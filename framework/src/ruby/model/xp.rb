@@ -8,6 +8,10 @@ class Xp
     @endpoints = endpoints
   end
 
+  def node_id(noc)
+    (noc.xps.map(&:x).max + 1) * @y + @x
+  end
+
   def neighbors(noc)
     noc.connections
        .select { |c| c.from == @id || c.to == @id }

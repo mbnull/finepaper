@@ -14,4 +14,10 @@ class NocConfig
     @noc = self
     binding
   end
+
+  def catalog
+    { masters:     @endpoints.select { |e| e.type == 'master' },
+      slaves:      @endpoints.select { |e| e.type == 'slave' },
+      by_protocol: @endpoints.group_by(&:protocol) }
+  end
 end

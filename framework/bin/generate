@@ -4,6 +4,7 @@ $LOAD_PATH.unshift File.join(__dir__, '..', 'src', 'ruby')
 require 'optparse'
 require 'parser/json_parser'
 require 'parser/verilog_parser'
+require 'topology/topology_expander'
 require 'drc/drc_runner'
 require 'plugin/plugin_base'
 require 'generator/rtl_generator'
@@ -17,6 +18,7 @@ OptionParser.new do |opts|
 end.parse!
 
 noc = JsonParser.parse(options[:input])
+noc = TopologyExpander.expand(noc)
 DrcRunner.new.run(noc)
 plugins = PluginRunner.new
 plugins.register(NiPortPlugin.new(options[:ipcore_dir])) if options[:ipcore_dir]
