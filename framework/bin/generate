@@ -1,0 +1,28 @@
+#!/usr/bin/env ruby
+$LOAD_PATH.unshift File.join(__dir__, '..', 'src', 'ruby')
+
+require 'optparse'
+require 'parser/json_parser'
+require 'drc/drc_runner'
+require 'plugin/plugin_base'
+require 'generator/rtl_generator'
+
+options = {}
+OptionParser.new do |opts|
+  opts.on('-i INPUT')  { |v| options[:input] = v }
+  opts.on('-o OUTPUT') { |v| options[:output] = v }
+  opts.on('-t TMPL')   { |v| options[:template_dir] = v }
+end.parse!
+
+noc = JsonParser.parse(options[:input])
+DrcRunner.new.run(noc)
+PluginRunner.new.run(noc, {})
+
+gen = RtlGenerator.new(noc, options[:template_dir])
+
+noc.xps.each do |xp|
+  noc.instance_variable_set(:@xp, xp)
+  gen.render('xp.sv.erb', File.join(options[:output], "#{xp.id}.sv"))
+end
+
+puts "Generated #{noc.xps.size} XP modules in #{options[:output]}"
