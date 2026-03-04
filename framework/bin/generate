@@ -31,6 +31,12 @@ noc.xps.each do |xp|
   gen.render('xp.sv.erb', File.join(options[:output], "xp_router_#{xp.id}.sv"))
 end
 
+noc.xps.each do |xp|
+  next if xp.endpoints.empty?
+  noc.instance_variable_set(:@xp, xp)
+  gen.render('ni.sv.erb', File.join(options[:output], "ni_xp_#{xp.id}.sv"))
+end
+
 noc.endpoints.each do |ep|
   next unless ep.template
   noc.instance_variable_set(:@ep, ep)

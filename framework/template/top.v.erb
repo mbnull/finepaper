@@ -29,6 +29,15 @@ module <%= @name %>_top #(
   logic [FLIT_WIDTH-1:0] link_<%= w %>_flit;
 <% end %>
 <%
+  # Generate wire declarations for NI-to-router connections (per endpoint)
+  @xps.each do |xp|
+    next if xp.endpoints.empty?
+    xp.endpoints.each do |ep_id| %>
+  logic [FLIT_WIDTH-1:0] ni_<%= ep_id %>_to_router_flit;
+  logic [FLIT_WIDTH-1:0] router_to_ni_<%= ep_id %>_flit;
+<% end
+  end %>
+<%
   # Instantiate all routers
   @xps.each do |xp| %>
   xp_router_<%= xp.id %> #(
@@ -49,7 +58,28 @@ module <%= @name %>_top #(
     .flit_in_<%= nb.id %>(<%=wire_name%>_flit),
     .flit_out_<%= nb.id %>(link_<%= xp.id %>_to_<%= nb.id %>_flit)<% end
     end
-    # Connect endpoints
+    # Connect endpoints via NI wires
+    xp.endpoints.each do |ep_id|
+      ep = @endpoints.find { |e| e.id == ep_id }
+      if ep.ports&.any?
+        ep.ports.each { |p| %>,
+    .<%= ep_id %>_<%= p.name %>(<%= ep_id %>_<%= p.name %>)<% }
+      else %>,
+    .<%= ep_id %>_flit_in(ni_<%= ep_id %>_to_router_flit),
+    .<%= ep_id %>_flit_out(router_to_ni_<%= ep_id %>_flit)<% end
+    end %>
+  );
+<% end %>
+<%
+  # Instantiate NI modules (one per XP with endpoints)
+  @xps.each do |xp|
+    next if xp.endpoints.empty? %>
+  ni_xp_<%= xp.id %> #(
+    .FLIT_WIDTH(FLIT_WIDTH),
+    .NUM_ENDPOINTS(<%= xp.endpoints.size %>)
+  ) u_ni_<%= xp.id %> (
+    .clk(clk),
+    .rst_n(rst_n)<%
     xp.endpoints.each do |ep_id|
       ep = @endpoints.find { |e| e.id == ep_id }
       if ep.ports&.any?
@@ -57,7 +87,9 @@ module <%= @name %>_top #(
     .<%= ep_id %>_<%= p.name %>(<%= ep_id %>_<%= p.name %>)<% }
       else %>,
     .<%= ep_id %>_flit_in(<%= ep_id %>_flit_in),
-    .<%= ep_id %>_flit_out(<%= ep_id %>_flit_out)<% end
+    .<%= ep_id %>_flit_out(<%= ep_id %>_flit_out),
+    .<%= ep_id %>_router_flit_in(ni_<%= ep_id %>_to_router_flit),
+    .<%= ep_id %>_router_flit_out(router_to_ni_<%= ep_id %>_flit)<% end
     end %>
   );
 <% end %>

@@ -7,7 +7,18 @@
     "addr_width": 32,
     "mesh": {
       "width": 3,
-      "height": 3
+      "height": 3,
+      "endpoint_map": {
+        "xp_0_0": ["ep_0"],
+        "xp_1_0": ["ep_1"],
+        "xp_2_0": ["ep_2"],
+        "xp_0_1": ["ep_3"],
+        "xp_1_1": ["ep_4"],
+        "xp_2_1": ["ep_5"],
+        "xp_0_2": ["ep_6"],
+        "xp_1_2": ["ep_7"],
+        "xp_2_2": ["ep_8"]
+      }
     }
   },
   "endpoints": [

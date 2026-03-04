@@ -110,6 +110,20 @@ class TestRtlGenerator < Minitest::Test
     FileUtils.rm_rf(out)
   end
 
+  def test_renders_ni_template
+    noc = JsonParser.parse(EXAMPLE)
+    xp = noc.xps.find { |x| x.endpoints.any? }
+    noc.instance_variable_set(:@xp, xp)
+    out = Dir.mktmpdir
+    RtlGenerator.new(noc, File.join(__dir__, '..', 'template'))
+                .render('ni.sv.erb', File.join(out, "ni_xp_#{xp.id}.sv"))
+    content = File.read(File.join(out, "ni_xp_#{xp.id}.sv"))
+    assert_match(/module ni_xp_#{xp.id}/, content)
+    assert_match(/NUM_ENDPOINTS/, content)
+  ensure
+    FileUtils.rm_rf(out)
+  end
+
   def test_renders_top_template
     noc = JsonParser.parse(EXAMPLE)
     out = Dir.mktmpdir
@@ -119,6 +133,7 @@ class TestRtlGenerator < Minitest::Test
     assert_match(/module my_noc_top/, content)
     assert_match(/xp_router_xp_0_0/, content)
     assert_match(/link_xp_0_0_to_xp_1_0_flit/, content)
+    assert_match(/ni_xp_/, content)
   ensure
     FileUtils.rm_rf(out)
   end
@@ -183,7 +198,13 @@ class TestGoldenFile < Minitest::Test
       noc.instance_variable_set(:@xp, xp)
       gen.render('xp.sv.erb', File.join(out, "xp_router_#{xp.id}.sv"))
     end
+    noc.xps.each do |xp|
+      next if xp.endpoints.empty?
+      noc.instance_variable_set(:@xp, xp)
+      gen.render('ni.sv.erb', File.join(out, "ni_xp_#{xp.id}.sv"))
+    end
     gen.render('top.v.erb', File.join(out, "#{noc.name}_top.v"))
+    assert_equal 9, Dir[File.join(out, "ni_xp_*.sv")].size, "Expected 9 NI modules"
     assert_equal File.read(File.join(GOLDEN_DIR, "mesh_3x3", "#{noc.name}_top.v")),
                  File.read(File.join(out, "#{noc.name}_top.v")),
                  "3x3 top differs from golden"

@@ -5,7 +5,8 @@ class TopologyExpander
     return noc if noc.xps.any?
     mesh = noc.parameters['mesh'] or raise "Topology not defined: add parameters.mesh or specify xps"
     w, h = mesh['width'], mesh['height']
-    xps = (0...h).flat_map { |y| (0...w).map { |x| Xp.new("xp_#{x}_#{y}", x, y, []) } }
+    ep_map = mesh['endpoint_map'] || {}
+    xps = (0...h).flat_map { |y| (0...w).map { |x| Xp.new("xp_#{x}_#{y}", x, y, ep_map["xp_#{x}_#{y}"] || []) } }
     conns = xps.flat_map do |xp|
       DIRS.filter_map do |(dx, dy), dir|
         nb = xps.find { |n| n.x == xp.x + dx && n.y == xp.y + dy }
