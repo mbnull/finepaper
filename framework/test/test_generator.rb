@@ -23,6 +23,29 @@ class TestJsonParser < Minitest::Test
     assert_equal 4, noc.connections.size
     assert_equal 4, noc.endpoints.size
   end
+
+  def test_applies_parameter_defaults
+    require 'tempfile'
+    f = Tempfile.new(['minimal', '.json'])
+    f.write('{"name":"test","version":"1.0"}')
+    f.close
+    noc = JsonParser.parse(f.path)
+    assert_equal 64, noc.parameters['data_width']
+    assert_equal 128, noc.parameters['flit_width']
+    assert_equal 32, noc.parameters['addr_width']
+  ensure
+    f&.unlink
+  end
+
+  def test_validates_required_fields
+    require 'tempfile'
+    f = Tempfile.new(['invalid', '.json'])
+    f.write('{"version":"1.0"}')
+    f.close
+    assert_raises(RuntimeError) { JsonParser.parse(f.path) }
+  ensure
+    f&.unlink
+  end
 end
 
 class TestTopologyExpander < Minitest::Test
