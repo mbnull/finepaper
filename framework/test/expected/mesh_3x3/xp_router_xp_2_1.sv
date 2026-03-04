@@ -8,7 +8,7 @@ module xp_router_xp_2_1 #(
 ) (
   input  logic clk,
   input  logic rst_n,
-  // Endpoints: 
+  // Endpoints: ep_5
 
   // Link to xp_2_0 (south)
   input  logic [FLIT_WIDTH-1:0] flit_in_xp_2_0,
@@ -18,7 +18,9 @@ module xp_router_xp_2_1 #(
   output logic [FLIT_WIDTH-1:0] flit_out_xp_1_1,
   // Link to xp_2_2 (south)
   input  logic [FLIT_WIDTH-1:0] flit_in_xp_2_2,
-  output logic [FLIT_WIDTH-1:0] flit_out_xp_2_2
+  output logic [FLIT_WIDTH-1:0] flit_out_xp_2_2,
+  input  logic [FLIT_WIDTH-1:0] ep_5_flit_in,
+  output logic [FLIT_WIDTH-1:0] ep_5_flit_out
 );
   // XP at (2, 1) — routing logic placeholder
 endmodule

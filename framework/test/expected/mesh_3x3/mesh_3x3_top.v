@@ -77,6 +77,34 @@ module mesh_3x3_top #(
   logic [FLIT_WIDTH-1:0] link_xp_2_2_to_xp_1_2_flit;
 
 
+  logic [FLIT_WIDTH-1:0] ni_ep_0_to_router_flit;
+  logic [FLIT_WIDTH-1:0] router_to_ni_ep_0_flit;
+
+  logic [FLIT_WIDTH-1:0] ni_ep_1_to_router_flit;
+  logic [FLIT_WIDTH-1:0] router_to_ni_ep_1_flit;
+
+  logic [FLIT_WIDTH-1:0] ni_ep_2_to_router_flit;
+  logic [FLIT_WIDTH-1:0] router_to_ni_ep_2_flit;
+
+  logic [FLIT_WIDTH-1:0] ni_ep_3_to_router_flit;
+  logic [FLIT_WIDTH-1:0] router_to_ni_ep_3_flit;
+
+  logic [FLIT_WIDTH-1:0] ni_ep_4_to_router_flit;
+  logic [FLIT_WIDTH-1:0] router_to_ni_ep_4_flit;
+
+  logic [FLIT_WIDTH-1:0] ni_ep_5_to_router_flit;
+  logic [FLIT_WIDTH-1:0] router_to_ni_ep_5_flit;
+
+  logic [FLIT_WIDTH-1:0] ni_ep_6_to_router_flit;
+  logic [FLIT_WIDTH-1:0] router_to_ni_ep_6_flit;
+
+  logic [FLIT_WIDTH-1:0] ni_ep_7_to_router_flit;
+  logic [FLIT_WIDTH-1:0] router_to_ni_ep_7_flit;
+
+  logic [FLIT_WIDTH-1:0] ni_ep_8_to_router_flit;
+  logic [FLIT_WIDTH-1:0] router_to_ni_ep_8_flit;
+
+
   xp_router_xp_0_0 #(
     .DATA_WIDTH(DATA_WIDTH),
     .FLIT_WIDTH(FLIT_WIDTH),
@@ -87,7 +115,9 @@ module mesh_3x3_top #(
     .flit_out_xp_1_0(link_xp_0_0_to_xp_1_0_flit),
     .flit_in_xp_1_0(link_xp_1_0_to_xp_0_0_flit),
     .flit_out_xp_0_1(link_xp_0_0_to_xp_0_1_flit),
-    .flit_in_xp_0_1(link_xp_0_1_to_xp_0_0_flit)
+    .flit_in_xp_0_1(link_xp_0_1_to_xp_0_0_flit),
+    .ep_0_flit_in(ni_ep_0_to_router_flit),
+    .ep_0_flit_out(router_to_ni_ep_0_flit)
   );
 
   xp_router_xp_1_0 #(
@@ -102,7 +132,9 @@ module mesh_3x3_top #(
     .flit_out_xp_2_0(link_xp_1_0_to_xp_2_0_flit),
     .flit_in_xp_2_0(link_xp_2_0_to_xp_1_0_flit),
     .flit_out_xp_1_1(link_xp_1_0_to_xp_1_1_flit),
-    .flit_in_xp_1_1(link_xp_1_1_to_xp_1_0_flit)
+    .flit_in_xp_1_1(link_xp_1_1_to_xp_1_0_flit),
+    .ep_1_flit_in(ni_ep_1_to_router_flit),
+    .ep_1_flit_out(router_to_ni_ep_1_flit)
   );
 
   xp_router_xp_2_0 #(
@@ -115,7 +147,9 @@ module mesh_3x3_top #(
     .flit_in_xp_1_0(link_xp_1_0_to_xp_2_0_flit),
     .flit_out_xp_1_0(link_xp_2_0_to_xp_1_0_flit),
     .flit_out_xp_2_1(link_xp_2_0_to_xp_2_1_flit),
-    .flit_in_xp_2_1(link_xp_2_1_to_xp_2_0_flit)
+    .flit_in_xp_2_1(link_xp_2_1_to_xp_2_0_flit),
+    .ep_2_flit_in(ni_ep_2_to_router_flit),
+    .ep_2_flit_out(router_to_ni_ep_2_flit)
   );
 
   xp_router_xp_0_1 #(
@@ -130,7 +164,9 @@ module mesh_3x3_top #(
     .flit_out_xp_1_1(link_xp_0_1_to_xp_1_1_flit),
     .flit_in_xp_1_1(link_xp_1_1_to_xp_0_1_flit),
     .flit_out_xp_0_2(link_xp_0_1_to_xp_0_2_flit),
-    .flit_in_xp_0_2(link_xp_0_2_to_xp_0_1_flit)
+    .flit_in_xp_0_2(link_xp_0_2_to_xp_0_1_flit),
+    .ep_3_flit_in(ni_ep_3_to_router_flit),
+    .ep_3_flit_out(router_to_ni_ep_3_flit)
   );
 
   xp_router_xp_1_1 #(
@@ -147,7 +183,9 @@ module mesh_3x3_top #(
     .flit_out_xp_2_1(link_xp_1_1_to_xp_2_1_flit),
     .flit_in_xp_2_1(link_xp_2_1_to_xp_1_1_flit),
     .flit_out_xp_1_2(link_xp_1_1_to_xp_1_2_flit),
-    .flit_in_xp_1_2(link_xp_1_2_to_xp_1_1_flit)
+    .flit_in_xp_1_2(link_xp_1_2_to_xp_1_1_flit),
+    .ep_4_flit_in(ni_ep_4_to_router_flit),
+    .ep_4_flit_out(router_to_ni_ep_4_flit)
   );
 
   xp_router_xp_2_1 #(
@@ -162,7 +200,9 @@ module mesh_3x3_top #(
     .flit_in_xp_1_1(link_xp_1_1_to_xp_2_1_flit),
     .flit_out_xp_1_1(link_xp_2_1_to_xp_1_1_flit),
     .flit_out_xp_2_2(link_xp_2_1_to_xp_2_2_flit),
-    .flit_in_xp_2_2(link_xp_2_2_to_xp_2_1_flit)
+    .flit_in_xp_2_2(link_xp_2_2_to_xp_2_1_flit),
+    .ep_5_flit_in(ni_ep_5_to_router_flit),
+    .ep_5_flit_out(router_to_ni_ep_5_flit)
   );
 
   xp_router_xp_0_2 #(
@@ -175,7 +215,9 @@ module mesh_3x3_top #(
     .flit_in_xp_0_1(link_xp_0_1_to_xp_0_2_flit),
     .flit_out_xp_0_1(link_xp_0_2_to_xp_0_1_flit),
     .flit_out_xp_1_2(link_xp_0_2_to_xp_1_2_flit),
-    .flit_in_xp_1_2(link_xp_1_2_to_xp_0_2_flit)
+    .flit_in_xp_1_2(link_xp_1_2_to_xp_0_2_flit),
+    .ep_6_flit_in(ni_ep_6_to_router_flit),
+    .ep_6_flit_out(router_to_ni_ep_6_flit)
   );
 
   xp_router_xp_1_2 #(
@@ -190,7 +232,9 @@ module mesh_3x3_top #(
     .flit_in_xp_0_2(link_xp_0_2_to_xp_1_2_flit),
     .flit_out_xp_0_2(link_xp_1_2_to_xp_0_2_flit),
     .flit_out_xp_2_2(link_xp_1_2_to_xp_2_2_flit),
-    .flit_in_xp_2_2(link_xp_2_2_to_xp_1_2_flit)
+    .flit_in_xp_2_2(link_xp_2_2_to_xp_1_2_flit),
+    .ep_7_flit_in(ni_ep_7_to_router_flit),
+    .ep_7_flit_out(router_to_ni_ep_7_flit)
   );
 
   xp_router_xp_2_2 #(
@@ -203,7 +247,118 @@ module mesh_3x3_top #(
     .flit_in_xp_2_1(link_xp_2_1_to_xp_2_2_flit),
     .flit_out_xp_2_1(link_xp_2_2_to_xp_2_1_flit),
     .flit_in_xp_1_2(link_xp_1_2_to_xp_2_2_flit),
-    .flit_out_xp_1_2(link_xp_2_2_to_xp_1_2_flit)
+    .flit_out_xp_1_2(link_xp_2_2_to_xp_1_2_flit),
+    .ep_8_flit_in(ni_ep_8_to_router_flit),
+    .ep_8_flit_out(router_to_ni_ep_8_flit)
+  );
+
+
+  ni_xp_xp_0_0 #(
+    .FLIT_WIDTH(FLIT_WIDTH),
+    .NUM_ENDPOINTS(1)
+  ) u_ni_xp_0_0 (
+    .clk(clk),
+    .rst_n(rst_n),
+    .ep_0_flit_in(ep_0_flit_in),
+    .ep_0_flit_out(ep_0_flit_out),
+    .ep_0_router_flit_in(ni_ep_0_to_router_flit),
+    .ep_0_router_flit_out(router_to_ni_ep_0_flit)
+  );
+
+  ni_xp_xp_1_0 #(
+    .FLIT_WIDTH(FLIT_WIDTH),
+    .NUM_ENDPOINTS(1)
+  ) u_ni_xp_1_0 (
+    .clk(clk),
+    .rst_n(rst_n),
+    .ep_1_flit_in(ep_1_flit_in),
+    .ep_1_flit_out(ep_1_flit_out),
+    .ep_1_router_flit_in(ni_ep_1_to_router_flit),
+    .ep_1_router_flit_out(router_to_ni_ep_1_flit)
+  );
+
+  ni_xp_xp_2_0 #(
+    .FLIT_WIDTH(FLIT_WIDTH),
+    .NUM_ENDPOINTS(1)
+  ) u_ni_xp_2_0 (
+    .clk(clk),
+    .rst_n(rst_n),
+    .ep_2_flit_in(ep_2_flit_in),
+    .ep_2_flit_out(ep_2_flit_out),
+    .ep_2_router_flit_in(ni_ep_2_to_router_flit),
+    .ep_2_router_flit_out(router_to_ni_ep_2_flit)
+  );
+
+  ni_xp_xp_0_1 #(
+    .FLIT_WIDTH(FLIT_WIDTH),
+    .NUM_ENDPOINTS(1)
+  ) u_ni_xp_0_1 (
+    .clk(clk),
+    .rst_n(rst_n),
+    .ep_3_flit_in(ep_3_flit_in),
+    .ep_3_flit_out(ep_3_flit_out),
+    .ep_3_router_flit_in(ni_ep_3_to_router_flit),
+    .ep_3_router_flit_out(router_to_ni_ep_3_flit)
+  );
+
+  ni_xp_xp_1_1 #(
+    .FLIT_WIDTH(FLIT_WIDTH),
+    .NUM_ENDPOINTS(1)
+  ) u_ni_xp_1_1 (
+    .clk(clk),
+    .rst_n(rst_n),
+    .ep_4_flit_in(ep_4_flit_in),
+    .ep_4_flit_out(ep_4_flit_out),
+    .ep_4_router_flit_in(ni_ep_4_to_router_flit),
+    .ep_4_router_flit_out(router_to_ni_ep_4_flit)
+  );
+
+  ni_xp_xp_2_1 #(
+    .FLIT_WIDTH(FLIT_WIDTH),
+    .NUM_ENDPOINTS(1)
+  ) u_ni_xp_2_1 (
+    .clk(clk),
+    .rst_n(rst_n),
+    .ep_5_flit_in(ep_5_flit_in),
+    .ep_5_flit_out(ep_5_flit_out),
+    .ep_5_router_flit_in(ni_ep_5_to_router_flit),
+    .ep_5_router_flit_out(router_to_ni_ep_5_flit)
+  );
+
+  ni_xp_xp_0_2 #(
+    .FLIT_WIDTH(FLIT_WIDTH),
+    .NUM_ENDPOINTS(1)
+  ) u_ni_xp_0_2 (
+    .clk(clk),
+    .rst_n(rst_n),
+    .ep_6_flit_in(ep_6_flit_in),
+    .ep_6_flit_out(ep_6_flit_out),
+    .ep_6_router_flit_in(ni_ep_6_to_router_flit),
+    .ep_6_router_flit_out(router_to_ni_ep_6_flit)
+  );
+
+  ni_xp_xp_1_2 #(
+    .FLIT_WIDTH(FLIT_WIDTH),
+    .NUM_ENDPOINTS(1)
+  ) u_ni_xp_1_2 (
+    .clk(clk),
+    .rst_n(rst_n),
+    .ep_7_flit_in(ep_7_flit_in),
+    .ep_7_flit_out(ep_7_flit_out),
+    .ep_7_router_flit_in(ni_ep_7_to_router_flit),
+    .ep_7_router_flit_out(router_to_ni_ep_7_flit)
+  );
+
+  ni_xp_xp_2_2 #(
+    .FLIT_WIDTH(FLIT_WIDTH),
+    .NUM_ENDPOINTS(1)
+  ) u_ni_xp_2_2 (
+    .clk(clk),
+    .rst_n(rst_n),
+    .ep_8_flit_in(ep_8_flit_in),
+    .ep_8_flit_out(ep_8_flit_out),
+    .ep_8_router_flit_in(ni_ep_8_to_router_flit),
+    .ep_8_router_flit_out(router_to_ni_ep_8_flit)
   );
 
 endmodule
