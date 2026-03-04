@@ -28,7 +28,7 @@ gen = RtlGenerator.new(noc, options[:template_dir])
 
 noc.xps.each do |xp|
   noc.instance_variable_set(:@xp, xp)
-  gen.render('xp.sv.erb', File.join(options[:output], "#{xp.id}.sv"))
+  gen.render('xp.sv.erb', File.join(options[:output], "xp_router_#{xp.id}.sv"))
 end
 
 noc.endpoints.each do |ep|
@@ -38,4 +38,6 @@ noc.endpoints.each do |ep|
               .render(File.basename(ep.template), File.join(options[:output], "#{ep.id}.sv"))
 end
 
-puts "Generated #{noc.xps.size} XP modules in #{options[:output]}"
+gen.render('top.v.erb', File.join(options[:output], "#{noc.name}_top.v"))
+
+puts "Generated #{noc.xps.size} XP modules + top in #{options[:output]}"

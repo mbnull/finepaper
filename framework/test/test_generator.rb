@@ -99,6 +99,19 @@ class TestRtlGenerator < Minitest::Test
   ensure
     FileUtils.rm_rf(out)
   end
+
+  def test_renders_top_template
+    noc = JsonParser.parse(EXAMPLE)
+    out = Dir.mktmpdir
+    RtlGenerator.new(noc, File.join(__dir__, '..', 'template'))
+                .render('top.v.erb', File.join(out, 'top.v'))
+    content = File.read(File.join(out, 'top.v'))
+    assert_match(/module my_noc_top/, content)
+    assert_match(/xp_router_xp_0_0/, content)
+    assert_match(/link_xp_0_0_to_xp_1_0_flit/, content)
+  ensure
+    FileUtils.rm_rf(out)
+  end
 end
 
 # Structural: generated ports match topology
@@ -138,11 +151,15 @@ class TestGoldenFile < Minitest::Test
       noc.instance_variable_set(:@xp, xp)
       gen.render('xp.sv.erb', File.join(out, "#{xp.id}.sv"))
     end
+    gen.render('top.v.erb', File.join(out, "#{noc.name}_top.v"))
     noc.xps.each do |xp|
       assert_equal File.read(File.join(GOLDEN_DIR, "#{xp.id}.sv")),
                    File.read(File.join(out, "#{xp.id}.sv")),
                    "#{xp.id}.sv differs from golden"
     end
+    assert_equal File.read(File.join(GOLDEN_DIR, "#{noc.name}_top.v")),
+                 File.read(File.join(out, "#{noc.name}_top.v")),
+                 "#{noc.name}_top.v differs from golden"
   ensure
     FileUtils.rm_rf(out)
   end
@@ -162,6 +179,22 @@ class TestVerilatorLint < Minitest::Test
     Dir[File.join(out, '*.sv')].each do |f|
       assert system("verilator --lint-only --sv #{f} 2>/dev/null"), "lint failed: #{File.basename(f)}"
     end
+  ensure
+    FileUtils.rm_rf(out)
+  end
+
+  def test_top_lint_clean
+    skip 'verilator not found' unless system('which verilator > /dev/null 2>&1')
+    noc = JsonParser.parse(EXAMPLE)
+    out = Dir.mktmpdir
+    gen = RtlGenerator.new(noc, File.join(__dir__, '..', 'template'))
+    noc.xps.each do |xp|
+      noc.instance_variable_set(:@xp, xp)
+      gen.render('xp.sv.erb', File.join(out, "xp_router_#{xp.id}.sv"))
+    end
+    gen.render('top.v.erb', File.join(out, 'top.v'))
+    files = Dir[File.join(out, '*.{sv,v}')].join(' ')
+    assert system("verilator --lint-only -Wno-UNUSEDSIGNAL -Wno-UNUSEDPARAM #{files} 2>&1 | grep -v Warning"), "top lint failed"
   ensure
     FileUtils.rm_rf(out)
   end
