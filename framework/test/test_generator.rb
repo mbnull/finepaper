@@ -13,6 +13,7 @@ require 'generator/rtl_generator'
 
 EXAMPLE = File.join(__dir__, '..', 'examples', 'simple_mesh.json')
 MESH_3X3 = File.join(__dir__, '..', 'examples', 'mesh_3x3.json')
+MULTI_EP = File.join(__dir__, '..', 'examples', 'multi_endpoint.json')
 
 class TestJsonParser < Minitest::Test
   def test_parses_noc
@@ -139,6 +140,98 @@ class TestRtlGenerator < Minitest::Test
   end
 end
 
+# NI multi-endpoint structural tests
+class TestNiMultiEndpoint < Minitest::Test
+  def setup
+    # Build a minimal NocConfig with one XP carrying 3 endpoints
+    require 'model/endpoint'
+    eps = [
+      Endpoint.new('ep_a', 'master', 'axi4', 64),
+      Endpoint.new('ep_b', 'slave',  'axi4', 128),
+      Endpoint.new('ep_c', 'master', 'axi4', 64)
+    ]
+    xp = Xp.new('xp_0_0', 0, 0, ['ep_a', 'ep_b', 'ep_c'])
+    params = { 'data_width' => 64, 'flit_width' => 128, 'addr_width' => 32 }
+    @noc = NocConfig.new('multi_ep_test', '1.0', params, [xp], [], eps)
+    @noc.instance_variable_set(:@xp, xp)
+    @out  = Dir.mktmpdir
+    @file = File.join(@out, 'ni_xp_0_0.sv')
+    RtlGenerator.new(@noc, File.join(__dir__, '..', 'template'))
+                .render('ni.sv.erb', @file)
+    @content = File.read(@file)
+  end
+
+  def teardown = FileUtils.rm_rf(@out)
+
+  def test_num_endpoints_parameter
+    assert_match(/NUM_ENDPOINTS = 3/, @content)
+  end
+
+  def test_all_endpoint_flit_in_ports_present
+    assert_match(/ep_a_flit_in/, @content)
+    assert_match(/ep_b_flit_in/, @content)
+    assert_match(/ep_c_flit_in/, @content)
+  end
+
+  def test_all_endpoint_flit_out_ports_present
+    assert_match(/ep_a_flit_out/, @content)
+    assert_match(/ep_b_flit_out/, @content)
+    assert_match(/ep_c_flit_out/, @content)
+  end
+
+  def test_all_router_side_ports_present
+    assert_match(/ep_a_router_flit_in/, @content)
+    assert_match(/ep_b_router_flit_in/, @content)
+    assert_match(/ep_c_router_flit_in/, @content)
+  end
+
+  def test_passthrough_assigns_for_each_endpoint
+    assert_match(/assign ep_a_router_flit_in = ep_a_flit_in/, @content)
+    assert_match(/assign ep_b_router_flit_in = ep_b_flit_in/, @content)
+    assert_match(/assign ep_c_router_flit_in = ep_c_flit_in/, @content)
+    assert_match(/assign ep_a_flit_out = ep_a_router_flit_out/, @content)
+    assert_match(/assign ep_b_flit_out = ep_b_router_flit_out/, @content)
+    assert_match(/assign ep_c_flit_out = ep_c_router_flit_out/, @content)
+  end
+
+  def test_verilator_lint_clean
+    skip 'verilator not found' unless system('which verilator > /dev/null 2>&1')
+    assert system("verilator --lint-only --sv #{@file} 2>/dev/null"), "lint failed on multi-endpoint NI"
+  end
+end
+
+# Multi-endpoint example integration test
+class TestMultiEndpointExample < Minitest::Test
+  def test_generates_multi_endpoint_ni
+    noc = JsonParser.parse(MULTI_EP)
+    out = Dir.mktmpdir
+    gen = RtlGenerator.new(noc, File.join(__dir__, '..', 'template'))
+    noc.xps.each do |xp|
+      noc.instance_variable_set(:@xp, xp)
+      gen.render('xp.sv.erb', File.join(out, "xp_router_#{xp.id}.sv"))
+    end
+    noc.xps.each do |xp|
+      next if xp.endpoints.empty?
+      noc.instance_variable_set(:@xp, xp)
+      gen.render('ni.sv.erb', File.join(out, "ni_xp_#{xp.id}.sv"))
+    end
+    gen.render('top.v.erb', File.join(out, "#{noc.name}_top.v"))
+
+    ni_3ep = File.read(File.join(out, "ni_xp_xp_0_0.sv"))
+    assert_match(/NUM_ENDPOINTS = 3/, ni_3ep)
+    assert_match(/ep_cpu0_flit_in/, ni_3ep)
+    assert_match(/ep_cpu1_flit_in/, ni_3ep)
+    assert_match(/ep_dma0_flit_in/, ni_3ep)
+
+    ni_2ep = File.read(File.join(out, "ni_xp_xp_1_0.sv"))
+    assert_match(/NUM_ENDPOINTS = 2/, ni_2ep)
+    assert_match(/ep_mem0_flit_in/, ni_2ep)
+    assert_match(/ep_mem1_flit_in/, ni_2ep)
+  ensure
+    FileUtils.rm_rf(out)
+  end
+end
+
 # Structural: generated ports match topology
 class TestGeneratorStructure < Minitest::Test
   def setup
@@ -239,6 +332,11 @@ class TestVerilatorLint < Minitest::Test
     noc.xps.each do |xp|
       noc.instance_variable_set(:@xp, xp)
       gen.render('xp.sv.erb', File.join(out, "xp_router_#{xp.id}.sv"))
+    end
+    noc.xps.each do |xp|
+      next if xp.endpoints.empty?
+      noc.instance_variable_set(:@xp, xp)
+      gen.render('ni.sv.erb', File.join(out, "ni_xp_#{xp.id}.sv"))
     end
     gen.render('top.v.erb', File.join(out, 'top.v'))
     files = Dir[File.join(out, '*.{sv,v}')].join(' ')
