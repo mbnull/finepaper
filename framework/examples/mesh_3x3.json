@@ -1,0 +1,24 @@
+{
+  "name": "mesh_3x3",
+  "version": "1.0",
+  "parameters": {
+    "data_width": 64,
+    "flit_width": 128,
+    "addr_width": 32,
+    "mesh": {
+      "width": 3,
+      "height": 3
+    }
+  },
+  "endpoints": [
+    { "id": "ep_0", "type": "master", "protocol": "axi4", "data_width": 64 },
+    { "id": "ep_1", "type": "master", "protocol": "axi4", "data_width": 64 },
+    { "id": "ep_2", "type": "master", "protocol": "axi4", "data_width": 64 },
+    { "id": "ep_3", "type": "slave",  "protocol": "axi4", "data_width": 128 },
+    { "id": "ep_4", "type": "slave",  "protocol": "axi4", "data_width": 128 },
+    { "id": "ep_5", "type": "slave",  "protocol": "axi4", "data_width": 128 },
+    { "id": "ep_6", "type": "master", "protocol": "axi4", "data_width": 64 },
+    { "id": "ep_7", "type": "master", "protocol": "axi4", "data_width": 64 },
+    { "id": "ep_8", "type": "slave",  "protocol": "axi4", "data_width": 128 }
+  ]
+}

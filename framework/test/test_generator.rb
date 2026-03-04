@@ -12,6 +12,7 @@ require 'model/xp'
 require 'generator/rtl_generator'
 
 EXAMPLE = File.join(__dir__, '..', 'examples', 'simple_mesh.json')
+MESH_3X3 = File.join(__dir__, '..', 'examples', 'mesh_3x3.json')
 
 class TestJsonParser < Minitest::Test
   def test_parses_noc
@@ -34,6 +35,15 @@ class TestTopologyExpander < Minitest::Test
     expanded = TopologyExpander.expand(noc)
     assert_equal 4, expanded.xps.size
     assert_equal 4, expanded.connections.size
+  end
+
+  def test_expands_3x3_mesh
+    noc = JsonParser.parse(MESH_3X3)
+    expanded = TopologyExpander.expand(noc)
+    assert_equal 9, expanded.xps.size
+    assert_equal 12, expanded.connections.size
+    center = expanded.xps.find { |xp| xp.x == 1 && xp.y == 1 }
+    assert_equal 4, center.neighbors(expanded).size
   end
 
   def test_raises_without_topology
@@ -153,13 +163,30 @@ class TestGoldenFile < Minitest::Test
     end
     gen.render('top.v.erb', File.join(out, "#{noc.name}_top.v"))
     noc.xps.each do |xp|
-      assert_equal File.read(File.join(GOLDEN_DIR, "#{xp.id}.sv")),
+      assert_equal File.read(File.join(GOLDEN_DIR, "simple_mesh", "#{xp.id}.sv")),
                    File.read(File.join(out, "#{xp.id}.sv")),
                    "#{xp.id}.sv differs from golden"
     end
-    assert_equal File.read(File.join(GOLDEN_DIR, "#{noc.name}_top.v")),
+    assert_equal File.read(File.join(GOLDEN_DIR, "simple_mesh", "#{noc.name}_top.v")),
                  File.read(File.join(out, "#{noc.name}_top.v")),
                  "#{noc.name}_top.v differs from golden"
+  ensure
+    FileUtils.rm_rf(out)
+  end
+
+  def test_matches_golden_3x3
+    noc = JsonParser.parse(MESH_3X3)
+    noc = TopologyExpander.expand(noc)
+    out = Dir.mktmpdir
+    gen = RtlGenerator.new(noc, File.join(__dir__, '..', 'template'))
+    noc.xps.each do |xp|
+      noc.instance_variable_set(:@xp, xp)
+      gen.render('xp.sv.erb', File.join(out, "xp_router_#{xp.id}.sv"))
+    end
+    gen.render('top.v.erb', File.join(out, "#{noc.name}_top.v"))
+    assert_equal File.read(File.join(GOLDEN_DIR, "mesh_3x3", "#{noc.name}_top.v")),
+                 File.read(File.join(out, "#{noc.name}_top.v")),
+                 "3x3 top differs from golden"
   ensure
     FileUtils.rm_rf(out)
   end
