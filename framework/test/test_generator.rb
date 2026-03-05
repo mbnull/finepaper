@@ -86,6 +86,32 @@ class TestDrcRunner < Minitest::Test
     noc = NocConfig.new('t', '1', {}, [xp, xp], [], [])
     assert_raises(RuntimeError) { DrcRunner.new.run(noc) }
   end
+
+  def test_raises_on_duplicate_endpoint_id
+    require 'model/endpoint'
+    ep = Endpoint.new('ep1', 'master', 'axi4', 64)
+    noc = NocConfig.new('t', '1', {}, [], [], [ep, ep])
+    assert_raises(RuntimeError) { DrcRunner.new.run(noc) }
+  end
+
+  def test_raises_on_invalid_buffer_depth
+    require 'model/endpoint'
+    ep = Endpoint.new('ep1', 'master', 'axi4', 64, { buffer_depth: 0 })
+    noc = NocConfig.new('t', '1', {}, [], [], [ep])
+    assert_raises(RuntimeError) { DrcRunner.new.run(noc) }
+  end
+
+  def test_raises_on_invalid_routing_algorithm
+    xp = Xp.new('xp1', 0, 0, [], { routing_algorithm: 'invalid' })
+    noc = NocConfig.new('t', '1', {}, [xp], [], [])
+    assert_raises(RuntimeError) { DrcRunner.new.run(noc) }
+  end
+
+  def test_raises_on_invalid_vc_count
+    xp = Xp.new('xp1', 0, 0, [], { vc_count: 10 })
+    noc = NocConfig.new('t', '1', {}, [xp], [], [])
+    assert_raises(RuntimeError) { DrcRunner.new.run(noc) }
+  end
 end
 
 class TestVerilogParser < Minitest::Test
@@ -119,6 +145,78 @@ class TestXp < Minitest::Test
     noc = JsonParser.parse(EXAMPLE)
     xp  = noc.xps.find { |x| x.x == 1 && x.y == 1 }
     assert_equal 3, xp.node_id(noc)
+  end
+end
+
+class TestConfigSchema < Minitest::Test
+  def test_endpoint_schema_reflection
+    schema = Endpoint.config_schema
+    assert_equal :integer, schema[:buffer_depth][:type]
+    assert_equal 16, schema[:buffer_depth][:default]
+    assert_equal :boolean, schema[:qos_enabled][:type]
+    assert_equal false, schema[:qos_enabled][:default]
+  end
+
+  def test_xp_schema_reflection
+    schema = Xp.config_schema
+    assert_equal :string, schema[:routing_algorithm][:type]
+    assert_equal 'xy', schema[:routing_algorithm][:default]
+    assert_equal :integer, schema[:vc_count][:type]
+    assert_equal 2, schema[:vc_count][:default]
+  end
+
+  def test_endpoint_applies_defaults
+    ep = Endpoint.new('ep1', 'master', 'axi4', 64)
+    assert_equal 16, ep.config[:buffer_depth]
+    assert_equal false, ep.config[:qos_enabled]
+  end
+
+  def test_endpoint_merges_custom_config
+    ep = Endpoint.new('ep1', 'master', 'axi4', 64, { buffer_depth: 32, qos_enabled: true })
+    assert_equal 32, ep.config[:buffer_depth]
+    assert_equal true, ep.config[:qos_enabled]
+  end
+
+  def test_xp_applies_defaults
+    xp = Xp.new('xp1', 0, 0, [])
+    assert_equal 'xy', xp.config[:routing_algorithm]
+    assert_equal 2, xp.config[:vc_count]
+    assert_equal 8, xp.config[:buffer_depth]
+  end
+
+  def test_xp_merges_custom_config
+    xp = Xp.new('xp1', 0, 0, [], { routing_algorithm: 'west_first', vc_count: 4 })
+    assert_equal 'west_first', xp.config[:routing_algorithm]
+    assert_equal 4, xp.config[:vc_count]
+    assert_equal 8, xp.config[:buffer_depth]
+  end
+
+  def test_parser_validates_type
+    f = Tempfile.new(['type_err', '.json'])
+    f.write('{"name":"t","version":"1.0","endpoints":[{"id":"ep1","type":"master","protocol":"axi4","data_width":64,"config":{"buffer_depth":"invalid"}}],"xps":[],"connections":[]}')
+    f.close
+    assert_raises(RuntimeError) { JsonParser.parse(f.path) }
+  ensure
+    f&.unlink
+  end
+
+  def test_parser_rejects_unknown_field
+    f = Tempfile.new(['unknown', '.json'])
+    f.write('{"name":"t","version":"1.0","endpoints":[{"id":"ep1","type":"master","protocol":"axi4","data_width":64,"config":{"unknown_field":123}}],"xps":[],"connections":[]}')
+    f.close
+    assert_raises(RuntimeError) { JsonParser.parse(f.path) }
+  ensure
+    f&.unlink
+  end
+
+  def test_parser_handles_missing_config
+    f = Tempfile.new(['no_cfg', '.json'])
+    f.write('{"name":"t","version":"1.0","endpoints":[{"id":"ep1","type":"master","protocol":"axi4","data_width":64}],"xps":[],"connections":[]}')
+    f.close
+    noc = JsonParser.parse(f.path)
+    assert_equal 16, noc.endpoints[0].config[:buffer_depth]
+  ensure
+    f&.unlink
   end
 end
 
