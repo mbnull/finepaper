@@ -34,21 +34,78 @@ ruby test/test_generator.rb
 - `src/ruby/generator/rtl_generator.rb` — `RtlGenerator#render(template, output_path)` evaluates ERB with `noc.expose` binding
 - `template/xp.sv.erb` — SystemVerilog XP router template; has access to `@xp`, `@noc`, `@parameters`, `@connections`
 
+## Configuration System
+
+**Schema-driven config with reflection, defaults, type checking, and DRC validation.**
+
+### Schema Definition
+
+Components define config schemas via `config_schema` class method:
+
+```ruby
+class Xp
+  def self.config_schema
+    {
+      routing_algorithm: { type: :string, default: 'xy' },
+      vc_count: { type: :integer, default: 2 },
+      buffer_depth: { type: :integer, default: 8 }
+    }
+  end
+end
+```
+
+### Config Fields
+
+**XP config:**
+- `routing_algorithm` (string, default: 'xy') — routing algorithm: 'xy', 'west_first', 'adaptive'
+- `vc_count` (integer, default: 2) — virtual channel count, must be 1-8
+- `buffer_depth` (integer, default: 8) — buffer depth, must be > 0
+
+**Endpoint config:**
+- `buffer_depth` (integer, default: 16) — buffer depth, must be > 0
+- `qos_enabled` (boolean, default: false) — QoS support flag
+
+### Parsing & Validation
+
+- `JsonParser.parse_config(json, schema)` validates types, rejects unknown fields, applies defaults
+- Constructor merges defaults with user config: `schema.transform_values { |v| v[:default] }.merge(config)`
+- DRC checks validate config values against constraints
+
 ## Key Conventions
 
 - DRC checks: subclass `DrcBase`, implement `check(noc)` returning `[]` or error strings
 - Plugins: subclass `PluginBase`, implement `process(noc, context)`
 - ERB templates access the current XP as `@xp`; call `@xp.neighbors(@noc)` for connected XPs
 - Topology: either specify `xps` array explicitly OR use `parameters.mesh` (width/height) for auto-expansion
+- Config schemas: define via `config_schema` class method; parser validates types and rejects unknown fields
+- Multi-endpoint XPs: NI template generates `NUM_ENDPOINTS` parameter and per-endpoint ports
 - `ipcore/` is gitignored — contains reference IP core SV/V files
+
+## DRC Checks
+
+**XP validation:**
+- `UniqueXpIds` — no duplicate XP IDs
+- `ValidXpConfig` — config values match schema types
+- `XpRoutingAlgorithm` — routing_algorithm in ['xy', 'west_first', 'adaptive']
+- `XpVirtualChannels` — vc_count in range 1-8
+- `XpBufferDepth` — buffer_depth > 0
+
+**Endpoint validation:**
+- `UniqueEndpointIds` — no duplicate endpoint IDs
+- `ValidEndpointConfig` — config values match schema types
+- `EndpointBufferDepth` — buffer_depth > 0
+- `EndpointProtocol` — protocol not empty
 
 ## Testing
 
 Test suite in `test/test_generator.rb` covers:
-- JSON parsing
-- Topology expansion (mesh generation)
-- DRC validation (unique IDs)
+- JSON parsing with defaults and required field validation
+- Schema reflection (`config_schema` for Xp and Endpoint)
+- Config parsing with type checking and unknown field rejection
+- Topology expansion (mesh generation, 2x2 and 3x3)
+- DRC validation (unique IDs, config types, routing algorithms, VC count, buffer depths, protocols)
 - Verilog port parsing
 - Device catalog generation
 - Node ID calculation
+- Multi-endpoint NI generation (NUM_ENDPOINTS parameter, per-endpoint ports)
 - RTL generation (structural, golden file regression, verilator lint)
