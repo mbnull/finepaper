@@ -1,11 +1,20 @@
 class Xp
-  attr_reader :id, :x, :y, :endpoints
+  attr_reader :id, :x, :y, :endpoints, :config
 
-  def initialize(id, x, y, endpoints)
+  def self.config_schema
+    {
+      routing_algorithm: { type: :string, default: 'xy' },
+      vc_count: { type: :integer, default: 2 },
+      buffer_depth: { type: :integer, default: 8 }
+    }
+  end
+
+  def initialize(id, x, y, endpoints, config = {})
     @id = id
     @x = x
     @y = y
     @endpoints = endpoints
+    @config = self.class.config_schema.transform_values { |v| v[:default] }.merge(config)
   end
 
   def node_id(noc)

@@ -1,0 +1,39 @@
+{
+  "name": "config_test_noc",
+  "version": "1.0",
+  "parameters": {
+    "data_width": 64
+  },
+  "endpoints": [
+    {
+      "id": "ep_cpu0",
+      "type": "master",
+      "protocol": "axi4",
+      "data_width": 64,
+      "config": {
+        "buffer_depth": 32,
+        "qos_enabled": true
+      }
+    },
+    {
+      "id": "ep_mem0",
+      "type": "slave",
+      "protocol": "axi4",
+      "data_width": 64
+    }
+  ],
+  "xps": [
+    {
+      "id": "xp_0_0",
+      "x": 0,
+      "y": 0,
+      "endpoints": ["ep_cpu0", "ep_mem0"],
+      "config": {
+        "routing_algorithm": "xy",
+        "vc_count": 4,
+        "buffer_depth": 16
+      }
+    }
+  ],
+  "connections": []
+}

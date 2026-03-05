@@ -2,6 +2,9 @@ class DrcBase
   def check(noc) = raise NotImplementedError
 end
 
+require_relative 'endpoint_drc'
+require_relative 'xp_drc'
+
 class UniqueXpIds < DrcBase
   def check(noc)
     noc.xps.map(&:id).tally.select { |_, n| n > 1 }.keys.map { |id| "Duplicate XP id: #{id}" }
@@ -9,7 +12,20 @@ class UniqueXpIds < DrcBase
 end
 
 class DrcRunner
-  def initialize = @drcs = [UniqueXpIds.new]
+  def initialize
+    @drcs = [
+      UniqueXpIds.new,
+      UniqueEndpointIds.new,
+      ValidEndpointConfig.new,
+      EndpointBufferDepth.new,
+      EndpointProtocol.new,
+      ValidXpConfig.new,
+      XpRoutingAlgorithm.new,
+      XpVirtualChannels.new,
+      XpBufferDepth.new
+    ]
+  end
+
   def register(drc) = @drcs << drc
 
   def run(noc)
