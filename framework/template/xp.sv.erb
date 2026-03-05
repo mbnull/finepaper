@@ -11,16 +11,20 @@ module xp_router_<%= @xp.id %> #(
   // Endpoints: <%= @xp.endpoints.join(', ') %>
 <%
   ports = []
+  # Neighbor connection ports
   @xp.neighbors(@noc).each do |nb|
     dir = @connections.find { |c| (c.from == @xp.id && c.to == nb.id) || (c.to == @xp.id && c.from == nb.id) }&.dir
-    ports << "  // Link to #{nb.id} (#{dir})\n  input  logic [FLIT_WIDTH-1:0] flit_in_#{nb.id},\n  output logic [FLIT_WIDTH-1:0] flit_out_#{nb.id}"
+    ports << "  // Link to #{nb.id} (#{dir})\n  input  logic [FLIT_WIDTH-1:0] flit_in_#{nb.id}"
+    ports << "  output logic [FLIT_WIDTH-1:0] flit_out_#{nb.id}"
   end
+  # Endpoint ports
   @xp.endpoints.each do |ep_id|
     ep = @noc.endpoints.find { |e| e.id == ep_id }
     if ep&.ports&.any?
       ep.ports.each { |p| ports << "  #{p.dir.ljust(6)} logic#{p.width ? " [#{p.width}]" : ''} #{ep_id}_#{p.name}" }
     else
-      ports << "  input  logic [FLIT_WIDTH-1:0] #{ep_id}_flit_in,\n  output logic [FLIT_WIDTH-1:0] #{ep_id}_flit_out"
+      ports << "  input  logic [FLIT_WIDTH-1:0] #{ep_id}_flit_in"
+      ports << "  output logic [FLIT_WIDTH-1:0] #{ep_id}_flit_out"
     end
   end
 %>
