@@ -32,6 +32,7 @@ signals:
     void moduleRemoved(const QString& moduleId);
     void connectionAdded(Connection* connection);
     void connectionRemoved(const QString& connectionId);
+    void parameterChanged(const QString& moduleId, const QString& paramName);
 
 private:
     std::vector<std::unique_ptr<Module>> m_modules;

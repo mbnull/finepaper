@@ -12,6 +12,7 @@ ValidationManager::ValidationManager(Graph* graph, LogPanel* logPanel, QObject* 
     connect(m_graph, &Graph::moduleRemoved, this, &ValidationManager::runValidation);
     connect(m_graph, &Graph::connectionAdded, this, &ValidationManager::runValidation);
     connect(m_graph, &Graph::connectionRemoved, this, &ValidationManager::runValidation);
+    connect(m_graph, &Graph::parameterChanged, this, &ValidationManager::runValidation);
 }
 
 ValidationManager::~ValidationManager() {

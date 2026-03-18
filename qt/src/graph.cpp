@@ -6,6 +6,9 @@ Graph::Graph(QObject* parent) : QObject(parent) {
 
 void Graph::addModule(std::unique_ptr<Module> module) {
     Module* ptr = module.get();
+    connect(ptr, &Module::parameterChanged, this, [this, ptr](const QString& paramName) {
+        emit parameterChanged(ptr->id(), paramName);
+    });
     m_modules.push_back(std::move(module));
     emit moduleAdded(ptr);
 }
@@ -51,6 +54,9 @@ std::unique_ptr<Module> Graph::takeModule(const QString& moduleId) {
 
 void Graph::insertModule(std::unique_ptr<Module> module) {
     Module* ptr = module.get();
+    connect(ptr, &Module::parameterChanged, this, [this, ptr](const QString& paramName) {
+        emit parameterChanged(ptr->id(), paramName);
+    });
     m_modules.push_back(std::move(module));
     emit moduleAdded(ptr);
 }
