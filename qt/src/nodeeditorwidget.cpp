@@ -34,6 +34,7 @@ NodeEditorWidget::NodeEditorWidget(Graph* graph, CommandManager* commandManager,
 
     connect(m_graphModel, &QtNodes::DataFlowGraphModel::connectionCreated, this, &NodeEditorWidget::onConnectionCreated);
     connect(m_graphModel, &QtNodes::DataFlowGraphModel::connectionDeleted, this, &NodeEditorWidget::onConnectionDeleted);
+    connect(m_scene, &QGraphicsScene::selectionChanged, this, &NodeEditorWidget::onSelectionChanged);
 
     for (const auto& module : m_graph->modules()) {
         onModuleAdded(module.get());
@@ -66,9 +67,51 @@ void NodeEditorWidget::onModuleRemoved(const QString& moduleId) {
     }
 }
 
-void NodeEditorWidget::onConnectionAdded(Connection*) {}
+void NodeEditorWidget::onConnectionAdded(Connection* connection) {
+    auto srcNodeIt = m_moduleToNodeId.find(connection->source().moduleId);
+    auto tgtNodeIt = m_moduleToNodeId.find(connection->target().moduleId);
+    if (srcNodeIt == m_moduleToNodeId.end() || tgtNodeIt == m_moduleToNodeId.end()) {
+        return;
+    }
 
-void NodeEditorWidget::onConnectionRemoved(const QString&) {}
+    QtNodes::NodeId srcNodeId = srcNodeIt.value();
+    QtNodes::NodeId tgtNodeId = tgtNodeIt.value();
+
+    auto* srcModel = dynamic_cast<GraphNodeModel*>(m_graphModel->delegateModel<GraphNodeModel>(srcNodeId));
+    auto* tgtModel = dynamic_cast<GraphNodeModel*>(m_graphModel->delegateModel<GraphNodeModel>(tgtNodeId));
+    if (!srcModel || !tgtModel) return;
+
+    QtNodes::PortIndex srcPortIdx = 0;
+    for (const auto& port : srcModel->module()->ports()) {
+        if (port.direction() == Port::Direction::Output) {
+            if (port.id() == connection->source().portId) break;
+            srcPortIdx++;
+        }
+    }
+
+    QtNodes::PortIndex tgtPortIdx = 0;
+    for (const auto& port : tgtModel->module()->ports()) {
+        if (port.direction() == Port::Direction::Input) {
+            if (port.id() == connection->target().portId) break;
+            tgtPortIdx++;
+        }
+    }
+
+    m_updatingFromGraph = true;
+    auto connId = m_graphModel->addConnection(srcNodeId, srcPortIdx, tgtNodeId, tgtPortIdx);
+    m_connectionToQtId[connection->id()] = connId;
+    m_updatingFromGraph = false;
+}
+
+void NodeEditorWidget::onConnectionRemoved(const QString& connectionId) {
+    auto it = m_connectionToQtId.find(connectionId);
+    if (it != m_connectionToQtId.end()) {
+        m_updatingFromGraph = true;
+        m_graphModel->deleteConnection(it.value());
+        m_connectionToQtId.erase(it);
+        m_updatingFromGraph = false;
+    }
+}
 
 void NodeEditorWidget::dragEnterEvent(QDragEnterEvent* event) {
     if (event->mimeData()->hasFormat("application/x-moduletype")) {
