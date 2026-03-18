@@ -7,6 +7,7 @@
 #include "palette.h"
 #include "logpanel.h"
 #include "validationmanager.h"
+#include "commands/loadgraphcommand.h"
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 #include <QSplitter>
@@ -50,5 +51,5 @@ MainWindow::~MainWindow() {
 }
 
 void MainWindow::loadGraph(const QString& jsonPath) {
-    m_graph->loadFromJson(jsonPath);
+    m_commandManager->executeCommand(std::make_unique<LoadGraphCommand>(m_graph, jsonPath));
 }

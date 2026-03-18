@@ -165,7 +165,7 @@ bool Graph::loadFromJson(const QString& jsonPath) {
         if (config.contains("buffer_depth")) module->setParameter("buffer_depth", config["buffer_depth"].toInt());
         if (config.contains("qos_enabled")) module->setParameter("qos_enabled", config["qos_enabled"].toBool());
 
-        module->addPort(Port("port", Port::Direction::Input, "noc", "Port"));
+        module->addPort(Port("port", Port::Direction::Output, "noc", "Port"));
         addModule(std::move(module));
     }
 
