@@ -138,7 +138,6 @@ QList<ValidationResult> DRCRunner::parseErrors(const QString& stderr) {
         results.append(ValidationResult(severity, match.captured(3), match.captured(2), "DRC"));
     }
 
-    QRegularExpression idExtract("(xp\\d+|ep\\d+)", QRegularExpression::CaseInsensitiveOption);
     for (const auto& line : stderr.split('\n')) {
         if (line.trimmed().isEmpty() || line.contains("DRC violations:")) continue;
 
@@ -150,8 +149,22 @@ QList<ValidationResult> DRCRunner::parseErrors(const QString& stderr) {
 
         if (line.contains(QRegularExpression("^(Duplicate .+|Invalid .+|Missing .+|.+ not found|XP .+:|Endpoint .+:)"))) {
             QString elementId;
-            auto match = idExtract.match(line);
-            if (match.hasMatch()) elementId = match.captured(1);
+            QRegularExpression xpPattern("^XP\\s+([^:]+):");
+            QRegularExpression epPattern("^Endpoint\\s+([^:]+):");
+            QRegularExpression dupXpPattern("^Duplicate XP id:\\s*(\\S+)");
+            QRegularExpression dupEpPattern("^Duplicate endpoint id:\\s*(\\S+)");
+
+            auto match = xpPattern.match(line);
+            if (!match.hasMatch()) match = epPattern.match(line);
+            if (!match.hasMatch()) match = dupXpPattern.match(line);
+            if (!match.hasMatch()) match = dupEpPattern.match(line);
+
+            if (match.hasMatch()) {
+                elementId = match.captured(1);
+                if (elementId.endsWith(" (RuntimeError)")) {
+                    elementId = elementId.left(elementId.length() - 15);
+                }
+            }
             results.append(ValidationResult(ValidationSeverity::Error, line.trimmed(), elementId, "DRC"));
         }
     }

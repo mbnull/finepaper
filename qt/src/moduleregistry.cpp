@@ -10,15 +10,29 @@ ModuleRegistry& ModuleRegistry::instance() {
 }
 
 ModuleRegistry::ModuleRegistry() {
-    QString bundlePath = QDir(QCoreApplication::applicationDirPath()).filePath("../bundles/modules.json");
-    bundlePath = QDir::cleanPath(bundlePath);
+    QString bundlePath;
 
-    if (!QFile::exists(bundlePath)) {
-        qWarning() << "Bundle file not found:" << bundlePath;
+    // Check environment variable first
+    bundlePath = qEnvironmentVariable("BUNDLE_PATH");
+    if (!bundlePath.isEmpty() && QFile::exists(bundlePath)) {
+        addProvider(std::make_unique<JsonBundleProvider>(bundlePath));
         return;
     }
 
-    addProvider(std::make_unique<JsonBundleProvider>(bundlePath));
+    // Search upward from application directory
+    QDir dir(QCoreApplication::applicationDirPath());
+    while (true) {
+        QString candidate = dir.filePath("bundles/modules.json");
+        if (QFile::exists(candidate)) {
+            addProvider(std::make_unique<JsonBundleProvider>(candidate));
+            return;
+        }
+
+        if (!dir.cdUp()) {
+            qWarning() << "Bundle file not found. Searched from:" << QCoreApplication::applicationDirPath();
+            return;
+        }
+    }
 }
 
 void ModuleRegistry::addProvider(std::unique_ptr<ModuleProvider> provider) {
