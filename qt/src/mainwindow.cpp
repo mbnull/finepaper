@@ -6,6 +6,7 @@
 #include "propertypanel.h"
 #include "palette.h"
 #include "logpanel.h"
+#include "validationmanager.h"
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 #include <QSplitter>
@@ -20,6 +21,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     m_propertyPanel = new PropertyPanel(m_graph, m_commandManager, this);
     m_palette = new Palette(m_graph, m_commandManager, this);
     m_logPanel = new LogPanel(this);
+    m_validationManager = new ValidationManager(m_graph, m_logPanel, this);
 
     QSplitter* mainSplitter = new QSplitter(Qt::Horizontal, this);
     mainSplitter->addWidget(m_palette);

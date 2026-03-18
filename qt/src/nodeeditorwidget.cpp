@@ -58,9 +58,11 @@ void NodeEditorWidget::onModuleAdded(Module* module) {
 void NodeEditorWidget::onModuleRemoved(const QString& moduleId) {
     auto it = m_moduleToNodeId.find(moduleId);
     if (it != m_moduleToNodeId.end()) {
-        m_graphModel->deleteNode(it.value());
+        m_updatingFromGraph = true;
         m_nodeToModuleId.remove(it.value());
+        m_graphModel->deleteNode(it.value());
         m_moduleToNodeId.erase(it);
+        m_updatingFromGraph = false;
     }
 }
 
