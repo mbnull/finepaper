@@ -22,6 +22,8 @@ public:
     const std::unordered_map<QString, Parameter>& parameters() const { return m_parameters; }
     void setParameter(const QString& name, Parameter::Value value);
 
+    std::unique_ptr<Module> clone() const;
+
 signals:
     void parameterChanged(const QString& name);
 

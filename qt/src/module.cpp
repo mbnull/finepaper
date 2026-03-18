@@ -17,3 +17,10 @@ void Module::setParameter(const QString& name, Parameter::Value value) {
     }
     emit parameterChanged(name);
 }
+
+std::unique_ptr<Module> Module::clone() const {
+    auto cloned = std::make_unique<Module>(m_id, m_type);
+    cloned->m_ports = m_ports;
+    cloned->m_parameters = m_parameters;
+    return cloned;
+}
