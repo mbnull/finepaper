@@ -14,7 +14,7 @@ ModuleRegistry::ModuleRegistry() {
         Port("irq", Port::Direction::Input, "irq", "irq")
     };
     cpu.defaultParameters = {
-        {"frequency", Parameter("frequency", Parameter::Type::Integer, 1000)}
+        {"frequency", Parameter("frequency", 1000)}
     };
     registerType(cpu);
 
@@ -24,7 +24,7 @@ ModuleRegistry::ModuleRegistry() {
         Port("bus", Port::Direction::Input, "bus", "bus")
     };
     memory.defaultParameters = {
-        {"size", Parameter("size", Parameter::Type::Integer, 4096)}
+        {"size", Parameter("size", 4096)}
     };
     registerType(memory);
 

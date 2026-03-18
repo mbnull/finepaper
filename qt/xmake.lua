@@ -20,6 +20,7 @@ target("qt")
     add_files("inc/nodeeditorwidget.h")
     add_files("inc/graphnodemodel.h")
     add_files("inc/propertypanel.h")
+    add_files("inc/palette.h")
 
     add_includedirs("inc")
 
