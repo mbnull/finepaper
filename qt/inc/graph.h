@@ -3,6 +3,7 @@
 #include "module.h"
 #include "connection.h"
 #include <QObject>
+#include <QMap>
 #include <vector>
 #include <memory>
 
@@ -36,7 +37,11 @@ signals:
     void connectionRemoved(const QString& connectionId);
     void parameterChanged(const QString& moduleId, const QString& paramName);
 
+private slots:
+    void onModuleParameterChanged(const QString& moduleId, const QString& paramName);
+
 private:
     std::vector<std::unique_ptr<Module>> m_modules;
     std::vector<std::unique_ptr<Connection>> m_connections;
+    QMap<QString, QMetaObject::Connection> m_moduleConnections;
 };
