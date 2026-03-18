@@ -20,9 +20,10 @@ void Graph::addModule(std::unique_ptr<Module> module) {
         return;
     }
     Module* ptr = module.get();
-    connect(ptr, &Module::parameterChanged, this, [this, ptr](const QString& paramName) {
-        emit parameterChanged(ptr->id(), paramName);
-    }, Qt::UniqueConnection);
+    QString moduleId = ptr->id();
+    m_moduleConnections[moduleId] = connect(ptr, &Module::parameterChanged, this, [this, moduleId](const QString& paramName) {
+        onModuleParameterChanged(moduleId, paramName);
+    });
     m_modules.push_back(std::move(module));
     emit moduleAdded(ptr);
 }
@@ -58,6 +59,8 @@ std::unique_ptr<Module> Graph::takeModule(const QString& moduleId) {
     auto it = std::find_if(m_modules.begin(), m_modules.end(),
         [&moduleId](const std::unique_ptr<Module>& m) { return m->id() == moduleId; });
     if (it != m_modules.end()) {
+        disconnect(m_moduleConnections[moduleId]);
+        m_moduleConnections.remove(moduleId);
         std::unique_ptr<Module> module = std::move(*it);
         m_modules.erase(it);
         emit moduleRemoved(moduleId);
@@ -76,9 +79,10 @@ void Graph::insertModule(std::unique_ptr<Module> module) {
         return;
     }
     Module* ptr = module.get();
-    connect(ptr, &Module::parameterChanged, this, [this, ptr](const QString& paramName) {
-        emit parameterChanged(ptr->id(), paramName);
-    }, Qt::UniqueConnection);
+    QString moduleId = ptr->id();
+    m_moduleConnections[moduleId] = connect(ptr, &Module::parameterChanged, this, [this, moduleId](const QString& paramName) {
+        onModuleParameterChanged(moduleId, paramName);
+    });
     m_modules.push_back(std::move(module));
     emit moduleAdded(ptr);
 }
@@ -211,7 +215,34 @@ bool Graph::loadFromJson(const QString& jsonPath) {
         QJsonObject conn = connVal.toObject();
         QString from = conn["from"].toString();
         QString to = conn["to"].toString();
-        auto connection = std::make_unique<Connection>(from + "_" + to, PortRef{from, "out"}, PortRef{to, "in"});
+
+        Module* fromModule = getModule(from);
+        Module* toModule = getModule(to);
+        if (!fromModule || !toModule) {
+            qWarning() << "Skipping connection" << from << "->" << to << ": module not found";
+            continue;
+        }
+
+        QString fromPort, toPort;
+        for (const auto& port : fromModule->ports()) {
+            if (port.direction() == Port::Direction::Output) {
+                fromPort = port.id();
+                break;
+            }
+        }
+        for (const auto& port : toModule->ports()) {
+            if (port.direction() == Port::Direction::Input) {
+                toPort = port.id();
+                break;
+            }
+        }
+
+        if (fromPort.isEmpty() || toPort.isEmpty()) {
+            qWarning() << "Skipping connection" << from << "->" << to << ": ports not found";
+            continue;
+        }
+
+        auto connection = std::make_unique<Connection>(from + "_" + to, PortRef{from, fromPort}, PortRef{to, toPort});
         addConnection(std::move(connection));
     }
 
@@ -222,10 +253,41 @@ bool Graph::loadFromJson(const QString& jsonPath) {
 
         for (const auto& epIdVal : endpoints) {
             QString epId = epIdVal.toString();
-            auto connection = std::make_unique<Connection>(epId + "_" + xpId, PortRef{epId, "port"}, PortRef{xpId, "in"});
+
+            Module* epModule = getModule(epId);
+            Module* xpModule = getModule(xpId);
+            if (!epModule || !xpModule) {
+                qWarning() << "Skipping connection" << epId << "->" << xpId << ": module not found";
+                continue;
+            }
+
+            QString epPort, xpPort;
+            for (const auto& port : xpModule->ports()) {
+                if (port.direction() == Port::Direction::Output) {
+                    xpPort = port.id();
+                    break;
+                }
+            }
+            for (const auto& port : epModule->ports()) {
+                if (port.direction() == Port::Direction::Input) {
+                    epPort = port.id();
+                    break;
+                }
+            }
+
+            if (epPort.isEmpty() || xpPort.isEmpty()) {
+                qWarning() << "Skipping connection" << epId << "->" << xpId << ": ports not found";
+                continue;
+            }
+
+            auto connection = std::make_unique<Connection>(xpId + "_" + epId, PortRef{xpId, xpPort}, PortRef{epId, epPort});
             addConnection(std::move(connection));
         }
     }
 
     return true;
+}
+
+void Graph::onModuleParameterChanged(const QString& moduleId, const QString& paramName) {
+    emit parameterChanged(moduleId, paramName);
 }
