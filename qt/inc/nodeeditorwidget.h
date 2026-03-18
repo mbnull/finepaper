@@ -15,6 +15,9 @@ class NodeEditorWidget : public QWidget {
 public:
     NodeEditorWidget(Graph* graph, CommandManager* commandManager, QWidget* parent = nullptr);
 
+public slots:
+    void highlightElement(const QString& elementId);
+
 signals:
     void moduleSelected(QString moduleId);
 
