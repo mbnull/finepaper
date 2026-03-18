@@ -63,8 +63,10 @@ void NodeEditorWidget::onModuleAdded(Module* module) {
     auto xIt = params.find("x");
     auto yIt = params.find("y");
     if (xIt != params.end() && yIt != params.end()) {
-        double x = std::get<int>(xIt->second.value());
-        double y = std::get<int>(yIt->second.value());
+        const auto& xValue = xIt->second.value();
+        const auto& yValue = yIt->second.value();
+        double x = std::get_if<int>(&xValue) ? std::get<int>(xValue) : std::get<double>(xValue);
+        double y = std::get_if<int>(&yValue) ? std::get<int>(yValue) : std::get<double>(yValue);
         m_graphModel->setNodeData(nodeId, QtNodes::NodeRole::Position, QPointF(x, y));
     }
 
@@ -176,6 +178,16 @@ void NodeEditorWidget::dropEvent(QDropEvent* event) {
         QPointF scenePos = m_view->mapToScene(event->pos());
         auto nodeId = m_moduleToNodeId.value(moduleId);
         m_graphModel->setNodeData(nodeId, QtNodes::NodeRole::Position, scenePos);
+
+        Module* module = m_graph->getModule(moduleId);
+        if (module) {
+            m_updatingFromGraph = true;
+            auto xCmd = std::make_unique<SetParameterCommand>(m_graph, moduleId, "x", static_cast<int>(scenePos.x()));
+            auto yCmd = std::make_unique<SetParameterCommand>(m_graph, moduleId, "y", static_cast<int>(scenePos.y()));
+            m_commandManager->executeCommand(std::move(xCmd));
+            m_commandManager->executeCommand(std::move(yCmd));
+            m_updatingFromGraph = false;
+        }
     }
 
     event->acceptProposedAction();
@@ -321,8 +333,10 @@ void NodeEditorWidget::onParameterChanged(const QString& paramName) {
     if (xIt == params.end() || yIt == params.end()) return;
 
     m_updatingFromGraph = true;
-    double x = std::get<int>(xIt->second.value());
-    double y = std::get<int>(yIt->second.value());
+    const auto& xValue = xIt->second.value();
+    const auto& yValue = yIt->second.value();
+    double x = std::get_if<int>(&xValue) ? std::get<int>(xValue) : std::get<double>(xValue);
+    double y = std::get_if<int>(&yValue) ? std::get<int>(yValue) : std::get<double>(yValue);
     m_graphModel->setNodeData(nodeIt.value(), QtNodes::NodeRole::Position, QPointF(x, y));
     m_updatingFromGraph = false;
 }
