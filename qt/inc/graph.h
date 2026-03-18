@@ -15,9 +15,13 @@ public:
     void addModule(std::unique_ptr<Module> module);
     void removeModule(const QString& moduleId);
     Module* getModule(const QString& moduleId) const;
+    std::unique_ptr<Module> takeModule(const QString& moduleId);
+    void insertModule(std::unique_ptr<Module> module);
 
     void addConnection(std::unique_ptr<Connection> connection);
     void removeConnection(const QString& connectionId);
+    std::unique_ptr<Connection> takeConnection(const QString& connectionId);
+    void insertConnection(std::unique_ptr<Connection> connection);
 
     const std::vector<std::unique_ptr<Module>>& modules() const { return m_modules; }
     const std::vector<std::unique_ptr<Connection>>& connections() const { return m_connections; }
