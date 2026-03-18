@@ -41,8 +41,8 @@ ModuleRegistry::ModuleRegistry() {
     ModuleType dma;
     dma.name = "DMA";
     dma.defaultPorts = {
-        Port("control", Port::Direction::Slave),
-        Port("mem", Port::Direction::Master)
+        Port("control", Port::Direction::Input, "control", "control"),
+        Port("mem", Port::Direction::Output, "bus", "mem")
     };
     registerType(dma);
 }
