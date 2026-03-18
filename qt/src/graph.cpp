@@ -90,7 +90,7 @@ void Graph::insertConnection(std::unique_ptr<Connection> connection) {
 }
 
 bool Graph::isValidConnection(const PortRef& source, const PortRef& target) const {
-    if (source.moduleId == target.moduleId) return false;
+    if (source.moduleId == target.moduleId && source.portId == target.portId) return false;
 
     Module* sourceModule = getModule(source.moduleId);
     Module* targetModule = getModule(target.moduleId);

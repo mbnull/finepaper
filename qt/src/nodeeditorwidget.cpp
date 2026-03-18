@@ -72,6 +72,7 @@ void NodeEditorWidget::onConnectionAdded(Connection* connection) {
     auto srcNodeIt = m_moduleToNodeId.find(connection->source().moduleId);
     auto tgtNodeIt = m_moduleToNodeId.find(connection->target().moduleId);
     if (srcNodeIt == m_moduleToNodeId.end() || tgtNodeIt == m_moduleToNodeId.end()) {
+        m_pendingConnections.clear();
         return;
     }
 
@@ -80,7 +81,10 @@ void NodeEditorWidget::onConnectionAdded(Connection* connection) {
 
     auto* srcModel = dynamic_cast<GraphNodeModel*>(m_graphModel->delegateModel<GraphNodeModel>(srcNodeId));
     auto* tgtModel = dynamic_cast<GraphNodeModel*>(m_graphModel->delegateModel<GraphNodeModel>(tgtNodeId));
-    if (!srcModel || !tgtModel) return;
+    if (!srcModel || !tgtModel) {
+        m_pendingConnections.clear();
+        return;
+    }
 
     QtNodes::PortIndex srcPortIdx = 0;
     for (const auto& port : srcModel->module()->ports()) {
@@ -116,6 +120,7 @@ void NodeEditorWidget::onConnectionRemoved(const QString& connectionId) {
     auto it = m_connectionToQtId.find(connectionId);
     if (it != m_connectionToQtId.end()) {
         m_updatingFromGraph = true;
+        m_pendingRemovals.insert(it.value());
         m_graphModel->deleteConnection(it.value());
         m_connectionToQtId.erase(it);
         m_updatingFromGraph = false;
@@ -175,6 +180,7 @@ void NodeEditorWidget::onConnectionCreated(QtNodes::ConnectionId connectionId) {
     PortRef source{srcModuleId, srcPortId};
     PortRef target{tgtModuleId, tgtPortId};
     if (!m_graph->isValidConnection(source, target)) {
+        m_pendingConnections.remove(connectionId);
         m_updatingFromGraph = true;
         m_graphModel->deleteConnection(connectionId);
         m_updatingFromGraph = false;
@@ -189,6 +195,11 @@ void NodeEditorWidget::onConnectionCreated(QtNodes::ConnectionId connectionId) {
 
 void NodeEditorWidget::onConnectionDeleted(QtNodes::ConnectionId connectionId) {
     if (m_updatingFromGraph) return;
+
+    if (m_pendingRemovals.contains(connectionId)) {
+        m_pendingRemovals.remove(connectionId);
+        return;
+    }
 
     for (auto it = m_connectionToQtId.begin(); it != m_connectionToQtId.end(); ++it) {
         if (it.value() == connectionId) {
@@ -238,6 +249,16 @@ void NodeEditorWidget::highlightElement(const QString& elementId) {
         if (nodeGraphics) {
             nodeGraphics->setSelected(true);
             m_view->centerOn(nodeGraphics);
+        }
+        return;
+    }
+
+    auto connIt = m_connectionToQtId.find(elementId);
+    if (connIt != m_connectionToQtId.end()) {
+        auto connGraphics = m_scene->connectionGraphicsObject(connIt.value());
+        if (connGraphics) {
+            connGraphics->setSelected(true);
+            m_view->centerOn(connGraphics);
         }
     }
 }

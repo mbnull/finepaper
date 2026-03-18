@@ -10,6 +10,7 @@ void AddConnectionCommand::execute() {
         return;
     }
     m_graph->insertConnection(std::move(m_connection));
+    m_executed = true;
 }
 
 void AddConnectionCommand::undo() {
