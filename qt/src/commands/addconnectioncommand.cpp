@@ -6,9 +6,9 @@ AddConnectionCommand::AddConnectionCommand(Graph* graph, std::unique_ptr<Connect
 }
 
 void AddConnectionCommand::execute() {
-    m_graph->addConnection(std::move(m_connection));
+    m_graph->insertConnection(std::move(m_connection));
 }
 
 void AddConnectionCommand::undo() {
-    m_graph->removeConnection(m_connectionId);
+    m_connection = m_graph->takeConnection(m_connectionId);
 }

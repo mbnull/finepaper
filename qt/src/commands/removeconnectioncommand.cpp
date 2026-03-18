@@ -4,9 +4,9 @@ RemoveConnectionCommand::RemoveConnectionCommand(Graph* graph, const QString& co
     : m_graph(graph), m_connectionId(connectionId) {}
 
 void RemoveConnectionCommand::execute() {
-    m_graph->removeConnection(m_connectionId);
+    m_connection = m_graph->takeConnection(m_connectionId);
 }
 
 void RemoveConnectionCommand::undo() {
-    m_graph->addConnection(std::move(m_connection));
+    m_graph->insertConnection(std::move(m_connection));
 }
