@@ -3,6 +3,13 @@
 
 #include <QMainWindow>
 
+class Graph;
+class CommandManager;
+class NodeEditorWidget;
+class PropertyPanel;
+class Palette;
+class LogPanel;
+
 namespace Ui {
 class MainWindow;
 }
@@ -16,6 +23,12 @@ class MainWindow : public QMainWindow {
 
   private:
     Ui::MainWindow *ui;
+    Graph* m_graph;
+    CommandManager* m_commandManager;
+    NodeEditorWidget* m_nodeEditor;
+    PropertyPanel* m_propertyPanel;
+    Palette* m_palette;
+    LogPanel* m_logPanel;
 };
 
 #endif // MAINWINDOW_H

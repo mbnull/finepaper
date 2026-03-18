@@ -3,6 +3,7 @@
 #include "module.h"
 #include "commandmanager.h"
 #include "commands/setparametercommand.h"
+#include <cfloat>
 #include <QLabel>
 #include <QLineEdit>
 #include <QSpinBox>
