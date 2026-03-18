@@ -20,7 +20,26 @@ QList<ValidationResult> DRCRunner::validate(const Graph* graph) {
     tmpFile.write(json.toUtf8());
     tmpFile.flush();
 
-    QString frameworkPath = QDir(QCoreApplication::applicationDirPath()).filePath("../framework");
+    QString frameworkPath = qEnvironmentVariable("FRAMEWORK_PATH");
+    if (frameworkPath.isEmpty()) {
+        QDir dir(QCoreApplication::applicationDirPath());
+        while (!dir.isRoot()) {
+            if (dir.cd("framework") && QFileInfo(dir.filePath("bin/generate")).exists()) {
+                frameworkPath = dir.absolutePath();
+                break;
+            }
+            dir.cdUp();
+            if (QFileInfo(dir.filePath("framework/bin/generate")).exists()) {
+                frameworkPath = dir.filePath("framework");
+                break;
+            }
+        }
+    }
+
+    if (frameworkPath.isEmpty() || !QFileInfo(frameworkPath + "/bin/generate").exists()) {
+        return {ValidationResult(ValidationSeverity::Error, "Framework not found. Set FRAMEWORK_PATH or place framework/ in parent directory.", "", "DRC")};
+    }
+
     QProcess proc;
     proc.setWorkingDirectory(frameworkPath);
     proc.start("ruby", {"bin/generate", "-i", tmpFile.fileName(), "-o", "/tmp", "-t", "templates"});
@@ -119,15 +138,22 @@ QList<ValidationResult> DRCRunner::parseErrors(const QString& stderr) {
         results.append(ValidationResult(severity, match.captured(3), match.captured(2), "DRC"));
     }
 
-    QRegularExpression re2("^(Duplicate .+|Invalid .+|Missing .+|.+ not found|XP .+:|Endpoint .+:)", QRegularExpression::MultilineOption);
-    auto it2 = re2.globalMatch(stderr);
-    while (it2.hasNext()) {
-        auto match = it2.next();
+    QRegularExpression idExtract("(xp\\d+|ep\\d+)", QRegularExpression::CaseInsensitiveOption);
+    for (const auto& line : stderr.split('\n')) {
+        if (line.trimmed().isEmpty() || line.contains("DRC violations:")) continue;
+
         bool found = false;
         for (const auto& r : results) {
-            if (r.message().contains(match.captured(1))) { found = true; break; }
+            if (r.message().contains(line.trimmed())) { found = true; break; }
         }
-        if (!found) results.append(ValidationResult(ValidationSeverity::Error, match.captured(1), "", "DRC"));
+        if (found) continue;
+
+        if (line.contains(QRegularExpression("^(Duplicate .+|Invalid .+|Missing .+|.+ not found|XP .+:|Endpoint .+:)"))) {
+            QString elementId;
+            auto match = idExtract.match(line);
+            if (match.hasMatch()) elementId = match.captured(1);
+            results.append(ValidationResult(ValidationSeverity::Error, line.trimmed(), elementId, "DRC"));
+        }
     }
 
     return results;

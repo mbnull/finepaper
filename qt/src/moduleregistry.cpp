@@ -1,5 +1,8 @@
 #include "moduleregistry.h"
 #include "moduleprovider.h"
+#include <QCoreApplication>
+#include <QDir>
+#include <QFile>
 
 ModuleRegistry& ModuleRegistry::instance() {
     static ModuleRegistry registry;
@@ -7,7 +10,15 @@ ModuleRegistry& ModuleRegistry::instance() {
 }
 
 ModuleRegistry::ModuleRegistry() {
-    addProvider(std::make_unique<JsonBundleProvider>("bundles/modules.json"));
+    QString bundlePath = QDir(QCoreApplication::applicationDirPath()).filePath("../bundles/modules.json");
+    bundlePath = QDir::cleanPath(bundlePath);
+
+    if (!QFile::exists(bundlePath)) {
+        qWarning() << "Bundle file not found:" << bundlePath;
+        return;
+    }
+
+    addProvider(std::make_unique<JsonBundleProvider>(bundlePath));
 }
 
 void ModuleRegistry::addProvider(std::unique_ptr<ModuleProvider> provider) {

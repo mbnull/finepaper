@@ -79,7 +79,7 @@ std::vector<ModuleType> JsonBundleProvider::loadModules() {
             QString pType = p["type"].toString();
             Parameter::Value val;
             if (pType == "int") val = p["default"].toInt();
-            else if (pType == "bool") val = p["default"].toBool() ? 1 : 0;
+            else if (pType == "bool") val = p["default"].toBool();
             else val = p["default"].toString();
             type.defaultParameters[p["name"].toString()] = Parameter(p["name"].toString(), val);
         }

@@ -10,7 +10,10 @@
       ],
       "parameters": [
         {"name": "x", "type": "int", "default": 0},
-        {"name": "y", "type": "int", "default": 0}
+        {"name": "y", "type": "int", "default": 0},
+        {"name": "routing_algorithm", "type": "string", "default": "xy"},
+        {"name": "vc_count", "type": "int", "default": 4},
+        {"name": "buffer_depth", "type": "int", "default": 16}
       ]
     },
     {
@@ -22,7 +25,8 @@
         {"name": "type", "type": "string", "default": "master"},
         {"name": "protocol", "type": "string", "default": "axi"},
         {"name": "data_width", "type": "int", "default": 32},
-        {"name": "qos_enabled", "type": "bool", "default": false}
+        {"name": "qos_enabled", "type": "bool", "default": false},
+        {"name": "buffer_depth", "type": "int", "default": 32}
       ]
     }
   ]
