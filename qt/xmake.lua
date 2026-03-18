@@ -8,10 +8,15 @@ target("qt")
 
     add_packages("nodeeditor")
     add_headerfiles("inc/*.h")
+    add_headerfiles("inc/commands/*.h")
     add_files("src/*.cpp")
+    add_files("src/commands/*.cpp")
     add_files("src/ui/mainwindow.ui")
     -- add files with Q_OBJECT meta (only for qt.moc)
     add_files("inc/mainwindow.h")
+    add_files("inc/graph.h")
+    add_files("inc/module.h")
+    add_files("inc/logpanel.h")
 
     add_includedirs("inc")
 
