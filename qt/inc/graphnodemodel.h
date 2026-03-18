@@ -1,27 +1,21 @@
 #pragma once
 
 #include <QtNodes/NodeDelegateModel>
-#include "module.h"
 
 class GraphNodeModel : public QtNodes::NodeDelegateModel {
     Q_OBJECT
 
 public:
-    explicit GraphNodeModel(Module* module);
+    GraphNodeModel() = default;
 
-    QString caption() const override { return m_module->type(); }
-    QString name() const override { return m_module->id(); }
+    QString caption() const override { return "Node"; }
+    QString name() const override { return "GraphNode"; }
 
-    unsigned int nPorts(QtNodes::PortType portType) const override;
-    QtNodes::NodeDataType dataType(QtNodes::PortType portType, QtNodes::PortIndex portIndex) const override;
+    unsigned int nPorts(QtNodes::PortType) const override { return 2; }
+    QtNodes::NodeDataType dataType(QtNodes::PortType, QtNodes::PortIndex) const override;
 
     std::shared_ptr<QtNodes::NodeData> outData(QtNodes::PortIndex) override { return nullptr; }
     void setInData(std::shared_ptr<QtNodes::NodeData>, QtNodes::PortIndex) override {}
 
     QWidget* embeddedWidget() override { return nullptr; }
-
-    Module* module() const { return m_module; }
-
-private:
-    Module* m_module;
 };
