@@ -10,6 +10,7 @@
 #include <QDropEvent>
 #include <QMimeData>
 #include <QUuid>
+#include <QGraphicsItem>
 
 NodeEditorWidget::NodeEditorWidget(Graph* graph, CommandManager* commandManager, QWidget* parent)
     : QWidget(parent), m_graph(graph), m_commandManager(commandManager) {

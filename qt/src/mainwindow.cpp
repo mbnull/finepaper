@@ -23,6 +23,9 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     m_logPanel = new LogPanel(this);
     m_validationManager = new ValidationManager(m_graph, m_logPanel, this);
 
+    connect(m_logPanel, &LogPanel::elementSelected, m_nodeEditor, &NodeEditorWidget::highlightElement);
+    connect(m_nodeEditor, &NodeEditorWidget::moduleSelected, m_propertyPanel, &PropertyPanel::setSelectedModule);
+
     QSplitter* mainSplitter = new QSplitter(Qt::Horizontal, this);
     mainSplitter->addWidget(m_palette);
     mainSplitter->addWidget(m_nodeEditor);
