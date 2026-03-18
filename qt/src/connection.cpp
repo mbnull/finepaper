@@ -1,5 +1,5 @@
 #include "connection.h"
 
-Connection::Connection(const QString& id, const QString& sourcePortId, const QString& targetPortId)
-    : m_id(id), m_sourcePortId(sourcePortId), m_targetPortId(targetPortId) {
+Connection::Connection(const QString& id, const PortRef& source, const PortRef& target)
+    : m_id(id), m_source(source), m_target(target) {
 }

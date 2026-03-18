@@ -1,17 +1,18 @@
 #pragma once
 
 #include <QString>
+#include "portref.h"
 
 class Connection {
 public:
-    Connection(const QString& id, const QString& sourcePortId, const QString& targetPortId);
+    Connection(const QString& id, const PortRef& source, const PortRef& target);
 
     QString id() const { return m_id; }
-    QString sourcePortId() const { return m_sourcePortId; }
-    QString targetPortId() const { return m_targetPortId; }
+    PortRef source() const { return m_source; }
+    PortRef target() const { return m_target; }
 
 private:
     QString m_id;
-    QString m_sourcePortId;
-    QString m_targetPortId;
+    PortRef m_source;
+    PortRef m_target;
 };
