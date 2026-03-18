@@ -7,9 +7,9 @@ class GraphNodeModel : public QtNodes::NodeDelegateModel {
     Q_OBJECT
 
 public:
-    explicit GraphNodeModel(Module* module);
+    GraphNodeModel() = default;
 
-    QString caption() const override { return m_module->id(); }
+    QString caption() const override;
     QString name() const override { return "GraphNode"; }
 
     unsigned int nPorts(QtNodes::PortType portType) const override;
@@ -21,8 +21,9 @@ public:
 
     QWidget* embeddedWidget() override { return nullptr; }
 
+    void setModule(Module* module) { m_module = module; }
     Module* module() const { return m_module; }
 
 private:
-    Module* m_module;
+    Module* m_module = nullptr;
 };
