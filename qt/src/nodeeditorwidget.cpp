@@ -1,11 +1,15 @@
 #include "nodeeditorwidget.h"
 #include "graphnodemodel.h"
+#include <QtNodes/NodeDelegateModelRegistry>
 #include <QVBoxLayout>
 
 NodeEditorWidget::NodeEditorWidget(Graph* graph, CommandManager* commandManager, QWidget* parent)
     : QWidget(parent), m_graph(graph), m_commandManager(commandManager) {
 
-    m_graphModel = new QtNodes::DataFlowGraphModel();
+    m_registry = std::make_shared<QtNodes::NodeDelegateModelRegistry>();
+    m_registry->registerModel<GraphNodeModel>("GraphNode");
+
+    m_graphModel = new QtNodes::DataFlowGraphModel(m_registry);
     m_scene = new QtNodes::DataFlowGraphicsScene(*m_graphModel, this);
     m_view = new QtNodes::GraphicsView(m_scene);
 
@@ -24,25 +28,18 @@ NodeEditorWidget::NodeEditorWidget(Graph* graph, CommandManager* commandManager,
 }
 
 void NodeEditorWidget::onModuleAdded(Module* module) {
-    auto nodeModel = std::make_unique<GraphNodeModel>(module);
-    m_graphModel->addNode(std::move(nodeModel));
+    QtNodes::NodeId nodeId = m_graphModel->addNode("GraphNode");
+    m_moduleToNodeId[module->id()] = nodeId;
 }
 
 void NodeEditorWidget::onModuleRemoved(const QString& moduleId) {
-    // Find and remove node by module ID
-    for (auto nodeId : m_graphModel->allNodeIds()) {
-        auto* node = m_graphModel->delegateModel<GraphNodeModel>(nodeId);
-        if (node && node->module()->id() == moduleId) {
-            m_graphModel->deleteNode(nodeId);
-            break;
-        }
+    auto it = m_moduleToNodeId.find(moduleId);
+    if (it != m_moduleToNodeId.end()) {
+        m_graphModel->deleteNode(it->second);
+        m_moduleToNodeId.erase(it);
     }
 }
 
-void NodeEditorWidget::onConnectionAdded(Connection* connection) {
-    // Minimal connection handling - QtNodes manages connections internally
-}
+void NodeEditorWidget::onConnectionAdded(Connection*) {}
 
-void NodeEditorWidget::onConnectionRemoved(const QString& connectionId) {
-    // Minimal connection handling - QtNodes manages connections internally
-}
+void NodeEditorWidget::onConnectionRemoved(const QString&) {}

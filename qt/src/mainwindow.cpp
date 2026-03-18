@@ -14,7 +14,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     ui->setupUi(this);
 
     m_graph = new Graph(this);
-    m_commandManager = new CommandManager(this);
+    m_commandManager = new CommandManager();
 
     m_nodeEditor = new NodeEditorWidget(m_graph, m_commandManager, this);
     m_propertyPanel = new PropertyPanel(m_graph, m_commandManager, this);
