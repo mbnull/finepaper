@@ -14,9 +14,15 @@ ModuleRegistry::ModuleRegistry() {
 
     // Check environment variable first
     bundlePath = qEnvironmentVariable("BUNDLE_PATH");
-    if (!bundlePath.isEmpty() && QFile::exists(bundlePath)) {
-        addProvider(std::make_unique<JsonBundleProvider>(bundlePath));
-        return;
+    if (!bundlePath.isEmpty()) {
+        QFileInfo info(bundlePath);
+        if (info.isDir()) {
+            bundlePath = QDir(bundlePath).filePath("bundles/modules.json");
+        }
+        if (QFile::exists(bundlePath)) {
+            addProvider(std::make_unique<JsonBundleProvider>(bundlePath));
+            return;
+        }
     }
 
     // Search upward from application directory

@@ -1,5 +1,9 @@
 #include "graph.h"
 #include <algorithm>
+#include <QFile>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
 
 Graph::Graph(QObject* parent) : QObject(parent) {
 }
@@ -113,4 +117,78 @@ bool Graph::isValidConnection(const PortRef& source, const PortRef& target) cons
             return c->source().moduleId == source.moduleId && c->source().portId == source.portId &&
                    c->target().moduleId == target.moduleId && c->target().portId == target.portId;
         });
+}
+
+bool Graph::loadFromJson(const QString& jsonPath) {
+    QFile file(jsonPath);
+    if (!file.open(QIODevice::ReadOnly)) return false;
+
+    QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
+    if (!doc.isObject()) return false;
+
+    QJsonObject root = doc.object();
+
+    while (!m_modules.empty()) {
+        removeModule(m_modules.front()->id());
+    }
+
+    QJsonArray xps = root["xps"].toArray();
+    for (const auto& xpVal : xps) {
+        QJsonObject xp = xpVal.toObject();
+        QString id = xp["id"].toString();
+        auto module = std::make_unique<Module>(id, "XP");
+
+        if (xp.contains("x")) module->setParameter("x", xp["x"].toInt());
+        if (xp.contains("y")) module->setParameter("y", xp["y"].toInt());
+
+        QJsonObject config = xp["config"].toObject();
+        if (config.contains("routing_algorithm")) module->setParameter("routing_algorithm", config["routing_algorithm"].toString());
+        if (config.contains("vc_count")) module->setParameter("vc_count", config["vc_count"].toInt());
+        if (config.contains("buffer_depth")) module->setParameter("buffer_depth", config["buffer_depth"].toInt());
+
+        module->addPort(Port("in", Port::Direction::Input, "noc", "Input"));
+        module->addPort(Port("out", Port::Direction::Output, "noc", "Output"));
+        addModule(std::move(module));
+    }
+
+    QJsonArray eps = root["endpoints"].toArray();
+    for (const auto& epVal : eps) {
+        QJsonObject ep = epVal.toObject();
+        QString id = ep["id"].toString();
+        auto module = std::make_unique<Module>(id, "Endpoint");
+
+        if (ep.contains("type")) module->setParameter("type", ep["type"].toString());
+        if (ep.contains("protocol")) module->setParameter("protocol", ep["protocol"].toString());
+        if (ep.contains("data_width")) module->setParameter("data_width", ep["data_width"].toInt());
+
+        QJsonObject config = ep["config"].toObject();
+        if (config.contains("buffer_depth")) module->setParameter("buffer_depth", config["buffer_depth"].toInt());
+        if (config.contains("qos_enabled")) module->setParameter("qos_enabled", config["qos_enabled"].toBool());
+
+        module->addPort(Port("port", Port::Direction::Input, "noc", "Port"));
+        addModule(std::move(module));
+    }
+
+    QJsonArray conns = root["connections"].toArray();
+    for (const auto& connVal : conns) {
+        QJsonObject conn = connVal.toObject();
+        QString from = conn["from"].toString();
+        QString to = conn["to"].toString();
+        auto connection = std::make_unique<Connection>(from + "_" + to, PortRef{from, "out"}, PortRef{to, "in"});
+        addConnection(std::move(connection));
+    }
+
+    for (const auto& xpVal : xps) {
+        QJsonObject xp = xpVal.toObject();
+        QString xpId = xp["id"].toString();
+        QJsonArray endpoints = xp["endpoints"].toArray();
+
+        for (const auto& epIdVal : endpoints) {
+            QString epId = epIdVal.toString();
+            auto connection = std::make_unique<Connection>(epId + "_" + xpId, PortRef{epId, "port"}, PortRef{xpId, "in"});
+            addConnection(std::move(connection));
+        }
+    }
+
+    return true;
 }

@@ -22,6 +22,8 @@ class MainWindow : public QMainWindow {
     explicit MainWindow(QWidget *parent = 0);
     ~MainWindow();
 
+    void loadGraph(const QString& jsonPath);
+
   private:
     Ui::MainWindow *ui;
     Graph* m_graph;

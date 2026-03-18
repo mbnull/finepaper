@@ -42,7 +42,7 @@ QList<ValidationResult> DRCRunner::validate(const Graph* graph) {
 
     QProcess proc;
     proc.setWorkingDirectory(frameworkPath);
-    proc.start("ruby", {"bin/generate", "-i", tmpFile.fileName(), "-o", "/tmp", "-t", "templates"});
+    proc.start("ruby", {"bin/generate", "-i", tmpFile.fileName(), "-o", "/tmp", "-t", "template"});
     proc.waitForFinished();
 
     return parseErrors(proc.readAllStandardError());
@@ -94,8 +94,8 @@ QString DRCRunner::serializeToJson(const Graph* graph) {
     for (const auto& conn : graph->connections()) {
         auto src = conn->source().moduleId;
         auto tgt = conn->target().moduleId;
-        auto srcMod = graph->findModule(src);
-        auto tgtMod = graph->findModule(tgt);
+        auto srcMod = graph->getModule(src);
+        auto tgtMod = graph->getModule(tgt);
 
         if (srcMod && tgtMod) {
             if (srcMod->type() == "XP" && tgtMod->type() == "XP") {

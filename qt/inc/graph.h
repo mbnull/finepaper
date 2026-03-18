@@ -27,6 +27,8 @@ public:
     const std::vector<std::unique_ptr<Module>>& modules() const { return m_modules; }
     const std::vector<std::unique_ptr<Connection>>& connections() const { return m_connections; }
 
+    bool loadFromJson(const QString& jsonPath);
+
 signals:
     void moduleAdded(Module* module);
     void moduleRemoved(const QString& moduleId);
