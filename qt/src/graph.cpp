@@ -10,14 +10,14 @@
 Graph::Graph(QObject* parent) : QObject(parent) {
 }
 
-void Graph::addModule(std::unique_ptr<Module> module) {
+bool Graph::addModule(std::unique_ptr<Module> module) {
     if (module->id().isEmpty()) {
         qWarning() << "Cannot add module with empty ID";
-        return;
+        return false;
     }
     if (getModule(module->id())) {
         qWarning() << "Cannot add module with duplicate ID:" << module->id();
-        return;
+        return false;
     }
     Module* ptr = module.get();
     QString moduleId = ptr->id();
@@ -26,6 +26,7 @@ void Graph::addModule(std::unique_ptr<Module> module) {
     });
     m_modules.push_back(std::move(module));
     emit moduleAdded(ptr);
+    return true;
 }
 
 void Graph::removeModule(const QString& moduleId) {
@@ -69,14 +70,14 @@ std::unique_ptr<Module> Graph::takeModule(const QString& moduleId) {
     return nullptr;
 }
 
-void Graph::insertModule(std::unique_ptr<Module> module) {
+bool Graph::insertModule(std::unique_ptr<Module> module) {
     if (module->id().isEmpty()) {
         qWarning() << "Cannot insert module with empty ID";
-        return;
+        return false;
     }
     if (getModule(module->id())) {
         qWarning() << "Cannot insert module with duplicate ID:" << module->id();
-        return;
+        return false;
     }
     Module* ptr = module.get();
     QString moduleId = ptr->id();
@@ -85,6 +86,7 @@ void Graph::insertModule(std::unique_ptr<Module> module) {
     });
     m_modules.push_back(std::move(module));
     emit moduleAdded(ptr);
+    return true;
 }
 
 void Graph::addConnection(std::unique_ptr<Connection> connection) {

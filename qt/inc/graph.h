@@ -13,11 +13,11 @@ class Graph : public QObject {
 public:
     explicit Graph(QObject* parent = nullptr);
 
-    void addModule(std::unique_ptr<Module> module);
+    bool addModule(std::unique_ptr<Module> module);
     void removeModule(const QString& moduleId);
     Module* getModule(const QString& moduleId) const;
     std::unique_ptr<Module> takeModule(const QString& moduleId);
-    void insertModule(std::unique_ptr<Module> module);
+    bool insertModule(std::unique_ptr<Module> module);
 
     void addConnection(std::unique_ptr<Connection> connection);
     void removeConnection(const QString& connectionId);
