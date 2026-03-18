@@ -90,6 +90,10 @@ bool Graph::insertModule(std::unique_ptr<Module> module) {
 }
 
 void Graph::addConnection(std::unique_ptr<Connection> connection) {
+    if (!isValidConnection(connection->source(), connection->target())) {
+        qWarning() << "Cannot add invalid connection:" << connection->id();
+        return;
+    }
     Connection* ptr = connection.get();
     m_connections.push_back(std::move(connection));
     emit connectionAdded(ptr);
@@ -118,6 +122,10 @@ std::unique_ptr<Connection> Graph::takeConnection(const QString& connectionId) {
 }
 
 void Graph::insertConnection(std::unique_ptr<Connection> connection) {
+    if (!isValidConnection(connection->source(), connection->target())) {
+        qWarning() << "Cannot insert invalid connection:" << connection->id();
+        return;
+    }
     Connection* ptr = connection.get();
     m_connections.push_back(std::move(connection));
     emit connectionAdded(ptr);
@@ -245,6 +253,10 @@ bool Graph::loadFromJson(const QString& jsonPath) {
         }
 
         auto connection = std::make_unique<Connection>(from + "_" + to, PortRef{from, fromPort}, PortRef{to, toPort});
+        if (!isValidConnection(connection->source(), connection->target())) {
+            qWarning() << "Skipping invalid connection" << from << "->" << to;
+            continue;
+        }
         addConnection(std::move(connection));
     }
 
@@ -283,6 +295,10 @@ bool Graph::loadFromJson(const QString& jsonPath) {
             }
 
             auto connection = std::make_unique<Connection>(xpId + "_" + epId, PortRef{xpId, xpPort}, PortRef{epId, epPort});
+            if (!isValidConnection(connection->source(), connection->target())) {
+                qWarning() << "Skipping invalid connection" << xpId << "->" << epId;
+                continue;
+            }
             addConnection(std::move(connection));
         }
     }
