@@ -5,7 +5,7 @@
 
 class Parameter {
 public:
-    using Value = std::variant<QString, int, double>;
+    using Value = std::variant<QString, int, double, bool>;
 
     Parameter(const QString& name, Value value);
 

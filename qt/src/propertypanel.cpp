@@ -9,6 +9,7 @@
 #include <QLineEdit>
 #include <QSpinBox>
 #include <QDoubleSpinBox>
+#include <QCheckBox>
 #include <QFormLayout>
 
 PropertyPanel::PropertyPanel(Graph* graph, CommandManager* commandManager, QWidget* parent)
@@ -78,6 +79,14 @@ void PropertyPanel::populatePanel() {
                 m_commandManager->executeCommand(std::move(cmd));
             });
             widget = doubleSpinBox;
+        } else if (std::holds_alternative<bool>(param.value())) {
+            auto* checkBox = new QCheckBox();
+            checkBox->setChecked(std::get<bool>(param.value()));
+            connect(checkBox, &QCheckBox::toggled, [this, name](bool checked) {
+                auto cmd = std::make_unique<SetParameterCommand>(m_graph, m_selectedModule->id(), name, checked);
+                m_commandManager->executeCommand(std::move(cmd));
+            });
+            widget = checkBox;
         }
 
         if (widget) {
@@ -111,5 +120,9 @@ void PropertyPanel::onParameterChanged(const QString& name) {
         doubleSpinBox->blockSignals(true);
         doubleSpinBox->setValue(std::get<double>(value));
         doubleSpinBox->blockSignals(false);
+    } else if (auto* checkBox = qobject_cast<QCheckBox*>(it->second)) {
+        checkBox->blockSignals(true);
+        checkBox->setChecked(std::get<bool>(value));
+        checkBox->blockSignals(false);
     }
 }

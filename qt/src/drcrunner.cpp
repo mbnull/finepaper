@@ -9,6 +9,8 @@
 #include <QJsonArray>
 #include <QMap>
 #include <QRegularExpression>
+#include <QCoreApplication>
+#include <QDir>
 
 QList<ValidationResult> DRCRunner::validate(const Graph* graph) {
     QString json = serializeToJson(graph);
@@ -18,8 +20,9 @@ QList<ValidationResult> DRCRunner::validate(const Graph* graph) {
     tmpFile.write(json.toUtf8());
     tmpFile.flush();
 
+    QString frameworkPath = QDir(QCoreApplication::applicationDirPath()).filePath("../framework");
     QProcess proc;
-    proc.setWorkingDirectory("../framework");
+    proc.setWorkingDirectory(frameworkPath);
     proc.start("ruby", {"bin/generate", "-i", tmpFile.fileName(), "-o", "/tmp", "-t", "templates"});
     proc.waitForFinished();
 
@@ -43,6 +46,13 @@ QString DRCRunner::serializeToJson(const Graph* graph) {
             if (p.count("x")) xp["x"] = std::get<int>(p.at("x").value());
             if (p.count("y")) xp["y"] = std::get<int>(p.at("y").value());
             xp["endpoints"] = QJsonArray();
+
+            QJsonObject config;
+            if (p.count("routing_algorithm")) config["routing_algorithm"] = std::get<QString>(p.at("routing_algorithm").value());
+            if (p.count("vc_count")) config["vc_count"] = std::get<int>(p.at("vc_count").value());
+            if (p.count("buffer_depth")) config["buffer_depth"] = std::get<int>(p.at("buffer_depth").value());
+            if (!config.isEmpty()) xp["config"] = config;
+
             xps.append(xp);
             xpEndpoints[mod->id()] = QJsonArray();
         } else if (mod->type() == "Endpoint") {
@@ -52,6 +62,12 @@ QString DRCRunner::serializeToJson(const Graph* graph) {
             if (p.count("type")) ep["type"] = std::get<QString>(p.at("type").value());
             if (p.count("protocol")) ep["protocol"] = std::get<QString>(p.at("protocol").value());
             if (p.count("data_width")) ep["data_width"] = std::get<int>(p.at("data_width").value());
+
+            QJsonObject config;
+            if (p.count("buffer_depth")) config["buffer_depth"] = std::get<int>(p.at("buffer_depth").value());
+            if (p.count("qos_enabled")) config["qos_enabled"] = std::get<bool>(p.at("qos_enabled").value());
+            if (!config.isEmpty()) ep["config"] = config;
+
             eps.append(ep);
         }
     }
@@ -103,7 +119,7 @@ QList<ValidationResult> DRCRunner::parseErrors(const QString& stderr) {
         results.append(ValidationResult(severity, match.captured(3), match.captured(2), "DRC"));
     }
 
-    QRegularExpression re2("^(Duplicate .+|Invalid .+|Missing .+|.+ not found)", QRegularExpression::MultilineOption);
+    QRegularExpression re2("^(Duplicate .+|Invalid .+|Missing .+|.+ not found|XP .+:|Endpoint .+:)", QRegularExpression::MultilineOption);
     auto it2 = re2.globalMatch(stderr);
     while (it2.hasNext()) {
         auto match = it2.next();

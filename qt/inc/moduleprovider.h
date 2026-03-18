@@ -13,3 +13,11 @@ class HardcodedProvider : public ModuleProvider {
 public:
     std::vector<ModuleType> loadModules() override;
 };
+
+class JsonBundleProvider : public ModuleProvider {
+public:
+    explicit JsonBundleProvider(const QString& bundlePath);
+    std::vector<ModuleType> loadModules() override;
+private:
+    QString m_bundlePath;
+};

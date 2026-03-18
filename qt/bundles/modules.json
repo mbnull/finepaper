@@ -1,0 +1,29 @@
+{
+  "modules": [
+    {
+      "name": "XP",
+      "ports": [
+        {"id": "north", "direction": "input", "type": "noc", "name": "North"},
+        {"id": "south", "direction": "output", "type": "noc", "name": "South"},
+        {"id": "east", "direction": "input", "type": "noc", "name": "East"},
+        {"id": "west", "direction": "output", "type": "noc", "name": "West"}
+      ],
+      "parameters": [
+        {"name": "x", "type": "int", "default": 0},
+        {"name": "y", "type": "int", "default": 0}
+      ]
+    },
+    {
+      "name": "Endpoint",
+      "ports": [
+        {"id": "noc", "direction": "input", "type": "noc", "name": "NoC"}
+      ],
+      "parameters": [
+        {"name": "type", "type": "string", "default": "master"},
+        {"name": "protocol", "type": "string", "default": "axi"},
+        {"name": "data_width", "type": "int", "default": 32},
+        {"name": "qos_enabled", "type": "bool", "default": false}
+      ]
+    }
+  ]
+}

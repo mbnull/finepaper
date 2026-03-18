@@ -7,7 +7,7 @@ ModuleRegistry& ModuleRegistry::instance() {
 }
 
 ModuleRegistry::ModuleRegistry() {
-    addProvider(std::make_unique<HardcodedProvider>());
+    addProvider(std::make_unique<JsonBundleProvider>("bundles/modules.json"));
 }
 
 void ModuleRegistry::addProvider(std::unique_ptr<ModuleProvider> provider) {
