@@ -157,9 +157,11 @@ void NodeEditorWidget::dropEvent(QDropEvent* event) {
     auto command = std::make_unique<AddModuleCommand>(m_graph, std::move(module));
     m_commandManager->executeCommand(std::move(command));
 
-    QPointF scenePos = m_view->mapToScene(event->pos());
-    auto nodeId = m_moduleToNodeId.value(moduleId);
-    m_scene->setNodePosition(nodeId, scenePos);
+    if (m_moduleToNodeId.contains(moduleId)) {
+        QPointF scenePos = m_view->mapToScene(event->pos());
+        auto nodeId = m_moduleToNodeId.value(moduleId);
+        m_scene->setNodePosition(nodeId, scenePos);
+    }
 
     event->acceptProposedAction();
 }
