@@ -33,6 +33,8 @@ private slots:
     void onConnectionCreated(QtNodes::ConnectionId connectionId);
     void onConnectionDeleted(QtNodes::ConnectionId connectionId);
     void onSelectionChanged();
+    void onNodeMoved(QtNodes::NodeId nodeId);
+    void onParameterChanged(const QString& paramName);
 
 private:
     QString getPortId(QtNodes::NodeId nodeId, QtNodes::PortType portType, QtNodes::PortIndex portIndex) const;

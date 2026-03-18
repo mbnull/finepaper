@@ -4,6 +4,7 @@
 #include "commands/addmodulecommand.h"
 #include "commands/addconnectioncommand.h"
 #include "commands/removeconnectioncommand.h"
+#include "commands/setparametercommand.h"
 #include <QtNodes/NodeDelegateModelRegistry>
 #include <QtNodes/internal/NodeGraphicsObject.hpp>
 #include <QtNodes/internal/ConnectionGraphicsObject.hpp>
@@ -38,6 +39,7 @@ NodeEditorWidget::NodeEditorWidget(Graph* graph, CommandManager* commandManager,
     connect(m_graphModel, &QtNodes::DataFlowGraphModel::connectionCreated, this, &NodeEditorWidget::onConnectionCreated);
     connect(m_graphModel, &QtNodes::DataFlowGraphModel::connectionDeleted, this, &NodeEditorWidget::onConnectionDeleted);
     connect(m_scene, &QGraphicsScene::selectionChanged, this, &NodeEditorWidget::onSelectionChanged);
+    connect(m_scene, &QtNodes::BasicGraphicsScene::nodeMoved, this, &NodeEditorWidget::onNodeMoved);
 
     for (const auto& module : m_graph->modules()) {
         onModuleAdded(module.get());
@@ -56,6 +58,17 @@ void NodeEditorWidget::onModuleAdded(Module* module) {
     }
     m_moduleToNodeId[module->id()] = nodeId;
     m_nodeToModuleId[nodeId] = module->id();
+
+    const auto& params = module->parameters();
+    auto xIt = params.find("x");
+    auto yIt = params.find("y");
+    if (xIt != params.end() && yIt != params.end()) {
+        double x = std::get<int>(xIt->second.value());
+        double y = std::get<int>(yIt->second.value());
+        m_graphModel->setNodeData(nodeId, QtNodes::NodeRole::Position, QPointF(x, y));
+    }
+
+    connect(module, &Module::parameterChanged, this, &NodeEditorWidget::onParameterChanged);
     m_updatingFromGraph = false;
 }
 
@@ -277,4 +290,39 @@ void NodeEditorWidget::highlightElement(const QString& elementId) {
             m_view->centerOn(connGraphics);
         }
     }
+}
+
+void NodeEditorWidget::onNodeMoved(QtNodes::NodeId nodeId) {
+    if (m_updatingFromGraph) return;
+
+    QString moduleId = m_nodeToModuleId.value(nodeId);
+    if (moduleId.isEmpty()) return;
+
+    QPointF pos = m_graphModel->nodeData(nodeId, QtNodes::NodeRole::Position).value<QPointF>();
+
+    auto xCmd = std::make_unique<SetParameterCommand>(m_graph, moduleId, "x", static_cast<int>(pos.x()));
+    auto yCmd = std::make_unique<SetParameterCommand>(m_graph, moduleId, "y", static_cast<int>(pos.y()));
+    m_commandManager->executeCommand(std::move(xCmd));
+    m_commandManager->executeCommand(std::move(yCmd));
+}
+
+void NodeEditorWidget::onParameterChanged(const QString& paramName) {
+    if (paramName != "x" && paramName != "y") return;
+
+    Module* module = qobject_cast<Module*>(sender());
+    if (!module) return;
+
+    auto nodeIt = m_moduleToNodeId.find(module->id());
+    if (nodeIt == m_moduleToNodeId.end()) return;
+
+    const auto& params = module->parameters();
+    auto xIt = params.find("x");
+    auto yIt = params.find("y");
+    if (xIt == params.end() || yIt == params.end()) return;
+
+    m_updatingFromGraph = true;
+    double x = std::get<int>(xIt->second.value());
+    double y = std::get<int>(yIt->second.value());
+    m_graphModel->setNodeData(nodeIt.value(), QtNodes::NodeRole::Position, QPointF(x, y));
+    m_updatingFromGraph = false;
 }
