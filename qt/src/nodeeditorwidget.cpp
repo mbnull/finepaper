@@ -5,7 +5,6 @@
 #include "commands/addconnectioncommand.h"
 #include "commands/removeconnectioncommand.h"
 #include <QtNodes/NodeDelegateModelRegistry>
-#include <QtNodes/NodeGraphicsObject>
 #include <QVBoxLayout>
 #include <QDragEnterEvent>
 #include <QDropEvent>
@@ -281,4 +280,21 @@ QString NodeEditorWidget::getPortId(QtNodes::NodeId nodeId, QtNodes::PortType po
         }
     }
     return "";
+}
+
+void NodeEditorWidget::highlightElement(const QString& elementId) {
+    auto it = m_moduleToNodeId.find(elementId);
+    if (it != m_moduleToNodeId.end()) {
+        m_scene->clearSelection();
+        auto items = m_scene->items();
+        for (auto* item : items) {
+            if (auto* nodeItem = dynamic_cast<QtNodes::NodeGraphicsObject*>(item)) {
+                if (nodeItem->nodeId() == it.value()) {
+                    nodeItem->setSelected(true);
+                    m_view->centerOn(nodeItem);
+                    break;
+                }
+            }
+        }
+    }
 }
