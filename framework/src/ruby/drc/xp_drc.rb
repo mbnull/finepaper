@@ -18,7 +18,7 @@ class ValidXpConfig < DrcBase
 end
 
 class XpRoutingAlgorithm < DrcBase
-  VALID_ALGORITHMS = ['xy', 'west_first', 'adaptive'].freeze
+  VALID_ALGORITHMS = ['xy', 'yx'].freeze
 
   def check(noc)
     noc.xps.flat_map do |xp|

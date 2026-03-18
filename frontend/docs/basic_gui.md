@@ -1,98 +1,90 @@
-# NoC IP Configuration GUI Frontend
+# NoC IP Configuration Frontend
 
 ## Goal Description
-Build a modern Qt6-based graphical user interface for visualizing and configuring Network-on-Chip (NoC) IP cores. The primary focus is topology visualization with a collapsible configuration panel. The GUI enables users to visually design NoC topologies (mesh and explicit modes), configure crosspoint routers and endpoints, and export valid JSON configurations for the finepaper framework's code generation pipeline.
+Build a React-based frontend for configuring Network-on-Chip (NoC) Intellectual Property cores with visual mesh topology display, wizard-driven configuration, and JSON export capability that integrates with the existing framework generator.
 
 ## Acceptance Criteria
 
 Following TDD philosophy, each criterion includes positive and negative tests for deterministic verification.
 
-- AC-1: Topology visualization displays NoC structure correctly
+- AC-1: Visual mesh topology display
   - Positive Tests (expected to PASS):
-    - Load a mesh topology JSON (3x3 grid) and verify all 9 crosspoint routers are displayed at correct grid positions
-    - Load an explicit topology JSON with custom XP placements and verify XPs appear at specified coordinates
-    - Verify connections between XPs are rendered as lines/arrows showing data flow direction
+    - Display a 2×2 mesh with 4 crosspoints arranged in a grid layout
+    - Display a 3×3 mesh with 9 crosspoints with correct spatial relationships
+    - Render mesh topology that visually matches the reference workflow image (1.png)
   - Negative Tests (expected to FAIL):
-    - Load a JSON with invalid XP coordinates (negative values) and verify error handling
-    - Load a JSON with connections referencing non-existent XP IDs and verify rejection
+    - Attempt to display non-mesh topology (star, ring) should be rejected or not supported
+    - Display mesh with invalid dimensions (0×0, negative values) should fail validation
+    - Render topology without proper grid alignment should be visually incorrect
 
-- AC-2: Configuration wizard supports both mesh and explicit topology modes
+- AC-2: Endpoint configuration during mesh generation
   - Positive Tests (expected to PASS):
-    - Create new NoC using mesh mode wizard, specify 4x4 dimensions, verify JSON contains mesh parameters
-    - Create new NoC using explicit mode wizard, manually place 5 XPs, verify JSON contains XPs array
-    - Switch between mesh and explicit modes during configuration without data loss
+    - Configure endpoint type (master/slave) and attach to a crosspoint
+    - Configure endpoint protocol (AXI4) and data width
+    - Reference framework schema for endpoint configuration options
+    - Generate mesh where each crosspoint can have zero or more endpoints attached
   - Negative Tests (expected to FAIL):
-    - Attempt to create mesh with zero or negative dimensions and verify validation error
-    - Attempt to create explicit topology with duplicate XP IDs and verify rejection
+    - Attempt to configure endpoint with unsupported protocol should be rejected
+    - Attach endpoint without specifying required type field should fail validation
+    - Configure endpoint with invalid data width should be rejected
 
-- AC-3: Endpoint configuration interface exposes all required parameters
+- AC-3: Wizard-based creation and configuration workflow
   - Positive Tests (expected to PASS):
-    - Add endpoint to XP, configure as master with AXI4 protocol, set buffer_depth=32, verify JSON output
-    - Add endpoint with QoS enabled, verify qos_enabled=true in JSON
-    - Configure endpoint with default values, verify framework defaults are applied
+    - Launch wizard to create new NoC configuration
+    - Step through wizard to configure mesh dimensions (width × height)
+    - Configure crosspoint routing algorithm through wizard interface
+    - Complete wizard and generate initial topology
   - Negative Tests (expected to FAIL):
-    - Set endpoint buffer_depth to zero or negative value and verify validation error
-    - Select invalid protocol type and verify rejection
+    - Attempt to skip required wizard steps should be prevented
+    - Submit wizard with incomplete required fields should fail validation
+    - Cancel wizard should not create partial configuration
 
-- AC-4: Crosspoint router configuration interface exposes routing and buffering parameters
+- AC-4: JSON export compatible with framework schema
   - Positive Tests (expected to PASS):
-    - Configure XP with xy routing algorithm, vc_count=4, buffer_depth=16, verify JSON output
-    - Configure XP with yx routing, verify routing_algorithm field in JSON
-    - Use default XP configuration, verify framework defaults (xy routing, 2 VCs, depth 8)
+    - Export JSON with required fields: name, version, xps, connections, endpoints
+    - Generate JSON that can be consumed by framework's bin/generate script
+    - Export includes crosspoint positions (x, y) and IDs
+    - Export includes connections with from/to/dir fields
+    - Export includes endpoints with id, type, protocol, data_width
   - Negative Tests (expected to FAIL):
-    - Set vc_count to 0 or >8 and verify validation error
-    - Set buffer_depth to negative value and verify rejection
-    - Select invalid routing algorithm (not xy or yx) and verify rejection
+    - Export empty configuration should fail or produce minimal valid JSON
+    - Export with missing required framework fields should be invalid
+    - Export with incorrect field types should fail framework parsing
 
-- AC-5: Global topology parameters are configurable
+- AC-5: NoC-only component support
   - Positive Tests (expected to PASS):
-    - Set data_width=64, flit_width=128, addr_width=32, verify parameters section in JSON
-    - Use default topology parameters, verify framework defaults are applied
-    - Modify parameters after initial creation, verify JSON updates correctly
+    - Create and configure NoC mesh topology
+    - Configure NoC-specific parameters (routing algorithm, virtual channels)
+    - Wizard explicitly supports NoC component type
   - Negative Tests (expected to FAIL):
-    - Set data_width to non-power-of-2 value and verify validation warning
-    - Set flit_width smaller than data_width and verify logical error detection
+    - Attempt to create non-NoC components should not be available in UI
+    - Select component types other than NoC should not be offered in wizard
 
-- AC-6: JSON export generates valid framework-compatible configuration files
+- AC-6: Port visualization for components (Second Step)
   - Positive Tests (expected to PASS):
-    - Export mesh topology configuration, verify JSON contains name, version, parameters.mesh, endpoints
-    - Export explicit topology configuration, verify JSON contains xps array with all configured routers
-    - Load exported JSON back into GUI, verify all settings are preserved
+    - Display ports on crosspoint components matching reference image (2.png)
+    - Display ports on endpoint components
+    - Visual representation matches example image (socreates.png / 3.png)
   - Negative Tests (expected to FAIL):
-    - Export configuration with missing mandatory fields (name, version) and verify error
-    - Export configuration with orphaned endpoints (not mapped to any XP) and verify warning
-
-- AC-7: GUI integrates with xmake build system
-  - Positive Tests (expected to PASS):
-    - Run xmake build from frontend/qt directory, verify executable is generated
-    - Run xmake run, verify GUI application launches successfully
-    - Modify source files, run xmake rebuild, verify changes are reflected
-  - Negative Tests (expected to FAIL):
-    - Run xmake with missing Qt dependencies and verify clear error message
-    - Run xmake with corrupted xmake.lua and verify build failure is reported
-
-- AC-8: UI follows modern design principles
-  - Positive Tests (expected to PASS):
-    - Verify configuration panel can be collapsed/expanded via UI control
-    - Verify modern styling (flat design, consistent spacing, readable fonts)
-    - Verify topology visualization occupies primary screen space when config panel is collapsed
-  - Negative Tests (expected to FAIL):
-    - Attempt to use application with config panel permanently blocking topology view
+    - Display components without port information should show incomplete visualization
+    - Render ports with incorrect directionality should be visually wrong
 
 ## Path Boundaries
 
 Path boundaries define the acceptable range of implementation quality and choices.
 
 ### Upper Bound (Maximum Acceptable Scope)
-The implementation includes a modern Qt GUI with both mesh and explicit topology modes, high-quality topology visualization with drag-and-drop XP placement, collapsible configuration panel with smooth animations, comprehensive configuration forms for all XP/endpoint/topology parameters, real-time visual feedback, JSON import/export with validation, integration with framework's run_drc.rb for validation, modern flat UI design with consistent styling, and complete xmake build configuration with Qt dependency management.
+The implementation includes a complete React application with visual mesh topology rendering, full wizard workflow for NoC configuration, comprehensive endpoint and crosspoint configuration UI, port visualization on all components, JSON export with validation, and integration testing with the framework's generate script. The UI provides intuitive drag-and-drop or form-based configuration, real-time visual feedback, and error handling for invalid configurations.
 
 ### Lower Bound (Minimum Acceptable Scope)
-The implementation includes a basic Qt GUI with modern styling, topology visualization as the primary focus (occupying most screen space), collapsible configuration panel (can be hidden to maximize topology view), support for mesh topology creation via parameter input, simple form-based configuration for essential XP and endpoint parameters, JSON export functionality that generates framework-compatible files using a reference example scheme, and functional xmake build system that compiles and runs the application.
+The implementation includes a basic React application that displays mesh topology in a grid layout, provides a simple wizard for creating NoC configurations with mesh dimensions and routing algorithm selection, allows basic endpoint attachment to crosspoints, and exports valid JSON matching the framework schema. The visual representation is functional but minimal, and port visualization may be simplified or deferred to the second milestone.
 
 ### Allowed Choices
-- Can use: Qt Widgets or Qt Quick/QML for UI framework, JSON libraries (Qt's QJsonDocument or third-party), modern Qt styling (QSS stylesheets, Material Design principles), standard Qt layouts and controls, collapsible/dockable widgets for configuration panel, framework's example JSON schemas as reference (select one static example as the initial target format)
-- Cannot use: Qt5 or earlier versions (project is Qt-based), non-Qt GUI frameworks, build systems other than xmake (explicitly required), JSON formats incompatible with the finepaper framework structure, outdated UI patterns (avoid skeuomorphic or cluttered designs)
-- Validation approach: Must support future integration with framework's run_drc.rb script (as clarified by user), but initial implementation can use basic client-side validation for immediate feedback
+- Can use: React (required), standard React patterns (hooks, components), CSS/styled-components for styling, JSON serialization libraries, canvas or SVG for topology visualization, form libraries for wizard implementation
+- Cannot use: Non-React frameworks (Vue, Angular), technologies that conflict with future Qt migration, complex state management libraries unless necessary (Redux, MobX - prefer React Context or simple state)
+- Technology stack: React is specified for this prototype, with awareness that the project will migrate to Qt-based implementation in the future
+- JSON format: Must use the existing framework schema (NocConfig format with xps, connections, endpoints fields) - this is fixed per framework requirements
+- Topology support: Only mesh topology is supported in this version - other topologies (star, ring, tree) are explicitly out of scope
 
 ## Feasibility Hints and Suggestions
 
@@ -100,107 +92,85 @@ The implementation includes a basic Qt GUI with modern styling, topology visuali
 
 ### Conceptual Approach
 
-**Architecture Overview:**
+**React Component Architecture:**
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                     Main Window (Qt6)                               │
-├─────────────────────────────────────────────────────────────────────┤
-│  Menu Bar: File (New/Open/Save/Export) | Edit | View               │
-├─────────────────────────────────────────────┬───────────────────────┤
-│                                             │  Config Panel [◀]     │
-│   Topology Visualization Canvas             │  (Collapsible)        │
-│   (Primary Focus - Maximum Space)           │ ┌─────────────────┐   │
-│                                             │ │ Mode: [Mesh ▼]  │   │
-│  ┌─────┐         ┌─────┐                   │ ├─────────────────┤   │
-│  │ XP  │────────▶│ XP  │                   │ │ Mesh Params:    │   │
-│  └─────┘         └─────┘                   │ │  Width:  [4]    │   │
-│     │               │                       │ │  Height: [4]    │   │
-│     ▼               ▼                       │ ├─────────────────┤   │
-│  ┌─────┐         ┌─────┐                   │ │ Topology:       │   │
-│  │ XP  │────────▶│ XP  │                   │ │  Data W: [32]   │   │
-│  └─────┘         └─────┘                   │ │  Flit W: [64]   │   │
-│                                             │ ├─────────────────┤   │
-│  Modern flat design with clean lines       │ │ Selected XP:    │   │
-│  High-DPI support, smooth rendering         │ │  Route: [xy▼]   │   │
-│                                             │ │  VC: [2]        │   │
-│                                             │ │  Buf: [8]       │   │
-│                                             │ ├─────────────────┤   │
-│                                             │ │ Endpoint:       │   │
-│                                             │ │  Type: [M/S]    │   │
-│                                             │ │  Proto: [AXI4]  │   │
-│                                             │ │  QoS: [✓]       │   │
-│                                             │ └─────────────────┘   │
-└─────────────────────────────────────────────┴───────────────────────┘
-
-When collapsed: [▶] button expands panel
-Topology canvas expands to full width for maximum visualization space
+App
+├── WizardFlow (manages multi-step configuration)
+│   ├── MeshDimensionsStep (width × height input)
+│   ├── RoutingAlgorithmStep (select xy, yx, west_first, etc.)
+│   └── EndpointConfigStep (add/configure endpoints)
+├── TopologyCanvas (visual mesh display)
+│   ├── CrosspointNode (renders XP at grid position)
+│   ├── ConnectionLine (renders links between XPs)
+│   └── EndpointNode (renders endpoint attached to XP)
+└── ExportButton (generates JSON output)
 ```
 
-**Data Flow:**
-1. User creates new NoC → Wizard collects mode (mesh/explicit) and basic parameters
-2. GUI initializes internal data model (NoC object with XPs, endpoints, connections)
-3. Visualization canvas renders topology based on data model
-4. User selects XP/endpoint → Configuration panel populates with current values
-5. User modifies config → Data model updates → Canvas refreshes
-6. User exports → Data model serializes to JSON → Framework validation (future: run_drc.rb)
+**Data Model (in-memory state):**
+```javascript
+{
+  name: "my_noc",
+  version: "1.0",
+  meshDimensions: { width: 3, height: 3 },
+  xps: [
+    { id: "xp_0_0", x: 0, y: 0, routing_algorithm: "xy" }
+  ],
+  connections: [
+    { from: "xp_0_0", to: "xp_1_0", dir: "east" }
+  ],
+  endpoints: [
+    { id: "ep_cpu0", type: "master", protocol: "axi4", data_width: 64 }
+  ]
+}
+```
 
-**Key Components:**
-- `NocDataModel`: Holds topology structure (XPs, endpoints, connections, parameters)
-- `TopologyCanvas`: QGraphicsView-based widget for rendering and interaction
-- `ConfigPanel`: QWidget with forms for parameter editing
-- `JsonExporter`: Serializes NocDataModel to framework JSON format
-- `JsonImporter`: Parses framework JSON and populates NocDataModel
+**JSON Export Logic:**
+1. Validate configuration completeness
+2. Transform internal state to framework schema format
+3. Generate connections automatically based on mesh topology (east/south links)
+4. Serialize to JSON string
+5. Provide download or copy-to-clipboard functionality
+
+**Mesh Topology Generation:**
+- For width=W, height=H: create W×H crosspoints at positions (x,y)
+- Generate east connections: (x,y) → (x+1,y) for x < W-1
+- Generate south connections: (x,y) → (x,y+1) for y < H-1
+- Each XP gets unique ID: `xp_{x}_{y}`
+
+**Port Visualization (Second Step):**
+- Render directional ports on each crosspoint (north, south, east, west, local)
+- Show endpoint connection to local port
+- Visual style matches reference images (2.png, 3.png)
 
 ### Relevant References
-- `frontend/qt/xmake.lua` - Build configuration template, defines Qt dependencies and build rules
-- `frontend/docs/xmake.txt` - xmake documentation for Qt project setup
-- `framework/lib/topology_expander.rb` - Shows how mesh parameters expand to XPs/connections
-- `framework/lib/noc.rb` - Defines NoC data structure (xps, endpoints, connections, parameters)
-- `framework/lib/xp.rb` - XP class with config_schema showing valid routing algorithms and parameters
-- `framework/lib/endpoint.rb` - Endpoint class with config_schema for buffer_depth and qos_enabled
-- `framework/examples/*.json` - Reference JSON files showing expected structure
+- `/framework/examples/simple_mesh.json` - Example NoC configuration showing required JSON structure
+- `/framework/src/ruby/model/noc_config.rb` - Framework's data model defining schema
+- `/framework/src/ruby/parser/json_parser.rb` - JSON parsing logic that validates structure
+- `/framework/src/ruby/topology/mesh_expander.rb` - Mesh topology generation algorithm
+- `/framework/bin/generate` - CLI script that consumes JSON and generates RTL
 
 ## Dependencies and Sequence
 
 ### Milestones
+1. **Milestone 1: Core Visual Topology and Configuration**
+   - Phase A: React project setup and basic component structure
+   - Phase B: Wizard implementation for mesh configuration (dimensions, routing algorithm)
+   - Phase C: Visual mesh topology rendering with crosspoints in grid layout
+   - Phase D: Endpoint configuration and attachment to crosspoints
+   - Phase E: JSON export matching framework schema
+   - Phase F: Integration testing with framework's bin/generate script
 
-1. **Project Setup and Build Infrastructure**
-   - Phase A: Configure xmake.lua with Qt6 dependencies (qtcore, qtwidgets, qtgui)
-   - Phase B: Create basic Qt6 application skeleton with main window and modern styling
-   - Phase C: Verify build and run workflow with xmake
+2. **Milestone 2: Port Visualization Enhancement**
+   - Phase A: Add port rendering to crosspoint components
+   - Phase B: Add port rendering to endpoint components
+   - Phase C: Visual refinement to match reference images (2.png, 3.png)
 
-2. **Data Model Implementation**
-   - Phase A: Define NocDataModel class to hold topology structure
-   - Phase B: Implement JSON serialization (export to framework format)
-   - Phase C: Implement JSON deserialization (import from framework format)
-   - Dependencies: Requires Milestone 1 completion
-
-3. **Topology Visualization**
-   - Phase A: Create TopologyCanvas widget using QGraphicsView
-   - Phase B: Implement mesh topology rendering (grid layout of XPs)
-   - Phase C: Implement explicit topology rendering (custom XP positions)
-   - Phase D: Add connection visualization (lines between XPs)
-   - Dependencies: Requires Milestone 2 (data model must exist to visualize)
-
-4. **Configuration Interface**
-   - Phase A: Build topology mode selector (mesh vs explicit)
-   - Phase B: Create mesh parameter input form (width, height)
-   - Phase C: Create topology parameter form (data_width, flit_width, addr_width)
-   - Phase D: Create XP configuration panel (routing algorithm, VC count, buffer depth)
-   - Phase E: Create endpoint configuration panel (type, protocol, buffer depth, QoS)
-   - Dependencies: Requires Milestone 2 (data model) and Milestone 3 (visualization for selection feedback)
-
-5. **Wizard and Workflow Integration**
-   - Phase A: Implement new NoC creation wizard
-   - Phase B: Connect configuration panels to data model (bidirectional binding)
-   - Phase C: Add file operations (New, Open, Save, Export JSON)
-   - Dependencies: Requires Milestones 2, 3, and 4
-
-6. **Validation and Polish**
-   - Phase A: Add client-side validation for parameter ranges
-   - Phase B: Prepare integration point for framework's run_drc.rb (future)
-   - Phase C: Add user feedback (error messages, status indicators)
-   - Dependencies: Requires all previous milestones
+**Dependency Notes:**
+- Milestone 1 Phase B (wizard) must complete before Phase C (visual rendering) to provide configuration data
+- Milestone 1 Phase C (topology rendering) must complete before Phase D (endpoint attachment) to have visual targets
+- Milestone 1 Phase E (JSON export) depends on all prior phases to have complete data model
+- Milestone 2 depends on Milestone 1 completion for base topology visualization
+- Priority: Visual components (Phases C, D) take precedence over data model perfection per draft requirements
 
 ## Implementation Notes
 
@@ -209,40 +179,39 @@ Topology canvas expands to full width for maximum visualization space
 - These terms are for plan documentation only, not for the resulting codebase
 - Use descriptive, domain-appropriate naming in code instead
 
-### Framework Integration Points
-- JSON output must match the framework's expected structure: top-level fields (name, version, parameters), xps array or parameters.mesh, endpoints array, connections array
-- Use a static reference example from framework/examples/ directory as the initial target format (select one example that demonstrates the core structure, avoiding overly complex test schemes)
-- The framework will provide run_drc.rb for validation in the future - design the export workflow to accommodate external validation script integration
-- Reference the selected example JSON for concrete structure validation
+### Clarifications from Draft Analysis
 
-### Qt6 and xmake Specifics
-- Use the existing template at frontend/qt as the starting point
-- xmake.lua must declare Qt6 dependencies: add_requires("qtwidgets", "qtgui", "qtcore")
-- Follow xmake documentation at frontend/docs/xmake.txt for Qt6-specific build rules
-- Ensure cross-platform compatibility (Linux, macOS, Windows) through Qt6 abstractions
-- Leverage Qt6 modern features: improved QML engine, better high-DPI support, enhanced styling capabilities
+**Terminology:**
+- "IP" refers to Intellectual Property (NoC IP cores), not Internet Protocol
+- The framework uses "NoC" (Network-on-Chip) terminology consistently
+- "IR" in the draft appears to be a typo and should be interpreted as "NoC configuration"
 
-### Configuration Schema Alignment
-- XP routing algorithms: Must be one of ['xy', 'yx'] (from framework's XP.config_schema)
-- XP VC count: Integer range 1-8 (from framework validation)
-- Buffer depths: Positive integers (XP default: 8, Endpoint default: 16)
-- Endpoint types: 'master' or 'slave'
-- Endpoint protocols: Must match framework's supported protocols (check framework/lib/endpoint.rb)
+**JSON Format:**
+- Despite draft stating "format is not defined yet", the framework already has a well-defined schema
+- Frontend must generate JSON matching the existing framework's NocConfig format
+- Required top-level fields: name, version, xps, connections, endpoints
+- Reference: `/framework/examples/simple_mesh.json` for exact structure
 
-### User Experience Considerations
-- Topology visualization is the primary focus - it should occupy the majority of screen space
-- Configuration panel must be collapsible to maximize topology viewing area
-- Apply modern UI design principles: flat design, consistent spacing, readable typography, subtle shadows/borders
-- Provide visual feedback when users select XPs or endpoints in the canvas
-- Use sensible defaults from the framework to minimize required user input
-- Display clear error messages for validation failures
-- Consider using a side panel or dockable widget for configuration that can slide in/out
-- Support undo/redo for configuration changes (optional for upper bound)
+**Technology Stack:**
+- Frontend technology: React (confirmed)
+- This is a prototype project that will migrate to Qt-based implementation in the future
+- Keep implementation simple and focused on visual functionality over complex data models
 
-### Port Configuration (Second Step - Future Work)
-- The draft mentions adding ports for all components as a second step (currently TBD)
-- This refers to integrating with the framework's NiPortPlugin which parses Verilog/SystemVerilog IP cores
-- Initial implementation should focus on topology and basic configuration; port integration can be added in a future iteration
+**Configuration Parameters:**
+- Mesh dimensions: width × height (fundamental to mesh topology)
+- XP routing algorithm: xy, yx, west_first, etc. (per framework support)
+- Endpoint types and protocols: master/slave with AXI4 protocol
+- XP buffer configuration (vc_count, buffer_depth) can be added as needed
+
+**Priority Guidance:**
+- Highest priority: Complete the visual part (topology display, wizard UI)
+- Secondary priority: Data models and JSON export
+- This aligns with rapid prototyping approach before Qt migration
+
+**Reference Images:**
+- 1.png (image-1.png): Overall workflow diagram
+- 2.png (image.png): Example with port visualization
+- 3.png (socreates.png): Additional example of component visualization
 
 --- Original Design Draft Start ---
 
@@ -263,12 +232,13 @@ add ports for all componenets. The target is second image(example image).
 TBD.
 
 # Notes
-we will use xmake as build system. you can change all files under frontend. and it provide a simple template under frontend/qt. The xmake doc is under frontend/docs/xmake.txt
+The highest prioir is complete the visual part instead of data models
+this is proto project. we will imgrate to qt-base project in the future.
 
 All reference image is below.
-![alt text](image-1.png) after upload ,is 1.jpeg or 2.jpeg
+![alt text](image-1.png) after upload ,is 1.png
 
-![example image](image.png) after upload is 3.jpeg
+![example image](image.png) after upload is 2.png
 
-![example 2](socreates.png) after upload is 4.jpeg
+![example 2](socreates.png) after upload is 3.png
 --- Original Design Draft End ---

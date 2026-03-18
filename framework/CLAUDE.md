@@ -57,7 +57,7 @@ end
 ### Config Fields
 
 **XP config:**
-- `routing_algorithm` (string, default: 'xy') — routing algorithm: 'xy', 'west_first', 'adaptive'
+- `routing_algorithm` (string, default: 'xy') — routing algorithm: 'xy', 'yx'
 - `vc_count` (integer, default: 2) — virtual channel count, must be 1-8
 - `buffer_depth` (integer, default: 8) — buffer depth, must be > 0
 
@@ -86,7 +86,7 @@ end
 **XP validation:**
 - `UniqueXpIds` — no duplicate XP IDs
 - `ValidXpConfig` — config values match schema types
-- `XpRoutingAlgorithm` — routing_algorithm in ['xy', 'west_first', 'adaptive']
+- `XpRoutingAlgorithm` — routing_algorithm in ['xy', 'yx']
 - `XpVirtualChannels` — vc_count in range 1-8
 - `XpBufferDepth` — buffer_depth > 0
 

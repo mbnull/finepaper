@@ -185,8 +185,8 @@ class TestConfigSchema < Minitest::Test
   end
 
   def test_xp_merges_custom_config
-    xp = Xp.new('xp1', 0, 0, [], { routing_algorithm: 'west_first', vc_count: 4 })
-    assert_equal 'west_first', xp.config[:routing_algorithm]
+    xp = Xp.new('xp1', 0, 0, [], { routing_algorithm: 'yx', vc_count: 4 })
+    assert_equal 'yx', xp.config[:routing_algorithm]
     assert_equal 4, xp.config[:vc_count]
     assert_equal 8, xp.config[:buffer_depth]
   end

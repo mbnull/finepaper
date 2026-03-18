@@ -15,11 +15,12 @@ add ports for all componenets. The target is second image(example image).
 TBD.
 
 # Notes
-we will use xmake as build system. you can change all files under frontend. and it provide a simple template under frontend/qt. The xmake doc is under frontend/docs/xmake.txt
+The highest prioir is complete the visual part instead of data models
+this is proto project. we will imgrate to qt-base project in the future.
 
 All reference image is below.
-![alt text](image-1.png) after upload ,is 1.jpeg or 2.jpeg
+![alt text](image-1.png) after upload ,is 1.png
 
-![example image](image.png) after upload is 3.jpeg
+![example image](image.png) after upload is 2.png
 
-![example 2](socreates.png) after upload is 4.jpeg
+![example 2](socreates.png) after upload is 3.png
