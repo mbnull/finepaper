@@ -22,6 +22,7 @@ public:
     void removeConnection(const QString& connectionId);
     std::unique_ptr<Connection> takeConnection(const QString& connectionId);
     void insertConnection(std::unique_ptr<Connection> connection);
+    bool isValidConnection(const PortRef& source, const PortRef& target) const;
 
     const std::vector<std::unique_ptr<Module>>& modules() const { return m_modules; }
     const std::vector<std::unique_ptr<Connection>>& connections() const { return m_connections; }

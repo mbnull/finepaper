@@ -14,7 +14,9 @@ void Graph::removeModule(const QString& moduleId) {
     auto connIt = m_connections.begin();
     while (connIt != m_connections.end()) {
         if ((*connIt)->source().moduleId == moduleId || (*connIt)->target().moduleId == moduleId) {
+            QString connId = (*connIt)->id();
             connIt = m_connections.erase(connIt);
+            emit connectionRemoved(connId);
         } else {
             ++connIt;
         }
@@ -85,4 +87,13 @@ void Graph::insertConnection(std::unique_ptr<Connection> connection) {
     Connection* ptr = connection.get();
     m_connections.push_back(std::move(connection));
     emit connectionAdded(ptr);
+}
+
+bool Graph::isValidConnection(const PortRef& source, const PortRef& target) const {
+    if (source.moduleId == target.moduleId) return false;
+    return std::none_of(m_connections.begin(), m_connections.end(),
+        [&](const std::unique_ptr<Connection>& c) {
+            return c->source().moduleId == source.moduleId && c->source().portId == source.portId &&
+                   c->target().moduleId == target.moduleId && c->target().portId == target.portId;
+        });
 }

@@ -16,6 +16,11 @@ PropertyPanel::PropertyPanel(Graph* graph, CommandManager* commandManager, QWidg
     m_layout = new QVBoxLayout(this);
 }
 
+void PropertyPanel::setSelectedModule(QString moduleId) {
+    Module* module = moduleId.isEmpty() ? nullptr : m_graph->getModule(moduleId);
+    setSelectedModule(module);
+}
+
 void PropertyPanel::setSelectedModule(Module* module) {
     if (m_selectedModule) {
         disconnect(m_selectedModule, &Module::parameterChanged, this, &PropertyPanel::onParameterChanged);

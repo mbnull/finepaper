@@ -14,4 +14,5 @@ private:
     Graph* m_graph;
     QString m_moduleId;
     std::unique_ptr<Module> m_module;
+    std::vector<std::unique_ptr<Connection>> m_connections;
 };

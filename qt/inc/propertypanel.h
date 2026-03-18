@@ -15,6 +15,9 @@ public:
     PropertyPanel(Graph* graph, CommandManager* commandManager, QWidget* parent = nullptr);
     void setSelectedModule(Module* module);
 
+public slots:
+    void setSelectedModule(QString moduleId);
+
 private slots:
     void onParameterChanged(const QString& name);
 

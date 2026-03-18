@@ -32,7 +32,7 @@ protected:
 
         QDrag* drag = new QDrag(this);
         QMimeData* mimeData = new QMimeData;
-        mimeData->setText(item->text());
+        mimeData->setData("application/x-moduletype", item->text().toUtf8());
         drag->setMimeData(mimeData);
         drag->exec(Qt::CopyAction);
     }

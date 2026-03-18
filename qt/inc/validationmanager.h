@@ -6,6 +6,7 @@
 class Graph;
 class LogPanel;
 class BasicValidator;
+class DRCRunner;
 
 class ValidationManager : public QObject {
     Q_OBJECT
@@ -21,6 +22,7 @@ private:
     Graph* m_graph;
     LogPanel* m_logPanel;
     BasicValidator* m_validator;
+    DRCRunner* m_drcRunner;
 };
 
 #endif

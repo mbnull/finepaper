@@ -6,6 +6,9 @@
 #include <QStringList>
 #include <vector>
 #include <unordered_map>
+#include <memory>
+
+class ModuleProvider;
 
 struct ModuleType {
     QString name;
@@ -17,6 +20,7 @@ class ModuleRegistry {
 public:
     static ModuleRegistry& instance();
 
+    void addProvider(std::unique_ptr<ModuleProvider> provider);
     void registerType(const ModuleType& type);
     const ModuleType* getType(const QString& name) const;
     QStringList availableTypes() const;
