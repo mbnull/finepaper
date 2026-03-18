@@ -17,6 +17,9 @@ target("qt")
     add_files("inc/graph.h")
     add_files("inc/module.h")
     add_files("inc/logpanel.h")
+    add_files("inc/nodeeditorwidget.h")
+    add_files("inc/graphnodemodel.h")
+    add_files("inc/propertypanel.h")
 
     add_includedirs("inc")
 
