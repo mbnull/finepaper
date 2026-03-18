@@ -11,6 +11,15 @@ void Graph::addModule(std::unique_ptr<Module> module) {
 }
 
 void Graph::removeModule(const QString& moduleId) {
+    auto connIt = m_connections.begin();
+    while (connIt != m_connections.end()) {
+        if ((*connIt)->source().moduleId == moduleId || (*connIt)->target().moduleId == moduleId) {
+            connIt = m_connections.erase(connIt);
+        } else {
+            ++connIt;
+        }
+    }
+
     auto it = std::remove_if(m_modules.begin(), m_modules.end(),
         [&moduleId](const std::unique_ptr<Module>& m) { return m->id() == moduleId; });
 
