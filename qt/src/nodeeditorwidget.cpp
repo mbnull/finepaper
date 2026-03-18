@@ -5,6 +5,8 @@
 #include "commands/addconnectioncommand.h"
 #include "commands/removeconnectioncommand.h"
 #include <QtNodes/NodeDelegateModelRegistry>
+#include <QtNodes/internal/NodeGraphicsObject.hpp>
+#include <QtNodes/internal/ConnectionGraphicsObject.hpp>
 #include <QVBoxLayout>
 #include <QDragEnterEvent>
 #include <QDropEvent>
@@ -160,7 +162,7 @@ void NodeEditorWidget::dropEvent(QDropEvent* event) {
     if (m_moduleToNodeId.contains(moduleId)) {
         QPointF scenePos = m_view->mapToScene(event->pos());
         auto nodeId = m_moduleToNodeId.value(moduleId);
-        m_scene->setNodePosition(nodeId, scenePos);
+        m_graphModel->setNodeData(nodeId, QtNodes::NodeRole::Position, scenePos);
     }
 
     event->acceptProposedAction();
