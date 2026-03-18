@@ -5,6 +5,7 @@
 #include "commands/addconnectioncommand.h"
 #include "commands/removeconnectioncommand.h"
 #include <QtNodes/NodeDelegateModelRegistry>
+#include <QtNodes/NodeGraphicsObject>
 #include <QVBoxLayout>
 #include <QDragEnterEvent>
 #include <QDropEvent>
@@ -144,4 +145,140 @@ void NodeEditorWidget::dropEvent(QDropEvent* event) {
     m_commandManager->executeCommand(std::move(command));
 
     event->acceptProposedAction();
+}
+
+void NodeEditorWidget::onSelectionChanged() {
+    auto selectedItems = m_scene->selectedItems();
+    if (selectedItems.isEmpty()) {
+        emit moduleSelected(QString());
+        return;
+    }
+
+    for (auto* item : selectedItems) {
+        auto* nodeItem = qgraphicsitem_cast<QtNodes::NodeGraphicsObject*>(item);
+        if (nodeItem) {
+            auto nodeId = nodeItem->nodeId();
+            auto it = m_nodeToModuleId.find(nodeId);
+            if (it != m_nodeToModuleId.end()) {
+                emit moduleSelected(it.value());
+                return;
+            }
+        }
+    }
+    emit moduleSelected(QString());
+}
+
+void NodeEditorWidget::onConnectionCreated(QtNodes::ConnectionId connectionId) {
+    if (m_updatingFromGraph) return;
+
+    auto srcNodeId = m_graphModel->connectionSourceNodeId(connectionId);
+    auto tgtNodeId = m_graphModel->connectionTargetNodeId(connectionId);
+    auto srcPortIdx = m_graphModel->connectionSourcePortIndex(connectionId);
+    auto tgtPortIdx = m_graphModel->connectionTargetPortIndex(connectionId);
+
+    auto srcModuleIt = m_nodeToModuleId.find(srcNodeId);
+    auto tgtModuleIt = m_nodeToModuleId.find(tgtNodeId);
+    if (srcModuleIt == m_nodeToModuleId.end() || tgtModuleIt == m_nodeToModuleId.end()) return;
+
+    QString srcPortId = getPortId(srcNodeId, QtNodes::PortType::Out, srcPortIdx);
+    QString tgtPortId = getPortId(tgtNodeId, QtNodes::PortType::In, tgtPortIdx);
+    if (srcPortId.isEmpty() || tgtPortId.isEmpty()) return;
+
+    PortRef srcRef{srcModuleIt.value(), srcPortId};
+    PortRef tgtRef{tgtModuleIt.value(), tgtPortId};
+
+    auto command = std::make_unique<AddConnectionCommand>(m_graph, srcRef, tgtRef);
+    m_commandManager->executeCommand(std::move(command));
+}
+
+void NodeEditorWidget::onConnectionDeleted(QtNodes::ConnectionId connectionId) {
+    if (m_updatingFromGraph) return;
+
+    for (auto it = m_connectionToQtId.begin(); it != m_connectionToQtId.end(); ++it) {
+        if (it.value() == connectionId) {
+            auto command = std::make_unique<RemoveConnectionCommand>(m_graph, it.key());
+            m_commandManager->executeCommand(std::move(command));
+            return;
+        }
+    }
+}
+
+QString NodeEditorWidget::getPortId(QtNodes::NodeId nodeId, QtNodes::PortType portType, QtNodes::PortIndex portIndex) const {
+    auto* model = dynamic_cast<GraphNodeModel*>(m_graphModel->delegateModel<GraphNodeModel>(nodeId));
+    if (!model || !model->module()) return QString();
+
+    Port::Direction dir = (portType == QtNodes::PortType::Out) ? Port::Direction::Output : Port::Direction::Input;
+    QtNodes::PortIndex idx = 0;
+    for (const auto& port : model->module()->ports()) {
+        if (port.direction() == dir) {
+            if (idx == portIndex) return port.id();
+            idx++;
+        }
+    }
+    return QString();
+}
+
+void NodeEditorWidget::onConnectionCreated(QtNodes::ConnectionId connectionId) {
+    if (m_updatingFromGraph) return;
+
+    auto srcNodeId = m_graphModel->connectionSourceNodeId(connectionId);
+    auto tgtNodeId = m_graphModel->connectionTargetNodeId(connectionId);
+    auto srcPortIdx = m_graphModel->connectionSourcePortIndex(connectionId);
+    auto tgtPortIdx = m_graphModel->connectionTargetPortIndex(connectionId);
+
+    QString srcModuleId = m_nodeToModuleId.value(srcNodeId);
+    QString tgtModuleId = m_nodeToModuleId.value(tgtNodeId);
+    if (srcModuleId.isEmpty() || tgtModuleId.isEmpty()) return;
+
+    QString srcPortId = getPortId(srcNodeId, QtNodes::PortType::Out, srcPortIdx);
+    QString tgtPortId = getPortId(tgtNodeId, QtNodes::PortType::In, tgtPortIdx);
+    if (srcPortId.isEmpty() || tgtPortId.isEmpty()) return;
+
+    QString connId = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    auto connection = std::make_unique<Connection>(connId, PortRef{srcModuleId, srcPortId}, PortRef{tgtModuleId, tgtPortId});
+    auto command = std::make_unique<AddConnectionCommand>(m_graph, std::move(connection));
+    m_commandManager->executeCommand(std::move(command));
+}
+
+void NodeEditorWidget::onConnectionDeleted(QtNodes::ConnectionId connectionId) {
+    if (m_updatingFromGraph) return;
+
+    for (auto it = m_connectionToQtId.begin(); it != m_connectionToQtId.end(); ++it) {
+        if (it.value() == connectionId) {
+            auto command = std::make_unique<RemoveConnectionCommand>(m_graph, it.key());
+            m_commandManager->executeCommand(std::move(command));
+            break;
+        }
+    }
+}
+
+void NodeEditorWidget::onSelectionChanged() {
+    auto selectedItems = m_scene->selectedItems();
+    for (auto* item : selectedItems) {
+        if (auto* nodeItem = dynamic_cast<QtNodes::NodeGraphicsObject*>(item)) {
+            auto nodeId = nodeItem->nodeId();
+            QString moduleId = m_nodeToModuleId.value(nodeId);
+            if (!moduleId.isEmpty()) {
+                emit moduleSelected(moduleId);
+                return;
+            }
+        }
+    }
+}
+
+QString NodeEditorWidget::getPortId(QtNodes::NodeId nodeId, QtNodes::PortType portType, QtNodes::PortIndex portIndex) const {
+    auto* model = dynamic_cast<GraphNodeModel*>(m_graphModel->delegateModel<GraphNodeModel>(nodeId));
+    if (!model || !model->module()) return "";
+
+    unsigned int idx = 0;
+    for (const auto& port : model->module()->ports()) {
+        if ((portType == QtNodes::PortType::Out && port.direction() == Port::Direction::Output) ||
+            (portType == QtNodes::PortType::In && port.direction() == Port::Direction::Input)) {
+            if (idx == portIndex) {
+                return port.id();
+            }
+            idx++;
+        }
+    }
+    return "";
 }
