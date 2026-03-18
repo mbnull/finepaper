@@ -4,6 +4,7 @@
 #include "commandmanager.h"
 #include "commands/setparametercommand.h"
 #include <cfloat>
+#include <climits>
 #include <QLabel>
 #include <QLineEdit>
 #include <QSpinBox>
@@ -32,6 +33,9 @@ void PropertyPanel::setSelectedModule(Module* module) {
 void PropertyPanel::clearPanel() {
     QLayoutItem* item;
     while ((item = m_layout->takeAt(0))) {
+        if (item->layout()) {
+            delete item->layout();
+        }
         delete item->widget();
         delete item;
     }
