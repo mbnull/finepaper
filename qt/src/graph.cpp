@@ -1,18 +1,28 @@
 #include "graph.h"
+#include "moduleregistry.h"
 #include <algorithm>
 #include <QFile>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
+#include <QDebug>
 
 Graph::Graph(QObject* parent) : QObject(parent) {
 }
 
 void Graph::addModule(std::unique_ptr<Module> module) {
+    if (module->id().isEmpty()) {
+        qWarning() << "Cannot add module with empty ID";
+        return;
+    }
+    if (getModule(module->id())) {
+        qWarning() << "Cannot add module with duplicate ID:" << module->id();
+        return;
+    }
     Module* ptr = module.get();
     connect(ptr, &Module::parameterChanged, this, [this, ptr](const QString& paramName) {
         emit parameterChanged(ptr->id(), paramName);
-    });
+    }, Qt::UniqueConnection);
     m_modules.push_back(std::move(module));
     emit moduleAdded(ptr);
 }
@@ -57,10 +67,18 @@ std::unique_ptr<Module> Graph::takeModule(const QString& moduleId) {
 }
 
 void Graph::insertModule(std::unique_ptr<Module> module) {
+    if (module->id().isEmpty()) {
+        qWarning() << "Cannot insert module with empty ID";
+        return;
+    }
+    if (getModule(module->id())) {
+        qWarning() << "Cannot insert module with duplicate ID:" << module->id();
+        return;
+    }
     Module* ptr = module.get();
     connect(ptr, &Module::parameterChanged, this, [this, ptr](const QString& paramName) {
         emit parameterChanged(ptr->id(), paramName);
-    });
+    }, Qt::UniqueConnection);
     m_modules.push_back(std::move(module));
     emit moduleAdded(ptr);
 }
@@ -136,7 +154,18 @@ bool Graph::loadFromJson(const QString& jsonPath) {
     for (const auto& xpVal : xps) {
         QJsonObject xp = xpVal.toObject();
         QString id = xp["id"].toString();
+
+        const ModuleType* type = ModuleRegistry::instance().getType("XP");
+        if (!type) continue;
+
         auto module = std::make_unique<Module>(id, "XP");
+
+        for (const auto& port : type->defaultPorts) {
+            module->addPort(port);
+        }
+        for (const auto& [key, param] : type->defaultParameters) {
+            module->setParameter(key, param.value());
+        }
 
         if (xp.contains("x")) module->setParameter("x", xp["x"].toInt());
         if (xp.contains("y")) module->setParameter("y", xp["y"].toInt());
@@ -146,8 +175,6 @@ bool Graph::loadFromJson(const QString& jsonPath) {
         if (config.contains("vc_count")) module->setParameter("vc_count", config["vc_count"].toInt());
         if (config.contains("buffer_depth")) module->setParameter("buffer_depth", config["buffer_depth"].toInt());
 
-        module->addPort(Port("in", Port::Direction::Input, "noc", "Input"));
-        module->addPort(Port("out", Port::Direction::Output, "noc", "Output"));
         addModule(std::move(module));
     }
 
@@ -155,7 +182,18 @@ bool Graph::loadFromJson(const QString& jsonPath) {
     for (const auto& epVal : eps) {
         QJsonObject ep = epVal.toObject();
         QString id = ep["id"].toString();
+
+        const ModuleType* type = ModuleRegistry::instance().getType("Endpoint");
+        if (!type) continue;
+
         auto module = std::make_unique<Module>(id, "Endpoint");
+
+        for (const auto& port : type->defaultPorts) {
+            module->addPort(port);
+        }
+        for (const auto& [key, param] : type->defaultParameters) {
+            module->setParameter(key, param.value());
+        }
 
         if (ep.contains("type")) module->setParameter("type", ep["type"].toString());
         if (ep.contains("protocol")) module->setParameter("protocol", ep["protocol"].toString());
@@ -165,7 +203,6 @@ bool Graph::loadFromJson(const QString& jsonPath) {
         if (config.contains("buffer_depth")) module->setParameter("buffer_depth", config["buffer_depth"].toInt());
         if (config.contains("qos_enabled")) module->setParameter("qos_enabled", config["qos_enabled"].toBool());
 
-        module->addPort(Port("port", Port::Direction::Output, "noc", "Port"));
         addModule(std::move(module));
     }
 
