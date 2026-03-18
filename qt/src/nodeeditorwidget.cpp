@@ -98,8 +98,15 @@ void NodeEditorWidget::onConnectionAdded(Connection* connection) {
         }
     }
 
-    m_updatingFromGraph = true;
     QtNodes::ConnectionId connId{srcNodeId, srcPortIdx, tgtNodeId, tgtPortIdx};
+
+    if (m_pendingConnections.contains(connId)) {
+        m_pendingConnections.remove(connId);
+        m_connectionToQtId[connection->id()] = connId;
+        return;
+    }
+
+    m_updatingFromGraph = true;
     m_graphModel->addConnection(connId);
     m_connectionToQtId[connection->id()] = connId;
     m_updatingFromGraph = false;
@@ -145,11 +152,17 @@ void NodeEditorWidget::dropEvent(QDropEvent* event) {
     auto command = std::make_unique<AddModuleCommand>(m_graph, std::move(module));
     m_commandManager->executeCommand(std::move(command));
 
+    QPointF scenePos = m_view->mapToScene(event->pos());
+    auto nodeId = m_moduleToNodeId.value(moduleId);
+    m_scene->setNodePosition(nodeId, scenePos);
+
     event->acceptProposedAction();
 }
 
 void NodeEditorWidget::onConnectionCreated(QtNodes::ConnectionId connectionId) {
     if (m_updatingFromGraph) return;
+
+    m_pendingConnections.insert(connectionId);
 
     QString srcModuleId = m_nodeToModuleId.value(connectionId.outNodeId);
     QString tgtModuleId = m_nodeToModuleId.value(connectionId.inNodeId);
@@ -159,8 +172,17 @@ void NodeEditorWidget::onConnectionCreated(QtNodes::ConnectionId connectionId) {
     QString tgtPortId = getPortId(connectionId.inNodeId, QtNodes::PortType::In, connectionId.inPortIndex);
     if (srcPortId.isEmpty() || tgtPortId.isEmpty()) return;
 
+    PortRef source{srcModuleId, srcPortId};
+    PortRef target{tgtModuleId, tgtPortId};
+    if (!m_graph->isValidConnection(source, target)) {
+        m_updatingFromGraph = true;
+        m_graphModel->deleteConnection(connectionId);
+        m_updatingFromGraph = false;
+        return;
+    }
+
     QString connId = QUuid::createUuid().toString(QUuid::WithoutBraces);
-    auto connection = std::make_unique<Connection>(connId, PortRef{srcModuleId, srcPortId}, PortRef{tgtModuleId, tgtPortId});
+    auto connection = std::make_unique<Connection>(connId, source, target);
     auto command = std::make_unique<AddConnectionCommand>(m_graph, std::move(connection));
     m_commandManager->executeCommand(std::move(command));
 }
@@ -208,7 +230,14 @@ QString NodeEditorWidget::getPortId(QtNodes::NodeId nodeId, QtNodes::PortType po
 }
 
 void NodeEditorWidget::highlightElement(const QString& elementId) {
-    // Basic implementation - just clear selection for now
-    // Full highlighting would require accessing node graphics objects
     m_scene->clearSelection();
+
+    auto nodeIt = m_moduleToNodeId.find(elementId);
+    if (nodeIt != m_moduleToNodeId.end()) {
+        auto nodeGraphics = m_scene->nodeGraphicsObject(nodeIt.value());
+        if (nodeGraphics) {
+            nodeGraphics->setSelected(true);
+            m_view->centerOn(nodeGraphics);
+        }
+    }
 }

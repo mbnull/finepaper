@@ -91,6 +91,17 @@ void Graph::insertConnection(std::unique_ptr<Connection> connection) {
 
 bool Graph::isValidConnection(const PortRef& source, const PortRef& target) const {
     if (source.moduleId == target.moduleId) return false;
+
+    Module* sourceModule = getModule(source.moduleId);
+    Module* targetModule = getModule(target.moduleId);
+    if (!sourceModule || !targetModule) return false;
+
+    auto sourcePortExists = std::any_of(sourceModule->ports().begin(), sourceModule->ports().end(),
+        [&](const Port& p) { return p.id() == source.portId; });
+    auto targetPortExists = std::any_of(targetModule->ports().begin(), targetModule->ports().end(),
+        [&](const Port& p) { return p.id() == target.portId; });
+    if (!sourcePortExists || !targetPortExists) return false;
+
     return std::none_of(m_connections.begin(), m_connections.end(),
         [&](const std::unique_ptr<Connection>& c) {
             return c->source().moduleId == source.moduleId && c->source().portId == source.portId &&

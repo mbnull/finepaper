@@ -1,4 +1,5 @@
 #include "moduleregistry.h"
+#include "moduleprovider.h"
 
 ModuleRegistry& ModuleRegistry::instance() {
     static ModuleRegistry registry;
@@ -6,45 +7,14 @@ ModuleRegistry& ModuleRegistry::instance() {
 }
 
 ModuleRegistry::ModuleRegistry() {
-    // Register hardcoded example types
-    ModuleType cpu;
-    cpu.name = "CPU";
-    cpu.defaultPorts = {
-        Port("mem_bus", Port::Direction::Output, "bus", "mem_bus"),
-        Port("irq", Port::Direction::Input, "irq", "irq")
-    };
-    cpu.defaultParameters = {
-        {"frequency", Parameter("frequency", 1000)}
-    };
-    registerType(cpu);
+    addProvider(std::make_unique<HardcodedProvider>());
+}
 
-    ModuleType memory;
-    memory.name = "Memory";
-    memory.defaultPorts = {
-        Port("bus", Port::Direction::Input, "bus", "bus")
-    };
-    memory.defaultParameters = {
-        {"size", Parameter("size", 4096)}
-    };
-    registerType(memory);
-
-    ModuleType router;
-    router.name = "Router";
-    router.defaultPorts = {
-        Port("in0", Port::Direction::Input, "data", "in0"),
-        Port("in1", Port::Direction::Input, "data", "in1"),
-        Port("out0", Port::Direction::Output, "data", "out0"),
-        Port("out1", Port::Direction::Output, "data", "out1")
-    };
-    registerType(router);
-
-    ModuleType dma;
-    dma.name = "DMA";
-    dma.defaultPorts = {
-        Port("control", Port::Direction::Input, "control", "control"),
-        Port("mem", Port::Direction::Output, "bus", "mem")
-    };
-    registerType(dma);
+void ModuleRegistry::addProvider(std::unique_ptr<ModuleProvider> provider) {
+    auto types = provider->loadModules();
+    for (const auto& type : types) {
+        registerType(type);
+    }
 }
 
 void ModuleRegistry::registerType(const ModuleType& type) {

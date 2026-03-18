@@ -6,6 +6,9 @@ AddConnectionCommand::AddConnectionCommand(Graph* graph, std::unique_ptr<Connect
 }
 
 void AddConnectionCommand::execute() {
+    if (!m_graph->isValidConnection(m_connection->source(), m_connection->target())) {
+        return;
+    }
     m_graph->insertConnection(std::move(m_connection));
 }
 
