@@ -18,6 +18,8 @@ public:
     std::shared_ptr<QtNodes::NodeData> outData(QtNodes::PortIndex) override { return nullptr; }
     void setInData(std::shared_ptr<QtNodes::NodeData>, QtNodes::PortIndex) override {}
 
+    QWidget* embeddedWidget() override { return nullptr; }
+
     Module* module() const { return m_module; }
 
 private:
