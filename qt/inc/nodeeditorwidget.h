@@ -15,6 +15,9 @@ class NodeEditorWidget : public QWidget {
 public:
     NodeEditorWidget(Graph* graph, CommandManager* commandManager, QWidget* parent = nullptr);
 
+signals:
+    void moduleSelected(QString moduleId);
+
 protected:
     void dragEnterEvent(QDragEnterEvent* event) override;
     void dropEvent(QDropEvent* event) override;
@@ -26,6 +29,7 @@ private slots:
     void onConnectionRemoved(const QString& connectionId);
     void onConnectionCreated(QtNodes::ConnectionId connectionId);
     void onConnectionDeleted(QtNodes::ConnectionId connectionId);
+    void onSelectionChanged();
 
 private:
     QString getPortId(QtNodes::NodeId nodeId, QtNodes::PortType portType, QtNodes::PortIndex portIndex) const;

@@ -32,14 +32,27 @@ NodeEditorWidget::NodeEditorWidget(Graph* graph, CommandManager* commandManager,
     connect(m_graph, &Graph::connectionAdded, this, &NodeEditorWidget::onConnectionAdded);
     connect(m_graph, &Graph::connectionRemoved, this, &NodeEditorWidget::onConnectionRemoved);
 
+    connect(m_graphModel, &QtNodes::DataFlowGraphModel::connectionCreated, this, &NodeEditorWidget::onConnectionCreated);
+    connect(m_graphModel, &QtNodes::DataFlowGraphModel::connectionDeleted, this, &NodeEditorWidget::onConnectionDeleted);
+
     for (const auto& module : m_graph->modules()) {
         onModuleAdded(module.get());
+    }
+    for (const auto& connection : m_graph->connections()) {
+        onConnectionAdded(connection.get());
     }
 }
 
 void NodeEditorWidget::onModuleAdded(Module* module) {
-    QtNodes::NodeId nodeId = m_graphModel->addNode("GraphNode");
+    m_updatingFromGraph = true;
+    auto nodeId = m_graphModel->addNode("GraphNode");
+    auto* nodeModel = dynamic_cast<GraphNodeModel*>(m_graphModel->delegateModel<GraphNodeModel>(nodeId));
+    if (nodeModel) {
+        nodeModel->setModule(module);
+    }
     m_moduleToNodeId[module->id()] = nodeId;
+    m_nodeToModuleId[nodeId] = module->id();
+    m_updatingFromGraph = false;
 }
 
 void NodeEditorWidget::onModuleRemoved(const QString& moduleId) {
@@ -78,11 +91,11 @@ void NodeEditorWidget::dropEvent(QDropEvent* event) {
         module->addPort(port);
     }
     for (const auto& [name, param] : type->defaultParameters) {
-        module->setParameter(name, param.value);
+        module->setParameter(name, param.value());
     }
 
     auto command = std::make_unique<AddModuleCommand>(m_graph, std::move(module));
-    m_commandManager->execute(std::move(command));
+    m_commandManager->executeCommand(std::move(command));
 
     event->acceptProposedAction();
 }
