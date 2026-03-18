@@ -171,11 +171,23 @@ void NodeEditorWidget::onConnectionCreated(QtNodes::ConnectionId connectionId) {
 
     QString srcModuleId = m_nodeToModuleId.value(connectionId.outNodeId);
     QString tgtModuleId = m_nodeToModuleId.value(connectionId.inNodeId);
-    if (srcModuleId.isEmpty() || tgtModuleId.isEmpty()) return;
+    if (srcModuleId.isEmpty() || tgtModuleId.isEmpty()) {
+        m_pendingConnections.remove(connectionId);
+        m_updatingFromGraph = true;
+        m_graphModel->deleteConnection(connectionId);
+        m_updatingFromGraph = false;
+        return;
+    }
 
     QString srcPortId = getPortId(connectionId.outNodeId, QtNodes::PortType::Out, connectionId.outPortIndex);
     QString tgtPortId = getPortId(connectionId.inNodeId, QtNodes::PortType::In, connectionId.inPortIndex);
-    if (srcPortId.isEmpty() || tgtPortId.isEmpty()) return;
+    if (srcPortId.isEmpty() || tgtPortId.isEmpty()) {
+        m_pendingConnections.remove(connectionId);
+        m_updatingFromGraph = true;
+        m_graphModel->deleteConnection(connectionId);
+        m_updatingFromGraph = false;
+        return;
+    }
 
     PortRef source{srcModuleId, srcPortId};
     PortRef target{tgtModuleId, tgtPortId};

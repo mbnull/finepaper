@@ -13,6 +13,7 @@ void SetParameterCommand::execute() {
         m_oldValue = it->second.value();
     }
     module->setParameter(m_paramName, m_newValue);
+    m_executed = true;
 }
 
 void SetParameterCommand::undo() {

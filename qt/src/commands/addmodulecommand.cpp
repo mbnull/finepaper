@@ -7,6 +7,7 @@ AddModuleCommand::AddModuleCommand(Graph* graph, std::unique_ptr<Module> module)
 
 void AddModuleCommand::execute() {
     m_graph->insertModule(std::move(m_module));
+    m_executed = true;
 }
 
 void AddModuleCommand::undo() {

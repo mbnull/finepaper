@@ -18,6 +18,7 @@ void RemoveModuleCommand::execute() {
         }
     }
     m_module = m_graph->takeModule(m_moduleId);
+    m_executed = true;
 }
 
 void RemoveModuleCommand::undo() {
