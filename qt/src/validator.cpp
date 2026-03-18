@@ -17,12 +17,20 @@ void BasicValidator::checkInvalidConnections(const Graph* graph, QList<Validatio
         Port* targetPort = nullptr;
 
         for (const auto& module : graph->modules()) {
-            for (const auto& port : module->ports()) {
-                if (port.id() == conn->sourcePortId()) {
-                    sourcePort = const_cast<Port*>(&port);
+            if (module->id() == conn->source().moduleId) {
+                for (const auto& port : module->ports()) {
+                    if (port.id() == conn->source().portId) {
+                        sourcePort = const_cast<Port*>(&port);
+                        break;
+                    }
                 }
-                if (port.id() == conn->targetPortId()) {
-                    targetPort = const_cast<Port*>(&port);
+            }
+            if (module->id() == conn->target().moduleId) {
+                for (const auto& port : module->ports()) {
+                    if (port.id() == conn->target().portId) {
+                        targetPort = const_cast<Port*>(&port);
+                        break;
+                    }
                 }
             }
         }
@@ -70,13 +78,14 @@ void BasicValidator::checkUnconnectedPorts(const Graph* graph, QList<ValidationR
     QSet<QString> connectedPorts;
 
     for (const auto& conn : graph->connections()) {
-        connectedPorts.insert(conn->sourcePortId());
-        connectedPorts.insert(conn->targetPortId());
+        connectedPorts.insert(conn->source().moduleId + ":" + conn->source().portId);
+        connectedPorts.insert(conn->target().moduleId + ":" + conn->target().portId);
     }
 
     for (const auto& module : graph->modules()) {
         for (const auto& port : module->ports()) {
-            if (!connectedPorts.contains(port.id())) {
+            QString portKey = module->id() + ":" + port.id();
+            if (!connectedPorts.contains(portKey)) {
                 results.append(ValidationResult(
                     ValidationSeverity::Warning,
                     QString("Unconnected %1 port: %2")

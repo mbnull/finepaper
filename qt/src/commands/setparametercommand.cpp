@@ -6,7 +6,11 @@ SetParameterCommand::SetParameterCommand(Graph* graph, const QString& moduleId,
 
 void SetParameterCommand::execute() {
     Module* module = m_graph->getModule(m_moduleId);
-    m_oldValue = module->parameters().at(m_paramName).value();
+    const auto& params = module->parameters();
+    auto it = params.find(m_paramName);
+    if (it != params.end()) {
+        m_oldValue = it->second.value();
+    }
     module->setParameter(m_paramName, m_newValue);
 }
 
