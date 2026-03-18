@@ -9,6 +9,7 @@ class NodeEditorWidget;
 class PropertyPanel;
 class Palette;
 class LogPanel;
+class ValidationManager;
 
 namespace Ui {
 class MainWindow;
@@ -29,6 +30,7 @@ class MainWindow : public QMainWindow {
     PropertyPanel* m_propertyPanel;
     Palette* m_palette;
     LogPanel* m_logPanel;
+    ValidationManager* m_validationManager;
 };
 
 #endif // MAINWINDOW_H
