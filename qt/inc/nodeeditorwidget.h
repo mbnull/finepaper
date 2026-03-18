@@ -5,7 +5,7 @@
 #include <QtNodes/GraphicsView>
 #include <QtNodes/NodeDelegateModelRegistry>
 #include <QWidget>
-#include <unordered_map>
+#include <QMap>
 #include "graph.h"
 #include "commandmanager.h"
 
@@ -15,18 +15,29 @@ class NodeEditorWidget : public QWidget {
 public:
     NodeEditorWidget(Graph* graph, CommandManager* commandManager, QWidget* parent = nullptr);
 
+protected:
+    void dragEnterEvent(QDragEnterEvent* event) override;
+    void dropEvent(QDropEvent* event) override;
+
 private slots:
     void onModuleAdded(Module* module);
     void onModuleRemoved(const QString& moduleId);
     void onConnectionAdded(Connection* connection);
     void onConnectionRemoved(const QString& connectionId);
+    void onConnectionCreated(QtNodes::ConnectionId connectionId);
+    void onConnectionDeleted(QtNodes::ConnectionId connectionId);
 
 private:
+    QString getPortId(QtNodes::NodeId nodeId, QtNodes::PortType portType, QtNodes::PortIndex portIndex) const;
+
     Graph* m_graph;
     CommandManager* m_commandManager;
     std::shared_ptr<QtNodes::NodeDelegateModelRegistry> m_registry;
     QtNodes::DataFlowGraphModel* m_graphModel;
     QtNodes::DataFlowGraphicsScene* m_scene;
     QtNodes::GraphicsView* m_view;
-    std::unordered_map<QString, QtNodes::NodeId> m_moduleToNodeId;
+    QMap<QString, QtNodes::NodeId> m_moduleToNodeId;
+    QMap<QtNodes::NodeId, QString> m_nodeToModuleId;
+    QMap<QString, QtNodes::ConnectionId> m_connectionToQtId;
+    bool m_updatingFromGraph = false;
 };
