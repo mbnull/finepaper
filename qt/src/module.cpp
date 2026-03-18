@@ -1,4 +1,5 @@
 #include "module.h"
+#include <memory>
 
 Module::Module(const QString& id, const QString& type, QObject* parent)
     : QObject(parent), m_id(id), m_type(type) {

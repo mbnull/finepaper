@@ -4,6 +4,7 @@
 #include "parameter.h"
 #include <QString>
 #include <QObject>
+#include <memory>
 #include <vector>
 #include <unordered_map>
 
