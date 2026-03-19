@@ -51,7 +51,9 @@ void PropertyPanel::clearPanel() {
 void PropertyPanel::populatePanel() {
     auto formLayout = new QFormLayout();
 
-    for (const auto& [name, param] : m_selectedModule->parameters()) {
+    for (auto it = m_selectedModule->parameters().constBegin(); it != m_selectedModule->parameters().constEnd(); ++it) {
+        const QString& name = it.key();
+        const Parameter& param = it.value();
         QWidget* widget = nullptr;
 
         if (std::holds_alternative<QString>(param.value())) {
@@ -106,7 +108,7 @@ void PropertyPanel::onParameterChanged(const QString& name) {
     auto paramIt = params.find(name);
     if (paramIt == params.end()) return;
 
-    const auto& value = paramIt->second.value();
+    const auto& value = paramIt.value().value();
 
     if (auto* lineEdit = qobject_cast<QLineEdit*>(it->second)) {
         lineEdit->blockSignals(true);

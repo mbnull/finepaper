@@ -70,8 +70,8 @@ QString DRCRunner::serializeToJson(const Graph* graph) {
             xp["id"] = mod->id();
             const auto& p = mod->parameters();
             if (p.find("x") != p.end() && p.find("y") != p.end()) {
-                auto xOpt = toDouble(p.at("x").value());
-                auto yOpt = toDouble(p.at("y").value());
+                auto xOpt = toDouble(p.value("x").value());
+                auto yOpt = toDouble(p.value("y").value());
                 if (xOpt && yOpt) {
                     xp["x"] = static_cast<int>(*xOpt);
                     xp["y"] = static_cast<int>(*yOpt);
@@ -80,9 +80,9 @@ QString DRCRunner::serializeToJson(const Graph* graph) {
             xp["endpoints"] = QJsonArray();
 
             QJsonObject config;
-            if (p.count("routing_algorithm")) config["routing_algorithm"] = std::get<QString>(p.at("routing_algorithm").value());
-            if (p.count("vc_count")) config["vc_count"] = std::get<int>(p.at("vc_count").value());
-            if (p.count("buffer_depth")) config["buffer_depth"] = std::get<int>(p.at("buffer_depth").value());
+            if (p.count("routing_algorithm")) config["routing_algorithm"] = std::get<QString>(p.value("routing_algorithm").value());
+            if (p.count("vc_count")) config["vc_count"] = std::get<int>(p.value("vc_count").value());
+            if (p.count("buffer_depth")) config["buffer_depth"] = std::get<int>(p.value("buffer_depth").value());
             if (!config.isEmpty()) xp["config"] = config;
 
             xps.append(xp);
@@ -91,13 +91,13 @@ QString DRCRunner::serializeToJson(const Graph* graph) {
             QJsonObject ep;
             ep["id"] = mod->id();
             const auto& p = mod->parameters();
-            if (p.count("type")) ep["type"] = std::get<QString>(p.at("type").value());
-            if (p.count("protocol")) ep["protocol"] = std::get<QString>(p.at("protocol").value());
-            if (p.count("data_width")) ep["data_width"] = std::get<int>(p.at("data_width").value());
+            if (p.count("type")) ep["type"] = std::get<QString>(p.value("type").value());
+            if (p.count("protocol")) ep["protocol"] = std::get<QString>(p.value("protocol").value());
+            if (p.count("data_width")) ep["data_width"] = std::get<int>(p.value("data_width").value());
 
             QJsonObject config;
-            if (p.count("buffer_depth")) config["buffer_depth"] = std::get<int>(p.at("buffer_depth").value());
-            if (p.count("qos_enabled")) config["qos_enabled"] = std::get<bool>(p.at("qos_enabled").value());
+            if (p.count("buffer_depth")) config["buffer_depth"] = std::get<int>(p.value("buffer_depth").value());
+            if (p.count("qos_enabled")) config["qos_enabled"] = std::get<bool>(p.value("qos_enabled").value());
             if (!config.isEmpty()) ep["config"] = config;
 
             eps.append(ep);

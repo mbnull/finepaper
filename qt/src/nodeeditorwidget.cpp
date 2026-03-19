@@ -70,8 +70,8 @@ void NodeEditorWidget::onModuleAdded(Module* module) {
     auto xIt = params.find("x");
     auto yIt = params.find("y");
     if (xIt != params.end() && yIt != params.end()) {
-        const auto& xValue = xIt->second.value();
-        const auto& yValue = yIt->second.value();
+        const auto& xValue = xIt.value().value();
+        const auto& yValue = yIt.value().value();
         auto xOpt = toDouble(xValue);
         auto yOpt = toDouble(yValue);
         if (xOpt && yOpt) {
@@ -342,8 +342,8 @@ void NodeEditorWidget::onParameterChanged(const QString& paramName) {
     if (xIt == params.end() || yIt == params.end()) return;
 
     ++m_updatingFromGraph;
-    const auto& xValue = xIt->second.value();
-    const auto& yValue = yIt->second.value();
+    const auto& xValue = xIt.value().value();
+    const auto& yValue = yIt.value().value();
     auto xOpt = toDouble(xValue);
     auto yOpt = toDouble(yValue);
     if (xOpt && yOpt) {
