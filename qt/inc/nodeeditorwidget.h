@@ -6,6 +6,7 @@
 #include <QtNodes/NodeDelegateModelRegistry>
 #include <QWidget>
 #include <QMap>
+#include <QSet>
 #include "graph.h"
 #include "commandmanager.h"
 
