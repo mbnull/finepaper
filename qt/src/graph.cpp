@@ -257,6 +257,10 @@ bool Graph::loadFromJson(const QString& jsonPath) {
         }
 
         if (fromPort.isEmpty()) {
+            if (!dir.isEmpty()) {
+                qWarning() << "Skipping connection" << from << "->" << to << ": no output port for dir" << dir;
+                continue;
+            }
             for (const auto& port : fromModule->ports()) {
                 if (port.direction() == Port::Direction::Output) {
                     fromPort = port.id();
@@ -265,6 +269,10 @@ bool Graph::loadFromJson(const QString& jsonPath) {
             }
         }
         if (toPort.isEmpty()) {
+            if (!dir.isEmpty()) {
+                qWarning() << "Skipping connection" << from << "->" << to << ": no input port for opposite of dir" << dir;
+                continue;
+            }
             for (const auto& port : toModule->ports()) {
                 if (port.direction() == Port::Direction::Input) {
                     toPort = port.id();

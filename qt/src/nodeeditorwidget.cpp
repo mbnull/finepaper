@@ -163,13 +163,29 @@ void NodeEditorWidget::dragEnterEvent(QDragEnterEvent* event) {
 
 bool NodeEditorWidget::eventFilter(QObject* obj, QEvent* event) {
     if (obj == m_view->viewport()) {
+        // Forward drag/drop events from the viewport to our handlers.
+        // Without this, the GraphicsView child widget consumes all drag events
+        // and our dragEnterEvent/dropEvent on NodeEditorWidget never fire.
         if (event->type() == QEvent::DragEnter) {
-            dragEnterEvent(static_cast<QDragEnterEvent*>(event));
-            return true;
+            auto* e = static_cast<QDragEnterEvent*>(event);
+            if (e->mimeData()->hasFormat("application/x-moduletype")) {
+                e->acceptProposedAction();
+                return true;
+            }
+        }
+        if (event->type() == QEvent::DragMove) {
+            auto* e = static_cast<QDragMoveEvent*>(event);
+            if (e->mimeData()->hasFormat("application/x-moduletype")) {
+                e->acceptProposedAction();
+                return true;
+            }
         }
         if (event->type() == QEvent::Drop) {
-            dropEvent(static_cast<QDropEvent*>(event));
-            return true;
+            auto* e = static_cast<QDropEvent*>(event);
+            if (e->mimeData()->hasFormat("application/x-moduletype")) {
+                dropEvent(e);
+                return true;
+            }
         }
     }
     return QWidget::eventFilter(obj, event);
