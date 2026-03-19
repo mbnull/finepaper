@@ -9,8 +9,9 @@ void SetParameterCommand::execute() {
     if (!module) return;
     const auto& params = module->parameters();
     auto it = params.find(m_paramName);
-    if (it != params.end()) {
-        m_oldValue = it->second.value();
+    m_parameterExisted = (it != params.end());
+    if (m_parameterExisted) {
+        m_oldValue = it.value().value();
     }
     module->setParameter(m_paramName, m_newValue);
     m_executed = true;
@@ -19,5 +20,9 @@ void SetParameterCommand::execute() {
 void SetParameterCommand::undo() {
     Module* module = m_graph->getModule(m_moduleId);
     if (!module) return;
-    module->setParameter(m_paramName, m_oldValue);
+    if (m_parameterExisted) {
+        module->setParameter(m_paramName, m_oldValue);
+    } else {
+        module->removeParameter(m_paramName);
+    }
 }

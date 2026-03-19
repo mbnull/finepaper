@@ -16,4 +16,5 @@ private:
     QString m_paramName;
     Parameter::Value m_newValue;
     Parameter::Value m_oldValue;
+    bool m_parameterExisted = false;
 };

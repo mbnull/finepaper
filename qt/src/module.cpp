@@ -12,10 +12,15 @@ void Module::addPort(const Port& port) {
 void Module::setParameter(const QString& name, Parameter::Value value) {
     auto it = m_parameters.find(name);
     if (it != m_parameters.end()) {
-        it->second.setValue(value);
+        it.value().setValue(value);
     } else {
-        m_parameters.emplace(name, Parameter(name, value));
+        m_parameters.insert(name, Parameter(name, value));
     }
+    emit parameterChanged(name);
+}
+
+void Module::removeParameter(const QString& name) {
+    m_parameters.remove(name);
     emit parameterChanged(name);
 }
 

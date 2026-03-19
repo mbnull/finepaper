@@ -4,9 +4,9 @@
 #include "parameter.h"
 #include <QString>
 #include <QObject>
+#include <QHash>
 #include <memory>
 #include <vector>
-#include <unordered_map>
 
 class Module : public QObject {
     Q_OBJECT
@@ -20,8 +20,9 @@ public:
     const std::vector<Port>& ports() const { return m_ports; }
     void addPort(const Port& port);
 
-    const std::unordered_map<QString, Parameter>& parameters() const { return m_parameters; }
+    const QHash<QString, Parameter>& parameters() const { return m_parameters; }
     void setParameter(const QString& name, Parameter::Value value);
+    void removeParameter(const QString& name);
 
     std::unique_ptr<Module> clone() const;
 
@@ -32,5 +33,5 @@ private:
     QString m_id;
     QString m_type;
     std::vector<Port> m_ports;
-    std::unordered_map<QString, Parameter> m_parameters;
+    QHash<QString, Parameter> m_parameters;
 };
