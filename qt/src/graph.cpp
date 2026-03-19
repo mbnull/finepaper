@@ -225,6 +225,7 @@ bool Graph::loadFromJson(const QString& jsonPath) {
         QJsonObject conn = connVal.toObject();
         QString from = conn["from"].toString();
         QString to = conn["to"].toString();
+        QString dir = conn["dir"].toString();
 
         Module* fromModule = getModule(from);
         Module* toModule = getModule(to);
@@ -234,16 +235,41 @@ bool Graph::loadFromJson(const QString& jsonPath) {
         }
 
         QString fromPort, toPort;
-        for (const auto& port : fromModule->ports()) {
-            if (port.direction() == Port::Direction::Output) {
-                fromPort = port.id();
-                break;
+
+        if (!dir.isEmpty()) {
+            QMap<QString, QString> oppositeDir = {
+                {"north", "south"}, {"south", "north"},
+                {"east", "west"}, {"west", "east"}
+            };
+
+            for (const auto& port : fromModule->ports()) {
+                if (port.direction() == Port::Direction::Output && port.id() == dir) {
+                    fromPort = port.id();
+                    break;
+                }
+            }
+            for (const auto& port : toModule->ports()) {
+                if (port.direction() == Port::Direction::Input && port.id() == oppositeDir[dir]) {
+                    toPort = port.id();
+                    break;
+                }
             }
         }
-        for (const auto& port : toModule->ports()) {
-            if (port.direction() == Port::Direction::Input) {
-                toPort = port.id();
-                break;
+
+        if (fromPort.isEmpty()) {
+            for (const auto& port : fromModule->ports()) {
+                if (port.direction() == Port::Direction::Output) {
+                    fromPort = port.id();
+                    break;
+                }
+            }
+        }
+        if (toPort.isEmpty()) {
+            for (const auto& port : toModule->ports()) {
+                if (port.direction() == Port::Direction::Input) {
+                    toPort = port.id();
+                    break;
+                }
             }
         }
 
