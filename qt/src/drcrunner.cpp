@@ -12,6 +12,12 @@
 #include <QCoreApplication>
 #include <QDir>
 
+static std::optional<double> toDouble(const Parameter::Value& v) {
+    if (auto* i = std::get_if<int>(&v)) return static_cast<double>(*i);
+    if (auto* d = std::get_if<double>(&v)) return *d;
+    return std::nullopt;
+}
+
 QList<ValidationResult> DRCRunner::validate(const Graph* graph) {
     QString json = serializeToJson(graph);
 
@@ -62,8 +68,12 @@ QString DRCRunner::serializeToJson(const Graph* graph) {
             QJsonObject xp;
             xp["id"] = mod->id();
             const auto& p = mod->parameters();
-            if (p.count("x")) xp["x"] = std::get<int>(p.at("x").value());
-            if (p.count("y")) xp["y"] = std::get<int>(p.at("y").value());
+            auto xOpt = toDouble(p.at("x").value());
+            auto yOpt = toDouble(p.at("y").value());
+            if (xOpt && yOpt) {
+                xp["x"] = static_cast<int>(*xOpt);
+                xp["y"] = static_cast<int>(*yOpt);
+            }
             xp["endpoints"] = QJsonArray();
 
             QJsonObject config;
