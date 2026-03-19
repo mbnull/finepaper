@@ -3,10 +3,10 @@
     {
       "name": "XP",
       "ports": [
-        {"id": "north", "direction": "input", "type": "noc", "name": "North"},
-        {"id": "south", "direction": "output", "type": "noc", "name": "South"},
-        {"id": "east", "direction": "input", "type": "noc", "name": "East"},
-        {"id": "west", "direction": "output", "type": "noc", "name": "West"}
+        {"id": "north", "direction": "output", "type": "noc", "name": "North"},
+        {"id": "south", "direction": "input", "type": "noc", "name": "South"},
+        {"id": "east", "direction": "output", "type": "noc", "name": "East"},
+        {"id": "west", "direction": "input", "type": "noc", "name": "West"}
       ],
       "parameters": [
         {"name": "x", "type": "int", "default": 0},
