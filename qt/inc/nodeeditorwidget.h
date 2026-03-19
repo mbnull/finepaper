@@ -50,5 +50,5 @@ private:
     QMap<QString, QtNodes::ConnectionId> m_connectionToQtId;
     QSet<QtNodes::ConnectionId> m_pendingConnections;
     QSet<QtNodes::ConnectionId> m_pendingRemovals;
-    bool m_updatingFromGraph = false;
+    int m_updatingFromGraph = 0;
 };

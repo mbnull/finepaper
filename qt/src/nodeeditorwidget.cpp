@@ -14,6 +14,7 @@
 #include <QMimeData>
 #include <QUuid>
 #include <QGraphicsItem>
+#include <optional>
 
 static std::optional<double> toDouble(const Parameter::Value& v) {
     if (auto* i = std::get_if<int>(&v)) return static_cast<double>(*i);
@@ -56,7 +57,7 @@ NodeEditorWidget::NodeEditorWidget(Graph* graph, CommandManager* commandManager,
 }
 
 void NodeEditorWidget::onModuleAdded(Module* module) {
-    m_updatingFromGraph = true;
+    ++m_updatingFromGraph;
     auto nodeId = m_graphModel->addNode("GraphNode");
     auto* nodeModel = dynamic_cast<GraphNodeModel*>(m_graphModel->delegateModel<GraphNodeModel>(nodeId));
     if (nodeModel) {
@@ -79,17 +80,17 @@ void NodeEditorWidget::onModuleAdded(Module* module) {
     }
 
     connect(module, &Module::parameterChanged, this, &NodeEditorWidget::onParameterChanged);
-    m_updatingFromGraph = false;
+    --m_updatingFromGraph;
 }
 
 void NodeEditorWidget::onModuleRemoved(const QString& moduleId) {
     auto it = m_moduleToNodeId.find(moduleId);
     if (it != m_moduleToNodeId.end()) {
-        m_updatingFromGraph = true;
+        ++m_updatingFromGraph;
         m_nodeToModuleId.remove(it.value());
         m_graphModel->deleteNode(it.value());
         m_moduleToNodeId.erase(it);
-        m_updatingFromGraph = false;
+        --m_updatingFromGraph;
     }
 }
 
@@ -135,20 +136,20 @@ void NodeEditorWidget::onConnectionAdded(Connection* connection) {
         return;
     }
 
-    m_updatingFromGraph = true;
+    ++m_updatingFromGraph;
     m_graphModel->addConnection(connId);
     m_connectionToQtId[connection->id()] = connId;
-    m_updatingFromGraph = false;
+    --m_updatingFromGraph;
 }
 
 void NodeEditorWidget::onConnectionRemoved(const QString& connectionId) {
     auto it = m_connectionToQtId.find(connectionId);
     if (it != m_connectionToQtId.end()) {
-        m_updatingFromGraph = true;
+        ++m_updatingFromGraph;
         m_pendingRemovals.insert(it.value());
         m_graphModel->deleteConnection(it.value());
         m_connectionToQtId.erase(it);
-        m_updatingFromGraph = false;
+        --m_updatingFromGraph;
     }
 }
 
@@ -188,13 +189,13 @@ void NodeEditorWidget::dropEvent(QDropEvent* event) {
 
         Module* module = m_graph->getModule(moduleId);
         if (module) {
-            m_updatingFromGraph = true;
+            ++m_updatingFromGraph;
             m_graphModel->setNodeData(nodeId, QtNodes::NodeRole::Position, scenePos);
             auto xCmd = std::make_unique<SetParameterCommand>(m_graph, moduleId, "x", static_cast<int>(scenePos.x()));
             auto yCmd = std::make_unique<SetParameterCommand>(m_graph, moduleId, "y", static_cast<int>(scenePos.y()));
             m_commandManager->executeCommand(std::move(xCmd));
             m_commandManager->executeCommand(std::move(yCmd));
-            m_updatingFromGraph = false;
+            --m_updatingFromGraph;
         }
     }
 
@@ -202,7 +203,7 @@ void NodeEditorWidget::dropEvent(QDropEvent* event) {
 }
 
 void NodeEditorWidget::onConnectionCreated(QtNodes::ConnectionId connectionId) {
-    if (m_updatingFromGraph) return;
+    if (m_updatingFromGraph > 0) return;
 
     m_pendingConnections.insert(connectionId);
 
@@ -210,9 +211,9 @@ void NodeEditorWidget::onConnectionCreated(QtNodes::ConnectionId connectionId) {
     QString tgtModuleId = m_nodeToModuleId.value(connectionId.inNodeId);
     if (srcModuleId.isEmpty() || tgtModuleId.isEmpty()) {
         m_pendingConnections.remove(connectionId);
-        m_updatingFromGraph = true;
+        ++m_updatingFromGraph;
         m_graphModel->deleteConnection(connectionId);
-        m_updatingFromGraph = false;
+        --m_updatingFromGraph;
         return;
     }
 
@@ -220,9 +221,9 @@ void NodeEditorWidget::onConnectionCreated(QtNodes::ConnectionId connectionId) {
     QString tgtPortId = getPortId(connectionId.inNodeId, QtNodes::PortType::In, connectionId.inPortIndex);
     if (srcPortId.isEmpty() || tgtPortId.isEmpty()) {
         m_pendingConnections.remove(connectionId);
-        m_updatingFromGraph = true;
+        ++m_updatingFromGraph;
         m_graphModel->deleteConnection(connectionId);
-        m_updatingFromGraph = false;
+        --m_updatingFromGraph;
         return;
     }
 
@@ -230,9 +231,9 @@ void NodeEditorWidget::onConnectionCreated(QtNodes::ConnectionId connectionId) {
     PortRef target{tgtModuleId, tgtPortId};
     if (!m_graph->isValidConnection(source, target)) {
         m_pendingConnections.remove(connectionId);
-        m_updatingFromGraph = true;
+        ++m_updatingFromGraph;
         m_graphModel->deleteConnection(connectionId);
-        m_updatingFromGraph = false;
+        --m_updatingFromGraph;
         return;
     }
 
@@ -243,7 +244,7 @@ void NodeEditorWidget::onConnectionCreated(QtNodes::ConnectionId connectionId) {
 }
 
 void NodeEditorWidget::onConnectionDeleted(QtNodes::ConnectionId connectionId) {
-    if (m_updatingFromGraph) return;
+    if (m_updatingFromGraph > 0) return;
 
     if (m_pendingRemovals.contains(connectionId)) {
         m_pendingRemovals.remove(connectionId);
@@ -313,7 +314,7 @@ void NodeEditorWidget::highlightElement(const QString& elementId) {
 }
 
 void NodeEditorWidget::onNodeMoved(QtNodes::NodeId nodeId) {
-    if (m_updatingFromGraph) return;
+    if (m_updatingFromGraph > 0) return;
 
     QString moduleId = m_nodeToModuleId.value(nodeId);
     if (moduleId.isEmpty()) return;
@@ -340,7 +341,7 @@ void NodeEditorWidget::onParameterChanged(const QString& paramName) {
     auto yIt = params.find("y");
     if (xIt == params.end() || yIt == params.end()) return;
 
-    m_updatingFromGraph = true;
+    ++m_updatingFromGraph;
     const auto& xValue = xIt->second.value();
     const auto& yValue = yIt->second.value();
     auto xOpt = toDouble(xValue);
@@ -348,5 +349,5 @@ void NodeEditorWidget::onParameterChanged(const QString& paramName) {
     if (xOpt && yOpt) {
         m_graphModel->setNodeData(nodeIt.value(), QtNodes::NodeRole::Position, QPointF(*xOpt, *yOpt));
     }
-    m_updatingFromGraph = false;
+    --m_updatingFromGraph;
 }
