@@ -11,6 +11,7 @@
 #include <QRegularExpression>
 #include <QCoreApplication>
 #include <QDir>
+#include <optional>
 
 static std::optional<double> toDouble(const Parameter::Value& v) {
     if (auto* i = std::get_if<int>(&v)) return static_cast<double>(*i);
@@ -68,11 +69,13 @@ QString DRCRunner::serializeToJson(const Graph* graph) {
             QJsonObject xp;
             xp["id"] = mod->id();
             const auto& p = mod->parameters();
-            auto xOpt = toDouble(p.at("x").value());
-            auto yOpt = toDouble(p.at("y").value());
-            if (xOpt && yOpt) {
-                xp["x"] = static_cast<int>(*xOpt);
-                xp["y"] = static_cast<int>(*yOpt);
+            if (p.find("x") != p.end() && p.find("y") != p.end()) {
+                auto xOpt = toDouble(p.at("x").value());
+                auto yOpt = toDouble(p.at("y").value());
+                if (xOpt && yOpt) {
+                    xp["x"] = static_cast<int>(*xOpt);
+                    xp["y"] = static_cast<int>(*yOpt);
+                }
             }
             xp["endpoints"] = QJsonArray();
 
