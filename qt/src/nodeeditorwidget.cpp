@@ -15,6 +15,12 @@
 #include <QUuid>
 #include <QGraphicsItem>
 
+static std::optional<double> toDouble(const Parameter::Value& v) {
+    if (auto* i = std::get_if<int>(&v)) return static_cast<double>(*i);
+    if (auto* d = std::get_if<double>(&v)) return *d;
+    return std::nullopt;
+}
+
 NodeEditorWidget::NodeEditorWidget(Graph* graph, CommandManager* commandManager, QWidget* parent)
     : QWidget(parent), m_graph(graph), m_commandManager(commandManager) {
 
@@ -65,9 +71,11 @@ void NodeEditorWidget::onModuleAdded(Module* module) {
     if (xIt != params.end() && yIt != params.end()) {
         const auto& xValue = xIt->second.value();
         const auto& yValue = yIt->second.value();
-        double x = std::get_if<int>(&xValue) ? std::get<int>(xValue) : std::get<double>(xValue);
-        double y = std::get_if<int>(&yValue) ? std::get<int>(yValue) : std::get<double>(yValue);
-        m_graphModel->setNodeData(nodeId, QtNodes::NodeRole::Position, QPointF(x, y));
+        auto xOpt = toDouble(xValue);
+        auto yOpt = toDouble(yValue);
+        if (xOpt && yOpt) {
+            m_graphModel->setNodeData(nodeId, QtNodes::NodeRole::Position, QPointF(*xOpt, *yOpt));
+        }
     }
 
     connect(module, &Module::parameterChanged, this, &NodeEditorWidget::onParameterChanged);
@@ -177,11 +185,11 @@ void NodeEditorWidget::dropEvent(QDropEvent* event) {
     if (m_moduleToNodeId.contains(moduleId)) {
         QPointF scenePos = m_view->mapToScene(event->pos());
         auto nodeId = m_moduleToNodeId.value(moduleId);
-        m_graphModel->setNodeData(nodeId, QtNodes::NodeRole::Position, scenePos);
 
         Module* module = m_graph->getModule(moduleId);
         if (module) {
             m_updatingFromGraph = true;
+            m_graphModel->setNodeData(nodeId, QtNodes::NodeRole::Position, scenePos);
             auto xCmd = std::make_unique<SetParameterCommand>(m_graph, moduleId, "x", static_cast<int>(scenePos.x()));
             auto yCmd = std::make_unique<SetParameterCommand>(m_graph, moduleId, "y", static_cast<int>(scenePos.y()));
             m_commandManager->executeCommand(std::move(xCmd));
@@ -335,8 +343,10 @@ void NodeEditorWidget::onParameterChanged(const QString& paramName) {
     m_updatingFromGraph = true;
     const auto& xValue = xIt->second.value();
     const auto& yValue = yIt->second.value();
-    double x = std::get_if<int>(&xValue) ? std::get<int>(xValue) : std::get<double>(xValue);
-    double y = std::get_if<int>(&yValue) ? std::get<int>(yValue) : std::get<double>(yValue);
-    m_graphModel->setNodeData(nodeIt.value(), QtNodes::NodeRole::Position, QPointF(x, y));
+    auto xOpt = toDouble(xValue);
+    auto yOpt = toDouble(yValue);
+    if (xOpt && yOpt) {
+        m_graphModel->setNodeData(nodeIt.value(), QtNodes::NodeRole::Position, QPointF(*xOpt, *yOpt));
+    }
     m_updatingFromGraph = false;
 }
