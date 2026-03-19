@@ -14,8 +14,9 @@ void LoadGraphCommand::execute() {
         }
     }
 
-    m_graph->loadFromJson(m_jsonPath);
-    m_executed = true;
+    if (m_graph->loadFromJson(m_jsonPath)) {
+        m_executed = true;
+    }
 }
 
 void LoadGraphCommand::undo() {

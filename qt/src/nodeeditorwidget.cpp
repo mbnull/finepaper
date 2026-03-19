@@ -176,8 +176,8 @@ void NodeEditorWidget::dropEvent(QDropEvent* event) {
     for (const auto& port : type->defaultPorts) {
         module->addPort(port);
     }
-    for (const auto& [name, param] : type->defaultParameters) {
-        module->setParameter(name, param.value());
+    for (auto it = type->defaultParameters.constBegin(); it != type->defaultParameters.constEnd(); ++it) {
+        module->setParameter(it.key(), it.value().value());
     }
 
     auto command = std::make_unique<AddModuleCommand>(m_graph, std::move(module));

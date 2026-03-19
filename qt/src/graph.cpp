@@ -177,8 +177,8 @@ bool Graph::loadFromJson(const QString& jsonPath) {
         for (const auto& port : type->defaultPorts) {
             module->addPort(port);
         }
-        for (const auto& [key, param] : type->defaultParameters) {
-            module->setParameter(key, param.value());
+        for (auto it = type->defaultParameters.constBegin(); it != type->defaultParameters.constEnd(); ++it) {
+            module->setParameter(it.key(), it.value().value());
         }
 
         if (xp.contains("x")) module->setParameter("x", xp["x"].toInt());
@@ -205,8 +205,8 @@ bool Graph::loadFromJson(const QString& jsonPath) {
         for (const auto& port : type->defaultPorts) {
             module->addPort(port);
         }
-        for (const auto& [key, param] : type->defaultParameters) {
-            module->setParameter(key, param.value());
+        for (auto it = type->defaultParameters.constBegin(); it != type->defaultParameters.constEnd(); ++it) {
+            module->setParameter(it.key(), it.value().value());
         }
 
         if (ep.contains("type")) module->setParameter("type", ep["type"].toString());

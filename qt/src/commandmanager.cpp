@@ -2,9 +2,11 @@
 
 void CommandManager::executeCommand(std::unique_ptr<Command> command) {
     command->execute();
-    m_undoStack.push(std::move(command));
-    while (!m_redoStack.empty()) {
-        m_redoStack.pop();
+    if (command->wasExecuted()) {
+        m_undoStack.push(std::move(command));
+        while (!m_redoStack.empty()) {
+            m_redoStack.pop();
+        }
     }
 }
 

@@ -4,8 +4,8 @@
 #include "parameter.h"
 #include <QString>
 #include <QStringList>
+#include <QHash>
 #include <vector>
-#include <unordered_map>
 #include <memory>
 
 class ModuleProvider;
@@ -13,7 +13,7 @@ class ModuleProvider;
 struct ModuleType {
     QString name;
     std::vector<Port> defaultPorts;
-    std::unordered_map<QString, Parameter> defaultParameters;
+    QHash<QString, Parameter> defaultParameters;
 };
 
 class ModuleRegistry {
@@ -27,5 +27,5 @@ public:
 
 private:
     ModuleRegistry();
-    std::unordered_map<QString, ModuleType> m_types;
+    QHash<QString, ModuleType> m_types;
 };

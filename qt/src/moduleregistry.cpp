@@ -54,13 +54,13 @@ void ModuleRegistry::registerType(const ModuleType& type) {
 
 const ModuleType* ModuleRegistry::getType(const QString& name) const {
     auto it = m_types.find(name);
-    return it != m_types.end() ? &it->second : nullptr;
+    return it != m_types.end() ? &it.value() : nullptr;
 }
 
 QStringList ModuleRegistry::availableTypes() const {
     QStringList types;
-    for (const auto& pair : m_types) {
-        types.append(pair.first);
+    for (auto it = m_types.begin(); it != m_types.end(); ++it) {
+        types.append(it.key());
     }
     types.sort();
     return types;
