@@ -41,6 +41,14 @@ void PropertyPanel::clearPanel() {
     while ((item = m_layout->takeAt(0))) {
         if (item->widget()) {
             delete item->widget();
+        } else if (QLayout* sub = item->layout()) {
+            // Delete all widgets inside the sub-layout (e.g. QFormLayout rows)
+            QLayoutItem* subItem;
+            while ((subItem = sub->takeAt(0))) {
+                if (subItem->widget()) delete subItem->widget();
+                delete subItem;
+            }
+            delete sub;
         }
         delete item;
     }
@@ -109,19 +117,19 @@ void PropertyPanel::onParameterChanged(const QString& name) {
 
     const auto& value = paramIt.value().value();
 
-    if (auto* lineEdit = qobject_cast<QLineEdit*>(it->second)) {
+    if (auto* lineEdit = qobject_cast<QLineEdit*>(it.value())) {
         lineEdit->blockSignals(true);
         lineEdit->setText(std::get<QString>(value));
         lineEdit->blockSignals(false);
-    } else if (auto* spinBox = qobject_cast<QSpinBox*>(it->second)) {
+    } else if (auto* spinBox = qobject_cast<QSpinBox*>(it.value())) {
         spinBox->blockSignals(true);
         spinBox->setValue(std::get<int>(value));
         spinBox->blockSignals(false);
-    } else if (auto* doubleSpinBox = qobject_cast<QDoubleSpinBox*>(it->second)) {
+    } else if (auto* doubleSpinBox = qobject_cast<QDoubleSpinBox*>(it.value())) {
         doubleSpinBox->blockSignals(true);
         doubleSpinBox->setValue(std::get<double>(value));
         doubleSpinBox->blockSignals(false);
-    } else if (auto* checkBox = qobject_cast<QCheckBox*>(it->second)) {
+    } else if (auto* checkBox = qobject_cast<QCheckBox*>(it.value())) {
         checkBox->blockSignals(true);
         checkBox->setChecked(std::get<bool>(value));
         checkBox->blockSignals(false);

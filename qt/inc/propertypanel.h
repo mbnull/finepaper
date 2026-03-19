@@ -2,7 +2,7 @@
 
 #include <QWidget>
 #include <QVBoxLayout>
-#include <unordered_map>
+#include <QHash>
 
 class Graph;
 class Module;
@@ -29,5 +29,5 @@ private:
     CommandManager* m_commandManager;
     Module* m_selectedModule = nullptr;
     QVBoxLayout* m_layout;
-    std::unordered_map<QString, QWidget*> m_parameterWidgets;
+    QHash<QString, QWidget*> m_parameterWidgets;
 };
