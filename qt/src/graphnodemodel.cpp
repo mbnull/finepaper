@@ -1,7 +1,7 @@
 #include "graphnodemodel.h"
 
 QString GraphNodeModel::caption() const {
-    return m_module ? m_module->id() : "Node";
+    return m_module ? m_module->type() : "Node";
 }
 
 unsigned int GraphNodeModel::nPorts(QtNodes::PortType portType) const {

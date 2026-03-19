@@ -25,6 +25,7 @@ signals:
 protected:
     void dragEnterEvent(QDragEnterEvent* event) override;
     void dropEvent(QDropEvent* event) override;
+    bool eventFilter(QObject* obj, QEvent* event) override;
 
 private slots:
     void onModuleAdded(Module* module);

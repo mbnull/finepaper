@@ -37,6 +37,8 @@ NodeEditorWidget::NodeEditorWidget(Graph* graph, CommandManager* commandManager,
     layout->addWidget(m_view);
 
     setAcceptDrops(true);
+    m_view->viewport()->setAcceptDrops(true);
+    m_view->viewport()->installEventFilter(this);
 
     connect(m_graph, &Graph::moduleAdded, this, &NodeEditorWidget::onModuleAdded);
     connect(m_graph, &Graph::moduleRemoved, this, &NodeEditorWidget::onModuleRemoved);
@@ -157,6 +159,20 @@ void NodeEditorWidget::dragEnterEvent(QDragEnterEvent* event) {
     if (event->mimeData()->hasFormat("application/x-moduletype")) {
         event->acceptProposedAction();
     }
+}
+
+bool NodeEditorWidget::eventFilter(QObject* obj, QEvent* event) {
+    if (obj == m_view->viewport()) {
+        if (event->type() == QEvent::DragEnter) {
+            dragEnterEvent(static_cast<QDragEnterEvent*>(event));
+            return true;
+        }
+        if (event->type() == QEvent::Drop) {
+            dropEvent(static_cast<QDropEvent*>(event));
+            return true;
+        }
+    }
+    return QWidget::eventFilter(obj, event);
 }
 
 void NodeEditorWidget::dropEvent(QDropEvent* event) {
