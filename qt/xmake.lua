@@ -5,7 +5,7 @@ add_requires("nodeeditor")
 
 target("qt")
     add_rules("qt.widgetapp")
-    set_languages("c++17")
+    set_languages("c++20")
 
     add_packages("nodeeditor")
     add_headerfiles("inc/*.h")

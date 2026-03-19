@@ -184,7 +184,7 @@ void NodeEditorWidget::dropEvent(QDropEvent* event) {
     m_commandManager->executeCommand(std::move(command));
 
     if (m_moduleToNodeId.contains(moduleId)) {
-        QPointF scenePos = m_view->mapToScene(event->pos());
+        QPointF scenePos = m_view->mapToScene(event->position().toPoint());
         auto nodeId = m_moduleToNodeId.value(moduleId);
 
         Module* module = m_graph->getModule(moduleId);
