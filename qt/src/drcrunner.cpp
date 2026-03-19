@@ -50,7 +50,20 @@ QList<ValidationResult> DRCRunner::validate(const Graph* graph) {
     QProcess proc;
     proc.setWorkingDirectory(frameworkPath);
     proc.start("ruby", {"bin/generate", "-i", tmpFile.fileName(), "-o", "/tmp", "-t", "template"});
-    proc.waitForFinished();
+
+    if (!proc.waitForFinished()) {
+        return {ValidationResult(ValidationSeverity::Error, "DRC process failed to start or timed out", "", "DRC")};
+    }
+
+    if (proc.exitStatus() != QProcess::NormalExit) {
+        QString stderr = QString::fromUtf8(proc.readAllStandardError());
+        return {ValidationResult(ValidationSeverity::Error, "DRC process crashed: " + stderr, "", "DRC")};
+    }
+
+    if (proc.exitCode() != 0) {
+        QString stderr = QString::fromUtf8(proc.readAllStandardError());
+        return {ValidationResult(ValidationSeverity::Error, "DRC validation failed (exit code " + QString::number(proc.exitCode()) + "): " + stderr, "", "DRC")};
+    }
 
     return parseErrors(proc.readAllStandardError());
 }
