@@ -1,3 +1,6 @@
+// MainWindow — constructs and connects all top-level UI components.
+// Layout: horizontal splitter (palette | node editor | property panel)
+// inside a vertical splitter with the log panel below.
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 #include "graph.h"
@@ -11,6 +14,9 @@
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 #include <QSplitter>
+#include <QPushButton>
+#include <QFileDialog>
+#include <QMessageBox>
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWindow) {
     ui->setupUi(this);
@@ -27,6 +33,9 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     connect(m_logPanel, &LogPanel::elementSelected, m_nodeEditor, &NodeEditorWidget::highlightElement);
     connect(m_nodeEditor, &NodeEditorWidget::moduleSelected, m_propertyPanel, QOverload<QString>::of(&PropertyPanel::setSelectedModule));
 
+    QPushButton* saveBtn = new QPushButton("Save JSON", this);
+    connect(saveBtn, &QPushButton::clicked, this, &MainWindow::saveGraph);
+
     QSplitter* mainSplitter = new QSplitter(Qt::Horizontal, this);
     mainSplitter->addWidget(m_palette);
     mainSplitter->addWidget(m_nodeEditor);
@@ -41,7 +50,18 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     verticalSplitter->setStretchFactor(0, 4);
     verticalSplitter->setStretchFactor(1, 1);
 
-    setCentralWidget(verticalSplitter);
+    QWidget* central = new QWidget(this);
+    QVBoxLayout* layout = new QVBoxLayout(central);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(2);
+
+    QHBoxLayout* toolbar = new QHBoxLayout();
+    toolbar->addStretch();
+    toolbar->addWidget(saveBtn);
+    layout->addLayout(toolbar);
+    layout->addWidget(verticalSplitter);
+
+    setCentralWidget(central);
     setWindowTitle("SoC/NoC Node Editor");
     resize(1200, 800);
 }
@@ -52,4 +72,11 @@ MainWindow::~MainWindow() {
 
 void MainWindow::loadGraph(const QString& jsonPath) {
     m_commandManager->executeCommand(std::make_unique<LoadGraphCommand>(m_graph, jsonPath));
+}
+
+void MainWindow::saveGraph() {
+    QString path = QFileDialog::getSaveFileName(this, "Save Graph", "", "JSON Files (*.json)");
+    if (path.isEmpty()) return;
+    if (!m_graph->saveToJson(path))
+        QMessageBox::warning(this, "Save Failed", "Could not write to " + path);
 }

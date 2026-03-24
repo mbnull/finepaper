@@ -1,3 +1,7 @@
+// MainWindow — top-level application window for the SoC/NoC node editor.
+// Owns the Graph, CommandManager, and all major UI panels (palette, node editor,
+// property panel, log panel, validation manager). Wires them together and
+// provides load/save entry points.
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 
@@ -23,6 +27,9 @@ class MainWindow : public QMainWindow {
     ~MainWindow();
 
     void loadGraph(const QString& jsonPath);
+
+private slots:
+    void saveGraph();
 
   private:
     Ui::MainWindow *ui;

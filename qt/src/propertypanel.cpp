@@ -1,3 +1,7 @@
+// PropertyPanel — shows editable parameters for the currently selected module.
+// Each parameter type (QString, int, double, bool) gets a matching Qt widget.
+// Changes are pushed through SetParameterCommand so they are undoable.
+// blockSignals() prevents feedback loops when the model updates the widget.
 #include "propertypanel.h"
 #include "graph.h"
 #include "module.h"
@@ -40,20 +44,15 @@ void PropertyPanel::clearPanel() {
     QLayoutItem* item;
     while ((item = m_layout->takeAt(0))) {
         if (item->widget()) {
-            item->widget()->blockSignals(true);
             delete item->widget();
         } else if (QLayout* sub = item->layout()) {
-            // Recursively remove and delete widgets from sub-layouts (e.g. QFormLayout).
-            // blockSignals prevents spinboxes/lineedits from firing commands on destruction.
-            QLayoutItem* subItem;
-            while ((subItem = sub->takeAt(0))) {
-                if (subItem->widget()) {
-                    subItem->widget()->blockSignals(true);
-                    delete subItem->widget();
-                }
-                delete subItem;
-            }
-            delete sub;
+            // Delete all widgets inside the sub-layout (e.g. QFormLayout rows)
+            // QLayoutItem* subItem;
+            // while ((subItem = sub->takeAt(0))) {
+            //     if (subItem->widget()) delete subItem->widget();
+            //     delete subItem;
+            // }
+            // delete sub;
         }
         delete item;
     }

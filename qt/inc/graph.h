@@ -1,3 +1,7 @@
+// Graph — central data model for the SoC/NoC topology.
+// Owns all Modules and Connections, enforces uniqueness and validity constraints,
+// and emits Qt signals when the topology changes so the UI stays in sync.
+// Supports JSON serialisation (loadFromJson / saveToJson).
 #pragma once
 
 #include "module.h"
@@ -29,6 +33,7 @@ public:
     const std::vector<std::unique_ptr<Connection>>& connections() const { return m_connections; }
 
     bool loadFromJson(const QString& jsonPath);
+    bool saveToJson(const QString& jsonPath) const;
 
 signals:
     void moduleAdded(Module* module);
