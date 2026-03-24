@@ -19,6 +19,8 @@
 PropertyPanel::PropertyPanel(Graph* graph, CommandManager* commandManager, QWidget* parent)
     : QWidget(parent), m_graph(graph), m_commandManager(commandManager) {
     m_layout = new QVBoxLayout(this);
+    m_formLayout = new QFormLayout();
+    m_layout->addLayout(m_formLayout);
 }
 
 void PropertyPanel::setSelectedModule(QString moduleId) {
@@ -41,36 +43,27 @@ void PropertyPanel::setSelectedModule(Module* module) {
 }
 
 void PropertyPanel::clearPanel() {
-    QLayoutItem* item;
-    while ((item = m_layout->takeAt(0))) {
-        if (item->widget()) {
-            delete item->widget();
-        } else if (QLayout* sub = item->layout()) {
-            // Delete all widgets inside the sub-layout (e.g. QFormLayout rows)
-            // QLayoutItem* subItem;
-            // while ((subItem = sub->takeAt(0))) {
-            //     if (subItem->widget()) delete subItem->widget();
-            //     delete subItem;
-            // }
-            // delete sub;
-        }
-        delete item;
+    while (m_formLayout->rowCount() > 0) {
+        m_formLayout->removeRow(0);
     }
     m_parameterWidgets.clear();
 }
 
 void PropertyPanel::populatePanel() {
-    auto formLayout = new QFormLayout();
+    const QString moduleId = m_selectedModule->id();
 
     for (auto it = m_selectedModule->parameters().constBegin(); it != m_selectedModule->parameters().constEnd(); ++it) {
         const QString& name = it.key();
+        if (name == "x" || name == "y") continue;
+
         const Parameter& param = it.value();
         QWidget* widget = nullptr;
 
         if (std::holds_alternative<QString>(param.value())) {
             auto* lineEdit = new QLineEdit(std::get<QString>(param.value()));
-            connect(lineEdit, &QLineEdit::editingFinished, [this, name, lineEdit]() {
-                auto cmd = std::make_unique<SetParameterCommand>(m_graph, m_selectedModule->id(), name, lineEdit->text());
+            connect(lineEdit, &QLineEdit::editingFinished, this, [this, moduleId, name, lineEdit]() {
+                if (!m_graph->getModule(moduleId)) return;
+                auto cmd = std::make_unique<SetParameterCommand>(m_graph, moduleId, name, lineEdit->text());
                 m_commandManager->executeCommand(std::move(cmd));
             });
             widget = lineEdit;
@@ -78,8 +71,9 @@ void PropertyPanel::populatePanel() {
             auto* spinBox = new QSpinBox();
             spinBox->setRange(INT_MIN, INT_MAX);
             spinBox->setValue(std::get<int>(param.value()));
-            connect(spinBox, QOverload<int>::of(&QSpinBox::valueChanged), [this, name](int value) {
-                auto cmd = std::make_unique<SetParameterCommand>(m_graph, m_selectedModule->id(), name, value);
+            connect(spinBox, QOverload<int>::of(&QSpinBox::valueChanged), this, [this, moduleId, name](int value) {
+                if (!m_graph->getModule(moduleId)) return;
+                auto cmd = std::make_unique<SetParameterCommand>(m_graph, moduleId, name, value);
                 m_commandManager->executeCommand(std::move(cmd));
             });
             widget = spinBox;
@@ -87,31 +81,33 @@ void PropertyPanel::populatePanel() {
             auto* doubleSpinBox = new QDoubleSpinBox();
             doubleSpinBox->setRange(-DBL_MAX, DBL_MAX);
             doubleSpinBox->setValue(std::get<double>(param.value()));
-            connect(doubleSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged), [this, name](double value) {
-                auto cmd = std::make_unique<SetParameterCommand>(m_graph, m_selectedModule->id(), name, value);
+            connect(doubleSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this, moduleId, name](double value) {
+                if (!m_graph->getModule(moduleId)) return;
+                auto cmd = std::make_unique<SetParameterCommand>(m_graph, moduleId, name, value);
                 m_commandManager->executeCommand(std::move(cmd));
             });
             widget = doubleSpinBox;
         } else if (std::holds_alternative<bool>(param.value())) {
             auto* checkBox = new QCheckBox();
             checkBox->setChecked(std::get<bool>(param.value()));
-            connect(checkBox, &QCheckBox::toggled, [this, name](bool checked) {
-                auto cmd = std::make_unique<SetParameterCommand>(m_graph, m_selectedModule->id(), name, checked);
+            connect(checkBox, &QCheckBox::toggled, this, [this, moduleId, name](bool checked) {
+                if (!m_graph->getModule(moduleId)) return;
+                auto cmd = std::make_unique<SetParameterCommand>(m_graph, moduleId, name, checked);
                 m_commandManager->executeCommand(std::move(cmd));
             });
             widget = checkBox;
         }
 
         if (widget) {
-            formLayout->addRow(name, widget);
+            m_formLayout->addRow(name, widget);
             m_parameterWidgets[name] = widget;
         }
     }
-
-    m_layout->addLayout(formLayout);
 }
 
 void PropertyPanel::onParameterChanged(const QString& name) {
+    if (!m_selectedModule) return;
+
     auto it = m_parameterWidgets.find(name);
     if (it == m_parameterWidgets.end()) return;
 
