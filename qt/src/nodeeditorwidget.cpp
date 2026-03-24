@@ -13,6 +13,7 @@
 #include "straightconnectionpainter.h"
 #include "commands/addmodulecommand.h"
 #include "commands/addconnectioncommand.h"
+#include "commands/removemodulecommand.h"
 #include "commands/removeconnectioncommand.h"
 #include "commands/setparametercommand.h"
 #include <QtNodes/NodeDelegateModelRegistry>
@@ -28,6 +29,7 @@
 #include <QPainter>
 #include <QMimeData>
 #include <QMouseEvent>
+#include <QMenu>
 #include <QVariantAnimation>
 #include <QUuid>
 #include <QGraphicsItem>
@@ -231,12 +233,17 @@ static std::optional<double> toDouble(const Parameter::Value& v) {
 
 namespace {
 
-int nextModuleIndex(const Graph* graph, const QString& prefix) {
+int nextModuleIndex(const Graph* graph, const QString& moduleType, const QString& externalIdPrefix) {
     QSet<int> used;
-    QRegularExpression pattern("^" + QRegularExpression::escape(prefix) + "_(\\d+)$", QRegularExpression::CaseInsensitiveOption);
+    QRegularExpression pattern("^" + QRegularExpression::escape(externalIdPrefix) + "_(\\d+)$",
+                               QRegularExpression::CaseInsensitiveOption);
 
     for (const auto& module : graph->modules()) {
-        const auto match = pattern.match(ModuleLabels::displayName(module.get()));
+        if (module->type() != moduleType) {
+            continue;
+        }
+
+        const auto match = pattern.match(ModuleLabels::externalId(module.get()));
         if (match.hasMatch()) {
             used.insert(match.captured(1).toInt());
         }
@@ -253,11 +260,11 @@ void assignModuleIdentity(Graph* graph, Module* module) {
     if (!graph || !module) return;
 
     if (module->type() == "XP") {
-        const int index = nextModuleIndex(graph, "XP");
+        const int index = nextModuleIndex(graph, "XP", "xp");
         module->setParameter("display_name", QString("XP_%1").arg(index, 2, 10, QChar('0')));
         module->setParameter("external_id", QString("xp_%1").arg(index, 2, 10, QChar('0')));
     } else if (module->type() == "Endpoint") {
-        const int index = nextModuleIndex(graph, "EP");
+        const int index = nextModuleIndex(graph, "Endpoint", "ep");
         module->setParameter("display_name", QString("EP_%1").arg(index, 2, 10, QChar('0')));
         module->setParameter("external_id", QString("ep_%1").arg(index, 2, 10, QChar('0')));
     }
@@ -305,20 +312,68 @@ bool isXpEndpointConnection(const Graph* graph,
     return true;
 }
 
+const Port* findPort(const Module* module, const QString& portId) {
+    if (!module) return nullptr;
+
+    for (const auto& port : module->ports()) {
+        if (port.id() == portId) {
+            return &port;
+        }
+    }
+
+    return nullptr;
+}
+
+constexpr qreal kCanvasHalfExtent = 2000.0;
+const QRectF kCanvasRect(-kCanvasHalfExtent, -kCanvasHalfExtent,
+                         kCanvasHalfExtent * 2.0, kCanvasHalfExtent * 2.0);
+
+QString firstAvailablePort(const Graph* graph,
+                           const Module* module,
+                           Port::Direction direction,
+                           const std::function<bool(const Port&)>& predicate) {
+    if (!graph || !module) return {};
+
+    for (const auto& port : module->ports()) {
+        if (port.direction() != direction || !predicate(port)) {
+            continue;
+        }
+
+        const bool occupied = std::any_of(graph->connections().begin(), graph->connections().end(),
+            [&](const std::unique_ptr<Connection>& connection) {
+                const PortRef& ref = direction == Port::Direction::Output
+                    ? connection->source()
+                    : connection->target();
+                return ref.moduleId == module->id() && ref.portId == port.id();
+            });
+
+        if (!occupied) {
+            return port.id();
+        }
+    }
+
+    return {};
+}
+
 } // namespace
 
 NodeEditorWidget::NodeEditorWidget(Graph* graph, CommandManager* commandManager, QWidget* parent)
-    : QWidget(parent), m_graph(graph), m_commandManager(commandManager) {
+    : QWidget(parent),
+      m_graph(graph),
+      m_commandManager(commandManager),
+      m_canvasRect(kCanvasRect) {
 
     m_registry = std::make_shared<QtNodes::NodeDelegateModelRegistry>();
     m_registry->registerModel<GraphNodeModel>("GraphNode");
 
     m_graphModel = new QtNodes::DataFlowGraphModel(m_registry);
     m_scene = new QtNodes::DataFlowGraphicsScene(*m_graphModel, this);
+    m_scene->setSceneRect(m_canvasRect);
     m_scene->setNodeGeometry(std::make_unique<GraphNodeGeometry>(*m_graphModel));
     m_scene->setNodePainter(std::make_unique<GraphNodePainter>());
     m_scene->setConnectionPainter(std::make_unique<StraightConnectionPainter>());
     m_view = new AnimatedGraphicsView(m_scene);
+    m_view->setSceneRect(m_canvasRect);
 
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
@@ -376,7 +431,8 @@ void NodeEditorWidget::ensureModuleInView(Module* module) {
         auto xOpt = toDouble(xValue);
         auto yOpt = toDouble(yValue);
         if (xOpt && yOpt) {
-            m_graphModel->setNodeData(nodeId, QtNodes::NodeRole::Position, QPointF(*xOpt, *yOpt));
+            const QPointF clampedPos = clampNodePosition(nodeId, QPointF(*xOpt, *yOpt));
+            m_graphModel->setNodeData(nodeId, QtNodes::NodeRole::Position, clampedPos);
         }
     }
     --m_updatingFromGraph;
@@ -551,11 +607,21 @@ bool NodeEditorWidget::eventFilter(QObject* obj, QEvent* event) {
                 tryCompleteXpRouterDraftConnection(e->position().toPoint())) {
                 return true;
             }
+            if (e->button() == Qt::LeftButton &&
+                tryCompleteXpEndpointDraftConnection(e->position().toPoint())) {
+                return true;
+            }
         }
         if (event->type() == QEvent::MouseButtonPress) {
             auto* e = static_cast<QMouseEvent*>(event);
             if (e->button() == Qt::LeftButton &&
                 tryToggleXpCollapsed(e->position().toPoint())) {
+                return true;
+            }
+        }
+        if (event->type() == QEvent::ContextMenu) {
+            auto* e = static_cast<QContextMenuEvent*>(event);
+            if (showNodeContextMenu(e->pos(), e->globalPos())) {
                 return true;
             }
         }
@@ -591,8 +657,8 @@ void NodeEditorWidget::dropEvent(QDropEvent* event) {
     m_commandManager->executeCommand(std::move(command));
 
     if (m_moduleToNodeId.contains(moduleId)) {
-        QPointF scenePos = m_view->mapToScene(event->position().toPoint());
         auto nodeId = m_moduleToNodeId.value(moduleId);
+        const QPointF scenePos = clampNodePosition(nodeId, m_view->mapToScene(event->position().toPoint()));
 
         Module* module = m_graph->getModule(moduleId);
         if (module) {
@@ -817,6 +883,107 @@ bool NodeEditorWidget::tryCompleteXpRouterDraftConnection(const QPoint& viewport
     return true;
 }
 
+bool NodeEditorWidget::resolveXpEndpointDraftConnection(const QtNodes::ConnectionGraphicsObject& draftConnection,
+                                                        QtNodes::NodeId targetNodeId,
+                                                        PortRef& source,
+                                                        PortRef& target) const {
+    const QtNodes::ConnectionId connectionId = draftConnection.connectionId();
+    const QtNodes::PortType requiredPort = draftConnection.connectionState().requiredPort();
+    if (requiredPort == QtNodes::PortType::None) {
+        return false;
+    }
+
+    const bool startFromOutput = requiredPort == QtNodes::PortType::In;
+    const QtNodes::NodeId startNodeId = startFromOutput ? connectionId.outNodeId : connectionId.inNodeId;
+    const QtNodes::PortIndex startPortIndex = startFromOutput ? connectionId.outPortIndex : connectionId.inPortIndex;
+    const QtNodes::PortType startPortType = startFromOutput ? QtNodes::PortType::Out : QtNodes::PortType::In;
+    if (startNodeId == QtNodes::InvalidNodeId || startPortIndex == QtNodes::InvalidPortIndex) {
+        return false;
+    }
+    if (startNodeId == targetNodeId) {
+        return false;
+    }
+
+    const QString startModuleId = m_nodeToModuleId.value(startNodeId);
+    const QString targetModuleId = m_nodeToModuleId.value(targetNodeId);
+    if (startModuleId.isEmpty() || targetModuleId.isEmpty()) {
+        return false;
+    }
+
+    const Module* startModule = m_graph->getModule(startModuleId);
+    const Module* endModule = m_graph->getModule(targetModuleId);
+    if (!startModule || !endModule) {
+        return false;
+    }
+
+    const QString startPortId = getPortId(startNodeId, startPortType, startPortIndex);
+    const Port* startPort = findPort(startModule, startPortId);
+    if (!startPort || startPort->type() != "endpoint") {
+        return false;
+    }
+
+    if (startFromOutput) {
+        if (startModule->type() != "XP" || endModule->type() != "Endpoint") {
+            return false;
+        }
+
+        const QString endpointPortId = firstAvailablePort(m_graph, endModule, Port::Direction::Input,
+            [](const Port& port) { return port.type() == "endpoint"; });
+        if (endpointPortId.isEmpty()) {
+            return false;
+        }
+
+        source = PortRef{startModuleId, startPortId};
+        target = PortRef{targetModuleId, endpointPortId};
+        return true;
+    }
+
+    if (startModule->type() != "Endpoint" || endModule->type() != "XP") {
+        return false;
+    }
+
+    const QString xpPortId = firstAvailablePort(m_graph, endModule, Port::Direction::Output,
+        [](const Port& port) { return PortLayout::isEndpointPort(port); });
+    if (xpPortId.isEmpty()) {
+        return false;
+    }
+
+    source = PortRef{targetModuleId, xpPortId};
+    target = PortRef{startModuleId, startPortId};
+    return true;
+}
+
+bool NodeEditorWidget::tryCompleteXpEndpointDraftConnection(const QPoint& viewportPos) {
+    auto* draftConnection = findDraftConnection();
+    if (!draftConnection) {
+        return false;
+    }
+
+    const QPointF scenePos = m_view->mapToScene(viewportPos);
+    auto* targetNode = QtNodes::locateNodeAt(scenePos, *m_scene, m_view->transform());
+    if (!targetNode) {
+        return false;
+    }
+
+    PortRef source;
+    PortRef target;
+    if (!resolveXpEndpointDraftConnection(*draftConnection, targetNode->nodeId(), source, target)) {
+        return false;
+    }
+
+    m_scene->resetDraftConnection();
+
+    if (!m_graph->isValidConnection(source, target)) {
+        return true;
+    }
+
+    const QString connId = QUuid::createUuid().toString(QUuid::WithoutBraces).replace('-', '_');
+    auto connection = std::make_unique<Connection>(connId, source, target);
+    auto command = std::make_unique<AddConnectionCommand>(m_graph, std::move(connection));
+    m_commandManager->executeCommand(std::move(command));
+    return true;
+}
+
 void NodeEditorWidget::highlightElement(const QString& elementId) {
     m_scene->clearSelection();
 
@@ -847,6 +1014,13 @@ void NodeEditorWidget::onNodeMoved(QtNodes::NodeId nodeId) {
     if (moduleId.isEmpty()) return;
 
     QPointF pos = m_graphModel->nodeData(nodeId, QtNodes::NodeRole::Position).value<QPointF>();
+    const QPointF clampedPos = clampNodePosition(nodeId, pos);
+    if (clampedPos != pos) {
+        ++m_updatingFromGraph;
+        m_graphModel->setNodeData(nodeId, QtNodes::NodeRole::Position, clampedPos);
+        --m_updatingFromGraph;
+        pos = clampedPos;
+    }
 
     auto xCmd = std::make_unique<SetParameterCommand>(m_graph, moduleId, "x", static_cast<int>(pos.x()));
     auto yCmd = std::make_unique<SetParameterCommand>(m_graph, moduleId, "y", static_cast<int>(pos.y()));
@@ -892,9 +1066,74 @@ void NodeEditorWidget::onParameterChanged(const QString& paramName) {
     auto xOpt = toDouble(xValue);
     auto yOpt = toDouble(yValue);
     if (xOpt && yOpt) {
-        m_graphModel->setNodeData(nodeIt.value(), QtNodes::NodeRole::Position, QPointF(*xOpt, *yOpt));
+        const QPointF clampedPos = clampNodePosition(nodeIt.value(), QPointF(*xOpt, *yOpt));
+        m_graphModel->setNodeData(nodeIt.value(), QtNodes::NodeRole::Position, clampedPos);
     }
     --m_updatingFromGraph;
+}
+
+bool NodeEditorWidget::showNodeContextMenu(const QPoint& viewportPos, const QPoint& globalPos) {
+    const QPointF scenePos = m_view->mapToScene(viewportPos);
+    auto* nodeGraphics = QtNodes::locateNodeAt(scenePos, *m_scene, m_view->transform());
+    if (!nodeGraphics) {
+        return false;
+    }
+
+    const QString moduleId = m_nodeToModuleId.value(nodeGraphics->nodeId());
+    if (moduleId.isEmpty()) {
+        return false;
+    }
+
+    auto* nodeModel = dynamic_cast<GraphNodeModel*>(m_graphModel->delegateModel<GraphNodeModel>(nodeGraphics->nodeId()));
+    Module* module = nodeModel ? nodeModel->module() : nullptr;
+    if (!module) {
+        return false;
+    }
+
+    QMenu menu(m_view);
+
+    QAction* toggleAction = nullptr;
+    if (module->type() == "XP") {
+        toggleAction = menu.addAction(nodeModel->isXpCollapsed() ? "Expand Node" : "Collapse Node");
+    }
+
+    QAction* deleteAction = menu.addAction("Delete Node");
+
+    QAction* selectedAction = menu.exec(globalPos);
+    if (!selectedAction) {
+        return true;
+    }
+
+    if (selectedAction == toggleAction) {
+        auto command = std::make_unique<SetParameterCommand>(m_graph,
+                                                             moduleId,
+                                                             "collapsed",
+                                                             !nodeModel->isXpCollapsed());
+        m_commandManager->executeCommand(std::move(command));
+        return true;
+    }
+
+    if (selectedAction == deleteAction) {
+        auto command = std::make_unique<RemoveModuleCommand>(m_graph, moduleId);
+        m_commandManager->executeCommand(std::move(command));
+        return true;
+    }
+
+    return true;
+}
+
+QPointF NodeEditorWidget::clampNodePosition(QtNodes::NodeId nodeId, const QPointF& position) const {
+    QSize nodeSize;
+    if (nodeId != QtNodes::InvalidNodeId) {
+        nodeSize = m_scene->nodeGeometry().size(nodeId);
+    }
+
+    const qreal maxX = m_canvasRect.right() - nodeSize.width();
+    const qreal maxY = m_canvasRect.bottom() - nodeSize.height();
+    return {
+        std::clamp(position.x(), m_canvasRect.left(), maxX),
+        std::clamp(position.y(), m_canvasRect.top(), maxY)
+    };
 }
 
 void NodeEditorWidget::refreshXpPresentation(const QString& xpModuleId) {

@@ -8,6 +8,7 @@
 #include <QWidget>
 #include <QMap>
 #include <QSet>
+#include <QRectF>
 #include "graph.h"
 #include "commandmanager.h"
 
@@ -61,7 +62,14 @@ private:
                                         QtNodes::NodeId targetNodeId,
                                         PortRef& source,
                                         PortRef& target) const;
+    bool resolveXpEndpointDraftConnection(const QtNodes::ConnectionGraphicsObject& draftConnection,
+                                          QtNodes::NodeId targetNodeId,
+                                          PortRef& source,
+                                          PortRef& target) const;
     bool tryCompleteXpRouterDraftConnection(const QPoint& viewportPos);
+    bool tryCompleteXpEndpointDraftConnection(const QPoint& viewportPos);
+    bool showNodeContextMenu(const QPoint& viewportPos, const QPoint& globalPos);
+    QPointF clampNodePosition(QtNodes::NodeId nodeId, const QPointF& position) const;
     void refreshXpPresentation(const QString& xpModuleId);
     void refreshAllXpPresentations();
 
@@ -77,4 +85,5 @@ private:
     QSet<QtNodes::ConnectionId> m_pendingConnections;
     QSet<QtNodes::ConnectionId> m_pendingRemovals;
     int m_updatingFromGraph = 0;
+    QRectF m_canvasRect;
 };

@@ -14,6 +14,7 @@
 #include <QDebug>
 #include <QFileInfo>
 #include <QUuid>
+#include <cmath>
 #include <functional>
 #include "portlayout.h"
 
@@ -82,6 +83,35 @@ std::optional<double> parameterAsDouble(const Module* module, const QString& nam
     if (auto* i = std::get_if<int>(&value)) return static_cast<double>(*i);
     if (auto* d = std::get_if<double>(&value)) return *d;
     return std::nullopt;
+}
+
+bool hasStoredPosition(const Module* module) {
+    return parameterAsDouble(module, "x").has_value() && parameterAsDouble(module, "y").has_value();
+}
+
+void assignEndpointFallbackPosition(Module* endpointModule,
+                                    const Module* xpModule,
+                                    const QString& xpPortId) {
+    if (!endpointModule || !xpModule || hasStoredPosition(endpointModule)) {
+        return;
+    }
+
+    const double xpX = parameterAsDouble(xpModule, "x").value_or(0.0);
+    const double xpY = parameterAsDouble(xpModule, "y").value_or(0.0);
+    const int slot = std::clamp(PortLayout::endpointPortSlot(xpPortId), 0, PortLayout::kEndpointPortCount - 1);
+
+    constexpr double kXpTopInset = 16.0;
+    constexpr double kXpBottomInset = 16.0;
+    constexpr double kXpHeight = 116.0;
+    constexpr double kEndpointHeight = 54.0;
+    constexpr double kEndpointXOffset = 156.0;
+
+    const double usableHeight = kXpHeight - kXpTopInset - kXpBottomInset;
+    const double slotHeight = usableHeight / static_cast<double>(PortLayout::kEndpointPortCount);
+    const double endpointCenterY = xpY + kXpTopInset + (static_cast<double>(slot) + 0.5) * slotHeight;
+
+    endpointModule->setParameter("x", static_cast<int>(std::lround(xpX - kEndpointXOffset)));
+    endpointModule->setParameter("y", static_cast<int>(std::lround(endpointCenterY - (kEndpointHeight / 2.0))));
 }
 
 std::pair<QString, QString> guessedRouterPorts(const Module* fromModule, const Module* toModule) {
@@ -387,6 +417,8 @@ bool Graph::loadFromJson(const QString& jsonPath) {
         module->setParameter("display_name", ModuleLabels::humanizeExternalId("Endpoint", externalId));
         module->setParameter("external_id", externalId);
 
+        if (ep.contains("x")) module->setParameter("x", ep["x"].toInt());
+        if (ep.contains("y")) module->setParameter("y", ep["y"].toInt());
         if (ep.contains("type")) module->setParameter("type", ep["type"].toString());
         if (ep.contains("protocol")) module->setParameter("protocol", ep["protocol"].toString());
         if (ep.contains("data_width")) module->setParameter("data_width", ep["data_width"].toInt());
@@ -473,6 +505,9 @@ bool Graph::loadFromJson(const QString& jsonPath) {
             continue;
         }
         addConnection(std::move(connection));
+        if (fromModule->type() == "XP" && toModule->type() == "Endpoint") {
+            assignEndpointFallbackPosition(toModule, fromModule, fromPort);
+        }
     }
 
     for (const auto& xpVal : xps) {
@@ -509,6 +544,7 @@ bool Graph::loadFromJson(const QString& jsonPath) {
                 continue;
             }
             addConnection(std::move(connection));
+            assignEndpointFallbackPosition(epModule, xpModule, xpPort);
         }
     }
 
@@ -538,6 +574,8 @@ bool Graph::saveToJson(const QString& jsonPath) const {
             xpEndpointMap.insert(ModuleLabels::externalId(mod.get()), QJsonArray());
             xps.append(obj);
         } else {
+            if (params.contains("x")) obj["x"] = parameterToJson(params["x"].value());
+            if (params.contains("y")) obj["y"] = parameterToJson(params["y"].value());
             if (params.contains("type")) obj["type"] = parameterToJson(params["type"].value());
             if (params.contains("protocol")) obj["protocol"] = parameterToJson(params["protocol"].value());
             if (params.contains("data_width")) obj["data_width"] = parameterToJson(params["data_width"].value());
