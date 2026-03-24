@@ -1,3 +1,4 @@
+// LoadGraphCommand loads a graph from JSON with undo support
 #pragma once
 
 #include "command.h"

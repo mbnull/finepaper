@@ -1,3 +1,4 @@
+// ValidationResult represents a single validation error or warning
 #ifndef VALIDATIONRESULT_H
 #define VALIDATIONRESULT_H
 

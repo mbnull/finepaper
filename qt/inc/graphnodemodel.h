@@ -1,3 +1,4 @@
+// GraphNodeModel adapts Module to QtNodes framework for visual node editor
 #pragma once
 
 #include <QtNodes/NodeDelegateModel>

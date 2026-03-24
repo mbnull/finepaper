@@ -1,3 +1,4 @@
+// Module represents a hardware component in the SoC/NoC design with ports and parameters
 #pragma once
 
 #include "port.h"

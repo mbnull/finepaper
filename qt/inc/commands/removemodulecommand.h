@@ -1,3 +1,4 @@
+// RemoveModuleCommand removes a module and its connections with undo support
 #pragma once
 
 #include "command.h"

@@ -11,6 +11,7 @@ QList<ValidationResult> BasicValidator::validate(const Graph* graph) {
     return results;
 }
 
+// Check for connections with invalid ports or direction mismatches
 void BasicValidator::checkInvalidConnections(const Graph* graph, QList<ValidationResult>& results) {
     for (const auto& conn : graph->connections()) {
         Port* sourcePort = nullptr;
@@ -74,6 +75,7 @@ void BasicValidator::checkInvalidConnections(const Graph* graph, QList<Validatio
     }
 }
 
+// Check for ports that have no connections (excluding XP routers)
 void BasicValidator::checkUnconnectedPorts(const Graph* graph, QList<ValidationResult>& results) {
     QSet<QString> connectedPorts;
 

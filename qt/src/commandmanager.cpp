@@ -1,5 +1,6 @@
 #include "commandmanager.h"
 
+// Execute command and push to undo stack, clearing redo history
 void CommandManager::executeCommand(std::unique_ptr<Command> command) {
     command->execute();
     if (command->wasExecuted()) {

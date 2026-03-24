@@ -1,3 +1,4 @@
+// GraphNodeGeometry calculates node sizes and port positions for visual rendering
 #pragma once
 
 #include <QtNodes/internal/AbstractNodeGeometry.hpp>

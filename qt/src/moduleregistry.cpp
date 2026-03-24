@@ -9,6 +9,7 @@ ModuleRegistry& ModuleRegistry::instance() {
     return registry;
 }
 
+// Search for module bundle file in environment or parent directories
 ModuleRegistry::ModuleRegistry() {
     QString bundlePath;
 

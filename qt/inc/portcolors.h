@@ -1,3 +1,4 @@
+// PortColors provides color mapping for different port types and directions
 #pragma once
 
 #include "port.h"

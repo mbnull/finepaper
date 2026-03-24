@@ -1,3 +1,4 @@
+// Command interface for undo/redo pattern
 #pragma once
 
 class Command {

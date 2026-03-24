@@ -1,3 +1,4 @@
+// RemoveConnectionCommand removes a connection with undo support
 #pragma once
 
 #include "command.h"

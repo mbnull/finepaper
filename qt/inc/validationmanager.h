@@ -1,3 +1,4 @@
+// ValidationManager runs validators on graph changes and updates log panel
 #ifndef VALIDATIONMANAGER_H
 #define VALIDATIONMANAGER_H
 

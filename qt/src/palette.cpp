@@ -9,6 +9,7 @@
 #include <QMouseEvent>
 #include <memory>
 
+// Custom list widget that supports drag-and-drop of module types
 class DraggableListWidget : public QListWidget {
 public:
     DraggableListWidget(QWidget* parent = nullptr) : QListWidget(parent) {

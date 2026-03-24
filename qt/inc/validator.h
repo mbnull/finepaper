@@ -1,3 +1,4 @@
+// Validator interface for checking graph topology correctness
 #ifndef VALIDATOR_H
 #define VALIDATOR_H
 
@@ -12,6 +13,7 @@ public:
     virtual QList<ValidationResult> validate(const Graph* graph) = 0;
 };
 
+// BasicValidator checks for invalid connections and unconnected ports
 class BasicValidator : public Validator {
 public:
     QList<ValidationResult> validate(const Graph* graph) override;

@@ -1,3 +1,4 @@
+// DRCRunner executes external DRC validation and parses results
 #ifndef DRCRUNNER_H
 #define DRCRUNNER_H
 

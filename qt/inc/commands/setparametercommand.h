@@ -1,3 +1,4 @@
+// SetParameterCommand changes a module parameter with undo support
 #pragma once
 
 #include "command.h"

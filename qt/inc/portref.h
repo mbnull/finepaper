@@ -1,3 +1,4 @@
+// PortRef identifies a specific port on a specific module
 #pragma once
 
 #include <QString>

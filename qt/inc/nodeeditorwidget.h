@@ -1,3 +1,4 @@
+// NodeEditorWidget provides visual node editor with drag-drop and connection management
 #pragma once
 
 #include <QtNodes/DataFlowGraphicsScene>

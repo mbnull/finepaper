@@ -1,3 +1,4 @@
+// GraphNodePainter handles custom rendering of nodes in the visual editor
 #pragma once
 
 #include <QtNodes/internal/AbstractNodePainter.hpp>

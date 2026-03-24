@@ -1,3 +1,4 @@
+// ModuleRegistry is a singleton that stores available module type definitions
 #pragma once
 
 #include "port.h"

@@ -1,3 +1,4 @@
+// CommandManager handles undo/redo stack for graph operations
 #pragma once
 
 #include "command.h"

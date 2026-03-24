@@ -1,3 +1,4 @@
+// ModuleProvider interface for loading module type definitions
 #pragma once
 
 #include "moduleregistry.h"
@@ -9,11 +10,13 @@ public:
     virtual std::vector<ModuleType> loadModules() = 0;
 };
 
+// HardcodedProvider returns built-in module types
 class HardcodedProvider : public ModuleProvider {
 public:
     std::vector<ModuleType> loadModules() override;
 };
 
+// JsonBundleProvider loads module types from JSON file
 class JsonBundleProvider : public ModuleProvider {
 public:
     explicit JsonBundleProvider(const QString& bundlePath);

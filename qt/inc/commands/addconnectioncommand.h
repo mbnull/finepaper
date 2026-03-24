@@ -1,3 +1,4 @@
+// AddConnectionCommand adds a connection between two ports with undo support
 #pragma once
 
 #include "command.h"

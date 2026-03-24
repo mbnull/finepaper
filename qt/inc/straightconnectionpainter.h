@@ -1,3 +1,4 @@
+// StraightConnectionPainter renders connections as straight lines between ports
 #pragma once
 
 #include <QtNodes/internal/AbstractConnectionPainter.hpp>

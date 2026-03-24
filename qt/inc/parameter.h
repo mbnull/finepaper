@@ -1,3 +1,4 @@
+// Parameter holds a named configuration value (string, int, double, or bool)
 #pragma once
 
 #include <QString>

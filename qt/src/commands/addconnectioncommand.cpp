@@ -5,6 +5,7 @@ AddConnectionCommand::AddConnectionCommand(Graph* graph, std::unique_ptr<Connect
     m_connectionId = m_connection->id();
 }
 
+// Add connection if valid
 void AddConnectionCommand::execute() {
     if (!m_graph->isValidConnection(m_connection->source(), m_connection->target())) {
         return;
@@ -13,6 +14,7 @@ void AddConnectionCommand::execute() {
     m_executed = true;
 }
 
+// Remove connection and restore ownership
 void AddConnectionCommand::undo() {
     m_connection = m_graph->takeConnection(m_connectionId);
 }

@@ -1,3 +1,4 @@
+// PropertyPanel displays and edits parameters for the selected module
 #pragma once
 
 #include <QWidget>

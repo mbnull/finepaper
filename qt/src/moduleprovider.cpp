@@ -4,6 +4,7 @@
 #include <QJsonObject>
 #include <QJsonArray>
 
+// Return hardcoded module type definitions
 std::vector<ModuleType> HardcodedProvider::loadModules() {
     std::vector<ModuleType> types;
 

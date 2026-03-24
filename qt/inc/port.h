@@ -1,3 +1,4 @@
+// Port represents an input or output connection point on a module
 #pragma once
 
 #include <QString>

@@ -1,3 +1,4 @@
+// Connection represents a link between two module ports in the NoC topology
 #pragma once
 
 #include <QString>

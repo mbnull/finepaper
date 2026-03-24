@@ -4,6 +4,7 @@
 #include "validator.h"
 #include "drcrunner.h"
 
+// Connect to graph signals to trigger validation on any change
 ValidationManager::ValidationManager(Graph* graph, LogPanel* logPanel, QObject* parent)
     : QObject(parent), m_graph(graph), m_logPanel(logPanel),
       m_validator(new BasicValidator()), m_drcRunner(new DRCRunner()) {
@@ -20,6 +21,7 @@ ValidationManager::~ValidationManager() {
     delete m_drcRunner;
 }
 
+// Run all validators and update log panel with results
 void ValidationManager::runValidation() {
     QList<ValidationResult> results = m_validator->validate(m_graph);
     results.append(m_drcRunner->validate(m_graph));

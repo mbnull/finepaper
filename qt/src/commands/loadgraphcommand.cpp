@@ -4,6 +4,7 @@ LoadGraphCommand::LoadGraphCommand(Graph* graph, const QString& jsonPath)
     : m_graph(graph), m_jsonPath(jsonPath) {
 }
 
+// Load graph from JSON, backing up current state for undo
 void LoadGraphCommand::execute() {
     if (!m_executed) {
         for (const auto& module : m_graph->modules()) {
@@ -19,6 +20,7 @@ void LoadGraphCommand::execute() {
     }
 }
 
+// Restore previous graph state
 void LoadGraphCommand::undo() {
     while (!m_graph->modules().empty()) {
         m_graph->removeModule(m_graph->modules().front()->id());

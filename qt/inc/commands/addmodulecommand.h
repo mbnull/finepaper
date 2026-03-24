@@ -1,3 +1,4 @@
+// AddModuleCommand adds a module to the graph with undo support
 #pragma once
 
 #include "command.h"

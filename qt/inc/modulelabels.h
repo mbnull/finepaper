@@ -1,3 +1,4 @@
+// ModuleLabels provides utility functions for extracting and formatting module display names
 #pragma once
 
 #include "module.h"

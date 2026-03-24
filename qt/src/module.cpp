@@ -9,6 +9,7 @@ void Module::addPort(const Port& port) {
     m_ports.push_back(port);
 }
 
+// Update existing parameter or create new one, then notify listeners
 void Module::setParameter(const QString& name, Parameter::Value value) {
     auto it = m_parameters.find(name);
     if (it != m_parameters.end()) {
@@ -24,6 +25,7 @@ void Module::removeParameter(const QString& name) {
     emit parameterChanged(name);
 }
 
+// Deep copy module with all ports and parameters
 std::unique_ptr<Module> Module::clone() const {
     auto cloned = std::make_unique<Module>(m_id, m_type);
     cloned->m_ports = m_ports;

@@ -1,3 +1,4 @@
+// Entry point for Qt NoC/SoC editor application
 #include "mainwindow.h"
 #include <QApplication>
 

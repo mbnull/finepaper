@@ -3,6 +3,7 @@
 RemoveModuleCommand::RemoveModuleCommand(Graph* graph, const QString& moduleId)
     : m_graph(graph), m_moduleId(moduleId) {}
 
+// Remove module and all connected connections
 void RemoveModuleCommand::execute() {
     if (!m_graph->getModule(m_moduleId)) return;
 
@@ -21,6 +22,7 @@ void RemoveModuleCommand::execute() {
     m_executed = true;
 }
 
+// Restore module and its connections
 void RemoveModuleCommand::undo() {
     if (!m_module) return;
     m_graph->insertModule(std::move(m_module));

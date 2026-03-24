@@ -1,3 +1,4 @@
+// Palette widget displays available module types for drag-and-drop
 #pragma once
 
 #include <QWidget>

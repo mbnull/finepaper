@@ -1,3 +1,4 @@
+// PortLayout provides utilities for port naming, positioning, and identification
 #pragma once
 
 #include "port.h"

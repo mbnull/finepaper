@@ -6,6 +6,7 @@ QString GraphNodeModel::caption() const {
     return ModuleLabels::displayName(m_module);
 }
 
+// Count ports matching the given direction
 unsigned int GraphNodeModel::nPorts(QtNodes::PortType portType) const {
     if (!m_module) return 0;
     unsigned int count = 0;
@@ -32,6 +33,7 @@ void GraphNodeModel::setModule(Module* module) {
     applyTypeStyle();
 }
 
+// Find port by type and index
 const Port* GraphNodeModel::portAt(QtNodes::PortType portType, QtNodes::PortIndex portIndex) const {
     if (!m_module) return nullptr;
 

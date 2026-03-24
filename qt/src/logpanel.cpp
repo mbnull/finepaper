@@ -12,6 +12,7 @@ LogPanel::LogPanel(QWidget* parent) : QWidget(parent) {
     connect(m_listWidget, &QListWidget::itemClicked, this, &LogPanel::onItemClicked);
 }
 
+// Display validation results with color-coded severity
 void LogPanel::setResults(const QList<ValidationResult>& results) {
     clear();
 
@@ -36,6 +37,7 @@ void LogPanel::clear() {
     m_listWidget->clear();
 }
 
+// Emit signal when user clicks on validation result
 void LogPanel::onItemClicked(QListWidgetItem* item) {
     QString elementId = item->data(Qt::UserRole).toString();
     if (!elementId.isEmpty()) {

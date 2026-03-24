@@ -21,6 +21,7 @@ static std::optional<double> toDouble(const Parameter::Value& v) {
     return std::nullopt;
 }
 
+// Run external DRC tool on graph and parse validation results
 QList<ValidationResult> DRCRunner::validate(const Graph* graph) {
     QString json = serializeToJson(graph);
 
