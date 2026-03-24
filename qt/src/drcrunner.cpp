@@ -1,7 +1,9 @@
 #include "drcrunner.h"
 #include "graph.h"
+#include "modulelabels.h"
 #include "module.h"
 #include "connection.h"
+#include "portlayout.h"
 #include <QProcess>
 #include <QTemporaryFile>
 #include <QJsonDocument>
@@ -76,11 +78,15 @@ QString DRCRunner::serializeToJson(const Graph* graph) {
     QJsonObject params;
     QJsonArray xps, conns, eps;
     QMap<QString, QJsonArray> xpEndpoints;
+    m_externalToInternalIds.clear();
 
     for (const auto& mod : graph->modules()) {
+        const QString externalId = ModuleLabels::externalId(mod.get());
+        m_externalToInternalIds[externalId] = mod->id();
+
         if (mod->type() == "XP") {
             QJsonObject xp;
-            xp["id"] = mod->id();
+            xp["id"] = externalId;
             const auto& p = mod->parameters();
             if (p.find("x") != p.end() && p.find("y") != p.end()) {
                 auto xOpt = toDouble(p.value("x").value());
@@ -99,10 +105,10 @@ QString DRCRunner::serializeToJson(const Graph* graph) {
             if (!config.isEmpty()) xp["config"] = config;
 
             xps.append(xp);
-            xpEndpoints[mod->id()] = QJsonArray();
+            xpEndpoints[externalId] = QJsonArray();
         } else if (mod->type() == "Endpoint") {
             QJsonObject ep;
-            ep["id"] = mod->id();
+            ep["id"] = externalId;
             const auto& p = mod->parameters();
             if (p.count("type")) ep["type"] = std::get<QString>(p.value("type").value());
             if (p.count("protocol")) ep["protocol"] = std::get<QString>(p.value("protocol").value());
@@ -118,21 +124,22 @@ QString DRCRunner::serializeToJson(const Graph* graph) {
     }
 
     for (const auto& conn : graph->connections()) {
-        auto src = conn->source().moduleId;
-        auto tgt = conn->target().moduleId;
-        auto srcMod = graph->getModule(src);
-        auto tgtMod = graph->getModule(tgt);
+        auto srcMod = graph->getModule(conn->source().moduleId);
+        auto tgtMod = graph->getModule(conn->target().moduleId);
 
         if (srcMod && tgtMod) {
+            const QString src = ModuleLabels::externalId(srcMod);
+            const QString tgt = ModuleLabels::externalId(tgtMod);
+
             if (srcMod->type() == "XP" && tgtMod->type() == "XP") {
                 QJsonObject c;
                 c["from"] = src;
                 c["to"] = tgt;
                 conns.append(c);
-            } else if (srcMod->type() == "Endpoint" && tgtMod->type() == "XP") {
-                xpEndpoints[tgt].append(src);
             } else if (srcMod->type() == "XP" && tgtMod->type() == "Endpoint") {
                 xpEndpoints[src].append(tgt);
+            } else if (srcMod->type() == "Endpoint" && tgtMod->type() == "XP") {
+                xpEndpoints[tgt].append(src);
             }
         }
     }
@@ -161,7 +168,8 @@ QList<ValidationResult> DRCRunner::parseErrors(const QString& stderr) {
         auto match = it.next();
         auto severity = match.captured(1).toLower().startsWith("warn")
             ? ValidationSeverity::Warning : ValidationSeverity::Error;
-        results.append(ValidationResult(severity, match.captured(3), match.captured(2), "DRC"));
+        const QString elementId = m_externalToInternalIds.value(match.captured(2), match.captured(2));
+        results.append(ValidationResult(severity, match.captured(3), elementId, "DRC"));
     }
 
     for (const auto& line : stderr.split('\n')) {
@@ -190,6 +198,7 @@ QList<ValidationResult> DRCRunner::parseErrors(const QString& stderr) {
                 if (elementId.endsWith(" (RuntimeError)")) {
                     elementId = elementId.left(elementId.length() - 15);
                 }
+                elementId = m_externalToInternalIds.value(elementId, elementId);
             }
             results.append(ValidationResult(ValidationSeverity::Error, line.trimmed(), elementId, "DRC"));
         }
@@ -197,4 +206,3 @@ QList<ValidationResult> DRCRunner::parseErrors(const QString& stderr) {
 
     return results;
 }
-

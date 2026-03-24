@@ -3,14 +3,24 @@
     {
       "name": "XP",
       "ports": [
-        {"id": "north", "direction": "output", "type": "noc", "name": "North"},
-        {"id": "south", "direction": "input", "type": "noc", "name": "South"},
-        {"id": "east", "direction": "output", "type": "noc", "name": "East"},
-        {"id": "west", "direction": "input", "type": "noc", "name": "West"}
+        {"id": "ep0", "direction": "output", "type": "endpoint", "name": "EP0"},
+        {"id": "ep1", "direction": "output", "type": "endpoint", "name": "EP1"},
+        {"id": "ep2", "direction": "output", "type": "endpoint", "name": "EP2"},
+        {"id": "ep3", "direction": "output", "type": "endpoint", "name": "EP3"},
+        {"id": "north_in", "direction": "input", "type": "router", "name": "N"},
+        {"id": "north_out", "direction": "output", "type": "router", "name": "N"},
+        {"id": "east_in", "direction": "input", "type": "router", "name": "E"},
+        {"id": "east_out", "direction": "output", "type": "router", "name": "E"},
+        {"id": "south_in", "direction": "input", "type": "router", "name": "S"},
+        {"id": "south_out", "direction": "output", "type": "router", "name": "S"},
+        {"id": "west_in", "direction": "input", "type": "router", "name": "W"},
+        {"id": "west_out", "direction": "output", "type": "router", "name": "W"}
       ],
       "parameters": [
         {"name": "x", "type": "int", "default": 0},
         {"name": "y", "type": "int", "default": 0},
+        {"name": "display_name", "type": "string", "default": ""},
+        {"name": "external_id", "type": "string", "default": ""},
         {"name": "routing_algorithm", "type": "string", "default": "xy"},
         {"name": "vc_count", "type": "int", "default": 2},
         {"name": "buffer_depth", "type": "int", "default": 8}
@@ -19,9 +29,11 @@
     {
       "name": "Endpoint",
       "ports": [
-        {"id": "noc", "direction": "input", "type": "noc", "name": "NoC"}
+        {"id": "noc", "direction": "input", "type": "endpoint", "name": "NoC"}
       ],
       "parameters": [
+        {"name": "display_name", "type": "string", "default": ""},
+        {"name": "external_id", "type": "string", "default": ""},
         {"name": "type", "type": "string", "default": "master"},
         {"name": "protocol", "type": "string", "default": "axi"},
         {"name": "data_width", "type": "int", "default": 32},

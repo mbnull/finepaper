@@ -1,6 +1,15 @@
+// NodeEditorWidget — Qt widget that bridges the Graph data model and the
+// QtNodes visual canvas. Listens to Graph signals to keep the canvas in sync,
+// and translates QtNodes connection/deletion events back into Commands.
+// m_updatingFromGraph guards against re-entrant signal loops when the widget
+// itself drives a graph change.
 #include "nodeeditorwidget.h"
+#include "graphnodegeometry.h"
 #include "graphnodemodel.h"
+#include "graphnodepainter.h"
+#include "modulelabels.h"
 #include "moduleregistry.h"
+#include "straightconnectionpainter.h"
 #include "commands/addmodulecommand.h"
 #include "commands/addconnectioncommand.h"
 #include "commands/removeconnectioncommand.h"
@@ -14,13 +23,51 @@
 #include <QMimeData>
 #include <QUuid>
 #include <QGraphicsItem>
+#include <QRegularExpression>
 #include <optional>
+#include <QSet>
 
 static std::optional<double> toDouble(const Parameter::Value& v) {
     if (auto* i = std::get_if<int>(&v)) return static_cast<double>(*i);
     if (auto* d = std::get_if<double>(&v)) return *d;
     return std::nullopt;
 }
+
+namespace {
+
+int nextModuleIndex(const Graph* graph, const QString& prefix) {
+    QSet<int> used;
+    QRegularExpression pattern("^" + QRegularExpression::escape(prefix) + "_(\\d+)$", QRegularExpression::CaseInsensitiveOption);
+
+    for (const auto& module : graph->modules()) {
+        const auto match = pattern.match(ModuleLabels::displayName(module.get()));
+        if (match.hasMatch()) {
+            used.insert(match.captured(1).toInt());
+        }
+    }
+
+    int index = 0;
+    while (used.contains(index)) {
+        ++index;
+    }
+    return index;
+}
+
+void assignModuleIdentity(Graph* graph, Module* module) {
+    if (!graph || !module) return;
+
+    if (module->type() == "XP") {
+        const int index = nextModuleIndex(graph, "XP");
+        module->setParameter("display_name", QString("XP_%1").arg(index, 2, 10, QChar('0')));
+        module->setParameter("external_id", QString("xp_%1").arg(index, 2, 10, QChar('0')));
+    } else if (module->type() == "Endpoint") {
+        const int index = nextModuleIndex(graph, "EP");
+        module->setParameter("display_name", QString("EP_%1").arg(index, 2, 10, QChar('0')));
+        module->setParameter("external_id", QString("ep_%1").arg(index, 2, 10, QChar('0')));
+    }
+}
+
+} // namespace
 
 NodeEditorWidget::NodeEditorWidget(Graph* graph, CommandManager* commandManager, QWidget* parent)
     : QWidget(parent), m_graph(graph), m_commandManager(commandManager) {
@@ -30,6 +77,9 @@ NodeEditorWidget::NodeEditorWidget(Graph* graph, CommandManager* commandManager,
 
     m_graphModel = new QtNodes::DataFlowGraphModel(m_registry);
     m_scene = new QtNodes::DataFlowGraphicsScene(*m_graphModel, this);
+    m_scene->setNodeGeometry(std::make_unique<GraphNodeGeometry>(*m_graphModel));
+    m_scene->setNodePainter(std::make_unique<GraphNodePainter>());
+    m_scene->setConnectionPainter(std::make_unique<StraightConnectionPainter>());
     m_view = new QtNodes::GraphicsView(m_scene);
 
     auto* layout = new QVBoxLayout(this);
@@ -202,7 +252,7 @@ void NodeEditorWidget::dropEvent(QDropEvent* event) {
         return;
     }
 
-    QString moduleId = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    QString moduleId = QUuid::createUuid().toString(QUuid::WithoutBraces).replace('-', '_');
     auto module = std::make_unique<Module>(moduleId, moduleType);
 
     for (const auto& port : type->defaultPorts) {
@@ -211,6 +261,7 @@ void NodeEditorWidget::dropEvent(QDropEvent* event) {
     for (auto it = type->defaultParameters.constBegin(); it != type->defaultParameters.constEnd(); ++it) {
         module->setParameter(it.key(), it.value().value());
     }
+    assignModuleIdentity(m_graph, module.get());
 
     auto command = std::make_unique<AddModuleCommand>(m_graph, std::move(module));
     m_commandManager->executeCommand(std::move(command));
@@ -269,7 +320,7 @@ void NodeEditorWidget::onConnectionCreated(QtNodes::ConnectionId connectionId) {
         return;
     }
 
-    QString connId = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    QString connId = QUuid::createUuid().toString(QUuid::WithoutBraces).replace('-', '_');
     auto connection = std::make_unique<Connection>(connId, source, target);
     auto command = std::make_unique<AddConnectionCommand>(m_graph, std::move(connection));
     m_commandManager->executeCommand(std::move(command));
@@ -360,13 +411,21 @@ void NodeEditorWidget::onNodeMoved(QtNodes::NodeId nodeId) {
 }
 
 void NodeEditorWidget::onParameterChanged(const QString& paramName) {
-    if (paramName != "x" && paramName != "y") return;
-
     Module* module = qobject_cast<Module*>(sender());
     if (!module) return;
 
     auto nodeIt = m_moduleToNodeId.find(module->id());
     if (nodeIt == m_moduleToNodeId.end()) return;
+
+    if (paramName == "display_name") {
+        if (auto* nodeGraphics = m_scene->nodeGraphicsObject(nodeIt.value())) {
+            nodeGraphics->setGeometryChanged();
+            nodeGraphics->update();
+        }
+        return;
+    }
+
+    if (paramName != "x" && paramName != "y") return;
 
     const auto& params = module->parameters();
     auto xIt = params.find("x");

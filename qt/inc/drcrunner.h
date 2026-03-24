@@ -2,6 +2,7 @@
 #define DRCRUNNER_H
 
 #include <QList>
+#include <QHash>
 #include <QString>
 #include "validationresult.h"
 
@@ -13,6 +14,8 @@ public:
 private:
     QString serializeToJson(const Graph* graph);
     QList<ValidationResult> parseErrors(const QString& stderr);
+
+    QHash<QString, QString> m_externalToInternalIds;
 };
 
 #endif

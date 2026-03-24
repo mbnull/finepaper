@@ -83,6 +83,10 @@ void BasicValidator::checkUnconnectedPorts(const Graph* graph, QList<ValidationR
     }
 
     for (const auto& module : graph->modules()) {
+        if (module->type() == "XP") {
+            continue;
+        }
+
         for (const auto& port : module->ports()) {
             QString portKey = module->id() + ":" + port.id();
             if (!connectedPorts.contains(portKey)) {
