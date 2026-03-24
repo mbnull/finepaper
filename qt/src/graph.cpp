@@ -32,12 +32,7 @@ const Port* findPort(const Module* module, const QString& portId) {
 }
 
 QString oppositeDirection(const QString& dir) {
-    const QString side = PortLayout::routerSideId(dir);
-    if (side == "north") return "south";
-    if (side == "south") return "north";
-    if (side == "east") return "west";
-    if (side == "west") return "east";
-    return {};
+    return PortLayout::oppositeRouterSide(PortLayout::routerSideId(dir));
 }
 
 QString newInternalId() {
@@ -364,6 +359,7 @@ bool Graph::loadFromJson(const QString& jsonPath) {
         if (xp.contains("y")) module->setParameter("y", xp["y"].toInt());
 
         QJsonObject config = xp["config"].toObject();
+        if (config.contains("collapsed")) module->setParameter("collapsed", config["collapsed"].toBool());
         if (config.contains("routing_algorithm")) module->setParameter("routing_algorithm", config["routing_algorithm"].toString());
         if (config.contains("vc_count")) module->setParameter("vc_count", config["vc_count"].toInt());
         if (config.contains("buffer_depth")) module->setParameter("buffer_depth", config["buffer_depth"].toInt());
@@ -533,6 +529,7 @@ bool Graph::saveToJson(const QString& jsonPath) const {
             obj["y"] = params.contains("y") ? parameterToJson(params["y"].value()) : QJsonValue(0);
 
             QJsonObject config;
+            if (params.contains("collapsed")) config["collapsed"] = parameterToJson(params["collapsed"].value());
             if (params.contains("routing_algorithm")) config["routing_algorithm"] = parameterToJson(params["routing_algorithm"].value());
             if (params.contains("vc_count")) config["vc_count"] = parameterToJson(params["vc_count"].value());
             if (params.contains("buffer_depth")) config["buffer_depth"] = parameterToJson(params["buffer_depth"].value());

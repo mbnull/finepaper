@@ -21,6 +21,7 @@
         {"name": "y", "type": "int", "default": 0},
         {"name": "display_name", "type": "string", "default": ""},
         {"name": "external_id", "type": "string", "default": ""},
+        {"name": "collapsed", "type": "bool", "default": true},
         {"name": "routing_algorithm", "type": "string", "default": "xy"},
         {"name": "vc_count", "type": "int", "default": 2},
         {"name": "buffer_depth", "type": "int", "default": 8}

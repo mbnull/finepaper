@@ -49,6 +49,14 @@ inline int routerPortSlot(const QString& portId) {
     return 0;
 }
 
+inline QString oppositeRouterSide(const QString& side) {
+    if (side == "north") return "south";
+    if (side == "south") return "north";
+    if (side == "east") return "west";
+    if (side == "west") return "east";
+    return {};
+}
+
 inline QString routerInputPortId(const QString& side) {
     return side + "_in";
 }

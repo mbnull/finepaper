@@ -1,4 +1,5 @@
 #include "graphnodepainter.h"
+#include "graphnodegeometry.h"
 #include "graphnodemodel.h"
 #include "portcolors.h"
 #include <QtNodes/DataFlowGraphModel>
@@ -16,6 +17,27 @@ QColor nodeBackground(const GraphNodeModel* model) {
     return QColor(224, 224, 224);
 }
 
+void drawXpToggleButton(QPainter* painter,
+                        const GraphNodeModel& model,
+                        QSize const& nodeSize) {
+    const QRectF buttonRect = GraphNodeGeometry::xpToggleButtonRect(nodeSize);
+
+    painter->setPen(QPen(QColor(48, 48, 48), 1.0));
+    painter->setBrush(QColor(248, 248, 248, 230));
+    painter->drawRoundedRect(buttonRect, 3.5, 3.5);
+
+    painter->setPen(QColor(30, 30, 30));
+    painter->setFont(QFont(QStringLiteral("Sans Serif"), 8, QFont::Bold));
+    painter->drawText(buttonRect, Qt::AlignCenter, model.isXpCollapsed() ? QStringLiteral("+") : QStringLiteral("-"));
+}
+
+QRectF routerLabelRect(const QString& side, const QPointF& center) {
+    if (side == "north") return QRectF(center.x() - 8.0, center.y() + 8.0, 16.0, 12.0);
+    if (side == "south") return QRectF(center.x() - 8.0, center.y() - 20.0, 16.0, 12.0);
+    if (side == "east") return QRectF(center.x() - 20.0, center.y() - 8.0, 12.0, 16.0);
+    return QRectF(center.x() + 8.0, center.y() - 8.0, 12.0, 16.0);
+}
+
 void drawPorts(QPainter* painter,
                QtNodes::NodeGraphicsObject& ngo,
                const GraphNodeModel* model,
@@ -25,10 +47,14 @@ void drawPorts(QPainter* painter,
 
     auto const& geometry = ngo.nodeScene()->nodeGeometry();
     const unsigned int portCount = model->nPorts(portType);
+    const bool collapsedXp = model->isXpCollapsed();
 
     for (unsigned int index = 0; index < portCount; ++index) {
         const Port* port = model->portAt(portType, index);
         if (!port) continue;
+        if (collapsedXp && PortLayout::isEndpointPort(*port)) {
+            continue;
+        }
 
         if (port->type() == "router") {
             const QString side = PortLayout::routerSideId(port->id());
@@ -46,7 +72,10 @@ void drawPorts(QPainter* painter,
         painter->drawEllipse(center, 5.5, 5.5);
 
         if (port->type() == "router") {
-            QRectF textRect(center.x() - 22.0, center.y() - 8.0, 14.0, 16.0);
+            const QString side = PortLayout::routerSideId(port->id());
+            const QRectF textRect = collapsedXp
+                ? routerLabelRect(side, center)
+                : QRectF(center.x() - 22.0, center.y() - 8.0, 14.0, 16.0);
             painter->setPen(QColor(22, 22, 22));
             painter->setFont(QFont(QStringLiteral("Sans Serif"), 7, QFont::Bold));
             painter->drawText(textRect, Qt::AlignCenter, port->name());
@@ -70,6 +99,10 @@ void GraphNodePainter::paint(QPainter* painter, QtNodes::NodeGraphicsObject& ngo
     painter->setPen(borderPen);
     painter->setBrush(nodeBackground(model));
     painter->drawRoundedRect(bodyRect, 8.0, 8.0);
+
+    if (model && model->module() && model->module()->type() == "XP") {
+        drawXpToggleButton(painter, *model, nodeSize);
+    }
 
     painter->setPen(QColor(22, 22, 22));
     painter->setFont(QFont(QStringLiteral("Sans Serif"), 9, QFont::DemiBold));

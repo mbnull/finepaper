@@ -1,6 +1,34 @@
 #include "graphnodemodel.h"
 #include "modulelabels.h"
+#include "portlayout.h"
 #include <QColor>
+
+namespace {
+
+bool boolParameter(const Module* module, const QString& name, bool fallbackValue) {
+    if (!module) return fallbackValue;
+
+    const auto it = module->parameters().find(name);
+    if (it == module->parameters().end()) return fallbackValue;
+
+    const Parameter::Value value = it.value().value();
+    if (const auto* boolValue = std::get_if<bool>(&value)) {
+        return *boolValue;
+    }
+
+    return fallbackValue;
+}
+
+bool isVisiblePort(const Module* module, const Port& port) {
+    if (!module || module->type() != "XP") {
+        return true;
+    }
+
+    const bool collapsed = boolParameter(module, "collapsed", true);
+    return !collapsed || !PortLayout::isEndpointPort(port);
+}
+
+} // namespace
 
 QString GraphNodeModel::caption() const {
     return ModuleLabels::displayName(m_module);
@@ -11,6 +39,9 @@ unsigned int GraphNodeModel::nPorts(QtNodes::PortType portType) const {
     if (!m_module) return 0;
     unsigned int count = 0;
     for (const auto& port : m_module->ports()) {
+        if (!isVisiblePort(m_module, port)) {
+            continue;
+        }
         if ((portType == QtNodes::PortType::In && port.direction() == Port::Direction::Input) ||
             (portType == QtNodes::PortType::Out && port.direction() == Port::Direction::Output)) {
             count++;
@@ -33,12 +64,19 @@ void GraphNodeModel::setModule(Module* module) {
     applyTypeStyle();
 }
 
+bool GraphNodeModel::isXpCollapsed() const {
+    return m_module && m_module->type() == "XP" && boolParameter(m_module, "collapsed", true);
+}
+
 // Find port by type and index
 const Port* GraphNodeModel::portAt(QtNodes::PortType portType, QtNodes::PortIndex portIndex) const {
     if (!m_module) return nullptr;
 
     unsigned int idx = 0;
     for (const auto& port : m_module->ports()) {
+        if (!isVisiblePort(m_module, port)) {
+            continue;
+        }
         if ((portType == QtNodes::PortType::In && port.direction() == Port::Direction::Input) ||
             (portType == QtNodes::PortType::Out && port.direction() == Port::Direction::Output)) {
             if (idx == portIndex) {
@@ -49,6 +87,26 @@ const Port* GraphNodeModel::portAt(QtNodes::PortType portType, QtNodes::PortInde
     }
 
     return nullptr;
+}
+
+QtNodes::PortIndex GraphNodeModel::portIndex(const QString& portId, QtNodes::PortType portType) const {
+    if (!m_module) return QtNodes::InvalidPortIndex;
+
+    unsigned int idx = 0;
+    for (const auto& port : m_module->ports()) {
+        if (!isVisiblePort(m_module, port)) {
+            continue;
+        }
+        if ((portType == QtNodes::PortType::In && port.direction() == Port::Direction::Input) ||
+            (portType == QtNodes::PortType::Out && port.direction() == Port::Direction::Output)) {
+            if (port.id() == portId) {
+                return idx;
+            }
+            ++idx;
+        }
+    }
+
+    return QtNodes::InvalidPortIndex;
 }
 
 QtNodes::NodeDataType GraphNodeModel::dataType(QtNodes::PortType portType, QtNodes::PortIndex portIndex) const {

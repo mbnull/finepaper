@@ -11,6 +11,13 @@
 #include "graph.h"
 #include "commandmanager.h"
 
+class AnimatedGraphicsView;
+class QDragEnterEvent;
+class QDragMoveEvent;
+class QDragLeaveEvent;
+class QDropEvent;
+namespace QtNodes { class ConnectionGraphicsObject; }
+
 class NodeEditorWidget : public QWidget {
     Q_OBJECT
 
@@ -25,6 +32,8 @@ signals:
 
 protected:
     void dragEnterEvent(QDragEnterEvent* event) override;
+    void dragMoveEvent(QDragMoveEvent* event) override;
+    void dragLeaveEvent(QDragLeaveEvent* event) override;
     void dropEvent(QDropEvent* event) override;
     bool eventFilter(QObject* obj, QEvent* event) override;
 
@@ -40,14 +49,28 @@ private slots:
     void onParameterChanged(const QString& paramName);
 
 private:
+    void ensureModuleInView(Module* module);
+    void removeModuleFromView(const QString& moduleId);
+    bool ensureConnectionInView(Connection* connection);
+    void removeConnectionFromView(const QString& connectionId);
     QString getPortId(QtNodes::NodeId nodeId, QtNodes::PortType portType, QtNodes::PortIndex portIndex) const;
+    bool resolveConnectionPorts(QtNodes::ConnectionId connectionId, PortRef& source, PortRef& target) const;
+    QtNodes::ConnectionGraphicsObject* findDraftConnection() const;
+    bool tryToggleXpCollapsed(const QPoint& viewportPos);
+    bool resolveXpRouterDraftConnection(const QtNodes::ConnectionGraphicsObject& draftConnection,
+                                        QtNodes::NodeId targetNodeId,
+                                        PortRef& source,
+                                        PortRef& target) const;
+    bool tryCompleteXpRouterDraftConnection(const QPoint& viewportPos);
+    void refreshXpPresentation(const QString& xpModuleId);
+    void refreshAllXpPresentations();
 
     Graph* m_graph;
     CommandManager* m_commandManager;
     std::shared_ptr<QtNodes::NodeDelegateModelRegistry> m_registry;
     QtNodes::DataFlowGraphModel* m_graphModel;
     QtNodes::DataFlowGraphicsScene* m_scene;
-    QtNodes::GraphicsView* m_view;
+    AnimatedGraphicsView* m_view;
     QMap<QString, QtNodes::NodeId> m_moduleToNodeId;
     QMap<QtNodes::NodeId, QString> m_nodeToModuleId;
     QMap<QString, QtNodes::ConnectionId> m_connectionToQtId;

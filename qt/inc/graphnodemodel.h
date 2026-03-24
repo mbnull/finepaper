@@ -26,7 +26,9 @@ public:
 
     void setModule(Module* module);
     Module* module() const { return m_module; }
+    bool isXpCollapsed() const;
     const Port* portAt(QtNodes::PortType portType, QtNodes::PortIndex portIndex) const;
+    QtNodes::PortIndex portIndex(const QString& portId, QtNodes::PortType portType) const;
 
 private:
     void applyTypeStyle();

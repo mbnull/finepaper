@@ -4,15 +4,27 @@
 #include <QtNodes/DataFlowGraphModel>
 #include <QFont>
 #include <QFontMetrics>
+#include <QStringList>
 #include <algorithm>
 
 namespace {
+
+QPointF cardinalPortPosition(const QString& side, QSize const& nodeSize, qreal inset) {
+    if (side == "north") return QPointF(nodeSize.width() / 2.0, inset);
+    if (side == "east") return QPointF(nodeSize.width() - inset, nodeSize.height() / 2.0);
+    if (side == "south") return QPointF(nodeSize.width() / 2.0, nodeSize.height() - inset);
+    if (side == "west") return QPointF(inset, nodeSize.height() / 2.0);
+    return {};
+}
 
 QSize sizeForModel(const GraphNodeModel* model) {
     const QString caption = model ? model->caption() : QStringLiteral("Node");
     const int captionWidth = QFontMetrics(QFont()).horizontalAdvance(caption) + 26;
 
     if (model && model->module() && model->module()->type() == "XP") {
+        if (model->isXpCollapsed()) {
+            return {std::max(104, captionWidth), 92};
+        }
         return {std::max(136, captionWidth), 116};
     }
 
@@ -49,7 +61,7 @@ QPointF GraphNodeGeometry::portPosition(QtNodes::NodeId nodeId,
 
     const QSize nodeSize = size(nodeId);
     if (model->module() && model->module()->type() == "XP") {
-        return xpPortPosition(*port, nodeSize);
+        return xpPortPosition(*model, *port, nodeSize);
     }
 
     return endpointPortPosition(nodeId, portType, nodeSize);
@@ -75,7 +87,11 @@ QPointF GraphNodeGeometry::captionPosition(QtNodes::NodeId) const {
 
 QRectF GraphNodeGeometry::captionRect(QtNodes::NodeId nodeId) const {
     const QSize nodeSize = size(nodeId);
-    return QRectF(8.0, 6.0, nodeSize.width() - 16.0, 20.0);
+    const GraphNodeModel* model = modelFor(nodeId);
+    const bool isXp = model && model->module() && model->module()->type() == "XP";
+    const qreal leftInset = isXp ? 30.0 : 8.0;
+    const qreal topInset = isXp && model->isXpCollapsed() ? 26.0 : 6.0;
+    return QRectF(leftInset, topInset, nodeSize.width() - leftInset - 8.0, 20.0);
 }
 
 QPointF GraphNodeGeometry::widgetPosition(QtNodes::NodeId) const {
@@ -86,12 +102,31 @@ QRect GraphNodeGeometry::resizeHandleRect(QtNodes::NodeId) const {
     return {};
 }
 
+QRectF GraphNodeGeometry::xpToggleButtonRect(QSize const&) {
+    return QRectF(8.0, 8.0, 14.0, 14.0);
+}
+
 const GraphNodeModel* GraphNodeGeometry::modelFor(QtNodes::NodeId nodeId) const {
     auto* graphModel = dynamic_cast<QtNodes::DataFlowGraphModel*>(&_graphModel);
     return graphModel ? graphModel->delegateModel<GraphNodeModel>(nodeId) : nullptr;
 }
 
-QPointF GraphNodeGeometry::xpPortPosition(const Port& port, QSize const& nodeSize) const {
+QPointF GraphNodeGeometry::xpPortPosition(const GraphNodeModel& model, const Port& port, QSize const& nodeSize) const {
+    if (model.isXpCollapsed()) {
+        if (PortLayout::isRouterPort(port)) {
+            return cardinalPortPosition(PortLayout::routerSideId(port.id()), nodeSize, 0.0);
+        }
+
+        static const QStringList endpointSides{QStringLiteral("north"),
+                                               QStringLiteral("east"),
+                                               QStringLiteral("south"),
+                                               QStringLiteral("west")};
+        const int slot = std::clamp(PortLayout::endpointPortSlot(port.id()),
+                                    0,
+                                    static_cast<int>(endpointSides.size()) - 1);
+        return cardinalPortPosition(endpointSides.at(slot), nodeSize, 18.0);
+    }
+
     constexpr qreal inset = 16.0;
     const qreal bottom = nodeSize.height() - inset;
 

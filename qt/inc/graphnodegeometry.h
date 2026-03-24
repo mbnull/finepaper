@@ -27,9 +27,11 @@ public:
     QPointF widgetPosition(QtNodes::NodeId nodeId) const override;
     QRect resizeHandleRect(QtNodes::NodeId nodeId) const override;
 
+    static QRectF xpToggleButtonRect(QSize const& nodeSize);
+
 private:
     const GraphNodeModel* modelFor(QtNodes::NodeId nodeId) const;
-    QPointF xpPortPosition(const Port& port, QSize const& nodeSize) const;
+    QPointF xpPortPosition(const GraphNodeModel& model, const Port& port, QSize const& nodeSize) const;
     QPointF endpointPortPosition(QtNodes::NodeId nodeId,
                                  QtNodes::PortType portType,
                                  QSize const& nodeSize) const;
