@@ -181,6 +181,7 @@ void NodeEditorWidget::onConnectionAdded(Connection* connection) {
     }
 
     QtNodes::ConnectionId connId{srcNodeId, srcPortIdx, tgtNodeId, tgtPortIdx};
+    m_pendingRemovals.remove(connId);
 
     if (m_pendingConnections.contains(connId)) {
         m_pendingConnections.remove(connId);
@@ -197,10 +198,19 @@ void NodeEditorWidget::onConnectionAdded(Connection* connection) {
 void NodeEditorWidget::onConnectionRemoved(const QString& connectionId) {
     auto it = m_connectionToQtId.find(connectionId);
     if (it != m_connectionToQtId.end()) {
-        ++m_updatingFromGraph;
-        m_pendingRemovals.insert(it.value());
-        m_graphModel->deleteConnection(it.value());
+        const QtNodes::ConnectionId qtConnectionId = it.value();
         m_connectionToQtId.erase(it);
+
+        if (!m_graphModel->connectionExists(qtConnectionId)) {
+            m_pendingRemovals.remove(qtConnectionId);
+            return;
+        }
+
+        ++m_updatingFromGraph;
+        m_pendingRemovals.insert(qtConnectionId);
+        if (!m_graphModel->deleteConnection(qtConnectionId)) {
+            m_pendingRemovals.remove(qtConnectionId);
+        }
         --m_updatingFromGraph;
     }
 }
