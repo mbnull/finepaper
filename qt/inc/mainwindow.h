@@ -6,6 +6,7 @@
 #define MAINWINDOW_H
 
 #include <QMainWindow>
+#include <memory>
 
 class Graph;
 class CommandManager;
@@ -14,17 +15,15 @@ class PropertyPanel;
 class Palette;
 class LogPanel;
 class ValidationManager;
-
-namespace Ui {
-class MainWindow;
-}
+class QAction;
+class QWidget;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
 
   public:
-    explicit MainWindow(QWidget *parent = 0);
-    ~MainWindow();
+    explicit MainWindow(QWidget *parent = nullptr);
+    ~MainWindow() override;
 
     void loadGraph(const QString& jsonPath);
 
@@ -32,14 +31,21 @@ private slots:
     void saveGraph();
 
   private:
-    Ui::MainWindow *ui;
+    void setupPanels();
+    void setupConnections();
+    void setupActions();
+    QWidget* createCentralContent();
+    void scheduleStartupLayoutLog();
+    void logStartupLayout() const;
+
     Graph* m_graph;
-    CommandManager* m_commandManager;
+    std::unique_ptr<CommandManager> m_commandManager;
     NodeEditorWidget* m_nodeEditor;
     PropertyPanel* m_propertyPanel;
     Palette* m_palette;
     LogPanel* m_logPanel;
     ValidationManager* m_validationManager;
+    QAction* m_saveAction;
 };
 
 #endif // MAINWINDOW_H
