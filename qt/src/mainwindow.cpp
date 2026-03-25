@@ -33,7 +33,8 @@ MainWindow::MainWindow(QWidget *parent)
       m_paletteDock(nullptr),
       m_propertyDock(nullptr),
       m_logDock(nullptr),
-      m_saveAction(nullptr) {
+      m_saveAction(nullptr),
+      m_arrangeAction(nullptr) {
     setupPanels();
     setupConnections();
     setupActions();
@@ -48,6 +49,9 @@ MainWindow::~MainWindow() = default;
 
 void MainWindow::loadGraph(const QString& jsonPath) {
     m_commandManager->executeCommand(std::make_unique<LoadGraphCommand>(m_graph, jsonPath));
+    if (m_arrangeAction && m_arrangeAction->isChecked()) {
+        m_nodeEditor->setArrangeEnabled(true);
+    }
 }
 
 void MainWindow::saveGraph() {
@@ -82,8 +86,19 @@ void MainWindow::setupActions() {
     m_saveAction = new QAction("Save JSON", this);
     connect(m_saveAction, &QAction::triggered, this, &MainWindow::saveGraph);
 
+    m_arrangeAction = new QAction("Arrange", this);
+    m_arrangeAction->setCheckable(true);
+    m_arrangeAction->setToolTip("Arrange the graph into a mesh-style layout and lock direct canvas editing.");
+    connect(m_arrangeAction, &QAction::toggled, m_nodeEditor, &NodeEditorWidget::setArrangeEnabled);
+    connect(m_arrangeAction, &QAction::toggled, m_palette, [this](bool enabled) {
+        m_palette->setEnabled(!enabled);
+    });
+
     auto* fileMenu = menuBar()->addMenu("&File");
     fileMenu->addAction(m_saveAction);
+
+    auto* layoutMenu = menuBar()->addMenu("&Layout");
+    layoutMenu->addAction(m_arrangeAction);
 
     auto* viewMenu = menuBar()->addMenu("&View");
     viewMenu->setObjectName("viewMenu");
@@ -91,6 +106,7 @@ void MainWindow::setupActions() {
     auto* mainToolBar = addToolBar("Main");
     mainToolBar->setObjectName("mainToolBar");
     mainToolBar->addAction(m_saveAction);
+    mainToolBar->addAction(m_arrangeAction);
 }
 
 QWidget* MainWindow::createCentralContent() {

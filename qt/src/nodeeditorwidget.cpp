@@ -4,6 +4,7 @@
 // m_updatingFromGraph guards against re-entrant signal loops when the widget
 // itself drives a graph change.
 #include "nodeeditorwidget.h"
+#include "editorgraphmodel.h"
 #include "graphnodegeometry.h"
 #include "graphnodemodel.h"
 #include "graphnodepainter.h"
@@ -11,6 +12,7 @@
 #include "moduleregistry.h"
 #include "portlayout.h"
 #include "straightconnectionpainter.h"
+#include "commands/arrangecommand.h"
 #include "commands/addmodulecommand.h"
 #include "commands/addconnectioncommand.h"
 #include "commands/removemodulecommand.h"
@@ -109,6 +111,17 @@ public:
 
         m_dragActive = false;
         animateOverlayTo(0.0);
+    }
+
+    void setEditingLocked(bool locked) {
+        m_editingLocked = locked;
+    }
+
+    void onDeleteSelectedObjects() override {
+        if (m_editingLocked) {
+            return;
+        }
+        QtNodes::GraphicsView::onDeleteSelectedObjects();
     }
 
 protected:
@@ -223,6 +236,7 @@ private:
     qreal m_pulsePhase = 0.0;
     qreal m_overlayOpacity = 0.0;
     bool m_dragActive = false;
+    bool m_editingLocked = false;
 };
 
 static std::optional<double> toDouble(const Parameter::Value& v) {
@@ -367,7 +381,7 @@ NodeEditorWidget::NodeEditorWidget(Graph* graph, CommandManager* commandManager,
     m_registry = std::make_shared<QtNodes::NodeDelegateModelRegistry>();
     m_registry->registerModel<GraphNodeModel>("GraphNode");
 
-    m_graphModel = new QtNodes::DataFlowGraphModel(m_registry);
+    m_graphModel = new EditorGraphModel(m_registry);
     m_scene = new QtNodes::DataFlowGraphicsScene(*m_graphModel, this);
     m_scene->setSceneRect(m_canvasRect);
     m_scene->setNodeGeometry(std::make_unique<GraphNodeGeometry>(*m_graphModel));
@@ -402,6 +416,28 @@ NodeEditorWidget::NodeEditorWidget(Graph* graph, CommandManager* commandManager,
     }
 
     refreshAllXpPresentations();
+}
+
+bool NodeEditorWidget::isArrangeEnabled() const {
+    return m_graphModel->isEditingLocked();
+}
+
+void NodeEditorWidget::setArrangeEnabled(bool enabled) {
+    if (enabled) {
+        auto command = std::make_unique<ArrangeCommand>(m_graph);
+        m_commandManager->executeCommand(std::move(command));
+    }
+
+    m_graphModel->setEditingLocked(enabled);
+    m_view->setEditingLocked(enabled);
+
+    if (QAction* deleteAction = m_view->deleteSelectionAction()) {
+        deleteAction->setEnabled(!enabled);
+    }
+
+    if (enabled) {
+        m_view->zoomFitAll();
+    }
 }
 
 void NodeEditorWidget::onModuleAdded(Module* module) {
@@ -546,6 +582,11 @@ void NodeEditorWidget::removeConnectionFromView(const QString& connectionId) {
 }
 
 void NodeEditorWidget::dragEnterEvent(QDragEnterEvent* event) {
+    if (m_graphModel->isEditingLocked()) {
+        event->ignore();
+        return;
+    }
+
     const QString moduleType = draggedModuleType(event->mimeData());
     if (!moduleType.isEmpty()) {
         m_view->beginPaletteDrag(m_view->viewport()->mapFrom(this, event->position().toPoint()), moduleType);
@@ -557,6 +598,11 @@ void NodeEditorWidget::dragEnterEvent(QDragEnterEvent* event) {
 }
 
 void NodeEditorWidget::dragMoveEvent(QDragMoveEvent* event) {
+    if (m_graphModel->isEditingLocked()) {
+        event->ignore();
+        return;
+    }
+
     const QString moduleType = draggedModuleType(event->mimeData());
     if (!moduleType.isEmpty()) {
         m_view->updatePaletteDrag(m_view->viewport()->mapFrom(this, event->position().toPoint()), moduleType);
@@ -581,6 +627,10 @@ bool NodeEditorWidget::eventFilter(QObject* obj, QEvent* event) {
             auto* e = static_cast<QDragEnterEvent*>(event);
             const QString moduleType = draggedModuleType(e->mimeData());
             if (!moduleType.isEmpty()) {
+                if (m_graphModel->isEditingLocked()) {
+                    e->ignore();
+                    return true;
+                }
                 m_view->beginPaletteDrag(e->position().toPoint(), moduleType);
                 e->acceptProposedAction();
                 return true;
@@ -590,6 +640,10 @@ bool NodeEditorWidget::eventFilter(QObject* obj, QEvent* event) {
             auto* e = static_cast<QDragMoveEvent*>(event);
             const QString moduleType = draggedModuleType(e->mimeData());
             if (!moduleType.isEmpty()) {
+                if (m_graphModel->isEditingLocked()) {
+                    e->ignore();
+                    return true;
+                }
                 m_view->updatePaletteDrag(e->position().toPoint(), moduleType);
                 e->acceptProposedAction();
                 return true;
@@ -603,6 +657,11 @@ bool NodeEditorWidget::eventFilter(QObject* obj, QEvent* event) {
             auto* e = static_cast<QDropEvent*>(event);
             const QString moduleType = draggedModuleType(e->mimeData());
             if (!moduleType.isEmpty()) {
+                if (m_graphModel->isEditingLocked()) {
+                    m_view->endPaletteDrag();
+                    e->ignore();
+                    return true;
+                }
                 m_view->updatePaletteDrag(e->position().toPoint(), moduleType);
                 dropEvent(e);
                 return true;
@@ -644,6 +703,12 @@ bool NodeEditorWidget::eventFilter(QObject* obj, QEvent* event) {
 }
 
 void NodeEditorWidget::dropEvent(QDropEvent* event) {
+    if (m_graphModel->isEditingLocked()) {
+        m_view->endPaletteDrag();
+        event->ignore();
+        return;
+    }
+
     const QString moduleType = draggedModuleType(event->mimeData());
     if (moduleType.isEmpty()) {
         m_view->endPaletteDrag();
@@ -692,6 +757,14 @@ void NodeEditorWidget::dropEvent(QDropEvent* event) {
 
 void NodeEditorWidget::onConnectionCreated(QtNodes::ConnectionId connectionId) {
     if (m_updatingFromGraph > 0) return;
+    if (m_graphModel->isEditingLocked()) {
+        ++m_updatingFromGraph;
+        if (m_graphModel->connectionExists(connectionId)) {
+            m_graphModel->deleteConnection(connectionId);
+        }
+        --m_updatingFromGraph;
+        return;
+    }
 
     m_pendingConnections.insert(connectionId);
 
@@ -721,6 +794,7 @@ void NodeEditorWidget::onConnectionCreated(QtNodes::ConnectionId connectionId) {
 
 void NodeEditorWidget::onConnectionDeleted(QtNodes::ConnectionId connectionId) {
     if (m_updatingFromGraph > 0) return;
+    if (m_graphModel->isEditingLocked()) return;
 
     if (m_pendingRemovals.contains(connectionId)) {
         m_pendingRemovals.remove(connectionId);
@@ -1124,6 +1198,12 @@ bool NodeEditorWidget::showNodeContextMenu(const QPoint& viewportPos, const QPoi
     Module* module = nodeModel ? nodeModel->module() : nullptr;
     if (!module) {
         return false;
+    }
+
+    if (m_graphModel->isEditingLocked()) {
+        m_scene->clearSelection();
+        nodeGraphics->setSelected(true);
+        return true;
     }
 
     QMenu menu(m_view);

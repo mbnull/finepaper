@@ -17,6 +17,7 @@ class QDragEnterEvent;
 class QDragMoveEvent;
 class QDragLeaveEvent;
 class QDropEvent;
+class EditorGraphModel;
 namespace QtNodes { class ConnectionGraphicsObject; }
 
 class NodeEditorWidget : public QWidget {
@@ -24,9 +25,11 @@ class NodeEditorWidget : public QWidget {
 
 public:
     NodeEditorWidget(Graph* graph, CommandManager* commandManager, QWidget* parent = nullptr);
+    bool isArrangeEnabled() const;
 
 public slots:
     void highlightElement(const QString& elementId);
+    void setArrangeEnabled(bool enabled);
 
 signals:
     void moduleSelected(QString moduleId);
@@ -79,7 +82,7 @@ private:
     Graph* m_graph;
     CommandManager* m_commandManager;
     std::shared_ptr<QtNodes::NodeDelegateModelRegistry> m_registry;
-    QtNodes::DataFlowGraphModel* m_graphModel;
+    EditorGraphModel* m_graphModel;
     QtNodes::DataFlowGraphicsScene* m_scene;
     AnimatedGraphicsView* m_view;
     QMap<QString, QtNodes::NodeId> m_moduleToNodeId;

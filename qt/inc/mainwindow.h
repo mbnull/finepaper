@@ -55,6 +55,7 @@ private slots:
     QDockWidget* m_propertyDock;
     QDockWidget* m_logDock;
     QAction* m_saveAction;
+    QAction* m_arrangeAction;
 };
 
 #endif // MAINWINDOW_H
