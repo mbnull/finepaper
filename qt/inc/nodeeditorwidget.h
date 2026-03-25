@@ -57,7 +57,10 @@ private:
     QString getPortId(QtNodes::NodeId nodeId, QtNodes::PortType portType, QtNodes::PortIndex portIndex) const;
     bool resolveConnectionPorts(QtNodes::ConnectionId connectionId, PortRef& source, PortRef& target) const;
     QtNodes::ConnectionGraphicsObject* findDraftConnection() const;
-    bool tryToggleXpCollapsed(const QPoint& viewportPos);
+    void setConnectionHighlighted(QtNodes::ConnectionId connectionId, bool highlighted);
+    void updateConnectedConnectionHighlights(QtNodes::NodeId selectedNodeId);
+    bool tryToggleXpCollapsed(const QPoint& viewportPos, bool requireToggleButton);
+    void toggleXpCollapsed(const QString& moduleId, bool collapsed);
     bool resolveXpRouterDraftConnection(const QtNodes::ConnectionGraphicsObject& draftConnection,
                                         QtNodes::NodeId targetNodeId,
                                         PortRef& source,

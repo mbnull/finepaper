@@ -16,6 +16,7 @@ class Palette;
 class LogPanel;
 class ValidationManager;
 class QAction;
+class QDockWidget;
 class QWidget;
 
 class MainWindow : public QMainWindow {
@@ -35,6 +36,11 @@ private slots:
     void setupConnections();
     void setupActions();
     QWidget* createCentralContent();
+    void setupDocks();
+    QDockWidget* createDock(const QString& title,
+                            QWidget* content,
+                            Qt::DockWidgetArea area,
+                            const QString& objectName);
     void scheduleStartupLayoutLog();
     void logStartupLayout() const;
 
@@ -45,6 +51,9 @@ private slots:
     Palette* m_palette;
     LogPanel* m_logPanel;
     ValidationManager* m_validationManager;
+    QDockWidget* m_paletteDock;
+    QDockWidget* m_propertyDock;
+    QDockWidget* m_logDock;
     QAction* m_saveAction;
 };
 

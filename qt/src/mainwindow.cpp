@@ -12,12 +12,11 @@
 #include "commands/loadgraphcommand.h"
 #include <QAction>
 #include <QDebug>
-#include <QHBoxLayout>
+#include <QDockWidget>
 #include <QFileDialog>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
-#include <QSplitter>
 #include <QTimer>
 #include <QToolBar>
 #include <QVBoxLayout>
@@ -31,13 +30,17 @@ MainWindow::MainWindow(QWidget *parent)
       m_palette(nullptr),
       m_logPanel(nullptr),
       m_validationManager(nullptr),
+      m_paletteDock(nullptr),
+      m_propertyDock(nullptr),
+      m_logDock(nullptr),
       m_saveAction(nullptr) {
     setupPanels();
     setupConnections();
     setupActions();
     setCentralWidget(createCentralContent());
+    setupDocks();
     setWindowTitle("SoC/NoC Node Editor");
-    resize(1200, 800);
+    resize(1920, 1080);
     scheduleStartupLayoutLog();
 }
 
@@ -60,6 +63,11 @@ void MainWindow::setupPanels() {
     m_palette = new Palette(m_graph, m_commandManager.get(), this);
     m_logPanel = new LogPanel(this);
     m_validationManager = new ValidationManager(m_graph, m_logPanel, this);
+
+    m_nodeEditor->setObjectName("nodeEditorPanel");
+    m_propertyPanel->setObjectName("propertyPanel");
+    m_palette->setObjectName("palettePanel");
+    m_logPanel->setObjectName("logPanel");
 }
 
 void MainWindow::setupConnections() {
@@ -77,32 +85,64 @@ void MainWindow::setupActions() {
     auto* fileMenu = menuBar()->addMenu("&File");
     fileMenu->addAction(m_saveAction);
 
+    auto* viewMenu = menuBar()->addMenu("&View");
+    viewMenu->setObjectName("viewMenu");
+
     auto* mainToolBar = addToolBar("Main");
     mainToolBar->setObjectName("mainToolBar");
     mainToolBar->addAction(m_saveAction);
 }
 
 QWidget* MainWindow::createCentralContent() {
-    auto* mainSplitter = new QSplitter(Qt::Horizontal, this);
-    mainSplitter->addWidget(m_palette);
-    mainSplitter->addWidget(m_nodeEditor);
-    mainSplitter->addWidget(m_propertyPanel);
-    mainSplitter->setStretchFactor(0, 1);
-    mainSplitter->setStretchFactor(1, 4);
-    mainSplitter->setStretchFactor(2, 1);
-
-    auto* verticalSplitter = new QSplitter(Qt::Vertical, this);
-    verticalSplitter->addWidget(mainSplitter);
-    verticalSplitter->addWidget(m_logPanel);
-    verticalSplitter->setStretchFactor(0, 4);
-    verticalSplitter->setStretchFactor(1, 1);
-
     auto* central = new QWidget(this);
     auto* layout = new QVBoxLayout(central);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(0);
-    layout->addWidget(verticalSplitter);
+    layout->addWidget(m_nodeEditor);
     return central;
+}
+
+void MainWindow::setupDocks() {
+    setDockOptions(QMainWindow::AnimatedDocks |
+                   QMainWindow::AllowNestedDocks |
+                   QMainWindow::AllowTabbedDocks);
+
+    m_paletteDock = createDock("Palette", m_palette, Qt::LeftDockWidgetArea, "paletteDock");
+    m_propertyDock = createDock("Properties", m_propertyPanel, Qt::RightDockWidgetArea, "propertyDock");
+    m_logDock = createDock("Validation Log", m_logPanel, Qt::BottomDockWidgetArea, "logDock");
+
+    setCorner(Qt::BottomLeftCorner, Qt::LeftDockWidgetArea);
+    setCorner(Qt::BottomRightCorner, Qt::RightDockWidgetArea);
+    resizeDocks({m_paletteDock, m_propertyDock}, {260, 320}, Qt::Horizontal);
+    resizeDocks({m_logDock}, {180}, Qt::Vertical);
+
+    QMenu* viewMenu = nullptr;
+    for (QAction* action : menuBar()->actions()) {
+        if (action && action->menu() && action->menu()->objectName() == "viewMenu") {
+            viewMenu = action->menu();
+            break;
+        }
+    }
+    if (viewMenu) {
+        viewMenu->addAction(m_paletteDock->toggleViewAction());
+        viewMenu->addAction(m_propertyDock->toggleViewAction());
+        viewMenu->addAction(m_logDock->toggleViewAction());
+    }
+}
+
+QDockWidget* MainWindow::createDock(const QString& title,
+                                    QWidget* content,
+                                    Qt::DockWidgetArea area,
+                                    const QString& objectName) {
+    auto* dock = new QDockWidget(title, this);
+    dock->setObjectName(objectName);
+    dock->setWidget(content);
+    dock->setAllowedAreas(Qt::AllDockWidgetAreas);
+    dock->setFeatures(QDockWidget::DockWidgetClosable |
+                      QDockWidget::DockWidgetMovable |
+                      QDockWidget::DockWidgetFloatable);
+    addDockWidget(area, dock);
+    return dock;
 }
 
 void MainWindow::scheduleStartupLayoutLog() {
@@ -122,9 +162,15 @@ void MainWindow::logStartupLayout() const {
             << "frame" << frameGeometry()
             << "visible" << isVisible();
     qInfo() << "Central widget" << (central ? central->geometry() : QRect())
-            << "editor" << (m_nodeEditor ? m_nodeEditor->geometry() : QRect())
-            << "palette" << (m_palette ? m_palette->geometry() : QRect())
-            << "properties" << (m_propertyPanel ? m_propertyPanel->geometry() : QRect())
-            << "log" << (m_logPanel ? m_logPanel->geometry() : QRect());
+            << "editor" << (m_nodeEditor ? m_nodeEditor->geometry() : QRect());
+    qInfo() << "Palette dock" << (m_paletteDock ? m_paletteDock->geometry() : QRect())
+            << "floating" << (m_paletteDock ? m_paletteDock->isFloating() : false)
+            << "visible" << (m_paletteDock ? m_paletteDock->isVisible() : false);
+    qInfo() << "Property dock" << (m_propertyDock ? m_propertyDock->geometry() : QRect())
+            << "floating" << (m_propertyDock ? m_propertyDock->isFloating() : false)
+            << "visible" << (m_propertyDock ? m_propertyDock->isVisible() : false);
+    qInfo() << "Log dock" << (m_logDock ? m_logDock->geometry() : QRect())
+            << "floating" << (m_logDock ? m_logDock->isFloating() : false)
+            << "visible" << (m_logDock ? m_logDock->isVisible() : false);
 #endif
 }

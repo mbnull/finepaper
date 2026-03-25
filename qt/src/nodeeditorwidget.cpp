@@ -327,6 +327,7 @@ const Port* findPort(const Module* module, const QString& portId) {
 constexpr qreal kCanvasHalfExtent = 2000.0;
 const QRectF kCanvasRect(-kCanvasHalfExtent, -kCanvasHalfExtent,
                          kCanvasHalfExtent * 2.0, kCanvasHalfExtent * 2.0);
+constexpr int kConnectedHighlightDataRole = 1;
 
 QString firstAvailablePort(const Graph* graph,
                            const Module* module,
@@ -511,6 +512,12 @@ bool NodeEditorWidget::ensureConnectionInView(Connection* connection) {
     m_graphModel->addConnection(connId);
     m_connectionToQtId[connection->id()] = connId;
     --m_updatingFromGraph;
+    setConnectionHighlighted(connId, false);
+
+    const auto selectedNodes = m_scene->selectedNodes();
+    if (!selectedNodes.empty()) {
+        updateConnectedConnectionHighlights(*selectedNodes.begin());
+    }
     return true;
 }
 
@@ -615,7 +622,14 @@ bool NodeEditorWidget::eventFilter(QObject* obj, QEvent* event) {
         if (event->type() == QEvent::MouseButtonPress) {
             auto* e = static_cast<QMouseEvent*>(event);
             if (e->button() == Qt::LeftButton &&
-                tryToggleXpCollapsed(e->position().toPoint())) {
+                tryToggleXpCollapsed(e->position().toPoint(), true)) {
+                return true;
+            }
+        }
+        if (event->type() == QEvent::MouseButtonDblClick) {
+            auto* e = static_cast<QMouseEvent*>(event);
+            if (e->button() == Qt::LeftButton &&
+                tryToggleXpCollapsed(e->position().toPoint(), false)) {
                 return true;
             }
         }
@@ -726,12 +740,14 @@ void NodeEditorWidget::onSelectionChanged() {
     auto selectedNodes = m_scene->selectedNodes();
     if (!selectedNodes.empty()) {
         auto nodeId = *selectedNodes.begin();
+        updateConnectedConnectionHighlights(nodeId);
         QString moduleId = m_nodeToModuleId.value(nodeId);
         if (!moduleId.isEmpty()) {
             emit moduleSelected(moduleId);
             return;
         }
     }
+    updateConnectedConnectionHighlights(QtNodes::InvalidNodeId);
     emit moduleSelected(QString());
 }
 
@@ -771,7 +787,26 @@ QtNodes::ConnectionGraphicsObject* NodeEditorWidget::findDraftConnection() const
     return nullptr;
 }
 
-bool NodeEditorWidget::tryToggleXpCollapsed(const QPoint& viewportPos) {
+void NodeEditorWidget::setConnectionHighlighted(QtNodes::ConnectionId connectionId, bool highlighted) {
+    auto* connectionGraphics = m_scene->connectionGraphicsObject(connectionId);
+    if (!connectionGraphics) {
+        return;
+    }
+
+    connectionGraphics->setData(kConnectedHighlightDataRole, highlighted);
+    connectionGraphics->update();
+}
+
+void NodeEditorWidget::updateConnectedConnectionHighlights(QtNodes::NodeId selectedNodeId) {
+    for (auto it = m_connectionToQtId.cbegin(); it != m_connectionToQtId.cend(); ++it) {
+        const QtNodes::ConnectionId connectionId = it.value();
+        const bool highlighted = selectedNodeId != QtNodes::InvalidNodeId &&
+                                 (connectionId.outNodeId == selectedNodeId || connectionId.inNodeId == selectedNodeId);
+        setConnectionHighlighted(connectionId, highlighted);
+    }
+}
+
+bool NodeEditorWidget::tryToggleXpCollapsed(const QPoint& viewportPos, bool requireToggleButton) {
     const QPointF scenePos = m_view->mapToScene(viewportPos);
     auto* nodeGraphics = QtNodes::locateNodeAt(scenePos, *m_scene, m_view->transform());
     if (!nodeGraphics) {
@@ -785,16 +820,17 @@ bool NodeEditorWidget::tryToggleXpCollapsed(const QPoint& viewportPos) {
 
     const QSize nodeSize = m_scene->nodeGeometry().size(nodeGraphics->nodeId());
     const QPointF localPos = nodeGraphics->mapFromScene(scenePos);
-    if (!GraphNodeGeometry::xpToggleButtonRect(nodeSize).contains(localPos)) {
+    if (requireToggleButton && !GraphNodeGeometry::xpToggleButtonRect(nodeSize).contains(localPos)) {
         return false;
     }
 
-    auto command = std::make_unique<SetParameterCommand>(m_graph,
-                                                         nodeModel->module()->id(),
-                                                         "collapsed",
-                                                         !nodeModel->isXpCollapsed());
-    m_commandManager->executeCommand(std::move(command));
+    toggleXpCollapsed(nodeModel->module()->id(), !nodeModel->isXpCollapsed());
     return true;
+}
+
+void NodeEditorWidget::toggleXpCollapsed(const QString& moduleId, bool collapsed) {
+    auto command = std::make_unique<SetParameterCommand>(m_graph, moduleId, "collapsed", collapsed);
+    m_commandManager->executeCommand(std::move(command));
 }
 
 bool NodeEditorWidget::resolveXpRouterDraftConnection(const QtNodes::ConnectionGraphicsObject& draftConnection,
@@ -1105,11 +1141,7 @@ bool NodeEditorWidget::showNodeContextMenu(const QPoint& viewportPos, const QPoi
     }
 
     if (selectedAction == toggleAction) {
-        auto command = std::make_unique<SetParameterCommand>(m_graph,
-                                                             moduleId,
-                                                             "collapsed",
-                                                             !nodeModel->isXpCollapsed());
-        m_commandManager->executeCommand(std::move(command));
+        toggleXpCollapsed(moduleId, !nodeModel->isXpCollapsed());
         return true;
     }
 
