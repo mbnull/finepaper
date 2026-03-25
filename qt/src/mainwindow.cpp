@@ -34,6 +34,7 @@ MainWindow::MainWindow(QWidget *parent)
       m_propertyDock(nullptr),
       m_logDock(nullptr),
       m_saveAction(nullptr),
+      m_validateAction(nullptr),
       m_arrangeAction(nullptr) {
     setupPanels();
     setupConnections();
@@ -48,7 +49,11 @@ MainWindow::MainWindow(QWidget *parent)
 MainWindow::~MainWindow() = default;
 
 void MainWindow::loadGraph(const QString& jsonPath) {
+    qInfo() << "Loading graph from" << jsonPath;
     m_commandManager->executeCommand(std::make_unique<LoadGraphCommand>(m_graph, jsonPath));
+    qInfo() << "Graph load command finished for" << jsonPath
+            << "modules" << m_graph->modules().size()
+            << "connections" << m_graph->connections().size();
     if (m_arrangeAction && m_arrangeAction->isChecked()) {
         m_nodeEditor->setArrangeEnabled(true);
     }
@@ -57,8 +62,24 @@ void MainWindow::loadGraph(const QString& jsonPath) {
 void MainWindow::saveGraph() {
     QString path = QFileDialog::getSaveFileName(this, "Save Graph", "", "JSON Files (*.json)");
     if (path.isEmpty()) return;
-    if (!m_graph->saveToJson(path))
+    qInfo() << "Saving graph to" << path;
+    if (!m_graph->saveToJson(path)) {
+        qWarning() << "Failed to save graph to" << path;
         QMessageBox::warning(this, "Save Failed", "Could not write to " + path);
+        return;
+    }
+
+    qInfo() << "Saved graph to" << path;
+}
+
+void MainWindow::runValidation() {
+    if (!m_validationManager) {
+        qCritical() << "Validation manager not initialized, cannot run validation";
+        return;
+    }
+
+    qInfo() << "Validation requested by user";
+    m_validationManager->runValidation();
 }
 
 void MainWindow::setupPanels() {
@@ -86,6 +107,10 @@ void MainWindow::setupActions() {
     m_saveAction = new QAction("Save JSON", this);
     connect(m_saveAction, &QAction::triggered, this, &MainWindow::saveGraph);
 
+    m_validateAction = new QAction("Validate", this);
+    m_validateAction->setToolTip("Run validation for the current graph.");
+    connect(m_validateAction, &QAction::triggered, this, &MainWindow::runValidation);
+
     m_arrangeAction = new QAction("Arrange", this);
     m_arrangeAction->setCheckable(true);
     m_arrangeAction->setToolTip("Arrange the graph into a mesh-style layout and lock direct canvas editing.");
@@ -97,6 +122,9 @@ void MainWindow::setupActions() {
     auto* fileMenu = menuBar()->addMenu("&File");
     fileMenu->addAction(m_saveAction);
 
+    auto* toolsMenu = menuBar()->addMenu("&Tools");
+    toolsMenu->addAction(m_validateAction);
+
     auto* layoutMenu = menuBar()->addMenu("&Layout");
     layoutMenu->addAction(m_arrangeAction);
 
@@ -106,6 +134,7 @@ void MainWindow::setupActions() {
     auto* mainToolBar = addToolBar("Main");
     mainToolBar->setObjectName("mainToolBar");
     mainToolBar->addAction(m_saveAction);
+    mainToolBar->addAction(m_validateAction);
     mainToolBar->addAction(m_arrangeAction);
 }
 

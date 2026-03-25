@@ -30,6 +30,7 @@ class MainWindow : public QMainWindow {
 
 private slots:
     void saveGraph();
+    void runValidation();
 
   private:
     void setupPanels();
@@ -55,6 +56,7 @@ private slots:
     QDockWidget* m_propertyDock;
     QDockWidget* m_logDock;
     QAction* m_saveAction;
+    QAction* m_validateAction;
     QAction* m_arrangeAction;
 };
 

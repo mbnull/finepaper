@@ -3,18 +3,12 @@
 #include "logpanel.h"
 #include "validator.h"
 #include "drcrunner.h"
+#include <QDebug>
 
-// Connect to graph signals to trigger validation on any change
+// Initialize validators. Validation is triggered explicitly by the UI.
 ValidationManager::ValidationManager(Graph* graph, LogPanel* logPanel, QObject* parent)
     : QObject(parent), m_graph(graph), m_logPanel(logPanel),
-      m_validator(new BasicValidator()), m_drcRunner(new DRCRunner()) {
-
-    connect(m_graph, &Graph::moduleAdded, this, &ValidationManager::runValidation);
-    connect(m_graph, &Graph::moduleRemoved, this, &ValidationManager::runValidation);
-    connect(m_graph, &Graph::connectionAdded, this, &ValidationManager::runValidation);
-    connect(m_graph, &Graph::connectionRemoved, this, &ValidationManager::runValidation);
-    connect(m_graph, &Graph::parameterChanged, this, &ValidationManager::runValidation);
-}
+      m_validator(new BasicValidator()), m_drcRunner(new DRCRunner()) {}
 
 ValidationManager::~ValidationManager() {
     delete m_validator;
@@ -23,7 +17,37 @@ ValidationManager::~ValidationManager() {
 
 // Run all validators and update log panel with results
 void ValidationManager::runValidation() {
+    qInfo() << "Running validation"
+            << "modules" << m_graph->modules().size()
+            << "connections" << m_graph->connections().size();
     QList<ValidationResult> results = m_validator->validate(m_graph);
     results.append(m_drcRunner->validate(m_graph));
     m_logPanel->setResults(results);
+
+    int errorCount = 0;
+    int warningCount = 0;
+    for (const auto& result : results) {
+        if (result.severity() == ValidationSeverity::Error) {
+            ++errorCount;
+            qCritical().noquote() << QString("Validation error [%1] element=%2 message=%3")
+                                         .arg(result.ruleName(),
+                                              result.elementId().isEmpty() ? QStringLiteral("-") : result.elementId(),
+                                              result.message());
+        } else {
+            ++warningCount;
+            qWarning().noquote() << QString("Validation warning [%1] element=%2 message=%3")
+                                        .arg(result.ruleName(),
+                                             result.elementId().isEmpty() ? QStringLiteral("-") : result.elementId(),
+                                             result.message());
+        }
+    }
+
+    if (results.isEmpty()) {
+        qInfo() << "Validation passed with no findings";
+    }
+
+    qInfo() << "Validation complete"
+            << "results" << results.size()
+            << "errors" << errorCount
+            << "warnings" << warningCount;
 }

@@ -1,4 +1,5 @@
 #include "commands/loadgraphcommand.h"
+#include <QDebug>
 
 LoadGraphCommand::LoadGraphCommand(Graph* graph, const QString& jsonPath)
     : m_graph(graph), m_jsonPath(jsonPath) {
@@ -22,6 +23,7 @@ void LoadGraphCommand::execute() {
 
 // Restore previous graph state
 void LoadGraphCommand::undo() {
+    qInfo() << "Restoring previous graph state after load from" << m_jsonPath;
     while (!m_graph->modules().empty()) {
         m_graph->removeModule(m_graph->modules().front()->id());
     }
@@ -32,4 +34,8 @@ void LoadGraphCommand::undo() {
     for (auto& connection : m_previousConnections) {
         m_graph->insertConnection(std::make_unique<Connection>(*connection));
     }
+
+    qInfo() << "Restored previous graph state"
+            << "modules" << m_graph->modules().size()
+            << "connections" << m_graph->connections().size();
 }

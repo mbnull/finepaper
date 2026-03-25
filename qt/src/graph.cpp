@@ -186,16 +186,25 @@ bool Graph::addModule(std::unique_ptr<Module> module) {
         onModuleParameterChanged(moduleId, paramName);
     });
     m_modules.push_back(std::move(module));
+    qInfo() << "Added module"
+            << "id" << moduleId
+            << "type" << ptr->type()
+            << "totalModules" << m_modules.size();
     emit moduleAdded(ptr);
     return true;
 }
 
 void Graph::removeModule(const QString& moduleId) {
+    const std::size_t moduleCountBefore = m_modules.size();
     auto connIt = m_connections.begin();
     while (connIt != m_connections.end()) {
         if ((*connIt)->source().moduleId == moduleId || (*connIt)->target().moduleId == moduleId) {
             QString connId = (*connIt)->id();
             connIt = m_connections.erase(connIt);
+            qInfo() << "Removed connection while deleting module"
+                    << "connectionId" << connId
+                    << "moduleId" << moduleId
+                    << "totalConnections" << m_connections.size();
             emit connectionRemoved(connId);
         } else {
             ++connIt;
@@ -207,7 +216,13 @@ void Graph::removeModule(const QString& moduleId) {
 
     if (it != m_modules.end()) {
         m_modules.erase(it, m_modules.end());
+        qInfo() << "Removed module"
+                << "id" << moduleId
+                << "totalModules" << m_modules.size();
         emit moduleRemoved(moduleId);
+    } else {
+        qDebug() << "Requested removal for unknown module" << moduleId
+                 << "totalModules" << moduleCountBefore;
     }
 }
 
@@ -225,9 +240,13 @@ std::unique_ptr<Module> Graph::takeModule(const QString& moduleId) {
         m_moduleConnections.remove(moduleId);
         std::unique_ptr<Module> module = std::move(*it);
         m_modules.erase(it);
+        qInfo() << "Took module"
+                << "id" << moduleId
+                << "totalModules" << m_modules.size();
         emit moduleRemoved(moduleId);
         return module;
     }
+    qDebug() << "Requested take for unknown module" << moduleId;
     return nullptr;
 }
 
@@ -246,6 +265,10 @@ bool Graph::insertModule(std::unique_ptr<Module> module) {
         onModuleParameterChanged(moduleId, paramName);
     });
     m_modules.push_back(std::move(module));
+    qInfo() << "Inserted module"
+            << "id" << moduleId
+            << "type" << ptr->type()
+            << "totalModules" << m_modules.size();
     emit moduleAdded(ptr);
     return true;
 }
@@ -257,16 +280,28 @@ void Graph::addConnection(std::unique_ptr<Connection> connection) {
     }
     Connection* ptr = connection.get();
     m_connections.push_back(std::move(connection));
+    qInfo() << "Added connection"
+            << "id" << ptr->id()
+            << "source" << ptr->source().moduleId << ptr->source().portId
+            << "target" << ptr->target().moduleId << ptr->target().portId
+            << "totalConnections" << m_connections.size();
     emit connectionAdded(ptr);
 }
 
 void Graph::removeConnection(const QString& connectionId) {
+    const std::size_t connectionCountBefore = m_connections.size();
     auto it = std::remove_if(m_connections.begin(), m_connections.end(),
         [&connectionId](const std::unique_ptr<Connection>& c) { return c->id() == connectionId; });
 
     if (it != m_connections.end()) {
         m_connections.erase(it, m_connections.end());
+        qInfo() << "Removed connection"
+                << "id" << connectionId
+                << "totalConnections" << m_connections.size();
         emit connectionRemoved(connectionId);
+    } else {
+        qDebug() << "Requested removal for unknown connection" << connectionId
+                 << "totalConnections" << connectionCountBefore;
     }
 }
 
@@ -276,9 +311,13 @@ std::unique_ptr<Connection> Graph::takeConnection(const QString& connectionId) {
     if (it != m_connections.end()) {
         std::unique_ptr<Connection> connection = std::move(*it);
         m_connections.erase(it);
+        qInfo() << "Took connection"
+                << "id" << connectionId
+                << "totalConnections" << m_connections.size();
         emit connectionRemoved(connectionId);
         return connection;
     }
+    qDebug() << "Requested take for unknown connection" << connectionId;
     return nullptr;
 }
 
@@ -289,6 +328,11 @@ void Graph::insertConnection(std::unique_ptr<Connection> connection) {
     }
     Connection* ptr = connection.get();
     m_connections.push_back(std::move(connection));
+    qInfo() << "Inserted connection"
+            << "id" << ptr->id()
+            << "source" << ptr->source().moduleId << ptr->source().portId
+            << "target" << ptr->target().moduleId << ptr->target().portId
+            << "totalConnections" << m_connections.size();
     emit connectionAdded(ptr);
 }
 
@@ -353,11 +397,18 @@ bool Graph::isValidConnection(const PortRef& source, const PortRef& target) cons
 }
 
 bool Graph::loadFromJson(const QString& jsonPath) {
+    qInfo() << "Starting graph import from" << jsonPath;
     QFile file(jsonPath);
-    if (!file.open(QIODevice::ReadOnly)) return false;
+    if (!file.open(QIODevice::ReadOnly)) {
+        qWarning() << "Failed to open graph JSON for reading:" << jsonPath;
+        return false;
+    }
 
     QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
-    if (!doc.isObject()) return false;
+    if (!doc.isObject()) {
+        qWarning() << "Invalid graph JSON document:" << jsonPath;
+        return false;
+    }
 
     QJsonObject root = doc.object();
     QHash<QString, QString> externalToInternalIds;
@@ -548,10 +599,16 @@ bool Graph::loadFromJson(const QString& jsonPath) {
         }
     }
 
+    qInfo() << "Completed graph import from" << jsonPath
+            << "modules" << m_modules.size()
+            << "connections" << m_connections.size();
     return true;
 }
 
 bool Graph::saveToJson(const QString& jsonPath) const {
+    qInfo() << "Starting graph export to" << jsonPath
+            << "modules" << m_modules.size()
+            << "connections" << m_connections.size();
     QJsonArray xps, eps, conns;
     QHash<QString, QJsonArray> xpEndpointMap;
 
@@ -636,11 +693,18 @@ bool Graph::saveToJson(const QString& jsonPath) const {
     root["connections"] = conns;
 
     QFile file(jsonPath);
-    if (!file.open(QIODevice::WriteOnly)) return false;
+    if (!file.open(QIODevice::WriteOnly)) {
+        qWarning() << "Failed to open graph JSON for writing:" << jsonPath;
+        return false;
+    }
     file.write(QJsonDocument(root).toJson());
+    qInfo() << "Completed graph export to" << jsonPath;
     return true;
 }
 
 void Graph::onModuleParameterChanged(const QString& moduleId, const QString& paramName) {
+    qDebug() << "Module parameter changed"
+             << "moduleId" << moduleId
+             << "parameter" << paramName;
     emit parameterChanged(moduleId, paramName);
 }

@@ -1,4 +1,4 @@
-// ValidationManager runs validators on graph changes and updates log panel
+// ValidationManager runs validators on demand and updates the log panel.
 #ifndef VALIDATIONMANAGER_H
 #define VALIDATIONMANAGER_H
 
@@ -16,7 +16,7 @@ public:
     ValidationManager(Graph* graph, LogPanel* logPanel, QObject* parent = nullptr);
     ~ValidationManager();
 
-private slots:
+public slots:
     void runValidation();
 
 private:
