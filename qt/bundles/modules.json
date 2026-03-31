@@ -2,6 +2,19 @@
   "modules": [
     {
       "name": "XP",
+      "palette_label": "XP",
+      "node_color": "#7cb9e8",
+      "editor_layout": "mesh_router",
+      "graph_group": "xps",
+      "identity": {
+        "external_id_prefix": "xp",
+        "display_prefix": "XP",
+        "width": 2,
+        "supports_mesh_coordinates": true
+      },
+      "capabilities": {
+        "supports_collapse": true
+      },
       "ports": [
         {"id": "ep0", "direction": "output", "type": "endpoint", "name": "EP0"},
         {"id": "ep1", "direction": "output", "type": "endpoint", "name": "EP1"},
@@ -29,6 +42,19 @@
     },
     {
       "name": "Endpoint",
+      "palette_label": "Endpoint",
+      "node_color": "#d6f4b6",
+      "editor_layout": "endpoint",
+      "graph_group": "endpoints",
+      "identity": {
+        "external_id_prefix": "ep",
+        "display_prefix": "EP",
+        "width": 2,
+        "supports_mesh_coordinates": false
+      },
+      "capabilities": {
+        "supports_collapse": false
+      },
       "ports": [
         {"id": "noc", "direction": "input", "type": "endpoint", "name": "NoC"}
       ],

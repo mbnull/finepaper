@@ -1,5 +1,6 @@
 #include "validator.h"
 #include "graph.h"
+#include "moduletypemetadata.h"
 #include <QSet>
 
 QList<ValidationResult> BasicValidator::validate(const Graph* graph) {
@@ -85,7 +86,7 @@ void BasicValidator::checkUnconnectedPorts(const Graph* graph, QList<ValidationR
     }
 
     for (const auto& module : graph->modules()) {
-        if (module->type() == "XP") {
+        if (ModuleTypeMetadata::hasEditorLayout(module.get(), u"mesh_router")) {
             continue;
         }
 

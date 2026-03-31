@@ -15,6 +15,15 @@ struct ModuleType {
     QString name;
     std::vector<Port> defaultPorts;
     QHash<QString, Parameter> defaultParameters;
+    QString paletteLabel;
+    QString nodeColor;
+    QString editorLayout;
+    QString graphGroup;
+    QString externalIdPrefix;
+    QString displayPrefix;
+    int identityWidth = 2;
+    bool supportsCollapse = false;
+    bool supportsMeshCoordinates = false;
 };
 
 class ModuleRegistry {
@@ -24,6 +33,7 @@ public:
     void addProvider(std::unique_ptr<ModuleProvider> provider);
     void registerType(const ModuleType& type);
     const ModuleType* getType(const QString& name) const;
+    const ModuleType* getTypeForGraphGroup(const QString& graphGroup) const;
     QStringList availableTypes() const;
 
 private:

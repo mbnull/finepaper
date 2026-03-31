@@ -2,6 +2,7 @@
 #include "graph.h"
 #include "modulelabels.h"
 #include "module.h"
+#include "moduletypemetadata.h"
 #include "connection.h"
 #include "portlayout.h"
 #include <QProcess>
@@ -19,6 +20,14 @@ static std::optional<double> toDouble(const Parameter::Value& v) {
     if (auto* i = std::get_if<int>(&v)) return static_cast<double>(*i);
     if (auto* d = std::get_if<double>(&v)) return *d;
     return std::nullopt;
+}
+
+static bool isMeshRouterModule(const Module* module) {
+    return ModuleTypeMetadata::hasEditorLayout(module, u"mesh_router");
+}
+
+static bool isEndpointModule(const Module* module) {
+    return ModuleTypeMetadata::isInGraphGroup(module, u"endpoints");
 }
 
 // Run external DRC tool on graph and parse validation results
@@ -85,7 +94,7 @@ QString DRCRunner::serializeToJson(const Graph* graph) {
         const QString externalId = ModuleLabels::externalId(mod.get());
         m_externalToInternalIds[externalId] = mod->id();
 
-        if (mod->type() == "XP") {
+        if (isMeshRouterModule(mod.get())) {
             QJsonObject xp;
             xp["id"] = externalId;
             const auto& p = mod->parameters();
@@ -107,7 +116,7 @@ QString DRCRunner::serializeToJson(const Graph* graph) {
 
             xps.append(xp);
             xpEndpoints[externalId] = QJsonArray();
-        } else if (mod->type() == "Endpoint") {
+        } else if (isEndpointModule(mod.get())) {
             QJsonObject ep;
             ep["id"] = externalId;
             const auto& p = mod->parameters();
@@ -132,14 +141,14 @@ QString DRCRunner::serializeToJson(const Graph* graph) {
             const QString src = ModuleLabels::externalId(srcMod);
             const QString tgt = ModuleLabels::externalId(tgtMod);
 
-            if (srcMod->type() == "XP" && tgtMod->type() == "XP") {
+            if (isMeshRouterModule(srcMod) && isMeshRouterModule(tgtMod)) {
                 QJsonObject c;
                 c["from"] = src;
                 c["to"] = tgt;
                 conns.append(c);
-            } else if (srcMod->type() == "XP" && tgtMod->type() == "Endpoint") {
+            } else if (isMeshRouterModule(srcMod) && isEndpointModule(tgtMod)) {
                 xpEndpoints[src].append(tgt);
-            } else if (srcMod->type() == "Endpoint" && tgtMod->type() == "XP") {
+            } else if (isEndpointModule(srcMod) && isMeshRouterModule(tgtMod)) {
                 xpEndpoints[tgt].append(src);
             }
         }

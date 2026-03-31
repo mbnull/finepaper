@@ -2,6 +2,7 @@
 #include "graph.h"
 #include "module.h"
 #include "modulelabels.h"
+#include "moduletypemetadata.h"
 #include "portlayout.h"
 #include <QPoint>
 #include <QRect>
@@ -9,6 +10,7 @@
 #include <QtGlobal>
 #include <algorithm>
 #include <cmath>
+#include <functional>
 #include <limits>
 #include <optional>
 #include <queue>
@@ -41,6 +43,14 @@ QString sortKeyForModule(const Module* module) {
         : ModuleLabels::externalId(module).toLower();
 }
 
+bool isMeshRouterModule(const Module* module) {
+    return ModuleTypeMetadata::hasEditorLayout(module, u"mesh_router");
+}
+
+bool isEndpointModule(const Module* module) {
+    return ModuleTypeMetadata::isInGraphGroup(module, u"endpoints");
+}
+
 struct OrderedModule {
     Module* module = nullptr;
     bool hasPosition = false;
@@ -50,12 +60,12 @@ struct OrderedModule {
 };
 
 std::vector<OrderedModule> orderedModules(const std::vector<std::unique_ptr<Module>>& modules,
-                                          const QString& type) {
+                                          const std::function<bool(const Module*)>& predicate) {
     std::vector<OrderedModule> ordered;
     ordered.reserve(modules.size());
 
     for (const auto& module : modules) {
-        if (module->type() != type) {
+        if (!predicate(module.get())) {
             continue;
         }
 
@@ -89,11 +99,17 @@ std::vector<OrderedModule> orderedModules(const std::vector<std::unique_ptr<Modu
 }
 
 std::optional<QPoint> explicitMeshCoordinate(const Module* module) {
-    if (!module || module->type() != "XP") {
+    if (!module || !isMeshRouterModule(module)) {
         return std::nullopt;
     }
 
-    static const QRegularExpression pattern("^xp_(\\d+)_(\\d+)$", QRegularExpression::CaseInsensitiveOption);
+    const QString prefix = ModuleTypeMetadata::externalIdPrefix(module);
+    if (prefix.isEmpty() || !ModuleTypeMetadata::supportsMeshCoordinates(module)) {
+        return std::nullopt;
+    }
+
+    const QRegularExpression pattern("^" + QRegularExpression::escape(prefix) + "_(\\d+)_(\\d+)$",
+                                     QRegularExpression::CaseInsensitiveOption);
     const QRegularExpressionMatch match = pattern.match(ModuleLabels::externalId(module));
     if (!match.hasMatch()) {
         return std::nullopt;
@@ -116,7 +132,7 @@ struct MeshRelation {
     QPoint delta;
 };
 
-QList<MeshRelation> xpMeshRelations(const Graph* graph) {
+QList<MeshRelation> meshRelations(const Graph* graph) {
     QList<MeshRelation> relations;
     if (!graph) {
         return relations;
@@ -128,7 +144,7 @@ QList<MeshRelation> xpMeshRelations(const Graph* graph) {
         if (!sourceModule || !targetModule) {
             continue;
         }
-        if (sourceModule->type() != "XP" || targetModule->type() != "XP") {
+        if (!isMeshRouterModule(sourceModule) || !isMeshRouterModule(targetModule)) {
             continue;
         }
 
@@ -153,7 +169,7 @@ QHash<QString, QPoint> inferMeshCoordinates(const Graph* graph,
     }
 
     QHash<QString, QList<QPair<QString, QPoint>>> adjacency;
-    for (const MeshRelation& relation : xpMeshRelations(graph)) {
+    for (const MeshRelation& relation : meshRelations(graph)) {
         adjacency[relation.fromId].append({relation.toId, relation.delta});
         adjacency[relation.toId].append({relation.fromId, QPoint(-relation.delta.x(), -relation.delta.y())});
     }
@@ -416,8 +432,12 @@ void ArrangeCommand::applyState(const QHash<QString, ModuleSnapshot>& snapshots)
 QHash<QString, ArrangeCommand::ModulePlacement> ArrangeCommand::buildPlacements() const {
     QHash<QString, ModulePlacement> placements;
 
-    const auto orderedXpModules = orderedModules(m_graph->modules(), QStringLiteral("XP"));
-    const auto orderedEndpointModules = orderedModules(m_graph->modules(), QStringLiteral("Endpoint"));
+    const auto orderedXpModules = orderedModules(m_graph->modules(), [](const Module* module) {
+        return isMeshRouterModule(module);
+    });
+    const auto orderedEndpointModules = orderedModules(m_graph->modules(), [](const Module* module) {
+        return isEndpointModule(module);
+    });
 
     constexpr int kXpSpacingX = 220;
     constexpr int kXpSpacingY = 168;
@@ -432,7 +452,7 @@ QHash<QString, ArrangeCommand::ModulePlacement> ArrangeCommand::buildPlacements(
 
     QHash<QString, QPoint> xpPositions;
     const QHash<QString, QPoint> meshCoordinates = inferMeshCoordinates(m_graph, orderedXpModules);
-    const QList<MeshRelation> relations = xpMeshRelations(m_graph);
+    const QList<MeshRelation> relations = meshRelations(m_graph);
     const QList<MeshComponent> components = buildMeshComponents(orderedXpModules, meshCoordinates, relations);
 
     int currentOriginX = 0;

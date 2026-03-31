@@ -5,6 +5,7 @@
 //   take        — transfer ownership out (used by undo commands)
 #include "graph.h"
 #include "modulelabels.h"
+#include "moduletypemetadata.h"
 #include "moduleregistry.h"
 #include <algorithm>
 #include <QFile>
@@ -36,8 +37,27 @@ QString oppositeDirection(const QString& dir) {
     return PortLayout::oppositeRouterSide(PortLayout::routerSideId(dir));
 }
 
+bool isMeshRouterModule(const Module* module) {
+    return ModuleTypeMetadata::hasEditorLayout(module, u"mesh_router");
+}
+
+bool isEndpointModule(const Module* module) {
+    return ModuleTypeMetadata::isInGraphGroup(module, u"endpoints");
+}
+
 QString newInternalId() {
     return QUuid::createUuid().toString(QUuid::WithoutBraces).replace('-', '_');
+}
+
+std::unique_ptr<Module> instantiateModule(const ModuleType& type, const QString& moduleId) {
+    auto module = std::make_unique<Module>(moduleId, type.name);
+    for (const auto& port : type.defaultPorts) {
+        module->addPort(port);
+    }
+    for (auto it = type.defaultParameters.constBegin(); it != type.defaultParameters.constEnd(); ++it) {
+        module->setParameter(it.key(), it.value().value());
+    }
+    return module;
 }
 
 QString firstAvailablePort(const Graph* graph,
@@ -144,8 +164,8 @@ bool isRouterLink(const Module* sourceModule,
                   const Port* targetPort) {
     return sourceModule && targetModule &&
            sourcePort && targetPort &&
-           sourceModule->type() == "XP" &&
-           targetModule->type() == "XP" &&
+           isMeshRouterModule(sourceModule) &&
+           isMeshRouterModule(targetModule) &&
            sourcePort->type() == "router" &&
            targetPort->type() == "router";
 }
@@ -412,6 +432,8 @@ bool Graph::loadFromJson(const QString& jsonPath) {
 
     QJsonObject root = doc.object();
     QHash<QString, QString> externalToInternalIds;
+    const ModuleType* meshRouterType = ModuleRegistry::instance().getTypeForGraphGroup("xps");
+    const ModuleType* endpointType = ModuleRegistry::instance().getTypeForGraphGroup("endpoints");
 
     while (!m_modules.empty()) {
         removeModule(m_modules.front()->id());
@@ -422,18 +444,10 @@ bool Graph::loadFromJson(const QString& jsonPath) {
         QJsonObject xp = xpVal.toObject();
         QString externalId = xp["id"].toString();
 
-        const ModuleType* type = ModuleRegistry::instance().getType("XP");
-        if (!type) continue;
+        if (!meshRouterType) continue;
 
-        auto module = std::make_unique<Module>(newInternalId(), "XP");
-
-        for (const auto& port : type->defaultPorts) {
-            module->addPort(port);
-        }
-        for (auto it = type->defaultParameters.constBegin(); it != type->defaultParameters.constEnd(); ++it) {
-            module->setParameter(it.key(), it.value().value());
-        }
-        module->setParameter("display_name", ModuleLabels::humanizeExternalId("XP", externalId));
+        auto module = instantiateModule(*meshRouterType, newInternalId());
+        module->setParameter("display_name", ModuleLabels::humanizeExternalId(meshRouterType->name, externalId));
         module->setParameter("external_id", externalId);
 
         if (xp.contains("x")) module->setParameter("x", xp["x"].toInt());
@@ -454,18 +468,10 @@ bool Graph::loadFromJson(const QString& jsonPath) {
         QJsonObject ep = epVal.toObject();
         QString externalId = ep["id"].toString();
 
-        const ModuleType* type = ModuleRegistry::instance().getType("Endpoint");
-        if (!type) continue;
+        if (!endpointType) continue;
 
-        auto module = std::make_unique<Module>(newInternalId(), "Endpoint");
-
-        for (const auto& port : type->defaultPorts) {
-            module->addPort(port);
-        }
-        for (auto it = type->defaultParameters.constBegin(); it != type->defaultParameters.constEnd(); ++it) {
-            module->setParameter(it.key(), it.value().value());
-        }
-        module->setParameter("display_name", ModuleLabels::humanizeExternalId("Endpoint", externalId));
+        auto module = instantiateModule(*endpointType, newInternalId());
+        module->setParameter("display_name", ModuleLabels::humanizeExternalId(endpointType->name, externalId));
         module->setParameter("external_id", externalId);
 
         if (ep.contains("x")) module->setParameter("x", ep["x"].toInt());
@@ -516,7 +522,7 @@ bool Graph::loadFromJson(const QString& jsonPath) {
             }
         }
 
-        if (fromModule->type() == "XP" && toModule->type() == "Endpoint") {
+        if (isMeshRouterModule(fromModule) && isEndpointModule(toModule)) {
             if (fromPort.isEmpty() || !findPort(fromModule, fromPort) || !PortLayout::isEndpointPort(*findPort(fromModule, fromPort))) {
                 fromPort = firstAvailablePort(this, fromModule, Port::Direction::Output,
                     [](const Port& port) { return PortLayout::isEndpointPort(port); });
@@ -528,7 +534,7 @@ bool Graph::loadFromJson(const QString& jsonPath) {
         } else if (!dir.isEmpty()) {
             fromPort = PortLayout::routerOutputPortId(dir);
             toPort = PortLayout::routerInputPortId(oppositeDirection(dir));
-        } else if (fromModule->type() == "XP" && toModule->type() == "XP") {
+        } else if (isMeshRouterModule(fromModule) && isMeshRouterModule(toModule)) {
             auto guessed = guessedRouterPorts(fromModule, toModule);
             if (!guessed.first.isEmpty() && !guessed.second.isEmpty()) {
                 fromPort = guessed.first;
@@ -556,7 +562,7 @@ bool Graph::loadFromJson(const QString& jsonPath) {
             continue;
         }
         addConnection(std::move(connection));
-        if (fromModule->type() == "XP" && toModule->type() == "Endpoint") {
+        if (isMeshRouterModule(fromModule) && isEndpointModule(toModule)) {
             assignEndpointFallbackPosition(toModule, fromModule, fromPort);
         }
     }
@@ -617,7 +623,7 @@ bool Graph::saveToJson(const QString& jsonPath) const {
         obj["id"] = ModuleLabels::externalId(mod.get());
 
         const auto& params = mod->parameters();
-        if (mod->type() == "XP") {
+        if (isMeshRouterModule(mod.get())) {
             obj["x"] = params.contains("x") ? parameterToJson(params["x"].value()) : QJsonValue(0);
             obj["y"] = params.contains("y") ? parameterToJson(params["y"].value()) : QJsonValue(0);
 
@@ -630,7 +636,7 @@ bool Graph::saveToJson(const QString& jsonPath) const {
             obj["endpoints"] = QJsonArray();
             xpEndpointMap.insert(ModuleLabels::externalId(mod.get()), QJsonArray());
             xps.append(obj);
-        } else {
+        } else if (isEndpointModule(mod.get())) {
             if (params.contains("x")) obj["x"] = parameterToJson(params["x"].value());
             if (params.contains("y")) obj["y"] = parameterToJson(params["y"].value());
             if (params.contains("type")) obj["type"] = parameterToJson(params["type"].value());
@@ -653,8 +659,8 @@ bool Graph::saveToJson(const QString& jsonPath) const {
         const QString targetExternalId = ModuleLabels::externalId(targetModule);
 
         if (sourceModule && targetModule &&
-            sourceModule->type() == "XP" &&
-            targetModule->type() == "Endpoint" &&
+            isMeshRouterModule(sourceModule) &&
+            isEndpointModule(targetModule) &&
             sourcePort && PortLayout::isEndpointPort(*sourcePort)) {
             auto it = xpEndpointMap.find(sourceExternalId);
             if (it != xpEndpointMap.end()) {
@@ -668,8 +674,8 @@ bool Graph::saveToJson(const QString& jsonPath) const {
         obj["to"] = targetExternalId;
 
         if (sourceModule && targetModule &&
-            sourceModule->type() == "XP" &&
-            targetModule->type() == "XP") {
+            isMeshRouterModule(sourceModule) &&
+            isMeshRouterModule(targetModule)) {
             // XP-to-XP links are exported as undirected/bidirectional edges.
         } else {
             obj["from_port"] = conn->source().portId;

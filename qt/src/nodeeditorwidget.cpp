@@ -9,6 +9,7 @@
 #include "graphnodemodel.h"
 #include "graphnodepainter.h"
 #include "modulelabels.h"
+#include "moduletypemetadata.h"
 #include "moduleregistry.h"
 #include "portlayout.h"
 #include "straightconnectionpainter.h"
@@ -247,6 +248,14 @@ static std::optional<double> toDouble(const Parameter::Value& v) {
 
 namespace {
 
+bool isMeshRouterModule(const Module* module) {
+    return ModuleTypeMetadata::hasEditorLayout(module, u"mesh_router");
+}
+
+bool isEndpointModule(const Module* module) {
+    return ModuleTypeMetadata::isInGraphGroup(module, u"endpoints");
+}
+
 int nextModuleIndex(const Graph* graph, const QString& moduleType, const QString& externalIdPrefix) {
     QSet<int> used;
     QRegularExpression pattern("^" + QRegularExpression::escape(externalIdPrefix) + "_(\\d+)$",
@@ -273,15 +282,16 @@ int nextModuleIndex(const Graph* graph, const QString& moduleType, const QString
 void assignModuleIdentity(Graph* graph, Module* module) {
     if (!graph || !module) return;
 
-    if (module->type() == "XP") {
-        const int index = nextModuleIndex(graph, "XP", "xp");
-        module->setParameter("display_name", QString("XP_%1").arg(index, 2, 10, QChar('0')));
-        module->setParameter("external_id", QString("xp_%1").arg(index, 2, 10, QChar('0')));
-    } else if (module->type() == "Endpoint") {
-        const int index = nextModuleIndex(graph, "Endpoint", "ep");
-        module->setParameter("display_name", QString("EP_%1").arg(index, 2, 10, QChar('0')));
-        module->setParameter("external_id", QString("ep_%1").arg(index, 2, 10, QChar('0')));
+    const QString externalPrefix = ModuleTypeMetadata::externalIdPrefix(module);
+    const QString displayPrefix = ModuleTypeMetadata::displayPrefix(module);
+    if (externalPrefix.isEmpty() || displayPrefix.isEmpty()) {
+        return;
     }
+
+    const int index = nextModuleIndex(graph, module->type(), externalPrefix);
+    const int width = ModuleTypeMetadata::identityWidth(module);
+    module->setParameter("display_name", QString("%1_%2").arg(displayPrefix).arg(index, width, 10, QChar('0')));
+    module->setParameter("external_id", QString("%1_%2").arg(externalPrefix).arg(index, width, 10, QChar('0')));
 }
 
 QString draggedModuleType(const QMimeData* mimeData) {
@@ -305,23 +315,23 @@ bool boolParameter(const Module* module, const QString& name, bool fallbackValue
     return fallbackValue;
 }
 
-bool isXpCollapsed(const Module* module) {
-    return module && module->type() == "XP" && boolParameter(module, "collapsed", true);
+bool isCollapsed(const Module* module) {
+    return module && ModuleTypeMetadata::supportsCollapse(module) && boolParameter(module, "collapsed", true);
 }
 
-bool isXpEndpointConnection(const Graph* graph,
-                            const Connection& connection,
-                            QString* xpModuleId = nullptr,
-                            QString* endpointModuleId = nullptr) {
+bool isEndpointAttachmentConnection(const Graph* graph,
+                                    const Connection& connection,
+                                    QString* hostModuleId = nullptr,
+                                    QString* endpointModuleId = nullptr) {
     if (!graph) return false;
 
     const Module* sourceModule = graph->getModule(connection.source().moduleId);
     const Module* targetModule = graph->getModule(connection.target().moduleId);
     if (!sourceModule || !targetModule) return false;
-    if (sourceModule->type() != "XP" || targetModule->type() != "Endpoint") return false;
+    if (!isMeshRouterModule(sourceModule) || !isEndpointModule(targetModule)) return false;
     if (!PortLayout::isEndpointPortId(connection.source().portId)) return false;
 
-    if (xpModuleId) *xpModuleId = sourceModule->id();
+    if (hostModuleId) *hostModuleId = sourceModule->id();
     if (endpointModuleId) *endpointModuleId = targetModule->id();
     return true;
 }
@@ -415,7 +425,7 @@ NodeEditorWidget::NodeEditorWidget(Graph* graph, CommandManager* commandManager,
         onConnectionAdded(connection.get());
     }
 
-    refreshAllXpPresentations();
+    refreshAllModulePresentations();
 }
 
 bool NodeEditorWidget::isArrangeEnabled() const {
@@ -493,9 +503,9 @@ void NodeEditorWidget::removeModuleFromView(const QString& moduleId) {
 void NodeEditorWidget::onConnectionAdded(Connection* connection) {
     ensureConnectionInView(connection);
 
-    QString xpModuleId;
-    if (isXpEndpointConnection(m_graph, *connection, &xpModuleId)) {
-        refreshXpPresentation(xpModuleId);
+    QString hostModuleId;
+    if (isEndpointAttachmentConnection(m_graph, *connection, &hostModuleId)) {
+        refreshModulePresentation(hostModuleId);
     }
 }
 
@@ -670,25 +680,25 @@ bool NodeEditorWidget::eventFilter(QObject* obj, QEvent* event) {
         if (event->type() == QEvent::MouseButtonRelease) {
             auto* e = static_cast<QMouseEvent*>(event);
             if (e->button() == Qt::LeftButton &&
-                tryCompleteXpRouterDraftConnection(e->position().toPoint())) {
+                tryCompleteRouterDraftConnection(e->position().toPoint())) {
                 return true;
             }
             if (e->button() == Qt::LeftButton &&
-                tryCompleteXpEndpointDraftConnection(e->position().toPoint())) {
+                tryCompleteEndpointDraftConnection(e->position().toPoint())) {
                 return true;
             }
         }
         if (event->type() == QEvent::MouseButtonPress) {
             auto* e = static_cast<QMouseEvent*>(event);
             if (e->button() == Qt::LeftButton &&
-                tryToggleXpCollapsed(e->position().toPoint(), true)) {
+                tryToggleCollapsed(e->position().toPoint(), true)) {
                 return true;
             }
         }
         if (event->type() == QEvent::MouseButtonDblClick) {
             auto* e = static_cast<QMouseEvent*>(event);
             if (e->button() == Qt::LeftButton &&
-                tryToggleXpCollapsed(e->position().toPoint(), false)) {
+                tryToggleCollapsed(e->position().toPoint(), false)) {
                 return true;
             }
         }
@@ -880,7 +890,7 @@ void NodeEditorWidget::updateConnectedConnectionHighlights(QtNodes::NodeId selec
     }
 }
 
-bool NodeEditorWidget::tryToggleXpCollapsed(const QPoint& viewportPos, bool requireToggleButton) {
+bool NodeEditorWidget::tryToggleCollapsed(const QPoint& viewportPos, bool requireToggleButton) {
     const QPointF scenePos = m_view->mapToScene(viewportPos);
     auto* nodeGraphics = QtNodes::locateNodeAt(scenePos, *m_scene, m_view->transform());
     if (!nodeGraphics) {
@@ -888,7 +898,7 @@ bool NodeEditorWidget::tryToggleXpCollapsed(const QPoint& viewportPos, bool requ
     }
 
     auto* nodeModel = dynamic_cast<GraphNodeModel*>(m_graphModel->delegateModel<GraphNodeModel>(nodeGraphics->nodeId()));
-    if (!nodeModel || !nodeModel->module() || nodeModel->module()->type() != "XP") {
+    if (!nodeModel || !nodeModel->module() || !ModuleTypeMetadata::supportsCollapse(nodeModel->module())) {
         return false;
     }
 
@@ -898,19 +908,19 @@ bool NodeEditorWidget::tryToggleXpCollapsed(const QPoint& viewportPos, bool requ
         return false;
     }
 
-    toggleXpCollapsed(nodeModel->module()->id(), !nodeModel->isXpCollapsed());
+    toggleCollapsed(nodeModel->module()->id(), !nodeModel->isCollapsed());
     return true;
 }
 
-void NodeEditorWidget::toggleXpCollapsed(const QString& moduleId, bool collapsed) {
+void NodeEditorWidget::toggleCollapsed(const QString& moduleId, bool collapsed) {
     auto command = std::make_unique<SetParameterCommand>(m_graph, moduleId, "collapsed", collapsed);
     m_commandManager->executeCommand(std::move(command));
 }
 
-bool NodeEditorWidget::resolveXpRouterDraftConnection(const QtNodes::ConnectionGraphicsObject& draftConnection,
-                                                      QtNodes::NodeId targetNodeId,
-                                                      PortRef& source,
-                                                      PortRef& target) const {
+bool NodeEditorWidget::resolveRouterDraftConnection(const QtNodes::ConnectionGraphicsObject& draftConnection,
+                                                    QtNodes::NodeId targetNodeId,
+                                                    PortRef& source,
+                                                    PortRef& target) const {
     const QtNodes::ConnectionId connectionId = draftConnection.connectionId();
     const QtNodes::PortType requiredPort = draftConnection.connectionState().requiredPort();
     if (requiredPort == QtNodes::PortType::None) {
@@ -936,7 +946,7 @@ bool NodeEditorWidget::resolveXpRouterDraftConnection(const QtNodes::ConnectionG
 
     const Module* startModule = m_graph->getModule(startModuleId);
     const Module* endModule = m_graph->getModule(targetModuleId);
-    if (!startModule || !endModule || startModule->type() != "XP" || endModule->type() != "XP") {
+    if (!startModule || !endModule || !isMeshRouterModule(startModule) || !isMeshRouterModule(endModule)) {
         return false;
     }
 
@@ -962,7 +972,7 @@ bool NodeEditorWidget::resolveXpRouterDraftConnection(const QtNodes::ConnectionG
     return true;
 }
 
-bool NodeEditorWidget::tryCompleteXpRouterDraftConnection(const QPoint& viewportPos) {
+bool NodeEditorWidget::tryCompleteRouterDraftConnection(const QPoint& viewportPos) {
     auto* draftConnection = findDraftConnection();
     if (!draftConnection) {
         return false;
@@ -976,7 +986,7 @@ bool NodeEditorWidget::tryCompleteXpRouterDraftConnection(const QPoint& viewport
 
     PortRef source;
     PortRef target;
-    if (!resolveXpRouterDraftConnection(*draftConnection, targetNode->nodeId(), source, target)) {
+    if (!resolveRouterDraftConnection(*draftConnection, targetNode->nodeId(), source, target)) {
         return false;
     }
 
@@ -993,10 +1003,10 @@ bool NodeEditorWidget::tryCompleteXpRouterDraftConnection(const QPoint& viewport
     return true;
 }
 
-bool NodeEditorWidget::resolveXpEndpointDraftConnection(const QtNodes::ConnectionGraphicsObject& draftConnection,
-                                                        QtNodes::NodeId targetNodeId,
-                                                        PortRef& source,
-                                                        PortRef& target) const {
+bool NodeEditorWidget::resolveEndpointDraftConnection(const QtNodes::ConnectionGraphicsObject& draftConnection,
+                                                      QtNodes::NodeId targetNodeId,
+                                                      PortRef& source,
+                                                      PortRef& target) const {
     const QtNodes::ConnectionId connectionId = draftConnection.connectionId();
     const QtNodes::PortType requiredPort = draftConnection.connectionState().requiredPort();
     if (requiredPort == QtNodes::PortType::None) {
@@ -1033,7 +1043,7 @@ bool NodeEditorWidget::resolveXpEndpointDraftConnection(const QtNodes::Connectio
     }
 
     if (startFromOutput) {
-        if (startModule->type() != "XP" || endModule->type() != "Endpoint") {
+        if (!isMeshRouterModule(startModule) || !isEndpointModule(endModule)) {
             return false;
         }
 
@@ -1048,7 +1058,7 @@ bool NodeEditorWidget::resolveXpEndpointDraftConnection(const QtNodes::Connectio
         return true;
     }
 
-    if (startModule->type() != "Endpoint" || endModule->type() != "XP") {
+    if (!isEndpointModule(startModule) || !isMeshRouterModule(endModule)) {
         return false;
     }
 
@@ -1063,7 +1073,7 @@ bool NodeEditorWidget::resolveXpEndpointDraftConnection(const QtNodes::Connectio
     return true;
 }
 
-bool NodeEditorWidget::tryCompleteXpEndpointDraftConnection(const QPoint& viewportPos) {
+bool NodeEditorWidget::tryCompleteEndpointDraftConnection(const QPoint& viewportPos) {
     auto* draftConnection = findDraftConnection();
     if (!draftConnection) {
         return false;
@@ -1077,7 +1087,7 @@ bool NodeEditorWidget::tryCompleteXpEndpointDraftConnection(const QPoint& viewpo
 
     PortRef source;
     PortRef target;
-    if (!resolveXpEndpointDraftConnection(*draftConnection, targetNode->nodeId(), source, target)) {
+    if (!resolveEndpointDraftConnection(*draftConnection, targetNode->nodeId(), source, target)) {
         return false;
     }
 
@@ -1159,7 +1169,7 @@ void NodeEditorWidget::onParameterChanged(const QString& paramName) {
             nodeGraphics->moveConnections();
             nodeGraphics->update();
         }
-        refreshXpPresentation(module->id());
+        refreshModulePresentation(module->id());
         return;
     }
 
@@ -1209,8 +1219,8 @@ bool NodeEditorWidget::showNodeContextMenu(const QPoint& viewportPos, const QPoi
     QMenu menu(m_view);
 
     QAction* toggleAction = nullptr;
-    if (module->type() == "XP") {
-        toggleAction = menu.addAction(nodeModel->isXpCollapsed() ? "Expand Node" : "Collapse Node");
+    if (ModuleTypeMetadata::supportsCollapse(module)) {
+        toggleAction = menu.addAction(nodeModel->isCollapsed() ? "Expand Node" : "Collapse Node");
     }
 
     QAction* deleteAction = menu.addAction("Delete Node");
@@ -1221,7 +1231,7 @@ bool NodeEditorWidget::showNodeContextMenu(const QPoint& viewportPos, const QPoi
     }
 
     if (selectedAction == toggleAction) {
-        toggleXpCollapsed(moduleId, !nodeModel->isXpCollapsed());
+        toggleCollapsed(moduleId, !nodeModel->isCollapsed());
         return true;
     }
 
@@ -1248,53 +1258,53 @@ QPointF NodeEditorWidget::clampNodePosition(QtNodes::NodeId nodeId, const QPoint
     };
 }
 
-void NodeEditorWidget::refreshXpPresentation(const QString& xpModuleId) {
-    Module* xpModule = m_graph->getModule(xpModuleId);
-    if (!xpModule || xpModule->type() != "XP") {
+void NodeEditorWidget::refreshModulePresentation(const QString& moduleId) {
+    Module* hostModule = m_graph->getModule(moduleId);
+    if (!hostModule || !ModuleTypeMetadata::supportsCollapse(hostModule)) {
         return;
     }
 
-    if (auto xpNodeIt = m_moduleToNodeId.find(xpModuleId); xpNodeIt != m_moduleToNodeId.end()) {
-        if (auto* xpNode = m_scene->nodeGraphicsObject(xpNodeIt.value())) {
-            xpNode->setGeometryChanged();
-            xpNode->moveConnections();
-            xpNode->update();
+    if (auto nodeIt = m_moduleToNodeId.find(moduleId); nodeIt != m_moduleToNodeId.end()) {
+        if (auto* node = m_scene->nodeGraphicsObject(nodeIt.value())) {
+            node->setGeometryChanged();
+            node->moveConnections();
+            node->update();
         }
     }
 
-    QList<Connection*> xpConnections;
-    QList<Connection*> xpEndpointConnections;
+    QList<Connection*> moduleConnections;
+    QList<Connection*> attachmentConnections;
     QSet<QString> endpointModuleIds;
     for (const auto& connection : m_graph->connections()) {
-        if (connection->source().moduleId != xpModuleId && connection->target().moduleId != xpModuleId) {
+        if (connection->source().moduleId != moduleId && connection->target().moduleId != moduleId) {
             continue;
         }
 
-        xpConnections.append(connection.get());
+        moduleConnections.append(connection.get());
 
-        QString connectionXpId;
+        QString connectionHostId;
         QString endpointModuleId;
-        if (!isXpEndpointConnection(m_graph, *connection, &connectionXpId, &endpointModuleId) ||
-            connectionXpId != xpModuleId) {
+        if (!isEndpointAttachmentConnection(m_graph, *connection, &connectionHostId, &endpointModuleId) ||
+            connectionHostId != moduleId) {
             continue;
         }
 
-        xpEndpointConnections.append(connection.get());
+        attachmentConnections.append(connection.get());
         endpointModuleIds.insert(endpointModuleId);
     }
 
-    for (Connection* connection : xpConnections) {
+    for (Connection* connection : moduleConnections) {
         removeConnectionFromView(connection->id());
     }
 
-    const bool collapsed = isXpCollapsed(xpModule);
+    const bool collapsed = isCollapsed(hostModule);
 
     if (collapsed) {
         for (const QString& endpointModuleId : endpointModuleIds) {
             removeModuleFromView(endpointModuleId);
         }
-        for (Connection* connection : xpConnections) {
-            if (!xpEndpointConnections.contains(connection)) {
+        for (Connection* connection : moduleConnections) {
+            if (!attachmentConnections.contains(connection)) {
                 ensureConnectionInView(connection);
             }
         }
@@ -1304,15 +1314,15 @@ void NodeEditorWidget::refreshXpPresentation(const QString& xpModuleId) {
     for (const QString& endpointModuleId : endpointModuleIds) {
         ensureModuleInView(m_graph->getModule(endpointModuleId));
     }
-    for (Connection* connection : xpConnections) {
+    for (Connection* connection : moduleConnections) {
         ensureConnectionInView(connection);
     }
 }
 
-void NodeEditorWidget::refreshAllXpPresentations() {
+void NodeEditorWidget::refreshAllModulePresentations() {
     for (const auto& module : m_graph->modules()) {
-        if (module->type() == "XP") {
-            refreshXpPresentation(module->id());
+        if (ModuleTypeMetadata::supportsCollapse(module.get())) {
+            refreshModulePresentation(module->id());
         }
     }
 }

@@ -62,22 +62,22 @@ private:
     QtNodes::ConnectionGraphicsObject* findDraftConnection() const;
     void setConnectionHighlighted(QtNodes::ConnectionId connectionId, bool highlighted);
     void updateConnectedConnectionHighlights(QtNodes::NodeId selectedNodeId);
-    bool tryToggleXpCollapsed(const QPoint& viewportPos, bool requireToggleButton);
-    void toggleXpCollapsed(const QString& moduleId, bool collapsed);
-    bool resolveXpRouterDraftConnection(const QtNodes::ConnectionGraphicsObject& draftConnection,
+    bool tryToggleCollapsed(const QPoint& viewportPos, bool requireToggleButton);
+    void toggleCollapsed(const QString& moduleId, bool collapsed);
+    bool resolveRouterDraftConnection(const QtNodes::ConnectionGraphicsObject& draftConnection,
+                                      QtNodes::NodeId targetNodeId,
+                                      PortRef& source,
+                                      PortRef& target) const;
+    bool resolveEndpointDraftConnection(const QtNodes::ConnectionGraphicsObject& draftConnection,
                                         QtNodes::NodeId targetNodeId,
                                         PortRef& source,
                                         PortRef& target) const;
-    bool resolveXpEndpointDraftConnection(const QtNodes::ConnectionGraphicsObject& draftConnection,
-                                          QtNodes::NodeId targetNodeId,
-                                          PortRef& source,
-                                          PortRef& target) const;
-    bool tryCompleteXpRouterDraftConnection(const QPoint& viewportPos);
-    bool tryCompleteXpEndpointDraftConnection(const QPoint& viewportPos);
+    bool tryCompleteRouterDraftConnection(const QPoint& viewportPos);
+    bool tryCompleteEndpointDraftConnection(const QPoint& viewportPos);
     bool showNodeContextMenu(const QPoint& viewportPos, const QPoint& globalPos);
     QPointF clampNodePosition(QtNodes::NodeId nodeId, const QPointF& position) const;
-    void refreshXpPresentation(const QString& xpModuleId);
-    void refreshAllXpPresentations();
+    void refreshModulePresentation(const QString& moduleId);
+    void refreshAllModulePresentations();
 
     Graph* m_graph;
     CommandManager* m_commandManager;

@@ -1,5 +1,6 @@
 #include "graphnodegeometry.h"
 #include "graphnodemodel.h"
+#include "moduletypemetadata.h"
 #include "portlayout.h"
 #include <QtNodes/DataFlowGraphModel>
 #include <QFont>
@@ -21,8 +22,8 @@ QSize sizeForModel(const GraphNodeModel* model) {
     const QString caption = model ? model->caption() : QStringLiteral("Node");
     const int captionWidth = QFontMetrics(QFont()).horizontalAdvance(caption) + 26;
 
-    if (model && model->module() && model->module()->type() == "XP") {
-        if (model->isXpCollapsed()) {
+    if (model && ModuleTypeMetadata::hasEditorLayout(model->module(), u"mesh_router")) {
+        if (model->isCollapsed()) {
             return {std::max(104, captionWidth), 92};
         }
         return {std::max(136, captionWidth), 116};
@@ -60,7 +61,7 @@ QPointF GraphNodeGeometry::portPosition(QtNodes::NodeId nodeId,
     if (!port) return {};
 
     const QSize nodeSize = size(nodeId);
-    if (model->module() && model->module()->type() == "XP") {
+    if (ModuleTypeMetadata::hasEditorLayout(model->module(), u"mesh_router")) {
         return xpPortPosition(*model, *port, nodeSize);
     }
 
@@ -88,9 +89,9 @@ QPointF GraphNodeGeometry::captionPosition(QtNodes::NodeId) const {
 QRectF GraphNodeGeometry::captionRect(QtNodes::NodeId nodeId) const {
     const QSize nodeSize = size(nodeId);
     const GraphNodeModel* model = modelFor(nodeId);
-    const bool isXp = model && model->module() && model->module()->type() == "XP";
-    const qreal leftInset = isXp ? 30.0 : 8.0;
-    const qreal topInset = isXp && model->isXpCollapsed() ? 26.0 : 6.0;
+    const bool usesMeshLayout = model && ModuleTypeMetadata::hasEditorLayout(model->module(), u"mesh_router");
+    const qreal leftInset = usesMeshLayout ? 30.0 : 8.0;
+    const qreal topInset = usesMeshLayout && model->isCollapsed() ? 26.0 : 6.0;
     return QRectF(leftInset, topInset, nodeSize.width() - leftInset - 8.0, 20.0);
 }
 
@@ -112,7 +113,7 @@ const GraphNodeModel* GraphNodeGeometry::modelFor(QtNodes::NodeId nodeId) const 
 }
 
 QPointF GraphNodeGeometry::xpPortPosition(const GraphNodeModel& model, const Port& port, QSize const& nodeSize) const {
-    if (model.isXpCollapsed()) {
+    if (model.isCollapsed()) {
         if (PortLayout::isRouterPort(port)) {
             return cardinalPortPosition(PortLayout::routerSideId(port.id()), nodeSize, 0.0);
         }

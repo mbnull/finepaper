@@ -1,5 +1,6 @@
 #include "palette.h"
 #include "moduleregistry.h"
+#include "moduletypemetadata.h"
 #include "commands/addmodulecommand.h"
 #include "module.h"
 #include <QVBoxLayout>
@@ -33,7 +34,7 @@ protected:
 
         QDrag* drag = new QDrag(this);
         QMimeData* mimeData = new QMimeData;
-        mimeData->setData("application/x-moduletype", item->text().toUtf8());
+        mimeData->setData("application/x-moduletype", item->data(Qt::UserRole).toString().toUtf8());
         drag->setMimeData(mimeData);
         drag->exec(Qt::CopyAction);
     }
@@ -59,6 +60,9 @@ void Palette::setupUI() {
 void Palette::populateModuleTypes() {
     QStringList types = ModuleRegistry::instance().availableTypes();
     for (const QString& type : types) {
-        m_listWidget->addItem(type);
+        const ModuleType* moduleType = ModuleRegistry::instance().getType(type);
+        auto* item = new QListWidgetItem(ModuleTypeMetadata::paletteLabel(moduleType));
+        item->setData(Qt::UserRole, type);
+        m_listWidget->addItem(item);
     }
 }

@@ -4,52 +4,6 @@
 #include <QJsonObject>
 #include <QJsonArray>
 
-// Return hardcoded module type definitions
-std::vector<ModuleType> HardcodedProvider::loadModules() {
-    std::vector<ModuleType> types;
-
-    ModuleType cpu;
-    cpu.name = "CPU";
-    cpu.defaultPorts = {
-        Port("mem_bus", Port::Direction::Output, "bus", "mem_bus"),
-        Port("irq", Port::Direction::Input, "irq", "irq")
-    };
-    cpu.defaultParameters = {
-        {"frequency", Parameter("frequency", 1000)}
-    };
-    types.push_back(cpu);
-
-    ModuleType memory;
-    memory.name = "Memory";
-    memory.defaultPorts = {
-        Port("bus", Port::Direction::Input, "bus", "bus")
-    };
-    memory.defaultParameters = {
-        {"size", Parameter("size", 4096)}
-    };
-    types.push_back(memory);
-
-    ModuleType router;
-    router.name = "Router";
-    router.defaultPorts = {
-        Port("in0", Port::Direction::Input, "data", "in0"),
-        Port("in1", Port::Direction::Input, "data", "in1"),
-        Port("out0", Port::Direction::Output, "data", "out0"),
-        Port("out1", Port::Direction::Output, "data", "out1")
-    };
-    types.push_back(router);
-
-    ModuleType dma;
-    dma.name = "DMA";
-    dma.defaultPorts = {
-        Port("control", Port::Direction::Input, "control", "control"),
-        Port("mem", Port::Direction::Output, "bus", "mem")
-    };
-    types.push_back(dma);
-
-    return types;
-}
-
 JsonBundleProvider::JsonBundleProvider(const QString& bundlePath)
     : m_bundlePath(bundlePath) {}
 
@@ -66,6 +20,19 @@ std::vector<ModuleType> JsonBundleProvider::loadModules() {
         QJsonObject mod = modVal.toObject();
         ModuleType type;
         type.name = mod["name"].toString();
+        type.paletteLabel = mod["palette_label"].toString();
+        type.nodeColor = mod["node_color"].toString();
+        type.editorLayout = mod["editor_layout"].toString();
+        type.graphGroup = mod["graph_group"].toString();
+
+        const QJsonObject identity = mod["identity"].toObject();
+        type.externalIdPrefix = identity["external_id_prefix"].toString();
+        type.displayPrefix = identity["display_prefix"].toString();
+        type.identityWidth = identity["width"].toInt(2);
+        type.supportsMeshCoordinates = identity["supports_mesh_coordinates"].toBool(false);
+
+        const QJsonObject capabilities = mod["capabilities"].toObject();
+        type.supportsCollapse = capabilities["supports_collapse"].toBool(false);
 
         for (const auto& portVal : mod["ports"].toArray()) {
             QJsonObject p = portVal.toObject();

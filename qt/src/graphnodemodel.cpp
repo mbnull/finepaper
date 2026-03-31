@@ -1,5 +1,6 @@
 #include "graphnodemodel.h"
 #include "modulelabels.h"
+#include "moduletypemetadata.h"
 #include "portlayout.h"
 #include <QColor>
 
@@ -20,7 +21,7 @@ bool boolParameter(const Module* module, const QString& name, bool fallbackValue
 }
 
 bool isVisiblePort(const Module* module, const Port& port) {
-    if (!module || module->type() != "XP") {
+    if (!module || !ModuleTypeMetadata::supportsCollapse(module)) {
         return true;
     }
 
@@ -64,8 +65,8 @@ void GraphNodeModel::setModule(Module* module) {
     applyTypeStyle();
 }
 
-bool GraphNodeModel::isXpCollapsed() const {
-    return m_module && m_module->type() == "XP" && boolParameter(m_module, "collapsed", true);
+bool GraphNodeModel::isCollapsed() const {
+    return m_module && ModuleTypeMetadata::supportsCollapse(m_module) && boolParameter(m_module, "collapsed", true);
 }
 
 // Find port by type and index
@@ -132,13 +133,8 @@ void GraphNodeModel::applyTypeStyle() {
     style.PenWidth = 1.5f;
     style.HoveredPenWidth = 2.0f;
 
-    if (m_module && m_module->type() == "XP") {
-        style.setBackgroundColor(QColor(124, 185, 232));
-    } else if (m_module && m_module->type() == "Endpoint") {
-        style.setBackgroundColor(QColor(132, 230, 129));
-    } else {
-        style.setBackgroundColor(QColor(224, 224, 224));
-    }
+    const QColor background(ModuleTypeMetadata::nodeColor(m_module));
+    style.setBackgroundColor(background.isValid() ? background : QColor(224, 224, 224));
 
     setNodeStyle(style);
 }

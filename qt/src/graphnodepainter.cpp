@@ -1,6 +1,7 @@
 #include "graphnodepainter.h"
 #include "graphnodegeometry.h"
 #include "graphnodemodel.h"
+#include "moduletypemetadata.h"
 #include "portcolors.h"
 #include <QtNodes/DataFlowGraphModel>
 #include <QtNodes/internal/BasicGraphicsScene.hpp>
@@ -12,9 +13,8 @@ namespace {
 
 QColor nodeBackground(const GraphNodeModel* model) {
     if (!model || !model->module()) return QColor(224, 224, 224);
-    if (model->module()->type() == "XP") return QColor(124, 185, 232);
-    if (model->module()->type() == "Endpoint") return QColor(214, 244, 182);
-    return QColor(224, 224, 224);
+    const QColor background(ModuleTypeMetadata::nodeColor(model->module()));
+    return background.isValid() ? background : QColor(224, 224, 224);
 }
 
 void drawXpToggleButton(QPainter* painter,
@@ -28,7 +28,7 @@ void drawXpToggleButton(QPainter* painter,
 
     painter->setPen(QColor(30, 30, 30));
     painter->setFont(QFont(QStringLiteral("Sans Serif"), 8, QFont::Bold));
-    painter->drawText(buttonRect, Qt::AlignCenter, model.isXpCollapsed() ? QStringLiteral("+") : QStringLiteral("-"));
+    painter->drawText(buttonRect, Qt::AlignCenter, model.isCollapsed() ? QStringLiteral("+") : QStringLiteral("-"));
 }
 
 QRectF routerLabelRect(const QString& side, const QPointF& center) {
@@ -47,12 +47,12 @@ void drawPorts(QPainter* painter,
 
     auto const& geometry = ngo.nodeScene()->nodeGeometry();
     const unsigned int portCount = model->nPorts(portType);
-    const bool collapsedXp = model->isXpCollapsed();
+    const bool collapsedNode = model->isCollapsed();
 
     for (unsigned int index = 0; index < portCount; ++index) {
         const Port* port = model->portAt(portType, index);
         if (!port) continue;
-        if (collapsedXp && PortLayout::isEndpointPort(*port)) {
+        if (collapsedNode && PortLayout::isEndpointPort(*port)) {
             continue;
         }
 
@@ -73,7 +73,7 @@ void drawPorts(QPainter* painter,
 
         if (port->type() == "router") {
             const QString side = PortLayout::routerSideId(port->id());
-            const QRectF textRect = collapsedXp
+            const QRectF textRect = collapsedNode
                 ? routerLabelRect(side, center)
                 : QRectF(center.x() - 22.0, center.y() - 8.0, 14.0, 16.0);
             painter->setPen(QColor(22, 22, 22));
@@ -100,7 +100,7 @@ void GraphNodePainter::paint(QPainter* painter, QtNodes::NodeGraphicsObject& ngo
     painter->setBrush(nodeBackground(model));
     painter->drawRoundedRect(bodyRect, 8.0, 8.0);
 
-    if (model && model->module() && model->module()->type() == "XP") {
+    if (model && ModuleTypeMetadata::supportsCollapse(model->module())) {
         drawXpToggleButton(painter, *model, nodeSize);
     }
 

@@ -2,6 +2,7 @@
 #pragma once
 
 #include "module.h"
+#include "moduletypemetadata.h"
 #include <QRegularExpression>
 
 namespace ModuleLabels {
@@ -32,27 +33,28 @@ inline QString externalId(const Module* module) {
 }
 
 inline QString humanizeExternalId(const QString& moduleType, const QString& rawId) {
-    if (rawId.isEmpty()) return moduleType;
+    const ModuleType* type = ModuleTypeMetadata::type(moduleType);
+    if (rawId.isEmpty()) return type ? ModuleTypeMetadata::paletteLabel(type) : moduleType;
 
-    if (moduleType == "XP") {
-        QRegularExpression meshPattern("^xp_(\\d+)_(\\d+)$", QRegularExpression::CaseInsensitiveOption);
+    const QString externalPrefix = type ? type->externalIdPrefix : QString();
+    const QString displayPrefix = type ? type->displayPrefix : QString();
+    const int identityWidth = type ? type->identityWidth : 2;
+
+    if (type && type->supportsMeshCoordinates && !externalPrefix.isEmpty() && !displayPrefix.isEmpty()) {
+        QRegularExpression meshPattern("^" + QRegularExpression::escape(externalPrefix) + "_(\\d+)_(\\d+)$",
+                                       QRegularExpression::CaseInsensitiveOption);
         auto meshMatch = meshPattern.match(rawId);
         if (meshMatch.hasMatch()) {
-            return QString("XP_%1%2").arg(meshMatch.captured(1), meshMatch.captured(2));
-        }
-
-        QRegularExpression seqPattern("^xp_(\\d+)$", QRegularExpression::CaseInsensitiveOption);
-        auto seqMatch = seqPattern.match(rawId);
-        if (seqMatch.hasMatch()) {
-            return QString("XP_%1").arg(seqMatch.captured(1).toInt(), 2, 10, QChar('0'));
+            return QString("%1_%2%3").arg(displayPrefix, meshMatch.captured(1), meshMatch.captured(2));
         }
     }
 
-    if (moduleType == "Endpoint") {
-        QRegularExpression seqPattern("^ep_(\\d+)$", QRegularExpression::CaseInsensitiveOption);
+    if (!externalPrefix.isEmpty() && !displayPrefix.isEmpty()) {
+        QRegularExpression seqPattern("^" + QRegularExpression::escape(externalPrefix) + "_(\\d+)$",
+                                      QRegularExpression::CaseInsensitiveOption);
         auto seqMatch = seqPattern.match(rawId);
         if (seqMatch.hasMatch()) {
-            return QString("EP_%1").arg(seqMatch.captured(1).toInt(), 2, 10, QChar('0'));
+            return QString("%1_%2").arg(displayPrefix).arg(seqMatch.captured(1).toInt(), identityWidth, 10, QChar('0'));
         }
     }
 

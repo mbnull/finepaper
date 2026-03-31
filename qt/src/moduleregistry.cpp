@@ -58,6 +58,15 @@ const ModuleType* ModuleRegistry::getType(const QString& name) const {
     return it != m_types.end() ? &it.value() : nullptr;
 }
 
+const ModuleType* ModuleRegistry::getTypeForGraphGroup(const QString& graphGroup) const {
+    for (auto it = m_types.cbegin(); it != m_types.cend(); ++it) {
+        if (it.value().graphGroup == graphGroup) {
+            return &it.value();
+        }
+    }
+    return nullptr;
+}
+
 QStringList ModuleRegistry::availableTypes() const {
     QStringList types;
     for (auto it = m_types.begin(); it != m_types.end(); ++it) {
