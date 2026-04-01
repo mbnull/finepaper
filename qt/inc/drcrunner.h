@@ -13,7 +13,6 @@ class DRCRunner {
 public:
     QList<ValidationResult> validate(const Graph* graph);
 private:
-    QString serializeToJson(const Graph* graph);
     QList<ValidationResult> parseErrors(const QString& stderr);
 
     QHash<QString, QString> m_externalToInternalIds;

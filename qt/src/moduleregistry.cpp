@@ -1,8 +1,7 @@
+#include "frameworkpaths.h"
 #include "moduleregistry.h"
 #include "moduleprovider.h"
-#include <QCoreApplication>
-#include <QDir>
-#include <QFile>
+#include <QDebug>
 
 ModuleRegistry& ModuleRegistry::instance() {
     static ModuleRegistry registry;
@@ -11,35 +10,13 @@ ModuleRegistry& ModuleRegistry::instance() {
 
 // Search for module bundle file in environment or parent directories
 ModuleRegistry::ModuleRegistry() {
-    QString bundlePath;
-
-    // Check environment variable first
-    bundlePath = qEnvironmentVariable("BUNDLE_PATH");
+    const QString bundlePath = FrameworkPaths::resolveBundlePath();
     if (!bundlePath.isEmpty()) {
-        QFileInfo info(bundlePath);
-        if (info.isDir()) {
-            bundlePath = QDir(bundlePath).filePath("bundles/modules.json");
-        }
-        if (QFile::exists(bundlePath)) {
-            addProvider(std::make_unique<JsonBundleProvider>(bundlePath));
-            return;
-        }
+        addProvider(std::make_unique<JsonBundleProvider>(bundlePath));
+        return;
     }
 
-    // Search upward from application directory
-    QDir dir(QCoreApplication::applicationDirPath());
-    while (true) {
-        QString candidate = dir.filePath("bundles/modules.json");
-        if (QFile::exists(candidate)) {
-            addProvider(std::make_unique<JsonBundleProvider>(candidate));
-            return;
-        }
-
-        if (!dir.cdUp()) {
-            qWarning() << "Bundle file not found. Searched from:" << QCoreApplication::applicationDirPath();
-            return;
-        }
-    }
+    qWarning() << "Bundle file not found. Searched current repo and framework bundle locations.";
 }
 
 void ModuleRegistry::addProvider(std::unique_ptr<ModuleProvider> provider) {

@@ -2,6 +2,7 @@
 // Layout: horizontal splitter (palette | node editor | property panel)
 // inside a vertical splitter with the log panel below.
 #include "mainwindow.h"
+#include "frameworkpaths.h"
 #include "graph.h"
 #include "commandmanager.h"
 #include "nodeeditorwidget.h"
@@ -11,15 +12,56 @@
 #include "validationmanager.h"
 #include "commands/loadgraphcommand.h"
 #include <QAction>
+#include <QApplication>
+#include <QColor>
 #include <QDebug>
+#include <QDir>
 #include <QDockWidget>
 #include <QFileDialog>
+#include <QFile>
+#include <QFileInfo>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
+#include <QProcess>
+#include <QRegularExpression>
+#include <QStatusBar>
 #include <QTimer>
 #include <QToolBar>
 #include <QVBoxLayout>
+
+namespace {
+
+QString sanitizedDesignName(const QString& directoryPath) {
+    QString designName = QFileInfo(directoryPath).fileName().trimmed().toLower();
+    designName.replace(QRegularExpression("[^a-z0-9_]+"), "_");
+    designName.remove(QRegularExpression("^_+|_+$"));
+    return designName.isEmpty() ? QStringLiteral("design") : designName;
+}
+
+QString trimmedProcessOutput(const QString& text) {
+    return text.trimmed().isEmpty() ? QStringLiteral("(no process output)") : text.trimmed();
+}
+
+void appendLogLines(LogPanel* logPanel,
+                    const QString& text,
+                    const QColor& color,
+                    const QString& prefix) {
+    if (!logPanel) {
+        return;
+    }
+
+    const QStringList lines = text.split('\n');
+    for (const QString& line : lines) {
+        const QString trimmed = line.trimmed();
+        if (trimmed.isEmpty()) {
+            continue;
+        }
+        logPanel->appendMessage(prefix + trimmed, color);
+    }
+}
+
+} // namespace
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent),
@@ -34,6 +76,7 @@ MainWindow::MainWindow(QWidget *parent)
       m_propertyDock(nullptr),
       m_logDock(nullptr),
       m_saveAction(nullptr),
+      m_generateAction(nullptr),
       m_validateAction(nullptr),
       m_arrangeAction(nullptr) {
     setupPanels();
@@ -72,6 +115,111 @@ void MainWindow::saveGraph() {
     qInfo() << "Saved graph to" << path;
 }
 
+void MainWindow::generateVerilog() {
+    const QString outputDirectory = QFileDialog::getExistingDirectory(
+        this,
+        "Select Verilog Output Folder",
+        QDir::currentPath(),
+        QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
+    if (outputDirectory.isEmpty()) {
+        return;
+    }
+
+    const QString frameworkPath = FrameworkPaths::resolveFrameworkPath();
+    const QString templatePath = FrameworkPaths::resolveTemplatePath();
+    if (frameworkPath.isEmpty() || templatePath.isEmpty()) {
+        m_logPanel->appendMessage("[Generate] Framework not found for ../framework/bin/generate or ../framework/template.",
+                                  QColor(220, 50, 50));
+        QMessageBox::warning(this,
+                             "Framework Not Found",
+                             "Could not find ../framework. Set FRAMEWORK_PATH or keep framework/ next to this repository.");
+        return;
+    }
+
+    QDir outputDir(outputDirectory);
+    if (!outputDir.mkpath(".")) {
+        m_logPanel->appendMessage("[Generate] Could not create output folder: " + outputDirectory,
+                                  QColor(220, 50, 50));
+        QMessageBox::warning(this,
+                             "Output Folder Error",
+                             "Could not create or access " + outputDirectory);
+        return;
+    }
+
+    const QString designName = sanitizedDesignName(outputDirectory);
+    const QString jsonPath = outputDir.filePath(designName + ".json");
+    QFile jsonFile(jsonPath);
+    if (!jsonFile.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        m_logPanel->appendMessage("[Generate] Could not write JSON: " + jsonPath,
+                                  QColor(220, 50, 50));
+        QMessageBox::warning(this,
+                             "JSON Export Failed",
+                             "Could not write " + jsonPath);
+        return;
+    }
+    jsonFile.write(m_graph->toJsonDocument(designName, GraphJsonFlavor::Framework).toJson());
+    jsonFile.close();
+
+    m_logPanel->appendMessage(QString("[Generate] Start output=%1").arg(outputDirectory),
+                              QColor(70, 110, 190));
+    m_logPanel->appendMessage(QString("[Generate] JSON=%1").arg(jsonPath),
+                              QColor(70, 110, 190));
+
+    statusBar()->showMessage("Generating Verilog...");
+    QApplication::setOverrideCursor(Qt::WaitCursor);
+
+    QProcess proc;
+    proc.setWorkingDirectory(frameworkPath);
+    proc.start("ruby", {
+        "bin/generate",
+        "-i", jsonPath,
+        "-o", outputDirectory,
+        "-t", templatePath
+    });
+
+    const bool started = proc.waitForStarted();
+    const bool finished = started && proc.waitForFinished(-1);
+    QApplication::restoreOverrideCursor();
+
+    if (!started) {
+        const QString error = "Failed to start framework generator: " + proc.errorString();
+        qWarning() << error;
+        m_logPanel->appendMessage("[Generate] " + error, QColor(220, 50, 50));
+        statusBar()->showMessage(error, 5000);
+        QMessageBox::warning(this, "Generate Failed", error);
+        return;
+    }
+
+    const QString standardOutput = QString::fromUtf8(proc.readAllStandardOutput());
+    const QString standardError = QString::fromUtf8(proc.readAllStandardError());
+    if (!finished || proc.exitStatus() != QProcess::NormalExit || proc.exitCode() != 0) {
+        const QString detail = trimmedProcessOutput(standardError.isEmpty() ? standardOutput : standardError);
+        const QString error = !finished
+            ? QStringLiteral("Generator timed out while producing Verilog.")
+            : QString("Generator failed (exit code %1).").arg(proc.exitCode());
+        qWarning().noquote() << error << detail;
+        m_logPanel->appendMessage("[Generate] " + error, QColor(220, 50, 50));
+        appendLogLines(m_logPanel, standardOutput, QColor(80, 120, 180), "[Generate][stdout] ");
+        appendLogLines(m_logPanel, standardError, QColor(220, 50, 50), "[Generate][stderr] ");
+        statusBar()->showMessage(error, 5000);
+        QMessageBox::warning(this,
+                             "Generate Failed",
+                             error + "\n\n" + detail);
+        return;
+    }
+
+    const QString successMessage = "Generated Verilog and JSON in " + outputDirectory;
+    qInfo().noquote() << successMessage;
+    m_logPanel->appendMessage("[Generate] " + successMessage, QColor(40, 140, 80));
+    appendLogLines(m_logPanel, standardOutput, QColor(40, 140, 80), "[Generate][stdout] ");
+    appendLogLines(m_logPanel, standardError, QColor(200, 150, 50), "[Generate][stderr] ");
+    statusBar()->showMessage(successMessage, 5000);
+    QMessageBox::information(this,
+                             "Generate Complete",
+                             successMessage + "\n\nJSON: " + jsonPath + "\n\n" +
+                                 trimmedProcessOutput(standardOutput));
+}
+
 void MainWindow::runValidation() {
     if (!m_validationManager) {
         qCritical() << "Validation manager not initialized, cannot run validation";
@@ -107,6 +255,10 @@ void MainWindow::setupActions() {
     m_saveAction = new QAction("Save JSON", this);
     connect(m_saveAction, &QAction::triggered, this, &MainWindow::saveGraph);
 
+    m_generateAction = new QAction("Generate Verilog", this);
+    m_generateAction->setToolTip("Export the current graph as framework JSON and generate Verilog in a selected folder.");
+    connect(m_generateAction, &QAction::triggered, this, &MainWindow::generateVerilog);
+
     m_validateAction = new QAction("Validate", this);
     m_validateAction->setToolTip("Run validation for the current graph.");
     connect(m_validateAction, &QAction::triggered, this, &MainWindow::runValidation);
@@ -123,6 +275,7 @@ void MainWindow::setupActions() {
     fileMenu->addAction(m_saveAction);
 
     auto* toolsMenu = menuBar()->addMenu("&Tools");
+    toolsMenu->addAction(m_generateAction);
     toolsMenu->addAction(m_validateAction);
 
     auto* layoutMenu = menuBar()->addMenu("&Layout");
@@ -134,6 +287,7 @@ void MainWindow::setupActions() {
     auto* mainToolBar = addToolBar("Main");
     mainToolBar->setObjectName("mainToolBar");
     mainToolBar->addAction(m_saveAction);
+    mainToolBar->addAction(m_generateAction);
     mainToolBar->addAction(m_validateAction);
     mainToolBar->addAction(m_arrangeAction);
 }

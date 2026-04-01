@@ -432,21 +432,6 @@ NodeEditorWidget::~NodeEditorWidget() {
     if (m_view && m_view->viewport()) {
         m_view->viewport()->removeEventFilter(this);
     }
-
-    if (m_graph) {
-        QObject::disconnect(m_graph, nullptr, this, nullptr);
-        for (const auto& module : m_graph->modules()) {
-            QObject::disconnect(module.get(), nullptr, this, nullptr);
-        }
-    }
-
-    if (m_graphModel) {
-        QObject::disconnect(m_graphModel, nullptr, this, nullptr);
-    }
-
-    if (m_scene) {
-        QObject::disconnect(m_scene, nullptr, this, nullptr);
-    }
 }
 
 bool NodeEditorWidget::isArrangeEnabled() const {

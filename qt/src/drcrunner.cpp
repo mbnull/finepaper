@@ -1,67 +1,35 @@
 #include "drcrunner.h"
+#include "frameworkpaths.h"
 #include "graph.h"
 #include "modulelabels.h"
-#include "module.h"
-#include "moduletypemetadata.h"
-#include "connection.h"
-#include "portlayout.h"
 #include <QProcess>
 #include <QTemporaryFile>
-#include <QJsonDocument>
-#include <QJsonObject>
-#include <QJsonArray>
-#include <QMap>
 #include <QRegularExpression>
-#include <QCoreApplication>
-#include <QDir>
-#include <optional>
-
-static std::optional<double> toDouble(const Parameter::Value& v) {
-    if (auto* i = std::get_if<int>(&v)) return static_cast<double>(*i);
-    if (auto* d = std::get_if<double>(&v)) return *d;
-    return std::nullopt;
-}
-
-static bool isMeshRouterModule(const Module* module) {
-    return ModuleTypeMetadata::hasEditorLayout(module, u"mesh_router");
-}
-
-static bool isEndpointModule(const Module* module) {
-    return ModuleTypeMetadata::isInGraphGroup(module, u"endpoints");
-}
 
 // Run external DRC tool on graph and parse validation results
 QList<ValidationResult> DRCRunner::validate(const Graph* graph) {
-    QString json = serializeToJson(graph);
+    QString json = graph->toJsonDocument(QStringLiteral("design"),
+                                         GraphJsonFlavor::Framework,
+                                         &m_externalToInternalIds).toJson();
 
     QTemporaryFile tmpFile;
     if (!tmpFile.open()) return {};
     tmpFile.write(json.toUtf8());
     tmpFile.flush();
 
-    QString frameworkPath = qEnvironmentVariable("FRAMEWORK_PATH");
-    if (frameworkPath.isEmpty()) {
-        QDir dir(QCoreApplication::applicationDirPath());
-        while (!dir.isRoot()) {
-            if (dir.cd("framework") && QFileInfo(dir.filePath("bin/generate")).exists()) {
-                frameworkPath = dir.absolutePath();
-                break;
-            }
-            dir.cdUp();
-            if (QFileInfo(dir.filePath("framework/bin/generate")).exists()) {
-                frameworkPath = dir.filePath("framework");
-                break;
-            }
-        }
-    }
-
-    if (frameworkPath.isEmpty() || !QFileInfo(frameworkPath + "/bin/generate").exists()) {
+    const QString frameworkPath = FrameworkPaths::resolveFrameworkPath();
+    const QString templatePath = FrameworkPaths::resolveTemplatePath();
+    if (frameworkPath.isEmpty() || templatePath.isEmpty()) {
         return {ValidationResult(ValidationSeverity::Error, "Framework not found. Set FRAMEWORK_PATH or place framework/ in parent directory.", "", "DRC")};
     }
 
     QProcess proc;
     proc.setWorkingDirectory(frameworkPath);
-    proc.start("ruby", {"bin/generate", "-i", tmpFile.fileName(), "-o", "/tmp", "-t", "template"});
+    proc.start("ruby", {"bin/generate", "-i", tmpFile.fileName(), "-o", "/tmp", "-t", templatePath});
+
+    if (!proc.waitForStarted()) {
+        return {ValidationResult(ValidationSeverity::Error, "DRC process failed to start: " + proc.errorString(), "", "DRC")};
+    }
 
     if (!proc.waitForFinished()) {
         return {ValidationResult(ValidationSeverity::Error, "DRC process failed to start or timed out", "", "DRC")};
@@ -78,95 +46,6 @@ QList<ValidationResult> DRCRunner::validate(const Graph* graph) {
     }
 
     return parseErrors(proc.readAllStandardError());
-}
-
-QString DRCRunner::serializeToJson(const Graph* graph) {
-    QJsonObject root;
-    root["name"] = "design";
-    root["version"] = "1.0";
-
-    QJsonObject params;
-    QJsonArray xps, conns, eps;
-    QMap<QString, QJsonArray> xpEndpoints;
-    m_externalToInternalIds.clear();
-
-    for (const auto& mod : graph->modules()) {
-        const QString externalId = ModuleLabels::externalId(mod.get());
-        m_externalToInternalIds[externalId] = mod->id();
-
-        if (isMeshRouterModule(mod.get())) {
-            QJsonObject xp;
-            xp["id"] = externalId;
-            const auto& p = mod->parameters();
-            if (p.find("x") != p.end() && p.find("y") != p.end()) {
-                auto xOpt = toDouble(p.value("x").value());
-                auto yOpt = toDouble(p.value("y").value());
-                if (xOpt && yOpt) {
-                    xp["x"] = static_cast<int>(*xOpt);
-                    xp["y"] = static_cast<int>(*yOpt);
-                }
-            }
-            xp["endpoints"] = QJsonArray();
-
-            QJsonObject config;
-            if (p.count("routing_algorithm")) config["routing_algorithm"] = std::get<QString>(p.value("routing_algorithm").value());
-            if (p.count("vc_count")) config["vc_count"] = std::get<int>(p.value("vc_count").value());
-            if (p.count("buffer_depth")) config["buffer_depth"] = std::get<int>(p.value("buffer_depth").value());
-            if (!config.isEmpty()) xp["config"] = config;
-
-            xps.append(xp);
-            xpEndpoints[externalId] = QJsonArray();
-        } else if (isEndpointModule(mod.get())) {
-            QJsonObject ep;
-            ep["id"] = externalId;
-            const auto& p = mod->parameters();
-            if (p.count("type")) ep["type"] = std::get<QString>(p.value("type").value());
-            if (p.count("protocol")) ep["protocol"] = std::get<QString>(p.value("protocol").value());
-            if (p.count("data_width")) ep["data_width"] = std::get<int>(p.value("data_width").value());
-
-            QJsonObject config;
-            if (p.count("buffer_depth")) config["buffer_depth"] = std::get<int>(p.value("buffer_depth").value());
-            if (p.count("qos_enabled")) config["qos_enabled"] = std::get<bool>(p.value("qos_enabled").value());
-            if (!config.isEmpty()) ep["config"] = config;
-
-            eps.append(ep);
-        }
-    }
-
-    for (const auto& conn : graph->connections()) {
-        auto srcMod = graph->getModule(conn->source().moduleId);
-        auto tgtMod = graph->getModule(conn->target().moduleId);
-
-        if (srcMod && tgtMod) {
-            const QString src = ModuleLabels::externalId(srcMod);
-            const QString tgt = ModuleLabels::externalId(tgtMod);
-
-            if (isMeshRouterModule(srcMod) && isMeshRouterModule(tgtMod)) {
-                QJsonObject c;
-                c["from"] = src;
-                c["to"] = tgt;
-                conns.append(c);
-            } else if (isMeshRouterModule(srcMod) && isEndpointModule(tgtMod)) {
-                xpEndpoints[src].append(tgt);
-            } else if (isEndpointModule(srcMod) && isMeshRouterModule(tgtMod)) {
-                xpEndpoints[tgt].append(src);
-            }
-        }
-    }
-
-    for (int i = 0; i < xps.size(); ++i) {
-        QJsonObject xp = xps[i].toObject();
-        QString xpId = xp["id"].toString();
-        xp["endpoints"] = xpEndpoints[xpId];
-        xps[i] = xp;
-    }
-
-    root["parameters"] = params;
-    root["xps"] = xps;
-    root["connections"] = conns;
-    root["endpoints"] = eps;
-
-    return QJsonDocument(root).toJson();
 }
 
 QList<ValidationResult> DRCRunner::parseErrors(const QString& stderr) {

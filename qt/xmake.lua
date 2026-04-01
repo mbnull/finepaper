@@ -50,6 +50,7 @@ add_qt_test_target("graph_test", "test/graph_test.cpp", {
     "src/connection.cpp",
     "src/port.cpp",
     "src/parameter.cpp",
+    "src/frameworkpaths.cpp",
     "src/moduleregistry.cpp",
     "src/moduleprovider.cpp",
     "inc/graph.h",

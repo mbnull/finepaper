@@ -1,5 +1,7 @@
 #include "graph.h"
 
+#include <QJsonArray>
+#include <QJsonObject>
 #include <QCoreApplication>
 #include <QString>
 #include <iostream>
@@ -111,6 +113,54 @@ void testGraphForwardsModuleParameterChanges() {
     require(changedParameterName == "buffer_depth", "forwarded signal should include parameter name");
 }
 
+void testFrameworkExportOmitsEditorOnlyCollapsedField() {
+    Graph graph;
+
+    auto xp = makeModule(
+        "xp_internal",
+        "XP",
+        {Port("ep0", Port::Direction::Output, "endpoint", "EP0")});
+    xp->setParameter("external_id", QString("xp_0_0"));
+    xp->setParameter("x", 0);
+    xp->setParameter("y", 0);
+    xp->setParameter("collapsed", true);
+    xp->setParameter("routing_algorithm", QString("xy"));
+
+    auto endpoint = makeModule(
+        "ep_internal",
+        "Endpoint",
+        {Port("noc", Port::Direction::Input, "endpoint", "NoC")});
+    endpoint->setParameter("external_id", QString("ep_0"));
+    endpoint->setParameter("type", QString("master"));
+    endpoint->setParameter("protocol", QString("axi4"));
+    endpoint->setParameter("data_width", 64);
+
+    require(graph.addModule(std::move(xp)), "failed to add XP module");
+    require(graph.addModule(std::move(endpoint)), "failed to add endpoint module");
+
+    graph.addConnection(std::make_unique<Connection>(
+        "xp_ep",
+        PortRef{"xp_internal", "ep0"},
+        PortRef{"ep_internal", "noc"}));
+
+    require(graph.connections().size() == 1, "expected endpoint connection to be stored");
+
+    const QJsonObject frameworkRoot =
+        graph.toJsonDocument("design", GraphJsonFlavor::Framework).object();
+    const QJsonObject editorRoot =
+        graph.toJsonDocument("design", GraphJsonFlavor::Editor).object();
+
+    const QJsonObject frameworkConfig =
+        frameworkRoot["xps"].toArray().first().toObject()["config"].toObject();
+    const QJsonObject editorConfig =
+        editorRoot["xps"].toArray().first().toObject()["config"].toObject();
+
+    require(!frameworkConfig.contains("collapsed"),
+            "framework export should omit editor-only collapsed state");
+    require(editorConfig.contains("collapsed"),
+            "editor export should preserve collapsed state");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -120,6 +170,7 @@ int main(int argc, char** argv) {
         testConnectionValidationPreventsPortReuse();
         testRemovingModuleAlsoRemovesAttachedConnections();
         testGraphForwardsModuleParameterChanges();
+        testFrameworkExportOmitsEditorOnlyCollapsedField();
     } catch (const std::exception& error) {
         std::cerr << "graph_test failed: " << error.what() << '\n';
         return 1;

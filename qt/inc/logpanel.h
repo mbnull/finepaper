@@ -3,6 +3,7 @@
 #define LOGPANEL_H
 
 #include <QWidget>
+#include <QColor>
 #include <QListWidget>
 #include "validationresult.h"
 
@@ -13,6 +14,9 @@ public:
     explicit LogPanel(QWidget* parent = nullptr);
 
     void setResults(const QList<ValidationResult>& results);
+    void appendMessage(const QString& message,
+                       const QColor& color = QColor(),
+                       const QString& elementId = QString());
     void clear();
 
 signals:

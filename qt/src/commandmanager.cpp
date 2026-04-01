@@ -1,4 +1,5 @@
 #include "commandmanager.h"
+#include "qdebug.h"
 #include <QDebug>
 
 // Execute command and push to undo stack, clearing redo history
@@ -12,7 +13,7 @@ void CommandManager::executeCommand(std::unique_ptr<Command> command) {
         while (!m_redoStack.empty()) {
             m_redoStack.pop();
         }
-        qInfo() << "Command executed"
+        qDebug() << "Command executed"
                 << "undoDepth" << m_undoStack.size()
                 << "redoDepth" << m_redoStack.size();
     } else {

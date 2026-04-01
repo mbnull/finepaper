@@ -615,12 +615,36 @@ bool Graph::saveToJson(const QString& jsonPath) const {
     qInfo() << "Starting graph export to" << jsonPath
             << "modules" << m_modules.size()
             << "connections" << m_connections.size();
-    QJsonArray xps, eps, conns;
+    QFile file(jsonPath);
+    if (!file.open(QIODevice::WriteOnly)) {
+        qWarning() << "Failed to open graph JSON for writing:" << jsonPath;
+        return false;
+    }
+    file.write(toJsonDocument(QFileInfo(jsonPath).baseName(), GraphJsonFlavor::Editor).toJson());
+    qInfo() << "Completed graph export to" << jsonPath;
+    return true;
+}
+
+QJsonDocument Graph::toJsonDocument(const QString& designName,
+                                    GraphJsonFlavor flavor,
+                                    QHash<QString, QString>* externalToInternalIds) const {
+    if (externalToInternalIds) {
+        externalToInternalIds->clear();
+    }
+
+    QJsonArray xps;
+    QJsonArray eps;
+    QJsonArray conns;
     QHash<QString, QJsonArray> xpEndpointMap;
 
     for (const auto& mod : m_modules) {
+        const QString externalId = ModuleLabels::externalId(mod.get());
+        if (externalToInternalIds) {
+            externalToInternalIds->insert(externalId, mod->id());
+        }
+
         QJsonObject obj;
-        obj["id"] = ModuleLabels::externalId(mod.get());
+        obj["id"] = externalId;
 
         const auto& params = mod->parameters();
         if (isMeshRouterModule(mod.get())) {
@@ -628,13 +652,15 @@ bool Graph::saveToJson(const QString& jsonPath) const {
             obj["y"] = params.contains("y") ? parameterToJson(params["y"].value()) : QJsonValue(0);
 
             QJsonObject config;
-            if (params.contains("collapsed")) config["collapsed"] = parameterToJson(params["collapsed"].value());
+            if (flavor == GraphJsonFlavor::Editor && params.contains("collapsed")) {
+                config["collapsed"] = parameterToJson(params["collapsed"].value());
+            }
             if (params.contains("routing_algorithm")) config["routing_algorithm"] = parameterToJson(params["routing_algorithm"].value());
             if (params.contains("vc_count")) config["vc_count"] = parameterToJson(params["vc_count"].value());
             if (params.contains("buffer_depth")) config["buffer_depth"] = parameterToJson(params["buffer_depth"].value());
             obj["config"] = config;
             obj["endpoints"] = QJsonArray();
-            xpEndpointMap.insert(ModuleLabels::externalId(mod.get()), QJsonArray());
+            xpEndpointMap.insert(externalId, QJsonArray());
             xps.append(obj);
         } else if (isEndpointModule(mod.get())) {
             if (params.contains("x")) obj["x"] = parameterToJson(params["x"].value());
@@ -673,11 +699,9 @@ bool Graph::saveToJson(const QString& jsonPath) const {
         obj["from"] = sourceExternalId;
         obj["to"] = targetExternalId;
 
-        if (sourceModule && targetModule &&
-            isMeshRouterModule(sourceModule) &&
-            isMeshRouterModule(targetModule)) {
-            // XP-to-XP links are exported as undirected/bidirectional edges.
-        } else {
+        if (!(sourceModule && targetModule &&
+              isMeshRouterModule(sourceModule) &&
+              isMeshRouterModule(targetModule))) {
             obj["from_port"] = conn->source().portId;
             obj["to_port"] = conn->target().portId;
         }
@@ -692,20 +716,13 @@ bool Graph::saveToJson(const QString& jsonPath) const {
     }
 
     QJsonObject root;
-    root["name"] = QFileInfo(jsonPath).baseName();
+    root["name"] = designName.isEmpty() ? QStringLiteral("design") : designName;
     root["version"] = "1.0";
+    root["parameters"] = QJsonObject();
     root["xps"] = xps;
     root["endpoints"] = eps;
     root["connections"] = conns;
-
-    QFile file(jsonPath);
-    if (!file.open(QIODevice::WriteOnly)) {
-        qWarning() << "Failed to open graph JSON for writing:" << jsonPath;
-        return false;
-    }
-    file.write(QJsonDocument(root).toJson());
-    qInfo() << "Completed graph export to" << jsonPath;
-    return true;
+    return QJsonDocument(root);
 }
 
 void Graph::onModuleParameterChanged(const QString& moduleId, const QString& paramName) {

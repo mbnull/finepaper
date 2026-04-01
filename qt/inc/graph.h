@@ -8,8 +8,15 @@
 #include "connection.h"
 #include <QObject>
 #include <QMap>
+#include <QHash>
+#include <QJsonDocument>
 #include <vector>
 #include <memory>
+
+enum class GraphJsonFlavor {
+    Editor,
+    Framework
+};
 
 class Graph : public QObject {
     Q_OBJECT
@@ -34,6 +41,9 @@ public:
 
     bool loadFromJson(const QString& jsonPath);
     bool saveToJson(const QString& jsonPath) const;
+    QJsonDocument toJsonDocument(const QString& designName,
+                                 GraphJsonFlavor flavor = GraphJsonFlavor::Framework,
+                                 QHash<QString, QString>* externalToInternalIds = nullptr) const;
 
 signals:
     void moduleAdded(Module* module);
