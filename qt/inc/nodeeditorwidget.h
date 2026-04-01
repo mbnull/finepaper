@@ -25,6 +25,7 @@ class NodeEditorWidget : public QWidget {
 
 public:
     NodeEditorWidget(Graph* graph, CommandManager* commandManager, QWidget* parent = nullptr);
+    ~NodeEditorWidget() override;
     bool isArrangeEnabled() const;
 
 public slots:
