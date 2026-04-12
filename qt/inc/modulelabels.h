@@ -22,7 +22,7 @@ inline QString stringParameter(const Module* module, const QString& name, const 
 }
 
 inline QString displayName(const Module* module) {
-    return stringParameter(module, "display_name", module ? module->id() : QStringLiteral("Node"));
+    return stringParameter(module, "display_name", module ? module->id() : QString());
 }
 
 inline QString externalId(const Module* module) {

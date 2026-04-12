@@ -439,16 +439,13 @@ QHash<QString, ArrangeCommand::ModulePlacement> ArrangeCommand::buildPlacements(
         return isEndpointModule(module);
     });
 
-    constexpr int kXpSpacingX = 220;
-    constexpr int kXpSpacingY = 168;
-    constexpr int kEndpointOffsetX = 156;
-    constexpr int kEndpointHeight = 54;
-    constexpr int kXpTopInset = 16;
-    constexpr int kXpBottomInset = 16;
-    constexpr int kXpExpandedHeight = 116;
-    constexpr int kLooseEndpointSpacingX = 168;
-    constexpr int kLooseEndpointSpacingY = 84;
-    constexpr int kLooseEndpointMarginY = 116;
+    Module* spacingSourceXp = orderedXpModules.empty() ? nullptr : orderedXpModules.front().module;
+    Module* spacingSourceEndpoint = orderedEndpointModules.empty() ? nullptr : orderedEndpointModules.front().module;
+    const int meshSpacingX = ModuleTypeMetadata::meshSpacingX(spacingSourceXp);
+    const int meshSpacingY = ModuleTypeMetadata::meshSpacingY(spacingSourceXp);
+    const int looseEndpointSpacingX = ModuleTypeMetadata::looseEndpointSpacingX(spacingSourceEndpoint);
+    const int looseEndpointSpacingY = ModuleTypeMetadata::looseEndpointSpacingY(spacingSourceEndpoint);
+    const int looseEndpointMarginY = ModuleTypeMetadata::looseEndpointMarginY(spacingSourceEndpoint);
 
     QHash<QString, QPoint> xpPositions;
     const QHash<QString, QPoint> meshCoordinates = inferMeshCoordinates(m_graph, orderedXpModules);
@@ -461,8 +458,8 @@ QHash<QString, ArrangeCommand::ModulePlacement> ArrangeCommand::buildPlacements(
     for (const MeshComponent& component : components) {
         const int componentWidth = component.bounds.width();
         const int componentHeight = component.bounds.height();
-        const int componentOriginX = currentOriginX - (((componentWidth - 1) * kXpSpacingX) / 2);
-        const int componentOriginY = -(((componentHeight - 1) * kXpSpacingY) / 2);
+        const int componentOriginX = currentOriginX - (((componentWidth - 1) * meshSpacingX) / 2);
+        const int componentOriginY = -(((componentHeight - 1) * meshSpacingY) / 2);
 
         for (Module* module : component.modules) {
             if (!module) {
@@ -472,20 +469,17 @@ QHash<QString, ArrangeCommand::ModulePlacement> ArrangeCommand::buildPlacements(
             const QPoint logical = meshCoordinates.value(module->id(), QPoint(0, 0));
             const int localColumn = logical.x() - component.bounds.left();
             const int localRow = logical.y() - component.bounds.top();
-            const int x = componentOriginX + (localColumn * kXpSpacingX);
-            const int y = componentOriginY + (localRow * kXpSpacingY);
+            const int x = componentOriginX + (localColumn * meshSpacingX);
+            const int y = componentOriginY + (localRow * meshSpacingY);
 
             xpPositions.insert(module->id(), QPoint(x, y));
             placements.insert(module->id(), ModulePlacement{x, y, true, true});
             globalMaxY = std::max(globalMaxY, y);
         }
 
-        currentOriginX += std::max(1, componentWidth) * kXpSpacingX;
-        currentOriginX += kXpSpacingX;
+        currentOriginX += std::max(1, componentWidth) * meshSpacingX;
+        currentOriginX += meshSpacingX;
     }
-
-    const double endpointStep = static_cast<double>(kXpExpandedHeight - kXpTopInset - kXpBottomInset) /
-                                static_cast<double>(PortLayout::kEndpointPortCount);
     QList<Module*> looseEndpoints;
 
     for (const OrderedModule& orderedEndpoint : orderedEndpointModules) {
@@ -495,11 +489,18 @@ QHash<QString, ArrangeCommand::ModulePlacement> ArrangeCommand::buildPlacements(
 
         if (!xpModuleId.isEmpty() && xpPositions.contains(xpModuleId) && endpointSlot >= 0) {
             const QPoint xpPosition = xpPositions.value(xpModuleId);
-            const double centerY = static_cast<double>(xpPosition.y()) + kXpTopInset +
-                                   (static_cast<double>(endpointSlot) + 0.5) * endpointStep;
+            const Module* xpModule = m_graph->getModule(xpModuleId);
+            const qreal xpPortInset = ModuleTypeMetadata::expandedPortInset(xpModule);
+            const qreal xpHeight = ModuleTypeMetadata::expandedNodeHeight(xpModule);
+            const qreal usableHeight = xpHeight - (xpPortInset * 2.0);
+            const qreal endpointStep = usableHeight / static_cast<qreal>(PortLayout::kEndpointPortCount);
+            const qreal centerY = static_cast<qreal>(xpPosition.y()) + xpPortInset +
+                                  (static_cast<qreal>(endpointSlot) + 0.5) * endpointStep;
+            const int endpointHeight = ModuleTypeMetadata::expandedNodeHeight(orderedEndpoint.module);
+            const int endpointOffsetX = ModuleTypeMetadata::linkedEndpointOffsetX(xpModule);
             placements.insert(endpointModuleId, ModulePlacement{
-                xpPosition.x() - kEndpointOffsetX,
-                static_cast<int>(std::lround(centerY - (kEndpointHeight / 2.0))),
+                xpPosition.x() - endpointOffsetX,
+                static_cast<int>(std::lround(centerY - (static_cast<qreal>(endpointHeight) / 2.0))),
                 false,
                 false
             });
@@ -512,17 +513,17 @@ QHash<QString, ArrangeCommand::ModulePlacement> ArrangeCommand::buildPlacements(
     const int looseColumns = !looseEndpoints.isEmpty()
         ? std::max(1, std::min(4, static_cast<int>(std::ceil(std::sqrt(static_cast<double>(looseEndpoints.size()))))))
         : 0;
-    const int looseOriginX = looseColumns > 0 ? -((looseColumns - 1) * kLooseEndpointSpacingX) / 2 : 0;
+    const int looseOriginX = looseColumns > 0 ? -((looseColumns - 1) * looseEndpointSpacingX) / 2 : 0;
     const int looseOriginY = xpPositions.isEmpty()
         ? 0
-        : globalMaxY + kLooseEndpointMarginY;
+        : globalMaxY + looseEndpointMarginY;
 
     for (int index = 0; index < looseEndpoints.size(); ++index) {
         const int row = index / looseColumns;
         const int column = index % looseColumns;
         placements.insert(looseEndpoints.at(index)->id(), ModulePlacement{
-            looseOriginX + (column * kLooseEndpointSpacingX),
-            looseOriginY + (row * kLooseEndpointSpacingY),
+            looseOriginX + (column * looseEndpointSpacingX),
+            looseOriginY + (row * looseEndpointSpacingY),
             false,
             false
         });

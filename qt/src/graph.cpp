@@ -163,18 +163,17 @@ void assignEndpointFallbackPosition(Module* endpointModule,
     const double xpY = parameterAsDouble(xpModule, "y").value_or(0.0);
     const int slot = std::clamp(PortLayout::endpointPortSlot(xpPortId), 0, PortLayout::kEndpointPortCount - 1);
 
-    constexpr double kXpTopInset = 16.0;
-    constexpr double kXpBottomInset = 16.0;
-    constexpr double kXpHeight = 116.0;
-    constexpr double kEndpointHeight = 54.0;
-    constexpr double kEndpointXOffset = 156.0;
+    const double xpPortInset = ModuleTypeMetadata::expandedPortInset(xpModule);
+    const double xpHeight = static_cast<double>(ModuleTypeMetadata::expandedNodeHeight(xpModule));
+    const double endpointHeight = static_cast<double>(ModuleTypeMetadata::expandedNodeHeight(endpointModule));
+    const double endpointXOffset = static_cast<double>(ModuleTypeMetadata::linkedEndpointOffsetX(xpModule));
 
-    const double usableHeight = kXpHeight - kXpTopInset - kXpBottomInset;
+    const double usableHeight = xpHeight - (xpPortInset * 2.0);
     const double slotHeight = usableHeight / static_cast<double>(PortLayout::kEndpointPortCount);
-    const double endpointCenterY = xpY + kXpTopInset + (static_cast<double>(slot) + 0.5) * slotHeight;
+    const double endpointCenterY = xpY + xpPortInset + (static_cast<double>(slot) + 0.5) * slotHeight;
 
-    endpointModule->setParameter("x", static_cast<int>(std::lround(xpX - kEndpointXOffset)));
-    endpointModule->setParameter("y", static_cast<int>(std::lround(endpointCenterY - (kEndpointHeight / 2.0))));
+    endpointModule->setParameter("x", static_cast<int>(std::lround(xpX - endpointXOffset)));
+    endpointModule->setParameter("y", static_cast<int>(std::lround(endpointCenterY - (endpointHeight / 2.0))));
 }
 
 std::pair<QString, QString> guessedRouterPorts(const Module* fromModule, const Module* toModule) {

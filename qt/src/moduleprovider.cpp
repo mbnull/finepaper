@@ -66,6 +66,7 @@ void applyGraphicsElement(ModuleType& type, QXmlStreamReader& xml) {
             type.expandedNodeHeight = intAttribute(expandedAttrs, u"height", type.expandedNodeHeight);
             type.expandedCaptionLeftInset = doubleAttribute(expandedAttrs, u"caption_left", type.expandedCaptionLeftInset);
             type.expandedCaptionTopInset = doubleAttribute(expandedAttrs, u"caption_top", type.expandedCaptionTopInset);
+            type.expandedPortInset = doubleAttribute(expandedAttrs, u"port_inset", type.expandedPortInset);
             xml.skipCurrentElement();
         } else if (xml.name() == u"collapsed") {
             const QXmlStreamAttributes collapsedAttrs = xml.attributes();
@@ -73,6 +74,21 @@ void applyGraphicsElement(ModuleType& type, QXmlStreamReader& xml) {
             type.collapsedNodeHeight = intAttribute(collapsedAttrs, u"height", type.collapsedNodeHeight);
             type.collapsedCaptionLeftInset = doubleAttribute(collapsedAttrs, u"caption_left", type.collapsedCaptionLeftInset);
             type.collapsedCaptionTopInset = doubleAttribute(collapsedAttrs, u"caption_top", type.collapsedCaptionTopInset);
+            type.collapsedEndpointPortInset = doubleAttribute(
+                collapsedAttrs, u"endpoint_inset", type.collapsedEndpointPortInset);
+            xml.skipCurrentElement();
+        } else if (xml.name() == u"arrangement") {
+            const QXmlStreamAttributes arrangementAttrs = xml.attributes();
+            type.linkedEndpointOffsetX = intAttribute(
+                arrangementAttrs, u"endpoint_offset_x", type.linkedEndpointOffsetX);
+            type.meshSpacingX = intAttribute(arrangementAttrs, u"mesh_spacing_x", type.meshSpacingX);
+            type.meshSpacingY = intAttribute(arrangementAttrs, u"mesh_spacing_y", type.meshSpacingY);
+            type.looseEndpointSpacingX = intAttribute(
+                arrangementAttrs, u"loose_endpoint_spacing_x", type.looseEndpointSpacingX);
+            type.looseEndpointSpacingY = intAttribute(
+                arrangementAttrs, u"loose_endpoint_spacing_y", type.looseEndpointSpacingY);
+            type.looseEndpointMarginY = intAttribute(
+                arrangementAttrs, u"loose_endpoint_margin_y", type.looseEndpointMarginY);
             xml.skipCurrentElement();
         } else {
             xml.skipCurrentElement();

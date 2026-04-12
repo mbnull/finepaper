@@ -19,11 +19,14 @@ QPointF cardinalPortPosition(const QString& side, QSize const& nodeSize, qreal i
 }
 
 QSize sizeForModel(const GraphNodeModel* model) {
-    const QString caption = model ? model->caption() : QStringLiteral("Node");
+    const QString caption = model ? model->caption() : QString();
     const int captionWidth = QFontMetrics(QFont()).horizontalAdvance(caption) + 26;
 
     if (!model || !model->module()) {
-        return {std::max(104, captionWidth), 54};
+        return {
+            std::max(ModuleTypeMetadata::expandedNodeMinWidth(nullptr), captionWidth),
+            ModuleTypeMetadata::expandedNodeHeight(nullptr)
+        };
     }
 
     if (model->isCollapsed()) {
@@ -97,8 +100,8 @@ QRectF GraphNodeGeometry::captionRect(QtNodes::NodeId nodeId) const {
     const QSize nodeSize = size(nodeId);
     const GraphNodeModel* model = modelFor(nodeId);
     const bool collapsed = model && model->isCollapsed();
-    const qreal leftInset = model ? ModuleTypeMetadata::captionLeftInset(model->module(), collapsed) : 8.0;
-    const qreal topInset = model ? ModuleTypeMetadata::captionTopInset(model->module(), collapsed) : 6.0;
+    const qreal leftInset = ModuleTypeMetadata::captionLeftInset(model ? model->module() : nullptr, collapsed);
+    const qreal topInset = ModuleTypeMetadata::captionTopInset(model ? model->module() : nullptr, collapsed);
     return QRectF(leftInset, topInset, nodeSize.width() - leftInset - 8.0, 20.0);
 }
 
@@ -132,10 +135,13 @@ QPointF GraphNodeGeometry::xpPortPosition(const GraphNodeModel& model, const Por
         const int slot = std::clamp(PortLayout::endpointPortSlot(port.id()),
                                     0,
                                     static_cast<int>(endpointSides.size()) - 1);
-        return cardinalPortPosition(endpointSides.at(slot), nodeSize, 18.0);
+        return cardinalPortPosition(
+            endpointSides.at(slot),
+            nodeSize,
+            ModuleTypeMetadata::collapsedEndpointPortInset(model.module()));
     }
 
-    constexpr qreal inset = 16.0;
+    const qreal inset = ModuleTypeMetadata::expandedPortInset(model.module());
     const qreal bottom = nodeSize.height() - inset;
 
     if (PortLayout::isEndpointPort(port)) {

@@ -34,6 +34,14 @@ struct ModuleType {
     qreal expandedCaptionTopInset = 6.0;
     qreal collapsedCaptionLeftInset = 8.0;
     qreal collapsedCaptionTopInset = 6.0;
+    qreal expandedPortInset = 16.0;
+    qreal collapsedEndpointPortInset = 18.0;
+    int linkedEndpointOffsetX = 156;
+    int meshSpacingX = 220;
+    int meshSpacingY = 168;
+    int looseEndpointSpacingX = 168;
+    int looseEndpointSpacingY = 84;
+    int looseEndpointMarginY = 116;
     QVector<ModuleConfigField> configFields;
     QString externalIdPrefix;
     QString displayPrefix;

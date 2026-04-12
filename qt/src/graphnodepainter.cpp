@@ -106,7 +106,7 @@ void GraphNodePainter::paint(QPainter* painter, QtNodes::NodeGraphicsObject& ngo
 
     painter->setPen(QColor(22, 22, 22));
     painter->setFont(QFont(QStringLiteral("Sans Serif"), 9, QFont::DemiBold));
-    painter->drawText(geometry.captionRect(ngo.nodeId()), Qt::AlignCenter, model ? model->caption() : QStringLiteral("Node"));
+    painter->drawText(geometry.captionRect(ngo.nodeId()), Qt::AlignCenter, model ? model->caption() : QString());
 
     QSet<QString> paintedRouterSides;
     drawPorts(painter, ngo, model, QtNodes::PortType::In, paintedRouterSides);

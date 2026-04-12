@@ -51,12 +51,12 @@ inline QString nodeColor(const Module* module) {
 
 inline int expandedNodeMinWidth(const Module* module) {
     const ModuleType* moduleType = type(module);
-    return moduleType ? moduleType->expandedNodeMinWidth : 104;
+    return moduleType ? moduleType->expandedNodeMinWidth : ModuleType{}.expandedNodeMinWidth;
 }
 
 inline int expandedNodeHeight(const Module* module) {
     const ModuleType* moduleType = type(module);
-    return moduleType ? moduleType->expandedNodeHeight : 54;
+    return moduleType ? moduleType->expandedNodeHeight : ModuleType{}.expandedNodeHeight;
 }
 
 inline int collapsedNodeMinWidth(const Module* module) {
@@ -71,14 +71,60 @@ inline int collapsedNodeHeight(const Module* module) {
 
 inline qreal captionLeftInset(const Module* module, bool collapsed) {
     const ModuleType* moduleType = type(module);
-    if (!moduleType) return 8.0;
+    if (!moduleType) {
+        const ModuleType defaults;
+        return collapsed ? defaults.collapsedCaptionLeftInset : defaults.expandedCaptionLeftInset;
+    }
     return collapsed ? moduleType->collapsedCaptionLeftInset : moduleType->expandedCaptionLeftInset;
 }
 
 inline qreal captionTopInset(const Module* module, bool collapsed) {
     const ModuleType* moduleType = type(module);
-    if (!moduleType) return 6.0;
+    if (!moduleType) {
+        const ModuleType defaults;
+        return collapsed ? defaults.collapsedCaptionTopInset : defaults.expandedCaptionTopInset;
+    }
     return collapsed ? moduleType->collapsedCaptionTopInset : moduleType->expandedCaptionTopInset;
+}
+
+inline qreal expandedPortInset(const Module* module) {
+    const ModuleType* moduleType = type(module);
+    return moduleType ? moduleType->expandedPortInset : ModuleType{}.expandedPortInset;
+}
+
+inline qreal collapsedEndpointPortInset(const Module* module) {
+    const ModuleType* moduleType = type(module);
+    return moduleType ? moduleType->collapsedEndpointPortInset : ModuleType{}.collapsedEndpointPortInset;
+}
+
+inline int linkedEndpointOffsetX(const Module* module) {
+    const ModuleType* moduleType = type(module);
+    return moduleType ? moduleType->linkedEndpointOffsetX : ModuleType{}.linkedEndpointOffsetX;
+}
+
+inline int meshSpacingX(const Module* module) {
+    const ModuleType* moduleType = type(module);
+    return moduleType ? moduleType->meshSpacingX : ModuleType{}.meshSpacingX;
+}
+
+inline int meshSpacingY(const Module* module) {
+    const ModuleType* moduleType = type(module);
+    return moduleType ? moduleType->meshSpacingY : ModuleType{}.meshSpacingY;
+}
+
+inline int looseEndpointSpacingX(const Module* module) {
+    const ModuleType* moduleType = type(module);
+    return moduleType ? moduleType->looseEndpointSpacingX : ModuleType{}.looseEndpointSpacingX;
+}
+
+inline int looseEndpointSpacingY(const Module* module) {
+    const ModuleType* moduleType = type(module);
+    return moduleType ? moduleType->looseEndpointSpacingY : ModuleType{}.looseEndpointSpacingY;
+}
+
+inline int looseEndpointMarginY(const Module* module) {
+    const ModuleType* moduleType = type(module);
+    return moduleType ? moduleType->looseEndpointMarginY : ModuleType{}.looseEndpointMarginY;
 }
 
 inline bool supportsCollapse(const Module* module) {
