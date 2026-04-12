@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module-presentations>
+  <module type="XP">
+    <graphics layout="mesh_router" node_color="#7cb9e8" supports_collapse="true">
+      <expanded min_width="136" height="116" caption_left="30" caption_top="6" />
+      <collapsed min_width="104" height="92" caption_left="30" caption_top="26" />
+    </graphics>
+    <config-zone>
+      <field parameter="display_name" label="Display name" />
+      <field parameter="external_id" label="External ID" />
+      <field parameter="routing_algorithm" label="Routing algorithm" />
+      <field parameter="vc_count" label="VC count" />
+      <field parameter="buffer_depth" label="Buffer depth" />
+    </config-zone>
+  </module>
+  <module type="Endpoint">
+    <graphics layout="endpoint" node_color="#d6f4b6" supports_collapse="false">
+      <expanded min_width="104" height="54" caption_left="8" caption_top="6" />
+    </graphics>
+    <config-zone>
+      <field parameter="display_name" label="Display name" />
+      <field parameter="external_id" label="External ID" />
+      <field parameter="type" label="Type" />
+      <field parameter="protocol" label="Protocol" />
+      <field parameter="data_width" label="Data width" />
+      <field parameter="qos_enabled" label="QoS enabled" />
+      <field parameter="buffer_depth" label="Buffer depth" />
+    </config-zone>
+  </module>
+</module-presentations>

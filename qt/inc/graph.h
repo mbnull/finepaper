@@ -41,6 +41,7 @@ public:
 
     bool loadFromJson(const QString& jsonPath);
     bool saveToJson(const QString& jsonPath) const;
+    bool saveToXml(const QString& xmlPath) const;
     QJsonDocument toJsonDocument(const QString& designName,
                                  GraphJsonFlavor flavor = GraphJsonFlavor::Framework,
                                  QHash<QString, QString>* externalToInternalIds = nullptr) const;

@@ -10,11 +10,12 @@ public:
     virtual std::vector<ModuleType> loadModules() = 0;
 };
 
-// JsonBundleProvider loads module types from JSON file
-class JsonBundleProvider : public ModuleProvider {
+// BundleProvider loads runtime metadata from JSON and editor metadata from XML.
+class BundleProvider : public ModuleProvider {
 public:
-    explicit JsonBundleProvider(const QString& bundlePath);
+    BundleProvider(const QString& bundlePath, const QString& presentationPath = {});
     std::vector<ModuleType> loadModules() override;
 private:
     QString m_bundlePath;
+    QString m_presentationPath;
 };

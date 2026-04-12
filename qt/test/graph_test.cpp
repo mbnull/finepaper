@@ -1,9 +1,14 @@
 #include "graph.h"
+#include "frameworkpaths.h"
+#include "moduleregistry.h"
 
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QCoreApplication>
+#include <QDir>
+#include <QFile>
 #include <QString>
+#include <QTemporaryDir>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
@@ -25,6 +30,30 @@ void require(bool condition, const char* message) {
         throw std::runtime_error(message);
     }
 }
+
+class ScopedEnvironmentVariable {
+public:
+    explicit ScopedEnvironmentVariable(const char* name)
+        : m_name(name), m_wasSet(qEnvironmentVariableIsSet(name)) {
+        if (m_wasSet) {
+            m_value = qgetenv(name);
+        }
+    }
+
+    ~ScopedEnvironmentVariable() {
+        if (m_wasSet) {
+            qputenv(m_name.constData(), m_value);
+            return;
+        }
+
+        qunsetenv(m_name.constData());
+    }
+
+private:
+    QByteArray m_name;
+    QByteArray m_value;
+    bool m_wasSet = false;
+};
 
 void testConnectionValidationPreventsPortReuse() {
     Graph graph;
@@ -113,6 +142,43 @@ void testGraphForwardsModuleParameterChanges() {
     require(changedParameterName == "buffer_depth", "forwarded signal should include parameter name");
 }
 
+void testBundlePresentationMetadataLoadsFromXml() {
+    const ModuleType* xpType = ModuleRegistry::instance().getType("XP");
+    require(xpType != nullptr, "XP type should be registered");
+    require(xpType->nodeColor == "#7cb9e8", "XP node color should come from presentation XML");
+    require(xpType->editorLayout == "mesh_router", "XP layout should come from presentation XML");
+    require(xpType->supportsCollapse, "XP collapse capability should come from presentation XML");
+    require(xpType->expandedNodeHeight == 116, "XP expanded height should come from presentation XML");
+    require(xpType->configFields.size() == 5, "XP config zone should be defined in presentation XML");
+
+    const ModuleType* endpointType = ModuleRegistry::instance().getType("Endpoint");
+    require(endpointType != nullptr, "Endpoint type should be registered");
+    require(endpointType->nodeColor == "#d6f4b6", "Endpoint node color should come from presentation XML");
+    require(endpointType->configFields.size() == 7, "Endpoint config zone should be defined in presentation XML");
+}
+
+void testExplicitBundlePathWithoutSidecarDoesNotFallbackPresentation() {
+    ScopedEnvironmentVariable bundlePathGuard("BUNDLE_PATH");
+    ScopedEnvironmentVariable bundleUiPathGuard("BUNDLE_UI_PATH");
+
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "failed to create temporary directory for bundle path test");
+
+    const QString bundlePath = QDir(tempDir.path()).filePath("modules.json");
+    QFile bundleFile(bundlePath);
+    require(bundleFile.open(QIODevice::WriteOnly), "failed to create bundle file");
+    bundleFile.write("{}");
+    bundleFile.close();
+
+    qputenv("BUNDLE_PATH", bundlePath.toUtf8());
+    qunsetenv("BUNDLE_UI_PATH");
+
+    require(FrameworkPaths::resolveModuleBundlePath() == QFileInfo(bundlePath).absoluteFilePath(),
+            "explicit bundle path should still resolve the selected modules.json");
+    require(FrameworkPaths::resolveModulePresentationPath().isEmpty(),
+            "presentation path should not fall back outside the explicit bundle");
+}
+
 void testFrameworkExportOmitsEditorOnlyCollapsedField() {
     Graph graph;
 
@@ -161,16 +227,68 @@ void testFrameworkExportOmitsEditorOnlyCollapsedField() {
             "editor export should preserve collapsed state");
 }
 
+void testXmlExportPreservesEditorGraphContent() {
+    Graph graph;
+
+    auto xp = makeModule(
+        "xp_internal",
+        "XP",
+        {Port("ep0", Port::Direction::Output, "endpoint", "EP0")});
+    xp->setParameter("external_id", QString("xp_0_0"));
+    xp->setParameter("x", 12);
+    xp->setParameter("y", 34);
+    xp->setParameter("collapsed", true);
+
+    auto endpoint = makeModule(
+        "ep_internal",
+        "Endpoint",
+        {Port("noc", Port::Direction::Input, "endpoint", "NoC")});
+    endpoint->setParameter("external_id", QString("ep_0"));
+    endpoint->setParameter("type", QString("master"));
+    endpoint->setParameter("protocol", QString("axi4"));
+
+    require(graph.addModule(std::move(xp)), "failed to add XP module for XML export");
+    require(graph.addModule(std::move(endpoint)), "failed to add endpoint module for XML export");
+
+    graph.addConnection(std::make_unique<Connection>(
+        "xp_ep",
+        PortRef{"xp_internal", "ep0"},
+        PortRef{"ep_internal", "noc"}));
+
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "failed to create temporary directory");
+
+    const QString xmlPath = QDir(tempDir.path()).filePath("design.xml");
+    require(graph.saveToXml(xmlPath), "failed to save graph XML");
+
+    QFile file(xmlPath);
+    require(file.open(QIODevice::ReadOnly), "failed to reopen graph XML");
+    const QString xml = QString::fromUtf8(file.readAll());
+
+    require(xml.contains("<graph>"), "XML export should contain graph root");
+    require(xml.contains("<name type=\"string\">design</name>"),
+            "XML export should contain design name");
+    require(xml.contains("<id type=\"string\">xp_0_0</id>"),
+            "XML export should contain XP external id");
+    require(xml.contains("<collapsed type=\"bool\">true</collapsed>"),
+            "XML export should preserve editor-only collapsed flag");
+    require(xml.contains("<id type=\"string\">ep_0</id>"),
+            "XML export should contain endpoint external id");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
 
     try {
+        testExplicitBundlePathWithoutSidecarDoesNotFallbackPresentation();
         testConnectionValidationPreventsPortReuse();
         testRemovingModuleAlsoRemovesAttachedConnections();
         testGraphForwardsModuleParameterChanges();
+        testBundlePresentationMetadataLoadsFromXml();
         testFrameworkExportOmitsEditorOnlyCollapsedField();
+        testXmlExportPreservesEditorGraphContent();
     } catch (const std::exception& error) {
         std::cerr << "graph_test failed: " << error.what() << '\n';
         return 1;

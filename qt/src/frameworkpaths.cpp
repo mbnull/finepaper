@@ -4,6 +4,9 @@
 #include <QDir>
 #include <QFileInfo>
 
+const auto frameworkpath = "../framework";
+
+
 namespace {
 
 bool isValidFrameworkRoot(const QString& path) {
@@ -79,6 +82,86 @@ QString firstExistingFile(const QStringList& candidates) {
     return {};
 }
 
+QString resolveBundleArtifactFromEnvironment(const QString& envVarName,
+                                             const QStringList& directoryCandidates,
+                                             const QStringList& siblingCandidates = {}) {
+    const QString envPath = qEnvironmentVariable(envVarName.toUtf8().constData());
+    if (envPath.isEmpty()) {
+        return {};
+    }
+
+    QFileInfo info(envPath);
+    if (info.isDir()) {
+        QStringList candidates;
+        for (const QString& relativePath : directoryCandidates) {
+            candidates.append(QDir(info.absoluteFilePath()).filePath(relativePath));
+        }
+        return firstExistingFile(candidates);
+    }
+
+    if (info.isFile()) {
+        if (siblingCandidates.isEmpty()) {
+            return info.absoluteFilePath();
+        }
+
+        QStringList candidates;
+        const QDir dir = info.absoluteDir();
+        for (const QString& relativePath : siblingCandidates) {
+            candidates.append(dir.filePath(relativePath));
+        }
+        return firstExistingFile(candidates);
+    }
+
+    return {};
+}
+
+QString resolveBundleArtifact(const QStringList& candidates,
+                              const QString& envVarName,
+                              const QStringList& envDirCandidates,
+                              const QStringList& envSiblingCandidates = {}) {
+    const QString envBundlePath = resolveBundleArtifactFromEnvironment(envVarName,
+                                                                      envDirCandidates,
+                                                                      envSiblingCandidates);
+    if (!envBundlePath.isEmpty()) {
+        return envBundlePath;
+    }
+
+    QString frameworkPath = FrameworkPaths::resolveFrameworkPath();
+    if (!frameworkPath.isEmpty()) {
+        QStringList frameworkCandidates;
+        for (const QString& candidate : candidates) {
+            frameworkCandidates.append(QDir(frameworkPath).filePath(candidate));
+            frameworkCandidates.append(QDir(frameworkPath).filePath("ip/" + candidate));
+        }
+        const QString frameworkBundlePath = firstExistingFile(frameworkCandidates);
+        if (!frameworkBundlePath.isEmpty()) {
+            return frameworkBundlePath;
+        }
+    }
+
+    for (const QString& root : {QDir::currentPath(), QCoreApplication::applicationDirPath()}) {
+        QDir dir(root);
+        while (true) {
+            QStringList localCandidates;
+            for (const QString& candidate : candidates) {
+                localCandidates.append(dir.filePath(candidate));
+                localCandidates.append(dir.filePath("framework/" + candidate));
+                localCandidates.append(dir.filePath("framework/ip/" + candidate));
+            }
+            const QString bundlePath = firstExistingFile(localCandidates);
+            if (!bundlePath.isEmpty()) {
+                return bundlePath;
+            }
+
+            if (!dir.cdUp()) {
+                break;
+            }
+        }
+    }
+
+    return {};
+}
+
 } // namespace
 
 namespace FrameworkPaths {
@@ -106,53 +189,32 @@ QString resolveTemplatePath() {
     return QDir(frameworkPath).filePath("template");
 }
 
-QString resolveBundlePath() {
-    const QString envPath = qEnvironmentVariable("BUNDLE_PATH");
-    if (!envPath.isEmpty()) {
-        QFileInfo info(envPath);
-        if (info.isDir()) {
-            const QString bundlePath = firstExistingFile({
-                QDir(info.absoluteFilePath()).filePath("bundles/modules.json"),
-                QDir(info.absoluteFilePath()).filePath("modules.json")
-            });
-            if (!bundlePath.isEmpty()) {
-                return bundlePath;
-            }
-        } else if (info.isFile()) {
-            return info.absoluteFilePath();
-        }
+QString resolveModuleBundlePath() {
+    return resolveBundleArtifact({QStringLiteral("bundles/modules.json")},
+                                 QStringLiteral("BUNDLE_PATH"),
+                                 {QStringLiteral("bundles/modules.json"),
+                                  QStringLiteral("modules.json")});
+}
+
+QString resolveModulePresentationPath() {
+    const QString explicitPresentationPath =
+        resolveBundleArtifactFromEnvironment(QStringLiteral("BUNDLE_UI_PATH"),
+                                            {QStringLiteral("bundles/modules.ui.xml"),
+                                             QStringLiteral("modules.ui.xml")});
+    if (!explicitPresentationPath.isEmpty()) {
+        return explicitPresentationPath;
     }
 
-    QString frameworkPath = resolveFrameworkPath();
-    if (!frameworkPath.isEmpty()) {
-        const QString frameworkBundlePath = firstExistingFile({
-            QDir(frameworkPath).filePath("bundles/modules.json"),
-            QDir(frameworkPath).filePath("ip/bundles/modules.json")
-        });
-        if (!frameworkBundlePath.isEmpty()) {
-            return frameworkBundlePath;
-        }
+    if (qEnvironmentVariableIsSet("BUNDLE_PATH")) {
+        return resolveBundleArtifactFromEnvironment(QStringLiteral("BUNDLE_PATH"),
+                                                    {QStringLiteral("bundles/modules.ui.xml"),
+                                                     QStringLiteral("modules.ui.xml")},
+                                                    {QStringLiteral("modules.ui.xml")});
     }
 
-    for (const QString& root : {QDir::currentPath(), QCoreApplication::applicationDirPath()}) {
-        QDir dir(root);
-        while (true) {
-            const QString bundlePath = firstExistingFile({
-                dir.filePath("bundles/modules.json"),
-                dir.filePath("framework/bundles/modules.json"),
-                dir.filePath("framework/ip/bundles/modules.json")
-            });
-            if (!bundlePath.isEmpty()) {
-                return bundlePath;
-            }
-
-            if (!dir.cdUp()) {
-                break;
-            }
-        }
-    }
-
-    return {};
+    return resolveBundleArtifact({QStringLiteral("bundles/modules.ui.xml")},
+                                 QString(),
+                                 {});
 }
 
 } // namespace FrameworkPaths

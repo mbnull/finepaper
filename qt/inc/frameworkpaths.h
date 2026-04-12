@@ -6,6 +6,7 @@ namespace FrameworkPaths {
 
 QString resolveFrameworkPath();
 QString resolveTemplatePath();
-QString resolveBundlePath();
+QString resolveModuleBundlePath();
+QString resolveModulePresentationPath();
 
 } // namespace FrameworkPaths

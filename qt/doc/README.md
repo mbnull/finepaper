@@ -4,7 +4,7 @@ This project is a Qt Widgets application for building and validating SoC/NoC top
 
 ## What the application does
 
-- Shows available module types in a palette loaded from a JSON bundle.
+- Shows available module types in a palette loaded from a JSON bundle plus XML presentation metadata.
 - Lets users drag modules onto a canvas and connect compatible ports.
 - Exposes module parameters in a property panel.
 - Saves editor state as JSON.
@@ -17,7 +17,8 @@ This project is a Qt Widgets application for building and validating SoC/NoC top
 - `inc/`: public headers for the application classes.
 - `src/commands/`, `inc/commands/`: undoable editing commands.
 - `test/`: lightweight executable tests for the graph model and command manager.
-- `bundles/modules.json`: local module bundle used when no external bundle is found.
+- `bundles/modules.json`: local runtime/default module bundle used when no external bundle is found.
+- `bundles/modules.ui.xml`: local editor presentation bundle for graphics and config-zone layout.
 - `deps/packages.lua`: xmake package declarations.
 - `docs/`: older working notes and reference material.
 - `doc/`: maintained project documentation.
@@ -32,7 +33,7 @@ This project is a Qt Widgets application for building and validating SoC/NoC top
 - `PropertyPanel`: auto-builds editors from module parameter types.
 - `ValidationManager`: runs built-in validation and external DRC checks.
 - `LogPanel`: shows validation, generation, and runtime messages.
-- `ModuleRegistry`: loads module definitions from JSON bundles.
+- `ModuleRegistry`: loads module definitions from JSON bundles and overlays editor metadata from XML.
 
 ## Build and run
 
@@ -78,6 +79,13 @@ Bundle discovery for module definitions works in this order:
 2. Framework bundle locations such as `framework/bundles/modules.json`
 3. Repository-local bundle paths such as `bundles/modules.json`
 
+Editor presentation metadata discovery works in this order:
+
+1. `BUNDLE_UI_PATH`
+2. Sidecar XML near `BUNDLE_PATH` when `BUNDLE_PATH` is set
+3. Framework bundle locations such as `framework/bundles/modules.ui.xml` when `BUNDLE_PATH` is not set
+4. Repository-local bundle paths such as `bundles/modules.ui.xml` when `BUNDLE_PATH` is not set
+
 If the framework is missing, the editor can still start, but Verilog generation and external DRC validation will fail with user-visible messages.
 
 ## Typical user flow
@@ -97,16 +105,21 @@ If the framework is missing, the editor can still start, but Verilog generation 
 
 ## Module bundle format
 
-Module types are loaded from JSON and currently include metadata for:
+Runtime module types are loaded from JSON and currently include metadata for:
 
 - palette label
-- node color
-- editor layout
 - graph grouping
 - identity prefixes and numbering width
-- collapse capability
 - default ports
 - default parameters
+
+Editor presentation metadata is loaded from XML and currently includes:
+
+- node color
+- editor layout / graphics profile
+- collapse behavior
+- node sizing and caption insets
+- config-zone field order and labels
 
 The local bundle defines two module types today:
 
@@ -115,7 +128,7 @@ The local bundle defines two module types today:
 
 ## Extension points
 
-- Add new module types by extending the JSON bundle and ensuring the editor layout metadata matches expected behavior.
+- Add new module types by extending `modules.json` and `modules.ui.xml` together.
 - Add new validation rules in `BasicValidator` or extend `DRCRunner` parsing if the external framework output changes.
 - Add new editing operations by implementing `Command` subclasses in `src/commands/`.
 

@@ -103,10 +103,17 @@ void MainWindow::loadGraph(const QString& jsonPath) {
 }
 
 void MainWindow::saveGraph() {
-    QString path = QFileDialog::getSaveFileName(this, "Save Graph", "", "JSON Files (*.json)");
+    QString path = QFileDialog::getSaveFileName(this,
+                                                "Save Graph",
+                                                "",
+                                                "JSON Files (*.json);;XML Files (*.xml)");
     if (path.isEmpty()) return;
     qInfo() << "Saving graph to" << path;
-    if (!m_graph->saveToJson(path)) {
+    const QString suffix = QFileInfo(path).suffix().toLower();
+    const bool saveSucceeded = suffix == QStringLiteral("xml")
+        ? m_graph->saveToXml(path)
+        : m_graph->saveToJson(path);
+    if (!saveSucceeded) {
         qWarning() << "Failed to save graph to" << path;
         QMessageBox::warning(this, "Save Failed", "Could not write to " + path);
         return;

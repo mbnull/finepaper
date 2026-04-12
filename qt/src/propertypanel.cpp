@@ -5,6 +5,7 @@
 #include "propertypanel.h"
 #include "graph.h"
 #include "module.h"
+#include "moduletypemetadata.h"
 #include "commandmanager.h"
 #include "commands/setparametercommand.h"
 #include <cfloat>
@@ -51,12 +52,13 @@ void PropertyPanel::clearPanel() {
 
 void PropertyPanel::populatePanel() {
     const QString moduleId = m_selectedModule->id();
+    const auto addParameterRow = [this, &moduleId](const QString& name, const QString& label) {
+        const auto paramIt = m_selectedModule->parameters().find(name);
+        if (paramIt == m_selectedModule->parameters().end()) {
+            return;
+        }
 
-    for (auto it = m_selectedModule->parameters().constBegin(); it != m_selectedModule->parameters().constEnd(); ++it) {
-        const QString& name = it.key();
-        if (name == "x" || name == "y") continue;
-
-        const Parameter& param = it.value();
+        const Parameter& param = paramIt.value();
         QWidget* widget = nullptr;
 
         if (std::holds_alternative<QString>(param.value())) {
@@ -99,9 +101,23 @@ void PropertyPanel::populatePanel() {
         }
 
         if (widget) {
-            m_formLayout->addRow(name, widget);
+            m_formLayout->addRow(label.isEmpty() ? name : label, widget);
             m_parameterWidgets[name] = widget;
         }
+    };
+
+    const QVector<ModuleConfigField>& configFields = ModuleTypeMetadata::configFields(m_selectedModule);
+    if (!configFields.isEmpty()) {
+        for (const ModuleConfigField& field : configFields) {
+            addParameterRow(field.parameterName, field.label);
+        }
+        return;
+    }
+
+    for (auto it = m_selectedModule->parameters().constBegin(); it != m_selectedModule->parameters().constEnd(); ++it) {
+        const QString& name = it.key();
+        if (name == "x" || name == "y") continue;
+        addParameterRow(name, name);
     }
 }
 

@@ -6,10 +6,17 @@
 #include <QString>
 #include <QStringList>
 #include <QHash>
+#include <QSize>
+#include <QVector>
 #include <vector>
 #include <memory>
 
 class ModuleProvider;
+
+struct ModuleConfigField {
+    QString parameterName;
+    QString label;
+};
 
 struct ModuleType {
     QString name;
@@ -19,6 +26,15 @@ struct ModuleType {
     QString nodeColor;
     QString editorLayout;
     QString graphGroup;
+    int expandedNodeMinWidth = 104;
+    int expandedNodeHeight = 54;
+    int collapsedNodeMinWidth = 104;
+    int collapsedNodeHeight = 54;
+    qreal expandedCaptionLeftInset = 8.0;
+    qreal expandedCaptionTopInset = 6.0;
+    qreal collapsedCaptionLeftInset = 8.0;
+    qreal collapsedCaptionTopInset = 6.0;
+    QVector<ModuleConfigField> configFields;
     QString externalIdPrefix;
     QString displayPrefix;
     int identityWidth = 2;

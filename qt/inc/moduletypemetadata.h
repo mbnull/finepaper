@@ -49,6 +49,38 @@ inline QString nodeColor(const Module* module) {
     return moduleType ? moduleType->nodeColor : QString();
 }
 
+inline int expandedNodeMinWidth(const Module* module) {
+    const ModuleType* moduleType = type(module);
+    return moduleType ? moduleType->expandedNodeMinWidth : 104;
+}
+
+inline int expandedNodeHeight(const Module* module) {
+    const ModuleType* moduleType = type(module);
+    return moduleType ? moduleType->expandedNodeHeight : 54;
+}
+
+inline int collapsedNodeMinWidth(const Module* module) {
+    const ModuleType* moduleType = type(module);
+    return moduleType ? moduleType->collapsedNodeMinWidth : expandedNodeMinWidth(module);
+}
+
+inline int collapsedNodeHeight(const Module* module) {
+    const ModuleType* moduleType = type(module);
+    return moduleType ? moduleType->collapsedNodeHeight : expandedNodeHeight(module);
+}
+
+inline qreal captionLeftInset(const Module* module, bool collapsed) {
+    const ModuleType* moduleType = type(module);
+    if (!moduleType) return 8.0;
+    return collapsed ? moduleType->collapsedCaptionLeftInset : moduleType->expandedCaptionLeftInset;
+}
+
+inline qreal captionTopInset(const Module* module, bool collapsed) {
+    const ModuleType* moduleType = type(module);
+    if (!moduleType) return 6.0;
+    return collapsed ? moduleType->collapsedCaptionTopInset : moduleType->expandedCaptionTopInset;
+}
+
 inline bool supportsCollapse(const Module* module) {
     const ModuleType* moduleType = type(module);
     return moduleType && moduleType->supportsCollapse;
@@ -72,6 +104,12 @@ inline int identityWidth(const Module* module) {
 inline bool supportsMeshCoordinates(const Module* module) {
     const ModuleType* moduleType = type(module);
     return moduleType && moduleType->supportsMeshCoordinates;
+}
+
+inline const QVector<ModuleConfigField>& configFields(const Module* module) {
+    static const QVector<ModuleConfigField> emptyFields;
+    const ModuleType* moduleType = type(module);
+    return moduleType ? moduleType->configFields : emptyFields;
 }
 
 } // namespace ModuleTypeMetadata

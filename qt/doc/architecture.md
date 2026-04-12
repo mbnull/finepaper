@@ -98,7 +98,7 @@ All edits are committed through `SetParameterCommand`.
 
 Module definitions are data-driven.
 
-`ModuleRegistry` loads `ModuleType` entries from a `ModuleProvider`, currently `JsonBundleProvider`.
+`ModuleRegistry` loads `ModuleType` entries from a `ModuleProvider`, currently `BundleProvider`.
 
 Bundle metadata controls:
 
@@ -164,7 +164,7 @@ Generation reuses the same framework discovery path and writes framework JSON in
 ## Operational assumptions
 
 - The external framework uses Ruby and provides `bin/generate`.
-- Module bundles are JSON-based.
+- Module bundles are split between JSON runtime/default metadata and XML editor presentation metadata.
 - Position is stored as module parameters such as `x` and `y`.
 - Some editor-only state, such as `collapsed`, is intentionally omitted from framework export.
 

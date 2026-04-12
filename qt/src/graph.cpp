@@ -14,6 +14,7 @@
 #include <QJsonArray>
 #include <QDebug>
 #include <QFileInfo>
+#include <QXmlStreamWriter>
 #include <QUuid>
 #include <cmath>
 #include <functional>
@@ -91,6 +92,48 @@ QJsonValue parameterToJson(const Parameter::Value& value) {
     if (std::holds_alternative<double>(value)) return QJsonValue(std::get<double>(value));
     if (std::holds_alternative<bool>(value)) return QJsonValue(std::get<bool>(value));
     return QJsonValue();
+}
+
+void writeJsonValueAsXml(QXmlStreamWriter& writer,
+                         const QString& elementName,
+                         const QJsonValue& value) {
+    if (value.isObject()) {
+        writer.writeStartElement(elementName);
+        const QJsonObject object = value.toObject();
+        for (auto it = object.begin(); it != object.end(); ++it) {
+            writeJsonValueAsXml(writer, it.key(), it.value());
+        }
+        writer.writeEndElement();
+        return;
+    }
+
+    if (value.isArray()) {
+        writer.writeStartElement(elementName);
+        const QJsonArray array = value.toArray();
+        for (const QJsonValue& item : array) {
+            writeJsonValueAsXml(writer, QStringLiteral("item"), item);
+        }
+        writer.writeEndElement();
+        return;
+    }
+
+    writer.writeStartElement(elementName);
+    if (value.isString()) {
+        writer.writeAttribute(QStringLiteral("type"), QStringLiteral("string"));
+        writer.writeCharacters(value.toString());
+    } else if (value.isDouble()) {
+        const double number = value.toDouble();
+        const bool isInteger = std::floor(number) == number;
+        writer.writeAttribute(QStringLiteral("type"), isInteger ? QStringLiteral("int")
+                                                                : QStringLiteral("double"));
+        writer.writeCharacters(QString::number(number, 'g', 15));
+    } else if (value.isBool()) {
+        writer.writeAttribute(QStringLiteral("type"), QStringLiteral("bool"));
+        writer.writeCharacters(value.toBool() ? QStringLiteral("true") : QStringLiteral("false"));
+    } else if (value.isNull() || value.isUndefined()) {
+        writer.writeAttribute(QStringLiteral("type"), QStringLiteral("null"));
+    }
+    writer.writeEndElement();
 }
 
 std::optional<double> parameterAsDouble(const Module* module, const QString& name) {
@@ -622,6 +665,34 @@ bool Graph::saveToJson(const QString& jsonPath) const {
     }
     file.write(toJsonDocument(QFileInfo(jsonPath).baseName(), GraphJsonFlavor::Editor).toJson());
     qInfo() << "Completed graph export to" << jsonPath;
+    return true;
+}
+
+bool Graph::saveToXml(const QString& xmlPath) const {
+    qInfo() << "Starting graph XML export to" << xmlPath
+            << "modules" << m_modules.size()
+            << "connections" << m_connections.size();
+
+    QFile file(xmlPath);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        qWarning() << "Failed to open graph XML for writing:" << xmlPath;
+        return false;
+    }
+
+    QXmlStreamWriter writer(&file);
+    writer.setAutoFormatting(true);
+    writer.writeStartDocument();
+    writeJsonValueAsXml(writer,
+                        QStringLiteral("graph"),
+                        toJsonDocument(QFileInfo(xmlPath).baseName(), GraphJsonFlavor::Editor).object());
+    writer.writeEndDocument();
+
+    if (writer.hasError()) {
+        qWarning() << "Failed while writing graph XML to" << xmlPath;
+        return false;
+    }
+
+    qInfo() << "Completed graph XML export to" << xmlPath;
     return true;
 }
 

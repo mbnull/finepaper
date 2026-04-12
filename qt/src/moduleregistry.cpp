@@ -8,11 +8,13 @@ ModuleRegistry& ModuleRegistry::instance() {
     return registry;
 }
 
-// Search for module bundle file in environment or parent directories
+// Search for module bundle files in environment or parent directories.
 ModuleRegistry::ModuleRegistry() {
-    const QString bundlePath = FrameworkPaths::resolveBundlePath();
+    const QString bundlePath = FrameworkPaths::resolveModuleBundlePath();
     if (!bundlePath.isEmpty()) {
-        addProvider(std::make_unique<JsonBundleProvider>(bundlePath));
+        addProvider(std::make_unique<BundleProvider>(
+            bundlePath,
+            FrameworkPaths::resolveModulePresentationPath()));
         return;
     }
 

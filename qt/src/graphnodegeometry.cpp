@@ -22,14 +22,21 @@ QSize sizeForModel(const GraphNodeModel* model) {
     const QString caption = model ? model->caption() : QStringLiteral("Node");
     const int captionWidth = QFontMetrics(QFont()).horizontalAdvance(caption) + 26;
 
-    if (model && ModuleTypeMetadata::hasEditorLayout(model->module(), u"mesh_router")) {
-        if (model->isCollapsed()) {
-            return {std::max(104, captionWidth), 92};
-        }
-        return {std::max(136, captionWidth), 116};
+    if (!model || !model->module()) {
+        return {std::max(104, captionWidth), 54};
     }
 
-    return {std::max(104, captionWidth), 54};
+    if (model->isCollapsed()) {
+        return {
+            std::max(ModuleTypeMetadata::collapsedNodeMinWidth(model->module()), captionWidth),
+            ModuleTypeMetadata::collapsedNodeHeight(model->module())
+        };
+    }
+
+    return {
+        std::max(ModuleTypeMetadata::expandedNodeMinWidth(model->module()), captionWidth),
+        ModuleTypeMetadata::expandedNodeHeight(model->module())
+    };
 }
 
 } // namespace
@@ -89,9 +96,9 @@ QPointF GraphNodeGeometry::captionPosition(QtNodes::NodeId) const {
 QRectF GraphNodeGeometry::captionRect(QtNodes::NodeId nodeId) const {
     const QSize nodeSize = size(nodeId);
     const GraphNodeModel* model = modelFor(nodeId);
-    const bool usesMeshLayout = model && ModuleTypeMetadata::hasEditorLayout(model->module(), u"mesh_router");
-    const qreal leftInset = usesMeshLayout ? 30.0 : 8.0;
-    const qreal topInset = usesMeshLayout && model->isCollapsed() ? 26.0 : 6.0;
+    const bool collapsed = model && model->isCollapsed();
+    const qreal leftInset = model ? ModuleTypeMetadata::captionLeftInset(model->module(), collapsed) : 8.0;
+    const qreal topInset = model ? ModuleTypeMetadata::captionTopInset(model->module(), collapsed) : 6.0;
     return QRectF(leftInset, topInset, nodeSize.width() - leftInset - 8.0, 20.0);
 }
 
