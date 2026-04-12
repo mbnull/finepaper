@@ -12,9 +12,11 @@ ModuleRegistry& ModuleRegistry::instance() {
 ModuleRegistry::ModuleRegistry() {
     const QString bundlePath = FrameworkPaths::resolveModuleBundlePath();
     if (!bundlePath.isEmpty()) {
-        addProvider(std::make_unique<BundleProvider>(
-            bundlePath,
+        auto provider = std::make_unique<LayeredModuleProvider>(
+            std::make_unique<JsonModuleTypeSource>(bundlePath));
+        provider->addOverlay(std::make_unique<XmlModulePresentationOverlay>(
             FrameworkPaths::resolveModulePresentationPath()));
+        addProvider(std::move(provider));
         return;
     }
 

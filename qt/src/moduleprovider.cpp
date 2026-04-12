@@ -1,8 +1,8 @@
 #include "moduleprovider.h"
 #include <QFile>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QJsonArray>
 #include <QXmlStreamReader>
 
 namespace {
@@ -105,12 +105,100 @@ void applyConfigZoneElement(ModuleType& type, QXmlStreamReader& xml) {
     }
 }
 
-void overlayPresentationMetadata(QHash<QString, ModuleType>& types, const QString& presentationPath) {
-    if (presentationPath.isEmpty()) {
+QJsonArray moduleArray(const QByteArray& jsonBytes) {
+    return QJsonDocument::fromJson(jsonBytes).object()["modules"].toArray();
+}
+
+void loadPorts(ModuleType& type, const QJsonArray& ports) {
+    for (const auto& portVal : ports) {
+        const QJsonObject port = portVal.toObject();
+        const Port::Direction direction = port["direction"].toString() == "input"
+            ? Port::Direction::Input
+            : Port::Direction::Output;
+        type.defaultPorts.push_back(Port(
+            port["id"].toString(), direction, port["type"].toString(), port["name"].toString()));
+    }
+}
+
+void loadParameters(ModuleType& type, const QJsonArray& parameters) {
+    for (const auto& paramVal : parameters) {
+        const QJsonObject parameter = paramVal.toObject();
+        const QString parameterType = parameter["type"].toString();
+        Parameter::Value defaultValue;
+        if (parameterType == "int") {
+            defaultValue = parameter["default"].toInt();
+        } else if (parameterType == "bool") {
+            defaultValue = parameter["default"].toBool();
+        } else {
+            defaultValue = parameter["default"].toString();
+        }
+        type.defaultParameters[parameter["name"].toString()] =
+            Parameter(parameter["name"].toString(), defaultValue);
+    }
+}
+
+ModuleType loadModuleType(const QJsonObject& moduleObject) {
+    ModuleType type;
+    type.name = moduleObject["name"].toString();
+    type.paletteLabel = moduleObject["palette_label"].toString();
+    type.nodeColor = moduleObject["node_color"].toString();
+    type.editorLayout = moduleObject["editor_layout"].toString();
+    type.graphGroup = moduleObject["graph_group"].toString();
+
+    const QJsonObject identity = moduleObject["identity"].toObject();
+    type.externalIdPrefix = identity["external_id_prefix"].toString();
+    type.displayPrefix = identity["display_prefix"].toString();
+    type.identityWidth = identity["width"].toInt(2);
+    type.supportsMeshCoordinates = identity["supports_mesh_coordinates"].toBool(false);
+
+    const QJsonObject capabilities = moduleObject["capabilities"].toObject();
+    type.supportsCollapse = capabilities["supports_collapse"].toBool(false);
+    if (!type.supportsCollapse) {
+        type.collapsedNodeMinWidth = type.expandedNodeMinWidth;
+        type.collapsedNodeHeight = type.expandedNodeHeight;
+        type.collapsedCaptionLeftInset = type.expandedCaptionLeftInset;
+        type.collapsedCaptionTopInset = type.expandedCaptionTopInset;
+    }
+
+    loadPorts(type, moduleObject["ports"].toArray());
+    loadParameters(type, moduleObject["parameters"].toArray());
+    return type;
+}
+
+} // namespace
+
+JsonModuleTypeSource::JsonModuleTypeSource(const QString& bundlePath)
+    : m_bundlePath(bundlePath) {}
+
+QHash<QString, ModuleType> JsonModuleTypeSource::loadModuleTypes() {
+    QHash<QString, ModuleType> types;
+    m_orderedTypeNames.clear();
+    QFile file(m_bundlePath);
+    if (!file.open(QIODevice::ReadOnly)) {
+        return {};
+    }
+
+    for (const auto& moduleValue : moduleArray(file.readAll())) {
+        const ModuleType type = loadModuleType(moduleValue.toObject());
+        m_orderedTypeNames.push_back(type.name);
+        types.insert(type.name, type);
+    }
+    return types;
+}
+
+QStringList JsonModuleTypeSource::orderedTypeNames() const {
+    return m_orderedTypeNames;
+}
+
+XmlModulePresentationOverlay::XmlModulePresentationOverlay(const QString& presentationPath)
+    : m_presentationPath(presentationPath) {}
+
+void XmlModulePresentationOverlay::apply(QHash<QString, ModuleType>& types) {
+    if (m_presentationPath.isEmpty()) {
         return;
     }
 
-    QFile file(presentationPath);
+    QFile file(m_presentationPath);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
         return;
     }
@@ -148,75 +236,42 @@ void overlayPresentationMetadata(QHash<QString, ModuleType>& types, const QStrin
     }
 }
 
-} // namespace
+LayeredModuleProvider::LayeredModuleProvider(std::unique_ptr<ModuleTypeSource> source)
+    : m_source(std::move(source)) {}
 
-BundleProvider::BundleProvider(const QString& bundlePath, const QString& presentationPath)
-    : m_bundlePath(bundlePath), m_presentationPath(presentationPath) {}
+void LayeredModuleProvider::addOverlay(std::unique_ptr<ModuleTypeOverlay> overlay) {
+    m_overlays.push_back(std::move(overlay));
+}
 
-std::vector<ModuleType> BundleProvider::loadModules() {
-    QHash<QString, ModuleType> types;
-    QFile file(m_bundlePath);
-    if (!file.open(QIODevice::ReadOnly)) return {};
-
-    QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
-    QJsonArray modules = doc.object()["modules"].toArray();
-
-    for (const auto& modVal : modules) {
-        QJsonObject mod = modVal.toObject();
-        ModuleType type;
-        type.name = mod["name"].toString();
-        type.paletteLabel = mod["palette_label"].toString();
-        type.nodeColor = mod["node_color"].toString();
-        type.editorLayout = mod["editor_layout"].toString();
-        type.graphGroup = mod["graph_group"].toString();
-
-        const QJsonObject identity = mod["identity"].toObject();
-        type.externalIdPrefix = identity["external_id_prefix"].toString();
-        type.displayPrefix = identity["display_prefix"].toString();
-        type.identityWidth = identity["width"].toInt(2);
-        type.supportsMeshCoordinates = identity["supports_mesh_coordinates"].toBool(false);
-
-        const QJsonObject capabilities = mod["capabilities"].toObject();
-        type.supportsCollapse = capabilities["supports_collapse"].toBool(false);
-        if (!type.supportsCollapse) {
-            type.collapsedNodeMinWidth = type.expandedNodeMinWidth;
-            type.collapsedNodeHeight = type.expandedNodeHeight;
-            type.collapsedCaptionLeftInset = type.expandedCaptionLeftInset;
-            type.collapsedCaptionTopInset = type.expandedCaptionTopInset;
-        }
-
-        for (const auto& portVal : mod["ports"].toArray()) {
-            QJsonObject p = portVal.toObject();
-            Port::Direction dir = p["direction"].toString() == "input"
-                ? Port::Direction::Input : Port::Direction::Output;
-            type.defaultPorts.push_back(Port(
-                p["id"].toString(), dir, p["type"].toString(), p["name"].toString()));
-        }
-
-        for (const auto& paramVal : mod["parameters"].toArray()) {
-            QJsonObject p = paramVal.toObject();
-            QString pType = p["type"].toString();
-            Parameter::Value val;
-            if (pType == "int") val = p["default"].toInt();
-            else if (pType == "bool") val = p["default"].toBool();
-            else val = p["default"].toString();
-            type.defaultParameters[p["name"].toString()] = Parameter(p["name"].toString(), val);
-        }
-
-        types.insert(type.name, type);
+std::vector<ModuleType> LayeredModuleProvider::loadModules() {
+    if (!m_source) {
+        return {};
     }
 
-    overlayPresentationMetadata(types, m_presentationPath);
+    QHash<QString, ModuleType> types = m_source->loadModuleTypes();
+    for (const auto& overlay : m_overlays) {
+        overlay->apply(types);
+    }
 
     std::vector<ModuleType> orderedTypes;
+    const QStringList orderedTypeNames = m_source->orderedTypeNames();
     orderedTypes.reserve(types.size());
-    for (const auto& module : modules) {
-        const QString name = module.toObject()["name"].toString();
-        auto it = types.find(name);
+
+    for (const QString& typeName : orderedTypeNames) {
+        const auto it = types.find(typeName);
         if (it != types.end()) {
             orderedTypes.push_back(it.value());
         }
     }
 
+    if (orderedTypes.size() == static_cast<std::size_t>(types.size())) {
+        return orderedTypes;
+    }
+
+    for (auto it = types.cbegin(); it != types.cend(); ++it) {
+        if (!orderedTypeNames.contains(it.key())) {
+            orderedTypes.push_back(it.value());
+        }
+    }
     return orderedTypes;
 }

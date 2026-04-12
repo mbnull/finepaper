@@ -98,7 +98,13 @@ All edits are committed through `SetParameterCommand`.
 
 Module definitions are data-driven.
 
-`ModuleRegistry` loads `ModuleType` entries from a `ModuleProvider`, currently `BundleProvider`.
+`ModuleRegistry` loads `ModuleType` entries from a composed `ModuleProvider`.
+
+The current provider stack is:
+
+- `JsonModuleTypeSource` for runtime/default metadata
+- `XmlModulePresentationOverlay` for editor presentation metadata
+- `LayeredModuleProvider` to combine the source and overlays
 
 Bundle metadata controls:
 
