@@ -7,8 +7,10 @@
 #include <QtNodes/NodeDelegateModelRegistry>
 #include <QWidget>
 #include <QMap>
+#include <QList>
 #include <QSet>
 #include <QRectF>
+#include <functional>
 #include "graph.h"
 #include "commandmanager.h"
 
@@ -17,7 +19,10 @@ class QDragEnterEvent;
 class QDragMoveEvent;
 class QDragLeaveEvent;
 class QDropEvent;
+class QContextMenuEvent;
+class QMouseEvent;
 class EditorGraphModel;
+class GraphNodeModel;
 namespace QtNodes { class ConnectionGraphicsObject; }
 
 class NodeEditorWidget : public QWidget {
@@ -54,10 +59,18 @@ private slots:
     void onParameterChanged(const QString& paramName);
 
 private:
+    struct ModulePresentationState {
+        QList<Connection*> moduleConnections;
+        QList<Connection*> attachmentConnections;
+        QSet<QString> endpointModuleIds;
+    };
+
     void ensureModuleInView(Module* module);
     void removeModuleFromView(const QString& moduleId);
     bool ensureConnectionInView(Connection* connection);
     void removeConnectionFromView(const QString& connectionId);
+    GraphNodeModel* graphNodeModel(QtNodes::NodeId nodeId) const;
+    void refreshNodeGraphics(QtNodes::NodeId nodeId, bool moveConnections);
     QString getPortId(QtNodes::NodeId nodeId, QtNodes::PortType portType, QtNodes::PortIndex portIndex) const;
     bool resolveConnectionPorts(QtNodes::ConnectionId connectionId, PortRef& source, PortRef& target) const;
     QtNodes::ConnectionGraphicsObject* findDraftConnection() const;
@@ -75,6 +88,24 @@ private:
                                         PortRef& target) const;
     bool tryCompleteRouterDraftConnection(const QPoint& viewportPos);
     bool tryCompleteEndpointDraftConnection(const QPoint& viewportPos);
+    bool tryCompleteDraftConnection(const QPoint& viewportPos,
+                                    const std::function<bool(const QtNodes::ConnectionGraphicsObject&,
+                                                             QtNodes::NodeId,
+                                                             PortRef&,
+                                                             PortRef&)>& resolver);
+    void executeAddConnection(const PortRef& source, const PortRef& target);
+    void syncNodePositionFromParameters(Module* module, QtNodes::NodeId nodeId);
+    ModulePresentationState collectModulePresentationState(const QString& moduleId) const;
+    void hideModuleConnections(const ModulePresentationState& state);
+    void applyCollapsedModulePresentation(const ModulePresentationState& state);
+    void applyExpandedModulePresentation(const ModulePresentationState& state);
+    bool handleViewportDragEnter(QDragEnterEvent* event);
+    bool handleViewportDragMove(QDragMoveEvent* event);
+    bool handleViewportDrop(QDropEvent* event);
+    bool handleViewportMouseRelease(QMouseEvent* event);
+    bool handleViewportMousePress(QMouseEvent* event);
+    bool handleViewportMouseDoubleClick(QMouseEvent* event);
+    bool handleViewportContextMenu(QContextMenuEvent* event);
     bool showNodeContextMenu(const QPoint& viewportPos, const QPoint& globalPos);
     QPointF clampNodePosition(QtNodes::NodeId nodeId, const QPointF& position) const;
     void refreshModulePresentation(const QString& moduleId);

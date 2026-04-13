@@ -4,17 +4,15 @@
 // m_updatingFromGraph guards against re-entrant signal loops when the widget
 // itself drives a graph change.
 #include "nodeeditorwidget.h"
+#include "animatedgraphicsview.h"
 #include "editorgraphmodel.h"
 #include "graphnodegeometry.h"
 #include "graphnodemodel.h"
 #include "graphnodepainter.h"
-#include "modulelabels.h"
 #include "moduletypemetadata.h"
-#include "moduleregistry.h"
 #include "portlayout.h"
 #include "straightconnectionpainter.h"
 #include "commands/arrangecommand.h"
-#include "commands/addmodulecommand.h"
 #include "commands/addconnectioncommand.h"
 #include "commands/removemodulecommand.h"
 #include "commands/removeconnectioncommand.h"
@@ -24,221 +22,13 @@
 #include <QtNodes/internal/ConnectionGraphicsObject.hpp>
 #include <QtNodes/internal/locateNode.hpp>
 #include <QVBoxLayout>
-#include <QDragEnterEvent>
-#include <QDragLeaveEvent>
-#include <QDragMoveEvent>
-#include <QDropEvent>
-#include <QFontMetrics>
-#include <QPainter>
-#include <QMimeData>
 #include <QMouseEvent>
 #include <QMenu>
-#include <QVariantAnimation>
 #include <QUuid>
 #include <QGraphicsItem>
-#include <QRegularExpression>
 #include <algorithm>
 #include <cmath>
 #include <optional>
-#include <QSet>
-
-class AnimatedGraphicsView final : public QtNodes::GraphicsView {
-public:
-    explicit AnimatedGraphicsView(QtNodes::BasicGraphicsScene* scene, QWidget* parent = nullptr)
-        : QtNodes::GraphicsView(scene, parent),
-          m_pulseAnimation(new QVariantAnimation(this)),
-          m_fadeAnimation(new QVariantAnimation(this)) {
-        setViewportUpdateMode(QGraphicsView::FullViewportUpdate);
-
-        m_pulseAnimation->setStartValue(0.0);
-        m_pulseAnimation->setEndValue(1.0);
-        m_pulseAnimation->setDuration(1400);
-        m_pulseAnimation->setLoopCount(-1);
-        connect(m_pulseAnimation, &QVariantAnimation::valueChanged, this, [this](const QVariant& value) {
-            m_pulsePhase = value.toDouble();
-            if (m_overlayOpacity > 0.0) {
-                viewport()->update();
-            }
-        });
-
-        m_fadeAnimation->setDuration(180);
-        m_fadeAnimation->setEasingCurve(QEasingCurve::OutCubic);
-        connect(m_fadeAnimation, &QVariantAnimation::valueChanged, this, [this](const QVariant& value) {
-            m_overlayOpacity = value.toDouble();
-            if (m_overlayOpacity <= 0.001 && !m_dragActive) {
-                m_overlayOpacity = 0.0;
-                m_pulseAnimation->stop();
-            }
-            viewport()->update();
-        });
-    }
-
-    void beginPaletteDrag(const QPoint& viewportPos, const QString& moduleType) {
-        m_dragPosition = viewportPos;
-        if (!moduleType.isEmpty()) {
-            m_moduleType = moduleType;
-        }
-
-        const bool needsFadeIn = !m_dragActive && m_overlayOpacity < 0.99;
-        m_dragActive = true;
-
-        if (m_pulseAnimation->state() != QAbstractAnimation::Running) {
-            m_pulseAnimation->start();
-        }
-        if (needsFadeIn) {
-            animateOverlayTo(1.0);
-        } else {
-            viewport()->update();
-        }
-    }
-
-    void updatePaletteDrag(const QPoint& viewportPos, const QString& moduleType) {
-        if (!m_dragActive) {
-            beginPaletteDrag(viewportPos, moduleType);
-            return;
-        }
-
-        m_dragPosition = viewportPos;
-        if (!moduleType.isEmpty()) {
-            m_moduleType = moduleType;
-        }
-        viewport()->update();
-    }
-
-    void endPaletteDrag() {
-        if (!m_dragActive && m_overlayOpacity == 0.0) {
-            return;
-        }
-
-        m_dragActive = false;
-        animateOverlayTo(0.0);
-    }
-
-    void setEditingLocked(bool locked) {
-        m_editingLocked = locked;
-    }
-
-    void onDeleteSelectedObjects() override {
-        if (m_editingLocked) {
-            return;
-        }
-        QtNodes::GraphicsView::onDeleteSelectedObjects();
-    }
-
-protected:
-    void drawForeground(QPainter* painter, const QRectF& rect) override {
-        QtNodes::GraphicsView::drawForeground(painter, rect);
-
-        if (m_overlayOpacity <= 0.0 || m_moduleType.isEmpty()) {
-            return;
-        }
-
-        painter->save();
-        painter->resetTransform();
-        painter->setRenderHint(QPainter::Antialiasing, true);
-        painter->setOpacity(m_overlayOpacity);
-
-        const QRectF viewportRect = viewport()->rect();
-        const QRectF frameRect = viewportRect.adjusted(16.0, 16.0, -16.0, -16.0);
-
-        QColor accent = palette().highlight().color();
-        QColor textColor = palette().text().color();
-        QColor surfaceColor = palette().base().color();
-
-        QColor frameFill = accent;
-        frameFill.setAlpha(18);
-        QPen framePen(accent, 2.0);
-        framePen.setStyle(Qt::DashLine);
-        framePen.setDashPattern({8.0, 8.0});
-        framePen.setDashOffset(-m_pulsePhase * 18.0);
-        QColor frameStroke = accent;
-        frameStroke.setAlpha(140);
-        framePen.setColor(frameStroke);
-
-        painter->setBrush(frameFill);
-        painter->setPen(framePen);
-        painter->drawRoundedRect(frameRect, 18.0, 18.0);
-
-        const QPointF center(
-            std::clamp(static_cast<qreal>(m_dragPosition.x()), frameRect.left() + 28.0, frameRect.right() - 28.0),
-            std::clamp(static_cast<qreal>(m_dragPosition.y()), frameRect.top() + 28.0, frameRect.bottom() - 28.0));
-
-        const qreal glowRadius = 78.0 + (m_pulsePhase * 22.0);
-        QRadialGradient glow(center, glowRadius);
-        QColor glowInner = accent;
-        glowInner.setAlpha(84);
-        QColor glowMid = accent;
-        glowMid.setAlpha(24);
-        QColor glowOuter = accent;
-        glowOuter.setAlpha(0);
-        glow.setColorAt(0.0, glowInner);
-        glow.setColorAt(0.55, glowMid);
-        glow.setColorAt(1.0, glowOuter);
-
-        painter->setPen(Qt::NoPen);
-        painter->setBrush(glow);
-        painter->drawEllipse(center, glowRadius, glowRadius);
-
-        QColor ringColor = accent;
-        ringColor.setAlpha(static_cast<int>(170 - (m_pulsePhase * 70.0)));
-        painter->setBrush(Qt::NoBrush);
-        painter->setPen(QPen(ringColor, 2.5));
-        painter->drawEllipse(center, 26.0 + (m_pulsePhase * 16.0), 26.0 + (m_pulsePhase * 16.0));
-
-        QColor coreColor = accent;
-        coreColor.setAlpha(220);
-        painter->setPen(Qt::NoPen);
-        painter->setBrush(coreColor);
-        painter->drawEllipse(center, 6.0, 6.0);
-
-        QFont chipFont = font();
-        chipFont.setBold(true);
-        QFontMetrics chipMetrics(chipFont);
-        const QSizeF chipSize(chipMetrics.horizontalAdvance(m_moduleType) + 52.0, chipMetrics.height() + 18.0);
-
-        QPointF chipTopLeft = center + QPointF(24.0, -chipSize.height() - 10.0);
-        chipTopLeft.setX(std::clamp(chipTopLeft.x(), frameRect.left(), frameRect.right() - chipSize.width()));
-        chipTopLeft.setY(std::clamp(chipTopLeft.y(), frameRect.top(), frameRect.bottom() - chipSize.height()));
-
-        const QRectF chipRect(chipTopLeft, chipSize);
-        QColor chipFill = surfaceColor;
-        chipFill.setAlpha(230);
-        QColor chipStroke = accent;
-        chipStroke.setAlpha(180);
-        painter->setBrush(chipFill);
-        painter->setPen(QPen(chipStroke, 1.5));
-        painter->drawRoundedRect(chipRect, 14.0, 14.0);
-
-        painter->setPen(Qt::NoPen);
-        painter->setBrush(coreColor);
-        painter->drawEllipse(QRectF(chipRect.left() + 14.0, chipRect.center().y() - 4.0, 8.0, 8.0));
-
-        QColor chipText = textColor;
-        chipText.setAlpha(230);
-        painter->setFont(chipFont);
-        painter->setPen(chipText);
-        painter->drawText(chipRect.adjusted(30.0, 0.0, -14.0, 0.0), Qt::AlignVCenter | Qt::AlignLeft, m_moduleType);
-
-        painter->restore();
-    }
-
-private:
-    void animateOverlayTo(qreal targetOpacity) {
-        m_fadeAnimation->stop();
-        m_fadeAnimation->setStartValue(m_overlayOpacity);
-        m_fadeAnimation->setEndValue(targetOpacity);
-        m_fadeAnimation->start();
-    }
-
-    QPoint m_dragPosition;
-    QString m_moduleType;
-    QVariantAnimation* m_pulseAnimation;
-    QVariantAnimation* m_fadeAnimation;
-    qreal m_pulsePhase = 0.0;
-    qreal m_overlayOpacity = 0.0;
-    bool m_dragActive = false;
-    bool m_editingLocked = false;
-};
 
 static std::optional<double> toDouble(const Parameter::Value& v) {
     if (auto* i = std::get_if<int>(&v)) return static_cast<double>(*i);
@@ -248,57 +38,21 @@ static std::optional<double> toDouble(const Parameter::Value& v) {
 
 namespace {
 
+class GraphUpdateGuard {
+public:
+    explicit GraphUpdateGuard(int& counter) : m_counter(counter) { ++m_counter; }
+    ~GraphUpdateGuard() { --m_counter; }
+
+private:
+    int& m_counter;
+};
+
 bool isMeshRouterModule(const Module* module) {
     return ModuleTypeMetadata::hasEditorLayout(module, u"mesh_router");
 }
 
 bool isEndpointModule(const Module* module) {
     return ModuleTypeMetadata::isInGraphGroup(module, u"endpoints");
-}
-
-int nextModuleIndex(const Graph* graph, const QString& moduleType, const QString& externalIdPrefix) {
-    QSet<int> used;
-    QRegularExpression pattern("^" + QRegularExpression::escape(externalIdPrefix) + "_(\\d+)$",
-                               QRegularExpression::CaseInsensitiveOption);
-
-    for (const auto& module : graph->modules()) {
-        if (module->type() != moduleType) {
-            continue;
-        }
-
-        const auto match = pattern.match(ModuleLabels::externalId(module.get()));
-        if (match.hasMatch()) {
-            used.insert(match.captured(1).toInt());
-        }
-    }
-
-    int index = 0;
-    while (used.contains(index)) {
-        ++index;
-    }
-    return index;
-}
-
-void assignModuleIdentity(Graph* graph, Module* module) {
-    if (!graph || !module) return;
-
-    const QString externalPrefix = ModuleTypeMetadata::externalIdPrefix(module);
-    const QString displayPrefix = ModuleTypeMetadata::displayPrefix(module);
-    if (externalPrefix.isEmpty() || displayPrefix.isEmpty()) {
-        return;
-    }
-
-    const int index = nextModuleIndex(graph, module->type(), externalPrefix);
-    const int width = ModuleTypeMetadata::identityWidth(module);
-    module->setParameter("display_name", QString("%1_%2").arg(displayPrefix).arg(index, width, 10, QChar('0')));
-    module->setParameter("external_id", QString("%1_%2").arg(externalPrefix).arg(index, width, 10, QChar('0')));
-}
-
-QString draggedModuleType(const QMimeData* mimeData) {
-    if (!mimeData || !mimeData->hasFormat("application/x-moduletype")) {
-        return {};
-    }
-    return QString::fromUtf8(mimeData->data("application/x-moduletype"));
 }
 
 bool boolParameter(const Module* module, const QString& name, bool fallbackValue) {
@@ -378,6 +132,36 @@ QString firstAvailablePort(const Graph* graph,
     }
 
     return {};
+}
+
+QString generateEntityId() {
+    return QUuid::createUuid().toString(QUuid::WithoutBraces).replace('-', '_');
+}
+
+struct DraftConnectionStart {
+    bool startFromOutput = false;
+    QtNodes::NodeId nodeId = QtNodes::InvalidNodeId;
+    QtNodes::PortIndex portIndex = QtNodes::InvalidPortIndex;
+    QtNodes::PortType portType = QtNodes::PortType::None;
+};
+
+std::optional<DraftConnectionStart> resolveDraftConnectionStart(const QtNodes::ConnectionGraphicsObject& draftConnection) {
+    const QtNodes::PortType requiredPort = draftConnection.connectionState().requiredPort();
+    if (requiredPort == QtNodes::PortType::None) {
+        return std::nullopt;
+    }
+
+    const QtNodes::ConnectionId connectionId = draftConnection.connectionId();
+    DraftConnectionStart start;
+    start.startFromOutput = requiredPort == QtNodes::PortType::In;
+    start.nodeId = start.startFromOutput ? connectionId.outNodeId : connectionId.inNodeId;
+    start.portIndex = start.startFromOutput ? connectionId.outPortIndex : connectionId.inPortIndex;
+    start.portType = start.startFromOutput ? QtNodes::PortType::Out : QtNodes::PortType::In;
+    if (start.nodeId == QtNodes::InvalidNodeId || start.portIndex == QtNodes::InvalidPortIndex) {
+        return std::nullopt;
+    }
+
+    return start;
 }
 
 } // namespace
@@ -466,7 +250,7 @@ void NodeEditorWidget::ensureModuleInView(Module* module) {
         return;
     }
 
-    ++m_updatingFromGraph;
+    GraphUpdateGuard guard(m_updatingFromGraph);
     auto nodeId = m_graphModel->addNode("GraphNode");
     auto* nodeModel = dynamic_cast<GraphNodeModel*>(m_graphModel->delegateModel<GraphNodeModel>(nodeId));
     if (nodeModel) {
@@ -474,21 +258,7 @@ void NodeEditorWidget::ensureModuleInView(Module* module) {
     }
     m_moduleToNodeId[module->id()] = nodeId;
     m_nodeToModuleId[nodeId] = module->id();
-
-    const auto& params = module->parameters();
-    auto xIt = params.find("x");
-    auto yIt = params.find("y");
-    if (xIt != params.end() && yIt != params.end()) {
-        const auto& xValue = xIt.value().value();
-        const auto& yValue = yIt.value().value();
-        auto xOpt = toDouble(xValue);
-        auto yOpt = toDouble(yValue);
-        if (xOpt && yOpt) {
-            const QPointF clampedPos = clampNodePosition(nodeId, QPointF(*xOpt, *yOpt));
-            m_graphModel->setNodeData(nodeId, QtNodes::NodeRole::Position, clampedPos);
-        }
-    }
-    --m_updatingFromGraph;
+    syncNodePositionFromParameters(module, nodeId);
 }
 
 void NodeEditorWidget::onModuleRemoved(const QString& moduleId) {
@@ -498,11 +268,10 @@ void NodeEditorWidget::onModuleRemoved(const QString& moduleId) {
 void NodeEditorWidget::removeModuleFromView(const QString& moduleId) {
     auto it = m_moduleToNodeId.find(moduleId);
     if (it != m_moduleToNodeId.end()) {
-        ++m_updatingFromGraph;
+        GraphUpdateGuard guard(m_updatingFromGraph);
         m_nodeToModuleId.remove(it.value());
         m_graphModel->deleteNode(it.value());
         m_moduleToNodeId.erase(it);
-        --m_updatingFromGraph;
     }
 }
 
@@ -560,10 +329,11 @@ bool NodeEditorWidget::ensureConnectionInView(Connection* connection) {
         return true;
     }
 
-    ++m_updatingFromGraph;
-    m_graphModel->addConnection(connId);
+    {
+        GraphUpdateGuard guard(m_updatingFromGraph);
+        m_graphModel->addConnection(connId);
+    }
     m_connectionToQtId[connection->id()] = connId;
-    --m_updatingFromGraph;
     setConnectionHighlighted(connId, false);
 
     const auto selectedNodes = m_scene->selectedNodes();
@@ -592,193 +362,33 @@ void NodeEditorWidget::removeConnectionFromView(const QString& connectionId) {
         return;
     }
 
-    ++m_updatingFromGraph;
+    GraphUpdateGuard guard(m_updatingFromGraph);
     m_graphModel->deleteConnection(qtConnectionId);
-    --m_updatingFromGraph;
 }
 
-void NodeEditorWidget::dragEnterEvent(QDragEnterEvent* event) {
-    if (m_graphModel->isEditingLocked()) {
-        event->ignore();
-        return;
-    }
-
-    const QString moduleType = draggedModuleType(event->mimeData());
-    if (!moduleType.isEmpty()) {
-        m_view->beginPaletteDrag(m_view->viewport()->mapFrom(this, event->position().toPoint()), moduleType);
-        event->acceptProposedAction();
-        return;
-    }
-
-    QWidget::dragEnterEvent(event);
+GraphNodeModel* NodeEditorWidget::graphNodeModel(QtNodes::NodeId nodeId) const {
+    return dynamic_cast<GraphNodeModel*>(m_graphModel->delegateModel<GraphNodeModel>(nodeId));
 }
 
-void NodeEditorWidget::dragMoveEvent(QDragMoveEvent* event) {
-    if (m_graphModel->isEditingLocked()) {
-        event->ignore();
-        return;
-    }
-
-    const QString moduleType = draggedModuleType(event->mimeData());
-    if (!moduleType.isEmpty()) {
-        m_view->updatePaletteDrag(m_view->viewport()->mapFrom(this, event->position().toPoint()), moduleType);
-        event->acceptProposedAction();
-        return;
-    }
-
-    QWidget::dragMoveEvent(event);
-}
-
-void NodeEditorWidget::dragLeaveEvent(QDragLeaveEvent* event) {
-    m_view->endPaletteDrag();
-    event->accept();
-}
-
-bool NodeEditorWidget::eventFilter(QObject* obj, QEvent* event) {
-    if (obj == m_view->viewport()) {
-        // Forward drag/drop events from the viewport to our handlers.
-        // Without this, the GraphicsView child widget consumes all drag events
-        // and our dragEnterEvent/dropEvent on NodeEditorWidget never fire.
-        if (event->type() == QEvent::DragEnter) {
-            auto* e = static_cast<QDragEnterEvent*>(event);
-            const QString moduleType = draggedModuleType(e->mimeData());
-            if (!moduleType.isEmpty()) {
-                if (m_graphModel->isEditingLocked()) {
-                    e->ignore();
-                    return true;
-                }
-                m_view->beginPaletteDrag(e->position().toPoint(), moduleType);
-                e->acceptProposedAction();
-                return true;
-            }
+void NodeEditorWidget::refreshNodeGraphics(QtNodes::NodeId nodeId, bool moveConnections) {
+    if (auto* nodeGraphics = m_scene->nodeGraphicsObject(nodeId)) {
+        nodeGraphics->setGeometryChanged();
+        if (moveConnections) {
+            nodeGraphics->moveConnections();
         }
-        if (event->type() == QEvent::DragMove) {
-            auto* e = static_cast<QDragMoveEvent*>(event);
-            const QString moduleType = draggedModuleType(e->mimeData());
-            if (!moduleType.isEmpty()) {
-                if (m_graphModel->isEditingLocked()) {
-                    e->ignore();
-                    return true;
-                }
-                m_view->updatePaletteDrag(e->position().toPoint(), moduleType);
-                e->acceptProposedAction();
-                return true;
-            }
-        }
-        if (event->type() == QEvent::DragLeave) {
-            m_view->endPaletteDrag();
-            return true;
-        }
-        if (event->type() == QEvent::Drop) {
-            auto* e = static_cast<QDropEvent*>(event);
-            const QString moduleType = draggedModuleType(e->mimeData());
-            if (!moduleType.isEmpty()) {
-                if (m_graphModel->isEditingLocked()) {
-                    m_view->endPaletteDrag();
-                    e->ignore();
-                    return true;
-                }
-                m_view->updatePaletteDrag(e->position().toPoint(), moduleType);
-                dropEvent(e);
-                return true;
-            }
-        }
-        if (event->type() == QEvent::MouseButtonRelease) {
-            auto* e = static_cast<QMouseEvent*>(event);
-            if (e->button() == Qt::LeftButton &&
-                tryCompleteRouterDraftConnection(e->position().toPoint())) {
-                return true;
-            }
-            if (e->button() == Qt::LeftButton &&
-                tryCompleteEndpointDraftConnection(e->position().toPoint())) {
-                return true;
-            }
-        }
-        if (event->type() == QEvent::MouseButtonPress) {
-            auto* e = static_cast<QMouseEvent*>(event);
-            if (e->button() == Qt::LeftButton &&
-                tryToggleCollapsed(e->position().toPoint(), true)) {
-                return true;
-            }
-        }
-        if (event->type() == QEvent::MouseButtonDblClick) {
-            auto* e = static_cast<QMouseEvent*>(event);
-            if (e->button() == Qt::LeftButton &&
-                tryToggleCollapsed(e->position().toPoint(), false)) {
-                return true;
-            }
-        }
-        if (event->type() == QEvent::ContextMenu) {
-            auto* e = static_cast<QContextMenuEvent*>(event);
-            if (showNodeContextMenu(e->pos(), e->globalPos())) {
-                return true;
-            }
-        }
+        nodeGraphics->update();
     }
-    return QWidget::eventFilter(obj, event);
-}
-
-void NodeEditorWidget::dropEvent(QDropEvent* event) {
-    if (m_graphModel->isEditingLocked()) {
-        m_view->endPaletteDrag();
-        event->ignore();
-        return;
-    }
-
-    const QString moduleType = draggedModuleType(event->mimeData());
-    if (moduleType.isEmpty()) {
-        m_view->endPaletteDrag();
-        return;
-    }
-
-    const ModuleType* type = ModuleRegistry::instance().getType(moduleType);
-    if (!type) {
-        m_view->endPaletteDrag();
-        return;
-    }
-
-    QString moduleId = QUuid::createUuid().toString(QUuid::WithoutBraces).replace('-', '_');
-    auto module = std::make_unique<Module>(moduleId, moduleType);
-
-    for (const auto& port : type->defaultPorts) {
-        module->addPort(port);
-    }
-    for (auto it = type->defaultParameters.constBegin(); it != type->defaultParameters.constEnd(); ++it) {
-        module->setParameter(it.key(), it.value().value());
-    }
-    assignModuleIdentity(m_graph, module.get());
-
-    auto command = std::make_unique<AddModuleCommand>(m_graph, std::move(module));
-    m_commandManager->executeCommand(std::move(command));
-
-    if (m_moduleToNodeId.contains(moduleId)) {
-        auto nodeId = m_moduleToNodeId.value(moduleId);
-        const QPointF scenePos = clampNodePosition(nodeId, m_view->mapToScene(event->position().toPoint()));
-
-        Module* module = m_graph->getModule(moduleId);
-        if (module) {
-            ++m_updatingFromGraph;
-            m_graphModel->setNodeData(nodeId, QtNodes::NodeRole::Position, scenePos);
-            auto xCmd = std::make_unique<SetParameterCommand>(m_graph, moduleId, "x", static_cast<int>(scenePos.x()));
-            auto yCmd = std::make_unique<SetParameterCommand>(m_graph, moduleId, "y", static_cast<int>(scenePos.y()));
-            m_commandManager->executeCommand(std::move(xCmd));
-            m_commandManager->executeCommand(std::move(yCmd));
-            --m_updatingFromGraph;
-        }
-    }
-
-    m_view->endPaletteDrag();
-    event->acceptProposedAction();
 }
 
 void NodeEditorWidget::onConnectionCreated(QtNodes::ConnectionId connectionId) {
     if (m_updatingFromGraph > 0) return;
     if (m_graphModel->isEditingLocked()) {
-        ++m_updatingFromGraph;
-        if (m_graphModel->connectionExists(connectionId)) {
-            m_graphModel->deleteConnection(connectionId);
+        {
+            GraphUpdateGuard guard(m_updatingFromGraph);
+            if (m_graphModel->connectionExists(connectionId)) {
+                m_graphModel->deleteConnection(connectionId);
+            }
         }
-        --m_updatingFromGraph;
         return;
     }
 
@@ -788,24 +398,19 @@ void NodeEditorWidget::onConnectionCreated(QtNodes::ConnectionId connectionId) {
     PortRef target;
     if (!resolveConnectionPorts(connectionId, source, target)) {
         m_pendingConnections.remove(connectionId);
-        ++m_updatingFromGraph;
+        GraphUpdateGuard guard(m_updatingFromGraph);
         m_graphModel->deleteConnection(connectionId);
-        --m_updatingFromGraph;
         return;
     }
 
     if (!m_graph->isValidConnection(source, target)) {
         m_pendingConnections.remove(connectionId);
-        ++m_updatingFromGraph;
+        GraphUpdateGuard guard(m_updatingFromGraph);
         m_graphModel->deleteConnection(connectionId);
-        --m_updatingFromGraph;
         return;
     }
 
-    QString connId = QUuid::createUuid().toString(QUuid::WithoutBraces).replace('-', '_');
-    auto connection = std::make_unique<Connection>(connId, source, target);
-    auto command = std::make_unique<AddConnectionCommand>(m_graph, std::move(connection));
-    m_commandManager->executeCommand(std::move(command));
+    executeAddConnection(source, target);
 }
 
 void NodeEditorWidget::onConnectionDeleted(QtNodes::ConnectionId connectionId) {
@@ -842,7 +447,7 @@ void NodeEditorWidget::onSelectionChanged() {
 }
 
 QString NodeEditorWidget::getPortId(QtNodes::NodeId nodeId, QtNodes::PortType portType, QtNodes::PortIndex portIndex) const {
-    auto* model = dynamic_cast<GraphNodeModel*>(m_graphModel->delegateModel<GraphNodeModel>(nodeId));
+    auto* model = graphNodeModel(nodeId);
     if (!model || !model->module()) return "";
 
     const Port* port = model->portAt(portType, portIndex);
@@ -903,7 +508,7 @@ bool NodeEditorWidget::tryToggleCollapsed(const QPoint& viewportPos, bool requir
         return false;
     }
 
-    auto* nodeModel = dynamic_cast<GraphNodeModel*>(m_graphModel->delegateModel<GraphNodeModel>(nodeGraphics->nodeId()));
+    auto* nodeModel = graphNodeModel(nodeGraphics->nodeId());
     if (!nodeModel || !nodeModel->module() || !ModuleTypeMetadata::supportsCollapse(nodeModel->module())) {
         return false;
     }
@@ -927,24 +532,15 @@ bool NodeEditorWidget::resolveRouterDraftConnection(const QtNodes::ConnectionGra
                                                     QtNodes::NodeId targetNodeId,
                                                     PortRef& source,
                                                     PortRef& target) const {
-    const QtNodes::ConnectionId connectionId = draftConnection.connectionId();
-    const QtNodes::PortType requiredPort = draftConnection.connectionState().requiredPort();
-    if (requiredPort == QtNodes::PortType::None) {
+    const auto start = resolveDraftConnectionStart(draftConnection);
+    if (!start) {
+        return false;
+    }
+    if (start->nodeId == targetNodeId) {
         return false;
     }
 
-    const bool startFromOutput = requiredPort == QtNodes::PortType::In;
-    const QtNodes::NodeId startNodeId = startFromOutput ? connectionId.outNodeId : connectionId.inNodeId;
-    const QtNodes::PortIndex startPortIndex = startFromOutput ? connectionId.outPortIndex : connectionId.inPortIndex;
-    const QtNodes::PortType startPortType = startFromOutput ? QtNodes::PortType::Out : QtNodes::PortType::In;
-    if (startNodeId == QtNodes::InvalidNodeId || startPortIndex == QtNodes::InvalidPortIndex) {
-        return false;
-    }
-    if (startNodeId == targetNodeId) {
-        return false;
-    }
-
-    const QString startModuleId = m_nodeToModuleId.value(startNodeId);
+    const QString startModuleId = m_nodeToModuleId.value(start->nodeId);
     const QString targetModuleId = m_nodeToModuleId.value(targetNodeId);
     if (startModuleId.isEmpty() || targetModuleId.isEmpty()) {
         return false;
@@ -956,7 +552,7 @@ bool NodeEditorWidget::resolveRouterDraftConnection(const QtNodes::ConnectionGra
         return false;
     }
 
-    const QString startPortId = getPortId(startNodeId, startPortType, startPortIndex);
+    const QString startPortId = getPortId(start->nodeId, start->portType, start->portIndex);
     if (!PortLayout::isDirectionalRouterPortId(startPortId)) {
         return false;
     }
@@ -967,7 +563,7 @@ bool NodeEditorWidget::resolveRouterDraftConnection(const QtNodes::ConnectionGra
         return false;
     }
 
-    if (startFromOutput) {
+    if (start->startFromOutput) {
         source = PortRef{startModuleId, PortLayout::routerOutputPortId(startSide)};
         target = PortRef{targetModuleId, PortLayout::routerInputPortId(oppositeSide)};
     } else {
@@ -979,58 +575,28 @@ bool NodeEditorWidget::resolveRouterDraftConnection(const QtNodes::ConnectionGra
 }
 
 bool NodeEditorWidget::tryCompleteRouterDraftConnection(const QPoint& viewportPos) {
-    auto* draftConnection = findDraftConnection();
-    if (!draftConnection) {
-        return false;
-    }
-
-    const QPointF scenePos = m_view->mapToScene(viewportPos);
-    auto* targetNode = QtNodes::locateNodeAt(scenePos, *m_scene, m_view->transform());
-    if (!targetNode) {
-        return false;
-    }
-
-    PortRef source;
-    PortRef target;
-    if (!resolveRouterDraftConnection(*draftConnection, targetNode->nodeId(), source, target)) {
-        return false;
-    }
-
-    m_scene->resetDraftConnection();
-
-    if (!m_graph->isValidConnection(source, target)) {
-        return true;
-    }
-
-    const QString connId = QUuid::createUuid().toString(QUuid::WithoutBraces).replace('-', '_');
-    auto connection = std::make_unique<Connection>(connId, source, target);
-    auto command = std::make_unique<AddConnectionCommand>(m_graph, std::move(connection));
-    m_commandManager->executeCommand(std::move(command));
-    return true;
+    return tryCompleteDraftConnection(viewportPos,
+        [this](const QtNodes::ConnectionGraphicsObject& draftConnection,
+               QtNodes::NodeId targetNodeId,
+               PortRef& source,
+               PortRef& target) {
+            return resolveRouterDraftConnection(draftConnection, targetNodeId, source, target);
+        });
 }
 
 bool NodeEditorWidget::resolveEndpointDraftConnection(const QtNodes::ConnectionGraphicsObject& draftConnection,
                                                       QtNodes::NodeId targetNodeId,
                                                       PortRef& source,
                                                       PortRef& target) const {
-    const QtNodes::ConnectionId connectionId = draftConnection.connectionId();
-    const QtNodes::PortType requiredPort = draftConnection.connectionState().requiredPort();
-    if (requiredPort == QtNodes::PortType::None) {
+    const auto start = resolveDraftConnectionStart(draftConnection);
+    if (!start) {
+        return false;
+    }
+    if (start->nodeId == targetNodeId) {
         return false;
     }
 
-    const bool startFromOutput = requiredPort == QtNodes::PortType::In;
-    const QtNodes::NodeId startNodeId = startFromOutput ? connectionId.outNodeId : connectionId.inNodeId;
-    const QtNodes::PortIndex startPortIndex = startFromOutput ? connectionId.outPortIndex : connectionId.inPortIndex;
-    const QtNodes::PortType startPortType = startFromOutput ? QtNodes::PortType::Out : QtNodes::PortType::In;
-    if (startNodeId == QtNodes::InvalidNodeId || startPortIndex == QtNodes::InvalidPortIndex) {
-        return false;
-    }
-    if (startNodeId == targetNodeId) {
-        return false;
-    }
-
-    const QString startModuleId = m_nodeToModuleId.value(startNodeId);
+    const QString startModuleId = m_nodeToModuleId.value(start->nodeId);
     const QString targetModuleId = m_nodeToModuleId.value(targetNodeId);
     if (startModuleId.isEmpty() || targetModuleId.isEmpty()) {
         return false;
@@ -1042,13 +608,13 @@ bool NodeEditorWidget::resolveEndpointDraftConnection(const QtNodes::ConnectionG
         return false;
     }
 
-    const QString startPortId = getPortId(startNodeId, startPortType, startPortIndex);
+    const QString startPortId = getPortId(start->nodeId, start->portType, start->portIndex);
     const Port* startPort = findPort(startModule, startPortId);
     if (!startPort || startPort->type() != "endpoint") {
         return false;
     }
 
-    if (startFromOutput) {
+    if (start->startFromOutput) {
         if (!isMeshRouterModule(startModule) || !isEndpointModule(endModule)) {
             return false;
         }
@@ -1080,6 +646,20 @@ bool NodeEditorWidget::resolveEndpointDraftConnection(const QtNodes::ConnectionG
 }
 
 bool NodeEditorWidget::tryCompleteEndpointDraftConnection(const QPoint& viewportPos) {
+    return tryCompleteDraftConnection(viewportPos,
+        [this](const QtNodes::ConnectionGraphicsObject& draftConnection,
+               QtNodes::NodeId targetNodeId,
+               PortRef& source,
+               PortRef& target) {
+            return resolveEndpointDraftConnection(draftConnection, targetNodeId, source, target);
+        });
+}
+
+bool NodeEditorWidget::tryCompleteDraftConnection(const QPoint& viewportPos,
+                                                  const std::function<bool(const QtNodes::ConnectionGraphicsObject&,
+                                                                           QtNodes::NodeId,
+                                                                           PortRef&,
+                                                                           PortRef&)>& resolver) {
     auto* draftConnection = findDraftConnection();
     if (!draftConnection) {
         return false;
@@ -1093,7 +673,7 @@ bool NodeEditorWidget::tryCompleteEndpointDraftConnection(const QPoint& viewport
 
     PortRef source;
     PortRef target;
-    if (!resolveEndpointDraftConnection(*draftConnection, targetNode->nodeId(), source, target)) {
+    if (!resolver(*draftConnection, targetNode->nodeId(), source, target)) {
         return false;
     }
 
@@ -1103,11 +683,14 @@ bool NodeEditorWidget::tryCompleteEndpointDraftConnection(const QPoint& viewport
         return true;
     }
 
-    const QString connId = QUuid::createUuid().toString(QUuid::WithoutBraces).replace('-', '_');
-    auto connection = std::make_unique<Connection>(connId, source, target);
+    executeAddConnection(source, target);
+    return true;
+}
+
+void NodeEditorWidget::executeAddConnection(const PortRef& source, const PortRef& target) {
+    auto connection = std::make_unique<Connection>(generateEntityId(), source, target);
     auto command = std::make_unique<AddConnectionCommand>(m_graph, std::move(connection));
     m_commandManager->executeCommand(std::move(command));
-    return true;
 }
 
 void NodeEditorWidget::highlightElement(const QString& elementId) {
@@ -1142,9 +725,8 @@ void NodeEditorWidget::onNodeMoved(QtNodes::NodeId nodeId) {
     QPointF pos = m_graphModel->nodeData(nodeId, QtNodes::NodeRole::Position).value<QPointF>();
     const QPointF clampedPos = clampNodePosition(nodeId, pos);
     if (clampedPos != pos) {
-        ++m_updatingFromGraph;
+        GraphUpdateGuard guard(m_updatingFromGraph);
         m_graphModel->setNodeData(nodeId, QtNodes::NodeRole::Position, clampedPos);
-        --m_updatingFromGraph;
         pos = clampedPos;
     }
 
@@ -1160,21 +742,15 @@ void NodeEditorWidget::onParameterChanged(const QString& paramName) {
 
     auto nodeIt = m_moduleToNodeId.find(module->id());
     if (nodeIt == m_moduleToNodeId.end()) return;
+    const QtNodes::NodeId nodeId = nodeIt.value();
 
     if (paramName == "display_name") {
-        if (auto* nodeGraphics = m_scene->nodeGraphicsObject(nodeIt.value())) {
-            nodeGraphics->setGeometryChanged();
-            nodeGraphics->update();
-        }
+        refreshNodeGraphics(nodeId, false);
         return;
     }
 
     if (paramName == "collapsed") {
-        if (auto* nodeGraphics = m_scene->nodeGraphicsObject(nodeIt.value())) {
-            nodeGraphics->setGeometryChanged();
-            nodeGraphics->moveConnections();
-            nodeGraphics->update();
-        }
+        refreshNodeGraphics(nodeId, true);
         refreshModulePresentation(module->id());
         return;
     }
@@ -1186,16 +762,30 @@ void NodeEditorWidget::onParameterChanged(const QString& paramName) {
     auto yIt = params.find("y");
     if (xIt == params.end() || yIt == params.end()) return;
 
-    ++m_updatingFromGraph;
-    const auto& xValue = xIt.value().value();
-    const auto& yValue = yIt.value().value();
-    auto xOpt = toDouble(xValue);
-    auto yOpt = toDouble(yValue);
-    if (xOpt && yOpt) {
-        const QPointF clampedPos = clampNodePosition(nodeIt.value(), QPointF(*xOpt, *yOpt));
-        m_graphModel->setNodeData(nodeIt.value(), QtNodes::NodeRole::Position, clampedPos);
+    syncNodePositionFromParameters(module, nodeId);
+}
+
+void NodeEditorWidget::syncNodePositionFromParameters(Module* module, QtNodes::NodeId nodeId) {
+    if (!module || nodeId == QtNodes::InvalidNodeId) {
+        return;
     }
-    --m_updatingFromGraph;
+
+    const auto& params = module->parameters();
+    auto xIt = params.find("x");
+    auto yIt = params.find("y");
+    if (xIt == params.end() || yIt == params.end()) {
+        return;
+    }
+
+    const auto xOpt = toDouble(xIt.value().value());
+    const auto yOpt = toDouble(yIt.value().value());
+    if (!xOpt || !yOpt) {
+        return;
+    }
+
+    GraphUpdateGuard guard(m_updatingFromGraph);
+    const QPointF clampedPos = clampNodePosition(nodeId, QPointF(*xOpt, *yOpt));
+    m_graphModel->setNodeData(nodeId, QtNodes::NodeRole::Position, clampedPos);
 }
 
 bool NodeEditorWidget::showNodeContextMenu(const QPoint& viewportPos, const QPoint& globalPos) {
@@ -1210,7 +800,7 @@ bool NodeEditorWidget::showNodeContextMenu(const QPoint& viewportPos, const QPoi
         return false;
     }
 
-    auto* nodeModel = dynamic_cast<GraphNodeModel*>(m_graphModel->delegateModel<GraphNodeModel>(nodeGraphics->nodeId()));
+    auto* nodeModel = graphNodeModel(nodeGraphics->nodeId());
     Module* module = nodeModel ? nodeModel->module() : nullptr;
     if (!module) {
         return false;
@@ -1271,58 +861,19 @@ void NodeEditorWidget::refreshModulePresentation(const QString& moduleId) {
     }
 
     if (auto nodeIt = m_moduleToNodeId.find(moduleId); nodeIt != m_moduleToNodeId.end()) {
-        if (auto* node = m_scene->nodeGraphicsObject(nodeIt.value())) {
-            node->setGeometryChanged();
-            node->moveConnections();
-            node->update();
-        }
+        refreshNodeGraphics(nodeIt.value(), true);
     }
 
-    QList<Connection*> moduleConnections;
-    QList<Connection*> attachmentConnections;
-    QSet<QString> endpointModuleIds;
-    for (const auto& connection : m_graph->connections()) {
-        if (connection->source().moduleId != moduleId && connection->target().moduleId != moduleId) {
-            continue;
-        }
-
-        moduleConnections.append(connection.get());
-
-        QString connectionHostId;
-        QString endpointModuleId;
-        if (!isEndpointAttachmentConnection(m_graph, *connection, &connectionHostId, &endpointModuleId) ||
-            connectionHostId != moduleId) {
-            continue;
-        }
-
-        attachmentConnections.append(connection.get());
-        endpointModuleIds.insert(endpointModuleId);
-    }
-
-    for (Connection* connection : moduleConnections) {
-        removeConnectionFromView(connection->id());
-    }
+    const ModulePresentationState state = collectModulePresentationState(moduleId);
+    hideModuleConnections(state);
 
     const bool collapsed = isCollapsed(hostModule);
-
     if (collapsed) {
-        for (const QString& endpointModuleId : endpointModuleIds) {
-            removeModuleFromView(endpointModuleId);
-        }
-        for (Connection* connection : moduleConnections) {
-            if (!attachmentConnections.contains(connection)) {
-                ensureConnectionInView(connection);
-            }
-        }
+        applyCollapsedModulePresentation(state);
         return;
     }
 
-    for (const QString& endpointModuleId : endpointModuleIds) {
-        ensureModuleInView(m_graph->getModule(endpointModuleId));
-    }
-    for (Connection* connection : moduleConnections) {
-        ensureConnectionInView(connection);
-    }
+    applyExpandedModulePresentation(state);
 }
 
 void NodeEditorWidget::refreshAllModulePresentations() {
@@ -1330,5 +881,55 @@ void NodeEditorWidget::refreshAllModulePresentations() {
         if (ModuleTypeMetadata::supportsCollapse(module.get())) {
             refreshModulePresentation(module->id());
         }
+    }
+}
+
+NodeEditorWidget::ModulePresentationState NodeEditorWidget::collectModulePresentationState(const QString& moduleId) const {
+    ModulePresentationState state;
+
+    for (const auto& connection : m_graph->connections()) {
+        if (connection->source().moduleId != moduleId && connection->target().moduleId != moduleId) {
+            continue;
+        }
+
+        state.moduleConnections.append(connection.get());
+
+        QString connectionHostId;
+        QString endpointModuleId;
+        if (isEndpointAttachmentConnection(m_graph, *connection, &connectionHostId, &endpointModuleId) &&
+            connectionHostId == moduleId) {
+            state.attachmentConnections.append(connection.get());
+            state.endpointModuleIds.insert(endpointModuleId);
+        }
+    }
+
+    return state;
+}
+
+void NodeEditorWidget::hideModuleConnections(const ModulePresentationState& state) {
+    for (Connection* connection : state.moduleConnections) {
+        removeConnectionFromView(connection->id());
+    }
+}
+
+void NodeEditorWidget::applyCollapsedModulePresentation(const ModulePresentationState& state) {
+    for (const QString& endpointModuleId : state.endpointModuleIds) {
+        removeModuleFromView(endpointModuleId);
+    }
+
+    for (Connection* connection : state.moduleConnections) {
+        if (!state.attachmentConnections.contains(connection)) {
+            ensureConnectionInView(connection);
+        }
+    }
+}
+
+void NodeEditorWidget::applyExpandedModulePresentation(const ModulePresentationState& state) {
+    for (const QString& endpointModuleId : state.endpointModuleIds) {
+        ensureModuleInView(m_graph->getModule(endpointModuleId));
+    }
+
+    for (Connection* connection : state.moduleConnections) {
+        ensureConnectionInView(connection);
     }
 }
