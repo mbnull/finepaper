@@ -215,7 +215,8 @@ bool NodeEditorWidget::handleViewportMouseDoubleClick(QMouseEvent* event) {
 }
 
 bool NodeEditorWidget::handleViewportContextMenu(QContextMenuEvent* event) {
-    return showNodeContextMenu(event->pos(), event->globalPos());
+    showNodeContextMenu(event->pos(), event->globalPos());
+    return true;
 }
 
 void NodeEditorWidget::dropEvent(QDropEvent* event) {

@@ -28,6 +28,7 @@
 #include <QStatusBar>
 #include <QTimer>
 #include <QToolBar>
+#include <QtGlobal>
 #include <QVBoxLayout>
 
 namespace {
@@ -309,9 +310,15 @@ QWidget* MainWindow::createCentralContent() {
 }
 
 void MainWindow::setupDocks() {
-    setDockOptions(QMainWindow::AnimatedDocks |
-                   QMainWindow::AllowNestedDocks |
-                   QMainWindow::AllowTabbedDocks);
+    QMainWindow::DockOptions dockOptions = QMainWindow::AnimatedDocks |
+                                           QMainWindow::AllowNestedDocks |
+                                           QMainWindow::AllowTabbedDocks;
+#if QT_VERSION >= QT_VERSION_CHECK(5, 6, 0)
+    dockOptions |= QMainWindow::GroupedDragging;
+#endif
+    setDockOptions(dockOptions);
+    setDockNestingEnabled(true);
+    setTabPosition(Qt::AllDockWidgetAreas, QTabWidget::North);
 
     m_paletteDock = createDock("Palette", m_palette, Qt::LeftDockWidgetArea, "paletteDock");
     m_propertyDock = createDock("Properties", m_propertyPanel, Qt::RightDockWidgetArea, "propertyDock");

@@ -9,10 +9,13 @@
 #include "graphnodegeometry.h"
 #include "graphnodemodel.h"
 #include "graphnodepainter.h"
+#include "modulelabels.h"
 #include "moduletypemetadata.h"
+#include "moduleregistry.h"
 #include "portlayout.h"
 #include "straightconnectionpainter.h"
 #include "commands/arrangecommand.h"
+#include "commands/addmodulecommand.h"
 #include "commands/addconnectioncommand.h"
 #include "commands/removemodulecommand.h"
 #include "commands/removeconnectioncommand.h"
@@ -24,6 +27,8 @@
 #include <QVBoxLayout>
 #include <QMouseEvent>
 #include <QMenu>
+#include <QRegularExpression>
+#include <QSet>
 #include <QUuid>
 #include <QGraphicsItem>
 #include <algorithm>
@@ -136,6 +141,46 @@ QString firstAvailablePort(const Graph* graph,
 
 QString generateEntityId() {
     return QUuid::createUuid().toString(QUuid::WithoutBraces).replace('-', '_');
+}
+
+int nextModuleIndex(const Graph* graph, const QString& moduleType, const QString& externalIdPrefix) {
+    QSet<int> used;
+    QRegularExpression pattern("^" + QRegularExpression::escape(externalIdPrefix) + "_(\\d+)$",
+                               QRegularExpression::CaseInsensitiveOption);
+
+    for (const auto& module : graph->modules()) {
+        if (module->type() != moduleType) {
+            continue;
+        }
+
+        const auto match = pattern.match(ModuleLabels::externalId(module.get()));
+        if (match.hasMatch()) {
+            used.insert(match.captured(1).toInt());
+        }
+    }
+
+    int index = 0;
+    while (used.contains(index)) {
+        ++index;
+    }
+    return index;
+}
+
+void assignModuleIdentity(Graph* graph, Module* module) {
+    if (!graph || !module) {
+        return;
+    }
+
+    const QString externalPrefix = ModuleTypeMetadata::externalIdPrefix(module);
+    const QString displayPrefix = ModuleTypeMetadata::displayPrefix(module);
+    if (externalPrefix.isEmpty() || displayPrefix.isEmpty()) {
+        return;
+    }
+
+    const int index = nextModuleIndex(graph, module->type(), externalPrefix);
+    const int width = ModuleTypeMetadata::identityWidth(module);
+    module->setParameter("display_name", QString("%1_%2").arg(displayPrefix).arg(index, width, 10, QChar('0')));
+    module->setParameter("external_id", QString("%1_%2").arg(externalPrefix).arg(index, width, 10, QChar('0')));
 }
 
 struct DraftConnectionStart {
@@ -792,7 +837,7 @@ bool NodeEditorWidget::showNodeContextMenu(const QPoint& viewportPos, const QPoi
     const QPointF scenePos = m_view->mapToScene(viewportPos);
     auto* nodeGraphics = QtNodes::locateNodeAt(scenePos, *m_scene, m_view->transform());
     if (!nodeGraphics) {
-        return false;
+        return showCanvasCreateMenu(viewportPos, globalPos);
     }
 
     const QString moduleId = m_nodeToModuleId.value(nodeGraphics->nodeId());
@@ -837,6 +882,71 @@ bool NodeEditorWidget::showNodeContextMenu(const QPoint& viewportPos, const QPoi
         return true;
     }
 
+    return true;
+}
+
+bool NodeEditorWidget::showCanvasCreateMenu(const QPoint& viewportPos, const QPoint& globalPos) {
+    if (m_graphModel->isEditingLocked()) {
+        return true;
+    }
+
+    const QStringList moduleTypes = ModuleRegistry::instance().availableTypes();
+    if (moduleTypes.isEmpty()) {
+        return true;
+    }
+
+    QMenu menu(m_view);
+    for (const QString& moduleType : moduleTypes) {
+        const ModuleType* type = ModuleRegistry::instance().getType(moduleType);
+        if (!type) {
+            continue;
+        }
+
+        QAction* action = menu.addAction(ModuleTypeMetadata::paletteLabel(type));
+        action->setData(moduleType);
+    }
+
+    QAction* selectedAction = menu.exec(globalPos);
+    if (!selectedAction) {
+        return true;
+    }
+
+    return createModuleAt(selectedAction->data().toString(), m_view->mapToScene(viewportPos));
+}
+
+bool NodeEditorWidget::createModuleAt(const QString& moduleType, const QPointF& scenePos) {
+    const ModuleType* type = ModuleRegistry::instance().getType(moduleType);
+    if (!type) {
+        return false;
+    }
+
+    const QString moduleId = generateEntityId();
+    auto module = std::make_unique<Module>(moduleId, moduleType);
+
+    for (const auto& port : type->defaultPorts) {
+        module->addPort(port);
+    }
+    for (auto it = type->defaultParameters.constBegin(); it != type->defaultParameters.constEnd(); ++it) {
+        module->setParameter(it.key(), it.value().value());
+    }
+    assignModuleIdentity(m_graph, module.get());
+
+    auto command = std::make_unique<AddModuleCommand>(m_graph, std::move(module));
+    m_commandManager->executeCommand(std::move(command));
+
+    if (!m_moduleToNodeId.contains(moduleId) || !m_graph->getModule(moduleId)) {
+        return false;
+    }
+
+    const auto nodeId = m_moduleToNodeId.value(moduleId);
+    const QPointF clampedPos = clampNodePosition(nodeId, scenePos);
+
+    GraphUpdateGuard guard(m_updatingFromGraph);
+    m_graphModel->setNodeData(nodeId, QtNodes::NodeRole::Position, clampedPos);
+    auto xCmd = std::make_unique<SetParameterCommand>(m_graph, moduleId, "x", static_cast<int>(clampedPos.x()));
+    auto yCmd = std::make_unique<SetParameterCommand>(m_graph, moduleId, "y", static_cast<int>(clampedPos.y()));
+    m_commandManager->executeCommand(std::move(xCmd));
+    m_commandManager->executeCommand(std::move(yCmd));
     return true;
 }
 

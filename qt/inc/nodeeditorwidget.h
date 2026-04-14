@@ -107,6 +107,8 @@ private:
     bool handleViewportMouseDoubleClick(QMouseEvent* event);
     bool handleViewportContextMenu(QContextMenuEvent* event);
     bool showNodeContextMenu(const QPoint& viewportPos, const QPoint& globalPos);
+    bool showCanvasCreateMenu(const QPoint& viewportPos, const QPoint& globalPos);
+    bool createModuleAt(const QString& moduleType, const QPointF& scenePos);
     QPointF clampNodePosition(QtNodes::NodeId nodeId, const QPointF& position) const;
     void refreshModulePresentation(const QString& moduleId);
     void refreshAllModulePresentations();
