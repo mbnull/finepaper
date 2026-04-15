@@ -80,6 +80,8 @@ MainWindow::MainWindow(QWidget *parent)
       m_generateAction(nullptr),
       m_validateAction(nullptr),
       m_arrangeAction(nullptr) {
+    // Build the window in dependency order: widgets first, then signal wiring,
+    // then actions/menus that depend on those widgets.
     setupPanels();
     setupConnections();
     setupActions();
@@ -94,6 +96,7 @@ MainWindow::~MainWindow() = default;
 
 void MainWindow::loadGraph(const QString& jsonPath) {
     qInfo() << "Loading graph from" << jsonPath;
+    // Route loading through command history so users can undo graph imports.
     m_commandManager->executeCommand(std::make_unique<LoadGraphCommand>(m_graph, jsonPath));
     qInfo() << "Graph load command finished for" << jsonPath
             << "modules" << m_graph->modules().size()
@@ -154,6 +157,7 @@ void MainWindow::generateVerilog() {
         return;
     }
 
+    // Persist the editor graph as framework-flavored JSON, then call generator.
     const QString designName = sanitizedDesignName(outputDirectory);
     const QString jsonPath = outputDir.filePath(designName + ".json");
     QFile jsonFile(jsonPath);
@@ -176,6 +180,8 @@ void MainWindow::generateVerilog() {
     statusBar()->showMessage("Generating Verilog...");
     QApplication::setOverrideCursor(Qt::WaitCursor);
 
+    // Run framework generator synchronously so UI status/logging reflects one
+    // complete operation from start to finish.
     QProcess proc;
     proc.setWorkingDirectory(frameworkPath);
     proc.start("ruby", {
@@ -252,6 +258,7 @@ void MainWindow::setupPanels() {
 }
 
 void MainWindow::setupConnections() {
+    // Keep selection synchronized between validation log, canvas, and property panel.
     connect(m_logPanel, &LogPanel::elementSelected, m_nodeEditor, &NodeEditorWidget::highlightElement);
     connect(m_nodeEditor,
             &NodeEditorWidget::moduleSelected,
@@ -260,6 +267,8 @@ void MainWindow::setupConnections() {
 }
 
 void MainWindow::setupActions() {
+    // Menu and toolbar share the same QAction instances to keep enabled/check
+    // states synchronized automatically.
     m_saveAction = new QAction("Save JSON", this);
     connect(m_saveAction, &QAction::triggered, this, &MainWindow::saveGraph);
 
@@ -301,6 +310,7 @@ void MainWindow::setupActions() {
 }
 
 QWidget* MainWindow::createCentralContent() {
+    // Main editing surface stays in the center; auxiliary tools are docked.
     auto* central = new QWidget(this);
     auto* layout = new QVBoxLayout(central);
     layout->setContentsMargins(0, 0, 0, 0);
@@ -329,6 +339,7 @@ void MainWindow::setupDocks() {
     resizeDocks({m_paletteDock, m_propertyDock}, {260, 320}, Qt::Horizontal);
     resizeDocks({m_logDock}, {180}, Qt::Vertical);
 
+    // Register dock toggle actions under View so users can restore hidden panels.
     QMenu* viewMenu = nullptr;
     for (QAction* action : menuBar()->actions()) {
         if (action && action->menu() && action->menu()->objectName() == "viewMenu") {

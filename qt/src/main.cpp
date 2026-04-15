@@ -12,6 +12,8 @@
 
 namespace {
 
+// Process-wide mutex used by the Qt message handler because Qt logs can come
+// from any thread.
 QMutex& logMutex() {
     static QMutex mutex;
     return mutex;
@@ -63,6 +65,7 @@ void logToFile(QtMsgType type, const QMessageLogContext& context, const QString&
                                        line,
                                        message);
 
+    // Keep line writes atomic so multi-threaded logs do not interleave.
     QMutexLocker locker(&logMutex());
     QFile* logFile = logFileHandle();
     if (logFile && logFile->isOpen()) {
@@ -87,6 +90,7 @@ void installFileLogger() {
         return;
     }
 
+    // Redirect all qDebug/qInfo/qWarning/etc. messages through logToFile().
     logFileHandle() = logFile;
     qInstallMessageHandler(logToFile);
     qInfo().noquote() << "Writing logs to" << logFile->fileName();
@@ -95,6 +99,7 @@ void installFileLogger() {
 } // namespace
 
 int main(int argc, char *argv[]) {
+    // Initialize Qt app state, install global logging, then show the main UI.
     QApplication a(argc, argv);
     QApplication::setApplicationName("finepaper");
     QApplication::setOrganizationName("finepaper");

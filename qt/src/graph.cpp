@@ -406,6 +406,7 @@ void Graph::insertConnection(std::unique_ptr<Connection> connection) {
 }
 
 bool Graph::isValidConnection(const PortRef& source, const PortRef& target) const {
+    // Disallow self-loops at graph level.
     if (source.moduleId == target.moduleId) return false;
 
     const Module* sourceModule = getModule(source.moduleId);
@@ -421,6 +422,8 @@ bool Graph::isValidConnection(const PortRef& source, const PortRef& target) cons
     if (!PortLayout::sameBusFamily(*sourcePort, *targetPort)) return false;
 
     if (isRouterLink(sourceModule, sourcePort, targetModule, targetPort)) {
+        // Router-to-router links are constrained to one opposite-side pair and
+        // one connection per side to preserve mesh semantics.
         const QString sourceSide = PortLayout::routerSideId(source.portId);
         const QString targetSide = PortLayout::routerSideId(target.portId);
 
@@ -446,6 +449,7 @@ bool Graph::isValidConnection(const PortRef& source, const PortRef& target) cons
         }
     }
 
+    // Occupancy is directional for regular ports, but bidirectional for InOut.
     const auto portIsOccupied = [&](const PortRef& portRef, const Port& port) {
         return std::any_of(m_connections.begin(), m_connections.end(),
             [&](const std::unique_ptr<Connection>& c) {
@@ -534,6 +538,8 @@ bool Graph::loadFromJson(const QString& jsonPath) {
         if (config.contains("vc_count")) module->setParameter("vc_count", config["vc_count"].toInt());
         if (config.contains("buffer_depth")) module->setParameter("buffer_depth", config["buffer_depth"].toInt());
 
+        // Keep stable lookup table so connection payload can resolve endpoints
+        // regardless of internal UUIDs.
         externalToInternalIds.insert(externalId, module->id());
         addModule(std::move(module));
     }
@@ -645,6 +651,8 @@ bool Graph::loadFromJson(const QString& jsonPath) {
             continue;
         }
 
+        // Connection IDs from import are deterministic labels; graph validity
+        // checks are still enforced before insertion.
         auto connection = std::make_unique<Connection>(from + "_" + to, PortRef{from, fromPort}, PortRef{to, toPort});
         if (!isValidConnection(connection->source(), connection->target())) {
             // Keep import resilient: skip only the bad edge and continue.
@@ -811,6 +819,8 @@ QJsonDocument Graph::toJsonDocument(const QString& designName,
             isMeshRouterModule(sourceModule) &&
             isEndpointModule(targetModule) &&
             sourcePort && PortLayout::isEndpointPort(*sourcePort)) {
+            // Router->endpoint links are represented in XP endpoint lists
+            // instead of generic edge list entries.
             auto it = xpEndpointMap.find(sourceExternalId);
             if (it != xpEndpointMap.end()) {
                 it.value().append(targetExternalId);

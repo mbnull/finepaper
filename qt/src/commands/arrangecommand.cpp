@@ -340,6 +340,8 @@ void ArrangeCommand::execute() {
     }
 
     if (!m_initialized) {
+        // Compute before/after snapshots once per command instance so redo
+        // reapplies identical coordinates.
         initializeSnapshots();
     }
 
@@ -356,6 +358,7 @@ void ArrangeCommand::undo() {
 }
 
 void ArrangeCommand::initializeSnapshots() {
+    // Snapshot current mutable placement fields, then overlay computed layout.
     captureCurrentState(m_before);
 
     const auto placements = buildPlacements();
@@ -410,6 +413,8 @@ void ArrangeCommand::applyState(const QHash<QString, ModuleSnapshot>& snapshots)
 
         const ModuleSnapshot& snapshot = it.value();
 
+        // Each field tracks existence explicitly so undo can remove parameters
+        // that were absent before arrange.
         if (snapshot.x.existed) {
             module->setParameter("x", snapshot.x.value);
         } else {
@@ -449,6 +454,8 @@ QHash<QString, ArrangeCommand::ModulePlacement> ArrangeCommand::buildPlacements(
     const int looseEndpointMarginY = ModuleTypeMetadata::looseEndpointMarginY(spacingSourceEndpoint);
 
     QHash<QString, QPoint> xpPositions;
+    // First infer logical mesh coordinates from explicit IDs + router links,
+    // then convert logical grid points into pixel positions.
     const QHash<QString, QPoint> meshCoordinates = inferMeshCoordinates(m_graph, orderedXpModules);
     const QList<MeshRelation> relations = meshRelations(m_graph);
     const QList<MeshComponent> components = buildMeshComponents(orderedXpModules, meshCoordinates, relations);
@@ -456,6 +463,7 @@ QHash<QString, ArrangeCommand::ModulePlacement> ArrangeCommand::buildPlacements(
     int currentOriginX = 0;
     int globalMaxY = std::numeric_limits<int>::min();
 
+    // Lay out disconnected mesh components side-by-side to avoid overlap.
     for (const MeshComponent& component : components) {
         const int componentWidth = component.bounds.width();
         const int componentHeight = component.bounds.height();
@@ -489,6 +497,7 @@ QHash<QString, ArrangeCommand::ModulePlacement> ArrangeCommand::buildPlacements(
         const int endpointSlot = endpointSlotForModule(m_graph, endpointModuleId);
 
         if (!xpModuleId.isEmpty() && xpPositions.contains(xpModuleId) && endpointSlot >= 0) {
+            // Attached endpoints follow their host router's endpoint slot geometry.
             const QPoint xpPosition = xpPositions.value(xpModuleId);
             const Module* xpModule = m_graph->getModule(xpModuleId);
             const qreal xpPortInset = ModuleTypeMetadata::expandedPortInset(xpModule);
@@ -511,6 +520,7 @@ QHash<QString, ArrangeCommand::ModulePlacement> ArrangeCommand::buildPlacements(
         looseEndpoints.append(orderedEndpoint.module);
     }
 
+    // Endpoints without an attachment are packed into a compact grid below meshes.
     const int looseColumns = !looseEndpoints.isEmpty()
         ? std::max(1, std::min(4, static_cast<int>(std::ceil(std::sqrt(static_cast<double>(looseEndpoints.size()))))))
         : 0;
@@ -531,6 +541,7 @@ QHash<QString, ArrangeCommand::ModulePlacement> ArrangeCommand::buildPlacements(
     }
 
     if (!placements.isEmpty()) {
+        // Center final result around x=0 so large topologies stay in view after zoom-fit.
         int minX = std::numeric_limits<int>::max();
         int maxX = std::numeric_limits<int>::min();
         for (auto it = placements.cbegin(); it != placements.cend(); ++it) {

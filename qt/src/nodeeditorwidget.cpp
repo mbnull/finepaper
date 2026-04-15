@@ -276,6 +276,8 @@ bool NodeEditorWidget::isArrangeEnabled() const {
 
 void NodeEditorWidget::setArrangeEnabled(bool enabled) {
     if (enabled) {
+        // Arrange itself is undoable, so entering arranged mode snapshots and
+        // applies layout through the command stack.
         auto command = std::make_unique<ArrangeCommand>(m_graph);
         m_commandManager->executeCommand(std::move(command));
     }
@@ -302,6 +304,8 @@ void NodeEditorWidget::ensureModuleInView(Module* module) {
         return;
     }
 
+    // Guard scene writes triggered by graph signals to avoid feedback loops
+    // into onConnectionCreated/onConnectionDeleted handlers.
     GraphUpdateGuard guard(m_updatingFromGraph);
     auto nodeId = m_graphModel->addNode("GraphNode");
     auto* nodeModel = dynamic_cast<GraphNodeModel*>(m_graphModel->delegateModel<GraphNodeModel>(nodeId));
@@ -376,6 +380,8 @@ bool NodeEditorWidget::ensureConnectionInView(Connection* connection) {
     }
 
     if (m_pendingConnections.contains(connId)) {
+        // This edge was user-created in the scene; graph confirmation arrived.
+        // Bind IDs and skip re-adding the same visual connection.
         m_pendingConnections.remove(connId);
         m_connectionToQtId[connection->id()] = connId;
         return true;
@@ -444,6 +450,7 @@ void NodeEditorWidget::onConnectionCreated(QtNodes::ConnectionId connectionId) {
         return;
     }
 
+    // Mark optimistic scene edge until command execution emits graph::connectionAdded.
     m_pendingConnections.insert(connectionId);
 
     PortRef source;
@@ -462,6 +469,7 @@ void NodeEditorWidget::onConnectionCreated(QtNodes::ConnectionId connectionId) {
         return;
     }
 
+    // Command path remains the single source of truth for mutation + undo.
     executeAddConnection(source, target);
 }
 
@@ -729,6 +737,7 @@ bool NodeEditorWidget::tryCompleteDraftConnection(const QPoint& viewportPos,
         return false;
     }
 
+    // Consume the temporary visual draft before applying validated command mutation.
     m_scene->resetDraftConnection();
 
     if (!m_graph->isValidConnection(source, target)) {
@@ -782,6 +791,8 @@ void NodeEditorWidget::onNodeMoved(QtNodes::NodeId nodeId) {
         pos = clampedPos;
     }
 
+    // Store coordinates as regular parameter commands so drag operations
+    // participate in undo/redo history.
     auto xCmd = std::make_unique<SetParameterCommand>(m_graph, moduleId, "x", static_cast<int>(pos.x()));
     auto yCmd = std::make_unique<SetParameterCommand>(m_graph, moduleId, "y", static_cast<int>(pos.y()));
     m_commandManager->executeCommand(std::move(xCmd));
