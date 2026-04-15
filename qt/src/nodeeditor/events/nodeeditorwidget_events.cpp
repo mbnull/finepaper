@@ -2,9 +2,7 @@
 #include "nodeeditorwidget.h"
 #include "animatedgraphicsview.h"
 #include "editorgraphmodel.h"
-#include "modulelabels.h"
-#include "moduletypemetadata.h"
-#include "moduleregistry.h"
+#include "nodeeditorentityfactory.h"
 #include "commands/addmodulecommand.h"
 #include "commands/setparametercommand.h"
 
@@ -16,9 +14,6 @@
 #include <QEvent>
 #include <QMimeData>
 #include <QMouseEvent>
-#include <QRegularExpression>
-#include <QUuid>
-#include <QSet>
 
 namespace {
 
@@ -27,50 +22,6 @@ QString draggedModuleType(const QMimeData* mimeData) {
         return {};
     }
     return QString::fromUtf8(mimeData->data("application/x-moduletype"));
-}
-
-QString generateEntityId() {
-    return QUuid::createUuid().toString(QUuid::WithoutBraces).replace('-', '_');
-}
-
-int nextModuleIndex(const Graph* graph, const QString& moduleType, const QString& externalIdPrefix) {
-    QSet<int> used;
-    QRegularExpression pattern("^" + QRegularExpression::escape(externalIdPrefix) + "_(\\d+)$",
-                               QRegularExpression::CaseInsensitiveOption);
-
-    for (const auto& module : graph->modules()) {
-        if (module->type() != moduleType) {
-            continue;
-        }
-
-        const auto match = pattern.match(ModuleLabels::externalId(module.get()));
-        if (match.hasMatch()) {
-            used.insert(match.captured(1).toInt());
-        }
-    }
-
-    int index = 0;
-    while (used.contains(index)) {
-        ++index;
-    }
-    return index;
-}
-
-void assignModuleIdentity(Graph* graph, Module* module) {
-    if (!graph || !module) {
-        return;
-    }
-
-    const QString externalPrefix = ModuleTypeMetadata::externalIdPrefix(module);
-    const QString displayPrefix = ModuleTypeMetadata::displayPrefix(module);
-    if (externalPrefix.isEmpty() || displayPrefix.isEmpty()) {
-        return;
-    }
-
-    const int index = nextModuleIndex(graph, module->type(), externalPrefix);
-    const int width = ModuleTypeMetadata::identityWidth(module);
-    module->setParameter("display_name", QString("%1_%2").arg(displayPrefix).arg(index, width, 10, QChar('0')));
-    module->setParameter("external_id", QString("%1_%2").arg(externalPrefix).arg(index, width, 10, QChar('0')));
 }
 
 } // namespace
@@ -233,22 +184,12 @@ void NodeEditorWidget::dropEvent(QDropEvent* event) {
         return;
     }
 
-    const ModuleType* type = ModuleRegistry::instance().getType(moduleType);
-    if (!type) {
+    const QString moduleId = NodeEditorEntityFactory::generateEntityId();
+    auto module = NodeEditorEntityFactory::createModule(m_graph, moduleId, moduleType);
+    if (!module) {
         m_view->endPaletteDrag();
         return;
     }
-
-    const QString moduleId = generateEntityId();
-    auto module = std::make_unique<Module>(moduleId, moduleType);
-
-    for (const auto& port : type->defaultPorts) {
-        module->addPort(port);
-    }
-    for (auto it = type->defaultParameters.constBegin(); it != type->defaultParameters.constEnd(); ++it) {
-        module->setParameter(it.key(), it.value().value());
-    }
-    assignModuleIdentity(m_graph, module.get());
 
     auto command = std::make_unique<AddModuleCommand>(m_graph, std::move(module));
     m_commandManager->executeCommand(std::move(command));

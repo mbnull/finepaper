@@ -240,6 +240,15 @@ bool connectionUsesRouterSide(const Connection& connection,
 Graph::Graph(QObject* parent) : QObject(parent) {
 }
 
+Graph::~Graph() {
+    for (auto it = m_moduleConnections.begin(); it != m_moduleConnections.end(); ++it) {
+        disconnect(it.value());
+    }
+    m_moduleConnections.clear();
+    m_connections.clear();
+    m_modules.clear();
+}
+
 bool Graph::addModule(std::unique_ptr<Module> module) {
     if (module->id().isEmpty()) {
         qWarning() << "Cannot add module with empty ID";
@@ -284,6 +293,8 @@ void Graph::removeModule(const QString& moduleId) {
         [&moduleId](const std::unique_ptr<Module>& m) { return m->id() == moduleId; });
 
     if (it != m_modules.end()) {
+        disconnect(m_moduleConnections.value(moduleId));
+        m_moduleConnections.remove(moduleId);
         m_modules.erase(it, m_modules.end());
         qInfo() << "Removed module"
                 << "id" << moduleId

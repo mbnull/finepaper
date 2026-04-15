@@ -12,6 +12,7 @@
 #include "modulelabels.h"
 #include "moduletypemetadata.h"
 #include "moduleregistry.h"
+#include "nodeeditorentityfactory.h"
 #include "portlayout.h"
 #include "straightconnectionpainter.h"
 #include "commands/arrangecommand.h"
@@ -27,9 +28,7 @@
 #include <QVBoxLayout>
 #include <QMouseEvent>
 #include <QMenu>
-#include <QRegularExpression>
 #include <QSet>
-#include <QUuid>
 #include <QGraphicsItem>
 #include <algorithm>
 #include <cmath>
@@ -144,50 +143,6 @@ QString firstAvailablePort(const Graph* graph,
     }
 
     return {};
-}
-
-QString generateEntityId() {
-    return QUuid::createUuid().toString(QUuid::WithoutBraces).replace('-', '_');
-}
-
-int nextModuleIndex(const Graph* graph, const QString& moduleType, const QString& externalIdPrefix) {
-    QSet<int> used;
-    QRegularExpression pattern("^" + QRegularExpression::escape(externalIdPrefix) + "_(\\d+)$",
-                               QRegularExpression::CaseInsensitiveOption);
-
-    for (const auto& module : graph->modules()) {
-        if (module->type() != moduleType) {
-            continue;
-        }
-
-        const auto match = pattern.match(ModuleLabels::externalId(module.get()));
-        if (match.hasMatch()) {
-            used.insert(match.captured(1).toInt());
-        }
-    }
-
-    int index = 0;
-    while (used.contains(index)) {
-        ++index;
-    }
-    return index;
-}
-
-void assignModuleIdentity(Graph* graph, Module* module) {
-    if (!graph || !module) {
-        return;
-    }
-
-    const QString externalPrefix = ModuleTypeMetadata::externalIdPrefix(module);
-    const QString displayPrefix = ModuleTypeMetadata::displayPrefix(module);
-    if (externalPrefix.isEmpty() || displayPrefix.isEmpty()) {
-        return;
-    }
-
-    const int index = nextModuleIndex(graph, module->type(), externalPrefix);
-    const int width = ModuleTypeMetadata::identityWidth(module);
-    module->setParameter("display_name", QString("%1_%2").arg(displayPrefix).arg(index, width, 10, QChar('0')));
-    module->setParameter("external_id", QString("%1_%2").arg(externalPrefix).arg(index, width, 10, QChar('0')));
 }
 
 struct DraftConnectionStart {
@@ -749,7 +704,7 @@ bool NodeEditorWidget::tryCompleteDraftConnection(const QPoint& viewportPos,
 }
 
 void NodeEditorWidget::executeAddConnection(const PortRef& source, const PortRef& target) {
-    auto connection = std::make_unique<Connection>(generateEntityId(), source, target);
+    auto connection = std::make_unique<Connection>(NodeEditorEntityFactory::generateEntityId(), source, target);
     auto command = std::make_unique<AddConnectionCommand>(m_graph, std::move(connection));
     m_commandManager->executeCommand(std::move(command));
 }
@@ -933,21 +888,11 @@ bool NodeEditorWidget::showCanvasCreateMenu(const QPoint& viewportPos, const QPo
 }
 
 bool NodeEditorWidget::createModuleAt(const QString& moduleType, const QPointF& scenePos) {
-    const ModuleType* type = ModuleRegistry::instance().getType(moduleType);
-    if (!type) {
+    const QString moduleId = NodeEditorEntityFactory::generateEntityId();
+    auto module = NodeEditorEntityFactory::createModule(m_graph, moduleId, moduleType);
+    if (!module) {
         return false;
     }
-
-    const QString moduleId = generateEntityId();
-    auto module = std::make_unique<Module>(moduleId, moduleType);
-
-    for (const auto& port : type->defaultPorts) {
-        module->addPort(port);
-    }
-    for (auto it = type->defaultParameters.constBegin(); it != type->defaultParameters.constEnd(); ++it) {
-        module->setParameter(it.key(), it.value().value());
-    }
-    assignModuleIdentity(m_graph, module.get());
 
     auto command = std::make_unique<AddModuleCommand>(m_graph, std::move(module));
     m_commandManager->executeCommand(std::move(command));

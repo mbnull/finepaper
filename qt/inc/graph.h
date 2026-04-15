@@ -23,6 +23,7 @@ class Graph : public QObject {
 
 public:
     explicit Graph(QObject* parent = nullptr);
+    ~Graph() override;
 
     // Adds a new module and emits moduleAdded; returns false on duplicate/invalid IDs.
     bool addModule(std::unique_ptr<Module> module);
