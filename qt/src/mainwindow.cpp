@@ -282,10 +282,21 @@ void MainWindow::setupActions() {
 
     m_arrangeAction = new QAction("Arrange", this);
     m_arrangeAction->setCheckable(true);
-    m_arrangeAction->setToolTip("Arrange the graph into a mesh-style layout and lock direct canvas editing.");
+    m_arrangeAction->setToolTip("Arrange the graph once into a mesh-style layout.");
     connect(m_arrangeAction, &QAction::toggled, m_nodeEditor, &NodeEditorWidget::setArrangeEnabled);
     connect(m_arrangeAction, &QAction::toggled, m_palette, [this](bool enabled) {
         m_palette->setEnabled(!enabled);
+    });
+    connect(m_arrangeAction, &QAction::toggled, this, [this](bool enabled) {
+        if (!enabled || !m_arrangeAction) {
+            return;
+        }
+        // Keep the existing toggle pipeline, but make Arrange behave like a one-shot click.
+        QTimer::singleShot(0, this, [this]() {
+            if (m_arrangeAction && m_arrangeAction->isChecked()) {
+                m_arrangeAction->setChecked(false);
+            }
+        });
     });
 
     auto* fileMenu = menuBar()->addMenu("&File");
