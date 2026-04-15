@@ -1,3 +1,4 @@
+// AnimatedGraphicsView renders the node canvas and an overlay used during palette drag operations.
 #pragma once
 
 #include <QtNodes/GraphicsView>

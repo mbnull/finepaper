@@ -1,3 +1,4 @@
+// ModuleRegistry bootstraps, indexes, and serves module type metadata to the editor.
 #include "frameworkpaths.h"
 #include "moduleregistry.h"
 #include "moduleprovider.h"

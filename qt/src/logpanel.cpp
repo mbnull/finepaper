@@ -1,3 +1,4 @@
+// LogPanel renders validation output and exposes click-to-select graph elements.
 #include "logpanel.h"
 #include <QVBoxLayout>
 

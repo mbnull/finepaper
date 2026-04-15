@@ -1,3 +1,4 @@
+// Module owns per-node ports and parameter values and emits parameter change notifications.
 #include "module.h"
 #include <memory>
 

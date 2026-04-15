@@ -1,3 +1,4 @@
+// SetParameterCommand updates one module parameter and restores old state on undo.
 #include "commands/setparametercommand.h"
 
 SetParameterCommand::SetParameterCommand(Graph* graph, const QString& moduleId,

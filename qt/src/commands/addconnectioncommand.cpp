@@ -1,3 +1,4 @@
+// AddConnectionCommand adds one connection with undo support.
 #include "commands/addconnectioncommand.h"
 
 AddConnectionCommand::AddConnectionCommand(Graph* graph, std::unique_ptr<Connection> connection)

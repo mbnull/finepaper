@@ -1,3 +1,4 @@
+// GraphNodePainter handles custom node visuals including title, ports, and XP toggle UI.
 #include "graphnodepainter.h"
 #include "graphnodegeometry.h"
 #include "graphnodemodel.h"

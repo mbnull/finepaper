@@ -29,12 +29,16 @@ class NodeEditorWidget : public QWidget {
     Q_OBJECT
 
 public:
+    // Constructs the visual editor and binds it to Graph/CommandManager.
     NodeEditorWidget(Graph* graph, CommandManager* commandManager, QWidget* parent = nullptr);
     ~NodeEditorWidget() override;
+    // Returns whether auto-arrange behavior is currently enabled in the view.
     bool isArrangeEnabled() const;
 
 public slots:
+    // Highlights a module/connection in the scene when selected from external UI (for example log panel).
     void highlightElement(const QString& elementId);
+    // Enables/disables auto-arrange mode and updates related interaction state.
     void setArrangeEnabled(bool enabled);
 
 signals:
@@ -48,12 +52,15 @@ protected:
     bool eventFilter(QObject* obj, QEvent* event) override;
 
 private slots:
+    // Mirror Graph mutations into QtNodes scene objects.
     void onModuleAdded(Module* module);
     void onModuleRemoved(const QString& moduleId);
     void onConnectionAdded(Connection* connection);
     void onConnectionRemoved(const QString& connectionId);
+    // Convert user-made scene connections into graph commands.
     void onConnectionCreated(QtNodes::ConnectionId connectionId);
     void onConnectionDeleted(QtNodes::ConnectionId connectionId);
+    // Keep selection/parameter changes synchronized across view and side panels.
     void onSelectionChanged();
     void onNodeMoved(QtNodes::NodeId nodeId);
     void onParameterChanged(const QString& paramName);

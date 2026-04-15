@@ -1,3 +1,4 @@
+// FrameworkPaths implementation with environment override and parent-directory probing.
 #include "frameworkpaths.h"
 
 #include <QCoreApplication>

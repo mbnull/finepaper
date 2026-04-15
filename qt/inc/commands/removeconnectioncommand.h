@@ -7,8 +7,11 @@
 
 class RemoveConnectionCommand : public Command {
 public:
+    // Targets a specific connection ID for deletion.
     RemoveConnectionCommand(Graph* graph, const QString& connectionId);
+    // Removes the connection and stores it for undo.
     void execute() override;
+    // Re-inserts the removed connection.
     void undo() override;
 
 private:

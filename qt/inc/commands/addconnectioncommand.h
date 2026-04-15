@@ -7,8 +7,11 @@
 
 class AddConnectionCommand : public Command {
 public:
+    // Takes ownership of a prepared connection to be inserted into the graph.
     AddConnectionCommand(Graph* graph, std::unique_ptr<Connection> connection);
+    // Inserts the connection if it passes graph validation rules.
     void execute() override;
+    // Removes the inserted connection and restores local ownership.
     void undo() override;
 
 private:

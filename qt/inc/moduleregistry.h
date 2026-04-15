@@ -56,10 +56,15 @@ class ModuleRegistry {
 public:
     static ModuleRegistry& instance();
 
+    // Adds a provider and imports all types it exposes.
     void addProvider(std::unique_ptr<ModuleProvider> provider);
+    // Inserts or replaces one module type definition in the registry.
     void registerType(const ModuleType& type);
+    // Looks up type metadata by canonical type name.
     const ModuleType* getType(const QString& name) const;
+    // Looks up the first type that belongs to a graph group (e.g., "xps", "endpoints").
     const ModuleType* getTypeForGraphGroup(const QString& graphGroup) const;
+    // Returns type names sorted for stable UI listing.
     QStringList availableTypes() const;
 
 private:

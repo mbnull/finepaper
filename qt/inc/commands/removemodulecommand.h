@@ -7,8 +7,11 @@
 
 class RemoveModuleCommand : public Command {
 public:
+    // Targets a specific module ID for deletion.
     RemoveModuleCommand(Graph* graph, const QString& moduleId);
+    // Removes the module and all incident connections, storing them for undo.
     void execute() override;
+    // Re-inserts removed module and its captured connections.
     void undo() override;
 
 private:

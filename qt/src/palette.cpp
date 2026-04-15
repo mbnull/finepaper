@@ -1,3 +1,4 @@
+// Palette lists available module types and starts drag payloads for node creation.
 #include "palette.h"
 #include "moduleregistry.h"
 #include "moduletypemetadata.h"

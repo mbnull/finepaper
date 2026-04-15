@@ -1,3 +1,4 @@
+// RemoveModuleCommand removes one module plus incident edges and restores them on undo.
 #include "commands/removemodulecommand.h"
 
 RemoveModuleCommand::RemoveModuleCommand(Graph* graph, const QString& moduleId)

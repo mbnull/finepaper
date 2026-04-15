@@ -1,3 +1,4 @@
+-- xmake build configuration for the Qt editor app and its test binaries.
 add_rules("mode.debug", "mode.release")
 
 includes("deps/packages.lua")

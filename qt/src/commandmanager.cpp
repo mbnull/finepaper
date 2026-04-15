@@ -1,3 +1,4 @@
+// CommandManager executes commands and maintains undo/redo history.
 #include "commandmanager.h"
 #include "qdebug.h"
 #include <QDebug>

@@ -1,3 +1,4 @@
+// DRCRunner serializes the graph, invokes external DRC, and maps findings back to editor IDs.
 #include "drcrunner.h"
 #include "frameworkpaths.h"
 #include "graph.h"

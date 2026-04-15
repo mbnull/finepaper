@@ -1,3 +1,4 @@
+// Graph integration-style tests for JSON import/export and topology behavior.
 #include "graph.h"
 #include "frameworkpaths.h"
 #include "moduleregistry.h"

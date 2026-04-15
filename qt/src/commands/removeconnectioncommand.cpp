@@ -1,3 +1,4 @@
+// RemoveConnectionCommand removes one connection and restores it on undo.
 #include "commands/removeconnectioncommand.h"
 
 RemoveConnectionCommand::RemoveConnectionCommand(Graph* graph, const QString& connectionId)

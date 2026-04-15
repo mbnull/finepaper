@@ -24,24 +24,39 @@ class Graph : public QObject {
 public:
     explicit Graph(QObject* parent = nullptr);
 
+    // Adds a new module and emits moduleAdded; returns false on duplicate/invalid IDs.
     bool addModule(std::unique_ptr<Module> module);
+    // Removes a module plus incident edges and emits corresponding removal signals.
     void removeModule(const QString& moduleId);
+    // Returns the module by ID, or nullptr if not found.
     Module* getModule(const QString& moduleId) const;
+    // Removes a module from the graph and transfers ownership to the caller.
     std::unique_ptr<Module> takeModule(const QString& moduleId);
+    // Inserts a pre-built module without creating it internally (used by undo/redo).
     bool insertModule(std::unique_ptr<Module> module);
 
+    // Adds a connection and emits connectionAdded.
     void addConnection(std::unique_ptr<Connection> connection);
+    // Removes a connection by ID and emits connectionRemoved.
     void removeConnection(const QString& connectionId);
+    // Removes a connection from the graph and transfers ownership to the caller.
     std::unique_ptr<Connection> takeConnection(const QString& connectionId);
+    // Inserts a pre-built connection (used by undo/redo).
     void insertConnection(std::unique_ptr<Connection> connection);
+    // Validates endpoint/module existence, directionality, and occupancy constraints.
     bool isValidConnection(const PortRef& source, const PortRef& target) const;
 
     const std::vector<std::unique_ptr<Module>>& modules() const { return m_modules; }
     const std::vector<std::unique_ptr<Connection>>& connections() const { return m_connections; }
 
+    // Imports an editor graph JSON file and rebuilds the in-memory graph.
+    // Existing modules/connections are cleared before import; returns false on file/JSON errors.
     bool loadFromJson(const QString& jsonPath);
+    // Exports current graph using editor-friendly JSON shape.
     bool saveToJson(const QString& jsonPath) const;
+    // Exports current graph as XML generated from the editor JSON object model.
     bool saveToXml(const QString& xmlPath) const;
+    // Serializes graph in editor/framework flavor, optionally returning external->internal ID map.
     QJsonDocument toJsonDocument(const QString& designName,
                                  GraphJsonFlavor flavor = GraphJsonFlavor::Framework,
                                  QHash<QString, QString>* externalToInternalIds = nullptr) const;

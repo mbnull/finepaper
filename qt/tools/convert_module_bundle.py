@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+# Converts framework module bundle XML into JSON metadata used by the editor loader pipeline.
 import argparse
 import copy
 import json

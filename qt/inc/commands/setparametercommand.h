@@ -7,8 +7,11 @@
 
 class SetParameterCommand : public Command {
 public:
+    // Targets one module parameter update and captures prior value for undo.
     SetParameterCommand(Graph* graph, const QString& moduleId, const QString& paramName, Parameter::Value newValue);
+    // Applies the new parameter value.
     void execute() override;
+    // Restores previous parameter value or removes newly introduced parameter.
     void undo() override;
 
 private:

@@ -1,3 +1,4 @@
+// AddModuleCommand inserts one module with undo support.
 #include "commands/addmodulecommand.h"
 
 AddModuleCommand::AddModuleCommand(Graph* graph, std::unique_ptr<Module> module)

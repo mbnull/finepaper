@@ -1,3 +1,4 @@
+// StraightConnectionPainter renders segmented orthogonal connection paths and highlight states.
 #include "straightconnectionpainter.h"
 #include "graphnodemodel.h"
 #include "portcolors.h"

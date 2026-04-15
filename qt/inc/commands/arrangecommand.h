@@ -14,7 +14,9 @@ class ArrangeCommand : public Command {
 public:
     explicit ArrangeCommand(Graph* graph);
 
+    // Computes and applies automatic placement for routers/endpoints.
     void execute() override;
+    // Restores the exact pre-arrange parameter state.
     void undo() override;
 
 private:

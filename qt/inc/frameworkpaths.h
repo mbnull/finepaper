@@ -1,3 +1,4 @@
+// FrameworkPaths resolves runtime paths to framework binaries, templates, and module bundles.
 #pragma once
 
 #include <QString>

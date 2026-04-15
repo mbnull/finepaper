@@ -1,3 +1,4 @@
+// AnimatedGraphicsView implementation for drag-overlay animations and guarded delete behavior.
 #include "animatedgraphicsview.h"
 
 #include <QFontMetrics>

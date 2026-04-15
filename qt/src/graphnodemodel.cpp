@@ -1,3 +1,4 @@
+// GraphNodeModel adapts Module data into QtNodes ports, captions, and editable state.
 #include "graphnodemodel.h"
 #include "modulelabels.h"
 #include "moduletypemetadata.h"

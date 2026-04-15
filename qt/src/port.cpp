@@ -1,3 +1,4 @@
+// Port value object implementation.
 #include "port.h"
 
 Port::Port(const QString& id,

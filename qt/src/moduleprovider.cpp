@@ -1,3 +1,4 @@
+// ModuleProvider loaders parse XML/JSON bundles into normalized ModuleType definitions.
 #include "moduleprovider.h"
 #include <QDir>
 #include <QFile>

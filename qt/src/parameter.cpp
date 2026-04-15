@@ -1,3 +1,4 @@
+// Parameter value object implementation.
 #include "parameter.h"
 
 Parameter::Parameter(const QString& name, Value value)

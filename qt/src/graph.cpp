@@ -486,6 +486,10 @@ bool Graph::isValidConnection(const PortRef& source, const PortRef& target) cons
 }
 
 bool Graph::loadFromJson(const QString& jsonPath) {
+    // Import pipeline:
+    // 1) Parse JSON and rebuild modules while mapping external IDs -> internal IDs.
+    // 2) Reconstruct explicit/derived connections with port fallback logic.
+    // 3) Restore legacy xp->endpoint links that may be stored separately.
     qInfo() << "Starting graph import from" << jsonPath;
     QFile file(jsonPath);
     if (!file.open(QIODevice::ReadOnly)) {
@@ -504,10 +508,12 @@ bool Graph::loadFromJson(const QString& jsonPath) {
     const ModuleType* meshRouterType = ModuleRegistry::instance().getTypeForGraphGroup("xps");
     const ModuleType* endpointType = ModuleRegistry::instance().getTypeForGraphGroup("endpoints");
 
+    // Start from a clean model so imported state fully replaces in-memory topology.
     while (!m_modules.empty()) {
         removeModule(m_modules.front()->id());
     }
 
+    // Pass 1: materialize all routers and remember external->internal ID mapping.
     QJsonArray xps = root["xps"].toArray();
     for (const auto& xpVal : xps) {
         QJsonObject xp = xpVal.toObject();
@@ -532,6 +538,7 @@ bool Graph::loadFromJson(const QString& jsonPath) {
         addModule(std::move(module));
     }
 
+    // Pass 2: materialize all endpoints and extend the same ID mapping table.
     QJsonArray eps = root["endpoints"].toArray();
     for (const auto& epVal : eps) {
         QJsonObject ep = epVal.toObject();
@@ -557,6 +564,12 @@ bool Graph::loadFromJson(const QString& jsonPath) {
         addModule(std::move(module));
     }
 
+    // Pass 3: recreate declared connections.
+    // Preference order for ports:
+    // - explicit port IDs from JSON (if pair type is valid),
+    // - direction-based router ports,
+    // - guessed router-to-router ports,
+    // - first available compatible fallback ports.
     QJsonArray conns = root["connections"].toArray();
     for (const auto& connVal : conns) {
         QJsonObject conn = connVal.toObject();
@@ -571,6 +584,7 @@ bool Graph::loadFromJson(const QString& jsonPath) {
         Module* fromModule = getModule(from);
         Module* toModule = getModule(to);
         if (!fromModule || !toModule) {
+            // IDs in the connection payload reference a node that was not imported.
             qWarning() << "Skipping connection" << fromExternal << "->" << toExternal << ": module not found";
             continue;
         }
@@ -586,12 +600,14 @@ bool Graph::loadFromJson(const QString& jsonPath) {
                 PortLayout::isRouterPort(*explicitFromPort) && PortLayout::isRouterPort(*explicitToPort);
 
             if (!explicitEndpointLink && !explicitRouterLink) {
+                // Ignore mixed/invalid explicit pairs and fall back to inferred ports below.
                 fromPort.clear();
                 toPort.clear();
             }
         }
 
         if (isMeshRouterModule(fromModule) && isEndpointModule(toModule)) {
+            // Router->endpoint links must use endpoint-class ports on both sides.
             if (fromPort.isEmpty() || !findPort(fromModule, fromPort) || !PortLayout::isEndpointPort(*findPort(fromModule, fromPort))) {
                 fromPort = firstAvailablePort(this, fromModule, Port::Direction::Output,
                     [](const Port& port) { return PortLayout::isEndpointPort(port); });
@@ -601,9 +617,11 @@ bool Graph::loadFromJson(const QString& jsonPath) {
                     [](const Port& port) { return PortLayout::isEndpointPort(port); });
             }
         } else if (!dir.isEmpty()) {
+            // Legacy files may only store relative direction; derive canonical router port IDs.
             fromPort = PortLayout::routerOutputPortId(dir);
             toPort = PortLayout::routerInputPortId(oppositeDirection(dir));
         } else if (isMeshRouterModule(fromModule) && isMeshRouterModule(toModule)) {
+            // As a last semantic guess, infer router-to-router side pairing from module placement.
             auto guessed = guessedRouterPorts(fromModule, toModule);
             if (!guessed.first.isEmpty() && !guessed.second.isEmpty()) {
                 fromPort = guessed.first;
@@ -612,10 +630,12 @@ bool Graph::loadFromJson(const QString& jsonPath) {
         }
 
         if (fromPort.isEmpty()) {
+            // Final fallback: pick the first free router-capable output.
             fromPort = firstAvailablePort(this, fromModule, Port::Direction::Output,
                 [](const Port& port) { return PortLayout::isRouterPort(port); });
         }
         if (toPort.isEmpty()) {
+            // Final fallback: pick the first free router-capable input.
             toPort = firstAvailablePort(this, toModule, Port::Direction::Input,
                 [](const Port& port) { return PortLayout::isRouterPort(port); });
         }
@@ -627,15 +647,19 @@ bool Graph::loadFromJson(const QString& jsonPath) {
 
         auto connection = std::make_unique<Connection>(from + "_" + to, PortRef{from, fromPort}, PortRef{to, toPort});
         if (!isValidConnection(connection->source(), connection->target())) {
+            // Keep import resilient: skip only the bad edge and continue.
             qWarning() << "Skipping invalid connection" << fromExternal << "->" << toExternal;
             continue;
         }
         addConnection(std::move(connection));
         if (isMeshRouterModule(fromModule) && isEndpointModule(toModule)) {
+            // Place endpoint near its router if explicit coordinates are missing.
             assignEndpointFallbackPosition(toModule, fromModule, fromPort);
         }
     }
 
+    // Pass 4: support legacy schema where router-attached endpoints are listed under each XP.
+    // These links can coexist with/without explicit entries in "connections".
     for (const auto& xpVal : xps) {
         QJsonObject xp = xpVal.toObject();
         QString xpExternalId = xp["id"].toString();
@@ -649,6 +673,7 @@ bool Graph::loadFromJson(const QString& jsonPath) {
             Module* epModule = getModule(epId);
             Module* xpModule = getModule(xpId);
             if (!epModule || !xpModule) {
+                // Legacy endpoint reference points to a module not present in this import.
                 qWarning() << "Skipping connection" << epExternalId << "->" << xpExternalId << ": module not found";
                 continue;
             }
@@ -666,6 +691,7 @@ bool Graph::loadFromJson(const QString& jsonPath) {
 
             auto connection = std::make_unique<Connection>(xpId + "_" + epId, PortRef{xpId, xpPort}, PortRef{epId, epPort});
             if (!isValidConnection(connection->source(), connection->target())) {
+                // Duplicate/conflicting legacy links are tolerated and skipped.
                 qWarning() << "Skipping invalid connection" << xpExternalId << "->" << epExternalId;
                 continue;
             }

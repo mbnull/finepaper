@@ -1,3 +1,4 @@
+// GraphNodeGeometry computes node bounds, port coordinates, and hit-testing for QtNodes.
 #include "graphnodegeometry.h"
 #include "graphnodemodel.h"
 #include "moduletypemetadata.h"

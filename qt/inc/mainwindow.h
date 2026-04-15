@@ -26,16 +26,23 @@ class MainWindow : public QMainWindow {
     explicit MainWindow(QWidget *parent = nullptr);
     ~MainWindow() override;
 
+    // Loads a design from disk via command pipeline so the action is undoable.
     void loadGraph(const QString& jsonPath);
 
 private slots:
+    // Saves current graph into editor JSON format.
     void saveGraph();
+    // Exports a framework-oriented output (Verilog generation entry point).
     void generateVerilog();
+    // Runs local + framework validation and refreshes the log panel.
     void runValidation();
 
   private:
+    // Builds the three-pane editor layout and log area.
     void setupPanels();
+    // Wires cross-widget signals/slots.
     void setupConnections();
+    // Creates menus/tool actions and binds callbacks.
     void setupActions();
     QWidget* createCentralContent();
     void setupDocks();

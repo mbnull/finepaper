@@ -1,3 +1,4 @@
+// LoadGraphCommand imports a graph snapshot and supports full-state undo.
 #include "commands/loadgraphcommand.h"
 #include <QDebug>
 

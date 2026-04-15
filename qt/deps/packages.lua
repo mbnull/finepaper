@@ -1,3 +1,4 @@
+-- xmake package recipe for the third-party QtNodes dependency used by the editor.
 package("nodeeditor")
 set_homepage("https://github.com/paceholder/nodeeditor")
 set_description("Qt Node Editor. Dataflow programming framework")

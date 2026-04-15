@@ -1,3 +1,4 @@
+// BasicValidator performs built-in graph checks (connection validity and required links).
 #include "validator.h"
 #include "graph.h"
 #include "moduletypemetadata.h"
