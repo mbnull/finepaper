@@ -24,7 +24,19 @@ public:
     virtual void apply(QHash<QString, ModuleType>& types) = 0;
 };
 
-// JsonModuleTypeSource loads runtime/default module metadata from modules.json.
+// XmlModuleTypeSource loads module core metadata from modules.xml.
+class XmlModuleTypeSource : public ModuleTypeSource {
+public:
+    explicit XmlModuleTypeSource(const QString& bundlePath);
+    QHash<QString, ModuleType> loadModuleTypes() override;
+    QStringList orderedTypeNames() const override;
+
+private:
+    QString m_bundlePath;
+    QStringList m_orderedTypeNames;
+};
+
+// JsonModuleTypeSource loads authored JSON metadata that can also be converted into XML bundles.
 class JsonModuleTypeSource : public ModuleTypeSource {
 public:
     explicit JsonModuleTypeSource(const QString& bundlePath);
@@ -36,7 +48,7 @@ private:
     QStringList m_orderedTypeNames;
 };
 
-// XmlModulePresentationOverlay applies editor-only presentation metadata from modules.ui.xml.
+// XmlModulePresentationOverlay applies legacy combined presentation metadata from modules.ui.xml.
 class XmlModulePresentationOverlay : public ModuleTypeOverlay {
 public:
     explicit XmlModulePresentationOverlay(const QString& presentationPath);
@@ -44,6 +56,16 @@ public:
 
 private:
     QString m_presentationPath;
+};
+
+// XmlModuleGraphicsOverlay applies per-module graphics overlays from a directory of XML files.
+class XmlModuleGraphicsOverlay : public ModuleTypeOverlay {
+public:
+    explicit XmlModuleGraphicsOverlay(const QString& graphicsDirectory);
+    void apply(QHash<QString, ModuleType>& types) override;
+
+private:
+    QString m_graphicsDirectory;
 };
 
 // LayeredModuleProvider composes a base source with optional overlays.

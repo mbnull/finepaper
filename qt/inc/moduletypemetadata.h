@@ -40,6 +40,11 @@ inline QString graphGroup(const Module* module) {
     return moduleType ? moduleType->graphGroup : QString();
 }
 
+inline QString description(const Module* module) {
+    const ModuleType* moduleType = type(module);
+    return moduleType ? moduleType->description : QString();
+}
+
 inline bool isInGraphGroup(const Module* module, QStringView graphGroupName) {
     return graphGroup(module) == graphGroupName;
 }

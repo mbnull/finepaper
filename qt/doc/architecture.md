@@ -102,19 +102,21 @@ Module definitions are data-driven.
 
 The current provider stack is:
 
-- `JsonModuleTypeSource` for runtime/default metadata
-- `XmlModulePresentationOverlay` for editor presentation metadata
-- `LayeredModuleProvider` to combine the source and overlays
+- `XmlModuleTypeSource` for the IP-core bundle metadata
+- `XmlModuleGraphicsOverlay` for per-IP graphics files
+- `JsonModuleTypeSource` plus `XmlModulePresentationOverlay` for authored JSON and older presentation overlays
+- `LayeredModuleProvider` to combine the source and optional overlays
 
 Bundle metadata controls:
 
 - palette naming
-- node color
-- editor layout specialization
+- module descriptions
 - graph grouping
 - external/display identity generation
-- collapse support
 - default ports and parameters
+- port roles and bus-family metadata
+- parameter descriptions and config visibility
+- node color and editor layout through graphics overlays
 
 `ModuleTypeMetadata` centralizes lookup helpers so UI and validation code can ask semantic questions such as:
 
@@ -170,7 +172,7 @@ Generation reuses the same framework discovery path and writes framework JSON in
 ## Operational assumptions
 
 - The external framework uses Ruby and provides `bin/generate`.
-- Module bundles are split between JSON runtime/default metadata and XML editor presentation metadata.
+- Module bundles are preferably expressed as `modules.xml` plus per-IP graphics files. Authored JSON and IP-XACT are conversion inputs, not the preferred runtime layout.
 - Position is stored as module parameters such as `x` and `y`.
 - Some editor-only state, such as `collapsed`, is intentionally omitted from framework export.
 

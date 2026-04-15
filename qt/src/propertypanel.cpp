@@ -16,10 +16,46 @@
 #include <QDoubleSpinBox>
 #include <QCheckBox>
 #include <QFormLayout>
+#include <QPlainTextEdit>
+#include <QScrollBar>
+
+namespace {
+
+QString humanizeIdentifier(const QString& identifier) {
+    QString text = identifier;
+    text.replace('-', ' ');
+    text.replace('_', ' ');
+
+    bool capitalizeNext = true;
+    for (int index = 0; index < text.size(); ++index) {
+        if (text[index].isSpace()) {
+            capitalizeNext = true;
+            continue;
+        }
+
+        if (capitalizeNext) {
+            text[index] = text[index].toUpper();
+            capitalizeNext = false;
+        }
+    }
+
+    return text;
+}
+} // namespace
 
 PropertyPanel::PropertyPanel(Graph* graph, CommandManager* commandManager, QWidget* parent)
     : QWidget(parent), m_graph(graph), m_commandManager(commandManager) {
     m_layout = new QVBoxLayout(this);
+    m_descriptionView = new QPlainTextEdit(this);
+    m_descriptionView->setReadOnly(true);
+    m_descriptionView->setLineWrapMode(QPlainTextEdit::WidgetWidth);
+    m_descriptionView->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_descriptionView->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    m_descriptionView->setFixedHeight((m_descriptionView->fontMetrics().lineSpacing() * 3) + 12);
+    m_descriptionView->setStyleSheet(
+        QStringLiteral("QPlainTextEdit { color: #555; font-size: 11px; border: 1px solid #d8d8d8; }"));
+    m_descriptionView->hide();
+    m_layout->addWidget(m_descriptionView);
     m_formLayout = new QFormLayout();
     m_layout->addLayout(m_formLayout);
 }
@@ -44,6 +80,9 @@ void PropertyPanel::setSelectedModule(Module* module) {
 }
 
 void PropertyPanel::clearPanel() {
+    m_descriptionView->clear();
+    m_descriptionView->hide();
+
     while (m_formLayout->rowCount() > 0) {
         m_formLayout->removeRow(0);
     }
@@ -51,8 +90,18 @@ void PropertyPanel::clearPanel() {
 }
 
 void PropertyPanel::populatePanel() {
+    const QString moduleDescription = ModuleTypeMetadata::description(m_selectedModule);
+    if (!moduleDescription.isEmpty()) {
+        m_descriptionView->setPlainText(moduleDescription);
+        m_descriptionView->setToolTip(moduleDescription);
+        m_descriptionView->verticalScrollBar()->setValue(0);
+        m_descriptionView->show();
+    }
+
     const QString moduleId = m_selectedModule->id();
-    const auto addParameterRow = [this, &moduleId](const QString& name, const QString& label) {
+    const auto addParameterRow = [this, &moduleId](const QString& name,
+                                                   const QString& label,
+                                                   const QString& description) {
         const auto paramIt = m_selectedModule->parameters().find(name);
         if (paramIt == m_selectedModule->parameters().end()) {
             return;
@@ -101,7 +150,12 @@ void PropertyPanel::populatePanel() {
         }
 
         if (widget) {
-            m_formLayout->addRow(label.isEmpty() ? name : label, widget);
+            QLabel* rowLabel = new QLabel(label.isEmpty() ? name : label, this);
+            if (!description.isEmpty()) {
+                rowLabel->setToolTip(description);
+                widget->setToolTip(description);
+            }
+            m_formLayout->addRow(rowLabel, widget);
             m_parameterWidgets[name] = widget;
         }
     };
@@ -109,7 +163,7 @@ void PropertyPanel::populatePanel() {
     const QVector<ModuleConfigField>& configFields = ModuleTypeMetadata::configFields(m_selectedModule);
     if (!configFields.isEmpty()) {
         for (const ModuleConfigField& field : configFields) {
-            addParameterRow(field.parameterName, field.label);
+            addParameterRow(field.parameterName, field.label, field.description);
         }
         return;
     }
@@ -117,7 +171,7 @@ void PropertyPanel::populatePanel() {
     for (auto it = m_selectedModule->parameters().constBegin(); it != m_selectedModule->parameters().constEnd(); ++it) {
         const QString& name = it.key();
         if (name == "x" || name == "y") continue;
-        addParameterRow(name, name);
+        addParameterRow(name, humanizeIdentifier(name), QString());
     }
 }
 

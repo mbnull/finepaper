@@ -16,6 +16,7 @@ class ModuleProvider;
 struct ModuleConfigField {
     QString parameterName;
     QString label;
+    QString description;
 };
 
 struct ModuleType {
@@ -23,6 +24,7 @@ struct ModuleType {
     std::vector<Port> defaultPorts;
     QHash<QString, Parameter> defaultParameters;
     QString paletteLabel;
+    QString description;
     QString nodeColor;
     QString editorLayout;
     QString graphGroup;

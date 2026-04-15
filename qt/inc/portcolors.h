@@ -8,7 +8,7 @@
 namespace PortColors {
 
 inline QColor colorForPort(const Port& port) {
-    if (port.type() == "endpoint") {
+    if (PortLayout::isEndpointPort(port)) {
         return QColor(96, 203, 132);
     }
 

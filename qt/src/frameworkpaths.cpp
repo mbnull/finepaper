@@ -82,6 +82,16 @@ QString firstExistingFile(const QStringList& candidates) {
     return {};
 }
 
+QString firstExistingDir(const QStringList& candidates) {
+    for (const QString& candidate : candidates) {
+        if (QFileInfo(candidate).isDir()) {
+            return QDir(candidate).absolutePath();
+        }
+    }
+
+    return {};
+}
+
 QString resolveBundleArtifactFromEnvironment(const QString& envVarName,
                                              const QStringList& directoryCandidates,
                                              const QStringList& siblingCandidates = {}) {
@@ -162,6 +172,60 @@ QString resolveBundleArtifact(const QStringList& candidates,
     return {};
 }
 
+QString resolveDirectoryArtifactFromEnvironment(const QString& envVarName) {
+    const QString envPath = qEnvironmentVariable(envVarName.toUtf8().constData());
+    if (envPath.isEmpty()) {
+        return {};
+    }
+
+    QFileInfo info(envPath);
+    return info.isDir() ? info.absoluteFilePath() : QString();
+}
+
+QString resolveDirectoryArtifact(const QStringList& candidates, const QString& envVarName = {}) {
+    if (!envVarName.isEmpty()) {
+        const QString envDir = resolveDirectoryArtifactFromEnvironment(envVarName);
+        if (!envDir.isEmpty()) {
+            return envDir;
+        }
+    }
+
+    QString frameworkPath = FrameworkPaths::resolveFrameworkPath();
+    if (!frameworkPath.isEmpty()) {
+        QStringList frameworkCandidates;
+        for (const QString& candidate : candidates) {
+            frameworkCandidates.append(QDir(frameworkPath).filePath(candidate));
+            frameworkCandidates.append(QDir(frameworkPath).filePath("ip/" + candidate));
+        }
+        const QString frameworkDir = firstExistingDir(frameworkCandidates);
+        if (!frameworkDir.isEmpty()) {
+            return frameworkDir;
+        }
+    }
+
+    for (const QString& root : {QDir::currentPath(), QCoreApplication::applicationDirPath()}) {
+        QDir dir(root);
+        while (true) {
+            QStringList localCandidates;
+            for (const QString& candidate : candidates) {
+                localCandidates.append(dir.filePath(candidate));
+                localCandidates.append(dir.filePath("framework/" + candidate));
+                localCandidates.append(dir.filePath("framework/ip/" + candidate));
+            }
+            const QString match = firstExistingDir(localCandidates);
+            if (!match.isEmpty()) {
+                return match;
+            }
+
+            if (!dir.cdUp()) {
+                break;
+            }
+        }
+    }
+
+    return {};
+}
+
 } // namespace
 
 namespace FrameworkPaths {
@@ -190,10 +254,50 @@ QString resolveTemplatePath() {
 }
 
 QString resolveModuleBundlePath() {
-    return resolveBundleArtifact({QStringLiteral("bundles/modules.json")},
+    return resolveBundleArtifact({QStringLiteral("bundles/modules.xml"),
+                                  QStringLiteral("bundles/modules.json")},
                                  QStringLiteral("BUNDLE_PATH"),
-                                 {QStringLiteral("bundles/modules.json"),
+                                 {QStringLiteral("bundles/modules.xml"),
+                                  QStringLiteral("modules.xml"),
+                                  QStringLiteral("bundles/modules.json"),
                                   QStringLiteral("modules.json")});
+}
+
+QString resolveModuleGraphicsDirectory() {
+    const QString explicitGraphicsDir =
+        resolveDirectoryArtifactFromEnvironment(QStringLiteral("BUNDLE_GRAPHICS_PATH"));
+    if (!explicitGraphicsDir.isEmpty()) {
+        return explicitGraphicsDir;
+    }
+
+    if (qEnvironmentVariableIsSet("BUNDLE_PATH")) {
+        const QString bundlePath = qEnvironmentVariable("BUNDLE_PATH");
+        QFileInfo info(bundlePath);
+        if (info.isDir()) {
+            const QString dirPath = firstExistingDir({
+                QDir(info.absoluteFilePath()).filePath(QStringLiteral("graphics")),
+                QDir(info.absoluteFilePath()).filePath(QStringLiteral("module-graphics")),
+                QDir(info.absoluteFilePath()).filePath(QStringLiteral("bundles/graphics"))
+            });
+            if (!dirPath.isEmpty()) {
+                return dirPath;
+            }
+        } else if (info.isFile()) {
+            const QDir dir = info.absoluteDir();
+            const QString dirPath = firstExistingDir({
+                dir.filePath(QStringLiteral("graphics")),
+                dir.filePath(QStringLiteral("module-graphics"))
+            });
+            if (!dirPath.isEmpty()) {
+                return dirPath;
+            }
+        }
+    }
+
+    return resolveDirectoryArtifact({QStringLiteral("bundles/graphics"),
+                                     QStringLiteral("graphics"),
+                                     QStringLiteral("bundles/module-graphics"),
+                                     QStringLiteral("module-graphics")});
 }
 
 QString resolveModulePresentationPath() {

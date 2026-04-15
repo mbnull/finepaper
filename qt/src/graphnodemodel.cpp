@@ -29,6 +29,12 @@ bool isVisiblePort(const Module* module, const Port& port) {
     return !collapsed || !PortLayout::isEndpointPort(port);
 }
 
+bool matchesPortType(const Port& port, QtNodes::PortType portType) {
+    return portType == QtNodes::PortType::In
+        ? PortLayout::supportsInput(port)
+        : PortLayout::supportsOutput(port);
+}
+
 } // namespace
 
 QString GraphNodeModel::caption() const {
@@ -43,8 +49,7 @@ unsigned int GraphNodeModel::nPorts(QtNodes::PortType portType) const {
         if (!isVisiblePort(m_module, port)) {
             continue;
         }
-        if ((portType == QtNodes::PortType::In && port.direction() == Port::Direction::Input) ||
-            (portType == QtNodes::PortType::Out && port.direction() == Port::Direction::Output)) {
+        if (matchesPortType(port, portType)) {
             count++;
         }
     }
@@ -78,8 +83,7 @@ const Port* GraphNodeModel::portAt(QtNodes::PortType portType, QtNodes::PortInde
         if (!isVisiblePort(m_module, port)) {
             continue;
         }
-        if ((portType == QtNodes::PortType::In && port.direction() == Port::Direction::Input) ||
-            (portType == QtNodes::PortType::Out && port.direction() == Port::Direction::Output)) {
+        if (matchesPortType(port, portType)) {
             if (idx == portIndex) {
                 return &port;
             }
@@ -98,8 +102,7 @@ QtNodes::PortIndex GraphNodeModel::portIndex(const QString& portId, QtNodes::Por
         if (!isVisiblePort(m_module, port)) {
             continue;
         }
-        if ((portType == QtNodes::PortType::In && port.direction() == Port::Direction::Input) ||
-            (portType == QtNodes::PortType::Out && port.direction() == Port::Direction::Output)) {
+        if (matchesPortType(port, portType)) {
             if (port.id() == portId) {
                 return idx;
             }
@@ -114,11 +117,9 @@ QtNodes::NodeDataType GraphNodeModel::dataType(QtNodes::PortType portType, QtNod
     const Port* port = portAt(portType, portIndex);
     if (!port) return {"default", "Data"};
 
-    if (port->type() == "router") {
-        return {"router", port->name()};
-    }
-
-    const QString typeId = port->type().isEmpty() ? QStringLiteral("default") : port->type();
+    const QString typeId = PortLayout::normalizedType(*port).isEmpty()
+        ? QStringLiteral("default")
+        : PortLayout::normalizedType(*port);
     return {typeId, port->name().isEmpty() ? typeId : port->name()};
 }
 

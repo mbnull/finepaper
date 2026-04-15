@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module-graphics type="Endpoint">
+  <graphics layout="endpoint" node_color="#d6f4b6">
+    <expanded min_width="104" height="54" caption_left="8" caption_top="6" />
+    <arrangement loose_endpoint_spacing_x="168"
+                 loose_endpoint_spacing_y="84"
+                 loose_endpoint_margin_y="116" />
+  </graphics>
+</module-graphics>

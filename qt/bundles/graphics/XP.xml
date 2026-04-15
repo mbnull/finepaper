@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module-graphics type="XP">
+  <graphics layout="mesh_router" node_color="#7cb9e8" supports_collapse="true">
+    <expanded min_width="136" height="116" caption_left="30" caption_top="6" port_inset="16" />
+    <collapsed min_width="104" height="92" caption_left="30" caption_top="26" endpoint_inset="18" />
+    <arrangement endpoint_offset_x="156" mesh_spacing_x="220" mesh_spacing_y="168" />
+  </graphics>
+</module-graphics>

@@ -119,16 +119,23 @@ QString firstAvailablePort(const Graph* graph,
     if (!graph || !module) return {};
 
     for (const auto& port : module->ports()) {
-        if (port.direction() != direction || !predicate(port)) {
+        const bool matchesDirection =
+            direction == Port::Direction::Output ? PortLayout::supportsOutput(port)
+                                                 : PortLayout::supportsInput(port);
+        if (!matchesDirection || !predicate(port)) {
             continue;
         }
 
         const bool occupied = std::any_of(graph->connections().begin(), graph->connections().end(),
             [&](const std::unique_ptr<Connection>& connection) {
-                const PortRef& ref = direction == Port::Direction::Output
-                    ? connection->source()
-                    : connection->target();
-                return ref.moduleId == module->id() && ref.portId == port.id();
+                const bool usedAsSource =
+                    connection->source().moduleId == module->id() && connection->source().portId == port.id();
+                const bool usedAsTarget =
+                    connection->target().moduleId == module->id() && connection->target().portId == port.id();
+                if (port.direction() == Port::Direction::InOut) {
+                    return usedAsSource || usedAsTarget;
+                }
+                return direction == Port::Direction::Output ? usedAsSource : usedAsTarget;
             });
 
         if (!occupied) {
@@ -655,7 +662,7 @@ bool NodeEditorWidget::resolveEndpointDraftConnection(const QtNodes::ConnectionG
 
     const QString startPortId = getPortId(start->nodeId, start->portType, start->portIndex);
     const Port* startPort = findPort(startModule, startPortId);
-    if (!startPort || startPort->type() != "endpoint") {
+    if (!startPort || !PortLayout::isEndpointPort(*startPort)) {
         return false;
     }
 
@@ -665,7 +672,7 @@ bool NodeEditorWidget::resolveEndpointDraftConnection(const QtNodes::ConnectionG
         }
 
         const QString endpointPortId = firstAvailablePort(m_graph, endModule, Port::Direction::Input,
-            [](const Port& port) { return port.type() == "endpoint"; });
+            [](const Port& port) { return PortLayout::isEndpointPort(port); });
         if (endpointPortId.isEmpty()) {
             return false;
         }

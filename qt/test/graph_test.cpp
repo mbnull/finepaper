@@ -1,6 +1,8 @@
 #include "graph.h"
 #include "frameworkpaths.h"
 #include "moduleregistry.h"
+#include "moduleprovider.h"
+#include "portlayout.h"
 
 #include <QJsonArray>
 #include <QJsonObject>
@@ -87,6 +89,62 @@ void testConnectionValidationPreventsPortReuse() {
     require(!graph.isValidConnection(source, targetA), "duplicate connection should be rejected");
 }
 
+void testInoutBusConnectionsAreValid() {
+    Graph graph;
+
+    require(graph.addModule(makeModule(
+        "router_a",
+        "Endpoint",
+        {Port("bus", Port::Direction::InOut, "bus", "BUS", {}, {}, "router")})),
+        "failed to add first inout bus module");
+    require(graph.addModule(makeModule(
+        "router_b",
+        "Endpoint",
+        {Port("bus", Port::Direction::InOut, "bus", "BUS", {}, {}, "router")})),
+        "failed to add second inout bus module");
+
+    const PortRef source{"router_a", "bus"};
+    const PortRef target{"router_b", "bus"};
+
+    require(graph.isValidConnection(source, target), "matching inout bus ports should connect");
+
+    graph.addConnection(std::make_unique<Connection>("bus_link", source, target));
+    require(graph.connections().size() == 1, "expected inout bus connection to be stored");
+}
+
+void testInoutPortsCannotBeReusedAcrossConnectionSides() {
+    Graph graph;
+
+    require(graph.addModule(makeModule(
+        "router_a",
+        "Endpoint",
+        {Port("bus", Port::Direction::InOut, "bus", "BUS", {}, {}, "router")})),
+        "failed to add first inout module");
+    require(graph.addModule(makeModule(
+        "router_b",
+        "Endpoint",
+        {Port("bus", Port::Direction::InOut, "bus", "BUS", {}, {}, "router")})),
+        "failed to add second inout module");
+    require(graph.addModule(makeModule(
+        "router_c",
+        "Endpoint",
+        {Port("bus", Port::Direction::InOut, "bus", "BUS", {}, {}, "router")})),
+        "failed to add third inout module");
+
+    const PortRef source{"router_a", "bus"};
+    const PortRef middle{"router_b", "bus"};
+    const PortRef target{"router_c", "bus"};
+
+    require(graph.isValidConnection(source, middle), "expected first inout connection to be valid");
+    graph.addConnection(std::make_unique<Connection>("bus_link_ab", source, middle));
+
+    require(graph.connections().size() == 1, "expected initial inout connection to be stored");
+    require(!graph.isValidConnection(middle, target),
+            "inout port already used as a target should not be reusable as a source");
+    require(!graph.isValidConnection(target, middle),
+            "inout port already used as a target should not be reusable as a target again");
+}
+
 void testRemovingModuleAlsoRemovesAttachedConnections() {
     Graph graph;
 
@@ -142,19 +200,68 @@ void testGraphForwardsModuleParameterChanges() {
     require(changedParameterName == "buffer_depth", "forwarded signal should include parameter name");
 }
 
-void testBundlePresentationMetadataLoadsFromXml() {
+void testLegacyEndpointTypeStillClassifiesAsEndpointPort() {
+    const Port legacyEndpointPort("noc", Port::Direction::Input, "endpoint", "NoC");
+    require(PortLayout::isEndpointPort(legacyEndpointPort),
+            "legacy endpoint type should classify as endpoint port");
+}
+
+void testBundleMetadataLoadsFromXml() {
     const ModuleType* xpType = ModuleRegistry::instance().getType("XP");
     require(xpType != nullptr, "XP type should be registered");
-    require(xpType->nodeColor == "#7cb9e8", "XP node color should come from presentation XML");
-    require(xpType->editorLayout == "mesh_router", "XP layout should come from presentation XML");
-    require(xpType->supportsCollapse, "XP collapse capability should come from presentation XML");
-    require(xpType->expandedNodeHeight == 116, "XP expanded height should come from presentation XML");
-    require(xpType->configFields.size() == 5, "XP config zone should be defined in presentation XML");
+    require(xpType->description.contains("Mesh router"), "XP description should come from bundle XML");
+    require(xpType->nodeColor == "#7cb9e8", "XP node color should come from bundle XML");
+    require(xpType->editorLayout == "mesh_router", "XP layout should come from bundle XML");
+    require(xpType->supportsCollapse, "XP collapse capability should come from bundle XML");
+    require(xpType->expandedNodeHeight == 116, "XP expanded height should come from bundle XML");
+    require(xpType->configFields.size() == 5, "XP config zone should be generated from configurable parameters");
+    require(xpType->configFields.first().description.contains("canvas"),
+            "XP parameter descriptions should be preserved in config fields");
 
     const ModuleType* endpointType = ModuleRegistry::instance().getType("Endpoint");
     require(endpointType != nullptr, "Endpoint type should be registered");
-    require(endpointType->nodeColor == "#d6f4b6", "Endpoint node color should come from presentation XML");
-    require(endpointType->configFields.size() == 7, "Endpoint config zone should be defined in presentation XML");
+    require(endpointType->description.contains("Endpoint interface"),
+            "Endpoint description should come from bundle XML");
+    require(endpointType->nodeColor == "#d6f4b6", "Endpoint node color should come from bundle XML");
+    require(endpointType->configFields.size() == 7,
+            "Endpoint config zone should be generated from configurable parameters");
+}
+
+void testXmlBundleWithoutGraphicsFallsBackToSimpleNode() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "failed to create temporary directory for xml fallback bundle test");
+
+    const QString bundlePath = QDir(tempDir.path()).filePath("modules.xml");
+    QFile bundleFile(bundlePath);
+    require(bundleFile.open(QIODevice::WriteOnly | QIODevice::Text),
+            "failed to create XML fallback bundle");
+    bundleFile.write(R"XML(<?xml version="1.0" encoding="UTF-8"?>
+<module-bundle>
+  <module name="DMA" palette_label="DMA" description="Generic DMA block.">
+    <ports>
+      <port id="cfg" direction="input" type="config" name="CFG" description="left configuration port" />
+      <port id="irq" direction="output" type="interrupt" name="IRQ" description="right interrupt output" />
+      <port id="trace" direction="output" type="debug" name="TRACE" description="top trace port" />
+    </ports>
+    <parameters>
+      <parameter name="x" type="int" default="0" configurable="false" />
+      <parameter name="mode" type="string" default="linear" label="Mode" description="DMA transfer mode." />
+    </parameters>
+  </module>
+</module-bundle>)XML");
+    bundleFile.close();
+
+    XmlModuleTypeSource source(bundlePath);
+    const QHash<QString, ModuleType> types = source.loadModuleTypes();
+    auto dmaIt = types.find("DMA");
+    require(dmaIt != types.end(), "DMA type should load from XML bundle");
+    require(dmaIt->editorLayout == "fallback",
+            "modules without explicit graphics should use fallback layout");
+    require(dmaIt->configFields.size() == 1,
+            "fallback XML bundle should auto-generate config fields from configurable parameters");
+    require(dmaIt->defaultPorts.size() == 3, "port descriptions should load from XML bundle");
+    require(dmaIt->defaultPorts[2].description().contains("top"),
+            "port description should be preserved for fallback layout parsing");
 }
 
 void testExplicitBundlePathWithoutSidecarDoesNotFallbackPresentation() {
@@ -284,9 +391,13 @@ int main(int argc, char** argv) {
     try {
         testExplicitBundlePathWithoutSidecarDoesNotFallbackPresentation();
         testConnectionValidationPreventsPortReuse();
+        testInoutBusConnectionsAreValid();
+        testInoutPortsCannotBeReusedAcrossConnectionSides();
         testRemovingModuleAlsoRemovesAttachedConnections();
         testGraphForwardsModuleParameterChanges();
-        testBundlePresentationMetadataLoadsFromXml();
+        testLegacyEndpointTypeStillClassifiesAsEndpointPort();
+        testBundleMetadataLoadsFromXml();
+        testXmlBundleWithoutGraphicsFallsBackToSimpleNode();
         testFrameworkExportOmitsEditorOnlyCollapsedField();
         testXmlExportPreservesEditorGraphContent();
     } catch (const std::exception& error) {

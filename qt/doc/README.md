@@ -4,7 +4,7 @@ This project is a Qt Widgets application for building and validating SoC/NoC top
 
 ## What the application does
 
-- Shows available module types in a palette loaded from a JSON bundle plus XML presentation metadata.
+- Shows available module types in a palette loaded from XML IP-core bundles and per-IP graphics overlays.
 - Lets users drag modules onto a canvas and connect compatible ports.
 - Exposes module parameters in a property panel.
 - Saves editor state as JSON.
@@ -17,9 +17,10 @@ This project is a Qt Widgets application for building and validating SoC/NoC top
 - `inc/`: public headers for the application classes.
 - `src/commands/`, `inc/commands/`: undoable editing commands.
 - `test/`: lightweight executable tests for the graph model and command manager.
-- `bundles/modules.json`: local runtime/default module bundle used when no external bundle is found.
-- `bundles/modules.ui.xml`: local editor presentation bundle for graphics and config-zone layout.
+- `bundles/modules.xml`: local IP-core bundle with ports, parameters, descriptions, and config metadata.
+- `bundles/graphics/*.xml`: per-IP graphics overlays used by the editor.
 - `deps/packages.lua`: xmake package declarations.
+- `tools/convert_module_bundle.py`: converts authored JSON, module-bundle XML, or IP-XACT into the split XML bundle format.
 - `docs/`: older working notes and reference material.
 - `doc/`: maintained project documentation.
 
@@ -33,7 +34,7 @@ This project is a Qt Widgets application for building and validating SoC/NoC top
 - `PropertyPanel`: auto-builds editors from module parameter types.
 - `ValidationManager`: runs built-in validation and external DRC checks.
 - `LogPanel`: shows validation, generation, and runtime messages.
-- `ModuleRegistry`: loads module definitions from JSON bundles and overlays editor metadata from XML.
+- `ModuleRegistry`: loads module definitions from `modules.xml`, applies per-IP graphics XML files, and can still read older split presentation overlays when needed.
 
 ## Build and run
 
@@ -76,15 +77,19 @@ Framework discovery is handled by `FrameworkPaths` and works in this order:
 Bundle discovery for module definitions works in this order:
 
 1. `BUNDLE_PATH`
-2. Framework bundle locations such as `framework/bundles/modules.json`
-3. Repository-local bundle paths such as `bundles/modules.json`
+2. Framework bundle locations such as `framework/bundles/modules.xml`
+3. Framework bundle locations such as `framework/bundles/modules.json`
+4. Repository-local bundle paths such as `bundles/modules.xml`
+5. Repository-local bundle paths such as `bundles/modules.json`
 
-Editor presentation metadata discovery works in this order:
+Graphics overlay discovery works in this order:
 
-1. `BUNDLE_UI_PATH`
-2. Sidecar XML near `BUNDLE_PATH` when `BUNDLE_PATH` is set
-3. Framework bundle locations such as `framework/bundles/modules.ui.xml` when `BUNDLE_PATH` is not set
-4. Repository-local bundle paths such as `bundles/modules.ui.xml` when `BUNDLE_PATH` is not set
+1. `BUNDLE_GRAPHICS_PATH`
+2. Graphics directories near `BUNDLE_PATH` such as `graphics/`
+3. Framework bundle locations such as `framework/bundles/graphics/`
+4. Repository-local bundle paths such as `bundles/graphics/`
+
+Legacy presentation XML discovery still uses `BUNDLE_UI_PATH` and `modules.ui.xml` when an older split bundle is being loaded.
 
 If the framework is missing, the editor can still start, but Verilog generation and external DRC validation will fail with user-visible messages.
 
@@ -105,31 +110,65 @@ If the framework is missing, the editor can still start, but Verilog generation 
 
 ## Module bundle format
 
-Runtime module types are loaded from JSON and currently include metadata for:
+The preferred runtime format is split into:
 
-- palette label
+- `modules.xml` for the IP-core definition
+- `graphics/<type>.xml` for the editor graphics of each IP
+
+The IP-core bundle can describe:
+
+- palette label and module description
 - graph grouping
 - identity prefixes and numbering width
-- default ports
-- default parameters
+- default ports plus port descriptions, roles, and bus-family metadata
+- default parameters plus labels, descriptions, and configurable visibility
+- config-zone field order and labels when custom ordering is needed
 
-Editor presentation metadata is loaded from XML and currently includes:
+Each graphics overlay can describe:
 
 - node color
 - editor layout / graphics profile
 - collapse behavior
 - node sizing and caption insets
-- config-zone field order and labels
 
 The local bundle defines two module types today:
 
 - `XP`: mesh-router style node with router and endpoint ports
 - `Endpoint`: endpoint node with configurable interface parameters
 
+If a module has no graphics overlay, the editor falls back to a simple node layout and infers port placement hints from each port description.
+
 ## Extension points
 
-- Add new module types by extending `modules.json` and `modules.ui.xml` together.
+- Add new module types by extending `modules.xml` and optionally adding `graphics/<type>.xml`.
 - Add new validation rules in `BasicValidator` or extend `DRCRunner` parsing if the external framework output changes.
 - Add new editing operations by implementing `Command` subclasses in `src/commands/`.
+
+## Converter
+
+To convert authored JSON into the split XML IP-core bundle format:
+
+```bash
+python3 tools/convert_module_bundle.py \
+  --json path/to/modules.json \
+  --ui path/to/modules.ui.xml \
+  --output-dir path/to/output_bundle
+```
+
+To convert IP-XACT into the same split format:
+
+```bash
+python3 tools/convert_module_bundle.py \
+  --ipxact path/to/component.xml \
+  --output-dir path/to/output_bundle
+```
+
+To split an existing `module-bundle` XML file into `modules.xml` plus per-IP graphics files:
+
+```bash
+python3 tools/convert_module_bundle.py \
+  --xml path/to/modules.xml \
+  --output-dir path/to/output_bundle
+```
 
 For a component-level view, see [architecture.md](/home/bnl/dev/finepaper/qt/doc/architecture.md).

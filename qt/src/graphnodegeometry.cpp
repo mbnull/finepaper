@@ -18,6 +18,54 @@ QPointF cardinalPortPosition(const QString& side, QSize const& nodeSize, qreal i
     return {};
 }
 
+struct SideCounts {
+    int north = 0;
+    int east = 0;
+    int south = 0;
+    int west = 0;
+};
+
+SideCounts fallbackSideCounts(const Module* module) {
+    SideCounts counts;
+    if (!module) {
+        return counts;
+    }
+
+    for (const Port& port : module->ports()) {
+        const QString side = PortLayout::fallbackSide(port);
+        if (side == "north") {
+            ++counts.north;
+        } else if (side == "east") {
+            ++counts.east;
+        } else if (side == "south") {
+            ++counts.south;
+        } else {
+            ++counts.west;
+        }
+    }
+
+    return counts;
+}
+
+QSize fallbackSizeForModel(const GraphNodeModel* model, int captionWidth) {
+    const Module* module = model ? model->module() : nullptr;
+    const SideCounts counts = fallbackSideCounts(module);
+    const int horizontalPorts = std::max(counts.north, counts.south);
+    const int verticalPorts = std::max(counts.west, counts.east);
+
+    const int width = std::max({
+        ModuleTypeMetadata::expandedNodeMinWidth(module),
+        captionWidth,
+        140,
+        84 + (horizontalPorts * 36)
+    });
+    const int height = std::max(
+        ModuleTypeMetadata::expandedNodeHeight(module),
+        72 + (verticalPorts * 24) + (horizontalPorts > 0 ? 24 : 0));
+
+    return {width, height};
+}
+
 QSize sizeForModel(const GraphNodeModel* model) {
     const QString caption = model ? model->caption() : QString();
     const int captionWidth = QFontMetrics(QFont()).horizontalAdvance(caption) + 26;
@@ -27,6 +75,10 @@ QSize sizeForModel(const GraphNodeModel* model) {
             std::max(ModuleTypeMetadata::expandedNodeMinWidth(nullptr), captionWidth),
             ModuleTypeMetadata::expandedNodeHeight(nullptr)
         };
+    }
+
+    if (ModuleTypeMetadata::editorLayout(model->module()) == QStringLiteral("fallback")) {
+        return fallbackSizeForModel(model, captionWidth);
     }
 
     if (model->isCollapsed()) {
@@ -74,8 +126,11 @@ QPointF GraphNodeGeometry::portPosition(QtNodes::NodeId nodeId,
     if (ModuleTypeMetadata::hasEditorLayout(model->module(), u"mesh_router")) {
         return xpPortPosition(*model, *port, nodeSize);
     }
+    if (ModuleTypeMetadata::hasEditorLayout(model->module(), u"endpoint")) {
+        return endpointPortPosition(nodeId, portType, nodeSize);
+    }
 
-    return endpointPortPosition(nodeId, portType, nodeSize);
+    return fallbackPortPosition(*model, *port, nodeSize);
 }
 
 QPointF GraphNodeGeometry::portTextPosition(QtNodes::NodeId nodeId,
@@ -85,7 +140,19 @@ QPointF GraphNodeGeometry::portTextPosition(QtNodes::NodeId nodeId,
     const QSize nodeSize = size(nodeId);
     const GraphNodeModel* model = modelFor(nodeId);
     const Port* port = model ? model->portAt(portType, portIndex) : nullptr;
-    const bool onLeft = port && PortLayout::isEndpointPort(*port);
+    if (!port) {
+        return {};
+    }
+
+    if (ModuleTypeMetadata::editorLayout(model ? model->module() : nullptr) == QStringLiteral("fallback")) {
+        const QString side = PortLayout::fallbackSide(*port);
+        if (side == "north") return QPointF(portPos.x() - 28.0, 18.0);
+        if (side == "south") return QPointF(portPos.x() - 28.0, nodeSize.height() - 22.0);
+        if (side == "east") return QPointF(nodeSize.width() - 68.0, portPos.y() + 4.0);
+        return QPointF(12.0, portPos.y() + 4.0);
+    }
+
+    const bool onLeft = portPos.x() <= nodeSize.width() / 2.0;
 
     return onLeft
         ? QPointF(12.0, portPos.y() + 4.0)
@@ -153,6 +220,31 @@ QPointF GraphNodeGeometry::xpPortPosition(const GraphNodeModel& model, const Por
     return QPointF(nodeSize.width(), stackedPortY(slot, PortLayout::kRouterPortCount, inset, bottom));
 }
 
+QPointF GraphNodeGeometry::fallbackPortPosition(const GraphNodeModel& model,
+                                                const Port& port,
+                                                QSize const& nodeSize) const {
+    const QString side = PortLayout::fallbackSide(port);
+    const int slot = fallbackPortSlot(model, port, side);
+    const int count = std::max(1, fallbackPortCount(model, side));
+
+    constexpr qreal horizontalInset = 20.0;
+    constexpr qreal verticalTop = 28.0;
+    const qreal verticalBottom = nodeSize.height() - 18.0;
+
+    if (side == "north") {
+        return QPointF(stackedPortX(slot, count, horizontalInset, nodeSize.width() - horizontalInset), 0.0);
+    }
+    if (side == "south") {
+        return QPointF(stackedPortX(slot, count, horizontalInset, nodeSize.width() - horizontalInset),
+                       nodeSize.height());
+    }
+    if (side == "east") {
+        return QPointF(nodeSize.width(), stackedPortY(slot, count, verticalTop, verticalBottom));
+    }
+
+    return QPointF(0.0, stackedPortY(slot, count, verticalTop, verticalBottom));
+}
+
 QPointF GraphNodeGeometry::endpointPortPosition(QtNodes::NodeId nodeId,
                                                 QtNodes::PortType portType,
                                                 QSize const& nodeSize) const {
@@ -176,8 +268,50 @@ bool GraphNodeGeometry::endpointPortOnLeft(QtNodes::NodeId nodeId) const {
     return true;
 }
 
+int GraphNodeGeometry::fallbackPortCount(const GraphNodeModel& model, const QString& side) const {
+    Module* module = model.module();
+    if (!module) {
+        return 0;
+    }
+
+    int count = 0;
+    for (const Port& port : module->ports()) {
+        if (PortLayout::fallbackSide(port) == side) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+int GraphNodeGeometry::fallbackPortSlot(const GraphNodeModel& model,
+                                        const Port& port,
+                                        const QString& side) const {
+    Module* module = model.module();
+    if (!module) {
+        return 0;
+    }
+
+    int slot = 0;
+    for (const Port& candidate : module->ports()) {
+        if (PortLayout::fallbackSide(candidate) != side) {
+            continue;
+        }
+        if (candidate.id() == port.id() && candidate.direction() == port.direction()) {
+            return slot;
+        }
+        ++slot;
+    }
+    return 0;
+}
+
 qreal GraphNodeGeometry::stackedPortY(int slot, int slotCount, qreal top, qreal bottom) {
     const qreal span = bottom - top;
     const qreal step = span / static_cast<qreal>(slotCount);
     return top + (static_cast<qreal>(slot) + 0.5) * step;
+}
+
+qreal GraphNodeGeometry::stackedPortX(int slot, int slotCount, qreal left, qreal right) {
+    const qreal span = right - left;
+    const qreal step = span / static_cast<qreal>(slotCount);
+    return left + (static_cast<qreal>(slot) + 0.5) * step;
 }

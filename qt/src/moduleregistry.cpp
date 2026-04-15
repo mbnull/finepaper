@@ -12,10 +12,20 @@ ModuleRegistry& ModuleRegistry::instance() {
 ModuleRegistry::ModuleRegistry() {
     const QString bundlePath = FrameworkPaths::resolveModuleBundlePath();
     if (!bundlePath.isEmpty()) {
-        auto provider = std::make_unique<LayeredModuleProvider>(
-            std::make_unique<JsonModuleTypeSource>(bundlePath));
-        provider->addOverlay(std::make_unique<XmlModulePresentationOverlay>(
-            FrameworkPaths::resolveModulePresentationPath()));
+        std::unique_ptr<LayeredModuleProvider> provider;
+        if (bundlePath.endsWith(QStringLiteral(".xml"), Qt::CaseInsensitive)) {
+            provider = std::make_unique<LayeredModuleProvider>(
+                std::make_unique<XmlModuleTypeSource>(bundlePath));
+            const QString graphicsDirectory = FrameworkPaths::resolveModuleGraphicsDirectory();
+            if (!graphicsDirectory.isEmpty()) {
+                provider->addOverlay(std::make_unique<XmlModuleGraphicsOverlay>(graphicsDirectory));
+            }
+        } else {
+            provider = std::make_unique<LayeredModuleProvider>(
+                std::make_unique<JsonModuleTypeSource>(bundlePath));
+            provider->addOverlay(std::make_unique<XmlModulePresentationOverlay>(
+                FrameworkPaths::resolveModulePresentationPath()));
+        }
         addProvider(std::move(provider));
         return;
     }

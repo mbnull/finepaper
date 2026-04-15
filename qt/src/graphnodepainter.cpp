@@ -38,6 +38,13 @@ QRectF routerLabelRect(const QString& side, const QPointF& center) {
     return QRectF(center.x() + 8.0, center.y() - 8.0, 12.0, 16.0);
 }
 
+QRectF fallbackLabelRect(const QString& side, const QPointF& center, QSize const& nodeSize) {
+    if (side == "north") return QRectF(center.x() - 30.0, 10.0, 60.0, 14.0);
+    if (side == "south") return QRectF(center.x() - 30.0, nodeSize.height() - 24.0, 60.0, 14.0);
+    if (side == "east") return QRectF(nodeSize.width() / 2.0, center.y() - 8.0, nodeSize.width() / 2.0 - 14.0, 16.0);
+    return QRectF(14.0, center.y() - 8.0, nodeSize.width() / 2.0 - 18.0, 16.0);
+}
+
 void drawPorts(QPainter* painter,
                QtNodes::NodeGraphicsObject& ngo,
                const GraphNodeModel* model,
@@ -48,6 +55,9 @@ void drawPorts(QPainter* painter,
     auto const& geometry = ngo.nodeScene()->nodeGeometry();
     const unsigned int portCount = model->nPorts(portType);
     const bool collapsedNode = model->isCollapsed();
+    const QSize nodeSize = geometry.size(ngo.nodeId());
+    const bool fallbackLayout = model->module() &&
+                                ModuleTypeMetadata::editorLayout(model->module()) == QStringLiteral("fallback");
 
     for (unsigned int index = 0; index < portCount; ++index) {
         const Port* port = model->portAt(portType, index);
@@ -56,7 +66,7 @@ void drawPorts(QPainter* painter,
             continue;
         }
 
-        if (port->type() == "router") {
+        if (PortLayout::isRouterPort(*port)) {
             const QString side = PortLayout::routerSideId(port->id());
             if (paintedRouterSides.contains(side)) {
                 continue;
@@ -71,13 +81,19 @@ void drawPorts(QPainter* painter,
         painter->setBrush(fill);
         painter->drawEllipse(center, 5.5, 5.5);
 
-        if (port->type() == "router") {
+        if (PortLayout::isRouterPort(*port)) {
             const QString side = PortLayout::routerSideId(port->id());
             const QRectF textRect = collapsedNode
                 ? routerLabelRect(side, center)
                 : QRectF(center.x() - 22.0, center.y() - 8.0, 14.0, 16.0);
             painter->setPen(QColor(22, 22, 22));
             painter->setFont(QFont(QStringLiteral("Sans Serif"), 7, QFont::Bold));
+            painter->drawText(textRect, Qt::AlignCenter, port->name());
+        } else if (fallbackLayout && !port->name().isEmpty()) {
+            const QString side = PortLayout::fallbackSide(*port);
+            const QRectF textRect = fallbackLabelRect(side, center, nodeSize);
+            painter->setPen(QColor(32, 32, 32));
+            painter->setFont(QFont(QStringLiteral("Sans Serif"), 7));
             painter->drawText(textRect, Qt::AlignCenter, port->name());
         }
     }

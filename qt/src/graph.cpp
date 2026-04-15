@@ -68,14 +68,21 @@ QString firstAvailablePort(const Graph* graph,
     if (!graph || !module) return {};
 
     for (const auto& port : module->ports()) {
-        if (port.direction() != direction || !predicate(port)) continue;
+        const bool matchesDirection =
+            direction == Port::Direction::Output ? PortLayout::supportsOutput(port)
+                                                 : PortLayout::supportsInput(port);
+        if (!matchesDirection || !predicate(port)) continue;
 
         const bool occupied = std::any_of(graph->connections().begin(), graph->connections().end(),
             [&](const std::unique_ptr<Connection>& connection) {
-                const PortRef& ref = direction == Port::Direction::Output
-                    ? connection->source()
-                    : connection->target();
-                return ref.moduleId == module->id() && ref.portId == port.id();
+                const bool usedAsSource =
+                    connection->source().moduleId == module->id() && connection->source().portId == port.id();
+                const bool usedAsTarget =
+                    connection->target().moduleId == module->id() && connection->target().portId == port.id();
+                if (port.direction() == Port::Direction::InOut) {
+                    return usedAsSource || usedAsTarget;
+                }
+                return direction == Port::Direction::Output ? usedAsSource : usedAsTarget;
             });
 
         if (!occupied) {
@@ -208,8 +215,8 @@ bool isRouterLink(const Module* sourceModule,
            sourcePort && targetPort &&
            isMeshRouterModule(sourceModule) &&
            isMeshRouterModule(targetModule) &&
-           sourcePort->type() == "router" &&
-           targetPort->type() == "router";
+           PortLayout::isRouterPort(*sourcePort) &&
+           PortLayout::isRouterPort(*targetPort);
 }
 
 bool connectionUsesRouterSide(const Connection& connection,
@@ -409,9 +416,9 @@ bool Graph::isValidConnection(const PortRef& source, const PortRef& target) cons
     const Port* targetPort = findPort(targetModule, target.portId);
     if (!sourcePort || !targetPort) return false;
 
-    if (sourcePort->direction() != Port::Direction::Output) return false;
-    if (targetPort->direction() != Port::Direction::Input) return false;
-    if (sourcePort->type() != targetPort->type()) return false;
+    if (!PortLayout::supportsOutput(*sourcePort)) return false;
+    if (!PortLayout::supportsInput(*targetPort)) return false;
+    if (!PortLayout::sameBusFamily(*sourcePort, *targetPort)) return false;
 
     if (isRouterLink(sourceModule, sourcePort, targetModule, targetPort)) {
         const QString sourceSide = PortLayout::routerSideId(source.portId);
@@ -439,15 +446,35 @@ bool Graph::isValidConnection(const PortRef& source, const PortRef& target) cons
         }
     }
 
-    const bool sourceInUse = std::any_of(m_connections.begin(), m_connections.end(),
-        [&](const std::unique_ptr<Connection>& c) {
-            return c->source().moduleId == source.moduleId && c->source().portId == source.portId;
-        });
+    const auto portIsOccupied = [&](const PortRef& portRef, const Port& port) {
+        return std::any_of(m_connections.begin(), m_connections.end(),
+            [&](const std::unique_ptr<Connection>& c) {
+                const bool usedAsSource =
+                    c->source().moduleId == portRef.moduleId && c->source().portId == portRef.portId;
+                const bool usedAsTarget =
+                    c->target().moduleId == portRef.moduleId && c->target().portId == portRef.portId;
+                if (port.direction() == Port::Direction::InOut) {
+                    return usedAsSource || usedAsTarget;
+                }
+
+                return usedAsSource;
+            });
+    };
+
+    const bool sourceInUse = portIsOccupied(source, *sourcePort);
     if (sourceInUse) return false;
 
     const bool targetInUse = std::any_of(m_connections.begin(), m_connections.end(),
         [&](const std::unique_ptr<Connection>& c) {
-            return c->target().moduleId == target.moduleId && c->target().portId == target.portId;
+            const bool usedAsSource =
+                c->source().moduleId == target.moduleId && c->source().portId == target.portId;
+            const bool usedAsTarget =
+                c->target().moduleId == target.moduleId && c->target().portId == target.portId;
+            if (targetPort->direction() == Port::Direction::InOut) {
+                return usedAsSource || usedAsTarget;
+            }
+
+            return usedAsTarget;
         });
     if (targetInUse) return false;
 
@@ -553,10 +580,10 @@ bool Graph::loadFromJson(const QString& jsonPath) {
             const Port* explicitToPort = findPort(toModule, toPort);
             const bool explicitEndpointLink =
                 explicitFromPort && explicitToPort &&
-                explicitFromPort->type() == "endpoint" && explicitToPort->type() == "endpoint";
+                PortLayout::isEndpointPort(*explicitFromPort) && PortLayout::isEndpointPort(*explicitToPort);
             const bool explicitRouterLink =
                 explicitFromPort && explicitToPort &&
-                explicitFromPort->type() == "router" && explicitToPort->type() == "router";
+                PortLayout::isRouterPort(*explicitFromPort) && PortLayout::isRouterPort(*explicitToPort);
 
             if (!explicitEndpointLink && !explicitRouterLink) {
                 fromPort.clear();
@@ -569,9 +596,9 @@ bool Graph::loadFromJson(const QString& jsonPath) {
                 fromPort = firstAvailablePort(this, fromModule, Port::Direction::Output,
                     [](const Port& port) { return PortLayout::isEndpointPort(port); });
             }
-            if (toPort.isEmpty() || !findPort(toModule, toPort) || findPort(toModule, toPort)->type() != "endpoint") {
+            if (toPort.isEmpty() || !findPort(toModule, toPort) || !PortLayout::isEndpointPort(*findPort(toModule, toPort))) {
                 toPort = firstAvailablePort(this, toModule, Port::Direction::Input,
-                    [](const Port& port) { return port.type() == "endpoint"; });
+                    [](const Port& port) { return PortLayout::isEndpointPort(port); });
             }
         } else if (!dir.isEmpty()) {
             fromPort = PortLayout::routerOutputPortId(dir);
@@ -630,7 +657,7 @@ bool Graph::loadFromJson(const QString& jsonPath) {
             xpPort = firstAvailablePort(this, xpModule, Port::Direction::Output,
                 [](const Port& port) { return PortLayout::isEndpointPort(port); });
             epPort = firstAvailablePort(this, epModule, Port::Direction::Input,
-                [](const Port& port) { return port.type() == "endpoint"; });
+                [](const Port& port) { return PortLayout::isEndpointPort(port); });
 
             if (epPort.isEmpty() || xpPort.isEmpty()) {
                 qWarning() << "Skipping connection" << epExternalId << "->" << xpExternalId << ": ports not found";

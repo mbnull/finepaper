@@ -1,6 +1,7 @@
 #include "validator.h"
 #include "graph.h"
 #include "moduletypemetadata.h"
+#include "portlayout.h"
 #include <QSet>
 
 QList<ValidationResult> BasicValidator::validate(const Graph* graph) {
@@ -47,25 +48,25 @@ void BasicValidator::checkInvalidConnections(const Graph* graph, QList<Validatio
             continue;
         }
 
-        if (sourcePort->direction() != Port::Direction::Output) {
+        if (!PortLayout::supportsOutput(*sourcePort)) {
             results.append(ValidationResult(
                 ValidationSeverity::Error,
-                "Connection source must be an output port",
+                "Connection source must be an output or inout port",
                 conn->id(),
                 "invalid_connection"
             ));
         }
 
-        if (targetPort->direction() != Port::Direction::Input) {
+        if (!PortLayout::supportsInput(*targetPort)) {
             results.append(ValidationResult(
                 ValidationSeverity::Error,
-                "Connection target must be an input port",
+                "Connection target must be an input or inout port",
                 conn->id(),
                 "invalid_connection"
             ));
         }
 
-        if (sourcePort->type() != targetPort->type()) {
+        if (!PortLayout::sameBusFamily(*sourcePort, *targetPort)) {
             results.append(ValidationResult(
                 ValidationSeverity::Warning,
                 QString("Port type mismatch: %1 -> %2").arg(sourcePort->type(), targetPort->type()),
@@ -96,7 +97,7 @@ void BasicValidator::checkUnconnectedPorts(const Graph* graph, QList<ValidationR
                 results.append(ValidationResult(
                     ValidationSeverity::Warning,
                     QString("Unconnected %1 port: %2")
-                        .arg(port.direction() == Port::Direction::Input ? "input" : "output")
+                        .arg(PortLayout::directionLabel(port))
                         .arg(port.name()),
                     module->id(),
                     "unconnected_port"

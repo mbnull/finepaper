@@ -9,6 +9,7 @@ class Graph;
 class Module;
 class CommandManager;
 class QFormLayout;
+class QPlainTextEdit;
 
 class PropertyPanel : public QWidget {
     Q_OBJECT
@@ -31,6 +32,7 @@ private:
     CommandManager* m_commandManager;
     Module* m_selectedModule = nullptr;
     QVBoxLayout* m_layout;
+    QPlainTextEdit* m_descriptionView;
     QFormLayout* m_formLayout;
     QHash<QString, QWidget*> m_parameterWidgets;
 };
