@@ -1,10 +1,10 @@
 // ArrangeCommand computes automatic node placement and stores previous positions for undo.
 #include "commands/arrangecommand.h"
-#include "graph.h"
-#include "module.h"
-#include "modulelabels.h"
-#include "moduletypemetadata.h"
-#include "portlayout.h"
+#include "graph/graph.h"
+#include "graph/module.h"
+#include "modules/modulelabels.h"
+#include "modules/moduletypemetadata.h"
+#include "common/portlayout.h"
 #include <QPoint>
 #include <QRect>
 #include <QRegularExpression>

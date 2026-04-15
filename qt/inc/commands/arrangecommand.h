@@ -2,8 +2,8 @@
 // and stores enough state to undo the arrangement in one step.
 #pragma once
 
-#include "command.h"
-#include "parameter.h"
+#include "commands/command.h"
+#include "graph/parameter.h"
 #include <QHash>
 #include <QString>
 

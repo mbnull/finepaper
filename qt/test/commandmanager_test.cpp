@@ -1,5 +1,5 @@
 // CommandManager unit tests for execute/undo/redo stack semantics.
-#include "commandmanager.h"
+#include "commands/commandmanager.h"
 
 #include <iostream>
 #include <memory>

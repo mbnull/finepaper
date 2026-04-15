@@ -1,8 +1,8 @@
 // RemoveModuleCommand removes a module and its connections with undo support
 #pragma once
 
-#include "command.h"
-#include "graph.h"
+#include "commands/command.h"
+#include "graph/graph.h"
 #include <memory>
 
 class RemoveModuleCommand : public Command {

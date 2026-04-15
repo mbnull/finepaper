@@ -1,10 +1,10 @@
-#include "nodeeditorentityfactory.h"
+#include "nodeeditor/nodeeditorentityfactory.h"
 
-#include "graph.h"
-#include "module.h"
-#include "modulelabels.h"
-#include "moduletypemetadata.h"
-#include "moduleregistry.h"
+#include "graph/graph.h"
+#include "graph/module.h"
+#include "modules/modulelabels.h"
+#include "modules/moduletypemetadata.h"
+#include "modules/moduleregistry.h"
 
 #include <QRegularExpression>
 #include <QSet>

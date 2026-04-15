@@ -9,22 +9,22 @@ target("qt")
     set_languages("c++20")
 
     add_packages("nodeeditor")
-    add_headerfiles("inc/*.h")
+    add_headerfiles("inc/**.h")
     add_headerfiles("inc/commands/*.h")
-    add_files("src/*.cpp")
+    add_files("src/**.cpp")
     add_files("src/nodeeditor/*.cpp")
     add_files("src/nodeeditor/events/*.cpp")
     add_files("src/commands/*.cpp")
     -- add files with Q_OBJECT meta (only for qt.moc)
-    add_files("inc/mainwindow.h")
-    add_files("inc/graph.h")
-    add_files("inc/module.h")
-    add_files("inc/logpanel.h")
-    add_files("inc/nodeeditorwidget.h")
-    add_files("inc/graphnodemodel.h")
-    add_files("inc/propertypanel.h")
-    add_files("inc/palette.h")
-    add_files("inc/validationmanager.h")
+    add_files("inc/**/mainwindow.h")
+    add_files("inc/**/graph.h")
+    add_files("inc/**/module.h")
+    add_files("inc/**/logpanel.h")
+    add_files("inc/**/nodeeditorwidget.h")
+    add_files("inc/**/graphnodemodel.h")
+    add_files("inc/**/propertypanel.h")
+    add_files("inc/**/palette.h")
+    add_files("inc/**/validationmanager.h")
 
     add_includedirs("inc")
 
@@ -48,19 +48,19 @@ local function add_qt_test_target(name, source_files, extra_files)
 end
 
 add_qt_test_target("graph_test", "test/graph_test.cpp", {
-    "src/graph.cpp",
-    "src/module.cpp",
-    "src/connection.cpp",
-    "src/port.cpp",
-    "src/parameter.cpp",
-    "src/frameworkpaths.cpp",
-    "src/moduleregistry.cpp",
-    "src/moduleprovider.cpp",
-    "inc/graph.h",
-    "inc/module.h"
+    "src/**/graph.cpp",
+    "src/**/module.cpp",
+    "src/**/connection.cpp",
+    "src/**/port.cpp",
+    "src/**/parameter.cpp",
+    "src/**/frameworkpaths.cpp",
+    "src/**/moduleregistry.cpp",
+    "src/**/moduleprovider.cpp",
+    "inc/**/graph.h",
+    "inc/**/module.h"
 })
 
 add_qt_test_target("commandmanager_test", "test/commandmanager_test.cpp", {
-    "src/command.cpp",
-    "src/commandmanager.cpp"
+    "src/**/command.cpp",
+    "src/**/commandmanager.cpp"
 })

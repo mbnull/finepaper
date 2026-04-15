@@ -1,10 +1,10 @@
 // LoadGraphCommand loads a graph from JSON with undo support
 #pragma once
 
-#include "command.h"
-#include "graph.h"
-#include "module.h"
-#include "connection.h"
+#include "commands/command.h"
+#include "graph/graph.h"
+#include "graph/module.h"
+#include "graph/connection.h"
 #include <QString>
 #include <vector>
 #include <memory>

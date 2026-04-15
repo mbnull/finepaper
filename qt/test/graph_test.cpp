@@ -1,9 +1,9 @@
 // Graph integration-style tests for JSON import/export and topology behavior.
-#include "graph.h"
-#include "frameworkpaths.h"
-#include "moduleregistry.h"
-#include "moduleprovider.h"
-#include "portlayout.h"
+#include "graph/graph.h"
+#include "common/frameworkpaths.h"
+#include "modules/moduleregistry.h"
+#include "modules/moduleprovider.h"
+#include "common/portlayout.h"
 
 #include <QJsonArray>
 #include <QJsonObject>

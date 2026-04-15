@@ -1,9 +1,9 @@
 // SetParameterCommand changes a module parameter with undo support
 #pragma once
 
-#include "command.h"
-#include "graph.h"
-#include "parameter.h"
+#include "commands/command.h"
+#include "graph/graph.h"
+#include "graph/parameter.h"
 
 class SetParameterCommand : public Command {
 public:

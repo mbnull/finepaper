@@ -1,8 +1,8 @@
 // NodeEditorWidget event handlers: drag/drop, context menu, and interactive editing shortcuts.
-#include "nodeeditorwidget.h"
-#include "animatedgraphicsview.h"
-#include "editorgraphmodel.h"
-#include "nodeeditorentityfactory.h"
+#include "nodeeditor/nodeeditorwidget.h"
+#include "nodeeditor/animatedgraphicsview.h"
+#include "nodeeditor/editorgraphmodel.h"
+#include "nodeeditor/nodeeditorentityfactory.h"
 #include "commands/addmodulecommand.h"
 #include "commands/setparametercommand.h"
 
