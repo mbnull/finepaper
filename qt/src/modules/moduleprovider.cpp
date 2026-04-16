@@ -98,6 +98,112 @@ bool boolValue(const QJsonValue& value, bool fallbackValue) {
     return fallbackValue;
 }
 
+std::optional<double> optionalDoubleAttribute(const QXmlStreamAttributes& attributes, QStringView name) {
+    const auto value = attributes.value(name);
+    if (value.isEmpty()) {
+        return std::nullopt;
+    }
+
+    bool ok = false;
+    const double parsed = value.toDouble(&ok);
+    return ok ? std::optional<double>(parsed) : std::nullopt;
+}
+
+std::optional<double> optionalDoubleValue(const QJsonValue& value) {
+    if (!value.isDouble()) {
+        return std::nullopt;
+    }
+
+    return value.toDouble();
+}
+
+ModuleParameterChoice parameterChoice(const QString& value, const QString& label) {
+    ModuleParameterChoice choice;
+    choice.value = value;
+    choice.label = label.isEmpty() ? value : label;
+    return choice;
+}
+
+void loadParameterChoicesFromJson(ModuleParameterMetadata& metadata, const QJsonValue& choicesValue) {
+    if (!choicesValue.isArray()) {
+        return;
+    }
+
+    for (const QJsonValue& choiceValue : choicesValue.toArray()) {
+        if (choiceValue.isString()) {
+            metadata.choices.push_back(parameterChoice(choiceValue.toString(), QString()));
+        } else if (choiceValue.isObject()) {
+            const QJsonObject choiceObject = choiceValue.toObject();
+            const QString value = choiceObject.value(QStringLiteral("value")).toString();
+            if (!value.isEmpty()) {
+                metadata.choices.push_back(parameterChoice(
+                    value,
+                    choiceObject.value(QStringLiteral("label")).toString()));
+            }
+        }
+    }
+}
+
+void loadParameterChoiceElement(ModuleParameterMetadata& metadata, QXmlStreamReader& xml) {
+    const QXmlStreamAttributes attrs = xml.attributes();
+    const QString value = attributeValue(attrs, u"value");
+    const QString label = attributeValue(attrs, u"label");
+    if (!value.isEmpty()) {
+        metadata.choices.push_back(parameterChoice(value, label));
+    }
+    xml.skipCurrentElement();
+}
+
+void loadParameterChoicesElement(ModuleParameterMetadata& metadata, QXmlStreamReader& xml) {
+    while (xml.readNextStartElement()) {
+        if (xml.name() == u"choice") {
+            loadParameterChoiceElement(metadata, xml);
+        } else {
+            xml.skipCurrentElement();
+        }
+    }
+}
+
+ModuleParameterMetadata parameterMetadataFromJson(const QString& name, const QJsonObject& parameter) {
+    ModuleParameterMetadata metadata;
+    metadata.name = name;
+    metadata.label = parameter.value(QStringLiteral("label")).toString();
+    metadata.description = parameter.value(QStringLiteral("description")).toString();
+    metadata.unit = parameter.value(QStringLiteral("unit")).toString();
+    metadata.minimumValue = optionalDoubleValue(parameter.value(QStringLiteral("minimum")));
+    if (!metadata.minimumValue.has_value()) {
+        metadata.minimumValue = optionalDoubleValue(parameter.value(QStringLiteral("min")));
+    }
+    metadata.maximumValue = optionalDoubleValue(parameter.value(QStringLiteral("maximum")));
+    if (!metadata.maximumValue.has_value()) {
+        metadata.maximumValue = optionalDoubleValue(parameter.value(QStringLiteral("max")));
+    }
+    metadata.configurable = !parameter.contains(QStringLiteral("configurable")) ||
+                            boolValue(parameter.value(QStringLiteral("configurable")), true);
+    metadata.readOnly = boolValue(parameter.value(QStringLiteral("read_only")), false);
+    loadParameterChoicesFromJson(metadata, parameter.value(QStringLiteral("choices")));
+    return metadata;
+}
+
+ModuleParameterMetadata parameterMetadataFromXml(const QString& name, const QXmlStreamAttributes& attrs) {
+    ModuleParameterMetadata metadata;
+    metadata.name = name;
+    metadata.label = attributeValue(attrs, u"label");
+    metadata.description = attributeValue(attrs, u"description");
+    metadata.unit = attributeValue(attrs, u"unit");
+    metadata.minimumValue = optionalDoubleAttribute(attrs, u"minimum");
+    if (!metadata.minimumValue.has_value()) {
+        metadata.minimumValue = optionalDoubleAttribute(attrs, u"min");
+    }
+    metadata.maximumValue = optionalDoubleAttribute(attrs, u"maximum");
+    if (!metadata.maximumValue.has_value()) {
+        metadata.maximumValue = optionalDoubleAttribute(attrs, u"max");
+    }
+    metadata.configurable = boolAttribute(attrs, u"configurable", true);
+    metadata.readOnly = boolAttribute(attrs, u"read_only", false);
+    return metadata;
+}
+
 void normalizeCollapsedMetrics(ModuleType& type) {
     if (!type.supportsCollapse) {
         type.collapsedNodeMinWidth = type.expandedNodeMinWidth;
@@ -270,19 +376,20 @@ ParameterLoadResult loadParametersFromJson(ModuleType& type, const QJsonArray& p
 
         type.defaultParameters[name] = Parameter(name, defaultValue);
 
+        ModuleParameterMetadata metadata = parameterMetadataFromJson(name, parameter);
+        if (metadata.label.isEmpty()) {
+            metadata.label = humanizeIdentifier(name);
+        }
+        type.parameterMetadata.insert(name, metadata);
+
         ModuleConfigField field{
             name,
-            parameter.value(QStringLiteral("label")).toString(),
-            parameter.value(QStringLiteral("description")).toString()
+            metadata.label,
+            metadata.description
         };
-        if (field.label.isEmpty()) {
-            field.label = humanizeIdentifier(name);
-        }
         result.fieldByName.insert(name, field);
 
-        const bool configurable = !parameter.contains(QStringLiteral("configurable")) ||
-                                  boolValue(parameter.value(QStringLiteral("configurable")), true);
-        if (configurable) {
+        if (metadata.configurable) {
             result.autoConfigFields.push_back(field);
         }
     }
@@ -323,25 +430,52 @@ ParameterLoadResult loadParametersFromXml(ModuleType& type, QXmlStreamReader& xm
         const QString name = attributeValue(attrs, u"name");
         const QString parameterType = attributeValue(attrs, u"type");
         QString defaultText = attributeValue(attrs, u"default");
+        QString inlineDefaultText;
+
+        ModuleParameterMetadata metadata = parameterMetadataFromXml(name, attrs);
+        while (!xml.atEnd()) {
+            xml.readNext();
+
+            if (xml.isEndElement() && xml.name() == u"parameter") {
+                break;
+            }
+
+            if (xml.isCharacters() && !xml.isWhitespace()) {
+                inlineDefaultText += xml.text().toString();
+                continue;
+            }
+
+            if (!xml.isStartElement()) {
+                continue;
+            }
+
+            if (xml.name() == u"choice") {
+                loadParameterChoiceElement(metadata, xml);
+            } else if (xml.name() == u"choices") {
+                loadParameterChoicesElement(metadata, xml);
+            } else {
+                xml.skipCurrentElement();
+            }
+        }
         if (defaultText.isEmpty()) {
-            defaultText = xml.readElementText(QXmlStreamReader::SkipChildElements);
-        } else {
-            xml.skipCurrentElement();
+            defaultText = inlineDefaultText.trimmed();
+        }
+
+        if (metadata.label.isEmpty()) {
+            metadata.label = humanizeIdentifier(name);
         }
 
         type.defaultParameters[name] = Parameter(name, parameterValue(parameterType, defaultText));
+        type.parameterMetadata.insert(name, metadata);
 
         ModuleConfigField field{
             name,
-            attributeValue(attrs, u"label"),
-            attributeValue(attrs, u"description")
+            metadata.label,
+            metadata.description
         };
-        if (field.label.isEmpty()) {
-            field.label = humanizeIdentifier(name);
-        }
         result.fieldByName.insert(name, field);
 
-        if (boolAttribute(attrs, u"configurable", true)) {
+        if (metadata.configurable) {
             result.autoConfigFields.push_back(field);
         }
     }

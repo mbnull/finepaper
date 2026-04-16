@@ -163,4 +163,14 @@ inline const QVector<ModuleConfigField>& configFields(const Module* module) {
     return moduleType ? moduleType->configFields : emptyFields;
 }
 
+inline const ModuleParameterMetadata* parameterMetadata(const Module* module, const QString& parameterName) {
+    const ModuleType* moduleType = type(module);
+    if (!moduleType) {
+        return nullptr;
+    }
+
+    const auto it = moduleType->parameterMetadata.find(parameterName);
+    return it != moduleType->parameterMetadata.end() ? &it.value() : nullptr;
+}
+
 } // namespace ModuleTypeMetadata

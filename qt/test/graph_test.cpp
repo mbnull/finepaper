@@ -173,6 +173,33 @@ void testRemovingModuleAlsoRemovesAttachedConnections() {
     require(graph.connections().empty(), "attached connections should be removed with the module");
 }
 
+void testClearRemovesAllModulesAndConnections() {
+    Graph graph;
+
+    require(graph.addModule(makeModule(
+        "producer",
+        "Endpoint",
+        {Port("out", Port::Direction::Output, "endpoint", "out")})),
+        "failed to add producer module");
+    require(graph.addModule(makeModule(
+        "consumer",
+        "Endpoint",
+        {Port("in", Port::Direction::Input, "endpoint", "in")})),
+        "failed to add consumer module");
+
+    graph.addConnection(std::make_unique<Connection>(
+        "producer_consumer",
+        PortRef{"producer", "out"},
+        PortRef{"consumer", "in"}));
+
+    require(graph.connections().size() == 1, "expected connection before clear");
+
+    graph.clear();
+
+    require(graph.modules().empty(), "clear should remove every module");
+    require(graph.connections().empty(), "clear should remove every connection");
+}
+
 void testGraphForwardsModuleParameterChanges() {
     Graph graph;
     QString changedModuleId;
@@ -263,6 +290,51 @@ void testXmlBundleWithoutGraphicsFallsBackToSimpleNode() {
     require(dmaIt->defaultPorts.size() == 3, "port descriptions should load from XML bundle");
     require(dmaIt->defaultPorts[2].description().contains("top"),
             "port description should be preserved for fallback layout parsing");
+}
+
+void testXmlBundleLoadsExtendedParameterMetadataWhenPresent() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "failed to create temporary directory for parameter metadata bundle test");
+
+    const QString bundlePath = QDir(tempDir.path()).filePath("modules.xml");
+    QFile bundleFile(bundlePath);
+    require(bundleFile.open(QIODevice::WriteOnly | QIODevice::Text),
+            "failed to create XML metadata bundle");
+    bundleFile.write(R"XML(<?xml version="1.0" encoding="UTF-8"?>
+<module-bundle>
+  <module name="Router" palette_label="Router" graph_group="xps" description="Router test bundle.">
+    <parameters>
+      <parameter name="routing_algorithm" type="string" default="xy" label="Routing algorithm">
+        <choices>
+          <choice value="xy" label="XY" />
+          <choice value="odd_even" label="Odd-Even" />
+        </choices>
+      </parameter>
+      <parameter name="vc_count" type="int" default="2" min="1" max="8" unit="VCs"
+                 label="VC count" description="Virtual channel count." />
+      <parameter name="external_id" type="string" default="" read_only="true"
+                 label="External ID" description="Framework-facing ID." />
+    </parameters>
+  </module>
+</module-bundle>)XML");
+    bundleFile.close();
+
+    XmlModuleTypeSource source(bundlePath);
+    const QHash<QString, ModuleType> types = source.loadModuleTypes();
+    auto routerIt = types.find("Router");
+    require(routerIt != types.end(), "Router type should load from XML bundle");
+    require(routerIt->parameterMetadata.contains("routing_algorithm"),
+            "routing_algorithm metadata should be available");
+    require(routerIt->parameterMetadata.value("routing_algorithm").choices.size() == 2,
+            "routing_algorithm should expose two editor choices");
+    require(routerIt->parameterMetadata.value("vc_count").minimumValue.value_or(0.0) == 1.0,
+            "vc_count minimum should load from XML metadata");
+    require(routerIt->parameterMetadata.value("vc_count").maximumValue.value_or(0.0) == 8.0,
+            "vc_count maximum should load from XML metadata");
+    require(routerIt->parameterMetadata.value("vc_count").unit == "VCs",
+            "vc_count unit should load from XML metadata");
+    require(routerIt->parameterMetadata.value("external_id").readOnly,
+            "external_id read_only flag should load from XML metadata");
 }
 
 void testExplicitBundlePathWithoutSidecarDoesNotFallbackPresentation() {
@@ -395,10 +467,12 @@ int main(int argc, char** argv) {
         testInoutBusConnectionsAreValid();
         testInoutPortsCannotBeReusedAcrossConnectionSides();
         testRemovingModuleAlsoRemovesAttachedConnections();
+        testClearRemovesAllModulesAndConnections();
         testGraphForwardsModuleParameterChanges();
         testLegacyEndpointTypeStillClassifiesAsEndpointPort();
         testBundleMetadataLoadsFromXml();
         testXmlBundleWithoutGraphicsFallsBackToSimpleNode();
+        testXmlBundleLoadsExtendedParameterMetadataWhenPresent();
         testFrameworkExportOmitsEditorOnlyCollapsedField();
         testXmlExportPreservesEditorGraphContent();
     } catch (const std::exception& error) {

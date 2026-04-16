@@ -14,6 +14,9 @@ void SetParameterCommand::execute() {
     m_parameterExisted = (it != params.end());
     if (m_parameterExisted) {
         m_oldValue = it.value().value();
+        if (m_oldValue == m_newValue) {
+            return;
+        }
     }
     module->setParameter(m_paramName, m_newValue);
     m_executed = true;

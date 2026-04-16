@@ -306,6 +306,12 @@ void Graph::removeModule(const QString& moduleId) {
     }
 }
 
+void Graph::clear() {
+    while (!m_modules.empty()) {
+        removeModule(m_modules.front()->id());
+    }
+}
+
 Module* Graph::getModule(const QString& moduleId) const {
     auto it = std::find_if(m_modules.begin(), m_modules.end(),
         [&moduleId](const std::unique_ptr<Module>& m) { return m->id() == moduleId; });

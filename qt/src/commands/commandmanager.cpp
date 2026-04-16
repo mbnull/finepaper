@@ -7,16 +7,23 @@
 void CommandManager::executeCommand(std::unique_ptr<Command> command) {
     qDebug() << "Executing command"
              << "undoDepth" << m_undoStack.size()
-             << "redoDepth" << m_redoStack.size();
+             << "redoDepth" << m_redoStack.size()
+             << "stateId" << m_currentStateId;
     command->execute();
     if (command->wasExecuted()) {
-        m_undoStack.push(std::move(command));
+        HistoryEntry entry;
+        entry.command = std::move(command);
+        entry.beforeStateId = m_currentStateId;
+        entry.afterStateId = m_nextStateId++;
+        m_currentStateId = entry.afterStateId;
+        m_undoStack.push(std::move(entry));
         while (!m_redoStack.empty()) {
             m_redoStack.pop();
         }
         qDebug() << "Command executed"
                 << "undoDepth" << m_undoStack.size()
-                << "redoDepth" << m_redoStack.size();
+                << "redoDepth" << m_redoStack.size()
+                << "stateId" << m_currentStateId;
     } else {
         qDebug() << "Command execution produced no state change";
     }
@@ -30,16 +37,19 @@ void CommandManager::undo() {
 
     qDebug() << "Undoing command"
              << "undoDepth" << m_undoStack.size()
-             << "redoDepth" << m_redoStack.size();
-    auto command = std::move(m_undoStack.top());
+             << "redoDepth" << m_redoStack.size()
+             << "stateId" << m_currentStateId;
+    auto entry = std::move(m_undoStack.top());
     m_undoStack.pop();
-    if (command->wasExecuted()) {
-        command->undo();
+    if (entry.command->wasExecuted()) {
+        entry.command->undo();
     }
-    m_redoStack.push(std::move(command));
+    m_currentStateId = entry.beforeStateId;
+    m_redoStack.push(std::move(entry));
     qInfo() << "Undo complete"
             << "undoDepth" << m_undoStack.size()
-            << "redoDepth" << m_redoStack.size();
+            << "redoDepth" << m_redoStack.size()
+            << "stateId" << m_currentStateId;
 }
 
 void CommandManager::redo() {
@@ -50,14 +60,30 @@ void CommandManager::redo() {
 
     qDebug() << "Redoing command"
              << "undoDepth" << m_undoStack.size()
-             << "redoDepth" << m_redoStack.size();
-    auto command = std::move(m_redoStack.top());
+             << "redoDepth" << m_redoStack.size()
+             << "stateId" << m_currentStateId;
+    auto entry = std::move(m_redoStack.top());
     m_redoStack.pop();
-    if (command->wasExecuted()) {
-        command->execute();
+    if (entry.command->wasExecuted()) {
+        entry.command->execute();
     }
-    m_undoStack.push(std::move(command));
+    m_currentStateId = entry.afterStateId;
+    m_undoStack.push(std::move(entry));
     qInfo() << "Redo complete"
             << "undoDepth" << m_undoStack.size()
-            << "redoDepth" << m_redoStack.size();
+            << "redoDepth" << m_redoStack.size()
+            << "stateId" << m_currentStateId;
+}
+
+void CommandManager::clearHistory() {
+    while (!m_undoStack.empty()) {
+        m_undoStack.pop();
+    }
+    while (!m_redoStack.empty()) {
+        m_redoStack.pop();
+    }
+    m_currentStateId = 0;
+    m_nextStateId = 1;
+
+    qInfo() << "Cleared command history";
 }

@@ -29,6 +29,8 @@ public:
     bool addModule(std::unique_ptr<Module> module);
     // Removes a module plus incident edges and emits corresponding removal signals.
     void removeModule(const QString& moduleId);
+    // Removes every module and connection from the graph.
+    void clear();
     // Returns the module by ID, or nullptr if not found.
     Module* getModule(const QString& moduleId) const;
     // Removes a module from the graph and transfers ownership to the caller.

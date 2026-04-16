@@ -39,23 +39,29 @@ private:
 void testExecuteUndoRedoLifecycle() {
     std::vector<std::string> events;
     CommandManager manager;
+    require(manager.currentStateId() == 0, "fresh history should start at state 0");
 
     manager.executeCommand(std::make_unique<RecordingCommand>(events, "alpha"));
 
     require(manager.canUndo(), "executed command should be undoable");
     require(!manager.canRedo(), "redo stack should be empty after execute");
+    require(manager.currentStateId() != 0, "execute should advance state id");
     require(events.size() == 1 && events[0] == "execute:alpha", "execute should run immediately");
+
+    const int executedStateId = manager.currentStateId();
 
     manager.undo();
 
     require(!manager.canUndo(), "undo should empty the undo stack");
     require(manager.canRedo(), "undo should populate redo stack");
+    require(manager.currentStateId() == 0, "undo should restore the original state id");
     require(events.size() == 2 && events[1] == "undo:alpha", "undo should run on the command");
 
     manager.redo();
 
     require(manager.canUndo(), "redo should restore undo availability");
     require(!manager.canRedo(), "redo should consume the redo stack");
+    require(manager.currentStateId() == executedStateId, "redo should restore the executed state id");
     require(events.size() == 3 && events[2] == "execute:alpha", "redo should execute the command again");
 }
 
@@ -64,6 +70,7 @@ void testRedoHistoryClearsAfterNewExecute() {
     CommandManager manager;
 
     manager.executeCommand(std::make_unique<RecordingCommand>(events, "alpha"));
+    const int alphaStateId = manager.currentStateId();
     manager.undo();
     require(manager.canRedo(), "redo should be available after undo");
 
@@ -71,6 +78,8 @@ void testRedoHistoryClearsAfterNewExecute() {
 
     require(manager.canUndo(), "new command should still be undoable");
     require(!manager.canRedo(), "new execute should clear redo history");
+    require(manager.currentStateId() != alphaStateId,
+            "new execute after undo should create a distinct history state");
 }
 
 void testFailedExecuteDoesNotEnterUndoStack() {
@@ -81,7 +90,23 @@ void testFailedExecuteDoesNotEnterUndoStack() {
 
     require(!manager.canUndo(), "command that never executed should not be undoable");
     require(!manager.canRedo(), "failed execute should not populate redo stack");
+    require(manager.currentStateId() == 0, "failed execute should leave state id unchanged");
     require(events.size() == 1 && events[0] == "execute:alpha", "execute should still have been attempted");
+}
+
+void testClearHistoryDropsUndoAndRedoStacks() {
+    std::vector<std::string> events;
+    CommandManager manager;
+
+    manager.executeCommand(std::make_unique<RecordingCommand>(events, "alpha"));
+    manager.undo();
+    require(manager.canRedo(), "redo should exist before clearHistory");
+
+    manager.clearHistory();
+
+    require(!manager.canUndo(), "clearHistory should empty undo stack");
+    require(!manager.canRedo(), "clearHistory should empty redo stack");
+    require(manager.currentStateId() == 0, "clearHistory should reset the current state id");
 }
 
 } // namespace
@@ -91,6 +116,7 @@ int main() {
         testExecuteUndoRedoLifecycle();
         testRedoHistoryClearsAfterNewExecute();
         testFailedExecuteDoesNotEnterUndoStack();
+        testClearHistoryDropsUndoAndRedoStacks();
     } catch (const std::exception& error) {
         std::cerr << "commandmanager_test failed: " << error.what() << '\n';
         return 1;

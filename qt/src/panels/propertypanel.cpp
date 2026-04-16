@@ -15,9 +15,12 @@
 #include <QSpinBox>
 #include <QDoubleSpinBox>
 #include <QCheckBox>
+#include <QComboBox>
+#include <QAbstractSpinBox>
 #include <QFormLayout>
 #include <QPlainTextEdit>
 #include <QScrollBar>
+#include <limits>
 
 namespace {
 
@@ -40,6 +43,73 @@ QString humanizeIdentifier(const QString& identifier) {
     }
 
     return text;
+}
+
+const ModuleParameterMetadata* metadataForParameter(const Module* module, const QString& name) {
+    return ModuleTypeMetadata::parameterMetadata(module, name);
+}
+
+void applySpinBoxMetadata(QSpinBox* spinBox, const ModuleParameterMetadata* metadata) {
+    const int minimum = metadata && metadata->minimumValue.has_value()
+        ? static_cast<int>(*metadata->minimumValue)
+        : INT_MIN;
+    const int maximum = metadata && metadata->maximumValue.has_value()
+        ? static_cast<int>(*metadata->maximumValue)
+        : INT_MAX;
+    spinBox->setRange(minimum, maximum);
+
+    if (metadata && !metadata->unit.isEmpty()) {
+        spinBox->setSuffix(QStringLiteral(" %1").arg(metadata->unit));
+    }
+}
+
+void applyDoubleSpinBoxMetadata(QDoubleSpinBox* spinBox, const ModuleParameterMetadata* metadata) {
+    const double minimum = metadata && metadata->minimumValue.has_value()
+        ? *metadata->minimumValue
+        : std::numeric_limits<double>::lowest();
+    const double maximum = metadata && metadata->maximumValue.has_value()
+        ? *metadata->maximumValue
+        : std::numeric_limits<double>::max();
+    spinBox->setRange(minimum, maximum);
+
+    if (metadata && !metadata->unit.isEmpty()) {
+        spinBox->setSuffix(QStringLiteral(" %1").arg(metadata->unit));
+    }
+}
+
+void applyReadOnlyMetadata(QWidget* widget, const ModuleParameterMetadata* metadata) {
+    if (!widget || !metadata || !metadata->readOnly) {
+        return;
+    }
+
+    if (auto* lineEdit = qobject_cast<QLineEdit*>(widget)) {
+        lineEdit->setReadOnly(true);
+    } else if (auto* spinBox = qobject_cast<QSpinBox*>(widget)) {
+        spinBox->setReadOnly(true);
+        spinBox->setButtonSymbols(QAbstractSpinBox::NoButtons);
+    } else if (auto* doubleSpinBox = qobject_cast<QDoubleSpinBox*>(widget)) {
+        doubleSpinBox->setReadOnly(true);
+        doubleSpinBox->setButtonSymbols(QAbstractSpinBox::NoButtons);
+    } else {
+        widget->setEnabled(false);
+    }
+}
+
+void syncComboBoxValue(QComboBox* comboBox, const QString& value) {
+    if (!comboBox) {
+        return;
+    }
+
+    int index = comboBox->findData(value);
+    if (index < 0) {
+        index = comboBox->findText(value);
+    }
+    if (index < 0) {
+        comboBox->addItem(value, value);
+        index = comboBox->count() - 1;
+    }
+
+    comboBox->setCurrentIndex(index);
 }
 } // namespace
 
@@ -108,44 +178,71 @@ void PropertyPanel::populatePanel() {
         }
 
         const Parameter& param = paramIt.value();
+        const ModuleParameterMetadata* metadata = metadataForParameter(m_selectedModule, name);
         QWidget* widget = nullptr;
 
-        if (std::holds_alternative<QString>(param.value())) {
+        if (metadata && !metadata->choices.isEmpty() && std::holds_alternative<QString>(param.value())) {
+            auto* comboBox = new QComboBox(this);
+            for (const ModuleParameterChoice& choice : metadata->choices) {
+                comboBox->addItem(choice.label, choice.value);
+            }
+            syncComboBoxValue(comboBox, std::get<QString>(param.value()));
+            if (!metadata->readOnly) {
+                connect(comboBox,
+                        QOverload<int>::of(&QComboBox::currentIndexChanged),
+                        this,
+                        [this, moduleId, name, comboBox](int index) {
+                            if (index < 0 || !m_graph->getModule(moduleId)) return;
+                            auto cmd = std::make_unique<SetParameterCommand>(
+                                m_graph, moduleId, name, comboBox->itemData(index).toString());
+                            m_commandManager->executeCommand(std::move(cmd));
+                        });
+            }
+            widget = comboBox;
+        } else if (std::holds_alternative<QString>(param.value())) {
             auto* lineEdit = new QLineEdit(std::get<QString>(param.value()));
-            connect(lineEdit, &QLineEdit::editingFinished, this, [this, moduleId, name, lineEdit]() {
-                if (!m_graph->getModule(moduleId)) return;
-                auto cmd = std::make_unique<SetParameterCommand>(m_graph, moduleId, name, lineEdit->text());
-                m_commandManager->executeCommand(std::move(cmd));
-            });
+            if (!metadata || !metadata->readOnly) {
+                connect(lineEdit, &QLineEdit::editingFinished, this, [this, moduleId, name, lineEdit]() {
+                    if (!m_graph->getModule(moduleId)) return;
+                    auto cmd = std::make_unique<SetParameterCommand>(m_graph, moduleId, name, lineEdit->text());
+                    m_commandManager->executeCommand(std::move(cmd));
+                });
+            }
             widget = lineEdit;
         } else if (std::holds_alternative<int>(param.value())) {
             auto* spinBox = new QSpinBox();
-            spinBox->setRange(INT_MIN, INT_MAX);
+            applySpinBoxMetadata(spinBox, metadata);
             spinBox->setValue(std::get<int>(param.value()));
-            connect(spinBox, QOverload<int>::of(&QSpinBox::valueChanged), this, [this, moduleId, name](int value) {
-                if (!m_graph->getModule(moduleId)) return;
-                auto cmd = std::make_unique<SetParameterCommand>(m_graph, moduleId, name, value);
-                m_commandManager->executeCommand(std::move(cmd));
-            });
+            if (!metadata || !metadata->readOnly) {
+                connect(spinBox, QOverload<int>::of(&QSpinBox::valueChanged), this, [this, moduleId, name](int value) {
+                    if (!m_graph->getModule(moduleId)) return;
+                    auto cmd = std::make_unique<SetParameterCommand>(m_graph, moduleId, name, value);
+                    m_commandManager->executeCommand(std::move(cmd));
+                });
+            }
             widget = spinBox;
         } else if (std::holds_alternative<double>(param.value())) {
             auto* doubleSpinBox = new QDoubleSpinBox();
-            doubleSpinBox->setRange(-DBL_MAX, DBL_MAX);
+            applyDoubleSpinBoxMetadata(doubleSpinBox, metadata);
             doubleSpinBox->setValue(std::get<double>(param.value()));
-            connect(doubleSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this, moduleId, name](double value) {
-                if (!m_graph->getModule(moduleId)) return;
-                auto cmd = std::make_unique<SetParameterCommand>(m_graph, moduleId, name, value);
-                m_commandManager->executeCommand(std::move(cmd));
-            });
+            if (!metadata || !metadata->readOnly) {
+                connect(doubleSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this, moduleId, name](double value) {
+                    if (!m_graph->getModule(moduleId)) return;
+                    auto cmd = std::make_unique<SetParameterCommand>(m_graph, moduleId, name, value);
+                    m_commandManager->executeCommand(std::move(cmd));
+                });
+            }
             widget = doubleSpinBox;
         } else if (std::holds_alternative<bool>(param.value())) {
             auto* checkBox = new QCheckBox();
             checkBox->setChecked(std::get<bool>(param.value()));
-            connect(checkBox, &QCheckBox::toggled, this, [this, moduleId, name](bool checked) {
-                if (!m_graph->getModule(moduleId)) return;
-                auto cmd = std::make_unique<SetParameterCommand>(m_graph, moduleId, name, checked);
-                m_commandManager->executeCommand(std::move(cmd));
-            });
+            if (!metadata || !metadata->readOnly) {
+                connect(checkBox, &QCheckBox::toggled, this, [this, moduleId, name](bool checked) {
+                    if (!m_graph->getModule(moduleId)) return;
+                    auto cmd = std::make_unique<SetParameterCommand>(m_graph, moduleId, name, checked);
+                    m_commandManager->executeCommand(std::move(cmd));
+                });
+            }
             widget = checkBox;
         }
 
@@ -155,6 +252,7 @@ void PropertyPanel::populatePanel() {
                 rowLabel->setToolTip(description);
                 widget->setToolTip(description);
             }
+            applyReadOnlyMetadata(widget, metadata);
             m_formLayout->addRow(rowLabel, widget);
             m_parameterWidgets[name] = widget;
         }
@@ -171,7 +269,10 @@ void PropertyPanel::populatePanel() {
     for (auto it = m_selectedModule->parameters().constBegin(); it != m_selectedModule->parameters().constEnd(); ++it) {
         const QString& name = it.key();
         if (name == "x" || name == "y") continue;
-        addParameterRow(name, humanizeIdentifier(name), QString());
+        const ModuleParameterMetadata* metadata = metadataForParameter(m_selectedModule, name);
+        addParameterRow(name,
+                        metadata && !metadata->label.isEmpty() ? metadata->label : humanizeIdentifier(name),
+                        metadata ? metadata->description : QString());
     }
 }
 
@@ -191,6 +292,10 @@ void PropertyPanel::onParameterChanged(const QString& name) {
         lineEdit->blockSignals(true);
         lineEdit->setText(std::get<QString>(value));
         lineEdit->blockSignals(false);
+    } else if (auto* comboBox = qobject_cast<QComboBox*>(it.value())) {
+        comboBox->blockSignals(true);
+        syncComboBoxValue(comboBox, std::get<QString>(value));
+        comboBox->blockSignals(false);
     } else if (auto* spinBox = qobject_cast<QSpinBox*>(it.value())) {
         spinBox->blockSignals(true);
         spinBox->setValue(std::get<int>(value));

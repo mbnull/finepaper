@@ -10,9 +10,9 @@
 #include "panels/palette.h"
 #include "panels/logpanel.h"
 #include "validation/validationmanager.h"
-#include "commands/loadgraphcommand.h"
 #include <QAction>
 #include <QApplication>
+#include <QCloseEvent>
 #include <QColor>
 #include <QDebug>
 #include <QDir>
@@ -24,6 +24,8 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QProcess>
+#include <QKeySequence>
+#include <QList>
 #include <QRegularExpression>
 #include <QStatusBar>
 #include <QTimer>
@@ -42,6 +44,27 @@ QString sanitizedDesignName(const QString& directoryPath) {
 
 QString trimmedProcessOutput(const QString& text) {
     return text.trimmed().isEmpty() ? QStringLiteral("(no process output)") : text.trimmed();
+}
+
+QString fileDialogSaveFilter() {
+    return QStringLiteral("JSON Files (*.json);;XML Files (*.xml)");
+}
+
+QString jsonFileDialogSaveFilter() {
+    return QStringLiteral("JSON Files (*.json)");
+}
+
+QString pathWithSelectedExtension(QString path, const QString& selectedFilter) {
+    if (!QFileInfo(path).suffix().isEmpty()) {
+        return path;
+    }
+
+    return path + (selectedFilter.startsWith(QStringLiteral("XML")) ? QStringLiteral(".xml")
+                                                                    : QStringLiteral(".json"));
+}
+
+QString documentDisplayName(const QString& path) {
+    return path.isEmpty() ? QStringLiteral("Untitled") : QFileInfo(path).fileName();
 }
 
 void appendLogLines(LogPanel* logPanel,
@@ -76,7 +99,12 @@ MainWindow::MainWindow(QWidget *parent)
       m_paletteDock(nullptr),
       m_propertyDock(nullptr),
       m_logDock(nullptr),
+      m_newAction(nullptr),
+      m_openAction(nullptr),
       m_saveAction(nullptr),
+      m_saveAsAction(nullptr),
+      m_undoAction(nullptr),
+      m_redoAction(nullptr),
       m_generateAction(nullptr),
       m_validateAction(nullptr),
       m_arrangeAction(nullptr) {
@@ -87,7 +115,8 @@ MainWindow::MainWindow(QWidget *parent)
     setupActions();
     setCentralWidget(createCentralContent());
     setupDocks();
-    setWindowTitle("SoC/NoC Node Editor");
+    updateWindowTitle();
+    updateCommandActions();
     resize(1920, 1080);
     scheduleStartupLayoutLog();
 }
@@ -95,35 +124,62 @@ MainWindow::MainWindow(QWidget *parent)
 MainWindow::~MainWindow() = default;
 
 void MainWindow::loadGraph(const QString& jsonPath) {
-    qInfo() << "Loading graph from" << jsonPath;
-    // Route loading through command history so users can undo graph imports.
-    m_commandManager->executeCommand(std::make_unique<LoadGraphCommand>(m_graph, jsonPath));
-    qInfo() << "Graph load command finished for" << jsonPath
-            << "modules" << m_graph->modules().size()
-            << "connections" << m_graph->connections().size();
-    if (m_arrangeAction && m_arrangeAction->isChecked()) {
-        m_nodeEditor->setArrangeEnabled(true);
-    }
+    loadDocument(jsonPath);
 }
 
 void MainWindow::saveGraph() {
-    QString path = QFileDialog::getSaveFileName(this,
-                                                "Save Graph",
-                                                "",
-                                                "JSON Files (*.json);;XML Files (*.xml)");
-    if (path.isEmpty()) return;
-    qInfo() << "Saving graph to" << path;
-    const QString suffix = QFileInfo(path).suffix().toLower();
-    const bool saveSucceeded = suffix == QStringLiteral("xml")
-        ? m_graph->saveToXml(path)
-        : m_graph->saveToJson(path);
-    if (!saveSucceeded) {
-        qWarning() << "Failed to save graph to" << path;
-        QMessageBox::warning(this, "Save Failed", "Could not write to " + path);
+    if (!m_currentDocumentPath.isEmpty()) {
+        saveDocument(m_currentDocumentPath);
         return;
     }
 
-    qInfo() << "Saved graph to" << path;
+    const QString path = QFileDialog::getSaveFileName(this,
+                                                      "Save Graph",
+                                                      defaultDocumentPath(),
+                                                      jsonFileDialogSaveFilter());
+    if (path.isEmpty()) {
+        return;
+    }
+
+    saveDocument(pathWithSelectedExtension(path, jsonFileDialogSaveFilter()));
+}
+
+void MainWindow::saveGraphAs() {
+    QString selectedFilter = QStringLiteral("JSON Files (*.json)");
+    QString path = QFileDialog::getSaveFileName(this,
+                                                "Save Graph",
+                                                defaultDocumentPath(),
+                                                fileDialogSaveFilter(),
+                                                &selectedFilter);
+    if (path.isEmpty()) {
+        return;
+    }
+
+    saveDocument(pathWithSelectedExtension(path, selectedFilter));
+}
+
+void MainWindow::newGraph() {
+    if (!maybeSaveChanges(QStringLiteral("creating a new design"))) {
+        return;
+    }
+
+    clearDocument();
+}
+
+void MainWindow::openGraph() {
+    if (!maybeSaveChanges(QStringLiteral("opening another design"))) {
+        return;
+    }
+
+    const QString path = QFileDialog::getOpenFileName(this,
+                                                      "Open Graph",
+                                                      defaultDocumentPath(),
+                                                      "JSON Files (*.json)");
+    if (path.isEmpty()) {
+        return;
+    }
+
+    loadDocument(path);
 }
 
 void MainWindow::generateVerilog() {
@@ -244,6 +300,25 @@ void MainWindow::runValidation() {
     m_validationManager->runValidation();
 }
 
+void MainWindow::undo() {
+    m_commandManager->undo();
+    syncDocumentStateFromHistory();
+}
+
+void MainWindow::redo() {
+    m_commandManager->redo();
+    syncDocumentStateFromHistory();
+}
+
+void MainWindow::closeEvent(QCloseEvent* event) {
+    if (maybeSaveChanges(QStringLiteral("closing the window"))) {
+        event->accept();
+        return;
+    }
+
+    event->ignore();
+}
+
 void MainWindow::setupPanels() {
     m_nodeEditor = new NodeEditorWidget(m_graph, m_commandManager.get(), this);
     m_propertyPanel = new PropertyPanel(m_graph, m_commandManager.get(), this);
@@ -264,13 +339,71 @@ void MainWindow::setupConnections() {
             &NodeEditorWidget::moduleSelected,
             m_propertyPanel,
             QOverload<QString>::of(&PropertyPanel::setSelectedModule));
+
+    const auto trackGraphChange = [this]() {
+        if (m_suppressDocumentTracking) {
+            return;
+        }
+        scheduleDocumentStateRefresh();
+    };
+
+    connect(m_graph, &Graph::moduleAdded, this, [trackGraphChange](Module*) { trackGraphChange(); });
+    connect(m_graph, &Graph::moduleRemoved, this, [trackGraphChange](const QString&) { trackGraphChange(); });
+    connect(m_graph, &Graph::connectionAdded, this, [trackGraphChange](Connection*) { trackGraphChange(); });
+    connect(m_graph, &Graph::connectionRemoved, this, [trackGraphChange](const QString&) { trackGraphChange(); });
+    connect(m_graph, &Graph::parameterChanged, this, [trackGraphChange](const QString&, const QString&) {
+        trackGraphChange();
+    });
 }
 
 void MainWindow::setupActions() {
     // Menu and toolbar share the same QAction instances to keep enabled/check
     // states synchronized automatically.
-    m_saveAction = new QAction("Save JSON", this);
+    m_newAction = new QAction("New", this);
+    m_newAction->setShortcut(QKeySequence::New);
+    m_newAction->setShortcutContext(Qt::WidgetWithChildrenShortcut);
+    connect(m_newAction, &QAction::triggered, this, &MainWindow::newGraph);
+
+    m_openAction = new QAction("Open...", this);
+    m_openAction->setShortcut(QKeySequence::Open);
+    m_openAction->setShortcutContext(Qt::WidgetWithChildrenShortcut);
+    connect(m_openAction, &QAction::triggered, this, &MainWindow::openGraph);
+
+    m_saveAction = new QAction("Save", this);
+    m_saveAction->setShortcut(QKeySequence::Save);
+    m_saveAction->setShortcutContext(Qt::WidgetWithChildrenShortcut);
     connect(m_saveAction, &QAction::triggered, this, &MainWindow::saveGraph);
+
+    m_saveAsAction = new QAction("Save As...", this);
+    m_saveAsAction->setShortcut(QKeySequence::SaveAs);
+    m_saveAsAction->setShortcutContext(Qt::WidgetWithChildrenShortcut);
+    connect(m_saveAsAction, &QAction::triggered, this, &MainWindow::saveGraphAs);
+
+    m_undoAction = new QAction("Undo", this);
+    m_undoAction->setShortcuts(QKeySequence::keyBindings(QKeySequence::Undo));
+    m_undoAction->setShortcutContext(Qt::WidgetWithChildrenShortcut);
+    connect(m_undoAction, &QAction::triggered, this, &MainWindow::undo);
+
+    m_redoAction = new QAction("Redo", this);
+    QList<QKeySequence> redoShortcuts = QKeySequence::keyBindings(QKeySequence::Redo);
+    if (!redoShortcuts.contains(QKeySequence(QStringLiteral("Ctrl+Shift+Z")))) {
+        redoShortcuts.push_back(QKeySequence(QStringLiteral("Ctrl+Shift+Z")));
+    }
+    if (!redoShortcuts.contains(QKeySequence(QStringLiteral("Ctrl+Y")))) {
+        redoShortcuts.push_back(QKeySequence(QStringLiteral("Ctrl+Y")));
+    }
+    m_redoAction->setShortcuts(redoShortcuts);
+    m_redoAction->setShortcutContext(Qt::WidgetWithChildrenShortcut);
+    connect(m_redoAction, &QAction::triggered, this, &MainWindow::redo);
+
+    // Register shortcuts on the main window directly so they still fire when
+    // focus sits inside child widgets like the graphics view viewport.
+    addAction(m_newAction);
+    addAction(m_openAction);
+    addAction(m_saveAction);
+    addAction(m_saveAsAction);
+    addAction(m_undoAction);
+    addAction(m_redoAction);
 
     m_generateAction = new QAction("Generate Verilog", this);
     m_generateAction->setToolTip("Export the current graph as framework JSON and generate Verilog in a selected folder.");
@@ -300,7 +433,14 @@ void MainWindow::setupActions() {
     });
 
     auto* fileMenu = menuBar()->addMenu("&File");
+    fileMenu->addAction(m_newAction);
+    fileMenu->addAction(m_openAction);
     fileMenu->addAction(m_saveAction);
+    fileMenu->addAction(m_saveAsAction);
+
+    auto* editMenu = menuBar()->addMenu("&Edit");
+    editMenu->addAction(m_undoAction);
+    editMenu->addAction(m_redoAction);
 
     auto* toolsMenu = menuBar()->addMenu("&Tools");
     toolsMenu->addAction(m_generateAction);
@@ -314,7 +454,11 @@ void MainWindow::setupActions() {
 
     auto* mainToolBar = addToolBar("Main");
     mainToolBar->setObjectName("mainToolBar");
+    mainToolBar->addAction(m_newAction);
+    mainToolBar->addAction(m_openAction);
     mainToolBar->addAction(m_saveAction);
+    mainToolBar->addAction(m_undoAction);
+    mainToolBar->addAction(m_redoAction);
     mainToolBar->addAction(m_generateAction);
     mainToolBar->addAction(m_validateAction);
     mainToolBar->addAction(m_arrangeAction);
@@ -408,4 +552,149 @@ void MainWindow::logStartupLayout() const {
             << "floating" << (m_logDock ? m_logDock->isFloating() : false)
             << "visible" << (m_logDock ? m_logDock->isVisible() : false);
 #endif
+}
+
+bool MainWindow::maybeSaveChanges(const QString& actionDescription) {
+    if (!m_documentDirty) {
+        return true;
+    }
+
+    const QMessageBox::StandardButton answer = QMessageBox::warning(
+        this,
+        "Unsaved Changes",
+        QString("Save changes before %1?").arg(actionDescription),
+        QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel,
+        QMessageBox::Save);
+
+    if (answer == QMessageBox::Cancel) {
+        return false;
+    }
+    if (answer == QMessageBox::Discard) {
+        return true;
+    }
+
+    if (!m_currentDocumentPath.isEmpty()) {
+        return saveDocument(m_currentDocumentPath);
+    }
+
+    const QString path = QFileDialog::getSaveFileName(this,
+                                                      "Save Graph",
+                                                      defaultDocumentPath(),
+                                                      jsonFileDialogSaveFilter());
+    if (path.isEmpty()) {
+        return false;
+    }
+
+    return saveDocument(pathWithSelectedExtension(path, jsonFileDialogSaveFilter()));
+}
+
+bool MainWindow::loadDocument(const QString& jsonPath) {
+    qInfo() << "Loading graph from" << jsonPath;
+
+    m_suppressDocumentTracking = true;
+    const bool loadSucceeded = m_graph->loadFromJson(jsonPath);
+    m_suppressDocumentTracking = false;
+
+    if (!loadSucceeded) {
+        QMessageBox::warning(this, "Open Failed", "Could not load " + jsonPath);
+        return false;
+    }
+
+    m_commandManager->clearHistory();
+    m_cleanStateId = m_commandManager->currentStateId();
+    setCurrentDocumentPath(jsonPath);
+    syncDocumentStateFromHistory();
+    statusBar()->showMessage("Opened " + QFileInfo(jsonPath).fileName(), 5000);
+    qInfo() << "Graph load finished for" << jsonPath
+            << "modules" << m_graph->modules().size()
+            << "connections" << m_graph->connections().size();
+    return true;
+}
+
+bool MainWindow::saveDocument(const QString& path) {
+    qInfo() << "Saving graph to" << path;
+    const QString suffix = QFileInfo(path).suffix().toLower();
+    const bool savingXml = suffix == QStringLiteral("xml");
+    const bool saveSucceeded = suffix == QStringLiteral("xml")
+        ? m_graph->saveToXml(path)
+        : m_graph->saveToJson(path);
+    if (!saveSucceeded) {
+        qWarning() << "Failed to save graph to" << path;
+        QMessageBox::warning(this, "Save Failed", "Could not write to " + path);
+        return false;
+    }
+
+    if (!savingXml) {
+        setCurrentDocumentPath(path);
+        m_cleanStateId = m_commandManager->currentStateId();
+    }
+    syncDocumentStateFromHistory();
+    statusBar()->showMessage("Saved " + QFileInfo(path).fileName(), 5000);
+    qInfo() << "Saved graph to" << path;
+    return true;
+}
+
+QString MainWindow::defaultDocumentPath() const {
+    return m_currentDocumentPath.isEmpty() ? QDir::currentPath() : m_currentDocumentPath;
+}
+
+void MainWindow::clearDocument() {
+    m_suppressDocumentTracking = true;
+    m_graph->clear();
+    m_suppressDocumentTracking = false;
+    m_commandManager->clearHistory();
+    m_cleanStateId = m_commandManager->currentStateId();
+    setCurrentDocumentPath(QString());
+    syncDocumentStateFromHistory();
+    statusBar()->showMessage("Started a new design", 5000);
+}
+
+void MainWindow::scheduleDocumentStateRefresh() {
+    if (m_documentStateRefreshPending) {
+        return;
+    }
+
+    m_documentStateRefreshPending = true;
+    QTimer::singleShot(0, this, [this]() {
+        m_documentStateRefreshPending = false;
+        syncDocumentStateFromHistory();
+    });
+}
+
+void MainWindow::syncDocumentStateFromHistory() {
+    setDocumentDirty(m_commandManager->currentStateId() != m_cleanStateId);
+    updateCommandActions();
+}
+
+void MainWindow::setCurrentDocumentPath(const QString& path) {
+    m_currentDocumentPath = path;
+    updateWindowTitle();
+}
+
+void MainWindow::setDocumentDirty(bool dirty) {
+    if (m_documentDirty == dirty) {
+        return;
+    }
+
+    m_documentDirty = dirty;
+    updateWindowTitle();
+}
+
+void MainWindow::updateWindowTitle() {
+    const QString title = QString("%1%2 - SoC/NoC Node Editor")
+                              .arg(documentDisplayName(m_currentDocumentPath),
+                                   m_documentDirty ? QStringLiteral("*") : QString());
+    setWindowTitle(title);
+}
+
+void MainWindow::updateCommandActions() {
+    if (m_saveAction) {
+        m_saveAction->setEnabled(m_documentDirty || !m_currentDocumentPath.isEmpty());
+    }
+    if (m_undoAction) {
+        m_undoAction->setEnabled(m_commandManager->canUndo());
+    }
+    if (m_redoAction) {
+        m_redoAction->setEnabled(m_commandManager->canRedo());
+    }
 }

@@ -8,10 +8,28 @@
 #include <QHash>
 #include <QSize>
 #include <QVector>
+#include <optional>
 #include <vector>
 #include <memory>
 
 class ModuleProvider;
+
+struct ModuleParameterChoice {
+    QString value;
+    QString label;
+};
+
+struct ModuleParameterMetadata {
+    QString name;
+    QString label;
+    QString description;
+    QString unit;
+    QVector<ModuleParameterChoice> choices;
+    std::optional<double> minimumValue;
+    std::optional<double> maximumValue;
+    bool configurable = true;
+    bool readOnly = false;
+};
 
 struct ModuleConfigField {
     QString parameterName;
@@ -23,6 +41,7 @@ struct ModuleType {
     QString name;
     std::vector<Port> defaultPorts;
     QHash<QString, Parameter> defaultParameters;
+    QHash<QString, ModuleParameterMetadata> parameterMetadata;
     QString paletteLabel;
     QString description;
     QString nodeColor;
