@@ -1,0 +1,131 @@
+{
+  "name": "XP",
+  "family": "xp",
+  "palette_label": "XP",
+  "graph_group": "xps",
+  "description": "Mesh router with four directional links and four local endpoint attachment slots.",
+  "ipxact": {
+    "vendor": "finepaper",
+    "library": "frontend",
+    "name": "XP",
+    "version": "1.0"
+  },
+  "identity": {
+    "external_id_prefix": "xp",
+    "display_prefix": "XP",
+    "width": 2,
+    "supports_mesh_coordinates": true
+  },
+  "capabilities": {
+    "supports_collapse": true
+  },
+  "presentation": {
+    "layout": "mesh_router",
+    "node_color": "#7cb9e8",
+    "supports_collapse": true,
+    "graphics": {
+      "expanded": {
+        "min_width": 136,
+        "height": 116,
+        "caption_left": 30,
+        "caption_top": 6,
+        "port_inset": 16
+      },
+      "collapsed": {
+        "min_width": 104,
+        "height": 92,
+        "caption_left": 30,
+        "caption_top": 26,
+        "endpoint_inset": 18
+      },
+      "arrangement": {
+        "endpoint_offset_x": 156,
+        "mesh_spacing_x": 220,
+        "mesh_spacing_y": 168
+      }
+    }
+  },
+  "connectivity": {
+    "attachment_bus_type": "ni2router",
+    "router_bus_type": "router",
+    "max_endpoint_attachments": 4,
+    "router_directions": [
+      "north",
+      "east",
+      "south",
+      "west"
+    ]
+  },
+  "ports": {
+    "patterns": [
+      {
+        "generator": "attachment_slots",
+        "count": 4,
+        "id_prefix": "ep",
+        "name_prefix": "EP",
+        "direction": "output",
+        "type": "bus",
+        "bus_type": "ni2router",
+        "role": "attachment",
+        "description_template": "Local endpoint slot %{index}"
+      },
+      {
+        "generator": "router_sides",
+        "sides": ["north", "east", "south", "west"],
+        "type": "bus",
+        "bus_type": "router",
+        "role": "router"
+      }
+    ]
+  },
+  "parameters": {
+    "base": [
+      { "use": "canvas_x" },
+      { "use": "canvas_y" },
+      { "use": "display_name" },
+      { "use": "external_id" },
+      {
+        "name": "collapsed",
+        "type": "bool",
+        "default": true,
+        "configurable": false,
+        "description": "Collapsed editor state."
+      }
+    ],
+    "config": [
+      {
+        "name": "routing_algorithm",
+        "type": "string",
+        "default": "xy",
+        "label": "Routing algorithm",
+        "description": "Router path selection strategy.",
+        "choices": [
+          {
+            "value": "xy",
+            "label": "XY"
+          },
+          {
+            "value": "yx",
+            "label": "YX"
+          }
+        ]
+      },
+      {
+        "name": "vc_count",
+        "type": "int",
+        "default": 2,
+        "label": "VC count",
+        "description": "Virtual channel count.",
+        "min": 1,
+        "max": 8,
+        "unit": "VCs"
+      },
+      {
+        "name": "buffer_depth",
+        "use": "buffer_depth",
+        "default": 8,
+        "description": "Depth of each input buffer."
+      }
+    ]
+  }
+}

@@ -15,35 +15,38 @@ OptionParser.new do |opts|
   opts.on('-o OUTPUT')  { |v| options[:output] = v }
   opts.on('-t TMPL')    { |v| options[:template_dir] = v }
   opts.on('-c IPCORE')  { |v| options[:ipcore_dir] = v }
+  opts.on('--model-dir DIR') { |v| options[:model_dir] = v }
 end.parse!
 
-noc = JsonParser.parse(options[:input])
-noc = TopologyExpander.expand(noc)
-DrcRunner.new.run(noc)
-plugins = PluginRunner.new
-plugins.register(NiPortPlugin.new(options[:ipcore_dir])) if options[:ipcore_dir]
-plugins.run(noc, {})
+ModuleCatalog.with_catalog_dir(options[:model_dir] || ModuleCatalog.catalog_dir) do
+  noc = JsonParser.parse(options[:input])
+  noc = TopologyExpander.expand(noc)
+  DrcRunner.new.run(noc)
+  plugins = PluginRunner.new
+  plugins.register(NiPortPlugin.new(options[:ipcore_dir])) if options[:ipcore_dir]
+  plugins.run(noc, {})
 
-gen = RtlGenerator.new(noc, options[:template_dir])
+  gen = RtlGenerator.new(noc, options[:template_dir])
 
-noc.xps.each do |xp|
-  noc.instance_variable_set(:@xp, xp)
-  gen.render('xp.sv.erb', File.join(options[:output], "xp_router_#{xp.id}.sv"))
+  noc.xps.each do |xp|
+    noc.instance_variable_set(:@xp, xp)
+    gen.render('xp.sv.erb', File.join(options[:output], "xp_router_#{xp.id}.sv"))
+  end
+
+  noc.xps.each do |xp|
+    next if xp.endpoints.empty?
+    noc.instance_variable_set(:@xp, xp)
+    gen.render('ni.sv.erb', File.join(options[:output], "ni_xp_#{xp.id}.sv"))
+  end
+
+  noc.endpoints.each do |ep|
+    next unless ep.template
+    noc.instance_variable_set(:@ep, ep)
+    RtlGenerator.new(noc, options[:ipcore_dir])
+                .render(File.basename(ep.template), File.join(options[:output], "#{ep.id}.sv"))
+  end
+
+  gen.render('top.v.erb', File.join(options[:output], "#{noc.name}_top.v"))
+
+  puts "Generated #{noc.xps.size} XP modules + top in #{options[:output]}"
 end
-
-noc.xps.each do |xp|
-  next if xp.endpoints.empty?
-  noc.instance_variable_set(:@xp, xp)
-  gen.render('ni.sv.erb', File.join(options[:output], "ni_xp_#{xp.id}.sv"))
-end
-
-noc.endpoints.each do |ep|
-  next unless ep.template
-  noc.instance_variable_set(:@ep, ep)
-  RtlGenerator.new(noc, options[:ipcore_dir])
-              .render(File.basename(ep.template), File.join(options[:output], "#{ep.id}.sv"))
-end
-
-gen.render('top.v.erb', File.join(options[:output], "#{noc.name}_top.v"))
-
-puts "Generated #{noc.xps.size} XP modules + top in #{options[:output]}"

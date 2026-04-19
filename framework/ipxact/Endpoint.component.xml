@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ipxact:component xmlns:ipxact="http://www.accellera.org/XMLSchema/IPXACT/1685-2021/" xmlns:fp="urn:finepaper:frontend:module:1.0">
+  <ipxact:vendor>finepaper</ipxact:vendor>
+  <ipxact:library>frontend</ipxact:library>
+  <ipxact:name>Endpoint</ipxact:name>
+  <ipxact:version>1.0</ipxact:version>
+  <ipxact:description>Endpoint interface block that terminates a local NoC connection.</ipxact:description>
+  <ipxact:model>
+    <ipxact:ports>
+      <ipxact:port>
+        <ipxact:name>noc</ipxact:name>
+        <ipxact:description>NoC attachment input</ipxact:description>
+        <ipxact:wire>
+          <ipxact:direction>in</ipxact:direction>
+        </ipxact:wire>
+        <ipxact:vendorExtensions>
+          <fp:port label="NoC" role="attachment" bus_type="ni2router" frontend_type="bus" />
+        </ipxact:vendorExtensions>
+      </ipxact:port>
+    </ipxact:ports>
+  </ipxact:model>
+  <ipxact:parameters>
+    <ipxact:parameter>
+      <ipxact:name>display_name</ipxact:name>
+      <ipxact:description>Name shown on the canvas.</ipxact:description>
+      <ipxact:value></ipxact:value>
+      <ipxact:vendorExtensions>
+        <fp:parameter frontend_type="string" label="Display name">
+        </fp:parameter>
+      </ipxact:vendorExtensions>
+    </ipxact:parameter>
+    <ipxact:parameter>
+      <ipxact:name>external_id</ipxact:name>
+      <ipxact:description>Framework-facing identifier.</ipxact:description>
+      <ipxact:value></ipxact:value>
+      <ipxact:vendorExtensions>
+        <fp:parameter frontend_type="string" label="External ID">
+        </fp:parameter>
+      </ipxact:vendorExtensions>
+    </ipxact:parameter>
+    <ipxact:parameter>
+      <ipxact:name>type</ipxact:name>
+      <ipxact:description>Endpoint traffic role.</ipxact:description>
+      <ipxact:value>master</ipxact:value>
+      <ipxact:vendorExtensions>
+        <fp:parameter frontend_type="string" label="Type">
+          <fp:choice value="master" label="Master" />
+          <fp:choice value="slave" label="Slave" />
+        </fp:parameter>
+      </ipxact:vendorExtensions>
+    </ipxact:parameter>
+    <ipxact:parameter>
+      <ipxact:name>protocol</ipxact:name>
+      <ipxact:description>Interface protocol.</ipxact:description>
+      <ipxact:value>axi</ipxact:value>
+      <ipxact:vendorExtensions>
+        <fp:parameter frontend_type="string" label="Protocol">
+        </fp:parameter>
+      </ipxact:vendorExtensions>
+    </ipxact:parameter>
+    <ipxact:parameter>
+      <ipxact:name>data_width</ipxact:name>
+      <ipxact:description>Bus width in bits.</ipxact:description>
+      <ipxact:value>32</ipxact:value>
+      <ipxact:vendorExtensions>
+        <fp:parameter frontend_type="int" label="Data width" minimum="1" unit="bits">
+        </fp:parameter>
+      </ipxact:vendorExtensions>
+    </ipxact:parameter>
+    <ipxact:parameter>
+      <ipxact:name>buffer_depth</ipxact:name>
+      <ipxact:description>Ingress buffer depth.</ipxact:description>
+      <ipxact:value>16</ipxact:value>
+      <ipxact:vendorExtensions>
+        <fp:parameter frontend_type="int" label="Buffer depth" minimum="1">
+        </fp:parameter>
+      </ipxact:vendorExtensions>
+    </ipxact:parameter>
+    <ipxact:parameter>
+      <ipxact:name>qos_enabled</ipxact:name>
+      <ipxact:description>Enable QoS tagging support.</ipxact:description>
+      <ipxact:value>false</ipxact:value>
+      <ipxact:vendorExtensions>
+        <fp:parameter frontend_type="bool" label="QoS enabled">
+        </fp:parameter>
+      </ipxact:vendorExtensions>
+    </ipxact:parameter>
+  </ipxact:parameters>
+  <ipxact:vendorExtensions>
+    <fp:module palette_label="Endpoint" graph_group="endpoints">
+      <fp:identity external_id_prefix="ep" display_prefix="EP" width="2" supports_mesh_coordinates="false" />
+      <fp:connectivity attachment_bus_type="ni2router" max_xp_attachments="1">
+      </fp:connectivity>
+      <fp:presentation layout="endpoint" node_color="#d6f4b6">
+        <fp:expanded min_width="104" height="54" caption_left="8" caption_top="6" />
+        <fp:arrangement loose_endpoint_spacing_x="168" loose_endpoint_spacing_y="84" loose_endpoint_margin_y="116" />
+      </fp:presentation>
+    </fp:module>
+  </ipxact:vendorExtensions>
+</ipxact:component>

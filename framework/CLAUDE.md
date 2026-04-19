@@ -20,10 +20,12 @@ ruby test/test_generator.rb
 
 - `bin/generate` — CLI entry point; iterates XPs, sets `@xp` on noc via `instance_variable_set`, calls `gen.render` per XP
 - `src/ruby/model/` — Data model classes
+  - `modules/` — canonical hand-edited model descriptors, one JSON file per frontend module
+  - `module_catalog.rb` — loads the model folder, expands compact generators, resolves inheritance, reflects config schemas
   - `NocConfig` — Top-level config; `#expose` sets `@noc = self` and returns `binding` for ERB
-  - `Xp` — Crosspoint router; `#node_id(noc)` calculates position-based ID
-  - `Connection` — Links between XPs with direction
-  - `Endpoint` — Network interface (NI) with protocol info
+  - `Xp` — Crosspoint router; instance can select a descriptor via `module`, `#node_id(noc)` calculates position-based ID
+  - `Connection` — Router links between XPs; supports legacy `dir` plus explicit router-port endpoints
+  - `Endpoint` — Network interface (NI) with protocol info; instance can select a descriptor via `module`
   - `NocConfig#catalog` — Groups endpoints by role (masters/slaves) and protocol
 - `src/ruby/parser/` — Input parsers
   - `json_parser.rb` — `JsonParser.parse(path)` → `NocConfig`
@@ -40,19 +42,7 @@ ruby test/test_generator.rb
 
 ### Schema Definition
 
-Components define config schemas via `config_schema` class method:
-
-```ruby
-class Xp
-  def self.config_schema
-    {
-      routing_algorithm: { type: :string, default: 'xy' },
-      vc_count: { type: :integer, default: 2 },
-      buffer_depth: { type: :integer, default: 8 }
-    }
-  end
-end
-```
+Config schemas are reflected from the hand-authored JSON descriptors in `src/ruby/model/modules/`.
 
 ### Config Fields
 
@@ -69,7 +59,7 @@ end
 
 - `JsonParser.parse_config(json, schema)` validates types, rejects unknown fields, applies defaults
 - Constructor merges defaults with user config: `schema.transform_values { |v| v[:default] }.merge(config)`
-- DRC checks validate config values against constraints
+- DRC checks validate descriptor constraints such as `choices`, `min`, and `max`
 
 ## Key Conventions
 
@@ -77,7 +67,15 @@ end
 - Plugins: subclass `PluginBase`, implement `process(noc, context)`
 - ERB templates access the current XP as `@xp`; call `@xp.neighbors(@noc)` for connected XPs
 - Topology: either specify `xps` array explicitly OR use `parameters.mesh` (width/height) for auto-expansion
-- Config schemas: define via `config_schema` class method; parser validates types and rejects unknown fields
+- Model catalog: descriptors live in `src/ruby/model/modules/`; use `--model-dir DIR` with `bin/generate` or `bin/export_modules` to point at an alternate model folder
+- Connections:
+  - legacy flat list: `[{ "from": "xp_0_0", "to": "xp_1_0", "dir": "east" }]`
+  - compact grouped form: `{ "router_links": [{ "from": "xp_0_0", "links": { "east": "xp_1_0" } }] }`
+  - explicit port form: `{ "explicit": [{ "from": { "node": "xp_0_0", "port": "east_out" }, "to": { "node": "xp_1_0", "port": "west_in" } }] }`
+- Per-instance descriptor selection:
+  - XP: `{ "id": "xp_0_0", "module": "XP", "x": 0, "y": 0 }`
+  - Endpoint: `{ "id": "ep0", "module": "Endpoint", "type": "master", "protocol": "axi4", "data_width": 64 }`
+- Config schemas: reflected from the selected module descriptor; parser validates types and rejects unknown fields
 - Multi-endpoint XPs: NI template generates `NUM_ENDPOINTS` parameter and per-endpoint ports
 - `ipcore/` is gitignored — contains reference IP core SV/V files
 
@@ -85,16 +83,14 @@ end
 
 **XP validation:**
 - `UniqueXpIds` — no duplicate XP IDs
-- `ValidXpConfig` — config values match schema types
-- `XpRoutingAlgorithm` — routing_algorithm in ['xy', 'yx']
-- `XpVirtualChannels` — vc_count in range 1-8
-- `XpBufferDepth` — buffer_depth > 0
+- `ValidXpConfig` — config values match descriptor types and constraints
 
 **Endpoint validation:**
 - `UniqueEndpointIds` — no duplicate endpoint IDs
-- `ValidEndpointConfig` — config values match schema types
-- `EndpointBufferDepth` — buffer_depth > 0
+- `ValidEndpointConfig` — config values match descriptor types and constraints
 - `EndpointProtocol` — protocol not empty
+- `ValidEndpointAttachments` — attachment limits and bus-family compatibility match the selected module descriptors
+- `ValidRouterConnections` — router directions, router bus families, and explicit router ports match the selected XP descriptors
 
 ## Testing
 

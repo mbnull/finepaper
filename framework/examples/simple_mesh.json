@@ -12,12 +12,13 @@
     { "id": "xp_0_1", "x": 0, "y": 1, "endpoints": ["ep_mem0"] },
     { "id": "xp_1_1", "x": 1, "y": 1, "endpoints": ["ep_mem1"] }
   ],
-  "connections": [
-    { "from": "xp_0_0", "to": "xp_1_0", "dir": "east" },
-    { "from": "xp_0_0", "to": "xp_0_1", "dir": "south" },
-    { "from": "xp_1_0", "to": "xp_1_1", "dir": "south" },
-    { "from": "xp_0_1", "to": "xp_1_1", "dir": "east" }
-  ],
+  "connections": {
+    "router_links": [
+      { "from": "xp_0_0", "links": { "east": "xp_1_0", "south": "xp_0_1" } },
+      { "from": "xp_1_0", "links": { "south": "xp_1_1" } },
+      { "from": "xp_0_1", "links": { "east": "xp_1_1" } }
+    ]
+  },
   "endpoints": [
     { "id": "ep_cpu0", "type": "master", "protocol": "axi4", "data_width": 64 },
     { "id": "ep_cpu1", "type": "master", "protocol": "axi4", "data_width": 64 },

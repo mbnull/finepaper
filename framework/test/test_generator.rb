@@ -7,6 +7,9 @@ require 'parser/json_parser'
 require 'parser/verilog_parser'
 require 'topology/topology_expander'
 require 'drc/drc_runner'
+require 'generator/frontend_bundle_exporter'
+require 'generator/ipxact_exporter'
+require 'model/module_catalog'
 require 'model/noc_config'
 require 'model/xp'
 require 'generator/rtl_generator'
@@ -22,6 +25,30 @@ class TestJsonParser < Minitest::Test
     assert_equal 4, noc.xps.size
     assert_equal 4, noc.connections.size
     assert_equal 4, noc.endpoints.size
+  end
+
+  def test_parses_grouped_router_links
+    f = Tempfile.new(['grouped_links', '.json'])
+    f.write('{"name":"t","version":"1.0","xps":[{"id":"xp0","x":0,"y":0},{"id":"xp1","x":1,"y":0},{"id":"xp2","x":0,"y":1}],"connections":{"router_links":[{"from":"xp0","links":{"east":"xp1","south":"xp2"}}]},"endpoints":[]}')
+    f.close
+    noc = JsonParser.parse(f.path)
+    assert_equal 2, noc.connections.size
+    assert_equal ['east', 'south'], noc.connections.map(&:router_direction).sort
+  ensure
+    f&.unlink
+  end
+
+  def test_parses_explicit_port_router_links
+    f = Tempfile.new(['explicit_links', '.json'])
+    f.write('{"name":"t","version":"1.0","xps":[{"id":"xp0","x":0,"y":0},{"id":"xp1","x":1,"y":0}],"connections":{"explicit":[{"from":{"node":"xp0","port":"east_out"},"to":{"node":"xp1","port":"west_in"}}]},"endpoints":[]}')
+    f.close
+    noc = JsonParser.parse(f.path)
+    assert_equal 1, noc.connections.size
+    assert_equal 'east', noc.connections.first.router_direction
+    assert_equal 'east_out', noc.connections.first.from_port
+    assert_equal 'west_in', noc.connections.first.to_port
+  ensure
+    f&.unlink
   end
 
   def test_applies_parameter_defaults
@@ -104,13 +131,81 @@ class TestDrcRunner < Minitest::Test
   def test_raises_on_invalid_routing_algorithm
     xp = Xp.new('xp1', 0, 0, [], { routing_algorithm: 'invalid' })
     noc = NocConfig.new('t', '1', {}, [xp], [], [])
-    assert_raises(RuntimeError) { DrcRunner.new.run(noc) }
+    error = assert_raises(RuntimeError) { DrcRunner.new.run(noc) }
+    assert_includes error.message, 'routing_algorithm must be one of xy, yx'
   end
 
   def test_raises_on_invalid_vc_count
     xp = Xp.new('xp1', 0, 0, [], { vc_count: 10 })
     noc = NocConfig.new('t', '1', {}, [xp], [], [])
-    assert_raises(RuntimeError) { DrcRunner.new.run(noc) }
+    error = assert_raises(RuntimeError) { DrcRunner.new.run(noc) }
+    assert_includes error.message, 'vc_count must be <= 8'
+  end
+
+  def test_raises_on_unknown_router_connection_target
+    xp = Xp.new('xp1', 0, 0, [])
+    noc = NocConfig.new('t', '1', {}, [xp], [Connection.new('xp1', 'xp2', 'east')], [])
+    error = assert_raises(RuntimeError) { DrcRunner.new.run(noc) }
+    assert_includes error.message, 'Invalid connection target: xp2 not found'
+  end
+
+  def test_raises_on_invalid_router_connection_direction
+    xp1 = Xp.new('xp1', 0, 0, [])
+    xp2 = Xp.new('xp2', 1, 0, [])
+    noc = NocConfig.new('t', '1', {}, [xp1, xp2], [Connection.new('xp1', 'xp2', 'sideways')], [])
+    error = assert_raises(RuntimeError) { DrcRunner.new.run(noc) }
+    assert_includes error.message, "XP xp1: invalid direction 'sideways' for connection to xp2"
+  end
+
+  def test_raises_on_missing_router_connection_direction
+    xp1 = Xp.new('xp1', 0, 0, [])
+    xp2 = Xp.new('xp2', 1, 0, [])
+    noc = NocConfig.new('t', '1', {}, [xp1, xp2], [Connection.new('xp1', 'xp2', nil)], [])
+    error = assert_raises(RuntimeError) { DrcRunner.new.run(noc) }
+    assert_includes error.message, 'XP xp1: missing router direction for connection to xp2'
+  end
+
+  def test_accepts_router_direction_derived_from_ports
+    xp1 = Xp.new('xp1', 0, 0, [])
+    xp2 = Xp.new('xp2', 1, 0, [])
+    noc = NocConfig.new('t', '1', {}, [xp1, xp2], [
+      Connection.new('xp1', 'xp2', nil, from_port: 'east_out', to_port: 'west_in')
+    ], [])
+    DrcRunner.new.run(noc)
+  end
+
+  def test_rejects_explicit_router_port_with_wrong_direction
+    xp1 = Xp.new('xp1', 0, 0, [])
+    xp2 = Xp.new('xp2', 1, 0, [])
+    noc = NocConfig.new('t', '1', {}, [xp1, xp2], [
+      Connection.new('xp1', 'xp2', nil, from_port: 'east_in', to_port: 'west_in')
+    ], [])
+    error = assert_raises(RuntimeError) { DrcRunner.new.run(noc) }
+    assert_includes error.message, 'port east_in must be output'
+  end
+
+  def test_raises_on_missing_endpoint_attachment
+    xp = Xp.new('xp1', 0, 0, ['ep_missing'])
+    noc = NocConfig.new('t', '1', {}, [xp], [], [])
+    error = assert_raises(RuntimeError) { DrcRunner.new.run(noc) }
+    assert_includes error.message, 'XP xp1: endpoint ep_missing not found'
+  end
+
+  def test_raises_on_endpoint_attached_to_multiple_xps
+    ep = Endpoint.new('ep1', 'master', 'axi4', 64)
+    xp1 = Xp.new('xp1', 0, 0, ['ep1'])
+    xp2 = Xp.new('xp2', 1, 0, ['ep1'])
+    noc = NocConfig.new('t', '1', {}, [xp1, xp2], [], [ep])
+    error = assert_raises(RuntimeError) { DrcRunner.new.run(noc) }
+    assert_includes error.message, 'Endpoint ep1: attached to 2 XPs, expected at most 1'
+  end
+
+  def test_raises_when_xp_exceeds_attachment_capacity
+    endpoints = 5.times.map { |index| Endpoint.new("ep#{index}", 'master', 'axi4', 64) }
+    xp = Xp.new('xp1', 0, 0, endpoints.map(&:id))
+    noc = NocConfig.new('t', '1', {}, [xp], [], endpoints)
+    error = assert_raises(RuntimeError) { DrcRunner.new.run(noc) }
+    assert_includes error.message, 'XP xp1: supports at most 4 endpoint attachments, got 5'
   end
 end
 
@@ -149,6 +244,97 @@ class TestXp < Minitest::Test
 end
 
 class TestConfigSchema < Minitest::Test
+  def test_module_catalog_reflects_framework_models
+    descriptors = ModuleCatalog.descriptors
+    assert_equal ['Endpoint', 'XP'], descriptors.map { |descriptor| descriptor[:name] }.sort
+    assert_equal 'router', ModuleCatalog.descriptor('XP').dig(:connectivity, :router_bus_type)
+    assert_equal 'ni2router', ModuleCatalog.descriptor('Endpoint').dig(:connectivity, :attachment_bus_type)
+  end
+
+  def test_module_catalog_expands_compact_xp_port_patterns
+    xp = ModuleCatalog.descriptor('XP')
+    assert_equal 12, xp[:ports].size
+    assert_equal 'ep0', xp[:ports][0][:id]
+    assert_equal 'EP0', xp[:ports][0][:name]
+    assert_equal 'north_in', xp[:ports][4][:id]
+    assert_equal 'N', xp[:ports][4][:name]
+    assert_equal 'West router egress', xp[:ports][11][:description]
+  end
+
+  def test_module_catalog_expands_parameter_templates
+    xp = ModuleCatalog.descriptor('XP')
+    endpoint = ModuleCatalog.descriptor('Endpoint')
+
+    assert_equal 'display_name', xp[:parameters][2][:name]
+    assert_equal 'Display name', xp[:parameters][2][:label]
+    assert_equal 'external_id', endpoint[:parameters][1][:name]
+    assert_equal 'Framework-facing identifier.', endpoint[:parameters][1][:description]
+    assert_equal 8, xp[:config_parameters][2][:default]
+    assert_equal 'Buffer depth', endpoint[:config_parameters][0][:label]
+  end
+
+  def test_module_catalog_computes_compatible_modules
+    assert_equal ['Endpoint'], ModuleCatalog.compatible_module_names('XP', relation: :attachment)
+    assert_equal ['XP'], ModuleCatalog.compatible_module_names('Endpoint', relation: :attachment)
+    assert_equal ['XP'], ModuleCatalog.compatible_module_names('XP', relation: :router)
+  end
+
+  def test_module_catalog_supports_folder_inheritance_and_variant_parsing
+    dir = Dir.mktmpdir
+    source_dir = File.join(__dir__, '..', 'src', 'ruby', 'model', 'modules')
+    FileUtils.cp_r(File.join(source_dir, '.'), dir)
+    File.write(File.join(dir, 'EndpointQoS.json'), <<~JSON)
+      {
+        "name": "EndpointQoS",
+        "extends": "Endpoint",
+        "family": "endpoint",
+        "palette_label": "Endpoint+QoS",
+        "description": "Endpoint variant with QoS enabled by default.",
+        "presentation": {
+          "node_color": "#c7f1ff"
+        },
+        "parameters": {
+          "config": [
+            {
+              "name": "buffer_depth",
+              "use": "buffer_depth",
+              "default": 32,
+              "description": "Ingress buffer depth."
+            },
+            {
+              "name": "qos_enabled",
+              "type": "bool",
+              "default": true,
+              "label": "QoS enabled",
+              "description": "Enable QoS tagging support."
+            }
+          ]
+        }
+      }
+    JSON
+
+    descriptor = nil
+    noc = nil
+    input = Tempfile.new(['catalog_variant', '.json'])
+    input.write('{"name":"t","version":"1.0","xps":[{"id":"xp0","x":0,"y":0,"endpoints":["ep0"]}],"connections":[],"endpoints":[{"id":"ep0","module":"EndpointQoS","type":"master","protocol":"axi4","data_width":64}]}')
+    input.close
+
+    ModuleCatalog.with_catalog_dir(dir) do
+      descriptor = ModuleCatalog.descriptor('EndpointQoS')
+      noc = JsonParser.parse(input.path)
+      DrcRunner.new.run(noc)
+    end
+
+    assert_equal 'endpoint', descriptor[:family]
+    assert_equal '#c7f1ff', descriptor.dig(:presentation, :node_color)
+    assert_equal 'EndpointQoS', noc.endpoints.first.module_name
+    assert_equal true, noc.endpoints.first.config[:qos_enabled]
+    assert_equal 32, noc.endpoints.first.config[:buffer_depth]
+  ensure
+    input&.unlink
+    FileUtils.rm_rf(dir)
+  end
+
   def test_endpoint_schema_reflection
     schema = Endpoint.config_schema
     assert_equal :integer, schema[:buffer_depth][:type]
@@ -217,6 +403,40 @@ class TestConfigSchema < Minitest::Test
     assert_equal 16, noc.endpoints[0].config[:buffer_depth]
   ensure
     f&.unlink
+  end
+end
+
+class TestModuleExporters < Minitest::Test
+  def test_frontend_bundle_exporter_writes_bundle_files
+    out = Dir.mktmpdir
+    FrontendBundleExporter.new.write(out)
+
+    modules_xml = File.read(File.join(out, 'modules.xml'))
+    xp_graphics = File.read(File.join(out, 'graphics', 'XP.xml'))
+
+    assert_match(/module name='XP'|module name="XP"/, modules_xml)
+    assert_match(/bus_type='router'|bus_type="router"/, modules_xml)
+    assert_match(/choice value='xy'|choice value="xy"/, modules_xml)
+    assert_match(/module-graphics type='XP'|module-graphics type="XP"/, xp_graphics)
+    assert_match(/layout='mesh_router'|layout="mesh_router"/, xp_graphics)
+  ensure
+    FileUtils.rm_rf(out)
+  end
+
+  def test_ipxact_exporter_writes_component_files
+    out = Dir.mktmpdir
+    IpXactExporter.new.write(out)
+
+    xp_component = File.read(File.join(out, 'XP.component.xml'))
+
+    assert_match(/xmlns:ipxact="http:\/\/www\.accellera\.org\/XMLSchema\/IPXACT\/1685-2021\/"/, xp_component)
+    assert_match(/<ipxact:component/, xp_component)
+    assert_match(/<ipxact:ports>/, xp_component)
+    assert_match(/<ipxact:parameters>/, xp_component)
+    assert_match(/<ipxact:vendorExtensions>/, xp_component)
+    assert_match(/<fp:module/, xp_component)
+  ensure
+    FileUtils.rm_rf(out)
   end
 end
 

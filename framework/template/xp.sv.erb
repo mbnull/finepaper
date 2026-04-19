@@ -13,7 +13,7 @@ module xp_router_<%= @xp.id %> #(
   ports = []
   # Neighbor connection ports
   @xp.neighbors(@noc).each do |nb|
-    dir = @connections.find { |c| (c.from == @xp.id && c.to == nb.id) || (c.to == @xp.id && c.from == nb.id) }&.dir
+    dir = @connections.find { |c| (c.from == @xp.id && c.to == nb.id) || (c.to == @xp.id && c.from == nb.id) }&.router_direction
     ports << "  // Link to #{nb.id} (#{dir})\n  input  logic [FLIT_WIDTH-1:0] flit_in_#{nb.id}"
     ports << "  output logic [FLIT_WIDTH-1:0] flit_out_#{nb.id}"
   end

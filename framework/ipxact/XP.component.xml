@@ -1,0 +1,225 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ipxact:component xmlns:ipxact="http://www.accellera.org/XMLSchema/IPXACT/1685-2021/" xmlns:fp="urn:finepaper:frontend:module:1.0">
+  <ipxact:vendor>finepaper</ipxact:vendor>
+  <ipxact:library>frontend</ipxact:library>
+  <ipxact:name>XP</ipxact:name>
+  <ipxact:version>1.0</ipxact:version>
+  <ipxact:description>Mesh router with four directional links and four local endpoint attachment slots.</ipxact:description>
+  <ipxact:model>
+    <ipxact:ports>
+      <ipxact:port>
+        <ipxact:name>ep0</ipxact:name>
+        <ipxact:description>Local endpoint slot 0</ipxact:description>
+        <ipxact:wire>
+          <ipxact:direction>out</ipxact:direction>
+        </ipxact:wire>
+        <ipxact:vendorExtensions>
+          <fp:port label="EP0" role="attachment" bus_type="ni2router" frontend_type="bus" />
+        </ipxact:vendorExtensions>
+      </ipxact:port>
+      <ipxact:port>
+        <ipxact:name>ep1</ipxact:name>
+        <ipxact:description>Local endpoint slot 1</ipxact:description>
+        <ipxact:wire>
+          <ipxact:direction>out</ipxact:direction>
+        </ipxact:wire>
+        <ipxact:vendorExtensions>
+          <fp:port label="EP1" role="attachment" bus_type="ni2router" frontend_type="bus" />
+        </ipxact:vendorExtensions>
+      </ipxact:port>
+      <ipxact:port>
+        <ipxact:name>ep2</ipxact:name>
+        <ipxact:description>Local endpoint slot 2</ipxact:description>
+        <ipxact:wire>
+          <ipxact:direction>out</ipxact:direction>
+        </ipxact:wire>
+        <ipxact:vendorExtensions>
+          <fp:port label="EP2" role="attachment" bus_type="ni2router" frontend_type="bus" />
+        </ipxact:vendorExtensions>
+      </ipxact:port>
+      <ipxact:port>
+        <ipxact:name>ep3</ipxact:name>
+        <ipxact:description>Local endpoint slot 3</ipxact:description>
+        <ipxact:wire>
+          <ipxact:direction>out</ipxact:direction>
+        </ipxact:wire>
+        <ipxact:vendorExtensions>
+          <fp:port label="EP3" role="attachment" bus_type="ni2router" frontend_type="bus" />
+        </ipxact:vendorExtensions>
+      </ipxact:port>
+      <ipxact:port>
+        <ipxact:name>north_in</ipxact:name>
+        <ipxact:description>North router ingress</ipxact:description>
+        <ipxact:wire>
+          <ipxact:direction>in</ipxact:direction>
+        </ipxact:wire>
+        <ipxact:vendorExtensions>
+          <fp:port label="N" role="router" bus_type="router" frontend_type="bus" />
+        </ipxact:vendorExtensions>
+      </ipxact:port>
+      <ipxact:port>
+        <ipxact:name>north_out</ipxact:name>
+        <ipxact:description>North router egress</ipxact:description>
+        <ipxact:wire>
+          <ipxact:direction>out</ipxact:direction>
+        </ipxact:wire>
+        <ipxact:vendorExtensions>
+          <fp:port label="N" role="router" bus_type="router" frontend_type="bus" />
+        </ipxact:vendorExtensions>
+      </ipxact:port>
+      <ipxact:port>
+        <ipxact:name>east_in</ipxact:name>
+        <ipxact:description>East router ingress</ipxact:description>
+        <ipxact:wire>
+          <ipxact:direction>in</ipxact:direction>
+        </ipxact:wire>
+        <ipxact:vendorExtensions>
+          <fp:port label="E" role="router" bus_type="router" frontend_type="bus" />
+        </ipxact:vendorExtensions>
+      </ipxact:port>
+      <ipxact:port>
+        <ipxact:name>east_out</ipxact:name>
+        <ipxact:description>East router egress</ipxact:description>
+        <ipxact:wire>
+          <ipxact:direction>out</ipxact:direction>
+        </ipxact:wire>
+        <ipxact:vendorExtensions>
+          <fp:port label="E" role="router" bus_type="router" frontend_type="bus" />
+        </ipxact:vendorExtensions>
+      </ipxact:port>
+      <ipxact:port>
+        <ipxact:name>south_in</ipxact:name>
+        <ipxact:description>South router ingress</ipxact:description>
+        <ipxact:wire>
+          <ipxact:direction>in</ipxact:direction>
+        </ipxact:wire>
+        <ipxact:vendorExtensions>
+          <fp:port label="S" role="router" bus_type="router" frontend_type="bus" />
+        </ipxact:vendorExtensions>
+      </ipxact:port>
+      <ipxact:port>
+        <ipxact:name>south_out</ipxact:name>
+        <ipxact:description>South router egress</ipxact:description>
+        <ipxact:wire>
+          <ipxact:direction>out</ipxact:direction>
+        </ipxact:wire>
+        <ipxact:vendorExtensions>
+          <fp:port label="S" role="router" bus_type="router" frontend_type="bus" />
+        </ipxact:vendorExtensions>
+      </ipxact:port>
+      <ipxact:port>
+        <ipxact:name>west_in</ipxact:name>
+        <ipxact:description>West router ingress</ipxact:description>
+        <ipxact:wire>
+          <ipxact:direction>in</ipxact:direction>
+        </ipxact:wire>
+        <ipxact:vendorExtensions>
+          <fp:port label="W" role="router" bus_type="router" frontend_type="bus" />
+        </ipxact:vendorExtensions>
+      </ipxact:port>
+      <ipxact:port>
+        <ipxact:name>west_out</ipxact:name>
+        <ipxact:description>West router egress</ipxact:description>
+        <ipxact:wire>
+          <ipxact:direction>out</ipxact:direction>
+        </ipxact:wire>
+        <ipxact:vendorExtensions>
+          <fp:port label="W" role="router" bus_type="router" frontend_type="bus" />
+        </ipxact:vendorExtensions>
+      </ipxact:port>
+    </ipxact:ports>
+  </ipxact:model>
+  <ipxact:parameters>
+    <ipxact:parameter>
+      <ipxact:name>x</ipxact:name>
+      <ipxact:description>Canvas X position.</ipxact:description>
+      <ipxact:value>0</ipxact:value>
+      <ipxact:vendorExtensions>
+        <fp:parameter frontend_type="int" configurable="false">
+        </fp:parameter>
+      </ipxact:vendorExtensions>
+    </ipxact:parameter>
+    <ipxact:parameter>
+      <ipxact:name>y</ipxact:name>
+      <ipxact:description>Canvas Y position.</ipxact:description>
+      <ipxact:value>0</ipxact:value>
+      <ipxact:vendorExtensions>
+        <fp:parameter frontend_type="int" configurable="false">
+        </fp:parameter>
+      </ipxact:vendorExtensions>
+    </ipxact:parameter>
+    <ipxact:parameter>
+      <ipxact:name>display_name</ipxact:name>
+      <ipxact:description>Name shown on the canvas.</ipxact:description>
+      <ipxact:value></ipxact:value>
+      <ipxact:vendorExtensions>
+        <fp:parameter frontend_type="string" label="Display name">
+        </fp:parameter>
+      </ipxact:vendorExtensions>
+    </ipxact:parameter>
+    <ipxact:parameter>
+      <ipxact:name>external_id</ipxact:name>
+      <ipxact:description>Framework-facing identifier.</ipxact:description>
+      <ipxact:value></ipxact:value>
+      <ipxact:vendorExtensions>
+        <fp:parameter frontend_type="string" label="External ID">
+        </fp:parameter>
+      </ipxact:vendorExtensions>
+    </ipxact:parameter>
+    <ipxact:parameter>
+      <ipxact:name>collapsed</ipxact:name>
+      <ipxact:description>Collapsed editor state.</ipxact:description>
+      <ipxact:value>true</ipxact:value>
+      <ipxact:vendorExtensions>
+        <fp:parameter frontend_type="bool" configurable="false">
+        </fp:parameter>
+      </ipxact:vendorExtensions>
+    </ipxact:parameter>
+    <ipxact:parameter>
+      <ipxact:name>routing_algorithm</ipxact:name>
+      <ipxact:description>Router path selection strategy.</ipxact:description>
+      <ipxact:value>xy</ipxact:value>
+      <ipxact:vendorExtensions>
+        <fp:parameter frontend_type="string" label="Routing algorithm">
+          <fp:choice value="xy" label="XY" />
+          <fp:choice value="yx" label="YX" />
+        </fp:parameter>
+      </ipxact:vendorExtensions>
+    </ipxact:parameter>
+    <ipxact:parameter>
+      <ipxact:name>vc_count</ipxact:name>
+      <ipxact:description>Virtual channel count.</ipxact:description>
+      <ipxact:value>2</ipxact:value>
+      <ipxact:vendorExtensions>
+        <fp:parameter frontend_type="int" label="VC count" minimum="1" maximum="8" unit="VCs">
+        </fp:parameter>
+      </ipxact:vendorExtensions>
+    </ipxact:parameter>
+    <ipxact:parameter>
+      <ipxact:name>buffer_depth</ipxact:name>
+      <ipxact:description>Depth of each input buffer.</ipxact:description>
+      <ipxact:value>8</ipxact:value>
+      <ipxact:vendorExtensions>
+        <fp:parameter frontend_type="int" label="Buffer depth" minimum="1">
+        </fp:parameter>
+      </ipxact:vendorExtensions>
+    </ipxact:parameter>
+  </ipxact:parameters>
+  <ipxact:vendorExtensions>
+    <fp:module palette_label="XP" graph_group="xps">
+      <fp:identity external_id_prefix="xp" display_prefix="XP" width="2" supports_mesh_coordinates="true" />
+      <fp:capabilities supports_collapse="true" />
+      <fp:connectivity attachment_bus_type="ni2router" router_bus_type="router" max_endpoint_attachments="4">
+        <fp:router_direction value="north" />
+        <fp:router_direction value="east" />
+        <fp:router_direction value="south" />
+        <fp:router_direction value="west" />
+      </fp:connectivity>
+      <fp:presentation layout="mesh_router" node_color="#7cb9e8" supports_collapse="true">
+        <fp:expanded min_width="136" height="116" caption_left="30" caption_top="6" port_inset="16" />
+        <fp:collapsed min_width="104" height="92" caption_left="30" caption_top="26" endpoint_inset="18" />
+        <fp:arrangement endpoint_offset_x="156" mesh_spacing_x="220" mesh_spacing_y="168" />
+      </fp:presentation>
+    </fp:module>
+  </ipxact:vendorExtensions>
+</ipxact:component>

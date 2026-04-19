@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module-graphics<%= xml_attributes(type: @descriptor[:name]) %>>
+<%- presentation = @descriptor[:presentation] || {} -%>
+  <graphics<%= xml_attributes(layout: presentation[:layout], node_color: presentation[:node_color], supports_collapse: presentation[:supports_collapse]) %>>
+<%- (presentation[:graphics] || {}).each do |section_name, attributes| -%>
+    <<%= section_name %><%= xml_attributes(attributes) %> />
+<%- end -%>
+  </graphics>
+</module-graphics>

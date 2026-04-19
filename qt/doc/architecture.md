@@ -172,7 +172,7 @@ Generation reuses the same framework discovery path and writes framework JSON in
 ## Operational assumptions
 
 - The external framework uses Ruby and provides `bin/generate`.
-- Module bundles are preferably expressed as `modules.xml` plus per-IP graphics files. Authored JSON and IP-XACT are conversion inputs, not the preferred runtime layout.
+- The canonical module catalog lives in `framework/src/ruby/model/modules/`. The editor consumes the generated `framework/bundles/modules.xml` plus `framework/bundles/graphics/*.xml`, and IP-XACT is treated as a secondary import/export format rather than the primary authoring format.
 - Position is stored as module parameters such as `x` and `y`.
 - Some editor-only state, such as `collapsed`, is intentionally omitted from framework export.
 

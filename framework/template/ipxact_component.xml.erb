@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<%- identity = @descriptor[:ipxact] || {} -%>
+<ipxact:component xmlns:ipxact="<%= xml_escape(@ipxact_ns) %>" xmlns:fp="<%= xml_escape(@finepaper_ns) %>">
+  <ipxact:vendor><%= xml_escape(identity.fetch(:vendor, 'finepaper')) %></ipxact:vendor>
+  <ipxact:library><%= xml_escape(identity.fetch(:library, 'frontend')) %></ipxact:library>
+  <ipxact:name><%= xml_escape(identity.fetch(:name, @descriptor[:name])) %></ipxact:name>
+  <ipxact:version><%= xml_escape(identity.fetch(:version, '1.0')) %></ipxact:version>
+<%- if @descriptor[:description] -%>
+  <ipxact:description><%= xml_escape(@descriptor[:description]) %></ipxact:description>
+<%- end -%>
+  <ipxact:model>
+    <ipxact:ports>
+<%- (@descriptor[:ports] || []).each do |port| -%>
+      <ipxact:port>
+        <ipxact:name><%= xml_escape(port[:id]) %></ipxact:name>
+<%- if port[:description] -%>
+        <ipxact:description><%= xml_escape(port[:description]) %></ipxact:description>
+<%- end -%>
+        <ipxact:wire>
+          <ipxact:direction><%= xml_escape(ipxact_direction(port[:direction])) %></ipxact:direction>
+        </ipxact:wire>
+        <ipxact:vendorExtensions>
+          <fp:port<%= xml_attributes(label: port[:name], role: port[:role], bus_type: port[:bus_type], frontend_type: port[:type]) %> />
+        </ipxact:vendorExtensions>
+      </ipxact:port>
+<%- end -%>
+    </ipxact:ports>
+  </ipxact:model>
+  <ipxact:parameters>
+<%- (@descriptor[:parameters] || []).each do |parameter| -%>
+    <ipxact:parameter>
+      <ipxact:name><%= xml_escape(parameter[:name]) %></ipxact:name>
+<%- if parameter[:description] -%>
+      <ipxact:description><%= xml_escape(parameter[:description]) %></ipxact:description>
+<%- end -%>
+      <ipxact:value><%= xml_escape(xml_scalar(parameter[:default])) %></ipxact:value>
+      <ipxact:vendorExtensions>
+        <fp:parameter<%= xml_attributes(frontend_type: parameter[:type], label: parameter[:label], configurable: parameter[:configurable], read_only: parameter[:read_only], minimum: parameter[:min], maximum: parameter[:max], unit: parameter[:unit]) %>>
+<%- (parameter[:choices] || []).each do |choice| -%>
+          <fp:choice<%= xml_attributes(value: choice[:value], label: choice[:label]) %> />
+<%- end -%>
+        </fp:parameter>
+      </ipxact:vendorExtensions>
+    </ipxact:parameter>
+<%- end -%>
+  </ipxact:parameters>
+  <ipxact:vendorExtensions>
+    <fp:module<%= xml_attributes(palette_label: @descriptor[:palette_label], graph_group: @descriptor[:graph_group]) %>>
+<%- if @descriptor[:identity] && !@descriptor[:identity].empty? -%>
+      <fp:identity<%= xml_attributes(@descriptor[:identity]) %> />
+<%- end -%>
+<%- if @descriptor[:capabilities] && !@descriptor[:capabilities].empty? -%>
+      <fp:capabilities<%= xml_attributes(@descriptor[:capabilities]) %> />
+<%- end -%>
+<%- if @descriptor[:connectivity] && !@descriptor[:connectivity].empty? -%>
+      <fp:connectivity<%= xml_attributes(@descriptor[:connectivity].reject { |_, value| value.is_a?(Array) }) %>>
+<%- if @descriptor[:connectivity][:router_directions] && !@descriptor[:connectivity][:router_directions].empty? -%>
+<%- @descriptor[:connectivity][:router_directions].each do |direction| -%>
+        <fp:router_direction value="<%= xml_escape(direction) %>" />
+<%- end -%>
+<%- end -%>
+      </fp:connectivity>
+<%- end -%>
+<%- presentation = @descriptor[:presentation] || {} -%>
+<%- if !presentation.empty? -%>
+      <fp:presentation<%= xml_attributes(layout: presentation[:layout], node_color: presentation[:node_color], supports_collapse: presentation[:supports_collapse]) %>>
+<%- (presentation[:graphics] || {}).each do |section_name, attributes| -%>
+        <fp:<%= section_name %><%= xml_attributes(attributes) %> />
+<%- end -%>
+      </fp:presentation>
+<%- end -%>
+    </fp:module>
+  </ipxact:vendorExtensions>
+</ipxact:component>

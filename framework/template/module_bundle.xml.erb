@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module-bundle>
+<%- @descriptors.each do |descriptor| -%>
+  <module<%= xml_attributes(name: descriptor[:name], palette_label: descriptor[:palette_label], graph_group: descriptor[:graph_group], description: descriptor[:description]) %>>
+<%- if descriptor[:identity] && !descriptor[:identity].empty? -%>
+    <identity<%= xml_attributes(descriptor[:identity]) %> />
+<%- end -%>
+<%- if descriptor[:capabilities] && !descriptor[:capabilities].empty? -%>
+    <capabilities<%= xml_attributes(descriptor[:capabilities]) %> />
+<%- end -%>
+<%- if descriptor[:ports] && !descriptor[:ports].empty? -%>
+    <ports>
+<%- descriptor[:ports].each do |port| -%>
+      <port<%= xml_attributes(id: port[:id], direction: port[:direction], type: port[:type], bus_type: port[:bus_type], role: port[:role], name: port[:name], description: port[:description]) %> />
+<%- end -%>
+    </ports>
+<%- end -%>
+<%- if descriptor[:parameters] && !descriptor[:parameters].empty? -%>
+    <parameters>
+<%- descriptor[:parameters].each do |parameter| -%>
+<%- if parameter[:choices] && !parameter[:choices].empty? -%>
+      <parameter<%= xml_attributes(name: parameter[:name], type: parameter[:type], default: parameter[:default], label: parameter[:label], description: parameter[:description], configurable: parameter[:configurable], read_only: parameter[:read_only], minimum: parameter[:min], maximum: parameter[:max], unit: parameter[:unit]) %>>
+        <choices>
+<%- parameter[:choices].each do |choice| -%>
+          <choice<%= xml_attributes(value: choice[:value], label: choice[:label]) %> />
+<%- end -%>
+        </choices>
+      </parameter>
+<%- else -%>
+      <parameter<%= xml_attributes(name: parameter[:name], type: parameter[:type], default: parameter[:default], label: parameter[:label], description: parameter[:description], configurable: parameter[:configurable], read_only: parameter[:read_only], minimum: parameter[:min], maximum: parameter[:max], unit: parameter[:unit]) %> />
+<%- end -%>
+<%- end -%>
+    </parameters>
+<%- end -%>
+  </module>
+<%- end -%>
+</module-bundle>

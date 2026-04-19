@@ -3,6 +3,7 @@ class DrcBase
 end
 
 require_relative 'endpoint_drc'
+require_relative 'connectivity_drc'
 require_relative 'xp_drc'
 
 class UniqueXpIds < DrcBase
@@ -17,12 +18,10 @@ class DrcRunner
       UniqueXpIds.new,
       UniqueEndpointIds.new,
       ValidEndpointConfig.new,
-      EndpointBufferDepth.new,
       EndpointProtocol.new,
-      ValidXpConfig.new,
-      XpRoutingAlgorithm.new,
-      XpVirtualChannels.new,
-      XpBufferDepth.new
+      ValidRouterConnections.new,
+      ValidEndpointAttachments.new,
+      ValidXpConfig.new
     ]
   end
 

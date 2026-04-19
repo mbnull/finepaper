@@ -17,8 +17,10 @@ This project is a Qt Widgets application for building and validating SoC/NoC top
 - `inc/`: public headers for the application classes.
 - `src/commands/`, `inc/commands/`: undoable editing commands.
 - `test/`: lightweight executable tests for the graph model and command manager.
-- `bundles/modules.xml`: local IP-core bundle with ports, parameters, descriptions, and config metadata.
-- `bundles/graphics/*.xml`: per-IP graphics overlays used by the editor.
+- `../framework/src/ruby/model/modules/`: canonical hand-edited module catalog used by the framework and the editor.
+- `../framework/template/module_*.erb`, `../framework/template/ipxact_component.xml.erb`: ERB templates used to generate frontend and IP-XACT views of the catalog.
+- `../framework/bundles/`: generated frontend bundle consumed by the editor at runtime.
+- `../framework/ipxact/`: generated IP-XACT component XML emitted from the same catalog.
 - `deps/packages.lua`: xmake package declarations.
 - `tools/convert_module_bundle.py`: converts authored JSON, module-bundle XML, or IP-XACT into the split XML bundle format.
 - `docs/`: older working notes and reference material.
@@ -34,7 +36,7 @@ This project is a Qt Widgets application for building and validating SoC/NoC top
 - `PropertyPanel`: auto-builds editors from module parameter types.
 - `ValidationManager`: runs built-in validation and external DRC checks.
 - `LogPanel`: shows validation, generation, and runtime messages.
-- `ModuleRegistry`: loads module definitions from `modules.xml`, applies per-IP graphics XML files, and can still read older split presentation overlays when needed.
+- `ModuleRegistry`: loads module definitions from the framework-generated `modules.xml`, applies per-IP graphics XML files, and can still read older split presentation overlays when needed.
 
 ## Build and run
 
@@ -93,6 +95,13 @@ Legacy presentation XML discovery still uses `BUNDLE_UI_PATH` and `modules.ui.xm
 
 If the framework is missing, the editor can still start, but Verilog generation and external DRC validation will fail with user-visible messages.
 
+The current source-of-truth flow is:
+
+1. Edit the JSON files under `framework/src/ruby/model/modules/`.
+2. Run `ruby framework/bin/export_modules`.
+3. The editor consumes `framework/bundles/modules.xml` plus `framework/bundles/graphics/*.xml`.
+4. Secondary exchange artifacts are emitted into `framework/ipxact/*.component.xml`.
+
 ## Typical user flow
 
 1. Start the application.
@@ -115,6 +124,8 @@ The preferred runtime format is split into:
 - `modules.xml` for the IP-core definition
 - `graphics/<type>.xml` for the editor graphics of each IP
 
+That runtime bundle is generated from the framework catalog in `framework/src/ruby/model/modules/`. The editor should treat the generated bundle as read-only.
+
 The IP-core bundle can describe:
 
 - palette label and module description
@@ -131,7 +142,7 @@ Each graphics overlay can describe:
 - collapse behavior
 - node sizing and caption insets
 
-The local bundle defines two module types today:
+The generated bundle defines two module types today:
 
 - `XP`: mesh-router style node with router and endpoint ports
 - `Endpoint`: endpoint node with configurable interface parameters
@@ -140,7 +151,7 @@ If a module has no graphics overlay, the editor falls back to a simple node layo
 
 ## Extension points
 
-- Add new module types by extending `modules.xml` and optionally adding `graphics/<type>.xml`.
+- Add or update module types by editing `framework/src/ruby/model/modules/`, then regenerate with `ruby framework/bin/export_modules`.
 - Add new validation rules in `BasicValidator` or extend `DRCRunner` parsing if the external framework output changes.
 - Add new editing operations by implementing `Command` subclasses in `src/commands/`.
 
@@ -169,6 +180,12 @@ To split an existing `module-bundle` XML file into `modules.xml` plus per-IP gra
 python3 tools/convert_module_bundle.py \
   --xml path/to/modules.xml \
   --output-dir path/to/output_bundle
+```
+
+To regenerate the checked-in frontend bundle and the secondary IP-XACT export from the framework catalog:
+
+```bash
+ruby ../framework/bin/export_modules
 ```
 
 For a component-level view, see [architecture.md](/home/bnl/dev/finepaper/qt/doc/architecture.md).

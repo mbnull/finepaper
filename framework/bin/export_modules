@@ -1,0 +1,34 @@
+#!/usr/bin/env ruby
+$LOAD_PATH.unshift File.join(__dir__, '..', 'src', 'ruby')
+
+require 'optparse'
+require 'generator/frontend_bundle_exporter'
+require 'generator/ipxact_exporter'
+require 'model/module_catalog'
+
+options = {
+  frontend_bundle: File.expand_path(File.join(__dir__, '..', 'bundles')),
+  ipxact: File.expand_path(File.join(__dir__, '..', 'ipxact'))
+}
+
+OptionParser.new do |opts|
+  opts.on('--frontend-bundle DIR') { |value| options[:frontend_bundle] = value }
+  opts.on('--ipxact DIR') { |value| options[:ipxact] = value }
+  opts.on('--no-frontend-bundle') { options[:frontend_bundle] = nil }
+  opts.on('--no-ipxact') { options[:ipxact] = nil }
+  opts.on('--model-dir DIR') { |value| options[:model_dir] = value }
+end.parse!
+
+abort('Nothing to export. Enable at least one of frontend bundle or IP-XACT output.') if options.values.compact.empty?
+
+ModuleCatalog.with_catalog_dir(options[:model_dir] || ModuleCatalog.catalog_dir) do
+  if options[:frontend_bundle]
+    FrontendBundleExporter.new.write(options[:frontend_bundle])
+    puts "Exported frontend bundle to #{options[:frontend_bundle]}"
+  end
+
+  if options[:ipxact]
+    IpXactExporter.new.write(options[:ipxact])
+    puts "Exported IP-XACT components to #{options[:ipxact]}"
+  end
+end

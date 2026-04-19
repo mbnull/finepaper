@@ -1,0 +1,38 @@
+{
+  "parameter_templates": {
+    "canvas_x": {
+      "name": "x",
+      "type": "int",
+      "default": 0,
+      "configurable": false,
+      "description": "Canvas X position."
+    },
+    "canvas_y": {
+      "name": "y",
+      "type": "int",
+      "default": 0,
+      "configurable": false,
+      "description": "Canvas Y position."
+    },
+    "display_name": {
+      "name": "display_name",
+      "type": "string",
+      "default": "",
+      "label": "Display name",
+      "description": "Name shown on the canvas."
+    },
+    "external_id": {
+      "name": "external_id",
+      "type": "string",
+      "default": "",
+      "label": "External ID",
+      "description": "Framework-facing identifier."
+    },
+    "buffer_depth": {
+      "name": "buffer_depth",
+      "type": "int",
+      "label": "Buffer depth",
+      "min": 1
+    }
+  }
+}

@@ -1,3 +1,5 @@
+require_relative '../model/module_catalog'
+
 class UniqueEndpointIds < DrcBase
   def check(noc)
     noc.endpoints.map(&:id).tally.select { |_, n| n > 1 }.keys.map { |id| "Duplicate endpoint id: #{id}" }
@@ -8,26 +10,13 @@ class ValidEndpointConfig < DrcBase
   def check(noc)
     noc.endpoints.flat_map do |ep|
       ep.config.flat_map do |key, value|
-        schema = Endpoint.config_schema[key]
-        next [] unless schema
-        expected = schema[:type]
-        valid = case expected
-        when :integer then value.is_a?(Integer)
-        when :string then value.is_a?(String)
-        when :boolean then [true, false].include?(value)
-        else true
-        end
-        valid ? [] : ["Endpoint #{ep.id}: invalid type for #{key}, expected #{expected}"]
-      end
-    end
-  end
-end
+        parameter = ModuleCatalog.config_parameter(ep.module_name, key)
+        next [] unless parameter
 
-class EndpointBufferDepth < DrcBase
-  def check(noc)
-    noc.endpoints.flat_map do |ep|
-      depth = ep.config[:buffer_depth]
-      depth > 0 ? [] : ["Endpoint #{ep.id}: buffer_depth must be > 0"]
+        ModuleCatalog.validate_parameter_value(parameter, value).map do |message|
+          "Endpoint #{ep.id}: #{message}"
+        end
+      end
     end
   end
 end

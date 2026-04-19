@@ -1,0 +1,105 @@
+{
+  "name": "Endpoint",
+  "family": "endpoint",
+  "palette_label": "Endpoint",
+  "graph_group": "endpoints",
+  "description": "Endpoint interface block that terminates a local NoC connection.",
+  "ipxact": {
+    "vendor": "finepaper",
+    "library": "frontend",
+    "name": "Endpoint",
+    "version": "1.0"
+  },
+  "identity": {
+    "external_id_prefix": "ep",
+    "display_prefix": "EP",
+    "width": 2,
+    "supports_mesh_coordinates": false
+  },
+  "presentation": {
+    "layout": "endpoint",
+    "node_color": "#d6f4b6",
+    "graphics": {
+      "expanded": {
+        "min_width": 104,
+        "height": 54,
+        "caption_left": 8,
+        "caption_top": 6
+      },
+      "arrangement": {
+        "loose_endpoint_spacing_x": 168,
+        "loose_endpoint_spacing_y": 84,
+        "loose_endpoint_margin_y": 116
+      }
+    }
+  },
+  "connectivity": {
+    "attachment_bus_type": "ni2router",
+    "max_xp_attachments": 1
+  },
+  "ports": [
+    {
+      "id": "noc",
+      "direction": "input",
+      "type": "bus",
+      "bus_type": "ni2router",
+      "role": "attachment",
+      "name": "NoC",
+      "description": "NoC attachment input"
+    }
+  ],
+  "parameters": {
+    "base": [
+      { "use": "display_name" },
+      { "use": "external_id" },
+      {
+        "name": "type",
+        "type": "string",
+        "default": "master",
+        "label": "Type",
+        "description": "Endpoint traffic role.",
+        "choices": [
+          {
+            "value": "master",
+            "label": "Master"
+          },
+          {
+            "value": "slave",
+            "label": "Slave"
+          }
+        ]
+      },
+      {
+        "name": "protocol",
+        "type": "string",
+        "default": "axi",
+        "label": "Protocol",
+        "description": "Interface protocol."
+      },
+      {
+        "name": "data_width",
+        "type": "int",
+        "default": 32,
+        "label": "Data width",
+        "description": "Bus width in bits.",
+        "min": 1,
+        "unit": "bits"
+      }
+    ],
+    "config": [
+      {
+        "name": "buffer_depth",
+        "use": "buffer_depth",
+        "default": 16,
+        "description": "Ingress buffer depth."
+      },
+      {
+        "name": "qos_enabled",
+        "type": "bool",
+        "default": false,
+        "label": "QoS enabled",
+        "description": "Enable QoS tagging support."
+      }
+    ]
+  }
+}

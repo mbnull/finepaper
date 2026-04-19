@@ -10,9 +10,11 @@
     { "id": "xp_0_0", "x": 0, "y": 0, "endpoints": ["ep_cpu0", "ep_cpu1", "ep_dma0"] },
     { "id": "xp_1_0", "x": 1, "y": 0, "endpoints": ["ep_mem0", "ep_mem1"] }
   ],
-  "connections": [
-    { "from": "xp_0_0", "to": "xp_1_0", "dir": "east" }
-  ],
+  "connections": {
+    "router_links": [
+      { "from": "xp_0_0", "links": { "east": "xp_1_0" } }
+    ]
+  },
   "endpoints": [
     { "id": "ep_cpu0", "type": "master", "protocol": "axi4", "data_width": 64 },
     { "id": "ep_cpu1", "type": "master", "protocol": "axi4", "data_width": 64 },

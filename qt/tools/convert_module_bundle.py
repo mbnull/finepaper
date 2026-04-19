@@ -46,6 +46,12 @@ def first_child(element, name):
     return None
 
 
+def child_elements(element, name):
+    if element is None:
+        return []
+    return [child for child in element if local_name(child.tag) == name]
+
+
 def detect_parameter_type(value):
     lower = value.lower()
     if lower in {"true", "false"}:
@@ -72,6 +78,49 @@ def normalize_ipxact_direction(value):
     if normalized in {"input", "output", "inout"}:
         return normalized
     return "inout"
+
+
+def parse_bool_string(value):
+    normalized = (value or "").strip().lower()
+    if normalized in {"true", "1", "yes"}:
+        return True
+    if normalized in {"false", "0", "no"}:
+        return False
+    return value
+
+
+def load_parameter_choices(parameter_el):
+    choices = []
+    choices_parent = first_child(parameter_el, "choices")
+    if choices_parent is None:
+        return choices
+
+    for choice_el in child_elements(choices_parent, "choice"):
+        choice = dict(choice_el.attrib)
+        if choice:
+            choices.append(choice)
+    return choices
+
+
+def vendor_extension_child(element, name):
+    return first_child(first_child(element, "vendorExtensions"), name)
+
+
+def load_presentation_extension(module_extension):
+    presentation_el = first_child(module_extension, "presentation")
+    if presentation_el is None:
+        return {}
+
+    presentation = dict(presentation_el.attrib)
+    graphics = {}
+    for child in presentation_el:
+        child_name = local_name(child.tag)
+        if child_name in {"expanded", "collapsed", "arrangement"}:
+            graphics[child_name] = dict(child.attrib)
+
+    if graphics:
+        presentation["graphics"] = graphics
+    return presentation
 
 
 def load_json_modules(path):
@@ -159,7 +208,11 @@ def load_bundle_xml(path):
                 for parameter_el in child:
                     if local_name(parameter_el.tag) != "parameter":
                         continue
-                    entry["parameters"].append(dict(parameter_el.attrib))
+                    parameter = dict(parameter_el.attrib)
+                    choices = load_parameter_choices(parameter_el)
+                    if choices:
+                        parameter["choices"] = choices
+                    entry["parameters"].append(parameter)
             elif child_name == "config-zone":
                 entry["config_zone_xml"] = copy.deepcopy(child)
             elif child_name == "graphics":
@@ -189,6 +242,20 @@ def load_ipxact_component(path):
         "config_zone": None,
     }
 
+    module_extension = vendor_extension_child(root, "module")
+    if module_extension is not None:
+        module["palette_label"] = module_extension.get("palette_label", name)
+        module["graph_group"] = module_extension.get("graph_group", "")
+        identity = first_child(module_extension, "identity")
+        capabilities = first_child(module_extension, "capabilities")
+        if identity is not None:
+            module["identity"] = dict(identity.attrib)
+        if capabilities is not None:
+            module["capabilities"] = dict(capabilities.attrib)
+        presentation = load_presentation_extension(module_extension)
+        if presentation:
+            module["presentation"] = presentation
+
     model = first_child(root, "model")
     ports_parent = first_child(model, "ports")
     if ports_parent is not None:
@@ -197,12 +264,15 @@ def load_ipxact_component(path):
                 continue
             wire = first_child(port_el, "wire")
             direction = normalize_ipxact_direction(text_of(wire, "direction", "inout"))
+            port_extension = vendor_extension_child(port_el, "port")
             module["ports"].append({
                 "id": text_of(port_el, "name"),
-                "name": text_of(port_el, "name"),
+                "name": port_extension.get("label", text_of(port_el, "name")) if port_extension is not None else text_of(port_el, "name"),
                 "direction": direction,
-                "type": "signal",
+                "type": port_extension.get("frontend_type", "signal") if port_extension is not None else "signal",
                 "description": text_of(port_el, "description"),
+                "role": port_extension.get("role", "") if port_extension is not None else "",
+                "bus_type": port_extension.get("bus_type", "") if port_extension is not None else "",
             })
 
     parameters_parent = first_child(root, "parameters")
@@ -211,11 +281,26 @@ def load_ipxact_component(path):
             if local_name(parameter_el.tag) != "parameter":
                 continue
             value = text_of(parameter_el, "value")
-            module["parameters"].append({
+            parameter_extension = vendor_extension_child(parameter_el, "parameter")
+            parameter = {
                 "name": text_of(parameter_el, "name"),
-                "type": detect_parameter_type(value),
+                "type": parameter_extension.get("frontend_type", detect_parameter_type(value)) if parameter_extension is not None else detect_parameter_type(value),
                 "default": value,
-            })
+                "description": text_of(parameter_el, "description"),
+            }
+            if parameter_extension is not None:
+                for attr_name in ("label", "unit", "minimum", "maximum"):
+                    if attr_name in parameter_extension.attrib:
+                        parameter[attr_name] = parameter_extension.get(attr_name)
+                for attr_name in ("configurable", "read_only"):
+                    if attr_name in parameter_extension.attrib:
+                        parameter[attr_name] = parse_bool_string(parameter_extension.get(attr_name))
+                choices = []
+                for choice_el in child_elements(parameter_extension, "choice"):
+                    choices.append(dict(choice_el.attrib))
+                if choices:
+                    parameter["choices"] = choices
+            module["parameters"].append(parameter)
 
     return [module]
 
@@ -255,9 +340,17 @@ def build_core_tree(modules):
             parameters_el = ET.SubElement(module_el, "parameters")
             for parameter in parameters:
                 parameter_el = ET.SubElement(parameters_el, "parameter")
-                for key in ("name", "type", "default", "label", "description", "configurable"):
+                for key in ("name", "type", "default", "label", "description",
+                            "configurable", "read_only", "minimum", "maximum",
+                            "min", "max", "unit"):
                     if key in parameter:
                         set_attr_if_present(parameter_el, key, parameter.get(key))
+                if parameter.get("choices"):
+                    choices_el = ET.SubElement(parameter_el, "choices")
+                    for choice in parameter["choices"]:
+                        choice_el = ET.SubElement(choices_el, "choice")
+                        set_attr_if_present(choice_el, "value", choice.get("value"))
+                        set_attr_if_present(choice_el, "label", choice.get("label"))
 
         if module.get("config_zone_xml") is not None:
             module_el.append(copy.deepcopy(module["config_zone_xml"]))

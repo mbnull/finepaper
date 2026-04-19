@@ -1,20 +1,34 @@
-class Xp
-  attr_reader :id, :x, :y, :endpoints, :config
+require_relative 'module_catalog'
 
-  def self.config_schema
-    {
-      routing_algorithm: { type: :string, default: 'xy' },
-      vc_count: { type: :integer, default: 2 },
-      buffer_depth: { type: :integer, default: 8 }
-    }
+class Xp
+  DEFAULT_MODULE_NAME = 'XP'.freeze
+
+  attr_reader :id, :x, :y, :endpoints, :config, :module_name
+
+  def self.default_module_name
+    DEFAULT_MODULE_NAME
   end
 
-  def initialize(id, x, y, endpoints, config = {})
+  def self.config_schema(module_name = default_module_name)
+    ModuleCatalog.config_schema(module_name)
+  end
+
+  def self.module_descriptor(module_name = default_module_name)
+    ModuleCatalog.descriptor(module_name)
+  end
+
+  def initialize(id, x, y, endpoints, config = {}, module_name = self.class.default_module_name)
+    ModuleCatalog.assert_family!(module_name, :xp)
     @id = id
     @x = x
     @y = y
     @endpoints = endpoints
-    @config = self.class.config_schema.transform_values { |v| v[:default] }.merge(config)
+    @module_name = module_name
+    @config = self.class.config_schema(@module_name).transform_values { |value| value[:default] }.merge(config)
+  end
+
+  def module_descriptor
+    self.class.module_descriptor(@module_name)
   end
 
   def node_id(noc)
