@@ -9,8 +9,14 @@ end
 class ValidEndpointConfig < DrcBase
   def check(noc)
     noc.endpoints.flat_map do |ep|
-      ep.config.flat_map do |key, value|
-        parameter = ModuleCatalog.config_parameter(ep.module_name, key)
+      endpoint_values = {
+        type: ep.type,
+        protocol: ep.protocol,
+        data_width: ep.data_width
+      }.merge(ep.config)
+
+      endpoint_values.flat_map do |key, value|
+        parameter = ModuleCatalog.parameter(ep.module_name, key)
         next [] unless parameter
 
         ModuleCatalog.validate_parameter_value(parameter, value).map do |message|

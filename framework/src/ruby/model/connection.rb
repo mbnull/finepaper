@@ -25,6 +25,7 @@ class Connection
   def self.direction_from_ports(from_port, to_port)
     source_side = side_from_port(from_port)
     target_side = side_from_port(to_port)
+    return nil if source_side && target_side && source_side != opposite_direction(target_side)
     return source_side if source_side
     return opposite_direction(target_side) if target_side
 

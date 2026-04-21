@@ -235,6 +235,19 @@ bool connectionUsesRouterSide(const Connection& connection,
     return false;
 }
 
+QString routerDirectionForConnection(const Connection& connection) {
+    if (PortLayout::isDirectionalRouterPortId(connection.source().portId)) {
+        return PortLayout::routerSideId(connection.source().portId);
+    }
+
+    if (PortLayout::isDirectionalRouterPortId(connection.target().portId)) {
+        return PortLayout::oppositeRouterSide(
+            PortLayout::routerSideId(connection.target().portId));
+    }
+
+    return {};
+}
+
 } // namespace
 
 Graph::Graph(QObject* parent) : QObject(parent) {
@@ -829,6 +842,7 @@ QJsonDocument Graph::toJsonDocument(const QString& designName,
         const Module* sourceModule = getModule(conn->source().moduleId);
         const Module* targetModule = getModule(conn->target().moduleId);
         const Port* sourcePort = sourceModule ? findPort(sourceModule, conn->source().portId) : nullptr;
+        const Port* targetPort = targetModule ? findPort(targetModule, conn->target().portId) : nullptr;
         const QString sourceExternalId = ModuleLabels::externalId(sourceModule);
         const QString targetExternalId = ModuleLabels::externalId(targetModule);
 
@@ -849,9 +863,17 @@ QJsonDocument Graph::toJsonDocument(const QString& designName,
         obj["from"] = sourceExternalId;
         obj["to"] = targetExternalId;
 
-        if (!(sourceModule && targetModule &&
-              isMeshRouterModule(sourceModule) &&
-              isMeshRouterModule(targetModule))) {
+        if (isRouterLink(sourceModule, sourcePort, targetModule, targetPort)) {
+            if (flavor == GraphJsonFlavor::Framework) {
+                obj["from_port"] = conn->source().portId;
+                obj["to_port"] = conn->target().portId;
+
+                const QString direction = routerDirectionForConnection(*conn);
+                if (!direction.isEmpty()) {
+                    obj["dir"] = direction;
+                }
+            }
+        } else {
             obj["from_port"] = conn->source().portId;
             obj["to_port"] = conn->target().portId;
         }

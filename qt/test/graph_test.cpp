@@ -407,6 +407,52 @@ void testFrameworkExportOmitsEditorOnlyCollapsedField() {
             "editor export should preserve collapsed state");
 }
 
+void testFrameworkExportIncludesRouterLinkMetadata() {
+    Graph graph;
+
+    auto sourceXp = makeModule(
+        "xp_left_internal",
+        "XP",
+        {Port("east_out", Port::Direction::Output, "router", "E", {}, "router")});
+    sourceXp->setParameter("external_id", QString("xp_0_0"));
+
+    auto targetXp = makeModule(
+        "xp_right_internal",
+        "XP",
+        {Port("west_in", Port::Direction::Input, "router", "W", {}, "router")});
+    targetXp->setParameter("external_id", QString("xp_0_1"));
+
+    require(graph.addModule(std::move(sourceXp)), "failed to add source XP module");
+    require(graph.addModule(std::move(targetXp)), "failed to add target XP module");
+
+    graph.addConnection(std::make_unique<Connection>(
+        "xp_link",
+        PortRef{"xp_left_internal", "east_out"},
+        PortRef{"xp_right_internal", "west_in"}));
+
+    require(graph.connections().size() == 1, "expected router connection to be stored");
+
+    const QJsonObject frameworkConnection =
+        graph.toJsonDocument("design", GraphJsonFlavor::Framework)
+             .object()["connections"].toArray().first().toObject();
+    const QJsonObject editorConnection =
+        graph.toJsonDocument("design", GraphJsonFlavor::Editor)
+             .object()["connections"].toArray().first().toObject();
+
+    require(frameworkConnection["dir"].toString() == "east",
+            "framework export should include router direction");
+    require(frameworkConnection["from_port"].toString() == "east_out",
+            "framework export should include source router port");
+    require(frameworkConnection["to_port"].toString() == "west_in",
+            "framework export should include target router port");
+    require(!editorConnection.contains("dir"),
+            "editor export should keep router direction implicit");
+    require(!editorConnection.contains("from_port"),
+            "editor export should keep router ports implicit");
+    require(!editorConnection.contains("to_port"),
+            "editor export should keep router ports implicit");
+}
+
 void testXmlExportPreservesEditorGraphContent() {
     Graph graph;
 
@@ -474,6 +520,7 @@ int main(int argc, char** argv) {
         testXmlBundleWithoutGraphicsFallsBackToSimpleNode();
         testXmlBundleLoadsExtendedParameterMetadataWhenPresent();
         testFrameworkExportOmitsEditorOnlyCollapsedField();
+        testFrameworkExportIncludesRouterLinkMetadata();
         testXmlExportPreservesEditorGraphContent();
     } catch (const std::exception& error) {
         std::cerr << "graph_test failed: " << error.what() << '\n';

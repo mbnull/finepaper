@@ -43,6 +43,12 @@ module ModuleCatalog
     end
   end
 
+  def parameter(name, parameter_name, catalog_dir: self.catalog_dir)
+    descriptor(name, catalog_dir: catalog_dir)&.fetch(:parameters, [])&.find do |entry|
+      entry[:name] == parameter_name.to_s
+    end
+  end
+
   def port(name, port_id, catalog_dir: self.catalog_dir)
     descriptor(name, catalog_dir: catalog_dir)&.fetch(:ports, [])&.find do |entry|
       entry[:id] == port_id.to_s
@@ -132,7 +138,7 @@ module ModuleCatalog
 
       resolved = {}
       raw_descriptors.keys.map do |name|
-        resolve_descriptor(name, raw_descriptors, templates, resolved, [])
+        normalize_descriptor(resolve_descriptor(name, raw_descriptors, resolved, []), templates)
       end
     end
   end
@@ -144,7 +150,7 @@ module ModuleCatalog
     JSON.parse(File.read(path))
   end
 
-  def resolve_descriptor(name, raw_descriptors, templates, resolved, stack)
+  def resolve_descriptor(name, raw_descriptors, resolved, stack)
     return resolved[name] if resolved.key?(name)
     raise "Unknown module descriptor: #{name}" unless raw_descriptors.key?(name)
     raise "Circular module inheritance: #{(stack + [name]).join(' -> ')}" if stack.include?(name)
@@ -152,12 +158,12 @@ module ModuleCatalog
     entry = deep_dup(raw_descriptors.fetch(name))
     parent_name = entry.delete(:extends)&.to_s
     if parent_name
-      parent = resolve_descriptor(parent_name, raw_descriptors, templates, resolved, stack + [name])
+      parent = deep_dup(resolve_descriptor(parent_name, raw_descriptors, resolved, stack + [name]))
       entry = deep_merge(parent, entry)
       entry[:name] = name
     end
 
-    resolved[name] = normalize_descriptor(entry, templates)
+    resolved[name] = entry
   end
 
   def normalize_descriptor(entry, parameter_templates)

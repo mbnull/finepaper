@@ -3,6 +3,8 @@ $LOAD_PATH.unshift File.join(__dir__, '..', 'src', 'ruby')
 require 'minitest/autorun'
 require 'tempfile'
 require 'fileutils'
+require 'open3'
+require 'rbconfig'
 require 'parser/json_parser'
 require 'parser/verilog_parser'
 require 'topology/topology_expander'
@@ -128,6 +130,20 @@ class TestDrcRunner < Minitest::Test
     assert_raises(RuntimeError) { DrcRunner.new.run(noc) }
   end
 
+  def test_raises_on_invalid_endpoint_type
+    ep = Endpoint.new('ep1', 'bogus', 'axi4', 64)
+    noc = NocConfig.new('t', '1', {}, [], [], [ep])
+    error = assert_raises(RuntimeError) { DrcRunner.new.run(noc) }
+    assert_includes error.message, 'type must be one of master, slave'
+  end
+
+  def test_raises_on_invalid_endpoint_data_width
+    ep = Endpoint.new('ep1', 'master', 'axi4', 0)
+    noc = NocConfig.new('t', '1', {}, [], [], [ep])
+    error = assert_raises(RuntimeError) { DrcRunner.new.run(noc) }
+    assert_includes error.message, 'data_width must be >= 1'
+  end
+
   def test_raises_on_invalid_routing_algorithm
     xp = Xp.new('xp1', 0, 0, [], { routing_algorithm: 'invalid' })
     noc = NocConfig.new('t', '1', {}, [xp], [], [])
@@ -182,6 +198,16 @@ class TestDrcRunner < Minitest::Test
     ], [])
     error = assert_raises(RuntimeError) { DrcRunner.new.run(noc) }
     assert_includes error.message, 'port east_in must be output'
+  end
+
+  def test_rejects_explicit_router_ports_with_conflicting_sides
+    xp1 = Xp.new('xp1', 0, 0, [])
+    xp2 = Xp.new('xp2', 1, 0, [])
+    noc = NocConfig.new('t', '1', {}, [xp1, xp2], [
+      Connection.new('xp1', 'xp2', nil, from_port: 'east_out', to_port: 'south_in')
+    ], [])
+    error = assert_raises(RuntimeError) { DrcRunner.new.run(noc) }
+    assert_includes error.message, 'router ports east_out and south_in imply conflicting directions'
   end
 
   def test_raises_on_missing_endpoint_attachment
@@ -335,6 +361,53 @@ class TestConfigSchema < Minitest::Test
     FileUtils.rm_rf(dir)
   end
 
+  def test_module_catalog_merges_parent_descriptor_before_normalization
+    dir = Dir.mktmpdir
+    source_dir = File.join(__dir__, '..', 'src', 'ruby', 'model', 'modules')
+    FileUtils.cp_r(File.join(source_dir, '.'), dir)
+    File.write(File.join(dir, 'EndpointAlias.json'), <<~JSON)
+      {
+        "name": "EndpointAlias",
+        "extends": "Endpoint",
+        "presentation": {
+          "node_color": "#eeeeee"
+        }
+      }
+    JSON
+    File.write(File.join(dir, 'EndpointPartial.json'), <<~JSON)
+      {
+        "name": "EndpointPartial",
+        "extends": "Endpoint",
+        "parameters": {
+          "config": [
+            {
+              "name": "buffer_depth",
+              "use": "buffer_depth",
+              "default": 32,
+              "description": "Ingress buffer depth."
+            }
+          ]
+        }
+      }
+    JSON
+
+    alias_descriptor = nil
+    partial_descriptor = nil
+    ModuleCatalog.with_catalog_dir(dir) do
+      alias_descriptor = ModuleCatalog.descriptor('EndpointAlias')
+      partial_descriptor = ModuleCatalog.descriptor('EndpointPartial')
+    end
+
+    assert_equal '#eeeeee', alias_descriptor.dig(:presentation, :node_color)
+    assert_equal ['display_name', 'external_id', 'type', 'protocol', 'data_width'],
+                 alias_descriptor[:parameters].first(5).map { |parameter| parameter[:name] }
+    assert_equal ['display_name', 'external_id', 'type', 'protocol', 'data_width'],
+                 partial_descriptor[:parameters].first(5).map { |parameter| parameter[:name] }
+    assert_equal 32, partial_descriptor[:config_parameters][0][:default]
+  ensure
+    FileUtils.rm_rf(dir)
+  end
+
   def test_endpoint_schema_reflection
     schema = Endpoint.config_schema
     assert_equal :integer, schema[:buffer_depth][:type]
@@ -407,6 +480,21 @@ class TestConfigSchema < Minitest::Test
 end
 
 class TestModuleExporters < Minitest::Test
+  def test_export_modules_fails_when_all_outputs_disabled
+    script = File.join(__dir__, '..', 'bin', 'export_modules')
+    model_dir = File.join(__dir__, '..', 'src', 'ruby', 'model', 'modules')
+    stdout, stderr, status = Open3.capture3(RbConfig.ruby,
+                                            script,
+                                            '--model-dir',
+                                            model_dir,
+                                            '--no-frontend-bundle',
+                                            '--no-ipxact')
+
+    assert_equal '', stdout
+    refute status.success?
+    assert_includes stderr, 'Nothing to export'
+  end
+
   def test_frontend_bundle_exporter_writes_bundle_files
     out = Dir.mktmpdir
     FrontendBundleExporter.new.write(out)

@@ -22,12 +22,17 @@ class ValidRouterConnections < DrcBase
       if from_xp && to_xp
         errors << "XP #{connection.from}: connection cannot target itself" if connection.from == connection.to
 
-        valid_directions = from_xp.module_descriptor.dig(:connectivity, :router_directions) || Connection::VALID_DIRECTIONS
-        direction = connection.router_direction
-        if direction && !valid_directions.include?(direction)
-          errors << "XP #{connection.from}: invalid direction '#{direction}' for connection to #{connection.to}"
-        elsif connection.router_link? && (direction.nil? || direction.empty?)
-          errors << "XP #{connection.from}: missing router direction for connection to #{connection.to}"
+        direction_errors = validate_router_direction(connection)
+        errors.concat(direction_errors)
+
+        if direction_errors.empty?
+          valid_directions = from_xp.module_descriptor.dig(:connectivity, :router_directions) || Connection::VALID_DIRECTIONS
+          direction = connection.router_direction
+          if direction && !valid_directions.include?(direction)
+            errors << "XP #{connection.from}: invalid direction '#{direction}' for connection to #{connection.to}"
+          elsif connection.router_link? && (direction.nil? || direction.empty?)
+            errors << "XP #{connection.from}: missing router direction for connection to #{connection.to}"
+          end
         end
 
         source_router_bus = from_xp.module_descriptor.dig(:connectivity, :router_bus_type)
@@ -45,6 +50,35 @@ class ValidRouterConnections < DrcBase
   end
 
   private
+
+  def validate_router_direction(connection)
+    return [] unless connection.router_link?
+
+    source_side = Connection.side_from_port(connection.from_port)
+    target_side = Connection.side_from_port(connection.to_port)
+
+    if source_side && target_side && source_side != Connection.opposite_direction(target_side)
+      return [
+        "XP #{connection.from}: router ports #{connection.from_port} and #{connection.to_port} imply conflicting directions for connection to #{connection.to}"
+      ]
+    end
+
+    return [] if connection.dir.nil? || connection.dir.empty?
+
+    errors = []
+    if source_side && connection.dir != source_side
+      errors << "XP #{connection.from}: connection direction '#{connection.dir}' does not match port #{connection.from_port}"
+    end
+
+    if target_side
+      expected_direction = Connection.opposite_direction(target_side)
+      if expected_direction && connection.dir != expected_direction
+        errors << "XP #{connection.from}: connection direction '#{connection.dir}' does not match port #{connection.to_port}"
+      end
+    end
+
+    errors
+  end
 
   def validate_router_port(xp, port_id, peer_id, expected_direction)
     return [] unless port_id

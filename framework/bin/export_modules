@@ -19,7 +19,8 @@ OptionParser.new do |opts|
   opts.on('--model-dir DIR') { |value| options[:model_dir] = value }
 end.parse!
 
-abort('Nothing to export. Enable at least one of frontend bundle or IP-XACT output.') if options.values.compact.empty?
+export_targets = options.values_at(:frontend_bundle, :ipxact)
+abort('Nothing to export. Enable at least one of frontend bundle or IP-XACT output.') if export_targets.compact.empty?
 
 ModuleCatalog.with_catalog_dir(options[:model_dir] || ModuleCatalog.catalog_dir) do
   if options[:frontend_bundle]
