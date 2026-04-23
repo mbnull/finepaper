@@ -10,6 +10,7 @@ class JsonParser
     'flit_width' => 128,
     'addr_width' => 32
   }.freeze
+  EDITOR_ONLY_XP_CONFIG_FIELDS = ['collapsed'].freeze
 
   def self.parse(path)
     data = JSON.parse(File.read(path))
@@ -30,11 +31,13 @@ class JsonParser
     raise "Missing 'version' in #{path}" unless data['version']
   end
 
-  def self.parse_config(json_config, schema)
+  def self.parse_config(json_config, schema, ignored_fields = [])
     return {} if json_config.nil?
 
     config = {}
     json_config.each do |key, value|
+      next if ignored_fields.include?(key)
+
       key_sym = key.to_sym
       raise "Unknown config field: #{key}" unless schema[key_sym]
 
@@ -64,7 +67,7 @@ class JsonParser
 
   def self.parse_xps(list)
     list.map do |x|
-      config = parse_config(x['config'], Xp.config_schema)
+      config = parse_config(x['config'], Xp.config_schema, EDITOR_ONLY_XP_CONFIG_FIELDS)
       Xp.new(x['id'], x['x'], x['y'], x['endpoints'] || [], config)
     end
   end

@@ -54,6 +54,10 @@ QString jsonFileDialogSaveFilter() {
     return QStringLiteral("JSON Files (*.json)");
 }
 
+QString jsonFileDialogOpenFilter() {
+    return QStringLiteral("JSON Files (*.json);;All Files (*)");
+}
+
 QString pathWithSelectedExtension(QString path, const QString& selectedFilter) {
     if (!QFileInfo(path).suffix().isEmpty()) {
         return path;
@@ -174,7 +178,7 @@ void MainWindow::openGraph() {
     const QString path = QFileDialog::getOpenFileName(this,
                                                       "Open Graph",
                                                       defaultDocumentPath(),
-                                                      "JSON Files (*.json)");
+                                                      jsonFileDialogOpenFilter());
     if (path.isEmpty()) {
         return;
     }

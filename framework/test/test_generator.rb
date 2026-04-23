@@ -219,6 +219,17 @@ class TestConfigSchema < Minitest::Test
     f&.unlink
   end
 
+  def test_parser_accepts_editor_saved_xp_collapsed_state
+    f = Tempfile.new(['editor_xp_config', '.json'])
+    f.write('{"name":"t","version":"1.0","endpoints":[],"xps":[{"id":"xp1","x":0,"y":0,"endpoints":[],"config":{"routing_algorithm":"xy","collapsed":true}}],"connections":[]}')
+    f.close
+    noc = JsonParser.parse(f.path)
+    assert_equal 'xy', noc.xps[0].config[:routing_algorithm]
+    refute_includes noc.xps[0].config.keys, :collapsed
+  ensure
+    f&.unlink
+  end
+
   def test_parser_handles_missing_config
     f = Tempfile.new(['no_cfg', '.json'])
     f.write('{"name":"t","version":"1.0","endpoints":[{"id":"ep1","type":"master","protocol":"axi4","data_width":64}],"xps":[],"connections":[]}')
