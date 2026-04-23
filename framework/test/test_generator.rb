@@ -236,7 +236,12 @@ class TestRtlGenerator < Minitest::Test
     out = Dir.mktmpdir
     RtlGenerator.new(noc, File.join(__dir__, '..', 'template'))
                 .render('xp.sv.erb', File.join(out, 'out.sv'))
-    assert_match(/module xp_router_xp_0_0/, File.read(File.join(out, 'out.sv')))
+    content = File.read(File.join(out, 'out.sv'))
+    assert_match(/module xp_router_xp_0_0/, content)
+    assert_match(/SMXP: Synthetic Mesh Cross Point/, content)
+    assert_match(/Mesh Port: E/, content)
+    assert_match(/Protocol Channel Placeholders/, content)
+    assert_match(/Internal Signals - Automatic Declarations/, content)
   ensure
     FileUtils.rm_rf(out)
   end
@@ -251,6 +256,9 @@ class TestRtlGenerator < Minitest::Test
     content = File.read(File.join(out, "ni_xp_#{xp.id}.sv"))
     assert_match(/module ni_xp_#{xp.id}/, content)
     assert_match(/NUM_ENDPOINTS/, content)
+    assert_match(/Endpoint Bridge Configuration/, content)
+    assert_match(/Protocol Adapter Placeholders/, content)
+    assert_match(/Credit and Flow Control/, content)
   ensure
     FileUtils.rm_rf(out)
   end
@@ -265,6 +273,10 @@ class TestRtlGenerator < Minitest::Test
     assert_match(/xp_router_xp_0_0/, content)
     assert_match(/link_xp_0_0_to_xp_1_0_flit/, content)
     assert_match(/ni_xp_/, content)
+    assert_match(/Topology Summary/, content)
+    assert_match(/Global Configuration Parameters/, content)
+    assert_match(/XP Inventory/, content)
+    assert_match(/Mesh Link Bundle Declarations/, content)
   ensure
     FileUtils.rm_rf(out)
   end
