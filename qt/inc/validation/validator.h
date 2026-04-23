@@ -13,13 +13,14 @@ public:
     virtual QList<ValidationResult> validate(const Graph* graph) = 0;
 };
 
-// BasicValidator checks for invalid connections and unconnected ports
+// BasicValidator checks for invalid connections, isolated routers, and unconnected ports.
 class BasicValidator : public Validator {
 public:
     QList<ValidationResult> validate(const Graph* graph) override;
 
 private:
     void checkInvalidConnections(const Graph* graph, QList<ValidationResult>& results);
+    void checkIsolatedXps(const Graph* graph, QList<ValidationResult>& results);
     void checkUnconnectedPorts(const Graph* graph, QList<ValidationResult>& results);
 };
 

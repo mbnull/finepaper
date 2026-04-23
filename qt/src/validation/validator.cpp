@@ -9,6 +9,7 @@ QList<ValidationResult> BasicValidator::validate(const Graph* graph) {
     QList<ValidationResult> results;
 
     checkInvalidConnections(graph, results);
+    checkIsolatedXps(graph, results);
     checkUnconnectedPorts(graph, results);
 
     return results;
@@ -75,6 +76,47 @@ void BasicValidator::checkInvalidConnections(const Graph* graph, QList<Validatio
                 "type_mismatch"
             ));
         }
+    }
+}
+
+// Router XP nodes may stand alone only when the graph contains that single module.
+void BasicValidator::checkIsolatedXps(const Graph* graph, QList<ValidationResult>& results) {
+    QList<const Module*> xpModules;
+    QSet<QString> connectedModuleIds;
+
+    for (const auto& module : graph->modules()) {
+        if (ModuleTypeMetadata::hasEditorLayout(module.get(), u"mesh_router")) {
+            xpModules.append(module.get());
+        }
+    }
+
+    if (xpModules.isEmpty()) {
+        return;
+    }
+
+    const bool singleStandaloneXpAllowed =
+        graph->modules().size() == 1 && xpModules.size() == 1;
+
+    for (const auto& conn : graph->connections()) {
+        connectedModuleIds.insert(conn->source().moduleId);
+        connectedModuleIds.insert(conn->target().moduleId);
+    }
+
+    for (const Module* xp : xpModules) {
+        if (connectedModuleIds.contains(xp->id())) {
+            continue;
+        }
+
+        if (singleStandaloneXpAllowed) {
+            continue;
+        }
+
+        results.append(ValidationResult(
+            ValidationSeverity::Error,
+            "Isolated XP must be connected unless it is the only module in the graph",
+            xp->id(),
+            "isolated_xp"
+        ));
     }
 }
 

@@ -64,3 +64,18 @@ add_qt_test_target("commandmanager_test", "test/commandmanager_test.cpp", {
     "src/**/command.cpp",
     "src/**/commandmanager.cpp"
 })
+
+add_qt_test_target("validation_test", "test/validation_test.cpp", {
+    "src/**/validator.cpp",
+    "src/**/validationresult.cpp",
+    "src/**/graph.cpp",
+    "src/**/module.cpp",
+    "src/**/connection.cpp",
+    "src/**/port.cpp",
+    "src/**/parameter.cpp",
+    "src/**/frameworkpaths.cpp",
+    "src/**/moduleregistry.cpp",
+    "src/**/moduleprovider.cpp",
+    "inc/**/graph.h",
+    "inc/**/module.h"
+})

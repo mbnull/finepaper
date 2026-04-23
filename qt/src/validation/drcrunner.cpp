@@ -14,9 +14,20 @@ QList<ValidationResult> DRCRunner::validate(const Graph* graph) {
                                          &m_externalToInternalIds).toJson();
 
     QTemporaryFile tmpFile;
-    if (!tmpFile.open()) return {};
-    tmpFile.write(json.toUtf8());
-    tmpFile.flush();
+    if (!tmpFile.open()) {
+        return {ValidationResult(ValidationSeverity::Error,
+                                 "DRC validation failed: could not create temporary JSON file: " + tmpFile.errorString(),
+                                 "",
+                                 "DRC")};
+    }
+
+    const QByteArray jsonBytes = json.toUtf8();
+    if (tmpFile.write(jsonBytes) != jsonBytes.size() || !tmpFile.flush()) {
+        return {ValidationResult(ValidationSeverity::Error,
+                                 "DRC validation failed: could not write temporary JSON file: " + tmpFile.errorString(),
+                                 "",
+                                 "DRC")};
+    }
 
     const QString frameworkPath = FrameworkPaths::resolveFrameworkPath();
     const QString templatePath = FrameworkPaths::resolveTemplatePath();
