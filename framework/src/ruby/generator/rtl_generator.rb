@@ -56,28 +56,37 @@ class RtlGenerator
     set_context(:@ni_module_lookup, ni_module_lookup)
     set_context(:@ni_features, ni_features)
 
-    xp_variants.each do |variant|
+    xp_paths = xp_variants.map do |variant|
       xp = variant[:xp]
       set_context(:@xp, xp)
       set_context(:@xp_module_name, variant[:module_name])
       set_context(:@xp_variant_signature, variant[:signature])
       set_context(:@xp_port_directions, link_directions_for(xp))
       set_context(:@xp_local_port_count, xp.endpoints.size)
-      render('xp.sv.erb', File.join(output_dir, variant[:folder], xp_variant_filename(variant)))
+      output_path = File.join(output_dir, variant[:folder], xp_variant_filename(variant))
+      render('xp.sv.erb', output_path)
+      output_path
     end
 
-    ni_variants.each do |variant|
+    ni_paths = ni_variants.map do |variant|
       xp = variant[:xp]
       set_context(:@xp, xp)
       set_context(:@ni_module_name, variant[:module_name])
       set_context(:@ni_variant_signature, variant[:signature])
       set_context(:@ni_endpoint_slots, ni_endpoint_slots(xp))
-      render('ni.sv.erb', File.join(output_dir, variant[:folder], ni_variant_filename(variant)))
+      output_path = File.join(output_dir, variant[:folder], ni_variant_filename(variant))
+      render('ni.sv.erb', output_path)
+      output_path
     end
 
-    emit_stub_modules(output_dir)
-    render_endpoint_templates(output_dir, ipcore_dir) if ipcore_dir
-    render('top.v.erb', File.join(output_dir, "#{@noc.name}_top.v"))
+    stub_paths = emit_stub_modules(output_dir)
+    endpoint_paths = ipcore_dir ? render_endpoint_templates(output_dir, ipcore_dir) : []
+    library_dirs = []
+    library_dirs << File.dirname(stub_paths.first) unless stub_paths.empty?
+    library_dirs << output_dir unless endpoint_paths.empty?
+    top_path = File.join(output_dir, "#{@noc.name}_top.v")
+    render('top.v.erb', top_path)
+    write_filelist(output_dir, xp_paths + ni_paths + [top_path], library_dirs: library_dirs)
   ensure
     clear_context(:@xp, :@xp_module_name, :@xp_variant_signature,
                   :@xp_port_directions, :@xp_local_port_count,
@@ -265,12 +274,14 @@ class RtlGenerator
   end
 
   def render_endpoint_templates(output_dir, ipcore_dir)
-    @noc.endpoints.each do |ep|
+    @noc.endpoints.filter_map do |ep|
       next unless ep.template
 
       set_context(:@ep, ep)
+      output_path = File.join(output_dir, "#{ep.id}.sv")
       RtlGenerator.new(@noc, ipcore_dir)
-                  .render(File.basename(ep.template), File.join(output_dir, "#{ep.id}.sv"))
+                  .render(File.basename(ep.template), output_path)
+      output_path
     end
   end
 
@@ -300,13 +311,25 @@ class RtlGenerator
 
   def emit_stub_modules(output_dir)
     stub_dir = File.join(@template_dir, 'stubs')
-    return unless Dir.exist?(stub_dir)
+    return [] unless Dir.exist?(stub_dir)
 
     out_dir = File.join(output_dir, 'stubs')
     FileUtils.mkdir_p(out_dir)
-    Dir[File.join(stub_dir, '*.sv')].each do |path|
-      FileUtils.cp(path, File.join(out_dir, File.basename(path)))
+    Dir[File.join(stub_dir, '*.sv')].sort.map do |path|
+      output_path = File.join(out_dir, File.basename(path))
+      FileUtils.cp(path, output_path)
+      output_path
     end
+  end
+
+  def write_filelist(output_dir, source_paths, library_dirs: [])
+    lines = library_dirs.flat_map do |dir|
+      expanded = File.expand_path(dir)
+      ["+incdir+#{expanded}", "-y #{expanded}"]
+    end
+    lines.concat(source_paths.map { |path| File.expand_path(path) })
+    lines.uniq!
+    File.write(File.join(output_dir, 'filelist.f'), "#{lines.join("\n")}\n")
   end
 
   def set_context(name, value)

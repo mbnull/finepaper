@@ -307,6 +307,57 @@ class TestRtlGenerator < Minitest::Test
     FileUtils.rm_rf(out)
   end
 
+  def test_partitioned_generation_writes_filelist
+    noc = JsonParser.parse(EXAMPLE)
+    out = Dir.mktmpdir
+    RtlGenerator.new(noc, File.join(__dir__, '..', 'template')).generate_partitioned(out)
+
+    filelist_path = File.join(out, 'filelist.f')
+    assert File.exist?(filelist_path), 'missing filelist.f'
+
+    lines = File.readlines(filelist_path, chomp: true)
+    stub_dir = File.expand_path(File.join(out, 'stubs'))
+    source_lines = lines.reject { |line| line.start_with?('+incdir+') || line.start_with?('-y ') }
+
+    refute_empty lines
+    assert_equal lines.uniq, lines
+    assert_includes lines, "+incdir+#{stub_dir}"
+    assert_includes lines, "-y #{stub_dir}"
+    assert_equal File.expand_path(File.join(out, 'my_noc_top.v')), lines.last
+    assert_includes source_lines, File.expand_path(File.join(out, 'xp_e00s', 'my_noc_xp_e00s.v'))
+    assert_includes source_lines, File.expand_path(File.join(out, 'ni_axi4_m64_feat_prscoe', 'my_noc_ni_axi4_m64_feat_prscoe.v'))
+    refute source_lines.any? { |line| line.include?('/stubs/') }, 'stubs should be a -y library, not direct source files'
+
+    source_lines.each do |line|
+      assert_match(%r{\A/}, line)
+      assert File.exist?(line), "listed file does not exist: #{line}"
+    end
+
+    generated_direct_rtl = (
+      Dir[File.join(out, 'xp_*', '*.v')] +
+      Dir[File.join(out, 'ni_*', '*.v')] +
+      [File.join(out, 'my_noc_top.v')]
+    ).sort.map do |path|
+      File.expand_path(path)
+    end
+    assert_equal generated_direct_rtl, source_lines.sort
+  ensure
+    FileUtils.rm_rf(out)
+  end
+
+  def test_filelist_lints_without_uninstantiated_stub_multitops
+    skip 'verilator not found' unless system('which verilator > /dev/null 2>&1')
+
+    noc = JsonParser.parse(EXAMPLE)
+    out = Dir.mktmpdir
+    RtlGenerator.new(noc, File.join(__dir__, '..', 'template')).generate_partitioned(out)
+
+    assert system("verilator --lint-only --sv -f #{File.join(out, 'filelist.f')} 2>/dev/null"),
+           'filelist lint should not report inactive stubs as top modules'
+  ensure
+    FileUtils.rm_rf(out)
+  end
+
   def test_partitioned_generation_reuses_3x3_variants
     noc = TopologyExpander.expand(JsonParser.parse(MESH_3X3))
     out = Dir.mktmpdir
