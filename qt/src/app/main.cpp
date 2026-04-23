@@ -1,5 +1,6 @@
 // Entry point for Qt NoC/SoC editor application
 #include "app/mainwindow.h"
+#include "app/uiscale.h"
 #include <QApplication>
 #include <QDateTime>
 #include <QDir>
@@ -100,6 +101,7 @@ void installFileLogger() {
 
 int main(int argc, char *argv[]) {
     // Initialize Qt app state, install global logging, then show the main UI.
+    UiScale::applyDefaultScaleFactor();
     QApplication a(argc, argv);
     QApplication::setApplicationName("finepaper");
     QApplication::setOrganizationName("finepaper");

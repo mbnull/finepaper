@@ -79,3 +79,8 @@ add_qt_test_target("validation_test", "test/validation_test.cpp", {
     "inc/**/graph.h",
     "inc/**/module.h"
 })
+
+add_qt_test_target("uiscale_test", "test/uiscale_test.cpp", {
+    "src/**/uiscale.cpp",
+    "inc/**/uiscale.h"
+})
