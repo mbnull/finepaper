@@ -39,8 +39,10 @@ module <%= @name %>_top #(
   end %>
 <%
   # Instantiate all routers
-  @xps.each do |xp| %>
-  xp_router_<%= xp.id %> #(
+  variant_mode = @xp_module_lookup && @xp_link_directions_by_id
+  @xps.each do |xp|
+    module_name = variant_mode ? @xp_module_lookup.fetch(xp.id) : "xp_router_#{xp.id}" %>
+  <%= module_name %> #(
     .DATA_WIDTH(DATA_WIDTH),
     .FLIT_WIDTH(FLIT_WIDTH),
     .ADDR_WIDTH(ADDR_WIDTH)
@@ -48,30 +50,44 @@ module <%= @name %>_top #(
     .clk(clk),
     .rst_n(rst_n)<%
     # Connect to neighboring routers
-    xp.neighbors(self).each do |nb|
-      conn = @connections.find { |c| (c.from == xp.id && c.to == nb.id) || (c.to == xp.id && c.from == nb.id) }
-      if conn.from == xp.id
-        wire_name = "link_#{xp.id}_to_#{nb.id}" %>,
+    if variant_mode
+      @xp_link_directions_by_id.fetch(xp.id).each do |link|
+        nb = link[:neighbor] %>,
+    .flit_out_<%= link[:abbr] %>(link_<%= xp.id %>_to_<%= nb.id %>_flit),
+    .flit_in_<%= link[:abbr] %>(link_<%= nb.id %>_to_<%= xp.id %>_flit)<% end
+    else
+      xp.neighbors(self).each do |nb|
+        conn = @connections.find { |c| (c.from == xp.id && c.to == nb.id) || (c.to == xp.id && c.from == nb.id) }
+        if conn.from == xp.id
+          wire_name = "link_#{xp.id}_to_#{nb.id}" %>,
     .flit_out_<%= nb.id %>(<%=wire_name%>_flit),
     .flit_in_<%= nb.id %>(link_<%= nb.id %>_to_<%= xp.id %>_flit)<% else
-        wire_name = "link_#{nb.id}_to_#{xp.id}" %>,
+          wire_name = "link_#{nb.id}_to_#{xp.id}" %>,
     .flit_in_<%= nb.id %>(<%=wire_name%>_flit),
     .flit_out_<%= nb.id %>(link_<%= xp.id %>_to_<%= nb.id %>_flit)<% end
+      end
     end
     # Connect endpoints via NI wires
-    xp.endpoints.each do |ep_id|
-      ep = @endpoints.find { |e| e.id == ep_id }
-      if ep.ports&.any?
-        ep.ports.each { |p| %>,
+    if variant_mode
+      xp.endpoints.each_with_index do |ep_id, idx| %>,
+    .local<%= idx %>_flit_in(ni_<%= ep_id %>_to_router_flit),
+    .local<%= idx %>_flit_out(router_to_ni_<%= ep_id %>_flit)<% end
+    else
+      xp.endpoints.each do |ep_id|
+        ep = @endpoints.find { |e| e.id == ep_id }
+        if ep.ports&.any?
+          ep.ports.each { |p| %>,
     .<%= ep_id %>_<%= p.name %>(<%= ep_id %>_<%= p.name %>)<% }
-      else %>,
+        else %>,
     .<%= ep_id %>_flit_in(ni_<%= ep_id %>_to_router_flit),
     .<%= ep_id %>_flit_out(router_to_ni_<%= ep_id %>_flit)<% end
+      end
     end %>
   );
 <% end %>
 <%
   # Instantiate NI modules (one per XP with endpoints)
+  variant_mode = @xp_module_lookup && @xp_link_directions_by_id
   @xps.each do |xp|
     next if xp.endpoints.empty? %>
   ni_xp_<%= xp.id %> #(
@@ -85,6 +101,9 @@ module <%= @name %>_top #(
       if ep.ports&.any?
         ep.ports.each { |p| %>,
     .<%= ep_id %>_<%= p.name %>(<%= ep_id %>_<%= p.name %>)<% }
+        if variant_mode %>,
+    .<%= ep_id %>_router_flit_in(ni_<%= ep_id %>_to_router_flit),
+    .<%= ep_id %>_router_flit_out(router_to_ni_<%= ep_id %>_flit)<% end
       else %>,
     .<%= ep_id %>_flit_in(<%= ep_id %>_flit_in),
     .<%= ep_id %>_flit_out(<%= ep_id %>_flit_out),

@@ -25,25 +25,7 @@ plugins.register(NiPortPlugin.new(options[:ipcore_dir])) if options[:ipcore_dir]
 plugins.run(noc, {})
 
 gen = RtlGenerator.new(noc, options[:template_dir])
+variant_count = gen.xp_variants.size
+gen.generate_partitioned(options[:output], ipcore_dir: options[:ipcore_dir])
 
-noc.xps.each do |xp|
-  noc.instance_variable_set(:@xp, xp)
-  gen.render('xp.sv.erb', File.join(options[:output], "xp_router_#{xp.id}.sv"))
-end
-
-noc.xps.each do |xp|
-  next if xp.endpoints.empty?
-  noc.instance_variable_set(:@xp, xp)
-  gen.render('ni.sv.erb', File.join(options[:output], "ni_xp_#{xp.id}.sv"))
-end
-
-noc.endpoints.each do |ep|
-  next unless ep.template
-  noc.instance_variable_set(:@ep, ep)
-  RtlGenerator.new(noc, options[:ipcore_dir])
-              .render(File.basename(ep.template), File.join(options[:output], "#{ep.id}.sv"))
-end
-
-gen.render('top.v.erb', File.join(options[:output], "#{noc.name}_top.v"))
-
-puts "Generated #{noc.xps.size} XP modules + top in #{options[:output]}"
+puts "Generated #{variant_count} XP variants from #{noc.xps.size} XPs + top in #{options[:output]}"

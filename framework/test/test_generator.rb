@@ -259,6 +259,60 @@ class TestRtlGenerator < Minitest::Test
   ensure
     FileUtils.rm_rf(out)
   end
+
+  def test_partitioned_generation_writes_direction_folders
+    noc = JsonParser.parse(EXAMPLE)
+    out = Dir.mktmpdir
+    RtlGenerator.new(noc, File.join(__dir__, '..', 'template')).generate_partitioned(out)
+
+    assert_empty Dir[File.join(out, 'xp_*', 'XP.v')]
+    %w[xp_e00s xp_0w0s xp_e0n0 xp_0wn0].each do |dir|
+      assert File.exist?(File.join(out, dir, "my_noc_#{dir}.v")), "missing #{dir}/my_noc_#{dir}.v"
+    end
+
+    xp = File.read(File.join(out, 'xp_e00s', 'my_noc_xp_e00s.v'))
+    assert_match(/module xp_router_e00s/, xp)
+    assert_match(/flit_in_e/, xp)
+    assert_match(/flit_out_s/, xp)
+    assert_match(/local0_flit_in/, xp)
+
+    top = File.read(File.join(out, 'my_noc_top.v'))
+    assert_match(/xp_router_e00s #\(/, top)
+    assert_match(/\.flit_out_e\(link_xp_0_0_to_xp_1_0_flit\)/, top)
+    assert_match(/\.flit_in_s\(link_xp_0_1_to_xp_0_0_flit\)/, top)
+    assert_match(/\.local0_flit_in\(ni_ep_cpu0_to_router_flit\)/, top)
+  ensure
+    FileUtils.rm_rf(out)
+  end
+
+  def test_partitioned_generation_reuses_3x3_variants
+    noc = TopologyExpander.expand(JsonParser.parse(MESH_3X3))
+    out = Dir.mktmpdir
+    RtlGenerator.new(noc, File.join(__dir__, '..', 'template')).generate_partitioned(out)
+
+    assert_equal 9, Dir[File.join(out, 'xp_*', 'mesh_3x3_xp_*.v')].size
+    assert File.exist?(File.join(out, 'xp_ewns', 'mesh_3x3_xp_ewns.v'))
+
+    top = File.read(File.join(out, 'mesh_3x3_top.v'))
+    assert_match(/xp_router_ewns #\(/, top)
+    assert_match(/u_xp_1_1/, top)
+  ensure
+    FileUtils.rm_rf(out)
+  end
+
+  def test_partitioned_generation_keeps_endpoint_count_in_variant_key
+    noc = JsonParser.parse(MULTI_EP)
+    out = Dir.mktmpdir
+    RtlGenerator.new(noc, File.join(__dir__, '..', 'template')).generate_partitioned(out)
+
+    assert File.exist?(File.join(out, 'xp_e000_ep3', 'multi_ep_noc_xp_e000_ep3.v'))
+    assert File.exist?(File.join(out, 'xp_0w00_ep2', 'multi_ep_noc_xp_0w00_ep2.v'))
+    xp = File.read(File.join(out, 'xp_e000_ep3', 'multi_ep_noc_xp_e000_ep3.v'))
+    assert_match(/module xp_router_e000_ep3/, xp)
+    assert_match(/local2_flit_out/, xp)
+  ensure
+    FileUtils.rm_rf(out)
+  end
 end
 
 # NI multi-endpoint structural tests

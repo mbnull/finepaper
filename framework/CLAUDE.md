@@ -18,7 +18,7 @@ ruby test/test_generator.rb
 
 ### Core Components
 
-- `bin/generate` — CLI entry point; iterates XPs, sets `@xp` on noc via `instance_variable_set`, calls `gen.render` per XP
+- `bin/generate` — CLI entry point; calls `RtlGenerator#generate_partitioned` to emit reusable XP variants under `xp_<E/W/N/S signature>/<noc_name>_xp_<E/W/N/S signature>.v`
 - `src/ruby/model/` — Data model classes
   - `NocConfig` — Top-level config; `#expose` sets `@noc = self` and returns `binding` for ERB
   - `Xp` — Crosspoint router; `#node_id(noc)` calculates position-based ID
@@ -31,8 +31,8 @@ ruby test/test_generator.rb
 - `src/ruby/topology/topology_expander.rb` — `TopologyExpander.expand(noc)` generates XPs/connections from `parameters.mesh`
 - `src/ruby/drc/drc_runner.rb` — `DrcBase#check(noc)` returns error strings; `DrcRunner` raises on violations
 - `src/ruby/plugin/plugin_base.rb` — `PluginBase#process(noc, context)`; `PluginRunner` runs all registered plugins
-- `src/ruby/generator/rtl_generator.rb` — `RtlGenerator#render(template, output_path)` evaluates ERB with `noc.expose` binding
-- `template/xp.sv.erb` — SystemVerilog XP router template; has access to `@xp`, `@noc`, `@parameters`, `@connections`
+- `src/ruby/generator/rtl_generator.rb` — `RtlGenerator#render(template, output_path)` evaluates ERB with `noc.expose`; `#generate_partitioned` groups XPs by E/W/N/S connectivity, emits project-prefixed variant files, and renders the top-level module
+- `template/xp.sv.erb` — SystemVerilog XP router template; in partitioned mode uses direction ports such as `flit_in_e` and generic local ports such as `local0_flit_in`
 
 ## Configuration System
 
@@ -75,7 +75,7 @@ end
 
 - DRC checks: subclass `DrcBase`, implement `check(noc)` returning `[]` or error strings
 - Plugins: subclass `PluginBase`, implement `process(noc, context)`
-- ERB templates access the current XP as `@xp`; call `@xp.neighbors(@noc)` for connected XPs
+- ERB templates access the current XP as `@xp`; partitioned generation also provides `@xp_port_directions` and top-level lookup maps for variant module selection
 - Topology: either specify `xps` array explicitly OR use `parameters.mesh` (width/height) for auto-expansion
 - Config schemas: define via `config_schema` class method; parser validates types and rejects unknown fields
 - Multi-endpoint XPs: NI template generates `NUM_ENDPOINTS` parameter and per-endpoint ports
