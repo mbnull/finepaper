@@ -111,4 +111,34 @@ module xp_router_xp_1_2 #(
   // u_channel_switch:
   //   - maps compact demo flits onto REQ/RSP/DAT/SNP/PUB placeholder channels
   //   - preserves the existing finepaper single-flit interface for tests
+  logic [ADDR_WIDTH-1:0] route_dst_addr;
+  logic [2:0]            route_select;
+  logic [7:0]            credit_level;
+  logic [FLIT_WIDTH-1:0] switched_flit;
+
+  assign route_dst_addr = '0;
+
+  fp_xp_route_decode #(
+    .ADDR_WIDTH(ADDR_WIDTH)
+  ) u_route_decode (
+    .dst_addr_i(route_dst_addr),
+    .route_sel_o(route_select)
+  );
+
+  fp_xp_credit_accounting #(
+    .VC_COUNT(2),
+    .BUFFER_DEPTH(8)
+  ) u_credit_accounting (
+    .clk(clk),
+    .rst_n(rst_n),
+    .flit_accept_i(1'b1),
+    .credit_level_o(credit_level)
+  );
+
+  fp_xp_channel_switch #(
+    .FLIT_WIDTH(FLIT_WIDTH)
+  ) u_channel_switch (
+    .flit_i(ep_7_flit_in),
+    .flit_o(switched_flit)
+  );
 endmodule
