@@ -10,13 +10,33 @@
 //#
 //# Endpoint Bridge Configuration
 //# =============================
-//  - source_xp       : xp_1_1
-//  - local_endpoints : ep_4
-//  - flit_width      : 128
-//  - endpoint_count  : 1
+//  - source_xp          : xp_1_1
+//  - module_name        : ni_xp_xp_1_1
+//  - variant_signature  : per-xp
+//  - local_endpoints    : ep_4
+//  - flit_width         : 128
+//  - endpoint_count     : 1
 //#
 
-//  - ep_4             role=slave  protocol=axi4     data_width=128 buffer_depth=16 qos=disabled
+//  - ep_4     maps=ep_4             role=slave  protocol=axi4     data_width=128 buffer_depth=16 qos=disabled
+
+//#
+//# Feature Mask
+//# ============
+
+//  - protocol_decode  : generated
+
+//  - request_queue    : generated
+
+//  - response_queue   : generated
+
+//  - credit_flow      : generated
+
+//  - qos              : generated
+
+//  - error_check      : generated
+
+//  - trace            : masked
 
 //#
 //# Protocol Adapter Placeholders
@@ -27,9 +47,9 @@
 //#
 //# Credit and Flow Control
 //# =======================
-//  - tx_credit_valid : placeholder for endpoint-to-router credit accounting
-//  - rx_credit_valid : placeholder for router-to-endpoint return credits
-//  - qos_class       : endpoint QoS metadata slot for future arbitration
+//  - tx_credit_count : placeholder local transmit credit counter
+//  - can_issue       : placeholder request admission decision
+//  - response_queue  : placeholder router-to-endpoint return buffering
 //----------------------------------------------------------------------------
 
 module ni_xp_xp_1_1 #(
@@ -47,12 +67,97 @@ module ni_xp_xp_1_1 #(
   output logic [FLIT_WIDTH-1:0] ep_4_router_flit_in,
   input  logic [FLIT_WIDTH-1:0] ep_4_router_flit_out
 );
-  //# Endpoint passthrough datapath
-  //# =============================
-  // Generated protocol adapters are structural placeholders. Endpoint records
-  // without explicit protocol ports keep the original direct flit passthrough.
+
+
+  //# ep_4 protocol conversion shell
+  //# ===============================
+  // Static framework stubs make this generated NI look like a protocol bridge
+  // without claiming to implement AXI/CHI semantics yet.
+
+  logic [3:0]            ep_4_opcode;
+  logic                  ep_4_is_read;
+  logic                  ep_4_is_write;
+  fp_ni_protocol_decode #(
+    .FLIT_WIDTH(FLIT_WIDTH),
+    .DATA_WIDTH(128)
+  ) u_ep_4_protocol_decode (
+    .flit_i(ep_4_flit_in),
+    .opcode_o(ep_4_opcode),
+    .is_read_o(ep_4_is_read),
+    .is_write_o(ep_4_is_write)
+  );
+
+
+  logic [FLIT_WIDTH-1:0] ep_4_req_payload;
+  logic                  ep_4_req_valid;
+  logic                  ep_4_req_ready;
+  fp_ni_request_queue #(
+    .FLIT_WIDTH(FLIT_WIDTH),
+    .DEPTH(16)
+  ) u_ep_4_request_queue (
+    .clk(clk),
+    .rst_n(rst_n),
+    .payload_i(ep_4_flit_in),
+    .valid_i(1'b1),
+    .ready_o(ep_4_req_ready),
+    .payload_o(ep_4_req_payload),
+    .valid_o(ep_4_req_valid),
+    .ready_i(1'b1)
+  );
+
+
+  logic [FLIT_WIDTH-1:0] ep_4_rsp_payload;
+  logic                  ep_4_rsp_valid;
+  logic                  ep_4_rsp_ready;
+  fp_ni_response_queue #(
+    .FLIT_WIDTH(FLIT_WIDTH),
+    .DEPTH(16)
+  ) u_ep_4_response_queue (
+    .clk(clk),
+    .rst_n(rst_n),
+    .payload_i(ep_4_router_flit_out),
+    .valid_i(1'b1),
+    .ready_o(ep_4_rsp_ready),
+    .payload_o(ep_4_rsp_payload),
+    .valid_o(ep_4_rsp_valid),
+    .ready_i(1'b1)
+  );
+
+
+  logic [7:0]            ep_4_tx_credit_count;
+  logic                  ep_4_can_issue;
+  fp_ni_credit_flow u_ep_4_credit_flow (
+    .clk(clk),
+    .rst_n(rst_n),
+    .issue_i(1'b1),
+    .return_credit_i(1'b1),
+    .credit_count_o(ep_4_tx_credit_count),
+    .can_issue_o(ep_4_can_issue)
+  );
+
+
+  logic [3:0]            ep_4_qos_class;
+  fp_ni_qos_classifier #(
+    .QOS_ENABLED(0)
+  ) u_ep_4_qos_classifier (
+    .opcode_i(ep_4_opcode),
+    .qos_class_o(ep_4_qos_class)
+  );
+
+
+  logic                  ep_4_protocol_error;
+  fp_ni_error_check #(
+    .FLIT_WIDTH(FLIT_WIDTH)
+  ) u_ep_4_error_check (
+    .flit_i(ep_4_flit_in),
+    .error_o(ep_4_protocol_error)
+  );
+
 
   assign ep_4_router_flit_in = ep_4_flit_in;
+
   assign ep_4_flit_out = ep_4_router_flit_out;
+
+
 
 endmodule

@@ -17,6 +17,7 @@
 //  - master_count   : 5
 //  - slave_count    : 4
 //  - variant_mode   : per-xp router modules
+//  - ni_mode        : per-xp ni modules
 //#
 //# Global Configuration Parameters
 //# ===============================
@@ -383,57 +384,84 @@ module mesh_3x3_top #(
 
   logic [FLIT_WIDTH-1:0] ni_ep_0_to_router_flit;
   logic [FLIT_WIDTH-1:0] router_to_ni_ep_0_flit;
+
   logic                  ni_ep_0_tx_credit_valid;
   logic                  ni_ep_0_rx_credit_valid;
+
   logic [3:0]            ni_ep_0_qos_class;
+
 
   logic [FLIT_WIDTH-1:0] ni_ep_1_to_router_flit;
   logic [FLIT_WIDTH-1:0] router_to_ni_ep_1_flit;
+
   logic                  ni_ep_1_tx_credit_valid;
   logic                  ni_ep_1_rx_credit_valid;
+
   logic [3:0]            ni_ep_1_qos_class;
+
 
   logic [FLIT_WIDTH-1:0] ni_ep_2_to_router_flit;
   logic [FLIT_WIDTH-1:0] router_to_ni_ep_2_flit;
+
   logic                  ni_ep_2_tx_credit_valid;
   logic                  ni_ep_2_rx_credit_valid;
+
   logic [3:0]            ni_ep_2_qos_class;
+
 
   logic [FLIT_WIDTH-1:0] ni_ep_3_to_router_flit;
   logic [FLIT_WIDTH-1:0] router_to_ni_ep_3_flit;
+
   logic                  ni_ep_3_tx_credit_valid;
   logic                  ni_ep_3_rx_credit_valid;
+
   logic [3:0]            ni_ep_3_qos_class;
+
 
   logic [FLIT_WIDTH-1:0] ni_ep_4_to_router_flit;
   logic [FLIT_WIDTH-1:0] router_to_ni_ep_4_flit;
+
   logic                  ni_ep_4_tx_credit_valid;
   logic                  ni_ep_4_rx_credit_valid;
+
   logic [3:0]            ni_ep_4_qos_class;
+
 
   logic [FLIT_WIDTH-1:0] ni_ep_5_to_router_flit;
   logic [FLIT_WIDTH-1:0] router_to_ni_ep_5_flit;
+
   logic                  ni_ep_5_tx_credit_valid;
   logic                  ni_ep_5_rx_credit_valid;
+
   logic [3:0]            ni_ep_5_qos_class;
+
 
   logic [FLIT_WIDTH-1:0] ni_ep_6_to_router_flit;
   logic [FLIT_WIDTH-1:0] router_to_ni_ep_6_flit;
+
   logic                  ni_ep_6_tx_credit_valid;
   logic                  ni_ep_6_rx_credit_valid;
+
   logic [3:0]            ni_ep_6_qos_class;
+
 
   logic [FLIT_WIDTH-1:0] ni_ep_7_to_router_flit;
   logic [FLIT_WIDTH-1:0] router_to_ni_ep_7_flit;
+
   logic                  ni_ep_7_tx_credit_valid;
   logic                  ni_ep_7_rx_credit_valid;
+
   logic [3:0]            ni_ep_7_qos_class;
+
 
   logic [FLIT_WIDTH-1:0] ni_ep_8_to_router_flit;
   logic [FLIT_WIDTH-1:0] router_to_ni_ep_8_flit;
+
   logic                  ni_ep_8_tx_credit_valid;
   logic                  ni_ep_8_rx_credit_valid;
+
   logic [3:0]            ni_ep_8_qos_class;
+
 
 
   //# Router Instance Stitching

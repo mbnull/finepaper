@@ -16,6 +16,26 @@ class RtlGenerator
     south: :north
   }.freeze
 
+  NI_FEATURE_DEFAULTS = {
+    'protocol_decode' => true,
+    'request_queue' => true,
+    'response_queue' => true,
+    'credit_flow' => true,
+    'qos' => true,
+    'error_check' => true,
+    'trace' => false
+  }.freeze
+
+  NI_FEATURE_CODES = {
+    'protocol_decode' => 'p',
+    'request_queue' => 'r',
+    'response_queue' => 's',
+    'credit_flow' => 'c',
+    'qos' => 'o',
+    'error_check' => 'e',
+    'trace' => 't'
+  }.freeze
+
   def initialize(noc, template_dir)
     @noc = noc
     @template_dir = template_dir
@@ -33,6 +53,8 @@ class RtlGenerator
     lookup = xp_module_lookup
     set_context(:@xp_module_lookup, lookup)
     set_context(:@xp_link_directions_by_id, xp_link_directions_by_id)
+    set_context(:@ni_module_lookup, ni_module_lookup)
+    set_context(:@ni_features, ni_features)
 
     xp_variants.each do |variant|
       xp = variant[:xp]
@@ -44,19 +66,25 @@ class RtlGenerator
       render('xp.sv.erb', File.join(output_dir, variant[:folder], xp_variant_filename(variant)))
     end
 
-    @noc.xps.each do |xp|
-      next if xp.endpoints.empty?
-
+    ni_variants.each do |variant|
+      xp = variant[:xp]
       set_context(:@xp, xp)
-      render('ni.sv.erb', File.join(output_dir, "ni_xp_#{xp.id}.sv"))
+      set_context(:@ni_module_name, variant[:module_name])
+      set_context(:@ni_variant_signature, variant[:signature])
+      set_context(:@ni_endpoint_slots, ni_endpoint_slots(xp))
+      render('ni.sv.erb', File.join(output_dir, variant[:folder], ni_variant_filename(variant)))
     end
 
+    emit_stub_modules(output_dir)
     render_endpoint_templates(output_dir, ipcore_dir) if ipcore_dir
     render('top.v.erb', File.join(output_dir, "#{@noc.name}_top.v"))
   ensure
     clear_context(:@xp, :@xp_module_name, :@xp_variant_signature,
                   :@xp_port_directions, :@xp_local_port_count,
-                  :@xp_module_lookup, :@xp_link_directions_by_id)
+                  :@xp_module_lookup, :@xp_link_directions_by_id,
+                  :@ni_module_lookup, :@ni_module_name,
+                  :@ni_variant_signature, :@ni_endpoint_slots,
+                  :@ni_features)
   end
 
   def xp_variants
@@ -84,6 +112,63 @@ class RtlGenerator
 
   def xp_variant_filename(variant)
     "#{file_token(@noc.name)}_#{variant[:folder]}.v"
+  end
+
+  def ni_features
+    configured = @noc.parameters.fetch('ni_features', {})
+    configured = configured.transform_keys(&:to_s)
+    NI_FEATURE_DEFAULTS.merge(configured)
+  end
+
+  def ni_feature_enabled?(feature)
+    ni_features.fetch(feature.to_s)
+  end
+
+  def ni_variants
+    @noc.xps.each_with_object({}) do |xp, variants|
+      next if xp.endpoints.empty?
+
+      signature = ni_signature(xp)
+      key = ni_variant_key(xp)
+      variants[key] ||= {
+        xp: xp,
+        signature: signature,
+        folder: "ni_#{key}",
+        module_name: "ni_bridge_#{key}"
+      }
+    end.values
+  end
+
+  def ni_signature(xp)
+    slot_signature = ni_endpoint_slots(xp).map do |slot|
+      base = "#{slot[:protocol]}_#{slot[:role_code]}#{slot[:data_width]}"
+      slot[:port_signature] == 'flit' ? base : "#{base}_#{slot[:port_signature]}"
+    end.join('_')
+
+    "#{slot_signature}_feat_#{ni_feature_signature}"
+  end
+
+  def ni_variant_filename(variant)
+    "#{file_token(@noc.name)}_#{variant[:folder]}.v"
+  end
+
+  def ni_endpoint_slots(xp)
+    endpoint_by_id = @noc.endpoints.to_h { |ep| [ep.id, ep] }
+    xp.endpoints.each_with_index.map do |ep_id, index|
+      ep = endpoint_by_id.fetch(ep_id)
+      {
+        index: index,
+        id: ep.id,
+        generic_id: "ep#{index}",
+        type: ep.type,
+        role_code: endpoint_role_code(ep),
+        protocol: file_token(ep.protocol.downcase),
+        data_width: ep.data_width,
+        config: ep.config,
+        ports: ep.ports,
+        port_signature: endpoint_port_signature(ep)
+      }
+    end
   end
 
   def link_directions_for(xp)
@@ -117,8 +202,20 @@ class RtlGenerator
     "#{signature}_ep#{xp.endpoints.size}"
   end
 
+  def ni_variant_key(xp)
+    ni_signature(xp)
+  end
+
   def xp_module_lookup
     @noc.xps.to_h { |xp| [xp.id, "xp_router_#{xp_variant_key(xp)}"] }
+  end
+
+  def ni_module_lookup
+    @noc.xps.each_with_object({}) do |xp, lookup|
+      next if xp.endpoints.empty?
+
+      lookup[xp.id] = "ni_bridge_#{ni_variant_key(xp)}"
+    end
   end
 
   def xp_link_directions_by_id
@@ -174,6 +271,41 @@ class RtlGenerator
       set_context(:@ep, ep)
       RtlGenerator.new(@noc, ipcore_dir)
                   .render(File.basename(ep.template), File.join(output_dir, "#{ep.id}.sv"))
+    end
+  end
+
+  def ni_feature_signature
+    signature = NI_FEATURE_CODES.filter_map do |feature, code|
+      code if ni_feature_enabled?(feature)
+    end.join
+    signature.empty? ? 'none' : signature
+  end
+
+  def endpoint_role_code(endpoint)
+    case endpoint.type
+    when 'master' then 'm'
+    when 'slave' then 's'
+    else file_token(endpoint.type.downcase)
+    end
+  end
+
+  def endpoint_port_signature(endpoint)
+    return 'flit' unless endpoint.ports&.any?
+
+    endpoint.ports.map do |port|
+      width = file_token((port.width || 'scalar').downcase)
+      "#{port.dir}_#{width}_#{file_token(port.name)}"
+    end.join('_')
+  end
+
+  def emit_stub_modules(output_dir)
+    stub_dir = File.join(@template_dir, 'stubs')
+    return unless Dir.exist?(stub_dir)
+
+    out_dir = File.join(output_dir, 'stubs')
+    FileUtils.mkdir_p(out_dir)
+    Dir[File.join(stub_dir, '*.sv')].each do |path|
+      FileUtils.cp(path, File.join(out_dir, File.basename(path)))
     end
   end
 

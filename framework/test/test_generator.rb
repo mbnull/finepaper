@@ -14,6 +14,7 @@ require 'generator/rtl_generator'
 EXAMPLE = File.join(__dir__, '..', 'examples', 'simple_mesh.json')
 MESH_3X3 = File.join(__dir__, '..', 'examples', 'mesh_3x3.json')
 MULTI_EP = File.join(__dir__, '..', 'examples', 'multi_endpoint.json')
+STUB_TEMPLATES = Dir[File.join(__dir__, '..', 'template', 'stubs', '*.sv')].sort
 
 class TestJsonParser < Minitest::Test
   def test_parses_noc
@@ -313,9 +314,15 @@ class TestRtlGenerator < Minitest::Test
 
     assert_equal 9, Dir[File.join(out, 'xp_*', 'mesh_3x3_xp_*.v')].size
     assert File.exist?(File.join(out, 'xp_ewns', 'mesh_3x3_xp_ewns.v'))
+    assert_equal 2, Dir[File.join(out, 'ni_*', 'mesh_3x3_ni_*.v')].size
+    assert File.exist?(File.join(out, 'ni_axi4_m64_feat_prscoe', 'mesh_3x3_ni_axi4_m64_feat_prscoe.v'))
+    assert File.exist?(File.join(out, 'ni_axi4_s128_feat_prscoe', 'mesh_3x3_ni_axi4_s128_feat_prscoe.v'))
 
     top = File.read(File.join(out, 'mesh_3x3_top.v'))
     assert_match(/xp_router_ewns #\(/, top)
+    assert_match(/ni_bridge_axi4_m64_feat_prscoe #\(/, top)
+    assert_match(/\.ep0_flit_in\(ep_0_flit_in\)/, top)
+    assert_match(/\.ep0_router_flit_in\(ni_ep_0_to_router_flit\)/, top)
     assert_match(/u_xp_1_1/, top)
   ensure
     FileUtils.rm_rf(out)
@@ -328,9 +335,69 @@ class TestRtlGenerator < Minitest::Test
 
     assert File.exist?(File.join(out, 'xp_e000_ep3', 'multi_ep_noc_xp_e000_ep3.v'))
     assert File.exist?(File.join(out, 'xp_0w00_ep2', 'multi_ep_noc_xp_0w00_ep2.v'))
+    assert File.exist?(File.join(out, 'ni_axi4_m64_axi4_m64_axi4_m128_feat_prscoe', 'multi_ep_noc_ni_axi4_m64_axi4_m64_axi4_m128_feat_prscoe.v'))
+    assert File.exist?(File.join(out, 'ni_axi4_s128_axi4_s128_feat_prscoe', 'multi_ep_noc_ni_axi4_s128_axi4_s128_feat_prscoe.v'))
     xp = File.read(File.join(out, 'xp_e000_ep3', 'multi_ep_noc_xp_e000_ep3.v'))
     assert_match(/module xp_router_e000_ep3/, xp)
     assert_match(/local2_flit_out/, xp)
+  ensure
+    FileUtils.rm_rf(out)
+  end
+
+  def test_partitioned_generation_masks_disabled_ni_features
+    params = {
+      'data_width' => 64,
+      'flit_width' => 128,
+      'addr_width' => 32,
+      'ni_features' => {
+        'credit_flow' => false,
+        'qos' => false,
+        'trace' => false
+      }
+    }
+    ep = Endpoint.new('ep_cpu0', 'master', 'axi4', 64)
+    xp = Xp.new('xp0', 0, 0, ['ep_cpu0'])
+    noc = NocConfig.new('masked_ni', '1.0', params, [xp], [], [ep])
+    out = Dir.mktmpdir
+
+    RtlGenerator.new(noc, File.join(__dir__, '..', 'template')).generate_partitioned(out)
+
+    ni = File.read(Dir[File.join(out, 'ni_*', 'masked_ni_ni_*.v')].first)
+    top = File.read(File.join(out, 'masked_ni_top.v'))
+    assert_match(/fp_ni_protocol_decode/, ni)
+    refute_match(/fp_ni_credit_flow/, ni)
+    refute_match(/fp_ni_qos_classifier/, ni)
+    refute_match(/fp_ni_trace_probe/, ni)
+    refute_match(/ni_ep_cpu0_qos_class/, top)
+    refute_match(/ni_ep_cpu0_tx_credit_valid/, top)
+  ensure
+    FileUtils.rm_rf(out)
+  end
+
+  def test_framework_stub_templates_are_available_for_generated_instances
+    expected = %w[
+      fp_ni_credit_flow.sv
+      fp_ni_error_check.sv
+      fp_ni_protocol_decode.sv
+      fp_ni_qos_classifier.sv
+      fp_ni_request_queue.sv
+      fp_ni_response_queue.sv
+      fp_ni_trace_probe.sv
+      fp_xp_channel_switch.sv
+      fp_xp_credit_accounting.sv
+      fp_xp_route_decode.sv
+    ]
+
+    assert_equal expected, STUB_TEMPLATES.map { |path| File.basename(path) }
+  end
+
+  def test_partitioned_generation_emits_framework_stubs
+    noc = JsonParser.parse(EXAMPLE)
+    out = Dir.mktmpdir
+    RtlGenerator.new(noc, File.join(__dir__, '..', 'template')).generate_partitioned(out)
+
+    assert_equal STUB_TEMPLATES.map { |path| File.basename(path) },
+                 Dir[File.join(out, 'stubs', '*.sv')].sort.map { |path| File.basename(path) }
   ensure
     FileUtils.rm_rf(out)
   end
@@ -425,7 +492,8 @@ class TestNiMultiEndpoint < Minitest::Test
 
   def test_verilator_lint_clean
     skip 'verilator not found' unless system('which verilator > /dev/null 2>&1')
-    assert system("verilator --lint-only --sv #{@file} 2>/dev/null"), "lint failed on multi-endpoint NI"
+    files = ([ @file ] + STUB_TEMPLATES).join(' ')
+    assert system("verilator --lint-only --sv -Wno-MULTITOP #{files} 2>/dev/null"), "lint failed on multi-endpoint NI"
   end
 end
 
@@ -547,7 +615,8 @@ class TestVerilatorLint < Minitest::Test
       gen.render('xp.sv.erb', File.join(out, "#{xp.id}.sv"))
     end
     Dir[File.join(out, '*.sv')].each do |f|
-      assert system("verilator --lint-only --sv #{f} 2>/dev/null"), "lint failed: #{File.basename(f)}"
+      files = ([ f ] + STUB_TEMPLATES).join(' ')
+      assert system("verilator --lint-only --sv -Wno-MULTITOP #{files} 2>/dev/null"), "lint failed: #{File.basename(f)}"
     end
   ensure
     FileUtils.rm_rf(out)
@@ -568,8 +637,8 @@ class TestVerilatorLint < Minitest::Test
       gen.render('ni.sv.erb', File.join(out, "ni_xp_#{xp.id}.sv"))
     end
     gen.render('top.v.erb', File.join(out, 'top.v'))
-    files = Dir[File.join(out, '*.{sv,v}')].join(' ')
-    assert system("verilator --lint-only -Wno-UNUSEDSIGNAL -Wno-UNUSEDPARAM #{files} 2>&1 | grep -v Warning"), "top lint failed"
+    files = (Dir[File.join(out, '*.{sv,v}')] + STUB_TEMPLATES).join(' ')
+    assert system("verilator --lint-only -Wno-UNUSEDSIGNAL -Wno-UNUSEDPARAM -Wno-MULTITOP #{files} 2>&1 | grep -v Warning"), "top lint failed"
   ensure
     FileUtils.rm_rf(out)
   end

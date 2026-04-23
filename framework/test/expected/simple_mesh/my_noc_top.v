@@ -17,6 +17,7 @@
 //  - master_count   : 2
 //  - slave_count    : 2
 //  - variant_mode   : per-xp router modules
+//  - ni_mode        : per-xp ni modules
 //#
 //# Global Configuration Parameters
 //# ===============================
@@ -175,27 +176,39 @@ module my_noc_top #(
 
   logic [FLIT_WIDTH-1:0] ni_ep_cpu0_to_router_flit;
   logic [FLIT_WIDTH-1:0] router_to_ni_ep_cpu0_flit;
+
   logic                  ni_ep_cpu0_tx_credit_valid;
   logic                  ni_ep_cpu0_rx_credit_valid;
+
   logic [3:0]            ni_ep_cpu0_qos_class;
+
 
   logic [FLIT_WIDTH-1:0] ni_ep_cpu1_to_router_flit;
   logic [FLIT_WIDTH-1:0] router_to_ni_ep_cpu1_flit;
+
   logic                  ni_ep_cpu1_tx_credit_valid;
   logic                  ni_ep_cpu1_rx_credit_valid;
+
   logic [3:0]            ni_ep_cpu1_qos_class;
+
 
   logic [FLIT_WIDTH-1:0] ni_ep_mem0_to_router_flit;
   logic [FLIT_WIDTH-1:0] router_to_ni_ep_mem0_flit;
+
   logic                  ni_ep_mem0_tx_credit_valid;
   logic                  ni_ep_mem0_rx_credit_valid;
+
   logic [3:0]            ni_ep_mem0_qos_class;
+
 
   logic [FLIT_WIDTH-1:0] ni_ep_mem1_to_router_flit;
   logic [FLIT_WIDTH-1:0] router_to_ni_ep_mem1_flit;
+
   logic                  ni_ep_mem1_tx_credit_valid;
   logic                  ni_ep_mem1_rx_credit_valid;
+
   logic [3:0]            ni_ep_mem1_qos_class;
+
 
 
   //# Router Instance Stitching
