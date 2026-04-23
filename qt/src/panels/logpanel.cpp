@@ -1,5 +1,6 @@
-// LogPanel renders validation output and exposes click-to-select graph elements.
+// LogPanel renders application activity and exposes click-to-select validation elements.
 #include "panels/logpanel.h"
+#include <QDateTime>
 #include <QVBoxLayout>
 
 LogPanel::LogPanel(QWidget* parent) : QWidget(parent) {
@@ -12,9 +13,31 @@ LogPanel::LogPanel(QWidget* parent) : QWidget(parent) {
     connect(m_listWidget, &QListWidget::itemClicked, this, &LogPanel::onItemClicked);
 }
 
-// Display validation results with color-coded severity
+// Append validation results with color-coded severity.
 void LogPanel::setResults(const QList<ValidationResult>& results) {
-    clear();
+    int errorCount = 0;
+    int warningCount = 0;
+    for (const auto& result : results) {
+        if (result.severity() == ValidationSeverity::Error) {
+            ++errorCount;
+        } else {
+            ++warningCount;
+        }
+    }
+
+    if (errorCount > 0) {
+        appendMessage(QString("[Validation] Failed: %1 error(s), %2 warning(s).")
+                          .arg(errorCount)
+                          .arg(warningCount),
+                      QColor(220, 50, 50));
+    } else if (warningCount > 0) {
+        appendMessage(QString("[Validation] Completed with %1 warning(s).")
+                          .arg(warningCount),
+                      QColor(200, 150, 50));
+    } else {
+        appendMessage(QStringLiteral("[Validation] Passed: no errors or warnings."),
+                      QColor(40, 140, 80));
+    }
 
     for (const auto& result : results) {
         const QString prefix = result.severity() == ValidationSeverity::Error
@@ -31,9 +54,11 @@ void LogPanel::appendMessage(const QString& message,
                              const QColor& color,
                              const QString& elementId) {
     auto* item = new QListWidgetItem();
+    const QString timestamp = QDateTime::currentDateTime().toString(QStringLiteral("yyyy-MM-dd HH:mm:ss"));
+    const QString timestampedMessage = QStringLiteral("[%1] %2").arg(timestamp, message);
     item->setText(elementId.isEmpty()
-        ? message
-        : QString("%1 [%2]").arg(message, elementId));
+        ? timestampedMessage
+        : QString("%1 [%2]").arg(timestampedMessage, elementId));
     item->setData(Qt::UserRole, elementId);
 
     if (color.isValid()) {

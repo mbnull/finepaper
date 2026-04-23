@@ -1,4 +1,4 @@
-// LogPanel displays validation results and allows clicking to select elements
+// LogPanel displays application activity and allows clicking validation entries to select elements.
 #ifndef LOGPANEL_H
 #define LOGPANEL_H
 

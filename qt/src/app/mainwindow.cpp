@@ -333,7 +333,7 @@ void MainWindow::setupPanels() {
 }
 
 void MainWindow::setupConnections() {
-    // Keep selection synchronized between validation log, canvas, and property panel.
+    // Keep validation-entry selection synchronized between the log, canvas, and property panel.
     connect(m_logPanel, &LogPanel::elementSelected, m_nodeEditor, &NodeEditorWidget::highlightElement);
     connect(m_nodeEditor,
             &NodeEditorWidget::moduleSelected,
@@ -487,7 +487,7 @@ void MainWindow::setupDocks() {
 
     m_paletteDock = createDock("Palette", m_palette, Qt::LeftDockWidgetArea, "paletteDock");
     m_propertyDock = createDock("Properties", m_propertyPanel, Qt::RightDockWidgetArea, "propertyDock");
-    m_logDock = createDock("Validation Log", m_logPanel, Qt::BottomDockWidgetArea, "logDock");
+    m_logDock = createDock("Activity Log", m_logPanel, Qt::BottomDockWidgetArea, "logDock");
 
     setCorner(Qt::BottomLeftCorner, Qt::LeftDockWidgetArea);
     setCorner(Qt::BottomRightCorner, Qt::RightDockWidgetArea);
