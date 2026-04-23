@@ -73,8 +73,13 @@ class RtlGenerator
   end
 
   def xp_signature(xp)
-    present = link_directions_for(xp).map { |link| link[:name] }
-    DIRECTION_ORDER.map { |dir| present.include?(dir[:name]) ? dir[:abbr] : '0' }.join
+    counts = link_directions_for(xp).map { |link| link[:name] }.tally
+    DIRECTION_ORDER.map do |dir|
+      count = counts.fetch(dir[:name], 0)
+      next '0' if count.zero?
+
+      count == 1 ? dir[:abbr] : "#{dir[:abbr]}#{count}"
+    end.join
   end
 
   def xp_variant_filename(variant)
@@ -82,17 +87,21 @@ class RtlGenerator
   end
 
   def link_directions_for(xp)
-    @noc.connections.filter_map do |conn|
+    links = @noc.connections.each_with_index.filter_map do |conn, index|
       next unless conn.from == xp.id || conn.to == xp.id
 
       neighbor_id = conn.from == xp.id ? conn.to : conn.from
       neighbor = @noc.xps.find { |candidate| candidate.id == neighbor_id }
+      next unless neighbor
+
       direction = direction_for_connection(xp, neighbor, conn)
       next unless direction
 
       direction_meta = DIRECTION_ORDER.find { |dir| dir[:name] == direction }
-      direction_meta.merge(neighbor: neighbor, connection: conn)
-    end.sort_by { |link| DIRECTION_ORDER.index { |dir| dir[:name] == link[:name] } }
+      direction_meta.merge(neighbor: neighbor, connection: conn, index: index)
+    end.sort_by { |link| [DIRECTION_ORDER.index { |dir| dir[:name] == link[:name] }, link[:index]] }
+
+    add_unique_ports(links)
   end
 
   private
@@ -121,6 +130,19 @@ class RtlGenerator
     return conn.from == xp.id ? direction : OPPOSITE_DIRECTION[direction] if direction
 
     infer_direction_from_position(xp, neighbor)
+  end
+
+  def add_unique_ports(links)
+    counts = links.map { |link| link[:name] }.tally
+    seen = Hash.new(0)
+
+    links.map do |link|
+      count = counts.fetch(link[:name])
+      ordinal = seen[link[:name]]
+      seen[link[:name]] += 1
+      port = count == 1 ? link[:abbr] : "#{link[:abbr]}#{ordinal}"
+      link.merge(port: port)
+    end
   end
 
   def normalize_direction(direction)

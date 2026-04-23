@@ -52,9 +52,10 @@ module <%= @name %>_top #(
     # Connect to neighboring routers
     if variant_mode
       @xp_link_directions_by_id.fetch(xp.id).each do |link|
-        nb = link[:neighbor] %>,
-    .flit_out_<%= link[:abbr] %>(link_<%= xp.id %>_to_<%= nb.id %>_flit),
-    .flit_in_<%= link[:abbr] %>(link_<%= nb.id %>_to_<%= xp.id %>_flit)<% end
+        nb = link[:neighbor]
+        port = link[:port] || link[:abbr] %>,
+    .flit_out_<%= port %>(link_<%= xp.id %>_to_<%= nb.id %>_flit),
+    .flit_in_<%= port %>(link_<%= nb.id %>_to_<%= xp.id %>_flit)<% end
     else
       xp.neighbors(self).each do |nb|
         conn = @connections.find { |c| (c.from == xp.id && c.to == nb.id) || (c.to == xp.id && c.from == nb.id) }

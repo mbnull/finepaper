@@ -94,6 +94,15 @@ class TestDrcRunner < Minitest::Test
     assert_raises(RuntimeError) { DrcRunner.new.run(noc) }
   end
 
+  def test_raises_on_connection_with_missing_xp
+    require 'model/connection'
+    xp = Xp.new('xp0', 0, 0, [])
+    noc = NocConfig.new('t', '1', {}, [xp], [Connection.new('xp0', 'missing', 'east')], [])
+
+    err = assert_raises(RuntimeError) { DrcRunner.new.run(noc) }
+    assert_match(/unknown target XP 'missing'/, err.message)
+  end
+
   def test_raises_on_invalid_buffer_depth
     require 'model/endpoint'
     ep = Endpoint.new('ep1', 'master', 'axi4', 64, { buffer_depth: 0 })
@@ -310,6 +319,39 @@ class TestRtlGenerator < Minitest::Test
     xp = File.read(File.join(out, 'xp_e000_ep3', 'multi_ep_noc_xp_e000_ep3.v'))
     assert_match(/module xp_router_e000_ep3/, xp)
     assert_match(/local2_flit_out/, xp)
+  ensure
+    FileUtils.rm_rf(out)
+  end
+
+  def test_partitioned_generation_disambiguates_same_direction_ports
+    xps = [
+      Xp.new('xp0', 0, 0, []),
+      Xp.new('xp1', 1, 0, []),
+      Xp.new('xp2', 2, 0, [])
+    ]
+    connections = [
+      Connection.new('xp0', 'xp1', 'east'),
+      Connection.new('xp0', 'xp2', 'east')
+    ]
+    params = { 'data_width' => 64, 'flit_width' => 128, 'addr_width' => 32 }
+    noc = NocConfig.new('same_dir', '1.0', params, xps, connections, [])
+    out = Dir.mktmpdir
+
+    RtlGenerator.new(noc, File.join(__dir__, '..', 'template')).generate_partitioned(out)
+
+    xp = File.read(File.join(out, 'xp_e2000_ep0', 'same_dir_xp_e2000_ep0.v'))
+    assert_match(/flit_in_e0/, xp)
+    assert_match(/flit_out_e0/, xp)
+    assert_match(/flit_in_e1/, xp)
+    assert_match(/flit_out_e1/, xp)
+    assert_equal 1, xp.scan(/flit_in_e0/).size
+    assert_equal 1, xp.scan(/flit_in_e1/).size
+
+    top = File.read(File.join(out, 'same_dir_top.v'))
+    assert_match(/\.flit_out_e0\(link_xp0_to_xp1_flit\)/, top)
+    assert_match(/\.flit_in_e0\(link_xp1_to_xp0_flit\)/, top)
+    assert_match(/\.flit_out_e1\(link_xp0_to_xp2_flit\)/, top)
+    assert_match(/\.flit_in_e1\(link_xp2_to_xp0_flit\)/, top)
   ensure
     FileUtils.rm_rf(out)
   end

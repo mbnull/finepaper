@@ -3,6 +3,7 @@ class DrcBase
 end
 
 require_relative 'endpoint_drc'
+require_relative 'connection_drc'
 require_relative 'xp_drc'
 
 class UniqueXpIds < DrcBase
@@ -16,6 +17,7 @@ class DrcRunner
     @drcs = [
       UniqueXpIds.new,
       UniqueEndpointIds.new,
+      ConnectionXpReferences.new,
       ValidEndpointConfig.new,
       EndpointBufferDepth.new,
       EndpointProtocol.new,

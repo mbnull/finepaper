@@ -18,8 +18,9 @@ module <%= module_name %> #(
     # Variant XP modules use direction-based ports so one module can be reused
     # by every coordinate with the same E/W/N/S connectivity.
     @xp_port_directions.each do |link|
-      ports << "  // Link #{link[:abbr].upcase}\n  input  logic [FLIT_WIDTH-1:0] flit_in_#{link[:abbr]}"
-      ports << "  output logic [FLIT_WIDTH-1:0] flit_out_#{link[:abbr]}"
+      port = link[:port] || link[:abbr]
+      ports << "  // Link #{port.upcase}\n  input  logic [FLIT_WIDTH-1:0] flit_in_#{port}"
+      ports << "  output logic [FLIT_WIDTH-1:0] flit_out_#{port}"
     end
     local_port_count.times do |idx|
       ports << "  input  logic [FLIT_WIDTH-1:0] local#{idx}_flit_in"
