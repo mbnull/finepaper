@@ -6,6 +6,7 @@
 #include <QString>
 #include <QStringList>
 #include <QHash>
+#include <QList>
 #include <QSize>
 #include <QVector>
 #include <optional>
@@ -13,6 +14,7 @@
 #include <memory>
 
 class ModuleProvider;
+struct PluginDescriptor;
 
 struct ModuleParameterChoice {
     QString value;
@@ -42,6 +44,7 @@ struct ModuleType {
     std::vector<Port> defaultPorts;
     QHash<QString, Parameter> defaultParameters;
     QHash<QString, ModuleParameterMetadata> parameterMetadata;
+    QString pluginId;
     QString paletteLabel;
     QString description;
     QString nodeColor;
@@ -73,12 +76,21 @@ struct ModuleType {
 
 class ModuleRegistry {
 public:
+    enum class LoadMode {
+        Auto,
+        Empty
+    };
+
     static ModuleRegistry& instance();
+
+    explicit ModuleRegistry(LoadMode loadMode = LoadMode::Auto);
 
     // Adds a provider and imports all types it exposes.
     void addProvider(std::unique_ptr<ModuleProvider> provider);
-    // Inserts or replaces one module type definition in the registry.
-    void registerType(const ModuleType& type);
+    // Inserts one module type definition; duplicate type names are skipped.
+    bool registerType(const ModuleType& type);
+    // Imports module types from plugin manifests.
+    bool loadPlugins(const QList<PluginDescriptor>& plugins);
     // Looks up type metadata by canonical type name.
     const ModuleType* getType(const QString& name) const;
     // Looks up the first type that belongs to a graph group (e.g., "xps", "endpoints").
@@ -87,6 +99,5 @@ public:
     QStringList availableTypes() const;
 
 private:
-    ModuleRegistry();
     QHash<QString, ModuleType> m_types;
 };

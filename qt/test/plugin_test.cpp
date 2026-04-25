@@ -1,5 +1,6 @@
 // Plugin system tests for manifest discovery and command metadata.
 #include "plugins/pluginregistry.h"
+#include "modules/moduleregistry.h"
 #include "modules/moduleprovider.h"
 
 #include <QCoreApplication>
@@ -51,6 +52,35 @@ void testPluginManifestLoadsRelativePaths() {
     require(plugins.first().generator.hasGenerator(), "generator should be retained");
 }
 
+void testModuleTypesKeepPluginOwnershipAndSkipDuplicates() {
+    QTemporaryDir temp;
+    require(temp.isValid(), "temporary directory should be valid");
+
+    QDir root(temp.path());
+    require(root.mkpath(QStringLiteral("first")), "failed to create first plugin");
+    require(root.mkpath(QStringLiteral("second")), "failed to create second plugin");
+    const QByteArray moduleXml = QByteArrayLiteral(R"xml(<module-bundle>
+      <module name="Shared" palette_label="Shared" graph_group="demo">
+        <ports><port id="in" direction="input" type="bus" name="IN"/></ports>
+        <parameters><parameter name="width" type="int" default="32"/></parameters>
+      </module>
+    </module-bundle>)xml");
+    writeFile(root.filePath(QStringLiteral("first/modules.xml")), moduleXml);
+    writeFile(root.filePath(QStringLiteral("second/modules.xml")), moduleXml);
+    writeFile(root.filePath(QStringLiteral("first/plugin.json")),
+              QByteArrayLiteral(R"json({"id":"first","name":"First","version":"1","modules":"modules.xml"})json"));
+    writeFile(root.filePath(QStringLiteral("second/plugin.json")),
+              QByteArrayLiteral(R"json({"id":"second","name":"Second","version":"1","modules":"modules.xml"})json"));
+
+    ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
+    registry.loadPlugins(PluginRegistry::discover({temp.path()}));
+
+    const ModuleType* type = registry.getType(QStringLiteral("Shared"));
+    require(type != nullptr, "Shared type should load");
+    require(type->pluginId == QStringLiteral("first"), "duplicate type should keep first plugin owner");
+    require(registry.availableTypes().size() == 1, "duplicate type name should be skipped");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -58,6 +88,7 @@ int main(int argc, char** argv) {
 
     try {
         testPluginManifestLoadsRelativePaths();
+        testModuleTypesKeepPluginOwnershipAndSkipDuplicates();
     } catch (const std::exception& error) {
         std::cerr << "plugin_test failed: " << error.what() << '\n';
         return 1;

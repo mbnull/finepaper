@@ -56,8 +56,11 @@ add_qt_test_target("graph_test", "test/graph_test.cpp", {
     "src/**/frameworkpaths.cpp",
     "src/**/moduleregistry.cpp",
     "src/**/moduleprovider.cpp",
+    "src/**/pluginregistry.cpp",
     "inc/**/graph.h",
-    "inc/**/module.h"
+    "inc/**/module.h",
+    "inc/**/pluginregistry.h",
+    "inc/**/plugindescriptor.h"
 })
 
 add_qt_test_target("commandmanager_test", "test/commandmanager_test.cpp", {
@@ -76,8 +79,11 @@ add_qt_test_target("validation_test", "test/validation_test.cpp", {
     "src/**/frameworkpaths.cpp",
     "src/**/moduleregistry.cpp",
     "src/**/moduleprovider.cpp",
+    "src/**/pluginregistry.cpp",
     "inc/**/graph.h",
-    "inc/**/module.h"
+    "inc/**/module.h",
+    "inc/**/pluginregistry.h",
+    "inc/**/plugindescriptor.h"
 })
 
 add_qt_test_target("uiscale_test", "test/uiscale_test.cpp", {
