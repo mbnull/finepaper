@@ -6,7 +6,7 @@ add_requires("nodeeditor")
 
 target("qt")
     add_rules("qt.widgetapp")
-    set_languages("c++20")
+    set_languages("c++23")
 
     add_packages("nodeeditor")
     add_headerfiles("inc/**.h")
@@ -34,7 +34,7 @@ local function add_qt_test_target(name, source_files, extra_files)
         set_kind("binary")
         set_group("test")
         set_default(false)
-        set_languages("c++20")
+        set_languages("c++23")
 
         add_includedirs("inc")
         add_files(source_files)
