@@ -7,7 +7,7 @@ The application follows a simple layered structure:
 - Model: `Graph`, `Module`, `Connection`, `Port`, `Parameter`
 - Command layer: undoable mutations wrapped in `Command` subclasses
 - UI layer: Qt Widgets and QtNodes views driven by model signals
-- Validation/integration layer: local validators plus the external framework runner
+- Plugin/integration layer: startup plugin discovery, local validators, and plugin generator runners
 
 The main rule in the codebase is that the `Graph` is the source of truth. UI widgets should not mutate persistent design state directly. User actions are converted into commands, commands modify the graph, and graph signals update the UI.
 
@@ -26,6 +26,8 @@ The main rule in the codebase is that the `Graph` is the source of truth. UI wid
 - one `PropertyPanel`
 - one `LogPanel`
 - one `ValidationManager`
+
+Before module metadata is used, `PluginRegistry` discovers plugin manifests from `FINEPAPER_PLUGIN_PATH` and repository-local `plugins/` directories. Discovery is startup-only. The registry stores directory plugin metadata and native plugin metadata, but native libraries are not loaded in this version.
 
 ### 2. Core model
 
@@ -98,14 +100,16 @@ All edits are committed through `SetParameterCommand`.
 
 Module definitions are data-driven.
 
-`ModuleRegistry` loads `ModuleType` entries from a composed `ModuleProvider`.
+`ModuleRegistry` loads `ModuleType` entries from startup-discovered plugin manifests. If no plugin modules are available, it can still fall back to legacy bundle discovery for older launches and tests.
 
-The current provider stack is:
+For each plugin, the provider stack is:
 
 - `XmlModuleTypeSource` for the IP-core bundle metadata
 - `XmlModuleGraphicsOverlay` for per-IP graphics files
 - `JsonModuleTypeSource` plus `XmlModulePresentationOverlay` for authored JSON and older presentation overlays
 - `LayeredModuleProvider` to combine the source and optional overlays
+
+Each loaded `ModuleType` stores the owning `pluginId`. Type names are unique in the current registry; duplicate type names from later plugins are skipped.
 
 Bundle metadata controls:
 
@@ -136,11 +140,12 @@ Local validation:
 External validation:
 
 - `DRCRunner` exports framework JSON to a temporary file
-- runs `ruby bin/generate`
+- resolves the single plugin used by the graph
+- runs that plugin's declared generator command
 - parses stderr into `ValidationResult` objects
 - maps external IDs back to internal graph IDs when possible
 
-Generation reuses the same framework discovery path and writes framework JSON into the chosen output directory before invoking the Ruby generator.
+Generation uses the same plugin generator resolution and writes framework JSON into the chosen output directory before invoking the plugin command. If the graph uses modules from multiple plugins, generation fails with a clear message because cross-plugin orchestration is reserved for a later phase.
 
 ## Data flow examples
 
@@ -171,8 +176,9 @@ Generation reuses the same framework discovery path and writes framework JSON in
 
 ## Operational assumptions
 
-- The external framework uses Ruby and provides `bin/generate`.
-- Module bundles are preferably expressed as `modules.xml` plus per-IP graphics files. Authored JSON and IP-XACT are conversion inputs, not the preferred runtime layout.
+- Plugins are directories with `plugin.json`; the bundled NoC plugin uses Ruby and provides `generator/bin/generate`.
+- Module bundles are preferably expressed as plugin-owned `modules.xml` plus per-IP graphics files. Authored JSON and IP-XACT are conversion inputs, not the preferred runtime layout.
+- Native plugin metadata may be present in `plugin.json`, but C++ dynamic libraries are not loaded yet.
 - Position is stored as module parameters such as `x` and `y`.
 - Some editor-only state, such as `collapsed`, is intentionally omitted from framework export.
 
@@ -180,5 +186,6 @@ Generation reuses the same framework discovery path and writes framework JSON in
 
 - Keep model mutations inside commands unless there is a strong reason not to.
 - Preserve the distinction between editor JSON and framework JSON.
+- Keep plugin discovery startup-only unless runtime reload is explicitly designed.
 - When adding new module categories or layouts, update metadata-driven checks instead of scattering type-name comparisons.
-- If framework output changes, update `DRCRunner::parseErrors()` and any ID-mapping assumptions together.
+- If plugin generator output changes, update `DRCRunner::parseErrors()` and any ID-mapping assumptions together.
