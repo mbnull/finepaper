@@ -1,6 +1,7 @@
 ipcore/
 .vscode/
 output/
+.worktrees/
 
 target/.humanize*
 
