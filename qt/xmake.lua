@@ -84,3 +84,14 @@ add_qt_test_target("uiscale_test", "test/uiscale_test.cpp", {
     "src/**/uiscale.cpp",
     "inc/**/uiscale.h"
 })
+
+add_qt_test_target("plugin_test", "test/plugin_test.cpp", {
+    "src/**/pluginregistry.cpp",
+    "src/**/moduleprovider.cpp",
+    "src/**/moduleregistry.cpp",
+    "src/**/frameworkpaths.cpp",
+    "src/**/parameter.cpp",
+    "src/**/port.cpp",
+    "inc/**/pluginregistry.h",
+    "inc/**/plugindescriptor.h"
+})
