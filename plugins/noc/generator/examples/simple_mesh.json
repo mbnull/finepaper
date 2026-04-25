@@ -1,0 +1,27 @@
+{
+  "name": "my_noc",
+  "version": "1.0",
+  "parameters": {
+    "data_width": 64,
+    "flit_width": 128,
+    "addr_width": 32
+  },
+  "xps": [
+    { "id": "xp_0_0", "x": 0, "y": 0, "endpoints": ["ep_cpu0"] },
+    { "id": "xp_1_0", "x": 1, "y": 0, "endpoints": ["ep_cpu1"] },
+    { "id": "xp_0_1", "x": 0, "y": 1, "endpoints": ["ep_mem0"] },
+    { "id": "xp_1_1", "x": 1, "y": 1, "endpoints": ["ep_mem1"] }
+  ],
+  "connections": [
+    { "from": "xp_0_0", "to": "xp_1_0", "dir": "east" },
+    { "from": "xp_0_0", "to": "xp_0_1", "dir": "south" },
+    { "from": "xp_1_0", "to": "xp_1_1", "dir": "south" },
+    { "from": "xp_0_1", "to": "xp_1_1", "dir": "east" }
+  ],
+  "endpoints": [
+    { "id": "ep_cpu0", "type": "master", "protocol": "axi4", "data_width": 64 },
+    { "id": "ep_cpu1", "type": "master", "protocol": "axi4", "data_width": 64 },
+    { "id": "ep_mem0", "type": "slave",  "protocol": "axi4", "data_width": 128 },
+    { "id": "ep_mem1", "type": "slave",  "protocol": "axi4", "data_width": 128 }
+  ]
+}

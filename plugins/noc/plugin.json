@@ -1,0 +1,23 @@
+{
+  "id": "finepaper.noc",
+  "name": "NoC",
+  "version": "1.0",
+  "modules": "modules.xml",
+  "graphics": "graphics",
+  "generator": {
+    "command": "ruby",
+    "args": [
+      "generator/bin/generate",
+      "-i",
+      "{input}",
+      "-o",
+      "{output}",
+      "-t",
+      "generator/template"
+    ]
+  },
+  "native": {
+    "enabled": false,
+    "library": ""
+  }
+}
