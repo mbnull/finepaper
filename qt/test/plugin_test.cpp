@@ -81,6 +81,27 @@ void testModuleTypesKeepPluginOwnershipAndSkipDuplicates() {
     require(registry.availableTypes().size() == 1, "duplicate type name should be skipped");
 }
 
+void testGeneratorArgumentsSubstituteInputAndOutput() {
+    PluginGeneratorDescriptor generator;
+    generator.command = QStringLiteral("ruby");
+    generator.args = {
+        QStringLiteral("generator/bin/generate"),
+        QStringLiteral("-i"),
+        QStringLiteral("{input}"),
+        QStringLiteral("-o"),
+        QStringLiteral("{output}"),
+        QStringLiteral("-t"),
+        QStringLiteral("generator/template")
+    };
+
+    const QStringList args = generator.arguments(QStringLiteral("/tmp/design.json"),
+                                                 QStringLiteral("/tmp/out"));
+
+    require(args.contains(QStringLiteral("/tmp/design.json")), "input placeholder should be substituted");
+    require(args.contains(QStringLiteral("/tmp/out")), "output placeholder should be substituted");
+    require(args.first() == QStringLiteral("generator/bin/generate"), "literal relative args should be preserved");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -89,6 +110,7 @@ int main(int argc, char** argv) {
     try {
         testPluginManifestLoadsRelativePaths();
         testModuleTypesKeepPluginOwnershipAndSkipDuplicates();
+        testGeneratorArgumentsSubstituteInputAndOutput();
     } catch (const std::exception& error) {
         std::cerr << "plugin_test failed: " << error.what() << '\n';
         return 1;

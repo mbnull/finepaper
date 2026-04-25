@@ -2,13 +2,13 @@
 // Layout: horizontal splitter (palette | node editor | property panel)
 // inside a vertical splitter with the log panel below.
 #include "app/mainwindow.h"
-#include "common/frameworkpaths.h"
 #include "graph/graph.h"
 #include "commands/commandmanager.h"
 #include "nodeeditor/nodeeditorwidget.h"
 #include "panels/propertypanel.h"
 #include "panels/palette.h"
 #include "panels/logpanel.h"
+#include "plugins/generatorrunner.h"
 #include "validation/validationmanager.h"
 #include <QAction>
 #include <QApplication>
@@ -196,17 +196,6 @@ void MainWindow::generateVerilog() {
         return;
     }
 
-    const QString frameworkPath = FrameworkPaths::resolveFrameworkPath();
-    const QString templatePath = FrameworkPaths::resolveTemplatePath();
-    if (frameworkPath.isEmpty() || templatePath.isEmpty()) {
-        m_logPanel->appendMessage("[Generate] Framework not found for ../framework/bin/generate or ../framework/template.",
-                                  QColor(220, 50, 50));
-        QMessageBox::warning(this,
-                             "Framework Not Found",
-                             "Could not find ../framework. Set FRAMEWORK_PATH or keep framework/ next to this repository.");
-        return;
-    }
-
     QDir outputDir(outputDirectory);
     if (!outputDir.mkpath(".")) {
         m_logPanel->appendMessage("[Generate] Could not create output folder: " + outputDirectory,
@@ -220,6 +209,17 @@ void MainWindow::generateVerilog() {
     // Persist the editor graph as framework-flavored JSON, then call generator.
     const QString designName = sanitizedDesignName(outputDirectory);
     const QString jsonPath = outputDir.filePath(designName + ".json");
+    const GeneratorCommand generatorCommand =
+        GeneratorRunner::resolveForGraph(m_graph, jsonPath, outputDirectory);
+    if (!generatorCommand.valid) {
+        m_logPanel->appendMessage("[Generate] " + generatorCommand.errorMessage,
+                                  QColor(220, 50, 50));
+        QMessageBox::warning(this,
+                             "Generator Not Available",
+                             generatorCommand.errorMessage);
+        return;
+    }
+
     QFile jsonFile(jsonPath);
     if (!jsonFile.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
         m_logPanel->appendMessage("[Generate] Could not write JSON: " + jsonPath,
@@ -236,27 +236,24 @@ void MainWindow::generateVerilog() {
                               QColor(70, 110, 190));
     m_logPanel->appendMessage(QString("[Generate] JSON=%1").arg(jsonPath),
                               QColor(70, 110, 190));
+    m_logPanel->appendMessage(QString("[Generate] Plugin=%1").arg(generatorCommand.pluginId),
+                              QColor(70, 110, 190));
 
     statusBar()->showMessage("Generating Verilog...");
     QApplication::setOverrideCursor(Qt::WaitCursor);
 
-    // Run framework generator synchronously so UI status/logging reflects one
+    // Run plugin generator synchronously so UI status/logging reflects one
     // complete operation from start to finish.
     QProcess proc;
-    proc.setWorkingDirectory(frameworkPath);
-    proc.start("ruby", {
-        "bin/generate",
-        "-i", jsonPath,
-        "-o", outputDirectory,
-        "-t", templatePath
-    });
+    proc.setWorkingDirectory(generatorCommand.workingDirectory);
+    proc.start(generatorCommand.command, generatorCommand.arguments);
 
     const bool started = proc.waitForStarted();
     const bool finished = started && proc.waitForFinished(-1);
     QApplication::restoreOverrideCursor();
 
     if (!started) {
-        const QString error = "Failed to start framework generator: " + proc.errorString();
+        const QString error = "Failed to start plugin generator: " + proc.errorString();
         qWarning() << error;
         m_logPanel->appendMessage("[Generate] " + error, QColor(220, 50, 50));
         statusBar()->showMessage(error, 5000);

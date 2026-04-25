@@ -1,9 +1,10 @@
 // DRCRunner serializes the graph, invokes external DRC, and maps findings back to editor IDs.
 #include "validation/drcrunner.h"
-#include "common/frameworkpaths.h"
 #include "graph/graph.h"
 #include "modules/modulelabels.h"
+#include "plugins/generatorrunner.h"
 #include <QProcess>
+#include <QTemporaryDir>
 #include <QTemporaryFile>
 #include <QRegularExpression>
 
@@ -29,15 +30,23 @@ QList<ValidationResult> DRCRunner::validate(const Graph* graph) {
                                  "DRC")};
     }
 
-    const QString frameworkPath = FrameworkPaths::resolveFrameworkPath();
-    const QString templatePath = FrameworkPaths::resolveTemplatePath();
-    if (frameworkPath.isEmpty() || templatePath.isEmpty()) {
-        return {ValidationResult(ValidationSeverity::Error, "Framework not found. Set FRAMEWORK_PATH or place framework/ in parent directory.", "", "DRC")};
+    QTemporaryDir outputDir;
+    if (!outputDir.isValid()) {
+        return {ValidationResult(ValidationSeverity::Error,
+                                 "DRC validation failed: could not create temporary output directory",
+                                 "",
+                                 "DRC")};
+    }
+
+    const GeneratorCommand generatorCommand =
+        GeneratorRunner::resolveForGraph(graph, tmpFile.fileName(), outputDir.path());
+    if (!generatorCommand.valid) {
+        return {ValidationResult(ValidationSeverity::Error, generatorCommand.errorMessage, "", "DRC")};
     }
 
     QProcess proc;
-    proc.setWorkingDirectory(frameworkPath);
-    proc.start("ruby", {"bin/generate", "-i", tmpFile.fileName(), "-o", "/tmp", "-t", templatePath});
+    proc.setWorkingDirectory(generatorCommand.workingDirectory);
+    proc.start(generatorCommand.command, generatorCommand.arguments);
 
     if (!proc.waitForStarted()) {
         return {ValidationResult(ValidationSeverity::Error, "DRC process failed to start: " + proc.errorString(), "", "DRC")};

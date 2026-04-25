@@ -9,6 +9,16 @@ struct PluginGeneratorDescriptor {
     QStringList args;
 
     bool hasGenerator() const { return !command.trimmed().isEmpty(); }
+    QStringList arguments(const QString& inputPath, const QString& outputDirectory) const {
+        QStringList resolved;
+        resolved.reserve(args.size());
+        for (QString arg : args) {
+            arg.replace(QStringLiteral("{input}"), inputPath);
+            arg.replace(QStringLiteral("{output}"), outputDirectory);
+            resolved.append(arg);
+        }
+        return resolved;
+    }
 };
 
 struct PluginNativeDescriptor {
