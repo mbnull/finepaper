@@ -353,7 +353,7 @@ def main():
     parser = argparse.ArgumentParser(
         description="Convert authored JSON, IP-XACT, or module-bundle XML into the split XML IP-core bundle format."
     )
-    parser.add_argument("--json", help="Hand-authored JSON bundle input")
+    parser.add_argument("--json", help="Deprecated hand-authored JSON module bundle input")
     parser.add_argument("--xml", help="Existing module-bundle XML input")
     parser.add_argument("--ipxact", help="IEEE IP-XACT component XML input")
     parser.add_argument("--ui", help="Optional module-presentations XML overlay for JSON input")

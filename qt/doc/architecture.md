@@ -106,7 +106,7 @@ For each plugin, the provider stack is:
 
 - `XmlModuleTypeSource` for the IP-core bundle metadata
 - `XmlModuleGraphicsOverlay` for per-IP graphics files
-- `JsonModuleTypeSource` plus `XmlModulePresentationOverlay` for authored JSON and older presentation overlays
+- `JsonModuleTypeSource` plus `XmlModulePresentationOverlay` for deprecated authored JSON module bundles and older presentation overlays
 - `LayeredModuleProvider` to combine the source and optional overlays
 
 Each loaded `ModuleType` stores the owning `pluginId`. Type names are unique in the current registry; duplicate type names from later plugins are skipped.
@@ -177,7 +177,7 @@ Generation uses the same plugin generator resolution and writes framework JSON i
 ## Operational assumptions
 
 - Plugins are directories with `plugin.json`; the bundled NoC plugin uses Ruby and provides `generator/bin/generate`.
-- Module bundles are preferably expressed as plugin-owned `modules.xml` plus per-IP graphics files. Authored JSON and IP-XACT are conversion inputs, not the preferred runtime layout.
+- Module bundles are preferably expressed as plugin-owned `modules.xml` plus per-IP graphics files. Authored JSON module bundles are deprecated conversion inputs; IP-XACT remains a conversion input, not the preferred runtime layout.
 - Native plugin metadata may be present in `plugin.json`, but C++ dynamic libraries are not loaded yet.
 - Position is stored as module parameters such as `x` and `y`.
 - Some editor-only state, such as `collapsed`, is intentionally omitted from framework export.

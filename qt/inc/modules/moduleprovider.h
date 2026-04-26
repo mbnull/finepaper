@@ -36,7 +36,8 @@ private:
     QStringList m_orderedTypeNames;
 };
 
-// JsonModuleTypeSource loads authored JSON metadata that can also be converted into XML bundles.
+// Deprecated: JsonModuleTypeSource loads the old JSON module bundle format.
+// Prefer plugin-owned modules.xml plus per-IP graphics XML files.
 class JsonModuleTypeSource : public ModuleTypeSource {
 public:
     explicit JsonModuleTypeSource(const QString& bundlePath);

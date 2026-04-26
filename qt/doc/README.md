@@ -21,7 +21,7 @@ This project is a Qt Widgets application for building and validating SoC/NoC top
 - `bundles/modules.xml`: legacy local IP-core bundle fallback with ports, parameters, descriptions, and config metadata.
 - `bundles/graphics/*.xml`: per-IP graphics overlays used by the editor.
 - `deps/packages.lua`: xmake package declarations.
-- `tools/convert_module_bundle.py`: converts authored JSON, module-bundle XML, or IP-XACT into the split XML bundle format.
+- `tools/convert_module_bundle.py`: converts deprecated authored JSON module bundles, module-bundle XML, or IP-XACT into the split XML bundle format.
 - `docs/`: older working notes and reference material.
 - `doc/`: maintained project documentation.
 
@@ -169,7 +169,7 @@ If a module has no graphics overlay, the editor falls back to a simple node layo
 
 ## Converter
 
-To convert authored JSON into the split XML IP-core bundle format:
+To convert a deprecated authored JSON module bundle into the split XML IP-core bundle format:
 
 ```bash
 python3 tools/convert_module_bundle.py \

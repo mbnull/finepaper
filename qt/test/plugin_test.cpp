@@ -1,5 +1,6 @@
 // Plugin system tests for manifest discovery and command metadata.
 #include "plugins/pluginregistry.h"
+#include "plugins/startupdiagnostics.h"
 #include "modules/moduleregistry.h"
 #include "modules/moduleprovider.h"
 
@@ -102,6 +103,63 @@ void testGeneratorArgumentsSubstituteInputAndOutput() {
     require(args.first() == QStringLiteral("generator/bin/generate"), "literal relative args should be preserved");
 }
 
+void testStartupDiagnosticsListLoadedPluginsAndIpTypes() {
+    QTemporaryDir temp;
+    require(temp.isValid(), "temporary directory should be valid");
+
+    QDir root(temp.path());
+    require(root.mkpath(QStringLiteral("demo/graphics")), "failed to create plugin dirs");
+    writeFile(root.filePath(QStringLiteral("demo/modules.xml")),
+              QByteArrayLiteral(R"xml(<module-bundle>
+      <module name="Shared" palette_label="Shared" graph_group="demo">
+        <interfaces>
+          <interface id="bus" bus="demo_bus" role="initiator" connects_to="target" match="" />
+        </interfaces>
+        <ports><port id="out" direction="output" type="bus" name="OUT" interface="bus"/></ports>
+        <parameters><parameter name="width" type="int" default="32"/></parameters>
+      </module>
+    </module-bundle>)xml"));
+    writeFile(root.filePath(QStringLiteral("demo/plugin.json")),
+              QByteArrayLiteral(R"json({
+      "id": "finepaper.demo",
+      "name": "Demo",
+      "version": "1.0",
+      "modules": "modules.xml",
+      "graphics": "graphics",
+      "generator": {"command": "ruby", "args": ["generator/bin/generate"]}
+    })json"));
+
+    const QList<PluginDescriptor> plugins = PluginRegistry::discover({temp.path()});
+    ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
+    registry.loadPlugins(plugins);
+
+    const QStringList lines = StartupDiagnostics::logLines(plugins, registry);
+
+    require(lines.join('\n').contains(QStringLiteral("[Startup] Plugin finepaper.demo")),
+            "startup diagnostics should include loaded plugin id");
+    require(lines.join('\n').contains(QStringLiteral("Demo v1.0")),
+            "startup diagnostics should include plugin display name and version");
+    require(lines.join('\n').contains(QStringLiteral("[Startup] IP Shared")),
+            "startup diagnostics should include loaded IP type");
+    require(lines.join('\n').contains(QStringLiteral("plugin=finepaper.demo")),
+            "startup diagnostics should include IP plugin owner");
+    require(lines.join('\n').contains(QStringLiteral("ports=1 parameters=1 interfaces=1")),
+            "startup diagnostics should include IP metadata counts");
+}
+
+void testStartupDiagnosticsMarksJsonModuleBundlesDeprecated() {
+    PluginDescriptor plugin;
+    plugin.id = QStringLiteral("finepaper.legacy");
+    plugin.name = QStringLiteral("Legacy");
+    plugin.version = QStringLiteral("0.1");
+    plugin.modulesPath = QStringLiteral("/tmp/modules.json");
+
+    const QStringList lines = StartupDiagnostics::pluginLogLines({plugin});
+
+    require(lines.join('\n').contains(QStringLiteral("bundle=json(deprecated)")),
+            "JSON module bundle format should be marked deprecated");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -111,6 +169,8 @@ int main(int argc, char** argv) {
         testPluginManifestLoadsRelativePaths();
         testModuleTypesKeepPluginOwnershipAndSkipDuplicates();
         testGeneratorArgumentsSubstituteInputAndOutput();
+        testStartupDiagnosticsListLoadedPluginsAndIpTypes();
+        testStartupDiagnosticsMarksJsonModuleBundlesDeprecated();
     } catch (const std::exception& error) {
         std::cerr << "plugin_test failed: " << error.what() << '\n';
         return 1;

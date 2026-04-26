@@ -62,6 +62,7 @@ private slots:
                             QWidget* content,
                             Qt::DockWidgetArea area,
                             const QString& objectName);
+    void appendStartupLog() const;
     void scheduleStartupLayoutLog();
     void logStartupLayout() const;
     bool maybeSaveChanges(const QString& actionDescription);

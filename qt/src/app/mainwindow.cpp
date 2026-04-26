@@ -9,7 +9,10 @@
 #include "panels/palette.h"
 #include "panels/logpanel.h"
 #include "plugins/generatorrunner.h"
+#include "plugins/pluginregistry.h"
+#include "plugins/startupdiagnostics.h"
 #include "validation/validationmanager.h"
+#include "modules/moduleregistry.h"
 #include <QAction>
 #include <QApplication>
 #include <QCloseEvent>
@@ -122,6 +125,7 @@ MainWindow::MainWindow(QWidget *parent)
     updateWindowTitle();
     updateCommandActions();
     resize(1920, 1080);
+    appendStartupLog();
     scheduleStartupLayoutLog();
 }
 
@@ -523,6 +527,20 @@ QDockWidget* MainWindow::createDock(const QString& title,
                       QDockWidget::DockWidgetFloatable);
     addDockWidget(area, dock);
     return dock;
+}
+
+void MainWindow::appendStartupLog() const {
+    if (!m_logPanel) {
+        return;
+    }
+
+    const QStringList lines =
+        StartupDiagnostics::logLines(PluginRegistry::instance().plugins(),
+                                     ModuleRegistry::instance());
+    for (const QString& line : lines) {
+        qInfo().noquote() << line;
+        m_logPanel->appendMessage(line, QColor(70, 110, 190));
+    }
 }
 
 void MainWindow::scheduleStartupLayoutLog() {
