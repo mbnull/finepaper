@@ -1,0 +1,318 @@
+schema: v1
+kind: noc-definition
+name: NoC
+version: '1.0'
+
+buses:
+  ni_link:
+    description: Endpoint-to-router NoC interface.
+    compatibility:
+      roles:
+        initiator: [target]
+        target: [initiator]
+      match: [protocol, data_width]
+    config:
+      protocol:
+        type: string
+        enum: [axi4, chi]
+        default: axi4
+        description: Interface protocol.
+      data_width:
+        type: int
+        enum: [32, 64, 128]
+        default: 64
+        description: Data width in bits.
+    signals:
+      - name: flit
+        direction: initiator_to_target
+        width: FLIT_WIDTH
+      - name: valid
+        direction: initiator_to_target
+        width: 1
+      - name: ready
+        direction: target_to_initiator
+        width: 1
+
+  router_link:
+    description: Router-to-router NoC link.
+    compatibility:
+      roles:
+        peer: [peer]
+      match: []
+    config: {}
+    signals:
+      - name: flit
+        direction: peer_to_peer
+        width: FLIT_WIDTH
+      - name: valid
+        direction: peer_to_peer
+        width: 1
+      - name: ready
+        direction: peer_to_peer
+        width: 1
+
+modules:
+  XP:
+    palette_label: XP
+    graph_group: xps
+    description: Mesh router with four directional links and four local endpoint attachment slots.
+    identity:
+      external_id_prefix: xp
+      display_prefix: XP
+      width: 2
+      supports_mesh_coordinates: true
+    capabilities:
+      supports_collapse: true
+    interface_limits:
+      ni_link:
+        max: 4
+    parameters:
+      x:
+        type: int
+        default: 0
+        configurable: false
+        emit: attribute
+        description: Canvas X position.
+      y:
+        type: int
+        default: 0
+        configurable: false
+        emit: attribute
+        description: Canvas Y position.
+      display_name:
+        type: string
+        default: ''
+        emit: editor
+        label: Display name
+        description: Name shown on the canvas.
+      external_id:
+        type: string
+        default: ''
+        emit: editor
+        label: External ID
+        description: Framework-facing identifier.
+      collapsed:
+        type: bool
+        default: true
+        configurable: false
+        emit: editor_only
+        description: Collapsed editor state.
+      routing_algorithm:
+        type: string
+        enum: [xy, yx]
+        default: xy
+        emit: config
+        label: Routing algorithm
+        description: Router path selection strategy.
+      vc_count:
+        type: int
+        default: 2
+        emit: config
+        label: VC count
+        description: Virtual channel count.
+      buffer_depth:
+        type: int
+        default: 8
+        emit: config
+        label: Buffer depth
+        description: Depth of each input buffer.
+    interfaces:
+      local0:
+        bus: ni_link
+        role: target
+        accepts:
+          protocol: [axi4, chi]
+          data_width: [32, 64, 128]
+        port:
+          id: ep0
+          direction: output
+          type: bus
+          bus_type: ni_link
+          role: attachment
+          name: EP0
+          description: Local endpoint slot 0
+      local1:
+        bus: ni_link
+        role: target
+        accepts:
+          protocol: [axi4, chi]
+          data_width: [32, 64, 128]
+        port:
+          id: ep1
+          direction: output
+          type: bus
+          bus_type: ni_link
+          role: attachment
+          name: EP1
+          description: Local endpoint slot 1
+      local2:
+        bus: ni_link
+        role: target
+        accepts:
+          protocol: [axi4, chi]
+          data_width: [32, 64, 128]
+        port:
+          id: ep2
+          direction: output
+          type: bus
+          bus_type: ni_link
+          role: attachment
+          name: EP2
+          description: Local endpoint slot 2
+      local3:
+        bus: ni_link
+        role: target
+        accepts:
+          protocol: [axi4, chi]
+          data_width: [32, 64, 128]
+        port:
+          id: ep3
+          direction: output
+          type: bus
+          bus_type: ni_link
+          role: attachment
+          name: EP3
+          description: Local endpoint slot 3
+      north:
+        bus: router_link
+        role: peer
+        ports:
+          - id: north_in
+            direction: input
+            type: bus
+            bus_type: router_link
+            role: router
+            name: N
+            description: North router ingress
+          - id: north_out
+            direction: output
+            type: bus
+            bus_type: router_link
+            role: router
+            name: N
+            description: North router egress
+      east:
+        bus: router_link
+        role: peer
+        ports:
+          - id: east_in
+            direction: input
+            type: bus
+            bus_type: router_link
+            role: router
+            name: E
+            description: East router ingress
+          - id: east_out
+            direction: output
+            type: bus
+            bus_type: router_link
+            role: router
+            name: E
+            description: East router egress
+      south:
+        bus: router_link
+        role: peer
+        ports:
+          - id: south_in
+            direction: input
+            type: bus
+            bus_type: router_link
+            role: router
+            name: S
+            description: South router ingress
+          - id: south_out
+            direction: output
+            type: bus
+            bus_type: router_link
+            role: router
+            name: S
+            description: South router egress
+      west:
+        bus: router_link
+        role: peer
+        ports:
+          - id: west_in
+            direction: input
+            type: bus
+            bus_type: router_link
+            role: router
+            name: W
+            description: West router ingress
+          - id: west_out
+            direction: output
+            type: bus
+            bus_type: router_link
+            role: router
+            name: W
+            description: West router egress
+
+  Endpoint:
+    palette_label: Endpoint
+    graph_group: endpoints
+    description: Endpoint interface block that terminates a local NoC connection.
+    identity:
+      external_id_prefix: ep
+      display_prefix: EP
+      width: 2
+      supports_mesh_coordinates: false
+    parameters:
+      display_name:
+        type: string
+        default: ''
+        emit: editor
+        label: Display name
+        description: Name shown on the canvas.
+      external_id:
+        type: string
+        default: ''
+        emit: editor
+        label: External ID
+        description: Framework-facing identifier.
+      type:
+        type: string
+        enum: [master, slave]
+        default: master
+        emit: attribute
+        label: Type
+        description: Endpoint traffic role.
+      protocol:
+        type: string
+        enum: [axi4, chi]
+        default: axi4
+        emit: attribute
+        label: Protocol
+        description: Interface protocol.
+      data_width:
+        type: int
+        enum: [32, 64, 128]
+        default: 64
+        emit: attribute
+        label: Data width
+        description: Bus width in bits.
+      qos_enabled:
+        type: bool
+        default: false
+        emit: config
+        label: QoS enabled
+        description: Enable QoS tagging support.
+      buffer_depth:
+        type: int
+        default: 16
+        emit: config
+        label: Buffer depth
+        description: Ingress buffer depth.
+    interfaces:
+      noc:
+        bus: ni_link
+        role: initiator
+        config:
+          protocol: { parameter: protocol }
+          data_width: { parameter: data_width }
+        port:
+          id: noc
+          direction: input
+          type: bus
+          bus_type: ni_link
+          role: attachment
+          name: NoC
+          description: NoC attachment input

@@ -1,56 +1,128 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <module-bundle>
-  <module name="XP"
-          palette_label="XP"
-          graph_group="xps"
-          description="Mesh router with four directional links and four local endpoint attachment slots.">
-    <identity external_id_prefix="xp"
-              display_prefix="XP"
-              width="2"
-              supports_mesh_coordinates="true" />
+  <buses>
+    <bus name="ni_link" description="Endpoint-to-router NoC interface.">
+      <compatibility>
+        <role name="initiator" connects_to="target" />
+        <role name="target" connects_to="initiator" />
+        <match field="protocol" />
+        <match field="data_width" />
+      </compatibility>
+      <config>
+        <field name="protocol" type="string" default="axi4" enum="axi4,chi" description="Interface protocol." />
+        <field name="data_width" type="int" default="64" enum="32,64,128" description="Data width in bits." />
+      </config>
+      <signals>
+        <signal name="flit" direction="initiator_to_target" width="FLIT_WIDTH" />
+        <signal name="valid" direction="initiator_to_target" width="1" />
+        <signal name="ready" direction="target_to_initiator" width="1" />
+      </signals>
+    </bus>
+    <bus name="router_link" description="Router-to-router NoC link.">
+      <compatibility>
+        <role name="peer" connects_to="peer" />
+      </compatibility>
+      <config>
+      </config>
+      <signals>
+        <signal name="flit" direction="peer_to_peer" width="FLIT_WIDTH" />
+        <signal name="valid" direction="peer_to_peer" width="1" />
+        <signal name="ready" direction="peer_to_peer" width="1" />
+      </signals>
+    </bus>
+  </buses>
+  <module name="XP" palette_label="XP" graph_group="xps" description="Mesh router with four directional links and four local endpoint attachment slots.">
+    <identity external_id_prefix="xp" display_prefix="XP" width="2" supports_mesh_coordinates="true" />
     <capabilities supports_collapse="true" />
+    <interfaces>
+      <interface id="local0" bus="ni_link" role="target" connects_to="initiator" match="protocol,data_width">
+        <accept field="protocol" values="axi4,chi" />
+        <accept field="data_width" values="32,64,128" />
+      </interface>
+      <interface id="local1" bus="ni_link" role="target" connects_to="initiator" match="protocol,data_width">
+        <accept field="protocol" values="axi4,chi" />
+        <accept field="data_width" values="32,64,128" />
+      </interface>
+      <interface id="local2" bus="ni_link" role="target" connects_to="initiator" match="protocol,data_width">
+        <accept field="protocol" values="axi4,chi" />
+        <accept field="data_width" values="32,64,128" />
+      </interface>
+      <interface id="local3" bus="ni_link" role="target" connects_to="initiator" match="protocol,data_width">
+        <accept field="protocol" values="axi4,chi" />
+        <accept field="data_width" values="32,64,128" />
+      </interface>
+      <interface id="north" bus="router_link" role="peer" connects_to="peer" match="">
+      </interface>
+      <interface id="east" bus="router_link" role="peer" connects_to="peer" match="">
+      </interface>
+      <interface id="south" bus="router_link" role="peer" connects_to="peer" match="">
+      </interface>
+      <interface id="west" bus="router_link" role="peer" connects_to="peer" match="">
+      </interface>
+    </interfaces>
     <ports>
-      <port id="ep0" direction="output" type="bus" bus_type="ni2router" role="attachment" name="EP0" description="Local endpoint slot 0" />
-      <port id="ep1" direction="output" type="bus" bus_type="ni2router" role="attachment" name="EP1" description="Local endpoint slot 1" />
-      <port id="ep2" direction="output" type="bus" bus_type="ni2router" role="attachment" name="EP2" description="Local endpoint slot 2" />
-      <port id="ep3" direction="output" type="bus" bus_type="ni2router" role="attachment" name="EP3" description="Local endpoint slot 3" />
-      <port id="north_in" direction="input" type="bus" bus_type="router" role="router" name="N" description="North router ingress" />
-      <port id="north_out" direction="output" type="bus" bus_type="router" role="router" name="N" description="North router egress" />
-      <port id="east_in" direction="input" type="bus" bus_type="router" role="router" name="E" description="East router ingress" />
-      <port id="east_out" direction="output" type="bus" bus_type="router" role="router" name="E" description="East router egress" />
-      <port id="south_in" direction="input" type="bus" bus_type="router" role="router" name="S" description="South router ingress" />
-      <port id="south_out" direction="output" type="bus" bus_type="router" role="router" name="S" description="South router egress" />
-      <port id="west_in" direction="input" type="bus" bus_type="router" role="router" name="W" description="West router ingress" />
-      <port id="west_out" direction="output" type="bus" bus_type="router" role="router" name="W" description="West router egress" />
+      <port id="ep0" direction="output" type="bus" bus_type="ni_link" role="attachment" name="EP0" description="Local endpoint slot 0" interface="local0" />
+      <port id="ep1" direction="output" type="bus" bus_type="ni_link" role="attachment" name="EP1" description="Local endpoint slot 1" interface="local1" />
+      <port id="ep2" direction="output" type="bus" bus_type="ni_link" role="attachment" name="EP2" description="Local endpoint slot 2" interface="local2" />
+      <port id="ep3" direction="output" type="bus" bus_type="ni_link" role="attachment" name="EP3" description="Local endpoint slot 3" interface="local3" />
+      <port id="north_in" direction="input" type="bus" bus_type="router_link" role="router" name="N" description="North router ingress" interface="north" />
+      <port id="north_out" direction="output" type="bus" bus_type="router_link" role="router" name="N" description="North router egress" interface="north" />
+      <port id="east_in" direction="input" type="bus" bus_type="router_link" role="router" name="E" description="East router ingress" interface="east" />
+      <port id="east_out" direction="output" type="bus" bus_type="router_link" role="router" name="E" description="East router egress" interface="east" />
+      <port id="south_in" direction="input" type="bus" bus_type="router_link" role="router" name="S" description="South router ingress" interface="south" />
+      <port id="south_out" direction="output" type="bus" bus_type="router_link" role="router" name="S" description="South router egress" interface="south" />
+      <port id="west_in" direction="input" type="bus" bus_type="router_link" role="router" name="W" description="West router ingress" interface="west" />
+      <port id="west_out" direction="output" type="bus" bus_type="router_link" role="router" name="W" description="West router egress" interface="west" />
     </ports>
     <parameters>
-      <parameter name="x" type="int" default="0" configurable="false" description="Canvas X position." />
-      <parameter name="y" type="int" default="0" configurable="false" description="Canvas Y position." />
+      <parameter name="x" type="int" default="0" description="Canvas X position." configurable="false" />
+      <parameter name="y" type="int" default="0" description="Canvas Y position." configurable="false" />
       <parameter name="display_name" type="string" default="" label="Display name" description="Name shown on the canvas." />
       <parameter name="external_id" type="string" default="" label="External ID" description="Framework-facing identifier." />
-      <parameter name="collapsed" type="bool" default="true" configurable="false" description="Collapsed editor state." />
-      <parameter name="routing_algorithm" type="string" default="xy" label="Routing algorithm" description="Router path selection strategy." />
+      <parameter name="collapsed" type="bool" default="true" description="Collapsed editor state." configurable="false" />
+      <parameter name="routing_algorithm" type="string" default="xy" label="Routing algorithm" description="Router path selection strategy.">
+        <choices>
+          <choice value="xy" label="xy" />
+          <choice value="yx" label="yx" />
+        </choices>
+      </parameter>
       <parameter name="vc_count" type="int" default="2" label="VC count" description="Virtual channel count." />
       <parameter name="buffer_depth" type="int" default="8" label="Buffer depth" description="Depth of each input buffer." />
     </parameters>
   </module>
-  <module name="Endpoint"
-          palette_label="Endpoint"
-          graph_group="endpoints"
-          description="Endpoint interface block that terminates a local NoC connection.">
-    <identity external_id_prefix="ep"
-              display_prefix="EP"
-              width="2"
-              supports_mesh_coordinates="false" />
+  <module name="Endpoint" palette_label="Endpoint" graph_group="endpoints" description="Endpoint interface block that terminates a local NoC connection.">
+    <identity external_id_prefix="ep" display_prefix="EP" width="2" supports_mesh_coordinates="false" />
+    <interfaces>
+      <interface id="noc" bus="ni_link" role="initiator" connects_to="target" match="protocol,data_width">
+        <config field="protocol" parameter="protocol" />
+        <config field="data_width" parameter="data_width" />
+      </interface>
+    </interfaces>
     <ports>
-      <port id="noc" direction="input" type="bus" bus_type="ni2router" role="attachment" name="NoC" description="NoC attachment input" />
+      <port id="noc" direction="input" type="bus" bus_type="ni_link" role="attachment" name="NoC" description="NoC attachment input" interface="noc" />
     </ports>
     <parameters>
       <parameter name="display_name" type="string" default="" label="Display name" description="Name shown on the canvas." />
       <parameter name="external_id" type="string" default="" label="External ID" description="Framework-facing identifier." />
-      <parameter name="type" type="string" default="master" label="Type" description="Endpoint traffic role." />
-      <parameter name="protocol" type="string" default="axi" label="Protocol" description="Interface protocol." />
-      <parameter name="data_width" type="int" default="32" label="Data width" description="Bus width in bits." />
+      <parameter name="type" type="string" default="master" label="Type" description="Endpoint traffic role.">
+        <choices>
+          <choice value="master" label="master" />
+          <choice value="slave" label="slave" />
+        </choices>
+      </parameter>
+      <parameter name="protocol" type="string" default="axi4" label="Protocol" description="Interface protocol.">
+        <choices>
+          <choice value="axi4" label="axi4" />
+          <choice value="chi" label="chi" />
+        </choices>
+      </parameter>
+      <parameter name="data_width" type="int" default="64" label="Data width" description="Bus width in bits.">
+        <choices>
+          <choice value="32" label="32" />
+          <choice value="64" label="64" />
+          <choice value="128" label="128" />
+        </choices>
+      </parameter>
       <parameter name="qos_enabled" type="bool" default="false" label="QoS enabled" description="Enable QoS tagging support." />
       <parameter name="buffer_depth" type="int" default="16" label="Buffer depth" description="Ingress buffer depth." />
     </parameters>

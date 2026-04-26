@@ -58,6 +58,14 @@ QString attributeValue(const QXmlStreamAttributes& attributes, QStringView name)
     return attributes.value(name).toString();
 }
 
+QStringList stringListAttribute(const QXmlStreamAttributes& attributes, QStringView name) {
+    const QString value = attributeValue(attributes, name);
+    if (value.isEmpty()) {
+        return {};
+    }
+    return value.split(QStringLiteral(","), Qt::SkipEmptyParts);
+}
+
 bool boolAttribute(const QXmlStreamAttributes& attributes, QStringView name, bool fallbackValue) {
     const auto value = attributes.value(name);
     return value.isEmpty() ? fallbackValue : parseBoolString(value, fallbackValue);
@@ -412,8 +420,51 @@ void loadPortsFromXml(ModuleType& type, QXmlStreamReader& xml) {
                                        attributeValue(attrs, u"name"),
                                        attributeValue(attrs, u"description"),
                                        attributeValue(attrs, u"role"),
-                                       attributeValue(attrs, u"bus_type"));
+                                       attributeValue(attrs, u"bus_type"),
+                                       attributeValue(attrs, u"interface"));
         xml.skipCurrentElement();
+    }
+}
+
+void loadInterfacesFromXml(ModuleType& type, QXmlStreamReader& xml) {
+    while (xml.readNextStartElement()) {
+        if (xml.name() != u"interface") {
+            xml.skipCurrentElement();
+            continue;
+        }
+
+        const QXmlStreamAttributes attrs = xml.attributes();
+        ModuleInterfaceMetadata metadata;
+        metadata.id = attributeValue(attrs, u"id");
+        metadata.bus = attributeValue(attrs, u"bus");
+        metadata.role = attributeValue(attrs, u"role");
+        metadata.compatibleRoles = stringListAttribute(attrs, u"connects_to");
+        metadata.matchFields = stringListAttribute(attrs, u"match");
+
+        while (xml.readNextStartElement()) {
+            if (xml.name() == u"accept") {
+                const QXmlStreamAttributes acceptAttrs = xml.attributes();
+                const QString field = attributeValue(acceptAttrs, u"field");
+                if (!field.isEmpty()) {
+                    metadata.acceptedValues.insert(field, stringListAttribute(acceptAttrs, u"values"));
+                }
+                xml.skipCurrentElement();
+            } else if (xml.name() == u"config") {
+                const QXmlStreamAttributes configAttrs = xml.attributes();
+                const QString field = attributeValue(configAttrs, u"field");
+                const QString parameter = attributeValue(configAttrs, u"parameter");
+                if (!field.isEmpty() && !parameter.isEmpty()) {
+                    metadata.parameterBindings.insert(field, parameter);
+                }
+                xml.skipCurrentElement();
+            } else {
+                xml.skipCurrentElement();
+            }
+        }
+
+        if (!metadata.id.isEmpty()) {
+            type.interfaceMetadata.insert(metadata.id, metadata);
+        }
     }
 }
 
@@ -640,6 +691,8 @@ ModuleType loadModuleTypeFromXml(QXmlStreamReader& xml) {
             xml.skipCurrentElement();
         } else if (xml.name() == u"graphics") {
             applyGraphicsElement(type, xml);
+        } else if (xml.name() == u"interfaces") {
+            loadInterfacesFromXml(type, xml);
         } else if (xml.name() == u"ports") {
             loadPortsFromXml(type, xml);
         } else if (xml.name() == u"parameters") {

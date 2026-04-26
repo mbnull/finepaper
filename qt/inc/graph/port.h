@@ -13,7 +13,8 @@ public:
          const QString& name,
          const QString& description = {},
          const QString& role = {},
-         const QString& busType = {});
+         const QString& busType = {},
+         const QString& interfaceId = {});
 
     QString id() const { return m_id; }
     Direction direction() const { return m_direction; }
@@ -22,6 +23,7 @@ public:
     QString description() const { return m_description; }
     QString role() const { return m_role; }
     QString busType() const { return m_busType; }
+    QString interfaceId() const { return m_interfaceId; }
 
 private:
     QString m_id;
@@ -31,4 +33,5 @@ private:
     QString m_description;
     QString m_role;
     QString m_busType;
+    QString m_interfaceId;
 };

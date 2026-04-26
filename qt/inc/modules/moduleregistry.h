@@ -39,12 +39,23 @@ struct ModuleConfigField {
     QString description;
 };
 
+struct ModuleInterfaceMetadata {
+    QString id;
+    QString bus;
+    QString role;
+    QStringList compatibleRoles;
+    QStringList matchFields;
+    QHash<QString, QStringList> acceptedValues;
+    QHash<QString, QString> parameterBindings;
+};
+
 struct ModuleType {
     QString name;
     std::vector<Port> defaultPorts;
     QHash<QString, Parameter> defaultParameters;
     QHash<QString, ModuleParameterMetadata> parameterMetadata;
     QString pluginId;
+    QHash<QString, ModuleInterfaceMetadata> interfaceMetadata;
     QString paletteLabel;
     QString description;
     QString nodeColor;

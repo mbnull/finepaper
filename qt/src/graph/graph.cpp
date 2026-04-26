@@ -219,6 +219,111 @@ bool isRouterLink(const Module* sourceModule,
            PortLayout::isRouterPort(*targetPort);
 }
 
+QString parameterValueString(const Module* module, const QString& parameterName) {
+    if (!module) return {};
+
+    const auto it = module->parameters().find(parameterName);
+    if (it == module->parameters().end()) return {};
+
+    const auto& value = it.value().value();
+    if (const auto* stringValue = std::get_if<QString>(&value)) return *stringValue;
+    if (const auto* intValue = std::get_if<int>(&value)) return QString::number(*intValue);
+    if (const auto* doubleValue = std::get_if<double>(&value)) return QString::number(*doubleValue, 'g', 15);
+    if (const auto* boolValue = std::get_if<bool>(&value)) return *boolValue ? QStringLiteral("true")
+                                                                             : QStringLiteral("false");
+    return {};
+}
+
+std::optional<ModuleInterfaceMetadata> interfaceMetadataFor(const Module* module, const Port* port) {
+    if (!module || !port || port->interfaceId().isEmpty()) {
+        return std::nullopt;
+    }
+
+    const ModuleType* moduleType = ModuleTypeMetadata::type(module);
+    if (!moduleType) {
+        return std::nullopt;
+    }
+
+    const auto it = moduleType->interfaceMetadata.find(port->interfaceId());
+    return it != moduleType->interfaceMetadata.end()
+        ? std::optional<ModuleInterfaceMetadata>(it.value())
+        : std::nullopt;
+}
+
+QStringList interfaceFieldValues(const ModuleInterfaceMetadata& metadata,
+                                 const Module* module,
+                                 const QString& field) {
+    const auto bindingIt = metadata.parameterBindings.find(field);
+    if (bindingIt != metadata.parameterBindings.end()) {
+        const QString value = parameterValueString(module, bindingIt.value());
+        return value.isEmpty() ? QStringList{} : QStringList{value};
+    }
+
+    const auto acceptedIt = metadata.acceptedValues.find(field);
+    if (acceptedIt != metadata.acceptedValues.end()) {
+        return acceptedIt.value();
+    }
+
+    return {};
+}
+
+bool valuesOverlap(const QStringList& lhs, const QStringList& rhs) {
+    for (const QString& value : lhs) {
+        if (rhs.contains(value)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool interfaceMetadataCompatible(const ModuleInterfaceMetadata& sourceInterface,
+                                 const Module* sourceModule,
+                                 const ModuleInterfaceMetadata& targetInterface,
+                                 const Module* targetModule) {
+    if (sourceInterface.bus != targetInterface.bus) {
+        return false;
+    }
+
+    if (!sourceInterface.compatibleRoles.contains(targetInterface.role) ||
+        !targetInterface.compatibleRoles.contains(sourceInterface.role)) {
+        return false;
+    }
+
+    QStringList matchFields = sourceInterface.matchFields;
+    for (const QString& field : targetInterface.matchFields) {
+        if (!matchFields.contains(field)) {
+            matchFields.append(field);
+        }
+    }
+
+    for (const QString& field : matchFields) {
+        const QStringList sourceValues = interfaceFieldValues(sourceInterface, sourceModule, field);
+        const QStringList targetValues = interfaceFieldValues(targetInterface, targetModule, field);
+        if (sourceValues.isEmpty() || targetValues.isEmpty() || !valuesOverlap(sourceValues, targetValues)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool interfacesCompatible(const Module* sourceModule,
+                          const Port* sourcePort,
+                          const Module* targetModule,
+                          const Port* targetPort) {
+    const std::optional<ModuleInterfaceMetadata> sourceInterface = interfaceMetadataFor(sourceModule, sourcePort);
+    const std::optional<ModuleInterfaceMetadata> targetInterface = interfaceMetadataFor(targetModule, targetPort);
+
+    if (!sourceInterface && !targetInterface) {
+        return true;
+    }
+    if (!sourceInterface || !targetInterface) {
+        return false;
+    }
+
+    return interfaceMetadataCompatible(*sourceInterface, sourceModule, *targetInterface, targetModule);
+}
+
 bool connectionUsesRouterSide(const Connection& connection,
                               const QString& moduleId,
                               const QString& side) {
@@ -437,6 +542,7 @@ bool Graph::isValidConnection(const PortRef& source, const PortRef& target) cons
     if (!PortLayout::supportsOutput(*sourcePort)) return false;
     if (!PortLayout::supportsInput(*targetPort)) return false;
     if (!PortLayout::sameBusFamily(*sourcePort, *targetPort)) return false;
+    if (!interfacesCompatible(sourceModule, sourcePort, targetModule, targetPort)) return false;
 
     if (isRouterLink(sourceModule, sourcePort, targetModule, targetPort)) {
         // Router-to-router links are constrained to one opposite-side pair and
