@@ -9,6 +9,10 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 
+class ModuleList(list):
+    pass
+
+
 def bool_text(value):
     return "true" if value else "false"
 
@@ -126,9 +130,15 @@ def load_bundle_xml(path):
     if local_name(root.tag) != "module-bundle":
         raise ValueError(f"{path} is not a module-bundle XML file")
 
-    modules = []
+    modules = ModuleList()
+    modules.bundle_xml_children = []
+
     for module_el in root.findall("./"):
-        if local_name(module_el.tag) != "module":
+        root_child_name = local_name(module_el.tag)
+        if root_child_name == "buses":
+            modules.bundle_xml_children.append(copy.deepcopy(module_el))
+            continue
+        if root_child_name != "module":
             continue
 
         entry = {
@@ -140,6 +150,7 @@ def load_bundle_xml(path):
             "capabilities": {},
             "ports": [],
             "parameters": [],
+            "interfaces_xml": None,
             "config_zone_xml": None,
             "graphics_xml": None,
         }
@@ -150,6 +161,8 @@ def load_bundle_xml(path):
                 entry["identity"] = dict(child.attrib)
             elif child_name == "capabilities":
                 entry["capabilities"] = dict(child.attrib)
+            elif child_name == "interfaces":
+                entry["interfaces_xml"] = copy.deepcopy(child)
             elif child_name == "ports":
                 for port_el in child:
                     if local_name(port_el.tag) != "port":
@@ -223,6 +236,9 @@ def load_ipxact_component(path):
 def build_core_tree(modules):
     root = ET.Element("module-bundle")
 
+    for child in getattr(modules, "bundle_xml_children", []):
+        root.append(copy.deepcopy(child))
+
     for module in modules:
         module_el = ET.SubElement(root, "module")
         set_attr_if_present(module_el, "name", module.get("name"))
@@ -242,12 +258,15 @@ def build_core_tree(modules):
             for key, value in capabilities.items():
                 set_attr_if_present(capabilities_el, key, value)
 
+        if module.get("interfaces_xml") is not None:
+            module_el.append(copy.deepcopy(module["interfaces_xml"]))
+
         ports = module.get("ports") or []
         if ports:
             ports_el = ET.SubElement(module_el, "ports")
             for port in ports:
                 port_el = ET.SubElement(ports_el, "port")
-                for key in ("id", "direction", "type", "name", "description", "role", "bus_type"):
+                for key in ("id", "direction", "type", "name", "description", "role", "bus_type", "interface"):
                     set_attr_if_present(port_el, key, port.get(key))
 
         parameters = module.get("parameters") or []

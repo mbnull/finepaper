@@ -234,6 +234,13 @@ QString parameterValueString(const Module* module, const QString& parameterName)
     return {};
 }
 
+QString canonicalInterfaceFieldValue(const QString& field, const QString& value) {
+    if (field == "protocol" && value.compare(QStringLiteral("axi"), Qt::CaseInsensitive) == 0) {
+        return QStringLiteral("axi4");
+    }
+    return value;
+}
+
 std::optional<ModuleInterfaceMetadata> interfaceMetadataFor(const Module* module, const Port* port) {
     if (!module || !port || port->interfaceId().isEmpty()) {
         return std::nullopt;
@@ -256,12 +263,16 @@ QStringList interfaceFieldValues(const ModuleInterfaceMetadata& metadata,
     const auto bindingIt = metadata.parameterBindings.find(field);
     if (bindingIt != metadata.parameterBindings.end()) {
         const QString value = parameterValueString(module, bindingIt.value());
-        return value.isEmpty() ? QStringList{} : QStringList{value};
+        return value.isEmpty() ? QStringList{} : QStringList{canonicalInterfaceFieldValue(field, value)};
     }
 
     const auto acceptedIt = metadata.acceptedValues.find(field);
     if (acceptedIt != metadata.acceptedValues.end()) {
-        return acceptedIt.value();
+        QStringList values;
+        for (const QString& value : acceptedIt.value()) {
+            values.append(canonicalInterfaceFieldValue(field, value));
+        }
+        return values;
     }
 
     return {};
@@ -682,7 +693,11 @@ bool Graph::loadFromJson(const QString& jsonPath) {
         if (ep.contains("x")) module->setParameter("x", ep["x"].toInt());
         if (ep.contains("y")) module->setParameter("y", ep["y"].toInt());
         if (ep.contains("type")) module->setParameter("type", ep["type"].toString());
-        if (ep.contains("protocol")) module->setParameter("protocol", ep["protocol"].toString());
+        if (ep.contains("protocol")) {
+            module->setParameter("protocol",
+                                 canonicalInterfaceFieldValue(QStringLiteral("protocol"),
+                                                              ep["protocol"].toString()));
+        }
         if (ep.contains("data_width")) module->setParameter("data_width", ep["data_width"].toInt());
 
         QJsonObject config = ep["config"].toObject();

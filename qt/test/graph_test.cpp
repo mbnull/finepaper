@@ -1,6 +1,7 @@
 // Graph integration-style tests for JSON import/export and topology behavior.
 #include "graph/graph.h"
 #include "common/frameworkpaths.h"
+#include "modules/modulelabels.h"
 #include "modules/moduleregistry.h"
 #include "modules/moduleprovider.h"
 #include "common/portlayout.h"
@@ -236,6 +237,61 @@ void testInterfaceCompatibilityAcceptsMatchingConfiguredFields() {
 
     require(graph.isValidConnection(PortRef{"endpoint", "noc"}, PortRef{"xp", "local0"}),
             "interface connection should accept matching protocol and data_width");
+}
+
+void testLegacyAxiEndpointImportMigratesProtocolBeforeLinkValidation() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "failed to create temporary directory for legacy axi import");
+
+    const QString jsonPath = QDir(tempDir.path()).filePath("legacy_axi.json");
+    QFile file(jsonPath);
+    require(file.open(QIODevice::WriteOnly | QIODevice::Text),
+            "failed to create legacy axi graph JSON");
+    file.write(R"JSON({
+  "name": "legacy_axi",
+  "version": "1.0",
+  "parameters": {},
+  "xps": [
+    {
+      "id": "xp_0_0",
+      "x": 0,
+      "y": 0,
+      "endpoints": ["ep_0"]
+    }
+  ],
+  "endpoints": [
+    {
+      "id": "ep_0",
+      "type": "master",
+      "protocol": "axi",
+      "data_width": 64
+    }
+  ],
+  "connections": []
+})JSON");
+    file.close();
+
+    Graph graph;
+    require(graph.loadFromJson(jsonPath), "legacy axi graph should load");
+    require(graph.connections().size() == 1,
+            "legacy axi endpoint attachment should be restored");
+
+    const Module* endpoint = nullptr;
+    for (const auto& module : graph.modules()) {
+        if (ModuleLabels::externalId(module.get()) == "ep_0") {
+            endpoint = module.get();
+            break;
+        }
+    }
+
+    require(endpoint != nullptr, "legacy endpoint should be imported");
+    const auto protocolIt = endpoint->parameters().find("protocol");
+    require(protocolIt != endpoint->parameters().end(),
+            "legacy endpoint protocol should be present after import");
+    const Parameter::Value protocolValue = protocolIt.value().value();
+    const auto* protocol = std::get_if<QString>(&protocolValue);
+    require(protocol && *protocol == "axi4",
+            "legacy axi endpoint protocol should migrate to axi4");
 }
 
 void testRemovingModuleAlsoRemovesAttachedConnections() {
@@ -562,6 +618,7 @@ int main(int argc, char** argv) {
         testInoutPortsCannotBeReusedAcrossConnectionSides();
         testInterfaceCompatibilityRejectsMismatchedConfiguredFields();
         testInterfaceCompatibilityAcceptsMatchingConfiguredFields();
+        testLegacyAxiEndpointImportMigratesProtocolBeforeLinkValidation();
         testRemovingModuleAlsoRemovesAttachedConnections();
         testClearRemovesAllModulesAndConnections();
         testGraphForwardsModuleParameterChanges();
