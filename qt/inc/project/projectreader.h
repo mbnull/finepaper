@@ -11,7 +11,14 @@ struct ProjectReadResult {
     QString error;
 };
 
+enum class ProjectFileKind {
+    Project,
+    LegacyJson,
+    Unknown
+};
+
 class ProjectReader {
 public:
+    static ProjectFileKind detectKind(const QString& path);
     static ProjectReadResult readFile(const QString& path);
 };

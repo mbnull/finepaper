@@ -28,15 +28,15 @@ class MainWindow : public QMainWindow {
     explicit MainWindow(QWidget *parent = nullptr);
     ~MainWindow() override;
 
-    // Loads a design from disk as the active document.
-    void loadGraph(const QString& jsonPath);
+    // Loads a project or legacy JSON design from disk as the active document.
+    void loadGraph(const QString& path);
 
 private slots:
     // Creates a new empty document.
     void newGraph();
-    // Opens an existing editor JSON document.
+    // Opens an existing project, with legacy JSON handled as import.
     void openGraph();
-    // Saves current document to the current path or prompts for one.
+    // Saves current project to the current path or prompts for one.
     void saveGraph();
     // Prompts for a new destination and saves there.
     void saveGraphAs();
@@ -66,7 +66,7 @@ private slots:
     void scheduleStartupLayoutLog();
     void logStartupLayout() const;
     bool maybeSaveChanges(const QString& actionDescription);
-    bool loadDocument(const QString& jsonPath);
+    bool loadDocument(const QString& path);
     bool saveDocument(const QString& path);
     QString defaultDocumentPath() const;
     void clearDocument();

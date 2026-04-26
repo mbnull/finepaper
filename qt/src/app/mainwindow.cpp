@@ -11,6 +11,9 @@
 #include "plugins/generatorrunner.h"
 #include "plugins/pluginregistry.h"
 #include "plugins/startupdiagnostics.h"
+#include "project/graphprojectserializer.h"
+#include "project/projectreader.h"
+#include "project/projectwriter.h"
 #include "validation/validationmanager.h"
 #include "modules/moduleregistry.h"
 #include <QAction>
@@ -49,25 +52,16 @@ QString trimmedProcessOutput(const QString& text) {
     return text.trimmed().isEmpty() ? QStringLiteral("(no process output)") : text.trimmed();
 }
 
-QString fileDialogSaveFilter() {
-    return QStringLiteral("JSON Files (*.json);;XML Files (*.xml)");
+QString projectFileDialogSaveFilter() {
+    return QStringLiteral("Finepaper Project (*.fpproj)");
 }
 
-QString jsonFileDialogSaveFilter() {
-    return QStringLiteral("JSON Files (*.json)");
+QString projectFileDialogOpenFilter() {
+    return QStringLiteral("Finepaper Project (*.fpproj);;Legacy NoC JSON (*.json);;All Files (*)");
 }
 
-QString jsonFileDialogOpenFilter() {
-    return QStringLiteral("JSON Files (*.json);;All Files (*)");
-}
-
-QString pathWithSelectedExtension(QString path, const QString& selectedFilter) {
-    if (!QFileInfo(path).suffix().isEmpty()) {
-        return path;
-    }
-
-    return path + (selectedFilter.startsWith(QStringLiteral("XML")) ? QStringLiteral(".xml")
-                                                                    : QStringLiteral(".json"));
+QString pathWithProjectExtension(QString path) {
+    return QFileInfo(path).suffix().isEmpty() ? path + QStringLiteral(".fpproj") : path;
 }
 
 QString documentDisplayName(const QString& path) {
@@ -131,8 +125,8 @@ MainWindow::MainWindow(QWidget *parent)
 
 MainWindow::~MainWindow() = default;
 
-void MainWindow::loadGraph(const QString& jsonPath) {
-    loadDocument(jsonPath);
+void MainWindow::loadGraph(const QString& path) {
+    loadDocument(path);
 }
 
 void MainWindow::saveGraph() {
@@ -142,28 +136,26 @@ void MainWindow::saveGraph() {
     }
 
     const QString path = QFileDialog::getSaveFileName(this,
-                                                      "Save Graph",
+                                                      "Save Project",
                                                       defaultDocumentPath(),
-                                                      jsonFileDialogSaveFilter());
+                                                      projectFileDialogSaveFilter());
     if (path.isEmpty()) {
         return;
     }
 
-    saveDocument(pathWithSelectedExtension(path, jsonFileDialogSaveFilter()));
+    saveDocument(pathWithProjectExtension(path));
 }
 
 void MainWindow::saveGraphAs() {
-    QString selectedFilter = QStringLiteral("JSON Files (*.json)");
     QString path = QFileDialog::getSaveFileName(this,
-                                                "Save Graph",
+                                                "Save Project As",
                                                 defaultDocumentPath(),
-                                                fileDialogSaveFilter(),
-                                                &selectedFilter);
+                                                projectFileDialogSaveFilter());
     if (path.isEmpty()) {
         return;
     }
 
-    saveDocument(pathWithSelectedExtension(path, selectedFilter));
+    saveDocument(pathWithProjectExtension(path));
 }
 
 void MainWindow::newGraph() {
@@ -180,9 +172,9 @@ void MainWindow::openGraph() {
     }
 
     const QString path = QFileDialog::getOpenFileName(this,
-                                                      "Open Graph",
+                                                      "Open Project",
                                                       defaultDocumentPath(),
-                                                      jsonFileDialogOpenFilter());
+                                                      projectFileDialogOpenFilter());
     if (path.isEmpty()) {
         return;
     }
@@ -597,59 +589,93 @@ bool MainWindow::maybeSaveChanges(const QString& actionDescription) {
     }
 
     const QString path = QFileDialog::getSaveFileName(this,
-                                                      "Save Graph",
+                                                      "Save Project",
                                                       defaultDocumentPath(),
-                                                      jsonFileDialogSaveFilter());
+                                                      projectFileDialogSaveFilter());
     if (path.isEmpty()) {
         return false;
     }
 
-    return saveDocument(pathWithSelectedExtension(path, jsonFileDialogSaveFilter()));
+    return saveDocument(pathWithProjectExtension(path));
 }
 
-bool MainWindow::loadDocument(const QString& jsonPath) {
-    qInfo() << "Loading graph from" << jsonPath;
+bool MainWindow::loadDocument(const QString& path) {
+    qInfo() << "Loading document from" << path;
 
-    m_suppressDocumentTracking = true;
-    const bool loadSucceeded = m_graph->loadFromJson(jsonPath);
-    m_suppressDocumentTracking = false;
+    const ProjectFileKind kind = ProjectReader::detectKind(path);
+    if (kind == ProjectFileKind::Project) {
+        const ProjectReadResult readResult = ProjectReader::readFile(path);
+        if (!readResult.success) {
+            qWarning() << "Failed to read project" << path << readResult.error;
+            QMessageBox::warning(this, "Open Failed", readResult.error);
+            return false;
+        }
 
-    if (!loadSucceeded) {
-        QMessageBox::warning(this, "Open Failed", "Could not load " + jsonPath);
-        return false;
+        m_suppressDocumentTracking = true;
+        const GraphProjectLoadResult loadResult =
+            GraphProjectSerializer::loadProject(readResult.document, *m_graph);
+        m_suppressDocumentTracking = false;
+        if (!loadResult.success) {
+            qWarning() << "Failed to load project graph" << path << loadResult.error;
+            QMessageBox::warning(this, "Open Failed", loadResult.error);
+            return false;
+        }
+
+        m_commandManager->clearHistory();
+        m_cleanStateId = m_commandManager->currentStateId();
+        setCurrentDocumentPath(path);
+        syncDocumentStateFromHistory();
+        statusBar()->showMessage("Opened " + QFileInfo(path).fileName(), 5000);
+        qInfo() << "Project load finished for" << path
+                << "modules" << m_graph->modules().size()
+                << "connections" << m_graph->connections().size();
+        return true;
     }
 
-    m_commandManager->clearHistory();
-    m_cleanStateId = m_commandManager->currentStateId();
-    setCurrentDocumentPath(jsonPath);
-    syncDocumentStateFromHistory();
-    statusBar()->showMessage("Opened " + QFileInfo(jsonPath).fileName(), 5000);
-    qInfo() << "Graph load finished for" << jsonPath
-            << "modules" << m_graph->modules().size()
-            << "connections" << m_graph->connections().size();
-    return true;
+    if (kind == ProjectFileKind::LegacyJson) {
+        qInfo() << "Importing legacy JSON from" << path;
+
+        m_suppressDocumentTracking = true;
+        const bool loadSucceeded = m_graph->loadFromJson(path);
+        m_suppressDocumentTracking = false;
+
+        if (!loadSucceeded) {
+            QMessageBox::warning(this, "Open Failed", "Could not import " + path);
+            return false;
+        }
+
+        m_commandManager->clearHistory();
+        m_cleanStateId = m_commandManager->currentStateId() - 1;
+        setCurrentDocumentPath(QString());
+        syncDocumentStateFromHistory();
+        statusBar()->showMessage("Imported legacy JSON " + QFileInfo(path).fileName(), 5000);
+        qInfo() << "Legacy JSON import finished for" << path
+                << "modules" << m_graph->modules().size()
+                << "connections" << m_graph->connections().size();
+        return true;
+    }
+
+    qWarning() << "Unsupported document format" << path;
+    QMessageBox::warning(this, "Open Failed", "Unsupported document format: " + path);
+    return false;
 }
 
 bool MainWindow::saveDocument(const QString& path) {
-    qInfo() << "Saving graph to" << path;
-    const QString suffix = QFileInfo(path).suffix().toLower();
-    const bool savingXml = suffix == QStringLiteral("xml");
-    const bool saveSucceeded = suffix == QStringLiteral("xml")
-        ? m_graph->saveToXml(path)
-        : m_graph->saveToJson(path);
-    if (!saveSucceeded) {
-        qWarning() << "Failed to save graph to" << path;
-        QMessageBox::warning(this, "Save Failed", "Could not write to " + path);
+    qInfo() << "Saving project to" << path;
+    const ProjectDocument document =
+        GraphProjectSerializer::toProject(*m_graph, QFileInfo(path).completeBaseName());
+    const ProjectWriteResult result = ProjectWriter::writeFile(path, document);
+    if (!result.success) {
+        qWarning() << "Failed to save project to" << path << result.error;
+        QMessageBox::warning(this, "Save Failed", result.error);
         return false;
     }
 
-    if (!savingXml) {
-        setCurrentDocumentPath(path);
-        m_cleanStateId = m_commandManager->currentStateId();
-    }
+    setCurrentDocumentPath(path);
+    m_cleanStateId = m_commandManager->currentStateId();
     syncDocumentStateFromHistory();
     statusBar()->showMessage("Saved " + QFileInfo(path).fileName(), 5000);
-    qInfo() << "Saved graph to" << path;
+    qInfo() << "Saved project to" << path;
     return true;
 }
 

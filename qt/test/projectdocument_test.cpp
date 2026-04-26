@@ -11,6 +11,7 @@
 
 #include <QCoreApplication>
 #include <QDir>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QTemporaryDir>
@@ -281,6 +282,34 @@ void testLoadRejectsInvalidConnectionReference() {
             "invalid connection error should mention the connection id");
 }
 
+void testReaderDetectsProjectAndLegacyJsonFiles() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "failed to create temporary directory");
+    const QString projectPath = QDir(tempDir.path()).filePath(QStringLiteral("design.fpproj"));
+    const QString legacyPath = QDir(tempDir.path()).filePath(QStringLiteral("legacy.json"));
+
+    const ProjectWriteResult writeResult =
+        ProjectWriter::writeFile(projectPath, validProjectDocument());
+    require(writeResult.success, "failed to write project fixture");
+
+    QFile legacyFile(legacyPath);
+    require(legacyFile.open(QIODevice::WriteOnly | QIODevice::Truncate),
+            "failed to write legacy fixture");
+    legacyFile.write(QJsonDocument(QJsonObject{
+        {QStringLiteral("name"), QStringLiteral("legacy")},
+        {QStringLiteral("version"), QStringLiteral("1.0")},
+        {QStringLiteral("xps"), QJsonArray{}},
+        {QStringLiteral("endpoints"), QJsonArray{}},
+        {QStringLiteral("connections"), QJsonArray{}}
+    }).toJson());
+    legacyFile.close();
+
+    require(ProjectReader::detectKind(projectPath) == ProjectFileKind::Project,
+            "project file should be detected as Finepaper project");
+    require(ProjectReader::detectKind(legacyPath) == ProjectFileKind::LegacyJson,
+            "legacy NoC JSON should be detected as legacy JSON");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -293,6 +322,7 @@ int main(int argc, char** argv) {
         testLoadRejectsMissingModuleType();
         testLoadRejectsInvalidParameterType();
         testLoadRejectsInvalidConnectionReference();
+        testReaderDetectsProjectAndLegacyJsonFiles();
     } catch (const std::exception& error) {
         std::cerr << "projectdocument_test failed: " << error.what() << '\n';
         return 1;

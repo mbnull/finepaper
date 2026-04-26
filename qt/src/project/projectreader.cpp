@@ -24,6 +24,31 @@ ProjectConnectionEndpoint endpointFromObject(const QJsonObject& object) {
 
 } // namespace
 
+ProjectFileKind ProjectReader::detectKind(const QString& path) {
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly)) {
+        return ProjectFileKind::Unknown;
+    }
+
+    QJsonParseError parseError;
+    const QJsonDocument json = QJsonDocument::fromJson(file.readAll(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !json.isObject()) {
+        return ProjectFileKind::Unknown;
+    }
+
+    const QJsonObject root = json.object();
+    if (root.value(QStringLiteral("kind")).toString() == QStringLiteral("finepaper-project")) {
+        return ProjectFileKind::Project;
+    }
+    if (root.contains(QStringLiteral("xps")) ||
+        root.contains(QStringLiteral("endpoints")) ||
+        root.contains(QStringLiteral("connections"))) {
+        return ProjectFileKind::LegacyJson;
+    }
+
+    return ProjectFileKind::Unknown;
+}
+
 ProjectReadResult ProjectReader::readFile(const QString& path) {
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly)) {
