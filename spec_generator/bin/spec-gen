@@ -1,0 +1,29 @@
+#!/usr/bin/env ruby
+
+$LOAD_PATH.unshift File.expand_path('../lib', __dir__)
+
+require 'optparse'
+require 'spec_generator'
+
+options = {
+  spec_path: 'spec/noc.yaml',
+  views_dir: 'spec/views',
+  qt_bundle_dir: 'qt/bundles',
+  ruby_model_dir: 'framework/src/ruby/model'
+}
+
+begin
+  OptionParser.new do |parser|
+    parser.banner = 'Usage: spec-gen [options]'
+    parser.on('--spec PATH', 'NoC YAML spec path') { |value| options[:spec_path] = value }
+    parser.on('--views DIR', 'Qt view XML directory') { |value| options[:views_dir] = value }
+    parser.on('--qt-bundle DIR', 'Qt bundle output directory') { |value| options[:qt_bundle_dir] = value }
+    parser.on('--ruby-model DIR', 'Ruby model output directory') { |value| options[:ruby_model_dir] = value }
+  end.parse!
+
+  SpecGenerator.generate(**options)
+  puts "Generated #{options[:qt_bundle_dir]} and #{options[:ruby_model_dir]}"
+rescue SpecGenerator::SpecError => error
+  warn "error: #{error.message}"
+  exit 1
+end

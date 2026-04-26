@@ -3,7 +3,7 @@ class Xp
 
   def self.config_schema
     {
-      routing_algorithm: { type: :string, default: 'xy' },
+      routing_algorithm: { type: :string, default: 'xy', enum: ['xy', 'yx'] },
       vc_count: { type: :integer, default: 2 },
       buffer_depth: { type: :integer, default: 8 }
     }

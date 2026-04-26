@@ -146,6 +146,98 @@ void testInoutPortsCannotBeReusedAcrossConnectionSides() {
             "inout port already used as a target should not be reusable as a target again");
 }
 
+ModuleInterfaceMetadata makeInterfaceMetadata(const QString& id,
+                                              const QString& bus,
+                                              const QString& role,
+                                              const QStringList& compatibleRoles,
+                                              const QStringList& matchFields) {
+    ModuleInterfaceMetadata metadata;
+    metadata.id = id;
+    metadata.bus = bus;
+    metadata.role = role;
+    metadata.compatibleRoles = compatibleRoles;
+    metadata.matchFields = matchFields;
+    return metadata;
+}
+
+void testInterfaceCompatibilityRejectsMismatchedConfiguredFields() {
+    ModuleType endpointType;
+    endpointType.name = "IfaceEndpoint";
+    ModuleInterfaceMetadata endpointInterface =
+        makeInterfaceMetadata("noc", "ni_link", "initiator", {"target"}, {"protocol", "data_width"});
+    endpointInterface.parameterBindings.insert("protocol", "protocol");
+    endpointInterface.parameterBindings.insert("data_width", "data_width");
+    endpointType.interfaceMetadata.insert("noc", endpointInterface);
+    ModuleRegistry::instance().registerType(endpointType);
+
+    ModuleType xpType;
+    xpType.name = "IfaceXp";
+    ModuleInterfaceMetadata xpInterface =
+        makeInterfaceMetadata("local0", "ni_link", "target", {"initiator"}, {"protocol", "data_width"});
+    xpInterface.acceptedValues.insert("protocol", {"axi4"});
+    xpInterface.acceptedValues.insert("data_width", {"128"});
+    xpType.interfaceMetadata.insert("local0", xpInterface);
+    ModuleRegistry::instance().registerType(xpType);
+
+    Graph graph;
+    auto endpoint = makeModule(
+        "endpoint",
+        "IfaceEndpoint",
+        {Port("noc", Port::Direction::Output, "bus", "NoC", {}, "attachment", "ni_link", "noc")});
+    endpoint->setParameter("protocol", QString("axi4"));
+    endpoint->setParameter("data_width", 64);
+
+    auto xp = makeModule(
+        "xp",
+        "IfaceXp",
+        {Port("local0", Port::Direction::Input, "bus", "Local0", {}, "attachment", "ni_link", "local0")});
+
+    require(graph.addModule(std::move(endpoint)), "failed to add interface endpoint");
+    require(graph.addModule(std::move(xp)), "failed to add interface XP");
+
+    require(!graph.isValidConnection(PortRef{"endpoint", "noc"}, PortRef{"xp", "local0"}),
+            "interface connection should reject mismatched data_width");
+}
+
+void testInterfaceCompatibilityAcceptsMatchingConfiguredFields() {
+    ModuleType endpointType;
+    endpointType.name = "IfaceEndpointOk";
+    ModuleInterfaceMetadata endpointInterface =
+        makeInterfaceMetadata("noc", "ni_link", "initiator", {"target"}, {"protocol", "data_width"});
+    endpointInterface.parameterBindings.insert("protocol", "protocol");
+    endpointInterface.parameterBindings.insert("data_width", "data_width");
+    endpointType.interfaceMetadata.insert("noc", endpointInterface);
+    ModuleRegistry::instance().registerType(endpointType);
+
+    ModuleType xpType;
+    xpType.name = "IfaceXpOk";
+    ModuleInterfaceMetadata xpInterface =
+        makeInterfaceMetadata("local0", "ni_link", "target", {"initiator"}, {"protocol", "data_width"});
+    xpInterface.acceptedValues.insert("protocol", {"axi4"});
+    xpInterface.acceptedValues.insert("data_width", {"32", "64", "128"});
+    xpType.interfaceMetadata.insert("local0", xpInterface);
+    ModuleRegistry::instance().registerType(xpType);
+
+    Graph graph;
+    auto endpoint = makeModule(
+        "endpoint",
+        "IfaceEndpointOk",
+        {Port("noc", Port::Direction::Output, "bus", "NoC", {}, "attachment", "ni_link", "noc")});
+    endpoint->setParameter("protocol", QString("axi4"));
+    endpoint->setParameter("data_width", 64);
+
+    auto xp = makeModule(
+        "xp",
+        "IfaceXpOk",
+        {Port("local0", Port::Direction::Input, "bus", "Local0", {}, "attachment", "ni_link", "local0")});
+
+    require(graph.addModule(std::move(endpoint)), "failed to add matching interface endpoint");
+    require(graph.addModule(std::move(xp)), "failed to add matching interface XP");
+
+    require(graph.isValidConnection(PortRef{"endpoint", "noc"}, PortRef{"xp", "local0"}),
+            "interface connection should accept matching protocol and data_width");
+}
+
 void testRemovingModuleAlsoRemovesAttachedConnections() {
     Graph graph;
 
@@ -466,6 +558,8 @@ int main(int argc, char** argv) {
         testConnectionValidationPreventsPortReuse();
         testInoutBusConnectionsAreValid();
         testInoutPortsCannotBeReusedAcrossConnectionSides();
+        testInterfaceCompatibilityRejectsMismatchedConfiguredFields();
+        testInterfaceCompatibilityAcceptsMatchingConfiguredFields();
         testRemovingModuleAlsoRemovesAttachedConnections();
         testClearRemovesAllModulesAndConnections();
         testGraphForwardsModuleParameterChanges();
