@@ -4,8 +4,8 @@ class Endpoint
 
   def self.config_schema
     {
-      buffer_depth: { type: :integer, default: 16 },
-      qos_enabled: { type: :boolean, default: false }
+      qos_enabled: { type: :boolean, default: false },
+      buffer_depth: { type: :integer, default: 16 }
     }
   end
 
