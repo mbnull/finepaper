@@ -10,6 +10,7 @@
 #include <QJsonValue>
 #include <QSet>
 #include <algorithm>
+#include <cmath>
 #include <memory>
 
 namespace {
@@ -30,6 +31,18 @@ Parameter::Value valueFromJson(const QJsonValue& value, const Parameter::Value& 
     return value.toString();
 }
 
+bool jsonValueMatchesParameterType(const QJsonValue& value, const Parameter::Value& defaultValue) {
+    if (std::holds_alternative<QString>(defaultValue)) return value.isString();
+    if (std::holds_alternative<int>(defaultValue)) {
+        if (!value.isDouble()) return false;
+        const double number = value.toDouble();
+        return std::floor(number) == number;
+    }
+    if (std::holds_alternative<double>(defaultValue)) return value.isDouble();
+    if (std::holds_alternative<bool>(defaultValue)) return value.isBool();
+    return false;
+}
+
 std::unique_ptr<Module> instantiateModule(const ModuleType& type, const QString& moduleId) {
     auto module = std::make_unique<Module>(moduleId, type.name);
     for (const Port& port : type.defaultPorts) {
@@ -44,6 +57,12 @@ std::unique_ptr<Module> instantiateModule(const ModuleType& type, const QString&
 bool hasPort(const Module* module, const QString& portId) {
     if (!module) return false;
     return std::any_of(module->ports().begin(), module->ports().end(), [&](const Port& port) {
+        return port.id() == portId;
+    });
+}
+
+bool hasPort(const ModuleType& type, const QString& portId) {
+    return std::any_of(type.defaultPorts.begin(), type.defaultPorts.end(), [&](const Port& port) {
         return port.id() == portId;
     });
 }
@@ -96,11 +115,25 @@ ProjectDocument GraphProjectSerializer::toProject(const Graph& graph, const QStr
 }
 
 GraphProjectLoadResult GraphProjectSerializer::loadProject(const ProjectDocument& document, Graph& graph) {
-    while (!graph.modules().empty()) {
-        graph.removeModule(graph.modules().front()->id());
-    }
+    QSet<QString> moduleIds;
+    QHash<QString, const ModuleType*> moduleTypesById;
 
     for (const ProjectModuleRecord& record : document.modules) {
+        if (record.id.isEmpty()) {
+            return failure(QStringLiteral("Project module is missing id"));
+        }
+        if (moduleIds.contains(record.id)) {
+            return failure(QStringLiteral("Duplicate module id: %1").arg(record.id));
+        }
+        moduleIds.insert(record.id);
+
+        if (record.pluginId.isEmpty()) {
+            return failure(QStringLiteral("Module %1 is missing plugin").arg(record.id));
+        }
+        if (record.type.isEmpty()) {
+            return failure(QStringLiteral("Module %1 is missing type").arg(record.id));
+        }
+
         const ModuleType* type = ModuleRegistry::instance().getType(record.type);
         if (!type) {
             return failure(QStringLiteral("Missing module type: %1").arg(record.type));
@@ -108,15 +141,46 @@ GraphProjectLoadResult GraphProjectSerializer::loadProject(const ProjectDocument
         if (type->pluginId != record.pluginId) {
             return failure(QStringLiteral("Module %1 requires plugin %2").arg(record.id, record.pluginId));
         }
+        moduleTypesById.insert(record.id, type);
+
+        for (auto it = record.parameters.begin(); it != record.parameters.end(); ++it) {
+            const auto defaultIt = type->defaultParameters.find(it.key());
+            if (defaultIt == type->defaultParameters.end()) {
+                return failure(QStringLiteral("Unknown parameter %1 on module %2")
+                                   .arg(it.key(), record.id));
+            }
+            if (!jsonValueMatchesParameterType(it.value(), defaultIt.value().value())) {
+                return failure(QStringLiteral("Invalid type for parameter %1 on module %2")
+                                   .arg(it.key(), record.id));
+            }
+        }
+    }
+
+    for (const ProjectConnectionRecord& record : document.connections) {
+        if (!moduleIds.contains(record.source.moduleId) || !moduleIds.contains(record.target.moduleId)) {
+            return failure(QStringLiteral("Connection %1 references missing module").arg(record.id));
+        }
+
+        const ModuleType* sourceType = moduleTypesById.value(record.source.moduleId);
+        const ModuleType* targetType = moduleTypesById.value(record.target.moduleId);
+        if (!sourceType || !targetType ||
+            !hasPort(*sourceType, record.source.portId) ||
+            !hasPort(*targetType, record.target.portId)) {
+            return failure(QStringLiteral("Connection %1 references missing port").arg(record.id));
+        }
+    }
+
+    while (!graph.modules().empty()) {
+        graph.removeModule(graph.modules().front()->id());
+    }
+
+    for (const ProjectModuleRecord& record : document.modules) {
+        const ModuleType* type = moduleTypesById.value(record.id);
 
         auto module = instantiateModule(*type, record.id);
         for (auto it = record.parameters.begin(); it != record.parameters.end(); ++it) {
             const auto defaultIt = type->defaultParameters.find(it.key());
-            if (defaultIt != type->defaultParameters.end()) {
-                module->setParameter(it.key(), valueFromJson(it.value(), defaultIt.value().value()));
-            } else {
-                module->setParameter(it.key(), it.value().toVariant().toString());
-            }
+            module->setParameter(it.key(), valueFromJson(it.value(), defaultIt.value().value()));
         }
 
         if (!graph.addModule(std::move(module))) {

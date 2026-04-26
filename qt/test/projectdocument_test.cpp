@@ -12,6 +12,7 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QJsonDocument>
+#include <QJsonObject>
 #include <QTemporaryDir>
 #include <iostream>
 #include <memory>
@@ -96,6 +97,52 @@ void registerProjectTypes() {
     registered = true;
 }
 
+ProjectDocument validProjectDocument() {
+    registerProjectTypes();
+
+    ProjectDocument document;
+    document.name = QStringLiteral("validation");
+    document.plugins.push_back(ProjectPluginRecord{QStringLiteral("finepaper.test"),
+                                                   QStringLiteral("1.0")});
+
+    ProjectModuleRecord xp;
+    xp.id = QStringLiteral("node_1");
+    xp.pluginId = QStringLiteral("finepaper.test");
+    xp.type = QStringLiteral("ProjectDocXP");
+    xp.parameters.insert(QStringLiteral("external_id"), QStringLiteral("xp_0_0"));
+    xp.parameters.insert(QStringLiteral("display_name"), QStringLiteral("XP 0 0"));
+    xp.parameters.insert(QStringLiteral("x"), 0);
+    xp.parameters.insert(QStringLiteral("y"), 0);
+    xp.parameters.insert(QStringLiteral("collapsed"), true);
+    xp.parameters.insert(QStringLiteral("routing_algorithm"), QStringLiteral("xy"));
+    xp.parameters.insert(QStringLiteral("vc_count"), 2);
+    xp.parameters.insert(QStringLiteral("buffer_depth"), 8);
+    document.modules.push_back(xp);
+
+    ProjectModuleRecord endpoint;
+    endpoint.id = QStringLiteral("node_2");
+    endpoint.pluginId = QStringLiteral("finepaper.test");
+    endpoint.type = QStringLiteral("ProjectDocEndpoint");
+    endpoint.parameters.insert(QStringLiteral("external_id"), QStringLiteral("ep_cpu0"));
+    endpoint.parameters.insert(QStringLiteral("display_name"), QStringLiteral("CPU 0"));
+    endpoint.parameters.insert(QStringLiteral("x"), -160);
+    endpoint.parameters.insert(QStringLiteral("y"), 0);
+    endpoint.parameters.insert(QStringLiteral("type"), QStringLiteral("master"));
+    endpoint.parameters.insert(QStringLiteral("protocol"), QStringLiteral("axi4"));
+    endpoint.parameters.insert(QStringLiteral("data_width"), 64);
+    endpoint.parameters.insert(QStringLiteral("qos_enabled"), false);
+    endpoint.parameters.insert(QStringLiteral("buffer_depth"), 16);
+    document.modules.push_back(endpoint);
+
+    document.connections.push_back(ProjectConnectionRecord{
+        QStringLiteral("conn_1"),
+        ProjectConnectionEndpoint{QStringLiteral("node_1"), QStringLiteral("ep0")},
+        ProjectConnectionEndpoint{QStringLiteral("node_2"), QStringLiteral("noc")}
+    });
+
+    return document;
+}
+
 std::unique_ptr<Module> instantiate(const ModuleType& type, const QString& id) {
     auto module = std::make_unique<Module>(id, type.name);
     for (const Port& port : type.defaultPorts) {
@@ -168,6 +215,72 @@ void testProjectRoundTripRestoresModulesParametersAndConnections() {
             "connection target should be restored");
 }
 
+void testReaderRejectsWrongKind() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "failed to create temporary directory");
+    const QString projectPath = QDir(tempDir.path()).filePath(QStringLiteral("wrong_kind.fpproj"));
+
+    QFile file(projectPath);
+    require(file.open(QIODevice::WriteOnly | QIODevice::Truncate),
+            "failed to write wrong-kind project");
+    file.write(QJsonDocument(QJsonObject{
+        {QStringLiteral("schema"), QStringLiteral("v1")},
+        {QStringLiteral("kind"), QStringLiteral("not-a-project")}
+    }).toJson());
+    file.close();
+
+    const ProjectReadResult result = ProjectReader::readFile(projectPath);
+    require(!result.success, "wrong project kind should be rejected");
+    require(result.error.contains(QStringLiteral("kind")),
+            "wrong-kind error should mention kind");
+}
+
+void testLoadRejectsDuplicateModuleIds() {
+    ProjectDocument document = validProjectDocument();
+    ProjectModuleRecord duplicate = document.modules.first();
+    duplicate.type = QStringLiteral("ProjectDocEndpoint");
+    document.modules.push_back(duplicate);
+
+    Graph graph;
+    const GraphProjectLoadResult result = GraphProjectSerializer::loadProject(document, graph);
+    require(!result.success, "duplicate module id should be rejected");
+    require(result.error.contains(QStringLiteral("node_1")),
+            "duplicate module id error should mention the duplicated id");
+}
+
+void testLoadRejectsMissingModuleType() {
+    ProjectDocument document = validProjectDocument();
+    document.modules.first().type = QStringLiteral("MissingProjectType");
+
+    Graph graph;
+    const GraphProjectLoadResult result = GraphProjectSerializer::loadProject(document, graph);
+    require(!result.success, "missing module type should be rejected");
+    require(result.error.contains(QStringLiteral("MissingProjectType")),
+            "missing type error should mention the type");
+}
+
+void testLoadRejectsInvalidParameterType() {
+    ProjectDocument document = validProjectDocument();
+    document.modules.last().parameters.insert(QStringLiteral("data_width"), QStringLiteral("wide"));
+
+    Graph graph;
+    const GraphProjectLoadResult result = GraphProjectSerializer::loadProject(document, graph);
+    require(!result.success, "invalid parameter type should be rejected");
+    require(result.error.contains(QStringLiteral("data_width")),
+            "invalid parameter error should mention the parameter");
+}
+
+void testLoadRejectsInvalidConnectionReference() {
+    ProjectDocument document = validProjectDocument();
+    document.connections.first().target.moduleId = QStringLiteral("missing_node");
+
+    Graph graph;
+    const GraphProjectLoadResult result = GraphProjectSerializer::loadProject(document, graph);
+    require(!result.success, "connection referencing missing module should be rejected");
+    require(result.error.contains(QStringLiteral("conn_1")),
+            "invalid connection error should mention the connection id");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -175,6 +288,11 @@ int main(int argc, char** argv) {
 
     try {
         testProjectRoundTripRestoresModulesParametersAndConnections();
+        testReaderRejectsWrongKind();
+        testLoadRejectsDuplicateModuleIds();
+        testLoadRejectsMissingModuleType();
+        testLoadRejectsInvalidParameterType();
+        testLoadRejectsInvalidConnectionReference();
     } catch (const std::exception& error) {
         std::cerr << "projectdocument_test failed: " << error.what() << '\n';
         return 1;
