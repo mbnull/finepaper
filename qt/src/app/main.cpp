@@ -1,11 +1,10 @@
 // Entry point for Qt NoC/SoC editor application
 #include "app/mainwindow.h"
+#include "app/logformat.h"
 #include "app/uiscale.h"
 #include <QApplication>
-#include <QDateTime>
 #include <QDir>
 #include <QFile>
-#include <QFileInfo>
 #include <QMessageLogContext>
 #include <QMutex>
 #include <QMutexLocker>
@@ -25,23 +24,6 @@ QFile*& logFileHandle() {
     return file;
 }
 
-QString logLevelName(QtMsgType type) {
-    switch (type) {
-    case QtDebugMsg:
-        return "DEBUG";
-    case QtInfoMsg:
-        return "INFO";
-    case QtWarningMsg:
-        return "WARN";
-    case QtCriticalMsg:
-        return "ERROR";
-    case QtFatalMsg:
-        return "FATAL";
-    }
-
-    return "UNKNOWN";
-}
-
 QString resolveLogFilePath() {
     QString logDirPath = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
     if (logDirPath.isEmpty()) {
@@ -54,17 +36,10 @@ QString resolveLogFilePath() {
 }
 
 void logToFile(QtMsgType type, const QMessageLogContext& context, const QString& message) {
-    const QString timestamp = QDateTime::currentDateTime().toString(Qt::ISODateWithMs);
-    const QString category = context.category ? QString::fromUtf8(context.category) : QStringLiteral("default");
-    const QString fileName = context.file ? QFileInfo(QString::fromUtf8(context.file)).fileName() : QStringLiteral("-");
-    const QString line = context.line > 0 ? QString::number(context.line) : QStringLiteral("-");
-    const QString formatted = QString("[%1] [%2] [%3] %4:%5 %6")
-                                  .arg(timestamp,
-                                       logLevelName(type),
-                                       category,
-                                       fileName,
-                                       line,
-                                       message);
+    const QString formatted = LogFormat::formatMessage(type,
+                                                       context,
+                                                       message,
+                                                       QDateTime::currentDateTime());
 
     // Keep line writes atomic so multi-threaded logs do not interleave.
     QMutexLocker locker(&logMutex());

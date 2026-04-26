@@ -91,6 +91,28 @@ add_qt_test_target("uiscale_test", "test/uiscale_test.cpp", {
     "inc/**/uiscale.h"
 })
 
+add_qt_test_target("logformat_test", "test/logformat_test.cpp", {
+    "src/**/logformat.cpp",
+    "inc/**/logformat.h"
+})
+
+target("logpanel_test")
+    add_rules("qt.widgetapp")
+    set_kind("binary")
+    set_group("test")
+    set_default(false)
+    set_languages("c++23")
+
+    add_includedirs("inc")
+    add_files("test/logpanel_test.cpp")
+    add_files("src/**/logpanel.cpp")
+    add_files("src/**/validationresult.cpp")
+    add_files("inc/**/logpanel.h")
+    add_tests("default", {
+        trim_output = true,
+        pass_outputs = "logpanel_test passed"
+    })
+
 add_qt_test_target("plugin_test", "test/plugin_test.cpp", {
     "src/**/pluginregistry.cpp",
     "src/**/startupdiagnostics.cpp",

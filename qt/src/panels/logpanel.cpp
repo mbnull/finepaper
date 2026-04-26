@@ -55,11 +55,14 @@ void LogPanel::appendMessage(const QString& message,
                              const QString& elementId) {
     auto* item = new QListWidgetItem();
     const QString timestamp = QDateTime::currentDateTime().toString(QStringLiteral("yyyy-MM-dd HH:mm:ss"));
-    const QString timestampedMessage = QStringLiteral("[%1] %2").arg(timestamp, message);
-    item->setText(elementId.isEmpty()
-        ? timestampedMessage
-        : QString("%1 [%2]").arg(timestampedMessage, elementId));
+    const QString visibleMessage = elementId.isEmpty()
+        ? message
+        : QString("%1 [%2]").arg(message, elementId);
+    const QString timestampedMessage = QStringLiteral("[%1] %2").arg(timestamp, visibleMessage);
+    item->setText(visibleMessage);
+    item->setToolTip(timestampedMessage);
     item->setData(Qt::UserRole, elementId);
+    item->setData(Qt::UserRole + 1, timestamp);
 
     if (color.isValid()) {
         item->setForeground(color);
