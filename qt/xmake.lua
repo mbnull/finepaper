@@ -96,6 +96,29 @@ add_qt_test_target("logformat_test", "test/logformat_test.cpp", {
     "inc/**/logformat.h"
 })
 
+add_qt_test_target("projectdocument_test", "test/projectdocument_test.cpp", {
+    "src/**/projectreader.cpp",
+    "src/**/projectwriter.cpp",
+    "src/**/graphprojectserializer.cpp",
+    "src/**/graph.cpp",
+    "src/**/module.cpp",
+    "src/**/connection.cpp",
+    "src/**/port.cpp",
+    "src/**/parameter.cpp",
+    "src/**/frameworkpaths.cpp",
+    "src/**/moduleregistry.cpp",
+    "src/**/moduleprovider.cpp",
+    "src/**/pluginregistry.cpp",
+    "inc/**/projectdocument.h",
+    "inc/**/projectreader.h",
+    "inc/**/projectwriter.h",
+    "inc/**/graphprojectserializer.h",
+    "inc/**/graph.h",
+    "inc/**/module.h",
+    "inc/**/pluginregistry.h",
+    "inc/**/plugindescriptor.h"
+})
+
 target("logpanel_test")
     add_rules("qt.widgetapp")
     set_kind("binary")
