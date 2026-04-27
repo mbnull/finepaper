@@ -27,6 +27,14 @@ void require(bool condition, const char* message) {
     }
 }
 
+void writeJsonFile(const QString& path, const QJsonObject& object) {
+    QFile file(path);
+    require(file.open(QIODevice::WriteOnly | QIODevice::Truncate),
+            "failed to write JSON fixture");
+    file.write(QJsonDocument(object).toJson());
+    file.close();
+}
+
 template <typename T>
 T parameterValue(const Module* module, const QString& name) {
     const auto it = module->parameters().find(name);
@@ -282,6 +290,86 @@ void testLoadRejectsInvalidConnectionReference() {
             "invalid connection error should mention the connection id");
 }
 
+void testLoadRejectsConnectionInvalidatedByEarlierConnectionWithoutChangingGraph() {
+    registerProjectTypes();
+
+    Graph graph;
+    require(graph.addModule(instantiate(makeProjectEndpointType(), QStringLiteral("existing_node"))),
+            "failed to add existing module");
+
+    ProjectDocument document = validProjectDocument();
+
+    ProjectModuleRecord secondEndpoint = document.modules.last();
+    secondEndpoint.id = QStringLiteral("node_3");
+    document.modules.push_back(secondEndpoint);
+    document.connections.push_back(ProjectConnectionRecord{
+        QStringLiteral("conn_2"),
+        ProjectConnectionEndpoint{QStringLiteral("node_1"), QStringLiteral("ep0")},
+        ProjectConnectionEndpoint{QStringLiteral("node_3"), QStringLiteral("noc")}
+    });
+
+    const GraphProjectLoadResult result = GraphProjectSerializer::loadProject(document, graph);
+
+    require(!result.success, "duplicate source-port connection should be rejected");
+    require(result.error.contains(QStringLiteral("conn_2")),
+            "invalid connection error should mention the rejected connection id");
+    require(graph.modules().size() == 1, "failed project load should preserve existing modules");
+    require(graph.connections().empty(), "failed project load should preserve existing connections");
+    require(graph.getModule(QStringLiteral("existing_node")) != nullptr,
+            "failed project load should keep the previous graph");
+    require(graph.getModule(QStringLiteral("node_1")) == nullptr,
+            "failed project load should not partially install new modules");
+}
+
+void testReaderRejectsMalformedProjectGraphArrays() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "failed to create temporary directory");
+
+    auto baseProject = [] {
+        return QJsonObject{
+            {QStringLiteral("schema"), QStringLiteral("v1")},
+            {QStringLiteral("kind"), QStringLiteral("finepaper-project")},
+            {QStringLiteral("project"), QJsonObject{
+                {QStringLiteral("name"), QStringLiteral("malformed")},
+                {QStringLiteral("version"), QStringLiteral("1.0")}
+            }},
+            {QStringLiteral("plugins"), QJsonArray{}}
+        };
+    };
+
+    QJsonObject missingGraph = baseProject();
+    QString path = QDir(tempDir.path()).filePath(QStringLiteral("missing_graph.fpproj"));
+    writeJsonFile(path, missingGraph);
+    ProjectReadResult result = ProjectReader::readFile(path);
+    require(!result.success, "missing graph object should be rejected");
+    require(result.error.contains(QStringLiteral("graph")),
+            "missing graph error should mention graph");
+
+    QJsonObject wrongModules = baseProject();
+    wrongModules.insert(QStringLiteral("graph"), QJsonObject{
+        {QStringLiteral("modules"), QJsonObject{}},
+        {QStringLiteral("connections"), QJsonArray{}}
+    });
+    path = QDir(tempDir.path()).filePath(QStringLiteral("wrong_modules.fpproj"));
+    writeJsonFile(path, wrongModules);
+    result = ProjectReader::readFile(path);
+    require(!result.success, "non-array modules should be rejected");
+    require(result.error.contains(QStringLiteral("graph.modules")),
+            "modules error should mention graph.modules");
+
+    QJsonObject wrongConnections = baseProject();
+    wrongConnections.insert(QStringLiteral("graph"), QJsonObject{
+        {QStringLiteral("modules"), QJsonArray{}},
+        {QStringLiteral("connections"), QJsonObject{}}
+    });
+    path = QDir(tempDir.path()).filePath(QStringLiteral("wrong_connections.fpproj"));
+    writeJsonFile(path, wrongConnections);
+    result = ProjectReader::readFile(path);
+    require(!result.success, "non-array connections should be rejected");
+    require(result.error.contains(QStringLiteral("graph.connections")),
+            "connections error should mention graph.connections");
+}
+
 void testReaderDetectsProjectAndLegacyJsonFiles() {
     QTemporaryDir tempDir;
     require(tempDir.isValid(), "failed to create temporary directory");
@@ -292,17 +380,13 @@ void testReaderDetectsProjectAndLegacyJsonFiles() {
         ProjectWriter::writeFile(projectPath, validProjectDocument());
     require(writeResult.success, "failed to write project fixture");
 
-    QFile legacyFile(legacyPath);
-    require(legacyFile.open(QIODevice::WriteOnly | QIODevice::Truncate),
-            "failed to write legacy fixture");
-    legacyFile.write(QJsonDocument(QJsonObject{
+    writeJsonFile(legacyPath, QJsonObject{
         {QStringLiteral("name"), QStringLiteral("legacy")},
         {QStringLiteral("version"), QStringLiteral("1.0")},
         {QStringLiteral("xps"), QJsonArray{}},
         {QStringLiteral("endpoints"), QJsonArray{}},
         {QStringLiteral("connections"), QJsonArray{}}
-    }).toJson());
-    legacyFile.close();
+    });
 
     require(ProjectReader::detectKind(projectPath) == ProjectFileKind::Project,
             "project file should be detected as Finepaper project");
@@ -322,6 +406,8 @@ int main(int argc, char** argv) {
         testLoadRejectsMissingModuleType();
         testLoadRejectsInvalidParameterType();
         testLoadRejectsInvalidConnectionReference();
+        testLoadRejectsConnectionInvalidatedByEarlierConnectionWithoutChangingGraph();
+        testReaderRejectsMalformedProjectGraphArrays();
         testReaderDetectsProjectAndLegacyJsonFiles();
     } catch (const std::exception& error) {
         std::cerr << "projectdocument_test failed: " << error.what() << '\n';

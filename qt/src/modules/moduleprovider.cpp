@@ -304,6 +304,33 @@ void applyGraphicsElement(ModuleType& type, QXmlStreamReader& xml) {
     }
 }
 
+void loadAnchorsFromXml(ModuleType& type, QXmlStreamReader& xml) {
+    while (xml.readNextStartElement()) {
+        if (xml.name() != u"anchor") {
+            xml.skipCurrentElement();
+            continue;
+        }
+
+        const QXmlStreamAttributes attrs = xml.attributes();
+        const QString interfaceId = attributeValue(attrs, u"ref");
+        const std::optional<double> x = optionalDoubleAttribute(attrs, u"x");
+        const std::optional<double> y = optionalDoubleAttribute(attrs, u"y");
+        if (!interfaceId.isEmpty() && x.has_value() && y.has_value()) {
+            ModuleInterfaceAnchor anchor;
+            anchor.interfaceId = interfaceId;
+            anchor.x = *x;
+            anchor.y = *y;
+            anchor.normalX = optionalDoubleAttribute(attrs, u"normal_x");
+            anchor.normalY = optionalDoubleAttribute(attrs, u"normal_y");
+            anchor.label = attributeValue(attrs, u"label");
+            anchor.labelX = optionalDoubleAttribute(attrs, u"label_x");
+            anchor.labelY = optionalDoubleAttribute(attrs, u"label_y");
+            type.interfaceAnchors.insert(anchor.interfaceId, anchor);
+        }
+        xml.skipCurrentElement();
+    }
+}
+
 QVector<ModuleConfigField> configFieldsFromXml(QXmlStreamReader& xml) {
     QVector<ModuleConfigField> fields;
 
@@ -436,6 +463,7 @@ void loadInterfacesFromXml(ModuleType& type, QXmlStreamReader& xml) {
         const QXmlStreamAttributes attrs = xml.attributes();
         ModuleInterfaceMetadata metadata;
         metadata.id = attributeValue(attrs, u"id");
+        metadata.label = attributeValue(attrs, u"label");
         metadata.bus = attributeValue(attrs, u"bus");
         metadata.role = attributeValue(attrs, u"role");
         metadata.compatibleRoles = stringListAttribute(attrs, u"connects_to");
@@ -691,6 +719,8 @@ ModuleType loadModuleTypeFromXml(QXmlStreamReader& xml) {
             xml.skipCurrentElement();
         } else if (xml.name() == u"graphics") {
             applyGraphicsElement(type, xml);
+        } else if (xml.name() == u"anchors") {
+            loadAnchorsFromXml(type, xml);
         } else if (xml.name() == u"interfaces") {
             loadInterfacesFromXml(type, xml);
         } else if (xml.name() == u"ports") {
@@ -829,6 +859,8 @@ void XmlModulePresentationOverlay::apply(QHash<QString, ModuleType>& types) {
             while (xml.readNextStartElement()) {
                 if (xml.name() == u"graphics") {
                     applyGraphicsElement(typeIt.value(), xml);
+                } else if (xml.name() == u"anchors") {
+                    loadAnchorsFromXml(typeIt.value(), xml);
                 } else if (xml.name() == u"config-zone") {
                     applyConfigZoneElement(typeIt.value(), xml);
                 } else {
@@ -872,6 +904,8 @@ void XmlModuleGraphicsOverlay::apply(QHash<QString, ModuleType>& types) {
             while (xml.readNextStartElement()) {
                 if (xml.name() == u"graphics") {
                     applyGraphicsElement(typeIt.value(), xml);
+                } else if (xml.name() == u"anchors") {
+                    loadAnchorsFromXml(typeIt.value(), xml);
                 } else {
                     xml.skipCurrentElement();
                 }

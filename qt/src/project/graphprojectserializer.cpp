@@ -71,6 +71,44 @@ GraphProjectLoadResult failure(const QString& error) {
     return {false, error};
 }
 
+GraphProjectLoadResult populateGraph(const ProjectDocument& document,
+                                     const QHash<QString, const ModuleType*>& moduleTypesById,
+                                     Graph& graph) {
+    for (const ProjectModuleRecord& record : document.modules) {
+        const ModuleType* type = moduleTypesById.value(record.id);
+
+        auto module = instantiateModule(*type, record.id);
+        for (auto it = record.parameters.begin(); it != record.parameters.end(); ++it) {
+            const auto defaultIt = type->defaultParameters.find(it.key());
+            module->setParameter(it.key(), valueFromJson(it.value(), defaultIt.value().value()));
+        }
+
+        if (!graph.addModule(std::move(module))) {
+            return failure(QStringLiteral("Could not add module: %1").arg(record.id));
+        }
+    }
+
+    for (const ProjectConnectionRecord& record : document.connections) {
+        const Module* sourceModule = graph.getModule(record.source.moduleId);
+        const Module* targetModule = graph.getModule(record.target.moduleId);
+        if (!sourceModule || !targetModule) {
+            return failure(QStringLiteral("Connection %1 references missing module").arg(record.id));
+        }
+        if (!hasPort(sourceModule, record.source.portId) || !hasPort(targetModule, record.target.portId)) {
+            return failure(QStringLiteral("Connection %1 references missing port").arg(record.id));
+        }
+
+        const PortRef source{record.source.moduleId, record.source.portId};
+        const PortRef target{record.target.moduleId, record.target.portId};
+        if (!graph.isValidConnection(source, target)) {
+            return failure(QStringLiteral("Invalid connection: %1").arg(record.id));
+        }
+        graph.addConnection(std::make_unique<Connection>(record.id, source, target));
+    }
+
+    return {true, {}};
+}
+
 } // namespace
 
 ProjectDocument GraphProjectSerializer::toProject(const Graph& graph, const QString& projectName) {
@@ -170,41 +208,13 @@ GraphProjectLoadResult GraphProjectSerializer::loadProject(const ProjectDocument
         }
     }
 
-    while (!graph.modules().empty()) {
-        graph.removeModule(graph.modules().front()->id());
+    Graph candidate;
+    const GraphProjectLoadResult validationResult =
+        populateGraph(document, moduleTypesById, candidate);
+    if (!validationResult.success) {
+        return validationResult;
     }
 
-    for (const ProjectModuleRecord& record : document.modules) {
-        const ModuleType* type = moduleTypesById.value(record.id);
-
-        auto module = instantiateModule(*type, record.id);
-        for (auto it = record.parameters.begin(); it != record.parameters.end(); ++it) {
-            const auto defaultIt = type->defaultParameters.find(it.key());
-            module->setParameter(it.key(), valueFromJson(it.value(), defaultIt.value().value()));
-        }
-
-        if (!graph.addModule(std::move(module))) {
-            return failure(QStringLiteral("Could not add module: %1").arg(record.id));
-        }
-    }
-
-    for (const ProjectConnectionRecord& record : document.connections) {
-        const Module* sourceModule = graph.getModule(record.source.moduleId);
-        const Module* targetModule = graph.getModule(record.target.moduleId);
-        if (!sourceModule || !targetModule) {
-            return failure(QStringLiteral("Connection %1 references missing module").arg(record.id));
-        }
-        if (!hasPort(sourceModule, record.source.portId) || !hasPort(targetModule, record.target.portId)) {
-            return failure(QStringLiteral("Connection %1 references missing port").arg(record.id));
-        }
-
-        const PortRef source{record.source.moduleId, record.source.portId};
-        const PortRef target{record.target.moduleId, record.target.portId};
-        if (!graph.isValidConnection(source, target)) {
-            return failure(QStringLiteral("Invalid connection: %1").arg(record.id));
-        }
-        graph.addConnection(std::make_unique<Connection>(record.id, source, target));
-    }
-
-    return {true, {}};
+    graph.clear();
+    return populateGraph(document, moduleTypesById, graph);
 }

@@ -41,12 +41,24 @@ struct ModuleConfigField {
 
 struct ModuleInterfaceMetadata {
     QString id;
+    QString label;
     QString bus;
     QString role;
     QStringList compatibleRoles;
     QStringList matchFields;
     QHash<QString, QStringList> acceptedValues;
     QHash<QString, QString> parameterBindings;
+};
+
+struct ModuleInterfaceAnchor {
+    QString interfaceId;
+    double x = 0.0;
+    double y = 0.0;
+    std::optional<double> normalX;
+    std::optional<double> normalY;
+    QString label;
+    std::optional<double> labelX;
+    std::optional<double> labelY;
 };
 
 struct ModuleType {
@@ -61,6 +73,7 @@ struct ModuleType {
     QString nodeColor;
     QString editorLayout;
     QString graphGroup;
+    QHash<QString, ModuleInterfaceAnchor> interfaceAnchors;
     int expandedNodeMinWidth = 104;
     int expandedNodeHeight = 54;
     int collapsedNodeMinWidth = 104;

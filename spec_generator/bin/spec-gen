@@ -6,10 +6,10 @@ require 'optparse'
 require 'spec_generator'
 
 options = {
-  spec_path: 'spec/noc.yaml',
-  views_dir: 'spec/views',
-  qt_bundle_dir: 'qt/bundles',
-  ruby_model_dir: 'framework/src/ruby/model'
+  spec_path: 'spec/noc/noc.yaml',
+  views_dir: 'spec/noc/views',
+  qt_bundle_dir: 'plugins/noc',
+  ruby_model_dir: 'plugins/noc/generator/src/ruby/model'
 }
 
 begin

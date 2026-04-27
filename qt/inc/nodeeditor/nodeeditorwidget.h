@@ -10,6 +10,8 @@
 #include <QList>
 #include <QSet>
 #include <QRectF>
+#include <QPointF>
+#include <QSize>
 #include <functional>
 #include "graph/graph.h"
 #include "commands/commandmanager.h"
@@ -72,6 +74,19 @@ private:
         QSet<QString> endpointModuleIds;
     };
 
+    struct ResizeInteraction {
+        bool active = false;
+        QtNodes::NodeId nodeId = QtNodes::InvalidNodeId;
+        QString moduleId;
+        QPointF pressScenePos;
+        QSize startSize;
+        QSize currentSize;
+        bool hadWidth = false;
+        bool hadHeight = false;
+        Parameter::Value oldWidth;
+        Parameter::Value oldHeight;
+    };
+
     void ensureModuleInView(Module* module);
     void removeModuleFromView(const QString& moduleId);
     bool ensureConnectionInView(Connection* connection);
@@ -106,17 +121,26 @@ private:
     void hideModuleConnections(const ModulePresentationState& state);
     void applyCollapsedModulePresentation(const ModulePresentationState& state);
     void applyExpandedModulePresentation(const ModulePresentationState& state);
+    void positionAttachedEndpoint(Connection* connection);
     bool handleViewportDragEnter(QDragEnterEvent* event);
     bool handleViewportDragMove(QDragMoveEvent* event);
     bool handleViewportDrop(QDropEvent* event);
     bool handleViewportMouseRelease(QMouseEvent* event);
     bool handleViewportMousePress(QMouseEvent* event);
+    bool handleViewportMouseMove(QMouseEvent* event);
     bool handleViewportMouseDoubleClick(QMouseEvent* event);
     bool handleViewportContextMenu(QContextMenuEvent* event);
     bool showNodeContextMenu(const QPoint& viewportPos, const QPoint& globalPos);
     bool showCanvasCreateMenu(const QPoint& viewportPos, const QPoint& globalPos);
     bool createModuleAt(const QString& moduleType, const QPointF& scenePos);
     QPointF clampNodePosition(QtNodes::NodeId nodeId, const QPointF& position) const;
+    QSize minimumNodeSize(QtNodes::NodeId nodeId) const;
+    bool tryBeginNodeResize(const QPoint& viewportPos);
+    void updateNodeResize(const QPoint& viewportPos);
+    void finishNodeResize();
+    void cancelNodeResize();
+    void applyTransientNodeSize(const QString& moduleId, QtNodes::NodeId nodeId, QSize const& size);
+    void restoreResizeParameters(Module* module);
     void refreshModulePresentation(const QString& moduleId);
     void refreshAllModulePresentations();
 
@@ -131,6 +155,7 @@ private:
     QMap<QString, QtNodes::ConnectionId> m_connectionToQtId;
     QSet<QtNodes::ConnectionId> m_pendingConnections;
     QSet<QtNodes::ConnectionId> m_pendingRemovals;
+    ResizeInteraction m_resize;
     int m_updatingFromGraph = 0;
     QRectF m_canvasRect;
 };

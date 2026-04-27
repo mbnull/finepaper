@@ -3,6 +3,7 @@
 
 #include <QtNodes/internal/AbstractNodeGeometry.hpp>
 #include "graph/port.h"
+#include <optional>
 
 class GraphNodeModel;
 
@@ -35,8 +36,15 @@ private:
     QPointF fallbackPortPosition(const GraphNodeModel& model, const Port& port, QSize const& nodeSize) const;
     QPointF endpointPortPosition(QtNodes::NodeId nodeId,
                                  QtNodes::PortType portType,
+                                 QtNodes::PortIndex portIndex,
+                                 const Port& port,
                                  QSize const& nodeSize) const;
-    bool endpointPortOnLeft(QtNodes::NodeId nodeId) const;
+    std::optional<QPointF> connectedPortNormal(QtNodes::NodeId nodeId,
+                                               QtNodes::PortType portType,
+                                               QtNodes::PortIndex portIndex) const;
+    std::optional<QPointF> connectedNodeHorizontalDirection(QtNodes::NodeId nodeId,
+                                                            QtNodes::PortType portType,
+                                                            QtNodes::PortIndex portIndex) const;
     int fallbackPortCount(const GraphNodeModel& model, const QString& side) const;
     int fallbackPortSlot(const GraphNodeModel& model, const Port& port, const QString& side) const;
     static qreal stackedPortY(int slot, int slotCount, qreal top, qreal bottom);

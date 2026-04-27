@@ -6,4 +6,7 @@
                  loose_endpoint_spacing_y="84"
                  loose_endpoint_margin_y="116" />
   </graphics>
+  <anchors>
+    <anchor ref="noc" x="104" y="27" normal_x="1" normal_y="0" label="NoC" label_x="78" label_y="40" />
+  </anchors>
 </module-graphics>

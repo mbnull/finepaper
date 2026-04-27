@@ -136,6 +136,36 @@ target("logpanel_test")
         pass_outputs = "logpanel_test passed"
     })
 
+target("nodeeditor_geometry_test")
+    add_rules("qt.widgetapp")
+    set_kind("binary")
+    set_group("test")
+    set_default(false)
+    set_languages("c++23")
+
+    add_packages("nodeeditor")
+    add_includedirs("inc")
+    add_files("test/nodeeditor_geometry_test.cpp")
+    add_files("src/**/module.cpp")
+    add_files("src/**/parameter.cpp")
+    add_files("src/**/port.cpp")
+    add_files("src/**/moduleregistry.cpp")
+    add_files("src/**/moduleprovider.cpp")
+    add_files("src/**/pluginregistry.cpp")
+    add_files("src/**/frameworkpaths.cpp")
+    add_files("src/nodeeditor/graphnodemodel.cpp")
+    add_files("src/nodeeditor/graphnodegeometry.cpp")
+    add_files("inc/**/module.h")
+    add_files("inc/**/modulelabels.h")
+    add_files("inc/**/moduleregistry.h")
+    add_files("inc/**/pluginregistry.h")
+    add_files("inc/**/plugindescriptor.h")
+    add_files("inc/**/graphnodemodel.h")
+    add_tests("default", {
+        trim_output = true,
+        pass_outputs = "nodeeditor_geometry_test passed"
+    })
+
 add_qt_test_target("plugin_test", "test/plugin_test.cpp", {
     "src/**/pluginregistry.cpp",
     "src/**/startupdiagnostics.cpp",

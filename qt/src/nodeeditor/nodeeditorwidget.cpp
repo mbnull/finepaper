@@ -13,6 +13,9 @@
 #include "modules/moduletypemetadata.h"
 #include "modules/moduleregistry.h"
 #include "nodeeditor/nodeeditorentityfactory.h"
+#include "nodeeditor/endpointattachmentlayout.h"
+#include "nodeeditor/portanchorgeometry.h"
+#include "nodeeditor/routerconnectionresolver.h"
 #include "common/portlayout.h"
 #include "nodeeditor/straightconnectionpainter.h"
 #include "commands/arrangecommand.h"
@@ -86,6 +89,14 @@ bool isEndpointAttachmentConnection(const Graph* graph,
     const Module* sourceModule = graph->getModule(connection.source().moduleId);
     const Module* targetModule = graph->getModule(connection.target().moduleId);
     if (!sourceModule || !targetModule) return false;
+
+    if (isEndpointModule(sourceModule) && isMeshRouterModule(targetModule) &&
+        PortLayout::isEndpointPortId(connection.target().portId)) {
+        if (hostModuleId) *hostModuleId = targetModule->id();
+        if (endpointModuleId) *endpointModuleId = sourceModule->id();
+        return true;
+    }
+
     if (!isMeshRouterModule(sourceModule) || !isEndpointModule(targetModule)) return false;
     if (!PortLayout::isEndpointPortId(connection.source().portId)) return false;
 
@@ -104,6 +115,44 @@ const Port* findPort(const Module* module, const QString& portId) {
     }
 
     return nullptr;
+}
+
+QPointF normalForSide(const QString& side) {
+    if (side == QStringLiteral("north")) return QPointF(0.0, -1.0);
+    if (side == QStringLiteral("east")) return QPointF(1.0, 0.0);
+    if (side == QStringLiteral("south")) return QPointF(0.0, 1.0);
+    if (side == QStringLiteral("west")) return QPointF(-1.0, 0.0);
+    return {};
+}
+
+QPointF portNormal(const Module* module,
+                   const Port* port,
+                   const QPointF& portPosition,
+                   QSize const& nodeSize) {
+    if (!module || !port) {
+        return {};
+    }
+
+    const QPointF edgeNormal = PortAnchorGeometry::normalFromEdge(portPosition, nodeSize);
+    if ((ModuleTypeMetadata::hasEditorLayout(module, u"mesh_router") ||
+         ModuleTypeMetadata::hasEditorLayout(module, u"endpoint")) &&
+        !edgeNormal.isNull()) {
+        return edgeNormal;
+    }
+
+    if (const ModuleInterfaceAnchor* anchor = ModuleTypeMetadata::interfaceAnchor(module, *port);
+        anchor && anchor->normalX.has_value() && anchor->normalY.has_value()) {
+        return QPointF(*anchor->normalX, *anchor->normalY);
+    }
+
+    if (!edgeNormal.isNull()) {
+        return edgeNormal;
+    }
+
+    if (PortLayout::isRouterPort(*port)) {
+        return normalForSide(PortLayout::routerSideId(port->id()));
+    }
+    return normalForSide(PortLayout::fallbackSide(*port));
 }
 
 constexpr qreal kCanvasHalfExtent = 2000.0;
@@ -270,6 +319,10 @@ void NodeEditorWidget::ensureModuleInView(Module* module) {
     m_moduleToNodeId[module->id()] = nodeId;
     m_nodeToModuleId[nodeId] = module->id();
     syncNodePositionFromParameters(module, nodeId);
+
+    if (ModuleTypeMetadata::supportsCollapse(module)) {
+        refreshModulePresentation(module->id());
+    }
 }
 
 void NodeEditorWidget::onModuleRemoved(const QString& moduleId) {
@@ -572,20 +625,24 @@ bool NodeEditorWidget::resolveRouterDraftConnection(const QtNodes::ConnectionGra
         return false;
     }
 
-    const QString startSide = PortLayout::routerSideId(startPortId);
-    const QString oppositeSide = PortLayout::oppositeRouterSide(startSide);
-    if (startSide.isEmpty() || oppositeSide.isEmpty()) {
+    const QPointF startPosition =
+        m_graphModel->nodeData(start->nodeId, QtNodes::NodeRole::Position).value<QPointF>();
+    const QPointF targetPosition =
+        m_graphModel->nodeData(targetNodeId, QtNodes::NodeRole::Position).value<QPointF>();
+
+    const std::optional<RouterConnectionResolver::ResolvedRouterConnection> resolved =
+        RouterConnectionResolver::resolveByPosition(
+            startModule,
+            endModule,
+            startPortId,
+            startPosition,
+            targetPosition);
+    if (!resolved.has_value()) {
         return false;
     }
 
-    if (start->startFromOutput) {
-        source = PortRef{startModuleId, PortLayout::routerOutputPortId(startSide)};
-        target = PortRef{targetModuleId, PortLayout::routerInputPortId(oppositeSide)};
-    } else {
-        source = PortRef{targetModuleId, PortLayout::routerOutputPortId(oppositeSide)};
-        target = PortRef{startModuleId, PortLayout::routerInputPortId(startSide)};
-    }
-
+    source = resolved->source;
+    target = resolved->target;
     return true;
 }
 
@@ -630,32 +687,44 @@ bool NodeEditorWidget::resolveEndpointDraftConnection(const QtNodes::ConnectionG
     }
 
     if (start->startFromOutput) {
-        if (!isMeshRouterModule(startModule) || !isEndpointModule(endModule)) {
-            return false;
+        if (isEndpointModule(startModule) && isMeshRouterModule(endModule)) {
+            const QString xpPortId = firstAvailablePort(m_graph, endModule, Port::Direction::Input,
+                [](const Port& port) { return PortLayout::isEndpointPort(port); });
+            if (xpPortId.isEmpty()) {
+                return false;
+            }
+
+            source = PortRef{startModuleId, startPortId};
+            target = PortRef{targetModuleId, xpPortId};
+            return true;
         }
 
-        const QString endpointPortId = firstAvailablePort(m_graph, endModule, Port::Direction::Input,
-            [](const Port& port) { return PortLayout::isEndpointPort(port); });
-        if (endpointPortId.isEmpty()) {
-            return false;
+        if (isMeshRouterModule(startModule) && isEndpointModule(endModule)) {
+            const QString endpointPortId = firstAvailablePort(m_graph, endModule, Port::Direction::Input,
+                [](const Port& port) { return PortLayout::isEndpointPort(port); });
+            if (endpointPortId.isEmpty()) {
+                return false;
+            }
+
+            source = PortRef{startModuleId, startPortId};
+            target = PortRef{targetModuleId, endpointPortId};
+            return true;
         }
 
-        source = PortRef{startModuleId, startPortId};
-        target = PortRef{targetModuleId, endpointPortId};
-        return true;
-    }
-
-    if (!isEndpointModule(startModule) || !isMeshRouterModule(endModule)) {
         return false;
     }
 
-    const QString xpPortId = firstAvailablePort(m_graph, endModule, Port::Direction::Output,
+    if (!isMeshRouterModule(startModule) || !isEndpointModule(endModule)) {
+        return false;
+    }
+
+    const QString endpointPortId = firstAvailablePort(m_graph, endModule, Port::Direction::Output,
         [](const Port& port) { return PortLayout::isEndpointPort(port); });
-    if (xpPortId.isEmpty()) {
+    if (endpointPortId.isEmpty()) {
         return false;
     }
 
-    source = PortRef{targetModuleId, xpPortId};
+    source = PortRef{targetModuleId, endpointPortId};
     target = PortRef{startModuleId, startPortId};
     return true;
 }
@@ -770,6 +839,14 @@ void NodeEditorWidget::onParameterChanged(const QString& paramName) {
     if (paramName == "collapsed") {
         refreshNodeGraphics(nodeId, true);
         refreshModulePresentation(module->id());
+        return;
+    }
+
+    if (paramName == "node_width" || paramName == "node_height") {
+        refreshNodeGraphics(nodeId, true);
+        if (ModuleTypeMetadata::supportsCollapse(module)) {
+            refreshModulePresentation(module->id());
+        }
         return;
     }
 
@@ -1002,7 +1079,76 @@ void NodeEditorWidget::applyExpandedModulePresentation(const ModulePresentationS
         ensureModuleInView(m_graph->getModule(endpointModuleId));
     }
 
+    for (Connection* connection : state.attachmentConnections) {
+        positionAttachedEndpoint(connection);
+    }
+
     for (Connection* connection : state.moduleConnections) {
         ensureConnectionInView(connection);
     }
+}
+
+void NodeEditorWidget::positionAttachedEndpoint(Connection* connection) {
+    if (!connection) {
+        return;
+    }
+
+    QString hostModuleId;
+    QString endpointModuleId;
+    if (!isEndpointAttachmentConnection(m_graph, *connection, &hostModuleId, &endpointModuleId)) {
+        return;
+    }
+
+    const auto hostNodeIt = m_moduleToNodeId.find(hostModuleId);
+    const auto endpointNodeIt = m_moduleToNodeId.find(endpointModuleId);
+    if (hostNodeIt == m_moduleToNodeId.end() || endpointNodeIt == m_moduleToNodeId.end()) {
+        return;
+    }
+
+    Module* hostModule = m_graph->getModule(hostModuleId);
+    Module* endpointModule = m_graph->getModule(endpointModuleId);
+    auto* hostModel = graphNodeModel(hostNodeIt.value());
+    auto* endpointModel = graphNodeModel(endpointNodeIt.value());
+    if (!hostModule || !endpointModule || !hostModel || !endpointModel) {
+        return;
+    }
+
+    const bool hostIsSource = connection->source().moduleId == hostModuleId;
+    const bool endpointIsSource = connection->source().moduleId == endpointModuleId;
+    const QString hostPortId = hostIsSource ? connection->source().portId : connection->target().portId;
+    const QString endpointPortId = endpointIsSource ? connection->source().portId : connection->target().portId;
+    const QtNodes::PortType hostPortType = hostIsSource ? QtNodes::PortType::Out : QtNodes::PortType::In;
+    const QtNodes::PortType endpointPortType = endpointIsSource ? QtNodes::PortType::Out : QtNodes::PortType::In;
+    const QtNodes::PortIndex hostPortIndex = hostModel->portIndex(hostPortId, hostPortType);
+    const QtNodes::PortIndex endpointPortIndex = endpointModel->portIndex(endpointPortId, endpointPortType);
+    if (hostPortIndex == QtNodes::InvalidPortIndex || endpointPortIndex == QtNodes::InvalidPortIndex) {
+        return;
+    }
+
+    auto const& geometry = m_scene->nodeGeometry();
+    const QPointF hostPosition =
+        m_graphModel->nodeData(hostNodeIt.value(), QtNodes::NodeRole::Position).value<QPointF>();
+    const QPointF hostPortPosition = geometry.portPosition(hostNodeIt.value(), hostPortType, hostPortIndex);
+    const Port* hostPort = findPort(hostModule, hostPortId);
+    const QPointF normal = portNormal(hostModule, hostPort, hostPortPosition, geometry.size(hostNodeIt.value()));
+    if (normal.isNull()) {
+        return;
+    }
+
+    const QPointF endpointPortPosition =
+        EndpointAttachmentLayout::endpointAnchorForHostNormal(geometry.size(endpointNodeIt.value()), normal);
+    const qreal configuredOffset = static_cast<qreal>(ModuleTypeMetadata::linkedEndpointOffsetX(hostModule));
+    const qreal projectedEndpointAnchor = QPointF::dotProduct(endpointPortPosition, normal);
+    const qreal gap = std::max<qreal>(32.0, configuredOffset + projectedEndpointAnchor);
+    const QPointF targetPosition = clampNodePosition(
+        endpointNodeIt.value(),
+        EndpointAttachmentLayout::endpointTopLeft(
+            hostPosition + hostPortPosition,
+            normal,
+            endpointPortPosition,
+            gap));
+
+    GraphUpdateGuard guard(m_updatingFromGraph);
+    m_graphModel->setNodeData(endpointNodeIt.value(), QtNodes::NodeRole::Position, targetPosition);
+    refreshNodeGraphics(endpointNodeIt.value(), true);
 }

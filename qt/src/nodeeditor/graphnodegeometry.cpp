@@ -1,6 +1,8 @@
 // GraphNodeGeometry computes node bounds, port coordinates, and hit-testing for QtNodes.
 #include "nodeeditor/graphnodegeometry.h"
 #include "nodeeditor/graphnodemodel.h"
+#include "nodeeditor/endpointattachmentlayout.h"
+#include "nodeeditor/portanchorgeometry.h"
 #include "modules/moduletypemetadata.h"
 #include "common/portlayout.h"
 #include <QtNodes/DataFlowGraphModel>
@@ -8,6 +10,7 @@
 #include <QFontMetrics>
 #include <QStringList>
 #include <algorithm>
+#include <optional>
 
 namespace {
 
@@ -16,6 +19,14 @@ QPointF cardinalPortPosition(const QString& side, QSize const& nodeSize, qreal i
     if (side == "east") return QPointF(nodeSize.width() - inset, nodeSize.height() / 2.0);
     if (side == "south") return QPointF(nodeSize.width() / 2.0, nodeSize.height() - inset);
     if (side == "west") return QPointF(inset, nodeSize.height() / 2.0);
+    return {};
+}
+
+QPointF normalForSide(const QString& side) {
+    if (side == QStringLiteral("north")) return QPointF(0.0, -1.0);
+    if (side == QStringLiteral("east")) return QPointF(1.0, 0.0);
+    if (side == QStringLiteral("south")) return QPointF(0.0, 1.0);
+    if (side == QStringLiteral("west")) return QPointF(-1.0, 0.0);
     return {};
 }
 
@@ -71,28 +82,81 @@ QSize sizeForModel(const GraphNodeModel* model) {
     const QString caption = model ? model->caption() : QString();
     const int captionWidth = QFontMetrics(QFont()).horizontalAdvance(caption) + 26;
 
+    const auto applyStoredSize = [](const Module* module, QSize baseSize) {
+        if (!module) {
+            return baseSize;
+        }
+
+        const auto intParameter = [module](const QString& name) -> std::optional<int> {
+            auto it = module->parameters().find(name);
+            if (it == module->parameters().end()) {
+                return std::nullopt;
+            }
+
+            const auto& value = it.value().value();
+            if (const auto* intValue = std::get_if<int>(&value)) {
+                return *intValue;
+            }
+            if (const auto* doubleValue = std::get_if<double>(&value)) {
+                return static_cast<int>(*doubleValue);
+            }
+            return std::nullopt;
+        };
+
+        if (const std::optional<int> width = intParameter(QStringLiteral("node_width"));
+            width.has_value()) {
+            baseSize.setWidth(std::max(baseSize.width(), *width));
+        }
+        if (const std::optional<int> height = intParameter(QStringLiteral("node_height"));
+            height.has_value()) {
+            baseSize.setHeight(std::max(baseSize.height(), *height));
+        }
+
+        return baseSize;
+    };
+
     if (!model || !model->module()) {
-        return {
+        return applyStoredSize(nullptr, {
             std::max(ModuleTypeMetadata::expandedNodeMinWidth(nullptr), captionWidth),
             ModuleTypeMetadata::expandedNodeHeight(nullptr)
-        };
+        });
     }
 
     if (ModuleTypeMetadata::editorLayout(model->module()) == QStringLiteral("fallback")) {
-        return fallbackSizeForModel(model, captionWidth);
+        return applyStoredSize(model->module(), fallbackSizeForModel(model, captionWidth));
     }
 
     if (model->isCollapsed()) {
-        return {
+        return applyStoredSize(model->module(), {
             std::max(ModuleTypeMetadata::collapsedNodeMinWidth(model->module()), captionWidth),
             ModuleTypeMetadata::collapsedNodeHeight(model->module())
-        };
+        });
     }
 
-    return {
+    return applyStoredSize(model->module(), {
         std::max(ModuleTypeMetadata::expandedNodeMinWidth(model->module()), captionWidth),
         ModuleTypeMetadata::expandedNodeHeight(model->module())
-    };
+    });
+}
+
+bool shouldUseInterfaceAnchors(const GraphNodeModel& model) {
+    return !(model.isCollapsed() && ModuleTypeMetadata::supportsCollapse(model.module()));
+}
+
+bool hasStatefulPortLayout(const Module* module) {
+    return ModuleTypeMetadata::hasEditorLayout(module, u"mesh_router") ||
+           ModuleTypeMetadata::hasEditorLayout(module, u"endpoint");
+}
+
+QPointF scaledAnchorPoint(const Module* module,
+                          const QSize& nodeSize,
+                          double anchorX,
+                          double anchorY) {
+    const double baselineWidth = static_cast<double>(ModuleTypeMetadata::expandedNodeMinWidth(module));
+    const double baselineHeight = static_cast<double>(ModuleTypeMetadata::expandedNodeHeight(module));
+    const double xScale = baselineWidth > 0.0 ? static_cast<double>(nodeSize.width()) / baselineWidth : 1.0;
+    const double yScale = baselineHeight > 0.0 ? static_cast<double>(nodeSize.height()) / baselineHeight : 1.0;
+    return QPointF(anchorX * xScale, anchorY * yScale);
 }
 
 } // namespace
@@ -124,11 +188,18 @@ QPointF GraphNodeGeometry::portPosition(QtNodes::NodeId nodeId,
     if (!port) return {};
 
     const QSize nodeSize = size(nodeId);
+    if (ModuleTypeMetadata::hasEditorLayout(model->module(), u"endpoint")) {
+        return endpointPortPosition(nodeId, portType, index, *port, nodeSize);
+    }
+
     if (ModuleTypeMetadata::hasEditorLayout(model->module(), u"mesh_router")) {
         return xpPortPosition(*model, *port, nodeSize);
     }
-    if (ModuleTypeMetadata::hasEditorLayout(model->module(), u"endpoint")) {
-        return endpointPortPosition(nodeId, portType, nodeSize);
+
+    if (shouldUseInterfaceAnchors(*model)) {
+        if (const ModuleInterfaceAnchor* anchor = ModuleTypeMetadata::interfaceAnchor(model->module(), *port)) {
+            return scaledAnchorPoint(model->module(), nodeSize, anchor->x, anchor->y);
+        }
     }
 
     return fallbackPortPosition(*model, *port, nodeSize);
@@ -143,6 +214,17 @@ QPointF GraphNodeGeometry::portTextPosition(QtNodes::NodeId nodeId,
     const Port* port = model ? model->portAt(portType, portIndex) : nullptr;
     if (!port) {
         return {};
+    }
+
+    if (model &&
+        !ModuleTypeMetadata::hasEditorLayout(model->module(), u"mesh_router") &&
+        !ModuleTypeMetadata::hasEditorLayout(model->module(), u"endpoint") &&
+        shouldUseInterfaceAnchors(*model)) {
+        if (const ModuleInterfaceAnchor* anchor = ModuleTypeMetadata::interfaceAnchor(model->module(), *port)) {
+            if (anchor->labelX.has_value() && anchor->labelY.has_value()) {
+                return scaledAnchorPoint(model->module(), nodeSize, *anchor->labelX, *anchor->labelY);
+            }
+        }
     }
 
     if (ModuleTypeMetadata::editorLayout(model ? model->module() : nullptr) == QStringLiteral("fallback")) {
@@ -177,8 +259,13 @@ QPointF GraphNodeGeometry::widgetPosition(QtNodes::NodeId) const {
     return QPointF(0.0, 0.0);
 }
 
-QRect GraphNodeGeometry::resizeHandleRect(QtNodes::NodeId) const {
-    return {};
+QRect GraphNodeGeometry::resizeHandleRect(QtNodes::NodeId nodeId) const {
+    const QSize nodeSize = size(nodeId);
+    constexpr int handleSize = 14;
+    return QRect(nodeSize.width() - handleSize,
+                 nodeSize.height() - handleSize,
+                 handleSize,
+                 handleSize);
 }
 
 QRectF GraphNodeGeometry::xpToggleButtonRect(QSize const&) {
@@ -248,25 +335,127 @@ QPointF GraphNodeGeometry::fallbackPortPosition(const GraphNodeModel& model,
 
 QPointF GraphNodeGeometry::endpointPortPosition(QtNodes::NodeId nodeId,
                                                 QtNodes::PortType portType,
+                                                QtNodes::PortIndex portIndex,
+                                                const Port& port,
                                                 QSize const& nodeSize) const {
-    const qreal y = nodeSize.height() / 2.0;
-    const bool onLeft = endpointPortOnLeft(nodeId);
-    const qreal x = portType == QtNodes::PortType::In
-        ? (onLeft ? 0.0 : nodeSize.width())
-        : (onLeft ? nodeSize.width() : 0.0);
-    return QPointF(x, y);
-}
-
-bool GraphNodeGeometry::endpointPortOnLeft(QtNodes::NodeId nodeId) const {
-    const auto endpointPosition = _graphModel.nodeData(nodeId, QtNodes::NodeRole::Position).value<QPointF>();
-    const auto connections = _graphModel.connections(nodeId, QtNodes::PortType::In, 0);
-
-    for (const auto& connection : connections) {
-        const QPointF sourcePosition = _graphModel.nodeData(connection.outNodeId, QtNodes::NodeRole::Position).value<QPointF>();
-        return sourcePosition.x() <= endpointPosition.x();
+    std::optional<QPointF> hostNormal = connectedNodeHorizontalDirection(nodeId, portType, portIndex);
+    if (!hostNormal.has_value() || hostNormal->isNull()) {
+        hostNormal = connectedPortNormal(nodeId, portType, portIndex);
+    }
+    if ((!hostNormal.has_value() || hostNormal->isNull()) && port.direction() == Port::Direction::InOut) {
+        if (const GraphNodeModel* model = modelFor(nodeId)) {
+            const QtNodes::PortType oppositePortType = portType == QtNodes::PortType::Out
+                ? QtNodes::PortType::In
+                : QtNodes::PortType::Out;
+            const QtNodes::PortIndex oppositePortIndex = model->portIndex(port.id(), oppositePortType);
+            if (oppositePortIndex != QtNodes::InvalidPortIndex) {
+                hostNormal = connectedNodeHorizontalDirection(nodeId, oppositePortType, oppositePortIndex);
+                if (!hostNormal.has_value() || hostNormal->isNull()) {
+                    hostNormal = connectedPortNormal(nodeId, oppositePortType, oppositePortIndex);
+                }
+            }
+        }
     }
 
-    return true;
+    if (hostNormal.has_value() && !hostNormal->isNull()) {
+        return EndpointAttachmentLayout::endpointAnchorForHostNormal(nodeSize, *hostNormal);
+    }
+
+    if (const GraphNodeModel* model = modelFor(nodeId)) {
+        if (const ModuleInterfaceAnchor* anchor = ModuleTypeMetadata::interfaceAnchor(model->module(), port)) {
+            return scaledAnchorPoint(model->module(), nodeSize, anchor->x, anchor->y);
+        }
+    }
+
+    const QPointF defaultNormal = portType == QtNodes::PortType::In
+        ? QPointF(-1.0, 0.0)
+        : QPointF(1.0, 0.0);
+    return PortAnchorGeometry::anchorForNormal(nodeSize, defaultNormal);
+}
+
+std::optional<QPointF> GraphNodeGeometry::connectedPortNormal(QtNodes::NodeId nodeId,
+                                                              QtNodes::PortType portType,
+                                                              QtNodes::PortIndex portIndex) const {
+    const auto connections = _graphModel.connections(nodeId, portType, portIndex);
+
+    for (const auto& connection : connections) {
+        const bool thisIsOutput = portType == QtNodes::PortType::Out &&
+                                  connection.outNodeId == nodeId &&
+                                  connection.outPortIndex == portIndex;
+        const bool thisIsInput = portType == QtNodes::PortType::In &&
+                                 connection.inNodeId == nodeId &&
+                                 connection.inPortIndex == portIndex;
+        if (!thisIsOutput && !thisIsInput) {
+            continue;
+        }
+
+        const QtNodes::NodeId otherNodeId = thisIsOutput ? connection.inNodeId : connection.outNodeId;
+        const QtNodes::PortType otherPortType = thisIsOutput ? QtNodes::PortType::In : QtNodes::PortType::Out;
+        const QtNodes::PortIndex otherPortIndex = thisIsOutput ? connection.inPortIndex : connection.outPortIndex;
+        const GraphNodeModel* otherModel = modelFor(otherNodeId);
+        const Port* otherPort = otherModel ? otherModel->portAt(otherPortType, otherPortIndex) : nullptr;
+        if (!otherModel || !otherPort) {
+            continue;
+        }
+
+        const QSize otherSize = size(otherNodeId);
+        const QPointF otherPortPosition = portPosition(otherNodeId, otherPortType, otherPortIndex);
+        const QPointF edgeNormal = PortAnchorGeometry::normalFromEdge(otherPortPosition, otherSize);
+        if (hasStatefulPortLayout(otherModel->module()) && !edgeNormal.isNull()) {
+            return edgeNormal;
+        }
+
+        if (const ModuleInterfaceAnchor* anchor = ModuleTypeMetadata::interfaceAnchor(otherModel->module(), *otherPort);
+            anchor && anchor->normalX.has_value() && anchor->normalY.has_value()) {
+            return QPointF(*anchor->normalX, *anchor->normalY);
+        }
+
+        if (!edgeNormal.isNull()) {
+            return edgeNormal;
+        }
+
+        if (PortLayout::isRouterPort(*otherPort)) {
+            return normalForSide(PortLayout::routerSideId(otherPort->id()));
+        }
+
+        return normalForSide(PortLayout::fallbackSide(*otherPort));
+    }
+
+    return std::nullopt;
+}
+
+std::optional<QPointF> GraphNodeGeometry::connectedNodeHorizontalDirection(QtNodes::NodeId nodeId,
+                                                                          QtNodes::PortType portType,
+                                                                          QtNodes::PortIndex portIndex) const {
+    const auto connections = _graphModel.connections(nodeId, portType, portIndex);
+
+    for (const auto& connection : connections) {
+        const bool thisIsOutput = portType == QtNodes::PortType::Out &&
+                                  connection.outNodeId == nodeId &&
+                                  connection.outPortIndex == portIndex;
+        const bool thisIsInput = portType == QtNodes::PortType::In &&
+                                 connection.inNodeId == nodeId &&
+                                 connection.inPortIndex == portIndex;
+        if (!thisIsOutput && !thisIsInput) {
+            continue;
+        }
+
+        const QtNodes::NodeId otherNodeId = thisIsOutput ? connection.inNodeId : connection.outNodeId;
+        const QPointF nodePosition =
+            _graphModel.nodeData(nodeId, QtNodes::NodeRole::Position).value<QPointF>();
+        const QPointF otherPosition =
+            _graphModel.nodeData(otherNodeId, QtNodes::NodeRole::Position).value<QPointF>();
+        const QPointF nodeCenter = nodePosition + QPointF(size(nodeId).width() / 2.0, size(nodeId).height() / 2.0);
+        const QPointF otherCenter = otherPosition + QPointF(size(otherNodeId).width() / 2.0, size(otherNodeId).height() / 2.0);
+        const qreal dx = nodeCenter.x() - otherCenter.x();
+        if (std::abs(dx) <= 0.5) {
+            continue;
+        }
+
+        return dx > 0.0 ? QPointF(1.0, 0.0) : QPointF(-1.0, 0.0);
+    }
+
+    return std::nullopt;
 }
 
 int GraphNodeGeometry::fallbackPortCount(const GraphNodeModel& model, const QString& side) const {

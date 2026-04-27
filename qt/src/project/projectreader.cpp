@@ -85,8 +85,18 @@ ProjectReadResult ProjectReader::readFile(const QString& path) {
         });
     }
 
-    const QJsonObject graph = root.value(QStringLiteral("graph")).toObject();
-    const QJsonArray modules = graph.value(QStringLiteral("modules")).toArray();
+    const QJsonValue graphValue = root.value(QStringLiteral("graph"));
+    if (!graphValue.isObject()) {
+        return failure(QStringLiteral("Project graph must be an object"));
+    }
+
+    const QJsonObject graph = graphValue.toObject();
+    const QJsonValue modulesValue = graph.value(QStringLiteral("modules"));
+    if (!modulesValue.isArray()) {
+        return failure(QStringLiteral("Project graph.modules must be an array"));
+    }
+
+    const QJsonArray modules = modulesValue.toArray();
     for (const QJsonValue& value : modules) {
         const QJsonObject object = value.toObject();
         ProjectModuleRecord module;
@@ -97,7 +107,12 @@ ProjectReadResult ProjectReader::readFile(const QString& path) {
         document.modules.push_back(module);
     }
 
-    const QJsonArray connections = graph.value(QStringLiteral("connections")).toArray();
+    const QJsonValue connectionsValue = graph.value(QStringLiteral("connections"));
+    if (!connectionsValue.isArray()) {
+        return failure(QStringLiteral("Project graph.connections must be an array"));
+    }
+
+    const QJsonArray connections = connectionsValue.toArray();
     for (const QJsonValue& value : connections) {
         const QJsonObject object = value.toObject();
         ProjectConnectionRecord connection;

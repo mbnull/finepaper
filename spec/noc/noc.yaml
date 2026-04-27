@@ -37,18 +37,19 @@ buses:
     description: Router-to-router NoC link.
     compatibility:
       roles:
-        peer: [peer]
+        initiator: [target]
+        target: [initiator]
       match: []
     config: {}
     signals:
       - name: flit
-        direction: peer_to_peer
+        direction: initiator_to_target
         width: FLIT_WIDTH
       - name: valid
-        direction: peer_to_peer
+        direction: initiator_to_target
         width: 1
       - name: ready
-        direction: peer_to_peer
+        direction: target_to_initiator
         width: 1
 
 modules:
@@ -118,133 +119,113 @@ modules:
         description: Depth of each input buffer.
     interfaces:
       local0:
+        label: Local 0
         bus: ni_link
         role: target
         accepts:
           protocol: [axi4, chi]
           data_width: [32, 64, 128]
         port:
-          id: ep0
-          direction: output
+          id: local0
+          direction: inout
           type: bus
           bus_type: ni_link
           role: attachment
-          name: EP0
+          name: Local 0
           description: Local endpoint slot 0
       local1:
+        label: Local 1
         bus: ni_link
         role: target
         accepts:
           protocol: [axi4, chi]
           data_width: [32, 64, 128]
         port:
-          id: ep1
-          direction: output
+          id: local1
+          direction: inout
           type: bus
           bus_type: ni_link
           role: attachment
-          name: EP1
+          name: Local 1
           description: Local endpoint slot 1
       local2:
+        label: Local 2
         bus: ni_link
         role: target
         accepts:
           protocol: [axi4, chi]
           data_width: [32, 64, 128]
         port:
-          id: ep2
-          direction: output
+          id: local2
+          direction: inout
           type: bus
           bus_type: ni_link
           role: attachment
-          name: EP2
+          name: Local 2
           description: Local endpoint slot 2
       local3:
+        label: Local 3
         bus: ni_link
         role: target
         accepts:
           protocol: [axi4, chi]
           data_width: [32, 64, 128]
         port:
-          id: ep3
-          direction: output
+          id: local3
+          direction: inout
           type: bus
           bus_type: ni_link
           role: attachment
-          name: EP3
+          name: Local 3
           description: Local endpoint slot 3
       north:
+        label: North
         bus: router_link
-        role: peer
-        ports:
-          - id: north_in
-            direction: input
-            type: bus
-            bus_type: router_link
-            role: router
-            name: N
-            description: North router ingress
-          - id: north_out
-            direction: output
-            type: bus
-            bus_type: router_link
-            role: router
-            name: N
-            description: North router egress
+        role: target
+        port:
+          id: north
+          direction: inout
+          type: bus
+          bus_type: router_link
+          role: router
+          name: North
+          description: North router interface
       east:
+        label: East
         bus: router_link
-        role: peer
-        ports:
-          - id: east_in
-            direction: input
-            type: bus
-            bus_type: router_link
-            role: router
-            name: E
-            description: East router ingress
-          - id: east_out
-            direction: output
-            type: bus
-            bus_type: router_link
-            role: router
-            name: E
-            description: East router egress
+        role: initiator
+        port:
+          id: east
+          direction: inout
+          type: bus
+          bus_type: router_link
+          role: router
+          name: East
+          description: East router interface
       south:
+        label: South
         bus: router_link
-        role: peer
-        ports:
-          - id: south_in
-            direction: input
-            type: bus
-            bus_type: router_link
-            role: router
-            name: S
-            description: South router ingress
-          - id: south_out
-            direction: output
-            type: bus
-            bus_type: router_link
-            role: router
-            name: S
-            description: South router egress
+        role: initiator
+        port:
+          id: south
+          direction: inout
+          type: bus
+          bus_type: router_link
+          role: router
+          name: South
+          description: South router interface
       west:
+        label: West
         bus: router_link
-        role: peer
-        ports:
-          - id: west_in
-            direction: input
-            type: bus
-            bus_type: router_link
-            role: router
-            name: W
-            description: West router ingress
-          - id: west_out
-            direction: output
-            type: bus
-            bus_type: router_link
-            role: router
-            name: W
-            description: West router egress
+        role: target
+        port:
+          id: west
+          direction: inout
+          type: bus
+          bus_type: router_link
+          role: router
+          name: West
+          description: West router interface
 
   Endpoint:
     palette_label: Endpoint
@@ -303,6 +284,7 @@ modules:
         description: Ingress buffer depth.
     interfaces:
       noc:
+        label: NoC
         bus: ni_link
         role: initiator
         config:
@@ -310,9 +292,9 @@ modules:
           data_width: { parameter: data_width }
         port:
           id: noc
-          direction: input
+          direction: inout
           type: bus
           bus_type: ni_link
           role: attachment
           name: NoC
-          description: NoC attachment input
+          description: NoC attachment interface

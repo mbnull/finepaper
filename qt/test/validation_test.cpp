@@ -12,14 +12,14 @@ namespace {
 
 std::unique_ptr<Module> makeXp(const QString& id) {
     auto module = std::make_unique<Module>(id, "XP");
-    module->addPort(Port("out", Port::Direction::Output, "bus", "OUT", {}, "router", "router"));
-    module->addPort(Port("in", Port::Direction::Input, "bus", "IN", {}, "router", "router"));
+    module->addPort(Port("east", Port::Direction::Output, "bus", "East", {}, "router", "router_link", "east"));
+    module->addPort(Port("west", Port::Direction::Input, "bus", "West", {}, "router", "router_link", "west"));
     return module;
 }
 
 std::unique_ptr<Module> makeEndpoint(const QString& id) {
     auto module = std::make_unique<Module>(id, "Endpoint");
-    module->addPort(Port("noc", Port::Direction::Input, "bus", "NoC", {}, "attachment", "ni2router"));
+    module->addPort(Port("noc", Port::Direction::Output, "bus", "NoC", {}, "attachment", "ni_link", "noc"));
     return module;
 }
 
@@ -60,8 +60,8 @@ void testIsolatedXpInLargerGraphIsRejected() {
 
     graph.addConnection(std::make_unique<Connection>(
         "xp_a_to_xp_b",
-        PortRef{"xp_a", "out"},
-        PortRef{"xp_b", "in"}));
+        PortRef{"xp_a", "east"},
+        PortRef{"xp_b", "west"}));
 
     BasicValidator validator;
     const QList<ValidationResult> results = validator.validate(&graph);

@@ -1,18 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <module-view schema="v1" module="XP">
   <graphics layout="mesh_router" node_color="#7cb9e8" supports_collapse="true">
-    <expanded min_width="136" height="116" caption_left="30" caption_top="6" port_inset="16" />
+    <expanded min_width="136" height="116" caption_left="30" caption_top="6" port_inset="18" />
     <collapsed min_width="104" height="92" caption_left="30" caption_top="26" endpoint_inset="18" />
     <arrangement endpoint_offset_x="156" mesh_spacing_x="220" mesh_spacing_y="168" />
   </graphics>
-  <interfaces>
-    <interface ref="local0" side="west" slot="0" />
-    <interface ref="local1" side="west" slot="1" />
-    <interface ref="local2" side="west" slot="2" />
-    <interface ref="local3" side="west" slot="3" />
-    <interface ref="north" side="north" />
-    <interface ref="east" side="east" />
-    <interface ref="south" side="south" />
-    <interface ref="west" side="west" />
-  </interfaces>
+  <anchors>
+    <anchor ref="local0" x="0" y="26" normal_x="-1" normal_y="0" label="Local 0" label_x="32" label_y="26" />
+    <anchor ref="local1" x="0" y="47" normal_x="-1" normal_y="0" label="Local 1" label_x="32" label_y="47" />
+    <anchor ref="local2" x="0" y="69" normal_x="-1" normal_y="0" label="Local 2" label_x="32" label_y="69" />
+    <anchor ref="local3" x="0" y="90" normal_x="-1" normal_y="0" label="Local 3" label_x="32" label_y="90" />
+    <anchor ref="north" x="68" y="0" normal_x="0" normal_y="-1" label="North" label_x="68" label_y="34" />
+    <anchor ref="east" x="136" y="58" normal_x="1" normal_y="0" label="East" label_x="112" label_y="58" />
+    <anchor ref="south" x="68" y="116" normal_x="0" normal_y="1" label="South" label_x="68" label_y="98" />
+    <anchor ref="west" x="0" y="58" normal_x="-1" normal_y="0" label="West" label_x="24" label_y="58" />
+  </anchors>
 </module-view>

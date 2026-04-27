@@ -43,6 +43,35 @@ class SpecGeneratorTest < Minitest::Test
     end
   end
 
+  def test_generates_interface_anchor_bundle_for_renamed_noc_modules
+    Dir.mktmpdir do |dir|
+      spec_path = write_file(dir, 'spec/noc.yaml', renamed_interface_anchor_spec_yaml)
+      write_file(dir, 'spec/views/RouterTile.xml', router_tile_view_xml)
+      write_file(dir, 'spec/views/NetworkPort.xml', network_port_view_xml)
+
+      SpecGenerator.generate(
+        spec_path: spec_path,
+        views_dir: File.join(dir, 'spec/views'),
+        qt_bundle_dir: File.join(dir, 'qt/bundles'),
+        ruby_model_dir: File.join(dir, 'framework/src/ruby/model')
+      )
+
+      modules_xml = File.read(File.join(dir, 'qt/bundles/modules.xml'))
+      assert_includes modules_xml, '<module name="RouterTile"'
+      assert_includes modules_xml, '<interface id="east" label="East" bus="router_link" role="initiator" connects_to="target" match="">'
+      assert_includes modules_xml, '<port id="east" direction="output" type="bus" bus_type="router_link" role="router" name="East" description="East router interface" interface="east" />'
+      refute_includes modules_xml, 'east_in'
+      refute_includes modules_xml, 'east_out'
+
+      graphics_xml = File.read(File.join(dir, 'qt/bundles/graphics/RouterTile.xml'))
+      assert_includes graphics_xml, '<anchors>'
+      assert_includes graphics_xml, '<anchor ref="east" x="136" y="58" normal_x="1" normal_y="0" label="East" label_x="112" label_y="58" />'
+
+      assert File.file?(File.join(dir, 'framework/src/ruby/model/xp.rb'))
+      assert File.file?(File.join(dir, 'framework/src/ruby/model/endpoint.rb'))
+    end
+  end
+
   def test_rejects_unknown_top_level_fields
     Dir.mktmpdir do |dir|
       spec_path = write_file(dir, 'spec/noc.yaml', valid_spec_yaml.sub("version: '1.0'\n", "version: '1.0'\nextra: nope\n"))
@@ -227,6 +256,150 @@ class SpecGeneratorTest < Minitest::Test
                 data_width: { parameter: data_width }
               port: { id: noc, direction: input, type: bus, bus_type: ni_link, role: attachment, name: NoC, description: NoC attachment input }
     YAML
+  end
+
+  def renamed_interface_anchor_spec_yaml
+    <<~YAML
+      schema: v1
+      kind: noc-definition
+      name: NoC
+      version: '1.0'
+      buses:
+        router_link:
+          description: Router-to-router NoC link.
+          compatibility:
+            roles:
+              initiator: [target]
+              target: [initiator]
+            match: []
+          config: {}
+          signals:
+            - name: flit
+              direction: initiator_to_target
+              width: FLIT_WIDTH
+        ni_link:
+          description: Endpoint-to-router NoC interface.
+          compatibility:
+            roles:
+              initiator: [target]
+              target: [initiator]
+            match: [protocol, data_width]
+          config:
+            protocol:
+              type: string
+              enum: [axi4, chi]
+              default: axi4
+              description: Interface protocol.
+            data_width:
+              type: int
+              enum: [32, 64, 128]
+              default: 64
+              description: Data width in bits.
+          signals:
+            - name: flit
+              direction: initiator_to_target
+              width: FLIT_WIDTH
+      modules:
+        RouterTile:
+          palette_label: Router Tile
+          graph_group: xps
+          description: Spec-named NoC router tile.
+          identity:
+            external_id_prefix: xp
+            display_prefix: RT
+            width: 2
+            supports_mesh_coordinates: true
+          capabilities:
+            supports_collapse: true
+          interface_limits:
+            ni_link:
+              max: 4
+          parameters:
+            x: { type: int, default: 0, configurable: false, emit: attribute, description: Canvas X position. }
+            y: { type: int, default: 0, configurable: false, emit: attribute, description: Canvas Y position. }
+            display_name: { type: string, default: '', emit: editor, label: Display name, description: Name shown on the canvas. }
+            external_id: { type: string, default: '', emit: editor, label: External ID, description: Framework-facing identifier. }
+            collapsed: { type: bool, default: true, configurable: false, emit: editor_only, description: Collapsed editor state. }
+            routing_algorithm: { type: string, enum: [xy, yx], default: xy, emit: config, label: Routing algorithm, description: Router path selection strategy. }
+            vc_count: { type: int, default: 2, emit: config, label: VC count, description: Virtual channel count. }
+            buffer_depth: { type: int, default: 8, emit: config, label: Buffer depth, description: Depth of each input buffer. }
+          interfaces:
+            east:
+              label: East
+              bus: router_link
+              role: initiator
+              port: { id: east, direction: output, type: bus, bus_type: router_link, role: router, name: East, description: East router interface }
+            west:
+              label: West
+              bus: router_link
+              role: target
+              port: { id: west, direction: input, type: bus, bus_type: router_link, role: router, name: West, description: West router interface }
+            local0:
+              label: Local 0
+              bus: ni_link
+              role: target
+              accepts: { protocol: [axi4, chi], data_width: [32, 64, 128] }
+              port: { id: local0, direction: input, type: bus, bus_type: ni_link, role: attachment, name: Local 0, description: Local endpoint slot 0 }
+        NetworkPort:
+          palette_label: Network Port
+          graph_group: endpoints
+          description: Spec-named NoC endpoint.
+          identity:
+            external_id_prefix: ep
+            display_prefix: NP
+            width: 2
+            supports_mesh_coordinates: false
+          parameters:
+            display_name: { type: string, default: '', emit: editor, label: Display name, description: Name shown on the canvas. }
+            external_id: { type: string, default: '', emit: editor, label: External ID, description: Framework-facing identifier. }
+            type: { type: string, enum: [master, slave], default: master, emit: attribute, label: Type, description: Endpoint traffic role. }
+            protocol: { type: string, enum: [axi4, chi], default: axi4, emit: attribute, label: Protocol, description: Interface protocol. }
+            data_width: { type: int, enum: [32, 64, 128], default: 64, emit: attribute, label: Data width, description: Bus width in bits. }
+            qos_enabled: { type: bool, default: false, emit: config, label: QoS enabled, description: Enable QoS tagging support. }
+            buffer_depth: { type: int, default: 16, emit: config, label: Buffer depth, description: Ingress buffer depth. }
+          interfaces:
+            noc:
+              label: NoC
+              bus: ni_link
+              role: initiator
+              config:
+                protocol: { parameter: protocol }
+                data_width: { parameter: data_width }
+              port: { id: noc, direction: output, type: bus, bus_type: ni_link, role: attachment, name: NoC, description: NoC attachment interface }
+    YAML
+  end
+
+  def router_tile_view_xml
+    <<~XML
+      <?xml version="1.0" encoding="UTF-8"?>
+      <module-view schema="v1" module="RouterTile">
+        <graphics layout="mesh_router" node_color="#7cb9e8" supports_collapse="true">
+          <expanded min_width="136" height="116" caption_left="30" caption_top="6" port_inset="16" />
+          <collapsed min_width="104" height="92" caption_left="30" caption_top="26" endpoint_inset="18" />
+          <arrangement endpoint_offset_x="156" mesh_spacing_x="220" mesh_spacing_y="168" />
+        </graphics>
+        <anchors>
+          <anchor ref="east" x="136" y="58" normal_x="1" normal_y="0" label="East" label_x="112" label_y="58" />
+          <anchor ref="west" x="0" y="58" normal_x="-1" normal_y="0" label="West" label_x="24" label_y="58" />
+          <anchor ref="local0" x="0" y="30" normal_x="-1" normal_y="0" label="Local 0" label_x="30" label_y="30" />
+        </anchors>
+      </module-view>
+    XML
+  end
+
+  def network_port_view_xml
+    <<~XML
+      <?xml version="1.0" encoding="UTF-8"?>
+      <module-view schema="v1" module="NetworkPort">
+        <graphics layout="endpoint" node_color="#d6f4b6">
+          <expanded min_width="104" height="54" caption_left="8" caption_top="6" />
+          <arrangement loose_endpoint_spacing_x="168" loose_endpoint_spacing_y="84" loose_endpoint_margin_y="116" />
+        </graphics>
+        <anchors>
+          <anchor ref="noc" x="104" y="27" normal_x="1" normal_y="0" label="NoC" label_x="78" label_y="27" />
+        </anchors>
+      </module-view>
+    XML
   end
 
   def xp_view_xml

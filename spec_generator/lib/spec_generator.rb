@@ -14,14 +14,13 @@ module SpecGenerator
   IDENTITY_KEYS = %w[external_id_prefix display_prefix width supports_mesh_coordinates].freeze
   CAPABILITY_KEYS = %w[supports_collapse].freeze
   PARAMETER_KEYS = %w[type default enum label description emit configurable min max].freeze
-  INTERFACE_KEYS = %w[bus role accepts config port ports].freeze
+  INTERFACE_KEYS = %w[label bus role accepts config port ports].freeze
   PORT_KEYS = %w[id direction type bus_type role name description].freeze
   PARAMETER_TYPES = %w[string int bool].freeze
   EMIT_MODES = %w[attribute config editor editor_only].freeze
   PORT_DIRECTIONS = %w[input output inout].freeze
-  SUPPORTED_MODULES = %w[XP Endpoint].freeze
 
-  View = Struct.new(:module_name, :graphics_xml, :interface_refs, keyword_init: true)
+  View = Struct.new(:module_name, :graphics_xml, :anchors_xml, :interface_refs, keyword_init: true)
   ParsedSpec = Struct.new(:data, :views, keyword_init: true)
 
   def self.generate(spec_path:, views_dir:, qt_bundle_dir:, ruby_model_dir:)
@@ -121,10 +120,7 @@ module SpecGenerator
     end
 
     def validate_modules(modules, buses)
-      module_names = modules.keys
-      unless module_names.sort == SUPPORTED_MODULES.sort
-        raise SpecError, "modules must be exactly #{SUPPORTED_MODULES.join(', ')}"
-      end
+      raise SpecError, 'modules cannot be empty' if modules.empty?
 
       modules.each do |module_name, mod|
         raise SpecError, "Module #{module_name} must be a map" unless mod.is_a?(Hash)
@@ -333,8 +329,14 @@ module SpecGenerator
       graphics_xml = normalize_indentation(text[%r{(<graphics\b.*?</graphics>)}m, 1])
       raise SpecError, "view #{module_name} must contain graphics element" unless graphics_xml
 
-      refs = text.scan(/<interface\b[^>]*\bref="([^"]+)"/).flatten
-      View.new(module_name: module_name, graphics_xml: graphics_xml.strip, interface_refs: refs)
+      anchors_xml = normalize_indentation(text[%r{(<anchors\b.*?</anchors>)}m, 1])
+      refs = text.scan(/<(?:interface|anchor)\b[^>]*\bref="([^"]+)"/).flatten
+      View.new(
+        module_name: module_name,
+        graphics_xml: graphics_xml.strip,
+        anchors_xml: anchors_xml&.strip,
+        interface_refs: refs
+      )
     end
 
     def normalize_indentation(text)
@@ -431,7 +433,7 @@ module SpecGenerator
       interfaces.each do |interface_name, interface|
         bus = @spec.fetch('buses').fetch(interface.fetch('bus'))
         compatibility = bus.fetch('compatibility')
-        lines << "      <interface#{attrs(id: interface_name, bus: interface['bus'], role: interface['role'], connects_to: compatibility.fetch('roles').fetch(interface.fetch('role')).join(','), match: compatibility.fetch('match').join(','))}>"
+        lines << "      <interface#{attrs(id: interface_name, label: interface['label'], bus: interface['bus'], role: interface['role'], connects_to: compatibility.fetch('roles').fetch(interface.fetch('role')).join(','), match: compatibility.fetch('match').join(','))}>"
         interface.fetch('accepts', {}).each do |field, values|
           lines << "        <accept#{attrs(field: field, values: values.join(','))} />"
         end
@@ -496,6 +498,7 @@ module SpecGenerator
         <?xml version="1.0" encoding="UTF-8"?>
         <module-graphics type="#{escape(module_name)}">
         #{indent(view.graphics_xml, 2)}
+        #{indent(view.anchors_xml, 2) if view.anchors_xml}
         </module-graphics>
       XML
     end
@@ -542,7 +545,7 @@ module SpecGenerator
     private
 
     def xp_model
-      xp = @spec.fetch('modules').fetch('XP')
+      xp = module_by_graph_group('xps')
       <<~RUBY
         class Xp
           attr_reader :id, :x, :y, :endpoints, :config
@@ -575,7 +578,7 @@ module SpecGenerator
     end
 
     def endpoint_model
-      endpoint = @spec.fetch('modules').fetch('Endpoint')
+      endpoint = module_by_graph_group('endpoints')
       attribute_names = attribute_parameters(endpoint).keys
       args = ['id', *attribute_names, 'config = {}']
       assignments = ['@id = id'] + attribute_names.map { |name| "@#{name} = #{name}" }
@@ -603,6 +606,13 @@ module SpecGenerator
 
     def config_parameters(mod)
       mod.fetch('parameters').select { |_, parameter| parameter['emit'] == 'config' }
+    end
+
+    def module_by_graph_group(graph_group)
+      found = @spec.fetch('modules').values.select { |mod| mod['graph_group'] == graph_group }
+      raise SpecError, "Expected exactly one module with graph_group #{graph_group}" unless found.size == 1
+
+      found.first
     end
 
     def schema_literal(parameters, indent)

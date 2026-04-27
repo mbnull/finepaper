@@ -163,6 +163,46 @@ inline const QVector<ModuleConfigField>& configFields(const Module* module) {
     return moduleType ? moduleType->configFields : emptyFields;
 }
 
+inline const ModuleInterfaceMetadata* interfaceMetadata(const Module* module, const QString& interfaceId) {
+    const ModuleType* moduleType = type(module);
+    if (!moduleType || interfaceId.isEmpty()) {
+        return nullptr;
+    }
+
+    const auto it = moduleType->interfaceMetadata.find(interfaceId);
+    return it != moduleType->interfaceMetadata.end() ? &it.value() : nullptr;
+}
+
+inline const ModuleInterfaceAnchor* interfaceAnchor(const Module* module, const QString& interfaceId) {
+    const ModuleType* moduleType = type(module);
+    if (!moduleType || interfaceId.isEmpty()) {
+        return nullptr;
+    }
+
+    const auto it = moduleType->interfaceAnchors.find(interfaceId);
+    return it != moduleType->interfaceAnchors.end() ? &it.value() : nullptr;
+}
+
+inline const ModuleInterfaceAnchor* interfaceAnchor(const Module* module, const Port& port) {
+    const QString interfaceId = port.interfaceId().isEmpty() ? port.id() : port.interfaceId();
+    return interfaceAnchor(module, interfaceId);
+}
+
+inline QString interfaceLabel(const Module* module, const Port& port) {
+    const ModuleInterfaceAnchor* anchor = interfaceAnchor(module, port);
+    if (anchor && !anchor->label.isEmpty()) {
+        return anchor->label;
+    }
+
+    const QString interfaceId = port.interfaceId().isEmpty() ? port.id() : port.interfaceId();
+    const ModuleInterfaceMetadata* metadata = interfaceMetadata(module, interfaceId);
+    if (metadata && !metadata->label.isEmpty()) {
+        return metadata->label;
+    }
+
+    return port.name();
+}
+
 inline const ModuleParameterMetadata* parameterMetadata(const Module* module, const QString& parameterName) {
     const ModuleType* moduleType = type(module);
     if (!moduleType) {

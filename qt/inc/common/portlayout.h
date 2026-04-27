@@ -23,7 +23,7 @@ inline bool isDirectionalRouterPortId(const QString& portId) {
 }
 
 inline bool isEndpointPortId(const QString& portId) {
-    return portId.startsWith("ep");
+    return portId.startsWith("ep") || portId.startsWith("local");
 }
 
 inline QString normalizedType(const Port& port) {
@@ -107,7 +107,8 @@ inline int endpointPortSlot(const QString& portId) {
     if (!isEndpointPortId(portId)) return 0;
 
     bool ok = false;
-    int slot = portId.mid(2).toInt(&ok);
+    const int prefixLength = portId.startsWith("local") ? 5 : 2;
+    int slot = portId.mid(prefixLength).toInt(&ok);
     return ok ? slot : 0;
 }
 

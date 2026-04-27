@@ -34,6 +34,63 @@ const Port* findPort(const Module* module, const QString& portId) {
     return nullptr;
 }
 
+const Port* findPortByInterface(const Module* module, const QString& interfaceId) {
+    if (!module || interfaceId.isEmpty()) return nullptr;
+
+    for (const auto& port : module->ports()) {
+        if (port.interfaceId() == interfaceId) {
+            return &port;
+        }
+    }
+
+    return nullptr;
+}
+
+QString normalizePortId(const Module* module, const QString& requestedPortId) {
+    if (!module || requestedPortId.isEmpty()) {
+        return requestedPortId;
+    }
+
+    if (findPort(module, requestedPortId)) {
+        return requestedPortId;
+    }
+
+    const QString sideId = PortLayout::routerSideId(requestedPortId);
+    if (sideId != requestedPortId && findPort(module, sideId)) {
+        return sideId;
+    }
+
+    if (PortLayout::isEndpointPortId(requestedPortId)) {
+        const QString localPortId = QStringLiteral("local%1").arg(PortLayout::endpointPortSlot(requestedPortId));
+        if (findPort(module, localPortId)) {
+            return localPortId;
+        }
+    }
+
+    if (const Port* interfacePort = findPortByInterface(module, requestedPortId)) {
+        return interfacePort->id();
+    }
+
+    return requestedPortId;
+}
+
+const Port* findNormalizedPort(const Module* module, const QString& portId) {
+    return findPort(module, normalizePortId(module, portId));
+}
+
+bool portSupportsDirection(const Module* module,
+                           const QString& portId,
+                           Port::Direction direction) {
+    const Port* port = findPort(module, portId);
+    if (!port) {
+        return false;
+    }
+
+    return direction == Port::Direction::Output
+        ? PortLayout::supportsOutput(*port)
+        : PortLayout::supportsInput(*port);
+}
+
 QString oppositeDirection(const QString& dir) {
     return PortLayout::oppositeRouterSide(PortLayout::routerSideId(dir));
 }
@@ -196,12 +253,12 @@ std::pair<QString, QString> guessedRouterPorts(const Module* fromModule, const M
         if (std::abs(dx) >= std::abs(dy)) {
             const QString sourceSide = dx >= 0.0 ? "east" : "west";
             const QString targetSide = oppositeDirection(sourceSide);
-            return {PortLayout::routerOutputPortId(sourceSide), PortLayout::routerInputPortId(targetSide)};
+            return {sourceSide, targetSide};
         }
 
         const QString sourceSide = dy >= 0.0 ? "south" : "north";
         const QString targetSide = oppositeDirection(sourceSide);
-        return {PortLayout::routerOutputPortId(sourceSide), PortLayout::routerInputPortId(targetSide)};
+        return {sourceSide, targetSide};
     }
 
     return {};
@@ -564,6 +621,9 @@ bool Graph::isValidConnection(const PortRef& source, const PortRef& target) cons
         if (sourceSide == targetSide) {
             return false;
         }
+        if (oppositeDirection(sourceSide) != targetSide) {
+            return false;
+        }
 
         for (const auto& existingConnection : m_connections) {
             const bool sameRouterPair =
@@ -733,9 +793,12 @@ bool Graph::loadFromJson(const QString& jsonPath) {
             continue;
         }
 
+        fromPort = normalizePortId(fromModule, fromPort);
+        toPort = normalizePortId(toModule, toPort);
+
         if (!fromPort.isEmpty() && !toPort.isEmpty()) {
-            const Port* explicitFromPort = findPort(fromModule, fromPort);
-            const Port* explicitToPort = findPort(toModule, toPort);
+            const Port* explicitFromPort = findNormalizedPort(fromModule, fromPort);
+            const Port* explicitToPort = findNormalizedPort(toModule, toPort);
             const bool explicitEndpointLink =
                 explicitFromPort && explicitToPort &&
                 PortLayout::isEndpointPort(*explicitFromPort) && PortLayout::isEndpointPort(*explicitToPort);
@@ -750,27 +813,63 @@ bool Graph::loadFromJson(const QString& jsonPath) {
             }
         }
 
-        if (isMeshRouterModule(fromModule) && isEndpointModule(toModule)) {
-            // Router->endpoint links must use endpoint-class ports on both sides.
-            if (fromPort.isEmpty() || !findPort(fromModule, fromPort) || !PortLayout::isEndpointPort(*findPort(fromModule, fromPort))) {
-                fromPort = firstAvailablePort(this, fromModule, Port::Direction::Output,
+        if ((isMeshRouterModule(fromModule) && isEndpointModule(toModule)) ||
+            (isEndpointModule(fromModule) && isMeshRouterModule(toModule))) {
+            // Store endpoint attachments in the direction Qt can validate:
+            // endpoint initiator/output -> router local target/input.
+            Module* endpointModule = isEndpointModule(fromModule) ? fromModule : toModule;
+            Module* routerModule = isMeshRouterModule(fromModule) ? fromModule : toModule;
+            QString endpointId = endpointModule->id();
+            QString routerId = routerModule->id();
+            QString endpointPort = endpointModule == fromModule ? fromPort : toPort;
+            QString routerPort = routerModule == fromModule ? fromPort : toPort;
+
+            endpointPort = normalizePortId(endpointModule, endpointPort);
+            routerPort = normalizePortId(routerModule, routerPort);
+
+            const Port* explicitEndpointPort = findPort(endpointModule, endpointPort);
+            if (endpointPort.isEmpty() || !explicitEndpointPort ||
+                !PortLayout::isEndpointPort(*explicitEndpointPort) ||
+                !PortLayout::supportsOutput(*explicitEndpointPort)) {
+                endpointPort = firstAvailablePort(this, endpointModule, Port::Direction::Output,
                     [](const Port& port) { return PortLayout::isEndpointPort(port); });
             }
-            if (toPort.isEmpty() || !findPort(toModule, toPort) || !PortLayout::isEndpointPort(*findPort(toModule, toPort))) {
-                toPort = firstAvailablePort(this, toModule, Port::Direction::Input,
+
+            const Port* explicitRouterPort = findPort(routerModule, routerPort);
+            if (routerPort.isEmpty() || !explicitRouterPort ||
+                !PortLayout::isEndpointPort(*explicitRouterPort) ||
+                !PortLayout::supportsInput(*explicitRouterPort)) {
+                routerPort = firstAvailablePort(this, routerModule, Port::Direction::Input,
                     [](const Port& port) { return PortLayout::isEndpointPort(port); });
             }
+
+            from = endpointId;
+            to = routerId;
+            fromModule = endpointModule;
+            toModule = routerModule;
+            fromPort = endpointPort;
+            toPort = routerPort;
         } else if (!dir.isEmpty()) {
-            // Legacy files may only store relative direction; derive canonical router port IDs.
-            fromPort = PortLayout::routerOutputPortId(dir);
-            toPort = PortLayout::routerInputPortId(oppositeDirection(dir));
+            // Legacy files may only store relative direction; derive interface ids.
+            fromPort = normalizePortId(fromModule, PortLayout::routerSideId(dir));
+            toPort = normalizePortId(toModule, oppositeDirection(dir));
         } else if (isMeshRouterModule(fromModule) && isMeshRouterModule(toModule)) {
             // As a last semantic guess, infer router-to-router side pairing from module placement.
             auto guessed = guessedRouterPorts(fromModule, toModule);
             if (!guessed.first.isEmpty() && !guessed.second.isEmpty()) {
-                fromPort = guessed.first;
-                toPort = guessed.second;
+                fromPort = normalizePortId(fromModule, guessed.first);
+                toPort = normalizePortId(toModule, guessed.second);
             }
+        }
+
+        if (isMeshRouterModule(fromModule) && isMeshRouterModule(toModule) &&
+            !fromPort.isEmpty() && !toPort.isEmpty() &&
+            !portSupportsDirection(fromModule, fromPort, Port::Direction::Output) &&
+            portSupportsDirection(toModule, toPort, Port::Direction::Output) &&
+            portSupportsDirection(fromModule, fromPort, Port::Direction::Input)) {
+            std::swap(from, to);
+            std::swap(fromModule, toModule);
+            std::swap(fromPort, toPort);
         }
 
         if (fromPort.isEmpty()) {
@@ -825,9 +924,9 @@ bool Graph::loadFromJson(const QString& jsonPath) {
             }
 
             QString epPort, xpPort;
-            xpPort = firstAvailablePort(this, xpModule, Port::Direction::Output,
+            xpPort = firstAvailablePort(this, xpModule, Port::Direction::Input,
                 [](const Port& port) { return PortLayout::isEndpointPort(port); });
-            epPort = firstAvailablePort(this, epModule, Port::Direction::Input,
+            epPort = firstAvailablePort(this, epModule, Port::Direction::Output,
                 [](const Port& port) { return PortLayout::isEndpointPort(port); });
 
             if (epPort.isEmpty() || xpPort.isEmpty()) {
@@ -835,7 +934,7 @@ bool Graph::loadFromJson(const QString& jsonPath) {
                 continue;
             }
 
-            auto connection = std::make_unique<Connection>(xpId + "_" + epId, PortRef{xpId, xpPort}, PortRef{epId, epPort});
+            auto connection = std::make_unique<Connection>(epId + "_" + xpId, PortRef{epId, epPort}, PortRef{xpId, xpPort});
             if (!isValidConnection(connection->source(), connection->target())) {
                 // Duplicate/conflicting legacy links are tolerated and skipped.
                 qWarning() << "Skipping invalid connection" << xpExternalId << "->" << epExternalId;
@@ -950,6 +1049,7 @@ QJsonDocument Graph::toJsonDocument(const QString& designName,
         const Module* sourceModule = getModule(conn->source().moduleId);
         const Module* targetModule = getModule(conn->target().moduleId);
         const Port* sourcePort = sourceModule ? findPort(sourceModule, conn->source().portId) : nullptr;
+        const Port* targetPort = targetModule ? findPort(targetModule, conn->target().portId) : nullptr;
         const QString sourceExternalId = ModuleLabels::externalId(sourceModule);
         const QString targetExternalId = ModuleLabels::externalId(targetModule);
 
@@ -962,6 +1062,21 @@ QJsonDocument Graph::toJsonDocument(const QString& designName,
             auto it = xpEndpointMap.find(sourceExternalId);
             if (it != xpEndpointMap.end()) {
                 it.value().append(targetExternalId);
+            }
+            continue;
+        }
+
+        if (sourceModule && targetModule &&
+            isEndpointModule(sourceModule) &&
+            isMeshRouterModule(targetModule) &&
+            sourcePort && targetPort &&
+            PortLayout::isEndpointPort(*sourcePort) &&
+            PortLayout::isEndpointPort(*targetPort)) {
+            // Endpoint->router is the current editor orientation for a local
+            // attachment. Framework JSON still stores it under the XP.
+            auto it = xpEndpointMap.find(targetExternalId);
+            if (it != xpEndpointMap.end()) {
+                it.value().append(sourceExternalId);
             }
             continue;
         }
