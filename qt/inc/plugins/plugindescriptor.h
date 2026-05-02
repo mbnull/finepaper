@@ -6,9 +6,13 @@
 
 struct PluginGeneratorDescriptor {
     QString command;
+    QString inputFormat = QStringLiteral("legacy_noc_json");
     QStringList args;
 
     bool hasGenerator() const { return !command.trimmed().isEmpty(); }
+    bool usesGenericGraphInput() const {
+        return inputFormat == QStringLiteral("generic_graph_v1");
+    }
     QStringList arguments(const QString& inputPath, const QString& outputDirectory) const {
         QStringList resolved;
         resolved.reserve(args.size());

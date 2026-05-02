@@ -167,6 +167,10 @@ target("nodeeditor_geometry_test")
     })
 
 add_qt_test_target("plugin_test", "test/plugin_test.cpp", {
+    "src/**/generatorrunner.cpp",
+    "src/**/graph.cpp",
+    "src/**/module.cpp",
+    "src/**/connection.cpp",
     "src/**/pluginregistry.cpp",
     "src/**/startupdiagnostics.cpp",
     "src/**/moduleprovider.cpp",
@@ -174,6 +178,9 @@ add_qt_test_target("plugin_test", "test/plugin_test.cpp", {
     "src/**/frameworkpaths.cpp",
     "src/**/parameter.cpp",
     "src/**/port.cpp",
+    "inc/**/generatorrunner.h",
+    "inc/**/graph.h",
+    "inc/**/module.h",
     "inc/**/pluginregistry.h",
     "inc/**/plugindescriptor.h"
 })

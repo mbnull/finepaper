@@ -1,4 +1,6 @@
 // Plugin system tests for manifest discovery and command metadata.
+#include "graph/graph.h"
+#include "plugins/generatorrunner.h"
 #include "plugins/pluginregistry.h"
 #include "plugins/startupdiagnostics.h"
 #include "modules/moduleregistry.h"
@@ -39,7 +41,11 @@ void testPluginManifestLoadsRelativePaths() {
       "version": "1.0",
       "modules": "modules.xml",
       "graphics": "graphics",
-      "generator": {"command": "ruby", "args": ["generator/bin/generate", "-i", "{input}", "-o", "{output}"]},
+      "generator": {
+        "command": "ruby",
+        "input_format": "generic_graph_v1",
+        "args": ["generator/bin/generate", "-i", "{input}", "-o", "{output}"]
+      },
       "native": {"enabled": true, "library": "libdemo.so"}
     })json"));
 
@@ -51,6 +57,8 @@ void testPluginManifestLoadsRelativePaths() {
     require(QFileInfo(plugins.first().graphicsPath).isAbsolute(), "graphics path should be absolute");
     require(plugins.first().native.enabled, "native metadata should be retained");
     require(plugins.first().generator.hasGenerator(), "generator should be retained");
+    require(plugins.first().generator.inputFormat == QStringLiteral("generic_graph_v1"),
+            "generator input format should load");
 }
 
 void testModuleTypesKeepPluginOwnershipAndSkipDuplicates() {
@@ -101,6 +109,32 @@ void testGeneratorArgumentsSubstituteInputAndOutput() {
     require(args.contains(QStringLiteral("/tmp/design.json")), "input placeholder should be substituted");
     require(args.contains(QStringLiteral("/tmp/out")), "output placeholder should be substituted");
     require(args.first() == QStringLiteral("generator/bin/generate"), "literal relative args should be preserved");
+}
+
+void testGeneratorRunnerPropagatesInputFormat() {
+    Graph graph;
+
+    ModuleType type;
+    type.name = QStringLiteral("FormatIp");
+    type.pluginId = QStringLiteral("finepaper.format");
+    ModuleRegistry::instance().registerType(type);
+
+    auto module = std::make_unique<Module>(QStringLiteral("format_node"), QStringLiteral("FormatIp"));
+    require(graph.addModule(std::move(module)), "failed to add format module");
+
+    PluginDescriptor plugin;
+    plugin.id = QStringLiteral("finepaper.format");
+    plugin.rootPath = QStringLiteral("/tmp/finepaper-format-plugin");
+    plugin.generator.command = QStringLiteral("ruby");
+    plugin.generator.inputFormat = QStringLiteral("generic_graph_v1");
+    plugin.generator.args = {QStringLiteral("generator/bin/generate")};
+
+    const GeneratorCommand command =
+        GeneratorRunner::resolveForGraph(&graph, {plugin}, QStringLiteral("/tmp/in.json"), QStringLiteral("/tmp/out"));
+
+    require(command.valid, "generator command should resolve");
+    require(command.inputFormat == QStringLiteral("generic_graph_v1"),
+            "resolved command should carry input format");
 }
 
 void testStartupDiagnosticsListLoadedPluginsAndIpTypes() {
@@ -169,6 +203,7 @@ int main(int argc, char** argv) {
         testPluginManifestLoadsRelativePaths();
         testModuleTypesKeepPluginOwnershipAndSkipDuplicates();
         testGeneratorArgumentsSubstituteInputAndOutput();
+        testGeneratorRunnerPropagatesInputFormat();
         testStartupDiagnosticsListLoadedPluginsAndIpTypes();
         testStartupDiagnosticsMarksJsonModuleBundlesDeprecated();
     } catch (const std::exception& error) {

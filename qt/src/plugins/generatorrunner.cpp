@@ -71,6 +71,7 @@ GeneratorCommand GeneratorRunner::resolveForGraph(const Graph* graph,
     command.pluginId = plugin->id;
     command.workingDirectory = plugin->rootPath;
     command.command = plugin->generator.command;
+    command.inputFormat = plugin->generator.inputFormat;
     command.arguments = plugin->generator.arguments(inputPath, outputDirectory);
     return command;
 }

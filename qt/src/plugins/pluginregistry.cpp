@@ -103,6 +103,11 @@ std::optional<PluginDescriptor> loadManifest(const QString& pluginDirectory) {
 
     const QJsonObject generator = object.value(QStringLiteral("generator")).toObject();
     descriptor.generator.command = generator.value(QStringLiteral("command")).toString().trimmed();
+    descriptor.generator.inputFormat =
+        generator.value(QStringLiteral("input_format")).toString(QStringLiteral("legacy_noc_json")).trimmed();
+    if (descriptor.generator.inputFormat.isEmpty()) {
+        descriptor.generator.inputFormat = QStringLiteral("legacy_noc_json");
+    }
     descriptor.generator.args = stringArray(generator.value(QStringLiteral("args")));
 
     const QJsonObject native = object.value(QStringLiteral("native")).toObject();

@@ -202,7 +202,7 @@ void MainWindow::generateVerilog() {
         return;
     }
 
-    // Persist the editor graph as framework-flavored JSON, then call generator.
+    // Persist the editor graph in the selected generator input shape, then call generator.
     const QString designName = sanitizedDesignName(outputDirectory);
     const QString jsonPath = outputDir.filePath(designName + ".json");
     const GeneratorCommand generatorCommand =
@@ -225,7 +225,11 @@ void MainWindow::generateVerilog() {
                              "Could not write " + jsonPath);
         return;
     }
-    jsonFile.write(m_graph->toJsonDocument(designName, GraphJsonFlavor::Framework).toJson());
+    const GraphJsonFlavor exportFlavor =
+        generatorCommand.inputFormat == QStringLiteral("generic_graph_v1")
+            ? GraphJsonFlavor::Plugin
+            : GraphJsonFlavor::Framework;
+    jsonFile.write(m_graph->toJsonDocument(designName, exportFlavor).toJson());
     jsonFile.close();
 
     m_logPanel->appendMessage(QString("[Generate] Start output=%1").arg(outputDirectory),
