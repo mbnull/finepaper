@@ -1,0 +1,99 @@
+{
+  "schema": "finepaper-plugin-graph-v1",
+  "name": "ravenoc_internal_2x2",
+  "modules": [
+    {
+      "id": "rave_0_0",
+      "plugin": "finepaper.ravenoc",
+      "type": "RaveTile",
+      "parameters": {
+        "x": 0,
+        "y": 0,
+        "flit_data_width": 32,
+        "flit_type_width": 2,
+        "flit_buffer_depth": 2,
+        "virtual_channels": 3,
+        "routing_algorithm": "xy",
+        "priority": "zero_high",
+        "max_packet_flits": 256,
+        "axi_addr_width": 32,
+        "axi_data_width": 32,
+        "axi_cdc_required": "all",
+        "bypass_cdc": false
+      }
+    },
+    {
+      "id": "rave_0_1",
+      "plugin": "finepaper.ravenoc",
+      "type": "RaveTile",
+      "parameters": {
+        "x": 1,
+        "y": 0
+      }
+    },
+    {
+      "id": "rave_1_0",
+      "plugin": "finepaper.ravenoc",
+      "type": "RaveTile",
+      "parameters": {
+        "x": 0,
+        "y": 1
+      }
+    },
+    {
+      "id": "rave_1_1",
+      "plugin": "finepaper.ravenoc",
+      "type": "RaveTile",
+      "parameters": {
+        "x": 1,
+        "y": 1
+      }
+    }
+  ],
+  "connections": [
+    {
+      "id": "rave_0_0_east",
+      "source": {
+        "module": "rave_0_0",
+        "port": "east"
+      },
+      "target": {
+        "module": "rave_0_1",
+        "port": "west"
+      }
+    },
+    {
+      "id": "rave_1_0_east",
+      "source": {
+        "module": "rave_1_0",
+        "port": "east"
+      },
+      "target": {
+        "module": "rave_1_1",
+        "port": "west"
+      }
+    },
+    {
+      "id": "rave_0_0_south",
+      "source": {
+        "module": "rave_0_0",
+        "port": "south"
+      },
+      "target": {
+        "module": "rave_1_0",
+        "port": "north"
+      }
+    },
+    {
+      "id": "rave_0_1_south",
+      "source": {
+        "module": "rave_0_1",
+        "port": "south"
+      },
+      "target": {
+        "module": "rave_1_1",
+        "port": "north"
+      }
+    }
+  ]
+}

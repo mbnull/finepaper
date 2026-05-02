@@ -102,7 +102,7 @@ class RaveNoCGenerator
 
   def generate
     graph = read_graph
-    module_record = single_ravenoc_module(graph)
+    module_record = ravenoc_module_record(graph)
     parameters = DEFAULTS.merge(module_record.fetch('parameters', {}))
     validate_vendor!
     validate_parameters!(parameters)
@@ -131,13 +131,59 @@ class RaveNoCGenerator
     raise GenerationError, "invalid JSON input: #{error.message}"
   end
 
-  def single_ravenoc_module(graph)
-    modules = graph.fetch('modules', []).select do |mod|
+  def ravenoc_module_record(graph)
+    legacy = graph.fetch('modules', []).select do |mod|
       mod['plugin'] == 'finepaper.ravenoc' && mod['type'] == 'RaveNoC'
     end
-    raise GenerationError, "expected exactly one RaveNoC module, found #{modules.size}" unless modules.size == 1
+    raise GenerationError, "expected exactly one RaveNoC module, found #{legacy.size}" if legacy.size > 1
+    return legacy.first if legacy.size == 1
 
-    modules.first
+    tiles = graph.fetch('modules', []).select do |mod|
+      mod['plugin'] == 'finepaper.ravenoc' && mod['type'] == 'RaveTile'
+    end
+    raise GenerationError, 'expected RaveNoC module or RaveTile graph, found none' if tiles.empty?
+
+    internal_graph_module_record(graph, tiles)
+  end
+
+  def internal_graph_module_record(graph, tiles)
+    coordinates = tiles.map do |tile|
+      params = tile.fetch('parameters', {})
+      x = params.fetch('x')
+      y = params.fetch('y')
+      unless x.is_a?(Integer) && y.is_a?(Integer)
+        raise GenerationError, "RaveTile #{tile['id']} x/y must be integers"
+      end
+
+      [tile['id'], x, y]
+    end
+
+    cols = coordinates.map { |(_, x, _)| x }.max + 1
+    rows = coordinates.map { |(_, _, y)| y }.max + 1
+    expected = rows * cols
+    unless tiles.size == expected
+      raise GenerationError,
+            "RaveTile graph must be rectangular, expected #{expected} tiles, found #{tiles.size}"
+    end
+
+    occupied = coordinates.map { |(_, x, y)| [x, y] }
+    (0...rows).each do |row|
+      (0...cols).each do |col|
+        raise GenerationError, "missing RaveTile at #{col},#{row}" unless occupied.include?([col, row])
+      end
+    end
+
+    first_tile = tiles.min_by do |tile|
+      params = tile.fetch('parameters', {})
+      [params.fetch('y'), params.fetch('x')]
+    end
+    parameters = first_tile.fetch('parameters', {}).merge('rows' => rows, 'cols' => cols)
+    {
+      'id' => graph.fetch('name', 'ravenoc_internal_graph'),
+      'type' => 'internal_graph',
+      'parameters' => parameters,
+      'tiles' => tiles
+    }
   end
 
   def validate_vendor!
@@ -237,7 +283,8 @@ class RaveNoCGenerator
       },
       module: {
         id: module_record['id'],
-        type: module_record['type']
+        type: module_record['type'],
+        tiles: module_record.fetch('tiles', []).size
       },
       parameters: parameters,
       verification: {

@@ -42,6 +42,27 @@ class RaveNoCGeneratorTest < Minitest::Test
     end
   end
 
+  def test_generates_from_internal_ravetile_graph
+    Dir.mktmpdir do |dir|
+      input = File.expand_path('../examples/internal_mesh_2x2.json', __dir__)
+      vendor = File.join(dir, 'vendor/ravenoc')
+      make_fake_vendor(vendor)
+      out = File.join(dir, 'out')
+
+      stdout, stderr, status = run_generator(input, out, vendor)
+
+      assert status.success?, stderr
+      assert_includes stdout, 'Generated RaveNoC integration'
+      config = File.read(File.join(out, 'ravenoc_config.svh'))
+      assert_includes config, '`define NOC_CFG_SZ_ROWS 2'
+      assert_includes config, '`define NOC_CFG_SZ_COLS 2'
+
+      manifest = JSON.parse(File.read(File.join(out, 'manifest.json')))
+      assert_equal 'internal_graph', manifest.fetch('module').fetch('type')
+      assert_equal 4, manifest.fetch('module').fetch('tiles')
+    end
+  end
+
   def test_rejects_illegal_single_node_mesh
     Dir.mktmpdir do |dir|
       graph = valid_graph
