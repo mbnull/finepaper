@@ -1,0 +1,24 @@
+{
+  "id": "finepaper.ravenoc",
+  "name": "RaveNoC",
+  "version": "1.0",
+  "modules": "modules.xml",
+  "graphics": "graphics",
+  "generator": {
+    "command": "ruby",
+    "input_format": "generic_graph_v1",
+    "args": [
+      "generator/bin/generate",
+      "-i",
+      "{input}",
+      "-o",
+      "{output}",
+      "-t",
+      "generator/template"
+    ]
+  },
+  "native": {
+    "enabled": false,
+    "library": ""
+  }
+}

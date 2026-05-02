@@ -10,6 +10,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QStringList>
 #include <QTemporaryDir>
 #include <iostream>
 #include <stdexcept>
@@ -26,6 +27,23 @@ void writeFile(const QString& path, const QByteArray& content) {
     QFile file(path);
     require(file.open(QIODevice::WriteOnly | QIODevice::Truncate), "failed to open test file");
     require(file.write(content) == content.size(), "failed to write test file");
+}
+
+QString repositoryPluginPath(const QString& relativePluginPath) {
+    const QStringList candidates = {
+        QDir::current().filePath(relativePluginPath),
+        QDir::current().filePath(QStringLiteral("../") + relativePluginPath),
+        QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("../../../../../") + relativePluginPath)
+    };
+
+    for (const QString& candidate : candidates) {
+        const QFileInfo info(candidate);
+        if (info.isDir()) {
+            return info.absoluteFilePath();
+        }
+    }
+
+    return QFileInfo(candidates.first()).absoluteFilePath();
 }
 
 void testPluginManifestLoadsRelativePaths() {
@@ -137,6 +155,36 @@ void testGeneratorRunnerPropagatesInputFormat() {
             "resolved command should carry input format");
 }
 
+void testRepositoryRaveNoCPluginMetadataLoads() {
+    const QString pluginRoot = repositoryPluginPath(QStringLiteral("plugins/ravenoc"));
+    const QList<PluginDescriptor> plugins = PluginRegistry::discover({pluginRoot});
+
+    require(plugins.size() == 1, "RaveNoC plugin should be discovered");
+    require(plugins.first().id == QStringLiteral("finepaper.ravenoc"),
+            "RaveNoC plugin id should load");
+    require(plugins.first().generator.command == QStringLiteral("ruby"),
+            "RaveNoC plugin should use Ruby generator");
+    require(plugins.first().generator.inputFormat == QStringLiteral("generic_graph_v1"),
+            "RaveNoC plugin should request generic graph input");
+
+    ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
+    registry.loadPlugins(plugins);
+
+    const ModuleType* type = registry.getType(QStringLiteral("RaveNoC"));
+    require(type != nullptr, "RaveNoC module type should load");
+    require(type->pluginId == QStringLiteral("finepaper.ravenoc"),
+            "RaveNoC module should keep plugin ownership");
+    require(type->graphGroup != QStringLiteral("xps") &&
+                type->graphGroup != QStringLiteral("endpoints"),
+            "RaveNoC must not reuse XP/Endpoint graph groups");
+    require(type->defaultParameters.contains(QStringLiteral("rows")),
+            "RaveNoC rows parameter should load");
+    require(type->defaultParameters.contains(QStringLiteral("routing_algorithm")),
+            "RaveNoC routing algorithm parameter should load");
+    require(type->parameterMetadata.value(QStringLiteral("routing_algorithm")).choices.size() == 2,
+            "RaveNoC routing algorithm choices should load");
+}
+
 void testStartupDiagnosticsListLoadedPluginsAndIpTypes() {
     QTemporaryDir temp;
     require(temp.isValid(), "temporary directory should be valid");
@@ -204,6 +252,7 @@ int main(int argc, char** argv) {
         testModuleTypesKeepPluginOwnershipAndSkipDuplicates();
         testGeneratorArgumentsSubstituteInputAndOutput();
         testGeneratorRunnerPropagatesInputFormat();
+        testRepositoryRaveNoCPluginMetadataLoads();
         testStartupDiagnosticsListLoadedPluginsAndIpTypes();
         testStartupDiagnosticsMarksJsonModuleBundlesDeprecated();
     } catch (const std::exception& error) {
