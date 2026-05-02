@@ -18,7 +18,9 @@ class LogPanel;
 class ValidationManager;
 class QAction;
 class QCloseEvent;
+class QComboBox;
 class QDockWidget;
+class QMenu;
 class QWidget;
 
 class MainWindow : public QMainWindow {
@@ -47,6 +49,8 @@ private slots:
     // Executes one undo/redo step in the command history.
     void undo();
     void redo();
+    void activeIpChanged(int index);
+    void createTopologyPreset();
 
   private:
     void closeEvent(QCloseEvent* event) override;
@@ -65,6 +69,9 @@ private slots:
     void appendStartupLog() const;
     void scheduleStartupLayoutLog();
     void logStartupLayout() const;
+    void populateActiveIpSelector();
+    void setActivePluginId(const QString& pluginId);
+    void rebuildTopologyMenu();
     bool maybeSaveChanges(const QString& actionDescription);
     bool loadDocument(const QString& path);
     bool saveDocument(const QString& path);
@@ -96,6 +103,9 @@ private slots:
     QAction* m_generateAction;
     QAction* m_validateAction;
     QAction* m_arrangeAction;
+    QComboBox* m_activeIpCombo;
+    QMenu* m_topologyMenu;
+    QString m_activePluginId;
     QString m_currentDocumentPath;
     int m_cleanStateId = 0;
     bool m_documentDirty = false;

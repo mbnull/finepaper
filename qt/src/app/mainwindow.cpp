@@ -14,18 +14,22 @@
 #include "project/graphprojectserializer.h"
 #include "project/projectreader.h"
 #include "project/projectwriter.h"
+#include "topology/topologypresetbuilder.h"
 #include "validation/validationmanager.h"
 #include "modules/moduleregistry.h"
+#include <algorithm>
 #include <QAction>
 #include <QApplication>
 #include <QCloseEvent>
 #include <QColor>
+#include <QComboBox>
 #include <QDebug>
 #include <QDir>
 #include <QDockWidget>
 #include <QFileDialog>
 #include <QFile>
 #include <QFileInfo>
+#include <QInputDialog>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
@@ -34,8 +38,10 @@
 #include <QList>
 #include <QRegularExpression>
 #include <QStatusBar>
+#include <QStringList>
 #include <QTimer>
 #include <QToolBar>
+#include <QToolButton>
 #include <QtGlobal>
 #include <QVBoxLayout>
 
@@ -108,7 +114,9 @@ MainWindow::MainWindow(QWidget *parent)
       m_redoAction(nullptr),
       m_generateAction(nullptr),
       m_validateAction(nullptr),
-      m_arrangeAction(nullptr) {
+      m_arrangeAction(nullptr),
+      m_activeIpCombo(nullptr),
+      m_topologyMenu(nullptr) {
     // Build the window in dependency order: widgets first, then signal wiring,
     // then actions/menus that depend on those widgets.
     setupPanels();
@@ -311,6 +319,86 @@ void MainWindow::redo() {
     syncDocumentStateFromHistory();
 }
 
+void MainWindow::activeIpChanged(int index) {
+    if (!m_activeIpCombo || index < 0) {
+        return;
+    }
+
+    const QString nextPluginId = m_activeIpCombo->itemData(index).toString();
+    if (nextPluginId == m_activePluginId) {
+        return;
+    }
+
+    if (!m_graph->modules().empty()) {
+        QMessageBox::warning(this,
+                             "Active IP",
+                             "Start a new empty design before switching the active IP package.");
+        const int previousIndex = m_activeIpCombo->findData(m_activePluginId);
+        if (previousIndex >= 0) {
+            m_activeIpCombo->blockSignals(true);
+            m_activeIpCombo->setCurrentIndex(previousIndex);
+            m_activeIpCombo->blockSignals(false);
+        }
+        return;
+    }
+
+    setActivePluginId(nextPluginId);
+}
+
+void MainWindow::createTopologyPreset() {
+    auto* action = qobject_cast<QAction*>(sender());
+    const PluginDescriptor* plugin = PluginRegistry::instance().plugin(m_activePluginId);
+    if (!action || !plugin) {
+        return;
+    }
+
+    const QString presetId = action->data().toString();
+    auto presetIt = std::find_if(plugin->topologyPresets.cbegin(),
+                                 plugin->topologyPresets.cend(),
+                                 [&](const TopologyPresetDescriptor& preset) {
+                                     return preset.id == presetId;
+                                 });
+    if (presetIt == plugin->topologyPresets.cend()) {
+        return;
+    }
+
+    TopologyPresetRequest request;
+    request.pluginId = plugin->id;
+    request.preset = *presetIt;
+
+    QStringList parameterNames = presetIt->parameters.keys();
+    parameterNames.sort();
+    for (const QString& name : parameterNames) {
+        const TopologyPresetParameterDescriptor parameter = presetIt->parameters.value(name);
+        bool ok = false;
+        const int value = QInputDialog::getInt(this,
+                                               presetIt->label,
+                                               parameter.label,
+                                               parameter.defaultValue,
+                                               parameter.minimumValue,
+                                               parameter.maximumValue,
+                                               1,
+                                               &ok);
+        if (!ok) {
+            return;
+        }
+        request.parameters.insert(name, value);
+    }
+
+    const TopologyPresetResult result =
+        TopologyPresetBuilder::apply(m_graph, ModuleRegistry::instance(), request);
+    if (!result.success) {
+        QMessageBox::warning(this, "Topology", result.error);
+        return;
+    }
+
+    if (!m_documentDirty && m_cleanStateId == m_commandManager->currentStateId()) {
+        m_cleanStateId = m_commandManager->currentStateId() - 1;
+    }
+    syncDocumentStateFromHistory();
+    statusBar()->showMessage(QString("Created %1 topology").arg(presetIt->label), 5000);
+}
+
 void MainWindow::closeEvent(QCloseEvent* event) {
     if (maybeSaveChanges(QStringLiteral("closing the window"))) {
         event->accept();
@@ -463,6 +551,24 @@ void MainWindow::setupActions() {
     mainToolBar->addAction(m_generateAction);
     mainToolBar->addAction(m_validateAction);
     mainToolBar->addAction(m_arrangeAction);
+
+    m_activeIpCombo = new QComboBox(this);
+    m_activeIpCombo->setObjectName(QStringLiteral("activeIpCombo"));
+    m_activeIpCombo->setMinimumWidth(180);
+    mainToolBar->addWidget(m_activeIpCombo);
+    connect(m_activeIpCombo,
+            QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this,
+            &MainWindow::activeIpChanged);
+
+    m_topologyMenu = new QMenu("Topology", this);
+    auto* topologyButton = new QToolButton(this);
+    topologyButton->setText("Topology");
+    topologyButton->setPopupMode(QToolButton::InstantPopup);
+    topologyButton->setMenu(m_topologyMenu);
+    mainToolBar->addWidget(topologyButton);
+
+    populateActiveIpSelector();
 }
 
 QWidget* MainWindow::createCentralContent() {
@@ -567,6 +673,59 @@ void MainWindow::logStartupLayout() const {
             << "floating" << (m_logDock ? m_logDock->isFloating() : false)
             << "visible" << (m_logDock ? m_logDock->isVisible() : false);
 #endif
+}
+
+void MainWindow::populateActiveIpSelector() {
+    if (!m_activeIpCombo) {
+        return;
+    }
+
+    m_activeIpCombo->blockSignals(true);
+    m_activeIpCombo->clear();
+
+    for (const PluginDescriptor& plugin : PluginRegistry::instance().plugins()) {
+        if (ModuleRegistry::instance().availableTypesForPlugin(plugin.id).isEmpty()) {
+            continue;
+        }
+        const QString label = plugin.name.isEmpty() ? plugin.id : plugin.name;
+        m_activeIpCombo->addItem(label, plugin.id);
+    }
+
+    m_activeIpCombo->blockSignals(false);
+    if (m_activeIpCombo->count() > 0) {
+        setActivePluginId(m_activeIpCombo->itemData(0).toString());
+        m_activeIpCombo->setCurrentIndex(0);
+    }
+}
+
+void MainWindow::setActivePluginId(const QString& pluginId) {
+    if (m_activePluginId == pluginId) {
+        return;
+    }
+
+    m_activePluginId = pluginId;
+    if (m_palette) {
+        m_palette->setActivePluginId(pluginId);
+    }
+    rebuildTopologyMenu();
+}
+
+void MainWindow::rebuildTopologyMenu() {
+    if (!m_topologyMenu) {
+        return;
+    }
+
+    m_topologyMenu->clear();
+    const PluginDescriptor* plugin = PluginRegistry::instance().plugin(m_activePluginId);
+    if (!plugin) {
+        return;
+    }
+
+    for (const TopologyPresetDescriptor& preset : plugin->topologyPresets) {
+        QAction* action = m_topologyMenu->addAction(preset.label);
+        action->setData(preset.id);
+        connect(action, &QAction::triggered, this, &MainWindow::createTopologyPreset);
+    }
 }
 
 bool MainWindow::maybeSaveChanges(const QString& actionDescription) {
