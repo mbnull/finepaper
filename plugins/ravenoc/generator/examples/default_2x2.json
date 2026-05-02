@@ -1,0 +1,27 @@
+{
+  "schema": "finepaper-plugin-graph-v1",
+  "name": "ravenoc_default_2x2",
+  "modules": [
+    {
+      "id": "ravenoc_00",
+      "plugin": "finepaper.ravenoc",
+      "type": "RaveNoC",
+      "parameters": {
+        "rows": 2,
+        "cols": 2,
+        "flit_data_width": 32,
+        "flit_type_width": 2,
+        "flit_buffer_depth": 2,
+        "virtual_channels": 3,
+        "routing_algorithm": "xy",
+        "priority": "zero_high",
+        "max_packet_flits": 256,
+        "axi_addr_width": 32,
+        "axi_data_width": 32,
+        "axi_cdc_required": "all",
+        "bypass_cdc": false
+      }
+    }
+  ],
+  "connections": []
+}

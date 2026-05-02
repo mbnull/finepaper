@@ -25,9 +25,13 @@ class RaveNoCGeneratorTest < Minitest::Test
       assert_includes File.read(File.join(out, 'ravenoc_config.svh')), '`define ROUTING_ALG XYAlg'
       assert_includes File.read(File.join(out, 'ravenoc_demo_top.sv')), 'module ravenoc_demo_top'
       assert_includes File.read(File.join(out, 'ravenoc_demo_top.sv')), 'ravenoc #('
-      assert_includes File.read(File.join(out, 'ravenoc_filelist.f')), '+define+NOC_CFG_SZ_ROWS=2'
-      assert_includes File.read(File.join(out, 'ravenoc_filelist.f')), 'src/ravenoc.sv'
-      assert_includes File.read(File.join(out, 'ravenoc_filelist.f')), 'ravenoc_demo_top.sv'
+      filelist = File.read(File.join(out, 'ravenoc_filelist.f'))
+      assert_includes filelist, '+define+NOC_CFG_SZ_ROWS=2'
+      assert_includes filelist, 'src/ravenoc.sv'
+      assert_includes filelist, 'ravenoc_demo_top.sv'
+      refute_includes filelist, 'ravenoc_axi_fnc.svh'
+      refute_includes filelist, 'ravenoc_defines.svh'
+      refute_includes filelist, 'ravenoc_structs.svh'
       assert File.executable?(File.join(out, 'verify.sh')), 'verify.sh should be executable'
       assert_includes File.read(File.join(out, 'verify.sh')), '--lint-only'
 

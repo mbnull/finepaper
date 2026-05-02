@@ -30,6 +30,27 @@ class RaveNoCGenerator
     'src/ravenoc.sv'
   ].freeze
 
+  VENDOR_SOURCE_FILES = [
+    'bus_arch_sv_pkg/amba_axi_pkg.sv',
+    'src/include/ravenoc_pkg.sv',
+    'src/ni/axi_csr.sv',
+    'src/ni/axi_slave_if.sv',
+    'src/ni/router_wrapper.sv',
+    'src/ni/async_gp_fifo.sv',
+    'src/ni/cdc_pkt.sv',
+    'src/ni/pkt_proc.sv',
+    'src/router/fifo.sv',
+    'src/router/output_module.sv',
+    'src/router/router_if.sv',
+    'src/router/router_ravenoc.sv',
+    'src/router/rr_arbiter.sv',
+    'src/router/vc_buffer.sv',
+    'src/router/input_router.sv',
+    'src/router/input_module.sv',
+    'src/router/input_datapath.sv',
+    'src/ravenoc.sv'
+  ].freeze
+
   DEFAULTS = {
     'rows' => 2,
     'cols' => 2,
@@ -182,7 +203,7 @@ class RaveNoCGenerator
   end
 
   def vendor_files
-    REQUIRED_VENDOR_FILES
+    VENDOR_SOURCE_FILES
   end
 
   def render(template_name, output_path, template_binding)
