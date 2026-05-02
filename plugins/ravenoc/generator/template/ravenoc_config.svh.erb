@@ -1,0 +1,6 @@
+`ifndef FINEPAPER_RAVENOC_CONFIG_SVH
+`define FINEPAPER_RAVENOC_CONFIG_SVH
+<% define_values.each do |name, value| -%>
+`define <%= name %> <%= value %>
+<% end -%>
+`endif
