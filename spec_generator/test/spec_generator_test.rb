@@ -170,6 +170,9 @@ class SpecGeneratorTest < Minitest::Test
       assert_equal 'ruby', plugin_json.fetch('generator').fetch('command')
       assert_equal 'generic_graph_v1', plugin_json.fetch('generator').fetch('input_format')
       assert_equal 'generator/bin/generate', plugin_json.fetch('generator').fetch('args').first
+      assert_equal 'ruby', plugin_json.fetch('drc').fetch('command')
+      assert_equal 'generic_graph_v1', plugin_json.fetch('drc').fetch('input_format')
+      assert_equal 'generator/bin/drc', plugin_json.fetch('drc').fetch('args').first
       presets = plugin_json.fetch('topology_presets')
       assert_equal 1, presets.size
       assert_equal 'mesh', presets.first.fetch('id')
@@ -281,6 +284,13 @@ class SpecGeneratorTest < Minitest::Test
             - "{output}"
             - -t
             - generator/template
+        drc:
+          command: ruby
+          input_format: generic_graph_v1
+          args:
+            - generator/bin/drc
+            - -i
+            - "{input}"
       topology_presets:
         - id: mesh
           label: Mesh
@@ -306,6 +316,8 @@ class SpecGeneratorTest < Minitest::Test
             external_id: { type: string, default: rave_00, label: External ID, description: Stable generated artifact identifier. }
             x: { type: int, default: 0, configurable: false, description: Canvas X position. }
             y: { type: int, default: 0, configurable: false, description: Canvas Y position. }
+            mesh_col: { type: int, default: 0, configurable: false, description: Logical RaveNoC mesh column. }
+            mesh_row: { type: int, default: 0, configurable: false, description: Logical RaveNoC mesh row. }
             flit_data_width: { type: int, default: 32, min: 8, max: 512, label: Flit data width, description: FLIT_DATA_WIDTH macro value. }
             flit_type_width: { type: int, default: 2, min: 1, max: 8, label: Flit type width, description: FLIT_TP_WIDTH macro value. }
             flit_buffer_depth: { type: int, default: 2, min: 1, max: 1024, label: Flit buffer depth, description: FLIT_BUFF macro value; must be a power of two. }

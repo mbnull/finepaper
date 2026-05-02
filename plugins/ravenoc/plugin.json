@@ -17,6 +17,15 @@
       "generator/template"
     ]
   },
+  "drc": {
+    "command": "ruby",
+    "input_format": "generic_graph_v1",
+    "args": [
+      "generator/bin/drc",
+      "-i",
+      "{input}"
+    ]
+  },
   "topology_presets": [
     {
       "id": "mesh",

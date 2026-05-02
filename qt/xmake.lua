@@ -69,6 +69,8 @@ add_qt_test_target("commandmanager_test", "test/commandmanager_test.cpp", {
 })
 
 add_qt_test_target("validation_test", "test/validation_test.cpp", {
+    "src/**/drcrunner.cpp",
+    "src/**/generatorrunner.cpp",
     "src/**/validator.cpp",
     "src/**/validationresult.cpp",
     "src/**/graph.cpp",
@@ -82,6 +84,8 @@ add_qt_test_target("validation_test", "test/validation_test.cpp", {
     "src/**/pluginregistry.cpp",
     "inc/**/graph.h",
     "inc/**/module.h",
+    "inc/**/drcrunner.h",
+    "inc/**/generatorrunner.h",
     "inc/**/pluginregistry.h",
     "inc/**/plugindescriptor.h"
 })

@@ -100,6 +100,19 @@ QVector<TopologyPresetDescriptor> topologyPresetsFromJson(const QJsonValue& valu
     return presets;
 }
 
+PluginCommandDescriptor commandFromJson(const QJsonValue& value) {
+    const QJsonObject object = value.toObject();
+    PluginCommandDescriptor command;
+    command.command = object.value(QStringLiteral("command")).toString().trimmed();
+    command.inputFormat =
+        object.value(QStringLiteral("input_format")).toString(QStringLiteral("legacy_noc_json")).trimmed();
+    if (command.inputFormat.isEmpty()) {
+        command.inputFormat = QStringLiteral("legacy_noc_json");
+    }
+    command.args = stringArray(object.value(QStringLiteral("args")));
+    return command;
+}
+
 bool boolValue(const QJsonValue& value, bool fallbackValue = false) {
     if (value.isBool()) {
         return value.toBool();
@@ -148,14 +161,8 @@ std::optional<PluginDescriptor> loadManifest(const QString& pluginDirectory) {
     descriptor.graphicsPath = resolvePath(descriptor.rootPath, object.value(QStringLiteral("graphics")).toString());
     descriptor.topologyPresets = topologyPresetsFromJson(object.value(QStringLiteral("topology_presets")));
 
-    const QJsonObject generator = object.value(QStringLiteral("generator")).toObject();
-    descriptor.generator.command = generator.value(QStringLiteral("command")).toString().trimmed();
-    descriptor.generator.inputFormat =
-        generator.value(QStringLiteral("input_format")).toString(QStringLiteral("legacy_noc_json")).trimmed();
-    if (descriptor.generator.inputFormat.isEmpty()) {
-        descriptor.generator.inputFormat = QStringLiteral("legacy_noc_json");
-    }
-    descriptor.generator.args = stringArray(generator.value(QStringLiteral("args")));
+    descriptor.generator = commandFromJson(object.value(QStringLiteral("generator")));
+    descriptor.drc = commandFromJson(object.value(QStringLiteral("drc")));
 
     const QJsonObject native = object.value(QStringLiteral("native")).toObject();
     descriptor.native.enabled = boolValue(native.value(QStringLiteral("enabled")), false);

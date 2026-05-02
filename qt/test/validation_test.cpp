@@ -1,6 +1,7 @@
-// BasicValidator tests for topology-level validation rules.
+// BasicValidator and plugin DRC integration tests.
 #include "graph/graph.h"
 #include "modules/moduleregistry.h"
+#include "validation/drcrunner.h"
 #include "validation/validator.h"
 
 #include <QCoreApplication>
@@ -10,16 +11,16 @@
 
 namespace {
 
-std::unique_ptr<Module> makeXp(const QString& id) {
-    auto module = std::make_unique<Module>(id, "XP");
-    module->addPort(Port("east", Port::Direction::Output, "bus", "East", {}, "router", "router_link", "east"));
-    module->addPort(Port("west", Port::Direction::Input, "bus", "West", {}, "router", "router_link", "west"));
-    return module;
-}
-
 std::unique_ptr<Module> makeEndpoint(const QString& id) {
     auto module = std::make_unique<Module>(id, "Endpoint");
     module->addPort(Port("noc", Port::Direction::Output, "bus", "NoC", {}, "attachment", "ni_link", "noc"));
+    return module;
+}
+
+std::unique_ptr<Module> makeRaveTile(const QString& id, int x, int y) {
+    auto module = std::make_unique<Module>(id, "RaveTile");
+    module->setParameter(QStringLiteral("x"), x);
+    module->setParameter(QStringLiteral("y"), y);
     return module;
 }
 
@@ -29,11 +30,9 @@ void require(bool condition, const char* message) {
     }
 }
 
-bool hasIsolatedXpError(const QList<ValidationResult>& results, const QString& elementId) {
+bool hasRule(const QList<ValidationResult>& results, const QString& ruleName) {
     for (const auto& result : results) {
-        if (result.severity() == ValidationSeverity::Error &&
-            result.ruleName() == "isolated_xp" &&
-            result.elementId() == elementId) {
+        if (result.ruleName() == ruleName) {
             return true;
         }
     }
@@ -41,49 +40,40 @@ bool hasIsolatedXpError(const QList<ValidationResult>& results, const QString& e
     return false;
 }
 
-void testSingleStandaloneXpIsAllowed() {
+void testBasicValidatorLeavesIpDrcToPluginCommand() {
     Graph graph;
-    require(graph.addModule(makeXp("xp_only")), "failed to add standalone XP");
-
-    BasicValidator validator;
-    const QList<ValidationResult> results = validator.validate(&graph);
-
-    require(!hasIsolatedXpError(results, "xp_only"),
-            "single XP as the only graph module should be allowed");
-}
-
-void testIsolatedXpInLargerGraphIsRejected() {
-    Graph graph;
-    require(graph.addModule(makeXp("xp_a")), "failed to add first XP");
-    require(graph.addModule(makeXp("xp_b")), "failed to add second XP");
-    require(graph.addModule(makeXp("xp_lonely")), "failed to add isolated XP");
-
-    graph.addConnection(std::make_unique<Connection>(
-        "xp_a_to_xp_b",
-        PortRef{"xp_a", "east"},
-        PortRef{"xp_b", "west"}));
-
-    BasicValidator validator;
-    const QList<ValidationResult> results = validator.validate(&graph);
-
-    require(hasIsolatedXpError(results, "xp_lonely"),
-            "XP without any connection should be an error when other graph modules exist");
-    require(!hasIsolatedXpError(results, "xp_a"),
-            "connected XP should not be reported as isolated");
-    require(!hasIsolatedXpError(results, "xp_b"),
-            "connected XP should not be reported as isolated");
-}
-
-void testSingleXpWithOtherModuleIsRejectedWhenUnconnected() {
-    Graph graph;
-    require(graph.addModule(makeXp("xp_lonely")), "failed to add XP");
     require(graph.addModule(makeEndpoint("endpoint")), "failed to add endpoint");
 
     BasicValidator validator;
     const QList<ValidationResult> results = validator.validate(&graph);
 
-    require(hasIsolatedXpError(results, "xp_lonely"),
-            "unconnected XP should be rejected unless it is the only graph module");
+    require(!hasRule(results, QStringLiteral("unconnected_port")),
+            "unconnected port warnings should come from IP DRC scripts");
+    require(!hasRule(results, QStringLiteral("isolated_xp")),
+            "IP topology rules should come from IP DRC scripts");
+}
+
+void testDrcRunnerUsesPluginGraphFlavorForRaveNoC() {
+    require(ModuleRegistry::instance().getType(QStringLiteral("RaveTile")) != nullptr,
+            "RaveTile type must be registered for DRC flavor test");
+
+    Graph graph;
+    require(graph.addModule(makeRaveTile(QStringLiteral("rave_0_0"), 0, 0)),
+            "failed to add first RaveTile");
+    require(graph.addModule(makeRaveTile(QStringLiteral("rave_0_1"), 1, 0)),
+            "failed to add second RaveTile");
+
+    DRCRunner runner;
+    const QList<ValidationResult> results = runner.validate(&graph);
+    QStringList messages;
+    for (const ValidationResult& result : results) {
+        messages.append(result.message());
+    }
+
+    const QByteArray messageBytes = messages.join('\n').toLocal8Bit();
+    require(results.isEmpty(), messageBytes.constData());
+    require(!messages.join('\n').contains(QStringLiteral("expected schema finepaper-plugin-graph-v1")),
+            "RaveNoC DRC should receive generic plugin graph JSON");
 }
 
 } // namespace
@@ -92,11 +82,8 @@ int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
 
     try {
-        require(ModuleRegistry::instance().getType("XP") != nullptr,
-                "XP type must be registered for validation tests");
-        testSingleStandaloneXpIsAllowed();
-        testIsolatedXpInLargerGraphIsRejected();
-        testSingleXpWithOtherModuleIsRejectedWhenUnconnected();
+        testBasicValidatorLeavesIpDrcToPluginCommand();
+        testDrcRunnerUsesPluginGraphFlavorForRaveNoC();
     } catch (const std::exception& error) {
         std::cerr << "validation_test failed: " << error.what() << '\n';
         return 1;

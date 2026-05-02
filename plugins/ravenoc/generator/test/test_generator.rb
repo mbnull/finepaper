@@ -9,6 +9,7 @@ require 'tmpdir'
 
 class RaveNoCGeneratorTest < Minitest::Test
   GENERATOR = File.expand_path('../bin/generate', __dir__)
+  DRC = File.expand_path('../bin/drc', __dir__)
 
   def test_generates_config_filelist_wrapper_verify_and_manifest
     Dir.mktmpdir do |dir|
@@ -60,6 +61,17 @@ class RaveNoCGeneratorTest < Minitest::Test
       manifest = JSON.parse(File.read(File.join(out, 'manifest.json')))
       assert_equal 'internal_graph', manifest.fetch('module').fetch('type')
       assert_equal 4, manifest.fetch('module').fetch('tiles')
+    end
+  end
+
+  def test_drc_validates_internal_graph_without_vendor_source
+    Dir.mktmpdir do |_dir|
+      input = File.expand_path('../examples/internal_mesh_2x2.json', __dir__)
+
+      stdout, stderr, status = run_drc(input)
+
+      assert status.success?, stderr
+      assert_includes stdout, 'RaveNoC DRC passed'
     end
   end
 
@@ -115,6 +127,14 @@ class RaveNoCGeneratorTest < Minitest::Test
       '-o', output,
       '-t', File.expand_path('../template', __dir__),
       '--vendor', vendor
+    )
+  end
+
+  def run_drc(input)
+    Open3.capture3(
+      RbConfig.ruby,
+      DRC,
+      '-i', input
     )
   end
 

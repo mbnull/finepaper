@@ -6,12 +6,13 @@
 #include <QStringList>
 #include <QVector>
 
-struct PluginGeneratorDescriptor {
+struct PluginCommandDescriptor {
     QString command;
     QString inputFormat = QStringLiteral("legacy_noc_json");
     QStringList args;
 
-    bool hasGenerator() const { return !command.trimmed().isEmpty(); }
+    bool hasCommand() const { return !command.trimmed().isEmpty(); }
+    bool hasGenerator() const { return hasCommand(); }
     bool usesGenericGraphInput() const {
         return inputFormat == QStringLiteral("generic_graph_v1");
     }
@@ -26,6 +27,8 @@ struct PluginGeneratorDescriptor {
         return resolved;
     }
 };
+
+using PluginGeneratorDescriptor = PluginCommandDescriptor;
 
 struct PluginNativeDescriptor {
     bool enabled = false;
@@ -56,7 +59,8 @@ struct PluginDescriptor {
     QString rootPath;
     QString modulesPath;
     QString graphicsPath;
-    PluginGeneratorDescriptor generator;
+    PluginCommandDescriptor generator;
+    PluginCommandDescriptor drc;
     PluginNativeDescriptor native;
     QVector<TopologyPresetDescriptor> topologyPresets;
 

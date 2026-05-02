@@ -64,6 +64,11 @@ void testPluginManifestLoadsRelativePaths() {
         "input_format": "generic_graph_v1",
         "args": ["generator/bin/generate", "-i", "{input}", "-o", "{output}"]
       },
+      "drc": {
+        "command": "ruby",
+        "input_format": "generic_graph_v1",
+        "args": ["generator/bin/drc", "-i", "{input}"]
+      },
       "topology_presets": [
         {
           "id": "mesh",
@@ -102,6 +107,11 @@ void testPluginManifestLoadsRelativePaths() {
     require(plugins.first().generator.hasGenerator(), "generator should be retained");
     require(plugins.first().generator.inputFormat == QStringLiteral("generic_graph_v1"),
             "generator input format should load");
+    require(plugins.first().drc.hasCommand(), "DRC command should be retained");
+    require(plugins.first().drc.inputFormat == QStringLiteral("generic_graph_v1"),
+            "DRC input format should load");
+    require(plugins.first().drc.args.first() == QStringLiteral("generator/bin/drc"),
+            "DRC args should load");
     require(plugins.first().topologyPresets.size() == 2,
             "topology presets should load from manifest");
     require(plugins.first().topologyPresets.first().id == QStringLiteral("mesh"),
@@ -219,6 +229,34 @@ void testGeneratorRunnerPropagatesInputFormat() {
             "resolved command should carry input format");
 }
 
+void testGeneratorRunnerResolvesDrcCommand() {
+    Graph graph;
+
+    ModuleType type;
+    type.name = QStringLiteral("DrcIp");
+    type.pluginId = QStringLiteral("finepaper.drc");
+    ModuleRegistry::instance().registerType(type);
+
+    auto module = std::make_unique<Module>(QStringLiteral("drc_node"), QStringLiteral("DrcIp"));
+    require(graph.addModule(std::move(module)), "failed to add DRC module");
+
+    PluginDescriptor plugin;
+    plugin.id = QStringLiteral("finepaper.drc");
+    plugin.rootPath = QStringLiteral("/tmp/finepaper-drc-plugin");
+    plugin.drc.command = QStringLiteral("ruby");
+    plugin.drc.inputFormat = QStringLiteral("generic_graph_v1");
+    plugin.drc.args = {QStringLiteral("generator/bin/drc"), QStringLiteral("-i"), QStringLiteral("{input}")};
+
+    const GeneratorCommand command =
+        GeneratorRunner::resolveDrcForGraph(&graph, {plugin}, QStringLiteral("/tmp/in.json"), QStringLiteral("/tmp/out"));
+
+    require(command.valid, "DRC command should resolve");
+    require(command.inputFormat == QStringLiteral("generic_graph_v1"),
+            "resolved DRC command should carry input format");
+    require(command.arguments.contains(QStringLiteral("/tmp/in.json")),
+            "resolved DRC command should substitute input");
+}
+
 void testRepositoryRaveNoCPluginMetadataLoads() {
     const QString pluginRoot = repositoryPluginPath(QStringLiteral("plugins/ravenoc"));
     const QList<PluginDescriptor> plugins = PluginRegistry::discover({pluginRoot});
@@ -230,6 +268,10 @@ void testRepositoryRaveNoCPluginMetadataLoads() {
             "RaveNoC plugin should use Ruby generator");
     require(plugins.first().generator.inputFormat == QStringLiteral("generic_graph_v1"),
             "RaveNoC plugin should request generic graph input");
+    require(plugins.first().drc.command == QStringLiteral("ruby"),
+            "RaveNoC plugin should use Ruby DRC");
+    require(plugins.first().drc.inputFormat == QStringLiteral("generic_graph_v1"),
+            "RaveNoC DRC should request generic graph input");
     require(plugins.first().topologyPresets.size() == 1,
             "RaveNoC plugin should expose topology presets");
     require(plugins.first().topologyPresets.first().routerModule == QStringLiteral("RaveTile"),
@@ -329,6 +371,7 @@ int main(int argc, char** argv) {
         testModuleRegistryListsTypesByPlugin();
         testGeneratorArgumentsSubstituteInputAndOutput();
         testGeneratorRunnerPropagatesInputFormat();
+        testGeneratorRunnerResolvesDrcCommand();
         testRepositoryRaveNoCPluginMetadataLoads();
         testStartupDiagnosticsListLoadedPluginsAndIpTypes();
         testStartupDiagnosticsMarksJsonModuleBundlesDeprecated();

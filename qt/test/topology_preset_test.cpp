@@ -20,6 +20,26 @@ void require(bool condition, const char* message) {
     }
 }
 
+int intParameter(const Module* module, const QString& name) {
+    require(module != nullptr, "module should exist");
+    const auto it = module->parameters().find(name);
+    require(it != module->parameters().end(), "int parameter should exist");
+    const Parameter::Value parameterValue = it.value().value();
+    const auto* value = std::get_if<int>(&parameterValue);
+    require(value != nullptr, "parameter should be an int");
+    return *value;
+}
+
+bool boolParameter(const Module* module, const QString& name) {
+    require(module != nullptr, "module should exist");
+    const auto it = module->parameters().find(name);
+    require(it != module->parameters().end(), "bool parameter should exist");
+    const Parameter::Value parameterValue = it.value().value();
+    const auto* value = std::get_if<bool>(&parameterValue);
+    require(value != nullptr, "parameter should be a bool");
+    return *value;
+}
+
 QString repositoryPluginPath(const QString& relativePluginPath) {
     const QStringList candidates = {
         QDir::current().filePath(relativePluginPath),
@@ -42,6 +62,9 @@ ModuleType routerType(const QString& name, const QString& pluginId) {
     type.name = name;
     type.pluginId = pluginId;
     type.graphGroup = QStringLiteral("xps");
+    type.supportsCollapse = true;
+    type.meshSpacingX = 220;
+    type.meshSpacingY = 168;
     type.defaultPorts = {
         Port(QStringLiteral("north"), Port::Direction::InOut, QStringLiteral("bus"), QStringLiteral("North"), {}, QStringLiteral("router"), QStringLiteral("router_link"), QStringLiteral("north")),
         Port(QStringLiteral("east"), Port::Direction::InOut, QStringLiteral("bus"), QStringLiteral("East"), {}, QStringLiteral("router"), QStringLiteral("router_link"), QStringLiteral("east")),
@@ -52,6 +75,7 @@ ModuleType routerType(const QString& name, const QString& pluginId) {
     type.defaultParameters.insert(QStringLiteral("y"), Parameter(QStringLiteral("y"), 0));
     type.defaultParameters.insert(QStringLiteral("display_name"), Parameter(QStringLiteral("display_name"), QString{}));
     type.defaultParameters.insert(QStringLiteral("external_id"), Parameter(QStringLiteral("external_id"), QString{}));
+    type.defaultParameters.insert(QStringLiteral("collapsed"), Parameter(QStringLiteral("collapsed"), true));
 
     ModuleInterfaceMetadata north;
     north.id = QStringLiteral("north");
@@ -122,6 +146,12 @@ void testMeshPresetCreatesEditableGraph() {
     require(graph.modules().size() == 6, "2x3 mesh should create six routers");
     require(graph.connections().size() == 7, "2x3 mesh should create seven links");
     require(graph.getModule(QStringLiteral("xp_0_0")) != nullptr, "mesh should create deterministic node ids");
+    require(intParameter(graph.getModule(QStringLiteral("xp_0_1")), QStringLiteral("x")) == 220,
+            "mesh preset should apply router horizontal spacing");
+    require(intParameter(graph.getModule(QStringLiteral("xp_1_0")), QStringLiteral("y")) == 168,
+            "mesh preset should apply router vertical spacing");
+    require(!boolParameter(graph.getModule(QStringLiteral("xp_0_0")), QStringLiteral("collapsed")),
+            "mesh preset should create routers expanded by default");
     require(graph.isValidConnection(PortRef{QStringLiteral("xp_0_0"), QStringLiteral("east")},
                                     PortRef{QStringLiteral("xp_0_1"), QStringLiteral("west")}) == false,
             "created east/west ports should be occupied by normal graph connections");
@@ -144,6 +174,8 @@ void testRingPresetCreatesClosedLoop() {
     require(graph.modules().size() == 4, "ring should create four routers");
     require(graph.connections().size() == 4, "ring should close the loop");
     require(graph.getModule(QStringLiteral("xp_3")) != nullptr, "ring should create deterministic ids");
+    require(intParameter(graph.getModule(QStringLiteral("xp_3")), QStringLiteral("x")) == 660,
+            "ring preset should apply router horizontal spacing");
 }
 
 void testRepositoryRaveNoCMeshPresetCreatesInternalTiles() {
@@ -176,6 +208,16 @@ void testRepositoryRaveNoCMeshPresetCreatesInternalTiles() {
     require(graph.connections().size() == 4, "RaveNoC 2x2 mesh should create four router links");
     require(graph.getModule(QStringLiteral("rave_0_0")) != nullptr,
             "RaveNoC mesh node id should be deterministic");
+    require(intParameter(graph.getModule(QStringLiteral("rave_0_1")), QStringLiteral("x")) == 220,
+            "RaveNoC mesh preset should apply RaveTile horizontal spacing");
+    require(intParameter(graph.getModule(QStringLiteral("rave_1_0")), QStringLiteral("y")) == 168,
+            "RaveNoC mesh preset should apply RaveTile vertical spacing");
+    require(!boolParameter(graph.getModule(QStringLiteral("rave_0_0")), QStringLiteral("collapsed")),
+            "RaveNoC mesh preset should create tiles expanded by default");
+    require(intParameter(graph.getModule(QStringLiteral("rave_0_1")), QStringLiteral("mesh_col")) == 1,
+            "RaveNoC mesh preset should preserve logical mesh columns");
+    require(intParameter(graph.getModule(QStringLiteral("rave_1_0")), QStringLiteral("mesh_row")) == 1,
+            "RaveNoC mesh preset should preserve logical mesh rows");
 }
 
 } // namespace

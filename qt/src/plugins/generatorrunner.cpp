@@ -24,23 +24,15 @@ const PluginDescriptor* findPlugin(const QList<PluginDescriptor>& plugins, const
     return nullptr;
 }
 
-} // namespace
-
-GeneratorCommand GeneratorRunner::resolveForGraph(const Graph* graph,
-                                                  const QString& inputPath,
-                                                  const QString& outputDirectory) {
-    return resolveForGraph(graph,
-                           PluginRegistry::instance().plugins(),
-                           inputPath,
-                           outputDirectory);
-}
-
-GeneratorCommand GeneratorRunner::resolveForGraph(const Graph* graph,
-                                                  const QList<PluginDescriptor>& plugins,
-                                                  const QString& inputPath,
-                                                  const QString& outputDirectory) {
+GeneratorCommand resolvePluginCommandForGraph(const Graph* graph,
+                                              const QList<PluginDescriptor>& plugins,
+                                              const QString& inputPath,
+                                              const QString& outputDirectory,
+                                              const QString& emptyGraphMessage,
+                                              const QString& missingCommandMessage,
+                                              const PluginCommandDescriptor PluginDescriptor::* commandMember) {
     if (!graph || graph->modules().empty()) {
-        return failure(QStringLiteral("No modules in graph. Add a plugin-owned IP before generating."));
+        return failure(emptyGraphMessage);
     }
 
     QSet<QString> pluginIds;
@@ -62,16 +54,64 @@ GeneratorCommand GeneratorRunner::resolveForGraph(const Graph* graph,
     if (!plugin) {
         return failure(QStringLiteral("Plugin '%1' is not loaded.").arg(pluginId));
     }
-    if (!plugin->generator.hasGenerator()) {
-        return failure(QStringLiteral("Plugin '%1' does not declare a generator.").arg(pluginId));
+
+    const PluginCommandDescriptor& descriptor = plugin->*commandMember;
+    if (!descriptor.hasCommand()) {
+        return failure(missingCommandMessage.arg(pluginId));
     }
 
     GeneratorCommand command;
     command.valid = true;
     command.pluginId = plugin->id;
     command.workingDirectory = plugin->rootPath;
-    command.command = plugin->generator.command;
-    command.inputFormat = plugin->generator.inputFormat;
-    command.arguments = plugin->generator.arguments(inputPath, outputDirectory);
+    command.command = descriptor.command;
+    command.inputFormat = descriptor.inputFormat;
+    command.arguments = descriptor.arguments(inputPath, outputDirectory);
     return command;
+}
+
+} // namespace
+
+GeneratorCommand GeneratorRunner::resolveForGraph(const Graph* graph,
+                                                  const QString& inputPath,
+                                                  const QString& outputDirectory) {
+    return resolveForGraph(graph,
+                           PluginRegistry::instance().plugins(),
+                           inputPath,
+                           outputDirectory);
+}
+
+GeneratorCommand GeneratorRunner::resolveForGraph(const Graph* graph,
+                                                  const QList<PluginDescriptor>& plugins,
+                                                  const QString& inputPath,
+                                                  const QString& outputDirectory) {
+    return resolvePluginCommandForGraph(graph,
+                                        plugins,
+                                        inputPath,
+                                        outputDirectory,
+                                        QStringLiteral("No modules in graph. Add a plugin-owned IP before generating."),
+                                        QStringLiteral("Plugin '%1' does not declare a generator."),
+                                        &PluginDescriptor::generator);
+}
+
+GeneratorCommand GeneratorRunner::resolveDrcForGraph(const Graph* graph,
+                                                     const QString& inputPath,
+                                                     const QString& outputDirectory) {
+    return resolveDrcForGraph(graph,
+                              PluginRegistry::instance().plugins(),
+                              inputPath,
+                              outputDirectory);
+}
+
+GeneratorCommand GeneratorRunner::resolveDrcForGraph(const Graph* graph,
+                                                     const QList<PluginDescriptor>& plugins,
+                                                     const QString& inputPath,
+                                                     const QString& outputDirectory) {
+    return resolvePluginCommandForGraph(graph,
+                                        plugins,
+                                        inputPath,
+                                        outputDirectory,
+                                        QStringLiteral("No modules in graph. Add a plugin-owned IP before running DRC."),
+                                        QStringLiteral("Plugin '%1' does not declare a DRC command."),
+                                        &PluginDescriptor::drc);
 }

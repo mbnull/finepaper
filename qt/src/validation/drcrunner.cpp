@@ -10,22 +10,12 @@
 
 // Run external DRC tool on graph and parse validation results
 QList<ValidationResult> DRCRunner::validate(const Graph* graph) {
-    QString json = graph->toJsonDocument(QStringLiteral("design"),
-                                         GraphJsonFlavor::Framework,
-                                         &m_externalToInternalIds).toJson();
+    m_externalToInternalIds.clear();
 
     QTemporaryFile tmpFile;
     if (!tmpFile.open()) {
         return {ValidationResult(ValidationSeverity::Error,
                                  "DRC validation failed: could not create temporary JSON file: " + tmpFile.errorString(),
-                                 "",
-                                 "DRC")};
-    }
-
-    const QByteArray jsonBytes = json.toUtf8();
-    if (tmpFile.write(jsonBytes) != jsonBytes.size() || !tmpFile.flush()) {
-        return {ValidationResult(ValidationSeverity::Error,
-                                 "DRC validation failed: could not write temporary JSON file: " + tmpFile.errorString(),
                                  "",
                                  "DRC")};
     }
@@ -39,9 +29,24 @@ QList<ValidationResult> DRCRunner::validate(const Graph* graph) {
     }
 
     const GeneratorCommand generatorCommand =
-        GeneratorRunner::resolveForGraph(graph, tmpFile.fileName(), outputDir.path());
+        GeneratorRunner::resolveDrcForGraph(graph, tmpFile.fileName(), outputDir.path());
     if (!generatorCommand.valid) {
         return {ValidationResult(ValidationSeverity::Error, generatorCommand.errorMessage, "", "DRC")};
+    }
+
+    const GraphJsonFlavor graphFlavor =
+        generatorCommand.inputFormat == QStringLiteral("generic_graph_v1")
+            ? GraphJsonFlavor::Plugin
+            : GraphJsonFlavor::Framework;
+    const QString json = graph->toJsonDocument(QStringLiteral("design"),
+                                               graphFlavor,
+                                               &m_externalToInternalIds).toJson();
+    const QByteArray jsonBytes = json.toUtf8();
+    if (tmpFile.write(jsonBytes) != jsonBytes.size() || !tmpFile.flush()) {
+        return {ValidationResult(ValidationSeverity::Error,
+                                 "DRC validation failed: could not write temporary JSON file: " + tmpFile.errorString(),
+                                 "",
+                                 "DRC")};
     }
 
     QProcess proc;

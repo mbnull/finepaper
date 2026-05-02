@@ -9,6 +9,8 @@
       "parameters": {
         "x": 0,
         "y": 0,
+        "mesh_col": 0,
+        "mesh_row": 0,
         "flit_data_width": 32,
         "flit_type_width": 2,
         "flit_buffer_depth": 2,
@@ -27,8 +29,10 @@
       "plugin": "finepaper.ravenoc",
       "type": "RaveTile",
       "parameters": {
-        "x": 1,
-        "y": 0
+        "x": 220,
+        "y": 0,
+        "mesh_col": 1,
+        "mesh_row": 0
       }
     },
     {
@@ -37,7 +41,9 @@
       "type": "RaveTile",
       "parameters": {
         "x": 0,
-        "y": 1
+        "y": 168,
+        "mesh_col": 0,
+        "mesh_row": 1
       }
     },
     {
@@ -45,8 +51,10 @@
       "plugin": "finepaper.ravenoc",
       "type": "RaveTile",
       "parameters": {
-        "x": 1,
-        "y": 1
+        "x": 220,
+        "y": 168,
+        "mesh_col": 1,
+        "mesh_row": 1
       }
     }
   ],

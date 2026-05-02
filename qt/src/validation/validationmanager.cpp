@@ -1,4 +1,4 @@
-// ValidationManager orchestrates local and framework validators and updates the log panel.
+// ValidationManager orchestrates framework checks and IP-provided DRC.
 #include "validation/validationmanager.h"
 #include "graph/graph.h"
 #include "panels/logpanel.h"

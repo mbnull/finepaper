@@ -8,8 +8,8 @@ module SpecGenerator
   TOP_LEVEL_KEYS = %w[schema kind name version buses modules].freeze
   EXTENSION_TOP_LEVEL_KEYS = %w[schema kind extension runtime topology_presets modules].freeze
   EXTENSION_KEYS = %w[id name version].freeze
-  RUNTIME_KEYS = %w[generator].freeze
-  GENERATOR_KEYS = %w[command input_format args].freeze
+  RUNTIME_KEYS = %w[generator drc].freeze
+  COMMAND_KEYS = %w[command input_format args].freeze
   TOPOLOGY_PRESET_KEYS = %w[id label kind router_module id_pattern ports parameters].freeze
   TOPOLOGY_PRESET_PARAMETER_KEYS = %w[label default min max].freeze
   EXTENSION_MODULE_KEYS = %w[
@@ -373,17 +373,22 @@ module SpecGenerator
 
     def validate_runtime(runtime)
       validate_keys!(runtime, RUNTIME_KEYS, 'extension runtime')
-      generator = runtime['generator']
-      raise SpecError, 'runtime.generator must be a map' unless generator.is_a?(Hash)
+      validate_runtime_command(runtime, 'generator')
+      validate_runtime_command(runtime, 'drc')
+    end
 
-      validate_keys!(generator, GENERATOR_KEYS, 'extension runtime.generator')
+    def validate_runtime_command(runtime, name)
+      command = runtime[name]
+      raise SpecError, "runtime.#{name} must be a map" unless command.is_a?(Hash)
+
+      validate_keys!(command, COMMAND_KEYS, "extension runtime.#{name}")
       %w[command input_format].each do |key|
-        raise SpecError, "runtime.generator.#{key} must be a string" unless generator[key].is_a?(String)
+        raise SpecError, "runtime.#{name}.#{key} must be a string" unless command[key].is_a?(String)
       end
-      raise SpecError, 'runtime.generator.args must be a list' unless generator['args'].is_a?(Array)
+      raise SpecError, "runtime.#{name}.args must be a list" unless command['args'].is_a?(Array)
 
-      generator['args'].each do |arg|
-        raise SpecError, 'runtime.generator.args entries must be strings' unless arg.is_a?(String)
+      command['args'].each do |arg|
+        raise SpecError, "runtime.#{name}.args entries must be strings" unless arg.is_a?(String)
       end
     end
 
@@ -820,7 +825,9 @@ module SpecGenerator
 
     def plugin_json
       extension = @spec.fetch('extension')
-      generator = @spec.fetch('runtime').fetch('generator')
+      runtime = @spec.fetch('runtime')
+      generator = runtime.fetch('generator')
+      drc = runtime.fetch('drc')
       JSON.pretty_generate(
         {
           id: extension.fetch('id'),
@@ -832,6 +839,11 @@ module SpecGenerator
             command: generator.fetch('command'),
             input_format: generator.fetch('input_format'),
             args: generator.fetch('args')
+          },
+          drc: {
+            command: drc.fetch('command'),
+            input_format: drc.fetch('input_format'),
+            args: drc.fetch('args')
           },
           topology_presets: @spec.fetch('topology_presets', []),
           native: {

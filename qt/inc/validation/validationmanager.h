@@ -18,7 +18,7 @@ public:
     ~ValidationManager();
 
 public slots:
-    // Runs built-in checks and external DRC, then publishes merged results to the log panel.
+    // Runs framework checks and IP-provided DRC, then publishes merged results to the log panel.
     void runValidation();
 
 private:

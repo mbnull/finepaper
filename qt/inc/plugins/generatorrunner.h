@@ -28,4 +28,11 @@ public:
                                             const QList<PluginDescriptor>& plugins,
                                             const QString& inputPath,
                                             const QString& outputDirectory);
+    static GeneratorCommand resolveDrcForGraph(const Graph* graph,
+                                               const QString& inputPath,
+                                               const QString& outputDirectory);
+    static GeneratorCommand resolveDrcForGraph(const Graph* graph,
+                                               const QList<PluginDescriptor>& plugins,
+                                               const QString& inputPath,
+                                               const QString& outputDirectory);
 };

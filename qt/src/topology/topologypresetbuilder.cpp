@@ -40,10 +40,19 @@ std::unique_ptr<Module> instantiateModule(const ModuleType& type,
         module->setParameter(it.key(), it.value().value());
     }
     if (module->parameters().contains(QStringLiteral("x"))) {
-        module->setParameter(QStringLiteral("x"), col);
+        module->setParameter(QStringLiteral("x"), col * type.meshSpacingX);
     }
     if (module->parameters().contains(QStringLiteral("y"))) {
-        module->setParameter(QStringLiteral("y"), row);
+        module->setParameter(QStringLiteral("y"), row * type.meshSpacingY);
+    }
+    if (type.supportsCollapse) {
+        module->setParameter(QStringLiteral("collapsed"), false);
+    }
+    if (module->parameters().contains(QStringLiteral("mesh_col"))) {
+        module->setParameter(QStringLiteral("mesh_col"), col);
+    }
+    if (module->parameters().contains(QStringLiteral("mesh_row"))) {
+        module->setParameter(QStringLiteral("mesh_row"), row);
     }
     if (module->parameters().contains(QStringLiteral("display_name"))) {
         module->setParameter(QStringLiteral("display_name"), id);

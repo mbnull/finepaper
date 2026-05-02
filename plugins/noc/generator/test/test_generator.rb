@@ -1,6 +1,8 @@
 $LOAD_PATH.unshift File.join(__dir__, '..', 'src', 'ruby')
 
 require 'minitest/autorun'
+require 'open3'
+require 'rbconfig'
 require 'tempfile'
 require 'fileutils'
 require 'parser/json_parser'
@@ -12,6 +14,7 @@ require 'model/xp'
 require 'generator/rtl_generator'
 
 EXAMPLE = File.join(__dir__, '..', 'examples', 'simple_mesh.json')
+DRC_BIN = File.join(__dir__, '..', 'bin', 'drc')
 MESH_3X3 = File.join(__dir__, '..', 'examples', 'mesh_3x3.json')
 MULTI_EP = File.join(__dir__, '..', 'examples', 'multi_endpoint.json')
 STUB_TEMPLATES = Dir[File.join(__dir__, '..', 'template', 'stubs', '*.sv')].sort
@@ -121,6 +124,13 @@ class TestDrcRunner < Minitest::Test
     xp = Xp.new('xp1', 0, 0, [], { vc_count: 10 })
     noc = NocConfig.new('t', '1', {}, [xp], [], [])
     assert_raises(RuntimeError) { DrcRunner.new.run(noc) }
+  end
+
+  def test_drc_script_passes_valid_example
+    stdout, stderr, status = Open3.capture3(RbConfig.ruby, DRC_BIN, '-i', EXAMPLE)
+
+    assert status.success?, stderr
+    assert_includes stdout, 'DRC passed for my_noc'
   end
 end
 

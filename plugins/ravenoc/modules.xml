@@ -26,6 +26,8 @@
       <parameter name="external_id" type="string" default="rave_00" label="External ID" description="Stable generated artifact identifier." />
       <parameter name="x" type="int" default="0" description="Canvas X position." configurable="false" />
       <parameter name="y" type="int" default="0" description="Canvas Y position." configurable="false" />
+      <parameter name="mesh_col" type="int" default="0" description="Logical RaveNoC mesh column." configurable="false" />
+      <parameter name="mesh_row" type="int" default="0" description="Logical RaveNoC mesh row." configurable="false" />
       <parameter name="flit_data_width" type="int" default="32" label="Flit data width" description="FLIT_DATA_WIDTH macro value." min="8" max="512" />
       <parameter name="flit_type_width" type="int" default="2" label="Flit type width" description="FLIT_TP_WIDTH macro value." min="1" max="8" />
       <parameter name="flit_buffer_depth" type="int" default="2" label="Flit buffer depth" description="FLIT_BUFF macro value; must be a power of two." min="1" max="1024" />

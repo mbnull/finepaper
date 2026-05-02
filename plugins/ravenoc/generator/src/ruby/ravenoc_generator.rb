@@ -118,6 +118,14 @@ class RaveNoCGenerator
     puts "Generated RaveNoC integration in #{output_dir}"
   end
 
+  def validate
+    graph = read_graph
+    module_record = ravenoc_module_record(graph)
+    parameters = DEFAULTS.merge(module_record.fetch('parameters', {}))
+    validate_parameters!(parameters)
+    true
+  end
+
   private
 
   def read_graph
@@ -149,10 +157,10 @@ class RaveNoCGenerator
   def internal_graph_module_record(graph, tiles)
     coordinates = tiles.map do |tile|
       params = tile.fetch('parameters', {})
-      x = params.fetch('x')
-      y = params.fetch('y')
+      x = params.key?('mesh_col') ? params.fetch('mesh_col') : params.fetch('x')
+      y = params.key?('mesh_row') ? params.fetch('mesh_row') : params.fetch('y')
       unless x.is_a?(Integer) && y.is_a?(Integer)
-        raise GenerationError, "RaveTile #{tile['id']} x/y must be integers"
+        raise GenerationError, "RaveTile #{tile['id']} mesh_col/mesh_row must be integers"
       end
 
       [tile['id'], x, y]
@@ -175,7 +183,10 @@ class RaveNoCGenerator
 
     first_tile = tiles.min_by do |tile|
       params = tile.fetch('parameters', {})
-      [params.fetch('y'), params.fetch('x')]
+      [
+        params.key?('mesh_row') ? params.fetch('mesh_row') : params.fetch('y'),
+        params.key?('mesh_col') ? params.fetch('mesh_col') : params.fetch('x')
+      ]
     end
     parameters = first_tile.fetch('parameters', {}).merge('rows' => rows, 'cols' => cols)
     {
