@@ -1,9 +1,13 @@
 #include "graph/graph.h"
 #include "modules/moduleregistry.h"
 #include "plugins/plugindescriptor.h"
+#include "plugins/pluginregistry.h"
 #include "topology/topologypresetbuilder.h"
 
+#include <QDir>
+#include <QFileInfo>
 #include <QCoreApplication>
+#include <algorithm>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
@@ -14,6 +18,23 @@ void require(bool condition, const char* message) {
     if (!condition) {
         throw std::runtime_error(message);
     }
+}
+
+QString repositoryPluginPath(const QString& relativePluginPath) {
+    const QStringList candidates = {
+        QDir::current().filePath(relativePluginPath),
+        QDir::current().filePath(QStringLiteral("../") + relativePluginPath),
+        QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("../../../../../") + relativePluginPath)
+    };
+
+    for (const QString& candidate : candidates) {
+        const QFileInfo info(candidate);
+        if (info.isDir()) {
+            return info.absoluteFilePath();
+        }
+    }
+
+    return QFileInfo(candidates.first()).absoluteFilePath();
 }
 
 ModuleType routerType(const QString& name, const QString& pluginId) {
@@ -125,6 +146,38 @@ void testRingPresetCreatesClosedLoop() {
     require(graph.getModule(QStringLiteral("xp_3")) != nullptr, "ring should create deterministic ids");
 }
 
+void testRepositoryRaveNoCMeshPresetCreatesInternalTiles() {
+    const QString pluginRoot = repositoryPluginPath(QStringLiteral("plugins/ravenoc"));
+    const QList<PluginDescriptor> plugins = PluginRegistry::discover({pluginRoot});
+    require(plugins.size() == 1, "RaveNoC plugin should be discovered");
+    require(!plugins.first().topologyPresets.isEmpty(), "RaveNoC should expose topology presets");
+
+    ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
+    registry.loadPlugins(plugins);
+
+    const auto meshIt = std::find_if(plugins.first().topologyPresets.cbegin(),
+                                     plugins.first().topologyPresets.cend(),
+                                     [](const TopologyPresetDescriptor& preset) {
+                                         return preset.id == QStringLiteral("mesh");
+                                     });
+    require(meshIt != plugins.first().topologyPresets.cend(), "RaveNoC mesh preset should exist");
+
+    Graph graph;
+    TopologyPresetRequest request;
+    request.pluginId = plugins.first().id;
+    request.preset = *meshIt;
+    request.parameters.insert(QStringLiteral("rows"), 2);
+    request.parameters.insert(QStringLiteral("cols"), 2);
+
+    const TopologyPresetResult result = TopologyPresetBuilder::apply(&graph, registry, request);
+
+    require(result.success, result.error.toLocal8Bit().constData());
+    require(graph.modules().size() == 4, "RaveNoC 2x2 mesh should create four editable tiles");
+    require(graph.connections().size() == 4, "RaveNoC 2x2 mesh should create four router links");
+    require(graph.getModule(QStringLiteral("rave_0_0")) != nullptr,
+            "RaveNoC mesh node id should be deterministic");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -132,6 +185,7 @@ int main(int argc, char** argv) {
     try {
         testMeshPresetCreatesEditableGraph();
         testRingPresetCreatesClosedLoop();
+        testRepositoryRaveNoCMeshPresetCreatesInternalTiles();
     } catch (const std::exception& error) {
         std::cerr << "topology_preset_test failed: " << error.what() << '\n';
         return 1;
