@@ -731,8 +731,10 @@ bool Graph::loadFromJson(const QString& jsonPath) {
 
     QJsonObject root = doc.object();
     QHash<QString, QString> externalToInternalIds;
-    const ModuleType* meshRouterType = ModuleRegistry::instance().getTypeForGraphGroup("xps");
-    const ModuleType* endpointType = ModuleRegistry::instance().getTypeForGraphGroup("endpoints");
+    const ModuleType* meshRouterType =
+        ModuleRegistry::instance().getTypeForGraphGroup(QStringLiteral("finepaper.noc"), QStringLiteral("xps"));
+    const ModuleType* endpointType =
+        ModuleRegistry::instance().getTypeForGraphGroup(QStringLiteral("finepaper.noc"), QStringLiteral("endpoints"));
 
     // Start from a clean model so imported state fully replaces in-memory topology.
     while (!m_modules.empty()) {
