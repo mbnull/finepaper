@@ -158,6 +158,34 @@ QJsonValue parameterToJson(const Parameter::Value& value) {
     return QJsonValue();
 }
 
+QString directionToJsonString(Port::Direction direction) {
+    if (direction == Port::Direction::Input) return QStringLiteral("input");
+    if (direction == Port::Direction::Output) return QStringLiteral("output");
+    return QStringLiteral("inout");
+}
+
+QJsonObject portToGenericJson(const Port& port) {
+    QJsonObject object;
+    object["id"] = port.id();
+    object["direction"] = directionToJsonString(port.direction());
+    object["type"] = port.type();
+    object["name"] = port.name();
+    if (!port.description().isEmpty()) object["description"] = port.description();
+    if (!port.role().isEmpty()) object["role"] = port.role();
+    if (!port.busType().isEmpty()) object["bus_type"] = port.busType();
+    if (!port.interfaceId().isEmpty()) object["interface"] = port.interfaceId();
+    return object;
+}
+
+QJsonObject parametersToGenericJson(const Module* module) {
+    QJsonObject parameters;
+    if (!module) return parameters;
+    for (auto it = module->parameters().constBegin(); it != module->parameters().constEnd(); ++it) {
+        parameters.insert(it.key(), parameterToJson(it.value().value()));
+    }
+    return parameters;
+}
+
 void writeJsonValueAsXml(QXmlStreamWriter& writer,
                          const QString& elementName,
                          const QJsonValue& value) {
@@ -998,6 +1026,49 @@ QJsonDocument Graph::toJsonDocument(const QString& designName,
                                     QHash<QString, QString>* externalToInternalIds) const {
     if (externalToInternalIds) {
         externalToInternalIds->clear();
+    }
+
+    if (flavor == GraphJsonFlavor::Plugin) {
+        QJsonArray modules;
+        QJsonArray connections;
+
+        for (const auto& module : m_modules) {
+            const ModuleType* type = ModuleRegistry::instance().getType(module->type());
+
+            QJsonObject object;
+            object["id"] = module->id();
+            object["plugin"] = type ? type->pluginId : QString();
+            object["type"] = module->type();
+            object["parameters"] = parametersToGenericJson(module.get());
+
+            QJsonArray ports;
+            for (const Port& port : module->ports()) {
+                ports.append(portToGenericJson(port));
+            }
+            object["ports"] = ports;
+            modules.append(object);
+        }
+
+        for (const auto& connection : m_connections) {
+            QJsonObject object;
+            object["id"] = connection->id();
+            object["source"] = QJsonObject{
+                {QStringLiteral("module"), connection->source().moduleId},
+                {QStringLiteral("port"), connection->source().portId}
+            };
+            object["target"] = QJsonObject{
+                {QStringLiteral("module"), connection->target().moduleId},
+                {QStringLiteral("port"), connection->target().portId}
+            };
+            connections.append(object);
+        }
+
+        QJsonObject root;
+        root["schema"] = QStringLiteral("finepaper-plugin-graph-v1");
+        root["name"] = designName.isEmpty() ? QStringLiteral("design") : designName;
+        root["modules"] = modules;
+        root["connections"] = connections;
+        return QJsonDocument(root);
     }
 
     QJsonArray xps;

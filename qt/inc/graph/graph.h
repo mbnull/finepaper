@@ -15,7 +15,8 @@
 
 enum class GraphJsonFlavor {
     Editor,
-    Framework
+    Framework,
+    Plugin
 };
 
 class Graph : public QObject {

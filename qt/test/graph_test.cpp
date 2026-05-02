@@ -685,6 +685,53 @@ void testFrameworkExportOmitsEditorOnlyCollapsedField() {
             "framework export should keep endpoint attachments in the XP endpoint list");
 }
 
+void testGenericPluginExportKeepsNonNocModules() {
+    ModuleType accelType;
+    accelType.name = QStringLiteral("GenericAccel");
+    accelType.pluginId = QStringLiteral("finepaper.generic");
+    ModuleRegistry::instance().registerType(accelType);
+
+    Graph graph;
+    auto module = makeModule(
+        "accel_internal",
+        "GenericAccel",
+        {
+            Port("cfg", Port::Direction::Input, "axi_lite", "CFG", {}, "control", "axi_lite"),
+            Port("irq", Port::Direction::Output, "interrupt", "IRQ", {}, "status", "interrupt")
+        });
+    module->setParameter("display_name", QString("Generic Accel"));
+    module->setParameter("x", 15);
+    module->setParameter("y", 25);
+    module->setParameter("width", 64);
+
+    require(graph.addModule(std::move(module)), "failed to add generic module");
+
+    const QJsonObject root =
+        graph.toJsonDocument("generic_design", GraphJsonFlavor::Plugin).object();
+
+    require(root["schema"].toString() == "finepaper-plugin-graph-v1",
+            "generic plugin export should identify its schema");
+    require(root["name"].toString() == "generic_design",
+            "generic plugin export should include the design name");
+
+    const QJsonArray modules = root["modules"].toArray();
+    require(modules.size() == 1, "generic plugin export should include non-NoC module");
+    const QJsonObject exportedModule = modules.first().toObject();
+    require(exportedModule["id"].toString() == "accel_internal",
+            "generic plugin export should preserve internal module id");
+    require(exportedModule["plugin"].toString() == "finepaper.generic",
+            "generic plugin export should include plugin owner");
+    require(exportedModule["type"].toString() == "GenericAccel",
+            "generic plugin export should include module type");
+    require(exportedModule["parameters"].toObject()["width"].toInt() == 64,
+            "generic plugin export should include module parameters");
+
+    const QJsonArray ports = exportedModule["ports"].toArray();
+    require(ports.size() == 2, "generic plugin export should include ports");
+    require(ports.first().toObject()["id"].toString() == "cfg",
+            "generic plugin export should include port ids");
+}
+
 void testXmlExportPreservesEditorGraphContent() {
     Graph graph;
 
@@ -758,6 +805,7 @@ int main(int argc, char** argv) {
         testXmlBundleWithoutGraphicsFallsBackToSimpleNode();
         testXmlBundleLoadsExtendedParameterMetadataWhenPresent();
         testFrameworkExportOmitsEditorOnlyCollapsedField();
+        testGenericPluginExportKeepsNonNocModules();
         testXmlExportPreservesEditorGraphContent();
     } catch (const std::exception& error) {
         std::cerr << "graph_test failed: " << error.what() << '\n';
