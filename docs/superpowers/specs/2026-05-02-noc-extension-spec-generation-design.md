@@ -19,11 +19,12 @@ The `kind` field is intentionally retained. It describes the extension category 
 - Generate `plugins/ravenoc/plugin.json`, `plugins/ravenoc/modules.xml`, and `plugins/ravenoc/graphics/RaveNoC.xml` from the spec.
 - Keep the existing built-in NoC spec flow working.
 - Preserve the current Ruby/ERB RaveNoC RTL generator; only UI/runtime metadata becomes generated.
-- Leave a declared `pages` section in the spec so Finepaper can later show NoC-specific configuration pages.
+- Keep future Qt page work as a separate design. This phase does not emit temporary page metadata files.
 
 ## Non-Goals
 
 - Do not build the Qt page-rendering UI in this phase.
+- Do not emit `pages.json` or any other page artifact in this phase.
 - Do not convert `spec/noc/noc.yaml` to the new schema in this phase.
 - Do not generalize to arbitrary IP categories beyond `kind: noc`.
 - Do not generate the RaveNoC RTL wrapper/filelist generator from this extension spec.
@@ -32,10 +33,10 @@ The `kind` field is intentionally retained. It describes the extension category 
 
 RaveNoC will live under:
 
-- `spec/noc/ravenoc/extension.yaml`
-- `spec/noc/ravenoc/views/RaveNoC.xml`
+- `spec/noc/ravenoc.yml`
+- `spec/noc/views/RaveNoC.xml`
 
-The extension YAML uses this shape:
+The RaveNoC YAML uses this shape:
 
 ```yaml
 schema: finepaper.extension.v1
@@ -92,19 +93,6 @@ modules:
           role: target
           name: AXI MOSI
           description: AXI request array input
-
-pages:
-  - id: configuration
-    title: Configuration
-    target: module:RaveNoC
-    kind: parameter_sections
-    sections:
-      - title: Mesh
-        fields: [rows, cols, routing_algorithm]
-      - title: Flit
-        fields: [flit_data_width, flit_buffer_depth, virtual_channels]
-      - title: AXI
-        fields: [axi_addr_width, axi_data_width, axi_cdc_required]
 ```
 
 The exact RaveNoC spec will include every parameter, interface, and port currently present in `plugins/ravenoc/modules.xml`.
@@ -116,20 +104,10 @@ The exact RaveNoC spec will include every parameter, interface, and port current
 - `plugins/ravenoc/plugin.json`
 - `plugins/ravenoc/modules.xml`
 - `plugins/ravenoc/graphics/RaveNoC.xml`
-- `plugins/ravenoc/pages.json`
 
 `plugin.json` remains a runtime compatibility artifact for the existing plugin loader. The source of truth is the extension spec.
 
-`pages.json` is emitted but not consumed by Qt yet. It should preserve the `pages` array exactly enough for future UI work:
-
-```json
-{
-  "schema": "finepaper.extension.pages.v1",
-  "kind": "noc",
-  "extension": "finepaper.ravenoc",
-  "pages": []
-}
-```
+No `pages.json` is generated. Page rendering is future Qt behavior, not a runtime file format introduced in this phase.
 
 ## Generator Changes
 
@@ -144,14 +122,18 @@ The CLI will get an extension-oriented mode:
 
 ```bash
 ruby spec_generator/bin/spec-gen \
-  --extension spec/noc/ravenoc/extension.yaml \
-  --views spec/noc/ravenoc/views \
+  --extension spec/noc/ravenoc.yml \
+  --views spec/noc/views \
   --bundle plugins/ravenoc
 ```
 
 The old defaults and options continue to generate the built-in NoC bundle and Ruby model files.
 
-Internally, the generator should reuse the Qt bundle emission path. The new extension parser can normalize the RaveNoC extension YAML into the same module representation used by `QtBundleEmitter`, then emit `plugin.json` and `pages.json` in addition to `modules.xml` and graphics XML.
+Internally, the generator should reuse the Qt bundle emission path. The new extension parser can normalize `spec/noc/ravenoc.yml` into the same module representation used by `QtBundleEmitter`, then emit `plugin.json`, `modules.xml`, and graphics XML.
+
+## Future Qt Pages
+
+The retained `kind: noc` field is still useful for future category-specific UI. A later Qt design can use `kind: noc` to choose a NoC-oriented configuration page or dashboard for modules such as RaveNoC. That page work should be implemented as Qt behavior with a dedicated UI contract, not as a temporary `pages.json` file.
 
 ## Validation
 
@@ -165,8 +147,6 @@ The extension parser must reject:
 - Modules without parameters or interfaces maps.
 - Interfaces without a port projection.
 - View anchors referencing interfaces not declared by the module.
-- `pages` entries whose `target` module does not exist.
-- `pages` entries whose `fields` reference unknown module parameters.
 
 ## Testing
 
@@ -176,9 +156,8 @@ Add focused tests in `spec_generator/test/spec_generator_test.rb`:
 - Generated `plugin.json` includes `finepaper.ravenoc`, Ruby command, and `generic_graph_v1`.
 - Generated `modules.xml` includes `RaveNoC`, `noc_core`, key parameters, and routing choices.
 - Generated `graphics/RaveNoC.xml` includes the view anchors.
-- Generated `pages.json` preserves `kind: noc` and the parameter sections.
 - Invalid `kind` fails with a clear error.
-- Unknown page field fails with a clear error.
+- View anchors that reference unknown interfaces fail with a clear error.
 
 Then update `qt/test/plugin_test.cpp` only if the generated runtime bundle shape changes. The existing RaveNoC metadata load test should continue passing against generated files.
 
@@ -194,7 +173,7 @@ After implementation, run:
 
 ```bash
 ruby spec_generator/test/spec_generator_test.rb
-ruby spec_generator/bin/spec-gen --extension spec/noc/ravenoc/extension.yaml --views spec/noc/ravenoc/views --bundle plugins/ravenoc
+ruby spec_generator/bin/spec-gen --extension spec/noc/ravenoc.yml --views spec/noc/views --bundle plugins/ravenoc
 xmake build plugin_test
 xmake run plugin_test
 ruby plugins/ravenoc/generator/test/test_generator.rb
