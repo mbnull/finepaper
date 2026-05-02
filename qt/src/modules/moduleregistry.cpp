@@ -116,10 +116,31 @@ const ModuleType* ModuleRegistry::getTypeForGraphGroup(const QString& graphGroup
     return nullptr;
 }
 
+const ModuleType* ModuleRegistry::getTypeForGraphGroup(const QString& pluginId,
+                                                       const QString& graphGroup) const {
+    for (auto it = m_types.cbegin(); it != m_types.cend(); ++it) {
+        if (it.value().pluginId == pluginId && it.value().graphGroup == graphGroup) {
+            return &it.value();
+        }
+    }
+    return nullptr;
+}
+
 QStringList ModuleRegistry::availableTypes() const {
     QStringList types;
     for (auto it = m_types.begin(); it != m_types.end(); ++it) {
         types.append(it.key());
+    }
+    types.sort();
+    return types;
+}
+
+QStringList ModuleRegistry::availableTypesForPlugin(const QString& pluginId) const {
+    QStringList types;
+    for (auto it = m_types.cbegin(); it != m_types.cend(); ++it) {
+        if (it.value().pluginId == pluginId) {
+            types.append(it.key());
+        }
     }
     types.sort();
     return types;

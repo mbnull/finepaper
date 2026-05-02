@@ -119,8 +119,12 @@ public:
     const ModuleType* getType(const QString& name) const;
     // Looks up the first type that belongs to a graph group (e.g., "xps", "endpoints").
     const ModuleType* getTypeForGraphGroup(const QString& graphGroup) const;
+    // Looks up the first type in a graph group owned by one plugin.
+    const ModuleType* getTypeForGraphGroup(const QString& pluginId, const QString& graphGroup) const;
     // Returns type names sorted for stable UI listing.
     QStringList availableTypes() const;
+    // Returns type names owned by one plugin, sorted for stable UI listing.
+    QStringList availableTypesForPlugin(const QString& pluginId) const;
 
 private:
     QHash<QString, ModuleType> m_types;

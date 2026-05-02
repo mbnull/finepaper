@@ -108,6 +108,35 @@ void testModuleTypesKeepPluginOwnershipAndSkipDuplicates() {
     require(registry.availableTypes().size() == 1, "duplicate type name should be skipped");
 }
 
+void testModuleRegistryListsTypesByPlugin() {
+    ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
+
+    ModuleType nocType;
+    nocType.name = QStringLiteral("XP");
+    nocType.pluginId = QStringLiteral("finepaper.noc");
+    nocType.graphGroup = QStringLiteral("xps");
+    require(registry.registerType(nocType), "noc type should register");
+
+    ModuleType ravenType;
+    ravenType.name = QStringLiteral("RaveTile");
+    ravenType.pluginId = QStringLiteral("finepaper.ravenoc");
+    ravenType.graphGroup = QStringLiteral("xps");
+    require(registry.registerType(ravenType), "ravenoc type should register");
+
+    const QStringList nocTypes = registry.availableTypesForPlugin(QStringLiteral("finepaper.noc"));
+    const QStringList ravenTypes = registry.availableTypesForPlugin(QStringLiteral("finepaper.ravenoc"));
+
+    require(nocTypes == QStringList{QStringLiteral("XP")},
+            "NoC active IP should only list NoC module types");
+    require(ravenTypes == QStringList{QStringLiteral("RaveTile")},
+            "RaveNoC active IP should only list RaveNoC module types");
+
+    const ModuleType* ravenRouter =
+        registry.getTypeForGraphGroup(QStringLiteral("finepaper.ravenoc"), QStringLiteral("xps"));
+    require(ravenRouter && ravenRouter->name == QStringLiteral("RaveTile"),
+            "graph group lookup should be scoped by plugin id");
+}
+
 void testGeneratorArgumentsSubstituteInputAndOutput() {
     PluginGeneratorDescriptor generator;
     generator.command = QStringLiteral("ruby");
@@ -250,6 +279,7 @@ int main(int argc, char** argv) {
     try {
         testPluginManifestLoadsRelativePaths();
         testModuleTypesKeepPluginOwnershipAndSkipDuplicates();
+        testModuleRegistryListsTypesByPlugin();
         testGeneratorArgumentsSubstituteInputAndOutput();
         testGeneratorRunnerPropagatesInputFormat();
         testRepositoryRaveNoCPluginMetadataLoads();

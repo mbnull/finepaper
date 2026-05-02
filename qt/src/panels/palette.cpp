@@ -59,11 +59,24 @@ void Palette::setupUI() {
 }
 
 void Palette::populateModuleTypes() {
-    QStringList types = ModuleRegistry::instance().availableTypes();
+    m_listWidget->clear();
+
+    const QStringList types = m_activePluginId.isEmpty()
+        ? ModuleRegistry::instance().availableTypes()
+        : ModuleRegistry::instance().availableTypesForPlugin(m_activePluginId);
+
     for (const QString& type : types) {
         const ModuleType* moduleType = ModuleRegistry::instance().getType(type);
         auto* item = new QListWidgetItem(ModuleTypeMetadata::paletteLabel(moduleType));
         item->setData(Qt::UserRole, type);
         m_listWidget->addItem(item);
     }
+}
+
+void Palette::setActivePluginId(const QString& pluginId) {
+    if (m_activePluginId == pluginId) {
+        return;
+    }
+    m_activePluginId = pluginId;
+    populateModuleTypes();
 }

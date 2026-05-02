@@ -12,6 +12,8 @@ class Palette : public QWidget {
 
 public:
     Palette(Graph* graph, CommandManager* commandManager, QWidget* parent = nullptr);
+    void setActivePluginId(const QString& pluginId);
+    QString activePluginId() const { return m_activePluginId; }
 
 private:
     void setupUI();
@@ -20,4 +22,5 @@ private:
     QListWidget* m_listWidget;
     Graph* m_graph;
     CommandManager* m_commandManager;
+    QString m_activePluginId;
 };
