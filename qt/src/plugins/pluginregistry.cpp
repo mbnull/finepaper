@@ -54,6 +54,52 @@ QStringList stringArray(const QJsonValue& value) {
     return strings;
 }
 
+TopologyPresetParameterDescriptor topologyParameter(const QJsonObject& object) {
+    TopologyPresetParameterDescriptor parameter;
+    parameter.label = object.value(QStringLiteral("label")).toString();
+    parameter.defaultValue = object.value(QStringLiteral("default")).toInt();
+    parameter.minimumValue = object.value(QStringLiteral("min")).toInt(parameter.defaultValue);
+    parameter.maximumValue = object.value(QStringLiteral("max")).toInt(parameter.defaultValue);
+    return parameter;
+}
+
+QVector<TopologyPresetDescriptor> topologyPresetsFromJson(const QJsonValue& value) {
+    QVector<TopologyPresetDescriptor> presets;
+    if (!value.isArray()) {
+        return presets;
+    }
+
+    for (const QJsonValue& item : value.toArray()) {
+        const QJsonObject object = item.toObject();
+        TopologyPresetDescriptor preset;
+        preset.id = object.value(QStringLiteral("id")).toString().trimmed();
+        preset.label = object.value(QStringLiteral("label")).toString().trimmed();
+        preset.kind = object.value(QStringLiteral("kind")).toString().trimmed();
+        preset.routerModule = object.value(QStringLiteral("router_module")).toString().trimmed();
+        preset.idPattern = object.value(QStringLiteral("id_pattern")).toString().trimmed();
+
+        const QJsonObject ports = object.value(QStringLiteral("ports")).toObject();
+        for (auto it = ports.constBegin(); it != ports.constEnd(); ++it) {
+            if (it.value().isString()) {
+                preset.ports.insert(it.key(), it.value().toString());
+            }
+        }
+
+        const QJsonObject parameters = object.value(QStringLiteral("parameters")).toObject();
+        for (auto it = parameters.constBegin(); it != parameters.constEnd(); ++it) {
+            preset.parameters.insert(it.key(), topologyParameter(it.value().toObject()));
+        }
+
+        if (!preset.id.isEmpty() && !preset.kind.isEmpty() && !preset.routerModule.isEmpty()) {
+            if (preset.label.isEmpty()) {
+                preset.label = preset.id;
+            }
+            presets.append(preset);
+        }
+    }
+    return presets;
+}
+
 bool boolValue(const QJsonValue& value, bool fallbackValue = false) {
     if (value.isBool()) {
         return value.toBool();
@@ -100,6 +146,7 @@ std::optional<PluginDescriptor> loadManifest(const QString& pluginDirectory) {
     descriptor.rootPath = QFileInfo(pluginDirectory).absoluteFilePath();
     descriptor.modulesPath = resolvePath(descriptor.rootPath, object.value(QStringLiteral("modules")).toString());
     descriptor.graphicsPath = resolvePath(descriptor.rootPath, object.value(QStringLiteral("graphics")).toString());
+    descriptor.topologyPresets = topologyPresetsFromJson(object.value(QStringLiteral("topology_presets")));
 
     const QJsonObject generator = object.value(QStringLiteral("generator")).toObject();
     descriptor.generator.command = generator.value(QStringLiteral("command")).toString().trimmed();

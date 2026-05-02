@@ -6,10 +6,12 @@ module SpecGenerator
   class SpecError < StandardError; end
 
   TOP_LEVEL_KEYS = %w[schema kind name version buses modules].freeze
-  EXTENSION_TOP_LEVEL_KEYS = %w[schema kind extension runtime modules].freeze
+  EXTENSION_TOP_LEVEL_KEYS = %w[schema kind extension runtime topology_presets modules].freeze
   EXTENSION_KEYS = %w[id name version].freeze
   RUNTIME_KEYS = %w[generator].freeze
   GENERATOR_KEYS = %w[command input_format args].freeze
+  TOPOLOGY_PRESET_KEYS = %w[id label kind router_module id_pattern ports parameters].freeze
+  TOPOLOGY_PRESET_PARAMETER_KEYS = %w[label default min max].freeze
   EXTENSION_MODULE_KEYS = %w[
     palette_label graph_group description identity capabilities parameters interfaces
   ].freeze
@@ -337,6 +339,7 @@ module SpecGenerator
       validate_top_level(data)
       validate_extension(data.fetch('extension'))
       validate_runtime(data.fetch('runtime'))
+      validate_topology_presets(data.fetch('topology_presets', []))
       validate_modules(data.fetch('modules'))
       views = ViewParser.new(@views_dir, data.fetch('modules')).parse
       ParsedSpec.new(data: data, views: views)
@@ -381,6 +384,34 @@ module SpecGenerator
 
       generator['args'].each do |arg|
         raise SpecError, 'runtime.generator.args entries must be strings' unless arg.is_a?(String)
+      end
+    end
+
+    def validate_topology_presets(presets)
+      raise SpecError, 'topology_presets must be a list' unless presets.is_a?(Array)
+
+      presets.each do |preset|
+        raise SpecError, 'topology preset must be a map' unless preset.is_a?(Hash)
+
+        validate_keys!(preset, TOPOLOGY_PRESET_KEYS, "topology preset #{preset['id'] || '<unnamed>'}")
+        %w[id label kind router_module id_pattern].each do |key|
+          raise SpecError, "topology preset #{key} must be a string" unless preset[key].is_a?(String)
+        end
+        raise SpecError, "topology preset #{preset['id']} ports must be a map" unless preset['ports'].is_a?(Hash)
+        preset['ports'].each do |name, value|
+          raise SpecError, "topology preset #{preset['id']} port #{name} must be a string" unless value.is_a?(String)
+        end
+        raise SpecError, "topology preset #{preset['id']} parameters must be a map" unless preset['parameters'].is_a?(Hash)
+        preset['parameters'].each do |name, parameter|
+          raise SpecError, "topology preset #{preset['id']} parameter #{name} must be a map" unless parameter.is_a?(Hash)
+          validate_keys!(parameter, TOPOLOGY_PRESET_PARAMETER_KEYS, "topology preset #{preset['id']} parameter #{name}")
+          raise SpecError, "topology preset #{preset['id']} parameter #{name} label must be a string" unless parameter['label'].is_a?(String)
+          %w[default min max].each do |key|
+            unless parameter[key].is_a?(Integer)
+              raise SpecError, "topology preset #{preset['id']} parameter #{name} #{key} must be an integer"
+            end
+          end
+        end
       end
     end
 
@@ -802,6 +833,7 @@ module SpecGenerator
             input_format: generator.fetch('input_format'),
             args: generator.fetch('args')
           },
+          topology_presets: @spec.fetch('topology_presets', []),
           native: {
             enabled: false,
             library: ''

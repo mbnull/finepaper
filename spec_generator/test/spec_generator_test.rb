@@ -169,6 +169,12 @@ class SpecGeneratorTest < Minitest::Test
       assert_equal 'ruby', plugin_json.fetch('generator').fetch('command')
       assert_equal 'generic_graph_v1', plugin_json.fetch('generator').fetch('input_format')
       assert_equal 'generator/bin/generate', plugin_json.fetch('generator').fetch('args').first
+      presets = plugin_json.fetch('topology_presets')
+      assert_equal 1, presets.size
+      assert_equal 'mesh', presets.first.fetch('id')
+      assert_equal 'RaveTile', presets.first.fetch('router_module')
+      assert_equal 'rave_{row}_{col}', presets.first.fetch('id_pattern')
+      assert_equal 2, presets.first.fetch('parameters').fetch('rows').fetch('default')
       assert_equal({ 'enabled' => false, 'library' => '' }, plugin_json.fetch('native'))
 
       modules_xml = File.read(File.join(dir, 'plugins/ravenoc/modules.xml'))
@@ -271,6 +277,16 @@ class SpecGeneratorTest < Minitest::Test
             - "{output}"
             - -t
             - generator/template
+      topology_presets:
+        - id: mesh
+          label: Mesh
+          kind: mesh
+          router_module: RaveTile
+          id_pattern: rave_{row}_{col}
+          ports: { east: east, west: west, north: north, south: south }
+          parameters:
+            rows: { label: Rows, default: 2, min: 1, max: 16 }
+            cols: { label: Columns, default: 2, min: 1, max: 16 }
       modules:
         RaveNoC:
           palette_label: RaveNoC

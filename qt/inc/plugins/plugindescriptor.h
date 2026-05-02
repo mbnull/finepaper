@@ -1,8 +1,10 @@
 // PluginDescriptor stores directory plugin manifest metadata.
 #pragma once
 
+#include <QHash>
 #include <QString>
 #include <QStringList>
+#include <QVector>
 
 struct PluginGeneratorDescriptor {
     QString command;
@@ -30,6 +32,23 @@ struct PluginNativeDescriptor {
     QString library;
 };
 
+struct TopologyPresetParameterDescriptor {
+    QString label;
+    int defaultValue = 0;
+    int minimumValue = 0;
+    int maximumValue = 0;
+};
+
+struct TopologyPresetDescriptor {
+    QString id;
+    QString label;
+    QString kind;
+    QString routerModule;
+    QString idPattern;
+    QHash<QString, QString> ports;
+    QHash<QString, TopologyPresetParameterDescriptor> parameters;
+};
+
 struct PluginDescriptor {
     QString id;
     QString name;
@@ -39,6 +58,7 @@ struct PluginDescriptor {
     QString graphicsPath;
     PluginGeneratorDescriptor generator;
     PluginNativeDescriptor native;
+    QVector<TopologyPresetDescriptor> topologyPresets;
 
     bool hasModules() const { return !modulesPath.isEmpty(); }
 };

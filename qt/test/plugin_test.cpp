@@ -64,6 +64,31 @@ void testPluginManifestLoadsRelativePaths() {
         "input_format": "generic_graph_v1",
         "args": ["generator/bin/generate", "-i", "{input}", "-o", "{output}"]
       },
+      "topology_presets": [
+        {
+          "id": "mesh",
+          "label": "Mesh",
+          "kind": "mesh",
+          "router_module": "XP",
+          "id_pattern": "xp_{row}_{col}",
+          "ports": {"east": "east", "west": "west", "north": "north", "south": "south"},
+          "parameters": {
+            "rows": {"label": "Rows", "default": 2, "min": 1, "max": 16},
+            "cols": {"label": "Columns", "default": 2, "min": 1, "max": 16}
+          }
+        },
+        {
+          "id": "ring",
+          "label": "Ring",
+          "kind": "ring",
+          "router_module": "XP",
+          "id_pattern": "xp_{index}",
+          "ports": {"east": "east", "west": "west"},
+          "parameters": {
+            "nodes": {"label": "Nodes", "default": 4, "min": 2, "max": 64}
+          }
+        }
+      ],
       "native": {"enabled": true, "library": "libdemo.so"}
     })json"));
 
@@ -77,6 +102,16 @@ void testPluginManifestLoadsRelativePaths() {
     require(plugins.first().generator.hasGenerator(), "generator should be retained");
     require(plugins.first().generator.inputFormat == QStringLiteral("generic_graph_v1"),
             "generator input format should load");
+    require(plugins.first().topologyPresets.size() == 2,
+            "topology presets should load from manifest");
+    require(plugins.first().topologyPresets.first().id == QStringLiteral("mesh"),
+            "first topology preset id should load");
+    require(plugins.first().topologyPresets.first().kind == QStringLiteral("mesh"),
+            "first topology preset kind should load");
+    require(plugins.first().topologyPresets.first().routerModule == QStringLiteral("XP"),
+            "topology router module should load");
+    require(plugins.first().topologyPresets.first().parameters.value(QStringLiteral("rows")).defaultValue == 2,
+            "topology rows default should load");
 }
 
 void testModuleTypesKeepPluginOwnershipAndSkipDuplicates() {
