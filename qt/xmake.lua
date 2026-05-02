@@ -184,3 +184,20 @@ add_qt_test_target("plugin_test", "test/plugin_test.cpp", {
     "inc/**/pluginregistry.h",
     "inc/**/plugindescriptor.h"
 })
+
+add_qt_test_target("topology_preset_test", "test/topology_preset_test.cpp", {
+    "src/**/topologypresetbuilder.cpp",
+    "src/**/graph.cpp",
+    "src/**/module.cpp",
+    "src/**/connection.cpp",
+    "src/**/port.cpp",
+    "src/**/parameter.cpp",
+    "src/**/moduleregistry.cpp",
+    "src/**/moduleprovider.cpp",
+    "src/**/pluginregistry.cpp",
+    "src/**/frameworkpaths.cpp",
+    "inc/**/topologypresetbuilder.h",
+    "inc/**/graph.h",
+    "inc/**/module.h",
+    "inc/**/plugindescriptor.h"
+})
