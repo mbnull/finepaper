@@ -1,10 +1,19 @@
 require 'fileutils'
+require 'json'
 require 'yaml'
 
 module SpecGenerator
   class SpecError < StandardError; end
 
   TOP_LEVEL_KEYS = %w[schema kind name version buses modules].freeze
+  EXTENSION_TOP_LEVEL_KEYS = %w[schema kind extension runtime modules].freeze
+  EXTENSION_KEYS = %w[id name version].freeze
+  RUNTIME_KEYS = %w[generator].freeze
+  GENERATOR_KEYS = %w[command input_format args].freeze
+  EXTENSION_MODULE_KEYS = %w[
+    palette_label graph_group description identity capabilities parameters interfaces
+  ].freeze
+  EXTENSION_INTERFACE_KEYS = %w[label bus role connects_to match port ports].freeze
   BUS_KEYS = %w[description ipxact compatibility config signals].freeze
   BUS_CONFIG_KEYS = %w[type enum default description].freeze
   COMPATIBILITY_KEYS = %w[roles match].freeze
@@ -13,7 +22,7 @@ module SpecGenerator
   ].freeze
   IDENTITY_KEYS = %w[external_id_prefix display_prefix width supports_mesh_coordinates].freeze
   CAPABILITY_KEYS = %w[supports_collapse].freeze
-  PARAMETER_KEYS = %w[type default enum label description emit configurable min max].freeze
+  PARAMETER_KEYS = %w[type default enum labels label description emit configurable min max].freeze
   INTERFACE_KEYS = %w[label bus role accepts config port ports].freeze
   PORT_KEYS = %w[id direction type bus_type role name description].freeze
   PARAMETER_TYPES = %w[string int bool].freeze
@@ -27,6 +36,11 @@ module SpecGenerator
     parsed = Parser.new(spec_path, views_dir).parse
     QtBundleEmitter.new(parsed).write(qt_bundle_dir)
     RubyModelEmitter.new(parsed.data).write(ruby_model_dir)
+  end
+
+  def self.generate_extension(extension_path:, views_dir:, bundle_dir:)
+    parsed = ExtensionParser.new(extension_path, views_dir).parse
+    ExtensionBundleEmitter.new(parsed).write(bundle_dir)
   end
 
   class Parser
@@ -156,6 +170,7 @@ module SpecGenerator
         validate_type_name!(param['type'], "Module #{module_name} parameter #{param_name}")
         raise SpecError, "Module #{module_name} parameter #{param_name} emit is invalid" unless EMIT_MODES.include?(param['emit'])
         validate_enum!(param, "Module #{module_name} parameter #{param_name}")
+        validate_parameter_labels!(param, "Module #{module_name} parameter #{param_name}")
         validate_default!(param, "Module #{module_name} parameter #{param_name}")
       end
     end
@@ -278,9 +293,235 @@ module SpecGenerator
       end
     end
 
+    def validate_parameter_labels!(field, context)
+      return unless field.key?('labels')
+
+      raise SpecError, "#{context} labels must be a map" unless field['labels'].is_a?(Hash)
+      raise SpecError, "#{context} labels require enum" unless field['enum'].is_a?(Array)
+
+      enum_values = field['enum'].map(&:to_s)
+      field['labels'].each do |value, label|
+        raise SpecError, "#{context} label key #{value} is outside enum" unless enum_values.include?(value.to_s)
+        raise SpecError, "#{context} label for #{value} must be a string" unless label.is_a?(String)
+      end
+    end
+
     def validate_default!(field, context)
       return unless field.key?('default')
 
+      value = field['default']
+      raise SpecError, "#{context} default #{value.inspect} does not match #{field['type']}" unless value_matches_type?(value, field['type'])
+      return unless field['enum'] && !field['enum'].include?(value)
+
+      raise SpecError, "#{context} default #{value.inspect} is outside enum"
+    end
+
+    def value_matches_type?(value, type)
+      case type
+      when 'string' then value.is_a?(String)
+      when 'int' then value.is_a?(Integer)
+      when 'bool' then value == true || value == false
+      else false
+      end
+    end
+  end
+
+  class ExtensionParser
+    def initialize(extension_path, views_dir)
+      @extension_path = extension_path
+      @views_dir = views_dir
+    end
+
+    def parse
+      data = load_yaml
+      validate_top_level(data)
+      validate_extension(data.fetch('extension'))
+      validate_runtime(data.fetch('runtime'))
+      validate_modules(data.fetch('modules'))
+      views = ViewParser.new(@views_dir, data.fetch('modules')).parse
+      ParsedSpec.new(data: data, views: views)
+    end
+
+    private
+
+    def load_yaml
+      YAML.safe_load(File.read(@extension_path), aliases: false).tap do |data|
+        raise SpecError, 'Extension spec root must be a map' unless data.is_a?(Hash)
+      end
+    rescue Psych::Exception => error
+      raise SpecError, "Invalid YAML: #{error.message}"
+    end
+
+    def validate_top_level(data)
+      validate_keys!(data, EXTENSION_TOP_LEVEL_KEYS, 'extension top-level')
+      raise SpecError, 'schema must be finepaper.extension.v1' unless data['schema'] == 'finepaper.extension.v1'
+      raise SpecError, 'kind must be noc' unless data['kind'] == 'noc'
+      raise SpecError, 'extension must be a map' unless data['extension'].is_a?(Hash)
+      raise SpecError, 'runtime must be a map' unless data['runtime'].is_a?(Hash)
+      raise SpecError, 'modules must be a map' unless data['modules'].is_a?(Hash)
+    end
+
+    def validate_extension(extension)
+      validate_keys!(extension, EXTENSION_KEYS, 'extension metadata')
+      EXTENSION_KEYS.each do |key|
+        raise SpecError, "extension.#{key} must be a string" unless extension[key].is_a?(String)
+      end
+    end
+
+    def validate_runtime(runtime)
+      validate_keys!(runtime, RUNTIME_KEYS, 'extension runtime')
+      generator = runtime['generator']
+      raise SpecError, 'runtime.generator must be a map' unless generator.is_a?(Hash)
+
+      validate_keys!(generator, GENERATOR_KEYS, 'extension runtime.generator')
+      %w[command input_format].each do |key|
+        raise SpecError, "runtime.generator.#{key} must be a string" unless generator[key].is_a?(String)
+      end
+      raise SpecError, 'runtime.generator.args must be a list' unless generator['args'].is_a?(Array)
+
+      generator['args'].each do |arg|
+        raise SpecError, 'runtime.generator.args entries must be strings' unless arg.is_a?(String)
+      end
+    end
+
+    def validate_modules(modules)
+      raise SpecError, 'modules cannot be empty' if modules.empty?
+
+      modules.each do |module_name, mod|
+        raise SpecError, "Module #{module_name} must be a map" unless mod.is_a?(Hash)
+
+        validate_keys!(mod, EXTENSION_MODULE_KEYS, "module #{module_name}")
+        %w[palette_label graph_group description].each do |key|
+          raise SpecError, "Module #{module_name} #{key} must be a string" unless mod[key].is_a?(String)
+        end
+        validate_identity(module_name, mod.fetch('identity'))
+        validate_capabilities(module_name, mod['capabilities']) if mod.key?('capabilities')
+        validate_parameters(module_name, mod.fetch('parameters'))
+        validate_interfaces(module_name, mod.fetch('interfaces'))
+      end
+    end
+
+    def validate_identity(module_name, identity)
+      raise SpecError, "Module #{module_name} identity must be a map" unless identity.is_a?(Hash)
+
+      validate_keys!(identity, IDENTITY_KEYS, "module #{module_name} identity")
+      %w[external_id_prefix display_prefix].each do |key|
+        raise SpecError, "Module #{module_name} identity.#{key} must be a string" unless identity[key].is_a?(String)
+      end
+      raise SpecError, "Module #{module_name} identity.width must be an integer" unless identity['width'].is_a?(Integer)
+      unless identity['supports_mesh_coordinates'] == true || identity['supports_mesh_coordinates'] == false
+        raise SpecError, "Module #{module_name} identity.supports_mesh_coordinates must be a bool"
+      end
+    end
+
+    def validate_capabilities(module_name, capabilities)
+      raise SpecError, "Module #{module_name} capabilities must be a map" unless capabilities.is_a?(Hash)
+
+      validate_keys!(capabilities, CAPABILITY_KEYS, "module #{module_name} capabilities")
+      if capabilities.key?('supports_collapse') &&
+         capabilities['supports_collapse'] != true &&
+         capabilities['supports_collapse'] != false
+        raise SpecError, "Module #{module_name} capabilities.supports_collapse must be a bool"
+      end
+    end
+
+    def validate_parameters(module_name, parameters)
+      raise SpecError, "Module #{module_name} parameters must be a map" unless parameters.is_a?(Hash)
+
+      parameters.each do |param_name, param|
+        raise SpecError, "Module #{module_name} parameter #{param_name} must be a map" unless param.is_a?(Hash)
+
+        validate_keys!(param, PARAMETER_KEYS, "module #{module_name} parameter #{param_name}")
+        validate_type_name!(param['type'], "Module #{module_name} parameter #{param_name}")
+        raise SpecError, "Module #{module_name} parameter #{param_name} default is required" unless param.key?('default')
+        if param.key?('emit') && !EMIT_MODES.include?(param['emit'])
+          raise SpecError, "Module #{module_name} parameter #{param_name} emit is invalid"
+        end
+        validate_enum!(param, "Module #{module_name} parameter #{param_name}")
+        validate_parameter_labels!(param, "Module #{module_name} parameter #{param_name}")
+        validate_default!(param, "Module #{module_name} parameter #{param_name}")
+        validate_parameter_bounds!(param, "Module #{module_name} parameter #{param_name}")
+      end
+    end
+
+    def validate_parameter_bounds!(param, context)
+      if param.key?('configurable') && param['configurable'] != true && param['configurable'] != false
+        raise SpecError, "#{context} configurable must be a bool"
+      end
+      %w[min max].each do |key|
+        raise SpecError, "#{context} #{key} must be an integer" if param.key?(key) && !param[key].is_a?(Integer)
+      end
+    end
+
+    def validate_interfaces(module_name, interfaces)
+      raise SpecError, "Module #{module_name} interfaces must be a map" unless interfaces.is_a?(Hash)
+
+      interfaces.each do |interface_name, interface|
+        raise SpecError, "Module #{module_name} interface #{interface_name} must be a map" unless interface.is_a?(Hash)
+
+        validate_keys!(interface, EXTENSION_INTERFACE_KEYS, "module #{module_name} interface #{interface_name}")
+        %w[label bus role connects_to].each do |key|
+          raise SpecError, "#{module_name}.#{interface_name} #{key} must be a string" unless interface[key].is_a?(String)
+        end
+        raise SpecError, "#{module_name}.#{interface_name} match must be a list" unless interface['match'].is_a?(Array)
+        interface['match'].each do |field|
+          raise SpecError, "#{module_name}.#{interface_name} match entries must be strings" unless field.is_a?(String)
+        end
+        validate_port_projection(module_name, interface_name, interface)
+      end
+    end
+
+    def validate_port_projection(module_name, interface_name, interface)
+      raise SpecError, "#{module_name}.#{interface_name} must define port or ports" unless interface.key?('port') || interface.key?('ports')
+      raise SpecError, "#{module_name}.#{interface_name} cannot define both port and ports" if interface.key?('port') && interface.key?('ports')
+
+      projections = interface.key?('port') ? [interface['port']] : interface['ports']
+      raise SpecError, "#{module_name}.#{interface_name} ports must be a list" unless projections.is_a?(Array)
+
+      projections.each do |port|
+        raise SpecError, "#{module_name}.#{interface_name} port must be a map" unless port.is_a?(Hash)
+
+        validate_keys!(port, PORT_KEYS, "#{module_name}.#{interface_name} port")
+        raise SpecError, "#{module_name}.#{interface_name} port direction is invalid" unless PORT_DIRECTIONS.include?(port['direction'])
+      end
+    end
+
+    def validate_keys!(hash, allowed, context)
+      hash.each_key do |key|
+        next if allowed.include?(key)
+
+        raise SpecError, "Unknown #{context} field: #{key}"
+      end
+    end
+
+    def validate_type_name!(type, context)
+      raise SpecError, "#{context} type is invalid" unless PARAMETER_TYPES.include?(type)
+    end
+
+    def validate_enum!(field, context)
+      return unless field.key?('enum')
+
+      raise SpecError, "#{context} enum must be a list" unless field['enum'].is_a?(Array)
+      raise SpecError, "#{context} enum cannot be empty" if field['enum'].empty?
+      field['enum'].each do |value|
+        raise SpecError, "#{context} enum value #{value.inspect} does not match #{field['type']}" unless value_matches_type?(value, field['type'])
+      end
+    end
+
+    def validate_parameter_labels!(field, context)
+      return unless field.key?('labels')
+
+      raise SpecError, "#{context} labels must be a map" unless field['labels'].is_a?(Hash)
+      raise SpecError, "#{context} labels require enum" unless field['enum'].is_a?(Array)
+
+      enum_values = field['enum'].map(&:to_s)
+      field['labels'].each do |value, label|
+        raise SpecError, "#{context} label key #{value} is outside enum" unless enum_values.include?(value.to_s)
+        raise SpecError, "#{context} label for #{value} must be a string" unless label.is_a?(String)
+      end
+    end
+
+    def validate_default!(field, context)
       value = field['default']
       raise SpecError, "#{context} default #{value.inspect} does not match #{field['type']}" unless value_matches_type?(value, field['type'])
       return unless field['enum'] && !field['enum'].include?(value)
@@ -485,6 +726,168 @@ module SpecGenerator
       end
       lines << '    </parameters>'
       lines
+    end
+
+    def projected_ports(interface)
+      return [interface.fetch('port')] if interface.key?('port')
+
+      interface.fetch('ports')
+    end
+
+    def graphics_xml(module_name, view)
+      <<~XML
+        <?xml version="1.0" encoding="UTF-8"?>
+        <module-graphics type="#{escape(module_name)}">
+        #{indent(view.graphics_xml, 2)}
+        #{indent(view.anchors_xml, 2) if view.anchors_xml}
+        </module-graphics>
+      XML
+    end
+
+    def attrs(values)
+      values.filter_map do |key, value|
+        next if value.nil?
+
+        %(#{key}="#{escape(value)}")
+      end.then { |items| items.empty? ? '' : " #{items.join(' ')}" }
+    end
+
+    def indent(text, spaces)
+      prefix = ' ' * spaces
+      text.lines.map { |line| "#{prefix}#{line.rstrip}" }.join("\n")
+    end
+
+    def escape(value)
+      value.to_s
+           .gsub('&', '&amp;')
+           .gsub('"', '&quot;')
+           .gsub('<', '&lt;')
+           .gsub('>', '&gt;')
+    end
+  end
+
+  class ExtensionBundleEmitter
+    def initialize(parsed)
+      @spec = parsed.data
+      @views = parsed.views
+    end
+
+    def write(bundle_dir)
+      FileUtils.mkdir_p(File.join(bundle_dir, 'graphics'))
+      File.write(File.join(bundle_dir, 'plugin.json'), plugin_json)
+      File.write(File.join(bundle_dir, 'modules.xml'), modules_xml)
+
+      @views.each do |module_name, view|
+        File.write(
+          File.join(bundle_dir, 'graphics', "#{module_name}.xml"),
+          graphics_xml(module_name, view)
+        )
+      end
+    end
+
+    private
+
+    def plugin_json
+      extension = @spec.fetch('extension')
+      generator = @spec.fetch('runtime').fetch('generator')
+      JSON.pretty_generate(
+        {
+          id: extension.fetch('id'),
+          name: extension.fetch('name'),
+          version: extension.fetch('version'),
+          modules: 'modules.xml',
+          graphics: 'graphics',
+          generator: {
+            command: generator.fetch('command'),
+            input_format: generator.fetch('input_format'),
+            args: generator.fetch('args')
+          },
+          native: {
+            enabled: false,
+            library: ''
+          }
+        }
+      ) + "\n"
+    end
+
+    def modules_xml
+      lines = ['<?xml version="1.0" encoding="UTF-8"?>', '<module-bundle>']
+      @spec.fetch('modules').each do |module_name, mod|
+        lines.concat(module_lines(module_name, mod))
+      end
+      lines << '</module-bundle>'
+      "#{lines.join("\n")}\n"
+    end
+
+    def module_lines(module_name, mod)
+      lines = [
+        "  <module#{attrs(name: module_name, palette_label: mod['palette_label'], graph_group: mod['graph_group'], description: mod['description'])}>"
+      ]
+      lines << "    <identity#{attrs(mod.fetch('identity'))} />"
+      if mod['capabilities']
+        lines << "    <capabilities#{attrs(mod['capabilities'])} />"
+      end
+      lines.concat(interface_lines(mod.fetch('interfaces')))
+      lines.concat(port_lines(mod.fetch('interfaces')))
+      lines.concat(parameter_lines(mod.fetch('parameters')))
+      lines << '  </module>'
+      lines
+    end
+
+    def interface_lines(interfaces)
+      lines = ['    <interfaces>']
+      interfaces.each do |interface_name, interface|
+        lines << "      <interface#{attrs(id: interface_name, label: interface['label'], bus: interface['bus'], role: interface['role'], connects_to: interface['connects_to'], match: interface.fetch('match').join(','))}>"
+        lines << '      </interface>'
+      end
+      lines << '    </interfaces>'
+      lines
+    end
+
+    def port_lines(interfaces)
+      lines = ['    <ports>']
+      interfaces.each do |interface_name, interface|
+        projected_ports(interface).each do |port|
+          lines << "      <port#{attrs(port.merge('interface' => interface_name))} />"
+        end
+      end
+      lines << '    </ports>'
+      lines
+    end
+
+    def parameter_lines(parameters)
+      lines = ['    <parameters>']
+      parameters.each do |name, parameter|
+        param_attrs = {
+          name: name,
+          type: parameter.fetch('type'),
+          default: parameter.fetch('default'),
+          label: parameter['label'],
+          description: parameter['description'],
+          configurable: parameter.key?('configurable') ? parameter['configurable'] : nil,
+          min: parameter['min'],
+          max: parameter['max']
+        }
+
+        if parameter['enum']
+          lines << "      <parameter#{attrs(param_attrs)}>"
+          lines << '        <choices>'
+          parameter['enum'].each do |choice|
+            lines << "          <choice#{attrs(value: choice, label: choice_label(parameter, choice))} />"
+          end
+          lines << '        </choices>'
+          lines << '      </parameter>'
+        else
+          lines << "      <parameter#{attrs(param_attrs)} />"
+        end
+      end
+      lines << '    </parameters>'
+      lines
+    end
+
+    def choice_label(parameter, choice)
+      labels = parameter.fetch('labels', {})
+      labels.fetch(choice, labels.fetch(choice.to_s, choice))
     end
 
     def projected_ports(interface)

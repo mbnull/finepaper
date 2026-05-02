@@ -7,22 +7,42 @@ require 'spec_generator'
 
 options = {
   spec_path: 'spec/noc/noc.yaml',
+  extension_path: nil,
   views_dir: 'spec/noc/views',
   qt_bundle_dir: 'plugins/noc',
-  ruby_model_dir: 'plugins/noc/generator/src/ruby/model'
+  ruby_model_dir: 'plugins/noc/generator/src/ruby/model',
+  extension_bundle_dir: nil
 }
 
 begin
   OptionParser.new do |parser|
     parser.banner = 'Usage: spec-gen [options]'
     parser.on('--spec PATH', 'NoC YAML spec path') { |value| options[:spec_path] = value }
+    parser.on('--extension PATH', 'NoC extension YAML spec path') { |value| options[:extension_path] = value }
     parser.on('--views DIR', 'Qt view XML directory') { |value| options[:views_dir] = value }
     parser.on('--qt-bundle DIR', 'Qt bundle output directory') { |value| options[:qt_bundle_dir] = value }
     parser.on('--ruby-model DIR', 'Ruby model output directory') { |value| options[:ruby_model_dir] = value }
+    parser.on('--bundle DIR', 'Extension bundle output directory') { |value| options[:extension_bundle_dir] = value }
   end.parse!
 
-  SpecGenerator.generate(**options)
-  puts "Generated #{options[:qt_bundle_dir]} and #{options[:ruby_model_dir]}"
+  if options[:extension_path]
+    raise SpecGenerator::SpecError, '--bundle is required with --extension' unless options[:extension_bundle_dir]
+
+    SpecGenerator.generate_extension(
+      extension_path: options[:extension_path],
+      views_dir: options[:views_dir],
+      bundle_dir: options[:extension_bundle_dir]
+    )
+    puts "Generated extension bundle #{options[:extension_bundle_dir]}"
+  else
+    SpecGenerator.generate(
+      spec_path: options[:spec_path],
+      views_dir: options[:views_dir],
+      qt_bundle_dir: options[:qt_bundle_dir],
+      ruby_model_dir: options[:ruby_model_dir]
+    )
+    puts "Generated #{options[:qt_bundle_dir]} and #{options[:ruby_model_dir]}"
+  end
 rescue SpecGenerator::SpecError => error
   warn "error: #{error.message}"
   exit 1
