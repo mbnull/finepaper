@@ -1,30 +1,31 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <module-bundle>
-  <module name="RaveNoC" palette_label="RaveNoC" graph_group="noc_core" description="Configurable RaveNoC mesh fabric backed by upstream RTL.">
-    <identity external_id_prefix="ravenoc" display_prefix="RNoC" width="2" supports_mesh_coordinates="false" />
+  <module name="RaveTile" palette_label="Rave Tile" graph_group="xps" description="Editable RaveNoC router tile backed by upstream RTL mesh.">
+    <identity external_id_prefix="rave" display_prefix="Rave" width="2" supports_mesh_coordinates="true" />
     <interfaces>
-      <interface id="axi_mosi" label="AXI MOSI" bus="axi4_struct_array" role="target" connects_to="initiator" match="data_width">
+      <interface id="north" label="North" bus="ravenoc_router_link" role="target" connects_to="initiator" match="">
       </interface>
-      <interface id="axi_miso" label="AXI MISO" bus="axi4_struct_array" role="initiator" connects_to="target" match="data_width">
+      <interface id="east" label="East" bus="ravenoc_router_link" role="initiator" connects_to="target" match="">
       </interface>
-      <interface id="irq" label="IRQ" bus="interrupt_array" role="initiator" connects_to="target" match="">
+      <interface id="south" label="South" bus="ravenoc_router_link" role="initiator" connects_to="target" match="">
       </interface>
-      <interface id="clock_reset" label="Clock/Reset" bus="clock_reset" role="target" connects_to="initiator" match="">
+      <interface id="west" label="West" bus="ravenoc_router_link" role="target" connects_to="initiator" match="">
+      </interface>
+      <interface id="local" label="Local" bus="ravenoc_endpoint_link" role="target" connects_to="initiator" match="">
       </interface>
     </interfaces>
     <ports>
-      <port id="axi_mosi" direction="input" type="bus" bus_type="axi4_struct_array" role="target" name="AXI MOSI" description="AXI request array input" interface="axi_mosi" />
-      <port id="axi_miso" direction="output" type="bus" bus_type="axi4_struct_array" role="initiator" name="AXI MISO" description="AXI response array output" interface="axi_miso" />
-      <port id="irq" direction="output" type="interrupt" bus_type="interrupt_array" role="status" name="IRQ" description="RaveNoC interrupt array" interface="irq" />
-      <port id="clock_reset" direction="input" type="clock_reset" bus_type="clock_reset" role="clock" name="CLK/RST" description="AXI and NoC clock/reset inputs" interface="clock_reset" />
+      <port id="north" direction="inout" type="bus" bus_type="ravenoc_router_link" role="router" name="North" description="North RaveNoC router link" interface="north" />
+      <port id="east" direction="inout" type="bus" bus_type="ravenoc_router_link" role="router" name="East" description="East RaveNoC router link" interface="east" />
+      <port id="south" direction="inout" type="bus" bus_type="ravenoc_router_link" role="router" name="South" description="South RaveNoC router link" interface="south" />
+      <port id="west" direction="inout" type="bus" bus_type="ravenoc_router_link" role="router" name="West" description="West RaveNoC router link" interface="west" />
+      <port id="local" direction="input" type="bus" bus_type="ravenoc_endpoint_link" role="attachment" name="Local" description="Local RaveNoC endpoint slot" interface="local" />
     </ports>
     <parameters>
-      <parameter name="display_name" type="string" default="RaveNoC" label="Display name" description="Name shown on the canvas." />
-      <parameter name="external_id" type="string" default="ravenoc_00" label="External ID" description="Stable generated artifact identifier." />
+      <parameter name="display_name" type="string" default="Rave Tile" label="Display name" description="Name shown on the canvas." />
+      <parameter name="external_id" type="string" default="rave_00" label="External ID" description="Stable generated artifact identifier." />
       <parameter name="x" type="int" default="0" description="Canvas X position." configurable="false" />
       <parameter name="y" type="int" default="0" description="Canvas Y position." configurable="false" />
-      <parameter name="rows" type="int" default="2" label="Rows" description="RaveNoC mesh row count." min="1" max="16" />
-      <parameter name="cols" type="int" default="2" label="Columns" description="RaveNoC mesh column count." min="1" max="16" />
       <parameter name="flit_data_width" type="int" default="32" label="Flit data width" description="FLIT_DATA_WIDTH macro value." min="8" max="512" />
       <parameter name="flit_type_width" type="int" default="2" label="Flit type width" description="FLIT_TP_WIDTH macro value." min="1" max="8" />
       <parameter name="flit_buffer_depth" type="int" default="2" label="Flit buffer depth" description="FLIT_BUFF macro value; must be a power of two." min="1" max="1024" />
@@ -46,6 +47,23 @@
       <parameter name="axi_data_width" type="int" default="32" label="AXI data width" description="AXI_DATA_WIDTH macro value." min="8" max="512" />
       <parameter name="axi_cdc_required" type="string" default="all" label="AXI CDC required" description="AXI_CDC_REQ policy: all, none, or bit mask." />
       <parameter name="bypass_cdc" type="bool" default="false" label="Bypass CDC in smoke" description="Drive generated bypass_cdc vector high in the smoke wrapper." />
+    </parameters>
+  </module>
+  <module name="RaveEndpoint" palette_label="Rave Endpoint" graph_group="endpoints" description="Editable RaveNoC endpoint attachment for a router tile.">
+    <identity external_id_prefix="rave_ep" display_prefix="Rave EP" width="2" supports_mesh_coordinates="false" />
+    <interfaces>
+      <interface id="noc" label="NoC" bus="ravenoc_endpoint_link" role="initiator" connects_to="target" match="">
+      </interface>
+    </interfaces>
+    <ports>
+      <port id="noc" direction="output" type="bus" bus_type="ravenoc_endpoint_link" role="attachment" name="NoC" description="RaveNoC endpoint attachment" interface="noc" />
+    </ports>
+    <parameters>
+      <parameter name="display_name" type="string" default="Rave Endpoint" label="Display name" description="Name shown on the canvas." />
+      <parameter name="external_id" type="string" default="rave_ep_00" label="External ID" description="Stable generated artifact identifier." />
+      <parameter name="x" type="int" default="0" description="Canvas X position." configurable="false" />
+      <parameter name="y" type="int" default="0" description="Canvas Y position." configurable="false" />
+      <parameter name="endpoint_index" type="int" default="0" label="Endpoint index" description="Stable endpoint index in the generated AXI arrays." min="0" max="255" />
     </parameters>
   </module>
 </module-bundle>

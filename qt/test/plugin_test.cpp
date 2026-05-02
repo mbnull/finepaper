@@ -230,23 +230,35 @@ void testRepositoryRaveNoCPluginMetadataLoads() {
             "RaveNoC plugin should use Ruby generator");
     require(plugins.first().generator.inputFormat == QStringLiteral("generic_graph_v1"),
             "RaveNoC plugin should request generic graph input");
+    require(plugins.first().topologyPresets.size() == 1,
+            "RaveNoC plugin should expose topology presets");
+    require(plugins.first().topologyPresets.first().routerModule == QStringLiteral("RaveTile"),
+            "RaveNoC mesh preset should create RaveTile routers");
 
     ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
     registry.loadPlugins(plugins);
 
-    const ModuleType* type = registry.getType(QStringLiteral("RaveNoC"));
-    require(type != nullptr, "RaveNoC module type should load");
-    require(type->pluginId == QStringLiteral("finepaper.ravenoc"),
-            "RaveNoC module should keep plugin ownership");
-    require(type->graphGroup != QStringLiteral("xps") &&
-                type->graphGroup != QStringLiteral("endpoints"),
-            "RaveNoC must not reuse XP/Endpoint graph groups");
-    require(type->defaultParameters.contains(QStringLiteral("rows")),
-            "RaveNoC rows parameter should load");
-    require(type->defaultParameters.contains(QStringLiteral("routing_algorithm")),
-            "RaveNoC routing algorithm parameter should load");
-    require(type->parameterMetadata.value(QStringLiteral("routing_algorithm")).choices.size() == 2,
-            "RaveNoC routing algorithm choices should load");
+    const QStringList ravenTypes = registry.availableTypesForPlugin(QStringLiteral("finepaper.ravenoc"));
+    require(ravenTypes == QStringList({QStringLiteral("RaveEndpoint"), QStringLiteral("RaveTile")}),
+            "RaveNoC active IP should list only its internal editable module types");
+
+    const ModuleType* tileType = registry.getType(QStringLiteral("RaveTile"));
+    require(tileType != nullptr, "RaveTile module type should load");
+    require(tileType->pluginId == QStringLiteral("finepaper.ravenoc"),
+            "RaveTile module should keep plugin ownership");
+    require(tileType->graphGroup == QStringLiteral("xps"),
+            "RaveTile should participate as the RaveNoC router graph group");
+    require(tileType->defaultParameters.contains(QStringLiteral("routing_algorithm")),
+            "RaveTile routing algorithm parameter should load");
+    require(tileType->parameterMetadata.value(QStringLiteral("routing_algorithm")).choices.size() == 2,
+            "RaveTile routing algorithm choices should load");
+
+    const ModuleType* endpointType = registry.getType(QStringLiteral("RaveEndpoint"));
+    require(endpointType != nullptr, "RaveEndpoint module type should load");
+    require(endpointType->pluginId == QStringLiteral("finepaper.ravenoc"),
+            "RaveEndpoint module should keep plugin ownership");
+    require(endpointType->graphGroup == QStringLiteral("endpoints"),
+            "RaveEndpoint should participate as an editable endpoint graph group");
 }
 
 void testStartupDiagnosticsListLoadedPluginsAndIpTypes() {

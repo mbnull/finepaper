@@ -17,6 +17,35 @@
       "generator/template"
     ]
   },
+  "topology_presets": [
+    {
+      "id": "mesh",
+      "label": "Mesh",
+      "kind": "mesh",
+      "router_module": "RaveTile",
+      "id_pattern": "rave_{row}_{col}",
+      "ports": {
+        "east": "east",
+        "west": "west",
+        "north": "north",
+        "south": "south"
+      },
+      "parameters": {
+        "rows": {
+          "label": "Rows",
+          "default": 2,
+          "min": 1,
+          "max": 16
+        },
+        "cols": {
+          "label": "Columns",
+          "default": 2,
+          "min": 1,
+          "max": 16
+        }
+      }
+    }
+  ],
   "native": {
     "enabled": false,
     "library": ""
