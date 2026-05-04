@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")"
-verilator --lint-only --sv --Wno-UNOPTFLAT -f ravenoc_filelist.f --top-module ravenoc_demo_top
+verilator --lint-only --sv --Wno-UNOPTFLAT -f ravenoc_filelist.f --top-module ravenoc_top

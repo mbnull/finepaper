@@ -1,0 +1,18 @@
+/* verilator lint_off UNUSED */
+module ravenoc_endpoint_dummy
+  import amba_axi_pkg::*;
+  import ravenoc_pkg::*;
+#(
+  parameter int ENDPOINT_INDEX = 0,
+  parameter int RAVENOC_SLOT = 0
+) (
+  input  logic        clk_axi,
+  input  logic        arst_axi,
+  output s_axi_mosi_t axi_mosi,
+  input  s_axi_miso_t axi_miso,
+  input  s_irq_ni_t   irq
+);
+  // Replace this placeholder with the AXI master connected to this RaveNoC slot.
+  assign axi_mosi = '0;
+endmodule
+/* verilator lint_on UNUSED */

@@ -113,6 +113,8 @@ class RaveNoCGenerator
     copy_vendor_sources!
     template_binding = binding_for(module_record, parameters)
     render('ravenoc_config.svh.erb', File.join(output_dir, 'ravenoc_config.svh'), template_binding)
+    render('ravenoc_endpoint_dummy.sv.erb', File.join(output_dir, 'ravenoc_endpoint_dummy.sv'), template_binding)
+    render('ravenoc_top.sv.erb', File.join(output_dir, 'ravenoc_top.sv'), template_binding)
     render('ravenoc_demo_top.sv.erb', File.join(output_dir, 'ravenoc_demo_top.sv'), template_binding)
     render('ravenoc_filelist.f.erb', File.join(output_dir, 'ravenoc_filelist.f'), template_binding)
     render('verify.sh.erb', File.join(output_dir, 'verify.sh'), template_binding)
@@ -177,7 +179,8 @@ class RaveNoCGenerator
       'id' => graph.fetch('name', 'ravenoc_internal_graph'),
       'type' => 'internal_graph',
       'parameters' => parameters,
-      'tiles' => tiles
+      'tiles' => tiles,
+      'endpoints' => endpoint_bindings(graph, coordinate_by_id, cols)
     }
   end
 
@@ -315,6 +318,71 @@ class RaveNoCGenerator
     "#{link.fetch(:from)} #{link.fetch(:axis)} #{link.fetch(:to)}"
   end
 
+  def endpoint_bindings(graph, coordinate_by_id, cols)
+    modules_by_id = graph.fetch('modules', []).to_h { |mod| [mod.fetch('id'), mod] }
+    tile_ids = coordinate_by_id.keys
+    endpoint_ids = modules_by_id.values.select do |mod|
+      mod['plugin'] == 'finepaper.ravenoc' && mod['type'] == 'RaveEndpoint'
+    end.map { |mod| mod.fetch('id') }
+
+    bindings = []
+    graph.fetch('connections', []).each do |connection|
+      endpoint_id, tile_id = endpoint_connection(connection, endpoint_ids, tile_ids)
+      next unless endpoint_id
+
+      endpoint = modules_by_id.fetch(endpoint_id)
+      col, row = coordinate_by_id.fetch(tile_id)
+      slot = (row * cols) + col
+      endpoint_index = endpoint_index(endpoint, bindings.size)
+      bindings << {
+        'id' => endpoint_id,
+        'tile' => tile_id,
+        'slot' => slot,
+        'endpoint_index' => endpoint_index,
+        'instance' => "u_ep#{slot}_#{safe_sv_identifier(endpoint_id)}_dummy"
+      }
+    end
+
+    duplicate_slot = bindings.group_by { |binding| binding.fetch('slot') }.find { |_, items| items.size > 1 }
+    raise GenerationError, "multiple RaveEndpoint connections target RaveNoC slot #{duplicate_slot.first}" if duplicate_slot
+
+    bindings.sort_by { |binding| [binding.fetch('slot'), binding.fetch('id')] }
+  end
+
+  def endpoint_connection(connection, endpoint_ids, tile_ids)
+    source = connection.fetch('source', {})
+    target = connection.fetch('target', {})
+    source_module = source.fetch('module', nil)
+    target_module = target.fetch('module', nil)
+
+    if endpoint_ids.include?(source_module) && source.fetch('port', nil) == 'noc' &&
+       tile_ids.include?(target_module) && target.fetch('port', nil) == 'local'
+      return [source_module, target_module]
+    end
+
+    if endpoint_ids.include?(target_module) && target.fetch('port', nil) == 'noc' &&
+       tile_ids.include?(source_module) && source.fetch('port', nil) == 'local'
+      return [target_module, source_module]
+    end
+
+    return [nil, nil] unless endpoint_ids.include?(source_module) || endpoint_ids.include?(target_module)
+
+    raise GenerationError, "invalid RaveEndpoint connection #{connection.fetch('id', '<unnamed>')}"
+  end
+
+  def endpoint_index(endpoint, fallback)
+    value = endpoint.fetch('parameters', {}).fetch('endpoint_index', fallback)
+    raise GenerationError, "RaveEndpoint #{endpoint.fetch('id')} endpoint_index must be an integer" unless value.is_a?(Integer)
+
+    value
+  end
+
+  def safe_sv_identifier(value)
+    identifier = value.to_s.gsub(/[^a-zA-Z0-9_$]/, '_')
+    identifier = "ep_#{identifier}" unless identifier.match?(/\A[a-zA-Z_]/)
+    identifier
+  end
+
   def validate_vendor!
     missing = REQUIRED_VENDOR_FILES.find { |relative| !File.file?(File.join(vendor_dir, relative)) }
     return unless missing
@@ -412,6 +480,9 @@ class RaveNoCGenerator
     bypass_cdc_literal = bypass_cdc_literal(parameters)
     vendor_files = vendor_files()
     output_dir = self.output_dir
+    endpoint_bindings = module_record.fetch('endpoints', [])
+    endpoint_by_slot = endpoint_bindings.to_h { |endpoint| [endpoint.fetch('slot'), endpoint] }
+    noc_size = parameters.fetch('rows') * parameters.fetch('cols')
     binding
   end
 
@@ -432,7 +503,8 @@ class RaveNoCGenerator
       module: {
         id: module_record['id'],
         type: module_record['type'],
-        tiles: module_record.fetch('tiles', []).size
+        tiles: module_record.fetch('tiles', []).size,
+        endpoints: module_record.fetch('endpoints', [])
       },
       parameters: parameters,
       verification: {

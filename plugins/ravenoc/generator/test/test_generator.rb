@@ -73,6 +73,39 @@ class RaveNoCGeneratorTest < Minitest::Test
     end
   end
 
+  def test_generates_endpoint_dummy_top_from_internal_endpoint_connection
+    Dir.mktmpdir do |dir|
+      input = write_json(dir, 'endpoint_graph.json', internal_graph_with_endpoint)
+      vendor = File.join(dir, 'vendor/ravenoc')
+      make_fake_vendor(vendor)
+      out = File.join(dir, 'out')
+
+      _stdout, stderr, status = run_generator(input, out, vendor)
+
+      assert status.success?, stderr
+      top = File.read(File.join(out, 'ravenoc_top.sv'))
+      assert_includes top, 'module ravenoc_top'
+      assert_includes top, 'ravenoc_endpoint_dummy'
+      assert_includes top, '.ENDPOINT_INDEX(7)'
+      assert_includes top, '.RAVENOC_SLOT(0)'
+      assert_includes top, 'assign axi_mosi_if[0] = ep0_axi_mosi;'
+      assert_includes top, 'ravenoc #('
+
+      dummy = File.read(File.join(out, 'ravenoc_endpoint_dummy.sv'))
+      assert_includes dummy, 'module ravenoc_endpoint_dummy'
+
+      filelist = File.read(File.join(out, 'ravenoc_filelist.f'))
+      assert_includes filelist, File.join(out, 'ravenoc_endpoint_dummy.sv')
+      assert_includes filelist, File.join(out, 'ravenoc_top.sv')
+
+      manifest = JSON.parse(File.read(File.join(out, 'manifest.json')))
+      endpoint = manifest.fetch('module').fetch('endpoints').first
+      assert_equal 'host_0', endpoint.fetch('id')
+      assert_equal 'rave_a', endpoint.fetch('tile')
+      assert_equal 0, endpoint.fetch('slot')
+    end
+  end
+
   def test_drc_validates_internal_graph_without_vendor_source
     Dir.mktmpdir do |_dir|
       input = File.expand_path('../examples/internal_mesh_2x2.json', __dir__)
@@ -350,6 +383,24 @@ class RaveNoCGeneratorTest < Minitest::Test
         }
       ]
     }
+  end
+
+  def internal_graph_with_endpoint
+    graph = manually_placed_tile_graph(include_mesh_connections: true)
+    graph.fetch('modules') << {
+      'id' => 'host_0',
+      'plugin' => 'finepaper.ravenoc',
+      'type' => 'RaveEndpoint',
+      'parameters' => {
+        'endpoint_index' => 7
+      }
+    }
+    graph.fetch('connections') << {
+      'id' => 'host_0_to_rave_a',
+      'source' => { 'module' => 'host_0', 'port' => 'noc' },
+      'target' => { 'module' => 'rave_a', 'port' => 'local' }
+    }
+    graph
   end
 
   def make_fake_vendor(root)
