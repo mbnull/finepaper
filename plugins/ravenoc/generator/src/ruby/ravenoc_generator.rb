@@ -163,6 +163,7 @@ class RaveNoCGenerator
     cols = coordinates.map { |(_, x, _)| x }.max + 1
     rows = coordinates.map { |(_, _, y)| y }.max + 1
     coordinate_by_id = coordinates.to_h { |id, x, y| [id, [x, y]] }
+    validate_mesh_connections!(graph, coordinate_by_id)
 
     first_tile = tiles.min_by do |tile|
       x, y = coordinate_by_id.fetch(tile.fetch('id'))
@@ -229,6 +230,86 @@ class RaveNoCGenerator
     end
 
     coordinates
+  end
+
+  def validate_mesh_connections!(graph, coordinate_by_id)
+    expected = expected_mesh_links(coordinate_by_id)
+    actual = actual_mesh_links(graph.fetch('connections', []), coordinate_by_id)
+
+    missing = expected - actual
+    unless missing.empty?
+      raise GenerationError, "missing mesh link #{mesh_link_description(missing.first)}"
+    end
+
+    duplicates = actual.tally.select { |_, count| count > 1 }.keys
+    unless duplicates.empty?
+      raise GenerationError, "duplicate mesh link #{mesh_link_description(duplicates.first)}"
+    end
+  end
+
+  def expected_mesh_links(coordinate_by_id)
+    id_by_coordinate = coordinate_by_id.to_h { |id, coordinate| [coordinate, id] }
+    coordinate_by_id.flat_map do |id, (x, y)|
+      [
+        mesh_link_key(id, 'east', id_by_coordinate[[x + 1, y]], 'west'),
+        mesh_link_key(id, 'south', id_by_coordinate[[x, y + 1]], 'north')
+      ].compact
+    end
+  end
+
+  def actual_mesh_links(connections, coordinate_by_id)
+    tile_ids = coordinate_by_id.keys
+    connections.filter_map do |connection|
+      source = connection.fetch('source', {})
+      target = connection.fetch('target', {})
+      source_module = source.fetch('module', nil)
+      target_module = target.fetch('module', nil)
+      next unless tile_ids.include?(source_module) && tile_ids.include?(target_module)
+
+      key = mesh_link_key(source_module,
+                          source.fetch('port', nil),
+                          target_module,
+                          target.fetch('port', nil))
+      unless key && adjacent_coordinates?(coordinate_by_id.fetch(source_module),
+                                          coordinate_by_id.fetch(target_module),
+                                          key.fetch(:axis))
+        raise GenerationError, "invalid mesh link #{connection.fetch('id', '<unnamed>')}"
+      end
+
+      key
+    end
+  end
+
+  def mesh_link_key(source_module, source_port, target_module, target_port)
+    return nil unless source_module && target_module
+
+    case [source_port, target_port]
+    when ['east', 'west']
+      { from: source_module, to: target_module, axis: :east }
+    when ['west', 'east']
+      { from: target_module, to: source_module, axis: :east }
+    when ['south', 'north']
+      { from: source_module, to: target_module, axis: :south }
+    when ['north', 'south']
+      { from: target_module, to: source_module, axis: :south }
+    end
+  end
+
+  def adjacent_coordinates?(from_coordinate, to_coordinate, axis)
+    from_x, from_y = from_coordinate
+    to_x, to_y = to_coordinate
+    case axis
+    when :east
+      to_x == from_x + 1 && to_y == from_y
+    when :south
+      to_x == from_x && to_y == from_y + 1
+    else
+      false
+    end
+  end
+
+  def mesh_link_description(link)
+    "#{link.fetch(:from)} #{link.fetch(:axis)} #{link.fetch(:to)}"
   end
 
   def validate_vendor!

@@ -77,12 +77,23 @@ class RaveNoCGeneratorTest < Minitest::Test
 
   def test_drc_accepts_manually_placed_tiles_with_default_mesh_coordinates
     Dir.mktmpdir do |dir|
-      input = write_json(dir, 'manual_tiles.json', manually_placed_tile_graph)
+      input = write_json(dir, 'manual_tiles.json', manually_placed_tile_graph(include_mesh_connections: true))
 
       stdout, stderr, status = run_drc(input)
 
       assert status.success?, stderr
       assert_includes stdout, 'RaveNoC DRC passed'
+    end
+  end
+
+  def test_drc_rejects_manual_tiles_without_mesh_connections
+    Dir.mktmpdir do |dir|
+      input = write_json(dir, 'manual_tiles_without_links.json', manually_placed_tile_graph)
+
+      _stdout, stderr, status = run_drc(input)
+
+      refute status.success?
+      assert_includes stderr, 'missing mesh link'
     end
   end
 
@@ -186,7 +197,7 @@ class RaveNoCGeneratorTest < Minitest::Test
     }
   end
 
-  def manually_placed_tile_graph
+  def manually_placed_tile_graph(include_mesh_connections: false)
     tile = lambda do |id, x, y|
       {
         'id' => id,
@@ -210,8 +221,33 @@ class RaveNoCGeneratorTest < Minitest::Test
         tile.call('rave_c', 100, 248),
         tile.call('rave_d', 320, 248)
       ],
-      'connections' => []
+      'connections' => include_mesh_connections ? manual_mesh_connections : []
     }
+  end
+
+  def manual_mesh_connections
+    [
+      {
+        'id' => 'rave_a_east',
+        'source' => { 'module' => 'rave_a', 'port' => 'east' },
+        'target' => { 'module' => 'rave_b', 'port' => 'west' }
+      },
+      {
+        'id' => 'rave_c_east',
+        'source' => { 'module' => 'rave_c', 'port' => 'east' },
+        'target' => { 'module' => 'rave_d', 'port' => 'west' }
+      },
+      {
+        'id' => 'rave_a_south',
+        'source' => { 'module' => 'rave_a', 'port' => 'south' },
+        'target' => { 'module' => 'rave_c', 'port' => 'north' }
+      },
+      {
+        'id' => 'rave_b_south',
+        'source' => { 'module' => 'rave_b', 'port' => 'south' },
+        'target' => { 'module' => 'rave_d', 'port' => 'north' }
+      }
+    ]
   end
 
   def make_fake_vendor(root)

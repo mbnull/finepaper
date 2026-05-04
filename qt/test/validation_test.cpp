@@ -19,6 +19,18 @@ std::unique_ptr<Module> makeEndpoint(const QString& id) {
 
 std::unique_ptr<Module> makeRaveTile(const QString& id, int x, int y) {
     auto module = std::make_unique<Module>(id, "RaveTile");
+    module->addPort(Port(QStringLiteral("north"), Port::Direction::InOut, QStringLiteral("bus"),
+                         QStringLiteral("North"), {}, QStringLiteral("router"),
+                         QStringLiteral("ravenoc_router_link"), QStringLiteral("north")));
+    module->addPort(Port(QStringLiteral("east"), Port::Direction::InOut, QStringLiteral("bus"),
+                         QStringLiteral("East"), {}, QStringLiteral("router"),
+                         QStringLiteral("ravenoc_router_link"), QStringLiteral("east")));
+    module->addPort(Port(QStringLiteral("south"), Port::Direction::InOut, QStringLiteral("bus"),
+                         QStringLiteral("South"), {}, QStringLiteral("router"),
+                         QStringLiteral("ravenoc_router_link"), QStringLiteral("south")));
+    module->addPort(Port(QStringLiteral("west"), Port::Direction::InOut, QStringLiteral("bus"),
+                         QStringLiteral("West"), {}, QStringLiteral("router"),
+                         QStringLiteral("ravenoc_router_link"), QStringLiteral("west")));
     module->setParameter(QStringLiteral("x"), x);
     module->setParameter(QStringLiteral("y"), y);
     return module;
@@ -35,6 +47,28 @@ void require(bool condition, const char* message) {
     if (!condition) {
         throw std::runtime_error(message);
     }
+}
+
+void addConnection(Graph& graph,
+                   const QString& id,
+                   const QString& sourceModule,
+                   const QString& sourcePort,
+                   const QString& targetModule,
+                   const QString& targetPort) {
+    graph.addConnection(std::make_unique<Connection>(
+        id,
+        PortRef{sourceModule, sourcePort},
+        PortRef{targetModule, targetPort}));
+}
+
+bool hasMessageContaining(const QList<ValidationResult>& results, const QString& text) {
+    for (const auto& result : results) {
+        if (result.message().contains(text)) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 bool hasRule(const QList<ValidationResult>& results, const QString& ruleName) {
@@ -69,6 +103,12 @@ void testDrcRunnerUsesPluginGraphFlavorForRaveNoC() {
             "failed to add first RaveTile");
     require(graph.addModule(makeRaveTile(QStringLiteral("rave_0_1"), 1, 0)),
             "failed to add second RaveTile");
+    addConnection(graph,
+                  QStringLiteral("rave_0_0_east"),
+                  QStringLiteral("rave_0_0"),
+                  QStringLiteral("east"),
+                  QStringLiteral("rave_0_1"),
+                  QStringLiteral("west"));
 
     DRCRunner runner;
     const QList<ValidationResult> results = runner.validate(&graph);
@@ -96,6 +136,18 @@ void testDrcRunnerAcceptsManualRaveTilePlacement() {
             "failed to add third manual RaveTile");
     require(graph.addModule(makeManualRaveTile(QStringLiteral("rave_d"), 320, 248)),
             "failed to add fourth manual RaveTile");
+    addConnection(graph, QStringLiteral("rave_a_east"),
+                  QStringLiteral("rave_a"), QStringLiteral("east"),
+                  QStringLiteral("rave_b"), QStringLiteral("west"));
+    addConnection(graph, QStringLiteral("rave_c_east"),
+                  QStringLiteral("rave_c"), QStringLiteral("east"),
+                  QStringLiteral("rave_d"), QStringLiteral("west"));
+    addConnection(graph, QStringLiteral("rave_a_south"),
+                  QStringLiteral("rave_a"), QStringLiteral("south"),
+                  QStringLiteral("rave_c"), QStringLiteral("north"));
+    addConnection(graph, QStringLiteral("rave_b_south"),
+                  QStringLiteral("rave_b"), QStringLiteral("south"),
+                  QStringLiteral("rave_d"), QStringLiteral("north"));
 
     DRCRunner runner;
     const QList<ValidationResult> results = runner.validate(&graph);
@@ -108,6 +160,27 @@ void testDrcRunnerAcceptsManualRaveTilePlacement() {
     require(results.isEmpty(), messageBytes.constData());
 }
 
+void testDrcRunnerRejectsManualRaveTileNonMesh() {
+    require(ModuleRegistry::instance().getType(QStringLiteral("RaveTile")) != nullptr,
+            "RaveTile type must be registered for manual placement DRC test");
+
+    Graph graph;
+    require(graph.addModule(makeManualRaveTile(QStringLiteral("rave_a"), 100, 80)),
+            "failed to add first manual RaveTile");
+    require(graph.addModule(makeManualRaveTile(QStringLiteral("rave_b"), 320, 80)),
+            "failed to add second manual RaveTile");
+    require(graph.addModule(makeManualRaveTile(QStringLiteral("rave_c"), 100, 248)),
+            "failed to add third manual RaveTile");
+    require(graph.addModule(makeManualRaveTile(QStringLiteral("rave_d"), 320, 248)),
+            "failed to add fourth manual RaveTile");
+
+    DRCRunner runner;
+    const QList<ValidationResult> results = runner.validate(&graph);
+
+    require(hasMessageContaining(results, QStringLiteral("missing mesh link")),
+            "manual RaveTile graph without mesh links should fail DRC");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -117,6 +190,7 @@ int main(int argc, char** argv) {
         testBasicValidatorLeavesIpDrcToPluginCommand();
         testDrcRunnerUsesPluginGraphFlavorForRaveNoC();
         testDrcRunnerAcceptsManualRaveTilePlacement();
+        testDrcRunnerRejectsManualRaveTileNonMesh();
     } catch (const std::exception& error) {
         std::cerr << "validation_test failed: " << error.what() << '\n';
         return 1;
