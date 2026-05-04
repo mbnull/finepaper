@@ -65,7 +65,6 @@
       <parameter name="external_id" type="string" default="rave_ep_00" label="External ID" description="Stable generated artifact identifier." />
       <parameter name="x" type="int" default="0" description="Canvas X position." configurable="false" />
       <parameter name="y" type="int" default="0" description="Canvas Y position." configurable="false" />
-      <parameter name="endpoint_index" type="int" default="0" label="Endpoint index" description="Stable endpoint index in the generated AXI arrays." min="0" max="255" />
     </parameters>
   </module>
 </module-bundle>

@@ -89,15 +89,16 @@ class RaveNoCGeneratorTest < Minitest::Test
       top = File.read(File.join(out, 'ravenoc_top.sv'))
       assert_includes top, 'module ravenoc_top'
       assert_includes top, 'ravenoc_endpoint_dummy'
-      assert_includes top, '.ENDPOINT_INDEX(7)'
       assert_includes top, '.RAVENOC_SLOT(0)'
       assert_includes top, 'u_ep0_host_0_dummy'
       assert_includes top, 'assign axi_mosi_if[0] = ep0_axi_mosi;'
       assert_includes top, 'ravenoc #('
+      refute_includes top, 'ENDPOINT_INDEX'
       refute_includes top, '9ed21db3_a343_4420_afcb_d6b19cb997fe'
 
       dummy = File.read(File.join(out, 'ravenoc_endpoint_dummy.sv'))
       assert_includes dummy, 'module ravenoc_endpoint_dummy'
+      refute_includes dummy, 'ENDPOINT_INDEX'
 
       filelist = File.read(File.join(out, 'ravenoc_filelist.f'))
       assert_includes filelist, File.join(out, 'ravenoc_endpoint_dummy.sv')
@@ -108,6 +109,7 @@ class RaveNoCGeneratorTest < Minitest::Test
       assert_equal 'host_0', endpoint.fetch('id')
       assert_equal 'rave_00', endpoint.fetch('tile')
       assert_equal 0, endpoint.fetch('slot')
+      refute endpoint.key?('endpoint_index')
     end
   end
 

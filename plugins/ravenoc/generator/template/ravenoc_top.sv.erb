@@ -22,7 +22,6 @@ module ravenoc_top (
   s_axi_mosi_t ep<%= slot %>_axi_mosi;
 
   ravenoc_endpoint_dummy #(
-    .ENDPOINT_INDEX(<%= endpoint.fetch('endpoint_index') %>),
     .RAVENOC_SLOT(<%= endpoint.fetch('slot') %>)
   ) <%= endpoint.fetch('instance') %> (
     .clk_axi(clk_axi[<%= slot %>]),

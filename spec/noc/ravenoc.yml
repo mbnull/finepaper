@@ -111,7 +111,6 @@ modules:
       external_id: { type: string, default: rave_ep_00, label: External ID, description: Stable generated artifact identifier. }
       x: { type: int, default: 0, configurable: false, description: Canvas X position. }
       y: { type: int, default: 0, configurable: false, description: Canvas Y position. }
-      endpoint_index: { type: int, default: 0, min: 0, max: 255, label: Endpoint index, description: Stable endpoint index in the generated AXI arrays. }
     interfaces:
       noc:
         label: NoC

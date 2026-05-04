@@ -332,14 +332,12 @@ class RaveNoCGenerator
       endpoint = modules_by_id.fetch(endpoint_id)
       col, row = coordinate_by_id.fetch(tile_id)
       slot = (row * cols) + col
-      endpoint_index = endpoint_index(endpoint, bindings.size)
       endpoint_artifact_id = module_artifact_id(endpoint)
       tile_artifact_id = module_artifact_id(modules_by_id.fetch(tile_id))
       bindings << {
         'id' => endpoint_artifact_id,
         'tile' => tile_artifact_id,
         'slot' => slot,
-        'endpoint_index' => endpoint_index,
         'instance' => "u_ep#{slot}_#{safe_sv_identifier(endpoint_artifact_id)}_dummy"
       }
     end
@@ -369,13 +367,6 @@ class RaveNoCGenerator
     return [nil, nil] unless endpoint_ids.include?(source_module) || endpoint_ids.include?(target_module)
 
     raise GenerationError, "invalid RaveEndpoint connection #{connection.fetch('id', '<unnamed>')}"
-  end
-
-  def endpoint_index(endpoint, fallback)
-    value = endpoint.fetch('parameters', {}).fetch('endpoint_index', fallback)
-    raise GenerationError, "RaveEndpoint #{endpoint.fetch('id')} endpoint_index must be an integer" unless value.is_a?(Integer)
-
-    value
   end
 
   def safe_sv_identifier(value)
