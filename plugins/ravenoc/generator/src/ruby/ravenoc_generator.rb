@@ -155,38 +155,18 @@ class RaveNoCGenerator
   end
 
   def internal_graph_module_record(graph, tiles)
-    coordinates = tiles.map do |tile|
-      params = tile.fetch('parameters', {})
-      x = params.key?('mesh_col') ? params.fetch('mesh_col') : params.fetch('x')
-      y = params.key?('mesh_row') ? params.fetch('mesh_row') : params.fetch('y')
-      unless x.is_a?(Integer) && y.is_a?(Integer)
-        raise GenerationError, "RaveTile #{tile['id']} mesh_col/mesh_row must be integers"
-      end
-
-      [tile['id'], x, y]
-    end
+    coordinates = rectangular_coordinates(logical_tile_coordinates(tiles)) ||
+                  rectangular_coordinates(canvas_tile_coordinates(tiles)) ||
+                  raise(GenerationError,
+                        "RaveTile graph must be rectangular, found #{tiles.size} tiles")
 
     cols = coordinates.map { |(_, x, _)| x }.max + 1
     rows = coordinates.map { |(_, _, y)| y }.max + 1
-    expected = rows * cols
-    unless tiles.size == expected
-      raise GenerationError,
-            "RaveTile graph must be rectangular, expected #{expected} tiles, found #{tiles.size}"
-    end
-
-    occupied = coordinates.map { |(_, x, y)| [x, y] }
-    (0...rows).each do |row|
-      (0...cols).each do |col|
-        raise GenerationError, "missing RaveTile at #{col},#{row}" unless occupied.include?([col, row])
-      end
-    end
+    coordinate_by_id = coordinates.to_h { |id, x, y| [id, [x, y]] }
 
     first_tile = tiles.min_by do |tile|
-      params = tile.fetch('parameters', {})
-      [
-        params.key?('mesh_row') ? params.fetch('mesh_row') : params.fetch('y'),
-        params.key?('mesh_col') ? params.fetch('mesh_col') : params.fetch('x')
-      ]
+      x, y = coordinate_by_id.fetch(tile.fetch('id'))
+      [y, x]
     end
     parameters = first_tile.fetch('parameters', {}).merge('rows' => rows, 'cols' => cols)
     {
@@ -195,6 +175,60 @@ class RaveNoCGenerator
       'parameters' => parameters,
       'tiles' => tiles
     }
+  end
+
+  def logical_tile_coordinates(tiles)
+    return nil unless tiles.all? do |tile|
+      params = tile.fetch('parameters', {})
+      params.key?('mesh_col') && params.key?('mesh_row')
+    end
+
+    tiles.map do |tile|
+      params = tile.fetch('parameters', {})
+      x = params.fetch('mesh_col')
+      y = params.fetch('mesh_row')
+      unless x.is_a?(Integer) && y.is_a?(Integer)
+        raise GenerationError, "RaveTile #{tile['id']} mesh_col/mesh_row must be integers"
+      end
+
+      [tile.fetch('id'), x, y]
+    end
+  end
+
+  def canvas_tile_coordinates(tiles)
+    raw = tiles.map do |tile|
+      params = tile.fetch('parameters', {})
+      x = params.fetch('x')
+      y = params.fetch('y')
+      unless x.is_a?(Numeric) && y.is_a?(Numeric)
+        raise GenerationError, "RaveTile #{tile['id']} x/y must be numbers"
+      end
+
+      [tile.fetch('id'), x, y]
+    end
+    xs = raw.map { |(_, x, _)| x }.uniq.sort
+    ys = raw.map { |(_, _, y)| y }.uniq.sort
+    x_index = xs.each_with_index.to_h
+    y_index = ys.each_with_index.to_h
+
+    raw.map { |id, x, y| [id, x_index.fetch(x), y_index.fetch(y)] }
+  end
+
+  def rectangular_coordinates(coordinates)
+    return nil unless coordinates
+
+    cols = coordinates.map { |(_, x, _)| x }.max + 1
+    rows = coordinates.map { |(_, _, y)| y }.max + 1
+    return nil unless coordinates.size == rows * cols
+
+    occupied = coordinates.map { |(_, x, y)| [x, y] }
+    (0...rows).each do |row|
+      (0...cols).each do |col|
+        return nil unless occupied.include?([col, row])
+      end
+    end
+
+    coordinates
   end
 
   def validate_vendor!

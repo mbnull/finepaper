@@ -75,6 +75,17 @@ class RaveNoCGeneratorTest < Minitest::Test
     end
   end
 
+  def test_drc_accepts_manually_placed_tiles_with_default_mesh_coordinates
+    Dir.mktmpdir do |dir|
+      input = write_json(dir, 'manual_tiles.json', manually_placed_tile_graph)
+
+      stdout, stderr, status = run_drc(input)
+
+      assert status.success?, stderr
+      assert_includes stdout, 'RaveNoC DRC passed'
+    end
+  end
+
   def test_rejects_illegal_single_node_mesh
     Dir.mktmpdir do |dir|
       graph = valid_graph
@@ -170,6 +181,34 @@ class RaveNoCGeneratorTest < Minitest::Test
             'bypass_cdc' => false
           }
         }
+      ],
+      'connections' => []
+    }
+  end
+
+  def manually_placed_tile_graph
+    tile = lambda do |id, x, y|
+      {
+        'id' => id,
+        'plugin' => 'finepaper.ravenoc',
+        'type' => 'RaveTile',
+        'parameters' => {
+          'x' => x,
+          'y' => y,
+          'mesh_col' => 0,
+          'mesh_row' => 0
+        }
+      }
+    end
+
+    {
+      'schema' => 'finepaper-plugin-graph-v1',
+      'name' => 'manual_tiles',
+      'modules' => [
+        tile.call('rave_a', 100, 80),
+        tile.call('rave_b', 320, 80),
+        tile.call('rave_c', 100, 248),
+        tile.call('rave_d', 320, 248)
       ],
       'connections' => []
     }

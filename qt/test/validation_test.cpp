@@ -24,6 +24,13 @@ std::unique_ptr<Module> makeRaveTile(const QString& id, int x, int y) {
     return module;
 }
 
+std::unique_ptr<Module> makeManualRaveTile(const QString& id, int x, int y) {
+    auto module = makeRaveTile(id, x, y);
+    module->setParameter(QStringLiteral("mesh_col"), 0);
+    module->setParameter(QStringLiteral("mesh_row"), 0);
+    return module;
+}
+
 void require(bool condition, const char* message) {
     if (!condition) {
         throw std::runtime_error(message);
@@ -76,6 +83,31 @@ void testDrcRunnerUsesPluginGraphFlavorForRaveNoC() {
             "RaveNoC DRC should receive generic plugin graph JSON");
 }
 
+void testDrcRunnerAcceptsManualRaveTilePlacement() {
+    require(ModuleRegistry::instance().getType(QStringLiteral("RaveTile")) != nullptr,
+            "RaveTile type must be registered for manual placement DRC test");
+
+    Graph graph;
+    require(graph.addModule(makeManualRaveTile(QStringLiteral("rave_a"), 100, 80)),
+            "failed to add first manual RaveTile");
+    require(graph.addModule(makeManualRaveTile(QStringLiteral("rave_b"), 320, 80)),
+            "failed to add second manual RaveTile");
+    require(graph.addModule(makeManualRaveTile(QStringLiteral("rave_c"), 100, 248)),
+            "failed to add third manual RaveTile");
+    require(graph.addModule(makeManualRaveTile(QStringLiteral("rave_d"), 320, 248)),
+            "failed to add fourth manual RaveTile");
+
+    DRCRunner runner;
+    const QList<ValidationResult> results = runner.validate(&graph);
+    QStringList messages;
+    for (const ValidationResult& result : results) {
+        messages.append(result.message());
+    }
+
+    const QByteArray messageBytes = messages.join('\n').toLocal8Bit();
+    require(results.isEmpty(), messageBytes.constData());
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -84,6 +116,7 @@ int main(int argc, char** argv) {
     try {
         testBasicValidatorLeavesIpDrcToPluginCommand();
         testDrcRunnerUsesPluginGraphFlavorForRaveNoC();
+        testDrcRunnerAcceptsManualRaveTilePlacement();
     } catch (const std::exception& error) {
         std::cerr << "validation_test failed: " << error.what() << '\n';
         return 1;
