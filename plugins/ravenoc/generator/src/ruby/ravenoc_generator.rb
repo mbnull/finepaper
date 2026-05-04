@@ -338,6 +338,17 @@ class RaveNoCGenerator
     %w[flit_data_width flit_type_width virtual_channels max_packet_flits axi_addr_width axi_data_width].each do |name|
       positive_integer!(parameters, name)
     end
+    unless [32, 64].include?(parameters.fetch('flit_data_width'))
+      raise GenerationError, 'flit_data_width must be 32 or 64'
+    end
+    raise GenerationError, 'flit_type_width must be 2' unless parameters.fetch('flit_type_width') == 2
+    unless (1..32).include?(parameters.fetch('virtual_channels'))
+      raise GenerationError, 'virtual_channels must be 1-32'
+    end
+    unless parameters.fetch('axi_data_width') == parameters.fetch('flit_data_width')
+      raise GenerationError, 'axi_data_width must equal flit_data_width'
+    end
+
     raise GenerationError, 'routing_algorithm must be xy or yx' unless ROUTING_MAP.key?(parameters['routing_algorithm'])
     raise GenerationError, 'priority must be zero_high or zero_low' unless PRIORITY_MAP.key?(parameters['priority'])
     validate_axi_cdc_required!(parameters)

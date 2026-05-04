@@ -97,6 +97,71 @@ class RaveNoCGeneratorTest < Minitest::Test
     end
   end
 
+  def test_drc_accepts_one_dimensional_internal_mesh_allowed_by_upstream
+    Dir.mktmpdir do |dir|
+      input = write_json(dir, 'one_by_two.json', one_by_two_tile_graph)
+
+      stdout, stderr, status = run_drc(input)
+
+      assert status.success?, stderr
+      assert_includes stdout, 'RaveNoC DRC passed'
+    end
+  end
+
+  def test_rejects_flit_type_width_other_than_two
+    Dir.mktmpdir do |dir|
+      graph = valid_graph
+      graph.fetch('modules').first.fetch('parameters')['flit_type_width'] = 3
+      input = write_json(dir, 'graph.json', graph)
+
+      _stdout, stderr, status = run_drc(input)
+
+      refute status.success?
+      assert_includes stderr, 'flit_type_width must be 2'
+    end
+  end
+
+  def test_rejects_unsupported_flit_data_width
+    Dir.mktmpdir do |dir|
+      graph = valid_graph
+      graph.fetch('modules').first.fetch('parameters')['flit_data_width'] = 128
+      graph.fetch('modules').first.fetch('parameters')['axi_data_width'] = 128
+      input = write_json(dir, 'graph.json', graph)
+
+      _stdout, stderr, status = run_drc(input)
+
+      refute status.success?
+      assert_includes stderr, 'flit_data_width must be 32 or 64'
+    end
+  end
+
+  def test_rejects_virtual_channels_above_upstream_limit
+    Dir.mktmpdir do |dir|
+      graph = valid_graph
+      graph.fetch('modules').first.fetch('parameters')['virtual_channels'] = 33
+      input = write_json(dir, 'graph.json', graph)
+
+      _stdout, stderr, status = run_drc(input)
+
+      refute status.success?
+      assert_includes stderr, 'virtual_channels must be 1-32'
+    end
+  end
+
+  def test_rejects_axi_data_width_that_differs_from_flit_data_width
+    Dir.mktmpdir do |dir|
+      graph = valid_graph
+      graph.fetch('modules').first.fetch('parameters')['flit_data_width'] = 32
+      graph.fetch('modules').first.fetch('parameters')['axi_data_width'] = 64
+      input = write_json(dir, 'graph.json', graph)
+
+      _stdout, stderr, status = run_drc(input)
+
+      refute status.success?
+      assert_includes stderr, 'axi_data_width must equal flit_data_width'
+    end
+  end
+
   def test_rejects_illegal_single_node_mesh
     Dir.mktmpdir do |dir|
       graph = valid_graph
@@ -248,6 +313,34 @@ class RaveNoCGeneratorTest < Minitest::Test
         'target' => { 'module' => 'rave_d', 'port' => 'north' }
       }
     ]
+  end
+
+  def one_by_two_tile_graph
+    {
+      'schema' => 'finepaper-plugin-graph-v1',
+      'name' => 'one_by_two',
+      'modules' => [
+        {
+          'id' => 'rave_a',
+          'plugin' => 'finepaper.ravenoc',
+          'type' => 'RaveTile',
+          'parameters' => { 'x' => 100, 'y' => 80, 'mesh_col' => 0, 'mesh_row' => 0 }
+        },
+        {
+          'id' => 'rave_b',
+          'plugin' => 'finepaper.ravenoc',
+          'type' => 'RaveTile',
+          'parameters' => { 'x' => 320, 'y' => 80, 'mesh_col' => 1, 'mesh_row' => 0 }
+        }
+      ],
+      'connections' => [
+        {
+          'id' => 'rave_a_east',
+          'source' => { 'module' => 'rave_a', 'port' => 'east' },
+          'target' => { 'module' => 'rave_b', 'port' => 'west' }
+        }
+      ]
+    }
   end
 
   def make_fake_vendor(root)
