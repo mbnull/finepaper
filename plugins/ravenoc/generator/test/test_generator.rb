@@ -24,12 +24,15 @@ class RaveNoCGeneratorTest < Minitest::Test
       assert_includes stdout, 'Generated RaveNoC integration'
       assert_includes File.read(File.join(out, 'ravenoc_config.svh')), '`define NOC_CFG_SZ_ROWS 2'
       assert_includes File.read(File.join(out, 'ravenoc_config.svh')), '`define ROUTING_ALG XYAlg'
-      assert_includes File.read(File.join(out, 'ravenoc_demo_top.sv')), 'module ravenoc_demo_top'
-      assert_includes File.read(File.join(out, 'ravenoc_demo_top.sv')), 'ravenoc #('
+      assert_includes File.read(File.join(out, 'ravenoc_top.sv')), 'module ravenoc_top'
+      assert_includes File.read(File.join(out, 'ravenoc_top.sv')), 'ravenoc #('
+      refute File.exist?(File.join(out, 'ravenoc_demo_top.sv')),
+             'demo-only top should not be generated'
       filelist = File.read(File.join(out, 'ravenoc_filelist.f'))
       assert_includes filelist, '+define+NOC_CFG_SZ_ROWS=2'
       assert_includes filelist, File.join(out, 'src/ravenoc.sv')
-      assert_includes filelist, File.join(out, 'ravenoc_demo_top.sv')
+      assert_includes filelist, File.join(out, 'ravenoc_top.sv')
+      refute_includes filelist, 'ravenoc_demo_top.sv'
       assert_includes filelist, "+incdir+#{out}"
       assert_includes filelist, "+incdir+#{File.join(out, 'src/include')}"
       refute_includes filelist, 'ravenoc_axi_fnc.svh'
@@ -88,8 +91,10 @@ class RaveNoCGeneratorTest < Minitest::Test
       assert_includes top, 'ravenoc_endpoint_dummy'
       assert_includes top, '.ENDPOINT_INDEX(7)'
       assert_includes top, '.RAVENOC_SLOT(0)'
+      assert_includes top, 'u_ep0_host_0_dummy'
       assert_includes top, 'assign axi_mosi_if[0] = ep0_axi_mosi;'
       assert_includes top, 'ravenoc #('
+      refute_includes top, '9ed21db3_a343_4420_afcb_d6b19cb997fe'
 
       dummy = File.read(File.join(out, 'ravenoc_endpoint_dummy.sv'))
       assert_includes dummy, 'module ravenoc_endpoint_dummy'
@@ -101,7 +106,7 @@ class RaveNoCGeneratorTest < Minitest::Test
       manifest = JSON.parse(File.read(File.join(out, 'manifest.json')))
       endpoint = manifest.fetch('module').fetch('endpoints').first
       assert_equal 'host_0', endpoint.fetch('id')
-      assert_equal 'rave_a', endpoint.fetch('tile')
+      assert_equal 'rave_00', endpoint.fetch('tile')
       assert_equal 0, endpoint.fetch('slot')
     end
   end
@@ -387,17 +392,20 @@ class RaveNoCGeneratorTest < Minitest::Test
 
   def internal_graph_with_endpoint
     graph = manually_placed_tile_graph(include_mesh_connections: true)
+    graph.fetch('modules').find { |mod| mod.fetch('id') == 'rave_a' }
+         .fetch('parameters')['external_id'] = 'rave_00'
     graph.fetch('modules') << {
-      'id' => 'host_0',
+      'id' => '9ed21db3_a343_4420_afcb_d6b19cb997fe',
       'plugin' => 'finepaper.ravenoc',
       'type' => 'RaveEndpoint',
       'parameters' => {
+        'external_id' => 'host_0',
         'endpoint_index' => 7
       }
     }
     graph.fetch('connections') << {
       'id' => 'host_0_to_rave_a',
-      'source' => { 'module' => 'host_0', 'port' => 'noc' },
+      'source' => { 'module' => '9ed21db3_a343_4420_afcb_d6b19cb997fe', 'port' => 'noc' },
       'target' => { 'module' => 'rave_a', 'port' => 'local' }
     }
     graph

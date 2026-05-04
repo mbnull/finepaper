@@ -14,6 +14,7 @@
 #include <QJsonArray>
 #include <QDebug>
 #include <QFileInfo>
+#include <QRegularExpression>
 #include <QXmlStreamWriter>
 #include <QUuid>
 #include <cmath>
@@ -184,6 +185,54 @@ QJsonObject parametersToGenericJson(const Module* module) {
         parameters.insert(it.key(), parameterToJson(it.value().value()));
     }
     return parameters;
+}
+
+QString safeArtifactToken(QString token, const QString& fallback) {
+    token = token.trimmed();
+    if (token.isEmpty()) {
+        token = fallback.trimmed();
+    }
+    token.replace(QRegularExpression(QStringLiteral("[^A-Za-z0-9_$]+")), QStringLiteral("_"));
+    token.replace(QRegularExpression(QStringLiteral("_+")), QStringLiteral("_"));
+    token = token.trimmed();
+    while (token.startsWith(QStringLiteral("_"))) {
+        token.remove(0, 1);
+    }
+    while (token.endsWith(QStringLiteral("_"))) {
+        token.chop(1);
+    }
+    if (token.isEmpty()) {
+        token = QStringLiteral("module");
+    }
+    if (!token.front().isLetter() && token.front() != QLatin1Char('_')) {
+        token.prepend(QStringLiteral("m_"));
+    }
+    return token;
+}
+
+QString uniqueArtifactToken(const QString& token, QSet<QString>& usedTokens) {
+    QString candidate = token;
+    int suffix = 1;
+    while (usedTokens.contains(candidate)) {
+        candidate = QStringLiteral("%1_%2").arg(token).arg(suffix++);
+    }
+    usedTokens.insert(candidate);
+    return candidate;
+}
+
+QString pluginModuleArtifactId(const Module* module, QSet<QString>& usedModuleIds) {
+    const QString fallback = module ? module->type().toLower() : QStringLiteral("module");
+    return uniqueArtifactToken(safeArtifactToken(ModuleLabels::externalId(module), fallback), usedModuleIds);
+}
+
+QString pluginConnectionArtifactId(const QString& sourceModuleId,
+                                   const QString& sourcePortId,
+                                   const QString& targetModuleId,
+                                   const QString& targetPortId,
+                                   QSet<QString>& usedConnectionIds) {
+    const QString raw = QStringLiteral("%1_%2_to_%3_%4")
+                            .arg(sourceModuleId, sourcePortId, targetModuleId, targetPortId);
+    return uniqueArtifactToken(safeArtifactToken(raw, QStringLiteral("connection")), usedConnectionIds);
 }
 
 void writeJsonValueAsXml(QXmlStreamWriter& writer,
@@ -1033,12 +1082,16 @@ QJsonDocument Graph::toJsonDocument(const QString& designName,
     if (flavor == GraphJsonFlavor::Plugin) {
         QJsonArray modules;
         QJsonArray connections;
+        QHash<QString, QString> runtimeToArtifactIds;
+        QSet<QString> usedModuleIds;
 
         for (const auto& module : m_modules) {
             const ModuleType* type = ModuleRegistry::instance().getType(module->type());
+            const QString artifactId = pluginModuleArtifactId(module.get(), usedModuleIds);
+            runtimeToArtifactIds.insert(module->id(), artifactId);
 
             QJsonObject object;
-            object["id"] = module->id();
+            object["id"] = artifactId;
             object["plugin"] = type ? type->pluginId : QString();
             object["type"] = module->type();
             object["parameters"] = parametersToGenericJson(module.get());
@@ -1051,15 +1104,26 @@ QJsonDocument Graph::toJsonDocument(const QString& designName,
             modules.append(object);
         }
 
+        QSet<QString> usedConnectionIds;
         for (const auto& connection : m_connections) {
+            const QString sourceModuleId = runtimeToArtifactIds.value(connection->source().moduleId);
+            const QString targetModuleId = runtimeToArtifactIds.value(connection->target().moduleId);
+            if (sourceModuleId.isEmpty() || targetModuleId.isEmpty()) {
+                continue;
+            }
+
             QJsonObject object;
-            object["id"] = connection->id();
+            object["id"] = pluginConnectionArtifactId(sourceModuleId,
+                                                      connection->source().portId,
+                                                      targetModuleId,
+                                                      connection->target().portId,
+                                                      usedConnectionIds);
             object["source"] = QJsonObject{
-                {QStringLiteral("module"), connection->source().moduleId},
+                {QStringLiteral("module"), sourceModuleId},
                 {QStringLiteral("port"), connection->source().portId}
             };
             object["target"] = QJsonObject{
-                {QStringLiteral("module"), connection->target().moduleId},
+                {QStringLiteral("module"), targetModuleId},
                 {QStringLiteral("port"), connection->target().portId}
             };
             connections.append(object);

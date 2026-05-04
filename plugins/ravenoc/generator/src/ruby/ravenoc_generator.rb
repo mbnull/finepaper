@@ -115,7 +115,6 @@ class RaveNoCGenerator
     render('ravenoc_config.svh.erb', File.join(output_dir, 'ravenoc_config.svh'), template_binding)
     render('ravenoc_endpoint_dummy.sv.erb', File.join(output_dir, 'ravenoc_endpoint_dummy.sv'), template_binding)
     render('ravenoc_top.sv.erb', File.join(output_dir, 'ravenoc_top.sv'), template_binding)
-    render('ravenoc_demo_top.sv.erb', File.join(output_dir, 'ravenoc_demo_top.sv'), template_binding)
     render('ravenoc_filelist.f.erb', File.join(output_dir, 'ravenoc_filelist.f'), template_binding)
     render('verify.sh.erb', File.join(output_dir, 'verify.sh'), template_binding)
     FileUtils.chmod(0o755, File.join(output_dir, 'verify.sh'))
@@ -334,12 +333,14 @@ class RaveNoCGenerator
       col, row = coordinate_by_id.fetch(tile_id)
       slot = (row * cols) + col
       endpoint_index = endpoint_index(endpoint, bindings.size)
+      endpoint_artifact_id = module_artifact_id(endpoint)
+      tile_artifact_id = module_artifact_id(modules_by_id.fetch(tile_id))
       bindings << {
-        'id' => endpoint_id,
-        'tile' => tile_id,
+        'id' => endpoint_artifact_id,
+        'tile' => tile_artifact_id,
         'slot' => slot,
         'endpoint_index' => endpoint_index,
-        'instance' => "u_ep#{slot}_#{safe_sv_identifier(endpoint_id)}_dummy"
+        'instance' => "u_ep#{slot}_#{safe_sv_identifier(endpoint_artifact_id)}_dummy"
       }
     end
 
@@ -381,6 +382,12 @@ class RaveNoCGenerator
     identifier = value.to_s.gsub(/[^a-zA-Z0-9_$]/, '_')
     identifier = "ep_#{identifier}" unless identifier.match?(/\A[a-zA-Z_]/)
     identifier
+  end
+
+  def module_artifact_id(mod)
+    params = mod.fetch('parameters', {})
+    value = params.fetch('external_id', mod.fetch('id'))
+    safe_sv_identifier(value)
   end
 
   def validate_vendor!
