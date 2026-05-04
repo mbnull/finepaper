@@ -51,6 +51,8 @@ class RaveNoCGenerator
     'src/ravenoc.sv'
   ].freeze
 
+  VENDOR_COPY_FILES = (REQUIRED_VENDOR_FILES + VENDOR_SOURCE_FILES).uniq.freeze
+
   DEFAULTS = {
     'rows' => 2,
     'cols' => 2,
@@ -108,6 +110,7 @@ class RaveNoCGenerator
     validate_parameters!(parameters)
 
     FileUtils.mkdir_p(output_dir)
+    copy_vendor_sources!
     template_binding = binding_for(module_record, parameters)
     render('ravenoc_config.svh.erb', File.join(output_dir, 'ravenoc_config.svh'), template_binding)
     render('ravenoc_demo_top.sv.erb', File.join(output_dir, 'ravenoc_demo_top.sv'), template_binding)
@@ -389,6 +392,15 @@ class RaveNoCGenerator
     VENDOR_SOURCE_FILES
   end
 
+  def copy_vendor_sources!
+    VENDOR_COPY_FILES.each do |relative|
+      source = File.join(vendor_dir, relative)
+      destination = File.join(output_dir, relative)
+      FileUtils.mkdir_p(File.dirname(destination))
+      FileUtils.cp(source, destination)
+    end
+  end
+
   def render(template_name, output_path, template_binding)
     template = File.read(File.join(template_dir, template_name))
     File.write(output_path, ERB.new(template, trim_mode: '-').result(template_binding))
@@ -399,8 +411,6 @@ class RaveNoCGenerator
     axi_cdc_literal = axi_cdc_literal(parameters)
     bypass_cdc_literal = bypass_cdc_literal(parameters)
     vendor_files = vendor_files()
-    output_dir = self.output_dir
-    vendor_dir = self.vendor_dir
     binding
   end
 

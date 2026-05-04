@@ -33,6 +33,14 @@ class RaveNoCGeneratorTest < Minitest::Test
       refute_includes filelist, 'ravenoc_axi_fnc.svh'
       refute_includes filelist, 'ravenoc_defines.svh'
       refute_includes filelist, 'ravenoc_structs.svh'
+      refute_includes filelist, vendor
+      refute_includes filelist, out
+      assert File.exist?(File.join(out, 'src/ravenoc.sv')),
+             'vendor source should be copied under output src/'
+      assert File.exist?(File.join(out, 'src/include/ravenoc_pkg.sv')),
+             'vendor include should be copied under output src/include/'
+      assert File.exist?(File.join(out, 'bus_arch_sv_pkg/amba_axi_pkg.sv')),
+             'vendor bus package should be copied under output bus_arch_sv_pkg/'
       assert File.executable?(File.join(out, 'verify.sh')), 'verify.sh should be executable'
       assert_includes File.read(File.join(out, 'verify.sh')), '--lint-only'
 
