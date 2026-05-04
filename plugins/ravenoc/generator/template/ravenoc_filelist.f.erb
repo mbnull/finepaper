@@ -1,9 +1,9 @@
-+incdir+.
-+incdir+src/include
++incdir+<%= output_dir %>
++incdir+<%= File.join(output_dir, 'src/include') %>
 <% define_values.each do |name, value| -%>
 +define+<%= name %>=<%= value %>
 <% end -%>
 <% vendor_files.each do |relative| -%>
-<%= relative %>
+<%= File.join(output_dir, relative) %>
 <% end -%>
-ravenoc_demo_top.sv
+<%= File.join(output_dir, 'ravenoc_demo_top.sv') %>

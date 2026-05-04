@@ -411,6 +411,7 @@ class RaveNoCGenerator
     axi_cdc_literal = axi_cdc_literal(parameters)
     bypass_cdc_literal = bypass_cdc_literal(parameters)
     vendor_files = vendor_files()
+    output_dir = self.output_dir
     binding
   end
 

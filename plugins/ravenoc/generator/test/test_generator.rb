@@ -28,13 +28,14 @@ class RaveNoCGeneratorTest < Minitest::Test
       assert_includes File.read(File.join(out, 'ravenoc_demo_top.sv')), 'ravenoc #('
       filelist = File.read(File.join(out, 'ravenoc_filelist.f'))
       assert_includes filelist, '+define+NOC_CFG_SZ_ROWS=2'
-      assert_includes filelist, 'src/ravenoc.sv'
-      assert_includes filelist, 'ravenoc_demo_top.sv'
+      assert_includes filelist, File.join(out, 'src/ravenoc.sv')
+      assert_includes filelist, File.join(out, 'ravenoc_demo_top.sv')
+      assert_includes filelist, "+incdir+#{out}"
+      assert_includes filelist, "+incdir+#{File.join(out, 'src/include')}"
       refute_includes filelist, 'ravenoc_axi_fnc.svh'
       refute_includes filelist, 'ravenoc_defines.svh'
       refute_includes filelist, 'ravenoc_structs.svh'
       refute_includes filelist, vendor
-      refute_includes filelist, out
       assert File.exist?(File.join(out, 'src/ravenoc.sv')),
              'vendor source should be copied under output src/'
       assert File.exist?(File.join(out, 'src/include/ravenoc_pkg.sv')),
