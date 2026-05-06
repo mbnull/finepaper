@@ -167,6 +167,15 @@ void testProjectRoundTripRestoresModulesParametersAndConnections() {
     registerProjectTypes();
 
     Graph graph;
+    graph.configureIpInstance(
+        QStringLiteral("ravenoc_0"),
+        QStringLiteral("finepaper.ravenoc"),
+        QStringLiteral("noc"),
+        QStringLiteral("RaveNoC"),
+        QHash<QString, Parameter>{
+            {QStringLiteral("flit_data_width"),
+             Parameter(QStringLiteral("flit_data_width"), 64)}
+        });
     auto xp = instantiate(makeProjectXpType(), QStringLiteral("node_1"));
     xp->setParameter(QStringLiteral("collapsed"), true);
     xp->setParameter(QStringLiteral("vc_count"), 4);
@@ -186,11 +195,16 @@ void testProjectRoundTripRestoresModulesParametersAndConnections() {
     const QString projectPath = QDir(tempDir.path()).filePath(QStringLiteral("roundtrip.fpproj"));
 
     const ProjectDocument document = GraphProjectSerializer::toProject(graph, QStringLiteral("roundtrip"));
+    require(document.ipInstances.size() == 1, "project should capture IP instance");
+    require(document.ipInstances.first().parameters.value(QStringLiteral("flit_data_width")).toInt() == 64,
+            "project should capture IP instance parameter");
     const ProjectWriteResult writeResult = ProjectWriter::writeFile(projectPath, document);
     require(writeResult.success, "project write should succeed");
 
     const ProjectReadResult readResult = ProjectReader::readFile(projectPath);
     require(readResult.success, "project read should succeed");
+    require(readResult.document.ipInstances.size() == 1,
+            "project read should restore IP instance records");
 
     Graph restored;
     const GraphProjectLoadResult loadResult =
@@ -199,6 +213,10 @@ void testProjectRoundTripRestoresModulesParametersAndConnections() {
 
     require(restored.modules().size() == 2, "project should restore both modules");
     require(restored.connections().size() == 1, "project should restore explicit connection");
+    require(restored.ipInstance().has_value(), "project should restore graph IP instance");
+    require(restored.ipInstance()->parameters.value(QStringLiteral("flit_data_width")).value() ==
+                Parameter::Value(64),
+            "project should restore graph IP instance parameter");
     require(restored.getModule(QStringLiteral("node_1")) != nullptr,
             "stable module id should be preserved");
     require(restored.getModule(QStringLiteral("node_2")) != nullptr,
@@ -222,6 +240,30 @@ void testProjectRoundTripRestoresModulesParametersAndConnections() {
     require(restoredConnection->target().moduleId == QStringLiteral("node_2") &&
                 restoredConnection->target().portId == QStringLiteral("noc"),
             "connection target should be restored");
+}
+
+void testLoadRejectsSecondNocIpInstance() {
+    ProjectDocument document = validProjectDocument();
+    document.ipInstances.push_back(ProjectIpInstanceRecord{
+        QStringLiteral("noc_a"),
+        QStringLiteral("finepaper.ravenoc"),
+        QStringLiteral("noc"),
+        QStringLiteral("RaveNoC"),
+        {}
+    });
+    document.ipInstances.push_back(ProjectIpInstanceRecord{
+        QStringLiteral("noc_b"),
+        QStringLiteral("finepaper.othernoc"),
+        QStringLiteral("noc"),
+        QStringLiteral("OtherNoC"),
+        {}
+    });
+
+    Graph graph;
+    const GraphProjectLoadResult result = GraphProjectSerializer::loadProject(document, graph);
+    require(!result.success, "second noc IP should be rejected");
+    require(result.error.contains(QStringLiteral("kind: noc")),
+            "error should mention noc uniqueness");
 }
 
 void testReaderRejectsWrongKind() {
@@ -403,6 +445,7 @@ int main(int argc, char** argv) {
         testProjectRoundTripRestoresModulesParametersAndConnections();
         testReaderRejectsWrongKind();
         testLoadRejectsDuplicateModuleIds();
+        testLoadRejectsSecondNocIpInstance();
         testLoadRejectsMissingModuleType();
         testLoadRejectsInvalidParameterType();
         testLoadRejectsInvalidConnectionReference();

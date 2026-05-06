@@ -568,6 +568,7 @@ void Graph::clear() {
     while (!m_modules.empty()) {
         removeModule(m_modules.front()->id());
     }
+    m_ipInstance.reset();
 }
 
 Module* Graph::getModule(const QString& moduleId) const {

@@ -85,6 +85,22 @@ ProjectReadResult ProjectReader::readFile(const QString& path) {
         });
     }
 
+    const QJsonValue ipInstancesValue = root.value(QStringLiteral("ip_instances"));
+    if (!ipInstancesValue.isUndefined() && !ipInstancesValue.isArray()) {
+        return failure(QStringLiteral("Project ip_instances must be an array"));
+    }
+    const QJsonArray ipInstances = ipInstancesValue.toArray();
+    for (const QJsonValue& value : ipInstances) {
+        const QJsonObject object = value.toObject();
+        ProjectIpInstanceRecord ipInstance;
+        ipInstance.id = object.value(QStringLiteral("id")).toString();
+        ipInstance.pluginId = object.value(QStringLiteral("plugin")).toString();
+        ipInstance.kind = object.value(QStringLiteral("kind")).toString();
+        ipInstance.type = object.value(QStringLiteral("type")).toString();
+        ipInstance.parameters = object.value(QStringLiteral("parameters")).toObject();
+        document.ipInstances.push_back(ipInstance);
+    }
+
     const QJsonValue graphValue = root.value(QStringLiteral("graph"));
     if (!graphValue.isObject()) {
         return failure(QStringLiteral("Project graph must be an object"));

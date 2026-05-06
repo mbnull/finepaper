@@ -44,6 +44,7 @@
 #include <QToolButton>
 #include <QtGlobal>
 #include <QVBoxLayout>
+#include <QHash>
 
 namespace {
 
@@ -72,6 +73,16 @@ QString pathWithProjectExtension(QString path) {
 
 QString documentDisplayName(const QString& path) {
     return path.isEmpty() ? QStringLiteral("Untitled") : QFileInfo(path).fileName();
+}
+
+QString defaultIpInstanceId(const PluginDescriptor& plugin) {
+    QString token = plugin.id.section(QLatin1Char('.'), -1).trimmed().toLower();
+    token.replace(QRegularExpression(QStringLiteral("[^a-z0-9_]+")), QStringLiteral("_"));
+    token.remove(QRegularExpression(QStringLiteral("^_+|_+$")));
+    if (token.isEmpty()) {
+        token = QStringLiteral("ip");
+    }
+    return token + QStringLiteral("_0");
 }
 
 void appendLogLines(LogPanel* logPanel,
@@ -707,7 +718,26 @@ void MainWindow::setActivePluginId(const QString& pluginId) {
     if (m_palette) {
         m_palette->setActivePluginId(pluginId);
     }
+    configureGraphIpInstanceFromActivePlugin();
     rebuildTopologyMenu();
+}
+
+void MainWindow::configureGraphIpInstanceFromActivePlugin() {
+    const PluginDescriptor* plugin = PluginRegistry::instance().plugin(m_activePluginId);
+    if (!plugin) {
+        return;
+    }
+
+    QHash<QString, Parameter> parameters;
+    for (auto it = plugin->instanceParameters.constBegin(); it != plugin->instanceParameters.constEnd(); ++it) {
+        parameters.insert(it.key(), Parameter(it.key(), it.value().defaultValue));
+    }
+
+    m_graph->configureIpInstance(defaultIpInstanceId(*plugin),
+                                 plugin->id,
+                                 plugin->kind,
+                                 plugin->name,
+                                 parameters);
 }
 
 void MainWindow::rebuildTopologyMenu() {
@@ -849,6 +879,7 @@ QString MainWindow::defaultDocumentPath() const {
 void MainWindow::clearDocument() {
     m_suppressDocumentTracking = true;
     m_graph->clear();
+    configureGraphIpInstanceFromActivePlugin();
     m_suppressDocumentTracking = false;
     m_commandManager->clearHistory();
     m_cleanStateId = m_commandManager->currentStateId();
