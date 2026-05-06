@@ -187,6 +187,14 @@ QJsonObject parametersToGenericJson(const Module* module) {
     return parameters;
 }
 
+QJsonObject parametersToGenericJson(const QHash<QString, Parameter>& source) {
+    QJsonObject parameters;
+    for (auto it = source.constBegin(); it != source.constEnd(); ++it) {
+        parameters.insert(it.key(), parameterToJson(it.value().value()));
+    }
+    return parameters;
+}
+
 QString safeArtifactToken(QString token, const QString& fallback) {
     token = token.trimmed();
     if (token.isEmpty()) {
@@ -672,6 +680,29 @@ void Graph::insertConnection(std::unique_ptr<Connection> connection) {
     emit connectionAdded(ptr);
 }
 
+void Graph::configureIpInstance(const QString& id,
+                                const QString& pluginId,
+                                const QString& kind,
+                                const QString& type,
+                                const QHash<QString, Parameter>& parameters) {
+    m_ipInstance = GraphIpInstance{id, pluginId, kind, type, parameters};
+}
+
+bool Graph::setIpInstanceParameter(const QString& name, Parameter::Value value) {
+    if (!m_ipInstance.has_value() || !m_ipInstance->parameters.contains(name)) {
+        return false;
+    }
+
+    Parameter& parameter = m_ipInstance->parameters[name];
+    if (parameter.value() == value) {
+        return true;
+    }
+
+    parameter.setValue(value);
+    emit ipInstanceParameterChanged(name);
+    return true;
+}
+
 bool Graph::isValidConnection(const PortRef& source, const PortRef& target) const {
     // Disallow self-loops at graph level.
     if (source.moduleId == target.moduleId) return false;
@@ -1132,6 +1163,15 @@ QJsonDocument Graph::toJsonDocument(const QString& designName,
         QJsonObject root;
         root["schema"] = QStringLiteral("finepaper-plugin-graph-v1");
         root["name"] = designName.isEmpty() ? QStringLiteral("design") : designName;
+        if (m_ipInstance.has_value()) {
+            QJsonObject ipInstance;
+            ipInstance["id"] = m_ipInstance->id;
+            ipInstance["plugin"] = m_ipInstance->pluginId;
+            ipInstance["kind"] = m_ipInstance->kind;
+            ipInstance["type"] = m_ipInstance->type;
+            ipInstance["parameters"] = parametersToGenericJson(m_ipInstance->parameters);
+            root["ip_instance"] = ipInstance;
+        }
         root["modules"] = modules;
         root["connections"] = connections;
         return QJsonDocument(root);

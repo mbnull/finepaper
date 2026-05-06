@@ -14,6 +14,7 @@
 #include <QTemporaryDir>
 #include <iostream>
 #include <stdexcept>
+#include <variant>
 
 namespace {
 
@@ -264,6 +265,14 @@ void testRepositoryRaveNoCPluginMetadataLoads() {
     require(plugins.size() == 1, "RaveNoC plugin should be discovered");
     require(plugins.first().id == QStringLiteral("finepaper.ravenoc"),
             "RaveNoC plugin id should load");
+    require(plugins.first().kind == QStringLiteral("noc"),
+            "RaveNoC plugin kind should load");
+    require(plugins.first().instanceParameters.contains(QStringLiteral("flit_data_width")),
+            "RaveNoC instance flit width should load");
+    require(std::get<int>(plugins.first().instanceParameters.value(QStringLiteral("flit_data_width")).defaultValue) == 32,
+            "RaveNoC flit width default should load");
+    require(plugins.first().instanceParameters.value(QStringLiteral("routing_algorithm")).choices.size() == 2,
+            "RaveNoC routing algorithm choices should load as instance metadata");
     require(plugins.first().generator.command == QStringLiteral("ruby"),
             "RaveNoC plugin should use Ruby generator");
     require(plugins.first().generator.inputFormat == QStringLiteral("generic_graph_v1"),
@@ -290,10 +299,8 @@ void testRepositoryRaveNoCPluginMetadataLoads() {
             "RaveTile module should keep plugin ownership");
     require(tileType->graphGroup == QStringLiteral("xps"),
             "RaveTile should participate as the RaveNoC router graph group");
-    require(tileType->defaultParameters.contains(QStringLiteral("routing_algorithm")),
-            "RaveTile routing algorithm parameter should load");
-    require(tileType->parameterMetadata.value(QStringLiteral("routing_algorithm")).choices.size() == 2,
-            "RaveTile routing algorithm choices should load");
+    require(!tileType->defaultParameters.contains(QStringLiteral("routing_algorithm")),
+            "RaveTile should not own fabric-wide routing algorithm parameter");
 
     const ModuleType* endpointType = registry.getType(QStringLiteral("RaveEndpoint"));
     require(endpointType != nullptr, "RaveEndpoint module type should load");

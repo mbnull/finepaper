@@ -840,6 +840,35 @@ void testXmlExportPreservesEditorGraphContent() {
             "XML export should contain endpoint external id");
 }
 
+void testPluginExportIncludesIpInstanceParameters() {
+    Graph graph;
+    graph.configureIpInstance(
+        QStringLiteral("ravenoc_0"),
+        QStringLiteral("finepaper.ravenoc"),
+        QStringLiteral("noc"),
+        QStringLiteral("RaveNoC"),
+        QHash<QString, Parameter>{
+            {QStringLiteral("flit_data_width"),
+             Parameter(QStringLiteral("flit_data_width"), 64)}
+        });
+
+    const QJsonObject root =
+        graph.toJsonDocument(QStringLiteral("demo"), GraphJsonFlavor::Plugin).object();
+    const QJsonObject ip = root.value(QStringLiteral("ip_instance")).toObject();
+
+    require(ip.value(QStringLiteral("id")).toString() == QStringLiteral("ravenoc_0"),
+            "ip instance id should export");
+    require(ip.value(QStringLiteral("plugin")).toString() == QStringLiteral("finepaper.ravenoc"),
+            "ip instance plugin should export");
+    require(ip.value(QStringLiteral("kind")).toString() == QStringLiteral("noc"),
+            "ip instance kind should export");
+    require(ip.value(QStringLiteral("type")).toString() == QStringLiteral("RaveNoC"),
+            "ip instance type should export");
+    require(ip.value(QStringLiteral("parameters")).toObject()
+                .value(QStringLiteral("flit_data_width")).toInt() == 64,
+            "ip instance parameter should export");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -866,6 +895,7 @@ int main(int argc, char** argv) {
         testGenericPluginExportKeepsNonNocModules();
         testPluginExportUsesArtifactIdsInsteadOfRuntimeIds();
         testXmlExportPreservesEditorGraphContent();
+        testPluginExportIncludesIpInstanceParameters();
     } catch (const std::exception& error) {
         std::cerr << "graph_test failed: " << error.what() << '\n';
         return 1;

@@ -12,11 +12,20 @@
 #include <QJsonDocument>
 #include <vector>
 #include <memory>
+#include <optional>
 
 enum class GraphJsonFlavor {
     Editor,
     Framework,
     Plugin
+};
+
+struct GraphIpInstance {
+    QString id;
+    QString pluginId;
+    QString kind;
+    QString type;
+    QHash<QString, Parameter> parameters;
 };
 
 class Graph : public QObject {
@@ -52,6 +61,13 @@ public:
 
     const std::vector<std::unique_ptr<Module>>& modules() const { return m_modules; }
     const std::vector<std::unique_ptr<Connection>>& connections() const { return m_connections; }
+    const std::optional<GraphIpInstance>& ipInstance() const { return m_ipInstance; }
+    void configureIpInstance(const QString& id,
+                             const QString& pluginId,
+                             const QString& kind,
+                             const QString& type,
+                             const QHash<QString, Parameter>& parameters);
+    bool setIpInstanceParameter(const QString& name, Parameter::Value value);
 
     // Imports an editor graph JSON file and rebuilds the in-memory graph.
     // Existing modules/connections are cleared before import; returns false on file/JSON errors.
@@ -71,6 +87,7 @@ signals:
     void connectionAdded(Connection* connection);
     void connectionRemoved(const QString& connectionId);
     void parameterChanged(const QString& moduleId, const QString& paramName);
+    void ipInstanceParameterChanged(const QString& paramName);
 
 private slots:
     void onModuleParameterChanged(const QString& moduleId, const QString& paramName);
@@ -79,4 +96,5 @@ private:
     std::vector<std::unique_ptr<Module>> m_modules;
     std::vector<std::unique_ptr<Connection>> m_connections;
     QMap<QString, QMetaObject::Connection> m_moduleConnections;
+    std::optional<GraphIpInstance> m_ipInstance;
 };

@@ -1,10 +1,13 @@
 // PluginDescriptor stores directory plugin manifest metadata.
 #pragma once
 
+#include "graph/parameter.h"
+
 #include <QHash>
 #include <QString>
 #include <QStringList>
 #include <QVector>
+#include <optional>
 
 struct PluginCommandDescriptor {
     QString command;
@@ -52,13 +55,32 @@ struct TopologyPresetDescriptor {
     QHash<QString, TopologyPresetParameterDescriptor> parameters;
 };
 
+struct PluginInstanceParameterChoice {
+    QString value;
+    QString label;
+};
+
+struct PluginInstanceParameterDescriptor {
+    QString name;
+    QString type;
+    Parameter::Value defaultValue = QString();
+    QString label;
+    QString description;
+    QVector<PluginInstanceParameterChoice> choices;
+    std::optional<double> minimumValue;
+    std::optional<double> maximumValue;
+    bool configurable = true;
+};
+
 struct PluginDescriptor {
     QString id;
     QString name;
     QString version;
+    QString kind;
     QString rootPath;
     QString modulesPath;
     QString graphicsPath;
+    QHash<QString, PluginInstanceParameterDescriptor> instanceParameters;
     PluginCommandDescriptor generator;
     PluginCommandDescriptor drc;
     PluginNativeDescriptor native;
