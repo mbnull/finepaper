@@ -6,7 +6,9 @@ module SpecGenerator
   class SpecError < StandardError; end
 
   TOP_LEVEL_KEYS = %w[schema kind name version buses modules].freeze
-  EXTENSION_TOP_LEVEL_KEYS = %w[schema kind extension runtime topology_presets modules].freeze
+  EXTENSION_TOP_LEVEL_KEYS = %w[
+    schema kind extension runtime topology_presets instance_parameters modules
+  ].freeze
   EXTENSION_KEYS = %w[id name version].freeze
   RUNTIME_KEYS = %w[generator drc].freeze
   COMMAND_KEYS = %w[command input_format args].freeze
@@ -340,6 +342,7 @@ module SpecGenerator
       validate_extension(data.fetch('extension'))
       validate_runtime(data.fetch('runtime'))
       validate_topology_presets(data.fetch('topology_presets', []))
+      validate_instance_parameters(data.fetch('instance_parameters', {}))
       validate_modules(data.fetch('modules'))
       views = ViewParser.new(@views_dir, data.fetch('modules')).parse
       ParsedSpec.new(data: data, views: views)
@@ -437,6 +440,12 @@ module SpecGenerator
       end
     end
 
+    def validate_instance_parameters(parameters)
+      raise SpecError, 'instance_parameters must be a map' unless parameters.is_a?(Hash)
+
+      validate_parameter_map('instance', parameters, 'instance parameter')
+    end
+
     def validate_identity(module_name, identity)
       raise SpecError, "Module #{module_name} identity must be a map" unless identity.is_a?(Hash)
 
@@ -464,19 +473,24 @@ module SpecGenerator
     def validate_parameters(module_name, parameters)
       raise SpecError, "Module #{module_name} parameters must be a map" unless parameters.is_a?(Hash)
 
-      parameters.each do |param_name, param|
-        raise SpecError, "Module #{module_name} parameter #{param_name} must be a map" unless param.is_a?(Hash)
+      validate_parameter_map(module_name, parameters, "Module #{module_name} parameter")
+    end
 
-        validate_keys!(param, PARAMETER_KEYS, "module #{module_name} parameter #{param_name}")
-        validate_type_name!(param['type'], "Module #{module_name} parameter #{param_name}")
-        raise SpecError, "Module #{module_name} parameter #{param_name} default is required" unless param.key?('default')
+    def validate_parameter_map(owner_name, parameters, context_prefix)
+      parameters.each do |param_name, param|
+        context = "#{context_prefix} #{param_name}"
+        raise SpecError, "#{context} must be a map" unless param.is_a?(Hash)
+
+        validate_keys!(param, PARAMETER_KEYS, "#{owner_name} parameter #{param_name}")
+        validate_type_name!(param['type'], context)
+        raise SpecError, "#{context} default is required" unless param.key?('default')
         if param.key?('emit') && !EMIT_MODES.include?(param['emit'])
-          raise SpecError, "Module #{module_name} parameter #{param_name} emit is invalid"
+          raise SpecError, "#{context} emit is invalid"
         end
-        validate_enum!(param, "Module #{module_name} parameter #{param_name}")
-        validate_parameter_labels!(param, "Module #{module_name} parameter #{param_name}")
-        validate_default!(param, "Module #{module_name} parameter #{param_name}")
-        validate_parameter_bounds!(param, "Module #{module_name} parameter #{param_name}")
+        validate_enum!(param, context)
+        validate_parameter_labels!(param, context)
+        validate_default!(param, context)
+        validate_parameter_bounds!(param, context)
       end
     end
 
@@ -833,6 +847,8 @@ module SpecGenerator
           id: extension.fetch('id'),
           name: extension.fetch('name'),
           version: extension.fetch('version'),
+          kind: @spec.fetch('kind'),
+          instance_parameters: @spec.fetch('instance_parameters', {}),
           modules: 'modules.xml',
           graphics: 'graphics',
           generator: {
