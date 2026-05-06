@@ -4,6 +4,8 @@
 
 Finepaper should support parameters that belong to an IP instance instead of to an internal graph node. A single canvas is the project workspace. The project can contain multiple IP instances, and each IP instance can own configuration values such as RaveNoC flit width, routing algorithm, virtual channel count, or AXI data width.
 
+A project may contain multiple IP instances, but it may contain at most one NoC IP instance. This preserves a single network fabric boundary while still allowing the project to contain other IP instances such as DMA blocks, peripherals, wrappers, or accelerators.
+
 These values are not graph-global parameters and they are not module instance parameters. They are IP instance parameters.
 
 The first implementation should use this model for RaveNoC. RaveNoC's fabric-wide RTL configuration should move out of `RaveTile.parameters` and into RaveNoC IP instance parameters. The RaveNoC generator should read those values from the IP instance, not from the first tile in the internal graph.
@@ -14,6 +16,7 @@ The first implementation should use this model for RaveNoC. RaveNoC's fabric-wid
 - Store parameter values per IP instance in project/generator documents.
 - Let the Qt property panel edit IP instance parameters when no node is selected.
 - Show multiple IP instances as separate parameter sections in one project canvas.
+- Enforce that one project contains at most one IP instance whose kind is `noc`.
 - Default all IP parameter sections to expanded when no node is selected.
 - Move RaveNoC fabric-wide parameters from `RaveTile` metadata to RaveNoC instance metadata.
 - Remove the implicit RaveNoC generator rule that reads fabric-wide parameters from the first tile.
@@ -47,6 +50,8 @@ A project is the saved editor document represented by one canvas workspace. It c
 
 An IP type is declared by a plugin or extension spec. `finepaper.ravenoc` declaring a RaveNoC IP type is the first target.
 
+Each IP type has a kind. The first relevant kind is `noc`. Future IPs can use non-NoC kinds such as `peripheral`, `accelerator`, `wrapper`, or another project-defined category. The `noc` kind has a project-level uniqueness constraint.
+
 ### IP Instance
 
 An IP instance is one configured occurrence of an IP type inside the project. Multiple IP instances can use the same IP type:
@@ -56,6 +61,8 @@ An IP instance is one configured occurrence of an IP type inside the project. Mu
 - `axi_dma_0`
 
 Each instance owns its own parameter values.
+
+A valid project cannot contain both `ravenoc_0` and `ravenoc_1` if both instances have kind `noc`. It can contain one NoC IP instance plus other non-NoC IP instances.
 
 ### Internal Module
 
@@ -131,6 +138,7 @@ A future project-oriented shape can be:
     {
       "id": "ravenoc_0",
       "plugin": "finepaper.ravenoc",
+      "kind": "noc",
       "type": "RaveNoC",
       "parameters": {
         "flit_data_width": 32,
@@ -143,6 +151,7 @@ A future project-oriented shape can be:
     {
       "id": "axi_dma_0",
       "plugin": "finepaper.axi_dma",
+      "kind": "peripheral",
       "type": "AxiDma",
       "parameters": {}
     }
@@ -158,6 +167,7 @@ The existing generator export can remain single-IP while still using the same ow
   "ip_instance": {
     "id": "ravenoc_0",
     "plugin": "finepaper.ravenoc",
+    "kind": "noc",
     "type": "RaveNoC",
     "parameters": {
       "flit_data_width": 32,
@@ -171,6 +181,20 @@ The existing generator export can remain single-IP while still using the same ow
 ```
 
 This lets the first implementation keep one active generated IP while avoiding a schema that implies one canvas-wide global parameter map.
+
+The project writer should derive or validate `kind` from plugin/type metadata. If `kind` is stored redundantly in the document for easier validation and diagnostics, load should still verify that it matches the current plugin metadata.
+
+## Project IP Constraints
+
+A project may contain any number of non-NoC IP instances, but it may contain at most one IP instance whose metadata declares `kind: noc`.
+
+This is a project-level rule, not a RaveNoC-specific rule. It means:
+
+- one project can contain `RaveNoC / ravenoc_0` and `AxiDma / axi_dma_0`;
+- one project cannot contain both `RaveNoC / ravenoc_0` and another NoC fabric instance;
+- future NoC plugins are mutually exclusive with RaveNoC in the same project unless this rule is deliberately changed.
+
+The add-IP UI should disable or reject adding a second NoC IP when the project already has one. The project loader and validator must also enforce the same constraint so invalid files are caught even if they were edited outside Qt.
 
 ## Qt Property Panel
 
@@ -261,7 +285,8 @@ Qt validation should reject or report:
 
 - project IP instances that reference missing plugins;
 - IP instances whose parameter names are not declared by that IP type;
-- IP instance parameter values whose type does not match metadata.
+- IP instance parameter values whose type does not match metadata;
+- more than one project IP instance whose metadata declares `kind: noc`.
 
 RaveNoC generator validation should continue to enforce RaveNoC-specific constraints:
 
@@ -288,6 +313,7 @@ Add tests for:
 - `spec_generator` rejecting invalid instance parameter declarations;
 - Qt plugin loading of IP instance parameter metadata;
 - project serialization preserving IP instance parameter values;
+- project validation rejecting a second `kind: noc` IP instance;
 - property panel rendering project/IP parameter sections when no node is selected;
 - property panel rendering selected-node parameters separately from the owning IP instance parameters;
 - RaveNoC generator reading fabric-wide parameters from `ip_instance.parameters`;
