@@ -54,15 +54,15 @@ Each IP type has a kind. The first relevant kind is `noc`. Future IPs can use no
 
 ### IP Instance
 
-An IP instance is one configured occurrence of an IP type inside the project. Multiple IP instances can use the same IP type:
+An IP instance is one configured occurrence of an IP type inside the project. Non-NoC IP types can have multiple instances of the same type:
 
-- `ravenoc_0`
-- `ravenoc_1`
 - `axi_dma_0`
+- `axi_dma_1`
+- `uart_0`
 
 Each instance owns its own parameter values.
 
-A valid project cannot contain both `ravenoc_0` and `ravenoc_1` if both instances have kind `noc`. It can contain one NoC IP instance plus other non-NoC IP instances.
+A valid project cannot contain both `ravenoc_0` and another NoC IP instance. It can contain one NoC IP instance plus other non-NoC IP instances.
 
 ### Internal Module
 
