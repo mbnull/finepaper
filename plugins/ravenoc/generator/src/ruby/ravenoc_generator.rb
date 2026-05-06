@@ -105,7 +105,7 @@ class RaveNoCGenerator
   def generate
     graph = read_graph
     module_record = ravenoc_module_record(graph)
-    parameters = DEFAULTS.merge(module_record.fetch('parameters', {}))
+    parameters = generation_parameters(graph, module_record)
     validate_vendor!
     validate_parameters!(parameters)
 
@@ -125,7 +125,7 @@ class RaveNoCGenerator
   def validate
     graph = read_graph
     module_record = ravenoc_module_record(graph)
-    parameters = DEFAULTS.merge(module_record.fetch('parameters', {}))
+    parameters = generation_parameters(graph, module_record)
     validate_parameters!(parameters)
     true
   end
@@ -173,7 +173,7 @@ class RaveNoCGenerator
       x, y = coordinate_by_id.fetch(tile.fetch('id'))
       [y, x]
     end
-    parameters = first_tile.fetch('parameters', {}).merge('rows' => rows, 'cols' => cols)
+    parameters = { 'rows' => rows, 'cols' => cols }
     {
       'id' => graph.fetch('name', 'ravenoc_internal_graph'),
       'type' => 'internal_graph',
@@ -181,6 +181,30 @@ class RaveNoCGenerator
       'tiles' => tiles,
       'endpoints' => endpoint_bindings(graph, coordinate_by_id, cols)
     }
+  end
+
+  def generation_parameters(graph, module_record)
+    dimensions = module_record.fetch('parameters', {}).slice('rows', 'cols')
+    ip_parameters = ip_instance_parameters(graph)
+    dimensions.merge(ip_parameters)
+  end
+
+  def ip_instance_parameters(graph)
+    ip_instance = graph.fetch('ip_instance', nil)
+    unless ip_instance.is_a?(Hash)
+      raise GenerationError, 'missing ip_instance'
+    end
+    unless ip_instance.fetch('plugin', nil) == 'finepaper.ravenoc'
+      raise GenerationError, 'ip_instance plugin must be finepaper.ravenoc'
+    end
+
+    parameters = ip_instance.fetch('parameters', nil)
+    raise GenerationError, 'ip_instance.parameters must be an object' unless parameters.is_a?(Hash)
+
+    (DEFAULTS.keys - %w[rows cols]).each do |name|
+      raise GenerationError, "missing IP instance parameter #{name}" unless parameters.key?(name)
+    end
+    parameters
   end
 
   def logical_tile_coordinates(tiles)

@@ -160,7 +160,7 @@ class RaveNoCGeneratorTest < Minitest::Test
   def test_rejects_flit_type_width_other_than_two
     Dir.mktmpdir do |dir|
       graph = valid_graph
-      graph.fetch('modules').first.fetch('parameters')['flit_type_width'] = 3
+      graph.fetch('ip_instance').fetch('parameters')['flit_type_width'] = 3
       input = write_json(dir, 'graph.json', graph)
 
       _stdout, stderr, status = run_drc(input)
@@ -173,8 +173,8 @@ class RaveNoCGeneratorTest < Minitest::Test
   def test_rejects_unsupported_flit_data_width
     Dir.mktmpdir do |dir|
       graph = valid_graph
-      graph.fetch('modules').first.fetch('parameters')['flit_data_width'] = 128
-      graph.fetch('modules').first.fetch('parameters')['axi_data_width'] = 128
+      graph.fetch('ip_instance').fetch('parameters')['flit_data_width'] = 128
+      graph.fetch('ip_instance').fetch('parameters')['axi_data_width'] = 128
       input = write_json(dir, 'graph.json', graph)
 
       _stdout, stderr, status = run_drc(input)
@@ -187,7 +187,7 @@ class RaveNoCGeneratorTest < Minitest::Test
   def test_rejects_virtual_channels_above_upstream_limit
     Dir.mktmpdir do |dir|
       graph = valid_graph
-      graph.fetch('modules').first.fetch('parameters')['virtual_channels'] = 33
+      graph.fetch('ip_instance').fetch('parameters')['virtual_channels'] = 33
       input = write_json(dir, 'graph.json', graph)
 
       _stdout, stderr, status = run_drc(input)
@@ -200,8 +200,8 @@ class RaveNoCGeneratorTest < Minitest::Test
   def test_rejects_axi_data_width_that_differs_from_flit_data_width
     Dir.mktmpdir do |dir|
       graph = valid_graph
-      graph.fetch('modules').first.fetch('parameters')['flit_data_width'] = 32
-      graph.fetch('modules').first.fetch('parameters')['axi_data_width'] = 64
+      graph.fetch('ip_instance').fetch('parameters')['flit_data_width'] = 32
+      graph.fetch('ip_instance').fetch('parameters')['axi_data_width'] = 64
       input = write_json(dir, 'graph.json', graph)
 
       _stdout, stderr, status = run_drc(input)
@@ -230,7 +230,7 @@ class RaveNoCGeneratorTest < Minitest::Test
   def test_rejects_non_power_of_two_buffer_depth
     Dir.mktmpdir do |dir|
       graph = valid_graph
-      graph.fetch('modules').first.fetch('parameters')['flit_buffer_depth'] = 3
+      graph.fetch('ip_instance').fetch('parameters')['flit_buffer_depth'] = 3
       input = write_json(dir, 'graph.json', graph)
       vendor = File.join(dir, 'vendor/ravenoc')
       make_fake_vendor(vendor)
@@ -250,6 +250,19 @@ class RaveNoCGeneratorTest < Minitest::Test
 
       refute status.success?
       assert_includes stderr, 'RaveNoC vendor source is missing'
+    end
+  end
+
+  def test_rejects_missing_ip_instance_parameter
+    Dir.mktmpdir do |dir|
+      graph = valid_graph
+      graph.fetch('ip_instance').fetch('parameters').delete('flit_data_width')
+      input = write_json(dir, 'missing_ip_param.json', graph)
+
+      _stdout, stderr, status = run_drc(input)
+
+      refute status.success?
+      assert_includes stderr, 'missing IP instance parameter flit_data_width'
     end
   end
 
@@ -285,6 +298,7 @@ class RaveNoCGeneratorTest < Minitest::Test
     {
       'schema' => 'finepaper-plugin-graph-v1',
       'name' => 'demo',
+      'ip_instance' => ravenoc_ip_instance,
       'modules' => [
         {
           'id' => 'ravenoc_node',
@@ -292,22 +306,33 @@ class RaveNoCGeneratorTest < Minitest::Test
           'type' => 'RaveNoC',
           'parameters' => {
             'rows' => 2,
-            'cols' => 2,
-            'flit_data_width' => 32,
-            'flit_type_width' => 2,
-            'flit_buffer_depth' => 2,
-            'virtual_channels' => 3,
-            'routing_algorithm' => 'xy',
-            'priority' => 'zero_high',
-            'max_packet_flits' => 256,
-            'axi_addr_width' => 32,
-            'axi_data_width' => 32,
-            'axi_cdc_required' => 'all',
-            'bypass_cdc' => false
+            'cols' => 2
           }
         }
       ],
       'connections' => []
+    }
+  end
+
+  def ravenoc_ip_instance
+    {
+      'id' => 'ravenoc_0',
+      'plugin' => 'finepaper.ravenoc',
+      'kind' => 'noc',
+      'type' => 'RaveNoC',
+      'parameters' => {
+        'flit_data_width' => 32,
+        'flit_type_width' => 2,
+        'flit_buffer_depth' => 2,
+        'virtual_channels' => 3,
+        'routing_algorithm' => 'xy',
+        'priority' => 'zero_high',
+        'max_packet_flits' => 256,
+        'axi_addr_width' => 32,
+        'axi_data_width' => 32,
+        'axi_cdc_required' => 'all',
+        'bypass_cdc' => false
+      }
     }
   end
 
@@ -329,6 +354,7 @@ class RaveNoCGeneratorTest < Minitest::Test
     {
       'schema' => 'finepaper-plugin-graph-v1',
       'name' => 'manual_tiles',
+      'ip_instance' => ravenoc_ip_instance,
       'modules' => [
         tile.call('rave_a', 100, 80),
         tile.call('rave_b', 320, 80),
@@ -368,6 +394,7 @@ class RaveNoCGeneratorTest < Minitest::Test
     {
       'schema' => 'finepaper-plugin-graph-v1',
       'name' => 'one_by_two',
+      'ip_instance' => ravenoc_ip_instance,
       'modules' => [
         {
           'id' => 'rave_a',
