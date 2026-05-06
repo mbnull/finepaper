@@ -140,6 +140,38 @@ target("logpanel_test")
         pass_outputs = "logpanel_test passed"
     })
 
+target("propertypanel_test")
+    add_rules("qt.widgetapp")
+    set_kind("binary")
+    set_group("test")
+    set_default(false)
+    set_languages("c++23")
+
+    add_includedirs("inc")
+    add_files("test/propertypanel_test.cpp")
+    add_files("src/panels/propertypanel.cpp")
+    add_files("src/commands/setparametercommand.cpp")
+    add_files("src/commands/command.cpp")
+    add_files("src/commands/commandmanager.cpp")
+    add_files("src/graph/graph.cpp")
+    add_files("src/graph/module.cpp")
+    add_files("src/graph/connection.cpp")
+    add_files("src/graph/port.cpp")
+    add_files("src/graph/parameter.cpp")
+    add_files("src/common/frameworkpaths.cpp")
+    add_files("src/modules/moduleregistry.cpp")
+    add_files("src/modules/moduleprovider.cpp")
+    add_files("src/plugins/pluginregistry.cpp")
+    add_files("inc/**/propertypanel.h")
+    add_files("inc/**/graph.h")
+    add_files("inc/**/module.h")
+    add_files("inc/**/pluginregistry.h")
+    add_files("inc/**/plugindescriptor.h")
+    add_tests("default", {
+        trim_output = true,
+        pass_outputs = "propertypanel_test passed"
+    })
+
 target("nodeeditor_geometry_test")
     add_rules("qt.widgetapp")
     set_kind("binary")

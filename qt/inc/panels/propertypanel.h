@@ -23,6 +23,7 @@ public slots:
 
 private slots:
     void onParameterChanged(const QString& name);
+    void onIpInstanceParameterChanged(const QString& name);
 
 private:
     void clearPanel();
@@ -35,4 +36,5 @@ private:
     QPlainTextEdit* m_descriptionView;
     QFormLayout* m_formLayout;
     QHash<QString, QWidget*> m_parameterWidgets;
+    QHash<QString, QWidget*> m_ipParameterWidgets;
 };

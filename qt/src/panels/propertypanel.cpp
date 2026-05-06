@@ -6,6 +6,7 @@
 #include "graph/graph.h"
 #include "graph/module.h"
 #include "modules/moduletypemetadata.h"
+#include "plugins/pluginregistry.h"
 #include "commands/commandmanager.h"
 #include "commands/setparametercommand.h"
 #include <cfloat>
@@ -49,6 +50,29 @@ const ModuleParameterMetadata* metadataForParameter(const Module* module, const 
     return ModuleTypeMetadata::parameterMetadata(module, name);
 }
 
+const PluginInstanceParameterDescriptor* metadataForIpParameter(const Graph* graph, const QString& name) {
+    if (!graph || !graph->ipInstance().has_value()) {
+        return nullptr;
+    }
+    const PluginDescriptor* plugin = PluginRegistry::instance().plugin(graph->ipInstance()->pluginId);
+    if (!plugin) {
+        return nullptr;
+    }
+    const auto it = plugin->instanceParameters.find(name);
+    return it != plugin->instanceParameters.end() ? &it.value() : nullptr;
+}
+
+QVector<ModuleParameterChoice> moduleChoices(const PluginInstanceParameterDescriptor* metadata) {
+    QVector<ModuleParameterChoice> choices;
+    if (!metadata) {
+        return choices;
+    }
+    for (const PluginInstanceParameterChoice& choice : metadata->choices) {
+        choices.push_back(ModuleParameterChoice{choice.value, choice.label});
+    }
+    return choices;
+}
+
 void applySpinBoxMetadata(QSpinBox* spinBox, const ModuleParameterMetadata* metadata) {
     const int minimum = metadata && metadata->minimumValue.has_value()
         ? static_cast<int>(*metadata->minimumValue)
@@ -79,6 +103,24 @@ void applyDoubleSpinBoxMetadata(QDoubleSpinBox* spinBox, const ModuleParameterMe
 
 void applyReadOnlyMetadata(QWidget* widget, const ModuleParameterMetadata* metadata) {
     if (!widget || !metadata || !metadata->readOnly) {
+        return;
+    }
+
+    if (auto* lineEdit = qobject_cast<QLineEdit*>(widget)) {
+        lineEdit->setReadOnly(true);
+    } else if (auto* spinBox = qobject_cast<QSpinBox*>(widget)) {
+        spinBox->setReadOnly(true);
+        spinBox->setButtonSymbols(QAbstractSpinBox::NoButtons);
+    } else if (auto* doubleSpinBox = qobject_cast<QDoubleSpinBox*>(widget)) {
+        doubleSpinBox->setReadOnly(true);
+        doubleSpinBox->setButtonSymbols(QAbstractSpinBox::NoButtons);
+    } else {
+        widget->setEnabled(false);
+    }
+}
+
+void applyReadOnlyMetadata(QWidget* widget, const PluginInstanceParameterDescriptor* metadata) {
+    if (!widget || !metadata || metadata->configurable) {
         return;
     }
 
@@ -128,6 +170,7 @@ PropertyPanel::PropertyPanel(Graph* graph, CommandManager* commandManager, QWidg
     m_layout->addWidget(m_descriptionView);
     m_formLayout = new QFormLayout();
     m_layout->addLayout(m_formLayout);
+    connect(m_graph, &Graph::ipInstanceParameterChanged, this, &PropertyPanel::onIpInstanceParameterChanged);
 }
 
 void PropertyPanel::setSelectedModule(QString moduleId) {
@@ -145,8 +188,8 @@ void PropertyPanel::setSelectedModule(Module* module) {
 
     if (m_selectedModule) {
         connect(m_selectedModule, &Module::parameterChanged, this, &PropertyPanel::onParameterChanged);
-        populatePanel();
     }
+    populatePanel();
 }
 
 void PropertyPanel::clearPanel() {
@@ -157,9 +200,113 @@ void PropertyPanel::clearPanel() {
         m_formLayout->removeRow(0);
     }
     m_parameterWidgets.clear();
+    m_ipParameterWidgets.clear();
 }
 
 void PropertyPanel::populatePanel() {
+    if (!m_selectedModule) {
+        if (!m_graph->ipInstance().has_value()) {
+            return;
+        }
+
+        const GraphIpInstance& ipInstance = *m_graph->ipInstance();
+        const QString title = QStringLiteral("%1 / %2").arg(ipInstance.type, ipInstance.id);
+        auto* header = new QLabel(title, this);
+        QFont font = header->font();
+        font.setBold(true);
+        header->setFont(font);
+        m_formLayout->addRow(header);
+
+        QStringList names = ipInstance.parameters.keys();
+        names.sort();
+        for (const QString& name : names) {
+            const Parameter& param = ipInstance.parameters.value(name);
+            const PluginInstanceParameterDescriptor* metadata = metadataForIpParameter(m_graph, name);
+            const QString label = metadata && !metadata->label.isEmpty()
+                ? metadata->label
+                : humanizeIdentifier(name);
+            const QString description = metadata ? metadata->description : QString();
+            QWidget* widget = nullptr;
+            const QVector<ModuleParameterChoice> choices = moduleChoices(metadata);
+
+            if (!choices.isEmpty() && std::holds_alternative<QString>(param.value())) {
+                auto* comboBox = new QComboBox(this);
+                for (const ModuleParameterChoice& choice : choices) {
+                    comboBox->addItem(choice.label, choice.value);
+                }
+                syncComboBoxValue(comboBox, std::get<QString>(param.value()));
+                if (!metadata || metadata->configurable) {
+                    connect(comboBox,
+                            QOverload<int>::of(&QComboBox::currentIndexChanged),
+                            this,
+                            [this, name, comboBox](int index) {
+                                if (index < 0) return;
+                                m_graph->setIpInstanceParameter(name, comboBox->itemData(index).toString());
+                            });
+                }
+                widget = comboBox;
+            } else if (std::holds_alternative<QString>(param.value())) {
+                auto* lineEdit = new QLineEdit(std::get<QString>(param.value()));
+                if (!metadata || metadata->configurable) {
+                    connect(lineEdit, &QLineEdit::editingFinished, this, [this, name, lineEdit]() {
+                        m_graph->setIpInstanceParameter(name, lineEdit->text());
+                    });
+                }
+                widget = lineEdit;
+            } else if (std::holds_alternative<int>(param.value())) {
+                auto* spinBox = new QSpinBox();
+                if (metadata && metadata->minimumValue.has_value() && metadata->maximumValue.has_value()) {
+                    spinBox->setRange(static_cast<int>(*metadata->minimumValue),
+                                      static_cast<int>(*metadata->maximumValue));
+                } else {
+                    spinBox->setRange(INT_MIN, INT_MAX);
+                }
+                spinBox->setValue(std::get<int>(param.value()));
+                if (!metadata || metadata->configurable) {
+                    connect(spinBox, QOverload<int>::of(&QSpinBox::valueChanged), this, [this, name](int value) {
+                        m_graph->setIpInstanceParameter(name, value);
+                    });
+                }
+                widget = spinBox;
+            } else if (std::holds_alternative<double>(param.value())) {
+                auto* doubleSpinBox = new QDoubleSpinBox();
+                doubleSpinBox->setRange(std::numeric_limits<double>::lowest(),
+                                        std::numeric_limits<double>::max());
+                doubleSpinBox->setValue(std::get<double>(param.value()));
+                if (!metadata || metadata->configurable) {
+                    connect(doubleSpinBox,
+                            QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+                            this,
+                            [this, name](double value) {
+                                m_graph->setIpInstanceParameter(name, value);
+                            });
+                }
+                widget = doubleSpinBox;
+            } else if (std::holds_alternative<bool>(param.value())) {
+                auto* checkBox = new QCheckBox();
+                checkBox->setChecked(std::get<bool>(param.value()));
+                if (!metadata || metadata->configurable) {
+                    connect(checkBox, &QCheckBox::toggled, this, [this, name](bool checked) {
+                        m_graph->setIpInstanceParameter(name, checked);
+                    });
+                }
+                widget = checkBox;
+            }
+
+            if (widget) {
+                QLabel* rowLabel = new QLabel(label, this);
+                if (!description.isEmpty()) {
+                    rowLabel->setToolTip(description);
+                    widget->setToolTip(description);
+                }
+                applyReadOnlyMetadata(widget, metadata);
+                m_formLayout->addRow(rowLabel, widget);
+                m_ipParameterWidgets.insert(name, widget);
+            }
+        }
+        return;
+    }
+
     const QString moduleDescription = ModuleTypeMetadata::description(m_selectedModule);
     if (!moduleDescription.isEmpty()) {
         m_descriptionView->setPlainText(moduleDescription);
@@ -285,6 +432,40 @@ void PropertyPanel::onParameterChanged(const QString& name) {
     const auto& params = m_selectedModule->parameters();
     auto paramIt = params.find(name);
     if (paramIt == params.end()) return;
+
+    const auto& value = paramIt.value().value();
+
+    if (auto* lineEdit = qobject_cast<QLineEdit*>(it.value())) {
+        lineEdit->blockSignals(true);
+        lineEdit->setText(std::get<QString>(value));
+        lineEdit->blockSignals(false);
+    } else if (auto* comboBox = qobject_cast<QComboBox*>(it.value())) {
+        comboBox->blockSignals(true);
+        syncComboBoxValue(comboBox, std::get<QString>(value));
+        comboBox->blockSignals(false);
+    } else if (auto* spinBox = qobject_cast<QSpinBox*>(it.value())) {
+        spinBox->blockSignals(true);
+        spinBox->setValue(std::get<int>(value));
+        spinBox->blockSignals(false);
+    } else if (auto* doubleSpinBox = qobject_cast<QDoubleSpinBox*>(it.value())) {
+        doubleSpinBox->blockSignals(true);
+        doubleSpinBox->setValue(std::get<double>(value));
+        doubleSpinBox->blockSignals(false);
+    } else if (auto* checkBox = qobject_cast<QCheckBox*>(it.value())) {
+        checkBox->blockSignals(true);
+        checkBox->setChecked(std::get<bool>(value));
+        checkBox->blockSignals(false);
+    }
+}
+
+void PropertyPanel::onIpInstanceParameterChanged(const QString& name) {
+    if (m_selectedModule || !m_graph->ipInstance().has_value()) return;
+
+    auto it = m_ipParameterWidgets.find(name);
+    if (it == m_ipParameterWidgets.end()) return;
+
+    const auto paramIt = m_graph->ipInstance()->parameters.find(name);
+    if (paramIt == m_graph->ipInstance()->parameters.end()) return;
 
     const auto& value = paramIt.value().value();
 
