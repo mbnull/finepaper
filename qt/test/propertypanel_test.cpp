@@ -1,9 +1,14 @@
-// Property panel tests for IP instance parameter presentation.
+// Property panel tests for plugin project parameter presentation.
 #include "commands/commandmanager.h"
 #include "graph/graph.h"
 #include "panels/propertypanel.h"
+#include "plugins/pluginprojectadapter.h"
+#include "project/pluginstate.h"
+#include "project/projectdocument.h"
+#include "project/projectstateservice.h"
 
 #include <QApplication>
+#include <QJsonObject>
 #include <QLabel>
 #include <QSpinBox>
 #include <iostream>
@@ -27,43 +32,48 @@ bool hasLabel(PropertyPanel& panel, const QString& text) {
     return false;
 }
 
-void testUnselectedPanelShowsIpInstanceParameters() {
+void testUnselectedPanelShowsPluginProjectParameters() {
     Graph graph;
-    graph.configureIpInstance(
-        QStringLiteral("ravenoc_0"),
-        QStringLiteral("finepaper.ravenoc"),
-        QStringLiteral("noc"),
-        QStringLiteral("RaveNoC"),
-        QHash<QString, Parameter>{
-            {QStringLiteral("flit_data_width"),
-             Parameter(QStringLiteral("flit_data_width"), 32)}
-        });
+    ProjectStateService stateService;
+    ProjectDocument document;
+    ProjectPluginStateRecord state;
+    state.pluginId = QStringLiteral("finepaper.ravenoc");
+    state.instanceId = QStringLiteral("ravenoc_0");
+    state.schema = QStringLiteral("ravenoc-project-state-v1");
+    state.state = QJsonObject{
+        {QStringLiteral("global_parameters"), QJsonObject{
+            {QStringLiteral("flit_data_width"), 64}
+        }}
+    };
+    document.pluginStates.push_back(state);
+    stateService.loadFromDocument(document);
+
+    PluginDescriptor plugin;
+    plugin.id = QStringLiteral("finepaper.ravenoc");
+    plugin.name = QStringLiteral("RaveNoC");
+    PluginInstanceParameterDescriptor width;
+    width.name = QStringLiteral("flit_data_width");
+    width.type = QStringLiteral("int");
+    width.defaultValue = 32;
+    width.label = QStringLiteral("Flit data width");
+    plugin.instanceParameters.insert(width.name, width);
+    ManifestPluginProjectAdapter adapter(plugin);
 
     CommandManager commandManager;
-    PropertyPanel panel(&graph, &commandManager);
+    PropertyPanel panel(&graph, &stateService, {&adapter}, &commandManager);
     panel.setSelectedModule(QString());
 
     require(hasLabel(panel, QStringLiteral("RaveNoC / ravenoc_0")),
-            "property panel should show IP instance section header");
+            "property panel should show plugin parameter section header");
     require(hasLabel(panel, QStringLiteral("Flit data width")),
-            "property panel should show IP instance parameter row");
+            "property panel should show plugin parameter row");
 
     QSpinBox* spinBox = panel.findChild<QSpinBox*>();
-    require(spinBox != nullptr, "integer IP instance parameter should use spin box");
-    spinBox->setValue(64);
-    require(commandManager.currentStateId() == 1,
-            "editing IP instance parameter should create a command history state");
-
-    const auto stored = graph.ipInstance()->parameters.value(QStringLiteral("flit_data_width")).value();
-    const auto* value = std::get_if<int>(&stored);
-    require(value && *value == 64,
-            "editing IP instance parameter should update graph state");
-
-    commandManager.undo();
-    const auto undone = graph.ipInstance()->parameters.value(QStringLiteral("flit_data_width")).value();
-    const auto* undoneValue = std::get_if<int>(&undone);
-    require(undoneValue && *undoneValue == 32,
-            "undo should restore previous IP instance parameter value");
+    require(spinBox != nullptr, "integer plugin parameter should use spin box");
+    require(spinBox->value() == 64,
+            "plugin parameter widget should read the stored project state value");
+    require(!graph.ipInstance().has_value(),
+            "plugin parameter rendering should not require graph IP instance state");
 }
 
 } // namespace
@@ -75,7 +85,7 @@ int main(int argc, char** argv) {
     QApplication app(argc, argv);
 
     try {
-        testUnselectedPanelShowsIpInstanceParameters();
+        testUnselectedPanelShowsPluginProjectParameters();
     } catch (const std::exception& error) {
         std::cerr << "propertypanel_test failed: " << error.what() << '\n';
         return 1;

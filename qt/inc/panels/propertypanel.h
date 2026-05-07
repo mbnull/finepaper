@@ -4,17 +4,28 @@
 #include <QWidget>
 #include <QVBoxLayout>
 #include <QHash>
+#include <QJsonValue>
+#include <QVector>
 
 class Graph;
+class IPluginProjectAdapter;
 class Module;
 class CommandManager;
+class ProjectStateService;
 class QFormLayout;
 class QPlainTextEdit;
+struct PluginParameterField;
+struct PluginParameterSection;
 
 class PropertyPanel : public QWidget {
     Q_OBJECT
 
 public:
+    PropertyPanel(Graph* graph,
+                  ProjectStateService* stateService,
+                  QVector<IPluginProjectAdapter*> pluginAdapters,
+                  CommandManager* commandManager,
+                  QWidget* parent = nullptr);
     PropertyPanel(Graph* graph, CommandManager* commandManager, QWidget* parent = nullptr);
     void setSelectedModule(Module* module);
 
@@ -23,13 +34,17 @@ public slots:
 
 private slots:
     void onParameterChanged(const QString& name);
-    void onIpInstanceParameterChanged(const QString& name);
 
 private:
     void clearPanel();
     void populatePanel();
+    QWidget* createPluginParameterWidget(const PluginParameterSection& section,
+                                         const PluginParameterField& field,
+                                         const QJsonValue& storedValue);
 
     Graph* m_graph;
+    ProjectStateService* m_stateService;
+    QVector<IPluginProjectAdapter*> m_pluginAdapters;
     CommandManager* m_commandManager;
     Module* m_selectedModule = nullptr;
     QVBoxLayout* m_layout;

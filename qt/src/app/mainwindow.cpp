@@ -10,10 +10,12 @@
 #include "panels/palette.h"
 #include "panels/logpanel.h"
 #include "plugins/generatorrunner.h"
+#include "plugins/pluginprojectadapter.h"
 #include "plugins/pluginregistry.h"
 #include "plugins/startupdiagnostics.h"
 #include "project/graphprojectserializer.h"
 #include "project/projectreader.h"
+#include "project/projectstateservice.h"
 #include "project/projectwriter.h"
 #include "topology/topologypresetbuilder.h"
 #include "validation/validationmanager.h"
@@ -110,6 +112,7 @@ MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent),
       m_graph(new Graph(this)),
       m_commandManager(std::make_unique<CommandManager>()),
+      m_projectStateService(std::make_unique<ProjectStateService>()),
       m_nodeEditor(nullptr),
       m_propertyPanel(nullptr),
       m_palette(nullptr),
@@ -434,8 +437,20 @@ void MainWindow::closeEvent(QCloseEvent* event) {
 }
 
 void MainWindow::setupPanels() {
+    m_pluginProjectAdapters.clear();
+    QVector<IPluginProjectAdapter*> pluginProjectAdapters;
+    for (const PluginDescriptor& plugin : PluginRegistry::instance().plugins()) {
+        auto adapter = std::make_unique<ManifestPluginProjectAdapter>(plugin);
+        pluginProjectAdapters.push_back(adapter.get());
+        m_pluginProjectAdapters.push_back(std::move(adapter));
+    }
+
     m_nodeEditor = new NodeEditorWidget(m_graph, m_commandManager.get(), this);
-    m_propertyPanel = new PropertyPanel(m_graph, m_commandManager.get(), this);
+    m_propertyPanel = new PropertyPanel(m_graph,
+                                        m_projectStateService.get(),
+                                        pluginProjectAdapters,
+                                        m_commandManager.get(),
+                                        this);
     m_palette = new Palette(m_graph, m_commandManager.get(), this);
     m_logPanel = new LogPanel(this);
     m_validationManager = new ValidationManager(m_graph, m_logPanel, this);
@@ -830,6 +845,10 @@ bool MainWindow::loadDocument(const QString& path) {
             QMessageBox::warning(this, "Open Failed", loadResult.error);
             return false;
         }
+        m_projectStateService->loadFromDocument(readResult.document);
+        if (m_propertyPanel) {
+            m_propertyPanel->setSelectedModule(QString());
+        }
 
         m_commandManager->clearHistory();
         m_cleanStateId = m_commandManager->currentStateId();
@@ -853,6 +872,10 @@ bool MainWindow::loadDocument(const QString& path) {
             QMessageBox::warning(this, "Open Failed", "Could not import " + path);
             return false;
         }
+        m_projectStateService->clear();
+        if (m_propertyPanel) {
+            m_propertyPanel->setSelectedModule(QString());
+        }
 
         m_commandManager->clearHistory();
         m_cleanStateId = m_commandManager->currentStateId() - 1;
@@ -872,8 +895,9 @@ bool MainWindow::loadDocument(const QString& path) {
 
 bool MainWindow::saveDocument(const QString& path) {
     qInfo() << "Saving project to" << path;
-    const ProjectDocument document =
+    ProjectDocument document =
         GraphProjectSerializer::toProject(*m_graph, QFileInfo(path).completeBaseName());
+    m_projectStateService->writeToDocument(document);
     const ProjectWriteResult result = ProjectWriter::writeFile(path, document);
     if (!result.success) {
         qWarning() << "Failed to save project to" << path << result.error;
@@ -896,8 +920,12 @@ QString MainWindow::defaultDocumentPath() const {
 void MainWindow::clearDocument() {
     m_suppressDocumentTracking = true;
     m_graph->clear();
+    m_projectStateService->clear();
     configureGraphIpInstanceFromActivePlugin();
     m_suppressDocumentTracking = false;
+    if (m_propertyPanel) {
+        m_propertyPanel->setSelectedModule(QString());
+    }
     m_commandManager->clearHistory();
     m_cleanStateId = m_commandManager->currentStateId();
     setCurrentDocumentPath(QString());
