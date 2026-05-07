@@ -68,6 +68,25 @@ add_qt_test_target("commandmanager_test", "test/commandmanager_test.cpp", {
     "src/**/commandmanager.cpp"
 })
 
+add_qt_test_target("arrangecommand_test", "test/arrangecommand_test.cpp", {
+    "src/commands/arrangecommand.cpp",
+    "src/**/command.cpp",
+    "src/**/graph.cpp",
+    "src/**/module.cpp",
+    "src/**/connection.cpp",
+    "src/**/port.cpp",
+    "src/**/parameter.cpp",
+    "src/**/frameworkpaths.cpp",
+    "src/**/moduleregistry.cpp",
+    "src/**/moduleprovider.cpp",
+    "src/**/pluginregistry.cpp",
+    "inc/**/arrangecommand.h",
+    "inc/**/graph.h",
+    "inc/**/module.h",
+    "inc/**/pluginregistry.h",
+    "inc/**/plugindescriptor.h"
+})
+
 add_qt_test_target("validation_test", "test/validation_test.cpp", {
     "src/**/drcrunner.cpp",
     "src/**/generatorrunner.cpp",

@@ -43,6 +43,17 @@ std::unique_ptr<Module> makeManualRaveTile(const QString& id, int x, int y) {
     return module;
 }
 
+std::unique_ptr<Module> makeRaveTileWithLogicalCoordinate(const QString& id,
+                                                          int x,
+                                                          int y,
+                                                          int meshCol,
+                                                          int meshRow) {
+    auto module = makeRaveTile(id, x, y);
+    module->setParameter(QStringLiteral("mesh_col"), meshCol);
+    module->setParameter(QStringLiteral("mesh_row"), meshRow);
+    return module;
+}
+
 void require(bool condition, const char* message) {
     if (!condition) {
         throw std::runtime_error(message);
@@ -59,6 +70,30 @@ void addConnection(Graph& graph,
         id,
         PortRef{sourceModule, sourcePort},
         PortRef{targetModule, targetPort}));
+}
+
+QHash<QString, Parameter> raveNoCIpParameters() {
+    return {
+        {QStringLiteral("flit_data_width"), Parameter(QStringLiteral("flit_data_width"), 32)},
+        {QStringLiteral("flit_type_width"), Parameter(QStringLiteral("flit_type_width"), 2)},
+        {QStringLiteral("flit_buffer_depth"), Parameter(QStringLiteral("flit_buffer_depth"), 2)},
+        {QStringLiteral("virtual_channels"), Parameter(QStringLiteral("virtual_channels"), 3)},
+        {QStringLiteral("routing_algorithm"), Parameter(QStringLiteral("routing_algorithm"), QStringLiteral("xy"))},
+        {QStringLiteral("priority"), Parameter(QStringLiteral("priority"), QStringLiteral("zero_high"))},
+        {QStringLiteral("max_packet_flits"), Parameter(QStringLiteral("max_packet_flits"), 256)},
+        {QStringLiteral("axi_addr_width"), Parameter(QStringLiteral("axi_addr_width"), 32)},
+        {QStringLiteral("axi_data_width"), Parameter(QStringLiteral("axi_data_width"), 32)},
+        {QStringLiteral("axi_cdc_required"), Parameter(QStringLiteral("axi_cdc_required"), QStringLiteral("all"))},
+        {QStringLiteral("bypass_cdc"), Parameter(QStringLiteral("bypass_cdc"), false)}
+    };
+}
+
+void configureRaveNoCIpInstance(Graph& graph) {
+    graph.configureIpInstance(QStringLiteral("ravenoc_0"),
+                              QStringLiteral("finepaper.ravenoc"),
+                              QStringLiteral("noc"),
+                              QStringLiteral("RaveNoC"),
+                              raveNoCIpParameters());
 }
 
 bool hasMessageContaining(const QList<ValidationResult>& results, const QString& text) {
@@ -99,6 +134,7 @@ void testDrcRunnerUsesPluginGraphFlavorForRaveNoC() {
             "RaveTile type must be registered for DRC flavor test");
 
     Graph graph;
+    configureRaveNoCIpInstance(graph);
     require(graph.addModule(makeRaveTile(QStringLiteral("rave_0_0"), 0, 0)),
             "failed to add first RaveTile");
     require(graph.addModule(makeRaveTile(QStringLiteral("rave_0_1"), 1, 0)),
@@ -128,6 +164,7 @@ void testDrcRunnerAcceptsManualRaveTilePlacement() {
             "RaveTile type must be registered for manual placement DRC test");
 
     Graph graph;
+    configureRaveNoCIpInstance(graph);
     require(graph.addModule(makeManualRaveTile(QStringLiteral("rave_a"), 100, 80)),
             "failed to add first manual RaveTile");
     require(graph.addModule(makeManualRaveTile(QStringLiteral("rave_b"), 320, 80)),
@@ -160,11 +197,45 @@ void testDrcRunnerAcceptsManualRaveTilePlacement() {
     require(results.isEmpty(), messageBytes.constData());
 }
 
+void testDrcRunnerUsesConnectionsWhenRaveTileLogicalCoordinatesAreStale() {
+    require(ModuleRegistry::instance().getType(QStringLiteral("RaveTile")) != nullptr,
+            "RaveTile type must be registered for stale logical coordinate DRC test");
+
+    Graph graph;
+    configureRaveNoCIpInstance(graph);
+    require(graph.addModule(makeRaveTileWithLogicalCoordinate(QStringLiteral("rave_left"),
+                                                             100,
+                                                             80,
+                                                             1,
+                                                             0)),
+            "failed to add left stale-coordinate RaveTile");
+    require(graph.addModule(makeRaveTileWithLogicalCoordinate(QStringLiteral("rave_right"),
+                                                             320,
+                                                             80,
+                                                             0,
+                                                             0)),
+            "failed to add right stale-coordinate RaveTile");
+    addConnection(graph, QStringLiteral("rave_left_east"),
+                  QStringLiteral("rave_left"), QStringLiteral("east"),
+                  QStringLiteral("rave_right"), QStringLiteral("west"));
+
+    DRCRunner runner;
+    const QList<ValidationResult> results = runner.validate(&graph);
+    QStringList messages;
+    for (const ValidationResult& result : results) {
+        messages.append(result.message());
+    }
+
+    const QByteArray messageBytes = messages.join('\n').toLocal8Bit();
+    require(results.isEmpty(), messageBytes.constData());
+}
+
 void testDrcRunnerRejectsManualRaveTileNonMesh() {
     require(ModuleRegistry::instance().getType(QStringLiteral("RaveTile")) != nullptr,
             "RaveTile type must be registered for manual placement DRC test");
 
     Graph graph;
+    configureRaveNoCIpInstance(graph);
     require(graph.addModule(makeManualRaveTile(QStringLiteral("rave_a"), 100, 80)),
             "failed to add first manual RaveTile");
     require(graph.addModule(makeManualRaveTile(QStringLiteral("rave_b"), 320, 80)),
@@ -190,6 +261,7 @@ int main(int argc, char** argv) {
         testBasicValidatorLeavesIpDrcToPluginCommand();
         testDrcRunnerUsesPluginGraphFlavorForRaveNoC();
         testDrcRunnerAcceptsManualRaveTilePlacement();
+        testDrcRunnerUsesConnectionsWhenRaveTileLogicalCoordinatesAreStale();
         testDrcRunnerRejectsManualRaveTileNonMesh();
     } catch (const std::exception& error) {
         std::cerr << "validation_test failed: " << error.what() << '\n';

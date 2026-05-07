@@ -177,21 +177,27 @@ QHash<QString, QPoint> inferMeshCoordinates(const Graph* graph,
 
     QList<QString> moduleOrder;
     moduleOrder.reserve(static_cast<qsizetype>(orderedXpModules.size()));
+    QHash<QString, QPoint> explicitCoordinates;
     for (const OrderedModule& orderedModule : orderedXpModules) {
         moduleOrder.append(orderedModule.module->id());
         if (const auto explicitCoord = explicitMeshCoordinate(orderedModule.module); explicitCoord.has_value()) {
-            coordinates.insert(orderedModule.module->id(), *explicitCoord);
+            explicitCoordinates.insert(orderedModule.module->id(), *explicitCoord);
         }
     }
 
+    QSet<QString> visited;
     for (const QString& startId : moduleOrder) {
-        if (coordinates.contains(startId)) {
+        if (visited.contains(startId)) {
             continue;
         }
 
         std::queue<QString> frontier;
         frontier.push(startId);
-        coordinates.insert(startId, QPoint(0, 0));
+        visited.insert(startId);
+        coordinates.insert(startId,
+                           adjacency.contains(startId)
+                               ? QPoint(0, 0)
+                               : explicitCoordinates.value(startId, QPoint(0, 0)));
 
         while (!frontier.empty()) {
             const QString currentId = frontier.front();
@@ -201,7 +207,8 @@ QHash<QString, QPoint> inferMeshCoordinates(const Graph* graph,
             for (const auto& edge : adjacency.value(currentId)) {
                 const QString& nextId = edge.first;
                 const QPoint candidate = current + edge.second;
-                if (!coordinates.contains(nextId)) {
+                if (!visited.contains(nextId)) {
+                    visited.insert(nextId);
                     coordinates.insert(nextId, candidate);
                     frontier.push(nextId);
                 }

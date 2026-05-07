@@ -159,7 +159,8 @@ class RaveNoCGenerator
   end
 
   def internal_graph_module_record(graph, tiles)
-    coordinates = rectangular_coordinates(logical_tile_coordinates(tiles)) ||
+    coordinates = rectangular_coordinates(connection_tile_coordinates(tiles, graph.fetch('connections', []))) ||
+                  rectangular_coordinates(logical_tile_coordinates(tiles)) ||
                   rectangular_coordinates(canvas_tile_coordinates(tiles)) ||
                   raise(GenerationError,
                         "RaveTile graph must be rectangular, found #{tiles.size} tiles")
@@ -242,6 +243,64 @@ class RaveNoCGenerator
     y_index = ys.each_with_index.to_h
 
     raw.map { |id, x, y| [id, x_index.fetch(x), y_index.fetch(y)] }
+  end
+
+  def connection_tile_coordinates(tiles, connections)
+    tile_ids = tiles.map { |tile| tile.fetch('id') }
+    adjacency = Hash.new { |hash, key| hash[key] = [] }
+
+    connections.each do |connection|
+      source = connection.fetch('source', {})
+      target = connection.fetch('target', {})
+      source_module = source.fetch('module', nil)
+      target_module = target.fetch('module', nil)
+      next unless tile_ids.include?(source_module) && tile_ids.include?(target_module)
+
+      key = mesh_link_key(source_module,
+                          source.fetch('port', nil),
+                          target_module,
+                          target.fetch('port', nil))
+      next unless key
+
+      dx, dy = key.fetch(:axis) == :east ? [1, 0] : [0, 1]
+      from = key.fetch(:from)
+      to = key.fetch(:to)
+      adjacency[from] << [to, dx, dy]
+      adjacency[to] << [from, -dx, -dy]
+    end
+    return nil if adjacency.empty?
+
+    coordinates = {}
+    tiles.sort_by do |tile|
+      params = tile.fetch('parameters', {})
+      [params.fetch('y', 0), params.fetch('x', 0), tile.fetch('id')]
+    end.each do |tile|
+      start = tile.fetch('id')
+      next if coordinates.key?(start) || !adjacency.key?(start)
+
+      coordinates[start] = [0, 0]
+      frontier = [start]
+      until frontier.empty?
+        current = frontier.shift
+        current_x, current_y = coordinates.fetch(current)
+
+        adjacency.fetch(current, []).each do |next_id, dx, dy|
+          candidate = [current_x + dx, current_y + dy]
+          if coordinates.key?(next_id)
+            return nil unless coordinates.fetch(next_id) == candidate
+            next
+          end
+
+          coordinates[next_id] = candidate
+          frontier << next_id
+        end
+      end
+    end
+    return nil unless coordinates.size == tile_ids.size
+
+    min_x = coordinates.values.map(&:first).min
+    min_y = coordinates.values.map(&:last).min
+    coordinates.map { |id, (x, y)| [id, x - min_x, y - min_y] }
   end
 
   def rectangular_coordinates(coordinates)
