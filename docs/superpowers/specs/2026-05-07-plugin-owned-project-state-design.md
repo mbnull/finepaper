@@ -136,3 +136,24 @@ Next architecture step:
 - Plugin parameter edits are undoable and mark the document dirty.
 - Generation and validation receive graph topology plus plugin-owned state through plugin interfaces.
 - Existing project files using the current IP instance shape migrate without data loss.
+
+## Implementation Status 2026-05-08
+
+This spec is validated against `master` at merge commit `4d1e9c7` plus follow-up test fix `f4584c2`.
+
+Implemented:
+
+- `.fpproj` stores opaque `plugin_state` records and preserves missing-plugin state across load/save.
+- Legacy `ip_instances` migrate into `plugin_state` without dropping mixed legacy/current records.
+- `Graph` no longer owns IP instance/global parameter state.
+- `ProjectStateService` owns editable plugin state outside `Graph`.
+- `PropertyPanel` renders plugin global parameters from provider metadata.
+- Plugin state parameter edits go through command history and mark the document dirty.
+- Generation and DRC receive `Graph + plugin_state`; the legacy `ip_instance` object is derived only at the external JSON boundary for compatibility.
+- Generated Verilog output directories also receive a `.fpproj` project snapshot through `writeGeneratedProjectSnapshot()`.
+
+Remaining architecture work:
+
+- Replace manifest-only adapter construction with native C++ plugin interfaces loaded from plugin libraries.
+- Let native plugins parse, validate, migrate, serialize, and generate from graph plus plugin state directly.
+- Keep command-based external generator/DRC support as a compatibility fallback while native plugins are introduced.
