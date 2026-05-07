@@ -3,15 +3,15 @@
   <module name="RaveTile" palette_label="Rave Tile" graph_group="xps" description="Editable RaveNoC router tile backed by upstream RTL mesh.">
     <identity external_id_prefix="rave" display_prefix="Rave" width="2" supports_mesh_coordinates="true" />
     <interfaces>
-      <interface id="north" label="North" bus="ravenoc_router_link" role="target" connects_to="initiator" match="">
+      <interface id="north" label="North" bus="ravenoc_router_link" role="target" connects_to="initiator" match="" cardinality="one" autocomplete_group="router_side" topology_rule="opposite_side">
       </interface>
-      <interface id="east" label="East" bus="ravenoc_router_link" role="initiator" connects_to="target" match="">
+      <interface id="east" label="East" bus="ravenoc_router_link" role="initiator" connects_to="target" match="" cardinality="one" autocomplete_group="router_side" topology_rule="opposite_side">
       </interface>
-      <interface id="south" label="South" bus="ravenoc_router_link" role="initiator" connects_to="target" match="">
+      <interface id="south" label="South" bus="ravenoc_router_link" role="initiator" connects_to="target" match="" cardinality="one" autocomplete_group="router_side" topology_rule="opposite_side">
       </interface>
-      <interface id="west" label="West" bus="ravenoc_router_link" role="target" connects_to="initiator" match="">
+      <interface id="west" label="West" bus="ravenoc_router_link" role="target" connects_to="initiator" match="" cardinality="one" autocomplete_group="router_side" topology_rule="opposite_side">
       </interface>
-      <interface id="local" label="Local" bus="ravenoc_endpoint_link" role="target" connects_to="initiator" match="">
+      <interface id="local" label="Local" bus="ravenoc_endpoint_link" role="target" connects_to="initiator" match="" cardinality="one" autocomplete_group="endpoint_attachment">
       </interface>
     </interfaces>
     <ports>
@@ -33,7 +33,7 @@
   <module name="RaveEndpoint" palette_label="Rave Endpoint" graph_group="endpoints" description="Editable RaveNoC endpoint attachment for a router tile.">
     <identity external_id_prefix="rave_ep" display_prefix="Rave EP" width="2" supports_mesh_coordinates="false" />
     <interfaces>
-      <interface id="noc" label="NoC" bus="ravenoc_endpoint_link" role="initiator" connects_to="target" match="">
+      <interface id="noc" label="NoC" bus="ravenoc_endpoint_link" role="initiator" connects_to="target" match="" cardinality="one" autocomplete_group="endpoint_attachment">
       </interface>
     </interfaces>
     <ports>

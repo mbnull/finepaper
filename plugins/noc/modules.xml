@@ -36,29 +36,29 @@
     <identity external_id_prefix="xp" display_prefix="XP" width="2" supports_mesh_coordinates="true" />
     <capabilities supports_collapse="true" />
     <interfaces>
-      <interface id="local0" label="Local 0" bus="ni_link" role="target" connects_to="initiator" match="protocol,data_width">
+      <interface id="local0" label="Local 0" bus="ni_link" role="target" connects_to="initiator" match="protocol,data_width" cardinality="one" autocomplete_group="endpoint_attachment">
         <accept field="protocol" values="axi4,chi" />
         <accept field="data_width" values="32,64,128" />
       </interface>
-      <interface id="local1" label="Local 1" bus="ni_link" role="target" connects_to="initiator" match="protocol,data_width">
+      <interface id="local1" label="Local 1" bus="ni_link" role="target" connects_to="initiator" match="protocol,data_width" cardinality="one" autocomplete_group="endpoint_attachment">
         <accept field="protocol" values="axi4,chi" />
         <accept field="data_width" values="32,64,128" />
       </interface>
-      <interface id="local2" label="Local 2" bus="ni_link" role="target" connects_to="initiator" match="protocol,data_width">
+      <interface id="local2" label="Local 2" bus="ni_link" role="target" connects_to="initiator" match="protocol,data_width" cardinality="one" autocomplete_group="endpoint_attachment">
         <accept field="protocol" values="axi4,chi" />
         <accept field="data_width" values="32,64,128" />
       </interface>
-      <interface id="local3" label="Local 3" bus="ni_link" role="target" connects_to="initiator" match="protocol,data_width">
+      <interface id="local3" label="Local 3" bus="ni_link" role="target" connects_to="initiator" match="protocol,data_width" cardinality="one" autocomplete_group="endpoint_attachment">
         <accept field="protocol" values="axi4,chi" />
         <accept field="data_width" values="32,64,128" />
       </interface>
-      <interface id="north" label="North" bus="router_link" role="target" connects_to="initiator" match="">
+      <interface id="north" label="North" bus="router_link" role="target" connects_to="initiator" match="" cardinality="one" autocomplete_group="router_side" topology_rule="opposite_side">
       </interface>
-      <interface id="east" label="East" bus="router_link" role="initiator" connects_to="target" match="">
+      <interface id="east" label="East" bus="router_link" role="initiator" connects_to="target" match="" cardinality="one" autocomplete_group="router_side" topology_rule="opposite_side">
       </interface>
-      <interface id="south" label="South" bus="router_link" role="initiator" connects_to="target" match="">
+      <interface id="south" label="South" bus="router_link" role="initiator" connects_to="target" match="" cardinality="one" autocomplete_group="router_side" topology_rule="opposite_side">
       </interface>
-      <interface id="west" label="West" bus="router_link" role="target" connects_to="initiator" match="">
+      <interface id="west" label="West" bus="router_link" role="target" connects_to="initiator" match="" cardinality="one" autocomplete_group="router_side" topology_rule="opposite_side">
       </interface>
     </interfaces>
     <ports>
@@ -90,7 +90,7 @@
   <module name="Endpoint" palette_label="Endpoint" graph_group="endpoints" description="Endpoint interface block that terminates a local NoC connection.">
     <identity external_id_prefix="ep" display_prefix="EP" width="2" supports_mesh_coordinates="false" />
     <interfaces>
-      <interface id="noc" label="NoC" bus="ni_link" role="initiator" connects_to="target" match="protocol,data_width">
+      <interface id="noc" label="NoC" bus="ni_link" role="initiator" connects_to="target" match="protocol,data_width" cardinality="one" autocomplete_group="endpoint_attachment">
         <config field="protocol" parameter="protocol" />
         <config field="data_width" parameter="data_width" />
       </interface>

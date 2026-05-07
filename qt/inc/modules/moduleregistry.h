@@ -48,6 +48,9 @@ struct ModuleInterfaceMetadata {
     QStringList matchFields;
     QHash<QString, QStringList> acceptedValues;
     QHash<QString, QString> parameterBindings;
+    QString cardinality = QStringLiteral("one");
+    QString autocompleteGroup;
+    QString topologyRule;
 };
 
 struct ModuleInterfaceAnchor {

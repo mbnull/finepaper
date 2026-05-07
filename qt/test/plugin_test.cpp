@@ -325,6 +325,21 @@ void testRepositoryRaveNoCPluginMetadataLoads() {
             "RaveTile should participate as the RaveNoC router graph group");
     require(!tileType->defaultParameters.contains(QStringLiteral("routing_algorithm")),
             "RaveTile should not own fabric-wide routing algorithm parameter");
+    const ModuleInterfaceMetadata eastInterface =
+        tileType->interfaceMetadata.value(QStringLiteral("east"));
+    require(eastInterface.cardinality == QStringLiteral("one"),
+            "RaveTile east interface should declare one connection");
+    require(eastInterface.autocompleteGroup == QStringLiteral("router_side"),
+            "RaveTile east interface should declare router_side autocomplete group");
+    require(eastInterface.topologyRule == QStringLiteral("opposite_side"),
+            "RaveTile east interface should declare opposite_side topology rule");
+
+    const ModuleInterfaceMetadata localInterface =
+        tileType->interfaceMetadata.value(QStringLiteral("local"));
+    require(localInterface.cardinality == QStringLiteral("one"),
+            "RaveTile local interface should declare one endpoint attachment");
+    require(localInterface.autocompleteGroup == QStringLiteral("endpoint_attachment"),
+            "RaveTile local interface should declare endpoint attachment autocomplete group");
 
     const ModuleType* endpointType = registry.getType(QStringLiteral("RaveEndpoint"));
     require(endpointType != nullptr, "RaveEndpoint module type should load");

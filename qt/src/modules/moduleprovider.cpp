@@ -341,6 +341,12 @@ void loadInterfacesFromXml(ModuleType& type, QXmlStreamReader& xml) {
         metadata.role = attributeValue(attrs, u"role");
         metadata.compatibleRoles = stringListAttribute(attrs, u"connects_to");
         metadata.matchFields = stringListAttribute(attrs, u"match");
+        metadata.cardinality = attributeValue(attrs, u"cardinality");
+        if (metadata.cardinality.isEmpty()) {
+            metadata.cardinality = QStringLiteral("one");
+        }
+        metadata.autocompleteGroup = attributeValue(attrs, u"autocomplete_group");
+        metadata.topologyRule = attributeValue(attrs, u"topology_rule");
 
         while (xml.readNextStartElement()) {
             if (xml.name() == u"accept") {
