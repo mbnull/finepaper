@@ -8,6 +8,7 @@
 #include "modules/moduletypemetadata.h"
 #include "plugins/pluginregistry.h"
 #include "commands/commandmanager.h"
+#include "commands/setipinstanceparametercommand.h"
 #include "commands/setparametercommand.h"
 #include <cfloat>
 #include <climits>
@@ -241,7 +242,9 @@ void PropertyPanel::populatePanel() {
                             this,
                             [this, name, comboBox](int index) {
                                 if (index < 0) return;
-                                m_graph->setIpInstanceParameter(name, comboBox->itemData(index).toString());
+                                auto cmd = std::make_unique<SetIpInstanceParameterCommand>(
+                                    m_graph, name, comboBox->itemData(index).toString());
+                                m_commandManager->executeCommand(std::move(cmd));
                             });
                 }
                 widget = comboBox;
@@ -249,7 +252,9 @@ void PropertyPanel::populatePanel() {
                 auto* lineEdit = new QLineEdit(std::get<QString>(param.value()));
                 if (!metadata || metadata->configurable) {
                     connect(lineEdit, &QLineEdit::editingFinished, this, [this, name, lineEdit]() {
-                        m_graph->setIpInstanceParameter(name, lineEdit->text());
+                        auto cmd = std::make_unique<SetIpInstanceParameterCommand>(
+                            m_graph, name, lineEdit->text());
+                        m_commandManager->executeCommand(std::move(cmd));
                     });
                 }
                 widget = lineEdit;
@@ -264,7 +269,8 @@ void PropertyPanel::populatePanel() {
                 spinBox->setValue(std::get<int>(param.value()));
                 if (!metadata || metadata->configurable) {
                     connect(spinBox, QOverload<int>::of(&QSpinBox::valueChanged), this, [this, name](int value) {
-                        m_graph->setIpInstanceParameter(name, value);
+                        auto cmd = std::make_unique<SetIpInstanceParameterCommand>(m_graph, name, value);
+                        m_commandManager->executeCommand(std::move(cmd));
                     });
                 }
                 widget = spinBox;
@@ -278,7 +284,9 @@ void PropertyPanel::populatePanel() {
                             QOverload<double>::of(&QDoubleSpinBox::valueChanged),
                             this,
                             [this, name](double value) {
-                                m_graph->setIpInstanceParameter(name, value);
+                                auto cmd = std::make_unique<SetIpInstanceParameterCommand>(
+                                    m_graph, name, value);
+                                m_commandManager->executeCommand(std::move(cmd));
                             });
                 }
                 widget = doubleSpinBox;
@@ -287,7 +295,9 @@ void PropertyPanel::populatePanel() {
                 checkBox->setChecked(std::get<bool>(param.value()));
                 if (!metadata || metadata->configurable) {
                     connect(checkBox, &QCheckBox::toggled, this, [this, name](bool checked) {
-                        m_graph->setIpInstanceParameter(name, checked);
+                        auto cmd = std::make_unique<SetIpInstanceParameterCommand>(
+                            m_graph, name, checked);
+                        m_commandManager->executeCommand(std::move(cmd));
                     });
                 }
                 widget = checkBox;

@@ -51,11 +51,19 @@ void testUnselectedPanelShowsIpInstanceParameters() {
     QSpinBox* spinBox = panel.findChild<QSpinBox*>();
     require(spinBox != nullptr, "integer IP instance parameter should use spin box");
     spinBox->setValue(64);
+    require(commandManager.currentStateId() == 1,
+            "editing IP instance parameter should create a command history state");
 
     const auto stored = graph.ipInstance()->parameters.value(QStringLiteral("flit_data_width")).value();
     const auto* value = std::get_if<int>(&stored);
     require(value && *value == 64,
             "editing IP instance parameter should update graph state");
+
+    commandManager.undo();
+    const auto undone = graph.ipInstance()->parameters.value(QStringLiteral("flit_data_width")).value();
+    const auto* undoneValue = std::get_if<int>(&undone);
+    require(undoneValue && *undoneValue == 32,
+            "undo should restore previous IP instance parameter value");
 }
 
 } // namespace

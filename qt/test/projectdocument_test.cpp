@@ -262,8 +262,32 @@ void testLoadRejectsSecondNocIpInstance() {
     Graph graph;
     const GraphProjectLoadResult result = GraphProjectSerializer::loadProject(document, graph);
     require(!result.success, "second noc IP should be rejected");
-    require(result.error.contains(QStringLiteral("kind: noc")),
-            "error should mention noc uniqueness");
+    require(result.error.contains(QStringLiteral("at most one IP instance")),
+            "error should mention single IP instance limit");
+}
+
+void testLoadRejectsMultipleIpInstances() {
+    ProjectDocument document = validProjectDocument();
+    document.ipInstances.push_back(ProjectIpInstanceRecord{
+        QStringLiteral("noc_a"),
+        QStringLiteral("finepaper.ravenoc"),
+        QStringLiteral("noc"),
+        QStringLiteral("RaveNoC"),
+        QJsonObject{{QStringLiteral("flit_data_width"), 64}}
+    });
+    document.ipInstances.push_back(ProjectIpInstanceRecord{
+        QStringLiteral("monitor_a"),
+        QStringLiteral("finepaper.monitor"),
+        QStringLiteral("monitor"),
+        QStringLiteral("TraceMonitor"),
+        QJsonObject{{QStringLiteral("sample_depth"), 1024}}
+    });
+
+    Graph graph;
+    const GraphProjectLoadResult result = GraphProjectSerializer::loadProject(document, graph);
+    require(!result.success, "multiple IP instances should be rejected until plugin state owns them");
+    require(result.error.contains(QStringLiteral("at most one IP instance")),
+            "error should mention single IP instance limit");
 }
 
 void testReaderRejectsWrongKind() {
@@ -446,6 +470,7 @@ int main(int argc, char** argv) {
         testReaderRejectsWrongKind();
         testLoadRejectsDuplicateModuleIds();
         testLoadRejectsSecondNocIpInstance();
+        testLoadRejectsMultipleIpInstances();
         testLoadRejectsMissingModuleType();
         testLoadRejectsInvalidParameterType();
         testLoadRejectsInvalidConnectionReference();

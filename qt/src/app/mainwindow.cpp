@@ -454,6 +454,9 @@ void MainWindow::setupConnections() {
     connect(m_graph, &Graph::parameterChanged, this, [trackGraphChange](const QString&, const QString&) {
         trackGraphChange();
     });
+    connect(m_graph, &Graph::ipInstanceParameterChanged, this, [trackGraphChange](const QString&) {
+        trackGraphChange();
+    });
 }
 
 void MainWindow::setupActions() {

@@ -197,6 +197,10 @@ ProjectDocument GraphProjectSerializer::toProject(const Graph& graph, const QStr
 }
 
 GraphProjectLoadResult GraphProjectSerializer::loadProject(const ProjectDocument& document, Graph& graph) {
+    if (document.ipInstances.size() > 1) {
+        return failure(QStringLiteral("Project may contain at most one IP instance"));
+    }
+
     int nocInstanceCount = 0;
     QSet<QString> ipInstanceIds;
     for (const ProjectIpInstanceRecord& record : document.ipInstances) {
