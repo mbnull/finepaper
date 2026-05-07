@@ -9,6 +9,7 @@
 #include "plugins/pluginprojectadapter.h"
 #include "project/projectstateservice.h"
 #include "commands/commandmanager.h"
+#include "commands/setpluginstateparametercommand.h"
 #include "commands/setparametercommand.h"
 #include <cfloat>
 #include <climits>
@@ -192,8 +193,12 @@ QString pluginValueAsString(const PluginParameterField& field, const QJsonValue&
     return defaultStringValue(field.defaultValue);
 }
 
-void makePluginWidgetDisplayOnly(QWidget* widget, bool configurable) {
+void applyPluginConfigurability(QWidget* widget, bool configurable) {
     if (!widget) {
+        return;
+    }
+
+    if (configurable) {
         return;
     }
 
@@ -206,10 +211,6 @@ void makePluginWidgetDisplayOnly(QWidget* widget, bool configurable) {
         doubleSpinBox->setReadOnly(true);
         doubleSpinBox->setButtonSymbols(QAbstractSpinBox::NoButtons);
     } else {
-        widget->setEnabled(false);
-    }
-
-    if (!configurable) {
         widget->setEnabled(false);
     }
 }
@@ -252,7 +253,7 @@ QWidget* PropertyPanel::createPluginParameterWidget(const PluginParameterSection
             comboBox->addItem(choice.label, choice.value);
         }
         syncComboBoxValue(comboBox, pluginValueAsString(field, storedValue));
-        makePluginWidgetDisplayOnly(comboBox, field.configurable);
+        applyPluginConfigurability(comboBox, field.configurable);
         return comboBox;
     }
 
@@ -261,7 +262,7 @@ QWidget* PropertyPanel::createPluginParameterWidget(const PluginParameterSection
         auto* spinBox = new QSpinBox(this);
         spinBox->setRange(INT_MIN, INT_MAX);
         spinBox->setValue(value.toInt(defaultIntValue(field.defaultValue)));
-        makePluginWidgetDisplayOnly(spinBox, field.configurable);
+        applyPluginConfigurability(spinBox, field.configurable);
         return spinBox;
     }
     if (field.type == QStringLiteral("double")) {
@@ -269,18 +270,18 @@ QWidget* PropertyPanel::createPluginParameterWidget(const PluginParameterSection
         doubleSpinBox->setRange(std::numeric_limits<double>::lowest(),
                                 std::numeric_limits<double>::max());
         doubleSpinBox->setValue(value.toDouble(defaultDoubleValue(field.defaultValue)));
-        makePluginWidgetDisplayOnly(doubleSpinBox, field.configurable);
+        applyPluginConfigurability(doubleSpinBox, field.configurable);
         return doubleSpinBox;
     }
     if (field.type == QStringLiteral("bool")) {
         auto* checkBox = new QCheckBox(this);
         checkBox->setChecked(value.toBool(defaultBoolValue(field.defaultValue)));
-        makePluginWidgetDisplayOnly(checkBox, field.configurable);
+        applyPluginConfigurability(checkBox, field.configurable);
         return checkBox;
     }
 
     auto* lineEdit = new QLineEdit(pluginValueAsString(field, storedValue), this);
-    makePluginWidgetDisplayOnly(lineEdit, field.configurable);
+    applyPluginConfigurability(lineEdit, field.configurable);
     return lineEdit;
 }
 
@@ -344,6 +345,54 @@ void PropertyPanel::populatePanel() {
                 if (!field.description.isEmpty()) {
                     rowLabel->setToolTip(field.description);
                     widget->setToolTip(field.description);
+                }
+                if (field.configurable && m_commandManager) {
+                    const QString pluginId = section.pluginId;
+                    const QString sectionId = section.id;
+                    const QString fieldName = field.name;
+                    const auto executeCommand = [this,
+                                                 pluginId,
+                                                 instanceId,
+                                                 sectionId,
+                                                 fieldName](QJsonValue value) {
+                        auto command = std::make_unique<SetPluginStateParameterCommand>(
+                            m_stateService, pluginId, instanceId, sectionId, fieldName, std::move(value));
+                        m_commandManager->executeCommand(std::move(command));
+                    };
+
+                    if (auto* comboBox = qobject_cast<QComboBox*>(widget)) {
+                        connect(comboBox,
+                                QOverload<int>::of(&QComboBox::currentIndexChanged),
+                                this,
+                                [comboBox, executeCommand](int index) {
+                                    if (index < 0) {
+                                        return;
+                                    }
+                                    executeCommand(comboBox->itemData(index).toString());
+                                });
+                    } else if (auto* spinBox = qobject_cast<QSpinBox*>(widget)) {
+                        connect(spinBox,
+                                QOverload<int>::of(&QSpinBox::valueChanged),
+                                this,
+                                [executeCommand](int value) {
+                                    executeCommand(value);
+                                });
+                    } else if (auto* doubleSpinBox = qobject_cast<QDoubleSpinBox*>(widget)) {
+                        connect(doubleSpinBox,
+                                QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+                                this,
+                                [executeCommand](double value) {
+                                    executeCommand(value);
+                                });
+                    } else if (auto* checkBox = qobject_cast<QCheckBox*>(widget)) {
+                        connect(checkBox, &QCheckBox::toggled, this, [executeCommand](bool checked) {
+                            executeCommand(checked);
+                        });
+                    } else if (auto* lineEdit = qobject_cast<QLineEdit*>(widget)) {
+                        connect(lineEdit, &QLineEdit::editingFinished, this, [lineEdit, executeCommand]() {
+                            executeCommand(lineEdit->text());
+                        });
+                    }
                 }
                 m_formLayout->addRow(rowLabel, widget);
                 m_ipParameterWidgets.insert(

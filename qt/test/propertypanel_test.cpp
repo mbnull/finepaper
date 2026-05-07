@@ -43,7 +43,7 @@ void testUnselectedPanelShowsPluginProjectParameters() {
     state.schema = QStringLiteral("ravenoc-project-state-v1");
     state.state = QJsonObject{
         {QStringLiteral("global_parameters"), QJsonObject{
-            {QStringLiteral("flit_data_width"), 64}
+            {QStringLiteral("flit_data_width"), 32}
         }}
     };
     document.pluginStates.push_back(state);
@@ -71,8 +71,24 @@ void testUnselectedPanelShowsPluginProjectParameters() {
 
     QSpinBox* spinBox = panel.findChild<QSpinBox*>();
     require(spinBox != nullptr, "integer plugin parameter should use spin box");
-    require(spinBox->value() == 64,
+    require(spinBox->value() == 32,
             "plugin parameter widget should read the stored project state value");
+
+    spinBox->setValue(64);
+    require(commandManager.currentStateId() == 1,
+            "plugin parameter edit should enter command history");
+    require(stateService.parameter(QStringLiteral("finepaper.ravenoc"),
+                                   QStringLiteral("ravenoc_0"),
+                                   QStringLiteral("global_parameters"),
+                                   QStringLiteral("flit_data_width")).toInt() == 64,
+            "plugin parameter edit should update state service");
+
+    commandManager.undo();
+    require(stateService.parameter(QStringLiteral("finepaper.ravenoc"),
+                                   QStringLiteral("ravenoc_0"),
+                                   QStringLiteral("global_parameters"),
+                                   QStringLiteral("flit_data_width")).toInt() == 32,
+            "undo should restore previous plugin parameter value");
     require(!graph.ipInstance().has_value(),
             "plugin parameter rendering should not require graph IP instance state");
 }
