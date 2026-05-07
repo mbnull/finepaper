@@ -53,6 +53,17 @@ QJsonObject toJson(const ProjectDocument& document) {
     }
     root.insert(QStringLiteral("plugins"), plugins);
 
+    QJsonArray pluginStates;
+    for (const ProjectPluginStateRecord& state : document.pluginStates) {
+        QJsonObject object;
+        object.insert(QStringLiteral("plugin"), state.pluginId);
+        object.insert(QStringLiteral("instance"), state.instanceId);
+        object.insert(QStringLiteral("schema"), state.schema);
+        object.insert(QStringLiteral("state"), sortedObject(state.state));
+        pluginStates.append(object);
+    }
+    root.insert(QStringLiteral("plugin_state"), pluginStates);
+
     QJsonArray ipInstances;
     for (const ProjectIpInstanceRecord& ipInstance : document.ipInstances) {
         QJsonObject object;

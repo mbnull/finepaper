@@ -4,17 +4,29 @@
 #include <QWidget>
 #include <QVBoxLayout>
 #include <QHash>
+#include <QJsonValue>
+#include <QPointer>
+#include <QVector>
 
 class Graph;
+class IPluginProjectAdapter;
 class Module;
 class CommandManager;
+class ProjectStateService;
 class QFormLayout;
 class QPlainTextEdit;
+struct PluginParameterField;
+struct PluginParameterSection;
 
 class PropertyPanel : public QWidget {
     Q_OBJECT
 
 public:
+    PropertyPanel(Graph* graph,
+                  ProjectStateService* stateService,
+                  QVector<IPluginProjectAdapter*> pluginAdapters,
+                  CommandManager* commandManager,
+                  QWidget* parent = nullptr);
     PropertyPanel(Graph* graph, CommandManager* commandManager, QWidget* parent = nullptr);
     void setSelectedModule(Module* module);
 
@@ -23,15 +35,24 @@ public slots:
 
 private slots:
     void onParameterChanged(const QString& name);
-    void onIpInstanceParameterChanged(const QString& name);
+    void onPluginStateParameterChanged(const QString& pluginId,
+                                       const QString& instanceId,
+                                       const QString& section,
+                                       const QString& name);
 
 private:
     void clearPanel();
     void populatePanel();
+    QWidget* createPluginParameterWidget(const PluginParameterSection& section,
+                                         const PluginParameterField& field,
+                                         const QJsonValue& storedValue,
+                                         bool editable);
 
     Graph* m_graph;
+    ProjectStateService* m_stateService;
+    QVector<IPluginProjectAdapter*> m_pluginAdapters;
     CommandManager* m_commandManager;
-    Module* m_selectedModule = nullptr;
+    QPointer<Module> m_selectedModule;
     QVBoxLayout* m_layout;
     QPlainTextEdit* m_descriptionView;
     QFormLayout* m_formLayout;

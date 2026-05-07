@@ -1,6 +1,8 @@
 // ProjectDocument defines the in-memory shape of Finepaper .fpproj files.
 #pragma once
 
+#include "project/pluginstate.h"
+
 #include <QJsonObject>
 #include <QString>
 #include <QVector>
@@ -42,6 +44,7 @@ struct ProjectDocument {
     QString name = QStringLiteral("Untitled");
     QString version = QStringLiteral("1.0");
     QVector<ProjectPluginRecord> plugins;
+    QVector<ProjectPluginStateRecord> pluginStates;
     QVector<ProjectIpInstanceRecord> ipInstances;
     QVector<ProjectModuleRecord> modules;
     QVector<ProjectConnectionRecord> connections;

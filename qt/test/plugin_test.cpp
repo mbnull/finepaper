@@ -1,6 +1,7 @@
 // Plugin system tests for manifest discovery and command metadata.
 #include "graph/graph.h"
 #include "plugins/generatorrunner.h"
+#include "plugins/pluginprojectadapter.h"
 #include "plugins/pluginregistry.h"
 #include "plugins/startupdiagnostics.h"
 #include "modules/moduleregistry.h"
@@ -31,21 +32,25 @@ void writeFile(const QString& path, const QByteArray& content) {
 }
 
 QString repositoryPluginPath(const QString& relativePluginPath) {
-    const QStringList candidates = {
-        QDir::current().filePath(relativePluginPath),
-        QDir::current().filePath(QStringLiteral("../") + relativePluginPath),
-        QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("../../../../") + relativePluginPath),
-        QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("../../../../../") + relativePluginPath)
+    const QStringList startPaths = {
+        QDir::currentPath(),
+        QCoreApplication::applicationDirPath()
     };
 
-    for (const QString& candidate : candidates) {
-        const QFileInfo info(candidate);
-        if (info.isDir()) {
-            return info.absoluteFilePath();
+    for (const QString& startPath : startPaths) {
+        QDir dir(startPath);
+        while (true) {
+            const QFileInfo info(dir.filePath(relativePluginPath));
+            if (info.isDir()) {
+                return info.absoluteFilePath();
+            }
+            if (!dir.cdUp()) {
+                break;
+            }
         }
     }
 
-    return QFileInfo(candidates.first()).absoluteFilePath();
+    return QFileInfo(QDir(startPaths.first()).filePath(relativePluginPath)).absoluteFilePath();
 }
 
 void testPluginManifestLoadsRelativePaths() {
@@ -329,6 +334,94 @@ void testRepositoryRaveNoCPluginMetadataLoads() {
             "RaveEndpoint should participate as an editable endpoint graph group");
 }
 
+void testManifestPluginAdapterExposesGlobalParameterSection() {
+    PluginDescriptor plugin;
+    plugin.id = QStringLiteral("finepaper.ravenoc");
+    plugin.name = QStringLiteral("RaveNoC");
+
+    PluginInstanceParameterDescriptor routing;
+    routing.name = QStringLiteral("routing_algorithm");
+    routing.type = QStringLiteral("string");
+    routing.defaultValue = QStringLiteral("xy");
+    routing.description = QStringLiteral("Routing algorithm");
+    routing.choices = {
+        PluginInstanceParameterChoice{QStringLiteral("west_first"), QStringLiteral("West-first")},
+        PluginInstanceParameterChoice{QStringLiteral("xy"), QStringLiteral("XY")}
+    };
+    routing.configurable = false;
+    plugin.instanceParameters.insert(routing.name, routing);
+
+    PluginInstanceParameterDescriptor width;
+    width.name = QStringLiteral("flit_data_width");
+    width.type = QStringLiteral("int");
+    width.defaultValue = 32;
+    width.label = QStringLiteral("Flit data width");
+    width.configurable = true;
+    plugin.instanceParameters.insert(width.name, width);
+
+    ManifestPluginProjectAdapter adapter(plugin);
+    const QVector<PluginParameterSection> sections = adapter.parameterSections();
+
+    require(sections.size() == 1, "adapter should expose one global parameter section");
+    require(sections.first().pluginId == QStringLiteral("finepaper.ravenoc"),
+            "section should retain plugin id");
+    require(sections.first().instanceId == QStringLiteral("ravenoc_0"),
+            "section instance id should use stable plugin id suffix");
+    require(sections.first().id == QStringLiteral("global_parameters"),
+            "section id should identify global parameters");
+    require(sections.first().label == QStringLiteral("RaveNoC"),
+            "section label should use plugin name");
+    require(sections.first().expandedByDefault,
+            "section should be expanded by default");
+    require(sections.first().fields.size() == 2,
+            "section should expose manifest fields");
+
+    const PluginParameterField& first = sections.first().fields.first();
+    require(first.name == QStringLiteral("flit_data_width"),
+            "section fields should be sorted deterministically by name");
+    require(first.label == QStringLiteral("Flit data width"),
+            "field should retain manifest label");
+    require(first.type == QStringLiteral("int"),
+            "field should retain manifest type");
+    require(std::get<int>(first.defaultValue) == 32,
+            "field should retain manifest default value");
+    require(first.configurable,
+            "field should retain manifest configurable flag");
+
+    const PluginParameterField& second = sections.first().fields.last();
+    require(second.name == QStringLiteral("routing_algorithm"),
+            "second sorted field should match routing parameter");
+    require(second.label == QStringLiteral("routing_algorithm"),
+            "field label should fall back to parameter name");
+    require(second.description == QStringLiteral("Routing algorithm"),
+            "field should retain manifest description");
+    require(second.choices.size() == 2,
+            "field should retain manifest choices");
+    require(!second.configurable,
+            "field should retain false configurable flag");
+}
+
+void testManifestPluginAdapterUsesPluginIdLabelAndSkipsEmptyParameters() {
+    PluginDescriptor plugin;
+    plugin.id = QStringLiteral("finepaper.empty");
+
+    ManifestPluginProjectAdapter adapter(plugin);
+    require(adapter.parameterSections().isEmpty(),
+            "adapter should not expose sections without instance parameters");
+
+    PluginInstanceParameterDescriptor mode;
+    mode.name = QStringLiteral("mode");
+    mode.type = QStringLiteral("string");
+    mode.defaultValue = QStringLiteral("basic");
+    plugin.instanceParameters.insert(mode.name, mode);
+
+    ManifestPluginProjectAdapter namedAdapter(plugin);
+    const QVector<PluginParameterSection> sections = namedAdapter.parameterSections();
+    require(sections.size() == 1, "adapter should expose one section after parameter is added");
+    require(sections.first().label == QStringLiteral("finepaper.empty"),
+            "section label should fall back to plugin id");
+}
+
 void testStartupDiagnosticsListLoadedPluginsAndIpTypes() {
     QTemporaryDir temp;
     require(temp.isValid(), "temporary directory should be valid");
@@ -400,6 +493,8 @@ int main(int argc, char** argv) {
         testGeneratorRunnerPropagatesInputFormat();
         testGeneratorRunnerResolvesDrcCommand();
         testRepositoryRaveNoCPluginMetadataLoads();
+        testManifestPluginAdapterExposesGlobalParameterSection();
+        testManifestPluginAdapterUsesPluginIdLabelAndSkipsEmptyParameters();
         testStartupDiagnosticsListLoadedPluginsAndIpTypes();
         testStartupDiagnosticsMarksJsonModuleBundlesUnsupported();
     } catch (const std::exception& error) {

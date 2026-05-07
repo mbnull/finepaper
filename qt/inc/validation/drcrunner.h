@@ -5,13 +5,16 @@
 #include <QList>
 #include <QHash>
 #include <QString>
+#include <QVector>
+#include "project/pluginstate.h"
 #include "validation/validationresult.h"
 
 class Graph;
 
 class DRCRunner {
 public:
-    QList<ValidationResult> validate(const Graph* graph);
+    QList<ValidationResult> validate(const Graph* graph,
+                                     const QVector<ProjectPluginStateRecord>& pluginStates);
 private:
     QList<ValidationResult> parseErrors(const QString& stderr);
 

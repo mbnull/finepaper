@@ -1,15 +1,19 @@
 // DRCRunner serializes the graph, invokes external DRC, and maps findings back to editor IDs.
 #include "validation/drcrunner.h"
+#include "app/generationartifacts.h"
 #include "graph/graph.h"
-#include "modules/modulelabels.h"
 #include "plugins/generatorrunner.h"
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QProcess>
 #include <QTemporaryDir>
 #include <QTemporaryFile>
 #include <QRegularExpression>
 
 // Run external DRC tool on graph and parse validation results
-QList<ValidationResult> DRCRunner::validate(const Graph* graph) {
+QList<ValidationResult> DRCRunner::validate(
+    const Graph* graph,
+    const QVector<ProjectPluginStateRecord>& pluginStates) {
     m_externalToInternalIds.clear();
 
     // External DRC consumes a serialized graph, so keep temporary input/output
@@ -44,10 +48,11 @@ QList<ValidationResult> DRCRunner::validate(const Graph* graph) {
             : GraphJsonFlavor::Framework;
     // Capture external artifact ID -> internal module ID while serializing so
     // parser results can select the right editor node in LogPanel.
-    const QString json = graph->toJsonDocument(QStringLiteral("design"),
-                                               graphFlavor,
-                                               &m_externalToInternalIds).toJson();
-    const QByteArray jsonBytes = json.toUtf8();
+    QJsonObject root = graph->toJsonDocument(QStringLiteral("design"),
+                                             graphFlavor,
+                                             &m_externalToInternalIds).object();
+    attachPluginState(root, pluginStates, generatorCommand.pluginId);
+    const QByteArray jsonBytes = QJsonDocument(root).toJson();
     if (tmpFile.write(jsonBytes) != jsonBytes.size() || !tmpFile.flush()) {
         // The external tool should never start with a partial input file.
         return {ValidationResult(ValidationSeverity::Error,

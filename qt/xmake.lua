@@ -23,6 +23,7 @@ target("qt")
     add_files("inc/**/nodeeditorwidget.h")
     add_files("inc/**/graphnodemodel.h")
     add_files("inc/**/propertypanel.h")
+    add_files("inc/**/projectstateservice.h")
     add_files("inc/**/palette.h")
     add_files("inc/**/validationmanager.h")
 
@@ -89,7 +90,10 @@ add_qt_test_target("arrangecommand_test", "test/arrangecommand_test.cpp", {
 
 add_qt_test_target("validation_test", "test/validation_test.cpp", {
     "src/**/drcrunner.cpp",
+    "src/app/generationartifacts.cpp",
     "src/**/generatorrunner.cpp",
+    "src/**/graphprojectserializer.cpp",
+    "src/**/projectwriter.cpp",
     "src/**/validator.cpp",
     "src/**/validationresult.cpp",
     "src/**/graph.cpp",
@@ -104,7 +108,12 @@ add_qt_test_target("validation_test", "test/validation_test.cpp", {
     "inc/**/graph.h",
     "inc/**/module.h",
     "inc/**/drcrunner.h",
+    "inc/app/generationartifacts.h",
     "inc/**/generatorrunner.h",
+    "inc/**/graphprojectserializer.h",
+    "inc/**/projectdocument.h",
+    "inc/**/projectwriter.h",
+    "inc/**/pluginstate.h",
     "inc/**/pluginregistry.h",
     "inc/**/plugindescriptor.h"
 })
@@ -122,6 +131,7 @@ add_qt_test_target("logformat_test", "test/logformat_test.cpp", {
 add_qt_test_target("projectdocument_test", "test/projectdocument_test.cpp", {
     "src/**/projectreader.cpp",
     "src/**/projectwriter.cpp",
+    "src/**/projectstateservice.cpp",
     "src/**/graphprojectserializer.cpp",
     "src/app/generationartifacts.cpp",
     "src/**/graph.cpp",
@@ -134,6 +144,8 @@ add_qt_test_target("projectdocument_test", "test/projectdocument_test.cpp", {
     "src/**/moduleprovider.cpp",
     "src/**/pluginregistry.cpp",
     "inc/**/projectdocument.h",
+    "inc/**/pluginstate.h",
+    "inc/**/projectstateservice.h",
     "inc/**/projectreader.h",
     "inc/**/projectwriter.h",
     "inc/**/graphprojectserializer.h",
@@ -171,7 +183,9 @@ target("propertypanel_test")
     add_includedirs("inc")
     add_files("test/propertypanel_test.cpp")
     add_files("src/panels/propertypanel.cpp")
-    add_files("src/commands/setipinstanceparametercommand.cpp")
+    add_files("src/project/projectstateservice.cpp")
+    add_files("src/plugins/manifestpluginprojectadapter.cpp")
+    add_files("src/commands/setpluginstateparametercommand.cpp")
     add_files("src/commands/setparametercommand.cpp")
     add_files("src/commands/command.cpp")
     add_files("src/commands/commandmanager.cpp")
@@ -187,6 +201,11 @@ target("propertypanel_test")
     add_files("inc/**/propertypanel.h")
     add_files("inc/**/graph.h")
     add_files("inc/**/module.h")
+    add_files("inc/**/projectstateservice.h")
+    add_files("inc/**/pluginprojectadapter.h")
+    add_files("inc/**/setpluginstateparametercommand.h")
+    add_files("inc/**/projectdocument.h")
+    add_files("inc/**/pluginstate.h")
     add_files("inc/**/pluginregistry.h")
     add_files("inc/**/plugindescriptor.h")
     add_tests("default", {
@@ -226,6 +245,7 @@ target("nodeeditor_geometry_test")
 
 add_qt_test_target("plugin_test", "test/plugin_test.cpp", {
     "src/**/generatorrunner.cpp",
+    "src/**/manifestpluginprojectadapter.cpp",
     "src/**/graph.cpp",
     "src/**/module.cpp",
     "src/**/connection.cpp",
@@ -237,6 +257,7 @@ add_qt_test_target("plugin_test", "test/plugin_test.cpp", {
     "src/**/parameter.cpp",
     "src/**/port.cpp",
     "inc/**/generatorrunner.h",
+    "inc/**/pluginprojectadapter.h",
     "inc/**/graph.h",
     "inc/**/module.h",
     "inc/**/pluginregistry.h",

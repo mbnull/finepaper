@@ -23,33 +23,12 @@ QJsonValue parameterToJson(const Parameter::Value& value) {
     return {};
 }
 
-QJsonObject parametersToJson(const QHash<QString, Parameter>& source) {
-    QJsonObject parameters;
-    for (auto it = source.constBegin(); it != source.constEnd(); ++it) {
-        parameters.insert(it.key(), parameterToJson(it.value().value()));
-    }
-    return parameters;
-}
-
 Parameter::Value valueFromJson(const QJsonValue& value, const Parameter::Value& defaultValue) {
     if (std::holds_alternative<QString>(defaultValue)) return value.toString();
     if (std::holds_alternative<int>(defaultValue)) return value.toInt();
     if (std::holds_alternative<double>(defaultValue)) return value.toDouble();
     if (std::holds_alternative<bool>(defaultValue)) return value.toBool();
     return value.toString();
-}
-
-Parameter::Value instanceValueFromJson(const QJsonValue& value) {
-    if (value.isString()) return value.toString();
-    if (value.isBool()) return value.toBool();
-    if (value.isDouble()) {
-        const double number = value.toDouble();
-        if (std::floor(number) == number) {
-            return value.toInt();
-        }
-        return number;
-    }
-    return QString();
 }
 
 bool jsonValueMatchesParameterType(const QJsonValue& value, const Parameter::Value& defaultValue) {
@@ -97,17 +76,6 @@ GraphProjectLoadResult failure(const QString& error) {
 GraphProjectLoadResult populateGraph(const ProjectDocument& document,
                                      const QHash<QString, const ModuleType*>& moduleTypesById,
                                      Graph& graph) {
-    if (!document.ipInstances.empty()) {
-        // The project schema supports a list for future extension, but the
-        // current editor accepts one active generated IP instance.
-        const ProjectIpInstanceRecord& record = document.ipInstances.first();
-        QHash<QString, Parameter> parameters;
-        for (auto it = record.parameters.begin(); it != record.parameters.end(); ++it) {
-            parameters.insert(it.key(), Parameter(it.key(), instanceValueFromJson(it.value())));
-        }
-        graph.configureIpInstance(record.id, record.pluginId, record.kind, record.type, parameters);
-    }
-
     for (const ProjectModuleRecord& record : document.modules) {
         const ModuleType* type = moduleTypesById.value(record.id);
 
@@ -154,22 +122,6 @@ ProjectDocument GraphProjectSerializer::toProject(const Graph& graph, const QStr
     document.name = projectName.isEmpty() ? QStringLiteral("Untitled") : projectName;
 
     QSet<QString> pluginIds;
-    if (graph.ipInstance().has_value()) {
-        // Persist IP instance metadata separately from graph modules so plugin
-        // generators can receive package-level parameters on reload.
-        const GraphIpInstance& ipInstance = *graph.ipInstance();
-        document.ipInstances.push_back(ProjectIpInstanceRecord{
-            ipInstance.id,
-            ipInstance.pluginId,
-            ipInstance.kind,
-            ipInstance.type,
-            parametersToJson(ipInstance.parameters)
-        });
-        if (!ipInstance.pluginId.isEmpty()) {
-            pluginIds.insert(ipInstance.pluginId);
-        }
-    }
-
     for (const auto& module : graph.modules()) {
         const ModuleType* type = ModuleRegistry::instance().getType(module->type());
         const QString pluginId = type ? type->pluginId : QString();
@@ -209,34 +161,6 @@ ProjectDocument GraphProjectSerializer::toProject(const Graph& graph, const QStr
 }
 
 GraphProjectLoadResult GraphProjectSerializer::loadProject(const ProjectDocument& document, Graph& graph) {
-    if (document.ipInstances.size() > 1) {
-        return failure(QStringLiteral("Project may contain at most one IP instance"));
-    }
-
-    // Validate package-level instance records before module records because the
-    // active IP instance drives plugin-level generation behavior.
-    int nocInstanceCount = 0;
-    QSet<QString> ipInstanceIds;
-    for (const ProjectIpInstanceRecord& record : document.ipInstances) {
-        if (record.id.isEmpty()) {
-            return failure(QStringLiteral("Project IP instance is missing id"));
-        }
-        if (ipInstanceIds.contains(record.id)) {
-            // Duplicate instance IDs would make generated artifact ownership
-            // ambiguous, even though only one instance is supported today.
-            return failure(QStringLiteral("Duplicate IP instance id: %1").arg(record.id));
-        }
-        ipInstanceIds.insert(record.id);
-
-        if (record.kind == QStringLiteral("noc")) {
-            ++nocInstanceCount;
-        }
-    }
-    if (nocInstanceCount > 1) {
-        // Reserve multi-NoC projects for a later orchestration design.
-        return failure(QStringLiteral("Project may contain at most one IP instance with kind: noc"));
-    }
-
     QSet<QString> moduleIds;
     QHash<QString, const ModuleType*> moduleTypesById;
 

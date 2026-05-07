@@ -8,11 +8,14 @@
 #include <QMainWindow>
 #include <QString>
 #include <memory>
+#include <vector>
 
 class Graph;
 class CommandManager;
+class IPluginProjectAdapter;
 class NodeEditorWidget;
 class PropertyPanel;
+class ProjectStateService;
 class Palette;
 class LogPanel;
 class ValidationManager;
@@ -71,7 +74,7 @@ private slots:
     void logStartupLayout() const;
     void populateActiveIpSelector();
     void setActivePluginId(const QString& pluginId);
-    void configureGraphIpInstanceFromActivePlugin();
+    void ensureProjectStateRecordFromActivePlugin();
     void rebuildTopologyMenu();
     bool maybeSaveChanges(const QString& actionDescription);
     bool loadDocument(const QString& path);
@@ -87,6 +90,8 @@ private slots:
 
     Graph* m_graph;
     std::unique_ptr<CommandManager> m_commandManager;
+    std::unique_ptr<ProjectStateService> m_projectStateService;
+    std::vector<std::unique_ptr<IPluginProjectAdapter>> m_pluginProjectAdapters;
     NodeEditorWidget* m_nodeEditor;
     PropertyPanel* m_propertyPanel;
     Palette* m_palette;
