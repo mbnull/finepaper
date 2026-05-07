@@ -186,24 +186,32 @@ class RaveNoCGenerator
 
   def generation_parameters(graph, module_record)
     dimensions = module_record.fetch('parameters', {}).slice('rows', 'cols')
-    ip_parameters = ip_instance_parameters(graph)
-    dimensions.merge(ip_parameters)
+    global_parameters = ravenoc_global_parameters(graph)
+    dimensions.merge(global_parameters)
   end
 
-  def ip_instance_parameters(graph)
-    ip_instance = graph.fetch('ip_instance', nil)
-    unless ip_instance.is_a?(Hash)
-      raise GenerationError, 'missing ip_instance'
-    end
-    unless ip_instance.fetch('plugin', nil) == 'finepaper.ravenoc'
-      raise GenerationError, 'ip_instance plugin must be finepaper.ravenoc'
+  def ravenoc_global_parameters(graph)
+    plugin_state = graph.fetch('plugin_state', nil)
+    unless plugin_state.is_a?(Array)
+      raise GenerationError, 'missing plugin_state'
     end
 
-    parameters = ip_instance.fetch('parameters', nil)
-    raise GenerationError, 'ip_instance.parameters must be an object' unless parameters.is_a?(Hash)
+    ravenoc_states = plugin_state.select do |state|
+      state.is_a?(Hash) && state.fetch('plugin', nil) == 'finepaper.ravenoc'
+    end
+    raise GenerationError, 'missing plugin_state' if ravenoc_states.empty?
+    if ravenoc_states.size > 1
+      raise GenerationError, "expected exactly one finepaper.ravenoc plugin_state, found #{ravenoc_states.size}"
+    end
+
+    state = ravenoc_states.first.fetch('state', nil)
+    raise GenerationError, 'plugin_state.state must be an object' unless state.is_a?(Hash)
+
+    parameters = state.fetch('global_parameters', nil)
+    raise GenerationError, 'plugin_state.state.global_parameters must be an object' unless parameters.is_a?(Hash)
 
     (DEFAULTS.keys - %w[rows cols]).each do |name|
-      raise GenerationError, "missing IP instance parameter #{name}" unless parameters.key?(name)
+      raise GenerationError, "missing RaveNoC global parameter #{name}" unless parameters.key?(name)
     end
     parameters
   end

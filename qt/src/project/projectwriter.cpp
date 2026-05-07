@@ -64,18 +64,6 @@ QJsonObject toJson(const ProjectDocument& document) {
     }
     root.insert(QStringLiteral("plugin_state"), pluginStates);
 
-    QJsonArray ipInstances;
-    for (const ProjectIpInstanceRecord& ipInstance : document.ipInstances) {
-        QJsonObject object;
-        object.insert(QStringLiteral("id"), ipInstance.id);
-        object.insert(QStringLiteral("plugin"), ipInstance.pluginId);
-        object.insert(QStringLiteral("kind"), ipInstance.kind);
-        object.insert(QStringLiteral("type"), ipInstance.type);
-        object.insert(QStringLiteral("parameters"), sortedObject(ipInstance.parameters));
-        ipInstances.append(object);
-    }
-    root.insert(QStringLiteral("ip_instances"), ipInstances);
-
     QJsonObject graph;
     QJsonArray modules;
     for (const ProjectModuleRecord& module : document.modules) {

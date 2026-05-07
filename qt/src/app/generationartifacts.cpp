@@ -40,51 +40,9 @@ QJsonArray pluginStateArray(const QVector<ProjectPluginStateRecord>& records) {
     return array;
 }
 
-QJsonObject legacyIpInstanceObject(const QVector<ProjectPluginStateRecord>& records,
-                                   const QString& pluginId) {
-    const ProjectPluginStateRecord* selected = nullptr;
-    for (const ProjectPluginStateRecord& record : records) {
-        if (!pluginId.isEmpty() && record.pluginId != pluginId) {
-            continue;
-        }
-        if (selected) {
-            return {};
-        }
-        selected = &record;
-    }
-    if (!selected) {
-        return {};
-    }
-
-    const QJsonValue parameters = selected->state.value(QStringLiteral("global_parameters"));
-    if (!parameters.isObject()) {
-        return {};
-    }
-
-    QJsonObject object;
-    object.insert(QStringLiteral("id"), selected->instanceId);
-    object.insert(QStringLiteral("plugin"), selected->pluginId);
-    const QJsonValue kind = selected->state.value(QStringLiteral("kind"));
-    if (kind.isString()) {
-        object.insert(QStringLiteral("kind"), kind);
-    }
-    const QJsonValue type = selected->state.value(QStringLiteral("type"));
-    if (type.isString()) {
-        object.insert(QStringLiteral("type"), type);
-    }
-    object.insert(QStringLiteral("parameters"), parameters.toObject());
-    return object;
-}
-
 void attachPluginState(QJsonObject& root,
-                       const QVector<ProjectPluginStateRecord>& records,
-                       const QString& legacyPluginId) {
+                       const QVector<ProjectPluginStateRecord>& records) {
     root.insert(QStringLiteral("plugin_state"), pluginStateArray(records));
-
-    const QJsonObject legacyIpInstance = legacyIpInstanceObject(records, legacyPluginId);
-    if (!legacyIpInstance.isEmpty()) {
-        root.insert(QStringLiteral("ip_instance"), legacyIpInstance);
-    }
 }
 
 GeneratedProjectSnapshotResult writeGeneratedProjectSnapshot(const Graph& graph,

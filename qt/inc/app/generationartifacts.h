@@ -17,11 +17,8 @@ struct GeneratedProjectSnapshotResult {
 };
 
 QJsonArray pluginStateArray(const QVector<ProjectPluginStateRecord>& records);
-QJsonObject legacyIpInstanceObject(const QVector<ProjectPluginStateRecord>& records,
-                                   const QString& pluginId = QString());
 void attachPluginState(QJsonObject& root,
-                       const QVector<ProjectPluginStateRecord>& records,
-                       const QString& legacyPluginId = QString());
+                       const QVector<ProjectPluginStateRecord>& records);
 
 GeneratedProjectSnapshotResult writeGeneratedProjectSnapshot(const Graph& graph,
                                                              const QString& outputDirectory,

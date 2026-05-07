@@ -30,14 +30,6 @@ struct ProjectConnectionRecord {
     ProjectConnectionEndpoint target;
 };
 
-struct ProjectIpInstanceRecord {
-    QString id;
-    QString pluginId;
-    QString kind;
-    QString type;
-    QJsonObject parameters;
-};
-
 struct ProjectDocument {
     QString schema = QStringLiteral("v1");
     QString kind = QStringLiteral("finepaper-project");
@@ -45,7 +37,6 @@ struct ProjectDocument {
     QString version = QStringLiteral("1.0");
     QVector<ProjectPluginRecord> plugins;
     QVector<ProjectPluginStateRecord> pluginStates;
-    QVector<ProjectIpInstanceRecord> ipInstances;
     QVector<ProjectModuleRecord> modules;
     QVector<ProjectConnectionRecord> connections;
 };

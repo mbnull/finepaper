@@ -158,8 +158,8 @@ void testDrcRunnerUsesPluginGraphFlavorForRaveNoC() {
     require(results.isEmpty(), messageBytes.constData());
     require(!messages.join('\n').contains(QStringLiteral("expected schema finepaper-plugin-graph-v1")),
             "RaveNoC DRC should receive generic plugin graph JSON");
-    require(!messages.join('\n').contains(QStringLiteral("missing ip_instance")),
-            "RaveNoC DRC should receive legacy IP instance compatibility JSON");
+    require(!messages.join('\n').contains(QStringLiteral("missing plugin_state")),
+            "RaveNoC DRC should receive plugin_state");
 }
 
 void testDrcRunnerAcceptsManualRaveTilePlacement() {

@@ -51,7 +51,7 @@ QList<ValidationResult> DRCRunner::validate(
     QJsonObject root = graph->toJsonDocument(QStringLiteral("design"),
                                              graphFlavor,
                                              &m_externalToInternalIds).object();
-    attachPluginState(root, pluginStates, generatorCommand.pluginId);
+    attachPluginState(root, pluginStates);
     const QByteArray jsonBytes = QJsonDocument(root).toJson();
     if (tmpFile.write(jsonBytes) != jsonBytes.size() || !tmpFile.flush()) {
         // The external tool should never start with a partial input file.

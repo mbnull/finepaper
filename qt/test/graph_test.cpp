@@ -793,15 +793,6 @@ void testXmlExportPreservesEditorGraphContent() {
             "XML export should contain endpoint external id");
 }
 
-void testPluginExportOmitsIpInstanceByDefault() {
-    Graph graph;
-
-    const QJsonObject root =
-        graph.toJsonDocument(QStringLiteral("demo"), GraphJsonFlavor::Plugin).object();
-    require(!root.contains(QStringLiteral("ip_instance")),
-            "Graph plugin export should not contain IP instance state by default");
-}
-
 } // namespace
 
 int main(int argc, char** argv) {
@@ -827,7 +818,6 @@ int main(int argc, char** argv) {
         testGenericPluginExportKeepsNonNocModules();
         testPluginExportUsesArtifactIdsInsteadOfRuntimeIds();
         testXmlExportPreservesEditorGraphContent();
-        testPluginExportOmitsIpInstanceByDefault();
     } catch (const std::exception& error) {
         std::cerr << "graph_test failed: " << error.what() << '\n';
         return 1;

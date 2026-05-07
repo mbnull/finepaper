@@ -6,7 +6,6 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
-#include <QSet>
 
 namespace {
 
@@ -108,45 +107,8 @@ ProjectReadResult ProjectReader::readFile(const QString& path) {
         document.pluginStates.push_back(state);
     }
 
-    const QJsonValue ipInstancesValue = root.value(QStringLiteral("ip_instances"));
-    if (!ipInstancesValue.isUndefined() && !ipInstancesValue.isArray()) {
-        return failure(QStringLiteral("Project ip_instances must be an array"));
-    }
-    const QJsonArray ipInstances = ipInstancesValue.toArray();
-    for (const QJsonValue& value : ipInstances) {
-        if (!value.isObject()) {
-            return failure(QStringLiteral("Project ip_instances entries must be objects"));
-        }
-        const QJsonObject object = value.toObject();
-        ProjectIpInstanceRecord ipInstance;
-        ipInstance.id = object.value(QStringLiteral("id")).toString();
-        ipInstance.pluginId = object.value(QStringLiteral("plugin")).toString();
-        ipInstance.kind = object.value(QStringLiteral("kind")).toString();
-        ipInstance.type = object.value(QStringLiteral("type")).toString();
-        ipInstance.parameters = object.value(QStringLiteral("parameters")).toObject();
-        document.ipInstances.push_back(ipInstance);
-    }
-
-    QSet<QString> migratedPluginStateKeys;
-    for (const ProjectPluginStateRecord& state : document.pluginStates) {
-        migratedPluginStateKeys.insert(state.pluginId + QLatin1Char('\n') + state.instanceId);
-    }
-    for (const ProjectIpInstanceRecord& ipInstance : document.ipInstances) {
-        const QString key = ipInstance.pluginId + QLatin1Char('\n') + ipInstance.id;
-        if (migratedPluginStateKeys.contains(key)) {
-            continue;
-        }
-        ProjectPluginStateRecord state;
-        state.pluginId = ipInstance.pluginId;
-        state.instanceId = ipInstance.id;
-        state.schema = ipInstance.pluginId + QStringLiteral("-project-state-v1");
-        state.state = QJsonObject{
-            {QStringLiteral("kind"), ipInstance.kind},
-            {QStringLiteral("type"), ipInstance.type},
-            {QStringLiteral("global_parameters"), ipInstance.parameters}
-        };
-        document.pluginStates.push_back(state);
-        migratedPluginStateKeys.insert(key);
+    if (root.contains(QStringLiteral("ip_instances"))) {
+        return failure(QStringLiteral("Project ip_instances is a pre-v1 field and is not supported"));
     }
 
     const QJsonValue graphValue = root.value(QStringLiteral("graph"));

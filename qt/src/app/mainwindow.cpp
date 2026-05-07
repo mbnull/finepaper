@@ -298,7 +298,7 @@ void MainWindow::generateVerilog() {
     // The same Graph can be serialized for either the newer plugin graph API or
     // the legacy NoC framework schema depending on the active plugin manifest.
     QJsonObject root = m_graph->toJsonDocument(designName, exportFlavor).object();
-    attachPluginState(root, m_projectStateService->pluginStates(), generatorCommand.pluginId);
+    attachPluginState(root, m_projectStateService->pluginStates());
     jsonFile.write(QJsonDocument(root).toJson());
     jsonFile.close();
 
