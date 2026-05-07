@@ -316,6 +316,114 @@ void testProjectStateServiceUpdatesPluginStateWithoutGraph() {
             "service should write updated plugin parameter");
 }
 
+void testProjectStateServiceDoesNotCreateMissingSection() {
+    ProjectDocument document = validProjectDocument();
+    ProjectPluginStateRecord state;
+    state.pluginId = QStringLiteral("finepaper.ravenoc");
+    state.instanceId = QStringLiteral("ravenoc_0");
+    state.schema = QStringLiteral("ravenoc-project-state-v1");
+    state.state = QJsonObject{};
+    document.pluginStates.push_back(state);
+
+    ProjectStateService service;
+    service.loadFromDocument(document);
+    require(!service.setParameter(QStringLiteral("finepaper.ravenoc"),
+                                  QStringLiteral("ravenoc_0"),
+                                  QStringLiteral("global_parameters"),
+                                  QStringLiteral("flit_data_width"),
+                                  64),
+            "missing plugin state section should not be created");
+
+    ProjectDocument saved = validProjectDocument();
+    service.writeToDocument(saved);
+    require(!saved.pluginStates.first().state.contains(QStringLiteral("global_parameters")),
+            "missing section should remain absent after failed update");
+}
+
+void testProjectStateServiceDoesNotOverwriteNonObjectSection() {
+    ProjectDocument document = validProjectDocument();
+    ProjectPluginStateRecord state;
+    state.pluginId = QStringLiteral("finepaper.ravenoc");
+    state.instanceId = QStringLiteral("ravenoc_0");
+    state.schema = QStringLiteral("ravenoc-project-state-v1");
+    state.state = QJsonObject{
+        {QStringLiteral("global_parameters"), QStringLiteral("opaque")}
+    };
+    document.pluginStates.push_back(state);
+
+    ProjectStateService service;
+    service.loadFromDocument(document);
+    require(!service.setParameter(QStringLiteral("finepaper.ravenoc"),
+                                  QStringLiteral("ravenoc_0"),
+                                  QStringLiteral("global_parameters"),
+                                  QStringLiteral("flit_data_width"),
+                                  64),
+            "non-object plugin state section should not be overwritten");
+
+    ProjectDocument saved = validProjectDocument();
+    service.writeToDocument(saved);
+    require(saved.pluginStates.first()
+                .state.value(QStringLiteral("global_parameters"))
+                .toString() == QStringLiteral("opaque"),
+            "non-object section should remain unchanged after failed update");
+}
+
+void testProjectStateServiceParameterReturnsUndefinedForMissingValues() {
+    ProjectDocument document = validProjectDocument();
+    ProjectPluginStateRecord state;
+    state.pluginId = QStringLiteral("finepaper.ravenoc");
+    state.instanceId = QStringLiteral("ravenoc_0");
+    state.schema = QStringLiteral("ravenoc-project-state-v1");
+    state.state = QJsonObject{
+        {QStringLiteral("global_parameters"), QJsonObject{}}
+    };
+    document.pluginStates.push_back(state);
+
+    ProjectStateService service;
+    service.loadFromDocument(document);
+    require(service.parameter(QStringLiteral("finepaper.missing"),
+                              QStringLiteral("ravenoc_0"),
+                              QStringLiteral("global_parameters"),
+                              QStringLiteral("flit_data_width"))
+                .isUndefined(),
+            "missing plugin state record should return undefined");
+    require(service.parameter(QStringLiteral("finepaper.ravenoc"),
+                              QStringLiteral("ravenoc_0"),
+                              QStringLiteral("missing_section"),
+                              QStringLiteral("flit_data_width"))
+                .isUndefined(),
+            "missing plugin state section should return undefined");
+    require(service.parameter(QStringLiteral("finepaper.ravenoc"),
+                              QStringLiteral("ravenoc_0"),
+                              QStringLiteral("global_parameters"),
+                              QStringLiteral("missing_name"))
+                .isUndefined(),
+            "missing plugin state parameter should return undefined");
+}
+
+void testProjectStateServiceParameterPreservesExplicitNull() {
+    ProjectDocument document = validProjectDocument();
+    ProjectPluginStateRecord state;
+    state.pluginId = QStringLiteral("finepaper.ravenoc");
+    state.instanceId = QStringLiteral("ravenoc_0");
+    state.schema = QStringLiteral("ravenoc-project-state-v1");
+    state.state = QJsonObject{
+        {QStringLiteral("global_parameters"), QJsonObject{
+            {QStringLiteral("optional_value"), QJsonValue(QJsonValue::Null)}
+        }}
+    };
+    document.pluginStates.push_back(state);
+
+    ProjectStateService service;
+    service.loadFromDocument(document);
+    const QJsonValue value = service.parameter(QStringLiteral("finepaper.ravenoc"),
+                                               QStringLiteral("ravenoc_0"),
+                                               QStringLiteral("global_parameters"),
+                                               QStringLiteral("optional_value"));
+    require(value.isNull(), "explicit null plugin state parameter should be preserved");
+    require(!value.isUndefined(), "explicit null plugin state parameter should not be undefined");
+}
+
 void testLoadRejectsSecondNocIpInstance() {
     ProjectDocument document = validProjectDocument();
     document.ipInstances.push_back(ProjectIpInstanceRecord{
@@ -642,6 +750,10 @@ int main(int argc, char** argv) {
         testProjectRoundTripRestoresModulesParametersAndConnections();
         testProjectPreservesOpaquePluginState();
         testProjectStateServiceUpdatesPluginStateWithoutGraph();
+        testProjectStateServiceDoesNotCreateMissingSection();
+        testProjectStateServiceDoesNotOverwriteNonObjectSection();
+        testProjectStateServiceParameterReturnsUndefinedForMissingValues();
+        testProjectStateServiceParameterPreservesExplicitNull();
         testReaderRejectsWrongKind();
         testLoadRejectsDuplicateModuleIds();
         testLoadRejectsSecondNocIpInstance();

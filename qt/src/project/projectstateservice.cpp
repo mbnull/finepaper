@@ -23,7 +23,12 @@ bool ProjectStateService::setParameter(const QString& pluginId,
             continue;
         }
 
-        QJsonObject sectionObject = record.state.value(section).toObject();
+        const QJsonValue sectionValue = record.state.value(section);
+        if (!sectionValue.isObject()) {
+            return false;
+        }
+
+        QJsonObject sectionObject = sectionValue.toObject();
         sectionObject.insert(name, value);
         record.state.insert(section, sectionObject);
         return true;
@@ -37,8 +42,12 @@ QJsonValue ProjectStateService::parameter(const QString& pluginId,
                                           const QString& name) const {
     for (const ProjectPluginStateRecord& record : m_pluginStates) {
         if (record.pluginId == pluginId && record.instanceId == instanceId) {
-            return record.state.value(section).toObject().value(name);
+            const QJsonValue sectionValue = record.state.value(section);
+            if (!sectionValue.isObject()) {
+                return QJsonValue(QJsonValue::Undefined);
+            }
+            return sectionValue.toObject().value(name);
         }
     }
-    return {};
+    return QJsonValue(QJsonValue::Undefined);
 }
