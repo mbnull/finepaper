@@ -20,6 +20,8 @@ void appendUniquePath(QStringList& paths, const QString& path) {
         return;
     }
 
+    // Store absolute paths so environment roots and ancestor-discovered roots
+    // deduplicate even when expressed with different relative spellings.
     const QFileInfo info(path);
     const QString absolutePath = info.absoluteFilePath();
     if (!paths.contains(absolutePath)) {
@@ -32,6 +34,8 @@ QString resolvePath(const QString& rootPath, const QString& path) {
         return {};
     }
 
+    // Manifest-local paths are resolved against the plugin root; absolute paths
+    // are preserved for development and installed-plugin layouts.
     const QFileInfo info(path);
     if (info.isAbsolute()) {
         return info.absoluteFilePath();
@@ -75,6 +79,8 @@ Parameter::Value parameterDefaultValue(const QString& type, const QJsonValue& va
         return value.toInt();
     }
     if (type == QStringLiteral("bool")) {
+        // Accept relaxed manifest booleans because early plugin drafts used
+        // numeric and string values before the schema settled.
         if (value.isBool()) {
             return value.toBool();
         }
@@ -117,6 +123,8 @@ QHash<QString, PluginInstanceParameterDescriptor> instanceParametersFromJson(con
 
     const QJsonObject object = value.toObject();
     for (auto it = object.constBegin(); it != object.constEnd(); ++it) {
+        // Keep descriptor defaults typed here; MainWindow copies them into the
+        // active Graph IP instance during plugin selection.
         const QJsonObject parameterObject = it.value().toObject();
         PluginInstanceParameterDescriptor parameter;
         parameter.name = it.key();
@@ -157,6 +165,8 @@ QVector<TopologyPresetDescriptor> topologyPresetsFromJson(const QJsonValue& valu
     for (const QJsonValue& item : value.toArray()) {
         const QJsonObject object = item.toObject();
         TopologyPresetDescriptor preset;
+        // Presets stay declarative in plugin.json. The topology builder later
+        // interprets kind/router/ports with these typed parameters.
         preset.id = object.value(QStringLiteral("id")).toString().trimmed();
         preset.label = object.value(QStringLiteral("label")).toString().trimmed();
         preset.kind = object.value(QStringLiteral("kind")).toString().trimmed();
@@ -220,6 +230,8 @@ bool boolValue(const QJsonValue& value, bool fallbackValue = false) {
 std::optional<PluginDescriptor> loadManifest(const QString& pluginDirectory) {
     const QFileInfo manifestInfo(QDir(pluginDirectory).filePath(QStringLiteral("plugin.json")));
     if (!manifestInfo.isFile()) {
+        // Discovery probes both roots and child directories; absence of a
+        // manifest is normal for container directories.
         return std::nullopt;
     }
 
@@ -232,12 +244,16 @@ std::optional<PluginDescriptor> loadManifest(const QString& pluginDirectory) {
     QJsonParseError parseError;
     const QJsonDocument document = QJsonDocument::fromJson(file.readAll(), &parseError);
     if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
+        // Invalid manifests are skipped rather than aborting startup so one bad
+        // plugin cannot hide all other discovered plugins.
         qWarning() << "Invalid plugin manifest" << manifestInfo.absoluteFilePath() << parseError.errorString();
         return std::nullopt;
     }
 
     const QJsonObject object = document.object();
     PluginDescriptor descriptor;
+    // Paths and commands are normalized at discovery time so the rest of the
+    // app can treat PluginDescriptor as runtime-ready metadata.
     descriptor.id = object.value(QStringLiteral("id")).toString().trimmed();
     descriptor.name = object.value(QStringLiteral("name")).toString().trimmed();
     descriptor.version = object.value(QStringLiteral("version")).toString().trimmed();
@@ -251,6 +267,8 @@ std::optional<PluginDescriptor> loadManifest(const QString& pluginDirectory) {
     descriptor.generator = commandFromJson(object.value(QStringLiteral("generator")));
     descriptor.drc = commandFromJson(object.value(QStringLiteral("drc")));
 
+    // Native metadata is retained for future support but not loaded by this
+    // registry; commands and data bundles are the active integration mechanism.
     const QJsonObject native = object.value(QStringLiteral("native")).toObject();
     descriptor.native.enabled = boolValue(native.value(QStringLiteral("enabled")), false);
     descriptor.native.library = native.value(QStringLiteral("library")).toString().trimmed();
@@ -261,6 +279,7 @@ std::optional<PluginDescriptor> loadManifest(const QString& pluginDirectory) {
     }
 
     if (descriptor.name.isEmpty()) {
+        // Fall back to ID so UI labels and diagnostics always have a stable name.
         descriptor.name = descriptor.id;
     }
 
@@ -276,6 +295,7 @@ void appendPluginFromDirectory(QList<PluginDescriptor>& plugins,
     }
 
     if (seenIds.contains(descriptor->id)) {
+        // First discovery root wins to keep plugin selection deterministic.
         qWarning() << "Skipping duplicate plugin id" << descriptor->id << "from" << pluginDirectory;
         return;
     }
@@ -289,6 +309,8 @@ void appendLocalPluginRootsFrom(QStringList& roots, const QString& startPath) {
         return;
     }
 
+    // Walk ancestors so running from the repository root, qt build directory,
+    // or installed binary directory can still find a sibling plugins/ folder.
     QDir dir(startPath);
     while (true) {
         const QString candidate = dir.filePath(QStringLiteral("plugins"));
@@ -320,20 +342,28 @@ QList<PluginDescriptor> PluginRegistry::discover(const QStringList& roots) {
     for (const QString& rootPath : roots) {
         const QFileInfo rootInfo(rootPath);
         if (!rootInfo.isDir()) {
+            // Missing roots are allowed because environment paths and install
+            // layouts can vary between developer machines.
             continue;
         }
 
         const QString absoluteRootPath = rootInfo.absoluteFilePath();
         if (seenDirectories.contains(absoluteRootPath)) {
+            // Ancestor walking can discover the same plugins/ directory from
+            // current path and application path; scan it once.
             continue;
         }
         seenDirectories.insert(absoluteRootPath);
 
+        // A root may itself be a plugin directory or a directory containing many
+        // plugin subdirectories; support both deployment styles.
         appendPluginFromDirectory(plugins, seenIds, absoluteRootPath);
 
         const QDir rootDir(absoluteRootPath);
         const QFileInfoList pluginDirectories =
             rootDir.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
+        // Sorted child directory traversal gives stable plugin ordering across
+        // repeated startups.
         for (const QFileInfo& pluginDirectory : pluginDirectories) {
             appendPluginFromDirectory(plugins, seenIds, pluginDirectory.absoluteFilePath());
         }
@@ -345,6 +375,8 @@ QList<PluginDescriptor> PluginRegistry::discover(const QStringList& roots) {
 QStringList PluginRegistry::defaultPluginRoots() {
     QStringList roots;
 
+    // Environment roots are honored first so tests and user installs can
+    // override repository-local plugins without changing the binary.
     const QString envPath = qEnvironmentVariable("FINEPAPER_PLUGIN_PATH");
     for (const QString& path : envPath.split(QDir::listSeparator(), Qt::SkipEmptyParts)) {
         appendUniquePath(roots, path);

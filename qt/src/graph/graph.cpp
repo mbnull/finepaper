@@ -52,6 +52,8 @@ QString normalizePortId(const Module* module, const QString& requestedPortId) {
         return requestedPortId;
     }
 
+    // Accept the persisted ID as-is first; later fallbacks cover legacy aliases
+    // and interface IDs without rewriting current project data.
     if (findPort(module, requestedPortId)) {
         return requestedPortId;
     }
@@ -62,6 +64,8 @@ QString normalizePortId(const Module* module, const QString& requestedPortId) {
     }
 
     if (PortLayout::isEndpointPortId(requestedPortId)) {
+        // Older schemas named router-local endpoint ports by slot. Current
+        // bundles may expose them as localN, so preserve import compatibility.
         const QString localPortId = QStringLiteral("local%1").arg(PortLayout::endpointPortSlot(requestedPortId));
         if (findPort(module, localPortId)) {
             return localPortId;
@@ -125,6 +129,9 @@ QString firstAvailablePort(const Graph* graph,
                            const std::function<bool(const Port&)>& predicate) {
     if (!graph || !module) return {};
 
+    // Used during import fallback where explicit port IDs may be missing. The
+    // occupancy rule mirrors Graph::isValidConnection to avoid choosing a port
+    // that will be rejected immediately afterward.
     for (const auto& port : module->ports()) {
         const bool matchesDirection =
             direction == Port::Direction::Output ? PortLayout::supportsOutput(port)
@@ -215,6 +222,8 @@ QString safeArtifactToken(QString token, const QString& fallback) {
     if (!token.front().isLetter() && token.front() != QLatin1Char('_')) {
         token.prepend(QStringLiteral("m_"));
     }
+    // Plugin-facing IDs become filenames or HDL-ish identifiers in downstream
+    // tools, so keep them deterministic and conservative.
     return token;
 }
 
@@ -388,6 +397,8 @@ std::optional<ModuleInterfaceMetadata> interfaceMetadataFor(const Module* module
         return std::nullopt;
     }
 
+    // Interface metadata lives on ModuleType because ports are copied into
+    // Module instances while semantic compatibility remains type-level data.
     const ModuleType* moduleType = ModuleTypeMetadata::type(module);
     if (!moduleType) {
         return std::nullopt;
@@ -449,6 +460,8 @@ bool interfaceMetadataCompatible(const ModuleInterfaceMetadata& sourceInterface,
         }
     }
 
+    // Both endpoints can require fields such as protocol or data width. A link
+    // is valid only when every required field has an overlapping value.
     for (const QString& field : matchFields) {
         const QStringList sourceValues = interfaceFieldValues(sourceInterface, sourceModule, field);
         const QStringList targetValues = interfaceFieldValues(targetInterface, targetModule, field);
@@ -518,6 +531,8 @@ bool Graph::addModule(std::unique_ptr<Module> module) {
     }
     Module* ptr = module.get();
     QString moduleId = ptr->id();
+    // Forward module-local parameter changes through Graph so UI and document
+    // tracking do not need to connect to every Module individually.
     m_moduleConnections[moduleId] = connect(ptr, &Module::parameterChanged, this, [this, moduleId](const QString& paramName) {
         onModuleParameterChanged(moduleId, paramName);
     });
@@ -532,6 +547,8 @@ bool Graph::addModule(std::unique_ptr<Module> module) {
 
 void Graph::removeModule(const QString& moduleId) {
     const std::size_t moduleCountBefore = m_modules.size();
+    // Remove dependent edges first so observers never see a connection pointing
+    // at a module that has already disappeared.
     auto connIt = m_connections.begin();
     while (connIt != m_connections.end()) {
         if ((*connIt)->source().moduleId == moduleId || (*connIt)->target().moduleId == moduleId) {
@@ -606,6 +623,8 @@ bool Graph::insertModule(std::unique_ptr<Module> module) {
     }
     Module* ptr = module.get();
     QString moduleId = ptr->id();
+    // insertModule mirrors addModule but is kept separate for undo paths where
+    // ownership has been transferred out and back in.
     m_moduleConnections[moduleId] = connect(ptr, &Module::parameterChanged, this, [this, moduleId](const QString& paramName) {
         onModuleParameterChanged(moduleId, paramName);
     });
@@ -686,6 +705,8 @@ void Graph::configureIpInstance(const QString& id,
                                 const QString& kind,
                                 const QString& type,
                                 const QHash<QString, Parameter>& parameters) {
+    // A graph currently represents one generated IP instance. The active plugin
+    // and its instance parameters travel with project save/export.
     m_ipInstance = GraphIpInstance{id, pluginId, kind, type, parameters};
 }
 
@@ -705,17 +726,25 @@ bool Graph::setIpInstanceParameter(const QString& name, Parameter::Value value) 
 }
 
 bool Graph::isValidConnection(const PortRef& source, const PortRef& target) const {
+    // Validation deliberately stays in Graph because UI gestures, imports, and
+    // command replay all need the same topology contract.
     // Disallow self-loops at graph level.
     if (source.moduleId == target.moduleId) return false;
 
     const Module* sourceModule = getModule(source.moduleId);
     const Module* targetModule = getModule(target.moduleId);
+    // Both endpoints must refer to live modules before any port-level checks
+    // can be meaningful.
     if (!sourceModule || !targetModule) return false;
 
     const Port* sourcePort = findPort(sourceModule, source.portId);
     const Port* targetPort = findPort(targetModule, target.portId);
+    // Port IDs are intentionally not normalized here; callers must pass the
+    // concrete IDs for the current module definitions.
     if (!sourcePort || !targetPort) return false;
 
+    // Generic electrical/interface checks run before topology-specific mesh
+    // constraints so every path observes the same base compatibility contract.
     if (!PortLayout::supportsOutput(*sourcePort)) return false;
     if (!PortLayout::supportsInput(*targetPort)) return false;
     if (!PortLayout::sameBusFamily(*sourcePort, *targetPort)) return false;
@@ -731,6 +760,7 @@ bool Graph::isValidConnection(const PortRef& source, const PortRef& target) cons
             return false;
         }
         if (oppositeDirection(sourceSide) != targetSide) {
+            // Mesh links must join opposite sides, for example east to west.
             return false;
         }
 
@@ -742,11 +772,13 @@ bool Graph::isValidConnection(const PortRef& source, const PortRef& target) cons
                  existingConnection->target().moduleId == source.moduleId);
 
             if (sameRouterPair) {
+                // A pair of routers can have at most one edge between them.
                 return false;
             }
 
             if (connectionUsesRouterSide(*existingConnection, source.moduleId, sourceSide) ||
                 connectionUsesRouterSide(*existingConnection, target.moduleId, targetSide)) {
+                // Router sides model physical channels and cannot fan out.
                 return false;
             }
         }
@@ -771,6 +803,8 @@ bool Graph::isValidConnection(const PortRef& source, const PortRef& target) cons
     const bool sourceInUse = portIsOccupied(source, *sourcePort);
     if (sourceInUse) return false;
 
+    // Targets use their natural direction for occupancy; InOut ports are
+    // considered consumed regardless of whether an edge uses them as source or target.
     const bool targetInUse = std::any_of(m_connections.begin(), m_connections.end(),
         [&](const std::unique_ptr<Connection>& c) {
             const bool usedAsSource =
@@ -785,6 +819,8 @@ bool Graph::isValidConnection(const PortRef& source, const PortRef& target) cons
         });
     if (targetInUse) return false;
 
+    // The final duplicate check is still needed for ports that allow direction
+    // reuse in future module definitions.
     return std::none_of(m_connections.begin(), m_connections.end(),
         [&](const std::unique_ptr<Connection>& c) {
             return c->source().moduleId == source.moduleId && c->source().portId == source.portId &&
@@ -812,6 +848,8 @@ bool Graph::loadFromJson(const QString& jsonPath) {
 
     QJsonObject root = doc.object();
     QHash<QString, QString> externalToInternalIds;
+    // Legacy JSON is NoC-specific, so it requires the bundled NoC graph groups
+    // even when newer plugins are also installed.
     const ModuleType* meshRouterType =
         ModuleRegistry::instance().getTypeForGraphGroup(QStringLiteral("finepaper.noc"), QStringLiteral("xps"));
     const ModuleType* endpointType =
@@ -831,6 +869,8 @@ bool Graph::loadFromJson(const QString& jsonPath) {
         if (!meshRouterType) continue;
 
         auto module = instantiateModule(*meshRouterType, newInternalId());
+        // Preserve the human-visible external ID separately from the generated
+        // runtime UUID used internally by the editor.
         module->setParameter("display_name", ModuleLabels::humanizeExternalId(meshRouterType->name, externalId));
         module->setParameter("external_id", externalId);
 
@@ -858,6 +898,8 @@ bool Graph::loadFromJson(const QString& jsonPath) {
         if (!endpointType) continue;
 
         auto module = instantiateModule(*endpointType, newInternalId());
+        // Endpoint parameters are imported opportunistically; omitted fields keep
+        // the defaults from the current module bundle.
         module->setParameter("display_name", ModuleLabels::humanizeExternalId(endpointType->name, externalId));
         module->setParameter("external_id", externalId);
 
@@ -887,6 +929,8 @@ bool Graph::loadFromJson(const QString& jsonPath) {
     // - first available compatible fallback ports.
     QJsonArray conns = root["connections"].toArray();
     for (const auto& connVal : conns) {
+        // Each legacy edge is normalized independently so one malformed edge
+        // does not prevent the rest of the imported topology from loading.
         QJsonObject conn = connVal.toObject();
         QString fromExternal = conn["from"].toString();
         QString toExternal = conn["to"].toString();
@@ -908,6 +952,8 @@ bool Graph::loadFromJson(const QString& jsonPath) {
         toPort = normalizePortId(toModule, toPort);
 
         if (!fromPort.isEmpty() && !toPort.isEmpty()) {
+            // Explicit endpoint/router port pairs are trusted only when both
+            // sides belong to the same semantic link class.
             const Port* explicitFromPort = findNormalizedPort(fromModule, fromPort);
             const Port* explicitToPort = findNormalizedPort(toModule, toPort);
             const bool explicitEndpointLink =
@@ -928,6 +974,8 @@ bool Graph::loadFromJson(const QString& jsonPath) {
             (isEndpointModule(fromModule) && isMeshRouterModule(toModule))) {
             // Store endpoint attachments in the direction Qt can validate:
             // endpoint initiator/output -> router local target/input.
+            // This canonical orientation keeps Graph::isValidConnection and the
+            // node-editor presentation code aligned after import.
             Module* endpointModule = isEndpointModule(fromModule) ? fromModule : toModule;
             Module* routerModule = isMeshRouterModule(fromModule) ? fromModule : toModule;
             QString endpointId = endpointModule->id();
@@ -938,6 +986,8 @@ bool Graph::loadFromJson(const QString& jsonPath) {
             endpointPort = normalizePortId(endpointModule, endpointPort);
             routerPort = normalizePortId(routerModule, routerPort);
 
+            // Legacy payload may give a named port that is present but not usable
+            // in the needed direction; fall back to the next available slot.
             const Port* explicitEndpointPort = findPort(endpointModule, endpointPort);
             if (endpointPort.isEmpty() || !explicitEndpointPort ||
                 !PortLayout::isEndpointPort(*explicitEndpointPort) ||
@@ -978,6 +1028,8 @@ bool Graph::loadFromJson(const QString& jsonPath) {
             !portSupportsDirection(fromModule, fromPort, Port::Direction::Output) &&
             portSupportsDirection(toModule, toPort, Port::Direction::Output) &&
             portSupportsDirection(fromModule, fromPort, Port::Direction::Input)) {
+            // If inferred router direction is reversed, swap endpoints so source
+            // still carries the output-capable side.
             std::swap(from, to);
             std::swap(fromModule, toModule);
             std::swap(fromPort, toPort);
@@ -1035,6 +1087,8 @@ bool Graph::loadFromJson(const QString& jsonPath) {
             }
 
             QString epPort, xpPort;
+            // Legacy xp.endpoints entries have no port information, so use the
+            // same free-slot selection as explicit endpoint attachment import.
             xpPort = firstAvailablePort(this, xpModule, Port::Direction::Input,
                 [](const Port& port) { return PortLayout::isEndpointPort(port); });
             epPort = firstAvailablePort(this, epModule, Port::Direction::Output,
@@ -1108,10 +1162,14 @@ QJsonDocument Graph::toJsonDocument(const QString& designName,
                                     GraphJsonFlavor flavor,
                                     QHash<QString, QString>* externalToInternalIds) const {
     if (externalToInternalIds) {
+        // Callers such as DRCRunner use this map to translate generated artifact
+        // IDs back to editor-internal IDs for selection/highlighting.
         externalToInternalIds->clear();
     }
 
     if (flavor == GraphJsonFlavor::Plugin) {
+        // Plugin graph export is generic: every module carries ports and typed
+        // parameters, and connections reference artifact IDs derived below.
         QJsonArray modules;
         QJsonArray connections;
         QHash<QString, QString> runtimeToArtifactIds;
@@ -1119,6 +1177,8 @@ QJsonDocument Graph::toJsonDocument(const QString& designName,
 
         for (const auto& module : m_modules) {
             const ModuleType* type = ModuleRegistry::instance().getType(module->type());
+            // External ID parameters are user/plugin visible; uniqueArtifactToken
+            // protects against duplicates when several modules share a label.
             const QString artifactId = pluginModuleArtifactId(module.get(), usedModuleIds);
             runtimeToArtifactIds.insert(module->id(), artifactId);
 
@@ -1130,14 +1190,20 @@ QJsonDocument Graph::toJsonDocument(const QString& designName,
 
             QJsonArray ports;
             for (const Port& port : module->ports()) {
+                // Generic plugin consumers need the effective runtime port list,
+                // not only the module type name.
                 ports.append(portToGenericJson(port));
             }
             object["ports"] = ports;
+            // Port and parameter snapshots are duplicated into the export so a
+            // generator does not have to re-open module bundle metadata.
             modules.append(object);
         }
 
         QSet<QString> usedConnectionIds;
         for (const auto& connection : m_connections) {
+            // Runtime IDs are editor-only UUIDs; plugin inputs receive stable,
+            // human-readable artifact IDs instead.
             const QString sourceModuleId = runtimeToArtifactIds.value(connection->source().moduleId);
             const QString targetModuleId = runtimeToArtifactIds.value(connection->target().moduleId);
             if (sourceModuleId.isEmpty() || targetModuleId.isEmpty()) {
@@ -1165,6 +1231,8 @@ QJsonDocument Graph::toJsonDocument(const QString& designName,
         root["schema"] = QStringLiteral("finepaper-plugin-graph-v1");
         root["name"] = designName.isEmpty() ? QStringLiteral("design") : designName;
         if (m_ipInstance.has_value()) {
+            // Package-level IP parameters travel alongside module graph data for
+            // plugins that generate one wrapped IP instance.
             QJsonObject ipInstance;
             ipInstance["id"] = m_ipInstance->id;
             ipInstance["plugin"] = m_ipInstance->pluginId;
@@ -1183,9 +1251,13 @@ QJsonDocument Graph::toJsonDocument(const QString& designName,
     QJsonArray conns;
     QHash<QString, QJsonArray> xpEndpointMap;
 
+    // Legacy framework export keeps routers/endpoints in separate arrays and
+    // stores local endpoint attachments under each XP.
     for (const auto& mod : m_modules) {
         const QString externalId = ModuleLabels::externalId(mod.get());
         if (externalToInternalIds) {
+            // Legacy DRC output references external IDs, not UUIDs, so populate
+            // the reverse lookup while writing the framework schema.
             externalToInternalIds->insert(externalId, mod->id());
         }
 
@@ -1194,6 +1266,8 @@ QJsonDocument Graph::toJsonDocument(const QString& designName,
 
         const auto& params = mod->parameters();
         if (isMeshRouterModule(mod.get())) {
+            // Router records in the legacy schema carry only NoC-specific config
+            // values expected by the sample Ruby framework.
             obj["x"] = params.contains("x") ? parameterToJson(params["x"].value()) : QJsonValue(0);
             obj["y"] = params.contains("y") ? parameterToJson(params["y"].value()) : QJsonValue(0);
 
@@ -1209,6 +1283,8 @@ QJsonDocument Graph::toJsonDocument(const QString& designName,
             xpEndpointMap.insert(externalId, QJsonArray());
             xps.append(obj);
         } else if (isEndpointModule(mod.get())) {
+            // Endpoint records flatten selected interface parameters for the
+            // legacy generator while leaving editor-only state out.
             if (params.contains("x")) obj["x"] = parameterToJson(params["x"].value());
             if (params.contains("y")) obj["y"] = parameterToJson(params["y"].value());
             if (params.contains("type")) obj["type"] = parameterToJson(params["type"].value());
@@ -1231,6 +1307,8 @@ QJsonDocument Graph::toJsonDocument(const QString& designName,
         const QString sourceExternalId = ModuleLabels::externalId(sourceModule);
         const QString targetExternalId = ModuleLabels::externalId(targetModule);
 
+        // Attachment edges are folded into xpEndpointMap below; all other edges
+        // remain in the generic legacy connections array.
         if (sourceModule && targetModule &&
             isMeshRouterModule(sourceModule) &&
             isEndpointModule(targetModule) &&
@@ -1266,6 +1344,8 @@ QJsonDocument Graph::toJsonDocument(const QString& designName,
         if (!(sourceModule && targetModule &&
               isMeshRouterModule(sourceModule) &&
               isMeshRouterModule(targetModule))) {
+            // Router-to-router legacy links can infer direction from endpoints,
+            // but heterogeneous links need explicit port IDs.
             obj["from_port"] = conn->source().portId;
             obj["to_port"] = conn->target().portId;
         }
@@ -1274,12 +1354,16 @@ QJsonDocument Graph::toJsonDocument(const QString& designName,
     }
 
     for (int i = 0; i < xps.size(); ++i) {
+        // Fill endpoint arrays after scanning connections so XP records remain
+        // one object per router in the final JSON.
         QJsonObject xp = xps[i].toObject();
         xp["endpoints"] = xpEndpointMap.value(xp["id"].toString());
         xps[i] = xp;
     }
 
     QJsonObject root;
+    // The legacy root shape is intentionally stable for the bundled Ruby
+    // generator and older tests.
     root["name"] = designName.isEmpty() ? QStringLiteral("design") : designName;
     root["version"] = "1.0";
     root["parameters"] = QJsonObject();

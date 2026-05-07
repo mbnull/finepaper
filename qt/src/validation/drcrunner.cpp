@@ -12,6 +12,8 @@
 QList<ValidationResult> DRCRunner::validate(const Graph* graph) {
     m_externalToInternalIds.clear();
 
+    // External DRC consumes a serialized graph, so keep temporary input/output
+    // isolated and disposable for each validation run.
     QTemporaryFile tmpFile;
     if (!tmpFile.open()) {
         return {ValidationResult(ValidationSeverity::Error,
@@ -31,6 +33,8 @@ QList<ValidationResult> DRCRunner::validate(const Graph* graph) {
     const GeneratorCommand generatorCommand =
         GeneratorRunner::resolveDrcForGraph(graph, tmpFile.fileName(), outputDir.path());
     if (!generatorCommand.valid) {
+        // Missing or incompatible DRC command is a validation finding, not a
+        // process crash, so report it through the normal log panel path.
         return {ValidationResult(ValidationSeverity::Error, generatorCommand.errorMessage, "", "DRC")};
     }
 
@@ -38,11 +42,14 @@ QList<ValidationResult> DRCRunner::validate(const Graph* graph) {
         generatorCommand.inputFormat == QStringLiteral("generic_graph_v1")
             ? GraphJsonFlavor::Plugin
             : GraphJsonFlavor::Framework;
+    // Capture external artifact ID -> internal module ID while serializing so
+    // parser results can select the right editor node in LogPanel.
     const QString json = graph->toJsonDocument(QStringLiteral("design"),
                                                graphFlavor,
                                                &m_externalToInternalIds).toJson();
     const QByteArray jsonBytes = json.toUtf8();
     if (tmpFile.write(jsonBytes) != jsonBytes.size() || !tmpFile.flush()) {
+        // The external tool should never start with a partial input file.
         return {ValidationResult(ValidationSeverity::Error,
                                  "DRC validation failed: could not write temporary JSON file: " + tmpFile.errorString(),
                                  "",
@@ -51,18 +58,26 @@ QList<ValidationResult> DRCRunner::validate(const Graph* graph) {
 
     QProcess proc;
     proc.setWorkingDirectory(generatorCommand.workingDirectory);
+    // Run from the plugin root to match generator-relative paths declared in
+    // plugin.json.
     proc.start(generatorCommand.command, generatorCommand.arguments);
 
     if (!proc.waitForStarted()) {
+        // Surface startup failures as DRC results so the UI can present them
+        // consistently with rule violations.
         return {ValidationResult(ValidationSeverity::Error, "DRC process failed to start: " + proc.errorString(), "", "DRC")};
     }
 
     if (!proc.waitForFinished()) {
+        // waitForFinished uses Qt's default timeout here; timeout is treated as
+        // an external-tool failure rather than an editor exception.
         return {ValidationResult(ValidationSeverity::Error, "DRC process failed to start or timed out", "", "DRC")};
     }
 
     if (proc.exitStatus() != QProcess::NormalExit) {
         QString stderr = QString::fromUtf8(proc.readAllStandardError());
+        // Preserve stderr because Ruby/plugin stack traces are usually the only
+        // actionable detail for plugin authors.
         return {ValidationResult(ValidationSeverity::Error, "DRC process crashed: " + stderr, "", "DRC")};
     }
 
@@ -76,6 +91,8 @@ QList<ValidationResult> DRCRunner::validate(const Graph* graph) {
 
 QList<ValidationResult> DRCRunner::parseErrors(const QString& stderr) {
     QList<ValidationResult> results;
+    // Preferred DRC format is "ERROR element: message"; element is translated
+    // through m_externalToInternalIds when it came from serialized artifacts.
     QRegularExpression re("^(ERROR|WARNING|error|warning)\\s+(.+?):\\s+(.+)$", QRegularExpression::MultilineOption);
     auto it = re.globalMatch(stderr);
 
@@ -90,6 +107,8 @@ QList<ValidationResult> DRCRunner::parseErrors(const QString& stderr) {
     for (const auto& line : stderr.split('\n')) {
         if (line.trimmed().isEmpty() || line.contains("DRC violations:")) continue;
 
+        // Older Ruby validators emitted free-form runtime lines. Preserve those
+        // as validation errors and extract element IDs from known prefixes.
         bool found = false;
         for (const auto& r : results) {
             if (r.message().contains(line.trimmed())) { found = true; break; }

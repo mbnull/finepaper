@@ -35,6 +35,8 @@ GeneratorCommand resolvePluginCommandForGraph(const Graph* graph,
         return failure(emptyGraphMessage);
     }
 
+    // Every module must be owned by the same loaded plugin because command
+    // invocation currently has one working directory and one input schema.
     QSet<QString> pluginIds;
     for (const auto& module : graph->modules()) {
         const ModuleType* type = ModuleRegistry::instance().getType(module->type());
@@ -60,6 +62,8 @@ GeneratorCommand resolvePluginCommandForGraph(const Graph* graph,
         return failure(missingCommandMessage.arg(pluginId));
     }
 
+    // Argument templating is manifest-owned. The caller only supplies the
+    // already-written input path and selected output directory.
     GeneratorCommand command;
     command.valid = true;
     command.pluginId = plugin->id;

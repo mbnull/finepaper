@@ -47,6 +47,8 @@ namespace {
 
 class GraphUpdateGuard {
 public:
+    // Counts nested model-to-scene updates so QtNodes callbacks can distinguish
+    // graph synchronization from direct user edits.
     explicit GraphUpdateGuard(int& counter) : m_counter(counter) { ++m_counter; }
     ~GraphUpdateGuard() { --m_counter; }
 
@@ -90,6 +92,8 @@ bool isEndpointAttachmentConnection(const Graph* graph,
     const Module* targetModule = graph->getModule(connection.target().moduleId);
     if (!sourceModule || !targetModule) return false;
 
+    // Endpoint attachments can be stored in either direction by older data or
+    // UI gestures; normalize both cases to host-router and endpoint IDs.
     if (isEndpointModule(sourceModule) && isMeshRouterModule(targetModule) &&
         PortLayout::isEndpointPortId(connection.target().portId)) {
         if (hostModuleId) *hostModuleId = targetModule->id();
@@ -166,6 +170,8 @@ QString firstAvailablePort(const Graph* graph,
                            const std::function<bool(const Port&)>& predicate) {
     if (!graph || !module) return {};
 
+    // One logical attachment consumes the port for both InOut directions; keep
+    // this helper aligned with Graph::isValidConnection occupancy checks.
     for (const auto& port : module->ports()) {
         const bool matchesDirection =
             direction == Port::Direction::Output ? PortLayout::supportsOutput(port)
@@ -209,6 +215,8 @@ std::optional<DraftConnectionStart> resolveDraftConnectionStart(const QtNodes::C
 
     const QtNodes::ConnectionId connectionId = draftConnection.connectionId();
     DraftConnectionStart start;
+    // QtNodes stores the missing side as "requiredPort"; invert that to recover
+    // the already anchored side of the drag operation.
     start.startFromOutput = requiredPort == QtNodes::PortType::In;
     start.nodeId = start.startFromOutput ? connectionId.outNodeId : connectionId.inNodeId;
     start.portIndex = start.startFromOutput ? connectionId.outPortIndex : connectionId.inPortIndex;
@@ -234,6 +242,8 @@ NodeEditorWidget::NodeEditorWidget(Graph* graph, CommandManager* commandManager,
     m_graphModel = new EditorGraphModel(m_registry);
     m_scene = new QtNodes::DataFlowGraphicsScene(*m_graphModel, this);
     m_scene->setSceneRect(m_canvasRect);
+    // Geometry/painter are graph-aware customizations; the QtNodes scene still
+    // owns low-level interaction and connection graphics.
     m_scene->setNodeGeometry(std::make_unique<GraphNodeGeometry>(*m_graphModel));
     m_scene->setNodePainter(std::make_unique<GraphNodePainter>());
     m_scene->setConnectionPainter(std::make_unique<StraightConnectionPainter>());
@@ -248,6 +258,8 @@ NodeEditorWidget::NodeEditorWidget(Graph* graph, CommandManager* commandManager,
     m_view->viewport()->setAcceptDrops(true);
     m_view->viewport()->installEventFilter(this);
 
+    // Graph signals are authoritative for persistent state. Scene callbacks
+    // below only translate UI intent into Commands.
     connect(m_graph, &Graph::moduleAdded, this, &NodeEditorWidget::onModuleAdded);
     connect(m_graph, &Graph::moduleRemoved, this, &NodeEditorWidget::onModuleRemoved);
     connect(m_graph, &Graph::connectionAdded, this, &NodeEditorWidget::onConnectionAdded);
@@ -258,6 +270,8 @@ NodeEditorWidget::NodeEditorWidget(Graph* graph, CommandManager* commandManager,
     connect(m_scene, &QGraphicsScene::selectionChanged, this, &NodeEditorWidget::onSelectionChanged);
     connect(m_scene, &QtNodes::BasicGraphicsScene::nodeMoved, this, &NodeEditorWidget::onNodeMoved);
 
+    // Support constructing the widget around a pre-populated Graph, as happens
+    // in tests and after model setup before the view is shown.
     for (const auto& module : m_graph->modules()) {
         onModuleAdded(module.get());
     }
@@ -353,9 +367,13 @@ bool NodeEditorWidget::ensureConnectionInView(Connection* connection) {
         return false;
     }
 
+    // Collapsed modules intentionally hide some endpoint nodes, so a missing
+    // visual endpoint means the connection should wait until presentation expands.
     auto srcNodeIt = m_moduleToNodeId.find(connection->source().moduleId);
     auto tgtNodeIt = m_moduleToNodeId.find(connection->target().moduleId);
     if (srcNodeIt == m_moduleToNodeId.end() || tgtNodeIt == m_moduleToNodeId.end()) {
+        // A stale optimistic connection cannot be matched when either endpoint
+        // node is hidden, so clear the draft set and let presentation refresh retry.
         m_pendingConnections.clear();
         return false;
     }
@@ -366,10 +384,14 @@ bool NodeEditorWidget::ensureConnectionInView(Connection* connection) {
     auto* srcModel = dynamic_cast<GraphNodeModel*>(m_graphModel->delegateModel<GraphNodeModel>(srcNodeId));
     auto* tgtModel = dynamic_cast<GraphNodeModel*>(m_graphModel->delegateModel<GraphNodeModel>(tgtNodeId));
     if (!srcModel || !tgtModel) {
+        // Delegate lookup failure means the QtNodes model is not ready for this
+        // edge yet; avoid creating an ID mapping to a non-renderable connection.
         m_pendingConnections.clear();
         return false;
     }
 
+    // Graph stores semantic port IDs while QtNodes needs positional port
+    // indexes. The GraphNodeModel is the only place that knows that mapping.
     const QtNodes::PortIndex srcPortIdx = srcModel->portIndex(connection->source().portId, QtNodes::PortType::Out);
     const QtNodes::PortIndex tgtPortIdx = tgtModel->portIndex(connection->target().portId, QtNodes::PortType::In);
     if (srcPortIdx == QtNodes::InvalidPortIndex || tgtPortIdx == QtNodes::InvalidPortIndex) {
@@ -379,6 +401,8 @@ bool NodeEditorWidget::ensureConnectionInView(Connection* connection) {
     QtNodes::ConnectionId connId{srcNodeId, srcPortIdx, tgtNodeId, tgtPortIdx};
     m_pendingRemovals.remove(connId);
 
+    // Reuse an existing visual edge when undo/redo or graph refresh replays a
+    // connection already known to QtNodes.
     auto existingIt = m_connectionToQtId.find(connection->id());
     if (existingIt != m_connectionToQtId.end() && m_graphModel->connectionExists(existingIt.value())) {
         return true;
@@ -402,6 +426,8 @@ bool NodeEditorWidget::ensureConnectionInView(Connection* connection) {
     m_connectionToQtId[connection->id()] = connId;
     setConnectionHighlighted(connId, false);
 
+    // Selection highlight depends on the edge map, so recompute it after a new
+    // visual connection is registered.
     const auto selectedNodes = m_scene->selectedNodes();
     if (!selectedNodes.empty()) {
         updateConnectedConnectionHighlights(*selectedNodes.begin());
@@ -420,6 +446,8 @@ void NodeEditorWidget::removeConnectionFromView(const QString& connectionId) {
     }
 
     const QtNodes::ConnectionId qtConnectionId = it.value();
+    // Clear optimistic bookkeeping first so the ensuing QtNodes delete signal
+    // cannot be mistaken for a second user removal.
     m_connectionToQtId.erase(it);
     m_pendingConnections.remove(qtConnectionId);
     m_pendingRemovals.remove(qtConnectionId);
@@ -461,6 +489,8 @@ void NodeEditorWidget::onConnectionCreated(QtNodes::ConnectionId connectionId) {
     // Mark optimistic scene edge until command execution emits graph::connectionAdded.
     m_pendingConnections.insert(connectionId);
 
+    // The scene has only node/port indexes. Resolve them back to model IDs
+    // before asking Graph to enforce topology and interface constraints.
     PortRef source;
     PortRef target;
     if (!resolveConnectionPorts(connectionId, source, target)) {
@@ -485,6 +515,8 @@ void NodeEditorWidget::onConnectionDeleted(QtNodes::ConnectionId connectionId) {
     if (m_updatingFromGraph > 0) return;
     if (m_graphModel->isEditingLocked()) return;
 
+    // Programmatic deletes are staged in m_pendingRemovals to avoid building an
+    // undo command for a graph-to-scene synchronization event.
     if (m_pendingRemovals.contains(connectionId)) {
         m_pendingRemovals.remove(connectionId);
         return;
@@ -583,6 +615,8 @@ bool NodeEditorWidget::tryToggleCollapsed(const QPoint& viewportPos, bool requir
 
     const QSize nodeSize = m_scene->nodeGeometry().size(nodeGraphics->nodeId());
     const QPointF localPos = nodeGraphics->mapFromScene(scenePos);
+    // Double-click can toggle the whole node; single-click toggles only through
+    // the explicit collapse affordance.
     if (requireToggleButton && !GraphNodeGeometry::xpToggleButtonRect(nodeSize).contains(localPos)) {
         return false;
     }
@@ -605,9 +639,13 @@ bool NodeEditorWidget::resolveRouterDraftConnection(const QtNodes::ConnectionGra
         return false;
     }
     if (start->nodeId == targetNodeId) {
+        // Endpoint auto-complete should never convert a drag back onto its
+        // origin node into a self-loop.
         return false;
     }
 
+    // Draft completion starts with QtNodes IDs and only becomes meaningful once
+    // both sides can be resolved to Graph module IDs.
     const QString startModuleId = m_nodeToModuleId.value(start->nodeId);
     const QString targetModuleId = m_nodeToModuleId.value(targetNodeId);
     if (startModuleId.isEmpty() || targetModuleId.isEmpty()) {
@@ -630,6 +668,8 @@ bool NodeEditorWidget::resolveRouterDraftConnection(const QtNodes::ConnectionGra
     const QPointF targetPosition =
         m_graphModel->nodeData(targetNodeId, QtNodes::NodeRole::Position).value<QPointF>();
 
+    // Router drags can land on the node body instead of a specific port; infer
+    // the side pair from spatial relationship and router metadata.
     const std::optional<RouterConnectionResolver::ResolvedRouterConnection> resolved =
         RouterConnectionResolver::resolveByPosition(
             startModule,
@@ -677,17 +717,25 @@ bool NodeEditorWidget::resolveEndpointDraftConnection(const QtNodes::ConnectionG
     const Module* startModule = m_graph->getModule(startModuleId);
     const Module* endModule = m_graph->getModule(targetModuleId);
     if (!startModule || !endModule) {
+        // Scene state can briefly outlive graph state during undo/delete; reject
+        // the gesture until the two layers converge again.
         return false;
     }
 
     const QString startPortId = getPortId(start->nodeId, start->portType, start->portIndex);
     const Port* startPort = findPort(startModule, startPortId);
     if (!startPort || !PortLayout::isEndpointPort(*startPort)) {
+        // Only local endpoint-class ports use this resolver; router side ports
+        // are handled by resolveRouterDraftConnection.
         return false;
     }
 
     if (start->startFromOutput) {
+        // Endpoint attachment accepts either endpoint->router or router->endpoint
+        // gestures, then chooses the first compatible free local port.
         if (isEndpointModule(startModule) && isMeshRouterModule(endModule)) {
+            // Endpoint output to router body maps onto the next free router
+            // local input slot.
             const QString xpPortId = firstAvailablePort(m_graph, endModule, Port::Direction::Input,
                 [](const Port& port) { return PortLayout::isEndpointPort(port); });
             if (xpPortId.isEmpty()) {
@@ -700,6 +748,8 @@ bool NodeEditorWidget::resolveEndpointDraftConnection(const QtNodes::ConnectionG
         }
 
         if (isMeshRouterModule(startModule) && isEndpointModule(endModule)) {
+            // Router local output to endpoint body maps onto the endpoint's
+            // compatible input side.
             const QString endpointPortId = firstAvailablePort(m_graph, endModule, Port::Direction::Input,
                 [](const Port& port) { return PortLayout::isEndpointPort(port); });
             if (endpointPortId.isEmpty()) {
@@ -718,6 +768,8 @@ bool NodeEditorWidget::resolveEndpointDraftConnection(const QtNodes::ConnectionG
         return false;
     }
 
+    // Dragging from a router input to an endpoint body means the endpoint should
+    // become the source and the router-local port should remain the target.
     const QString endpointPortId = firstAvailablePort(m_graph, endModule, Port::Direction::Output,
         [](const Port& port) { return PortLayout::isEndpointPort(port); });
     if (endpointPortId.isEmpty()) {
@@ -725,6 +777,8 @@ bool NodeEditorWidget::resolveEndpointDraftConnection(const QtNodes::ConnectionG
     }
 
     source = PortRef{targetModuleId, endpointPortId};
+    // Return canonical endpoint->router orientation for storage even though the
+    // user dragged from the router side.
     target = PortRef{startModuleId, startPortId};
     return true;
 }
@@ -764,6 +818,8 @@ bool NodeEditorWidget::tryCompleteDraftConnection(const QPoint& viewportPos,
     // Consume the temporary visual draft before applying validated command mutation.
     m_scene->resetDraftConnection();
 
+    // Returning true after reset tells the event filter that the gesture was
+    // handled even if Graph rejects the resolved endpoint pair.
     if (!m_graph->isValidConnection(source, target)) {
         return true;
     }
@@ -981,6 +1037,8 @@ bool NodeEditorWidget::createModuleAt(const QString& moduleType, const QPointF& 
     const auto nodeId = m_moduleToNodeId.value(moduleId);
     const QPointF clampedPos = clampNodePosition(nodeId, scenePos);
 
+    // Creation is one user action but position is stored in Graph parameters, so
+    // follow-up commands persist the drop location and make it undoable.
     GraphUpdateGuard guard(m_updatingFromGraph);
     m_graphModel->setNodeData(nodeId, QtNodes::NodeRole::Position, clampedPos);
     auto xCmd = std::make_unique<SetParameterCommand>(m_graph, moduleId, "x", static_cast<int>(clampedPos.x()));
@@ -1015,6 +1073,8 @@ void NodeEditorWidget::refreshModulePresentation(const QString& moduleId) {
     }
 
     const ModulePresentationState state = collectModulePresentationState(moduleId);
+    // Presentation refresh starts by hiding all affected edges, then restores
+    // only the subset that should be visible for the current collapse state.
     hideModuleConnections(state);
 
     const bool collapsed = isCollapsed(hostModule);
@@ -1063,6 +1123,8 @@ void NodeEditorWidget::hideModuleConnections(const ModulePresentationState& stat
 }
 
 void NodeEditorWidget::applyCollapsedModulePresentation(const ModulePresentationState& state) {
+    // Collapsed router nodes absorb attached endpoint visuals while keeping
+    // non-attachment links visible on the host node.
     for (const QString& endpointModuleId : state.endpointModuleIds) {
         removeModuleFromView(endpointModuleId);
     }
@@ -1075,6 +1137,8 @@ void NodeEditorWidget::applyCollapsedModulePresentation(const ModulePresentation
 }
 
 void NodeEditorWidget::applyExpandedModulePresentation(const ModulePresentationState& state) {
+    // Expanded routers expose endpoint modules again, lay them out around the
+    // host, then restore all visible connections.
     for (const QString& endpointModuleId : state.endpointModuleIds) {
         ensureModuleInView(m_graph->getModule(endpointModuleId));
     }
@@ -1093,6 +1157,8 @@ void NodeEditorWidget::positionAttachedEndpoint(Connection* connection) {
         return;
     }
 
+    // The presentation state stores attachments as graph connections. Resolve
+    // which endpoint is visually hosted by which router before touching scene data.
     QString hostModuleId;
     QString endpointModuleId;
     if (!isEndpointAttachmentConnection(m_graph, *connection, &hostModuleId, &endpointModuleId)) {
@@ -1102,9 +1168,13 @@ void NodeEditorWidget::positionAttachedEndpoint(Connection* connection) {
     const auto hostNodeIt = m_moduleToNodeId.find(hostModuleId);
     const auto endpointNodeIt = m_moduleToNodeId.find(endpointModuleId);
     if (hostNodeIt == m_moduleToNodeId.end() || endpointNodeIt == m_moduleToNodeId.end()) {
+        // Collapsed or not-yet-created endpoint visuals are handled by the
+        // caller's presentation pass.
         return;
     }
 
+    // Need both Graph modules for metadata and QtNodes delegate models for
+    // port-index lookup.
     Module* hostModule = m_graph->getModule(hostModuleId);
     Module* endpointModule = m_graph->getModule(endpointModuleId);
     auto* hostModel = graphNodeModel(hostNodeIt.value());
@@ -1115,6 +1185,8 @@ void NodeEditorWidget::positionAttachedEndpoint(Connection* connection) {
 
     const bool hostIsSource = connection->source().moduleId == hostModuleId;
     const bool endpointIsSource = connection->source().moduleId == endpointModuleId;
+    // Connection orientation can vary; derive host/endpoint port IDs from the
+    // actual endpoints instead of assuming source or target roles.
     const QString hostPortId = hostIsSource ? connection->source().portId : connection->target().portId;
     const QString endpointPortId = endpointIsSource ? connection->source().portId : connection->target().portId;
     const QtNodes::PortType hostPortType = hostIsSource ? QtNodes::PortType::Out : QtNodes::PortType::In;
@@ -1122,6 +1194,8 @@ void NodeEditorWidget::positionAttachedEndpoint(Connection* connection) {
     const QtNodes::PortIndex hostPortIndex = hostModel->portIndex(hostPortId, hostPortType);
     const QtNodes::PortIndex endpointPortIndex = endpointModel->portIndex(endpointPortId, endpointPortType);
     if (hostPortIndex == QtNodes::InvalidPortIndex || endpointPortIndex == QtNodes::InvalidPortIndex) {
+        // Missing visual ports usually mean metadata and graph data disagree;
+        // skip positioning rather than placing an endpoint at an arbitrary point.
         return;
     }
 
@@ -1132,11 +1206,15 @@ void NodeEditorWidget::positionAttachedEndpoint(Connection* connection) {
     const Port* hostPort = findPort(hostModule, hostPortId);
     const QPointF normal = portNormal(hostModule, hostPort, hostPortPosition, geometry.size(hostNodeIt.value()));
     if (normal.isNull()) {
+        // Without a stable outward normal, there is no deterministic side for
+        // endpoint attachment.
         return;
     }
 
     const QPointF endpointPortPosition =
         EndpointAttachmentLayout::endpointAnchorForHostNormal(geometry.size(endpointNodeIt.value()), normal);
+    // Offset is measured along the host-port normal so north/east/south/west
+    // attachments share the same geometry path.
     const qreal configuredOffset = static_cast<qreal>(ModuleTypeMetadata::linkedEndpointOffsetX(hostModule));
     const qreal projectedEndpointAnchor = QPointF::dotProduct(endpointPortPosition, normal);
     const qreal gap = std::max<qreal>(32.0, configuredOffset + projectedEndpointAnchor);
@@ -1148,6 +1226,8 @@ void NodeEditorWidget::positionAttachedEndpoint(Connection* connection) {
             endpointPortPosition,
             gap));
 
+    // This is a visual presentation adjustment only. Persisted endpoint
+    // coordinates remain controlled by explicit drag/command paths.
     GraphUpdateGuard guard(m_updatingFromGraph);
     m_graphModel->setNodeData(endpointNodeIt.value(), QtNodes::NodeRole::Position, targetPosition);
     refreshNodeGraphics(endpointNodeIt.value(), true);

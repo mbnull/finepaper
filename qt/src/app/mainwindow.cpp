@@ -203,6 +203,8 @@ void MainWindow::openGraph() {
 }
 
 void MainWindow::generateVerilog() {
+    // Generation starts from a user-chosen directory because the plugin command
+    // may emit multiple RTL/support files beside the JSON handoff.
     const QString outputDirectory = QFileDialog::getExistingDirectory(
         this,
         "Select Verilog Output Folder",
@@ -213,6 +215,8 @@ void MainWindow::generateVerilog() {
     }
 
     QDir outputDir(outputDirectory);
+    // QFileDialog normally returns an existing folder, but this check keeps the
+    // workflow robust for platform-specific symlink or permission edge cases.
     if (!outputDir.mkpath(".")) {
         m_logPanel->appendMessage("[Generate] Could not create output folder: " + outputDirectory,
                                   QColor(220, 50, 50));
@@ -225,6 +229,8 @@ void MainWindow::generateVerilog() {
     // Persist the editor graph in the selected generator input shape, then call generator.
     const QString designName = sanitizedDesignName(outputDirectory);
     const QString jsonPath = outputDir.filePath(designName + ".json");
+    // Resolve the command before writing artifacts so plugin ownership and
+    // multi-plugin constraints fail early with a user-facing message.
     const GeneratorCommand generatorCommand =
         GeneratorRunner::resolveForGraph(m_graph, jsonPath, outputDirectory);
     if (!generatorCommand.valid) {
@@ -237,6 +243,8 @@ void MainWindow::generateVerilog() {
     }
 
     QFile jsonFile(jsonPath);
+    // JSON is the contract boundary between the editor and the external plugin
+    // process, so fail before launching the generator if the handoff cannot be written.
     if (!jsonFile.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
         m_logPanel->appendMessage("[Generate] Could not write JSON: " + jsonPath,
                                   QColor(220, 50, 50));
@@ -249,9 +257,13 @@ void MainWindow::generateVerilog() {
         generatorCommand.inputFormat == QStringLiteral("generic_graph_v1")
             ? GraphJsonFlavor::Plugin
             : GraphJsonFlavor::Framework;
+    // The same Graph can be serialized for either the newer plugin graph API or
+    // the legacy NoC framework schema depending on the active plugin manifest.
     jsonFile.write(m_graph->toJsonDocument(designName, exportFlavor).toJson());
     jsonFile.close();
 
+    // Keep a Finepaper project snapshot next to generated RTL so the produced
+    // files can be traced back to an editor-loadable design.
     const GeneratedProjectSnapshotResult projectSnapshot =
         writeGeneratedProjectSnapshot(*m_graph, outputDirectory, designName);
     if (!projectSnapshot.success) {
@@ -263,6 +275,8 @@ void MainWindow::generateVerilog() {
         return;
     }
 
+    // Log artifact paths before process launch; if the plugin fails, users still
+    // know exactly which intermediate files were produced.
     m_logPanel->appendMessage(QString("[Generate] Start output=%1").arg(outputDirectory),
                               QColor(70, 110, 190));
     m_logPanel->appendMessage(QString("[Generate] JSON=%1").arg(jsonPath),
@@ -281,6 +295,8 @@ void MainWindow::generateVerilog() {
     proc.setWorkingDirectory(generatorCommand.workingDirectory);
     proc.start(generatorCommand.command, generatorCommand.arguments);
 
+    // The cursor is restored immediately after process completion/start failure
+    // so all later message boxes and status updates use the normal UI cursor.
     const bool started = proc.waitForStarted();
     const bool finished = started && proc.waitForFinished(-1);
     QApplication::restoreOverrideCursor();
@@ -296,6 +312,8 @@ void MainWindow::generateVerilog() {
 
     const QString standardOutput = QString::fromUtf8(proc.readAllStandardOutput());
     const QString standardError = QString::fromUtf8(proc.readAllStandardError());
+    // Generators are external tools; preserve stdout/stderr separately in the
+    // activity log so plugin authors can diagnose failures without rerunning.
     if (!finished || proc.exitStatus() != QProcess::NormalExit || proc.exitCode() != 0) {
         const QString detail = trimmedProcessOutput(standardError.isEmpty() ? standardOutput : standardError);
         const QString error = !finished
@@ -313,6 +331,8 @@ void MainWindow::generateVerilog() {
     }
 
     const QString successMessage = "Generated Verilog and JSON in " + outputDirectory;
+    // Successful stderr is logged as a warning-colored channel because many
+    // command-line tools use stderr for progress even when exit code is zero.
     qInfo().noquote() << successMessage;
     m_logPanel->appendMessage("[Generate] " + successMessage, QColor(40, 140, 80));
     appendLogLines(m_logPanel, standardOutput, QColor(40, 140, 80), "[Generate][stdout] ");
@@ -355,6 +375,9 @@ void MainWindow::activeIpChanged(int index) {
     }
 
     if (!m_graph->modules().empty()) {
+        // Plugin choice determines module metadata, generator command, and IP
+        // instance parameters. Mixing an existing graph into a new plugin would
+        // silently invalidate those cross-layer assumptions.
         QMessageBox::warning(this,
                              "Active IP",
                              "Start a new empty design before switching the active IP package.");
@@ -378,6 +401,8 @@ void MainWindow::createTopologyPreset() {
     }
 
     const QString presetId = action->data().toString();
+    // Presets are plugin-owned; look them up by ID at trigger time so rebuilt
+    // menus cannot leave stale QAction pointers to deleted descriptors.
     auto presetIt = std::find_if(plugin->topologyPresets.cbegin(),
                                  plugin->topologyPresets.cend(),
                                  [&](const TopologyPresetDescriptor& preset) {
@@ -394,6 +419,8 @@ void MainWindow::createTopologyPreset() {
     QStringList parameterNames = presetIt->parameters.keys();
     parameterNames.sort();
     for (const QString& name : parameterNames) {
+        // Deterministic prompt ordering makes repeated preset creation and UI
+        // tests stable even though descriptor parameters are stored in a hash.
         const TopologyPresetParameterDescriptor parameter = presetIt->parameters.value(name);
         bool ok = false;
         const int value = QInputDialog::getInt(this,
@@ -418,6 +445,8 @@ void MainWindow::createTopologyPreset() {
     }
 
     if (!m_documentDirty && m_cleanStateId == m_commandManager->currentStateId()) {
+        // TopologyPresetBuilder mutates the graph directly today. Nudge the
+        // clean-state marker so the document is treated as dirty afterward.
         m_cleanStateId = m_commandManager->currentStateId() - 1;
     }
     syncDocumentStateFromHistory();
@@ -455,6 +484,8 @@ void MainWindow::setupConnections() {
             QOverload<QString>::of(&PropertyPanel::setSelectedModule));
 
     const auto trackGraphChange = [this]() {
+        // Bulk load/import paths suppress tracking until the graph is fully
+        // rebuilt; otherwise intermediate signals would mark a clean document dirty.
         if (m_suppressDocumentTracking) {
             return;
         }
@@ -708,6 +739,8 @@ void MainWindow::populateActiveIpSelector() {
         return;
     }
 
+    // Only plugins with loaded module definitions are useful in the active-IP
+    // selector; generator-only manifests stay discoverable through diagnostics.
     m_activeIpCombo->blockSignals(true);
     m_activeIpCombo->clear();
 
@@ -745,6 +778,8 @@ void MainWindow::configureGraphIpInstanceFromActivePlugin() {
         return;
     }
 
+    // Instance parameters are copied from the manifest into Graph so project
+    // save/generation observe one canonical IP-instance state.
     QHash<QString, Parameter> parameters;
     for (auto it = plugin->instanceParameters.constBegin(); it != plugin->instanceParameters.constEnd(); ++it) {
         parameters.insert(it.key(), Parameter(it.key(), it.value().defaultValue));
@@ -780,6 +815,8 @@ bool MainWindow::maybeSaveChanges(const QString& actionDescription) {
         return true;
     }
 
+    // All destructive document transitions funnel through this prompt so close,
+    // open, and new preserve the same save/discard/cancel semantics.
     const QMessageBox::StandardButton answer = QMessageBox::warning(
         this,
         "Unsaved Changes",
@@ -812,8 +849,12 @@ bool MainWindow::maybeSaveChanges(const QString& actionDescription) {
 bool MainWindow::loadDocument(const QString& path) {
     qInfo() << "Loading document from" << path;
 
+    // Format detection is content-based instead of extension-based so renamed
+    // legacy files still import through the correct path.
     const ProjectFileKind kind = ProjectReader::detectKind(path);
     if (kind == ProjectFileKind::Project) {
+        // Project files carry plugin ownership and typed parameters, so load
+        // through the serializer instead of the legacy Graph JSON importer.
         const ProjectReadResult readResult = ProjectReader::readFile(path);
         if (!readResult.success) {
             qWarning() << "Failed to read project" << path << readResult.error;
@@ -821,6 +862,8 @@ bool MainWindow::loadDocument(const QString& path) {
             return false;
         }
 
+        // Suppress document tracking while Graph emits module/connection signals
+        // for the newly loaded state.
         m_suppressDocumentTracking = true;
         const GraphProjectLoadResult loadResult =
             GraphProjectSerializer::loadProject(readResult.document, *m_graph);
@@ -832,6 +875,8 @@ bool MainWindow::loadDocument(const QString& path) {
         }
 
         m_commandManager->clearHistory();
+        // After a successful project load, the current command state becomes
+        // the clean baseline for window title and save action enablement.
         m_cleanStateId = m_commandManager->currentStateId();
         setCurrentDocumentPath(path);
         syncDocumentStateFromHistory();
@@ -845,6 +890,8 @@ bool MainWindow::loadDocument(const QString& path) {
     if (kind == ProjectFileKind::LegacyJson) {
         qInfo() << "Importing legacy JSON from" << path;
 
+        // Legacy JSON imports are treated as unsaved new projects because they
+        // lack Finepaper project metadata and may be normalized during import.
         m_suppressDocumentTracking = true;
         const bool loadSucceeded = m_graph->loadFromJson(path);
         m_suppressDocumentTracking = false;
@@ -855,6 +902,8 @@ bool MainWindow::loadDocument(const QString& path) {
         }
 
         m_commandManager->clearHistory();
+        // Legacy imports are intentionally dirty: saving should write a new
+        // Finepaper project rather than overwriting the imported JSON.
         m_cleanStateId = m_commandManager->currentStateId() - 1;
         setCurrentDocumentPath(QString());
         syncDocumentStateFromHistory();
@@ -866,6 +915,7 @@ bool MainWindow::loadDocument(const QString& path) {
     }
 
     qWarning() << "Unsupported document format" << path;
+    // Unknown files leave the existing design untouched.
     QMessageBox::warning(this, "Open Failed", "Unsupported document format: " + path);
     return false;
 }
@@ -910,6 +960,8 @@ void MainWindow::scheduleDocumentStateRefresh() {
         return;
     }
 
+    // Coalesce bursts of graph signals from one logical command into one dirty
+    // state refresh on the next event-loop turn.
     m_documentStateRefreshPending = true;
     QTimer::singleShot(0, this, [this]() {
         m_documentStateRefreshPending = false;

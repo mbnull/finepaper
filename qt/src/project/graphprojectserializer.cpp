@@ -66,6 +66,8 @@ bool jsonValueMatchesParameterType(const QJsonValue& value, const Parameter::Val
 
 std::unique_ptr<Module> instantiateModule(const ModuleType& type, const QString& moduleId) {
     auto module = std::make_unique<Module>(moduleId, type.name);
+    // Recreate runtime modules from type defaults first, then overlay persisted
+    // parameters in populateGraph so missing fields still receive current defaults.
     for (const Port& port : type.defaultPorts) {
         module->addPort(port);
     }
@@ -96,6 +98,8 @@ GraphProjectLoadResult populateGraph(const ProjectDocument& document,
                                      const QHash<QString, const ModuleType*>& moduleTypesById,
                                      Graph& graph) {
     if (!document.ipInstances.empty()) {
+        // The project schema supports a list for future extension, but the
+        // current editor accepts one active generated IP instance.
         const ProjectIpInstanceRecord& record = document.ipInstances.first();
         QHash<QString, Parameter> parameters;
         for (auto it = record.parameters.begin(); it != record.parameters.end(); ++it) {
@@ -108,6 +112,8 @@ GraphProjectLoadResult populateGraph(const ProjectDocument& document,
         const ModuleType* type = moduleTypesById.value(record.id);
 
         auto module = instantiateModule(*type, record.id);
+        // Values were type-checked before this function; conversion can use the
+        // module type default as the target variant shape.
         for (auto it = record.parameters.begin(); it != record.parameters.end(); ++it) {
             const auto defaultIt = type->defaultParameters.find(it.key());
             module->setParameter(it.key(), valueFromJson(it.value(), defaultIt.value().value()));
@@ -119,6 +125,8 @@ GraphProjectLoadResult populateGraph(const ProjectDocument& document,
     }
 
     for (const ProjectConnectionRecord& record : document.connections) {
+        // Validate against the concrete Graph again because module defaults and
+        // interface metadata may reject edges that pass basic project shape checks.
         const Module* sourceModule = graph.getModule(record.source.moduleId);
         const Module* targetModule = graph.getModule(record.target.moduleId);
         if (!sourceModule || !targetModule) {
@@ -147,6 +155,8 @@ ProjectDocument GraphProjectSerializer::toProject(const Graph& graph, const QStr
 
     QSet<QString> pluginIds;
     if (graph.ipInstance().has_value()) {
+        // Persist IP instance metadata separately from graph modules so plugin
+        // generators can receive package-level parameters on reload.
         const GraphIpInstance& ipInstance = *graph.ipInstance();
         document.ipInstances.push_back(ProjectIpInstanceRecord{
             ipInstance.id,
@@ -168,6 +178,8 @@ ProjectDocument GraphProjectSerializer::toProject(const Graph& graph, const QStr
         }
 
         ProjectModuleRecord record;
+        // Project records keep stable editor module IDs. External/generated IDs
+        // are parameters and may differ per plugin.
         record.id = module->id();
         record.pluginId = pluginId;
         record.type = module->type();
@@ -201,6 +213,8 @@ GraphProjectLoadResult GraphProjectSerializer::loadProject(const ProjectDocument
         return failure(QStringLiteral("Project may contain at most one IP instance"));
     }
 
+    // Validate package-level instance records before module records because the
+    // active IP instance drives plugin-level generation behavior.
     int nocInstanceCount = 0;
     QSet<QString> ipInstanceIds;
     for (const ProjectIpInstanceRecord& record : document.ipInstances) {
@@ -208,6 +222,8 @@ GraphProjectLoadResult GraphProjectSerializer::loadProject(const ProjectDocument
             return failure(QStringLiteral("Project IP instance is missing id"));
         }
         if (ipInstanceIds.contains(record.id)) {
+            // Duplicate instance IDs would make generated artifact ownership
+            // ambiguous, even though only one instance is supported today.
             return failure(QStringLiteral("Duplicate IP instance id: %1").arg(record.id));
         }
         ipInstanceIds.insert(record.id);
@@ -217,12 +233,15 @@ GraphProjectLoadResult GraphProjectSerializer::loadProject(const ProjectDocument
         }
     }
     if (nocInstanceCount > 1) {
+        // Reserve multi-NoC projects for a later orchestration design.
         return failure(QStringLiteral("Project may contain at most one IP instance with kind: noc"));
     }
 
     QSet<QString> moduleIds;
     QHash<QString, const ModuleType*> moduleTypesById;
 
+    // First pass validates identifiers, plugin ownership, and parameter types
+    // without mutating the live graph.
     for (const ProjectModuleRecord& record : document.modules) {
         if (record.id.isEmpty()) {
             return failure(QStringLiteral("Project module is missing id"));
@@ -241,9 +260,13 @@ GraphProjectLoadResult GraphProjectSerializer::loadProject(const ProjectDocument
 
         const ModuleType* type = ModuleRegistry::instance().getType(record.type);
         if (!type) {
+            // Missing type means the required plugin bundle was not loaded at
+            // startup, so continuing would lose graph semantics.
             return failure(QStringLiteral("Missing module type: %1").arg(record.type));
         }
         if (type->pluginId != record.pluginId) {
+            // Type names are currently globally unique, but the project still
+            // records plugin ownership to catch accidental cross-plugin reuse.
             return failure(QStringLiteral("Module %1 requires plugin %2").arg(record.id, record.pluginId));
         }
         moduleTypesById.insert(record.id, type);
@@ -251,10 +274,14 @@ GraphProjectLoadResult GraphProjectSerializer::loadProject(const ProjectDocument
         for (auto it = record.parameters.begin(); it != record.parameters.end(); ++it) {
             const auto defaultIt = type->defaultParameters.find(it.key());
             if (defaultIt == type->defaultParameters.end()) {
+                // Unknown parameters usually indicate a stale project/schema
+                // mismatch; reject instead of silently dropping data.
                 return failure(QStringLiteral("Unknown parameter %1 on module %2")
                                    .arg(it.key(), record.id));
             }
             if (!jsonValueMatchesParameterType(it.value(), defaultIt.value().value())) {
+                // Preserve typed Parameter variants so property panels and
+                // generators receive the expected value shape after load.
                 return failure(QStringLiteral("Invalid type for parameter %1 on module %2")
                                    .arg(it.key(), record.id));
             }
@@ -262,6 +289,8 @@ GraphProjectLoadResult GraphProjectSerializer::loadProject(const ProjectDocument
     }
 
     for (const ProjectConnectionRecord& record : document.connections) {
+        // Connection shape can be checked against module type defaults before
+        // instantiating a candidate Graph.
         if (!moduleIds.contains(record.source.moduleId) || !moduleIds.contains(record.target.moduleId)) {
             return failure(QStringLiteral("Connection %1 references missing module").arg(record.id));
         }
@@ -276,12 +305,15 @@ GraphProjectLoadResult GraphProjectSerializer::loadProject(const ProjectDocument
     }
 
     Graph candidate;
+    // Candidate load catches semantic Graph validation failures while keeping
+    // the user's current design intact on error.
     const GraphProjectLoadResult validationResult =
         populateGraph(document, moduleTypesById, candidate);
     if (!validationResult.success) {
         return validationResult;
     }
 
+    // Only after all validation succeeds do we replace the live graph.
     graph.clear();
     return populateGraph(document, moduleTypesById, graph);
 }
