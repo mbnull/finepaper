@@ -486,6 +486,62 @@ void testReaderRejectsMalformedProjectGraphArrays() {
     require(!result.success, "non-array plugin_state should be rejected");
     require(result.error.contains(QStringLiteral("plugin_state")),
             "plugin_state error should mention plugin_state");
+
+    QJsonObject wrongPluginStateItem = baseProject();
+    wrongPluginStateItem.insert(QStringLiteral("plugin_state"), QJsonArray{
+        QStringLiteral("not-an-object")
+    });
+    wrongPluginStateItem.insert(QStringLiteral("graph"), QJsonObject{
+        {QStringLiteral("modules"), QJsonArray{}},
+        {QStringLiteral("connections"), QJsonArray{}}
+    });
+    path = QDir(tempDir.path()).filePath(QStringLiteral("wrong_plugin_state_item.fpproj"));
+    writeJsonFile(path, wrongPluginStateItem);
+    result = ProjectReader::readFile(path);
+    require(!result.success, "non-object plugin_state item should be rejected");
+    require(result.error.contains(QStringLiteral("plugin_state")),
+            "plugin_state item error should mention plugin_state");
+
+    QJsonObject missingPluginStateObject = baseProject();
+    missingPluginStateObject.insert(QStringLiteral("plugin_state"), QJsonArray{
+        QJsonObject{
+            {QStringLiteral("plugin"), QStringLiteral("finepaper.ravenoc")},
+            {QStringLiteral("instance"), QStringLiteral("ravenoc_0")},
+            {QStringLiteral("schema"), QStringLiteral("ravenoc-project-state-v1")}
+        }
+    });
+    missingPluginStateObject.insert(QStringLiteral("graph"), QJsonObject{
+        {QStringLiteral("modules"), QJsonArray{}},
+        {QStringLiteral("connections"), QJsonArray{}}
+    });
+    path = QDir(tempDir.path()).filePath(QStringLiteral("missing_plugin_state_object.fpproj"));
+    writeJsonFile(path, missingPluginStateObject);
+    result = ProjectReader::readFile(path);
+    require(!result.success, "missing plugin_state state should be rejected");
+    require(result.error.contains(QStringLiteral("plugin_state")) &&
+                result.error.contains(QStringLiteral("state")),
+            "missing plugin_state state error should mention plugin_state and state");
+
+    QJsonObject wrongPluginStateObject = baseProject();
+    wrongPluginStateObject.insert(QStringLiteral("plugin_state"), QJsonArray{
+        QJsonObject{
+            {QStringLiteral("plugin"), QStringLiteral("finepaper.ravenoc")},
+            {QStringLiteral("instance"), QStringLiteral("ravenoc_0")},
+            {QStringLiteral("schema"), QStringLiteral("ravenoc-project-state-v1")},
+            {QStringLiteral("state"), QStringLiteral("not-an-object")}
+        }
+    });
+    wrongPluginStateObject.insert(QStringLiteral("graph"), QJsonObject{
+        {QStringLiteral("modules"), QJsonArray{}},
+        {QStringLiteral("connections"), QJsonArray{}}
+    });
+    path = QDir(tempDir.path()).filePath(QStringLiteral("wrong_plugin_state_object.fpproj"));
+    writeJsonFile(path, wrongPluginStateObject);
+    result = ProjectReader::readFile(path);
+    require(!result.success, "non-object plugin_state state should be rejected");
+    require(result.error.contains(QStringLiteral("plugin_state")) &&
+                result.error.contains(QStringLiteral("state")),
+            "non-object plugin_state state error should mention plugin_state and state");
 }
 
 void testReaderDetectsProjectAndLegacyJsonFiles() {

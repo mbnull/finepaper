@@ -91,12 +91,19 @@ ProjectReadResult ProjectReader::readFile(const QString& path) {
     }
     const QJsonArray pluginStates = pluginStateValue.toArray();
     for (const QJsonValue& value : pluginStates) {
+        if (!value.isObject()) {
+            return failure(QStringLiteral("Project plugin_state entries must be objects"));
+        }
         const QJsonObject object = value.toObject();
+        const QJsonValue stateValue = object.value(QStringLiteral("state"));
+        if (!stateValue.isObject()) {
+            return failure(QStringLiteral("Project plugin_state.state must be an object"));
+        }
         ProjectPluginStateRecord state;
         state.pluginId = object.value(QStringLiteral("plugin")).toString();
         state.instanceId = object.value(QStringLiteral("instance")).toString();
         state.schema = object.value(QStringLiteral("schema")).toString();
-        state.state = object.value(QStringLiteral("state")).toObject();
+        state.state = stateValue.toObject();
         document.pluginStates.push_back(state);
     }
 
