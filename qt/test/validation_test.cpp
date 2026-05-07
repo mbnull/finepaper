@@ -73,30 +73,6 @@ void addConnection(Graph& graph,
         PortRef{targetModule, targetPort}));
 }
 
-QHash<QString, Parameter> raveNoCIpParameters() {
-    return {
-        {QStringLiteral("flit_data_width"), Parameter(QStringLiteral("flit_data_width"), 32)},
-        {QStringLiteral("flit_type_width"), Parameter(QStringLiteral("flit_type_width"), 2)},
-        {QStringLiteral("flit_buffer_depth"), Parameter(QStringLiteral("flit_buffer_depth"), 2)},
-        {QStringLiteral("virtual_channels"), Parameter(QStringLiteral("virtual_channels"), 3)},
-        {QStringLiteral("routing_algorithm"), Parameter(QStringLiteral("routing_algorithm"), QStringLiteral("xy"))},
-        {QStringLiteral("priority"), Parameter(QStringLiteral("priority"), QStringLiteral("zero_high"))},
-        {QStringLiteral("max_packet_flits"), Parameter(QStringLiteral("max_packet_flits"), 256)},
-        {QStringLiteral("axi_addr_width"), Parameter(QStringLiteral("axi_addr_width"), 32)},
-        {QStringLiteral("axi_data_width"), Parameter(QStringLiteral("axi_data_width"), 32)},
-        {QStringLiteral("axi_cdc_required"), Parameter(QStringLiteral("axi_cdc_required"), QStringLiteral("all"))},
-        {QStringLiteral("bypass_cdc"), Parameter(QStringLiteral("bypass_cdc"), false)}
-    };
-}
-
-void configureRaveNoCIpInstance(Graph& graph) {
-    graph.configureIpInstance(QStringLiteral("ravenoc_0"),
-                              QStringLiteral("finepaper.ravenoc"),
-                              QStringLiteral("noc"),
-                              QStringLiteral("RaveNoC"),
-                              raveNoCIpParameters());
-}
-
 bool hasMessageContaining(const QList<ValidationResult>& results, const QString& text) {
     for (const auto& result : results) {
         if (result.message().contains(text)) {
@@ -160,7 +136,6 @@ void testDrcRunnerUsesPluginGraphFlavorForRaveNoC() {
             "RaveTile type must be registered for DRC flavor test");
 
     Graph graph;
-    configureRaveNoCIpInstance(graph);
     require(graph.addModule(makeRaveTile(QStringLiteral("rave_0_0"), 0, 0)),
             "failed to add first RaveTile");
     require(graph.addModule(makeRaveTile(QStringLiteral("rave_0_1"), 1, 0)),
@@ -192,7 +167,6 @@ void testDrcRunnerAcceptsManualRaveTilePlacement() {
             "RaveTile type must be registered for manual placement DRC test");
 
     Graph graph;
-    configureRaveNoCIpInstance(graph);
     require(graph.addModule(makeManualRaveTile(QStringLiteral("rave_a"), 100, 80)),
             "failed to add first manual RaveTile");
     require(graph.addModule(makeManualRaveTile(QStringLiteral("rave_b"), 320, 80)),
@@ -230,7 +204,6 @@ void testDrcRunnerUsesConnectionsWhenRaveTileLogicalCoordinatesAreStale() {
             "RaveTile type must be registered for stale logical coordinate DRC test");
 
     Graph graph;
-    configureRaveNoCIpInstance(graph);
     require(graph.addModule(makeRaveTileWithLogicalCoordinate(QStringLiteral("rave_left"),
                                                              100,
                                                              80,
@@ -248,7 +221,7 @@ void testDrcRunnerUsesConnectionsWhenRaveTileLogicalCoordinatesAreStale() {
                   QStringLiteral("rave_right"), QStringLiteral("west"));
 
     DRCRunner runner;
-    const QList<ValidationResult> results = runner.validate(&graph);
+    const QList<ValidationResult> results = runner.validate(&graph, ravenocPluginState());
     QStringList messages;
     for (const ValidationResult& result : results) {
         messages.append(result.message());
@@ -263,7 +236,6 @@ void testDrcRunnerRejectsManualRaveTileNonMesh() {
             "RaveTile type must be registered for manual placement DRC test");
 
     Graph graph;
-    configureRaveNoCIpInstance(graph);
     require(graph.addModule(makeManualRaveTile(QStringLiteral("rave_a"), 100, 80)),
             "failed to add first manual RaveTile");
     require(graph.addModule(makeManualRaveTile(QStringLiteral("rave_b"), 320, 80)),
