@@ -1,4 +1,5 @@
 // Project document tests for .fpproj save/load behavior.
+#include "app/generationartifacts.h"
 #include "graph/connection.h"
 #include "graph/graph.h"
 #include "graph/module.h"
@@ -460,6 +461,36 @@ void testReaderDetectsProjectAndLegacyJsonFiles() {
             "legacy NoC JSON should be detected as legacy JSON");
 }
 
+void testGenerationWritesProjectSnapshot() {
+    Graph graph;
+    graph.configureIpInstance(
+        QStringLiteral("ravenoc_0"),
+        QStringLiteral("finepaper.ravenoc"),
+        QStringLiteral("noc"),
+        QStringLiteral("RaveNoC"),
+        QHash<QString, Parameter>{
+            {QStringLiteral("flit_data_width"),
+             Parameter(QStringLiteral("flit_data_width"), 64)}
+        });
+
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "failed to create temporary directory");
+
+    const GeneratedProjectSnapshotResult result =
+        writeGeneratedProjectSnapshot(graph, tempDir.path(), QStringLiteral("generated_design"));
+    require(result.success, "generation project snapshot should be written");
+    require(QFileInfo::exists(result.path), "generation project snapshot should exist");
+    require(QFileInfo(result.path).fileName() == QStringLiteral("generated_design.fpproj"),
+            "generation project snapshot should use design name");
+
+    const ProjectReadResult readResult = ProjectReader::readFile(result.path);
+    require(readResult.success, "generation project snapshot should be readable");
+    require(readResult.document.name == QStringLiteral("generated_design"),
+            "generation project snapshot should use design name as project name");
+    require(readResult.document.ipInstances.size() == 1,
+            "generation project snapshot should include IP instance state");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -477,6 +508,7 @@ int main(int argc, char** argv) {
         testLoadRejectsConnectionInvalidatedByEarlierConnectionWithoutChangingGraph();
         testReaderRejectsMalformedProjectGraphArrays();
         testReaderDetectsProjectAndLegacyJsonFiles();
+        testGenerationWritesProjectSnapshot();
     } catch (const std::exception& error) {
         std::cerr << "projectdocument_test failed: " << error.what() << '\n';
         return 1;

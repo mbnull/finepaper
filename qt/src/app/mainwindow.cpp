@@ -2,6 +2,7 @@
 // Layout: horizontal splitter (palette | node editor | property panel)
 // inside a vertical splitter with the log panel below.
 #include "app/mainwindow.h"
+#include "app/generationartifacts.h"
 #include "graph/graph.h"
 #include "commands/commandmanager.h"
 #include "nodeeditor/nodeeditorwidget.h"
@@ -251,9 +252,22 @@ void MainWindow::generateVerilog() {
     jsonFile.write(m_graph->toJsonDocument(designName, exportFlavor).toJson());
     jsonFile.close();
 
+    const GeneratedProjectSnapshotResult projectSnapshot =
+        writeGeneratedProjectSnapshot(*m_graph, outputDirectory, designName);
+    if (!projectSnapshot.success) {
+        m_logPanel->appendMessage("[Generate] Could not write project: " + projectSnapshot.error,
+                                  QColor(220, 50, 50));
+        QMessageBox::warning(this,
+                             "Project Snapshot Failed",
+                             projectSnapshot.error);
+        return;
+    }
+
     m_logPanel->appendMessage(QString("[Generate] Start output=%1").arg(outputDirectory),
                               QColor(70, 110, 190));
     m_logPanel->appendMessage(QString("[Generate] JSON=%1").arg(jsonPath),
+                              QColor(70, 110, 190));
+    m_logPanel->appendMessage(QString("[Generate] Project=%1").arg(projectSnapshot.path),
                               QColor(70, 110, 190));
     m_logPanel->appendMessage(QString("[Generate] Plugin=%1").arg(generatorCommand.pluginId),
                               QColor(70, 110, 190));
