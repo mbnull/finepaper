@@ -210,6 +210,7 @@ target("nodeeditor_geometry_test")
 
 add_qt_test_target("plugin_test", "test/plugin_test.cpp", {
     "src/**/generatorrunner.cpp",
+    "src/**/manifestpluginprojectadapter.cpp",
     "src/**/graph.cpp",
     "src/**/module.cpp",
     "src/**/connection.cpp",
@@ -221,6 +222,7 @@ add_qt_test_target("plugin_test", "test/plugin_test.cpp", {
     "src/**/parameter.cpp",
     "src/**/port.cpp",
     "inc/**/generatorrunner.h",
+    "inc/**/pluginprojectadapter.h",
     "inc/**/graph.h",
     "inc/**/module.h",
     "inc/**/pluginregistry.h",
