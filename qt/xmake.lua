@@ -115,6 +115,7 @@ add_qt_test_target("projectdocument_test", "test/projectdocument_test.cpp", {
     "src/**/moduleprovider.cpp",
     "src/**/pluginregistry.cpp",
     "inc/**/projectdocument.h",
+    "inc/**/pluginstate.h",
     "inc/**/projectreader.h",
     "inc/**/projectwriter.h",
     "inc/**/graphprojectserializer.h",

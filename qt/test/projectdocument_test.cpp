@@ -243,6 +243,44 @@ void testProjectRoundTripRestoresModulesParametersAndConnections() {
             "connection target should be restored");
 }
 
+void testProjectPreservesOpaquePluginState() {
+    ProjectDocument document = validProjectDocument();
+    ProjectPluginStateRecord state;
+    state.pluginId = QStringLiteral("finepaper.ravenoc");
+    state.instanceId = QStringLiteral("ravenoc_0");
+    state.schema = QStringLiteral("ravenoc-project-state-v1");
+    state.state = QJsonObject{
+        {QStringLiteral("global_parameters"), QJsonObject{
+            {QStringLiteral("flit_data_width"), 64},
+            {QStringLiteral("routing_algorithm"), QStringLiteral("xy")}
+        }}
+    };
+    document.pluginStates.push_back(state);
+
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "failed to create temporary directory");
+    const QString path = QDir(tempDir.path()).filePath(QStringLiteral("plugin_state.fpproj"));
+    const ProjectWriteResult writeResult = ProjectWriter::writeFile(path, document);
+    require(writeResult.success, "project with plugin state should write");
+
+    const ProjectReadResult readResult = ProjectReader::readFile(path);
+    require(readResult.success, "project with plugin state should read");
+    require(readResult.document.pluginStates.size() == 1,
+            "plugin state record should round-trip");
+    const ProjectPluginStateRecord& restored = readResult.document.pluginStates.first();
+    require(restored.pluginId == QStringLiteral("finepaper.ravenoc"),
+            "plugin state plugin id should round-trip");
+    require(restored.instanceId == QStringLiteral("ravenoc_0"),
+            "plugin state instance id should round-trip");
+    require(restored.schema == QStringLiteral("ravenoc-project-state-v1"),
+            "plugin state schema should round-trip");
+    require(restored.state.value(QStringLiteral("global_parameters"))
+                .toObject()
+                .value(QStringLiteral("flit_data_width"))
+                .toInt() == 64,
+            "opaque plugin state JSON should round-trip");
+}
+
 void testLoadRejectsSecondNocIpInstance() {
     ProjectDocument document = validProjectDocument();
     document.ipInstances.push_back(ProjectIpInstanceRecord{
@@ -435,6 +473,19 @@ void testReaderRejectsMalformedProjectGraphArrays() {
     require(!result.success, "non-array connections should be rejected");
     require(result.error.contains(QStringLiteral("graph.connections")),
             "connections error should mention graph.connections");
+
+    QJsonObject wrongPluginState = baseProject();
+    wrongPluginState.insert(QStringLiteral("plugin_state"), QJsonObject{});
+    wrongPluginState.insert(QStringLiteral("graph"), QJsonObject{
+        {QStringLiteral("modules"), QJsonArray{}},
+        {QStringLiteral("connections"), QJsonArray{}}
+    });
+    path = QDir(tempDir.path()).filePath(QStringLiteral("wrong_plugin_state.fpproj"));
+    writeJsonFile(path, wrongPluginState);
+    result = ProjectReader::readFile(path);
+    require(!result.success, "non-array plugin_state should be rejected");
+    require(result.error.contains(QStringLiteral("plugin_state")),
+            "plugin_state error should mention plugin_state");
 }
 
 void testReaderDetectsProjectAndLegacyJsonFiles() {
@@ -498,6 +549,7 @@ int main(int argc, char** argv) {
 
     try {
         testProjectRoundTripRestoresModulesParametersAndConnections();
+        testProjectPreservesOpaquePluginState();
         testReaderRejectsWrongKind();
         testLoadRejectsDuplicateModuleIds();
         testLoadRejectsSecondNocIpInstance();

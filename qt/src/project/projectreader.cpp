@@ -85,6 +85,21 @@ ProjectReadResult ProjectReader::readFile(const QString& path) {
         });
     }
 
+    const QJsonValue pluginStateValue = root.value(QStringLiteral("plugin_state"));
+    if (!pluginStateValue.isUndefined() && !pluginStateValue.isArray()) {
+        return failure(QStringLiteral("Project plugin_state must be an array"));
+    }
+    const QJsonArray pluginStates = pluginStateValue.toArray();
+    for (const QJsonValue& value : pluginStates) {
+        const QJsonObject object = value.toObject();
+        ProjectPluginStateRecord state;
+        state.pluginId = object.value(QStringLiteral("plugin")).toString();
+        state.instanceId = object.value(QStringLiteral("instance")).toString();
+        state.schema = object.value(QStringLiteral("schema")).toString();
+        state.state = object.value(QStringLiteral("state")).toObject();
+        document.pluginStates.push_back(state);
+    }
+
     const QJsonValue ipInstancesValue = root.value(QStringLiteral("ip_instances"));
     if (!ipInstancesValue.isUndefined() && !ipInstancesValue.isArray()) {
         return failure(QStringLiteral("Project ip_instances must be an array"));
