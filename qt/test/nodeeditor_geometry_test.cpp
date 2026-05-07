@@ -329,6 +329,9 @@ void testStoredNodeSizeOverridesDefaultAndProvidesResizeHandle() {
 } // namespace
 
 int main(int argc, char** argv) {
+    if (!qEnvironmentVariableIsSet("QT_QPA_PLATFORM")) {
+        qputenv("QT_QPA_PLATFORM", "offscreen");
+    }
     QApplication app(argc, argv);
 
     try {
