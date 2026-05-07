@@ -103,6 +103,7 @@ add_qt_test_target("logformat_test", "test/logformat_test.cpp", {
 add_qt_test_target("projectdocument_test", "test/projectdocument_test.cpp", {
     "src/**/projectreader.cpp",
     "src/**/projectwriter.cpp",
+    "src/**/projectstateservice.cpp",
     "src/**/graphprojectserializer.cpp",
     "src/app/generationartifacts.cpp",
     "src/**/graph.cpp",
@@ -116,6 +117,7 @@ add_qt_test_target("projectdocument_test", "test/projectdocument_test.cpp", {
     "src/**/pluginregistry.cpp",
     "inc/**/projectdocument.h",
     "inc/**/pluginstate.h",
+    "inc/**/projectstateservice.h",
     "inc/**/projectreader.h",
     "inc/**/projectwriter.h",
     "inc/**/graphprojectserializer.h",

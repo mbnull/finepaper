@@ -8,6 +8,7 @@
 #include "modules/moduleregistry.h"
 #include "project/graphprojectserializer.h"
 #include "project/projectreader.h"
+#include "project/projectstateservice.h"
 #include "project/projectwriter.h"
 
 #include <QCoreApplication>
@@ -279,6 +280,40 @@ void testProjectPreservesOpaquePluginState() {
                 .value(QStringLiteral("flit_data_width"))
                 .toInt() == 64,
             "opaque plugin state JSON should round-trip");
+}
+
+void testProjectStateServiceUpdatesPluginStateWithoutGraph() {
+    ProjectDocument document = validProjectDocument();
+    ProjectPluginStateRecord state;
+    state.pluginId = QStringLiteral("finepaper.ravenoc");
+    state.instanceId = QStringLiteral("ravenoc_0");
+    state.schema = QStringLiteral("ravenoc-project-state-v1");
+    state.state = QJsonObject{
+        {QStringLiteral("global_parameters"), QJsonObject{
+            {QStringLiteral("flit_data_width"), 32}
+        }}
+    };
+    document.pluginStates.push_back(state);
+
+    ProjectStateService service;
+    service.loadFromDocument(document);
+    require(service.setParameter(QStringLiteral("finepaper.ravenoc"),
+                                 QStringLiteral("ravenoc_0"),
+                                 QStringLiteral("global_parameters"),
+                                 QStringLiteral("flit_data_width"),
+                                 64),
+            "plugin state parameter update should succeed");
+
+    ProjectDocument saved = validProjectDocument();
+    service.writeToDocument(saved);
+    require(saved.pluginStates.size() == 1,
+            "service should write one plugin state record");
+    require(saved.pluginStates.first()
+                .state.value(QStringLiteral("global_parameters"))
+                .toObject()
+                .value(QStringLiteral("flit_data_width"))
+                .toInt() == 64,
+            "service should write updated plugin parameter");
 }
 
 void testLoadRejectsSecondNocIpInstance() {
@@ -606,6 +641,7 @@ int main(int argc, char** argv) {
     try {
         testProjectRoundTripRestoresModulesParametersAndConnections();
         testProjectPreservesOpaquePluginState();
+        testProjectStateServiceUpdatesPluginStateWithoutGraph();
         testReaderRejectsWrongKind();
         testLoadRejectsDuplicateModuleIds();
         testLoadRejectsSecondNocIpInstance();
