@@ -89,6 +89,8 @@ void testUnselectedPanelShowsPluginProjectParameters() {
                                    QStringLiteral("global_parameters"),
                                    QStringLiteral("flit_data_width")).toInt() == 32,
             "undo should restore previous plugin parameter value");
+    require(spinBox->value() == 32,
+            "undo should refresh the visible plugin parameter widget");
     require(!graph.ipInstance().has_value(),
             "plugin parameter rendering should not require graph IP instance state");
 }
@@ -151,6 +153,36 @@ void testClearingGraphBeforePanelSelectionClearIsSafe() {
     panel.setSelectedModule(QString());
 }
 
+void testDefaultPluginSectionWithoutStateIsReadOnly() {
+    Graph graph;
+    ProjectStateService stateService;
+
+    PluginDescriptor plugin;
+    plugin.id = QStringLiteral("finepaper.ravenoc");
+    plugin.name = QStringLiteral("RaveNoC");
+    PluginInstanceParameterDescriptor width;
+    width.name = QStringLiteral("flit_data_width");
+    width.type = QStringLiteral("int");
+    width.defaultValue = 32;
+    width.label = QStringLiteral("Flit data width");
+    plugin.instanceParameters.insert(width.name, width);
+    ManifestPluginProjectAdapter adapter(plugin);
+
+    CommandManager commandManager;
+    PropertyPanel panel(&graph, &stateService, {&adapter}, &commandManager);
+    panel.setSelectedModule(QString());
+
+    QSpinBox* spinBox = panel.findChild<QSpinBox*>();
+    require(spinBox != nullptr, "default plugin parameter should still be visible");
+    require(spinBox->isReadOnly(),
+            "default plugin parameter without writable state should be read-only");
+    spinBox->setValue(64);
+    require(commandManager.currentStateId() == 0,
+            "read-only default plugin parameter should not enter command history");
+    require(stateService.pluginStates().isEmpty(),
+            "read-only default plugin parameter should not create state implicitly");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -163,6 +195,7 @@ int main(int argc, char** argv) {
         testUnselectedPanelShowsPluginProjectParameters();
         testUnselectedPanelUsesPersistedCustomPluginInstanceId();
         testClearingGraphBeforePanelSelectionClearIsSafe();
+        testDefaultPluginSectionWithoutStateIsReadOnly();
     } catch (const std::exception& error) {
         std::cerr << "propertypanel_test failed: " << error.what() << '\n';
         return 1;

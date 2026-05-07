@@ -1,6 +1,9 @@
 // ProjectStateService stores plugin-owned project state outside Graph.
 #include "project/projectstateservice.h"
 
+ProjectStateService::ProjectStateService(QObject* parent)
+    : QObject(parent) {}
+
 void ProjectStateService::clear() {
     m_pluginStates.clear();
 }
@@ -11,6 +14,17 @@ void ProjectStateService::loadFromDocument(const ProjectDocument& document) {
 
 void ProjectStateService::writeToDocument(ProjectDocument& document) const {
     document.pluginStates = m_pluginStates;
+}
+
+bool ProjectStateService::ensurePluginStateRecord(const ProjectPluginStateRecord& record) {
+    for (const ProjectPluginStateRecord& existing : m_pluginStates) {
+        if (existing.pluginId == record.pluginId && existing.instanceId == record.instanceId) {
+            return false;
+        }
+    }
+
+    m_pluginStates.push_back(record);
+    return true;
 }
 
 bool ProjectStateService::setParameter(const QString& pluginId,
@@ -31,6 +45,7 @@ bool ProjectStateService::setParameter(const QString& pluginId,
         QJsonObject sectionObject = sectionValue.toObject();
         sectionObject.insert(name, value);
         record.state.insert(section, sectionObject);
+        emit parameterChanged(pluginId, instanceId, section, name);
         return true;
     }
     return false;

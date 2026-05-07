@@ -33,6 +33,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QInputDialog>
+#include <QJsonObject>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
@@ -86,6 +87,38 @@ QString defaultIpInstanceId(const PluginDescriptor& plugin) {
         token = QStringLiteral("ip");
     }
     return token + QStringLiteral("_0");
+}
+
+QJsonValue pluginDefaultValueToJson(const Parameter::Value& value) {
+    if (const auto* stringValue = std::get_if<QString>(&value)) {
+        return *stringValue;
+    }
+    if (const auto* intValue = std::get_if<int>(&value)) {
+        return *intValue;
+    }
+    if (const auto* doubleValue = std::get_if<double>(&value)) {
+        return *doubleValue;
+    }
+    if (const auto* boolValue = std::get_if<bool>(&value)) {
+        return *boolValue;
+    }
+    return QJsonValue(QJsonValue::Undefined);
+}
+
+ProjectPluginStateRecord defaultPluginStateRecord(const PluginDescriptor& plugin) {
+    QJsonObject globalParameters;
+    QStringList names = plugin.instanceParameters.keys();
+    names.sort();
+    for (const QString& name : names) {
+        globalParameters.insert(name, pluginDefaultValueToJson(plugin.instanceParameters.value(name).defaultValue));
+    }
+
+    ProjectPluginStateRecord record;
+    record.pluginId = plugin.id;
+    record.instanceId = defaultIpInstanceId(plugin);
+    record.schema = plugin.id + QStringLiteral("-project-state-v1");
+    record.state.insert(QStringLiteral("global_parameters"), globalParameters);
+    return record;
 }
 
 void appendLogLines(LogPanel* logPanel,
@@ -486,6 +519,12 @@ void MainWindow::setupConnections() {
     connect(m_graph, &Graph::ipInstanceParameterChanged, this, [trackGraphChange](const QString&) {
         trackGraphChange();
     });
+    connect(m_projectStateService.get(),
+            &ProjectStateService::parameterChanged,
+            this,
+            [trackGraphChange](const QString&, const QString&, const QString&, const QString&) {
+                trackGraphChange();
+            });
 }
 
 void MainWindow::setupActions() {
@@ -770,6 +809,7 @@ void MainWindow::configureGraphIpInstanceFromActivePlugin() {
                                  plugin->kind,
                                  plugin->name,
                                  parameters);
+    m_projectStateService->ensurePluginStateRecord(defaultPluginStateRecord(*plugin));
 }
 
 void MainWindow::rebuildTopologyMenu() {

@@ -35,13 +35,18 @@ public slots:
 
 private slots:
     void onParameterChanged(const QString& name);
+    void onPluginStateParameterChanged(const QString& pluginId,
+                                       const QString& instanceId,
+                                       const QString& section,
+                                       const QString& name);
 
 private:
     void clearPanel();
     void populatePanel();
     QWidget* createPluginParameterWidget(const PluginParameterSection& section,
                                          const PluginParameterField& field,
-                                         const QJsonValue& storedValue);
+                                         const QJsonValue& storedValue,
+                                         bool editable);
 
     Graph* m_graph;
     ProjectStateService* m_stateService;

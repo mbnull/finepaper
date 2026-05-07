@@ -239,6 +239,12 @@ PropertyPanel::PropertyPanel(Graph* graph,
     m_layout->addWidget(m_descriptionView);
     m_formLayout = new QFormLayout();
     m_layout->addLayout(m_formLayout);
+    if (m_stateService) {
+        connect(m_stateService,
+                &ProjectStateService::parameterChanged,
+                this,
+                &PropertyPanel::onPluginStateParameterChanged);
+    }
 }
 
 PropertyPanel::PropertyPanel(Graph* graph, CommandManager* commandManager, QWidget* parent)
@@ -246,14 +252,15 @@ PropertyPanel::PropertyPanel(Graph* graph, CommandManager* commandManager, QWidg
 
 QWidget* PropertyPanel::createPluginParameterWidget(const PluginParameterSection&,
                                                     const PluginParameterField& field,
-                                                    const QJsonValue& storedValue) {
+                                                    const QJsonValue& storedValue,
+                                                    bool editable) {
     if (!field.choices.isEmpty()) {
         auto* comboBox = new QComboBox(this);
         for (const PluginInstanceParameterChoice& choice : field.choices) {
             comboBox->addItem(choice.label, choice.value);
         }
         syncComboBoxValue(comboBox, pluginValueAsString(field, storedValue));
-        applyPluginConfigurability(comboBox, field.configurable);
+        applyPluginConfigurability(comboBox, editable);
         return comboBox;
     }
 
@@ -262,7 +269,7 @@ QWidget* PropertyPanel::createPluginParameterWidget(const PluginParameterSection
         auto* spinBox = new QSpinBox(this);
         spinBox->setRange(INT_MIN, INT_MAX);
         spinBox->setValue(value.toInt(defaultIntValue(field.defaultValue)));
-        applyPluginConfigurability(spinBox, field.configurable);
+        applyPluginConfigurability(spinBox, editable);
         return spinBox;
     }
     if (field.type == QStringLiteral("double")) {
@@ -270,18 +277,18 @@ QWidget* PropertyPanel::createPluginParameterWidget(const PluginParameterSection
         doubleSpinBox->setRange(std::numeric_limits<double>::lowest(),
                                 std::numeric_limits<double>::max());
         doubleSpinBox->setValue(value.toDouble(defaultDoubleValue(field.defaultValue)));
-        applyPluginConfigurability(doubleSpinBox, field.configurable);
+        applyPluginConfigurability(doubleSpinBox, editable);
         return doubleSpinBox;
     }
     if (field.type == QStringLiteral("bool")) {
         auto* checkBox = new QCheckBox(this);
         checkBox->setChecked(value.toBool(defaultBoolValue(field.defaultValue)));
-        applyPluginConfigurability(checkBox, field.configurable);
+        applyPluginConfigurability(checkBox, editable);
         return checkBox;
     }
 
     auto* lineEdit = new QLineEdit(pluginValueAsString(field, storedValue), this);
-    applyPluginConfigurability(lineEdit, field.configurable);
+    applyPluginConfigurability(lineEdit, editable);
     return lineEdit;
 }
 
@@ -322,7 +329,8 @@ void PropertyPanel::populatePanel() {
         }
 
         const auto renderSection = [this](const PluginParameterSection& section,
-                                          const QString& instanceId) {
+                                          const QString& instanceId,
+                                          bool writableState) {
             const QString baseLabel = section.label.isEmpty() ? section.pluginId : section.label;
             const QString title = instanceId.isEmpty()
                 ? baseLabel
@@ -336,7 +344,8 @@ void PropertyPanel::populatePanel() {
             for (const PluginParameterField& field : section.fields) {
                 const QJsonValue stored = m_stateService->parameter(
                     section.pluginId, instanceId, section.id, field.name);
-                QWidget* widget = createPluginParameterWidget(section, field, stored);
+                const bool editable = field.configurable && writableState;
+                QWidget* widget = createPluginParameterWidget(section, field, stored, editable);
                 if (!widget) {
                     continue;
                 }
@@ -346,7 +355,7 @@ void PropertyPanel::populatePanel() {
                     rowLabel->setToolTip(field.description);
                     widget->setToolTip(field.description);
                 }
-                if (field.configurable && m_commandManager) {
+                if (editable && m_commandManager) {
                     const QString pluginId = section.pluginId;
                     const QString sectionId = section.id;
                     const QString fieldName = field.name;
@@ -412,11 +421,13 @@ void PropertyPanel::populatePanel() {
                     if (record.pluginId != section.pluginId) {
                         continue;
                     }
-                    renderSection(section, record.instanceId);
+                    renderSection(section,
+                                  record.instanceId,
+                                  record.state.value(section.id).isObject());
                     renderedPersistedState = true;
                 }
                 if (!renderedPersistedState) {
-                    renderSection(section, section.instanceId);
+                    renderSection(section, section.instanceId, false);
                 }
             }
         }
@@ -570,6 +581,75 @@ void PropertyPanel::onParameterChanged(const QString& name) {
     } else if (auto* checkBox = qobject_cast<QCheckBox*>(it.value())) {
         checkBox->blockSignals(true);
         checkBox->setChecked(std::get<bool>(value));
+        checkBox->blockSignals(false);
+    }
+}
+
+void PropertyPanel::onPluginStateParameterChanged(const QString& pluginId,
+                                                  const QString& instanceId,
+                                                  const QString& section,
+                                                  const QString& name) {
+    if (m_selectedModule || !m_stateService) {
+        return;
+    }
+
+    const QString key = pluginId + QStringLiteral("/") + instanceId +
+        QStringLiteral("/") + section + QStringLiteral("/") + name;
+    auto widgetIt = m_ipParameterWidgets.find(key);
+    if (widgetIt == m_ipParameterWidgets.end()) {
+        return;
+    }
+
+    PluginParameterField field;
+    bool hasField = false;
+    for (const IPluginProjectAdapter* adapter : m_pluginAdapters) {
+        if (!adapter) {
+            continue;
+        }
+        for (const PluginParameterSection& candidateSection : adapter->parameterSections()) {
+            if (candidateSection.pluginId != pluginId || candidateSection.id != section) {
+                continue;
+            }
+            for (const PluginParameterField& candidateField : candidateSection.fields) {
+                if (candidateField.name == name) {
+                    field = candidateField;
+                    hasField = true;
+                    break;
+                }
+            }
+            if (hasField) {
+                break;
+            }
+        }
+        if (hasField) {
+            break;
+        }
+    }
+
+    const QJsonValue stored = m_stateService->parameter(pluginId, instanceId, section, name);
+    const QJsonValue value = hasField ? resolvedPluginValue(field, stored) : stored;
+    QWidget* widget = widgetIt.value();
+    if (auto* lineEdit = qobject_cast<QLineEdit*>(widget)) {
+        lineEdit->blockSignals(true);
+        lineEdit->setText(hasField ? pluginValueAsString(field, stored) : value.toString());
+        lineEdit->blockSignals(false);
+    } else if (auto* comboBox = qobject_cast<QComboBox*>(widget)) {
+        comboBox->blockSignals(true);
+        syncComboBoxValue(comboBox, hasField ? pluginValueAsString(field, stored) : value.toString());
+        comboBox->blockSignals(false);
+    } else if (auto* spinBox = qobject_cast<QSpinBox*>(widget)) {
+        spinBox->blockSignals(true);
+        spinBox->setValue(value.toInt(hasField ? defaultIntValue(field.defaultValue) : spinBox->value()));
+        spinBox->blockSignals(false);
+    } else if (auto* doubleSpinBox = qobject_cast<QDoubleSpinBox*>(widget)) {
+        doubleSpinBox->blockSignals(true);
+        doubleSpinBox->setValue(value.toDouble(hasField ? defaultDoubleValue(field.defaultValue)
+                                                        : doubleSpinBox->value()));
+        doubleSpinBox->blockSignals(false);
+    } else if (auto* checkBox = qobject_cast<QCheckBox*>(widget)) {
+        checkBox->blockSignals(true);
+        checkBox->setChecked(value.toBool(hasField ? defaultBoolValue(field.defaultValue)
+                                                   : checkBox->isChecked()));
         checkBox->blockSignals(false);
     }
 }
