@@ -91,8 +91,6 @@ void testUnselectedPanelShowsPluginProjectParameters() {
             "undo should restore previous plugin parameter value");
     require(spinBox->value() == 32,
             "undo should refresh the visible plugin parameter widget");
-    require(!graph.ipInstance().has_value(),
-            "plugin parameter rendering should not require graph IP instance state");
 }
 
 void testUnselectedPanelUsesPersistedCustomPluginInstanceId() {
@@ -135,8 +133,6 @@ void testUnselectedPanelUsesPersistedCustomPluginInstanceId() {
     require(spinBox != nullptr, "integer plugin parameter should use spin box");
     require(spinBox->value() == 128,
             "plugin parameter widget should read stored value for custom instance id");
-    require(!graph.ipInstance().has_value(),
-            "custom plugin state rendering should not require graph IP instance state");
 }
 
 void testClearingGraphBeforePanelSelectionClearIsSafe() {

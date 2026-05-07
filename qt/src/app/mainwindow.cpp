@@ -33,6 +33,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QInputDialog>
+#include <QJsonDocument>
 #include <QJsonObject>
 #include <QMenu>
 #include <QMenuBar>
@@ -48,7 +49,6 @@
 #include <QToolButton>
 #include <QtGlobal>
 #include <QVBoxLayout>
-#include <QHash>
 
 namespace {
 
@@ -117,6 +117,8 @@ ProjectPluginStateRecord defaultPluginStateRecord(const PluginDescriptor& plugin
     record.pluginId = plugin.id;
     record.instanceId = defaultIpInstanceId(plugin);
     record.schema = plugin.id + QStringLiteral("-project-state-v1");
+    record.state.insert(QStringLiteral("kind"), plugin.kind);
+    record.state.insert(QStringLiteral("type"), plugin.name);
     record.state.insert(QStringLiteral("global_parameters"), globalParameters);
     return record;
 }
@@ -285,11 +287,16 @@ void MainWindow::generateVerilog() {
         generatorCommand.inputFormat == QStringLiteral("generic_graph_v1")
             ? GraphJsonFlavor::Plugin
             : GraphJsonFlavor::Framework;
-    jsonFile.write(m_graph->toJsonDocument(designName, exportFlavor).toJson());
+    QJsonObject root = m_graph->toJsonDocument(designName, exportFlavor).object();
+    attachPluginState(root, m_projectStateService->pluginStates(), generatorCommand.pluginId);
+    jsonFile.write(QJsonDocument(root).toJson());
     jsonFile.close();
 
     const GeneratedProjectSnapshotResult projectSnapshot =
-        writeGeneratedProjectSnapshot(*m_graph, outputDirectory, designName);
+        writeGeneratedProjectSnapshot(*m_graph,
+                                      outputDirectory,
+                                      designName,
+                                      m_projectStateService->pluginStates());
     if (!projectSnapshot.success) {
         m_logPanel->appendMessage("[Generate] Could not write project: " + projectSnapshot.error,
                                   QColor(220, 50, 50));
@@ -486,7 +493,10 @@ void MainWindow::setupPanels() {
                                         this);
     m_palette = new Palette(m_graph, m_commandManager.get(), this);
     m_logPanel = new LogPanel(this);
-    m_validationManager = new ValidationManager(m_graph, m_logPanel, this);
+    m_validationManager = new ValidationManager(m_graph,
+                                                m_projectStateService.get(),
+                                                m_logPanel,
+                                                this);
 
     m_nodeEditor->setObjectName("nodeEditorPanel");
     m_propertyPanel->setObjectName("propertyPanel");
@@ -514,9 +524,6 @@ void MainWindow::setupConnections() {
     connect(m_graph, &Graph::connectionAdded, this, [trackGraphChange](Connection*) { trackGraphChange(); });
     connect(m_graph, &Graph::connectionRemoved, this, [trackGraphChange](const QString&) { trackGraphChange(); });
     connect(m_graph, &Graph::parameterChanged, this, [trackGraphChange](const QString&, const QString&) {
-        trackGraphChange();
-    });
-    connect(m_graph, &Graph::ipInstanceParameterChanged, this, [trackGraphChange](const QString&) {
         trackGraphChange();
     });
     connect(m_projectStateService.get(),
@@ -789,26 +796,16 @@ void MainWindow::setActivePluginId(const QString& pluginId) {
     if (m_palette) {
         m_palette->setActivePluginId(pluginId);
     }
-    configureGraphIpInstanceFromActivePlugin();
+    ensureProjectStateRecordFromActivePlugin();
     rebuildTopologyMenu();
 }
 
-void MainWindow::configureGraphIpInstanceFromActivePlugin() {
+void MainWindow::ensureProjectStateRecordFromActivePlugin() {
     const PluginDescriptor* plugin = PluginRegistry::instance().plugin(m_activePluginId);
     if (!plugin) {
         return;
     }
 
-    QHash<QString, Parameter> parameters;
-    for (auto it = plugin->instanceParameters.constBegin(); it != plugin->instanceParameters.constEnd(); ++it) {
-        parameters.insert(it.key(), Parameter(it.key(), it.value().defaultValue));
-    }
-
-    m_graph->configureIpInstance(defaultIpInstanceId(*plugin),
-                                 plugin->id,
-                                 plugin->kind,
-                                 plugin->name,
-                                 parameters);
     m_projectStateService->ensurePluginStateRecord(defaultPluginStateRecord(*plugin));
 }
 
@@ -913,6 +910,7 @@ bool MainWindow::loadDocument(const QString& path) {
             return false;
         }
         m_projectStateService->clear();
+        ensureProjectStateRecordFromActivePlugin();
         if (m_propertyPanel) {
             m_propertyPanel->setSelectedModule(QString());
         }
@@ -961,7 +959,7 @@ void MainWindow::clearDocument() {
     m_suppressDocumentTracking = true;
     m_graph->clear();
     m_projectStateService->clear();
-    configureGraphIpInstanceFromActivePlugin();
+    ensureProjectStateRecordFromActivePlugin();
     m_suppressDocumentTracking = false;
     if (m_propertyPanel) {
         m_propertyPanel->setSelectedModule(QString());

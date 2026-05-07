@@ -71,7 +71,10 @@ add_qt_test_target("commandmanager_test", "test/commandmanager_test.cpp", {
 
 add_qt_test_target("validation_test", "test/validation_test.cpp", {
     "src/**/drcrunner.cpp",
+    "src/app/generationartifacts.cpp",
     "src/**/generatorrunner.cpp",
+    "src/**/graphprojectserializer.cpp",
+    "src/**/projectwriter.cpp",
     "src/**/validator.cpp",
     "src/**/validationresult.cpp",
     "src/**/graph.cpp",
@@ -86,7 +89,12 @@ add_qt_test_target("validation_test", "test/validation_test.cpp", {
     "inc/**/graph.h",
     "inc/**/module.h",
     "inc/**/drcrunner.h",
+    "inc/app/generationartifacts.h",
     "inc/**/generatorrunner.h",
+    "inc/**/graphprojectserializer.h",
+    "inc/**/projectdocument.h",
+    "inc/**/projectwriter.h",
+    "inc/**/pluginstate.h",
     "inc/**/pluginregistry.h",
     "inc/**/plugindescriptor.h"
 })
@@ -159,7 +167,6 @@ target("propertypanel_test")
     add_files("src/project/projectstateservice.cpp")
     add_files("src/plugins/manifestpluginprojectadapter.cpp")
     add_files("src/commands/setpluginstateparametercommand.cpp")
-    add_files("src/commands/setipinstanceparametercommand.cpp")
     add_files("src/commands/setparametercommand.cpp")
     add_files("src/commands/command.cpp")
     add_files("src/commands/commandmanager.cpp")

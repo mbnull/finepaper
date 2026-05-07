@@ -122,6 +122,20 @@ ProjectReadResult ProjectReader::readFile(const QString& path) {
         ipInstance.parameters = object.value(QStringLiteral("parameters")).toObject();
         document.ipInstances.push_back(ipInstance);
     }
+    if (document.pluginStates.isEmpty()) {
+        for (const ProjectIpInstanceRecord& ipInstance : document.ipInstances) {
+            ProjectPluginStateRecord state;
+            state.pluginId = ipInstance.pluginId;
+            state.instanceId = ipInstance.id;
+            state.schema = ipInstance.pluginId + QStringLiteral("-project-state-v1");
+            state.state = QJsonObject{
+                {QStringLiteral("kind"), ipInstance.kind},
+                {QStringLiteral("type"), ipInstance.type},
+                {QStringLiteral("global_parameters"), ipInstance.parameters}
+            };
+            document.pluginStates.push_back(state);
+        }
+    }
 
     const QJsonValue graphValue = root.value(QStringLiteral("graph"));
     if (!graphValue.isObject()) {

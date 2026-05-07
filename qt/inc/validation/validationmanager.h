@@ -8,13 +8,17 @@ class Graph;
 class LogPanel;
 class BasicValidator;
 class DRCRunner;
+class ProjectStateService;
 
 class ValidationManager : public QObject {
     Q_OBJECT
 
 public:
     // Owns validator instances and targets a specific Graph/LogPanel pair.
-    ValidationManager(Graph* graph, LogPanel* logPanel, QObject* parent = nullptr);
+    ValidationManager(Graph* graph,
+                      ProjectStateService* projectStateService,
+                      LogPanel* logPanel,
+                      QObject* parent = nullptr);
     ~ValidationManager();
 
 public slots:
@@ -23,6 +27,7 @@ public slots:
 
 private:
     Graph* m_graph;
+    ProjectStateService* m_projectStateService;
     LogPanel* m_logPanel;
     BasicValidator* m_validator;
     DRCRunner* m_drcRunner;

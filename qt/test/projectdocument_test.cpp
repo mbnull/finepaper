@@ -169,15 +169,6 @@ void testProjectRoundTripRestoresModulesParametersAndConnections() {
     registerProjectTypes();
 
     Graph graph;
-    graph.configureIpInstance(
-        QStringLiteral("ravenoc_0"),
-        QStringLiteral("finepaper.ravenoc"),
-        QStringLiteral("noc"),
-        QStringLiteral("RaveNoC"),
-        QHash<QString, Parameter>{
-            {QStringLiteral("flit_data_width"),
-             Parameter(QStringLiteral("flit_data_width"), 64)}
-        });
     auto xp = instantiate(makeProjectXpType(), QStringLiteral("node_1"));
     xp->setParameter(QStringLiteral("collapsed"), true);
     xp->setParameter(QStringLiteral("vc_count"), 4);
@@ -187,26 +178,34 @@ void testProjectRoundTripRestoresModulesParametersAndConnections() {
     require(graph.addModule(std::move(xp)), "failed to add XP module");
     require(graph.addModule(std::move(endpoint)), "failed to add endpoint module");
     graph.addConnection(std::make_unique<Connection>(
-        QStringLiteral("conn_1"),
-        PortRef{QStringLiteral("node_1"), QStringLiteral("ep0")},
-        PortRef{QStringLiteral("node_2"), QStringLiteral("noc")}));
+            QStringLiteral("conn_1"),
+            PortRef{QStringLiteral("node_1"), QStringLiteral("ep0")},
+            PortRef{QStringLiteral("node_2"), QStringLiteral("noc")}));
     require(graph.connections().size() == 1, "setup connection should be valid");
+    ProjectPluginStateRecord state;
+    state.pluginId = QStringLiteral("finepaper.ravenoc");
+    state.instanceId = QStringLiteral("ravenoc_0");
+    state.schema = QStringLiteral("ravenoc-project-state-v1");
+    state.state = QJsonObject{
+        {QStringLiteral("global_parameters"), QJsonObject{
+            {QStringLiteral("flit_data_width"), 64}
+        }}
+    };
 
     QTemporaryDir tempDir;
     require(tempDir.isValid(), "failed to create temporary directory");
     const QString projectPath = QDir(tempDir.path()).filePath(QStringLiteral("roundtrip.fpproj"));
 
-    const ProjectDocument document = GraphProjectSerializer::toProject(graph, QStringLiteral("roundtrip"));
-    require(document.ipInstances.size() == 1, "project should capture IP instance");
-    require(document.ipInstances.first().parameters.value(QStringLiteral("flit_data_width")).toInt() == 64,
-            "project should capture IP instance parameter");
+    ProjectDocument document = GraphProjectSerializer::toProject(graph, QStringLiteral("roundtrip"));
+    require(document.ipInstances.isEmpty(), "graph project serialization should not capture IP state");
+    document.pluginStates.push_back(state);
     const ProjectWriteResult writeResult = ProjectWriter::writeFile(projectPath, document);
     require(writeResult.success, "project write should succeed");
 
     const ProjectReadResult readResult = ProjectReader::readFile(projectPath);
     require(readResult.success, "project read should succeed");
-    require(readResult.document.ipInstances.size() == 1,
-            "project read should restore IP instance records");
+    require(readResult.document.pluginStates.size() == 1,
+            "project read should restore plugin state records");
 
     Graph restored;
     const GraphProjectLoadResult loadResult =
@@ -215,10 +214,6 @@ void testProjectRoundTripRestoresModulesParametersAndConnections() {
 
     require(restored.modules().size() == 2, "project should restore both modules");
     require(restored.connections().size() == 1, "project should restore explicit connection");
-    require(restored.ipInstance().has_value(), "project should restore graph IP instance");
-    require(restored.ipInstance()->parameters.value(QStringLiteral("flit_data_width")).value() ==
-                Parameter::Value(64),
-            "project should restore graph IP instance parameter");
     require(restored.getModule(QStringLiteral("node_1")) != nullptr,
             "stable module id should be preserved");
     require(restored.getModule(QStringLiteral("node_2")) != nullptr,
@@ -280,6 +275,36 @@ void testProjectPreservesOpaquePluginState() {
                 .value(QStringLiteral("flit_data_width"))
                 .toInt() == 64,
             "opaque plugin state JSON should round-trip");
+}
+
+void testLegacyIpInstanceMigratesToPluginState() {
+    ProjectDocument document = validProjectDocument();
+    document.ipInstances.push_back(ProjectIpInstanceRecord{
+        QStringLiteral("ravenoc_0"),
+        QStringLiteral("finepaper.ravenoc"),
+        QStringLiteral("noc"),
+        QStringLiteral("RaveNoC"),
+        QJsonObject{{QStringLiteral("flit_data_width"), 64}}
+    });
+
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "failed to create temporary directory");
+    const QString path = QDir(tempDir.path()).filePath(QStringLiteral("legacy_ip.fpproj"));
+    const ProjectWriteResult writeResult = ProjectWriter::writeFile(path, document);
+    require(writeResult.success, "legacy ip project should write");
+
+    const ProjectReadResult readResult = ProjectReader::readFile(path);
+    require(readResult.success, "legacy ip project should read");
+    require(readResult.document.pluginStates.size() == 1,
+            "legacy IP instance should migrate to plugin state");
+    require(readResult.document.pluginStates.first().pluginId == QStringLiteral("finepaper.ravenoc"),
+            "migrated plugin state should retain plugin id");
+    require(readResult.document.pluginStates.first()
+                .state.value(QStringLiteral("global_parameters"))
+                .toObject()
+                .value(QStringLiteral("flit_data_width"))
+                .toInt() == 64,
+            "migrated plugin state should retain parameter value");
 }
 
 void testProjectStateServiceUpdatesPluginStateWithoutGraph() {
@@ -422,54 +447,6 @@ void testProjectStateServiceParameterPreservesExplicitNull() {
                                                QStringLiteral("optional_value"));
     require(value.isNull(), "explicit null plugin state parameter should be preserved");
     require(!value.isUndefined(), "explicit null plugin state parameter should not be undefined");
-}
-
-void testLoadRejectsSecondNocIpInstance() {
-    ProjectDocument document = validProjectDocument();
-    document.ipInstances.push_back(ProjectIpInstanceRecord{
-        QStringLiteral("noc_a"),
-        QStringLiteral("finepaper.ravenoc"),
-        QStringLiteral("noc"),
-        QStringLiteral("RaveNoC"),
-        {}
-    });
-    document.ipInstances.push_back(ProjectIpInstanceRecord{
-        QStringLiteral("noc_b"),
-        QStringLiteral("finepaper.othernoc"),
-        QStringLiteral("noc"),
-        QStringLiteral("OtherNoC"),
-        {}
-    });
-
-    Graph graph;
-    const GraphProjectLoadResult result = GraphProjectSerializer::loadProject(document, graph);
-    require(!result.success, "second noc IP should be rejected");
-    require(result.error.contains(QStringLiteral("at most one IP instance")),
-            "error should mention single IP instance limit");
-}
-
-void testLoadRejectsMultipleIpInstances() {
-    ProjectDocument document = validProjectDocument();
-    document.ipInstances.push_back(ProjectIpInstanceRecord{
-        QStringLiteral("noc_a"),
-        QStringLiteral("finepaper.ravenoc"),
-        QStringLiteral("noc"),
-        QStringLiteral("RaveNoC"),
-        QJsonObject{{QStringLiteral("flit_data_width"), 64}}
-    });
-    document.ipInstances.push_back(ProjectIpInstanceRecord{
-        QStringLiteral("monitor_a"),
-        QStringLiteral("finepaper.monitor"),
-        QStringLiteral("monitor"),
-        QStringLiteral("TraceMonitor"),
-        QJsonObject{{QStringLiteral("sample_depth"), 1024}}
-    });
-
-    Graph graph;
-    const GraphProjectLoadResult result = GraphProjectSerializer::loadProject(document, graph);
-    require(!result.success, "multiple IP instances should be rejected until plugin state owns them");
-    require(result.error.contains(QStringLiteral("at most one IP instance")),
-            "error should mention single IP instance limit");
 }
 
 void testReaderRejectsWrongKind() {
@@ -711,23 +688,68 @@ void testReaderDetectsProjectAndLegacyJsonFiles() {
             "legacy NoC JSON should be detected as legacy JSON");
 }
 
+void testGenerationHelpersShapePluginStateForGeneratorBoundary() {
+    ProjectPluginStateRecord state;
+    state.pluginId = QStringLiteral("finepaper.ravenoc");
+    state.instanceId = QStringLiteral("ravenoc_0");
+    state.schema = QStringLiteral("ravenoc-project-state-v1");
+    state.state = QJsonObject{
+        {QStringLiteral("kind"), QStringLiteral("noc")},
+        {QStringLiteral("type"), QStringLiteral("RaveNoC")},
+        {QStringLiteral("global_parameters"), QJsonObject{
+            {QStringLiteral("flit_data_width"), 64}
+        }}
+    };
+    const QVector<ProjectPluginStateRecord> records{state};
+
+    const QJsonArray states = pluginStateArray(records);
+    require(states.size() == 1, "plugin state helper should serialize one record");
+    require(states.first().toObject()
+                .value(QStringLiteral("state"))
+                .toObject()
+                .value(QStringLiteral("global_parameters"))
+                .toObject()
+                .value(QStringLiteral("flit_data_width"))
+                .toInt() == 64,
+            "plugin state helper should preserve global parameters");
+
+    const QJsonObject ipInstance =
+        legacyIpInstanceObject(records, QStringLiteral("finepaper.ravenoc"));
+    require(ipInstance.value(QStringLiteral("id")).toString() == QStringLiteral("ravenoc_0"),
+            "legacy IP object should use plugin state instance id");
+    require(ipInstance.value(QStringLiteral("plugin")).toString() == QStringLiteral("finepaper.ravenoc"),
+            "legacy IP object should use plugin id");
+    require(ipInstance.value(QStringLiteral("kind")).toString() == QStringLiteral("noc"),
+            "legacy IP object should preserve kind when present");
+    require(ipInstance.value(QStringLiteral("type")).toString() == QStringLiteral("RaveNoC"),
+            "legacy IP object should preserve type when present");
+    require(ipInstance.value(QStringLiteral("parameters"))
+                .toObject()
+                .value(QStringLiteral("flit_data_width"))
+                .toInt() == 64,
+            "legacy IP object should derive parameters from global plugin state");
+}
+
 void testGenerationWritesProjectSnapshot() {
     Graph graph;
-    graph.configureIpInstance(
-        QStringLiteral("ravenoc_0"),
-        QStringLiteral("finepaper.ravenoc"),
-        QStringLiteral("noc"),
-        QStringLiteral("RaveNoC"),
-        QHash<QString, Parameter>{
-            {QStringLiteral("flit_data_width"),
-             Parameter(QStringLiteral("flit_data_width"), 64)}
-        });
+    ProjectPluginStateRecord state;
+    state.pluginId = QStringLiteral("finepaper.ravenoc");
+    state.instanceId = QStringLiteral("ravenoc_0");
+    state.schema = QStringLiteral("ravenoc-project-state-v1");
+    state.state = QJsonObject{
+        {QStringLiteral("global_parameters"), QJsonObject{
+            {QStringLiteral("flit_data_width"), 64}
+        }}
+    };
 
     QTemporaryDir tempDir;
     require(tempDir.isValid(), "failed to create temporary directory");
 
     const GeneratedProjectSnapshotResult result =
-        writeGeneratedProjectSnapshot(graph, tempDir.path(), QStringLiteral("generated_design"));
+        writeGeneratedProjectSnapshot(graph,
+                                      tempDir.path(),
+                                      QStringLiteral("generated_design"),
+                                      QVector<ProjectPluginStateRecord>{state});
     require(result.success, "generation project snapshot should be written");
     require(QFileInfo::exists(result.path), "generation project snapshot should exist");
     require(QFileInfo(result.path).fileName() == QStringLiteral("generated_design.fpproj"),
@@ -737,8 +759,16 @@ void testGenerationWritesProjectSnapshot() {
     require(readResult.success, "generation project snapshot should be readable");
     require(readResult.document.name == QStringLiteral("generated_design"),
             "generation project snapshot should use design name as project name");
-    require(readResult.document.ipInstances.size() == 1,
-            "generation project snapshot should include IP instance state");
+    require(readResult.document.ipInstances.isEmpty(),
+            "generation project snapshot should not write graph IP state");
+    require(readResult.document.pluginStates.size() == 1,
+            "generation project snapshot should include plugin state");
+    require(readResult.document.pluginStates.first()
+                .state.value(QStringLiteral("global_parameters"))
+                .toObject()
+                .value(QStringLiteral("flit_data_width"))
+                .toInt() == 64,
+            "generation project snapshot should preserve plugin parameters");
 }
 
 } // namespace
@@ -749,6 +779,7 @@ int main(int argc, char** argv) {
     try {
         testProjectRoundTripRestoresModulesParametersAndConnections();
         testProjectPreservesOpaquePluginState();
+        testLegacyIpInstanceMigratesToPluginState();
         testProjectStateServiceUpdatesPluginStateWithoutGraph();
         testProjectStateServiceDoesNotCreateMissingSection();
         testProjectStateServiceDoesNotOverwriteNonObjectSection();
@@ -756,14 +787,13 @@ int main(int argc, char** argv) {
         testProjectStateServiceParameterPreservesExplicitNull();
         testReaderRejectsWrongKind();
         testLoadRejectsDuplicateModuleIds();
-        testLoadRejectsSecondNocIpInstance();
-        testLoadRejectsMultipleIpInstances();
         testLoadRejectsMissingModuleType();
         testLoadRejectsInvalidParameterType();
         testLoadRejectsInvalidConnectionReference();
         testLoadRejectsConnectionInvalidatedByEarlierConnectionWithoutChangingGraph();
         testReaderRejectsMalformedProjectGraphArrays();
         testReaderDetectsProjectAndLegacyJsonFiles();
+        testGenerationHelpersShapePluginStateForGeneratorBoundary();
         testGenerationWritesProjectSnapshot();
     } catch (const std::exception& error) {
         std::cerr << "projectdocument_test failed: " << error.what() << '\n';

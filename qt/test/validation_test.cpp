@@ -1,6 +1,7 @@
 // BasicValidator and plugin DRC integration tests.
 #include "graph/graph.h"
 #include "modules/moduleregistry.h"
+#include "project/pluginstate.h"
 #include "validation/drcrunner.h"
 #include "validation/validator.h"
 
@@ -81,6 +82,31 @@ bool hasRule(const QList<ValidationResult>& results, const QString& ruleName) {
     return false;
 }
 
+QVector<ProjectPluginStateRecord> ravenocPluginState() {
+    ProjectPluginStateRecord state;
+    state.pluginId = QStringLiteral("finepaper.ravenoc");
+    state.instanceId = QStringLiteral("ravenoc_0");
+    state.schema = QStringLiteral("finepaper.ravenoc-project-state-v1");
+    state.state = QJsonObject{
+        {QStringLiteral("kind"), QStringLiteral("noc")},
+        {QStringLiteral("type"), QStringLiteral("RaveNoC")},
+        {QStringLiteral("global_parameters"), QJsonObject{
+            {QStringLiteral("flit_data_width"), 32},
+            {QStringLiteral("flit_type_width"), 2},
+            {QStringLiteral("flit_buffer_depth"), 2},
+            {QStringLiteral("virtual_channels"), 3},
+            {QStringLiteral("routing_algorithm"), QStringLiteral("xy")},
+            {QStringLiteral("priority"), QStringLiteral("zero_high")},
+            {QStringLiteral("max_packet_flits"), 256},
+            {QStringLiteral("axi_addr_width"), 32},
+            {QStringLiteral("axi_data_width"), 32},
+            {QStringLiteral("axi_cdc_required"), QStringLiteral("all")},
+            {QStringLiteral("bypass_cdc"), false}
+        }}
+    };
+    return {state};
+}
+
 void testBasicValidatorLeavesIpDrcToPluginCommand() {
     Graph graph;
     require(graph.addModule(makeEndpoint("endpoint")), "failed to add endpoint");
@@ -111,7 +137,7 @@ void testDrcRunnerUsesPluginGraphFlavorForRaveNoC() {
                   QStringLiteral("west"));
 
     DRCRunner runner;
-    const QList<ValidationResult> results = runner.validate(&graph);
+    const QList<ValidationResult> results = runner.validate(&graph, ravenocPluginState());
     QStringList messages;
     for (const ValidationResult& result : results) {
         messages.append(result.message());
@@ -121,6 +147,8 @@ void testDrcRunnerUsesPluginGraphFlavorForRaveNoC() {
     require(results.isEmpty(), messageBytes.constData());
     require(!messages.join('\n').contains(QStringLiteral("expected schema finepaper-plugin-graph-v1")),
             "RaveNoC DRC should receive generic plugin graph JSON");
+    require(!messages.join('\n').contains(QStringLiteral("missing ip_instance")),
+            "RaveNoC DRC should receive legacy IP instance compatibility JSON");
 }
 
 void testDrcRunnerAcceptsManualRaveTilePlacement() {
@@ -150,7 +178,7 @@ void testDrcRunnerAcceptsManualRaveTilePlacement() {
                   QStringLiteral("rave_d"), QStringLiteral("north"));
 
     DRCRunner runner;
-    const QList<ValidationResult> results = runner.validate(&graph);
+    const QList<ValidationResult> results = runner.validate(&graph, ravenocPluginState());
     QStringList messages;
     for (const ValidationResult& result : results) {
         messages.append(result.message());
@@ -175,7 +203,7 @@ void testDrcRunnerRejectsManualRaveTileNonMesh() {
             "failed to add fourth manual RaveTile");
 
     DRCRunner runner;
-    const QList<ValidationResult> results = runner.validate(&graph);
+    const QList<ValidationResult> results = runner.validate(&graph, ravenocPluginState());
 
     require(hasMessageContaining(results, QStringLiteral("missing mesh link")),
             "manual RaveTile graph without mesh links should fail DRC");

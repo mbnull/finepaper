@@ -2,13 +2,17 @@
 #include "validation/validationmanager.h"
 #include "graph/graph.h"
 #include "panels/logpanel.h"
+#include "project/projectstateservice.h"
 #include "validation/validator.h"
 #include "validation/drcrunner.h"
 #include <QDebug>
 
 // Initialize validators. Validation is triggered explicitly by the UI.
-ValidationManager::ValidationManager(Graph* graph, LogPanel* logPanel, QObject* parent)
-    : QObject(parent), m_graph(graph), m_logPanel(logPanel),
+ValidationManager::ValidationManager(Graph* graph,
+                                     ProjectStateService* projectStateService,
+                                     LogPanel* logPanel,
+                                     QObject* parent)
+    : QObject(parent), m_graph(graph), m_projectStateService(projectStateService), m_logPanel(logPanel),
       m_validator(new BasicValidator()), m_drcRunner(new DRCRunner()) {}
 
 ValidationManager::~ValidationManager() {
@@ -22,7 +26,10 @@ void ValidationManager::runValidation() {
             << "modules" << m_graph->modules().size()
             << "connections" << m_graph->connections().size();
     QList<ValidationResult> results = m_validator->validate(m_graph);
-    results.append(m_drcRunner->validate(m_graph));
+    const QVector<ProjectPluginStateRecord> emptyPluginStates;
+    results.append(m_drcRunner->validate(
+        m_graph,
+        m_projectStateService ? m_projectStateService->pluginStates() : emptyPluginStates));
     m_logPanel->setResults(results);
 
     int errorCount = 0;

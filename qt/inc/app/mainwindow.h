@@ -74,7 +74,7 @@ private slots:
     void logStartupLayout() const;
     void populateActiveIpSelector();
     void setActivePluginId(const QString& pluginId);
-    void configureGraphIpInstanceFromActivePlugin();
+    void ensureProjectStateRecordFromActivePlugin();
     void rebuildTopologyMenu();
     bool maybeSaveChanges(const QString& actionDescription);
     bool loadDocument(const QString& path);
