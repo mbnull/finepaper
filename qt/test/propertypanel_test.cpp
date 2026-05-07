@@ -12,6 +12,7 @@
 #include <QLabel>
 #include <QSpinBox>
 #include <iostream>
+#include <memory>
 #include <stdexcept>
 
 namespace {
@@ -76,6 +77,64 @@ void testUnselectedPanelShowsPluginProjectParameters() {
             "plugin parameter rendering should not require graph IP instance state");
 }
 
+void testUnselectedPanelUsesPersistedCustomPluginInstanceId() {
+    Graph graph;
+    ProjectStateService stateService;
+    ProjectDocument document;
+    ProjectPluginStateRecord state;
+    state.pluginId = QStringLiteral("finepaper.ravenoc");
+    state.instanceId = QStringLiteral("ravenoc_custom");
+    state.schema = QStringLiteral("ravenoc-project-state-v1");
+    state.state = QJsonObject{
+        {QStringLiteral("global_parameters"), QJsonObject{
+            {QStringLiteral("flit_data_width"), 128}
+        }}
+    };
+    document.pluginStates.push_back(state);
+    stateService.loadFromDocument(document);
+
+    PluginDescriptor plugin;
+    plugin.id = QStringLiteral("finepaper.ravenoc");
+    plugin.name = QStringLiteral("RaveNoC");
+    PluginInstanceParameterDescriptor width;
+    width.name = QStringLiteral("flit_data_width");
+    width.type = QStringLiteral("int");
+    width.defaultValue = 32;
+    width.label = QStringLiteral("Flit data width");
+    plugin.instanceParameters.insert(width.name, width);
+    ManifestPluginProjectAdapter adapter(plugin);
+
+    CommandManager commandManager;
+    PropertyPanel panel(&graph, &stateService, {&adapter}, &commandManager);
+    panel.setSelectedModule(QString());
+
+    require(hasLabel(panel, QStringLiteral("RaveNoC / ravenoc_custom")),
+            "property panel should show persisted plugin instance id");
+    require(!hasLabel(panel, QStringLiteral("RaveNoC / ravenoc_0")),
+            "property panel should not render adapter default instance when persisted state exists");
+
+    QSpinBox* spinBox = panel.findChild<QSpinBox*>();
+    require(spinBox != nullptr, "integer plugin parameter should use spin box");
+    require(spinBox->value() == 128,
+            "plugin parameter widget should read stored value for custom instance id");
+    require(!graph.ipInstance().has_value(),
+            "custom plugin state rendering should not require graph IP instance state");
+}
+
+void testClearingGraphBeforePanelSelectionClearIsSafe() {
+    Graph graph;
+    auto module = std::make_unique<Module>(QStringLiteral("module_0"), QStringLiteral("Demo"));
+    module->setParameter(QStringLiteral("width"), 32);
+    graph.addModule(std::move(module));
+
+    CommandManager commandManager;
+    PropertyPanel panel(&graph, &commandManager);
+    panel.setSelectedModule(QStringLiteral("module_0"));
+
+    graph.clear();
+    panel.setSelectedModule(QString());
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -86,6 +145,8 @@ int main(int argc, char** argv) {
 
     try {
         testUnselectedPanelShowsPluginProjectParameters();
+        testUnselectedPanelUsesPersistedCustomPluginInstanceId();
+        testClearingGraphBeforePanelSelectionClearIsSafe();
     } catch (const std::exception& error) {
         std::cerr << "propertypanel_test failed: " << error.what() << '\n';
         return 1;

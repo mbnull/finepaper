@@ -320,39 +320,54 @@ void PropertyPanel::populatePanel() {
             return;
         }
 
+        const auto renderSection = [this](const PluginParameterSection& section,
+                                          const QString& instanceId) {
+            const QString baseLabel = section.label.isEmpty() ? section.pluginId : section.label;
+            const QString title = instanceId.isEmpty()
+                ? baseLabel
+                : QStringLiteral("%1 / %2").arg(baseLabel, instanceId);
+            auto* header = new QLabel(title, this);
+            QFont font = header->font();
+            font.setBold(true);
+            header->setFont(font);
+            m_formLayout->addRow(header);
+
+            for (const PluginParameterField& field : section.fields) {
+                const QJsonValue stored = m_stateService->parameter(
+                    section.pluginId, instanceId, section.id, field.name);
+                QWidget* widget = createPluginParameterWidget(section, field, stored);
+                if (!widget) {
+                    continue;
+                }
+                const QString label = field.label.isEmpty() ? humanizeIdentifier(field.name) : field.label;
+                QLabel* rowLabel = new QLabel(label, this);
+                if (!field.description.isEmpty()) {
+                    rowLabel->setToolTip(field.description);
+                    widget->setToolTip(field.description);
+                }
+                m_formLayout->addRow(rowLabel, widget);
+                m_ipParameterWidgets.insert(
+                    section.pluginId + QStringLiteral("/") + instanceId +
+                        QStringLiteral("/") + section.id + QStringLiteral("/") + field.name,
+                    widget);
+            }
+        };
+
         for (const IPluginProjectAdapter* adapter : m_pluginAdapters) {
             if (!adapter) {
                 continue;
             }
             for (const PluginParameterSection& section : adapter->parameterSections()) {
-                const QString baseLabel = section.label.isEmpty() ? section.pluginId : section.label;
-                const QString title = section.instanceId.isEmpty()
-                    ? baseLabel
-                    : QStringLiteral("%1 / %2").arg(baseLabel, section.instanceId);
-                auto* header = new QLabel(title, this);
-                QFont font = header->font();
-                font.setBold(true);
-                header->setFont(font);
-                m_formLayout->addRow(header);
-
-                for (const PluginParameterField& field : section.fields) {
-                    const QJsonValue stored = m_stateService->parameter(
-                        section.pluginId, section.instanceId, section.id, field.name);
-                    QWidget* widget = createPluginParameterWidget(section, field, stored);
-                    if (!widget) {
+                bool renderedPersistedState = false;
+                for (const ProjectPluginStateRecord& record : m_stateService->pluginStates()) {
+                    if (record.pluginId != section.pluginId) {
                         continue;
                     }
-                    const QString label = field.label.isEmpty() ? humanizeIdentifier(field.name) : field.label;
-                    QLabel* rowLabel = new QLabel(label, this);
-                    if (!field.description.isEmpty()) {
-                        rowLabel->setToolTip(field.description);
-                        widget->setToolTip(field.description);
-                    }
-                    m_formLayout->addRow(rowLabel, widget);
-                    m_ipParameterWidgets.insert(
-                        section.pluginId + QStringLiteral("/") + section.instanceId +
-                            QStringLiteral("/") + section.id + QStringLiteral("/") + field.name,
-                        widget);
+                    renderSection(section, record.instanceId);
+                    renderedPersistedState = true;
+                }
+                if (!renderedPersistedState) {
+                    renderSection(section, section.instanceId);
                 }
             }
         }

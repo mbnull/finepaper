@@ -5,6 +5,7 @@
 #include <QVBoxLayout>
 #include <QHash>
 #include <QJsonValue>
+#include <QPointer>
 #include <QVector>
 
 class Graph;
@@ -46,7 +47,7 @@ private:
     ProjectStateService* m_stateService;
     QVector<IPluginProjectAdapter*> m_pluginAdapters;
     CommandManager* m_commandManager;
-    Module* m_selectedModule = nullptr;
+    QPointer<Module> m_selectedModule;
     QVBoxLayout* m_layout;
     QPlainTextEdit* m_descriptionView;
     QFormLayout* m_formLayout;
