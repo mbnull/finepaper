@@ -41,20 +41,25 @@ bool boolParameter(const Module* module, const QString& name) {
 }
 
 QString repositoryPluginPath(const QString& relativePluginPath) {
-    const QStringList candidates = {
-        QDir::current().filePath(relativePluginPath),
-        QDir::current().filePath(QStringLiteral("../") + relativePluginPath),
-        QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("../../../../../") + relativePluginPath)
+    const QStringList startPaths = {
+        QDir::currentPath(),
+        QCoreApplication::applicationDirPath()
     };
 
-    for (const QString& candidate : candidates) {
-        const QFileInfo info(candidate);
-        if (info.isDir()) {
-            return info.absoluteFilePath();
+    for (const QString& startPath : startPaths) {
+        QDir dir(startPath);
+        while (true) {
+            const QFileInfo info(dir.filePath(relativePluginPath));
+            if (info.isDir()) {
+                return info.absoluteFilePath();
+            }
+            if (!dir.cdUp()) {
+                break;
+            }
         }
     }
 
-    return QFileInfo(candidates.first()).absoluteFilePath();
+    return QFileInfo(QDir(startPaths.first()).filePath(relativePluginPath)).absoluteFilePath();
 }
 
 ModuleType routerType(const QString& name, const QString& pluginId) {
