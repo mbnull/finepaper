@@ -16,7 +16,7 @@ QString pluginVersionText(const PluginDescriptor& plugin) {
 QString moduleBundleFormat(const QString& modulesPath) {
     const QString suffix = QFileInfo(modulesPath).suffix().toLower();
     if (suffix == QStringLiteral("json")) {
-        return QStringLiteral("json(deprecated)");
+        return QStringLiteral("json(unsupported)");
     }
     if (suffix == QStringLiteral("xml")) {
         return QStringLiteral("xml");

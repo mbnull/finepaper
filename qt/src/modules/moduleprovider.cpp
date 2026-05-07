@@ -2,10 +2,6 @@
 #include "modules/moduleprovider.h"
 #include <QDir>
 #include <QFile>
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
-#include <QJsonParseError>
 #include <QXmlStreamReader>
 
 namespace {
@@ -93,19 +89,6 @@ double doubleAttribute(const QXmlStreamAttributes& attributes, QStringView name,
     return ok ? parsed : fallbackValue;
 }
 
-bool boolValue(const QJsonValue& value, bool fallbackValue) {
-    if (value.isBool()) {
-        return value.toBool();
-    }
-    if (value.isString()) {
-        return parseBoolString(value.toString(), fallbackValue);
-    }
-    if (value.isDouble()) {
-        return value.toInt() != 0;
-    }
-    return fallbackValue;
-}
-
 std::optional<double> optionalDoubleAttribute(const QXmlStreamAttributes& attributes, QStringView name) {
     const auto value = attributes.value(name);
     if (value.isEmpty()) {
@@ -117,39 +100,11 @@ std::optional<double> optionalDoubleAttribute(const QXmlStreamAttributes& attrib
     return ok ? std::optional<double>(parsed) : std::nullopt;
 }
 
-std::optional<double> optionalDoubleValue(const QJsonValue& value) {
-    if (!value.isDouble()) {
-        return std::nullopt;
-    }
-
-    return value.toDouble();
-}
-
 ModuleParameterChoice parameterChoice(const QString& value, const QString& label) {
     ModuleParameterChoice choice;
     choice.value = value;
     choice.label = label.isEmpty() ? value : label;
     return choice;
-}
-
-void loadParameterChoicesFromJson(ModuleParameterMetadata& metadata, const QJsonValue& choicesValue) {
-    if (!choicesValue.isArray()) {
-        return;
-    }
-
-    for (const QJsonValue& choiceValue : choicesValue.toArray()) {
-        if (choiceValue.isString()) {
-            metadata.choices.push_back(parameterChoice(choiceValue.toString(), QString()));
-        } else if (choiceValue.isObject()) {
-            const QJsonObject choiceObject = choiceValue.toObject();
-            const QString value = choiceObject.value(QStringLiteral("value")).toString();
-            if (!value.isEmpty()) {
-                metadata.choices.push_back(parameterChoice(
-                    value,
-                    choiceObject.value(QStringLiteral("label")).toString()));
-            }
-        }
-    }
 }
 
 void loadParameterChoiceElement(ModuleParameterMetadata& metadata, QXmlStreamReader& xml) {
@@ -170,27 +125,6 @@ void loadParameterChoicesElement(ModuleParameterMetadata& metadata, QXmlStreamRe
             xml.skipCurrentElement();
         }
     }
-}
-
-ModuleParameterMetadata parameterMetadataFromJson(const QString& name, const QJsonObject& parameter) {
-    ModuleParameterMetadata metadata;
-    metadata.name = name;
-    metadata.label = parameter.value(QStringLiteral("label")).toString();
-    metadata.description = parameter.value(QStringLiteral("description")).toString();
-    metadata.unit = parameter.value(QStringLiteral("unit")).toString();
-    metadata.minimumValue = optionalDoubleValue(parameter.value(QStringLiteral("minimum")));
-    if (!metadata.minimumValue.has_value()) {
-        metadata.minimumValue = optionalDoubleValue(parameter.value(QStringLiteral("min")));
-    }
-    metadata.maximumValue = optionalDoubleValue(parameter.value(QStringLiteral("maximum")));
-    if (!metadata.maximumValue.has_value()) {
-        metadata.maximumValue = optionalDoubleValue(parameter.value(QStringLiteral("max")));
-    }
-    metadata.configurable = !parameter.contains(QStringLiteral("configurable")) ||
-                            boolValue(parameter.value(QStringLiteral("configurable")), true);
-    metadata.readOnly = boolValue(parameter.value(QStringLiteral("read_only")), false);
-    loadParameterChoicesFromJson(metadata, parameter.value(QStringLiteral("choices")));
-    return metadata;
 }
 
 ModuleParameterMetadata parameterMetadataFromXml(const QString& name, const QXmlStreamAttributes& attrs) {
@@ -352,10 +286,6 @@ QVector<ModuleConfigField> configFieldsFromXml(QXmlStreamReader& xml) {
     return fields;
 }
 
-void applyConfigZoneElement(ModuleType& type, QXmlStreamReader& xml) {
-    type.configFields = configFieldsFromXml(xml);
-}
-
 void fillConfigFieldDefaults(QVector<ModuleConfigField>& fields,
                              const QHash<QString, ModuleConfigField>& defaults) {
     for (ModuleConfigField& field : fields) {
@@ -373,63 +303,6 @@ void fillConfigFieldDefaults(QVector<ModuleConfigField>& fields,
             field.label = humanizeIdentifier(field.parameterName);
         }
     }
-}
-
-void loadPortsFromJson(ModuleType& type, const QJsonArray& ports) {
-    for (const auto& portVal : ports) {
-        const QJsonObject port = portVal.toObject();
-        const Port::Direction direction = portDirection(port.value(QStringLiteral("direction")).toString());
-        type.defaultPorts.emplace_back(
-            port.value(QStringLiteral("id")).toString(),
-            direction,
-            port.value(QStringLiteral("type")).toString(),
-            port.value(QStringLiteral("name")).toString(),
-            port.value(QStringLiteral("description")).toString(),
-            port.value(QStringLiteral("role")).toString(),
-            port.value(QStringLiteral("bus_type")).toString());
-    }
-}
-
-ParameterLoadResult loadParametersFromJson(ModuleType& type, const QJsonArray& parameters) {
-    ParameterLoadResult result;
-
-    for (const auto& paramVal : parameters) {
-        const QJsonObject parameter = paramVal.toObject();
-        const QString name = parameter.value(QStringLiteral("name")).toString();
-        const QString parameterType = parameter.value(QStringLiteral("type")).toString();
-        Parameter::Value defaultValue;
-
-        if (parameterType == QStringLiteral("int")) {
-            defaultValue = parameter.value(QStringLiteral("default")).toInt();
-        } else if (parameterType == QStringLiteral("double")) {
-            defaultValue = parameter.value(QStringLiteral("default")).toDouble();
-        } else if (parameterType == QStringLiteral("bool")) {
-            defaultValue = boolValue(parameter.value(QStringLiteral("default")), false);
-        } else {
-            defaultValue = parameter.value(QStringLiteral("default")).toString();
-        }
-
-        type.defaultParameters[name] = Parameter(name, defaultValue);
-
-        ModuleParameterMetadata metadata = parameterMetadataFromJson(name, parameter);
-        if (metadata.label.isEmpty()) {
-            metadata.label = humanizeIdentifier(name);
-        }
-        type.parameterMetadata.insert(name, metadata);
-
-        ModuleConfigField field{
-            name,
-            metadata.label,
-            metadata.description
-        };
-        result.fieldByName.insert(name, field);
-
-        if (metadata.configurable) {
-            result.autoConfigFields.push_back(field);
-        }
-    }
-
-    return result;
 }
 
 void loadPortsFromXml(ModuleType& type, QXmlStreamReader& xml) {
@@ -562,137 +435,6 @@ ParameterLoadResult loadParametersFromXml(ModuleType& type, QXmlStreamReader& xm
     return result;
 }
 
-QVector<ModuleConfigField> configFieldsFromJson(const QJsonValue& configZoneValue,
-                                                const QHash<QString, ModuleConfigField>& defaults) {
-    QJsonArray fields;
-    if (configZoneValue.isArray()) {
-        fields = configZoneValue.toArray();
-    } else if (configZoneValue.isObject()) {
-        fields = configZoneValue.toObject().value(QStringLiteral("fields")).toArray();
-    } else {
-        return {};
-    }
-
-    QVector<ModuleConfigField> configFields;
-    for (const auto& fieldValue : fields) {
-        ModuleConfigField field;
-        if (fieldValue.isString()) {
-            field.parameterName = fieldValue.toString();
-        } else if (fieldValue.isObject()) {
-            const QJsonObject object = fieldValue.toObject();
-            field.parameterName = object.value(QStringLiteral("parameter")).toString();
-            field.label = object.value(QStringLiteral("label")).toString();
-            field.description = object.value(QStringLiteral("description")).toString();
-        }
-
-        if (!field.parameterName.isEmpty()) {
-            configFields.push_back(field);
-        }
-    }
-
-    fillConfigFieldDefaults(configFields, defaults);
-    return configFields;
-}
-
-void loadIdentityFromJson(ModuleType& type, const QJsonObject& identity) {
-    type.externalIdPrefix = identity.value(QStringLiteral("external_id_prefix")).toString();
-    type.displayPrefix = identity.value(QStringLiteral("display_prefix")).toString();
-    type.identityWidth = identity.value(QStringLiteral("width")).toInt(2);
-    type.supportsMeshCoordinates = boolValue(identity.value(QStringLiteral("supports_mesh_coordinates")), false);
-}
-
-void loadPresentationFromJson(ModuleType& type, const QJsonObject& presentation) {
-    if (presentation.isEmpty()) {
-        return;
-    }
-
-    if (presentation.contains(QStringLiteral("layout"))) {
-        type.editorLayout = presentation.value(QStringLiteral("layout")).toString(type.editorLayout);
-    }
-    if (presentation.contains(QStringLiteral("node_color"))) {
-        type.nodeColor = presentation.value(QStringLiteral("node_color")).toString(type.nodeColor);
-    }
-    if (presentation.contains(QStringLiteral("supports_collapse"))) {
-        type.supportsCollapse = boolValue(
-            presentation.value(QStringLiteral("supports_collapse")), type.supportsCollapse);
-    }
-
-    const QJsonObject graphics = presentation.value(QStringLiteral("graphics")).toObject();
-    const QJsonObject expanded = graphics.value(QStringLiteral("expanded")).toObject();
-    type.expandedNodeMinWidth = expanded.value(QStringLiteral("min_width")).toInt(type.expandedNodeMinWidth);
-    type.expandedNodeHeight = expanded.value(QStringLiteral("height")).toInt(type.expandedNodeHeight);
-    type.expandedCaptionLeftInset = expanded.value(QStringLiteral("caption_left")).toDouble(type.expandedCaptionLeftInset);
-    type.expandedCaptionTopInset = expanded.value(QStringLiteral("caption_top")).toDouble(type.expandedCaptionTopInset);
-    type.expandedPortInset = expanded.value(QStringLiteral("port_inset")).toDouble(type.expandedPortInset);
-
-    const QJsonObject collapsed = graphics.value(QStringLiteral("collapsed")).toObject();
-    type.collapsedNodeMinWidth = collapsed.value(QStringLiteral("min_width")).toInt(type.collapsedNodeMinWidth);
-    type.collapsedNodeHeight = collapsed.value(QStringLiteral("height")).toInt(type.collapsedNodeHeight);
-    type.collapsedCaptionLeftInset = collapsed.value(QStringLiteral("caption_left")).toDouble(type.collapsedCaptionLeftInset);
-    type.collapsedCaptionTopInset = collapsed.value(QStringLiteral("caption_top")).toDouble(type.collapsedCaptionTopInset);
-    type.collapsedEndpointPortInset = collapsed.value(QStringLiteral("endpoint_inset")).toDouble(type.collapsedEndpointPortInset);
-
-    const QJsonObject arrangement = graphics.value(QStringLiteral("arrangement")).toObject();
-    type.linkedEndpointOffsetX = arrangement.value(QStringLiteral("endpoint_offset_x")).toInt(type.linkedEndpointOffsetX);
-    type.meshSpacingX = arrangement.value(QStringLiteral("mesh_spacing_x")).toInt(type.meshSpacingX);
-    type.meshSpacingY = arrangement.value(QStringLiteral("mesh_spacing_y")).toInt(type.meshSpacingY);
-    type.looseEndpointSpacingX = arrangement.value(QStringLiteral("loose_endpoint_spacing_x")).toInt(type.looseEndpointSpacingX);
-    type.looseEndpointSpacingY = arrangement.value(QStringLiteral("loose_endpoint_spacing_y")).toInt(type.looseEndpointSpacingY);
-    type.looseEndpointMarginY = arrangement.value(QStringLiteral("loose_endpoint_margin_y")).toInt(type.looseEndpointMarginY);
-}
-
-QJsonArray moduleArray(const QByteArray& jsonBytes) {
-    QJsonParseError parseError;
-    const QJsonDocument document = QJsonDocument::fromJson(jsonBytes, &parseError);
-    if (parseError.error != QJsonParseError::NoError) {
-        return {};
-    }
-
-    if (document.isArray()) {
-        return document.array();
-    }
-
-    return document.object().value(QStringLiteral("modules")).toArray();
-}
-
-ModuleType loadModuleTypeFromJson(const QJsonObject& moduleObject) {
-    ModuleType type;
-    type.name = moduleObject.value(QStringLiteral("name")).toString();
-    type.paletteLabel = moduleObject.value(QStringLiteral("palette_label")).toString();
-    type.description = moduleObject.value(QStringLiteral("description")).toString();
-    type.nodeColor = moduleObject.value(QStringLiteral("node_color")).toString();
-    type.editorLayout = moduleObject.value(QStringLiteral("editor_layout")).toString();
-    type.graphGroup = moduleObject.value(QStringLiteral("graph_group")).toString();
-
-    loadIdentityFromJson(type, moduleObject.value(QStringLiteral("identity")).toObject());
-
-    const QJsonObject capabilities = moduleObject.value(QStringLiteral("capabilities")).toObject();
-    type.supportsCollapse = boolValue(capabilities.value(QStringLiteral("supports_collapse")), false);
-
-    loadPortsFromJson(type, moduleObject.value(QStringLiteral("ports")).toArray());
-    const ParameterLoadResult parameterResult =
-        loadParametersFromJson(type, moduleObject.value(QStringLiteral("parameters")).toArray());
-
-    if (moduleObject.contains(QStringLiteral("config_zone"))) {
-        type.configFields = configFieldsFromJson(moduleObject.value(QStringLiteral("config_zone")),
-                                                 parameterResult.fieldByName);
-    } else {
-        type.configFields = parameterResult.autoConfigFields;
-    }
-
-    loadPresentationFromJson(type, moduleObject.value(QStringLiteral("presentation")).toObject());
-
-    if (type.paletteLabel.isEmpty()) {
-        type.paletteLabel = humanizeIdentifier(type.name);
-    }
-    if (type.editorLayout.isEmpty()) {
-        type.editorLayout = defaultEditorLayout(type);
-    }
-
-    normalizeCollapsedMetrics(type);
-    return type;
-}
-
 ModuleType loadModuleTypeFromXml(QXmlStreamReader& xml) {
     ModuleType type;
     const QXmlStreamAttributes attrs = xml.attributes();
@@ -793,82 +535,6 @@ QHash<QString, ModuleType> XmlModuleTypeSource::loadModuleTypes() {
 
 QStringList XmlModuleTypeSource::orderedTypeNames() const {
     return m_orderedTypeNames;
-}
-
-JsonModuleTypeSource::JsonModuleTypeSource(const QString& bundlePath)
-    : m_bundlePath(bundlePath) {}
-
-QHash<QString, ModuleType> JsonModuleTypeSource::loadModuleTypes() {
-    QHash<QString, ModuleType> types;
-    m_orderedTypeNames.clear();
-
-    QFile file(m_bundlePath);
-    if (!file.open(QIODevice::ReadOnly)) {
-        return {};
-    }
-
-    for (const auto& moduleValue : moduleArray(file.readAll())) {
-        const ModuleType type = loadModuleTypeFromJson(moduleValue.toObject());
-        if (type.name.isEmpty()) {
-            continue;
-        }
-        m_orderedTypeNames.push_back(type.name);
-        types.insert(type.name, type);
-    }
-
-    return types;
-}
-
-QStringList JsonModuleTypeSource::orderedTypeNames() const {
-    return m_orderedTypeNames;
-}
-
-XmlModulePresentationOverlay::XmlModulePresentationOverlay(const QString& presentationPath)
-    : m_presentationPath(presentationPath) {}
-
-void XmlModulePresentationOverlay::apply(QHash<QString, ModuleType>& types) {
-    if (m_presentationPath.isEmpty()) {
-        return;
-    }
-
-    QFile file(m_presentationPath);
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        return;
-    }
-
-    QXmlStreamReader xml(&file);
-    while (xml.readNextStartElement()) {
-        if (xml.name() != u"module-presentations") {
-            xml.skipCurrentElement();
-            continue;
-        }
-
-        while (xml.readNextStartElement()) {
-            if (xml.name() != u"module") {
-                xml.skipCurrentElement();
-                continue;
-            }
-
-            const QString moduleTypeName = attributeValue(xml.attributes(), u"type");
-            auto typeIt = types.find(moduleTypeName);
-            if (typeIt == types.end()) {
-                xml.skipCurrentElement();
-                continue;
-            }
-
-            while (xml.readNextStartElement()) {
-                if (xml.name() == u"graphics") {
-                    applyGraphicsElement(typeIt.value(), xml);
-                } else if (xml.name() == u"anchors") {
-                    loadAnchorsFromXml(typeIt.value(), xml);
-                } else if (xml.name() == u"config-zone") {
-                    applyConfigZoneElement(typeIt.value(), xml);
-                } else {
-                    xml.skipCurrentElement();
-                }
-            }
-        }
-    }
 }
 
 XmlModuleGraphicsOverlay::XmlModuleGraphicsOverlay(const QString& graphicsDirectory)

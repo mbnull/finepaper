@@ -1,6 +1,5 @@
 // Graph integration-style tests for JSON import/export and topology behavior.
 #include "graph/graph.h"
-#include "common/frameworkpaths.h"
 #include "modules/modulelabels.h"
 #include "modules/moduleregistry.h"
 #include "modules/moduleprovider.h"
@@ -40,30 +39,6 @@ void require(bool condition, const char* message) {
         throw std::runtime_error(message);
     }
 }
-
-class ScopedEnvironmentVariable {
-public:
-    explicit ScopedEnvironmentVariable(const char* name)
-        : m_name(name), m_wasSet(qEnvironmentVariableIsSet(name)) {
-        if (m_wasSet) {
-            m_value = qgetenv(name);
-        }
-    }
-
-    ~ScopedEnvironmentVariable() {
-        if (m_wasSet) {
-            qputenv(m_name.constData(), m_value);
-            return;
-        }
-
-        qunsetenv(m_name.constData());
-    }
-
-private:
-    QByteArray m_name;
-    QByteArray m_value;
-    bool m_wasSet = false;
-};
 
 void testConnectionValidationPreventsPortReuse() {
     Graph graph;
@@ -611,28 +586,6 @@ void testXmlBundleLoadsExtendedParameterMetadataWhenPresent() {
             "external_id read_only flag should load from XML metadata");
 }
 
-void testExplicitBundlePathWithoutSidecarDoesNotFallbackPresentation() {
-    ScopedEnvironmentVariable bundlePathGuard("BUNDLE_PATH");
-    ScopedEnvironmentVariable bundleUiPathGuard("BUNDLE_UI_PATH");
-
-    QTemporaryDir tempDir;
-    require(tempDir.isValid(), "failed to create temporary directory for bundle path test");
-
-    const QString bundlePath = QDir(tempDir.path()).filePath("modules.json");
-    QFile bundleFile(bundlePath);
-    require(bundleFile.open(QIODevice::WriteOnly), "failed to create bundle file");
-    bundleFile.write("{}");
-    bundleFile.close();
-
-    qputenv("BUNDLE_PATH", bundlePath.toUtf8());
-    qunsetenv("BUNDLE_UI_PATH");
-
-    require(FrameworkPaths::resolveModuleBundlePath() == QFileInfo(bundlePath).absoluteFilePath(),
-            "explicit bundle path should still resolve the selected modules.json");
-    require(FrameworkPaths::resolveModulePresentationPath().isEmpty(),
-            "presentation path should not fall back outside the explicit bundle");
-}
-
 void testFrameworkExportOmitsEditorOnlyCollapsedField() {
     Graph graph;
 
@@ -875,7 +828,6 @@ int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
 
     try {
-        testExplicitBundlePathWithoutSidecarDoesNotFallbackPresentation();
         testConnectionValidationPreventsPortReuse();
         testInoutBusConnectionsAreValid();
         testInoutPortsCannotBeReusedAcrossConnectionSides();

@@ -34,6 +34,7 @@ QString repositoryPluginPath(const QString& relativePluginPath) {
     const QStringList candidates = {
         QDir::current().filePath(relativePluginPath),
         QDir::current().filePath(QStringLiteral("../") + relativePluginPath),
+        QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("../../../../") + relativePluginPath),
         QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("../../../../../") + relativePluginPath)
     };
 
@@ -152,6 +153,24 @@ void testModuleTypesKeepPluginOwnershipAndSkipDuplicates() {
     require(type != nullptr, "Shared type should load");
     require(type->pluginId == QStringLiteral("first"), "duplicate type should keep first plugin owner");
     require(registry.availableTypes().size() == 1, "duplicate type name should be skipped");
+}
+
+void testJsonModuleBundlesAreIgnored() {
+    QTemporaryDir temp;
+    require(temp.isValid(), "temporary directory should be valid");
+
+    QDir root(temp.path());
+    require(root.mkpath(QStringLiteral("legacy")), "failed to create legacy plugin");
+    writeFile(root.filePath(QStringLiteral("legacy/modules.json")),
+              QByteArrayLiteral(R"json([{"name":"Legacy","ports":[],"parameters":[]}])json"));
+    writeFile(root.filePath(QStringLiteral("legacy/plugin.json")),
+              QByteArrayLiteral(R"json({"id":"legacy","name":"Legacy","version":"1","modules":"modules.json"})json"));
+
+    ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
+    const bool loaded = registry.loadPlugins(PluginRegistry::discover({temp.path()}));
+
+    require(!loaded, "JSON module bundles should no longer load");
+    require(registry.availableTypes().isEmpty(), "legacy JSON module type should be ignored");
 }
 
 void testModuleRegistryListsTypesByPlugin() {
@@ -354,7 +373,7 @@ void testStartupDiagnosticsListLoadedPluginsAndIpTypes() {
             "startup diagnostics should include IP metadata counts");
 }
 
-void testStartupDiagnosticsMarksJsonModuleBundlesDeprecated() {
+void testStartupDiagnosticsMarksJsonModuleBundlesUnsupported() {
     PluginDescriptor plugin;
     plugin.id = QStringLiteral("finepaper.legacy");
     plugin.name = QStringLiteral("Legacy");
@@ -363,8 +382,8 @@ void testStartupDiagnosticsMarksJsonModuleBundlesDeprecated() {
 
     const QStringList lines = StartupDiagnostics::pluginLogLines({plugin});
 
-    require(lines.join('\n').contains(QStringLiteral("bundle=json(deprecated)")),
-            "JSON module bundle format should be marked deprecated");
+    require(lines.join('\n').contains(QStringLiteral("bundle=json(unsupported)")),
+            "JSON module bundle format should be marked unsupported");
 }
 
 } // namespace
@@ -375,13 +394,14 @@ int main(int argc, char** argv) {
     try {
         testPluginManifestLoadsRelativePaths();
         testModuleTypesKeepPluginOwnershipAndSkipDuplicates();
+        testJsonModuleBundlesAreIgnored();
         testModuleRegistryListsTypesByPlugin();
         testGeneratorArgumentsSubstituteInputAndOutput();
         testGeneratorRunnerPropagatesInputFormat();
         testGeneratorRunnerResolvesDrcCommand();
         testRepositoryRaveNoCPluginMetadataLoads();
         testStartupDiagnosticsListLoadedPluginsAndIpTypes();
-        testStartupDiagnosticsMarksJsonModuleBundlesDeprecated();
+        testStartupDiagnosticsMarksJsonModuleBundlesUnsupported();
     } catch (const std::exception& error) {
         std::cerr << "plugin_test failed: " << error.what() << '\n';
         return 1;

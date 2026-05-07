@@ -100,13 +100,12 @@ All edits are committed through `SetParameterCommand`.
 
 Module definitions are data-driven.
 
-`ModuleRegistry` loads `ModuleType` entries from startup-discovered plugin manifests. If no plugin modules are available, it can still fall back to legacy bundle discovery for older launches and tests.
+`ModuleRegistry` loads `ModuleType` entries from startup-discovered plugin manifests. Module definitions must be plugin-owned.
 
 For each plugin, the provider stack is:
 
 - `XmlModuleTypeSource` for the IP-core bundle metadata
 - `XmlModuleGraphicsOverlay` for per-IP graphics files
-- `JsonModuleTypeSource` plus `XmlModulePresentationOverlay` for deprecated authored JSON module bundles and older presentation overlays
 - `LayeredModuleProvider` to combine the source and optional overlays
 
 Each loaded `ModuleType` stores the owning `pluginId`. Type names are unique in the current registry; duplicate type names from later plugins are skipped.

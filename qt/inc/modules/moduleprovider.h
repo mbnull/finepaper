@@ -36,29 +36,6 @@ private:
     QStringList m_orderedTypeNames;
 };
 
-// Deprecated: JsonModuleTypeSource loads the old JSON module bundle format.
-// Prefer plugin-owned modules.xml plus per-IP graphics XML files.
-class JsonModuleTypeSource : public ModuleTypeSource {
-public:
-    explicit JsonModuleTypeSource(const QString& bundlePath);
-    QHash<QString, ModuleType> loadModuleTypes() override;
-    QStringList orderedTypeNames() const override;
-
-private:
-    QString m_bundlePath;
-    QStringList m_orderedTypeNames;
-};
-
-// XmlModulePresentationOverlay applies legacy combined presentation metadata from modules.ui.xml.
-class XmlModulePresentationOverlay : public ModuleTypeOverlay {
-public:
-    explicit XmlModulePresentationOverlay(const QString& presentationPath);
-    void apply(QHash<QString, ModuleType>& types) override;
-
-private:
-    QString m_presentationPath;
-};
-
 // XmlModuleGraphicsOverlay applies per-module graphics overlays from a directory of XML files.
 class XmlModuleGraphicsOverlay : public ModuleTypeOverlay {
 public:

@@ -18,8 +18,6 @@ This project is a Qt Widgets application for building and validating SoC/NoC top
 - `src/commands/`, `inc/commands/`: undoable editing commands.
 - `test/`: lightweight executable tests for the graph model and command manager.
 - `../plugins/noc/`: bundled NoC plugin with module definitions, graphics, and the Ruby sample generator.
-- `bundles/modules.xml`: legacy local IP-core bundle fallback with ports, parameters, descriptions, and config metadata.
-- `bundles/graphics/*.xml`: per-IP graphics overlays used by the editor.
 - `deps/packages.lua`: xmake package declarations.
 - `tools/convert_module_bundle.py`: converts deprecated authored JSON module bundles, module-bundle XML, or IP-XACT into the split XML bundle format.
 - `docs/`: older working notes and reference material.
@@ -36,7 +34,7 @@ This project is a Qt Widgets application for building and validating SoC/NoC top
 - `ValidationManager`: runs built-in validation and external DRC checks.
 - `LogPanel`: shows validation, generation, and runtime messages.
 - `PluginRegistry`: discovers startup-loaded IP plugins from `FINEPAPER_PLUGIN_PATH` and repository-local `plugins/`.
-- `ModuleRegistry`: loads module definitions from plugin manifests, applies per-IP graphics XML files, and can still read older split presentation overlays when needed.
+- `ModuleRegistry`: loads module definitions from plugin manifests and applies per-IP graphics XML files.
 
 ## Build and run
 
@@ -80,7 +78,6 @@ Plugin discovery works in this order:
 
 1. Directories listed in `FINEPAPER_PLUGIN_PATH`, using the platform path-list separator.
 2. A repository-local `plugins/` directory found from the current working directory or application directory.
-3. Legacy bundle fallback paths when no plugin module definitions are available.
 
 Each plugin is a directory containing `plugin.json`. The bundled NoC plugin lives at `../plugins/noc/` and declares:
 
@@ -110,8 +107,6 @@ The first manifest schema is:
 ```
 
 Manifest paths are resolved relative to the plugin directory. `{input}` and `{output}` are replaced with the exported design JSON path and selected output directory. Native plugin metadata is retained for future C++ dynamic-library support, but native libraries are not loaded in this version.
-
-Legacy presentation XML discovery still uses `BUNDLE_UI_PATH` and `modules.ui.xml` when an older split bundle is being loaded.
 
 If a graph contains modules from more than one plugin, generation and external DRC currently fail with a user-visible message because multi-plugin orchestration is not implemented yet.
 

@@ -1,5 +1,4 @@
 // ModuleRegistry bootstraps, indexes, and serves module type metadata to the editor.
-#include "common/frameworkpaths.h"
 #include "modules/moduleregistry.h"
 #include "modules/moduleprovider.h"
 #include "plugins/pluginregistry.h"
@@ -11,7 +10,7 @@ ModuleRegistry& ModuleRegistry::instance() {
     return registry;
 }
 
-// Search for module bundle files in environment or parent directories.
+// Load module definitions from startup-discovered plugins only.
 ModuleRegistry::ModuleRegistry(LoadMode loadMode) {
     if (loadMode == LoadMode::Empty) {
         return;
@@ -21,29 +20,7 @@ ModuleRegistry::ModuleRegistry(LoadMode loadMode) {
         return;
     }
 
-    const QString bundlePath = FrameworkPaths::resolveModuleBundlePath();
-    if (!bundlePath.isEmpty()) {
-        std::unique_ptr<LayeredModuleProvider> provider;
-        if (bundlePath.endsWith(QStringLiteral(".xml"), Qt::CaseInsensitive)) {
-            provider = std::make_unique<LayeredModuleProvider>(
-                std::make_unique<XmlModuleTypeSource>(bundlePath));
-            const QString graphicsDirectory = FrameworkPaths::resolveModuleGraphicsDirectory();
-            if (!graphicsDirectory.isEmpty()) {
-                provider->addOverlay(std::make_unique<XmlModuleGraphicsOverlay>(graphicsDirectory));
-            }
-        } else {
-            provider = std::make_unique<LayeredModuleProvider>(
-                std::make_unique<JsonModuleTypeSource>(bundlePath));
-            qWarning() << "Deprecated JSON module bundle format loaded" << bundlePath
-                       << "- prefer plugin-owned modules.xml plus graphics/*.xml.";
-            provider->addOverlay(std::make_unique<XmlModulePresentationOverlay>(
-                FrameworkPaths::resolveModulePresentationPath()));
-        }
-        addProvider(std::move(provider));
-        return;
-    }
-
-    qWarning() << "Bundle file not found. Searched current repo and framework bundle locations.";
+    qWarning() << "No plugin-owned module definitions found.";
 }
 
 void ModuleRegistry::addProvider(std::unique_ptr<ModuleProvider> provider) {
@@ -81,12 +58,6 @@ bool ModuleRegistry::loadPlugins(const QList<PluginDescriptor>& plugins) {
             if (!plugin.graphicsPath.isEmpty() && QFileInfo(plugin.graphicsPath).isDir()) {
                 provider->addOverlay(std::make_unique<XmlModuleGraphicsOverlay>(plugin.graphicsPath));
             }
-        } else if (plugin.modulesPath.endsWith(QStringLiteral(".json"), Qt::CaseInsensitive)) {
-            qWarning() << "Deprecated JSON module bundle format loaded from plugin"
-                       << plugin.id << plugin.modulesPath
-                       << "- prefer modules.xml plus graphics/*.xml.";
-            provider = std::make_unique<LayeredModuleProvider>(
-                std::make_unique<JsonModuleTypeSource>(plugin.modulesPath));
         } else {
             qWarning() << "Skipping plugin with unsupported module bundle" << plugin.id << plugin.modulesPath;
             continue;
