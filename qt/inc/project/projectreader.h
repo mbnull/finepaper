@@ -12,9 +12,8 @@ struct ProjectReadResult {
 };
 
 enum class ProjectFileKind {
-    Project,
-    LegacyJson,
-    Unknown
+    Unknown,
+    Project
 };
 
 class ProjectReader {

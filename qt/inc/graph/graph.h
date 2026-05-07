@@ -1,7 +1,7 @@
 // Graph — central data model for the SoC/NoC topology.
 // Owns all Modules and Connections, enforces uniqueness and validity constraints,
 // and emits Qt signals when the topology changes so the UI stays in sync.
-// Supports JSON serialisation (loadFromJson / saveToJson).
+// Supports plugin-facing graph JSON serialization.
 #pragma once
 
 #include "graph/module.h"
@@ -14,8 +14,6 @@
 #include <memory>
 
 enum class GraphJsonFlavor {
-    Editor,
-    Framework,
     Plugin
 };
 
@@ -53,16 +51,9 @@ public:
     const std::vector<std::unique_ptr<Module>>& modules() const { return m_modules; }
     const std::vector<std::unique_ptr<Connection>>& connections() const { return m_connections; }
 
-    // Imports an editor graph JSON file and rebuilds the in-memory graph.
-    // Existing modules/connections are cleared before import; returns false on file/JSON errors.
-    bool loadFromJson(const QString& jsonPath);
-    // Exports current graph using editor-friendly JSON shape.
-    bool saveToJson(const QString& jsonPath) const;
-    // Exports current graph as XML generated from the editor JSON object model.
-    bool saveToXml(const QString& xmlPath) const;
-    // Serializes graph in editor/framework flavor, optionally returning external->internal ID map.
+    // Serializes graph for plugin generator/DRC boundaries.
     QJsonDocument toJsonDocument(const QString& designName,
-                                 GraphJsonFlavor flavor = GraphJsonFlavor::Framework,
+                                 GraphJsonFlavor flavor = GraphJsonFlavor::Plugin,
                                  QHash<QString, QString>* externalToInternalIds = nullptr) const;
 
 signals:

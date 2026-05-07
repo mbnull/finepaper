@@ -40,11 +40,6 @@ ProjectFileKind ProjectReader::detectKind(const QString& path) {
     if (root.value(QStringLiteral("kind")).toString() == QStringLiteral("finepaper-project")) {
         return ProjectFileKind::Project;
     }
-    if (root.contains(QStringLiteral("xps")) ||
-        root.contains(QStringLiteral("endpoints")) ||
-        root.contains(QStringLiteral("connections"))) {
-        return ProjectFileKind::LegacyJson;
-    }
 
     return ProjectFileKind::Unknown;
 }

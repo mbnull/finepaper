@@ -1,6 +1,5 @@
 // Graph integration-style tests for JSON import/export and topology behavior.
 #include "graph/graph.h"
-#include "modules/modulelabels.h"
 #include "modules/moduleregistry.h"
 #include "modules/moduleprovider.h"
 #include "common/portlayout.h"
@@ -247,72 +246,6 @@ void testRouterLinksRequireOppositeSides() {
             "east router interface should not connect to north");
 }
 
-void testLegacyAxiEndpointImportMigratesProtocolBeforeLinkValidation() {
-    QTemporaryDir tempDir;
-    require(tempDir.isValid(), "failed to create temporary directory for legacy axi import");
-
-    const QString jsonPath = QDir(tempDir.path()).filePath("legacy_axi.json");
-    QFile file(jsonPath);
-    require(file.open(QIODevice::WriteOnly | QIODevice::Text),
-            "failed to create legacy axi graph JSON");
-    file.write(R"JSON({
-  "name": "legacy_axi",
-  "version": "1.0",
-  "parameters": {},
-  "xps": [
-    {
-      "id": "xp_0_0",
-      "x": 0,
-      "y": 0,
-      "endpoints": ["ep_0"]
-    }
-  ],
-  "endpoints": [
-    {
-      "id": "ep_0",
-      "type": "master",
-      "protocol": "axi",
-      "data_width": 64
-    }
-  ],
-  "connections": []
-})JSON");
-    file.close();
-
-    Graph graph;
-    require(graph.loadFromJson(jsonPath), "legacy axi graph should load");
-    require(graph.connections().size() == 1,
-            "legacy axi endpoint attachment should be restored");
-
-    const Module* endpoint = nullptr;
-    const Module* xp = nullptr;
-    for (const auto& module : graph.modules()) {
-        if (ModuleLabels::externalId(module.get()) == "ep_0") {
-            endpoint = module.get();
-        } else if (ModuleLabels::externalId(module.get()) == "xp_0_0") {
-            xp = module.get();
-        }
-    }
-
-    require(endpoint != nullptr, "legacy endpoint should be imported");
-    require(xp != nullptr, "legacy XP should be imported");
-    const auto protocolIt = endpoint->parameters().find("protocol");
-    require(protocolIt != endpoint->parameters().end(),
-            "legacy endpoint protocol should be present after import");
-    const Parameter::Value protocolValue = protocolIt.value().value();
-    const auto* protocol = std::get_if<QString>(&protocolValue);
-    require(protocol && *protocol == "axi4",
-            "legacy axi endpoint protocol should migrate to axi4");
-
-    const Connection* connection = graph.connections().front().get();
-    require(connection->source().moduleId == endpoint->id() &&
-                connection->source().portId == "noc",
-            "legacy endpoint attachment should use Endpoint.noc as the source interface");
-    require(connection->target().moduleId == xp->id() &&
-                connection->target().portId == "local0",
-            "legacy endpoint attachment should use XP.local0 as the target interface");
-}
-
 void testRemovingModuleAlsoRemovesAttachedConnections() {
     Graph graph;
 
@@ -463,47 +396,6 @@ void testBundleMetadataLoadsFromXml() {
             "XP local endpoint interface should be a bidirectional interface anchor");
 }
 
-void testLegacyDirectionalImportUsesInterfaceIds() {
-    QTemporaryDir tempDir;
-    require(tempDir.isValid(), "failed to create temporary directory for legacy dir import");
-
-    const QString jsonPath = QDir(tempDir.path()).filePath("legacy_dir.json");
-    QFile file(jsonPath);
-    require(file.open(QIODevice::WriteOnly | QIODevice::Text),
-            "failed to create legacy dir graph JSON");
-    file.write(R"JSON({
-  "name": "legacy_dir",
-  "version": "1.0",
-  "parameters": {},
-  "xps": [
-    { "id": "xp_0_0", "x": 0, "y": 0, "endpoints": [] },
-    { "id": "xp_1_0", "x": 1, "y": 0, "endpoints": [] }
-  ],
-  "endpoints": [],
-  "connections": [
-    { "from": "xp_0_0", "to": "xp_1_0", "dir": "east" }
-  ]
-})JSON");
-    file.close();
-
-    Graph graph;
-    require(graph.loadFromJson(jsonPath), "legacy directional graph should load");
-    require(graph.connections().size() == 1,
-            "legacy directional router link should be restored");
-
-    const Connection* connection = graph.connections().front().get();
-    const Module* sourceModule = graph.getModule(connection->source().moduleId);
-    const Module* targetModule = graph.getModule(connection->target().moduleId);
-    require(ModuleLabels::externalId(sourceModule) == "xp_0_0",
-            "legacy directional source router should be preserved");
-    require(ModuleLabels::externalId(targetModule) == "xp_1_0",
-            "legacy directional target router should be preserved");
-    require(connection->source().portId == "east",
-            "legacy east output should normalize to the east interface id");
-    require(connection->target().portId == "west",
-            "legacy east target should normalize to the west interface id");
-}
-
 void testXmlBundleWithoutGraphicsFallsBackToSimpleNode() {
     QTemporaryDir tempDir;
     require(tempDir.isValid(), "failed to create temporary directory for xml fallback bundle test");
@@ -584,58 +476,6 @@ void testXmlBundleLoadsExtendedParameterMetadataWhenPresent() {
             "vc_count unit should load from XML metadata");
     require(routerIt->parameterMetadata.value("external_id").readOnly,
             "external_id read_only flag should load from XML metadata");
-}
-
-void testFrameworkExportOmitsEditorOnlyCollapsedField() {
-    Graph graph;
-
-    auto xp = makeModule(
-        "xp_internal",
-        "XP",
-        {Port("local0", Port::Direction::Input, "bus", "Local 0", {}, "attachment", "ni_link", "local0")});
-    xp->setParameter("external_id", QString("xp_0_0"));
-    xp->setParameter("x", 0);
-    xp->setParameter("y", 0);
-    xp->setParameter("collapsed", true);
-    xp->setParameter("routing_algorithm", QString("xy"));
-
-    auto endpoint = makeModule(
-        "ep_internal",
-        "Endpoint",
-        {Port("noc", Port::Direction::Output, "bus", "NoC", {}, "attachment", "ni_link", "noc")});
-    endpoint->setParameter("external_id", QString("ep_0"));
-    endpoint->setParameter("type", QString("master"));
-    endpoint->setParameter("protocol", QString("axi4"));
-    endpoint->setParameter("data_width", 64);
-
-    require(graph.addModule(std::move(xp)), "failed to add XP module");
-    require(graph.addModule(std::move(endpoint)), "failed to add endpoint module");
-
-    graph.addConnection(std::make_unique<Connection>(
-        "xp_ep",
-        PortRef{"ep_internal", "noc"},
-        PortRef{"xp_internal", "local0"}));
-
-    require(graph.connections().size() == 1, "expected endpoint connection to be stored");
-
-    const QJsonObject frameworkRoot =
-        graph.toJsonDocument("design", GraphJsonFlavor::Framework).object();
-    const QJsonObject editorRoot =
-        graph.toJsonDocument("design", GraphJsonFlavor::Editor).object();
-
-    const QJsonObject frameworkConfig =
-        frameworkRoot["xps"].toArray().first().toObject()["config"].toObject();
-    const QJsonObject editorConfig =
-        editorRoot["xps"].toArray().first().toObject()["config"].toObject();
-
-    require(!frameworkConfig.contains("collapsed"),
-            "framework export should omit editor-only collapsed state");
-    require(editorConfig.contains("collapsed"),
-            "editor export should preserve collapsed state");
-    require(frameworkRoot["connections"].toArray().isEmpty(),
-            "framework export should not emit endpoint attachments as generic edges");
-    require(frameworkRoot["xps"].toArray().first().toObject()["endpoints"].toArray().first().toString() == "ep_0",
-            "framework export should keep endpoint attachments in the XP endpoint list");
 }
 
 void testGenericPluginExportKeepsNonNocModules() {
@@ -743,56 +583,6 @@ void testPluginExportUsesArtifactIdsInsteadOfRuntimeIds() {
             "plugin export should not leak connection runtime UUID");
 }
 
-void testXmlExportPreservesEditorGraphContent() {
-    Graph graph;
-
-    auto xp = makeModule(
-        "xp_internal",
-        "XP",
-        {Port("local0", Port::Direction::Input, "bus", "Local 0", {}, "attachment", "ni_link", "local0")});
-    xp->setParameter("external_id", QString("xp_0_0"));
-    xp->setParameter("x", 12);
-    xp->setParameter("y", 34);
-    xp->setParameter("collapsed", true);
-
-    auto endpoint = makeModule(
-        "ep_internal",
-        "Endpoint",
-        {Port("noc", Port::Direction::Output, "bus", "NoC", {}, "attachment", "ni_link", "noc")});
-    endpoint->setParameter("external_id", QString("ep_0"));
-    endpoint->setParameter("type", QString("master"));
-    endpoint->setParameter("protocol", QString("axi4"));
-    endpoint->setParameter("data_width", 64);
-
-    require(graph.addModule(std::move(xp)), "failed to add XP module for XML export");
-    require(graph.addModule(std::move(endpoint)), "failed to add endpoint module for XML export");
-
-    graph.addConnection(std::make_unique<Connection>(
-        "xp_ep",
-        PortRef{"ep_internal", "noc"},
-        PortRef{"xp_internal", "local0"}));
-
-    QTemporaryDir tempDir;
-    require(tempDir.isValid(), "failed to create temporary directory");
-
-    const QString xmlPath = QDir(tempDir.path()).filePath("design.xml");
-    require(graph.saveToXml(xmlPath), "failed to save graph XML");
-
-    QFile file(xmlPath);
-    require(file.open(QIODevice::ReadOnly), "failed to reopen graph XML");
-    const QString xml = QString::fromUtf8(file.readAll());
-
-    require(xml.contains("<graph>"), "XML export should contain graph root");
-    require(xml.contains("<name type=\"string\">design</name>"),
-            "XML export should contain design name");
-    require(xml.contains("<id type=\"string\">xp_0_0</id>"),
-            "XML export should contain XP external id");
-    require(xml.contains("<collapsed type=\"bool\">true</collapsed>"),
-            "XML export should preserve editor-only collapsed flag");
-    require(xml.contains("<id type=\"string\">ep_0</id>"),
-            "XML export should contain endpoint external id");
-}
-
 } // namespace
 
 int main(int argc, char** argv) {
@@ -805,19 +595,15 @@ int main(int argc, char** argv) {
         testInterfaceCompatibilityRejectsMismatchedConfiguredFields();
         testInterfaceCompatibilityAcceptsMatchingConfiguredFields();
         testRouterLinksRequireOppositeSides();
-        testLegacyAxiEndpointImportMigratesProtocolBeforeLinkValidation();
         testRemovingModuleAlsoRemovesAttachedConnections();
         testClearRemovesAllModulesAndConnections();
         testGraphForwardsModuleParameterChanges();
         testLegacyEndpointTypeStillClassifiesAsEndpointPort();
         testBundleMetadataLoadsFromXml();
-        testLegacyDirectionalImportUsesInterfaceIds();
         testXmlBundleWithoutGraphicsFallsBackToSimpleNode();
         testXmlBundleLoadsExtendedParameterMetadataWhenPresent();
-        testFrameworkExportOmitsEditorOnlyCollapsedField();
         testGenericPluginExportKeepsNonNocModules();
         testPluginExportUsesArtifactIdsInsteadOfRuntimeIds();
-        testXmlExportPreservesEditorGraphContent();
     } catch (const std::exception& error) {
         std::cerr << "graph_test failed: " << error.what() << '\n';
         return 1;

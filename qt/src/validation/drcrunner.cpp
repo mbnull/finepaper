@@ -42,14 +42,10 @@ QList<ValidationResult> DRCRunner::validate(
         return {ValidationResult(ValidationSeverity::Error, generatorCommand.errorMessage, "", "DRC")};
     }
 
-    const GraphJsonFlavor graphFlavor =
-        generatorCommand.inputFormat == QStringLiteral("generic_graph_v1")
-            ? GraphJsonFlavor::Plugin
-            : GraphJsonFlavor::Framework;
     // Capture external artifact ID -> internal module ID while serializing so
     // parser results can select the right editor node in LogPanel.
     QJsonObject root = graph->toJsonDocument(QStringLiteral("design"),
-                                             graphFlavor,
+                                             GraphJsonFlavor::Plugin,
                                              &m_externalToInternalIds).object();
     attachPluginState(root, pluginStates);
     const QByteArray jsonBytes = QJsonDocument(root).toJson();

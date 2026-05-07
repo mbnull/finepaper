@@ -291,13 +291,7 @@ void MainWindow::generateVerilog() {
                              "Could not write " + jsonPath);
         return;
     }
-    const GraphJsonFlavor exportFlavor =
-        generatorCommand.inputFormat == QStringLiteral("generic_graph_v1")
-            ? GraphJsonFlavor::Plugin
-            : GraphJsonFlavor::Framework;
-    // The same Graph can be serialized for either the newer plugin graph API or
-    // the legacy NoC framework schema depending on the active plugin manifest.
-    QJsonObject root = m_graph->toJsonDocument(designName, exportFlavor).object();
+    QJsonObject root = m_graph->toJsonDocument(designName, GraphJsonFlavor::Plugin).object();
     attachPluginState(root, m_projectStateService->pluginStates());
     jsonFile.write(QJsonDocument(root).toJson());
     jsonFile.close();
@@ -938,38 +932,6 @@ bool MainWindow::loadDocument(const QString& path) {
         syncDocumentStateFromHistory();
         statusBar()->showMessage("Opened " + QFileInfo(path).fileName(), 5000);
         qInfo() << "Project load finished for" << path
-                << "modules" << m_graph->modules().size()
-                << "connections" << m_graph->connections().size();
-        return true;
-    }
-
-    if (kind == ProjectFileKind::LegacyJson) {
-        qInfo() << "Importing legacy JSON from" << path;
-
-        // Legacy JSON imports are treated as unsaved new projects because they
-        // lack Finepaper project metadata and may be normalized during import.
-        m_suppressDocumentTracking = true;
-        const bool loadSucceeded = m_graph->loadFromJson(path);
-        m_suppressDocumentTracking = false;
-
-        if (!loadSucceeded) {
-            QMessageBox::warning(this, "Open Failed", "Could not import " + path);
-            return false;
-        }
-        m_projectStateService->clear();
-        ensureProjectStateRecordFromActivePlugin();
-        if (m_propertyPanel) {
-            m_propertyPanel->setSelectedModule(QString());
-        }
-
-        m_commandManager->clearHistory();
-        // Legacy imports are intentionally dirty: saving should write a new
-        // Finepaper project rather than overwriting the imported JSON.
-        m_cleanStateId = m_commandManager->currentStateId() - 1;
-        setCurrentDocumentPath(QString());
-        syncDocumentStateFromHistory();
-        statusBar()->showMessage("Imported legacy JSON " + QFileInfo(path).fileName(), 5000);
-        qInfo() << "Legacy JSON import finished for" << path
                 << "modules" << m_graph->modules().size()
                 << "connections" << m_graph->connections().size();
         return true;
