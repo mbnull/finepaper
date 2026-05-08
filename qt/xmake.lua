@@ -64,6 +64,24 @@ add_qt_test_target("graph_test", "test/graph_test.cpp", {
     "inc/**/plugindescriptor.h"
 })
 
+add_qt_test_target("connectionruleservice_test", "test/connectionruleservice_test.cpp", {
+    "src/connection/connectionruleservice.cpp",
+    "src/**/graph.cpp",
+    "src/**/module.cpp",
+    "src/**/connection.cpp",
+    "src/**/port.cpp",
+    "src/**/parameter.cpp",
+    "src/**/frameworkpaths.cpp",
+    "src/**/moduleregistry.cpp",
+    "src/**/moduleprovider.cpp",
+    "src/**/pluginregistry.cpp",
+    "inc/**/connectionruleservice.h",
+    "inc/**/graph.h",
+    "inc/**/module.h",
+    "inc/**/pluginregistry.h",
+    "inc/**/plugindescriptor.h"
+})
+
 add_qt_test_target("commandmanager_test", "test/commandmanager_test.cpp", {
     "src/**/command.cpp",
     "src/**/commandmanager.cpp"
