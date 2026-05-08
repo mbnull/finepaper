@@ -156,6 +156,38 @@ void testRejectsOccupiedCardinalityOnePort() {
             "occupied rejection should report port_occupied");
 }
 
+void testVisualSideOrientsInOutPortToNodeCompletion() {
+    registerRouterType();
+    Graph graph;
+    require(graph.addModule(makeRouter(QStringLiteral("left"))), "failed to add left router");
+    require(graph.addModule(makeRouter(QStringLiteral("right"))), "failed to add right router");
+
+    ConnectionRequest request;
+    request.kind = ConnectionRequestKind::PortToNode;
+    request.allowAutoComplete = true;
+    request.allowAlternatives = true;
+    request.start.moduleId = QStringLiteral("left");
+    request.start.portId = QStringLiteral("west");
+    request.start.visualSide = ConnectionVisualSide::Input;
+    request.end.moduleId = QStringLiteral("right");
+    request.end.fromNodeBody = true;
+    request.end.hiddenPortsAllowed = true;
+    request.end.visualSide = ConnectionVisualSide::Output;
+
+    ConnectionRuleService service(&graph, {});
+    const ConnectionCheckResult result = service.check(request);
+
+    require(result.status == ConnectionCheckStatus::Allowed,
+            "input-side inout drag to a node should resolve to one oriented option");
+    require(result.options.size() == 1, "visual side should avoid symmetric duplicate options");
+    require(result.options.first().source.moduleId == QStringLiteral("right") &&
+                result.options.first().source.portId == QStringLiteral("east"),
+            "body target output side should become the source through its east interface");
+    require(result.options.first().target.moduleId == QStringLiteral("left") &&
+                result.options.first().target.portId == QStringLiteral("west"),
+            "input-side start port should become the target");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -166,6 +198,7 @@ int main(int argc, char** argv) {
         testRejectsMissingPortWithReason();
         testRejectsSameSideTopologyRule();
         testRejectsOccupiedCardinalityOnePort();
+        testVisualSideOrientsInOutPortToNodeCompletion();
     } catch (const std::exception& error) {
         std::cerr << "connectionruleservice_test failed: " << error.what() << '\n';
         return 1;

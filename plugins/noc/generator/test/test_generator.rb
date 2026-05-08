@@ -18,6 +18,60 @@ DRC_BIN = File.join(__dir__, '..', 'bin', 'drc')
 MESH_3X3 = File.join(__dir__, '..', 'examples', 'mesh_3x3.json')
 MULTI_EP = File.join(__dir__, '..', 'examples', 'multi_endpoint.json')
 STUB_TEMPLATES = Dir[File.join(__dir__, '..', 'template', 'stubs', '*.sv')].sort
+GENERIC_GRAPH = {
+  'schema' => 'finepaper-plugin-graph-v1',
+  'name' => 'generic_noc',
+  'modules' => [
+    {
+      'id' => 'xp_0_0',
+      'plugin' => 'finepaper.noc',
+      'type' => 'XP',
+      'parameters' => {
+        'mesh_col' => 0,
+        'mesh_row' => 0,
+        'routing_algorithm' => 'xy',
+        'vc_count' => 2,
+        'buffer_depth' => 8
+      }
+    },
+    {
+      'id' => 'xp_0_1',
+      'plugin' => 'finepaper.noc',
+      'type' => 'XP',
+      'parameters' => {
+        'mesh_col' => 1,
+        'mesh_row' => 0,
+        'routing_algorithm' => 'xy',
+        'vc_count' => 2,
+        'buffer_depth' => 8
+      }
+    },
+    {
+      'id' => 'ep_cpu0',
+      'plugin' => 'finepaper.noc',
+      'type' => 'Endpoint',
+      'parameters' => {
+        'type' => 'master',
+        'protocol' => 'axi4',
+        'data_width' => 64,
+        'buffer_depth' => 16,
+        'qos_enabled' => false
+      }
+    }
+  ],
+  'connections' => [
+    {
+      'id' => 'xp_0_0_east_to_xp_0_1_west',
+      'source' => { 'module' => 'xp_0_0', 'port' => 'east' },
+      'target' => { 'module' => 'xp_0_1', 'port' => 'west' }
+    },
+    {
+      'id' => 'ep_cpu0_to_xp_0_0_local0',
+      'source' => { 'module' => 'ep_cpu0', 'port' => 'noc' },
+      'target' => { 'module' => 'xp_0_0', 'port' => 'local0' }
+    }
+  ]
+}.freeze
 
 class TestJsonParser < Minitest::Test
   def test_parses_noc
@@ -26,6 +80,22 @@ class TestJsonParser < Minitest::Test
     assert_equal 4, noc.xps.size
     assert_equal 4, noc.connections.size
     assert_equal 4, noc.endpoints.size
+  end
+
+  def test_parses_generic_plugin_graph
+    f = Tempfile.new(['generic_graph', '.json'])
+    f.write(JSON.generate(GENERIC_GRAPH))
+    f.close
+
+    noc = JsonParser.parse(f.path)
+
+    assert_equal 'generic_noc', noc.name
+    assert_equal 2, noc.xps.size
+    assert_equal 1, noc.connections.size
+    assert_equal 1, noc.endpoints.size
+    assert_equal ['ep_cpu0'], noc.xps.find { |xp| xp.id == 'xp_0_0' }.endpoints
+  ensure
+    f&.unlink
   end
 
   def test_applies_parameter_defaults
@@ -131,6 +201,19 @@ class TestDrcRunner < Minitest::Test
 
     assert status.success?, stderr
     assert_includes stdout, 'DRC passed for my_noc'
+  end
+
+  def test_drc_script_accepts_generic_plugin_graph
+    f = Tempfile.new(['generic_graph', '.json'])
+    f.write(JSON.generate(GENERIC_GRAPH))
+    f.close
+
+    stdout, stderr, status = Open3.capture3(RbConfig.ruby, DRC_BIN, '-i', f.path)
+
+    assert status.success?, stderr
+    assert_includes stdout, 'DRC passed for generic_noc'
+  ensure
+    f&.unlink
   end
 end
 

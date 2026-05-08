@@ -74,6 +74,8 @@
     <parameters>
       <parameter name="x" type="int" default="0" description="Canvas X position." configurable="false" />
       <parameter name="y" type="int" default="0" description="Canvas Y position." configurable="false" />
+      <parameter name="mesh_col" type="int" default="0" description="Logical mesh column." configurable="false" />
+      <parameter name="mesh_row" type="int" default="0" description="Logical mesh row." configurable="false" />
       <parameter name="display_name" type="string" default="" label="Display name" description="Name shown on the canvas." />
       <parameter name="external_id" type="string" default="" label="External ID" description="Framework-facing identifier." />
       <parameter name="collapsed" type="bool" default="true" description="Collapsed editor state." configurable="false" />

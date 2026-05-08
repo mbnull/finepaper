@@ -3,6 +3,7 @@
 #include "graph/connection.h"
 #include "graph/graph.h"
 #include "graph/module.h"
+#include "connection/connectionruleservice.h"
 #include "modules/moduleregistry.h"
 
 #include <memory>
@@ -64,6 +65,7 @@ std::unique_ptr<Module> instantiateModule(const ModuleType& type,
 }
 
 bool addLink(Graph* graph,
+             const ConnectionRuleService& ruleService,
              TopologyPresetResult& result,
              const QString& id,
              const QString& sourceModule,
@@ -72,11 +74,19 @@ bool addLink(Graph* graph,
              const QString& targetPort) {
     const PortRef source{sourceModule, sourcePort};
     const PortRef target{targetModule, targetPort};
-    if (!graph->isValidConnection(source, target)) {
+    const ConnectionCheckResult check = ruleService.check(
+        ConnectionRequest::portToPort(source, target, ConnectionRequestKind::Programmatic));
+    if (!check.hasSingleOption()) {
+        result.error = QStringLiteral("Generated invalid connection: %1 (%2)")
+                           .arg(id, check.reasonCode);
+        return false;
+    }
+    const ConnectionResolvedOption& option = check.options.first();
+    if (!graph->isValidConnection(option.source, option.target)) {
         result.error = QStringLiteral("Generated invalid connection: %1").arg(id);
         return false;
     }
-    graph->addConnection(std::make_unique<Connection>(id, source, target));
+    graph->addConnection(std::make_unique<Connection>(id, option.source, option.target));
     result.connectionIds.append(id);
     return true;
 }
@@ -108,19 +118,20 @@ TopologyPresetResult createMesh(Graph* graph,
     const QString west = request.preset.ports.value(QStringLiteral("west"));
     const QString north = request.preset.ports.value(QStringLiteral("north"));
     const QString south = request.preset.ports.value(QStringLiteral("south"));
+    const ConnectionRuleService ruleService(graph, {});
 
     for (int row = 0; row < rows; ++row) {
         for (int col = 0; col < cols; ++col) {
             const QString current = meshNodeId(request.preset.idPattern, row, col);
             if (col + 1 < cols) {
                 const QString right = meshNodeId(request.preset.idPattern, row, col + 1);
-                if (!addLink(graph, result, current + QStringLiteral("_east"), current, east, right, west)) {
+                if (!addLink(graph, ruleService, result, current + QStringLiteral("_east"), current, east, right, west)) {
                     return result;
                 }
             }
             if (row + 1 < rows) {
                 const QString below = meshNodeId(request.preset.idPattern, row + 1, col);
-                if (!addLink(graph, result, current + QStringLiteral("_south"), current, south, below, north)) {
+                if (!addLink(graph, ruleService, result, current + QStringLiteral("_south"), current, south, below, north)) {
                     return result;
                 }
             }
@@ -153,10 +164,11 @@ TopologyPresetResult createRing(Graph* graph,
 
     const QString east = request.preset.ports.value(QStringLiteral("east"));
     const QString west = request.preset.ports.value(QStringLiteral("west"));
+    const ConnectionRuleService ruleService(graph, {});
     for (int index = 0; index < nodes; ++index) {
         const QString current = ringNodeId(request.preset.idPattern, index);
         const QString next = ringNodeId(request.preset.idPattern, (index + 1) % nodes);
-        if (!addLink(graph, result, current + QStringLiteral("_next"), current, east, next, west)) {
+        if (!addLink(graph, ruleService, result, current + QStringLiteral("_next"), current, east, next, west)) {
             return result;
         }
     }

@@ -87,6 +87,7 @@ ModuleType routerType(const QString& name, const QString& pluginId) {
     north.bus = QStringLiteral("router_link");
     north.role = QStringLiteral("target");
     north.compatibleRoles = {QStringLiteral("initiator")};
+    north.topologyRule = QStringLiteral("opposite_side");
     type.interfaceMetadata.insert(north.id, north);
 
     ModuleInterfaceMetadata east;
@@ -94,6 +95,7 @@ ModuleType routerType(const QString& name, const QString& pluginId) {
     east.bus = QStringLiteral("router_link");
     east.role = QStringLiteral("initiator");
     east.compatibleRoles = {QStringLiteral("target")};
+    east.topologyRule = QStringLiteral("opposite_side");
     type.interfaceMetadata.insert(east.id, east);
 
     ModuleInterfaceMetadata south = east;
@@ -183,6 +185,27 @@ void testRingPresetCreatesClosedLoop() {
             "ring preset should apply router horizontal spacing");
 }
 
+void testPresetRejectsConnectionsThatFailRuleService() {
+    ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
+    require(registry.registerType(routerType(QStringLiteral("XP"), QStringLiteral("finepaper.noc"))),
+            "router type should register");
+
+    Graph graph;
+    TopologyPresetRequest request;
+    request.pluginId = QStringLiteral("finepaper.noc");
+    request.preset = meshPreset();
+    request.preset.ports.insert(QStringLiteral("west"), QStringLiteral("east"));
+    request.parameters.insert(QStringLiteral("rows"), 1);
+    request.parameters.insert(QStringLiteral("cols"), 2);
+
+    const TopologyPresetResult result = TopologyPresetBuilder::apply(&graph, registry, request);
+
+    require(!result.success, "preset should reject same-side links through connection rules");
+    require(result.error.contains(QStringLiteral("Generated invalid connection")),
+            "preset failure should identify generated invalid connection");
+    require(graph.connections().empty(), "invalid preset link should not be inserted");
+}
+
 void testRepositoryRaveNoCMeshPresetCreatesInternalTiles() {
     const QString pluginRoot = repositoryPluginPath(QStringLiteral("plugins/ravenoc"));
     const QList<PluginDescriptor> plugins = PluginRegistry::discover({pluginRoot});
@@ -232,6 +255,7 @@ int main(int argc, char** argv) {
     try {
         testMeshPresetCreatesEditableGraph();
         testRingPresetCreatesClosedLoop();
+        testPresetRejectsConnectionsThatFailRuleService();
         testRepositoryRaveNoCMeshPresetCreatesInternalTiles();
     } catch (const std::exception& error) {
         std::cerr << "topology_preset_test failed: " << error.what() << '\n';

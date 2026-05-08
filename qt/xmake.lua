@@ -49,6 +49,9 @@ local function add_qt_test_target(name, source_files, extra_files)
 end
 
 add_qt_test_target("graph_test", "test/graph_test.cpp", {
+    "src/commands/addconnectioncommand.cpp",
+    "src/commands/command.cpp",
+    "src/commands/commandmanager.cpp",
     "src/connection/connectionruleservice.cpp",
     "src/**/graph.cpp",
     "src/**/module.cpp",
@@ -60,6 +63,8 @@ add_qt_test_target("graph_test", "test/graph_test.cpp", {
     "src/**/moduleprovider.cpp",
     "src/**/pluginregistry.cpp",
     "inc/**/connectionruleservice.h",
+    "inc/**/addconnectioncommand.h",
+    "inc/**/commandmanager.h",
     "inc/**/graph.h",
     "inc/**/module.h",
     "inc/**/pluginregistry.h",
@@ -312,6 +317,7 @@ add_qt_test_target("plugin_test", "test/plugin_test.cpp", {
 })
 
 add_qt_test_target("topology_preset_test", "test/topology_preset_test.cpp", {
+    "src/connection/connectionruleservice.cpp",
     "src/**/topologypresetbuilder.cpp",
     "src/**/graph.cpp",
     "src/**/module.cpp",
@@ -322,6 +328,7 @@ add_qt_test_target("topology_preset_test", "test/topology_preset_test.cpp", {
     "src/**/moduleprovider.cpp",
     "src/**/pluginregistry.cpp",
     "src/**/frameworkpaths.cpp",
+    "inc/**/connectionruleservice.h",
     "inc/**/topologypresetbuilder.h",
     "inc/**/graph.h",
     "inc/**/module.h",

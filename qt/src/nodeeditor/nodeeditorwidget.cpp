@@ -689,10 +689,13 @@ void NodeEditorWidget::showConnectionOptionsMenu(
 }
 
 void NodeEditorWidget::executeAddConnection(const PortRef& source, const PortRef& target) {
-    refreshConnectionRuleService();
     auto connection = std::make_unique<Connection>(NodeEditorEntityFactory::generateEntityId(), source, target);
+    auto pluginStatesProvider = [projectStateService = m_projectStateService]() {
+        return projectStateService ? projectStateService->pluginStates()
+                                   : QVector<ProjectPluginStateRecord>{};
+    };
     auto command = std::make_unique<AddConnectionCommand>(m_graph,
-                                                          m_connectionRuleService.get(),
+                                                          std::move(pluginStatesProvider),
                                                           std::move(connection));
     m_commandManager->executeCommand(std::move(command));
 }

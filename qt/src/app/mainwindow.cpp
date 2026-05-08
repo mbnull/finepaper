@@ -68,7 +68,7 @@ QString projectFileDialogSaveFilter() {
 }
 
 QString projectFileDialogOpenFilter() {
-    return QStringLiteral("Finepaper Project (*.fpproj);;Legacy NoC JSON (*.json);;All Files (*)");
+    return QStringLiteral("Finepaper Project (*.fpproj);;All Files (*)");
 }
 
 QString pathWithProjectExtension(QString path) {
@@ -612,7 +612,7 @@ void MainWindow::setupActions() {
     addAction(m_redoAction);
 
     m_generateAction = new QAction("Generate Verilog", this);
-    m_generateAction->setToolTip("Export the current graph as framework JSON and generate Verilog in a selected folder.");
+    m_generateAction->setToolTip("Write plugin graph input and a project snapshot, then generate Verilog in a selected folder.");
     connect(m_generateAction, &QAction::triggered, this, &MainWindow::generateVerilog);
 
     m_validateAction = new QAction("Validate", this);

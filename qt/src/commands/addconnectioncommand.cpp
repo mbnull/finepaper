@@ -2,10 +2,10 @@
 #include "commands/addconnectioncommand.h"
 
 AddConnectionCommand::AddConnectionCommand(Graph* graph,
-                                           ConnectionRuleService* ruleService,
+                                           PluginStatesProvider pluginStatesProvider,
                                            std::unique_ptr<Connection> connection)
     : m_graph(graph),
-      m_ruleService(ruleService),
+      m_pluginStatesProvider(std::move(pluginStatesProvider)),
       m_connection(std::move(connection)) {
     m_connectionId = m_connection->id();
 }
@@ -16,14 +16,16 @@ void AddConnectionCommand::execute() {
         return;
     }
 
-    if (m_ruleService) {
-        const ConnectionCheckResult result = m_ruleService->check(
-            ConnectionRequest::portToPort(m_connection->source(),
-                                          m_connection->target(),
-                                          ConnectionRequestKind::Programmatic));
-        if (!result.hasSingleOption()) {
-            return;
-        }
+    ConnectionRuleService ruleService(
+        m_graph,
+        m_pluginStatesProvider ? m_pluginStatesProvider()
+                               : QVector<ProjectPluginStateRecord>{});
+    const ConnectionCheckResult result = ruleService.check(
+        ConnectionRequest::portToPort(m_connection->source(),
+                                      m_connection->target(),
+                                      ConnectionRequestKind::Programmatic));
+    if (!result.hasSingleOption()) {
+        return;
     }
 
     if (!m_graph->isValidConnection(m_connection->source(), m_connection->target())) {

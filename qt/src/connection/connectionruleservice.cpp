@@ -166,6 +166,14 @@ bool oppositeSideRulePasses(const PortSemanticInfo& source,
            PortLayout::oppositeRouterSide(sourceSide) == targetSide;
 }
 
+bool endpointAllowsAsSource(const ConnectionEndpointRequest& endpoint) {
+    return endpoint.visualSide != ConnectionVisualSide::Input;
+}
+
+bool endpointAllowsAsTarget(const ConnectionEndpointRequest& endpoint) {
+    return endpoint.visualSide != ConnectionVisualSide::Output;
+}
+
 } // namespace
 
 ConnectionRequest ConnectionRequest::portToPort(const PortRef& start,
@@ -279,8 +287,26 @@ QVector<ConnectionResolvedOption> ConnectionRuleService::buildOptions(
     const bool allowReverse =
         request.kind == ConnectionRequestKind::PortToNode ||
         request.kind == ConnectionRequestKind::NodeToPort;
+    const auto optionExists = [&](const PortRef& source, const PortRef& target) {
+        return std::any_of(options.cbegin(), options.cend(),
+            [&](const ConnectionResolvedOption& option) {
+                return option.source.moduleId == source.moduleId &&
+                       option.source.portId == source.portId &&
+                       option.target.moduleId == target.moduleId &&
+                       option.target.portId == target.portId;
+            });
+    };
+
     const auto tryAppendOption = [&](const PortSemanticInfo& source,
-                                     const PortSemanticInfo& target) {
+                                     const PortSemanticInfo& target,
+                                     const ConnectionEndpointRequest& sourceEndpoint,
+                                     const ConnectionEndpointRequest& targetEndpoint) {
+        if (!endpointAllowsAsSource(sourceEndpoint) || !endpointAllowsAsTarget(targetEndpoint)) {
+            if (rejectionReason) *rejectionReason = QStringLiteral("direction_mismatch");
+            if (rejectionMessage) *rejectionMessage = QStringLiteral("No direction-compatible connection option");
+            return;
+        }
+
         if (!source.supportsOutput || !target.supportsInput) {
             if (rejectionReason) *rejectionReason = QStringLiteral("direction_mismatch");
             if (rejectionMessage) *rejectionMessage = QStringLiteral("No direction-compatible connection option");
@@ -312,6 +338,10 @@ QVector<ConnectionResolvedOption> ConnectionRuleService::buildOptions(
             return;
         }
 
+        if (optionExists(source.ref, target.ref)) {
+            return;
+        }
+
         options.push_back(ConnectionResolvedOption{
             source.ref,
             target.ref,
@@ -329,9 +359,9 @@ QVector<ConnectionResolvedOption> ConnectionRuleService::buildOptions(
                 continue;
             }
 
-            tryAppendOption(start, end);
+            tryAppendOption(start, end, request.start, request.end);
             if (allowReverse) {
-                tryAppendOption(end, start);
+                tryAppendOption(end, start, request.end, request.start);
             }
         }
     }

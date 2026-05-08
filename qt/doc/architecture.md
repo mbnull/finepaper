@@ -138,13 +138,13 @@ Local validation:
 
 External validation:
 
-- `DRCRunner` exports framework JSON to a temporary file
+- `DRCRunner` exports plugin graph JSON to a temporary file
 - resolves the single plugin used by the graph
 - runs that plugin's declared generator command
 - parses stderr into `ValidationResult` objects
 - maps external IDs back to internal graph IDs when possible
 
-Generation uses the same plugin generator resolution and writes framework JSON into the chosen output directory before invoking the plugin command. If the graph uses modules from multiple plugins, generation fails with a clear message because cross-plugin orchestration is reserved for a later phase.
+Generation uses the same plugin generator resolution and writes plugin graph JSON plus a Finepaper project snapshot into the chosen output directory before invoking the plugin command. If the graph uses modules from multiple plugins, generation fails with a clear message because cross-plugin orchestration is reserved for a later phase.
 
 ## Data flow examples
 
@@ -179,12 +179,12 @@ Generation uses the same plugin generator resolution and writes framework JSON i
 - Module bundles are preferably expressed as plugin-owned `modules.xml` plus per-IP graphics files. Authored JSON module bundles are deprecated conversion inputs; IP-XACT remains a conversion input, not the preferred runtime layout.
 - Native plugin metadata may be present in `plugin.json`, but C++ dynamic libraries are not loaded yet.
 - Position is stored as module parameters such as `x` and `y`.
-- Some editor-only state, such as `collapsed`, is intentionally omitted from framework export.
+- Some editor-only state, such as transient selection, is intentionally omitted from plugin graph export.
 
 ## Notes for maintainers
 
 - Keep model mutations inside commands unless there is a strong reason not to.
-- Preserve the distinction between editor JSON and framework JSON.
+- Preserve the distinction between editor project state and plugin graph input.
 - Keep plugin discovery startup-only unless runtime reload is explicitly designed.
 - When adding new module categories or layouts, update metadata-driven checks instead of scattering type-name comparisons.
 - If plugin generator output changes, update `DRCRunner::parseErrors()` and any ID-mapping assumptions together.

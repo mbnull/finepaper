@@ -1,4 +1,6 @@
 // Graph integration-style tests for JSON import/export and topology behavior.
+#include "commands/addconnectioncommand.h"
+#include "commands/commandmanager.h"
 #include "connection/connectionruleservice.h"
 #include "graph/graph.h"
 #include "modules/moduleregistry.h"
@@ -94,6 +96,46 @@ void testInoutBusConnectionsAreValid() {
 
     graph.addConnection(std::make_unique<Connection>("bus_link", source, target));
     require(graph.connections().size() == 1, "expected inout bus connection to be stored");
+}
+
+void testAddConnectionCommandRedoBuildsFreshRuleService() {
+    Graph graph;
+
+    require(graph.addModule(makeModule(
+        "source",
+        "Endpoint",
+        {Port("out", Port::Direction::Output, "endpoint", "out")})),
+        "failed to add source module");
+    require(graph.addModule(makeModule(
+        "target",
+        "Endpoint",
+        {Port("in", Port::Direction::Input, "endpoint", "in")})),
+        "failed to add target module");
+
+    int providerCalls = 0;
+    auto pluginStatesProvider = [&providerCalls]() {
+        ++providerCalls;
+        return QVector<ProjectPluginStateRecord>{};
+    };
+
+    CommandManager commandManager;
+    auto command = std::make_unique<AddConnectionCommand>(
+        &graph,
+        pluginStatesProvider,
+        std::make_unique<Connection>("command_link",
+                                     PortRef{"source", "out"},
+                                     PortRef{"target", "in"}));
+
+    commandManager.executeCommand(std::move(command));
+    require(providerCalls == 1, "initial execute should build a rule service from provider state");
+    require(graph.connections().size() == 1, "initial execute should add the connection");
+
+    commandManager.undo();
+    require(graph.connections().empty(), "undo should remove the connection");
+
+    commandManager.redo();
+    require(providerCalls == 2, "redo should build a fresh rule service instead of reusing a stale pointer");
+    require(graph.connections().size() == 1, "redo should restore the connection");
 }
 
 void testInoutPortsCannotBeReusedAcrossConnectionSides() {
@@ -625,6 +667,7 @@ int main(int argc, char** argv) {
     try {
         testGraphConnectionValidationRejectsOnlyExactDuplicates();
         testInoutBusConnectionsAreValid();
+        testAddConnectionCommandRedoBuildsFreshRuleService();
         testInoutPortsCannotBeReusedAcrossConnectionSides();
         testInterfaceCompatibilityRejectsMismatchedConfiguredFields();
         testInterfaceCompatibilityAcceptsMatchingConfiguredFields();

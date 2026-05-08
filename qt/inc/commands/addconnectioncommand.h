@@ -4,13 +4,16 @@
 #include "commands/command.h"
 #include "connection/connectionruleservice.h"
 #include "graph/graph.h"
+#include <functional>
 #include <memory>
 
 class AddConnectionCommand : public Command {
 public:
+    using PluginStatesProvider = std::function<QVector<ProjectPluginStateRecord>()>;
+
     // Takes ownership of a prepared connection to be inserted into the graph.
     AddConnectionCommand(Graph* graph,
-                         ConnectionRuleService* ruleService,
+                         PluginStatesProvider pluginStatesProvider,
                          std::unique_ptr<Connection> connection);
     // Inserts the connection if it passes graph validation rules.
     void execute() override;
@@ -19,7 +22,7 @@ public:
 
 private:
     Graph* m_graph = nullptr;
-    ConnectionRuleService* m_ruleService = nullptr;
+    PluginStatesProvider m_pluginStatesProvider;
     std::unique_ptr<Connection> m_connection;
     QString m_connectionId;
 };
