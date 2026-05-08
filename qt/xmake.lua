@@ -49,6 +49,7 @@ local function add_qt_test_target(name, source_files, extra_files)
 end
 
 add_qt_test_target("graph_test", "test/graph_test.cpp", {
+    "src/connection/connectionruleservice.cpp",
     "src/**/graph.cpp",
     "src/**/module.cpp",
     "src/**/connection.cpp",
@@ -58,6 +59,7 @@ add_qt_test_target("graph_test", "test/graph_test.cpp", {
     "src/**/moduleregistry.cpp",
     "src/**/moduleprovider.cpp",
     "src/**/pluginregistry.cpp",
+    "inc/**/connectionruleservice.h",
     "inc/**/graph.h",
     "inc/**/module.h",
     "inc/**/pluginregistry.h",
@@ -147,6 +149,7 @@ add_qt_test_target("logformat_test", "test/logformat_test.cpp", {
 })
 
 add_qt_test_target("projectdocument_test", "test/projectdocument_test.cpp", {
+    "src/connection/connectionruleservice.cpp",
     "src/**/projectreader.cpp",
     "src/**/projectwriter.cpp",
     "src/**/projectstateservice.cpp",
@@ -161,6 +164,7 @@ add_qt_test_target("projectdocument_test", "test/projectdocument_test.cpp", {
     "src/**/moduleregistry.cpp",
     "src/**/moduleprovider.cpp",
     "src/**/pluginregistry.cpp",
+    "inc/**/connectionruleservice.h",
     "inc/**/projectdocument.h",
     "inc/**/pluginstate.h",
     "inc/**/projectstateservice.h",

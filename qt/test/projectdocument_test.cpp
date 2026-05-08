@@ -545,6 +545,44 @@ void testLoadRejectsInvalidConnectionReference() {
             "invalid connection error should mention the connection id");
 }
 
+void testProjectLoadRejectsConnectionRuleFailure() {
+    ProjectDocument document = validProjectDocument();
+    document.modules.clear();
+    document.connections.clear();
+
+    ProjectModuleRecord left;
+    left.id = QStringLiteral("left");
+    left.pluginId = QStringLiteral("finepaper.ravenoc");
+    left.type = QStringLiteral("RaveTile");
+    left.parameters = QJsonObject{
+        {QStringLiteral("x"), 0},
+        {QStringLiteral("y"), 0},
+        {QStringLiteral("mesh_col"), 0},
+        {QStringLiteral("mesh_row"), 0}
+    };
+    document.modules.push_back(left);
+
+    ProjectModuleRecord right = left;
+    right.id = QStringLiteral("right");
+    right.parameters.insert(QStringLiteral("x"), 220);
+    right.parameters.insert(QStringLiteral("mesh_col"), 1);
+    document.modules.push_back(right);
+
+    document.connections.push_back(ProjectConnectionRecord{
+        QStringLiteral("bad_same_side"),
+        ProjectConnectionEndpoint{QStringLiteral("left"), QStringLiteral("east")},
+        ProjectConnectionEndpoint{QStringLiteral("right"), QStringLiteral("east")}
+    });
+
+    Graph graph;
+    const GraphProjectLoadResult result = GraphProjectSerializer::loadProject(document, graph);
+    require(!result.success, "project load should reject connection rule failure");
+    require(result.error.contains(QStringLiteral("bad_same_side")),
+            "project load failure should include connection id");
+    require(result.error.contains(QStringLiteral("topology_rule_mismatch")),
+            "project load failure should include connection rule reason");
+}
+
 void testLoadRejectsConnectionInvalidatedByEarlierConnectionWithoutChangingGraph() {
     registerProjectTypes();
 
@@ -814,6 +852,7 @@ int main(int argc, char** argv) {
         testLoadRejectsMissingModuleType();
         testLoadRejectsInvalidParameterType();
         testLoadRejectsInvalidConnectionReference();
+        testProjectLoadRejectsConnectionRuleFailure();
         testLoadRejectsConnectionInvalidatedByEarlierConnectionWithoutChangingGraph();
         testReaderRejectsMalformedProjectGraphArrays();
         testProjectReaderDetectsOnlyFinepaperProjects();

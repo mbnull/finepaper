@@ -830,7 +830,7 @@ bool NodeEditorWidget::tryCompleteDraftConnection(const QPoint& viewportPos,
 
 void NodeEditorWidget::executeAddConnection(const PortRef& source, const PortRef& target) {
     auto connection = std::make_unique<Connection>(NodeEditorEntityFactory::generateEntityId(), source, target);
-    auto command = std::make_unique<AddConnectionCommand>(m_graph, std::move(connection));
+    auto command = std::make_unique<AddConnectionCommand>(m_graph, nullptr, std::move(connection));
     m_commandManager->executeCommand(std::move(command));
 }
 

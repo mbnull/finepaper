@@ -1,4 +1,5 @@
 // Graph integration-style tests for JSON import/export and topology behavior.
+#include "connection/connectionruleservice.h"
 #include "graph/graph.h"
 #include "modules/moduleregistry.h"
 #include "modules/moduleprovider.h"
@@ -39,7 +40,7 @@ void require(bool condition, const char* message) {
     }
 }
 
-void testConnectionValidationPreventsPortReuse() {
+void testGraphConnectionValidationRejectsOnlyExactDuplicates() {
     Graph graph;
 
     require(graph.addModule(makeModule(
@@ -67,7 +68,8 @@ void testConnectionValidationPreventsPortReuse() {
     graph.addConnection(std::make_unique<Connection>("c1", source, targetA));
 
     require(graph.connections().size() == 1, "expected connection to be stored");
-    require(!graph.isValidConnection(source, targetB), "source port should not be reusable");
+    require(graph.isValidConnection(source, targetB),
+            "structural graph guard should leave port reuse to connection rules");
     require(!graph.isValidConnection(source, targetA), "duplicate connection should be rejected");
 }
 
@@ -121,10 +123,19 @@ void testInoutPortsCannotBeReusedAcrossConnectionSides() {
     graph.addConnection(std::make_unique<Connection>("bus_link_ab", source, middle));
 
     require(graph.connections().size() == 1, "expected initial inout connection to be stored");
-    require(!graph.isValidConnection(middle, target),
-            "inout port already used as a target should not be reusable as a source");
-    require(!graph.isValidConnection(target, middle),
-            "inout port already used as a target should not be reusable as a target again");
+    ConnectionRuleService service(&graph, {});
+    const ConnectionCheckResult sourceReuse = service.check(
+        ConnectionRequest::portToPort(middle, target, ConnectionRequestKind::Programmatic));
+    const ConnectionCheckResult targetReuse = service.check(
+        ConnectionRequest::portToPort(target, middle, ConnectionRequestKind::Programmatic));
+    require(sourceReuse.status == ConnectionCheckStatus::Rejected,
+            "connection service should reject occupied inout source reuse");
+    require(sourceReuse.reasonCode == QStringLiteral("port_occupied"),
+            "source reuse should report port_occupied");
+    require(targetReuse.status == ConnectionCheckStatus::Rejected,
+            "connection service should reject occupied inout target reuse");
+    require(targetReuse.reasonCode == QStringLiteral("port_occupied"),
+            "target reuse should report port_occupied");
 }
 
 ModuleInterfaceMetadata makeInterfaceMetadata(const QString& id,
@@ -176,8 +187,15 @@ void testInterfaceCompatibilityRejectsMismatchedConfiguredFields() {
     require(graph.addModule(std::move(endpoint)), "failed to add interface endpoint");
     require(graph.addModule(std::move(xp)), "failed to add interface XP");
 
-    require(!graph.isValidConnection(PortRef{"endpoint", "noc"}, PortRef{"xp", "local0"}),
-            "interface connection should reject mismatched data_width");
+    ConnectionRuleService service(&graph, {});
+    const ConnectionCheckResult result = service.check(
+        ConnectionRequest::portToPort(PortRef{"endpoint", "noc"},
+                                      PortRef{"xp", "local0"},
+                                      ConnectionRequestKind::Programmatic));
+    require(result.status == ConnectionCheckStatus::Rejected,
+            "connection service should reject mismatched data_width");
+    require(result.reasonCode == QStringLiteral("interface_field_mismatch"),
+            "data_width mismatch should report interface_field_mismatch");
 }
 
 void testInterfaceCompatibilityAcceptsMatchingConfiguredFields() {
@@ -215,8 +233,13 @@ void testInterfaceCompatibilityAcceptsMatchingConfiguredFields() {
     require(graph.addModule(std::move(endpoint)), "failed to add matching interface endpoint");
     require(graph.addModule(std::move(xp)), "failed to add matching interface XP");
 
-    require(graph.isValidConnection(PortRef{"endpoint", "noc"}, PortRef{"xp", "local0"}),
-            "interface connection should accept matching protocol and data_width");
+    ConnectionRuleService service(&graph, {});
+    const ConnectionCheckResult result = service.check(
+        ConnectionRequest::portToPort(PortRef{"endpoint", "noc"},
+                                      PortRef{"xp", "local0"},
+                                      ConnectionRequestKind::Programmatic));
+    require(result.status == ConnectionCheckStatus::Allowed,
+            "connection service should accept matching protocol and data_width");
 }
 
 void testRouterLinksRequireOppositeSides() {
@@ -240,10 +263,21 @@ void testRouterLinksRequireOppositeSides() {
     require(graph.addModule(std::move(source)), "failed to add source router");
     require(graph.addModule(std::move(target)), "failed to add target router");
 
-    require(graph.isValidConnection(PortRef{"router_a", "east"}, PortRef{"router_b", "west"}),
+    ConnectionRuleService service(&graph, {});
+    const ConnectionCheckResult opposite = service.check(
+        ConnectionRequest::portToPort(PortRef{"router_a", "east"},
+                                      PortRef{"router_b", "west"},
+                                      ConnectionRequestKind::Programmatic));
+    const ConnectionCheckResult wrongSide = service.check(
+        ConnectionRequest::portToPort(PortRef{"router_a", "east"},
+                                      PortRef{"router_b", "north"},
+                                      ConnectionRequestKind::Programmatic));
+    require(opposite.status == ConnectionCheckStatus::Allowed,
             "east router interface should connect to west");
-    require(!graph.isValidConnection(PortRef{"router_a", "east"}, PortRef{"router_b", "north"}),
+    require(wrongSide.status == ConnectionCheckStatus::Rejected,
             "east router interface should not connect to north");
+    require(wrongSide.reasonCode == QStringLiteral("topology_rule_mismatch"),
+            "wrong router side should report topology_rule_mismatch");
 }
 
 void testRemovingModuleAlsoRemovesAttachedConnections() {
@@ -589,7 +623,7 @@ int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
 
     try {
-        testConnectionValidationPreventsPortReuse();
+        testGraphConnectionValidationRejectsOnlyExactDuplicates();
         testInoutBusConnectionsAreValid();
         testInoutPortsCannotBeReusedAcrossConnectionSides();
         testInterfaceCompatibilityRejectsMismatchedConfiguredFields();

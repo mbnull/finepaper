@@ -1,6 +1,7 @@
 // GraphProjectSerializer converts Graph state to/from Finepaper project records.
 #include "project/graphprojectserializer.h"
 
+#include "connection/connectionruleservice.h"
 #include "graph/connection.h"
 #include "graph/graph.h"
 #include "graph/module.h"
@@ -92,6 +93,7 @@ GraphProjectLoadResult populateGraph(const ProjectDocument& document,
         }
     }
 
+    const ConnectionRuleService ruleService(&graph, document.pluginStates);
     for (const ProjectConnectionRecord& record : document.connections) {
         // Validate against the concrete Graph again because module defaults and
         // interface metadata may reject edges that pass basic project shape checks.
@@ -106,8 +108,12 @@ GraphProjectLoadResult populateGraph(const ProjectDocument& document,
 
         const PortRef source{record.source.moduleId, record.source.portId};
         const PortRef target{record.target.moduleId, record.target.portId};
-        if (!graph.isValidConnection(source, target)) {
-            return failure(QStringLiteral("Invalid connection: %1").arg(record.id));
+        const ConnectionCheckResult check = ruleService.check(
+            ConnectionRequest::portToPort(source, target, ConnectionRequestKind::ProjectLoad));
+        if (!check.hasSingleOption()) {
+            return failure(QStringLiteral("Invalid connection %1: %2")
+                               .arg(record.id,
+                                    check.reasonCode.isEmpty() ? check.message : check.reasonCode));
         }
         graph.addConnection(std::make_unique<Connection>(record.id, source, target));
     }

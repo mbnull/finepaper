@@ -5,7 +5,6 @@
 //   take        — transfer ownership out (used by undo commands)
 #include "graph/graph.h"
 #include "modules/modulelabels.h"
-#include "modules/moduletypemetadata.h"
 #include "modules/moduleregistry.h"
 #include <algorithm>
 #include <QJsonDocument>
@@ -14,7 +13,6 @@
 #include <QDebug>
 #include <QRegularExpression>
 #include <QSet>
-#include "common/portlayout.h"
 
 namespace {
 
@@ -28,14 +26,6 @@ const Port* findPort(const Module* module, const QString& portId) {
     }
 
     return nullptr;
-}
-
-QString oppositeDirection(const QString& dir) {
-    return PortLayout::oppositeRouterSide(PortLayout::routerSideId(dir));
-}
-
-bool isMeshRouterModule(const Module* module) {
-    return ModuleTypeMetadata::hasEditorLayout(module, u"mesh_router");
 }
 
 QJsonValue parameterToJson(const Parameter::Value& value) {
@@ -122,154 +112,6 @@ QString pluginConnectionArtifactId(const QString& sourceModuleId,
     const QString raw = QStringLiteral("%1_%2_to_%3_%4")
                             .arg(sourceModuleId, sourcePortId, targetModuleId, targetPortId);
     return uniqueArtifactToken(safeArtifactToken(raw, QStringLiteral("connection")), usedConnectionIds);
-}
-
-bool isRouterLink(const Module* sourceModule,
-                  const Port* sourcePort,
-                  const Module* targetModule,
-                  const Port* targetPort) {
-    return sourceModule && targetModule &&
-           sourcePort && targetPort &&
-           isMeshRouterModule(sourceModule) &&
-           isMeshRouterModule(targetModule) &&
-           PortLayout::isRouterPort(*sourcePort) &&
-           PortLayout::isRouterPort(*targetPort);
-}
-
-QString parameterValueString(const Module* module, const QString& parameterName) {
-    if (!module) return {};
-
-    const auto it = module->parameters().find(parameterName);
-    if (it == module->parameters().end()) return {};
-
-    const auto& value = it.value().value();
-    if (const auto* stringValue = std::get_if<QString>(&value)) return *stringValue;
-    if (const auto* intValue = std::get_if<int>(&value)) return QString::number(*intValue);
-    if (const auto* doubleValue = std::get_if<double>(&value)) return QString::number(*doubleValue, 'g', 15);
-    if (const auto* boolValue = std::get_if<bool>(&value)) return *boolValue ? QStringLiteral("true")
-                                                                             : QStringLiteral("false");
-    return {};
-}
-
-QString canonicalInterfaceFieldValue(const QString& field, const QString& value) {
-    if (field == "protocol" && value.compare(QStringLiteral("axi"), Qt::CaseInsensitive) == 0) {
-        return QStringLiteral("axi4");
-    }
-    return value;
-}
-
-std::optional<ModuleInterfaceMetadata> interfaceMetadataFor(const Module* module, const Port* port) {
-    if (!module || !port || port->interfaceId().isEmpty()) {
-        return std::nullopt;
-    }
-
-    // Interface metadata lives on ModuleType because ports are copied into
-    // Module instances while semantic compatibility remains type-level data.
-    const ModuleType* moduleType = ModuleTypeMetadata::type(module);
-    if (!moduleType) {
-        return std::nullopt;
-    }
-
-    const auto it = moduleType->interfaceMetadata.find(port->interfaceId());
-    return it != moduleType->interfaceMetadata.end()
-        ? std::optional<ModuleInterfaceMetadata>(it.value())
-        : std::nullopt;
-}
-
-QStringList interfaceFieldValues(const ModuleInterfaceMetadata& metadata,
-                                 const Module* module,
-                                 const QString& field) {
-    const auto bindingIt = metadata.parameterBindings.find(field);
-    if (bindingIt != metadata.parameterBindings.end()) {
-        const QString value = parameterValueString(module, bindingIt.value());
-        return value.isEmpty() ? QStringList{} : QStringList{canonicalInterfaceFieldValue(field, value)};
-    }
-
-    const auto acceptedIt = metadata.acceptedValues.find(field);
-    if (acceptedIt != metadata.acceptedValues.end()) {
-        QStringList values;
-        for (const QString& value : acceptedIt.value()) {
-            values.append(canonicalInterfaceFieldValue(field, value));
-        }
-        return values;
-    }
-
-    return {};
-}
-
-bool valuesOverlap(const QStringList& lhs, const QStringList& rhs) {
-    for (const QString& value : lhs) {
-        if (rhs.contains(value)) {
-            return true;
-        }
-    }
-    return false;
-}
-
-bool interfaceMetadataCompatible(const ModuleInterfaceMetadata& sourceInterface,
-                                 const Module* sourceModule,
-                                 const ModuleInterfaceMetadata& targetInterface,
-                                 const Module* targetModule) {
-    if (sourceInterface.bus != targetInterface.bus) {
-        return false;
-    }
-
-    if (!sourceInterface.compatibleRoles.contains(targetInterface.role) ||
-        !targetInterface.compatibleRoles.contains(sourceInterface.role)) {
-        return false;
-    }
-
-    QStringList matchFields = sourceInterface.matchFields;
-    for (const QString& field : targetInterface.matchFields) {
-        if (!matchFields.contains(field)) {
-            matchFields.append(field);
-        }
-    }
-
-    // Both endpoints can require fields such as protocol or data width. A link
-    // is valid only when every required field has an overlapping value.
-    for (const QString& field : matchFields) {
-        const QStringList sourceValues = interfaceFieldValues(sourceInterface, sourceModule, field);
-        const QStringList targetValues = interfaceFieldValues(targetInterface, targetModule, field);
-        if (sourceValues.isEmpty() || targetValues.isEmpty() || !valuesOverlap(sourceValues, targetValues)) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-bool interfacesCompatible(const Module* sourceModule,
-                          const Port* sourcePort,
-                          const Module* targetModule,
-                          const Port* targetPort) {
-    const std::optional<ModuleInterfaceMetadata> sourceInterface = interfaceMetadataFor(sourceModule, sourcePort);
-    const std::optional<ModuleInterfaceMetadata> targetInterface = interfaceMetadataFor(targetModule, targetPort);
-
-    if (!sourceInterface && !targetInterface) {
-        return true;
-    }
-    if (!sourceInterface || !targetInterface) {
-        return false;
-    }
-
-    return interfaceMetadataCompatible(*sourceInterface, sourceModule, *targetInterface, targetModule);
-}
-
-bool connectionUsesRouterSide(const Connection& connection,
-                              const QString& moduleId,
-                              const QString& side) {
-    if (connection.source().moduleId == moduleId &&
-        PortLayout::routerSideId(connection.source().portId) == side) {
-        return true;
-    }
-
-    if (connection.target().moduleId == moduleId &&
-        PortLayout::routerSideId(connection.target().portId) == side) {
-        return true;
-    }
-
-    return false;
 }
 
 } // namespace
@@ -466,105 +308,26 @@ void Graph::insertConnection(std::unique_ptr<Connection> connection) {
 }
 
 bool Graph::isValidConnection(const PortRef& source, const PortRef& target) const {
-    // Validation deliberately stays in Graph because UI gestures, imports, and
-    // command replay all need the same topology contract.
-    // Disallow self-loops at graph level.
-    if (source.moduleId == target.moduleId) return false;
+    if (source.moduleId == target.moduleId) {
+        return false;
+    }
 
     const Module* sourceModule = getModule(source.moduleId);
     const Module* targetModule = getModule(target.moduleId);
-    // Both endpoints must refer to live modules before any port-level checks
-    // can be meaningful.
-    if (!sourceModule || !targetModule) return false;
-
-    const Port* sourcePort = findPort(sourceModule, source.portId);
-    const Port* targetPort = findPort(targetModule, target.portId);
-    // Port IDs are intentionally not normalized here; callers must pass the
-    // concrete IDs for the current module definitions.
-    if (!sourcePort || !targetPort) return false;
-
-    // Generic electrical/interface checks run before topology-specific mesh
-    // constraints so every path observes the same base compatibility contract.
-    if (!PortLayout::supportsOutput(*sourcePort)) return false;
-    if (!PortLayout::supportsInput(*targetPort)) return false;
-    if (!PortLayout::sameBusFamily(*sourcePort, *targetPort)) return false;
-    if (!interfacesCompatible(sourceModule, sourcePort, targetModule, targetPort)) return false;
-
-    if (isRouterLink(sourceModule, sourcePort, targetModule, targetPort)) {
-        // Router-to-router links are constrained to one opposite-side pair and
-        // one connection per side to preserve mesh semantics.
-        const QString sourceSide = PortLayout::routerSideId(source.portId);
-        const QString targetSide = PortLayout::routerSideId(target.portId);
-
-        if (sourceSide == targetSide) {
-            return false;
-        }
-        if (oppositeDirection(sourceSide) != targetSide) {
-            // Mesh links must join opposite sides, for example east to west.
-            return false;
-        }
-
-        for (const auto& existingConnection : m_connections) {
-            const bool sameRouterPair =
-                (existingConnection->source().moduleId == source.moduleId &&
-                 existingConnection->target().moduleId == target.moduleId) ||
-                (existingConnection->source().moduleId == target.moduleId &&
-                 existingConnection->target().moduleId == source.moduleId);
-
-            if (sameRouterPair) {
-                // A pair of routers can have at most one edge between them.
-                return false;
-            }
-
-            if (connectionUsesRouterSide(*existingConnection, source.moduleId, sourceSide) ||
-                connectionUsesRouterSide(*existingConnection, target.moduleId, targetSide)) {
-                // Router sides model physical channels and cannot fan out.
-                return false;
-            }
-        }
+    if (!sourceModule || !targetModule) {
+        return false;
     }
 
-    // Occupancy is directional for regular ports, but bidirectional for InOut.
-    const auto portIsOccupied = [&](const PortRef& portRef, const Port& port) {
-        return std::any_of(m_connections.begin(), m_connections.end(),
-            [&](const std::unique_ptr<Connection>& c) {
-                const bool usedAsSource =
-                    c->source().moduleId == portRef.moduleId && c->source().portId == portRef.portId;
-                const bool usedAsTarget =
-                    c->target().moduleId == portRef.moduleId && c->target().portId == portRef.portId;
-                if (port.direction() == Port::Direction::InOut) {
-                    return usedAsSource || usedAsTarget;
-                }
+    if (!findPort(sourceModule, source.portId) || !findPort(targetModule, target.portId)) {
+        return false;
+    }
 
-                return usedAsSource;
-            });
-    };
-
-    const bool sourceInUse = portIsOccupied(source, *sourcePort);
-    if (sourceInUse) return false;
-
-    // Targets use their natural direction for occupancy; InOut ports are
-    // considered consumed regardless of whether an edge uses them as source or target.
-    const bool targetInUse = std::any_of(m_connections.begin(), m_connections.end(),
-        [&](const std::unique_ptr<Connection>& c) {
-            const bool usedAsSource =
-                c->source().moduleId == target.moduleId && c->source().portId == target.portId;
-            const bool usedAsTarget =
-                c->target().moduleId == target.moduleId && c->target().portId == target.portId;
-            if (targetPort->direction() == Port::Direction::InOut) {
-                return usedAsSource || usedAsTarget;
-            }
-
-            return usedAsTarget;
-        });
-    if (targetInUse) return false;
-
-    // The final duplicate check is still needed for ports that allow direction
-    // reuse in future module definitions.
     return std::none_of(m_connections.begin(), m_connections.end(),
-        [&](const std::unique_ptr<Connection>& c) {
-            return c->source().moduleId == source.moduleId && c->source().portId == source.portId &&
-                   c->target().moduleId == target.moduleId && c->target().portId == target.portId;
+        [&](const std::unique_ptr<Connection>& connection) {
+            return connection->source().moduleId == source.moduleId &&
+                   connection->source().portId == source.portId &&
+                   connection->target().moduleId == target.moduleId &&
+                   connection->target().portId == target.portId;
         });
 }
 
