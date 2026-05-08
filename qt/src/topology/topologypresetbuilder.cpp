@@ -44,6 +44,26 @@ void rollbackCreated(Graph* graph, TopologyPresetResult& result) {
     result.moduleIds.clear();
 }
 
+TopologyPresetResult failAndRollback(Graph* graph,
+                                     TopologyPresetResult& result,
+                                     const QString& error) {
+    result.error = error;
+    rollbackCreated(graph, result);
+    return result;
+}
+
+bool connectionIdExists(const Graph* graph, const QString& id) {
+    if (!graph) {
+        return false;
+    }
+    for (const auto& connection : graph->connections()) {
+        if (connection && connection->id() == id) {
+            return true;
+        }
+    }
+    return false;
+}
+
 std::unique_ptr<Module> instantiateModule(const ModuleType& type,
                                           const QString& id,
                                           int row,
@@ -87,6 +107,11 @@ bool addLink(Graph* graph,
              const QString& sourcePort,
              const QString& targetModule,
              const QString& targetPort) {
+    if (connectionIdExists(graph, id)) {
+        result.error = QStringLiteral("Connection already exists: %1").arg(id);
+        return false;
+    }
+
     const PortRef source{sourceModule, sourcePort};
     const PortRef target{targetModule, targetPort};
     const ConnectionCheckResult check = ruleService.check(
@@ -120,10 +145,10 @@ TopologyPresetResult createMesh(Graph* graph,
         for (int col = 0; col < cols; ++col) {
             const QString id = meshNodeId(request.preset.idPattern, row, col);
             if (graph->getModule(id)) {
-                return failure(QStringLiteral("Module already exists: %1").arg(id));
+                return failAndRollback(graph, result, QStringLiteral("Module already exists: %1").arg(id));
             }
             if (!graph->addModule(instantiateModule(routerType, id, row, col))) {
-                return failure(QStringLiteral("Could not add module: %1").arg(id));
+                return failAndRollback(graph, result, QStringLiteral("Could not add module: %1").arg(id));
             }
             result.moduleIds.append(id);
         }
@@ -171,10 +196,10 @@ TopologyPresetResult createRing(Graph* graph,
     for (int index = 0; index < nodes; ++index) {
         const QString id = ringNodeId(request.preset.idPattern, index);
         if (graph->getModule(id)) {
-            return failure(QStringLiteral("Module already exists: %1").arg(id));
+            return failAndRollback(graph, result, QStringLiteral("Module already exists: %1").arg(id));
         }
         if (!graph->addModule(instantiateModule(routerType, id, 0, index))) {
-            return failure(QStringLiteral("Could not add module: %1").arg(id));
+            return failAndRollback(graph, result, QStringLiteral("Could not add module: %1").arg(id));
         }
         result.moduleIds.append(id);
     }

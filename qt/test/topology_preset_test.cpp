@@ -232,6 +232,71 @@ void testPresetFailureRollsBackPartialGraph() {
     require(graph.connections().empty(), "failed preset should roll back earlier valid links");
 }
 
+void testPresetModuleCreationFailureRollsBackPartialGraph() {
+    ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
+    require(registry.registerType(routerType(QStringLiteral("XP"), QStringLiteral("finepaper.noc"))),
+            "router type should register");
+
+    Graph graph;
+    TopologyPresetRequest request;
+    request.pluginId = QStringLiteral("finepaper.noc");
+    request.preset = meshPreset();
+    request.preset.idPattern = QStringLiteral("xp");
+    request.parameters.insert(QStringLiteral("rows"), 1);
+    request.parameters.insert(QStringLiteral("cols"), 2);
+
+    const TopologyPresetResult result = TopologyPresetBuilder::apply(&graph, registry, request);
+
+    require(!result.success, "duplicate generated module id should fail preset");
+    require(graph.modules().empty(), "module creation failure should roll back earlier created modules");
+    require(graph.connections().empty(), "module creation failure should not leave connections");
+}
+
+void testPresetConnectionIdCollisionDoesNotRemoveExistingConnection() {
+    ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
+    const QString typeName = QStringLiteral("XPCollision");
+    ModuleType type = routerType(typeName, QStringLiteral("finepaper.noc"));
+    require(registry.registerType(type), "router type should register");
+    ModuleRegistry::instance().registerType(type);
+
+    Graph graph;
+    require(graph.addModule(std::make_unique<Module>(QStringLiteral("existing_source"), typeName)),
+            "existing source should add");
+    graph.getModule(QStringLiteral("existing_source"))->addPort(
+        Port(QStringLiteral("east"), Port::Direction::InOut, QStringLiteral("bus"),
+             QStringLiteral("East"), {}, QStringLiteral("router"),
+             QStringLiteral("router_link"), QStringLiteral("east")));
+    require(graph.addModule(std::make_unique<Module>(QStringLiteral("existing_target"), typeName)),
+            "existing target should add");
+    graph.getModule(QStringLiteral("existing_target"))->addPort(
+        Port(QStringLiteral("west"), Port::Direction::InOut, QStringLiteral("bus"),
+             QStringLiteral("West"), {}, QStringLiteral("router"),
+             QStringLiteral("router_link"), QStringLiteral("west")));
+    graph.addConnection(std::make_unique<Connection>(
+        QStringLiteral("xp_0_0_east"),
+        PortRef{QStringLiteral("existing_source"), QStringLiteral("east")},
+        PortRef{QStringLiteral("existing_target"), QStringLiteral("west")}));
+    require(graph.connections().size() == 1, "pre-existing connection should be present");
+
+    TopologyPresetRequest request;
+    request.pluginId = QStringLiteral("finepaper.noc");
+    request.preset = meshPreset();
+    request.preset.routerModule = typeName;
+    request.parameters.insert(QStringLiteral("rows"), 1);
+    request.parameters.insert(QStringLiteral("cols"), 2);
+
+    const TopologyPresetResult result = TopologyPresetBuilder::apply(&graph, registry, request);
+
+    require(!result.success, "generated connection id collision should fail preset");
+    require(graph.connections().size() == 1, "rollback should preserve pre-existing connection");
+    require(graph.connections().front()->id() == QStringLiteral("xp_0_0_east"),
+            "existing connection id should remain");
+    require(graph.getModule(QStringLiteral("existing_source")) != nullptr,
+            "rollback should preserve pre-existing source module");
+    require(graph.getModule(QStringLiteral("xp_0_0")) == nullptr,
+            "rollback should remove generated modules");
+}
+
 void testRepositoryRaveNoCMeshPresetCreatesInternalTiles() {
     const QString pluginRoot = repositoryPluginPath(QStringLiteral("plugins/ravenoc"));
     const QList<PluginDescriptor> plugins = PluginRegistry::discover({pluginRoot});
@@ -283,6 +348,8 @@ int main(int argc, char** argv) {
         testRingPresetCreatesClosedLoop();
         testPresetRejectsConnectionsThatFailRuleService();
         testPresetFailureRollsBackPartialGraph();
+        testPresetModuleCreationFailureRollsBackPartialGraph();
+        testPresetConnectionIdCollisionDoesNotRemoveExistingConnection();
         testRepositoryRaveNoCMeshPresetCreatesInternalTiles();
     } catch (const std::exception& error) {
         std::cerr << "topology_preset_test failed: " << error.what() << '\n';
