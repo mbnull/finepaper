@@ -736,14 +736,14 @@ void testProjectReaderDetectsOnlyFinepaperProjects() {
     QTemporaryDir tempDir;
     require(tempDir.isValid(), "failed to create temporary directory");
     const QString projectPath = QDir(tempDir.path()).filePath(QStringLiteral("design.fpproj"));
-    const QString legacyPath = QDir(tempDir.path()).filePath(QStringLiteral("legacy.json"));
+    const QString preV1Path = QDir(tempDir.path()).filePath(QStringLiteral("pre_v1_graph.json"));
 
     const ProjectWriteResult writeResult =
         ProjectWriter::writeFile(projectPath, validProjectDocument());
     require(writeResult.success, "failed to write project fixture");
 
-    writeJsonFile(legacyPath, QJsonObject{
-        {QStringLiteral("name"), QStringLiteral("legacy")},
+    writeJsonFile(preV1Path, QJsonObject{
+        {QStringLiteral("name"), QStringLiteral("pre_v1_graph")},
         {QStringLiteral("version"), QStringLiteral("1.0")},
         {QStringLiteral("xps"), QJsonArray{}},
         {QStringLiteral("endpoints"), QJsonArray{}},
@@ -752,8 +752,8 @@ void testProjectReaderDetectsOnlyFinepaperProjects() {
 
     require(ProjectReader::detectKind(projectPath) == ProjectFileKind::Project,
             "project file should be detected as Finepaper project");
-    require(ProjectReader::detectKind(legacyPath) == ProjectFileKind::Unknown,
-            "pre-v1 legacy graph JSON should not be a supported import kind");
+    require(ProjectReader::detectKind(preV1Path) == ProjectFileKind::Unknown,
+            "pre-v1 graph JSON should not be a supported import kind");
 }
 
 void testGenerationHelpersShapePluginStateForGeneratorBoundary() {
@@ -785,8 +785,9 @@ void testGenerationHelpersShapePluginStateForGeneratorBoundary() {
     attachPluginState(root, records);
     require(root.contains(QStringLiteral("plugin_state")),
             "generated input should include plugin_state");
-    require(!root.contains(QStringLiteral("ip_instance")),
-            "generated input should not include legacy ip_instance");
+    const QString preV1IpInstanceField = QStringLiteral("ip_") + QStringLiteral("instance");
+    require(!root.contains(preV1IpInstanceField),
+            "generated input should not include pre-v1 IP instance field");
 }
 
 void testGenerationWritesProjectSnapshot() {

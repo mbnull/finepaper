@@ -899,11 +899,11 @@ bool MainWindow::loadDocument(const QString& path) {
     qInfo() << "Loading document from" << path;
 
     // Format detection is content-based instead of extension-based so renamed
-    // legacy files still import through the correct path.
+    // project files still load through the correct path.
     const ProjectFileKind kind = ProjectReader::detectKind(path);
     if (kind == ProjectFileKind::Project) {
         // Project files carry plugin ownership and typed parameters, so load
-        // through the serializer instead of the legacy Graph JSON importer.
+        // through the serializer.
         const ProjectReadResult readResult = ProjectReader::readFile(path);
         if (!readResult.success) {
             qWarning() << "Failed to read project" << path << readResult.error;

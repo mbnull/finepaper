@@ -56,7 +56,7 @@ private:
     int& m_counter;
 };
 
-bool isMeshRouterModule(const Module* module) {
+bool usesMeshRouterPresentation(const Module* module) {
     return ModuleTypeMetadata::hasEditorLayout(module, u"mesh_router");
 }
 
@@ -92,16 +92,16 @@ bool isEndpointAttachmentConnection(const Graph* graph,
     const Module* targetModule = graph->getModule(connection.target().moduleId);
     if (!sourceModule || !targetModule) return false;
 
-    // Endpoint attachments can be stored in either direction by older data or
-    // UI gestures; normalize both cases to host-router and endpoint IDs.
-    if (isEndpointModule(sourceModule) && isMeshRouterModule(targetModule) &&
+    // Endpoint attachment presentation normalizes either stored direction to
+    // host-router and endpoint IDs.
+    if (isEndpointModule(sourceModule) && usesMeshRouterPresentation(targetModule) &&
         PortLayout::isEndpointPortId(connection.target().portId)) {
         if (hostModuleId) *hostModuleId = targetModule->id();
         if (endpointModuleId) *endpointModuleId = sourceModule->id();
         return true;
     }
 
-    if (!isMeshRouterModule(sourceModule) || !isEndpointModule(targetModule)) return false;
+    if (!usesMeshRouterPresentation(sourceModule) || !isEndpointModule(targetModule)) return false;
     if (!PortLayout::isEndpointPortId(connection.source().portId)) return false;
 
     if (hostModuleId) *hostModuleId = sourceModule->id();

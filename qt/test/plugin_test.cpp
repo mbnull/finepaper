@@ -165,17 +165,17 @@ void testJsonModuleBundlesAreIgnored() {
     require(temp.isValid(), "temporary directory should be valid");
 
     QDir root(temp.path());
-    require(root.mkpath(QStringLiteral("legacy")), "failed to create legacy plugin");
-    writeFile(root.filePath(QStringLiteral("legacy/modules.json")),
-              QByteArrayLiteral(R"json([{"name":"Legacy","ports":[],"parameters":[]}])json"));
-    writeFile(root.filePath(QStringLiteral("legacy/plugin.json")),
-              QByteArrayLiteral(R"json({"id":"legacy","name":"Legacy","version":"1","modules":"modules.json"})json"));
+    require(root.mkpath(QStringLiteral("json_bundle")), "failed to create JSON bundle plugin");
+    writeFile(root.filePath(QStringLiteral("json_bundle/modules.json")),
+              QByteArrayLiteral(R"json([{"name":"JsonBundle","ports":[],"parameters":[]}])json"));
+    writeFile(root.filePath(QStringLiteral("json_bundle/plugin.json")),
+              QByteArrayLiteral(R"json({"id":"json_bundle","name":"JsonBundle","version":"1","modules":"modules.json"})json"));
 
     ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
     const bool loaded = registry.loadPlugins(PluginRegistry::discover({temp.path()}));
 
     require(!loaded, "JSON module bundles should no longer load");
-    require(registry.availableTypes().isEmpty(), "legacy JSON module type should be ignored");
+    require(registry.availableTypes().isEmpty(), "JSON module type should be ignored");
 }
 
 void testModuleRegistryListsTypesByPlugin() {
@@ -483,8 +483,8 @@ void testStartupDiagnosticsListLoadedPluginsAndIpTypes() {
 
 void testStartupDiagnosticsMarksJsonModuleBundlesUnsupported() {
     PluginDescriptor plugin;
-    plugin.id = QStringLiteral("finepaper.legacy");
-    plugin.name = QStringLiteral("Legacy");
+    plugin.id = QStringLiteral("finepaper.jsonbundle");
+    plugin.name = QStringLiteral("JsonBundle");
     plugin.version = QStringLiteral("0.1");
     plugin.modulesPath = QStringLiteral("/tmp/modules.json");
 

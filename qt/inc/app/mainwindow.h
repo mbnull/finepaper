@@ -33,13 +33,13 @@ class MainWindow : public QMainWindow {
     explicit MainWindow(QWidget *parent = nullptr);
     ~MainWindow() override;
 
-    // Loads a project or legacy JSON design from disk as the active document.
+    // Loads a Finepaper project from disk as the active document.
     void loadGraph(const QString& path);
 
 private slots:
     // Creates a new empty document.
     void newGraph();
-    // Opens an existing project, with legacy JSON handled as import.
+    // Opens an existing project.
     void openGraph();
     // Saves current project to the current path or prompts for one.
     void saveGraph();

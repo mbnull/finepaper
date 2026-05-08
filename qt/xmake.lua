@@ -109,6 +109,7 @@ add_qt_test_target("arrangecommand_test", "test/arrangecommand_test.cpp", {
 })
 
 add_qt_test_target("validation_test", "test/validation_test.cpp", {
+    "src/connection/connectionruleservice.cpp",
     "src/**/drcrunner.cpp",
     "src/app/generationartifacts.cpp",
     "src/**/generatorrunner.cpp",
@@ -125,6 +126,7 @@ add_qt_test_target("validation_test", "test/validation_test.cpp", {
     "src/**/moduleregistry.cpp",
     "src/**/moduleprovider.cpp",
     "src/**/pluginregistry.cpp",
+    "inc/**/connectionruleservice.h",
     "inc/**/graph.h",
     "inc/**/module.h",
     "inc/**/drcrunner.h",

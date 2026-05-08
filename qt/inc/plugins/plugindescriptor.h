@@ -11,7 +11,7 @@
 
 struct PluginCommandDescriptor {
     QString command;
-    QString inputFormat = QStringLiteral("legacy_noc_json");
+    QString inputFormat = QStringLiteral("generic_graph_v1");
     QStringList args;
 
     bool hasCommand() const { return !command.trimmed().isEmpty(); }

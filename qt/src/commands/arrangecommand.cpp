@@ -44,7 +44,7 @@ QString sortKeyForModule(const Module* module) {
         : ModuleLabels::externalId(module).toLower();
 }
 
-bool isMeshRouterModule(const Module* module) {
+bool hasMeshRouterLayout(const Module* module) {
     return ModuleTypeMetadata::hasEditorLayout(module, u"mesh_router");
 }
 
@@ -100,7 +100,7 @@ std::vector<OrderedModule> orderedModules(const std::vector<std::unique_ptr<Modu
 }
 
 std::optional<QPoint> explicitMeshCoordinate(const Module* module) {
-    if (!module || !isMeshRouterModule(module)) {
+    if (!module || !hasMeshRouterLayout(module)) {
         return std::nullopt;
     }
 
@@ -145,7 +145,7 @@ QList<MeshRelation> meshRelations(const Graph* graph) {
         if (!sourceModule || !targetModule) {
             continue;
         }
-        if (!isMeshRouterModule(sourceModule) || !isMeshRouterModule(targetModule)) {
+        if (!hasMeshRouterLayout(sourceModule) || !hasMeshRouterLayout(targetModule)) {
             continue;
         }
 
@@ -446,7 +446,7 @@ QHash<QString, ArrangeCommand::ModulePlacement> ArrangeCommand::buildPlacements(
     QHash<QString, ModulePlacement> placements;
 
     const auto orderedXpModules = orderedModules(m_graph->modules(), [](const Module* module) {
-        return isMeshRouterModule(module);
+        return hasMeshRouterLayout(module);
     });
     const auto orderedEndpointModules = orderedModules(m_graph->modules(), [](const Module* module) {
         return isEndpointModule(module);

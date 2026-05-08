@@ -15,7 +15,7 @@ struct GeneratorCommand {
     QString pluginId;
     QString workingDirectory;
     QString command;
-    QString inputFormat = QStringLiteral("legacy_noc_json");
+    QString inputFormat = QStringLiteral("generic_graph_v1");
     QStringList arguments;
 };
 

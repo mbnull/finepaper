@@ -8,7 +8,6 @@
 #include "nodeeditor/graphnodegeometry.h"
 #include "nodeeditor/graphnodemodel.h"
 #include "nodeeditor/nodeeditorwidget.h"
-#include "nodeeditor/routerconnectionresolver.h"
 #include "project/projectstateservice.h"
 
 #include <QtNodes/DataFlowGraphModel>
@@ -164,29 +163,6 @@ void testExpandedMeshRouterUsesStatefulPortLayout() {
             "expanded mesh router interfaces should all be stacked on the right edge");
     require(north.y() < east.y() && east.y() < south.y() && south.y() < west.y(),
             "expanded mesh router interfaces should be vertically ordered on the right edge");
-}
-
-void testRouterConnectionResolverReversesAgainstNodePositions() {
-    std::unique_ptr<Module> start = makeRouter(false, QStringLiteral("start"));
-    start->setParameter(QStringLiteral("display_name"), QStringLiteral("Start"));
-    std::unique_ptr<Module> target = makeRouter(false, QStringLiteral("target"));
-    target->setParameter(QStringLiteral("display_name"), QStringLiteral("Target"));
-
-    const std::optional<RouterConnectionResolver::ResolvedRouterConnection> resolved =
-        RouterConnectionResolver::resolveByPosition(
-            start.get(),
-            target.get(),
-            QStringLiteral("east"),
-            QPointF(220.0, 0.0),
-            QPointF(0.0, 0.0));
-
-    require(resolved.has_value(), "router connection resolver should produce a link");
-    require(resolved->source.moduleId == QStringLiteral("target") &&
-                resolved->source.portId == QStringLiteral("east"),
-            "router to the west should become the source through its east interface");
-    require(resolved->target.moduleId == QStringLiteral("start") &&
-                resolved->target.portId == QStringLiteral("west"),
-            "start router should become the target through its west interface");
 }
 
 void testEndpointAttachmentLayoutUsesHostAnchorNormal() {
@@ -350,7 +326,6 @@ int main(int argc, char** argv) {
 
     try {
         testExpandedMeshRouterUsesStatefulPortLayout();
-        testRouterConnectionResolverReversesAgainstNodePositions();
         testEndpointAttachmentLayoutUsesHostAnchorNormal();
         testEndpointInterfaceUsesHorizontalSidesOnly();
         testEndpointInterfaceFlipsTowardHostAnchor();

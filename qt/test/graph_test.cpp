@@ -362,10 +362,10 @@ void testGraphForwardsModuleParameterChanges() {
     require(changedParameterName == "buffer_depth", "forwarded signal should include parameter name");
 }
 
-void testLegacyEndpointTypeStillClassifiesAsEndpointPort() {
-    const Port legacyEndpointPort("noc", Port::Direction::Input, "endpoint", "NoC");
-    require(PortLayout::isEndpointPort(legacyEndpointPort),
-            "legacy endpoint type should classify as endpoint port");
+void testEndpointTypeStillClassifiesAsEndpointPort() {
+    const Port endpointTypedPort("noc", Port::Direction::Input, "endpoint", "NoC");
+    require(PortLayout::isEndpointPort(endpointTypedPort),
+            "endpoint type should classify as endpoint port");
     require(PortLayout::isEndpointPortId("local3"),
             "localN interface ids should classify as endpoint slots");
     require(PortLayout::endpointPortSlot("local3") == 3,
@@ -387,8 +387,8 @@ void testBundleMetadataLoadsFromXml() {
     require(moduleTypeHasPort(xpType, "east"), "XP should expose east as one visible router interface");
     require(moduleTypeHasPort(xpType, "west"), "XP should expose west as one visible router interface");
     require(moduleTypeHasPort(xpType, "local0"), "XP should expose local0 as one visible endpoint interface");
-    require(!moduleTypeHasPort(xpType, "east_in"), "XP should not expose legacy east_in");
-    require(!moduleTypeHasPort(xpType, "east_out"), "XP should not expose legacy east_out");
+    require(!moduleTypeHasPort(xpType, "east_in"), "XP should not expose split east_in");
+    require(!moduleTypeHasPort(xpType, "east_out"), "XP should not expose split east_out");
 
     const auto eastInterface = xpType->interfaceMetadata.find("east");
     require(eastInterface != xpType->interfaceMetadata.end(), "XP east interface metadata should load");
@@ -632,7 +632,7 @@ int main(int argc, char** argv) {
         testRemovingModuleAlsoRemovesAttachedConnections();
         testClearRemovesAllModulesAndConnections();
         testGraphForwardsModuleParameterChanges();
-        testLegacyEndpointTypeStillClassifiesAsEndpointPort();
+        testEndpointTypeStillClassifiesAsEndpointPort();
         testBundleMetadataLoadsFromXml();
         testXmlBundleWithoutGraphicsFallsBackToSimpleNode();
         testXmlBundleLoadsExtendedParameterMetadataWhenPresent();
