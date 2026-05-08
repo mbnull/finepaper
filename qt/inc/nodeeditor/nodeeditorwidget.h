@@ -13,6 +13,8 @@
 #include <QPointF>
 #include <QSize>
 #include <functional>
+#include <memory>
+#include "connection/connectionruleservice.h"
 #include "graph/graph.h"
 #include "commands/commandmanager.h"
 
@@ -25,6 +27,8 @@ class QContextMenuEvent;
 class QMouseEvent;
 class EditorGraphModel;
 class GraphNodeModel;
+class ConnectionRuleService;
+class ProjectStateService;
 namespace QtNodes { class ConnectionGraphicsObject; }
 
 class NodeEditorWidget : public QWidget {
@@ -32,7 +36,10 @@ class NodeEditorWidget : public QWidget {
 
 public:
     // Constructs the visual editor and binds it to Graph/CommandManager.
-    NodeEditorWidget(Graph* graph, CommandManager* commandManager, QWidget* parent = nullptr);
+    NodeEditorWidget(Graph* graph,
+                     ProjectStateService* projectStateService,
+                     CommandManager* commandManager,
+                     QWidget* parent = nullptr);
     ~NodeEditorWidget() override;
     // Returns whether auto-arrange behavior is currently enabled in the view.
     bool isArrangeEnabled() const;
@@ -96,25 +103,17 @@ private:
     QString getPortId(QtNodes::NodeId nodeId, QtNodes::PortType portType, QtNodes::PortIndex portIndex) const;
     bool resolveConnectionPorts(QtNodes::ConnectionId connectionId, PortRef& source, PortRef& target) const;
     QtNodes::ConnectionGraphicsObject* findDraftConnection() const;
+    void refreshConnectionRuleService();
     void setConnectionHighlighted(QtNodes::ConnectionId connectionId, bool highlighted);
     void updateConnectedConnectionHighlights(QtNodes::NodeId selectedNodeId);
     bool tryToggleCollapsed(const QPoint& viewportPos, bool requireToggleButton);
     void toggleCollapsed(const QString& moduleId, bool collapsed);
-    bool resolveRouterDraftConnection(const QtNodes::ConnectionGraphicsObject& draftConnection,
-                                      QtNodes::NodeId targetNodeId,
-                                      PortRef& source,
-                                      PortRef& target) const;
-    bool resolveEndpointDraftConnection(const QtNodes::ConnectionGraphicsObject& draftConnection,
-                                        QtNodes::NodeId targetNodeId,
-                                        PortRef& source,
-                                        PortRef& target) const;
-    bool tryCompleteRouterDraftConnection(const QPoint& viewportPos);
-    bool tryCompleteEndpointDraftConnection(const QPoint& viewportPos);
-    bool tryCompleteDraftConnection(const QPoint& viewportPos,
-                                    const std::function<bool(const QtNodes::ConnectionGraphicsObject&,
-                                                             QtNodes::NodeId,
-                                                             PortRef&,
-                                                             PortRef&)>& resolver);
+    bool tryCompleteDraftConnection(const QPoint& viewportPos);
+    ConnectionRequest draftConnectionRequest(const QtNodes::ConnectionGraphicsObject& draftConnection,
+                                             QtNodes::NodeId targetNodeId,
+                                             const QPointF& scenePos) const;
+    void showConnectionOptionsMenu(const QPoint& viewportPos,
+                                   const QVector<ConnectionResolvedOption>& options);
     void executeAddConnection(const PortRef& source, const PortRef& target);
     void syncNodePositionFromParameters(Module* module, QtNodes::NodeId nodeId);
     ModulePresentationState collectModulePresentationState(const QString& moduleId) const;
@@ -145,7 +144,9 @@ private:
     void refreshAllModulePresentations();
 
     Graph* m_graph;
+    ProjectStateService* m_projectStateService;
     CommandManager* m_commandManager;
+    std::unique_ptr<ConnectionRuleService> m_connectionRuleService;
     std::shared_ptr<QtNodes::NodeDelegateModelRegistry> m_registry;
     EditorGraphModel* m_graphModel;
     QtNodes::DataFlowGraphicsScene* m_scene;

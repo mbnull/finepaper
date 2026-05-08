@@ -508,7 +508,10 @@ void MainWindow::setupPanels() {
         m_pluginProjectAdapters.push_back(std::move(adapter));
     }
 
-    m_nodeEditor = new NodeEditorWidget(m_graph, m_commandManager.get(), this);
+    m_nodeEditor = new NodeEditorWidget(m_graph,
+                                        m_projectStateService.get(),
+                                        m_commandManager.get(),
+                                        this);
     m_propertyPanel = new PropertyPanel(m_graph,
                                         m_projectStateService.get(),
                                         pluginProjectAdapters,

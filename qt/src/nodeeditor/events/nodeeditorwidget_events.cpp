@@ -163,11 +163,11 @@ bool NodeEditorWidget::handleViewportMouseRelease(QMouseEvent* event) {
         return true;
     }
 
-    if (tryCompleteRouterDraftConnection(event->position().toPoint())) {
+    if (tryCompleteDraftConnection(event->position().toPoint())) {
         return true;
     }
 
-    return tryCompleteEndpointDraftConnection(event->position().toPoint());
+    return false;
 }
 
 bool NodeEditorWidget::handleViewportMousePress(QMouseEvent* event) {

@@ -1,11 +1,15 @@
 // Node editor geometry tests for interface-anchor scaling and router layout.
+#include "commands/commandmanager.h"
+#include "graph/graph.h"
 #include "graph/module.h"
 #include "graph/port.h"
 #include "modules/moduleregistry.h"
 #include "nodeeditor/endpointattachmentlayout.h"
 #include "nodeeditor/graphnodegeometry.h"
 #include "nodeeditor/graphnodemodel.h"
+#include "nodeeditor/nodeeditorwidget.h"
 #include "nodeeditor/routerconnectionresolver.h"
+#include "project/projectstateservice.h"
 
 #include <QtNodes/DataFlowGraphModel>
 #include <QtNodes/NodeDelegateModelRegistry>
@@ -326,6 +330,16 @@ void testStoredNodeSizeOverridesDefaultAndProvidesResizeHandle() {
             "resize handle should sit inside the bottom-right node bounds");
 }
 
+void testNodeEditorWidgetOwnsConnectionRuleServiceInputs() {
+    Graph graph;
+    ProjectStateService stateService;
+    CommandManager commandManager;
+    NodeEditorWidget widget(&graph, &stateService, &commandManager);
+
+    require(!widget.isArrangeEnabled(),
+            "widget should construct with project state service dependency");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -342,6 +356,7 @@ int main(int argc, char** argv) {
         testEndpointInterfaceFlipsTowardHostAnchor();
         testEndpointInterfaceFollowsRelativeNodePosition();
         testStoredNodeSizeOverridesDefaultAndProvidesResizeHandle();
+        testNodeEditorWidgetOwnsConnectionRuleServiceInputs();
     } catch (const std::exception& error) {
         std::cerr << "nodeeditor_geometry_test failed: " << error.what() << '\n';
         return 1;

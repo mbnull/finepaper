@@ -15,9 +15,9 @@
 #include "nodeeditor/nodeeditorentityfactory.h"
 #include "nodeeditor/endpointattachmentlayout.h"
 #include "nodeeditor/portanchorgeometry.h"
-#include "nodeeditor/routerconnectionresolver.h"
 #include "common/portlayout.h"
 #include "nodeeditor/straightconnectionpainter.h"
+#include "project/projectstateservice.h"
 #include "commands/arrangecommand.h"
 #include "commands/addmodulecommand.h"
 #include "commands/addconnectioncommand.h"
@@ -164,42 +164,6 @@ const QRectF kCanvasRect(-kCanvasHalfExtent, -kCanvasHalfExtent,
                          kCanvasHalfExtent * 2.0, kCanvasHalfExtent * 2.0);
 constexpr int kConnectedHighlightDataRole = 1;
 
-QString firstAvailablePort(const Graph* graph,
-                           const Module* module,
-                           Port::Direction direction,
-                           const std::function<bool(const Port&)>& predicate) {
-    if (!graph || !module) return {};
-
-    // One logical attachment consumes the port for both InOut directions; keep
-    // this helper aligned with Graph::isValidConnection occupancy checks.
-    for (const auto& port : module->ports()) {
-        const bool matchesDirection =
-            direction == Port::Direction::Output ? PortLayout::supportsOutput(port)
-                                                 : PortLayout::supportsInput(port);
-        if (!matchesDirection || !predicate(port)) {
-            continue;
-        }
-
-        const bool occupied = std::any_of(graph->connections().begin(), graph->connections().end(),
-            [&](const std::unique_ptr<Connection>& connection) {
-                const bool usedAsSource =
-                    connection->source().moduleId == module->id() && connection->source().portId == port.id();
-                const bool usedAsTarget =
-                    connection->target().moduleId == module->id() && connection->target().portId == port.id();
-                if (port.direction() == Port::Direction::InOut) {
-                    return usedAsSource || usedAsTarget;
-                }
-                return direction == Port::Direction::Output ? usedAsSource : usedAsTarget;
-            });
-
-        if (!occupied) {
-            return port.id();
-        }
-    }
-
-    return {};
-}
-
 struct DraftConnectionStart {
     bool startFromOutput = false;
     QtNodes::NodeId nodeId = QtNodes::InvalidNodeId;
@@ -230,11 +194,16 @@ std::optional<DraftConnectionStart> resolveDraftConnectionStart(const QtNodes::C
 
 } // namespace
 
-NodeEditorWidget::NodeEditorWidget(Graph* graph, CommandManager* commandManager, QWidget* parent)
+NodeEditorWidget::NodeEditorWidget(Graph* graph,
+                                   ProjectStateService* projectStateService,
+                                   CommandManager* commandManager,
+                                   QWidget* parent)
     : QWidget(parent),
       m_graph(graph),
+      m_projectStateService(projectStateService),
       m_commandManager(commandManager),
       m_canvasRect(kCanvasRect) {
+    refreshConnectionRuleService();
 
     m_registry = std::make_shared<QtNodes::NodeDelegateModelRegistry>();
     m_registry->registerModel<GraphNodeModel>("GraphNode");
@@ -500,7 +469,10 @@ void NodeEditorWidget::onConnectionCreated(QtNodes::ConnectionId connectionId) {
         return;
     }
 
-    if (!m_graph->isValidConnection(source, target)) {
+    refreshConnectionRuleService();
+    const ConnectionCheckResult result = m_connectionRuleService->check(
+        ConnectionRequest::portToPort(source, target, ConnectionRequestKind::PortToPort));
+    if (!result.hasSingleOption()) {
         m_pendingConnections.remove(connectionId);
         GraphUpdateGuard guard(m_updatingFromGraph);
         m_graphModel->deleteConnection(connectionId);
@@ -508,7 +480,7 @@ void NodeEditorWidget::onConnectionCreated(QtNodes::ConnectionId connectionId) {
     }
 
     // Command path remains the single source of truth for mutation + undo.
-    executeAddConnection(source, target);
+    executeAddConnection(result.options.first().source, result.options.first().target);
 }
 
 void NodeEditorWidget::onConnectionDeleted(QtNodes::ConnectionId connectionId) {
@@ -582,6 +554,13 @@ QtNodes::ConnectionGraphicsObject* NodeEditorWidget::findDraftConnection() const
     return nullptr;
 }
 
+void NodeEditorWidget::refreshConnectionRuleService() {
+    m_connectionRuleService = std::make_unique<ConnectionRuleService>(
+        m_graph,
+        m_projectStateService ? m_projectStateService->pluginStates()
+                              : QVector<ProjectPluginStateRecord>{});
+}
+
 void NodeEditorWidget::setConnectionHighlighted(QtNodes::ConnectionId connectionId, bool highlighted) {
     auto* connectionGraphics = m_scene->connectionGraphicsObject(connectionId);
     if (!connectionGraphics) {
@@ -630,174 +609,38 @@ void NodeEditorWidget::toggleCollapsed(const QString& moduleId, bool collapsed) 
     m_commandManager->executeCommand(std::move(command));
 }
 
-bool NodeEditorWidget::resolveRouterDraftConnection(const QtNodes::ConnectionGraphicsObject& draftConnection,
-                                                    QtNodes::NodeId targetNodeId,
-                                                    PortRef& source,
-                                                    PortRef& target) const {
+ConnectionRequest NodeEditorWidget::draftConnectionRequest(
+    const QtNodes::ConnectionGraphicsObject& draftConnection,
+    QtNodes::NodeId targetNodeId,
+    const QPointF& scenePos) const {
     const auto start = resolveDraftConnectionStart(draftConnection);
+    ConnectionRequest request;
+    request.kind = ConnectionRequestKind::PortToNode;
+    request.interactive = true;
+    request.allowAutoComplete = true;
+    request.allowAlternatives = true;
+
     if (!start) {
-        return false;
-    }
-    if (start->nodeId == targetNodeId) {
-        // Endpoint auto-complete should never convert a drag back onto its
-        // origin node into a self-loop.
-        return false;
+        return request;
     }
 
-    // Draft completion starts with QtNodes IDs and only becomes meaningful once
-    // both sides can be resolved to Graph module IDs.
-    const QString startModuleId = m_nodeToModuleId.value(start->nodeId);
-    const QString targetModuleId = m_nodeToModuleId.value(targetNodeId);
-    if (startModuleId.isEmpty() || targetModuleId.isEmpty()) {
-        return false;
-    }
-
-    const Module* startModule = m_graph->getModule(startModuleId);
-    const Module* endModule = m_graph->getModule(targetModuleId);
-    if (!startModule || !endModule || !isMeshRouterModule(startModule) || !isMeshRouterModule(endModule)) {
-        return false;
-    }
-
-    const QString startPortId = getPortId(start->nodeId, start->portType, start->portIndex);
-    if (!PortLayout::isDirectionalRouterPortId(startPortId)) {
-        return false;
-    }
-
-    const QPointF startPosition =
+    request.start.moduleId = m_nodeToModuleId.value(start->nodeId);
+    request.start.portId = getPortId(start->nodeId, start->portType, start->portIndex);
+    request.start.visualSide = start->startFromOutput ? ConnectionVisualSide::Output
+                                                       : ConnectionVisualSide::Input;
+    request.start.scenePos =
         m_graphModel->nodeData(start->nodeId, QtNodes::NodeRole::Position).value<QPointF>();
-    const QPointF targetPosition =
-        m_graphModel->nodeData(targetNodeId, QtNodes::NodeRole::Position).value<QPointF>();
 
-    // Router drags can land on the node body instead of a specific port; infer
-    // the side pair from spatial relationship and router metadata.
-    const std::optional<RouterConnectionResolver::ResolvedRouterConnection> resolved =
-        RouterConnectionResolver::resolveByPosition(
-            startModule,
-            endModule,
-            startPortId,
-            startPosition,
-            targetPosition);
-    if (!resolved.has_value()) {
-        return false;
-    }
-
-    source = resolved->source;
-    target = resolved->target;
-    return true;
+    request.end.moduleId = m_nodeToModuleId.value(targetNodeId);
+    request.end.scenePos = scenePos;
+    request.end.fromNodeBody = true;
+    request.end.hiddenPortsAllowed = true;
+    request.end.visualSide = start->startFromOutput ? ConnectionVisualSide::Input
+                                                     : ConnectionVisualSide::Output;
+    return request;
 }
 
-bool NodeEditorWidget::tryCompleteRouterDraftConnection(const QPoint& viewportPos) {
-    return tryCompleteDraftConnection(viewportPos,
-        [this](const QtNodes::ConnectionGraphicsObject& draftConnection,
-               QtNodes::NodeId targetNodeId,
-               PortRef& source,
-               PortRef& target) {
-            return resolveRouterDraftConnection(draftConnection, targetNodeId, source, target);
-        });
-}
-
-bool NodeEditorWidget::resolveEndpointDraftConnection(const QtNodes::ConnectionGraphicsObject& draftConnection,
-                                                      QtNodes::NodeId targetNodeId,
-                                                      PortRef& source,
-                                                      PortRef& target) const {
-    const auto start = resolveDraftConnectionStart(draftConnection);
-    if (!start) {
-        return false;
-    }
-    if (start->nodeId == targetNodeId) {
-        return false;
-    }
-
-    const QString startModuleId = m_nodeToModuleId.value(start->nodeId);
-    const QString targetModuleId = m_nodeToModuleId.value(targetNodeId);
-    if (startModuleId.isEmpty() || targetModuleId.isEmpty()) {
-        return false;
-    }
-
-    const Module* startModule = m_graph->getModule(startModuleId);
-    const Module* endModule = m_graph->getModule(targetModuleId);
-    if (!startModule || !endModule) {
-        // Scene state can briefly outlive graph state during undo/delete; reject
-        // the gesture until the two layers converge again.
-        return false;
-    }
-
-    const QString startPortId = getPortId(start->nodeId, start->portType, start->portIndex);
-    const Port* startPort = findPort(startModule, startPortId);
-    if (!startPort || !PortLayout::isEndpointPort(*startPort)) {
-        // Only local endpoint-class ports use this resolver; router side ports
-        // are handled by resolveRouterDraftConnection.
-        return false;
-    }
-
-    if (start->startFromOutput) {
-        // Endpoint attachment accepts either endpoint->router or router->endpoint
-        // gestures, then chooses the first compatible free local port.
-        if (isEndpointModule(startModule) && isMeshRouterModule(endModule)) {
-            // Endpoint output to router body maps onto the next free router
-            // local input slot.
-            const QString xpPortId = firstAvailablePort(m_graph, endModule, Port::Direction::Input,
-                [](const Port& port) { return PortLayout::isEndpointPort(port); });
-            if (xpPortId.isEmpty()) {
-                return false;
-            }
-
-            source = PortRef{startModuleId, startPortId};
-            target = PortRef{targetModuleId, xpPortId};
-            return true;
-        }
-
-        if (isMeshRouterModule(startModule) && isEndpointModule(endModule)) {
-            // Router local output to endpoint body maps onto the endpoint's
-            // compatible input side.
-            const QString endpointPortId = firstAvailablePort(m_graph, endModule, Port::Direction::Input,
-                [](const Port& port) { return PortLayout::isEndpointPort(port); });
-            if (endpointPortId.isEmpty()) {
-                return false;
-            }
-
-            source = PortRef{startModuleId, startPortId};
-            target = PortRef{targetModuleId, endpointPortId};
-            return true;
-        }
-
-        return false;
-    }
-
-    if (!isMeshRouterModule(startModule) || !isEndpointModule(endModule)) {
-        return false;
-    }
-
-    // Dragging from a router input to an endpoint body means the endpoint should
-    // become the source and the router-local port should remain the target.
-    const QString endpointPortId = firstAvailablePort(m_graph, endModule, Port::Direction::Output,
-        [](const Port& port) { return PortLayout::isEndpointPort(port); });
-    if (endpointPortId.isEmpty()) {
-        return false;
-    }
-
-    source = PortRef{targetModuleId, endpointPortId};
-    // Return canonical endpoint->router orientation for storage even though the
-    // user dragged from the router side.
-    target = PortRef{startModuleId, startPortId};
-    return true;
-}
-
-bool NodeEditorWidget::tryCompleteEndpointDraftConnection(const QPoint& viewportPos) {
-    return tryCompleteDraftConnection(viewportPos,
-        [this](const QtNodes::ConnectionGraphicsObject& draftConnection,
-               QtNodes::NodeId targetNodeId,
-               PortRef& source,
-               PortRef& target) {
-            return resolveEndpointDraftConnection(draftConnection, targetNodeId, source, target);
-        });
-}
-
-bool NodeEditorWidget::tryCompleteDraftConnection(const QPoint& viewportPos,
-                                                  const std::function<bool(const QtNodes::ConnectionGraphicsObject&,
-                                                                           QtNodes::NodeId,
-                                                                           PortRef&,
-                                                                           PortRef&)>& resolver) {
+bool NodeEditorWidget::tryCompleteDraftConnection(const QPoint& viewportPos) {
     auto* draftConnection = findDraftConnection();
     if (!draftConnection) {
         return false;
@@ -809,28 +652,48 @@ bool NodeEditorWidget::tryCompleteDraftConnection(const QPoint& viewportPos,
         return false;
     }
 
-    PortRef source;
-    PortRef target;
-    if (!resolver(*draftConnection, targetNode->nodeId(), source, target)) {
-        return false;
-    }
+    refreshConnectionRuleService();
+    const ConnectionCheckResult result =
+        m_connectionRuleService->check(draftConnectionRequest(*draftConnection,
+                                                              targetNode->nodeId(),
+                                                              scenePos));
 
     // Consume the temporary visual draft before applying validated command mutation.
     m_scene->resetDraftConnection();
 
-    // Returning true after reset tells the event filter that the gesture was
-    // handled even if Graph rejects the resolved endpoint pair.
-    if (!m_graph->isValidConnection(source, target)) {
+    if (result.hasSingleOption()) {
+        const ConnectionResolvedOption& option = result.options.first();
+        executeAddConnection(option.source, option.target);
         return true;
     }
 
-    executeAddConnection(source, target);
+    if (result.status == ConnectionCheckStatus::NeedsSelection && !result.options.isEmpty()) {
+        showConnectionOptionsMenu(viewportPos, result.options);
+        return true;
+    }
+
     return true;
 }
 
+void NodeEditorWidget::showConnectionOptionsMenu(
+    const QPoint& viewportPos,
+    const QVector<ConnectionResolvedOption>& options) {
+    QMenu menu(this);
+    for (const ConnectionResolvedOption& option : options) {
+        QAction* action = menu.addAction(option.label);
+        connect(action, &QAction::triggered, this, [this, option]() {
+            executeAddConnection(option.source, option.target);
+        });
+    }
+    menu.exec(m_view->viewport()->mapToGlobal(viewportPos));
+}
+
 void NodeEditorWidget::executeAddConnection(const PortRef& source, const PortRef& target) {
+    refreshConnectionRuleService();
     auto connection = std::make_unique<Connection>(NodeEditorEntityFactory::generateEntityId(), source, target);
-    auto command = std::make_unique<AddConnectionCommand>(m_graph, nullptr, std::move(connection));
+    auto command = std::make_unique<AddConnectionCommand>(m_graph,
+                                                          m_connectionRuleService.get(),
+                                                          std::move(connection));
     m_commandManager->executeCommand(std::move(command));
 }
 

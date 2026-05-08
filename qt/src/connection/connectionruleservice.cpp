@@ -272,10 +272,55 @@ QVector<PortSemanticInfo> ConnectionRuleService::resolveEndpointPorts(
 QVector<ConnectionResolvedOption> ConnectionRuleService::buildOptions(
     const QVector<PortSemanticInfo>& startPorts,
     const QVector<PortSemanticInfo>& endPorts,
-    const ConnectionRequest&,
+    const ConnectionRequest& request,
     QString* rejectionReason,
     QString* rejectionMessage) const {
     QVector<ConnectionResolvedOption> options;
+    const bool allowReverse =
+        request.kind == ConnectionRequestKind::PortToNode ||
+        request.kind == ConnectionRequestKind::NodeToPort;
+    const auto tryAppendOption = [&](const PortSemanticInfo& source,
+                                     const PortSemanticInfo& target) {
+        if (!source.supportsOutput || !target.supportsInput) {
+            if (rejectionReason) *rejectionReason = QStringLiteral("direction_mismatch");
+            if (rejectionMessage) *rejectionMessage = QStringLiteral("No direction-compatible connection option");
+            return;
+        }
+
+        if (connectionExists(m_graph, source.ref, target.ref)) {
+            if (rejectionReason) *rejectionReason = QStringLiteral("duplicate_connection");
+            if (rejectionMessage) *rejectionMessage = QStringLiteral("Connection already exists");
+            return;
+        }
+
+        if ((source.cardinality == QStringLiteral("one") &&
+             portOccupiedForCardinalityOne(m_graph, source.ref)) ||
+            (target.cardinality == QStringLiteral("one") &&
+             portOccupiedForCardinalityOne(m_graph, target.ref))) {
+            if (rejectionReason) *rejectionReason = QStringLiteral("port_occupied");
+            if (rejectionMessage) *rejectionMessage = QStringLiteral("Connection port is already occupied");
+            return;
+        }
+
+        if (!oppositeSideRulePasses(source, target)) {
+            if (rejectionReason) *rejectionReason = QStringLiteral("topology_rule_mismatch");
+            if (rejectionMessage) *rejectionMessage = QStringLiteral("Connection does not satisfy topology rule");
+            return;
+        }
+
+        if (!metadataCompatible(source, target, rejectionReason, rejectionMessage)) {
+            return;
+        }
+
+        options.push_back(ConnectionResolvedOption{
+            source.ref,
+            target.ref,
+            QStringLiteral("%1.%2 -> %3.%4")
+                .arg(source.ref.moduleId, source.ref.portId, target.ref.moduleId, target.ref.portId),
+            0
+        });
+    };
+
     for (const PortSemanticInfo& start : startPorts) {
         for (const PortSemanticInfo& end : endPorts) {
             if (start.ref.moduleId == end.ref.moduleId) {
@@ -284,44 +329,10 @@ QVector<ConnectionResolvedOption> ConnectionRuleService::buildOptions(
                 continue;
             }
 
-            if (!start.supportsOutput || !end.supportsInput) {
-                if (rejectionReason) *rejectionReason = QStringLiteral("direction_mismatch");
-                if (rejectionMessage) *rejectionMessage = QStringLiteral("No direction-compatible connection option");
-                continue;
+            tryAppendOption(start, end);
+            if (allowReverse) {
+                tryAppendOption(end, start);
             }
-
-            if (connectionExists(m_graph, start.ref, end.ref)) {
-                if (rejectionReason) *rejectionReason = QStringLiteral("duplicate_connection");
-                if (rejectionMessage) *rejectionMessage = QStringLiteral("Connection already exists");
-                continue;
-            }
-
-            if ((start.cardinality == QStringLiteral("one") &&
-                 portOccupiedForCardinalityOne(m_graph, start.ref)) ||
-                (end.cardinality == QStringLiteral("one") &&
-                 portOccupiedForCardinalityOne(m_graph, end.ref))) {
-                if (rejectionReason) *rejectionReason = QStringLiteral("port_occupied");
-                if (rejectionMessage) *rejectionMessage = QStringLiteral("Connection port is already occupied");
-                continue;
-            }
-
-            if (!oppositeSideRulePasses(start, end)) {
-                if (rejectionReason) *rejectionReason = QStringLiteral("topology_rule_mismatch");
-                if (rejectionMessage) *rejectionMessage = QStringLiteral("Connection does not satisfy topology rule");
-                continue;
-            }
-
-            if (!metadataCompatible(start, end, rejectionReason, rejectionMessage)) {
-                continue;
-            }
-
-            options.push_back(ConnectionResolvedOption{
-                start.ref,
-                end.ref,
-                QStringLiteral("%1.%2 -> %3.%4")
-                    .arg(start.ref.moduleId, start.ref.portId, end.ref.moduleId, end.ref.portId),
-                0
-            });
         }
     }
     if (options.isEmpty() && rejectionReason && rejectionReason->isEmpty()) {
