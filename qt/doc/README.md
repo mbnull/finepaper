@@ -4,12 +4,12 @@ This project is a Qt Widgets application for building and validating SoC/NoC top
 
 ## What the application does
 
-- Shows available module types in a palette loaded from startup-discovered IP plugins.
+- Shows available module types in a palette loaded from startup-discovered IP core runtime bundles.
 - Lets users drag modules onto a canvas and connect compatible ports.
 - Exposes module parameters in a property panel.
 - Saves editor state as a `.fpproj` project.
-- Exports plugin graph JSON and invokes the active plugin generator to produce Verilog.
-- Runs local validation plus plugin-backed DRC checks and shows findings in the log panel.
+- Exports graph JSON and invokes the active IP core generator to produce Verilog.
+- Runs local validation plus IP core-backed DRC checks and shows findings in the log panel.
 
 ## Repository layout
 
@@ -17,7 +17,8 @@ This project is a Qt Widgets application for building and validating SoC/NoC top
 - `inc/`: public headers for the application classes.
 - `src/commands/`, `inc/commands/`: undoable editing commands.
 - `test/`: lightweight executable tests for the graph model and command manager.
-- `../plugins/noc/`: bundled NoC plugin with module definitions, graphics, and the Ruby sample generator.
+- `../ipcores/<package>/`: editable concrete IP core packages with `ipcore.yml`, `views/`, `generator/`, and `vendor/`.
+- `../generated/ipcores/<ipcore-id>/`: committed runtime metadata generated from IP core packages.
 - `deps/packages.lua`: xmake package declarations.
 - `tools/convert_module_bundle.py`: converts deprecated authored JSON module bundles, module-bundle XML, or IP-XACT into the split XML bundle format.
 - `docs/`: older working notes and reference material.
@@ -33,8 +34,8 @@ This project is a Qt Widgets application for building and validating SoC/NoC top
 - `PropertyPanel`: auto-builds editors from module parameter types.
 - `ValidationManager`: runs built-in validation and external DRC checks.
 - `LogPanel`: shows validation, generation, and runtime messages.
-- `PluginRegistry`: discovers startup-loaded IP plugins from `FINEPAPER_PLUGIN_PATH` and repository-local `plugins/`.
-- `ModuleRegistry`: loads module definitions from plugin manifests and applies per-IP graphics XML files.
+- `PluginRegistry`: discovers startup-loaded runtime manifests from `FINEPAPER_PLUGIN_PATH` and repository-local generated IP core bundles.
+- `ModuleRegistry`: loads module definitions from runtime manifests and applies per-IP graphics XML files.
 
 ## Build and run
 
@@ -68,23 +69,22 @@ xmake build plugin_test
 xmake run plugin_test
 ```
 
-`graph_test` covers graph ownership, connection validation, parameter change forwarding, bundle loading, and JSON export behavior. `commandmanager_test` covers execute, undo, redo, and redo-stack invalidation. `validation_test` covers local topology validation. `uiscale_test` covers UI scaling helpers. `plugin_test` covers plugin manifest discovery, plugin-owned module loading, duplicate type handling, and generator argument substitution.
+`graph_test` covers graph ownership, connection validation, parameter change forwarding, bundle loading, and JSON export behavior. `commandmanager_test` covers execute, undo, redo, and redo-stack invalidation. `validation_test` covers local topology validation. `uiscale_test` covers UI scaling helpers. `plugin_test` covers runtime manifest discovery, bundle-owned module loading, duplicate type handling, and generator argument substitution.
 
-## Plugin integration
+## IP Core Runtime Integration
 
-Generation and DRC validation are provided by the plugin that owns the modules in the current graph. Plugins are loaded once at startup; runtime installation, unloading, and refresh are not supported.
+Generation and DRC validation are provided by the IP core package that owns the modules in the current graph. Runtime metadata is loaded once at startup; runtime installation, unloading, and refresh are not supported.
 
-Plugin discovery works in this order:
+Runtime bundle discovery works in this order:
 
 1. Directories listed in `FINEPAPER_PLUGIN_PATH`, using the platform path-list separator.
-2. A repository-local `plugins/` directory found from the current working directory or application directory.
+2. Repository-local `generated/ipcores/<ipcore-id>/` directories found from the current working directory or application directory.
 
-Each plugin is a directory containing `plugin.json`. The bundled NoC plugin lives at `../plugins/noc/` and declares:
+Each runtime bundle is a generated directory containing `plugin.json`. Editable concrete IP core packages live under `../ipcores/<package>/`; for example, `../ipcores/finepaper-noc/` and `../ipcores/ravenoc/`. The committed generated bundles live under `../generated/ipcores/finepaper.noc/` and `../generated/ipcores/finepaper.ravenoc/` and declare:
 
+- `plugin.json`
 - `modules.xml`
 - `graphics/`
-- `generator/bin/generate`
-- `generator/template/`
 
 The first manifest schema is:
 
@@ -93,6 +93,7 @@ The first manifest schema is:
   "id": "finepaper.noc",
   "name": "NoC",
   "version": "1.0",
+  "source_root": "../../../ipcores/finepaper-noc",
   "modules": "modules.xml",
   "graphics": "graphics",
   "generator": {
@@ -106,9 +107,11 @@ The first manifest schema is:
 }
 ```
 
-Manifest paths are resolved relative to the plugin directory. `{input}` and `{output}` are replaced with the plugin graph JSON path and selected output directory. Native plugin metadata is retained for future C++ dynamic-library support, but native libraries are not loaded in this version.
+`modules` and `graphics` paths are resolved against the generated runtime bundle directory. `source_root` points back to the editable IP core package, and generator/DRC commands run from that source root so paths such as `generator/bin/generate` and `generator/template` resolve against `ipcores/<package>/`. `{input}` and `{output}` are replaced with the graph JSON path and selected output directory. Native plugin metadata is retained for future C++ dynamic-library support, but native libraries are not loaded in this version.
 
-If a graph contains modules from more than one plugin, generation and external DRC currently fail with a user-visible message because multi-plugin orchestration is not implemented yet.
+If a graph contains modules from more than one IP core runtime bundle, generation and external DRC currently fail with a user-visible message because multi-package orchestration is not implemented yet.
+
+Use `plugins/` wording only for feature plugins or editor behavior extensions. Concrete NoC and RaveNoC IP packages should be described as IP core packages under `ipcores/` with generated runtime bundles under `generated/ipcores/`.
 
 ## Typical user flow
 
@@ -116,18 +119,18 @@ If a graph contains modules from more than one plugin, generation and external D
 2. Drag module types from the palette onto the canvas.
 3. Connect output ports to input ports.
 4. Select a module and edit parameters in the property panel.
-5. Run validation to collect built-in and plugin DRC findings.
+5. Run validation to collect built-in and IP core DRC findings.
 6. Save a Finepaper project or generate Verilog into a chosen output directory.
 
 ## Generated and saved data
 
 - `saveGraph()` writes a `.fpproj` through `ProjectWriter`.
-- `generateVerilog()` writes plugin graph JSON and a `.fpproj` snapshot to the selected output directory, then runs the active plugin generator.
+- `generateVerilog()` writes graph JSON and a `.fpproj` snapshot to the selected output directory, then runs the active IP core generator.
 - Application logs are written to the platform-local app data directory as `finepaper.log`.
 
 ## Module bundle format
 
-The preferred runtime format is split into:
+The preferred runtime format is generated from `ipcores/<package>/ipcore.yml` and split into:
 
 - `modules.xml` for the IP-core definition
 - `graphics/<type>.xml` for the editor graphics of each IP
@@ -148,7 +151,7 @@ Each graphics overlay can describe:
 - collapse behavior
 - node sizing and caption insets
 
-The bundled NoC plugin defines two module types today:
+The bundled Finepaper NoC IP core defines two module types today:
 
 - `XP`: mesh-router style node with router and endpoint ports
 - `Endpoint`: endpoint node with configurable interface parameters
@@ -157,9 +160,9 @@ If a module has no graphics overlay, the editor falls back to a simple node layo
 
 ## Extension points
 
-- Add new module types by extending `modules.xml` and optionally adding `graphics/<type>.xml`.
-- Add new IP support by creating a plugin directory with `plugin.json`, `modules.xml`, optional `graphics/<type>.xml`, and an optional generator command.
-- Add new validation rules in `BasicValidator` or extend `DRCRunner` parsing if plugin generator output changes.
+- Add new module types by editing the source package `ipcore.yml` and optionally adding `views/<type>.xml`, then regenerating `generated/ipcores/<ipcore-id>/`.
+- Add new concrete IP support by creating an `ipcores/<package>/` source package with `ipcore.yml`, `views/`, `generator/`, and `vendor/`, then generating a runtime bundle under `generated/ipcores/<ipcore-id>/`.
+- Add new validation rules in `BasicValidator` or extend `DRCRunner` parsing if IP core generator output changes.
 - Add new editing operations by implementing `Command` subclasses in `src/commands/`.
 
 ## Converter

@@ -77,6 +77,8 @@ struct PluginDescriptor {
     QString name;
     QString version;
     QString kind;
+    QString runtimeRootPath;
+    QString sourceRootPath;
     QString rootPath;
     QString modulesPath;
     QString graphicsPath;

@@ -5,48 +5,54 @@ $LOAD_PATH.unshift File.expand_path('../lib', __dir__)
 require 'optparse'
 require 'spec_generator'
 
+def generate_repository_ipcores
+  SpecGenerator.generate_ipcore(
+    ipcore_path: 'ipcores/finepaper-noc/ipcore.yml',
+    views_dir: 'ipcores/finepaper-noc/views',
+    runtime_bundle_dir: 'generated/ipcores/finepaper.noc',
+    ruby_model_dir: 'ipcores/finepaper-noc/generator/src/ruby/model'
+  )
+  SpecGenerator.generate_ipcore(
+    ipcore_path: 'ipcores/ravenoc/ipcore.yml',
+    views_dir: 'ipcores/ravenoc/views',
+    runtime_bundle_dir: 'generated/ipcores/finepaper.ravenoc'
+  )
+end
+
 options = {
   check: false,
-  spec_path: 'spec/noc/noc.yaml',
-  extension_path: nil,
-  views_dir: 'spec/noc/views',
-  qt_bundle_dir: 'plugins/noc',
-  ruby_model_dir: 'plugins/noc/generator/src/ruby/model',
-  extension_bundle_dir: nil
+  ipcore_path: nil,
+  views_dir: nil,
+  runtime_bundle_dir: nil,
+  ruby_model_dir: nil
 }
 
 begin
   OptionParser.new do |parser|
     parser.banner = 'Usage: spec-gen [options]'
     parser.on('--check', 'Verify committed generated artifacts match specs') { options[:check] = true }
-    parser.on('--spec PATH', 'NoC YAML spec path') { |value| options[:spec_path] = value }
-    parser.on('--extension PATH', 'NoC extension YAML spec path') { |value| options[:extension_path] = value }
-    parser.on('--views DIR', 'Qt view XML directory') { |value| options[:views_dir] = value }
-    parser.on('--qt-bundle DIR', 'Qt bundle output directory') { |value| options[:qt_bundle_dir] = value }
-    parser.on('--ruby-model DIR', 'Ruby model output directory') { |value| options[:ruby_model_dir] = value }
-    parser.on('--bundle DIR', 'Extension bundle output directory') { |value| options[:extension_bundle_dir] = value }
+    parser.on('--ipcore PATH', 'IP core YAML path') { |value| options[:ipcore_path] = value }
+    parser.on('--views DIR', 'IP core view XML directory') { |value| options[:views_dir] = value }
+    parser.on('--runtime-bundle DIR', 'Generated runtime bundle output directory') { |value| options[:runtime_bundle_dir] = value }
+    parser.on('--ruby-model DIR', 'Generated Ruby model output directory') { |value| options[:ruby_model_dir] = value }
   end.parse!
 
   if options[:check]
     SpecGenerator.check_repository_generated_outputs(root: Dir.pwd)
-    puts 'Generated runtime artifacts are up to date'
-  elsif options[:extension_path]
-    raise SpecGenerator::SpecError, '--bundle is required with --extension' unless options[:extension_bundle_dir]
+    puts 'Generated IP core runtime artifacts are up to date'
+  elsif options[:ipcore_path]
+    raise SpecGenerator::SpecError, '--runtime-bundle is required with --ipcore' unless options[:runtime_bundle_dir]
 
-    SpecGenerator.generate_extension(
-      extension_path: options[:extension_path],
-      views_dir: options[:views_dir],
-      bundle_dir: options[:extension_bundle_dir]
-    )
-    puts "Generated extension bundle #{options[:extension_bundle_dir]}"
-  else
-    SpecGenerator.generate(
-      spec_path: options[:spec_path],
-      views_dir: options[:views_dir],
-      qt_bundle_dir: options[:qt_bundle_dir],
+    SpecGenerator.generate_ipcore(
+      ipcore_path: options[:ipcore_path],
+      views_dir: options[:views_dir] || File.join(File.dirname(options[:ipcore_path]), 'views'),
+      runtime_bundle_dir: options[:runtime_bundle_dir],
       ruby_model_dir: options[:ruby_model_dir]
     )
-    puts "Generated #{options[:qt_bundle_dir]} and #{options[:ruby_model_dir]}"
+    puts "Generated IP core runtime bundle #{options[:runtime_bundle_dir]}"
+  else
+    generate_repository_ipcores
+    puts 'Generated repository IP core runtime bundles'
   end
 rescue SpecGenerator::SpecError => error
   warn "error: #{error.message}"

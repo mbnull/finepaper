@@ -13,6 +13,7 @@
 #include <QFileInfo>
 #include <QStringList>
 #include <QTemporaryDir>
+#include <algorithm>
 #include <iostream>
 #include <stdexcept>
 #include <variant>
@@ -53,17 +54,20 @@ QString repositoryPluginPath(const QString& relativePluginPath) {
     return QFileInfo(QDir(startPaths.first()).filePath(relativePluginPath)).absoluteFilePath();
 }
 
-void testPluginManifestLoadsRelativePaths() {
+void testIpCoreManifestLoadsRuntimeAndSourcePaths() {
     QTemporaryDir temp;
     require(temp.isValid(), "temporary directory should be valid");
 
     QDir root(temp.path());
-    require(root.mkpath(QStringLiteral("demo/graphics")), "failed to create plugin dirs");
-    writeFile(root.filePath(QStringLiteral("demo/modules.xml")), QByteArrayLiteral("<module-bundle/>"));
-    writeFile(root.filePath(QStringLiteral("demo/plugin.json")), QByteArrayLiteral(R"json({
+    require(root.mkpath(QStringLiteral("generated/finepaper.demo/graphics")), "failed to create runtime dirs");
+    require(root.mkpath(QStringLiteral("ipcores/demo")), "failed to create source dirs");
+    writeFile(root.filePath(QStringLiteral("generated/finepaper.demo/modules.xml")),
+              QByteArrayLiteral("<module-bundle/>"));
+    writeFile(root.filePath(QStringLiteral("generated/finepaper.demo/plugin.json")), QByteArrayLiteral(R"json({
       "id": "finepaper.demo",
       "name": "Demo",
       "version": "1.0",
+      "source_root": "../../ipcores/demo",
       "modules": "modules.xml",
       "graphics": "graphics",
       "generator": {
@@ -104,12 +108,24 @@ void testPluginManifestLoadsRelativePaths() {
       "native": {"enabled": true, "library": "libdemo.so"}
     })json"));
 
-    const QList<PluginDescriptor> plugins = PluginRegistry::discover({temp.path()});
+    const QList<PluginDescriptor> plugins =
+        PluginRegistry::discover({root.filePath(QStringLiteral("generated"))});
+    const QString runtimeRoot =
+        QFileInfo(root.filePath(QStringLiteral("generated/finepaper.demo"))).absoluteFilePath();
+    const QString sourceRoot =
+        QFileInfo(root.filePath(QStringLiteral("ipcores/demo"))).absoluteFilePath();
 
     require(plugins.size() == 1, "expected one plugin");
     require(plugins.first().id == QStringLiteral("finepaper.demo"), "plugin id should load");
+    require(plugins.first().runtimeRootPath == runtimeRoot, "runtime root should be manifest directory");
+    require(plugins.first().sourceRootPath == sourceRoot, "source root should resolve from source_root");
+    require(plugins.first().rootPath == sourceRoot, "legacy root path should alias source root");
     require(QFileInfo(plugins.first().modulesPath).isAbsolute(), "modules path should be absolute");
     require(QFileInfo(plugins.first().graphicsPath).isAbsolute(), "graphics path should be absolute");
+    require(plugins.first().modulesPath == QFileInfo(root.filePath(QStringLiteral("generated/finepaper.demo/modules.xml"))).absoluteFilePath(),
+            "modules path should resolve against runtime root");
+    require(plugins.first().graphicsPath == QFileInfo(root.filePath(QStringLiteral("generated/finepaper.demo/graphics"))).absoluteFilePath(),
+            "graphics path should resolve against runtime root");
     require(plugins.first().native.enabled, "native metadata should be retained");
     require(plugins.first().generator.hasGenerator(), "generator should be retained");
     require(plugins.first().generator.inputFormat == QStringLiteral("generic_graph_v1"),
@@ -129,6 +145,26 @@ void testPluginManifestLoadsRelativePaths() {
             "topology router module should load");
     require(plugins.first().topologyPresets.first().parameters.value(QStringLiteral("rows")).defaultValue == 2,
             "topology rows default should load");
+
+    Graph graph;
+    ModuleType type;
+    type.name = QStringLiteral("DemoIp");
+    type.pluginId = QStringLiteral("finepaper.demo");
+    ModuleRegistry::instance().registerType(type);
+    require(graph.addModule(std::make_unique<Module>(QStringLiteral("demo_ip"), QStringLiteral("DemoIp"))),
+            "failed to add demo module");
+
+    const GeneratorCommand generatorCommand =
+        GeneratorRunner::resolveForGraph(&graph, plugins, QStringLiteral("/tmp/in.json"), QStringLiteral("/tmp/out"));
+    require(generatorCommand.valid, "generator command should resolve for discovered plugin");
+    require(generatorCommand.workingDirectory == sourceRoot,
+            "generator working directory should use source root");
+
+    const GeneratorCommand drcCommand =
+        GeneratorRunner::resolveDrcForGraph(&graph, plugins, QStringLiteral("/tmp/in.json"), QStringLiteral("/tmp/out"));
+    require(drcCommand.valid, "DRC command should resolve for discovered plugin");
+    require(drcCommand.workingDirectory == sourceRoot,
+            "DRC working directory should use source root");
 }
 
 void testModuleTypesKeepPluginOwnershipAndSkipDuplicates() {
@@ -147,9 +183,9 @@ void testModuleTypesKeepPluginOwnershipAndSkipDuplicates() {
     writeFile(root.filePath(QStringLiteral("first/modules.xml")), moduleXml);
     writeFile(root.filePath(QStringLiteral("second/modules.xml")), moduleXml);
     writeFile(root.filePath(QStringLiteral("first/plugin.json")),
-              QByteArrayLiteral(R"json({"id":"first","name":"First","version":"1","modules":"modules.xml"})json"));
+              QByteArrayLiteral(R"json({"id":"first","name":"First","version":"1","source_root":".","modules":"modules.xml"})json"));
     writeFile(root.filePath(QStringLiteral("second/plugin.json")),
-              QByteArrayLiteral(R"json({"id":"second","name":"Second","version":"1","modules":"modules.xml"})json"));
+              QByteArrayLiteral(R"json({"id":"second","name":"Second","version":"1","source_root":".","modules":"modules.xml"})json"));
 
     ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
     registry.loadPlugins(PluginRegistry::discover({temp.path()}));
@@ -169,13 +205,27 @@ void testJsonModuleBundlesAreIgnored() {
     writeFile(root.filePath(QStringLiteral("json_bundle/modules.json")),
               QByteArrayLiteral(R"json([{"name":"JsonBundle","ports":[],"parameters":[]}])json"));
     writeFile(root.filePath(QStringLiteral("json_bundle/plugin.json")),
-              QByteArrayLiteral(R"json({"id":"json_bundle","name":"JsonBundle","version":"1","modules":"modules.json"})json"));
+              QByteArrayLiteral(R"json({"id":"json_bundle","name":"JsonBundle","version":"1","source_root":".","modules":"modules.json"})json"));
 
     ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
     const bool loaded = registry.loadPlugins(PluginRegistry::discover({temp.path()}));
 
     require(!loaded, "JSON module bundles should no longer load");
     require(registry.availableTypes().isEmpty(), "JSON module type should be ignored");
+}
+
+void testManifestWithoutSourceRootIsSkipped() {
+    QTemporaryDir temp;
+    require(temp.isValid(), "temporary directory should be valid");
+
+    QDir root(temp.path());
+    require(root.mkpath(QStringLiteral("legacy")), "failed to create legacy plugin");
+    writeFile(root.filePath(QStringLiteral("legacy/plugin.json")),
+              QByteArrayLiteral(R"json({"id":"legacy","name":"Legacy","version":"1","modules":"modules.xml"})json"));
+
+    const QList<PluginDescriptor> plugins = PluginRegistry::discover({temp.path()});
+
+    require(plugins.empty(), "manifest without source_root should be skipped");
 }
 
 void testModuleRegistryListsTypesByPlugin() {
@@ -241,7 +291,8 @@ void testGeneratorRunnerPropagatesInputFormat() {
 
     PluginDescriptor plugin;
     plugin.id = QStringLiteral("finepaper.format");
-    plugin.rootPath = QStringLiteral("/tmp/finepaper-format-plugin");
+    plugin.sourceRootPath = QStringLiteral("/tmp/finepaper-format-ipcore");
+    plugin.rootPath = plugin.sourceRootPath;
     plugin.generator.command = QStringLiteral("ruby");
     plugin.generator.inputFormat = QStringLiteral("generic_graph_v1");
     plugin.generator.args = {QStringLiteral("generator/bin/generate")};
@@ -252,6 +303,8 @@ void testGeneratorRunnerPropagatesInputFormat() {
     require(command.valid, "generator command should resolve");
     require(command.inputFormat == QStringLiteral("generic_graph_v1"),
             "resolved command should carry input format");
+    require(command.workingDirectory == plugin.sourceRootPath,
+            "resolved command should use IP core source root");
 }
 
 void testGeneratorRunnerResolvesDrcCommand() {
@@ -267,7 +320,8 @@ void testGeneratorRunnerResolvesDrcCommand() {
 
     PluginDescriptor plugin;
     plugin.id = QStringLiteral("finepaper.drc");
-    plugin.rootPath = QStringLiteral("/tmp/finepaper-drc-plugin");
+    plugin.sourceRootPath = QStringLiteral("/tmp/finepaper-drc-ipcore");
+    plugin.rootPath = plugin.sourceRootPath;
     plugin.drc.command = QStringLiteral("ruby");
     plugin.drc.inputFormat = QStringLiteral("generic_graph_v1");
     plugin.drc.args = {QStringLiteral("generator/bin/drc"), QStringLiteral("-i"), QStringLiteral("{input}")};
@@ -278,19 +332,88 @@ void testGeneratorRunnerResolvesDrcCommand() {
     require(command.valid, "DRC command should resolve");
     require(command.inputFormat == QStringLiteral("generic_graph_v1"),
             "resolved DRC command should carry input format");
+    require(command.workingDirectory == plugin.sourceRootPath,
+            "resolved DRC command should use IP core source root");
     require(command.arguments.contains(QStringLiteral("/tmp/in.json")),
             "resolved DRC command should substitute input");
 }
 
-void testRepositoryRaveNoCPluginMetadataLoads() {
-    const QString pluginRoot = repositoryPluginPath(QStringLiteral("plugins/ravenoc"));
+void testDefaultDiscoveryIncludesGeneratedIpcores() {
+    const QStringList roots = PluginRegistry::defaultPluginRoots();
+    const QString generatedRoot = repositoryPluginPath(QStringLiteral("generated/ipcores"));
+
+    require(roots.contains(generatedRoot), "default roots should include generated ipcores");
+
+    const QList<PluginDescriptor> plugins = PluginRegistry::discover(roots);
+    const auto nocIt = std::find_if(plugins.cbegin(), plugins.cend(), [](const PluginDescriptor& plugin) {
+        return plugin.id == QStringLiteral("finepaper.noc");
+    });
+    const auto ravenIt = std::find_if(plugins.cbegin(), plugins.cend(), [](const PluginDescriptor& plugin) {
+        return plugin.id == QStringLiteral("finepaper.ravenoc");
+    });
+
+    require(nocIt != plugins.cend(), "generated NoC bundle should be discovered by default roots");
+    require(ravenIt != plugins.cend(), "generated RaveNoC bundle should be discovered by default roots");
+    require(nocIt->runtimeRootPath == repositoryPluginPath(QStringLiteral("generated/ipcores/finepaper.noc")),
+            "default NoC discovery should load the generated runtime bundle");
+    require(ravenIt->runtimeRootPath == repositoryPluginPath(QStringLiteral("generated/ipcores/finepaper.ravenoc")),
+            "default RaveNoC discovery should load the generated runtime bundle");
+}
+
+void testRepositoryFinepaperNoCIpCoreMetadataLoads() {
+    const QString ipcoreRoot = repositoryPluginPath(QStringLiteral("generated/ipcores/finepaper.noc"));
+    const QList<PluginDescriptor> plugins = PluginRegistry::discover({ipcoreRoot});
+
+    require(plugins.size() == 1, "Finepaper NoC IP core should be discovered");
+    require(plugins.first().id == QStringLiteral("finepaper.noc"),
+            "Finepaper NoC IP core id should load");
+    require(plugins.first().runtimeRootPath == ipcoreRoot,
+            "Finepaper NoC runtime root should be generated bundle directory");
+    require(plugins.first().sourceRootPath == repositoryPluginPath(QStringLiteral("ipcores/finepaper-noc")),
+            "Finepaper NoC source root should resolve to concrete IP source package");
+    require(plugins.first().modulesPath == QFileInfo(QDir(ipcoreRoot).filePath(QStringLiteral("modules.xml"))).absoluteFilePath(),
+            "Finepaper NoC modules should resolve against generated runtime bundle");
+    require(plugins.first().graphicsPath == QFileInfo(QDir(ipcoreRoot).filePath(QStringLiteral("graphics"))).absoluteFilePath(),
+            "Finepaper NoC graphics should resolve against generated runtime bundle");
+
+    ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
+    registry.loadPlugins(plugins);
+
+    const QStringList nocTypes = registry.availableTypesForPlugin(QStringLiteral("finepaper.noc"));
+    require(nocTypes == QStringList({QStringLiteral("Endpoint"), QStringLiteral("XP")}),
+            "Finepaper NoC IP core should list its internal editable module types");
+
+    const ModuleType* xpType = registry.getType(QStringLiteral("XP"));
+    require(xpType != nullptr, "XP module type should load");
+    require(xpType->pluginId == QStringLiteral("finepaper.noc"),
+            "XP module should keep IP core ownership");
+    require(xpType->graphGroup == QStringLiteral("xps"),
+            "XP should participate as the NoC router graph group");
+    const ModuleInterfaceMetadata localInterface =
+        xpType->interfaceMetadata.value(QStringLiteral("local0"));
+    require(localInterface.cardinality == QStringLiteral("one"),
+            "XP local0 interface should declare one endpoint attachment");
+    require(localInterface.autocompleteGroup == QStringLiteral("endpoint_attachment"),
+            "XP local0 interface should declare endpoint attachment autocomplete group");
+}
+
+void testRepositoryRaveNoCIpCoreMetadataLoads() {
+    const QString pluginRoot = repositoryPluginPath(QStringLiteral("generated/ipcores/finepaper.ravenoc"));
     const QList<PluginDescriptor> plugins = PluginRegistry::discover({pluginRoot});
 
-    require(plugins.size() == 1, "RaveNoC plugin should be discovered");
+    require(plugins.size() == 1, "RaveNoC IP core should be discovered");
     require(plugins.first().id == QStringLiteral("finepaper.ravenoc"),
-            "RaveNoC plugin id should load");
+            "RaveNoC IP core id should load");
+    require(plugins.first().runtimeRootPath == pluginRoot,
+            "RaveNoC runtime root should be generated bundle directory");
+    require(plugins.first().sourceRootPath == repositoryPluginPath(QStringLiteral("ipcores/ravenoc")),
+            "RaveNoC source root should resolve to concrete IP source package");
+    require(plugins.first().modulesPath == QFileInfo(QDir(pluginRoot).filePath(QStringLiteral("modules.xml"))).absoluteFilePath(),
+            "RaveNoC modules should resolve against generated runtime bundle");
+    require(plugins.first().graphicsPath == QFileInfo(QDir(pluginRoot).filePath(QStringLiteral("graphics"))).absoluteFilePath(),
+            "RaveNoC graphics should resolve against generated runtime bundle");
     require(plugins.first().kind == QStringLiteral("noc"),
-            "RaveNoC plugin kind should load");
+            "RaveNoC IP core kind should load");
     require(plugins.first().instanceParameters.contains(QStringLiteral("flit_data_width")),
             "RaveNoC instance flit width should load");
     require(std::get<int>(plugins.first().instanceParameters.value(QStringLiteral("flit_data_width")).defaultValue) == 32,
@@ -298,15 +421,15 @@ void testRepositoryRaveNoCPluginMetadataLoads() {
     require(plugins.first().instanceParameters.value(QStringLiteral("routing_algorithm")).choices.size() == 2,
             "RaveNoC routing algorithm choices should load as instance metadata");
     require(plugins.first().generator.command == QStringLiteral("ruby"),
-            "RaveNoC plugin should use Ruby generator");
+            "RaveNoC IP core should use Ruby generator");
     require(plugins.first().generator.inputFormat == QStringLiteral("generic_graph_v1"),
-            "RaveNoC plugin should request generic graph input");
+            "RaveNoC IP core should request generic graph input");
     require(plugins.first().drc.command == QStringLiteral("ruby"),
-            "RaveNoC plugin should use Ruby DRC");
+            "RaveNoC IP core should use Ruby DRC");
     require(plugins.first().drc.inputFormat == QStringLiteral("generic_graph_v1"),
             "RaveNoC DRC should request generic graph input");
     require(plugins.first().topologyPresets.size() == 1,
-            "RaveNoC plugin should expose topology presets");
+            "RaveNoC IP core should expose topology presets");
     require(plugins.first().topologyPresets.first().routerModule == QStringLiteral("RaveTile"),
             "RaveNoC mesh preset should create RaveTile routers");
 
@@ -320,7 +443,7 @@ void testRepositoryRaveNoCPluginMetadataLoads() {
     const ModuleType* tileType = registry.getType(QStringLiteral("RaveTile"));
     require(tileType != nullptr, "RaveTile module type should load");
     require(tileType->pluginId == QStringLiteral("finepaper.ravenoc"),
-            "RaveTile module should keep plugin ownership");
+            "RaveTile module should keep IP core ownership");
     require(tileType->graphGroup == QStringLiteral("xps"),
             "RaveTile should participate as the RaveNoC router graph group");
     require(!tileType->defaultParameters.contains(QStringLiteral("routing_algorithm")),
@@ -344,7 +467,7 @@ void testRepositoryRaveNoCPluginMetadataLoads() {
     const ModuleType* endpointType = registry.getType(QStringLiteral("RaveEndpoint"));
     require(endpointType != nullptr, "RaveEndpoint module type should load");
     require(endpointType->pluginId == QStringLiteral("finepaper.ravenoc"),
-            "RaveEndpoint module should keep plugin ownership");
+            "RaveEndpoint module should keep IP core ownership");
     require(endpointType->graphGroup == QStringLiteral("endpoints"),
             "RaveEndpoint should participate as an editable endpoint graph group");
 }
@@ -458,6 +581,7 @@ void testStartupDiagnosticsListLoadedPluginsAndIpTypes() {
       "id": "finepaper.demo",
       "name": "Demo",
       "version": "1.0",
+      "source_root": ".",
       "modules": "modules.xml",
       "graphics": "graphics",
       "generator": {"command": "ruby", "args": ["generator/bin/generate"]}
@@ -500,14 +624,17 @@ int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
 
     try {
-        testPluginManifestLoadsRelativePaths();
+        testIpCoreManifestLoadsRuntimeAndSourcePaths();
         testModuleTypesKeepPluginOwnershipAndSkipDuplicates();
         testJsonModuleBundlesAreIgnored();
+        testManifestWithoutSourceRootIsSkipped();
         testModuleRegistryListsTypesByPlugin();
         testGeneratorArgumentsSubstituteInputAndOutput();
         testGeneratorRunnerPropagatesInputFormat();
         testGeneratorRunnerResolvesDrcCommand();
-        testRepositoryRaveNoCPluginMetadataLoads();
+        testDefaultDiscoveryIncludesGeneratedIpcores();
+        testRepositoryFinepaperNoCIpCoreMetadataLoads();
+        testRepositoryRaveNoCIpCoreMetadataLoads();
         testManifestPluginAdapterExposesGlobalParameterSection();
         testManifestPluginAdapterUsesPluginIdLabelAndSkipsEmptyParameters();
         testStartupDiagnosticsListLoadedPluginsAndIpTypes();

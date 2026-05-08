@@ -258,9 +258,16 @@ std::optional<PluginDescriptor> loadManifest(const QString& pluginDirectory) {
     descriptor.name = object.value(QStringLiteral("name")).toString().trimmed();
     descriptor.version = object.value(QStringLiteral("version")).toString().trimmed();
     descriptor.kind = object.value(QStringLiteral("kind")).toString().trimmed();
-    descriptor.rootPath = QFileInfo(pluginDirectory).absoluteFilePath();
-    descriptor.modulesPath = resolvePath(descriptor.rootPath, object.value(QStringLiteral("modules")).toString());
-    descriptor.graphicsPath = resolvePath(descriptor.rootPath, object.value(QStringLiteral("graphics")).toString());
+    descriptor.runtimeRootPath = QFileInfo(pluginDirectory).absoluteFilePath();
+    const QString sourceRoot = object.value(QStringLiteral("source_root")).toString().trimmed();
+    if (sourceRoot.isEmpty()) {
+        qWarning() << "Skipping plugin manifest without source_root" << manifestInfo.absoluteFilePath();
+        return std::nullopt;
+    }
+    descriptor.sourceRootPath = resolvePath(descriptor.runtimeRootPath, sourceRoot);
+    descriptor.rootPath = descriptor.sourceRootPath;
+    descriptor.modulesPath = resolvePath(descriptor.runtimeRootPath, object.value(QStringLiteral("modules")).toString());
+    descriptor.graphicsPath = resolvePath(descriptor.runtimeRootPath, object.value(QStringLiteral("graphics")).toString());
     descriptor.instanceParameters = instanceParametersFromJson(object.value(QStringLiteral("instance_parameters")));
     descriptor.topologyPresets = topologyPresetsFromJson(object.value(QStringLiteral("topology_presets")));
 
@@ -310,12 +317,18 @@ void appendLocalPluginRootsFrom(QStringList& roots, const QString& startPath) {
     }
 
     // Walk ancestors so running from the repository root, qt build directory,
-    // or installed binary directory can still find a sibling plugins/ folder.
+    // or installed binary directory can still find repository-local plugin
+    // bundles.
     QDir dir(startPath);
     while (true) {
-        const QString candidate = dir.filePath(QStringLiteral("plugins"));
-        if (QFileInfo(candidate).isDir()) {
-            appendUniquePath(roots, candidate);
+        const QString generatedIpcores = dir.filePath(QStringLiteral("generated/ipcores"));
+        if (QFileInfo(generatedIpcores).isDir()) {
+            appendUniquePath(roots, generatedIpcores);
+        }
+
+        const QString plugins = dir.filePath(QStringLiteral("plugins"));
+        if (QFileInfo(plugins).isDir()) {
+            appendUniquePath(roots, plugins);
         }
 
         if (!dir.cdUp()) {

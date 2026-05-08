@@ -1,3 +1,3 @@
-[submodule "plugins/ravenoc/vendor/ravenoc"]
-	path = plugins/ravenoc/vendor/ravenoc
+[submodule "ipcores/ravenoc/vendor/ravenoc"]
+	path = ipcores/ravenoc/vendor/ravenoc
 	url = https://github.com/aignacio/ravenoc.git

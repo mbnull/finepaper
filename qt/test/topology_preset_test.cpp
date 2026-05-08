@@ -298,9 +298,13 @@ void testPresetConnectionIdCollisionDoesNotRemoveExistingConnection() {
 }
 
 void testRepositoryRaveNoCMeshPresetCreatesInternalTiles() {
-    const QString pluginRoot = repositoryPluginPath(QStringLiteral("plugins/ravenoc"));
+    const QString pluginRoot = repositoryPluginPath(QStringLiteral("generated/ipcores/finepaper.ravenoc"));
     const QList<PluginDescriptor> plugins = PluginRegistry::discover({pluginRoot});
     require(plugins.size() == 1, "RaveNoC plugin should be discovered");
+    require(plugins.first().runtimeRootPath == pluginRoot,
+            "RaveNoC runtime root should be generated bundle directory");
+    require(plugins.first().sourceRootPath == repositoryPluginPath(QStringLiteral("ipcores/ravenoc")),
+            "RaveNoC source root should resolve to concrete IP source package");
     require(!plugins.first().topologyPresets.isEmpty(), "RaveNoC should expose topology presets");
 
     ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);

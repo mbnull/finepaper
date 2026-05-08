@@ -1,9 +1,8 @@
-schema: finepaper.extension.v1
+schema: finepaper.ipcore.v1
+id: finepaper.ravenoc
+name: RaveNoC
+version: '1.0'
 kind: noc
-extension:
-  id: finepaper.ravenoc
-  name: RaveNoC
-  version: '1.0'
 runtime:
   generator:
     command: ruby

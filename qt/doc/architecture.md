@@ -7,7 +7,7 @@ The application follows a simple layered structure:
 - Model: `Graph`, `Module`, `Connection`, `Port`, `Parameter`
 - Command layer: undoable mutations wrapped in `Command` subclasses
 - UI layer: Qt Widgets and QtNodes views driven by model signals
-- Plugin/integration layer: startup plugin discovery, local validators, and plugin generator runners
+- IP core integration layer: startup runtime bundle discovery, local validators, and IP core generator runners
 
 The main rule in the codebase is that the `Graph` is the source of truth. UI widgets should not mutate persistent design state directly. User actions are converted into commands, commands modify the graph, and graph signals update the UI.
 
@@ -27,7 +27,7 @@ The main rule in the codebase is that the `Graph` is the source of truth. UI wid
 - one `LogPanel`
 - one `ValidationManager`
 
-Before module metadata is used, `PluginRegistry` discovers plugin manifests from `FINEPAPER_PLUGIN_PATH` and repository-local `plugins/` directories. Discovery is startup-only. The registry stores directory plugin metadata and native plugin metadata, but native libraries are not loaded in this version.
+Before module metadata is used, `PluginRegistry` discovers generated runtime manifests from `FINEPAPER_PLUGIN_PATH` and repository-local `generated/ipcores/<ipcore-id>/` directories. Discovery is startup-only. The registry stores directory runtime metadata and native plugin metadata, but native libraries are not loaded in this version.
 
 ### 2. Core model
 
@@ -39,7 +39,7 @@ Important properties of the model:
 - connections are validated before insertion
 - removing a module also removes attached connections
 - module parameter changes are forwarded through `Graph::parameterChanged`
-- project persistence and plugin graph export are separate boundaries
+- project persistence and graph export are separate boundaries
 
 `Module` contains:
 
@@ -100,15 +100,17 @@ All edits are committed through `SetParameterCommand`.
 
 Module definitions are data-driven.
 
-`ModuleRegistry` loads `ModuleType` entries from startup-discovered plugin manifests. Module definitions must be plugin-owned.
+`ModuleRegistry` loads `ModuleType` entries from startup-discovered runtime manifests. Module definitions must be owned by a generated IP core runtime bundle.
 
-For each plugin, the provider stack is:
+For each runtime bundle, the provider stack is:
 
 - `XmlModuleTypeSource` for the IP-core bundle metadata
 - `XmlModuleGraphicsOverlay` for per-IP graphics files
 - `LayeredModuleProvider` to combine the source and optional overlays
 
-Each loaded `ModuleType` stores the owning `pluginId`. Type names are unique in the current registry; duplicate type names from later plugins are skipped.
+Each loaded `ModuleType` stores the owning `pluginId`. Type names are unique in the current registry; duplicate type names from later runtime bundles are skipped.
+
+Editable concrete IP core packages live under `ipcores/<package>/` with `ipcore.yml`, `views/`, `generator/`, and `vendor/`. The committed generated runtime metadata lives under `generated/ipcores/<ipcore-id>/` with `plugin.json`, `modules.xml`, and `graphics/`. In `plugin.json`, `source_root` points back to the editable package. Qt resolves `modules` and `graphics` against the generated runtime root, then executes generator and DRC commands in `sourceRootPath`.
 
 Bundle metadata controls:
 
@@ -138,13 +140,13 @@ Local validation:
 
 External validation:
 
-- `DRCRunner` exports plugin graph JSON to a temporary file
-- resolves the single plugin used by the graph
-- runs that plugin's declared generator command
+- `DRCRunner` exports graph JSON to a temporary file
+- resolves the single IP core runtime bundle used by the graph
+- runs that package's declared DRC command from `sourceRootPath`
 - parses stderr into `ValidationResult` objects
 - maps external IDs back to internal graph IDs when possible
 
-Generation uses the same plugin generator resolution and writes plugin graph JSON plus a Finepaper project snapshot into the chosen output directory before invoking the plugin command. If the graph uses modules from multiple plugins, generation fails with a clear message because cross-plugin orchestration is reserved for a later phase.
+Generation uses the same IP core generator resolution and writes graph JSON plus a Finepaper project snapshot into the chosen output directory before invoking the package command from `sourceRootPath`. If the graph uses modules from multiple IP core runtime bundles, generation fails with a clear message because cross-package orchestration is reserved for a later phase.
 
 ## Data flow examples
 
@@ -175,16 +177,19 @@ Generation uses the same plugin generator resolution and writes plugin graph JSO
 
 ## Operational assumptions
 
-- Plugins are directories with `plugin.json`; the bundled NoC plugin uses Ruby and provides `generator/bin/generate`.
-- Module bundles are preferably expressed as plugin-owned `modules.xml` plus per-IP graphics files. Authored JSON module bundles are deprecated conversion inputs; IP-XACT remains a conversion input, not the preferred runtime layout.
+- Concrete IP core packages are editable directories under `ipcores/<package>/`; the bundled Finepaper NoC and RaveNoC packages use Ruby and provide `generator/bin/generate`.
+- Runtime bundles are generated under `generated/ipcores/<ipcore-id>/` and contain `plugin.json`, `modules.xml`, and per-IP graphics files.
+- In `plugin.json`, `source_root` points back to the source package. Qt resolves module and graphics metadata against the generated runtime root and executes generator/DRC commands in `sourceRootPath`.
+- Authored JSON module bundles are deprecated conversion inputs; IP-XACT remains a conversion input, not the preferred runtime layout.
+- Reserve `plugins/` wording for feature plugins or editor behavior extensions, not concrete NoC or RaveNoC IP packages.
 - Native plugin metadata may be present in `plugin.json`, but C++ dynamic libraries are not loaded yet.
 - Position is stored as module parameters such as `x` and `y`.
-- Some editor-only state, such as transient selection, is intentionally omitted from plugin graph export.
+- Some editor-only state, such as transient selection, is intentionally omitted from graph export.
 
 ## Notes for maintainers
 
 - Keep model mutations inside commands unless there is a strong reason not to.
-- Preserve the distinction between editor project state and plugin graph input.
-- Keep plugin discovery startup-only unless runtime reload is explicitly designed.
+- Preserve the distinction between editor project state and generator graph input.
+- Keep runtime bundle discovery startup-only unless runtime reload is explicitly designed.
 - When adding new module categories or layouts, update metadata-driven checks instead of scattering type-name comparisons.
-- If plugin generator output changes, update `DRCRunner::parseErrors()` and any ID-mapping assumptions together.
+- If IP core generator output changes, update `DRCRunner::parseErrors()` and any ID-mapping assumptions together.

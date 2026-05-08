@@ -1,7 +1,45 @@
-schema: v1
-kind: noc-definition
+schema: finepaper.ipcore.v1
+id: finepaper.noc
 name: NoC
 version: '1.0'
+kind: noc
+runtime:
+  generator:
+    command: ruby
+    input_format: generic_graph_v1
+    args:
+      - generator/bin/generate
+      - -i
+      - "{input}"
+      - -o
+      - "{output}"
+      - -t
+      - generator/template
+  drc:
+    command: ruby
+    input_format: generic_graph_v1
+    args:
+      - generator/bin/drc
+      - -i
+      - "{input}"
+topology_presets:
+  - id: mesh
+    label: Mesh
+    kind: mesh
+    router_module: XP
+    id_pattern: xp_{row}_{col}
+    ports: { east: east, west: west, north: north, south: south }
+    parameters:
+      rows: { label: Rows, default: 2, min: 1, max: 16 }
+      cols: { label: Columns, default: 2, min: 1, max: 16 }
+  - id: ring
+    label: Ring
+    kind: ring
+    router_module: XP
+    id_pattern: xp_{index}
+    ports: { east: east, west: west }
+    parameters:
+      nodes: { label: Nodes, default: 4, min: 2, max: 64 }
 
 buses:
   ni_link:

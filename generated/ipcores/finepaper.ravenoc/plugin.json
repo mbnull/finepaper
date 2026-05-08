@@ -3,6 +3,7 @@
   "name": "RaveNoC",
   "version": "1.0",
   "kind": "noc",
+  "source_root": "../../../ipcores/ravenoc",
   "instance_parameters": {
     "flit_data_width": {
       "type": "int",
