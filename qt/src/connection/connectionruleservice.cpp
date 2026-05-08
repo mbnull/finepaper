@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <memory>
 #include <utility>
+#include <variant>
 
 namespace {
 
@@ -45,6 +46,124 @@ bool connectionExists(const Graph* graph, const PortRef& source, const PortRef& 
                    connection->target().moduleId == target.moduleId &&
                    connection->target().portId == target.portId;
         });
+}
+
+QString parameterValueString(const Module* module, const QString& parameterName) {
+    if (!module) return {};
+
+    const auto it = module->parameters().find(parameterName);
+    if (it == module->parameters().end()) return {};
+
+    const auto& value = it.value().value();
+    if (const auto* stringValue = std::get_if<QString>(&value)) return *stringValue;
+    if (const auto* intValue = std::get_if<int>(&value)) return QString::number(*intValue);
+    if (const auto* doubleValue = std::get_if<double>(&value)) return QString::number(*doubleValue, 'g', 15);
+    if (const auto* boolValue = std::get_if<bool>(&value)) return *boolValue ? QStringLiteral("true")
+                                                                             : QStringLiteral("false");
+    return {};
+}
+
+QString canonicalInterfaceFieldValue(const QString& field, const QString& value) {
+    if (field == QStringLiteral("protocol") &&
+        value.compare(QStringLiteral("axi"), Qt::CaseInsensitive) == 0) {
+        return QStringLiteral("axi4");
+    }
+    return value;
+}
+
+QStringList interfaceFieldValues(const ModuleInterfaceMetadata& metadata,
+                                 const Module* module,
+                                 const QString& field) {
+    const auto bindingIt = metadata.parameterBindings.find(field);
+    if (bindingIt != metadata.parameterBindings.end()) {
+        const QString value = parameterValueString(module, bindingIt.value());
+        return value.isEmpty() ? QStringList{} : QStringList{canonicalInterfaceFieldValue(field, value)};
+    }
+
+    const auto acceptedIt = metadata.acceptedValues.find(field);
+    if (acceptedIt != metadata.acceptedValues.end()) {
+        QStringList values;
+        for (const QString& value : acceptedIt.value()) {
+            values.append(canonicalInterfaceFieldValue(field, value));
+        }
+        return values;
+    }
+
+    return {};
+}
+
+bool valuesOverlap(const QStringList& lhs, const QStringList& rhs) {
+    for (const QString& value : lhs) {
+        if (rhs.contains(value)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool metadataCompatible(const PortSemanticInfo& source,
+                        const PortSemanticInfo& target,
+                        QString* reason,
+                        QString* message) {
+    const QString sourceBus = source.interfaceBus.isEmpty() ? source.busType : source.interfaceBus;
+    const QString targetBus = target.interfaceBus.isEmpty() ? target.busType : target.interfaceBus;
+    if (sourceBus != targetBus) {
+        if (reason) *reason = QStringLiteral("bus_mismatch");
+        if (message) *message = QStringLiteral("Connection bus types do not match");
+        return false;
+    }
+
+    if (!source.interfaceRole.isEmpty() || !target.interfaceRole.isEmpty()) {
+        if (!source.compatibleRoles.contains(target.interfaceRole) ||
+            !target.compatibleRoles.contains(source.interfaceRole)) {
+            if (reason) *reason = QStringLiteral("interface_role_mismatch");
+            if (message) *message = QStringLiteral("Connection interface roles are not compatible");
+            return false;
+        }
+    }
+
+    QStringList fields = source.matchFieldValues.keys();
+    for (const QString& field : target.matchFieldValues.keys()) {
+        if (!fields.contains(field)) {
+            fields.append(field);
+        }
+    }
+    for (const QString& field : fields) {
+        if (!valuesOverlap(source.matchFieldValues.value(field),
+                           target.matchFieldValues.value(field))) {
+            if (reason) *reason = QStringLiteral("interface_field_mismatch");
+            if (message) *message = QStringLiteral("Connection interface field values do not overlap");
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool portOccupiedForCardinalityOne(const Graph* graph, const PortRef& ref) {
+    if (!graph) {
+        return false;
+    }
+    return std::any_of(graph->connections().begin(), graph->connections().end(),
+        [&](const std::unique_ptr<Connection>& connection) {
+            return (connection->source().moduleId == ref.moduleId &&
+                    connection->source().portId == ref.portId) ||
+                   (connection->target().moduleId == ref.moduleId &&
+                    connection->target().portId == ref.portId);
+        });
+}
+
+bool oppositeSideRulePasses(const PortSemanticInfo& source,
+                            const PortSemanticInfo& target) {
+    if (source.topologyRule != QStringLiteral("opposite_side") &&
+        target.topologyRule != QStringLiteral("opposite_side")) {
+        return true;
+    }
+
+    const QString sourceSide = PortLayout::routerSideId(source.ref.portId);
+    const QString targetSide = PortLayout::routerSideId(target.ref.portId);
+    return !sourceSide.isEmpty() &&
+           PortLayout::oppositeRouterSide(sourceSide) == targetSide;
 }
 
 } // namespace
@@ -99,6 +218,27 @@ std::optional<PortSemanticInfo> ConnectionRuleService::resolvePort(const QString
     info.supportsInput = PortLayout::supportsInput(*port);
     info.supportsOutput = PortLayout::supportsOutput(*port);
     info.visibleInUi = visibleInUi;
+    info.occupiedAsSource = portOccupiedForCardinalityOne(m_graph, info.ref);
+    info.occupiedAsTarget = info.occupiedAsSource;
+
+    if (moduleType && !port->interfaceId().isEmpty()) {
+        const auto metadataIt = moduleType->interfaceMetadata.find(port->interfaceId());
+        if (metadataIt != moduleType->interfaceMetadata.end()) {
+            const ModuleInterfaceMetadata& metadata = metadataIt.value();
+            info.interfaceBus = metadata.bus;
+            info.interfaceRole = metadata.role;
+            info.compatibleRoles = metadata.compatibleRoles;
+            info.cardinality = metadata.cardinality.isEmpty() ? QStringLiteral("one")
+                                                              : metadata.cardinality;
+            info.autocompleteGroup = metadata.autocompleteGroup;
+            info.topologyRule = metadata.topologyRule;
+            QStringList fields = metadata.matchFields;
+            fields.sort();
+            for (const QString& field : fields) {
+                info.matchFieldValues.insert(field, interfaceFieldValues(metadata, module, field));
+            }
+        }
+    }
     return info;
 }
 
@@ -144,17 +284,44 @@ QVector<ConnectionResolvedOption> ConnectionRuleService::buildOptions(
                 continue;
             }
 
-            if (start.supportsOutput && end.supportsInput &&
-                start.busType == end.busType &&
-                !connectionExists(m_graph, start.ref, end.ref)) {
-                options.push_back(ConnectionResolvedOption{
-                    start.ref,
-                    end.ref,
-                    QStringLiteral("%1.%2 -> %3.%4")
-                        .arg(start.ref.moduleId, start.ref.portId, end.ref.moduleId, end.ref.portId),
-                    0
-                });
+            if (!start.supportsOutput || !end.supportsInput) {
+                if (rejectionReason) *rejectionReason = QStringLiteral("direction_mismatch");
+                if (rejectionMessage) *rejectionMessage = QStringLiteral("No direction-compatible connection option");
+                continue;
             }
+
+            if (connectionExists(m_graph, start.ref, end.ref)) {
+                if (rejectionReason) *rejectionReason = QStringLiteral("duplicate_connection");
+                if (rejectionMessage) *rejectionMessage = QStringLiteral("Connection already exists");
+                continue;
+            }
+
+            if ((start.cardinality == QStringLiteral("one") &&
+                 portOccupiedForCardinalityOne(m_graph, start.ref)) ||
+                (end.cardinality == QStringLiteral("one") &&
+                 portOccupiedForCardinalityOne(m_graph, end.ref))) {
+                if (rejectionReason) *rejectionReason = QStringLiteral("port_occupied");
+                if (rejectionMessage) *rejectionMessage = QStringLiteral("Connection port is already occupied");
+                continue;
+            }
+
+            if (!oppositeSideRulePasses(start, end)) {
+                if (rejectionReason) *rejectionReason = QStringLiteral("topology_rule_mismatch");
+                if (rejectionMessage) *rejectionMessage = QStringLiteral("Connection does not satisfy topology rule");
+                continue;
+            }
+
+            if (!metadataCompatible(start, end, rejectionReason, rejectionMessage)) {
+                continue;
+            }
+
+            options.push_back(ConnectionResolvedOption{
+                start.ref,
+                end.ref,
+                QStringLiteral("%1.%2 -> %3.%4")
+                    .arg(start.ref.moduleId, start.ref.portId, end.ref.moduleId, end.ref.portId),
+                0
+            });
         }
     }
     if (options.isEmpty() && rejectionReason && rejectionReason->isEmpty()) {
