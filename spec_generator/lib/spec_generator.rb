@@ -1,5 +1,6 @@
 require 'fileutils'
 require 'json'
+require 'tmpdir'
 require 'yaml'
 
 module SpecGenerator
@@ -17,7 +18,20 @@ module SpecGenerator
   EXTENSION_MODULE_KEYS = %w[
     palette_label graph_group description identity capabilities parameters interfaces
   ].freeze
-  EXTENSION_INTERFACE_KEYS = %w[label bus role connects_to match port ports].freeze
+  INTERFACE_METADATA_KEYS = %w[cardinality autocomplete_group topology_rule].freeze
+  INTERFACE_CARDINALITIES = %w[one many].freeze
+  INTERFACE_TOPOLOGY_RULES = %w[opposite_side].freeze
+  GENERATED_OUTPUT_ROOTS = [
+    ['plugins/noc/modules.xml', :file],
+    ['plugins/noc/graphics', :directory],
+    ['plugins/noc/generator/src/ruby/model', :generated_files],
+    ['plugins/ravenoc/plugin.json', :file],
+    ['plugins/ravenoc/modules.xml', :file],
+    ['plugins/ravenoc/graphics', :directory]
+  ].freeze
+  EXTENSION_INTERFACE_KEYS = %w[
+    label bus role connects_to match cardinality autocomplete_group topology_rule port ports
+  ].freeze
   BUS_KEYS = %w[description ipxact compatibility config signals].freeze
   BUS_CONFIG_KEYS = %w[type enum default description].freeze
   COMPATIBILITY_KEYS = %w[roles match].freeze
@@ -27,7 +41,9 @@ module SpecGenerator
   IDENTITY_KEYS = %w[external_id_prefix display_prefix width supports_mesh_coordinates].freeze
   CAPABILITY_KEYS = %w[supports_collapse].freeze
   PARAMETER_KEYS = %w[type default enum labels label description emit configurable min max].freeze
-  INTERFACE_KEYS = %w[label bus role accepts config port ports].freeze
+  INTERFACE_KEYS = %w[
+    label bus role accepts config cardinality autocomplete_group topology_rule port ports
+  ].freeze
   PORT_KEYS = %w[id direction type bus_type role name description].freeze
   PARAMETER_TYPES = %w[string int bool].freeze
   EMIT_MODES = %w[attribute config editor editor_only].freeze
@@ -45,6 +61,60 @@ module SpecGenerator
   def self.generate_extension(extension_path:, views_dir:, bundle_dir:)
     parsed = ExtensionParser.new(extension_path, views_dir).parse
     ExtensionBundleEmitter.new(parsed).write(bundle_dir)
+  end
+
+  def self.check_repository_generated_outputs(root: Dir.pwd)
+    root = File.expand_path(root)
+    mismatches = []
+    Dir.mktmpdir('finepaper-spec-gen-check') do |dir|
+      generate(
+        spec_path: File.join(root, 'spec/noc/noc.yaml'),
+        views_dir: File.join(root, 'spec/noc/views'),
+        qt_bundle_dir: File.join(dir, 'plugins/noc'),
+        ruby_model_dir: File.join(dir, 'plugins/noc/generator/src/ruby/model')
+      )
+
+      generate_extension(
+        extension_path: File.join(root, 'spec/noc/ravenoc.yml'),
+        views_dir: File.join(root, 'spec/noc/views'),
+        bundle_dir: File.join(dir, 'plugins/ravenoc')
+      )
+
+      GENERATED_OUTPUT_ROOTS.each do |relroot, type|
+        relpaths = if type == :generated_files
+                     generated_output_relpaths(dir, relroot, :directory)
+                   else
+                     (generated_output_relpaths(root, relroot, type) +
+                      generated_output_relpaths(dir, relroot, type)).uniq.sort
+                   end
+        relpaths.each do |relpath|
+          committed_path = File.join(root, relpath)
+          generated_path = File.join(dir, relpath)
+          if !File.file?(committed_path)
+            mismatches << "missing committed: #{relpath}"
+          elsif !File.file?(generated_path)
+            mismatches << "missing generated: #{relpath}"
+          elsif File.binread(committed_path) != File.binread(generated_path)
+            mismatches << "content mismatch: #{relpath}"
+          end
+        end
+      end
+    end
+
+    return true if mismatches.empty?
+
+    raise SpecError, "Generated artifacts are out of date:\n#{mismatches.map { |path| "  #{path}" }.join("\n")}"
+  end
+
+  def self.generated_output_relpaths(root, relroot, type)
+    return [relroot] if type == :file
+
+    base = File.join(root, relroot)
+    return [] unless File.directory?(base)
+
+    Dir.glob(File.join(base, '**', '*'), File::FNM_DOTMATCH)
+       .select { |path| File.file?(path) }
+       .map { |path| path.sub(%r{\A#{Regexp.escape(root)}/}, '') }
   end
 
   class Parser
@@ -202,6 +272,7 @@ module SpecGenerator
         raise SpecError, "#{module_name}.#{interface_name} references unknown bus #{bus_name}" unless bus
         raise SpecError, "#{module_name}.#{interface_name} role #{interface['role']} is not defined by #{bus_name}" unless bus.fetch('compatibility').fetch('roles').key?(interface['role'])
 
+        validate_interface_metadata(module_name, interface_name, interface)
         validate_accepts(module_name, interface_name, bus_name, interface['accepts'], bus) if interface.key?('accepts')
         validate_interface_config(module_name, interface_name, bus_name, interface['config'], parameters, bus) if interface.key?('config')
         validate_port_projection(module_name, interface_name, interface)
@@ -211,6 +282,31 @@ module SpecGenerator
         count = interfaces.count { |_, interface| interface['bus'] == bus_name }
         if count > limit['max']
           raise SpecError, "Module #{module_name} has #{count} #{bus_name} interfaces, max is #{limit['max']}"
+        end
+      end
+    end
+
+    def validate_interface_metadata(module_name, interface_name, interface)
+      INTERFACE_METADATA_KEYS.each do |key|
+        next unless interface.key?(key)
+
+        unless interface[key].is_a?(String)
+          raise SpecError, "#{module_name}.#{interface_name} #{key} must be a string"
+        end
+
+        validate_interface_metadata_value(module_name, interface_name, key, interface[key])
+      end
+    end
+
+    def validate_interface_metadata_value(module_name, interface_name, key, value)
+      case key
+      when 'cardinality'
+        unless INTERFACE_CARDINALITIES.include?(value)
+          raise SpecError, "#{module_name}.#{interface_name} cardinality is invalid"
+        end
+      when 'topology_rule'
+        unless INTERFACE_TOPOLOGY_RULES.include?(value)
+          raise SpecError, "#{module_name}.#{interface_name} topology_rule is invalid"
         end
       end
     end
@@ -517,7 +613,33 @@ module SpecGenerator
         interface['match'].each do |field|
           raise SpecError, "#{module_name}.#{interface_name} match entries must be strings" unless field.is_a?(String)
         end
+        validate_interface_metadata(module_name, interface_name, interface)
         validate_port_projection(module_name, interface_name, interface)
+      end
+    end
+
+    def validate_interface_metadata(module_name, interface_name, interface)
+      INTERFACE_METADATA_KEYS.each do |key|
+        next unless interface.key?(key)
+
+        unless interface[key].is_a?(String)
+          raise SpecError, "#{module_name}.#{interface_name} #{key} must be a string"
+        end
+
+        validate_interface_metadata_value(module_name, interface_name, key, interface[key])
+      end
+    end
+
+    def validate_interface_metadata_value(module_name, interface_name, key, value)
+      case key
+      when 'cardinality'
+        unless INTERFACE_CARDINALITIES.include?(value)
+          raise SpecError, "#{module_name}.#{interface_name} cardinality is invalid"
+        end
+      when 'topology_rule'
+        unless INTERFACE_TOPOLOGY_RULES.include?(value)
+          raise SpecError, "#{module_name}.#{interface_name} topology_rule is invalid"
+        end
       end
     end
 
@@ -724,7 +846,18 @@ module SpecGenerator
       interfaces.each do |interface_name, interface|
         bus = @spec.fetch('buses').fetch(interface.fetch('bus'))
         compatibility = bus.fetch('compatibility')
-        lines << "      <interface#{attrs(id: interface_name, label: interface['label'], bus: interface['bus'], role: interface['role'], connects_to: compatibility.fetch('roles').fetch(interface.fetch('role')).join(','), match: compatibility.fetch('match').join(','))}>"
+        interface_attrs = {
+          id: interface_name,
+          label: interface['label'],
+          bus: interface['bus'],
+          role: interface['role'],
+          connects_to: compatibility.fetch('roles').fetch(interface.fetch('role')).join(','),
+          match: compatibility.fetch('match').join(','),
+          cardinality: interface['cardinality'],
+          autocomplete_group: interface['autocomplete_group'],
+          topology_rule: interface['topology_rule']
+        }
+        lines << "      <interface#{attrs(interface_attrs)}>"
         interface.fetch('accepts', {}).each do |field, values|
           lines << "        <accept#{attrs(field: field, values: values.join(','))} />"
         end
@@ -897,7 +1030,18 @@ module SpecGenerator
     def interface_lines(interfaces)
       lines = ['    <interfaces>']
       interfaces.each do |interface_name, interface|
-        lines << "      <interface#{attrs(id: interface_name, label: interface['label'], bus: interface['bus'], role: interface['role'], connects_to: interface['connects_to'], match: interface.fetch('match').join(','))}>"
+        interface_attrs = {
+          id: interface_name,
+          label: interface['label'],
+          bus: interface['bus'],
+          role: interface['role'],
+          connects_to: interface['connects_to'],
+          match: interface.fetch('match').join(','),
+          cardinality: interface['cardinality'],
+          autocomplete_group: interface['autocomplete_group'],
+          topology_rule: interface['topology_rule']
+        }
+        lines << "      <interface#{attrs(interface_attrs)}>"
         lines << '      </interface>'
       end
       lines << '    </interfaces>'

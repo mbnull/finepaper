@@ -80,6 +80,18 @@ modules:
         configurable: false
         emit: attribute
         description: Canvas Y position.
+      mesh_col:
+        type: int
+        default: 0
+        configurable: false
+        emit: attribute
+        description: Logical mesh column.
+      mesh_row:
+        type: int
+        default: 0
+        configurable: false
+        emit: attribute
+        description: Logical mesh row.
       display_name:
         type: string
         default: ''
@@ -122,6 +134,8 @@ modules:
         label: Local 0
         bus: ni_link
         role: target
+        cardinality: one
+        autocomplete_group: endpoint_attachment
         accepts:
           protocol: [axi4, chi]
           data_width: [32, 64, 128]
@@ -137,6 +151,8 @@ modules:
         label: Local 1
         bus: ni_link
         role: target
+        cardinality: one
+        autocomplete_group: endpoint_attachment
         accepts:
           protocol: [axi4, chi]
           data_width: [32, 64, 128]
@@ -152,6 +168,8 @@ modules:
         label: Local 2
         bus: ni_link
         role: target
+        cardinality: one
+        autocomplete_group: endpoint_attachment
         accepts:
           protocol: [axi4, chi]
           data_width: [32, 64, 128]
@@ -167,6 +185,8 @@ modules:
         label: Local 3
         bus: ni_link
         role: target
+        cardinality: one
+        autocomplete_group: endpoint_attachment
         accepts:
           protocol: [axi4, chi]
           data_width: [32, 64, 128]
@@ -182,6 +202,9 @@ modules:
         label: North
         bus: router_link
         role: target
+        cardinality: one
+        autocomplete_group: router_side
+        topology_rule: opposite_side
         port:
           id: north
           direction: inout
@@ -194,6 +217,9 @@ modules:
         label: East
         bus: router_link
         role: initiator
+        cardinality: one
+        autocomplete_group: router_side
+        topology_rule: opposite_side
         port:
           id: east
           direction: inout
@@ -206,6 +232,9 @@ modules:
         label: South
         bus: router_link
         role: initiator
+        cardinality: one
+        autocomplete_group: router_side
+        topology_rule: opposite_side
         port:
           id: south
           direction: inout
@@ -218,6 +247,9 @@ modules:
         label: West
         bus: router_link
         role: target
+        cardinality: one
+        autocomplete_group: router_side
+        topology_rule: opposite_side
         port:
           id: west
           direction: inout
@@ -287,6 +319,8 @@ modules:
         label: NoC
         bus: ni_link
         role: initiator
+        cardinality: one
+        autocomplete_group: endpoint_attachment
         config:
           protocol: { parameter: protocol }
           data_width: { parameter: data_width }

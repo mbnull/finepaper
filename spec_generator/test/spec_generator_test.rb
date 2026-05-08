@@ -109,6 +109,52 @@ class SpecGeneratorTest < Minitest::Test
     end
   end
 
+  def test_rejects_base_interface_metadata_that_is_not_a_string
+    Dir.mktmpdir do |dir|
+      yaml = valid_spec_yaml.sub(
+        'local0: { bus: ni_link, role: target, accepts:',
+        'local0: { cardinality: 1, bus: ni_link, role: target, accepts:'
+      )
+      spec_path = write_file(dir, 'spec/noc.yaml', yaml)
+      write_file(dir, 'spec/views/XP.xml', xp_view_xml)
+      write_file(dir, 'spec/views/Endpoint.xml', endpoint_view_xml)
+
+      error = assert_raises(SpecGenerator::SpecError) do
+        SpecGenerator.generate(
+          spec_path: spec_path,
+          views_dir: File.join(dir, 'spec/views'),
+          qt_bundle_dir: File.join(dir, 'out/qt'),
+          ruby_model_dir: File.join(dir, 'out/ruby')
+        )
+      end
+
+      assert_match(/XP.local0 cardinality must be a string/, error.message)
+    end
+  end
+
+  def test_rejects_base_interface_cardinality_outside_known_values
+    Dir.mktmpdir do |dir|
+      yaml = valid_spec_yaml.sub(
+        'local0: { bus: ni_link, role: target, accepts:',
+        'local0: { cardinality: eno, bus: ni_link, role: target, accepts:'
+      )
+      spec_path = write_file(dir, 'spec/noc.yaml', yaml)
+      write_file(dir, 'spec/views/XP.xml', xp_view_xml)
+      write_file(dir, 'spec/views/Endpoint.xml', endpoint_view_xml)
+
+      error = assert_raises(SpecGenerator::SpecError) do
+        SpecGenerator.generate(
+          spec_path: spec_path,
+          views_dir: File.join(dir, 'spec/views'),
+          qt_bundle_dir: File.join(dir, 'out/qt'),
+          ruby_model_dir: File.join(dir, 'out/ruby')
+        )
+      end
+
+      assert_match(/XP.local0 cardinality is invalid/, error.message)
+    end
+  end
+
   def test_rejects_view_interface_refs_missing_from_spec
     Dir.mktmpdir do |dir|
       spec_path = write_file(dir, 'spec/noc.yaml', valid_spec_yaml)
@@ -202,6 +248,35 @@ class SpecGeneratorTest < Minitest::Test
     end
   end
 
+  def test_repository_specs_generate_runtime_interface_metadata
+    Dir.mktmpdir do |dir|
+      SpecGenerator.generate(
+        spec_path: repo_path('spec/noc/noc.yaml'),
+        views_dir: repo_path('spec/noc/views'),
+        qt_bundle_dir: File.join(dir, 'plugins/noc'),
+        ruby_model_dir: File.join(dir, 'plugins/noc/generator/src/ruby/model')
+      )
+
+      SpecGenerator.generate_extension(
+        extension_path: repo_path('spec/noc/ravenoc.yml'),
+        views_dir: repo_path('spec/noc/views'),
+        bundle_dir: File.join(dir, 'plugins/ravenoc')
+      )
+
+      noc_modules_xml = File.read(File.join(dir, 'plugins/noc/modules.xml'))
+      assert_includes noc_modules_xml, '<interface id="local0" label="Local 0" bus="ni_link" role="target" connects_to="initiator" match="protocol,data_width" cardinality="one" autocomplete_group="endpoint_attachment">'
+      assert_includes noc_modules_xml, '<interface id="north" label="North" bus="router_link" role="target" connects_to="initiator" match="" cardinality="one" autocomplete_group="router_side" topology_rule="opposite_side">'
+      assert_includes noc_modules_xml, '<interface id="noc" label="NoC" bus="ni_link" role="initiator" connects_to="target" match="protocol,data_width" cardinality="one" autocomplete_group="endpoint_attachment">'
+      assert_includes noc_modules_xml, '<parameter name="mesh_col" type="int" default="0" description="Logical mesh column." configurable="false" />'
+      assert_includes noc_modules_xml, '<parameter name="mesh_row" type="int" default="0" description="Logical mesh row." configurable="false" />'
+
+      ravenoc_modules_xml = File.read(File.join(dir, 'plugins/ravenoc/modules.xml'))
+      assert_includes ravenoc_modules_xml, '<interface id="north" label="North" bus="ravenoc_router_link" role="target" connects_to="initiator" match="" cardinality="one" autocomplete_group="router_side" topology_rule="opposite_side">'
+      assert_includes ravenoc_modules_xml, '<interface id="local" label="Local" bus="ravenoc_endpoint_link" role="target" connects_to="initiator" match="" cardinality="one" autocomplete_group="endpoint_attachment">'
+      assert_includes ravenoc_modules_xml, '<interface id="noc" label="NoC" bus="ravenoc_endpoint_link" role="initiator" connects_to="target" match="" cardinality="one" autocomplete_group="endpoint_attachment">'
+    end
+  end
+
   def test_rejects_extension_instance_parameter_without_default
     Dir.mktmpdir do |dir|
       yaml = ravenoc_extension_yaml.sub('default: 32, min: 8', 'min: 8')
@@ -234,6 +309,50 @@ class SpecGeneratorTest < Minitest::Test
         )
       end
       assert_match(/kind must be noc/, error.message)
+    end
+  end
+
+  def test_rejects_extension_interface_metadata_that_is_not_a_string
+    Dir.mktmpdir do |dir|
+      yaml = ravenoc_extension_yaml.sub(
+        'connects_to: initiator',
+        "connects_to: initiator\n        autocomplete_group: 42"
+      )
+      extension_path = write_file(dir, 'spec/noc/ravenoc.yml', yaml)
+      write_file(dir, 'spec/noc/views/RaveTile.xml', rave_tile_view_xml)
+      write_file(dir, 'spec/noc/views/RaveEndpoint.xml', rave_endpoint_view_xml)
+
+      error = assert_raises(SpecGenerator::SpecError) do
+        SpecGenerator.generate_extension(
+          extension_path: extension_path,
+          views_dir: File.join(dir, 'spec/noc/views'),
+          bundle_dir: File.join(dir, 'plugins/ravenoc')
+        )
+      end
+
+      assert_match(/RaveTile.north autocomplete_group must be a string/, error.message)
+    end
+  end
+
+  def test_rejects_extension_topology_rule_outside_known_values
+    Dir.mktmpdir do |dir|
+      yaml = ravenoc_extension_yaml.sub(
+        'match: []',
+        "match: []\n        topology_rule: opposite-side"
+      )
+      extension_path = write_file(dir, 'spec/noc/ravenoc.yml', yaml)
+      write_file(dir, 'spec/noc/views/RaveTile.xml', rave_tile_view_xml)
+      write_file(dir, 'spec/noc/views/RaveEndpoint.xml', rave_endpoint_view_xml)
+
+      error = assert_raises(SpecGenerator::SpecError) do
+        SpecGenerator.generate_extension(
+          extension_path: extension_path,
+          views_dir: File.join(dir, 'spec/noc/views'),
+          bundle_dir: File.join(dir, 'plugins/ravenoc')
+        )
+      end
+
+      assert_match(/RaveTile.north topology_rule is invalid/, error.message)
     end
   end
 
@@ -278,7 +397,98 @@ class SpecGeneratorTest < Minitest::Test
     end
   end
 
+  def test_cli_check_passes_when_generated_runtime_artifacts_match_specs
+    Dir.mktmpdir do |dir|
+      build_generated_fixture_repo(dir)
+      stdout, stderr, status = Open3.capture3(
+        RbConfig.ruby,
+        File.expand_path('../bin/spec-gen', __dir__),
+        '--check',
+        chdir: dir
+      )
+
+      assert status.success?, stderr
+      assert_includes stdout, 'Generated runtime artifacts are up to date'
+    end
+  end
+
+  def test_check_repository_generated_outputs_reports_noc_modules_drift
+    Dir.mktmpdir do |dir|
+      build_generated_fixture_repo(dir)
+      path = File.join(dir, 'plugins/noc/modules.xml')
+      File.write(path, File.read(path).sub('cardinality="one"', 'cardinality="many"'))
+
+      error = assert_raises(SpecGenerator::SpecError) do
+        SpecGenerator.check_repository_generated_outputs(root: dir)
+      end
+
+      assert_match(/plugins\/noc\/modules.xml/, error.message)
+    end
+  end
+
+  def test_check_repository_generated_outputs_reports_ravenoc_modules_drift
+    Dir.mktmpdir do |dir|
+      build_generated_fixture_repo(dir)
+      path = File.join(dir, 'plugins/ravenoc/modules.xml')
+      File.write(path, File.read(path).sub('cardinality="one"', 'cardinality="many"'))
+
+      error = assert_raises(SpecGenerator::SpecError) do
+        SpecGenerator.check_repository_generated_outputs(root: dir)
+      end
+
+      assert_match(/plugins\/ravenoc\/modules.xml/, error.message)
+    end
+  end
+
+  def test_check_repository_generated_outputs_reports_missing_committed_file
+    Dir.mktmpdir do |dir|
+      build_generated_fixture_repo(dir)
+      FileUtils.rm(File.join(dir, 'plugins/noc/modules.xml'))
+
+      error = assert_raises(SpecGenerator::SpecError) do
+        SpecGenerator.check_repository_generated_outputs(root: dir)
+      end
+
+      assert_match(/missing committed: plugins\/noc\/modules.xml/, error.message)
+    end
+  end
+
+  def test_check_repository_generated_outputs_reports_stale_committed_file
+    Dir.mktmpdir do |dir|
+      build_generated_fixture_repo(dir)
+      File.write(File.join(dir, 'plugins/noc/graphics/Stale.xml'), '<stale />')
+
+      error = assert_raises(SpecGenerator::SpecError) do
+        SpecGenerator.check_repository_generated_outputs(root: dir)
+      end
+
+      assert_match(/missing generated: plugins\/noc\/graphics\/Stale.xml/, error.message)
+    end
+  end
+
   private
+
+  def repo_path(*parts)
+    File.expand_path(File.join('..', '..', *parts), __dir__)
+  end
+
+  def build_generated_fixture_repo(root)
+    FileUtils.mkdir_p(File.join(root, 'spec'))
+    FileUtils.cp_r(repo_path('spec/noc'), File.join(root, 'spec/noc'))
+
+    SpecGenerator.generate(
+      spec_path: File.join(root, 'spec/noc/noc.yaml'),
+      views_dir: File.join(root, 'spec/noc/views'),
+      qt_bundle_dir: File.join(root, 'plugins/noc'),
+      ruby_model_dir: File.join(root, 'plugins/noc/generator/src/ruby/model')
+    )
+
+    SpecGenerator.generate_extension(
+      extension_path: File.join(root, 'spec/noc/ravenoc.yml'),
+      views_dir: File.join(root, 'spec/noc/views'),
+      bundle_dir: File.join(root, 'plugins/ravenoc')
+    )
+  end
 
   def write_file(root, relative_path, content)
     path = File.join(root, relative_path)

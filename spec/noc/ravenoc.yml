@@ -69,6 +69,9 @@ modules:
         role: target
         connects_to: initiator
         match: []
+        cardinality: one
+        autocomplete_group: router_side
+        topology_rule: opposite_side
         port: { id: north, direction: inout, type: bus, bus_type: ravenoc_router_link, role: router, name: North, description: North RaveNoC router link }
       east:
         label: East
@@ -76,6 +79,9 @@ modules:
         role: initiator
         connects_to: target
         match: []
+        cardinality: one
+        autocomplete_group: router_side
+        topology_rule: opposite_side
         port: { id: east, direction: inout, type: bus, bus_type: ravenoc_router_link, role: router, name: East, description: East RaveNoC router link }
       south:
         label: South
@@ -83,6 +89,9 @@ modules:
         role: initiator
         connects_to: target
         match: []
+        cardinality: one
+        autocomplete_group: router_side
+        topology_rule: opposite_side
         port: { id: south, direction: inout, type: bus, bus_type: ravenoc_router_link, role: router, name: South, description: South RaveNoC router link }
       west:
         label: West
@@ -90,6 +99,9 @@ modules:
         role: target
         connects_to: initiator
         match: []
+        cardinality: one
+        autocomplete_group: router_side
+        topology_rule: opposite_side
         port: { id: west, direction: inout, type: bus, bus_type: ravenoc_router_link, role: router, name: West, description: West RaveNoC router link }
       local:
         label: Local
@@ -97,6 +109,8 @@ modules:
         role: target
         connects_to: initiator
         match: []
+        cardinality: one
+        autocomplete_group: endpoint_attachment
         port: { id: local, direction: input, type: bus, bus_type: ravenoc_endpoint_link, role: attachment, name: Local, description: Local RaveNoC endpoint slot }
   RaveEndpoint:
     palette_label: Rave Endpoint
@@ -119,4 +133,6 @@ modules:
         role: initiator
         connects_to: target
         match: []
+        cardinality: one
+        autocomplete_group: endpoint_attachment
         port: { id: noc, direction: output, type: bus, bus_type: ravenoc_endpoint_link, role: attachment, name: NoC, description: RaveNoC endpoint attachment }
