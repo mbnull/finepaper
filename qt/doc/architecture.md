@@ -39,7 +39,7 @@ Important properties of the model:
 - connections are validated before insertion
 - removing a module also removes attached connections
 - module parameter changes are forwarded through `Graph::parameterChanged`
-- JSON export supports both editor and framework flavors
+- project persistence and plugin graph export are separate boundaries
 
 `Module` contains:
 

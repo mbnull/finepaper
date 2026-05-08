@@ -17,6 +17,7 @@ SetPluginStateParameterCommand::SetPluginStateParameterCommand(ProjectStateServi
       m_newValue(std::move(newValue)) {}
 
 void SetPluginStateParameterCommand::execute() {
+    m_executed = false;
     if (!m_stateService) {
         return;
     }

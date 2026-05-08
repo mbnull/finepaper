@@ -64,8 +64,14 @@ void CommandManager::redo() {
              << "stateId" << m_currentStateId;
     auto entry = std::move(m_redoStack.top());
     m_redoStack.pop();
-    if (entry.command->wasExecuted()) {
-        entry.command->execute();
+    entry.command->execute();
+    if (!entry.command->wasExecuted()) {
+        m_redoStack.push(std::move(entry));
+        qDebug() << "Redo produced no state change"
+                 << "undoDepth" << m_undoStack.size()
+                 << "redoDepth" << m_redoStack.size()
+                 << "stateId" << m_currentStateId;
+        return;
     }
     m_currentStateId = entry.afterStateId;
     m_undoStack.push(std::move(entry));

@@ -6,6 +6,7 @@ RemoveConnectionCommand::RemoveConnectionCommand(Graph* graph, const QString& co
 
 // Remove connection from graph
 void RemoveConnectionCommand::execute() {
+    m_executed = false;
     m_connection = m_graph->takeConnection(m_connectionId);
     if (m_connection) {
         m_executed = true;

@@ -342,6 +342,7 @@ ArrangeCommand::ArrangeCommand(Graph* graph)
 }
 
 void ArrangeCommand::execute() {
+    m_executed = false;
     if (!m_graph) {
         return;
     }

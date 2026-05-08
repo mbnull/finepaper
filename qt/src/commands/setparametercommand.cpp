@@ -7,6 +7,7 @@ SetParameterCommand::SetParameterCommand(Graph* graph, const QString& moduleId,
 
 // Set parameter value, storing old value for undo
 void SetParameterCommand::execute() {
+    m_executed = false;
     Module* module = m_graph->getModule(m_moduleId);
     if (!module) return;
     const auto& params = module->parameters();

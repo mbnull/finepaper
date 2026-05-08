@@ -8,6 +8,7 @@ AddModuleCommand::AddModuleCommand(Graph* graph, std::unique_ptr<Module> module)
 
 // Insert module into graph if valid
 void AddModuleCommand::execute() {
+    m_executed = false;
     if (m_moduleId.isEmpty() || m_graph->getModule(m_moduleId)) {
         return;
     }

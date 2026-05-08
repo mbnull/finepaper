@@ -45,9 +45,9 @@ private slots:
     void saveGraph();
     // Prompts for a new destination and saves there.
     void saveGraphAs();
-    // Exports a framework-oriented output (Verilog generation entry point).
+    // Exports plugin input and runs the Verilog generation entry point.
     void generateVerilog();
-    // Runs local + framework validation and refreshes the log panel.
+    // Runs local + plugin validation and refreshes the log panel.
     void runValidation();
     // Executes one undo/redo step in the command history.
     void undo();

@@ -7,8 +7,8 @@ This project is a Qt Widgets application for building and validating SoC/NoC top
 - Shows available module types in a palette loaded from startup-discovered IP plugins.
 - Lets users drag modules onto a canvas and connect compatible ports.
 - Exposes module parameters in a property panel.
-- Saves editor state as JSON.
-- Exports framework-oriented JSON and invokes the active plugin generator to produce Verilog.
+- Saves editor state as a `.fpproj` project.
+- Exports plugin graph JSON and invokes the active plugin generator to produce Verilog.
 - Runs local validation plus plugin-backed DRC checks and shows findings in the log panel.
 
 ## Repository layout
@@ -106,7 +106,7 @@ The first manifest schema is:
 }
 ```
 
-Manifest paths are resolved relative to the plugin directory. `{input}` and `{output}` are replaced with the exported design JSON path and selected output directory. Native plugin metadata is retained for future C++ dynamic-library support, but native libraries are not loaded in this version.
+Manifest paths are resolved relative to the plugin directory. `{input}` and `{output}` are replaced with the plugin graph JSON path and selected output directory. Native plugin metadata is retained for future C++ dynamic-library support, but native libraries are not loaded in this version.
 
 If a graph contains modules from more than one plugin, generation and external DRC currently fail with a user-visible message because multi-plugin orchestration is not implemented yet.
 
@@ -117,12 +117,12 @@ If a graph contains modules from more than one plugin, generation and external D
 3. Connect output ports to input ports.
 4. Select a module and edit parameters in the property panel.
 5. Run validation to collect built-in and plugin DRC findings.
-6. Save editor JSON or generate Verilog into a chosen output directory.
+6. Save a Finepaper project or generate Verilog into a chosen output directory.
 
 ## Generated and saved data
 
-- `saveGraph()` writes editor JSON through `Graph::saveToJson()`.
-- `generateVerilog()` writes framework-flavored JSON to the selected output directory and then runs the active plugin generator.
+- `saveGraph()` writes a `.fpproj` through `ProjectWriter`.
+- `generateVerilog()` writes plugin graph JSON and a `.fpproj` snapshot to the selected output directory, then runs the active plugin generator.
 - Application logs are written to the platform-local app data directory as `finepaper.log`.
 
 ## Module bundle format

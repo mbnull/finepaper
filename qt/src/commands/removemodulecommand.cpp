@@ -6,6 +6,7 @@ RemoveModuleCommand::RemoveModuleCommand(Graph* graph, const QString& moduleId)
 
 // Remove module and all connected connections
 void RemoveModuleCommand::execute() {
+    m_executed = false;
     if (!m_graph->getModule(m_moduleId)) return;
 
     std::vector<QString> connIds;

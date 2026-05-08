@@ -36,6 +36,34 @@ private:
     bool m_executeSucceeds;
 };
 
+class FailsOnRedoCommand final : public Command {
+public:
+    explicit FailsOnRedoCommand(std::vector<std::string>& events)
+        : m_events(events) {
+    }
+
+    void execute() override {
+        ++m_attempts;
+        if (m_attempts == 1) {
+            m_events.push_back("execute:first");
+            m_executed = true;
+            return;
+        }
+
+        m_events.push_back("execute:rejected");
+        m_executed = false;
+    }
+
+    void undo() override {
+        m_events.push_back("undo");
+        m_executed = false;
+    }
+
+private:
+    std::vector<std::string>& m_events;
+    int m_attempts = 0;
+};
+
 void testExecuteUndoRedoLifecycle() {
     std::vector<std::string> events;
     CommandManager manager;
@@ -109,6 +137,24 @@ void testClearHistoryDropsUndoAndRedoStacks() {
     require(manager.currentStateId() == 0, "clearHistory should reset the current state id");
 }
 
+void testRedoFailureDoesNotAdvanceHistory() {
+    std::vector<std::string> events;
+    CommandManager manager;
+
+    manager.executeCommand(std::make_unique<FailsOnRedoCommand>(events));
+    manager.undo();
+    require(manager.canRedo(), "undo should make command redoable");
+    require(manager.currentStateId() == 0, "undo should restore initial state");
+
+    manager.redo();
+
+    require(manager.currentStateId() == 0, "failed redo should not advance current state");
+    require(!manager.canUndo(), "failed redo should not push command back to undo");
+    require(manager.canRedo(), "failed redo should keep command available for retry");
+    require(events.size() == 3 && events[2] == "execute:rejected",
+            "redo should attempt execution and observe rejection");
+}
+
 } // namespace
 
 int main() {
@@ -117,6 +163,7 @@ int main() {
         testRedoHistoryClearsAfterNewExecute();
         testFailedExecuteDoesNotEnterUndoStack();
         testClearHistoryDropsUndoAndRedoStacks();
+        testRedoFailureDoesNotAdvanceHistory();
     } catch (const std::exception& error) {
         std::cerr << "commandmanager_test failed: " << error.what() << '\n';
         return 1;

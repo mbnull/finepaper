@@ -12,6 +12,7 @@ AddConnectionCommand::AddConnectionCommand(Graph* graph,
 
 // Add connection if valid
 void AddConnectionCommand::execute() {
+    m_executed = false;
     if (!m_graph || !m_connection) {
         return;
     }

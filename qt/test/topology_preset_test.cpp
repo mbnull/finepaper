@@ -206,6 +206,32 @@ void testPresetRejectsConnectionsThatFailRuleService() {
     require(graph.connections().empty(), "invalid preset link should not be inserted");
 }
 
+void testPresetFailureRollsBackPartialGraph() {
+    ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
+    const QString typeName = QStringLiteral("XPAtomicRollback");
+    ModuleType type = routerType(typeName, QStringLiteral("finepaper.noc"));
+    ModuleInterfaceMetadata south = type.interfaceMetadata.value(QStringLiteral("south"));
+    south.role = QStringLiteral("target");
+    south.compatibleRoles = {QStringLiteral("initiator")};
+    type.interfaceMetadata.insert(south.id, south);
+    require(registry.registerType(type), "router type should register");
+    ModuleRegistry::instance().registerType(type);
+
+    Graph graph;
+    TopologyPresetRequest request;
+    request.pluginId = QStringLiteral("finepaper.noc");
+    request.preset = meshPreset();
+    request.preset.routerModule = typeName;
+    request.parameters.insert(QStringLiteral("rows"), 2);
+    request.parameters.insert(QStringLiteral("cols"), 2);
+
+    const TopologyPresetResult result = TopologyPresetBuilder::apply(&graph, registry, request);
+
+    require(!result.success, "preset should fail when a later generated link violates rules");
+    require(graph.modules().empty(), "failed preset should roll back created modules");
+    require(graph.connections().empty(), "failed preset should roll back earlier valid links");
+}
+
 void testRepositoryRaveNoCMeshPresetCreatesInternalTiles() {
     const QString pluginRoot = repositoryPluginPath(QStringLiteral("plugins/ravenoc"));
     const QList<PluginDescriptor> plugins = PluginRegistry::discover({pluginRoot});
@@ -256,6 +282,7 @@ int main(int argc, char** argv) {
         testMeshPresetCreatesEditableGraph();
         testRingPresetCreatesClosedLoop();
         testPresetRejectsConnectionsThatFailRuleService();
+        testPresetFailureRollsBackPartialGraph();
         testRepositoryRaveNoCMeshPresetCreatesInternalTiles();
     } catch (const std::exception& error) {
         std::cerr << "topology_preset_test failed: " << error.what() << '\n';

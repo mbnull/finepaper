@@ -29,6 +29,21 @@ QString ringNodeId(const QString& pattern, int index) {
     return replaceToken(pattern, QStringLiteral("index"), index);
 }
 
+void rollbackCreated(Graph* graph, TopologyPresetResult& result) {
+    if (!graph) {
+        return;
+    }
+
+    for (const QString& connectionId : result.connectionIds) {
+        graph->removeConnection(connectionId);
+    }
+    for (int i = result.moduleIds.size() - 1; i >= 0; --i) {
+        graph->removeModule(result.moduleIds.at(i));
+    }
+    result.connectionIds.clear();
+    result.moduleIds.clear();
+}
+
 std::unique_ptr<Module> instantiateModule(const ModuleType& type,
                                           const QString& id,
                                           int row,
@@ -126,12 +141,14 @@ TopologyPresetResult createMesh(Graph* graph,
             if (col + 1 < cols) {
                 const QString right = meshNodeId(request.preset.idPattern, row, col + 1);
                 if (!addLink(graph, ruleService, result, current + QStringLiteral("_east"), current, east, right, west)) {
+                    rollbackCreated(graph, result);
                     return result;
                 }
             }
             if (row + 1 < rows) {
                 const QString below = meshNodeId(request.preset.idPattern, row + 1, col);
                 if (!addLink(graph, ruleService, result, current + QStringLiteral("_south"), current, south, below, north)) {
+                    rollbackCreated(graph, result);
                     return result;
                 }
             }
@@ -169,6 +186,7 @@ TopologyPresetResult createRing(Graph* graph,
         const QString current = ringNodeId(request.preset.idPattern, index);
         const QString next = ringNodeId(request.preset.idPattern, (index + 1) % nodes);
         if (!addLink(graph, ruleService, result, current + QStringLiteral("_next"), current, east, next, west)) {
+            rollbackCreated(graph, result);
             return result;
         }
     }
