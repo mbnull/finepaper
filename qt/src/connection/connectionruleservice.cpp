@@ -190,9 +190,9 @@ ConnectionRequest ConnectionRequest::portToPort(const PortRef& start,
 }
 
 ConnectionRuleService::ConnectionRuleService(const Graph* graph,
-                                             QVector<ProjectPluginStateRecord> pluginStates)
+                                             QVector<ProjectIpInstanceRecord> ipInstanceRecords)
     : m_graph(graph),
-      m_pluginStates(std::move(pluginStates)) {}
+      m_ipInstanceRecords(std::move(ipInstanceRecords)) {}
 
 ConnectionCheckResult ConnectionRuleService::reject(QString reasonCode, QString message) const {
     ConnectionCheckResult result;

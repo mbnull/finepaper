@@ -26,10 +26,10 @@ void ValidationManager::runValidation() {
             << "modules" << m_graph->modules().size()
             << "connections" << m_graph->connections().size();
     QList<ValidationResult> results = m_validator->validate(m_graph);
-    const QVector<ProjectPluginStateRecord> emptyPluginStates;
+    const QVector<ProjectIpInstanceRecord> emptyIpInstanceRecords;
     results.append(m_drcRunner->validate(
         m_graph,
-        m_projectStateService ? m_projectStateService->pluginStates() : emptyPluginStates));
+        m_projectStateService ? m_projectStateService->ipInstanceRecords() : emptyIpInstanceRecords));
     m_logPanel->setResults(results);
 
     int errorCount = 0;

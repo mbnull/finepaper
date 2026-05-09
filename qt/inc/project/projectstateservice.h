@@ -1,4 +1,4 @@
-// ProjectStateService owns editable plugin project state outside Graph.
+// ProjectStateService owns editable IP instance project state outside Graph.
 #pragma once
 
 #include "project/pluginstate.h"
@@ -17,25 +17,27 @@ public:
     void clear();
     void loadFromDocument(const ProjectDocument& document);
     void writeToDocument(ProjectDocument& document) const;
-    const QVector<ProjectPluginStateRecord>& pluginStates() const { return m_pluginStates; }
-    bool ensurePluginStateRecord(const ProjectPluginStateRecord& record);
+    const QVector<ProjectIpInstanceRecord>& ipInstanceRecords() const { return m_ipInstanceRecords; }
+    bool ensureIpInstanceRecord(const ProjectIpInstanceRecord& record);
+    bool removeIpInstanceRecord(const QString& ipcoreId, const QString& instanceId);
 
-    bool setParameter(const QString& pluginId,
+    bool setParameter(const QString& ipcoreId,
                       const QString& instanceId,
                       const QString& section,
                       const QString& name,
                       const QJsonValue& value);
-    QJsonValue parameter(const QString& pluginId,
+    QJsonValue parameter(const QString& ipcoreId,
                          const QString& instanceId,
                          const QString& section,
                          const QString& name) const;
 
 signals:
-    void parameterChanged(const QString& pluginId,
+    void parameterChanged(const QString& ipcoreId,
                           const QString& instanceId,
                           const QString& section,
                           const QString& name);
+    void ipInstanceRecordsChanged();
 
 private:
-    QVector<ProjectPluginStateRecord> m_pluginStates;
+    QVector<ProjectIpInstanceRecord> m_ipInstanceRecords;
 };

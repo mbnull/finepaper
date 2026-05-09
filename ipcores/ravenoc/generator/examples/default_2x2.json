@@ -1,9 +1,9 @@
 {
   "schema": "finepaper-plugin-graph-v1",
   "name": "ravenoc_default_2x2",
-  "plugin_state": [
+  "ipcore_state": [
     {
-      "plugin": "finepaper.ravenoc",
+      "ipcore": "finepaper.ravenoc",
       "instance": "ravenoc_0",
       "schema": "finepaper.ravenoc-project-state-v1",
       "state": {

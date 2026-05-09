@@ -16,11 +16,11 @@ struct GeneratedProjectSnapshotResult {
     QString error;
 };
 
-QJsonArray pluginStateArray(const QVector<ProjectPluginStateRecord>& records);
-void attachPluginState(QJsonObject& root,
-                       const QVector<ProjectPluginStateRecord>& records);
+QJsonArray ipcoreStateArray(const QVector<ProjectIpInstanceRecord>& records);
+void attachIpcoreState(QJsonObject& root,
+                       const QVector<ProjectIpInstanceRecord>& records);
 
 GeneratedProjectSnapshotResult writeGeneratedProjectSnapshot(const Graph& graph,
                                                              const QString& outputDirectory,
                                                              const QString& designName,
-                                                             const QVector<ProjectPluginStateRecord>& pluginStates);
+                                                             const QVector<ProjectIpInstanceRecord>& ipcoreState);

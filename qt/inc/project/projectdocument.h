@@ -7,14 +7,14 @@
 #include <QString>
 #include <QVector>
 
-struct ProjectPluginRecord {
+struct ProjectIpcoreRecord {
     QString id;
     QString version;
 };
 
 struct ProjectModuleRecord {
     QString id;
-    QString pluginId;
+    QString ipcoreId;
     QString type;
     QJsonObject parameters;
 };
@@ -35,8 +35,8 @@ struct ProjectDocument {
     QString kind = QStringLiteral("finepaper-project");
     QString name = QStringLiteral("Untitled");
     QString version = QStringLiteral("1.0");
-    QVector<ProjectPluginRecord> plugins;
-    QVector<ProjectPluginStateRecord> pluginStates;
+    QVector<ProjectIpcoreRecord> ipcores;
+    QVector<ProjectIpInstanceRecord> ipcoreState;
     QVector<ProjectModuleRecord> modules;
     QVector<ProjectConnectionRecord> connections;
 };

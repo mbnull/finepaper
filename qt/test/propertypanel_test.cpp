@@ -37,8 +37,8 @@ void testUnselectedPanelShowsPluginProjectParameters() {
     Graph graph;
     ProjectStateService stateService;
     ProjectDocument document;
-    ProjectPluginStateRecord state;
-    state.pluginId = QStringLiteral("finepaper.ravenoc");
+    ProjectIpInstanceRecord state;
+    state.ipcoreId = QStringLiteral("finepaper.ravenoc");
     state.instanceId = QStringLiteral("ravenoc_0");
     state.schema = QStringLiteral("ravenoc-project-state-v1");
     state.state = QJsonObject{
@@ -46,7 +46,7 @@ void testUnselectedPanelShowsPluginProjectParameters() {
             {QStringLiteral("flit_data_width"), 32}
         }}
     };
-    document.pluginStates.push_back(state);
+    document.ipcoreState.push_back(state);
     stateService.loadFromDocument(document);
 
     PluginDescriptor plugin;
@@ -97,8 +97,8 @@ void testUnselectedPanelUsesPersistedCustomPluginInstanceId() {
     Graph graph;
     ProjectStateService stateService;
     ProjectDocument document;
-    ProjectPluginStateRecord state;
-    state.pluginId = QStringLiteral("finepaper.ravenoc");
+    ProjectIpInstanceRecord state;
+    state.ipcoreId = QStringLiteral("finepaper.ravenoc");
     state.instanceId = QStringLiteral("ravenoc_custom");
     state.schema = QStringLiteral("ravenoc-project-state-v1");
     state.state = QJsonObject{
@@ -106,7 +106,7 @@ void testUnselectedPanelUsesPersistedCustomPluginInstanceId() {
             {QStringLiteral("flit_data_width"), 128}
         }}
     };
-    document.pluginStates.push_back(state);
+    document.ipcoreState.push_back(state);
     stateService.loadFromDocument(document);
 
     PluginDescriptor plugin;
@@ -175,7 +175,7 @@ void testDefaultPluginSectionWithoutStateIsReadOnly() {
     spinBox->setValue(64);
     require(commandManager.currentStateId() == 0,
             "read-only default plugin parameter should not enter command history");
-    require(stateService.pluginStates().isEmpty(),
+    require(stateService.ipInstanceRecords().isEmpty(),
             "read-only default plugin parameter should not create state implicitly");
 }
 

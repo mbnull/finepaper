@@ -14,7 +14,7 @@ class Graph;
 class DRCRunner {
 public:
     QList<ValidationResult> validate(const Graph* graph,
-                                     const QVector<ProjectPluginStateRecord>& pluginStates);
+                                     const QVector<ProjectIpInstanceRecord>& ipInstanceRecords);
 private:
     QList<ValidationResult> parseErrors(const QString& stderr);
 

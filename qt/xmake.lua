@@ -24,6 +24,8 @@ target("qt")
     add_files("inc/**/graphnodemodel.h")
     add_files("inc/**/propertypanel.h")
     add_files("inc/**/projectstateservice.h")
+    add_files("inc/**/projectipservice.h")
+    add_files("inc/**/activeworkspacecontroller.h")
     add_files("inc/**/palette.h")
     add_files("inc/**/validationmanager.h")
 
@@ -184,6 +186,49 @@ add_qt_test_target("projectdocument_test", "test/projectdocument_test.cpp", {
     "inc/**/pluginregistry.h",
     "inc/**/plugindescriptor.h"
 })
+
+add_qt_test_target("ipcatalogservice_test", "test/ipcatalogservice_test.cpp", {
+    "src/ipcore/ipcatalogservice.cpp",
+    "src/modules/moduleregistry.cpp",
+    "src/modules/moduleprovider.cpp",
+    "src/plugins/pluginregistry.cpp",
+    "src/common/frameworkpaths.cpp",
+    "src/graph/parameter.cpp",
+    "src/graph/port.cpp",
+    "inc/ipcore/ipcatalogservice.h",
+    "inc/**/moduleregistry.h",
+    "inc/**/plugindescriptor.h"
+})
+
+target("projectipservice_test")
+    add_rules("qt.console")
+    set_kind("binary")
+    set_group("test")
+    set_default(false)
+    set_languages("c++23")
+
+    add_includedirs("inc")
+    add_files("test/projectipservice_test.cpp")
+    add_files("src/project/projectipservice.cpp")
+    add_files("src/project/projectstateservice.cpp")
+    add_files("src/ipcore/ipcatalogservice.cpp")
+    add_files("src/workspace/activeworkspacecontroller.cpp")
+    add_files("src/modules/moduleregistry.cpp")
+    add_files("src/modules/moduleprovider.cpp")
+    add_files("src/plugins/pluginregistry.cpp")
+    add_files("src/common/frameworkpaths.cpp")
+    add_files("src/graph/parameter.cpp")
+    add_files("src/graph/port.cpp")
+    add_files("inc/project/projectipservice.h")
+    add_files("inc/project/projectstateservice.h")
+    add_files("inc/ipcore/ipcatalogservice.h")
+    add_files("inc/workspace/activeworkspacecontroller.h")
+    add_files("inc/**/moduleregistry.h")
+    add_files("inc/**/plugindescriptor.h")
+    add_tests("default", {
+        trim_output = true,
+        pass_outputs = "projectipservice_test passed"
+    })
 
 target("logpanel_test")
     add_rules("qt.widgetapp")

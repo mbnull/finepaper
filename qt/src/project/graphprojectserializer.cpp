@@ -93,7 +93,7 @@ GraphProjectLoadResult populateGraph(const ProjectDocument& document,
         }
     }
 
-    const ConnectionRuleService ruleService(&graph, document.pluginStates);
+    const ConnectionRuleService ruleService(&graph, document.ipcoreState);
     for (const ProjectConnectionRecord& record : document.connections) {
         // Validate against the concrete Graph again because module defaults and
         // interface metadata may reject edges that pass basic project shape checks.
@@ -127,19 +127,19 @@ ProjectDocument GraphProjectSerializer::toProject(const Graph& graph, const QStr
     ProjectDocument document;
     document.name = projectName.isEmpty() ? QStringLiteral("Untitled") : projectName;
 
-    QSet<QString> pluginIds;
+    QSet<QString> ipcoreIds;
     for (const auto& module : graph.modules()) {
         const ModuleType* type = ModuleRegistry::instance().getType(module->type());
-        const QString pluginId = type ? type->pluginId : QString();
-        if (!pluginId.isEmpty()) {
-            pluginIds.insert(pluginId);
+        const QString ipcoreId = type ? type->pluginId : QString();
+        if (!ipcoreId.isEmpty()) {
+            ipcoreIds.insert(ipcoreId);
         }
 
         ProjectModuleRecord record;
         // Project records keep stable editor module IDs. External/generated IDs
-        // are parameters and may differ per plugin.
+        // are parameters and may differ per IP core.
         record.id = module->id();
-        record.pluginId = pluginId;
+        record.ipcoreId = ipcoreId;
         record.type = module->type();
         for (auto it = module->parameters().constBegin(); it != module->parameters().constEnd(); ++it) {
             record.parameters.insert(it.key(), parameterToJson(it.value().value()));
@@ -147,10 +147,10 @@ ProjectDocument GraphProjectSerializer::toProject(const Graph& graph, const QStr
         document.modules.push_back(record);
     }
 
-    QStringList sortedPluginIds(pluginIds.begin(), pluginIds.end());
-    sortedPluginIds.sort();
-    for (const QString& pluginId : sortedPluginIds) {
-        document.plugins.push_back(ProjectPluginRecord{pluginId, QStringLiteral("1.0")});
+    QStringList sortedIpcoreIds(ipcoreIds.begin(), ipcoreIds.end());
+    sortedIpcoreIds.sort();
+    for (const QString& ipcoreId : sortedIpcoreIds) {
+        document.ipcores.push_back(ProjectIpcoreRecord{ipcoreId, QStringLiteral("1.0")});
     }
 
     for (const auto& connection : graph.connections()) {
@@ -170,7 +170,7 @@ GraphProjectLoadResult GraphProjectSerializer::loadProject(const ProjectDocument
     QSet<QString> moduleIds;
     QHash<QString, const ModuleType*> moduleTypesById;
 
-    // First pass validates identifiers, plugin ownership, and parameter types
+    // First pass validates identifiers, IP core ownership, and parameter types
     // without mutating the live graph.
     for (const ProjectModuleRecord& record : document.modules) {
         if (record.id.isEmpty()) {
@@ -181,8 +181,8 @@ GraphProjectLoadResult GraphProjectSerializer::loadProject(const ProjectDocument
         }
         moduleIds.insert(record.id);
 
-        if (record.pluginId.isEmpty()) {
-            return failure(QStringLiteral("Module %1 is missing plugin").arg(record.id));
+        if (record.ipcoreId.isEmpty()) {
+            return failure(QStringLiteral("Module %1 is missing ipcore").arg(record.id));
         }
         if (record.type.isEmpty()) {
             return failure(QStringLiteral("Module %1 is missing type").arg(record.id));
@@ -190,14 +190,14 @@ GraphProjectLoadResult GraphProjectSerializer::loadProject(const ProjectDocument
 
         const ModuleType* type = ModuleRegistry::instance().getType(record.type);
         if (!type) {
-            // Missing type means the required plugin bundle was not loaded at
+            // Missing type means the required IP core bundle was not loaded at
             // startup, so continuing would lose graph semantics.
             return failure(QStringLiteral("Missing module type: %1").arg(record.type));
         }
-        if (type->pluginId != record.pluginId) {
+        if (type->pluginId != record.ipcoreId) {
             // Type names are currently globally unique, but the project still
-            // records plugin ownership to catch accidental cross-plugin reuse.
-            return failure(QStringLiteral("Module %1 requires plugin %2").arg(record.id, record.pluginId));
+            // records IP core ownership to catch accidental cross-IP reuse.
+            return failure(QStringLiteral("Module %1 requires ipcore %2").arg(record.id, record.ipcoreId));
         }
         moduleTypesById.insert(record.id, type);
 

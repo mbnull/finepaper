@@ -104,7 +104,7 @@ struct ConnectionCheckResult {
 class ConnectionRuleService {
 public:
     ConnectionRuleService(const Graph* graph,
-                          QVector<ProjectPluginStateRecord> pluginStates);
+                          QVector<ProjectIpInstanceRecord> ipInstanceRecords);
 
     ConnectionCheckResult check(const ConnectionRequest& request) const;
 
@@ -121,5 +121,5 @@ private:
                                                    QString* rejectionMessage) const;
 
     const Graph* m_graph = nullptr;
-    QVector<ProjectPluginStateRecord> m_pluginStates;
+    QVector<ProjectIpInstanceRecord> m_ipInstanceRecords;
 };

@@ -15,6 +15,8 @@ class CommandManager;
 class IPluginProjectAdapter;
 class NodeEditorWidget;
 class PropertyPanel;
+class IpCatalogService;
+class ProjectIpService;
 class ProjectStateService;
 class Palette;
 class LogPanel;
@@ -90,7 +92,9 @@ private slots:
 
     Graph* m_graph;
     std::unique_ptr<CommandManager> m_commandManager;
+    std::unique_ptr<IpCatalogService> m_ipCatalogService;
     std::unique_ptr<ProjectStateService> m_projectStateService;
+    std::unique_ptr<ProjectIpService> m_projectIpService;
     std::vector<std::unique_ptr<IPluginProjectAdapter>> m_pluginProjectAdapters;
     NodeEditorWidget* m_nodeEditor;
     PropertyPanel* m_propertyPanel;

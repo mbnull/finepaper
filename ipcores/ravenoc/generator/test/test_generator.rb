@@ -298,7 +298,7 @@ class RaveNoCGeneratorTest < Minitest::Test
     {
       'schema' => 'finepaper-plugin-graph-v1',
       'name' => 'demo',
-      'plugin_state' => [ravenoc_plugin_state],
+      'ipcore_state' => [ravenoc_plugin_state],
       'modules' => [
         {
           'id' => 'ravenoc_node',
@@ -315,15 +315,15 @@ class RaveNoCGeneratorTest < Minitest::Test
   end
 
   def graph_global_parameters(graph)
-    graph.fetch('plugin_state')
-         .find { |state| state.fetch('plugin') == 'finepaper.ravenoc' }
+    graph.fetch('ipcore_state')
+         .find { |state| state.fetch('ipcore') == 'finepaper.ravenoc' }
          .fetch('state')
          .fetch('global_parameters')
   end
 
   def ravenoc_plugin_state
     {
-      'plugin' => 'finepaper.ravenoc',
+      'ipcore' => 'finepaper.ravenoc',
       'instance' => 'ravenoc_0',
       'schema' => 'finepaper.ravenoc-project-state-v1',
       'state' => {
@@ -364,7 +364,7 @@ class RaveNoCGeneratorTest < Minitest::Test
     {
       'schema' => 'finepaper-plugin-graph-v1',
       'name' => 'manual_tiles',
-      'plugin_state' => [ravenoc_plugin_state],
+      'ipcore_state' => [ravenoc_plugin_state],
       'modules' => [
         tile.call('rave_a', 100, 80),
         tile.call('rave_b', 320, 80),
@@ -404,7 +404,7 @@ class RaveNoCGeneratorTest < Minitest::Test
     {
       'schema' => 'finepaper-plugin-graph-v1',
       'name' => 'one_by_two',
-      'plugin_state' => [ravenoc_plugin_state],
+      'ipcore_state' => [ravenoc_plugin_state],
       'modules' => [
         {
           'id' => 'rave_a',

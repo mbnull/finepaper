@@ -10,28 +10,28 @@
 
 namespace {
 
-void addPluginStateDependencies(ProjectDocument& document,
-                                const QVector<ProjectPluginStateRecord>& pluginStates) {
-    QSet<QString> pluginIds;
-    for (const ProjectPluginRecord& plugin : document.plugins) {
-        pluginIds.insert(plugin.id);
+void addIpcoreStateDependencies(ProjectDocument& document,
+                                const QVector<ProjectIpInstanceRecord>& records) {
+    QSet<QString> ipcoreIds;
+    for (const ProjectIpcoreRecord& ipcore : document.ipcores) {
+        ipcoreIds.insert(ipcore.id);
     }
-    for (const ProjectPluginStateRecord& state : pluginStates) {
-        if (state.pluginId.isEmpty() || pluginIds.contains(state.pluginId)) {
+    for (const ProjectIpInstanceRecord& state : records) {
+        if (state.ipcoreId.isEmpty() || ipcoreIds.contains(state.ipcoreId)) {
             continue;
         }
-        document.plugins.push_back(ProjectPluginRecord{state.pluginId, QStringLiteral("1.0")});
-        pluginIds.insert(state.pluginId);
+        document.ipcores.push_back(ProjectIpcoreRecord{state.ipcoreId, QStringLiteral("1.0")});
+        ipcoreIds.insert(state.ipcoreId);
     }
 }
 
 } // namespace
 
-QJsonArray pluginStateArray(const QVector<ProjectPluginStateRecord>& records) {
+QJsonArray ipcoreStateArray(const QVector<ProjectIpInstanceRecord>& records) {
     QJsonArray array;
-    for (const ProjectPluginStateRecord& record : records) {
+    for (const ProjectIpInstanceRecord& record : records) {
         QJsonObject object;
-        object.insert(QStringLiteral("plugin"), record.pluginId);
+        object.insert(QStringLiteral("ipcore"), record.ipcoreId);
         object.insert(QStringLiteral("instance"), record.instanceId);
         object.insert(QStringLiteral("schema"), record.schema);
         object.insert(QStringLiteral("state"), record.state);
@@ -40,20 +40,20 @@ QJsonArray pluginStateArray(const QVector<ProjectPluginStateRecord>& records) {
     return array;
 }
 
-void attachPluginState(QJsonObject& root,
-                       const QVector<ProjectPluginStateRecord>& records) {
-    root.insert(QStringLiteral("plugin_state"), pluginStateArray(records));
+void attachIpcoreState(QJsonObject& root,
+                       const QVector<ProjectIpInstanceRecord>& records) {
+    root.insert(QStringLiteral("ipcore_state"), ipcoreStateArray(records));
 }
 
 GeneratedProjectSnapshotResult writeGeneratedProjectSnapshot(const Graph& graph,
                                                              const QString& outputDirectory,
                                                              const QString& designName,
-                                                             const QVector<ProjectPluginStateRecord>& pluginStates) {
+                                                             const QVector<ProjectIpInstanceRecord>& ipcoreState) {
     QDir outputDir(outputDirectory);
     const QString projectPath = outputDir.filePath(designName + QStringLiteral(".fpproj"));
     ProjectDocument document = GraphProjectSerializer::toProject(graph, designName);
-    document.pluginStates = pluginStates;
-    addPluginStateDependencies(document, pluginStates);
+    document.ipcoreState = ipcoreState;
+    addIpcoreStateDependencies(document, ipcoreState);
     const ProjectWriteResult writeResult = ProjectWriter::writeFile(projectPath, document);
     if (!writeResult.success) {
         return {false, projectPath, writeResult.error};

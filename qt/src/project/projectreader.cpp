@@ -71,39 +71,45 @@ ProjectReadResult ProjectReader::readFile(const QString& path) {
     document.name = project.value(QStringLiteral("name")).toString(QStringLiteral("Untitled"));
     document.version = project.value(QStringLiteral("version")).toString(QStringLiteral("1.0"));
 
-    const QJsonArray plugins = root.value(QStringLiteral("plugins")).toArray();
-    for (const QJsonValue& value : plugins) {
+    if (root.contains(QStringLiteral("plugins"))) {
+        return failure(QStringLiteral("Project plugins is a pre-v1 field and is not supported"));
+    }
+    if (root.contains(QStringLiteral("plugin_state"))) {
+        return failure(QStringLiteral("Project plugin_state is a pre-v1 field and is not supported"));
+    }
+    if (root.contains(QStringLiteral("ip_instances"))) {
+        return failure(QStringLiteral("Project ip_instances is a pre-v1 field and is not supported"));
+    }
+
+    const QJsonArray ipcores = root.value(QStringLiteral("ipcores")).toArray();
+    for (const QJsonValue& value : ipcores) {
         const QJsonObject object = value.toObject();
-        document.plugins.push_back(ProjectPluginRecord{
+        document.ipcores.push_back(ProjectIpcoreRecord{
             object.value(QStringLiteral("id")).toString(),
             object.value(QStringLiteral("version")).toString()
         });
     }
 
-    const QJsonValue pluginStateValue = root.value(QStringLiteral("plugin_state"));
-    if (!pluginStateValue.isUndefined() && !pluginStateValue.isArray()) {
-        return failure(QStringLiteral("Project plugin_state must be an array"));
+    const QJsonValue ipcoreStateValue = root.value(QStringLiteral("ipcore_state"));
+    if (!ipcoreStateValue.isUndefined() && !ipcoreStateValue.isArray()) {
+        return failure(QStringLiteral("Project ipcore_state must be an array"));
     }
-    const QJsonArray pluginStates = pluginStateValue.toArray();
-    for (const QJsonValue& value : pluginStates) {
+    const QJsonArray ipcoreState = ipcoreStateValue.toArray();
+    for (const QJsonValue& value : ipcoreState) {
         if (!value.isObject()) {
-            return failure(QStringLiteral("Project plugin_state entries must be objects"));
+            return failure(QStringLiteral("Project ipcore_state entries must be objects"));
         }
         const QJsonObject object = value.toObject();
         const QJsonValue stateValue = object.value(QStringLiteral("state"));
         if (!stateValue.isObject()) {
-            return failure(QStringLiteral("Project plugin_state.state must be an object"));
+            return failure(QStringLiteral("Project ipcore_state.state must be an object"));
         }
-        ProjectPluginStateRecord state;
-        state.pluginId = object.value(QStringLiteral("plugin")).toString();
+        ProjectIpInstanceRecord state;
+        state.ipcoreId = object.value(QStringLiteral("ipcore")).toString();
         state.instanceId = object.value(QStringLiteral("instance")).toString();
         state.schema = object.value(QStringLiteral("schema")).toString();
         state.state = stateValue.toObject();
-        document.pluginStates.push_back(state);
-    }
-
-    if (root.contains(QStringLiteral("ip_instances"))) {
-        return failure(QStringLiteral("Project ip_instances is a pre-v1 field and is not supported"));
+        document.ipcoreState.push_back(state);
     }
 
     const QJsonValue graphValue = root.value(QStringLiteral("graph"));
@@ -120,9 +126,12 @@ ProjectReadResult ProjectReader::readFile(const QString& path) {
     const QJsonArray modules = modulesValue.toArray();
     for (const QJsonValue& value : modules) {
         const QJsonObject object = value.toObject();
+        if (object.contains(QStringLiteral("plugin"))) {
+            return failure(QStringLiteral("Project graph.modules.plugin is a pre-v1 field and is not supported"));
+        }
         ProjectModuleRecord module;
         module.id = object.value(QStringLiteral("id")).toString();
-        module.pluginId = object.value(QStringLiteral("plugin")).toString();
+        module.ipcoreId = object.value(QStringLiteral("ipcore")).toString();
         module.type = object.value(QStringLiteral("type")).toString();
         module.parameters = object.value(QStringLiteral("parameters")).toObject();
         document.modules.push_back(module);

@@ -9,11 +9,11 @@
 
 class AddConnectionCommand : public Command {
 public:
-    using PluginStatesProvider = std::function<QVector<ProjectPluginStateRecord>()>;
+    using IpInstanceRecordsProvider = std::function<QVector<ProjectIpInstanceRecord>()>;
 
     // Takes ownership of a prepared connection to be inserted into the graph.
     AddConnectionCommand(Graph* graph,
-                         PluginStatesProvider pluginStatesProvider,
+                         IpInstanceRecordsProvider ipInstanceRecordsProvider,
                          std::unique_ptr<Connection> connection);
     // Inserts the connection if it passes graph validation rules.
     void execute() override;
@@ -22,7 +22,7 @@ public:
 
 private:
     Graph* m_graph = nullptr;
-    PluginStatesProvider m_pluginStatesProvider;
+    IpInstanceRecordsProvider m_ipInstanceRecordsProvider;
     std::unique_ptr<Connection> m_connection;
     QString m_connectionId;
 };

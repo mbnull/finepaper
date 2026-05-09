@@ -95,11 +95,11 @@ class JsonParser
   end
 
   def self.generic_parameters(data)
-    plugin_state = data['plugin_state']
-    return data['parameters'] || {} unless plugin_state.is_a?(Array)
+    ipcore_state = data['ipcore_state']
+    return data['parameters'] || {} unless ipcore_state.is_a?(Array)
 
-    state_record = plugin_state.find do |record|
-      record.is_a?(Hash) && record['plugin'] == 'finepaper.noc'
+    state_record = ipcore_state.find do |record|
+      record.is_a?(Hash) && record['ipcore'] == 'finepaper.noc'
     end
     state = state_record && state_record['state']
     parameters = state.is_a?(Hash) ? state['global_parameters'] : nil

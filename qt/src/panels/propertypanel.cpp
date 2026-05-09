@@ -417,8 +417,8 @@ void PropertyPanel::populatePanel() {
             }
             for (const PluginParameterSection& section : adapter->parameterSections()) {
                 bool renderedPersistedState = false;
-                for (const ProjectPluginStateRecord& record : m_stateService->pluginStates()) {
-                    if (record.pluginId != section.pluginId) {
+                for (const ProjectIpInstanceRecord& record : m_stateService->ipInstanceRecords()) {
+                    if (record.ipcoreId != section.pluginId) {
                         continue;
                     }
                     renderSection(section,

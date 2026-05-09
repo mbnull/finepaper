@@ -557,8 +557,8 @@ QtNodes::ConnectionGraphicsObject* NodeEditorWidget::findDraftConnection() const
 void NodeEditorWidget::refreshConnectionRuleService() {
     m_connectionRuleService = std::make_unique<ConnectionRuleService>(
         m_graph,
-        m_projectStateService ? m_projectStateService->pluginStates()
-                              : QVector<ProjectPluginStateRecord>{});
+        m_projectStateService ? m_projectStateService->ipInstanceRecords()
+                              : QVector<ProjectIpInstanceRecord>{});
 }
 
 void NodeEditorWidget::setConnectionHighlighted(QtNodes::ConnectionId connectionId, bool highlighted) {
@@ -690,12 +690,12 @@ void NodeEditorWidget::showConnectionOptionsMenu(
 
 void NodeEditorWidget::executeAddConnection(const PortRef& source, const PortRef& target) {
     auto connection = std::make_unique<Connection>(NodeEditorEntityFactory::generateEntityId(), source, target);
-    auto pluginStatesProvider = [projectStateService = m_projectStateService]() {
-        return projectStateService ? projectStateService->pluginStates()
-                                   : QVector<ProjectPluginStateRecord>{};
+    auto ipInstanceRecordsProvider = [projectStateService = m_projectStateService]() {
+        return projectStateService ? projectStateService->ipInstanceRecords()
+                                   : QVector<ProjectIpInstanceRecord>{};
     };
     auto command = std::make_unique<AddConnectionCommand>(m_graph,
-                                                          std::move(pluginStatesProvider),
+                                                          std::move(ipInstanceRecordsProvider),
                                                           std::move(connection));
     m_commandManager->executeCommand(std::move(command));
 }

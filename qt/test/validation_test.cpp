@@ -93,9 +93,9 @@ bool hasRule(const QList<ValidationResult>& results, const QString& ruleName) {
     return false;
 }
 
-QVector<ProjectPluginStateRecord> ravenocPluginState() {
-    ProjectPluginStateRecord state;
-    state.pluginId = QStringLiteral("finepaper.ravenoc");
+QVector<ProjectIpInstanceRecord> ravenocIpcoreState() {
+    ProjectIpInstanceRecord state;
+    state.ipcoreId = QStringLiteral("finepaper.ravenoc");
     state.instanceId = QStringLiteral("ravenoc_0");
     state.schema = QStringLiteral("finepaper.ravenoc-project-state-v1");
     state.state = QJsonObject{
@@ -148,7 +148,7 @@ void testDrcRunnerUsesPluginGraphFlavorForRaveNoC() {
                   QStringLiteral("west"));
 
     DRCRunner runner;
-    const QList<ValidationResult> results = runner.validate(&graph, ravenocPluginState());
+    const QList<ValidationResult> results = runner.validate(&graph, ravenocIpcoreState());
     QStringList messages;
     for (const ValidationResult& result : results) {
         messages.append(result.message());
@@ -158,8 +158,8 @@ void testDrcRunnerUsesPluginGraphFlavorForRaveNoC() {
     require(results.isEmpty(), messageBytes.constData());
     require(!messages.join('\n').contains(QStringLiteral("expected schema finepaper-plugin-graph-v1")),
             "RaveNoC DRC should receive generic plugin graph JSON");
-    require(!messages.join('\n').contains(QStringLiteral("missing plugin_state")),
-            "RaveNoC DRC should receive plugin_state");
+    require(!messages.join('\n').contains(QStringLiteral("missing ipcore_state")),
+            "RaveNoC DRC should receive ipcore_state");
 }
 
 void testDrcRunnerAcceptsManualRaveTilePlacement() {
@@ -189,7 +189,7 @@ void testDrcRunnerAcceptsManualRaveTilePlacement() {
                   QStringLiteral("rave_d"), QStringLiteral("north"));
 
     DRCRunner runner;
-    const QList<ValidationResult> results = runner.validate(&graph, ravenocPluginState());
+    const QList<ValidationResult> results = runner.validate(&graph, ravenocIpcoreState());
     QStringList messages;
     for (const ValidationResult& result : results) {
         messages.append(result.message());
@@ -221,7 +221,7 @@ void testDrcRunnerUsesConnectionsWhenRaveTileLogicalCoordinatesAreStale() {
                   QStringLiteral("rave_right"), QStringLiteral("west"));
 
     DRCRunner runner;
-    const QList<ValidationResult> results = runner.validate(&graph, ravenocPluginState());
+    const QList<ValidationResult> results = runner.validate(&graph, ravenocIpcoreState());
     QStringList messages;
     for (const ValidationResult& result : results) {
         messages.append(result.message());
@@ -246,7 +246,7 @@ void testDrcRunnerRejectsManualRaveTileNonMesh() {
             "failed to add fourth manual RaveTile");
 
     DRCRunner runner;
-    const QList<ValidationResult> results = runner.validate(&graph, ravenocPluginState());
+    const QList<ValidationResult> results = runner.validate(&graph, ravenocIpcoreState());
 
     require(hasMessageContaining(results, QStringLiteral("missing mesh link")),
             "manual RaveTile graph without mesh links should fail DRC");

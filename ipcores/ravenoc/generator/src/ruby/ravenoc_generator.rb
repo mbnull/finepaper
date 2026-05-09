@@ -191,24 +191,24 @@ class RaveNoCGenerator
   end
 
   def ravenoc_global_parameters(graph)
-    plugin_state = graph.fetch('plugin_state', nil)
-    unless plugin_state.is_a?(Array)
-      raise GenerationError, 'missing plugin_state'
+    ipcore_state = graph.fetch('ipcore_state', nil)
+    unless ipcore_state.is_a?(Array)
+      raise GenerationError, 'missing ipcore_state'
     end
 
-    ravenoc_states = plugin_state.select do |state|
-      state.is_a?(Hash) && state.fetch('plugin', nil) == 'finepaper.ravenoc'
+    ravenoc_states = ipcore_state.select do |state|
+      state.is_a?(Hash) && state.fetch('ipcore', nil) == 'finepaper.ravenoc'
     end
-    raise GenerationError, 'missing plugin_state' if ravenoc_states.empty?
+    raise GenerationError, 'missing ipcore_state' if ravenoc_states.empty?
     if ravenoc_states.size > 1
-      raise GenerationError, "expected exactly one finepaper.ravenoc plugin_state, found #{ravenoc_states.size}"
+      raise GenerationError, "expected exactly one finepaper.ravenoc ipcore_state, found #{ravenoc_states.size}"
     end
 
     state = ravenoc_states.first.fetch('state', nil)
-    raise GenerationError, 'plugin_state.state must be an object' unless state.is_a?(Hash)
+    raise GenerationError, 'ipcore_state.state must be an object' unless state.is_a?(Hash)
 
     parameters = state.fetch('global_parameters', nil)
-    raise GenerationError, 'plugin_state.state.global_parameters must be an object' unless parameters.is_a?(Hash)
+    raise GenerationError, 'ipcore_state.state.global_parameters must be an object' unless parameters.is_a?(Hash)
 
     (DEFAULTS.keys - %w[rows cols]).each do |name|
       raise GenerationError, "missing RaveNoC global parameter #{name}" unless parameters.key?(name)

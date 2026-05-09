@@ -1,11 +1,11 @@
-// Shared project plugin state records.
+// Shared project IP instance state records.
 #pragma once
 
 #include <QJsonObject>
 #include <QString>
 
-struct ProjectPluginStateRecord {
-    QString pluginId;
+struct ProjectIpInstanceRecord {
+    QString ipcoreId;
     QString instanceId;
     QString schema;
     QJsonObject state;

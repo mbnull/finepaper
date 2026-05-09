@@ -1,4 +1,4 @@
-// SetPluginStateParameterCommand changes one plugin-owned parameter with undo support.
+// SetPluginStateParameterCommand changes one IP-instance parameter with undo support.
 #pragma once
 
 #include "commands/command.h"
@@ -10,7 +10,7 @@
 class SetPluginStateParameterCommand final : public Command {
 public:
     SetPluginStateParameterCommand(ProjectStateService* stateService,
-                                   QString pluginId,
+                                   QString ipcoreId,
                                    QString instanceId,
                                    QString section,
                                    QString name,
@@ -20,7 +20,7 @@ public:
 
 private:
     ProjectStateService* m_stateService;
-    QString m_pluginId;
+    QString m_ipcoreId;
     QString m_instanceId;
     QString m_section;
     QString m_name;

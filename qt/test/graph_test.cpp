@@ -113,15 +113,15 @@ void testAddConnectionCommandRedoBuildsFreshRuleService() {
         "failed to add target module");
 
     int providerCalls = 0;
-    auto pluginStatesProvider = [&providerCalls]() {
+    auto ipInstanceRecordsProvider = [&providerCalls]() {
         ++providerCalls;
-        return QVector<ProjectPluginStateRecord>{};
+        return QVector<ProjectIpInstanceRecord>{};
     };
 
     CommandManager commandManager;
     auto command = std::make_unique<AddConnectionCommand>(
         &graph,
-        pluginStatesProvider,
+        ipInstanceRecordsProvider,
         std::make_unique<Connection>("command_link",
                                      PortRef{"source", "out"},
                                      PortRef{"target", "in"}));

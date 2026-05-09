@@ -13,7 +13,7 @@
 // Run external DRC tool on graph and parse validation results
 QList<ValidationResult> DRCRunner::validate(
     const Graph* graph,
-    const QVector<ProjectPluginStateRecord>& pluginStates) {
+    const QVector<ProjectIpInstanceRecord>& ipInstanceRecords) {
     m_externalToInternalIds.clear();
 
     // External DRC consumes a serialized graph, so keep temporary input/output
@@ -47,7 +47,7 @@ QList<ValidationResult> DRCRunner::validate(
     QJsonObject root = graph->toJsonDocument(QStringLiteral("design"),
                                              GraphJsonFlavor::Plugin,
                                              &m_externalToInternalIds).object();
-    attachPluginState(root, pluginStates);
+    attachIpcoreState(root, ipInstanceRecords);
     const QByteArray jsonBytes = QJsonDocument(root).toJson();
     if (tmpFile.write(jsonBytes) != jsonBytes.size() || !tmpFile.flush()) {
         // The external tool should never start with a partial input file.

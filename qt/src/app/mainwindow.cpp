@@ -5,6 +5,7 @@
 #include "app/generationartifacts.h"
 #include "graph/graph.h"
 #include "commands/commandmanager.h"
+#include "ipcore/ipcatalogservice.h"
 #include "nodeeditor/nodeeditorwidget.h"
 #include "panels/propertypanel.h"
 #include "panels/palette.h"
@@ -14,6 +15,7 @@
 #include "plugins/pluginregistry.h"
 #include "plugins/startupdiagnostics.h"
 #include "project/graphprojectserializer.h"
+#include "project/projectipservice.h"
 #include "project/projectreader.h"
 #include "project/projectstateservice.h"
 #include "project/projectwriter.h"
@@ -49,6 +51,7 @@
 #include <QToolButton>
 #include <QtGlobal>
 #include <QVBoxLayout>
+#include <optional>
 
 namespace {
 
@@ -79,50 +82,6 @@ QString documentDisplayName(const QString& path) {
     return path.isEmpty() ? QStringLiteral("Untitled") : QFileInfo(path).fileName();
 }
 
-QString defaultIpInstanceId(const PluginDescriptor& plugin) {
-    QString token = plugin.id.section(QLatin1Char('.'), -1).trimmed().toLower();
-    token.replace(QRegularExpression(QStringLiteral("[^a-z0-9_]+")), QStringLiteral("_"));
-    token.remove(QRegularExpression(QStringLiteral("^_+|_+$")));
-    if (token.isEmpty()) {
-        token = QStringLiteral("ip");
-    }
-    return token + QStringLiteral("_0");
-}
-
-QJsonValue pluginDefaultValueToJson(const Parameter::Value& value) {
-    if (const auto* stringValue = std::get_if<QString>(&value)) {
-        return *stringValue;
-    }
-    if (const auto* intValue = std::get_if<int>(&value)) {
-        return *intValue;
-    }
-    if (const auto* doubleValue = std::get_if<double>(&value)) {
-        return *doubleValue;
-    }
-    if (const auto* boolValue = std::get_if<bool>(&value)) {
-        return *boolValue;
-    }
-    return QJsonValue(QJsonValue::Undefined);
-}
-
-ProjectPluginStateRecord defaultPluginStateRecord(const PluginDescriptor& plugin) {
-    QJsonObject globalParameters;
-    QStringList names = plugin.instanceParameters.keys();
-    names.sort();
-    for (const QString& name : names) {
-        globalParameters.insert(name, pluginDefaultValueToJson(plugin.instanceParameters.value(name).defaultValue));
-    }
-
-    ProjectPluginStateRecord record;
-    record.pluginId = plugin.id;
-    record.instanceId = defaultIpInstanceId(plugin);
-    record.schema = plugin.id + QStringLiteral("-project-state-v1");
-    record.state.insert(QStringLiteral("kind"), plugin.kind);
-    record.state.insert(QStringLiteral("type"), plugin.name);
-    record.state.insert(QStringLiteral("global_parameters"), globalParameters);
-    return record;
-}
-
 void appendLogLines(LogPanel* logPanel,
                     const QString& text,
                     const QColor& color,
@@ -147,7 +106,9 @@ MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent),
       m_graph(new Graph(this)),
       m_commandManager(std::make_unique<CommandManager>()),
+      m_ipCatalogService(std::make_unique<IpCatalogService>(IpCatalogService::fromRuntimeRegistries())),
       m_projectStateService(std::make_unique<ProjectStateService>()),
+      m_projectIpService(std::make_unique<ProjectIpService>(m_projectStateService.get())),
       m_nodeEditor(nullptr),
       m_propertyPanel(nullptr),
       m_palette(nullptr),
@@ -292,7 +253,7 @@ void MainWindow::generateVerilog() {
         return;
     }
     QJsonObject root = m_graph->toJsonDocument(designName, GraphJsonFlavor::Plugin).object();
-    attachPluginState(root, m_projectStateService->pluginStates());
+    attachIpcoreState(root, m_projectStateService->ipInstanceRecords());
     jsonFile.write(QJsonDocument(root).toJson());
     jsonFile.close();
 
@@ -302,7 +263,7 @@ void MainWindow::generateVerilog() {
         writeGeneratedProjectSnapshot(*m_graph,
                                       outputDirectory,
                                       designName,
-                                      m_projectStateService->pluginStates());
+                                      m_projectStateService->ipInstanceRecords());
     if (!projectSnapshot.success) {
         m_logPanel->appendMessage("[Generate] Could not write project: " + projectSnapshot.error,
                                   QColor(220, 50, 50));
@@ -560,6 +521,12 @@ void MainWindow::setupConnections() {
             [trackGraphChange](const QString&, const QString&, const QString&, const QString&) {
                 trackGraphChange();
             });
+    connect(m_projectIpService.get(),
+            &ProjectIpService::ipInstancesChanged,
+            this,
+            [trackGraphChange]() {
+                trackGraphChange();
+            });
 }
 
 void MainWindow::setupActions() {
@@ -797,22 +764,21 @@ void MainWindow::populateActiveIpSelector() {
         return;
     }
 
-    // Only plugins with loaded module definitions are useful in the active-IP
+    // Only IP cores with loaded module definitions are useful in the active-IP
     // selector; generator-only manifests stay discoverable through diagnostics.
     m_activeIpCombo->blockSignals(true);
     m_activeIpCombo->clear();
 
-    for (const PluginDescriptor& plugin : PluginRegistry::instance().plugins()) {
-        if (ModuleRegistry::instance().availableTypesForPlugin(plugin.id).isEmpty()) {
-            continue;
-        }
-        const QString label = plugin.name.isEmpty() ? plugin.id : plugin.name;
-        m_activeIpCombo->addItem(label, plugin.id);
+    for (const IpCatalogEntry& entry : m_ipCatalogService->selectableEntries()) {
+        const QString label = entry.name.isEmpty() ? entry.id : entry.name;
+        m_activeIpCombo->addItem(label, entry.id);
     }
 
     m_activeIpCombo->blockSignals(false);
     if (m_activeIpCombo->count() > 0) {
+        m_suppressDocumentTracking = true;
         setActivePluginId(m_activeIpCombo->itemData(0).toString());
+        m_suppressDocumentTracking = false;
         m_activeIpCombo->setCurrentIndex(0);
     }
 }
@@ -831,14 +797,17 @@ void MainWindow::setActivePluginId(const QString& pluginId) {
 }
 
 void MainWindow::ensureProjectStateRecordFromActivePlugin() {
-    const PluginDescriptor* plugin = PluginRegistry::instance().plugin(m_activePluginId);
-    if (!plugin) {
+    if (!m_ipCatalogService || !m_projectIpService) {
+        return;
+    }
+    const std::optional<IpCatalogEntry> entry = m_ipCatalogService->entry(m_activePluginId);
+    if (!entry.has_value()) {
         return;
     }
 
-    // Instance parameters are copied from the manifest into Graph so project
-    // save/generation observe one canonical IP-instance state.
-    m_projectStateService->ensurePluginStateRecord(defaultPluginStateRecord(*plugin));
+    // Instance parameters are copied from catalog metadata into project state
+    // so save/generation observe one canonical IP-instance record.
+    m_projectIpService->ensureInstanceForIpcore(*entry);
 }
 
 void MainWindow::rebuildTopologyMenu() {

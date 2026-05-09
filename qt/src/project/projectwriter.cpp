@@ -39,37 +39,37 @@ QJsonObject toJson(const ProjectDocument& document) {
     project.insert(QStringLiteral("version"), document.version);
     root.insert(QStringLiteral("project"), project);
 
-    QJsonArray plugins;
-    QVector<ProjectPluginRecord> sortedPlugins = document.plugins;
-    std::sort(sortedPlugins.begin(), sortedPlugins.end(), [](const ProjectPluginRecord& lhs,
-                                                             const ProjectPluginRecord& rhs) {
+    QJsonArray ipcores;
+    QVector<ProjectIpcoreRecord> sortedIpcoreRecords = document.ipcores;
+    std::sort(sortedIpcoreRecords.begin(), sortedIpcoreRecords.end(), [](const ProjectIpcoreRecord& lhs,
+                                                                         const ProjectIpcoreRecord& rhs) {
         return lhs.id < rhs.id;
     });
-    for (const ProjectPluginRecord& plugin : sortedPlugins) {
+    for (const ProjectIpcoreRecord& ipcore : sortedIpcoreRecords) {
         QJsonObject object;
-        object.insert(QStringLiteral("id"), plugin.id);
-        object.insert(QStringLiteral("version"), plugin.version);
-        plugins.append(object);
+        object.insert(QStringLiteral("id"), ipcore.id);
+        object.insert(QStringLiteral("version"), ipcore.version);
+        ipcores.append(object);
     }
-    root.insert(QStringLiteral("plugins"), plugins);
+    root.insert(QStringLiteral("ipcores"), ipcores);
 
-    QJsonArray pluginStates;
-    for (const ProjectPluginStateRecord& state : document.pluginStates) {
+    QJsonArray ipcoreState;
+    for (const ProjectIpInstanceRecord& state : document.ipcoreState) {
         QJsonObject object;
-        object.insert(QStringLiteral("plugin"), state.pluginId);
+        object.insert(QStringLiteral("ipcore"), state.ipcoreId);
         object.insert(QStringLiteral("instance"), state.instanceId);
         object.insert(QStringLiteral("schema"), state.schema);
         object.insert(QStringLiteral("state"), sortedObject(state.state));
-        pluginStates.append(object);
+        ipcoreState.append(object);
     }
-    root.insert(QStringLiteral("plugin_state"), pluginStates);
+    root.insert(QStringLiteral("ipcore_state"), ipcoreState);
 
     QJsonObject graph;
     QJsonArray modules;
     for (const ProjectModuleRecord& module : document.modules) {
         QJsonObject object;
         object.insert(QStringLiteral("id"), module.id);
-        object.insert(QStringLiteral("plugin"), module.pluginId);
+        object.insert(QStringLiteral("ipcore"), module.ipcoreId);
         object.insert(QStringLiteral("type"), module.type);
         object.insert(QStringLiteral("parameters"), sortedObject(module.parameters));
         modules.append(object);
