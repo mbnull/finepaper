@@ -702,6 +702,58 @@ void testProjectLoadRejectsConnectionRuleFailure() {
             "project load failure should include connection rule reason");
 }
 
+void testProjectLoadReportsIpcoreConnectionRuleFailure() {
+    ModuleType sourceType = makeProjectEndpointType();
+    sourceType.name = QStringLiteral("ProjectDocAxiSource");
+    sourceType.pluginId = QStringLiteral("finepaper.test");
+    sourceType.defaultPorts.clear();
+    sourceType.defaultPorts.push_back(Port(QStringLiteral("noc"),
+                                           Port::Direction::InOut,
+                                           QStringLiteral("bus"),
+                                           QStringLiteral("NoC"),
+                                           {},
+                                           QStringLiteral("attachment"),
+                                           QStringLiteral("endpoint_link"),
+                                           QStringLiteral("noc")));
+    ModuleInterfaceMetadata sourceMeta;
+    sourceMeta.id = QStringLiteral("noc");
+    sourceMeta.bus = QStringLiteral("endpoint_link");
+    sourceMeta.role = QStringLiteral("initiator");
+    sourceMeta.compatibleRoles = {QStringLiteral("target")};
+    sourceMeta.matchFields = {QStringLiteral("protocol")};
+    sourceMeta.acceptedValues.insert(QStringLiteral("protocol"), QStringList{QStringLiteral("axi4")});
+    sourceType.interfaceMetadata.insert(sourceMeta.id, sourceMeta);
+    ModuleRegistry::instance().registerType(sourceType);
+
+    ModuleType targetType = sourceType;
+    targetType.name = QStringLiteral("ProjectDocApbTarget");
+    targetType.interfaceMetadata[QStringLiteral("noc")].role = QStringLiteral("target");
+    targetType.interfaceMetadata[QStringLiteral("noc")].compatibleRoles = {QStringLiteral("initiator")};
+    targetType.interfaceMetadata[QStringLiteral("noc")].acceptedValues.insert(
+        QStringLiteral("protocol"),
+        QStringList{QStringLiteral("apb")});
+    ModuleRegistry::instance().registerType(targetType);
+
+    ProjectDocument document;
+    document.name = QStringLiteral("ipcore_rule_failure");
+    document.ipcores.push_back(ProjectIpcoreRecord{QStringLiteral("finepaper.test"), QStringLiteral("1.0")});
+    document.modules.push_back(ProjectModuleRecord{QStringLiteral("source"), QStringLiteral("finepaper.test"), sourceType.name, {}});
+    document.modules.push_back(ProjectModuleRecord{QStringLiteral("target"), QStringLiteral("finepaper.test"), targetType.name, {}});
+    document.connections.push_back(ProjectConnectionRecord{
+        QStringLiteral("bad_connection"),
+        ProjectConnectionEndpoint{QStringLiteral("source"), QStringLiteral("noc")},
+        ProjectConnectionEndpoint{QStringLiteral("target"), QStringLiteral("noc")}
+    });
+
+    Graph graph;
+    const GraphProjectLoadResult result = GraphProjectSerializer::loadProject(document, graph);
+
+    require(!result.success, "project load should reject IP-core rule mismatch");
+    require(result.error.contains(QStringLiteral("interface_field_mismatch")),
+            "project load should surface IP-core layer reason code");
+    require(graph.modules().empty(), "failed load should not mutate graph");
+}
+
 void testLoadRejectsConnectionInvalidatedByEarlierConnectionWithoutChangingGraph() {
     registerProjectTypes();
 
@@ -983,6 +1035,7 @@ int main(int argc, char** argv) {
         testLoadRejectsInvalidParameterType();
         testLoadRejectsInvalidConnectionReference();
         testProjectLoadRejectsConnectionRuleFailure();
+        testProjectLoadReportsIpcoreConnectionRuleFailure();
         testLoadRejectsConnectionInvalidatedByEarlierConnectionWithoutChangingGraph();
         testReaderRejectsMalformedProjectGraphArrays();
         testProjectReaderDetectsOnlyFinepaperProjects();

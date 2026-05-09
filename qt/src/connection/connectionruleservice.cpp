@@ -101,25 +101,104 @@ bool valuesOverlap(const QStringList& lhs, const QStringList& rhs) {
     return false;
 }
 
-bool metadataCompatible(const PortSemanticInfo& source,
-                        const PortSemanticInfo& target,
-                        QString* reason,
-                        QString* message) {
+bool portOccupiedForCardinalityOne(const Graph* graph, const PortRef& ref);
+bool oppositeSideRulePasses(const PortSemanticInfo& source, const PortSemanticInfo& target);
+bool endpointAllowsAsSource(const ConnectionEndpointRequest& endpoint);
+bool endpointAllowsAsTarget(const ConnectionEndpointRequest& endpoint);
+bool roleAllowsAsSource(const QString& role);
+bool roleAllowsAsTarget(const QString& role);
+
+struct CandidateEvaluation {
+    bool accepted = false;
+    ConnectionRuleLayer layer = ConnectionRuleLayer::FeaturePlugin;
+    QString reasonCode;
+    QString message;
+};
+
+CandidateEvaluation acceptedCandidate() {
+    CandidateEvaluation evaluation;
+    evaluation.accepted = true;
+    evaluation.layer = ConnectionRuleLayer::Ipcore;
+    return evaluation;
+}
+
+CandidateEvaluation rejectedCandidate(ConnectionRuleLayer layer,
+                                      QString reasonCode,
+                                      QString message) {
+    CandidateEvaluation evaluation;
+    evaluation.layer = layer;
+    evaluation.reasonCode = std::move(reasonCode);
+    evaluation.message = std::move(message);
+    return evaluation;
+}
+
+CandidateEvaluation checkFeatureDeclarativeRules(const Graph* graph,
+                                                 const PortSemanticInfo& source,
+                                                 const PortSemanticInfo& target,
+                                                 const ConnectionEndpointRequest& sourceEndpoint,
+                                                 const ConnectionEndpointRequest& targetEndpoint) {
+    if (!endpointAllowsAsSource(sourceEndpoint) || !endpointAllowsAsTarget(targetEndpoint)) {
+        return rejectedCandidate(ConnectionRuleLayer::FeaturePlugin,
+                                 QStringLiteral("direction_mismatch"),
+                                 QStringLiteral("No direction-compatible connection option"));
+    }
+
+    if (!source.supportsOutput || !target.supportsInput) {
+        return rejectedCandidate(ConnectionRuleLayer::FeaturePlugin,
+                                 QStringLiteral("direction_mismatch"),
+                                 QStringLiteral("No direction-compatible connection option"));
+    }
+
+    if ((source.cardinality == QStringLiteral("one") &&
+         portOccupiedForCardinalityOne(graph, source.ref)) ||
+        (target.cardinality == QStringLiteral("one") &&
+         portOccupiedForCardinalityOne(graph, target.ref))) {
+        return rejectedCandidate(ConnectionRuleLayer::FeaturePlugin,
+                                 QStringLiteral("port_occupied"),
+                                 QStringLiteral("Connection port is already occupied"));
+    }
+
+    if (!oppositeSideRulePasses(source, target)) {
+        return rejectedCandidate(ConnectionRuleLayer::FeaturePlugin,
+                                 QStringLiteral("topology_rule_mismatch"),
+                                 QStringLiteral("Connection does not satisfy topology rule"));
+    }
+
     const QString sourceBus = source.interfaceBus.isEmpty() ? source.busType : source.interfaceBus;
     const QString targetBus = target.interfaceBus.isEmpty() ? target.busType : target.interfaceBus;
     if (sourceBus != targetBus) {
-        if (reason) *reason = QStringLiteral("bus_mismatch");
-        if (message) *message = QStringLiteral("Connection bus types do not match");
-        return false;
+        return rejectedCandidate(ConnectionRuleLayer::FeaturePlugin,
+                                 QStringLiteral("bus_mismatch"),
+                                 QStringLiteral("Connection bus types do not match"));
+    }
+
+    if (!roleAllowsAsSource(source.interfaceRole) ||
+        !roleAllowsAsTarget(target.interfaceRole)) {
+        return rejectedCandidate(ConnectionRuleLayer::FeaturePlugin,
+                                 QStringLiteral("interface_role_mismatch"),
+                                 QStringLiteral("Connection interface roles are not compatible"));
     }
 
     if (!source.interfaceRole.isEmpty() || !target.interfaceRole.isEmpty()) {
         if (!source.compatibleRoles.contains(target.interfaceRole) ||
             !target.compatibleRoles.contains(source.interfaceRole)) {
-            if (reason) *reason = QStringLiteral("interface_role_mismatch");
-            if (message) *message = QStringLiteral("Connection interface roles are not compatible");
-            return false;
+            return rejectedCandidate(ConnectionRuleLayer::FeaturePlugin,
+                                     QStringLiteral("interface_role_mismatch"),
+                                     QStringLiteral("Connection interface roles are not compatible"));
         }
+    }
+
+    return acceptedCandidate();
+}
+
+CandidateEvaluation checkIpcoreDeclarativeConstraints(const PortSemanticInfo& source,
+                                                      const PortSemanticInfo& target) {
+    if (!source.ipcoreId.isEmpty() &&
+        !target.ipcoreId.isEmpty() &&
+        source.ipcoreId != target.ipcoreId) {
+        return rejectedCandidate(ConnectionRuleLayer::Ipcore,
+                                 QStringLiteral("ipcore_mismatch"),
+                                 QStringLiteral("Connection endpoints belong to different IP cores"));
     }
 
     QStringList fields = source.matchFieldValues.keys();
@@ -131,13 +210,13 @@ bool metadataCompatible(const PortSemanticInfo& source,
     for (const QString& field : fields) {
         if (!valuesOverlap(source.matchFieldValues.value(field),
                            target.matchFieldValues.value(field))) {
-            if (reason) *reason = QStringLiteral("interface_field_mismatch");
-            if (message) *message = QStringLiteral("Connection interface field values do not overlap");
-            return false;
+            return rejectedCandidate(ConnectionRuleLayer::Ipcore,
+                                     QStringLiteral("interface_field_mismatch"),
+                                     QStringLiteral("Connection interface field values do not overlap"));
         }
     }
 
-    return true;
+    return acceptedCandidate();
 }
 
 bool portOccupiedForCardinalityOne(const Graph* graph, const PortRef& ref) {
@@ -174,6 +253,20 @@ bool endpointAllowsAsTarget(const ConnectionEndpointRequest& endpoint) {
     return endpoint.visualSide != ConnectionVisualSide::Output;
 }
 
+bool roleAllowsAsSource(const QString& role) {
+    if (role.isEmpty()) {
+        return true;
+    }
+    return role != QStringLiteral("target");
+}
+
+bool roleAllowsAsTarget(const QString& role) {
+    if (role.isEmpty()) {
+        return true;
+    }
+    return role != QStringLiteral("initiator");
+}
+
 } // namespace
 
 ConnectionRequest ConnectionRequest::portToPort(const PortRef& start,
@@ -194,12 +287,54 @@ ConnectionRuleService::ConnectionRuleService(const Graph* graph,
     : m_graph(graph),
       m_ipInstanceRecords(std::move(ipInstanceRecords)) {}
 
-ConnectionCheckResult ConnectionRuleService::reject(QString reasonCode, QString message) const {
+ConnectionCheckResult ConnectionRuleService::reject(ConnectionRuleLayer layer,
+                                                    QString reasonCode,
+                                                    QString message) const {
     ConnectionCheckResult result;
     result.status = ConnectionCheckStatus::Rejected;
+    result.layer = layer;
     result.reasonCode = std::move(reasonCode);
     result.message = std::move(message);
     return result;
+}
+
+std::optional<ConnectionCheckResult>
+ConnectionRuleService::checkStructuralRules(const ConnectionRequest& request) const {
+    if (!m_graph) {
+        return reject(ConnectionRuleLayer::Structural,
+                      QStringLiteral("missing_graph"),
+                      QStringLiteral("Connection graph is not available"));
+    }
+    if (!m_graph->getModule(request.start.moduleId) || !m_graph->getModule(request.end.moduleId)) {
+        return reject(ConnectionRuleLayer::Structural,
+                      QStringLiteral("missing_module"),
+                      QStringLiteral("Connection references a missing module"));
+    }
+    if (request.start.moduleId == request.end.moduleId) {
+        return reject(ConnectionRuleLayer::Structural,
+                      QStringLiteral("self_loop"),
+                      QStringLiteral("Cannot connect a module to itself"));
+    }
+    if (request.start.portId.has_value() && !findPort(m_graph->getModule(request.start.moduleId), *request.start.portId)) {
+        return reject(ConnectionRuleLayer::Structural,
+                      QStringLiteral("missing_port"),
+                      QStringLiteral("Connection references a missing port"));
+    }
+    if (request.end.portId.has_value() && !findPort(m_graph->getModule(request.end.moduleId), *request.end.portId)) {
+        return reject(ConnectionRuleLayer::Structural,
+                      QStringLiteral("missing_port"),
+                      QStringLiteral("Connection references a missing port"));
+    }
+    if (request.start.portId.has_value() && request.end.portId.has_value()) {
+        const PortRef source{request.start.moduleId, *request.start.portId};
+        const PortRef target{request.end.moduleId, *request.end.portId};
+        if (connectionExists(m_graph, source, target)) {
+            return reject(ConnectionRuleLayer::Structural,
+                          QStringLiteral("duplicate_connection"),
+                          QStringLiteral("Connection already exists"));
+        }
+    }
+    return std::nullopt;
 }
 
 std::optional<PortSemanticInfo> ConnectionRuleService::resolvePort(const QString& moduleId,
@@ -215,7 +350,9 @@ std::optional<PortSemanticInfo> ConnectionRuleService::resolvePort(const QString
     PortSemanticInfo info;
     info.ref = PortRef{moduleId, portId};
     info.moduleType = module->type();
-    info.pluginId = moduleType ? moduleType->pluginId : QString();
+    info.ipcoreId = !module->ipcoreId().isEmpty()
+        ? module->ipcoreId()
+        : (moduleType ? moduleType->pluginId : QString());
     info.graphGroup = moduleType ? moduleType->graphGroup : QString();
     info.editorLayout = ModuleTypeMetadata::editorLayout(module);
     info.portName = port->name();
@@ -281,6 +418,7 @@ QVector<ConnectionResolvedOption> ConnectionRuleService::buildOptions(
     const QVector<PortSemanticInfo>& startPorts,
     const QVector<PortSemanticInfo>& endPorts,
     const ConnectionRequest& request,
+    ConnectionRuleLayer* rejectionLayer,
     QString* rejectionReason,
     QString* rejectionMessage) const {
     QVector<ConnectionResolvedOption> options;
@@ -297,44 +435,57 @@ QVector<ConnectionResolvedOption> ConnectionRuleService::buildOptions(
             });
     };
 
+    const auto filterAutocompleteCandidates = [](const QVector<PortSemanticInfo>& fixedPorts,
+                                                 const QVector<PortSemanticInfo>& hiddenPorts) {
+        QStringList groups;
+        for (const PortSemanticInfo& port : fixedPorts) {
+            if (!port.autocompleteGroup.isEmpty() && !groups.contains(port.autocompleteGroup)) {
+                groups.append(port.autocompleteGroup);
+            }
+        }
+        if (groups.isEmpty()) {
+            return hiddenPorts;
+        }
+
+        QVector<PortSemanticInfo> filtered;
+        for (const PortSemanticInfo& port : hiddenPorts) {
+            if (groups.contains(port.autocompleteGroup)) {
+                filtered.push_back(port);
+            }
+        }
+        return filtered.isEmpty() ? hiddenPorts : filtered;
+    };
+
+    const QVector<PortSemanticInfo> effectiveStartPorts =
+        request.start.fromNodeBody ? filterAutocompleteCandidates(endPorts, startPorts) : startPorts;
+    const QVector<PortSemanticInfo> effectiveEndPorts =
+        request.end.fromNodeBody ? filterAutocompleteCandidates(startPorts, endPorts) : endPorts;
+
     const auto tryAppendOption = [&](const PortSemanticInfo& source,
                                      const PortSemanticInfo& target,
                                      const ConnectionEndpointRequest& sourceEndpoint,
                                      const ConnectionEndpointRequest& targetEndpoint) {
-        if (!endpointAllowsAsSource(sourceEndpoint) || !endpointAllowsAsTarget(targetEndpoint)) {
-            if (rejectionReason) *rejectionReason = QStringLiteral("direction_mismatch");
-            if (rejectionMessage) *rejectionMessage = QStringLiteral("No direction-compatible connection option");
-            return;
-        }
-
-        if (!source.supportsOutput || !target.supportsInput) {
-            if (rejectionReason) *rejectionReason = QStringLiteral("direction_mismatch");
-            if (rejectionMessage) *rejectionMessage = QStringLiteral("No direction-compatible connection option");
-            return;
-        }
-
         if (connectionExists(m_graph, source.ref, target.ref)) {
+            if (rejectionLayer) *rejectionLayer = ConnectionRuleLayer::Structural;
             if (rejectionReason) *rejectionReason = QStringLiteral("duplicate_connection");
             if (rejectionMessage) *rejectionMessage = QStringLiteral("Connection already exists");
             return;
         }
 
-        if ((source.cardinality == QStringLiteral("one") &&
-             portOccupiedForCardinalityOne(m_graph, source.ref)) ||
-            (target.cardinality == QStringLiteral("one") &&
-             portOccupiedForCardinalityOne(m_graph, target.ref))) {
-            if (rejectionReason) *rejectionReason = QStringLiteral("port_occupied");
-            if (rejectionMessage) *rejectionMessage = QStringLiteral("Connection port is already occupied");
+        const CandidateEvaluation feature =
+            checkFeatureDeclarativeRules(m_graph, source, target, sourceEndpoint, targetEndpoint);
+        if (!feature.accepted) {
+            if (rejectionLayer) *rejectionLayer = feature.layer;
+            if (rejectionReason) *rejectionReason = feature.reasonCode;
+            if (rejectionMessage) *rejectionMessage = feature.message;
             return;
         }
 
-        if (!oppositeSideRulePasses(source, target)) {
-            if (rejectionReason) *rejectionReason = QStringLiteral("topology_rule_mismatch");
-            if (rejectionMessage) *rejectionMessage = QStringLiteral("Connection does not satisfy topology rule");
-            return;
-        }
-
-        if (!metadataCompatible(source, target, rejectionReason, rejectionMessage)) {
+        const CandidateEvaluation ipcore = checkIpcoreDeclarativeConstraints(source, target);
+        if (!ipcore.accepted) {
+            if (rejectionLayer) *rejectionLayer = ipcore.layer;
+            if (rejectionReason) *rejectionReason = ipcore.reasonCode;
+            if (rejectionMessage) *rejectionMessage = ipcore.message;
             return;
         }
 
@@ -351,9 +502,10 @@ QVector<ConnectionResolvedOption> ConnectionRuleService::buildOptions(
         });
     };
 
-    for (const PortSemanticInfo& start : startPorts) {
-        for (const PortSemanticInfo& end : endPorts) {
+    for (const PortSemanticInfo& start : effectiveStartPorts) {
+        for (const PortSemanticInfo& end : effectiveEndPorts) {
             if (start.ref.moduleId == end.ref.moduleId) {
+                if (rejectionLayer) *rejectionLayer = ConnectionRuleLayer::Structural;
                 if (rejectionReason) *rejectionReason = QStringLiteral("self_loop");
                 if (rejectionMessage) *rejectionMessage = QStringLiteral("Cannot connect a module to itself");
                 continue;
@@ -373,24 +525,25 @@ QVector<ConnectionResolvedOption> ConnectionRuleService::buildOptions(
 }
 
 ConnectionCheckResult ConnectionRuleService::check(const ConnectionRequest& request) const {
-    if (!m_graph) {
-        return reject(QStringLiteral("missing_graph"), QStringLiteral("Connection graph is not available"));
-    }
-    if (!m_graph->getModule(request.start.moduleId) || !m_graph->getModule(request.end.moduleId)) {
-        return reject(QStringLiteral("missing_module"), QStringLiteral("Connection references a missing module"));
+    if (const std::optional<ConnectionCheckResult> structuralFailure = checkStructuralRules(request)) {
+        return *structuralFailure;
     }
 
     const QVector<PortSemanticInfo> startPorts = resolveEndpointPorts(request.start);
     const QVector<PortSemanticInfo> endPorts = resolveEndpointPorts(request.end);
     if (startPorts.isEmpty() || endPorts.isEmpty()) {
-        return reject(QStringLiteral("missing_port"), QStringLiteral("Connection references a missing port"));
+        return reject(ConnectionRuleLayer::Structural,
+                      QStringLiteral("missing_port"),
+                      QStringLiteral("Connection references a missing port"));
     }
 
+    ConnectionRuleLayer layer = ConnectionRuleLayer::FeaturePlugin;
     QString reason;
     QString message;
-    QVector<ConnectionResolvedOption> options = buildOptions(startPorts, endPorts, request, &reason, &message);
+    QVector<ConnectionResolvedOption> options = buildOptions(startPorts, endPorts, request, &layer, &reason, &message);
     if (options.isEmpty()) {
-        return reject(reason.isEmpty() ? QStringLiteral("no_connection_option") : reason,
+        return reject(layer,
+                      reason.isEmpty() ? QStringLiteral("no_connection_option") : reason,
                       message.isEmpty() ? QStringLiteral("No legal connection option") : message);
     }
 
@@ -401,6 +554,7 @@ ConnectionCheckResult ConnectionRuleService::check(const ConnectionRequest& requ
     ConnectionCheckResult result;
     result.status = options.size() == 1 ? ConnectionCheckStatus::Allowed
                                         : ConnectionCheckStatus::NeedsSelection;
+    result.layer = ConnectionRuleLayer::Ipcore;
     result.options = std::move(options);
     return result;
 }

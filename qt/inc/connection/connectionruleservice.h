@@ -55,7 +55,7 @@ struct ConnectionRequest {
 struct PortSemanticInfo {
     PortRef ref;
     QString moduleType;
-    QString pluginId;
+    QString ipcoreId;
     QString graphGroup;
     QString editorLayout;
     QString portName;
@@ -77,6 +77,13 @@ struct PortSemanticInfo {
     bool visibleInUi = true;
 };
 
+enum class ConnectionRuleLayer {
+    Structural,
+    FeaturePlugin,
+    Ipcore,
+    FinalDrc
+};
+
 enum class ConnectionCheckStatus {
     Allowed,
     NeedsSelection,
@@ -92,6 +99,7 @@ struct ConnectionResolvedOption {
 
 struct ConnectionCheckResult {
     ConnectionCheckStatus status = ConnectionCheckStatus::Rejected;
+    ConnectionRuleLayer layer = ConnectionRuleLayer::Structural;
     QVector<ConnectionResolvedOption> options;
     QString reasonCode;
     QString message;
@@ -109,7 +117,8 @@ public:
     ConnectionCheckResult check(const ConnectionRequest& request) const;
 
 private:
-    ConnectionCheckResult reject(QString reasonCode, QString message) const;
+    ConnectionCheckResult reject(ConnectionRuleLayer layer, QString reasonCode, QString message) const;
+    std::optional<ConnectionCheckResult> checkStructuralRules(const ConnectionRequest& request) const;
     QVector<PortSemanticInfo> resolveEndpointPorts(const ConnectionEndpointRequest& endpoint) const;
     std::optional<PortSemanticInfo> resolvePort(const QString& moduleId,
                                                 const QString& portId,
@@ -117,6 +126,7 @@ private:
     QVector<ConnectionResolvedOption> buildOptions(const QVector<PortSemanticInfo>& startPorts,
                                                    const QVector<PortSemanticInfo>& endPorts,
                                                    const ConnectionRequest& request,
+                                                   ConnectionRuleLayer* rejectionLayer,
                                                    QString* rejectionReason,
                                                    QString* rejectionMessage) const;
 

@@ -240,6 +240,52 @@ void testInterfaceCompatibilityRejectsMismatchedConfiguredFields() {
             "data_width mismatch should report interface_field_mismatch");
 }
 
+void testGraphStructuralValidationIgnoresSemanticMetadata() {
+    ModuleType sourceType;
+    sourceType.name = QStringLiteral("StructuralOnlySource");
+    sourceType.pluginId = QStringLiteral("finepaper.structural");
+    ModuleInterfaceMetadata sourceInterface =
+        makeInterfaceMetadata(QStringLiteral("out"),
+                              QStringLiteral("semantic_a"),
+                              QStringLiteral("initiator"),
+                              {QStringLiteral("target")},
+                              {});
+    sourceType.interfaceMetadata.insert(sourceInterface.id, sourceInterface);
+    ModuleRegistry::instance().registerType(sourceType);
+
+    ModuleType targetType;
+    targetType.name = QStringLiteral("StructuralOnlyTarget");
+    targetType.pluginId = QStringLiteral("finepaper.structural");
+    ModuleInterfaceMetadata targetInterface =
+        makeInterfaceMetadata(QStringLiteral("in"),
+                              QStringLiteral("semantic_b"),
+                              QStringLiteral("target"),
+                              {QStringLiteral("initiator")},
+                              {});
+    targetType.interfaceMetadata.insert(targetInterface.id, targetInterface);
+    ModuleRegistry::instance().registerType(targetType);
+
+    Graph graph;
+    require(graph.addModule(makeModule(
+        QStringLiteral("source"),
+        sourceType.name,
+        {Port(QStringLiteral("out"), Port::Direction::Output, QStringLiteral("bus"),
+              QStringLiteral("Out"), {}, QStringLiteral("source"),
+              QStringLiteral("semantic_a"), QStringLiteral("out"))})),
+        "failed to add structural source");
+    require(graph.addModule(makeModule(
+        QStringLiteral("target"),
+        targetType.name,
+        {Port(QStringLiteral("in"), Port::Direction::Input, QStringLiteral("bus"),
+              QStringLiteral("In"), {}, QStringLiteral("target"),
+              QStringLiteral("semantic_b"), QStringLiteral("in"))})),
+        "failed to add structural target");
+
+    require(graph.isValidConnection(PortRef{QStringLiteral("source"), QStringLiteral("out")},
+                                    PortRef{QStringLiteral("target"), QStringLiteral("in")}),
+            "Graph structural validation should not reject semantic bus/role mismatches");
+}
+
 void testInterfaceCompatibilityAcceptsMatchingConfiguredFields() {
     ModuleType endpointType;
     endpointType.name = "IfaceEndpointOk";
@@ -670,6 +716,7 @@ int main(int argc, char** argv) {
         testAddConnectionCommandRedoBuildsFreshRuleService();
         testInoutPortsCannotBeReusedAcrossConnectionSides();
         testInterfaceCompatibilityRejectsMismatchedConfiguredFields();
+        testGraphStructuralValidationIgnoresSemanticMetadata();
         testInterfaceCompatibilityAcceptsMatchingConfiguredFields();
         testRouterLinksRequireOppositeSides();
         testRemovingModuleAlsoRemovesAttachedConnections();

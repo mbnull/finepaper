@@ -45,7 +45,8 @@ public:
     std::unique_ptr<Connection> takeConnection(const QString& connectionId);
     // Inserts a pre-built connection (used by undo/redo).
     void insertConnection(std::unique_ptr<Connection> connection);
-    // Validates structural integrity: endpoints exist, no self-loop, no exact duplicate.
+    // Validates structural integrity only: endpoints exist, no self-loop, no exact duplicate.
+    // Semantic/editor rules live in ConnectionRuleService.
     bool isValidConnection(const PortRef& source, const PortRef& target) const;
 
     const std::vector<std::unique_ptr<Module>>& modules() const { return m_modules; }
