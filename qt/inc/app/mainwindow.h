@@ -1,5 +1,5 @@
 // MainWindow — top-level application window for the SoC/NoC node editor.
-// Owns the Graph, CommandManager, and all major UI panels (palette, node editor,
+// Owns the Graph, CommandManager, and all major UI panels (catalog, node editor,
 // property panel, log panel, validation manager). Wires them together and
 // provides load/save entry points.
 #ifndef MAINWINDOW_H
@@ -15,15 +15,15 @@ class CommandManager;
 class IPluginProjectAdapter;
 class NodeEditorWidget;
 class PropertyPanel;
+class IpCatalogPanel;
 class IpCatalogService;
 class ProjectIpService;
 class ProjectStateService;
-class Palette;
+class ActiveWorkspaceController;
 class LogPanel;
 class ValidationManager;
 class QAction;
 class QCloseEvent;
-class QComboBox;
 class QDockWidget;
 class QMenu;
 class QWidget;
@@ -54,7 +54,6 @@ private slots:
     // Executes one undo/redo step in the command history.
     void undo();
     void redo();
-    void activeIpChanged(int index);
     void createTopologyPreset();
 
   private:
@@ -74,7 +73,6 @@ private slots:
     void appendStartupLog() const;
     void scheduleStartupLayoutLog();
     void logStartupLayout() const;
-    void populateActiveIpSelector();
     void setActivePluginId(const QString& pluginId);
     void ensureProjectStateRecordFromActivePlugin();
     void rebuildTopologyMenu();
@@ -95,13 +93,14 @@ private slots:
     std::unique_ptr<IpCatalogService> m_ipCatalogService;
     std::unique_ptr<ProjectStateService> m_projectStateService;
     std::unique_ptr<ProjectIpService> m_projectIpService;
+    std::unique_ptr<ActiveWorkspaceController> m_activeWorkspaceController;
     std::vector<std::unique_ptr<IPluginProjectAdapter>> m_pluginProjectAdapters;
     NodeEditorWidget* m_nodeEditor;
     PropertyPanel* m_propertyPanel;
-    Palette* m_palette;
+    IpCatalogPanel* m_ipCatalogPanel;
     LogPanel* m_logPanel;
     ValidationManager* m_validationManager;
-    QDockWidget* m_paletteDock;
+    QDockWidget* m_ipCatalogDock;
     QDockWidget* m_propertyDock;
     QDockWidget* m_logDock;
     QAction* m_newAction;
@@ -113,7 +112,6 @@ private slots:
     QAction* m_generateAction;
     QAction* m_validateAction;
     QAction* m_arrangeAction;
-    QComboBox* m_activeIpCombo;
     QMenu* m_topologyMenu;
     QString m_activePluginId;
     QString m_currentDocumentPath;

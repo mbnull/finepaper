@@ -1,15 +1,12 @@
-// Palette lists available module types and starts drag payloads for node creation.
+// Legacy palette lists available module types and starts drag payloads for node creation.
 #include "panels/palette.h"
 #include "modules/moduleregistry.h"
 #include "modules/moduletypemetadata.h"
-#include "commands/addmodulecommand.h"
-#include "graph/module.h"
 #include <QVBoxLayout>
 #include <QLabel>
 #include <QDrag>
 #include <QMimeData>
 #include <QMouseEvent>
-#include <memory>
 
 // Custom list widget that supports drag-and-drop of module types
 class DraggableListWidget : public QListWidget {
@@ -44,8 +41,8 @@ private:
     QPoint m_dragStartPos;
 };
 
-Palette::Palette(Graph* graph, CommandManager* commandManager, QWidget* parent)
-    : QWidget(parent), m_graph(graph), m_commandManager(commandManager) {
+Palette::Palette(QWidget* parent)
+    : QWidget(parent) {
     setupUI();
     populateModuleTypes();
 }

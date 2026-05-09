@@ -1,5 +1,5 @@
 // MainWindow — constructs and connects all top-level UI components.
-// Layout: horizontal splitter (palette | node editor | property panel)
+// Layout: horizontal splitter (IP catalog | node editor | property panel)
 // inside a vertical splitter with the log panel below.
 #include "app/mainwindow.h"
 #include "app/generationartifacts.h"
@@ -7,8 +7,8 @@
 #include "commands/commandmanager.h"
 #include "ipcore/ipcatalogservice.h"
 #include "nodeeditor/nodeeditorwidget.h"
+#include "panels/ipcatalogpanel.h"
 #include "panels/propertypanel.h"
-#include "panels/palette.h"
 #include "panels/logpanel.h"
 #include "plugins/generatorrunner.h"
 #include "plugins/pluginprojectadapter.h"
@@ -21,13 +21,13 @@
 #include "project/projectwriter.h"
 #include "topology/topologypresetbuilder.h"
 #include "validation/validationmanager.h"
+#include "workspace/activeworkspacecontroller.h"
 #include "modules/moduleregistry.h"
 #include <algorithm>
 #include <QAction>
 #include <QApplication>
 #include <QCloseEvent>
 #include <QColor>
-#include <QComboBox>
 #include <QDebug>
 #include <QDir>
 #include <QDockWidget>
@@ -109,12 +109,15 @@ MainWindow::MainWindow(QWidget *parent)
       m_ipCatalogService(std::make_unique<IpCatalogService>(IpCatalogService::fromRuntimeRegistries())),
       m_projectStateService(std::make_unique<ProjectStateService>()),
       m_projectIpService(std::make_unique<ProjectIpService>(m_projectStateService.get())),
+      m_activeWorkspaceController(std::make_unique<ActiveWorkspaceController>(
+          m_projectIpService.get(),
+          m_ipCatalogService.get())),
       m_nodeEditor(nullptr),
       m_propertyPanel(nullptr),
-      m_palette(nullptr),
+      m_ipCatalogPanel(nullptr),
       m_logPanel(nullptr),
       m_validationManager(nullptr),
-      m_paletteDock(nullptr),
+      m_ipCatalogDock(nullptr),
       m_propertyDock(nullptr),
       m_logDock(nullptr),
       m_newAction(nullptr),
@@ -126,7 +129,6 @@ MainWindow::MainWindow(QWidget *parent)
       m_generateAction(nullptr),
       m_validateAction(nullptr),
       m_arrangeAction(nullptr),
-      m_activeIpCombo(nullptr),
       m_topologyMenu(nullptr) {
     // Build the window in dependency order: widgets first, then signal wiring,
     // then actions/menus that depend on those widgets.
@@ -362,35 +364,6 @@ void MainWindow::redo() {
     syncDocumentStateFromHistory();
 }
 
-void MainWindow::activeIpChanged(int index) {
-    if (!m_activeIpCombo || index < 0) {
-        return;
-    }
-
-    const QString nextPluginId = m_activeIpCombo->itemData(index).toString();
-    if (nextPluginId == m_activePluginId) {
-        return;
-    }
-
-    if (!m_graph->modules().empty()) {
-        // Plugin choice determines module metadata, generator command, and IP
-        // instance parameters. Mixing an existing graph into a new plugin would
-        // silently invalidate those cross-layer assumptions.
-        QMessageBox::warning(this,
-                             "Active IP",
-                             "Start a new empty design before switching the active IP package.");
-        const int previousIndex = m_activeIpCombo->findData(m_activePluginId);
-        if (previousIndex >= 0) {
-            m_activeIpCombo->blockSignals(true);
-            m_activeIpCombo->setCurrentIndex(previousIndex);
-            m_activeIpCombo->blockSignals(false);
-        }
-        return;
-    }
-
-    setActivePluginId(nextPluginId);
-}
-
 void MainWindow::createTopologyPreset() {
     auto* action = qobject_cast<QAction*>(sender());
     const PluginDescriptor* plugin = PluginRegistry::instance().plugin(m_activePluginId);
@@ -478,7 +451,11 @@ void MainWindow::setupPanels() {
                                         pluginProjectAdapters,
                                         m_commandManager.get(),
                                         this);
-    m_palette = new Palette(m_graph, m_commandManager.get(), this);
+    m_ipCatalogPanel = new IpCatalogPanel(m_ipCatalogService.get(),
+                                          m_projectStateService.get(),
+                                          m_projectIpService.get(),
+                                          m_activeWorkspaceController.get(),
+                                          this);
     m_logPanel = new LogPanel(this);
     m_validationManager = new ValidationManager(m_graph,
                                                 m_projectStateService.get(),
@@ -487,7 +464,6 @@ void MainWindow::setupPanels() {
 
     m_nodeEditor->setObjectName("nodeEditorPanel");
     m_propertyPanel->setObjectName("propertyPanel");
-    m_palette->setObjectName("palettePanel");
     m_logPanel->setObjectName("logPanel");
 }
 
@@ -526,6 +502,29 @@ void MainWindow::setupConnections() {
             this,
             [trackGraphChange]() {
                 trackGraphChange();
+            });
+    connect(m_ipCatalogPanel,
+            &IpCatalogPanel::addIpcoreRequested,
+            this,
+            [this](const QString& ipcoreId) {
+                const std::optional<IpCatalogEntry> entry = m_ipCatalogService->entry(ipcoreId);
+                if (!entry.has_value()) {
+                    return;
+                }
+                const ProjectIpServiceResult result = m_projectIpService->ensureInstanceForIpcore(*entry);
+                if (!result.success) {
+                    QMessageBox::warning(this, "IP Catalog", result.error);
+                    return;
+                }
+                setActivePluginId(ipcoreId);
+            });
+    connect(m_ipCatalogPanel,
+            &IpCatalogPanel::selectIpInstanceRequested,
+            this,
+            [this](const QString& ipcoreId, const QString& instanceId) {
+                if (m_projectIpService->selectInstance(ipcoreId, instanceId)) {
+                    setActivePluginId(ipcoreId);
+                }
             });
 }
 
@@ -590,9 +589,6 @@ void MainWindow::setupActions() {
     m_arrangeAction->setCheckable(true);
     m_arrangeAction->setToolTip("Arrange the graph once into a mesh-style layout.");
     connect(m_arrangeAction, &QAction::toggled, m_nodeEditor, &NodeEditorWidget::setArrangeEnabled);
-    connect(m_arrangeAction, &QAction::toggled, m_palette, [this](bool enabled) {
-        m_palette->setEnabled(!enabled);
-    });
     connect(m_arrangeAction, &QAction::toggled, this, [this](bool enabled) {
         if (!enabled || !m_arrangeAction) {
             return;
@@ -636,23 +632,12 @@ void MainWindow::setupActions() {
     mainToolBar->addAction(m_validateAction);
     mainToolBar->addAction(m_arrangeAction);
 
-    m_activeIpCombo = new QComboBox(this);
-    m_activeIpCombo->setObjectName(QStringLiteral("activeIpCombo"));
-    m_activeIpCombo->setMinimumWidth(180);
-    mainToolBar->addWidget(m_activeIpCombo);
-    connect(m_activeIpCombo,
-            QOverload<int>::of(&QComboBox::currentIndexChanged),
-            this,
-            &MainWindow::activeIpChanged);
-
     m_topologyMenu = new QMenu("Topology", this);
     auto* topologyButton = new QToolButton(this);
     topologyButton->setText("Topology");
     topologyButton->setPopupMode(QToolButton::InstantPopup);
     topologyButton->setMenu(m_topologyMenu);
     mainToolBar->addWidget(topologyButton);
-
-    populateActiveIpSelector();
 }
 
 QWidget* MainWindow::createCentralContent() {
@@ -676,13 +661,13 @@ void MainWindow::setupDocks() {
     setDockNestingEnabled(true);
     setTabPosition(Qt::AllDockWidgetAreas, QTabWidget::North);
 
-    m_paletteDock = createDock("Palette", m_palette, Qt::LeftDockWidgetArea, "paletteDock");
+    m_ipCatalogDock = createDock("IP Catalog", m_ipCatalogPanel, Qt::LeftDockWidgetArea, "ipCatalogDock");
     m_propertyDock = createDock("Properties", m_propertyPanel, Qt::RightDockWidgetArea, "propertyDock");
     m_logDock = createDock("Activity Log", m_logPanel, Qt::BottomDockWidgetArea, "logDock");
 
     setCorner(Qt::BottomLeftCorner, Qt::LeftDockWidgetArea);
     setCorner(Qt::BottomRightCorner, Qt::RightDockWidgetArea);
-    resizeDocks({m_paletteDock, m_propertyDock}, {260, 320}, Qt::Horizontal);
+    resizeDocks({m_ipCatalogDock, m_propertyDock}, {280, 320}, Qt::Horizontal);
     resizeDocks({m_logDock}, {180}, Qt::Vertical);
 
     // Register dock toggle actions under View so users can restore hidden panels.
@@ -694,7 +679,7 @@ void MainWindow::setupDocks() {
         }
     }
     if (viewMenu) {
-        viewMenu->addAction(m_paletteDock->toggleViewAction());
+        viewMenu->addAction(m_ipCatalogDock->toggleViewAction());
         viewMenu->addAction(m_propertyDock->toggleViewAction());
         viewMenu->addAction(m_logDock->toggleViewAction());
     }
@@ -747,9 +732,9 @@ void MainWindow::logStartupLayout() const {
             << "visible" << isVisible();
     qInfo() << "Central widget" << (central ? central->geometry() : QRect())
             << "editor" << (m_nodeEditor ? m_nodeEditor->geometry() : QRect());
-    qInfo() << "Palette dock" << (m_paletteDock ? m_paletteDock->geometry() : QRect())
-            << "floating" << (m_paletteDock ? m_paletteDock->isFloating() : false)
-            << "visible" << (m_paletteDock ? m_paletteDock->isVisible() : false);
+    qInfo() << "IP catalog dock" << (m_ipCatalogDock ? m_ipCatalogDock->geometry() : QRect())
+            << "floating" << (m_ipCatalogDock ? m_ipCatalogDock->isFloating() : false)
+            << "visible" << (m_ipCatalogDock ? m_ipCatalogDock->isVisible() : false);
     qInfo() << "Property dock" << (m_propertyDock ? m_propertyDock->geometry() : QRect())
             << "floating" << (m_propertyDock ? m_propertyDock->isFloating() : false)
             << "visible" << (m_propertyDock ? m_propertyDock->isVisible() : false);
@@ -759,39 +744,12 @@ void MainWindow::logStartupLayout() const {
 #endif
 }
 
-void MainWindow::populateActiveIpSelector() {
-    if (!m_activeIpCombo) {
-        return;
-    }
-
-    // Only IP cores with loaded module definitions are useful in the active-IP
-    // selector; generator-only manifests stay discoverable through diagnostics.
-    m_activeIpCombo->blockSignals(true);
-    m_activeIpCombo->clear();
-
-    for (const IpCatalogEntry& entry : m_ipCatalogService->selectableEntries()) {
-        const QString label = entry.name.isEmpty() ? entry.id : entry.name;
-        m_activeIpCombo->addItem(label, entry.id);
-    }
-
-    m_activeIpCombo->blockSignals(false);
-    if (m_activeIpCombo->count() > 0) {
-        m_suppressDocumentTracking = true;
-        setActivePluginId(m_activeIpCombo->itemData(0).toString());
-        m_suppressDocumentTracking = false;
-        m_activeIpCombo->setCurrentIndex(0);
-    }
-}
-
 void MainWindow::setActivePluginId(const QString& pluginId) {
     if (m_activePluginId == pluginId) {
         return;
     }
 
     m_activePluginId = pluginId;
-    if (m_palette) {
-        m_palette->setActivePluginId(pluginId);
-    }
     ensureProjectStateRecordFromActivePlugin();
     rebuildTopologyMenu();
 }
