@@ -17,6 +17,8 @@ public:
 
     QString id() const { return m_id; }
     QString type() const { return m_type; }
+    QString ipcoreId() const { return m_ipcoreId; }
+    void setIpcoreId(const QString& ipcoreId);
 
     const std::vector<Port>& ports() const { return m_ports; }
     void addPort(const Port& port);
@@ -33,6 +35,7 @@ signals:
 private:
     QString m_id;
     QString m_type;
+    QString m_ipcoreId;
     std::vector<Port> m_ports;
     QHash<QString, Parameter> m_parameters;
 };

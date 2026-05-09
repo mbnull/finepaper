@@ -60,13 +60,17 @@ QString generateEntityId() {
     return QUuid::createUuid().toString(QUuid::WithoutBraces).replace('-', '_');
 }
 
-std::unique_ptr<Module> createModule(Graph* graph, const QString& moduleId, const QString& moduleType) {
+std::unique_ptr<Module> createModule(Graph* graph,
+                                     const QString& moduleId,
+                                     const QString& moduleType,
+                                     const QString& ipcoreId) {
     const ModuleType* type = ModuleRegistry::instance().getType(moduleType);
-    if (!type) {
+    if (!type || ipcoreId.trimmed().isEmpty() || type->pluginId != ipcoreId) {
         return {};
     }
 
     auto module = std::make_unique<Module>(moduleId, moduleType);
+    module->setIpcoreId(ipcoreId);
     for (const auto& port : type->defaultPorts) {
         module->addPort(port);
     }

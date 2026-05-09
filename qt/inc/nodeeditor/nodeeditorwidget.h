@@ -12,18 +12,22 @@
 #include <QRectF>
 #include <QPointF>
 #include <QSize>
+#include <QStringList>
 #include <functional>
 #include <memory>
+#include <optional>
 #include "connection/connectionruleservice.h"
 #include "graph/graph.h"
 #include "commands/commandmanager.h"
 
+class ActiveWorkspaceController;
 class AnimatedGraphicsView;
 class QDragEnterEvent;
 class QDragMoveEvent;
 class QDragLeaveEvent;
 class QDropEvent;
 class QContextMenuEvent;
+class QMimeData;
 class QMouseEvent;
 class EditorGraphModel;
 class GraphNodeModel;
@@ -38,11 +42,13 @@ public:
     // Constructs the visual editor and binds it to Graph/CommandManager.
     NodeEditorWidget(Graph* graph,
                      ProjectStateService* projectStateService,
+                     ActiveWorkspaceController* workspaceController,
                      CommandManager* commandManager,
                      QWidget* parent = nullptr);
     ~NodeEditorWidget() override;
     // Returns whether auto-arrange behavior is currently enabled in the view.
     bool isArrangeEnabled() const;
+    QStringList availableCreateModuleTypes() const;
 
 public slots:
     // Highlights a module/connection in the scene when selected from external UI (for example log panel).
@@ -94,6 +100,12 @@ private:
         Parameter::Value oldHeight;
     };
 
+    struct ScopedModulePayload {
+        QString ipcoreId;
+        QString instanceId;
+        QString moduleType;
+    };
+
     void ensureModuleInView(Module* module);
     void removeModuleFromView(const QString& moduleId);
     bool ensureConnectionInView(Connection* connection);
@@ -131,7 +143,10 @@ private:
     bool handleViewportContextMenu(QContextMenuEvent* event);
     bool showNodeContextMenu(const QPoint& viewportPos, const QPoint& globalPos);
     bool showCanvasCreateMenu(const QPoint& viewportPos, const QPoint& globalPos);
-    bool createModuleAt(const QString& moduleType, const QPointF& scenePos);
+    std::optional<ScopedModulePayload> scopedModulePayload(const QMimeData* mimeData) const;
+    bool acceptsScopedModulePayload(const ScopedModulePayload& payload) const;
+    bool createModuleAt(const ScopedModulePayload& payload, const QPointF& scenePos);
+    QString activeIpcoreId() const;
     QPointF clampNodePosition(QtNodes::NodeId nodeId, const QPointF& position) const;
     QSize minimumNodeSize(QtNodes::NodeId nodeId) const;
     bool tryBeginNodeResize(const QPoint& viewportPos);
@@ -145,6 +160,7 @@ private:
 
     Graph* m_graph;
     ProjectStateService* m_projectStateService;
+    ActiveWorkspaceController* m_workspaceController;
     CommandManager* m_commandManager;
     std::unique_ptr<ConnectionRuleService> m_connectionRuleService;
     std::shared_ptr<QtNodes::NodeDelegateModelRegistry> m_registry;

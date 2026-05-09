@@ -3,19 +3,28 @@
 #include "graph/graph.h"
 #include "graph/module.h"
 #include "graph/port.h"
+#include "ipcore/ipcatalogservice.h"
 #include "modules/moduleregistry.h"
 #include "nodeeditor/endpointattachmentlayout.h"
 #include "nodeeditor/graphnodegeometry.h"
 #include "nodeeditor/graphnodemodel.h"
 #include "nodeeditor/nodeeditorwidget.h"
+#include "project/projectipservice.h"
 #include "project/projectstateservice.h"
+#include "workspace/activeworkspacecontroller.h"
 
 #include <QtNodes/DataFlowGraphModel>
 #include <QtNodes/NodeDelegateModelRegistry>
 #include <QApplication>
+#include <QDragEnterEvent>
+#include <QDropEvent>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QMimeData>
 #include <QPointF>
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 
 namespace {
@@ -24,6 +33,113 @@ void require(bool condition, const char* message) {
     if (!condition) {
         throw std::runtime_error(message);
     }
+}
+
+constexpr auto ScopedModuleMime = "application/x-finepaper-module";
+
+PluginDescriptor nodeEditorRavenocDescriptor() {
+    PluginDescriptor descriptor;
+    descriptor.id = QStringLiteral("finepaper.ravenoc");
+    descriptor.name = QStringLiteral("RaveNoC");
+    descriptor.version = QStringLiteral("1.0");
+    descriptor.kind = QStringLiteral("noc");
+    return descriptor;
+}
+
+PluginDescriptor nodeEditorFabricDescriptor() {
+    PluginDescriptor descriptor;
+    descriptor.id = QStringLiteral("finepaper.fabric");
+    descriptor.name = QStringLiteral("Fabric");
+    descriptor.version = QStringLiteral("1.0");
+    descriptor.kind = QStringLiteral("fabric");
+    return descriptor;
+}
+
+ModuleType scopedEditorType(const QString& name, const QString& ipcoreId) {
+    ModuleType type;
+    type.name = name;
+    type.pluginId = ipcoreId;
+    type.paletteLabel = name;
+    type.defaultParameters.insert(QStringLiteral("x"), Parameter(QStringLiteral("x"), 0));
+    type.defaultParameters.insert(QStringLiteral("y"), Parameter(QStringLiteral("y"), 0));
+    type.defaultPorts.push_back(Port(QStringLiteral("out"),
+                                     Port::Direction::Output,
+                                     QStringLiteral("bus"),
+                                     QStringLiteral("Out")));
+    return type;
+}
+
+struct ScopedNodeEditorHarness {
+    Graph graph;
+    CommandManager commandManager;
+    ModuleRegistry registry{ModuleRegistry::LoadMode::Empty};
+    PluginDescriptor ravenoc = nodeEditorRavenocDescriptor();
+    PluginDescriptor fabric = nodeEditorFabricDescriptor();
+    IpCatalogService catalog;
+    ProjectStateService stateService;
+    ProjectIpService projectIpService;
+    ActiveWorkspaceController workspaceController;
+    NodeEditorWidget editor;
+
+    ScopedNodeEditorHarness()
+        : catalog(QList<PluginDescriptor>{ravenoc, fabric}, &registry),
+          projectIpService(&stateService),
+          workspaceController(&projectIpService, &catalog),
+          editor(&graph, &stateService, &workspaceController, &commandManager) {
+        require(registry.registerType(scopedEditorType(QStringLiteral("RaveTile"),
+                                                       QStringLiteral("finepaper.ravenoc"))),
+                "RaveTile test type should register");
+        require(registry.registerType(scopedEditorType(QStringLiteral("FabricSwitch"),
+                                                       QStringLiteral("finepaper.fabric"))),
+                "FabricSwitch test type should register");
+        catalog = IpCatalogService(QList<PluginDescriptor>{ravenoc, fabric}, &registry);
+        editor.resize(320, 240);
+        editor.show();
+        QCoreApplication::processEvents();
+    }
+
+    IpCatalogEntry ravenocEntry() const {
+        const std::optional<IpCatalogEntry> entry = catalog.entry(QStringLiteral("finepaper.ravenoc"));
+        require(entry.has_value(), "RaveNoC entry should exist");
+        return *entry;
+    }
+
+    void selectRavenoc() {
+        const ProjectIpServiceResult result = projectIpService.ensureInstanceForIpcore(ravenocEntry());
+        require(result.success, "RaveNoC instance should be selected");
+        QCoreApplication::processEvents();
+    }
+};
+
+std::unique_ptr<QMimeData> scopedModuleMime(const QString& ipcoreId,
+                                            const QString& instanceId,
+                                            const QString& moduleType) {
+    QJsonObject object;
+    object.insert(QStringLiteral("ipcore"), ipcoreId);
+    object.insert(QStringLiteral("instance"), instanceId);
+    object.insert(QStringLiteral("type"), moduleType);
+    auto mimeData = std::make_unique<QMimeData>();
+    mimeData->setData(ScopedModuleMime,
+                      QJsonDocument(object).toJson(QJsonDocument::Compact));
+    return mimeData;
+}
+
+bool sendScopedDrop(NodeEditorWidget& editor, QMimeData* mimeData) {
+    QDragEnterEvent enter(QPoint(16, 16),
+                          Qt::CopyAction,
+                          mimeData,
+                          Qt::LeftButton,
+                          Qt::NoModifier);
+    QCoreApplication::sendEvent(&editor, &enter);
+
+    QDropEvent drop(QPointF(48, 64),
+                    Qt::CopyAction,
+                    mimeData,
+                    Qt::LeftButton,
+                    Qt::NoModifier);
+    QCoreApplication::sendEvent(&editor, &drop);
+    QCoreApplication::processEvents();
+    return drop.isAccepted();
 }
 
 void registerScaledAnchorType() {
@@ -309,11 +425,88 @@ void testStoredNodeSizeOverridesDefaultAndProvidesResizeHandle() {
 void testNodeEditorWidgetOwnsConnectionRuleServiceInputs() {
     Graph graph;
     ProjectStateService stateService;
+    ProjectIpService projectIpService(&stateService);
+    IpCatalogService catalog({}, &ModuleRegistry::instance());
+    ActiveWorkspaceController workspaceController(&projectIpService, &catalog);
     CommandManager commandManager;
-    NodeEditorWidget widget(&graph, &stateService, &commandManager);
+    NodeEditorWidget widget(&graph, &stateService, &workspaceController, &commandManager);
 
     require(!widget.isArrangeEnabled(),
             "widget should construct with project state service dependency");
+}
+
+void testScopedDropRejectsMissingActiveInstance() {
+    ScopedNodeEditorHarness harness;
+    auto mimeData = scopedModuleMime(QStringLiteral("finepaper.ravenoc"),
+                                     QStringLiteral("ravenoc_0"),
+                                     QStringLiteral("RaveTile"));
+
+    const bool accepted = sendScopedDrop(harness.editor, mimeData.get());
+
+    require(!accepted, "drop without selected active IP instance should be rejected");
+    require(harness.graph.modules().empty(),
+            "drop without selected active IP instance should not create a module");
+}
+
+void testScopedDropRejectsDifferentIpcore() {
+    ScopedNodeEditorHarness harness;
+    harness.selectRavenoc();
+    auto mimeData = scopedModuleMime(QStringLiteral("finepaper.fabric"),
+                                     QStringLiteral("fabric_0"),
+                                     QStringLiteral("FabricSwitch"));
+
+    const bool accepted = sendScopedDrop(harness.editor, mimeData.get());
+
+    require(!accepted, "drop for a different IP core should be rejected");
+    require(harness.graph.modules().empty(),
+            "drop for a different IP core should not create a module");
+}
+
+void testScopedDropRejectsLegacyModuleTypeMime() {
+    ScopedNodeEditorHarness harness;
+    harness.selectRavenoc();
+    auto mimeData = std::make_unique<QMimeData>();
+    const QString legacyMime = QStringLiteral("application/x-") + QStringLiteral("moduletype");
+    mimeData->setData(legacyMime, QByteArray("RaveTile"));
+
+    const bool accepted = sendScopedDrop(harness.editor, mimeData.get());
+
+    require(!accepted, "legacy module MIME should be rejected");
+    require(harness.graph.modules().empty(),
+            "legacy module MIME should not create a module");
+}
+
+void testScopedDropCreatesOwnedModule() {
+    ScopedNodeEditorHarness harness;
+    harness.selectRavenoc();
+    auto mimeData = scopedModuleMime(QStringLiteral("finepaper.ravenoc"),
+                                     QStringLiteral("ravenoc_0"),
+                                     QStringLiteral("RaveTile"));
+
+    const bool accepted = sendScopedDrop(harness.editor, mimeData.get());
+
+    require(accepted, "matching scoped module drop should be accepted");
+    require(harness.graph.modules().size() == 1, "matching scoped drop should create one module");
+    const Module* module = harness.graph.modules().front().get();
+    require(module->type() == QStringLiteral("RaveTile"),
+            "created module should use payload module type");
+    require(module->ipcoreId() == QStringLiteral("finepaper.ravenoc"),
+            "created module should keep active IP-core ownership");
+    require(harness.commandManager.canUndo(),
+            "scoped module creation should enter command history");
+}
+
+void testCreateMenuTypesFollowActiveWorkspace() {
+    ScopedNodeEditorHarness harness;
+    require(harness.editor.availableCreateModuleTypes().isEmpty(),
+            "create menu should be empty without active workspace");
+
+    harness.selectRavenoc();
+
+    const QStringList moduleTypes = harness.editor.availableCreateModuleTypes();
+    require(moduleTypes.size() == 1, "create menu should list active workspace modules only");
+    require(moduleTypes.first() == QStringLiteral("RaveTile"),
+            "create menu should list RaveNoC module type");
 }
 
 } // namespace
@@ -332,6 +525,11 @@ int main(int argc, char** argv) {
         testEndpointInterfaceFollowsRelativeNodePosition();
         testStoredNodeSizeOverridesDefaultAndProvidesResizeHandle();
         testNodeEditorWidgetOwnsConnectionRuleServiceInputs();
+        testScopedDropRejectsMissingActiveInstance();
+        testScopedDropRejectsDifferentIpcore();
+        testScopedDropRejectsLegacyModuleTypeMime();
+        testScopedDropCreatesOwnedModule();
+        testCreateMenuTypesFollowActiveWorkspace();
     } catch (const std::exception& error) {
         std::cerr << "nodeeditor_geometry_test failed: " << error.what() << '\n';
         return 1;

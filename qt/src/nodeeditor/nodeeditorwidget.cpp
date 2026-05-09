@@ -18,6 +18,7 @@
 #include "common/portlayout.h"
 #include "nodeeditor/straightconnectionpainter.h"
 #include "project/projectstateservice.h"
+#include "workspace/activeworkspacecontroller.h"
 #include "commands/arrangecommand.h"
 #include "commands/addmodulecommand.h"
 #include "commands/addconnectioncommand.h"
@@ -196,11 +197,13 @@ std::optional<DraftConnectionStart> resolveDraftConnectionStart(const QtNodes::C
 
 NodeEditorWidget::NodeEditorWidget(Graph* graph,
                                    ProjectStateService* projectStateService,
+                                   ActiveWorkspaceController* workspaceController,
                                    CommandManager* commandManager,
                                    QWidget* parent)
     : QWidget(parent),
       m_graph(graph),
       m_projectStateService(projectStateService),
+      m_workspaceController(workspaceController),
       m_commandManager(commandManager),
       m_canvasRect(kCanvasRect) {
     refreshConnectionRuleService();
@@ -259,6 +262,37 @@ NodeEditorWidget::~NodeEditorWidget() {
 
 bool NodeEditorWidget::isArrangeEnabled() const {
     return m_graphModel->isEditingLocked();
+}
+
+QString NodeEditorWidget::activeIpcoreId() const {
+    if (!m_workspaceController || !m_workspaceController->state().hasActiveIp) {
+        return {};
+    }
+    return m_workspaceController->state().ipcoreId;
+}
+
+QStringList NodeEditorWidget::availableCreateModuleTypes() const {
+    if (!m_workspaceController || !m_workspaceController->state().hasActiveIp) {
+        return {};
+    }
+    return m_workspaceController->state().moduleTypes;
+}
+
+bool NodeEditorWidget::acceptsScopedModulePayload(const ScopedModulePayload& payload) const {
+    if (!m_workspaceController) {
+        return false;
+    }
+
+    const ActiveWorkspaceState& state = m_workspaceController->state();
+    if (!state.hasActiveIp ||
+        payload.ipcoreId != state.ipcoreId ||
+        payload.instanceId != state.instanceId ||
+        !state.moduleTypes.contains(payload.moduleType)) {
+        return false;
+    }
+
+    const ModuleType* type = ModuleRegistry::instance().getType(payload.moduleType);
+    return type && type->pluginId == state.ipcoreId;
 }
 
 void NodeEditorWidget::setArrangeEnabled(bool enabled) {
@@ -862,7 +896,7 @@ bool NodeEditorWidget::showCanvasCreateMenu(const QPoint& viewportPos, const QPo
         return true;
     }
 
-    const QStringList moduleTypes = ModuleRegistry::instance().availableTypes();
+    const QStringList moduleTypes = availableCreateModuleTypes();
     if (moduleTypes.isEmpty()) {
         return true;
     }
@@ -883,35 +917,40 @@ bool NodeEditorWidget::showCanvasCreateMenu(const QPoint& viewportPos, const QPo
         return true;
     }
 
-    return createModuleAt(selectedAction->data().toString(), m_view->mapToScene(viewportPos));
+    ScopedModulePayload payload;
+    payload.ipcoreId = m_workspaceController->state().ipcoreId;
+    payload.instanceId = m_workspaceController->state().instanceId;
+    payload.moduleType = selectedAction->data().toString();
+    return createModuleAt(payload, m_view->mapToScene(viewportPos));
 }
 
-bool NodeEditorWidget::createModuleAt(const QString& moduleType, const QPointF& scenePos) {
+bool NodeEditorWidget::createModuleAt(const ScopedModulePayload& payload, const QPointF& scenePos) {
+    if (!acceptsScopedModulePayload(payload)) {
+        return false;
+    }
+
     const QString moduleId = NodeEditorEntityFactory::generateEntityId();
-    auto module = NodeEditorEntityFactory::createModule(m_graph, moduleId, moduleType);
+    auto module = NodeEditorEntityFactory::createModule(m_graph,
+                                                        moduleId,
+                                                        payload.moduleType,
+                                                        payload.ipcoreId);
     if (!module) {
         return false;
     }
 
-    auto command = std::make_unique<AddModuleCommand>(m_graph, std::move(module));
-    m_commandManager->executeCommand(std::move(command));
-
-    if (!m_moduleToNodeId.contains(moduleId) || !m_graph->getModule(moduleId)) {
-        return false;
+    const QPointF clampedPos = clampNodePosition(QtNodes::InvalidNodeId, scenePos);
+    if (module->parameters().contains(QStringLiteral("x"))) {
+        module->setParameter(QStringLiteral("x"), static_cast<int>(clampedPos.x()));
+    }
+    if (module->parameters().contains(QStringLiteral("y"))) {
+        module->setParameter(QStringLiteral("y"), static_cast<int>(clampedPos.y()));
     }
 
-    const auto nodeId = m_moduleToNodeId.value(moduleId);
-    const QPointF clampedPos = clampNodePosition(nodeId, scenePos);
-
-    // Creation is one user action but position is stored in Graph parameters, so
-    // follow-up commands persist the drop location and make it undoable.
-    GraphUpdateGuard guard(m_updatingFromGraph);
-    m_graphModel->setNodeData(nodeId, QtNodes::NodeRole::Position, clampedPos);
-    auto xCmd = std::make_unique<SetParameterCommand>(m_graph, moduleId, "x", static_cast<int>(clampedPos.x()));
-    auto yCmd = std::make_unique<SetParameterCommand>(m_graph, moduleId, "y", static_cast<int>(clampedPos.y()));
-    m_commandManager->executeCommand(std::move(xCmd));
-    m_commandManager->executeCommand(std::move(yCmd));
-    return true;
+    auto command = std::make_unique<AddModuleCommand>(m_graph,
+                                                      std::move(module),
+                                                      payload.ipcoreId);
+    m_commandManager->executeCommand(std::move(command));
+    return m_graph->getModule(moduleId) != nullptr;
 }
 
 QPointF NodeEditorWidget::clampNodePosition(QtNodes::NodeId nodeId, const QPointF& position) const {

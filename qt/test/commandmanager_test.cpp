@@ -1,4 +1,5 @@
 // CommandManager unit tests for execute/undo/redo stack semantics.
+#include "commands/compositecommand.h"
 #include "commands/commandmanager.h"
 
 #include <iostream>
@@ -155,6 +156,63 @@ void testRedoFailureDoesNotAdvanceHistory() {
             "redo should attempt execution and observe rejection");
 }
 
+void testExecuteCommandReturnsRejectedCommandOnFailure() {
+    std::vector<std::string> events;
+    CommandManager manager;
+
+    std::unique_ptr<Command> rejected =
+        manager.executeCommand(std::make_unique<RecordingCommand>(events, "alpha", false));
+
+    require(rejected != nullptr, "failed command should be returned to caller");
+    require(!rejected->wasExecuted(), "returned failed command should expose failed status");
+    require(!manager.canUndo(), "failed command should not enter undo history");
+    require(manager.currentStateId() == 0, "failed command should not advance state");
+}
+
+void testExecuteCommandReturnsNullOnAcceptedCommand() {
+    std::vector<std::string> events;
+    CommandManager manager;
+
+    std::unique_ptr<Command> rejected =
+        manager.executeCommand(std::make_unique<RecordingCommand>(events, "alpha"));
+
+    require(rejected == nullptr, "accepted command should not be returned");
+    require(manager.canUndo(), "accepted command should enter undo history");
+    require(manager.currentStateId() != 0, "accepted command should advance state");
+}
+
+void testCompositeCommandUndoRunsChildrenInReverseOrder() {
+    std::vector<std::string> events;
+    auto composite = std::make_unique<CompositeCommand>();
+    composite->addCommand(std::make_unique<RecordingCommand>(events, "alpha"));
+    composite->addCommand(std::make_unique<RecordingCommand>(events, "beta"));
+
+    composite->execute();
+    require(composite->wasExecuted(), "composite command should execute when all children execute");
+    composite->undo();
+
+    require(events.size() == 4, "composite should record two executes and two undos");
+    require(events[0] == "execute:alpha", "first child should execute first");
+    require(events[1] == "execute:beta", "second child should execute second");
+    require(events[2] == "undo:beta", "second child should undo first");
+    require(events[3] == "undo:alpha", "first child should undo last");
+}
+
+void testCompositeCommandRollsBackExecutedChildrenOnFailure() {
+    std::vector<std::string> events;
+    auto composite = std::make_unique<CompositeCommand>();
+    composite->addCommand(std::make_unique<RecordingCommand>(events, "alpha"));
+    composite->addCommand(std::make_unique<RecordingCommand>(events, "beta", false));
+
+    composite->execute();
+
+    require(!composite->wasExecuted(), "composite should fail when a child fails");
+    require(events.size() == 3, "composite should roll back the executed child");
+    require(events[0] == "execute:alpha", "first child should execute");
+    require(events[1] == "execute:beta", "second child should attempt execute");
+    require(events[2] == "undo:alpha", "first child should roll back");
+}
+
 } // namespace
 
 int main() {
@@ -164,6 +222,10 @@ int main() {
         testFailedExecuteDoesNotEnterUndoStack();
         testClearHistoryDropsUndoAndRedoStacks();
         testRedoFailureDoesNotAdvanceHistory();
+        testExecuteCommandReturnsRejectedCommandOnFailure();
+        testExecuteCommandReturnsNullOnAcceptedCommand();
+        testCompositeCommandUndoRunsChildrenInReverseOrder();
+        testCompositeCommandRollsBackExecutedChildrenOnFailure();
     } catch (const std::exception& error) {
         std::cerr << "commandmanager_test failed: " << error.what() << '\n';
         return 1;

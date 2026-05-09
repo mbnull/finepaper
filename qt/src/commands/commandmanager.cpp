@@ -4,7 +4,7 @@
 #include <QDebug>
 
 // Execute command and push to undo stack, clearing redo history
-void CommandManager::executeCommand(std::unique_ptr<Command> command) {
+std::unique_ptr<Command> CommandManager::executeCommand(std::unique_ptr<Command> command) {
     qDebug() << "Executing command"
              << "undoDepth" << m_undoStack.size()
              << "redoDepth" << m_redoStack.size()
@@ -24,8 +24,10 @@ void CommandManager::executeCommand(std::unique_ptr<Command> command) {
                 << "undoDepth" << m_undoStack.size()
                 << "redoDepth" << m_redoStack.size()
                 << "stateId" << m_currentStateId;
+        return nullptr;
     } else {
         qDebug() << "Command execution produced no state change";
+        return command;
     }
 }
 

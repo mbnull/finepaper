@@ -339,6 +339,24 @@ void testProjectWriterUsesIpcoreVocabulary() {
     require(!firstModule.contains(QStringLiteral("plugin")), "module should not emit plugin owner");
 }
 
+void testProjectSerializerUsesModuleIpcoreOwnership() {
+    ModuleType type = makeProjectXpType();
+    type.name = QStringLiteral("ProjectDocOwnedXP");
+    type.pluginId = QStringLiteral("finepaper.owned");
+    ModuleRegistry::instance().registerType(type);
+
+    Graph graph;
+    auto module = instantiate(type, QStringLiteral("owned_node"));
+    module->setIpcoreId(QStringLiteral("finepaper.owned"));
+    require(graph.addModule(std::move(module)), "owned module should add");
+
+    const ProjectDocument document = GraphProjectSerializer::toProject(graph, QStringLiteral("owned"));
+
+    require(document.modules.size() == 1, "serializer should write one module");
+    require(document.modules.first().ipcoreId == QStringLiteral("finepaper.owned"),
+            "serializer should preserve module IP-core ownership");
+}
+
 void testProjectReaderRejectsPreV1IpInstances() {
     QJsonObject root = minimalProjectRoot();
     root.insert(QStringLiteral("ip_instances"), QJsonArray{
@@ -948,6 +966,7 @@ int main(int argc, char** argv) {
         testProjectRoundTripRestoresModulesParametersAndConnections();
         testProjectPreservesOpaqueIpcoreState();
         testProjectWriterUsesIpcoreVocabulary();
+        testProjectSerializerUsesModuleIpcoreOwnership();
         testProjectReaderRejectsPreV1IpInstances();
         testProjectReaderRejectsOldPluginRootKeys();
         testProjectReaderRejectsOldPluginStateKey();

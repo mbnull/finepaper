@@ -3,6 +3,7 @@
 // inside a vertical splitter with the log panel below.
 #include "app/mainwindow.h"
 #include "app/generationartifacts.h"
+#include "commands/topologypresetcommand.h"
 #include "graph/graph.h"
 #include "commands/commandmanager.h"
 #include "ipcore/ipcatalogservice.h"
@@ -366,25 +367,25 @@ void MainWindow::redo() {
 
 void MainWindow::createTopologyPreset() {
     auto* action = qobject_cast<QAction*>(sender());
-    const PluginDescriptor* plugin = PluginRegistry::instance().plugin(m_activePluginId);
-    if (!action || !plugin) {
+    if (!action || !m_activeWorkspaceController || !m_activeWorkspaceController->state().hasActiveIp) {
         return;
     }
 
+    const ActiveWorkspaceState& workspace = m_activeWorkspaceController->state();
     const QString presetId = action->data().toString();
-    // Presets are plugin-owned; look them up by ID at trigger time so rebuilt
+    // Presets are IP-core-owned; look them up by ID at trigger time so rebuilt
     // menus cannot leave stale QAction pointers to deleted descriptors.
-    auto presetIt = std::find_if(plugin->topologyPresets.cbegin(),
-                                 plugin->topologyPresets.cend(),
+    auto presetIt = std::find_if(workspace.topologyPresets.cbegin(),
+                                 workspace.topologyPresets.cend(),
                                  [&](const TopologyPresetDescriptor& preset) {
                                      return preset.id == presetId;
                                  });
-    if (presetIt == plugin->topologyPresets.cend()) {
+    if (presetIt == workspace.topologyPresets.cend()) {
         return;
     }
 
     TopologyPresetRequest request;
-    request.pluginId = plugin->id;
+    request.ipcoreId = workspace.ipcoreId;
     request.preset = *presetIt;
 
     QStringList parameterNames = presetIt->parameters.keys();
@@ -408,18 +409,16 @@ void MainWindow::createTopologyPreset() {
         request.parameters.insert(name, value);
     }
 
-    const TopologyPresetResult result =
-        TopologyPresetBuilder::apply(m_graph, ModuleRegistry::instance(), request);
-    if (!result.success) {
-        QMessageBox::warning(this, "Topology", result.error);
+    std::unique_ptr<Command> rejected =
+        m_commandManager->executeCommand(std::make_unique<TopologyPresetCommand>(
+            m_graph,
+            &ModuleRegistry::instance(),
+            request));
+    if (auto* failed = dynamic_cast<TopologyPresetCommand*>(rejected.get())) {
+        QMessageBox::warning(this, "Topology", failed->result().error);
         return;
     }
 
-    if (!m_documentDirty && m_cleanStateId == m_commandManager->currentStateId()) {
-        // TopologyPresetBuilder mutates the graph directly today. Nudge the
-        // clean-state marker so the document is treated as dirty afterward.
-        m_cleanStateId = m_commandManager->currentStateId() - 1;
-    }
     syncDocumentStateFromHistory();
     statusBar()->showMessage(QString("Created %1 topology").arg(presetIt->label), 5000);
 }
@@ -444,6 +443,7 @@ void MainWindow::setupPanels() {
 
     m_nodeEditor = new NodeEditorWidget(m_graph,
                                         m_projectStateService.get(),
+                                        m_activeWorkspaceController.get(),
                                         m_commandManager.get(),
                                         this);
     m_propertyPanel = new PropertyPanel(m_graph,
@@ -503,6 +503,10 @@ void MainWindow::setupConnections() {
             [trackGraphChange]() {
                 trackGraphChange();
             });
+    connect(m_activeWorkspaceController.get(),
+            &ActiveWorkspaceController::activeWorkspaceChanged,
+            this,
+            &MainWindow::rebuildTopologyMenu);
     connect(m_ipCatalogPanel,
             &IpCatalogPanel::addIpcoreRequested,
             this,
@@ -774,12 +778,12 @@ void MainWindow::rebuildTopologyMenu() {
     }
 
     m_topologyMenu->clear();
-    const PluginDescriptor* plugin = PluginRegistry::instance().plugin(m_activePluginId);
-    if (!plugin) {
+    if (!m_activeWorkspaceController || !m_activeWorkspaceController->state().hasActiveIp) {
         return;
     }
 
-    for (const TopologyPresetDescriptor& preset : plugin->topologyPresets) {
+    const ActiveWorkspaceState& workspace = m_activeWorkspaceController->state();
+    for (const TopologyPresetDescriptor& preset : workspace.topologyPresets) {
         QAction* action = m_topologyMenu->addAction(preset.label);
         action->setData(preset.id);
         connect(action, &QAction::triggered, this, &MainWindow::createTopologyPreset);

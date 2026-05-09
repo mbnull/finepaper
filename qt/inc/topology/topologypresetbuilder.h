@@ -10,7 +10,7 @@ class Graph;
 class ModuleRegistry;
 
 struct TopologyPresetRequest {
-    QString pluginId;
+    QString ipcoreId;
     TopologyPresetDescriptor preset;
     QHash<QString, int> parameters;
 };

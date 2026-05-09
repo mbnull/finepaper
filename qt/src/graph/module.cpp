@@ -6,6 +6,10 @@ Module::Module(const QString& id, const QString& type, QObject* parent)
     : QObject(parent), m_id(id), m_type(type) {
 }
 
+void Module::setIpcoreId(const QString& ipcoreId) {
+    m_ipcoreId = ipcoreId;
+}
+
 void Module::addPort(const Port& port) {
     m_ports.push_back(port);
 }
@@ -35,6 +39,7 @@ void Module::removeParameter(const QString& name) {
 // Deep copy module with all ports and parameters
 std::unique_ptr<Module> Module::clone() const {
     auto cloned = std::make_unique<Module>(m_id, m_type);
+    cloned->m_ipcoreId = m_ipcoreId;
     cloned->m_ports = m_ports;
     cloned->m_parameters = m_parameters;
     return cloned;

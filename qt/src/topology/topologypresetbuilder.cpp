@@ -66,9 +66,11 @@ bool connectionIdExists(const Graph* graph, const QString& id) {
 
 std::unique_ptr<Module> instantiateModule(const ModuleType& type,
                                           const QString& id,
+                                          const QString& ipcoreId,
                                           int row,
                                           int col) {
     auto module = std::make_unique<Module>(id, type.name);
+    module->setIpcoreId(ipcoreId);
     for (const Port& port : type.defaultPorts) {
         module->addPort(port);
     }
@@ -147,7 +149,7 @@ TopologyPresetResult createMesh(Graph* graph,
             if (graph->getModule(id)) {
                 return failAndRollback(graph, result, QStringLiteral("Module already exists: %1").arg(id));
             }
-            if (!graph->addModule(instantiateModule(routerType, id, row, col))) {
+            if (!graph->addModule(instantiateModule(routerType, id, request.ipcoreId, row, col))) {
                 return failAndRollback(graph, result, QStringLiteral("Could not add module: %1").arg(id));
             }
             result.moduleIds.append(id);
@@ -198,7 +200,7 @@ TopologyPresetResult createRing(Graph* graph,
         if (graph->getModule(id)) {
             return failAndRollback(graph, result, QStringLiteral("Module already exists: %1").arg(id));
         }
-        if (!graph->addModule(instantiateModule(routerType, id, 0, index))) {
+        if (!graph->addModule(instantiateModule(routerType, id, request.ipcoreId, 0, index))) {
             return failAndRollback(graph, result, QStringLiteral("Could not add module: %1").arg(id));
         }
         result.moduleIds.append(id);
@@ -229,9 +231,9 @@ TopologyPresetResult TopologyPresetBuilder::apply(Graph* graph,
         return failure(QStringLiteral("Graph is required"));
     }
     const ModuleType* routerType = registry.getType(request.preset.routerModule);
-    if (!routerType || routerType->pluginId != request.pluginId) {
+    if (!routerType || routerType->pluginId != request.ipcoreId) {
         return failure(QStringLiteral("Router module %1 is not part of active IP %2")
-                           .arg(request.preset.routerModule, request.pluginId));
+                           .arg(request.preset.routerModule, request.ipcoreId));
     }
     if (request.preset.kind == QStringLiteral("mesh")) {
         return createMesh(graph, *routerType, request);

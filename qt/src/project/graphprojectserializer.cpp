@@ -81,6 +81,7 @@ GraphProjectLoadResult populateGraph(const ProjectDocument& document,
         const ModuleType* type = moduleTypesById.value(record.id);
 
         auto module = instantiateModule(*type, record.id);
+        module->setIpcoreId(record.ipcoreId);
         // Values were type-checked before this function; conversion can use the
         // module type default as the target variant shape.
         for (auto it = record.parameters.begin(); it != record.parameters.end(); ++it) {
@@ -130,7 +131,9 @@ ProjectDocument GraphProjectSerializer::toProject(const Graph& graph, const QStr
     QSet<QString> ipcoreIds;
     for (const auto& module : graph.modules()) {
         const ModuleType* type = ModuleRegistry::instance().getType(module->type());
-        const QString ipcoreId = type ? type->pluginId : QString();
+        const QString ipcoreId = module->ipcoreId().isEmpty()
+            ? (type ? type->pluginId : QString())
+            : module->ipcoreId();
         if (!ipcoreId.isEmpty()) {
             ipcoreIds.insert(ipcoreId);
         }

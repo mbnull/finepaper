@@ -11,6 +11,8 @@
 #include <QAbstractItemView>
 #include <QDrag>
 #include <QHash>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
@@ -26,7 +28,9 @@
 namespace {
 
 constexpr int InstanceIdRole = Qt::UserRole + 1;
-constexpr auto ModuleTypeMime = "application/x-moduletype";
+constexpr int IpcoreIdRole = Qt::UserRole + 2;
+constexpr int ActiveInstanceIdRole = Qt::UserRole + 3;
+constexpr auto ScopedModuleMime = "application/x-finepaper-module";
 
 QString catalogLabel(const IpCatalogEntry& entry) {
     const QString label = entry.name.trimmed().isEmpty() ? entry.id : entry.name.trimmed();
@@ -68,13 +72,22 @@ protected:
         }
 
         const QString moduleType = item->data(Qt::UserRole).toString();
-        if (moduleType.trimmed().isEmpty()) {
+        const QString ipcoreId = item->data(IpcoreIdRole).toString();
+        const QString instanceId = item->data(ActiveInstanceIdRole).toString();
+        if (moduleType.trimmed().isEmpty() ||
+            ipcoreId.trimmed().isEmpty() ||
+            instanceId.trimmed().isEmpty()) {
             return;
         }
 
         auto* drag = new QDrag(this);
         auto* mimeData = new QMimeData;
-        mimeData->setData(ModuleTypeMime, moduleType.toUtf8());
+        QJsonObject object;
+        object.insert(QStringLiteral("ipcore"), ipcoreId);
+        object.insert(QStringLiteral("instance"), instanceId);
+        object.insert(QStringLiteral("type"), moduleType);
+        mimeData->setData(ScopedModuleMime,
+                          QJsonDocument(object).toJson(QJsonDocument::Compact));
         drag->setMimeData(mimeData);
 
         if (m_dragStartedCallback) {
@@ -256,6 +269,8 @@ void IpCatalogPanel::refreshActiveWorkspace() {
             }
             auto* item = new QListWidgetItem(entry.label);
             item->setData(Qt::UserRole, entry.moduleType);
+            item->setData(IpcoreIdRole, state.ipcoreId);
+            item->setData(ActiveInstanceIdRole, state.instanceId);
             item->setToolTip(entry.description);
             item->setFlags(item->flags() | Qt::ItemIsDragEnabled);
             m_activeModuleList->addItem(item);

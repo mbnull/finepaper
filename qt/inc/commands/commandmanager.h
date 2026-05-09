@@ -7,8 +7,8 @@
 
 class CommandManager {
 public:
-    // Executes a command; if it changes state, it is pushed to undo and redo history is cleared.
-    void executeCommand(std::unique_ptr<Command> command);
+    // Executes a command; accepted commands enter history, rejected commands are returned for inspection.
+    std::unique_ptr<Command> executeCommand(std::unique_ptr<Command> command);
     // Reverts the most recent executed command.
     void undo();
     // Re-applies the most recently undone command.

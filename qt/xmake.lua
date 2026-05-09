@@ -94,6 +94,7 @@ add_qt_test_target("connectionruleservice_test", "test/connectionruleservice_tes
 
 add_qt_test_target("commandmanager_test", "test/commandmanager_test.cpp", {
     "src/**/command.cpp",
+    "src/commands/compositecommand.cpp",
     "src/**/commandmanager.cpp"
 })
 
@@ -357,7 +358,10 @@ target("nodeeditor_geometry_test")
     add_files("src/**/module.cpp")
     add_files("src/**/parameter.cpp")
     add_files("src/**/port.cpp")
+    add_files("src/ipcore/ipcatalogservice.cpp")
+    add_files("src/project/projectipservice.cpp")
     add_files("src/project/projectstateservice.cpp")
+    add_files("src/workspace/activeworkspacecontroller.cpp")
     add_files("src/**/moduleregistry.cpp")
     add_files("src/**/moduleprovider.cpp")
     add_files("src/**/pluginregistry.cpp")
@@ -376,7 +380,10 @@ target("nodeeditor_geometry_test")
     add_files("inc/**/modulelabels.h")
     add_files("inc/**/moduleregistry.h")
     add_files("inc/**/nodeeditorwidget.h")
+    add_files("inc/**/ipcatalogservice.h")
+    add_files("inc/**/projectipservice.h")
     add_files("inc/**/projectstateservice.h")
+    add_files("inc/**/activeworkspacecontroller.h")
     add_files("inc/**/pluginstate.h")
     add_files("inc/**/pluginregistry.h")
     add_files("inc/**/plugindescriptor.h")
@@ -408,6 +415,9 @@ add_qt_test_target("plugin_test", "test/plugin_test.cpp", {
 })
 
 add_qt_test_target("topology_preset_test", "test/topology_preset_test.cpp", {
+    "src/commands/command.cpp",
+    "src/commands/commandmanager.cpp",
+    "src/commands/topologypresetcommand.cpp",
     "src/connection/connectionruleservice.cpp",
     "src/**/topologypresetbuilder.cpp",
     "src/**/graph.cpp",
@@ -420,6 +430,8 @@ add_qt_test_target("topology_preset_test", "test/topology_preset_test.cpp", {
     "src/**/pluginregistry.cpp",
     "src/**/frameworkpaths.cpp",
     "inc/**/connectionruleservice.h",
+    "inc/**/commandmanager.h",
+    "inc/**/topologypresetcommand.h",
     "inc/**/topologypresetbuilder.h",
     "inc/**/graph.h",
     "inc/**/module.h",
