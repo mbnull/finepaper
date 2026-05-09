@@ -6,7 +6,7 @@
 #include <QHash>
 #include <QString>
 #include "ipcore/ipcatalogservice.h"
-#include "project/pluginstate.h"
+#include "project/ipinstancestate.h"
 #include "validation/validationresult.h"
 
 class Graph;

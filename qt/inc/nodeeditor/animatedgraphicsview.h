@@ -1,4 +1,4 @@
-// AnimatedGraphicsView renders the node canvas and an overlay used during palette drag operations.
+// AnimatedGraphicsView renders the node canvas and an overlay used during module drag operations.
 #pragma once
 
 #include <QtNodes/GraphicsView>
@@ -8,9 +8,9 @@ class AnimatedGraphicsView final : public QtNodes::GraphicsView {
 public:
     explicit AnimatedGraphicsView(QtNodes::BasicGraphicsScene* scene, QWidget* parent = nullptr);
 
-    void beginPaletteDrag(const QPoint& viewportPos, const QString& moduleType);
-    void updatePaletteDrag(const QPoint& viewportPos, const QString& moduleType);
-    void endPaletteDrag();
+    void beginModuleDrag(const QPoint& viewportPos, const QString& moduleType);
+    void updateModuleDrag(const QPoint& viewportPos, const QString& moduleType);
+    void endModuleDrag();
     void setEditingLocked(bool locked);
 
     void onDeleteSelectedObjects() override;

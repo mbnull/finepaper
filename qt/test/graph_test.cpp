@@ -461,7 +461,7 @@ void testEndpointTypeStillClassifiesAsEndpointPort() {
 void testBundleMetadataLoadsFromXml() {
     const ModuleType* xpType = ModuleRegistry::instance().getType("XP");
     require(xpType != nullptr, "XP type should be registered");
-    require(xpType->pluginId == "finepaper.noc", "XP type should come from bundled NoC plugin");
+    require(xpType->pluginId == "finepaper.noc", "XP type should come from bundled NoC IP core");
     require(xpType->description.contains("Mesh router"), "XP description should come from bundle XML");
     require(xpType->nodeColor == "#7cb9e8", "XP node color should come from bundle XML");
     require(xpType->editorLayout == "mesh_router", "XP layout should come from bundle XML");
@@ -495,7 +495,7 @@ void testBundleMetadataLoadsFromXml() {
 
     const ModuleType* endpointType = ModuleRegistry::instance().getType("Endpoint");
     require(endpointType != nullptr, "Endpoint type should be registered");
-    require(endpointType->pluginId == "finepaper.noc", "Endpoint type should come from bundled NoC plugin");
+    require(endpointType->pluginId == "finepaper.noc", "Endpoint type should come from bundled NoC IP core");
     require(endpointType->description.contains("Endpoint interface"),
             "Endpoint description should come from bundle XML");
     require(endpointType->nodeColor == "#d6f4b6", "Endpoint node color should come from bundle XML");

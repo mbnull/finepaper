@@ -1,7 +1,7 @@
 // ProjectStateService owns editable IP instance project state outside Graph.
 #pragma once
 
-#include "project/pluginstate.h"
+#include "project/ipinstancestate.h"
 #include "project/projectdocument.h"
 
 #include <QObject>

@@ -1,7 +1,7 @@
 // ProjectDocument defines the in-memory shape of Finepaper .fpproj files.
 #pragma once
 
-#include "project/pluginstate.h"
+#include "project/ipinstancestate.h"
 
 #include <QJsonObject>
 #include <QString>

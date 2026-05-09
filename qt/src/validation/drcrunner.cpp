@@ -65,7 +65,7 @@ QList<ValidationResult> DRCRunner::validate(
 
     QProcess proc;
     proc.setWorkingDirectory(generatorCommand.workingDirectory);
-    // Run from the plugin root to match generator-relative paths declared in
+    // Run from the IP-core source root to match generator-relative paths declared in
     // plugin.json.
     proc.start(generatorCommand.command, generatorCommand.arguments);
 
@@ -83,8 +83,8 @@ QList<ValidationResult> DRCRunner::validate(
 
     if (proc.exitStatus() != QProcess::NormalExit) {
         QString stderr = QString::fromUtf8(proc.readAllStandardError());
-        // Preserve stderr because Ruby/plugin stack traces are usually the only
-        // actionable detail for plugin authors.
+        // Preserve stderr because Ruby/IP-core stack traces are usually the only
+        // actionable detail for IP-core authors.
         return {ValidationResult(ValidationSeverity::Error, "DRC process crashed: " + stderr, "", "DRC")};
     }
 

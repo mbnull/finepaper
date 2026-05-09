@@ -1,0 +1,29 @@
+// SetIpInstanceParameterCommand changes one IP-instance parameter with undo support.
+#pragma once
+
+#include "commands/command.h"
+#include "project/projectstateservice.h"
+
+#include <QJsonValue>
+#include <QString>
+
+class SetIpInstanceParameterCommand final : public Command {
+public:
+    SetIpInstanceParameterCommand(ProjectStateService* stateService,
+                                  QString ipcoreId,
+                                  QString instanceId,
+                                  QString section,
+                                  QString name,
+                                  QJsonValue newValue);
+    void execute() override;
+    void undo() override;
+
+private:
+    ProjectStateService* m_stateService;
+    QString m_ipcoreId;
+    QString m_instanceId;
+    QString m_section;
+    QString m_name;
+    QJsonValue m_newValue;
+    QJsonValue m_oldValue;
+};

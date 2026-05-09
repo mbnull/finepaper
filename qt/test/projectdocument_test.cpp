@@ -1032,7 +1032,7 @@ void testGenerationWritesProjectSnapshot() {
                 .toObject()
                 .value(QStringLiteral("flit_data_width"))
                 .toInt() == 64,
-            "generation project snapshot should preserve plugin parameters");
+            "generation project snapshot should preserve IP-core parameters");
 }
 
 } // namespace

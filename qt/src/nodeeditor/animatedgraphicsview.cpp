@@ -34,7 +34,7 @@ AnimatedGraphicsView::AnimatedGraphicsView(QtNodes::BasicGraphicsScene* scene, Q
     });
 }
 
-void AnimatedGraphicsView::beginPaletteDrag(const QPoint& viewportPos, const QString& moduleType) {
+void AnimatedGraphicsView::beginModuleDrag(const QPoint& viewportPos, const QString& moduleType) {
     m_dragPosition = viewportPos;
     if (!moduleType.isEmpty()) {
         m_moduleType = moduleType;
@@ -53,9 +53,9 @@ void AnimatedGraphicsView::beginPaletteDrag(const QPoint& viewportPos, const QSt
     }
 }
 
-void AnimatedGraphicsView::updatePaletteDrag(const QPoint& viewportPos, const QString& moduleType) {
+void AnimatedGraphicsView::updateModuleDrag(const QPoint& viewportPos, const QString& moduleType) {
     if (!m_dragActive) {
-        beginPaletteDrag(viewportPos, moduleType);
+        beginModuleDrag(viewportPos, moduleType);
         return;
     }
 
@@ -66,7 +66,7 @@ void AnimatedGraphicsView::updatePaletteDrag(const QPoint& viewportPos, const QS
     viewport()->update();
 }
 
-void AnimatedGraphicsView::endPaletteDrag() {
+void AnimatedGraphicsView::endModuleDrag() {
     if (!m_dragActive && m_overlayOpacity == 0.0) {
         return;
     }

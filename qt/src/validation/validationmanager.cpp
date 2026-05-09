@@ -1,4 +1,4 @@
-// ValidationManager orchestrates framework checks and IP-provided DRC.
+// ValidationManager orchestrates structural checks and IP-provided DRC.
 #include "validation/validationmanager.h"
 #include "graph/graph.h"
 #include "ipcore/ipcatalogservice.h"

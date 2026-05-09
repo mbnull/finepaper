@@ -13,7 +13,7 @@
 #include "panels/propertypanel.h"
 #include "panels/logpanel.h"
 #include "plugins/generatorrunner.h"
-#include "plugins/pluginprojectadapter.h"
+#include "project/ipinstanceparameteradapter.h"
 #include "plugins/pluginregistry.h"
 #include "plugins/startupdiagnostics.h"
 #include "project/graphprojectserializer.h"
@@ -219,7 +219,7 @@ void MainWindow::openGraph() {
 }
 
 void MainWindow::generateVerilog() {
-    // Generation starts from a user-chosen directory because the plugin command
+    // Generation starts from a user-chosen directory because the IP-core command
     // may emit multiple RTL/support files beside the JSON handoff.
     const QString outputDirectory = QFileDialog::getExistingDirectory(
         this,
@@ -321,7 +321,7 @@ void MainWindow::generateVerilog() {
         return;
     }
 
-    // Log artifact paths before process launch; if the plugin fails, users still
+    // Log artifact paths before process launch; if the generator fails, users still
     // know exactly which intermediate files were produced.
     m_logPanel->appendMessage(QString("[Generate] Start output=%1").arg(outputDirectory),
                               QColor(70, 110, 190));
@@ -359,7 +359,7 @@ void MainWindow::generateVerilog() {
     const QString standardOutput = QString::fromUtf8(proc.readAllStandardOutput());
     const QString standardError = QString::fromUtf8(proc.readAllStandardError());
     // Generators are external tools; preserve stdout/stderr separately in the
-    // activity log so plugin authors can diagnose failures without rerunning.
+    // activity log so IP-core authors can diagnose failures without rerunning.
     if (!finished || proc.exitStatus() != QProcess::NormalExit || proc.exitCode() != 0) {
         const QString detail = trimmedProcessOutput(standardError.isEmpty() ? standardOutput : standardError);
         const QString error = !finished
@@ -478,12 +478,12 @@ void MainWindow::closeEvent(QCloseEvent* event) {
 }
 
 void MainWindow::setupPanels() {
-    m_pluginProjectAdapters.clear();
-    QVector<IPluginProjectAdapter*> pluginProjectAdapters;
+    m_ipInstanceParameterAdapters.clear();
+    QVector<IIpInstanceParameterAdapter*> ipInstanceParameterAdapters;
     for (const PluginDescriptor& plugin : PluginRegistry::instance().plugins()) {
-        auto adapter = std::make_unique<ManifestPluginProjectAdapter>(plugin);
-        pluginProjectAdapters.push_back(adapter.get());
-        m_pluginProjectAdapters.push_back(std::move(adapter));
+        auto adapter = std::make_unique<ManifestIpInstanceParameterAdapter>(plugin);
+        ipInstanceParameterAdapters.push_back(adapter.get());
+        m_ipInstanceParameterAdapters.push_back(std::move(adapter));
     }
 
     m_nodeEditor = new NodeEditorWidget(m_graph,
@@ -493,7 +493,7 @@ void MainWindow::setupPanels() {
                                         this);
     m_propertyPanel = new PropertyPanel(m_graph,
                                         m_projectStateService.get(),
-                                        pluginProjectAdapters,
+                                        ipInstanceParameterAdapters,
                                         m_commandManager.get(),
                                         this);
     m_ipCatalogPanel = new IpCatalogPanel(m_ipCatalogService.get(),
@@ -567,14 +567,14 @@ void MainWindow::setupConnections() {
                     QMessageBox::warning(this, "IP Catalog", result.error);
                     return;
                 }
-                setActivePluginId(ipcoreId);
+                setActiveIpcoreId(ipcoreId);
             });
     connect(m_ipCatalogPanel,
             &IpCatalogPanel::selectIpInstanceRequested,
             this,
             [this](const QString& ipcoreId, const QString& instanceId) {
                 if (m_projectIpService->selectInstance(ipcoreId, instanceId)) {
-                    setActivePluginId(ipcoreId);
+                    setActiveIpcoreId(ipcoreId);
                 }
             });
 }
@@ -629,7 +629,7 @@ void MainWindow::setupActions() {
     addAction(m_redoAction);
 
     m_generateAction = new QAction("Generate Verilog", this);
-    m_generateAction->setToolTip("Write plugin graph input and a project snapshot, then generate Verilog in a selected folder.");
+    m_generateAction->setToolTip("Write IP-core graph input and a project snapshot, then generate Verilog in a selected folder.");
     connect(m_generateAction, &QAction::triggered, this, &MainWindow::generateVerilog);
 
     m_validateAction = new QAction("Validate", this);
@@ -795,21 +795,21 @@ void MainWindow::logStartupLayout() const {
 #endif
 }
 
-void MainWindow::setActivePluginId(const QString& pluginId) {
-    if (m_activePluginId == pluginId) {
+void MainWindow::setActiveIpcoreId(const QString& ipcoreId) {
+    if (m_activeIpcoreId == ipcoreId) {
         return;
     }
 
-    m_activePluginId = pluginId;
-    ensureProjectStateRecordFromActivePlugin();
+    m_activeIpcoreId = ipcoreId;
+    ensureProjectStateRecordFromActiveIpcore();
     rebuildTopologyMenu();
 }
 
-void MainWindow::ensureProjectStateRecordFromActivePlugin() {
+void MainWindow::ensureProjectStateRecordFromActiveIpcore() {
     if (!m_ipCatalogService || !m_projectIpService) {
         return;
     }
-    const std::optional<IpCatalogEntry> entry = m_ipCatalogService->entry(m_activePluginId);
+    const std::optional<IpCatalogEntry> entry = m_ipCatalogService->entry(m_activeIpcoreId);
     if (!entry.has_value()) {
         return;
     }
@@ -880,7 +880,7 @@ bool MainWindow::loadDocument(const QString& path) {
     // project files still load through the correct path.
     const ProjectFileKind kind = ProjectReader::detectKind(path);
     if (kind == ProjectFileKind::Project) {
-        // Project files carry plugin ownership and typed parameters, so load
+        // Project files carry IP-core ownership and typed parameters, so load
         // through the serializer.
         const ProjectReadResult readResult = ProjectReader::readFile(path);
         if (!readResult.success) {
@@ -952,7 +952,7 @@ void MainWindow::clearDocument() {
     m_suppressDocumentTracking = true;
     m_graph->clear();
     m_projectStateService->clear();
-    ensureProjectStateRecordFromActivePlugin();
+    ensureProjectStateRecordFromActiveIpcore();
     m_suppressDocumentTracking = false;
     if (m_propertyPanel) {
         m_propertyPanel->setSelectedModule(QString());

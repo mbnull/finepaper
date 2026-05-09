@@ -4,12 +4,12 @@ This project is a Qt Widgets application for building and validating SoC/NoC top
 
 ## What the application does
 
-- Shows available module types in a palette loaded from startup-discovered IP core runtime bundles.
-- Lets users drag modules onto a canvas and connect compatible ports.
+- Shows discovered IP cores in the IP Catalog, lets users add/select project IP instances, and exposes the active workspace's module types.
+- Lets users drag active workspace modules onto a canvas, use canvas creation menus, and connect compatible ports.
 - Exposes module parameters in a property panel.
 - Saves editor state as a `.fpproj` project.
-- Exports graph JSON and invokes the active IP core generator to produce Verilog.
-- Runs local validation plus IP core-backed DRC checks and shows findings in the log panel.
+- Exports `finepaper-ipcore-graph-v1` JSON and invokes the active IP core generator to produce Verilog.
+- Runs local validation plus active IP core-backed DRC checks and shows findings in the log panel.
 
 ## Repository layout
 
@@ -30,12 +30,15 @@ This project is a Qt Widgets application for building and validating SoC/NoC top
 - `Graph`: source of truth for modules, connections, and parameter changes.
 - `CommandManager`: executes undoable commands and manages undo/redo stacks.
 - `NodeEditorWidget`: bridges `Graph` to QtNodes and translates UI actions into commands.
-- `Palette`: lists available module types for drag-and-drop creation.
+- `IpCatalogPanel`: lists discovered IP cores, project IP instances, active workspace modules, and workspace tools.
+- `IpCatalogService`: projects startup-discovered runtime manifests into selectable IP catalog entries.
+- `ActiveWorkspaceController`: exposes the selected project IP instance and its available module types/topology presets.
 - `PropertyPanel`: auto-builds editors from module parameter types.
 - `ValidationManager`: runs built-in validation and external DRC checks.
 - `LogPanel`: shows validation, generation, and runtime messages.
 - `PluginRegistry`: discovers startup-loaded runtime manifests from `FINEPAPER_PLUGIN_PATH` and repository-local generated IP core bundles.
 - `ModuleRegistry`: loads module definitions from runtime manifests and applies per-IP graphics XML files.
+- `IpCoreGraphExporter`: serializes the active IP core graph as the generator/DRC handoff format.
 
 ## Build and run
 
@@ -73,7 +76,7 @@ xmake run plugin_test
 
 ## IP Core Runtime Integration
 
-Generation and DRC validation are provided by the IP core package that owns the modules in the current graph. Runtime metadata is loaded once at startup; runtime installation, unloading, and refresh are not supported.
+Generation and DRC validation are provided by the active IP core selected in the IP Catalog workspace. Runtime metadata is loaded once at startup; runtime installation, unloading, and refresh are not supported.
 
 Runtime bundle discovery works in this order:
 
@@ -94,11 +97,18 @@ The first manifest schema is:
   "name": "NoC",
   "version": "1.0",
   "source_root": "../../../ipcores/finepaper-noc",
+  "kind": "noc",
   "modules": "modules.xml",
   "graphics": "graphics",
   "generator": {
     "command": "ruby",
+    "input_format": "ipcore_graph_v1",
     "args": ["generator/bin/generate", "-i", "{input}", "-o", "{output}", "-t", "generator/template"]
+  },
+  "drc": {
+    "command": "ruby",
+    "input_format": "ipcore_graph_v1",
+    "args": ["generator/bin/drc", "-i", "{input}", "-o", "{output}"]
   },
   "native": {
     "enabled": false,
@@ -107,25 +117,26 @@ The first manifest schema is:
 }
 ```
 
-`modules` and `graphics` paths are resolved against the generated runtime bundle directory. `source_root` points back to the editable IP core package, and generator/DRC commands run from that source root so paths such as `generator/bin/generate` and `generator/template` resolve against `ipcores/<package>/`. `{input}` and `{output}` are replaced with the graph JSON path and selected output directory. Native plugin metadata is retained for future C++ dynamic-library support, but native libraries are not loaded in this version.
+`modules` and `graphics` paths are resolved against the generated runtime bundle directory. `source_root` points back to the editable IP core package and becomes `IpCatalogEntry::sourceRootPath`; generator/DRC commands run from that source root so paths such as `generator/bin/generate` and `generator/template` resolve against `ipcores/<package>/`. `{input}` and `{output}` are replaced with the exported `finepaper-ipcore-graph-v1` JSON path and selected output directory. Native plugin metadata is retained for future C++ dynamic-library support, but native libraries are not loaded in this version.
 
-If a graph contains modules from more than one IP core runtime bundle, generation and external DRC currently fail with a user-visible message because multi-package orchestration is not implemented yet.
+`IpCoreGraphExporter` serializes only the active workspace's selected IP instance. Generation and external DRC fail with a user-visible message if a module or connection references a different IP core than the selected active workspace.
 
 Use `plugins/` wording only for feature plugins or editor behavior extensions. Concrete NoC and RaveNoC IP packages should be described as IP core packages under `ipcores/` with generated runtime bundles under `generated/ipcores/`.
 
 ## Typical user flow
 
 1. Start the application.
-2. Drag module types from the palette onto the canvas.
-3. Connect output ports to input ports.
-4. Select a module and edit parameters in the property panel.
-5. Run validation to collect built-in and IP core DRC findings.
-6. Save a Finepaper project or generate Verilog into a chosen output directory.
+2. Add or select an IP core instance in the IP Catalog.
+3. Drag module types from Workspace Modules, or use the canvas creation menu, to add modules for the active workspace.
+4. Connect output ports to input ports.
+5. Select a module or IP instance and edit parameters in the property panel.
+6. Run validation to collect built-in and active IP core DRC findings.
+7. Save a Finepaper project or generate Verilog into a chosen output directory.
 
 ## Generated and saved data
 
 - `saveGraph()` writes a `.fpproj` through `ProjectWriter`.
-- `generateVerilog()` writes graph JSON and a `.fpproj` snapshot to the selected output directory, then runs the active IP core generator.
+- `generateVerilog()` writes `finepaper-ipcore-graph-v1` JSON through `IpCoreGraphExporter` and a `.fpproj` snapshot to the selected output directory, then runs the active IP core generator from `IpCatalogEntry::sourceRootPath`.
 - Application logs are written to the platform-local app data directory as `finepaper.log`.
 
 ## Module bundle format

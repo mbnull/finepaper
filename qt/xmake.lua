@@ -27,7 +27,6 @@ target("qt")
     add_files("inc/**/projectstateservice.h")
     add_files("inc/**/projectipservice.h")
     add_files("inc/**/activeworkspacecontroller.h")
-    add_files("inc/**/palette.h")
     add_files("inc/**/validationmanager.h")
 
     add_includedirs("inc")
@@ -61,7 +60,6 @@ add_qt_test_target("graph_test", "test/graph_test.cpp", {
     "src/**/connection.cpp",
     "src/**/port.cpp",
     "src/**/parameter.cpp",
-    "src/**/frameworkpaths.cpp",
     "src/**/moduleregistry.cpp",
     "src/**/moduleprovider.cpp",
     "src/**/pluginregistry.cpp",
@@ -81,7 +79,6 @@ add_qt_test_target("connectionruleservice_test", "test/connectionruleservice_tes
     "src/**/connection.cpp",
     "src/**/port.cpp",
     "src/**/parameter.cpp",
-    "src/**/frameworkpaths.cpp",
     "src/**/moduleregistry.cpp",
     "src/**/moduleprovider.cpp",
     "src/**/pluginregistry.cpp",
@@ -100,7 +97,6 @@ add_qt_test_target("ipcoregraphexporter_test", "test/ipcoregraphexporter_test.cp
     "src/**/connection.cpp",
     "src/**/port.cpp",
     "src/**/parameter.cpp",
-    "src/**/frameworkpaths.cpp",
     "src/**/moduleregistry.cpp",
     "src/**/moduleprovider.cpp",
     "src/**/pluginregistry.cpp",
@@ -126,7 +122,6 @@ add_qt_test_target("arrangecommand_test", "test/arrangecommand_test.cpp", {
     "src/**/connection.cpp",
     "src/**/port.cpp",
     "src/**/parameter.cpp",
-    "src/**/frameworkpaths.cpp",
     "src/**/moduleregistry.cpp",
     "src/**/moduleprovider.cpp",
     "src/**/pluginregistry.cpp",
@@ -153,7 +148,6 @@ add_qt_test_target("validation_test", "test/validation_test.cpp", {
     "src/**/connection.cpp",
     "src/**/port.cpp",
     "src/**/parameter.cpp",
-    "src/**/frameworkpaths.cpp",
     "src/**/moduleregistry.cpp",
     "src/**/moduleprovider.cpp",
     "src/**/pluginregistry.cpp",
@@ -168,7 +162,7 @@ add_qt_test_target("validation_test", "test/validation_test.cpp", {
     "inc/**/graphprojectserializer.h",
     "inc/**/projectdocument.h",
     "inc/**/projectwriter.h",
-    "inc/**/pluginstate.h",
+    "inc/**/ipinstancestate.h",
     "inc/**/pluginregistry.h",
     "inc/**/plugindescriptor.h"
 })
@@ -197,13 +191,12 @@ add_qt_test_target("projectdocument_test", "test/projectdocument_test.cpp", {
     "src/**/connection.cpp",
     "src/**/port.cpp",
     "src/**/parameter.cpp",
-    "src/**/frameworkpaths.cpp",
     "src/**/moduleregistry.cpp",
     "src/**/moduleprovider.cpp",
     "src/**/pluginregistry.cpp",
     "inc/**/connectionruleservice.h",
     "inc/**/projectdocument.h",
-    "inc/**/pluginstate.h",
+    "inc/**/ipinstancestate.h",
     "inc/**/projectstateservice.h",
     "inc/**/projectreader.h",
     "inc/**/projectwriter.h",
@@ -222,7 +215,6 @@ add_qt_test_target("ipcatalogservice_test", "test/ipcatalogservice_test.cpp", {
     "src/modules/moduleregistry.cpp",
     "src/modules/moduleprovider.cpp",
     "src/plugins/pluginregistry.cpp",
-    "src/common/frameworkpaths.cpp",
     "src/graph/parameter.cpp",
     "src/graph/port.cpp",
     "inc/ipcore/ipcatalogservice.h",
@@ -246,7 +238,6 @@ target("projectipservice_test")
     add_files("src/modules/moduleregistry.cpp")
     add_files("src/modules/moduleprovider.cpp")
     add_files("src/plugins/pluginregistry.cpp")
-    add_files("src/common/frameworkpaths.cpp")
     add_files("src/graph/parameter.cpp")
     add_files("src/graph/port.cpp")
     add_files("inc/project/projectipservice.h")
@@ -288,8 +279,8 @@ target("propertypanel_test")
     add_files("test/propertypanel_test.cpp")
     add_files("src/panels/propertypanel.cpp")
     add_files("src/project/projectstateservice.cpp")
-    add_files("src/plugins/manifestpluginprojectadapter.cpp")
-    add_files("src/commands/setpluginstateparametercommand.cpp")
+    add_files("src/project/manifestipinstanceparameteradapter.cpp")
+    add_files("src/commands/setipinstanceparametercommand.cpp")
     add_files("src/commands/setparametercommand.cpp")
     add_files("src/commands/command.cpp")
     add_files("src/commands/commandmanager.cpp")
@@ -298,7 +289,6 @@ target("propertypanel_test")
     add_files("src/graph/connection.cpp")
     add_files("src/graph/port.cpp")
     add_files("src/graph/parameter.cpp")
-    add_files("src/common/frameworkpaths.cpp")
     add_files("src/modules/moduleregistry.cpp")
     add_files("src/modules/moduleprovider.cpp")
     add_files("src/plugins/pluginregistry.cpp")
@@ -306,10 +296,10 @@ target("propertypanel_test")
     add_files("inc/**/graph.h")
     add_files("inc/**/module.h")
     add_files("inc/**/projectstateservice.h")
-    add_files("inc/**/pluginprojectadapter.h")
-    add_files("inc/**/setpluginstateparametercommand.h")
+    add_files("inc/project/ipinstanceparameteradapter.h")
+    add_files("inc/**/setipinstanceparametercommand.h")
     add_files("inc/**/projectdocument.h")
-    add_files("inc/**/pluginstate.h")
+    add_files("inc/**/ipinstancestate.h")
     add_files("inc/**/pluginregistry.h")
     add_files("inc/**/plugindescriptor.h")
     add_tests("default", {
@@ -341,7 +331,6 @@ target("ipcatalogpanel_test")
     add_files("src/commands/*.cpp")
     add_files("src/graph/*.cpp")
     add_files("src/modules/*.cpp")
-    add_files("src/common/*.cpp")
     add_files("src/nodeeditor/*.cpp")
     add_files("src/nodeeditor/events/*.cpp")
     add_files("inc/**/mainwindow.h")
@@ -355,7 +344,6 @@ target("ipcatalogpanel_test")
     add_files("inc/**/projectstateservice.h")
     add_files("inc/**/projectipservice.h")
     add_files("inc/**/activeworkspacecontroller.h")
-    add_files("inc/**/palette.h")
     add_files("inc/**/validationmanager.h")
     add_tests("default", {
         trim_output = true,
@@ -393,7 +381,6 @@ target("nodeeditor_geometry_test")
     add_files("src/**/moduleregistry.cpp")
     add_files("src/**/moduleprovider.cpp")
     add_files("src/**/pluginregistry.cpp")
-    add_files("src/**/frameworkpaths.cpp")
     add_files("src/nodeeditor/animatedgraphicsview.cpp")
     add_files("src/nodeeditor/events/nodeeditorwidget_events.cpp")
     add_files("src/nodeeditor/graphnodepainter.cpp")
@@ -412,7 +399,7 @@ target("nodeeditor_geometry_test")
     add_files("inc/**/projectipservice.h")
     add_files("inc/**/projectstateservice.h")
     add_files("inc/**/activeworkspacecontroller.h")
-    add_files("inc/**/pluginstate.h")
+    add_files("inc/**/ipinstancestate.h")
     add_files("inc/**/pluginregistry.h")
     add_files("inc/**/plugindescriptor.h")
     add_files("inc/**/graphnodemodel.h")
@@ -423,7 +410,7 @@ target("nodeeditor_geometry_test")
 
 add_qt_test_target("plugin_test", "test/plugin_test.cpp", {
     "src/**/generatorrunner.cpp",
-    "src/**/manifestpluginprojectadapter.cpp",
+    "src/project/manifestipinstanceparameteradapter.cpp",
     "src/**/graph.cpp",
     "src/**/module.cpp",
     "src/**/connection.cpp",
@@ -431,11 +418,10 @@ add_qt_test_target("plugin_test", "test/plugin_test.cpp", {
     "src/**/startupdiagnostics.cpp",
     "src/**/moduleprovider.cpp",
     "src/**/moduleregistry.cpp",
-    "src/**/frameworkpaths.cpp",
     "src/**/parameter.cpp",
     "src/**/port.cpp",
     "inc/**/generatorrunner.h",
-    "inc/**/pluginprojectadapter.h",
+    "inc/project/ipinstanceparameteradapter.h",
     "inc/**/graph.h",
     "inc/**/module.h",
     "inc/**/pluginregistry.h",
@@ -456,7 +442,6 @@ add_qt_test_target("topology_preset_test", "test/topology_preset_test.cpp", {
     "src/**/moduleregistry.cpp",
     "src/**/moduleprovider.cpp",
     "src/**/pluginregistry.cpp",
-    "src/**/frameworkpaths.cpp",
     "inc/**/connectionruleservice.h",
     "inc/**/commandmanager.h",
     "inc/**/topologypresetcommand.h",

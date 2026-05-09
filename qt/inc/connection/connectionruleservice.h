@@ -3,7 +3,7 @@
 
 #include "graph/connection.h"
 #include "graph/parameter.h"
-#include "project/pluginstate.h"
+#include "project/ipinstancestate.h"
 
 #include <QHash>
 #include <QPointF>

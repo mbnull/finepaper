@@ -12,7 +12,7 @@
 
 class Graph;
 class CommandManager;
-class IPluginProjectAdapter;
+class IIpInstanceParameterAdapter;
 class NodeEditorWidget;
 class PropertyPanel;
 class IpCatalogPanel;
@@ -49,7 +49,7 @@ private slots:
     void saveGraphAs();
     // Exports active IP-core input and runs the Verilog generation entry point.
     void generateVerilog();
-    // Runs local + plugin validation and refreshes the log panel.
+    // Runs local + IP-core validation and refreshes the log panel.
     void runValidation();
     // Executes one undo/redo step in the command history.
     void undo();
@@ -73,8 +73,8 @@ private slots:
     void appendStartupLog() const;
     void scheduleStartupLayoutLog();
     void logStartupLayout() const;
-    void setActivePluginId(const QString& pluginId);
-    void ensureProjectStateRecordFromActivePlugin();
+    void setActiveIpcoreId(const QString& ipcoreId);
+    void ensureProjectStateRecordFromActiveIpcore();
     void rebuildTopologyMenu();
     bool maybeSaveChanges(const QString& actionDescription);
     bool loadDocument(const QString& path);
@@ -94,7 +94,7 @@ private slots:
     std::unique_ptr<ProjectStateService> m_projectStateService;
     std::unique_ptr<ProjectIpService> m_projectIpService;
     std::unique_ptr<ActiveWorkspaceController> m_activeWorkspaceController;
-    std::vector<std::unique_ptr<IPluginProjectAdapter>> m_pluginProjectAdapters;
+    std::vector<std::unique_ptr<IIpInstanceParameterAdapter>> m_ipInstanceParameterAdapters;
     NodeEditorWidget* m_nodeEditor;
     PropertyPanel* m_propertyPanel;
     IpCatalogPanel* m_ipCatalogPanel;
@@ -113,7 +113,7 @@ private slots:
     QAction* m_validateAction;
     QAction* m_arrangeAction;
     QMenu* m_topologyMenu;
-    QString m_activePluginId;
+    QString m_activeIpcoreId;
     QString m_currentDocumentPath;
     int m_cleanStateId = 0;
     bool m_documentDirty = false;

@@ -1,6 +1,6 @@
 # Finepaper Spec Generator
 
-`spec_generator` turns editable IP core package metadata into the committed runtime metadata consumed by the current Qt editor and Ruby framework.
+`spec_generator` turns editable IP core package metadata into the committed runtime metadata consumed by the current Qt editor and the IP core generator/DRC tools.
 
 Inputs:
 
@@ -14,6 +14,8 @@ Outputs:
 - `generated/ipcores/<ipcore-id>/plugin.json`
 - `generated/ipcores/<ipcore-id>/modules.xml`
 - `generated/ipcores/<ipcore-id>/graphics/*.xml`
+
+`plugin.json` is the runtime manifest loaded by `PluginRegistry` and surfaced as an `IpCatalogEntry` by the Qt editor. It keeps `source_root`, generator, DRC, topology preset, instance parameter, and native plugin metadata. Generator and DRC commands consume `ipcore_graph_v1` input, which the editor writes as `finepaper-ipcore-graph-v1` JSON through `IpCoreGraphExporter`.
 
 Run from the repository root:
 

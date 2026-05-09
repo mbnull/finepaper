@@ -123,8 +123,8 @@ QHash<QString, PluginInstanceParameterDescriptor> instanceParametersFromJson(con
 
     const QJsonObject object = value.toObject();
     for (auto it = object.constBegin(); it != object.constEnd(); ++it) {
-        // Keep descriptor defaults typed here; MainWindow copies them into the
-        // active Graph IP instance during plugin selection.
+        // Keep descriptor defaults typed here; project services copy them into
+        // the selected IP-instance state when an IP core is added.
         const QJsonObject parameterObject = it.value().toObject();
         PluginInstanceParameterDescriptor parameter;
         parameter.name = it.key();

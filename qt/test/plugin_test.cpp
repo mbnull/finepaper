@@ -1,7 +1,7 @@
 // Plugin system tests for manifest discovery and command metadata.
 #include "graph/graph.h"
 #include "plugins/generatorrunner.h"
-#include "plugins/pluginprojectadapter.h"
+#include "project/ipinstanceparameteradapter.h"
 #include "plugins/pluginregistry.h"
 #include "plugins/startupdiagnostics.h"
 #include "modules/moduleregistry.h"
@@ -132,7 +132,7 @@ void testIpCoreManifestLoadsRuntimeAndSourcePaths() {
         QFileInfo(root.filePath(QStringLiteral("ipcores/demo"))).absoluteFilePath();
 
     require(plugins.size() == 1, "expected one plugin");
-    require(plugins.first().id == QStringLiteral("finepaper.demo"), "plugin id should load");
+    require(plugins.first().id == QStringLiteral("finepaper.demo"), "IP-core id should load");
     require(plugins.first().runtimeRootPath == runtimeRoot, "runtime root should be manifest directory");
     require(plugins.first().sourceRootPath == sourceRoot, "source root should resolve from source_root");
     require(plugins.first().rootPath == sourceRoot, "legacy root path should alias source root");
@@ -268,7 +268,7 @@ void testModuleRegistryListsTypesByPlugin() {
     const ModuleType* ravenRouter =
         registry.getTypeForGraphGroup(QStringLiteral("finepaper.ravenoc"), QStringLiteral("xps"));
     require(ravenRouter && ravenRouter->name == QStringLiteral("RaveTile"),
-            "graph group lookup should be scoped by plugin id");
+            "graph group lookup should be scoped by IP-core id");
 }
 
 void testGeneratorArgumentsSubstituteInputAndOutput() {
@@ -468,7 +468,7 @@ void testRepositoryRaveNoCIpCoreMetadataLoads() {
             "RaveEndpoint should participate as an editable endpoint graph group");
 }
 
-void testManifestPluginAdapterExposesGlobalParameterSection() {
+void testManifestIpInstanceAdapterExposesGlobalParameterSection() {
     PluginDescriptor plugin;
     plugin.id = QStringLiteral("finepaper.ravenoc");
     plugin.name = QStringLiteral("RaveNoC");
@@ -493,24 +493,24 @@ void testManifestPluginAdapterExposesGlobalParameterSection() {
     width.configurable = true;
     plugin.instanceParameters.insert(width.name, width);
 
-    ManifestPluginProjectAdapter adapter(plugin);
-    const QVector<PluginParameterSection> sections = adapter.parameterSections();
+    ManifestIpInstanceParameterAdapter adapter(plugin);
+    const QVector<IpInstanceParameterSection> sections = adapter.parameterSections();
 
     require(sections.size() == 1, "adapter should expose one global parameter section");
-    require(sections.first().pluginId == QStringLiteral("finepaper.ravenoc"),
-            "section should retain plugin id");
+    require(sections.first().ipcoreId == QStringLiteral("finepaper.ravenoc"),
+            "section should retain IP-core id");
     require(sections.first().instanceId == QStringLiteral("ravenoc_0"),
-            "section instance id should use stable plugin id suffix");
+            "section instance id should use stable IP-core id suffix");
     require(sections.first().id == QStringLiteral("global_parameters"),
             "section id should identify global parameters");
     require(sections.first().label == QStringLiteral("RaveNoC"),
-            "section label should use plugin name");
+            "section label should use IP-core name");
     require(sections.first().expandedByDefault,
             "section should be expanded by default");
     require(sections.first().fields.size() == 2,
             "section should expose manifest fields");
 
-    const PluginParameterField& first = sections.first().fields.first();
+    const IpInstanceParameterField& first = sections.first().fields.first();
     require(first.name == QStringLiteral("flit_data_width"),
             "section fields should be sorted deterministically by name");
     require(first.label == QStringLiteral("Flit data width"),
@@ -522,7 +522,7 @@ void testManifestPluginAdapterExposesGlobalParameterSection() {
     require(first.configurable,
             "field should retain manifest configurable flag");
 
-    const PluginParameterField& second = sections.first().fields.last();
+    const IpInstanceParameterField& second = sections.first().fields.last();
     require(second.name == QStringLiteral("routing_algorithm"),
             "second sorted field should match routing parameter");
     require(second.label == QStringLiteral("routing_algorithm"),
@@ -535,11 +535,11 @@ void testManifestPluginAdapterExposesGlobalParameterSection() {
             "field should retain false configurable flag");
 }
 
-void testManifestPluginAdapterUsesPluginIdLabelAndSkipsEmptyParameters() {
+void testManifestIpInstanceAdapterUsesIpcoreIdLabelAndSkipsEmptyParameters() {
     PluginDescriptor plugin;
     plugin.id = QStringLiteral("finepaper.empty");
 
-    ManifestPluginProjectAdapter adapter(plugin);
+    ManifestIpInstanceParameterAdapter adapter(plugin);
     require(adapter.parameterSections().isEmpty(),
             "adapter should not expose sections without instance parameters");
 
@@ -549,11 +549,11 @@ void testManifestPluginAdapterUsesPluginIdLabelAndSkipsEmptyParameters() {
     mode.defaultValue = QStringLiteral("basic");
     plugin.instanceParameters.insert(mode.name, mode);
 
-    ManifestPluginProjectAdapter namedAdapter(plugin);
-    const QVector<PluginParameterSection> sections = namedAdapter.parameterSections();
+    ManifestIpInstanceParameterAdapter namedAdapter(plugin);
+    const QVector<IpInstanceParameterSection> sections = namedAdapter.parameterSections();
     require(sections.size() == 1, "adapter should expose one section after parameter is added");
     require(sections.first().label == QStringLiteral("finepaper.empty"),
-            "section label should fall back to plugin id");
+            "section label should fall back to IP-core id");
 }
 
 void testStartupDiagnosticsListLoadedPluginsAndIpTypes() {
@@ -590,7 +590,7 @@ void testStartupDiagnosticsListLoadedPluginsAndIpTypes() {
     const QStringList lines = StartupDiagnostics::logLines(plugins, registry);
 
     require(lines.join('\n').contains(QStringLiteral("[Startup] Plugin finepaper.demo")),
-            "startup diagnostics should include loaded plugin id");
+            "startup diagnostics should include loaded IP-core id");
     require(lines.join('\n').contains(QStringLiteral("Demo v1.0")),
             "startup diagnostics should include plugin display name and version");
     require(lines.join('\n').contains(QStringLiteral("[Startup] IP Shared")),
@@ -631,8 +631,8 @@ int main(int argc, char** argv) {
         testDefaultDiscoveryIncludesGeneratedIpcores();
         testRepositoryFinepaperNoCIpCoreMetadataLoads();
         testRepositoryRaveNoCIpCoreMetadataLoads();
-        testManifestPluginAdapterExposesGlobalParameterSection();
-        testManifestPluginAdapterUsesPluginIdLabelAndSkipsEmptyParameters();
+        testManifestIpInstanceAdapterExposesGlobalParameterSection();
+        testManifestIpInstanceAdapterUsesIpcoreIdLabelAndSkipsEmptyParameters();
         testStartupDiagnosticsListLoadedPluginsAndIpTypes();
         testStartupDiagnosticsMarksJsonModuleBundlesUnsupported();
     } catch (const std::exception& error) {

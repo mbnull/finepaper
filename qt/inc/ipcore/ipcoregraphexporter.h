@@ -2,7 +2,7 @@
 #pragma once
 
 #include "ipcore/ipcatalogservice.h"
-#include "project/pluginstate.h"
+#include "project/ipinstancestate.h"
 
 #include <QHash>
 #include <QJsonDocument>

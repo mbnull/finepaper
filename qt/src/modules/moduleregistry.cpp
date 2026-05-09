@@ -20,7 +20,7 @@ ModuleRegistry::ModuleRegistry(LoadMode loadMode) {
         return;
     }
 
-    qWarning() << "No plugin-owned module definitions found.";
+    qWarning() << "No runtime-owned module definitions found.";
 }
 
 void ModuleRegistry::addProvider(std::unique_ptr<ModuleProvider> provider) {
@@ -36,7 +36,7 @@ bool ModuleRegistry::registerType(const ModuleType& type) {
     }
     if (m_types.contains(type.name)) {
         qWarning() << "Skipping duplicate module type" << type.name
-                   << "from plugin" << type.pluginId;
+                   << "from runtime bundle" << type.pluginId;
         return false;
     }
     m_types[type.name] = type;

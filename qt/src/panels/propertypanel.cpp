@@ -6,10 +6,10 @@
 #include "graph/graph.h"
 #include "graph/module.h"
 #include "modules/moduletypemetadata.h"
-#include "plugins/pluginprojectadapter.h"
+#include "project/ipinstanceparameteradapter.h"
 #include "project/projectstateservice.h"
 #include "commands/commandmanager.h"
-#include "commands/setpluginstateparametercommand.h"
+#include "commands/setipinstanceparametercommand.h"
 #include "commands/setparametercommand.h"
 #include <cfloat>
 #include <climits>
@@ -132,7 +132,7 @@ QJsonValue valueToJson(const Parameter::Value& value) {
     return QJsonValue(QJsonValue::Undefined);
 }
 
-QJsonValue resolvedPluginValue(const PluginParameterField& field, const QJsonValue& storedValue) {
+QJsonValue resolvedIpInstanceValue(const IpInstanceParameterField& field, const QJsonValue& storedValue) {
     return storedValue.isUndefined() ? valueToJson(field.defaultValue) : storedValue;
 }
 
@@ -179,8 +179,8 @@ bool defaultBoolValue(const Parameter::Value& value) {
     return false;
 }
 
-QString pluginValueAsString(const PluginParameterField& field, const QJsonValue& storedValue) {
-    const QJsonValue value = resolvedPluginValue(field, storedValue);
+QString ipInstanceValueAsString(const IpInstanceParameterField& field, const QJsonValue& storedValue) {
+    const QJsonValue value = resolvedIpInstanceValue(field, storedValue);
     if (value.isString()) {
         return value.toString();
     }
@@ -193,7 +193,7 @@ QString pluginValueAsString(const PluginParameterField& field, const QJsonValue&
     return defaultStringValue(field.defaultValue);
 }
 
-void applyPluginConfigurability(QWidget* widget, bool configurable) {
+void applyIpInstanceConfigurability(QWidget* widget, bool configurable) {
     if (!widget) {
         return;
     }
@@ -218,13 +218,13 @@ void applyPluginConfigurability(QWidget* widget, bool configurable) {
 
 PropertyPanel::PropertyPanel(Graph* graph,
                              ProjectStateService* stateService,
-                             QVector<IPluginProjectAdapter*> pluginAdapters,
+                             QVector<IIpInstanceParameterAdapter*> ipInstanceParameterAdapters,
                              CommandManager* commandManager,
                              QWidget* parent)
     : QWidget(parent),
       m_graph(graph),
       m_stateService(stateService),
-      m_pluginAdapters(std::move(pluginAdapters)),
+      m_ipInstanceParameterAdapters(std::move(ipInstanceParameterAdapters)),
       m_commandManager(commandManager) {
     m_layout = new QVBoxLayout(this);
     m_descriptionView = new QPlainTextEdit(this);
@@ -243,15 +243,15 @@ PropertyPanel::PropertyPanel(Graph* graph,
         connect(m_stateService,
                 &ProjectStateService::parameterChanged,
                 this,
-                &PropertyPanel::onPluginStateParameterChanged);
+                &PropertyPanel::onIpInstanceParameterChanged);
     }
 }
 
 PropertyPanel::PropertyPanel(Graph* graph, CommandManager* commandManager, QWidget* parent)
     : PropertyPanel(graph, nullptr, {}, commandManager, parent) {}
 
-QWidget* PropertyPanel::createPluginParameterWidget(const PluginParameterSection&,
-                                                    const PluginParameterField& field,
+QWidget* PropertyPanel::createIpInstanceParameterWidget(const IpInstanceParameterSection&,
+                                                    const IpInstanceParameterField& field,
                                                     const QJsonValue& storedValue,
                                                     bool editable) {
     if (!field.choices.isEmpty()) {
@@ -259,17 +259,17 @@ QWidget* PropertyPanel::createPluginParameterWidget(const PluginParameterSection
         for (const PluginInstanceParameterChoice& choice : field.choices) {
             comboBox->addItem(choice.label, choice.value);
         }
-        syncComboBoxValue(comboBox, pluginValueAsString(field, storedValue));
-        applyPluginConfigurability(comboBox, editable);
+        syncComboBoxValue(comboBox, ipInstanceValueAsString(field, storedValue));
+        applyIpInstanceConfigurability(comboBox, editable);
         return comboBox;
     }
 
-    const QJsonValue value = resolvedPluginValue(field, storedValue);
+    const QJsonValue value = resolvedIpInstanceValue(field, storedValue);
     if (field.type == QStringLiteral("int")) {
         auto* spinBox = new QSpinBox(this);
         spinBox->setRange(INT_MIN, INT_MAX);
         spinBox->setValue(value.toInt(defaultIntValue(field.defaultValue)));
-        applyPluginConfigurability(spinBox, editable);
+        applyIpInstanceConfigurability(spinBox, editable);
         return spinBox;
     }
     if (field.type == QStringLiteral("double")) {
@@ -277,18 +277,18 @@ QWidget* PropertyPanel::createPluginParameterWidget(const PluginParameterSection
         doubleSpinBox->setRange(std::numeric_limits<double>::lowest(),
                                 std::numeric_limits<double>::max());
         doubleSpinBox->setValue(value.toDouble(defaultDoubleValue(field.defaultValue)));
-        applyPluginConfigurability(doubleSpinBox, editable);
+        applyIpInstanceConfigurability(doubleSpinBox, editable);
         return doubleSpinBox;
     }
     if (field.type == QStringLiteral("bool")) {
         auto* checkBox = new QCheckBox(this);
         checkBox->setChecked(value.toBool(defaultBoolValue(field.defaultValue)));
-        applyPluginConfigurability(checkBox, editable);
+        applyIpInstanceConfigurability(checkBox, editable);
         return checkBox;
     }
 
-    auto* lineEdit = new QLineEdit(pluginValueAsString(field, storedValue), this);
-    applyPluginConfigurability(lineEdit, editable);
+    auto* lineEdit = new QLineEdit(ipInstanceValueAsString(field, storedValue), this);
+    applyIpInstanceConfigurability(lineEdit, editable);
     return lineEdit;
 }
 
@@ -328,10 +328,10 @@ void PropertyPanel::populatePanel() {
             return;
         }
 
-        const auto renderSection = [this](const PluginParameterSection& section,
+        const auto renderSection = [this](const IpInstanceParameterSection& section,
                                           const QString& instanceId,
                                           bool writableState) {
-            const QString baseLabel = section.label.isEmpty() ? section.pluginId : section.label;
+            const QString baseLabel = section.label.isEmpty() ? section.ipcoreId : section.label;
             const QString title = instanceId.isEmpty()
                 ? baseLabel
                 : QStringLiteral("%1 / %2").arg(baseLabel, instanceId);
@@ -341,11 +341,11 @@ void PropertyPanel::populatePanel() {
             header->setFont(font);
             m_formLayout->addRow(header);
 
-            for (const PluginParameterField& field : section.fields) {
+            for (const IpInstanceParameterField& field : section.fields) {
                 const QJsonValue stored = m_stateService->parameter(
-                    section.pluginId, instanceId, section.id, field.name);
+                    section.ipcoreId, instanceId, section.id, field.name);
                 const bool editable = field.configurable && writableState;
-                QWidget* widget = createPluginParameterWidget(section, field, stored, editable);
+                QWidget* widget = createIpInstanceParameterWidget(section, field, stored, editable);
                 if (!widget) {
                     continue;
                 }
@@ -356,16 +356,16 @@ void PropertyPanel::populatePanel() {
                     widget->setToolTip(field.description);
                 }
                 if (editable && m_commandManager) {
-                    const QString pluginId = section.pluginId;
+                    const QString ipcoreId = section.ipcoreId;
                     const QString sectionId = section.id;
                     const QString fieldName = field.name;
                     const auto executeCommand = [this,
-                                                 pluginId,
+                                                 ipcoreId,
                                                  instanceId,
                                                  sectionId,
                                                  fieldName](QJsonValue value) {
-                        auto command = std::make_unique<SetPluginStateParameterCommand>(
-                            m_stateService, pluginId, instanceId, sectionId, fieldName, std::move(value));
+                        auto command = std::make_unique<SetIpInstanceParameterCommand>(
+                            m_stateService, ipcoreId, instanceId, sectionId, fieldName, std::move(value));
                         m_commandManager->executeCommand(std::move(command));
                     };
 
@@ -405,20 +405,20 @@ void PropertyPanel::populatePanel() {
                 }
                 m_formLayout->addRow(rowLabel, widget);
                 m_ipParameterWidgets.insert(
-                    section.pluginId + QStringLiteral("/") + instanceId +
+                    section.ipcoreId + QStringLiteral("/") + instanceId +
                         QStringLiteral("/") + section.id + QStringLiteral("/") + field.name,
                     widget);
             }
         };
 
-        for (const IPluginProjectAdapter* adapter : m_pluginAdapters) {
+        for (const IIpInstanceParameterAdapter* adapter : m_ipInstanceParameterAdapters) {
             if (!adapter) {
                 continue;
             }
-            for (const PluginParameterSection& section : adapter->parameterSections()) {
+            for (const IpInstanceParameterSection& section : adapter->parameterSections()) {
                 bool renderedPersistedState = false;
                 for (const ProjectIpInstanceRecord& record : m_stateService->ipInstanceRecords()) {
-                    if (record.ipcoreId != section.pluginId) {
+                    if (record.ipcoreId != section.ipcoreId) {
                         continue;
                     }
                     renderSection(section,
@@ -585,32 +585,32 @@ void PropertyPanel::onParameterChanged(const QString& name) {
     }
 }
 
-void PropertyPanel::onPluginStateParameterChanged(const QString& pluginId,
-                                                  const QString& instanceId,
-                                                  const QString& section,
-                                                  const QString& name) {
+void PropertyPanel::onIpInstanceParameterChanged(const QString& ipcoreId,
+                                                 const QString& instanceId,
+                                                 const QString& section,
+                                                 const QString& name) {
     if (m_selectedModule || !m_stateService) {
         return;
     }
 
-    const QString key = pluginId + QStringLiteral("/") + instanceId +
+    const QString key = ipcoreId + QStringLiteral("/") + instanceId +
         QStringLiteral("/") + section + QStringLiteral("/") + name;
     auto widgetIt = m_ipParameterWidgets.find(key);
     if (widgetIt == m_ipParameterWidgets.end()) {
         return;
     }
 
-    PluginParameterField field;
+    IpInstanceParameterField field;
     bool hasField = false;
-    for (const IPluginProjectAdapter* adapter : m_pluginAdapters) {
+    for (const IIpInstanceParameterAdapter* adapter : m_ipInstanceParameterAdapters) {
         if (!adapter) {
             continue;
         }
-        for (const PluginParameterSection& candidateSection : adapter->parameterSections()) {
-            if (candidateSection.pluginId != pluginId || candidateSection.id != section) {
+        for (const IpInstanceParameterSection& candidateSection : adapter->parameterSections()) {
+            if (candidateSection.ipcoreId != ipcoreId || candidateSection.id != section) {
                 continue;
             }
-            for (const PluginParameterField& candidateField : candidateSection.fields) {
+            for (const IpInstanceParameterField& candidateField : candidateSection.fields) {
                 if (candidateField.name == name) {
                     field = candidateField;
                     hasField = true;
@@ -626,16 +626,16 @@ void PropertyPanel::onPluginStateParameterChanged(const QString& pluginId,
         }
     }
 
-    const QJsonValue stored = m_stateService->parameter(pluginId, instanceId, section, name);
-    const QJsonValue value = hasField ? resolvedPluginValue(field, stored) : stored;
+    const QJsonValue stored = m_stateService->parameter(ipcoreId, instanceId, section, name);
+    const QJsonValue value = hasField ? resolvedIpInstanceValue(field, stored) : stored;
     QWidget* widget = widgetIt.value();
     if (auto* lineEdit = qobject_cast<QLineEdit*>(widget)) {
         lineEdit->blockSignals(true);
-        lineEdit->setText(hasField ? pluginValueAsString(field, stored) : value.toString());
+        lineEdit->setText(hasField ? ipInstanceValueAsString(field, stored) : value.toString());
         lineEdit->blockSignals(false);
     } else if (auto* comboBox = qobject_cast<QComboBox*>(widget)) {
         comboBox->blockSignals(true);
-        syncComboBoxValue(comboBox, hasField ? pluginValueAsString(field, stored) : value.toString());
+        syncComboBoxValue(comboBox, hasField ? ipInstanceValueAsString(field, stored) : value.toString());
         comboBox->blockSignals(false);
     } else if (auto* spinBox = qobject_cast<QSpinBox*>(widget)) {
         spinBox->blockSignals(true);

@@ -58,8 +58,8 @@ void NodeEditorWidget::dragEnterEvent(QDragEnterEvent* event) {
 
     const std::optional<ScopedModulePayload> payload = scopedModulePayload(event->mimeData());
     if (payload.has_value() && acceptsScopedModulePayload(*payload)) {
-        m_view->beginPaletteDrag(m_view->viewport()->mapFrom(this, event->position().toPoint()),
-                                 payload->moduleType);
+        m_view->beginModuleDrag(m_view->viewport()->mapFrom(this, event->position().toPoint()),
+                                payload->moduleType);
         event->acceptProposedAction();
         return;
     }
@@ -75,8 +75,8 @@ void NodeEditorWidget::dragMoveEvent(QDragMoveEvent* event) {
 
     const std::optional<ScopedModulePayload> payload = scopedModulePayload(event->mimeData());
     if (payload.has_value() && acceptsScopedModulePayload(*payload)) {
-        m_view->updatePaletteDrag(m_view->viewport()->mapFrom(this, event->position().toPoint()),
-                                  payload->moduleType);
+        m_view->updateModuleDrag(m_view->viewport()->mapFrom(this, event->position().toPoint()),
+                                 payload->moduleType);
         event->acceptProposedAction();
         return;
     }
@@ -85,7 +85,7 @@ void NodeEditorWidget::dragMoveEvent(QDragMoveEvent* event) {
 }
 
 void NodeEditorWidget::dragLeaveEvent(QDragLeaveEvent* event) {
-    m_view->endPaletteDrag();
+    m_view->endModuleDrag();
     event->accept();
 }
 
@@ -102,7 +102,7 @@ bool NodeEditorWidget::eventFilter(QObject* obj, QEvent* event) {
     case QEvent::DragMove:
         return handleViewportDragMove(static_cast<QDragMoveEvent*>(event));
     case QEvent::DragLeave:
-        m_view->endPaletteDrag();
+        m_view->endModuleDrag();
         return true;
     case QEvent::Drop:
         return handleViewportDrop(static_cast<QDropEvent*>(event));
@@ -134,7 +134,7 @@ bool NodeEditorWidget::handleViewportDragEnter(QDragEnterEvent* event) {
         return true;
     }
 
-    m_view->beginPaletteDrag(event->position().toPoint(), payload->moduleType);
+    m_view->beginModuleDrag(event->position().toPoint(), payload->moduleType);
     event->acceptProposedAction();
     return true;
 }
@@ -150,7 +150,7 @@ bool NodeEditorWidget::handleViewportDragMove(QDragMoveEvent* event) {
         return true;
     }
 
-    m_view->updatePaletteDrag(event->position().toPoint(), payload->moduleType);
+    m_view->updateModuleDrag(event->position().toPoint(), payload->moduleType);
     event->acceptProposedAction();
     return true;
 }
@@ -162,18 +162,18 @@ bool NodeEditorWidget::handleViewportDrop(QDropEvent* event) {
     }
 
     if (m_graphModel->isEditingLocked() || !acceptsScopedModulePayload(*payload)) {
-        m_view->endPaletteDrag();
+        m_view->endModuleDrag();
         event->ignore();
         return true;
     }
 
-    m_view->updatePaletteDrag(event->position().toPoint(), payload->moduleType);
+    m_view->updateModuleDrag(event->position().toPoint(), payload->moduleType);
     if (createModuleAt(*payload, m_view->mapToScene(event->position().toPoint()))) {
         event->acceptProposedAction();
     } else {
         event->ignore();
     }
-    m_view->endPaletteDrag();
+    m_view->endModuleDrag();
     return true;
 }
 
@@ -227,20 +227,20 @@ bool NodeEditorWidget::handleViewportContextMenu(QContextMenuEvent* event) {
 
 void NodeEditorWidget::dropEvent(QDropEvent* event) {
     if (m_graphModel->isEditingLocked()) {
-        m_view->endPaletteDrag();
+        m_view->endModuleDrag();
         event->ignore();
         return;
     }
 
     const std::optional<ScopedModulePayload> payload = scopedModulePayload(event->mimeData());
     if (!payload.has_value() || !acceptsScopedModulePayload(*payload)) {
-        m_view->endPaletteDrag();
+        m_view->endModuleDrag();
         event->ignore();
         return;
     }
 
     const bool created = createModuleAt(*payload, m_view->mapToScene(event->position().toPoint()));
-    m_view->endPaletteDrag();
+    m_view->endModuleDrag();
     if (created) {
         event->acceptProposedAction();
     } else {

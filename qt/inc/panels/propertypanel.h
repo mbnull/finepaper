@@ -9,14 +9,14 @@
 #include <QVector>
 
 class Graph;
-class IPluginProjectAdapter;
+class IIpInstanceParameterAdapter;
 class Module;
 class CommandManager;
 class ProjectStateService;
 class QFormLayout;
 class QPlainTextEdit;
-struct PluginParameterField;
-struct PluginParameterSection;
+struct IpInstanceParameterField;
+struct IpInstanceParameterSection;
 
 class PropertyPanel : public QWidget {
     Q_OBJECT
@@ -24,7 +24,7 @@ class PropertyPanel : public QWidget {
 public:
     PropertyPanel(Graph* graph,
                   ProjectStateService* stateService,
-                  QVector<IPluginProjectAdapter*> pluginAdapters,
+                  QVector<IIpInstanceParameterAdapter*> ipInstanceParameterAdapters,
                   CommandManager* commandManager,
                   QWidget* parent = nullptr);
     PropertyPanel(Graph* graph, CommandManager* commandManager, QWidget* parent = nullptr);
@@ -35,7 +35,7 @@ public slots:
 
 private slots:
     void onParameterChanged(const QString& name);
-    void onPluginStateParameterChanged(const QString& pluginId,
+    void onIpInstanceParameterChanged(const QString& ipcoreId,
                                        const QString& instanceId,
                                        const QString& section,
                                        const QString& name);
@@ -43,14 +43,14 @@ private slots:
 private:
     void clearPanel();
     void populatePanel();
-    QWidget* createPluginParameterWidget(const PluginParameterSection& section,
-                                         const PluginParameterField& field,
+    QWidget* createIpInstanceParameterWidget(const IpInstanceParameterSection& section,
+                                         const IpInstanceParameterField& field,
                                          const QJsonValue& storedValue,
                                          bool editable);
 
     Graph* m_graph;
     ProjectStateService* m_stateService;
-    QVector<IPluginProjectAdapter*> m_pluginAdapters;
+    QVector<IIpInstanceParameterAdapter*> m_ipInstanceParameterAdapters;
     CommandManager* m_commandManager;
     QPointer<Module> m_selectedModule;
     QVBoxLayout* m_layout;

@@ -1,7 +1,7 @@
 // Helpers for artifacts written alongside generated Verilog output.
 #pragma once
 
-#include "project/pluginstate.h"
+#include "project/ipinstancestate.h"
 
 #include <QJsonArray>
 #include <QJsonObject>

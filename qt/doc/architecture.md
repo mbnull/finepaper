@@ -7,7 +7,7 @@ The application follows a simple layered structure:
 - Model: `Graph`, `Module`, `Connection`, `Port`, `Parameter`
 - Command layer: undoable mutations wrapped in `Command` subclasses
 - UI layer: Qt Widgets and QtNodes views driven by model signals
-- IP core integration layer: startup runtime bundle discovery, local validators, and IP core generator runners
+- IP core integration layer: startup runtime bundle discovery, IP Catalog/active workspace state, local validators, and IP core generator runners
 
 The main rule in the codebase is that the `Graph` is the source of truth. UI widgets should not mutate persistent design state directly. User actions are converted into commands, commands modify the graph, and graph signals update the UI.
 
@@ -22,12 +22,17 @@ The main rule in the codebase is that the `Graph` is the source of truth. UI wid
 - one `Graph`
 - one `CommandManager`
 - one `NodeEditorWidget`
-- one `Palette`
+- one `IpCatalogPanel`
+- one `IpCatalogService`
+- one `ActiveWorkspaceController`
+- one `ProjectIpService`
 - one `PropertyPanel`
 - one `LogPanel`
 - one `ValidationManager`
 
 Before module metadata is used, `PluginRegistry` discovers generated runtime manifests from `FINEPAPER_PLUGIN_PATH` and repository-local `generated/ipcores/<ipcore-id>/` directories. Discovery is startup-only. The registry stores directory runtime metadata and native plugin metadata, but native libraries are not loaded in this version.
+
+`IpCatalogService` turns those runtime manifests into `IpCatalogEntry` records. `ProjectIpService` owns project IP instances and the current selected instance. `ActiveWorkspaceController` combines the selected project instance with its catalog entry to expose the active workspace's IP core id, instance id, module types, and topology presets.
 
 ### 2. Core model
 
@@ -80,7 +85,8 @@ From model to UI:
 
 From UI to model:
 
-- interprets drag-and-drop from the palette
+- accepts scoped module drag-and-drop from the active workspace module list
+- offers a canvas creation menu for active workspace module types
 - turns connection creation/deletion into commands
 - turns node moves into parameter updates
 - emits `moduleSelected` for the property panel
@@ -94,7 +100,14 @@ From UI to model:
 
 All edits are committed through `SetParameterCommand`.
 
-`Palette` is read-only UI that exposes registered module types as drag sources.
+`IpCatalogPanel` provides four workspace-facing lists:
+
+- IP cores discovered from generated runtime manifests
+- Project IP instances saved with the project
+- Workspace Modules for the selected active IP instance
+- Workspace Tools derived from the active IP catalog entry
+
+Workspace module drags carry the IP core id, instance id, and module type. `NodeEditorWidget` accepts the payload only when it matches the current active workspace and the module type belongs to that IP core.
 
 ### 5. Module type system
 
@@ -108,9 +121,9 @@ For each runtime bundle, the provider stack is:
 - `XmlModuleGraphicsOverlay` for per-IP graphics files
 - `LayeredModuleProvider` to combine the source and optional overlays
 
-Each loaded `ModuleType` stores the owning `pluginId`. Type names are unique in the current registry; duplicate type names from later runtime bundles are skipped.
+Each loaded `ModuleType` stores the owning `pluginId`, which corresponds to the IP core id in the catalog. Type names are unique in the current registry; duplicate type names from later runtime bundles are skipped.
 
-Editable concrete IP core packages live under `ipcores/<package>/` with `ipcore.yml`, `views/`, `generator/`, and `vendor/`. The committed generated runtime metadata lives under `generated/ipcores/<ipcore-id>/` with `plugin.json`, `modules.xml`, and `graphics/`. In `plugin.json`, `source_root` points back to the editable package. Qt resolves `modules` and `graphics` against the generated runtime root, then executes generator and DRC commands in `sourceRootPath`.
+Editable concrete IP core packages live under `ipcores/<package>/` with `ipcore.yml`, `views/`, `generator/`, and `vendor/`. The committed generated runtime metadata lives under `generated/ipcores/<ipcore-id>/` with `plugin.json`, `modules.xml`, and `graphics/`. In `plugin.json`, `source_root` points back to the editable package. Qt resolves `modules` and `graphics` against the generated runtime root, then stores the source package path as `IpCatalogEntry::sourceRootPath` for generator and DRC process working directories.
 
 Bundle metadata controls:
 
@@ -140,23 +153,28 @@ Local validation:
 
 External validation:
 
-- `DRCRunner` exports graph JSON to a temporary file
-- resolves the single IP core runtime bundle used by the graph
-- runs that package's declared DRC command from `sourceRootPath`
+- `DRCRunner` receives the active `IpCatalogEntry` and selected project IP instance
+- `IpCoreGraphExporter` writes active IP-core graph JSON to a temporary file
+- runs that package's declared DRC command from `IpCatalogEntry::sourceRootPath`
 - parses stderr into `ValidationResult` objects
 - maps external IDs back to internal graph IDs when possible
 
-Generation uses the same IP core generator resolution and writes graph JSON plus a Finepaper project snapshot into the chosen output directory before invoking the package command from `sourceRootPath`. If the graph uses modules from multiple IP core runtime bundles, generation fails with a clear message because cross-package orchestration is reserved for a later phase.
+The exported generator/DRC document uses schema `finepaper-ipcore-graph-v1`, includes the selected IP core id, selected instance id, `ipcore_state`, modules, and connections, and rejects graph content outside the active IP core.
+
+Generation uses the same active IP catalog entry and project instance. It writes `finepaper-ipcore-graph-v1` JSON plus a Finepaper `.fpproj` snapshot into the chosen output directory before invoking the package command from `IpCatalogEntry::sourceRootPath`.
 
 ## Data flow examples
 
 ### Add a module
 
-1. User drags a type from `Palette`.
-2. `NodeEditorWidget` creates `AddModuleCommand`.
-3. Command inserts a `Module` into `Graph`.
-4. `Graph` emits `moduleAdded`.
-5. `NodeEditorWidget` creates the visual node.
+1. User selects or creates a project IP instance in the IP Catalog.
+2. `ActiveWorkspaceController` exposes the selected instance's module types.
+3. User drags a type from Workspace Modules or chooses a type from the canvas creation menu.
+4. `NodeEditorWidget` validates the scoped module payload against the active workspace.
+5. `NodeEditorWidget` creates `AddModuleCommand`.
+6. Command inserts a `Module` into `Graph`.
+7. `Graph` emits `moduleAdded`.
+8. `NodeEditorWidget` creates the visual node.
 
 ### Edit a parameter
 
@@ -171,15 +189,17 @@ Generation uses the same IP core generator resolution and writes graph JSON plus
 
 1. User triggers validation from the main window.
 2. `ValidationManager` runs `BasicValidator`.
-3. `ValidationManager` runs `DRCRunner`.
-4. Results are pushed to `LogPanel`.
-5. Selecting a log entry can highlight the related element in the editor.
+3. `ValidationManager` resolves the active workspace to an `IpCatalogEntry` and selected project IP instance.
+4. `ValidationManager` runs `DRCRunner`.
+5. `DRCRunner` uses `IpCoreGraphExporter` and the IP core's DRC command.
+6. Results are pushed to `LogPanel`.
+7. Selecting a log entry can highlight the related element in the editor.
 
 ## Operational assumptions
 
 - Concrete IP core packages are editable directories under `ipcores/<package>/`; the bundled Finepaper NoC and RaveNoC packages use Ruby and provide `generator/bin/generate`.
 - Runtime bundles are generated under `generated/ipcores/<ipcore-id>/` and contain `plugin.json`, `modules.xml`, and per-IP graphics files.
-- In `plugin.json`, `source_root` points back to the source package. Qt resolves module and graphics metadata against the generated runtime root and executes generator/DRC commands in `sourceRootPath`.
+- In `plugin.json`, `source_root` points back to the source package. Qt resolves module and graphics metadata against the generated runtime root and executes generator/DRC commands in `IpCatalogEntry::sourceRootPath`.
 - Authored JSON module bundles are deprecated conversion inputs; IP-XACT remains a conversion input, not the preferred runtime layout.
 - Reserve `plugins/` wording for feature plugins or editor behavior extensions, not concrete NoC or RaveNoC IP packages.
 - Native plugin metadata may be present in `plugin.json`, but C++ dynamic libraries are not loaded yet.
@@ -191,5 +211,6 @@ Generation uses the same IP core generator resolution and writes graph JSON plus
 - Keep model mutations inside commands unless there is a strong reason not to.
 - Preserve the distinction between editor project state and generator graph input.
 - Keep runtime bundle discovery startup-only unless runtime reload is explicitly designed.
+- Keep active workspace behavior scoped to the selected project IP instance.
 - When adding new module categories or layouts, update metadata-driven checks instead of scattering type-name comparisons.
 - If IP core generator output changes, update `DRCRunner::parseErrors()` and any ID-mapping assumptions together.

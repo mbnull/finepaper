@@ -1,14 +1,14 @@
-// SetPluginStateParameterCommand applies undoable IP-instance state edits.
-#include "commands/setpluginstateparametercommand.h"
+// SetIpInstanceParameterCommand applies undoable IP-instance state edits.
+#include "commands/setipinstanceparametercommand.h"
 
 #include <utility>
 
-SetPluginStateParameterCommand::SetPluginStateParameterCommand(ProjectStateService* stateService,
-                                                               QString ipcoreId,
-                                                               QString instanceId,
-                                                               QString section,
-                                                               QString name,
-                                                               QJsonValue newValue)
+SetIpInstanceParameterCommand::SetIpInstanceParameterCommand(ProjectStateService* stateService,
+                                                             QString ipcoreId,
+                                                             QString instanceId,
+                                                             QString section,
+                                                             QString name,
+                                                             QJsonValue newValue)
     : m_stateService(stateService),
       m_ipcoreId(std::move(ipcoreId)),
       m_instanceId(std::move(instanceId)),
@@ -16,7 +16,7 @@ SetPluginStateParameterCommand::SetPluginStateParameterCommand(ProjectStateServi
       m_name(std::move(name)),
       m_newValue(std::move(newValue)) {}
 
-void SetPluginStateParameterCommand::execute() {
+void SetIpInstanceParameterCommand::execute() {
     m_executed = false;
     if (!m_stateService) {
         return;
@@ -31,7 +31,7 @@ void SetPluginStateParameterCommand::execute() {
     }
 }
 
-void SetPluginStateParameterCommand::undo() {
+void SetIpInstanceParameterCommand::undo() {
     if (!m_stateService) {
         return;
     }
