@@ -6,7 +6,7 @@ kind: noc
 runtime:
   generator:
     command: ruby
-    input_format: generic_graph_v1
+    input_format: ipcore_graph_v1
     args:
       - generator/bin/generate
       - -i
@@ -17,7 +17,7 @@ runtime:
       - generator/template
   drc:
     command: ruby
-    input_format: generic_graph_v1
+    input_format: ipcore_graph_v1
     args:
       - generator/bin/drc
       - -i

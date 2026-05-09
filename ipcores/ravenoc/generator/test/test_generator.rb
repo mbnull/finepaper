@@ -49,7 +49,7 @@ class RaveNoCGeneratorTest < Minitest::Test
       assert_includes File.read(File.join(out, 'verify.sh')), '--lint-only'
 
       manifest = JSON.parse(File.read(File.join(out, 'manifest.json')))
-      assert_equal 'finepaper.ravenoc', manifest.fetch('plugin')
+      assert_equal 'finepaper.ravenoc', manifest.fetch('ipcore')
       assert_equal 'ravenoc_node', manifest.fetch('module').fetch('id')
       assert_equal 2, manifest.fetch('parameters').fetch('rows')
     end
@@ -296,13 +296,13 @@ class RaveNoCGeneratorTest < Minitest::Test
 
   def valid_graph
     {
-      'schema' => 'finepaper-plugin-graph-v1',
+      'schema' => 'finepaper-ipcore-graph-v1',
       'name' => 'demo',
-      'ipcore_state' => [ravenoc_plugin_state],
+      'ipcore_state' => [ravenoc_ipcore_state],
       'modules' => [
         {
           'id' => 'ravenoc_node',
-          'plugin' => 'finepaper.ravenoc',
+          'ipcore' => 'finepaper.ravenoc',
           'type' => 'RaveNoC',
           'parameters' => {
             'rows' => 2,
@@ -321,7 +321,7 @@ class RaveNoCGeneratorTest < Minitest::Test
          .fetch('global_parameters')
   end
 
-  def ravenoc_plugin_state
+  def ravenoc_ipcore_state
     {
       'ipcore' => 'finepaper.ravenoc',
       'instance' => 'ravenoc_0',
@@ -350,7 +350,7 @@ class RaveNoCGeneratorTest < Minitest::Test
     tile = lambda do |id, x, y|
       {
         'id' => id,
-        'plugin' => 'finepaper.ravenoc',
+        'ipcore' => 'finepaper.ravenoc',
         'type' => 'RaveTile',
         'parameters' => {
           'x' => x,
@@ -362,9 +362,9 @@ class RaveNoCGeneratorTest < Minitest::Test
     end
 
     {
-      'schema' => 'finepaper-plugin-graph-v1',
+      'schema' => 'finepaper-ipcore-graph-v1',
       'name' => 'manual_tiles',
-      'ipcore_state' => [ravenoc_plugin_state],
+      'ipcore_state' => [ravenoc_ipcore_state],
       'modules' => [
         tile.call('rave_a', 100, 80),
         tile.call('rave_b', 320, 80),
@@ -402,19 +402,19 @@ class RaveNoCGeneratorTest < Minitest::Test
 
   def one_by_two_tile_graph
     {
-      'schema' => 'finepaper-plugin-graph-v1',
+      'schema' => 'finepaper-ipcore-graph-v1',
       'name' => 'one_by_two',
-      'ipcore_state' => [ravenoc_plugin_state],
+      'ipcore_state' => [ravenoc_ipcore_state],
       'modules' => [
         {
           'id' => 'rave_a',
-          'plugin' => 'finepaper.ravenoc',
+          'ipcore' => 'finepaper.ravenoc',
           'type' => 'RaveTile',
           'parameters' => { 'x' => 100, 'y' => 80, 'mesh_col' => 0, 'mesh_row' => 0 }
         },
         {
           'id' => 'rave_b',
-          'plugin' => 'finepaper.ravenoc',
+          'ipcore' => 'finepaper.ravenoc',
           'type' => 'RaveTile',
           'parameters' => { 'x' => 320, 'y' => 80, 'mesh_col' => 1, 'mesh_row' => 0 }
         }
@@ -435,7 +435,7 @@ class RaveNoCGeneratorTest < Minitest::Test
          .fetch('parameters')['external_id'] = 'rave_00'
     graph.fetch('modules') << {
       'id' => '9ed21db3_a343_4420_afcb_d6b19cb997fe',
-      'plugin' => 'finepaper.ravenoc',
+      'ipcore' => 'finepaper.ravenoc',
       'type' => 'RaveEndpoint',
       'parameters' => {
         'external_id' => 'host_0',

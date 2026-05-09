@@ -29,7 +29,7 @@ class SpecGeneratorTest < Minitest::Test
       assert_equal 'modules.xml', plugin_json.fetch('modules')
       assert_equal 'graphics', plugin_json.fetch('graphics')
       assert_equal 'ruby', plugin_json.fetch('generator').fetch('command')
-      assert_equal 'generic_graph_v1', plugin_json.fetch('generator').fetch('input_format')
+      assert_equal 'ipcore_graph_v1', plugin_json.fetch('generator').fetch('input_format')
       assert_equal 'generator/bin/generate', plugin_json.fetch('generator').fetch('args').first
       assert_equal 'ruby', plugin_json.fetch('drc').fetch('command')
       assert_equal 'generator/bin/drc', plugin_json.fetch('drc').fetch('args').first
@@ -465,12 +465,12 @@ class SpecGeneratorTest < Minitest::Test
       runtime:
         generator:
           command: ruby
-          input_format: generic_graph_v1
+          input_format: ipcore_graph_v1
           args:
             - generator/bin/generate
         drc:
           command: ruby
-          input_format: generic_graph_v1
+          input_format: ipcore_graph_v1
           args:
             - generator/bin/drc
       buses:

@@ -11,13 +11,13 @@
 
 struct PluginCommandDescriptor {
     QString command;
-    QString inputFormat = QStringLiteral("generic_graph_v1");
+    QString inputFormat = QStringLiteral("ipcore_graph_v1");
     QStringList args;
 
     bool hasCommand() const { return !command.trimmed().isEmpty(); }
     bool hasGenerator() const { return hasCommand(); }
-    bool usesGenericGraphInput() const {
-        return inputFormat == QStringLiteral("generic_graph_v1");
+    bool usesIpcoreGraphInput() const {
+        return inputFormat == QStringLiteral("ipcore_graph_v1");
     }
     QStringList arguments(const QString& inputPath, const QString& outputDirectory) const {
         QStringList resolved;

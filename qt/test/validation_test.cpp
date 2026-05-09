@@ -6,6 +6,9 @@
 #include "validation/validator.h"
 
 #include <QCoreApplication>
+#include <QDir>
+#include <QFileInfo>
+#include <QStringList>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
@@ -20,6 +23,7 @@ std::unique_ptr<Module> makeEndpoint(const QString& id) {
 
 std::unique_ptr<Module> makeRaveTile(const QString& id, int x, int y) {
     auto module = std::make_unique<Module>(id, "RaveTile");
+    module->setIpcoreId(QStringLiteral("finepaper.ravenoc"));
     module->addPort(Port(QStringLiteral("north"), Port::Direction::InOut, QStringLiteral("bus"),
                          QStringLiteral("North"), {}, QStringLiteral("router"),
                          QStringLiteral("ravenoc_router_link"), QStringLiteral("north")));
@@ -93,7 +97,46 @@ bool hasRule(const QList<ValidationResult>& results, const QString& ruleName) {
     return false;
 }
 
-QVector<ProjectIpInstanceRecord> ravenocIpcoreState() {
+QString repositoryPath(const QString& relativePath) {
+    const QStringList startPaths = {
+        QDir::currentPath(),
+        QCoreApplication::applicationDirPath()
+    };
+
+    for (const QString& startPath : startPaths) {
+        QDir dir(startPath);
+        while (true) {
+            const QFileInfo info(dir.filePath(relativePath));
+            if (info.exists()) {
+                return info.absoluteFilePath();
+            }
+            if (!dir.cdUp()) {
+                break;
+            }
+        }
+    }
+
+    return QFileInfo(QDir(startPaths.first()).filePath(relativePath)).absoluteFilePath();
+}
+
+IpCatalogEntry ravenocCatalogEntry() {
+    IpCatalogEntry entry;
+    entry.id = QStringLiteral("finepaper.ravenoc");
+    entry.name = QStringLiteral("RaveNoC");
+    entry.version = QStringLiteral("1.0");
+    entry.kind = QStringLiteral("noc");
+    entry.sourceRootPath = repositoryPath(QStringLiteral("ipcores/ravenoc"));
+    entry.drc.command = QStringLiteral("ruby");
+    entry.drc.inputFormat = QStringLiteral("ipcore_graph_v1");
+    entry.drc.args = {
+        QStringLiteral("generator/bin/drc"),
+        QStringLiteral("-i"),
+        QStringLiteral("{input}")
+    };
+    return entry;
+}
+
+ProjectIpInstanceRecord ravenocIpcoreStateRecord() {
     ProjectIpInstanceRecord state;
     state.ipcoreId = QStringLiteral("finepaper.ravenoc");
     state.instanceId = QStringLiteral("ravenoc_0");
@@ -115,7 +158,7 @@ QVector<ProjectIpInstanceRecord> ravenocIpcoreState() {
             {QStringLiteral("bypass_cdc"), false}
         }}
     };
-    return {state};
+    return state;
 }
 
 void testBasicValidatorLeavesIpDrcToPluginCommand() {
@@ -131,7 +174,7 @@ void testBasicValidatorLeavesIpDrcToPluginCommand() {
             "IP topology rules should come from IP DRC scripts");
 }
 
-void testDrcRunnerUsesPluginGraphFlavorForRaveNoC() {
+void testDrcRunnerUsesIpcoreGraphForRaveNoC() {
     require(ModuleRegistry::instance().getType(QStringLiteral("RaveTile")) != nullptr,
             "RaveTile type must be registered for DRC flavor test");
 
@@ -148,7 +191,8 @@ void testDrcRunnerUsesPluginGraphFlavorForRaveNoC() {
                   QStringLiteral("west"));
 
     DRCRunner runner;
-    const QList<ValidationResult> results = runner.validate(&graph, ravenocIpcoreState());
+    const QList<ValidationResult> results =
+        runner.validate(&graph, ravenocCatalogEntry(), ravenocIpcoreStateRecord());
     QStringList messages;
     for (const ValidationResult& result : results) {
         messages.append(result.message());
@@ -156,8 +200,8 @@ void testDrcRunnerUsesPluginGraphFlavorForRaveNoC() {
 
     const QByteArray messageBytes = messages.join('\n').toLocal8Bit();
     require(results.isEmpty(), messageBytes.constData());
-    require(!messages.join('\n').contains(QStringLiteral("expected schema finepaper-plugin-graph-v1")),
-            "RaveNoC DRC should receive generic plugin graph JSON");
+    require(!messages.join('\n').contains(QStringLiteral("expected schema finepaper-ipcore-graph-v1")),
+            "RaveNoC DRC should receive IP-core graph JSON");
     require(!messages.join('\n').contains(QStringLiteral("missing ipcore_state")),
             "RaveNoC DRC should receive ipcore_state");
 }
@@ -189,7 +233,8 @@ void testDrcRunnerAcceptsManualRaveTilePlacement() {
                   QStringLiteral("rave_d"), QStringLiteral("north"));
 
     DRCRunner runner;
-    const QList<ValidationResult> results = runner.validate(&graph, ravenocIpcoreState());
+    const QList<ValidationResult> results =
+        runner.validate(&graph, ravenocCatalogEntry(), ravenocIpcoreStateRecord());
     QStringList messages;
     for (const ValidationResult& result : results) {
         messages.append(result.message());
@@ -221,7 +266,8 @@ void testDrcRunnerUsesConnectionsWhenRaveTileLogicalCoordinatesAreStale() {
                   QStringLiteral("rave_right"), QStringLiteral("west"));
 
     DRCRunner runner;
-    const QList<ValidationResult> results = runner.validate(&graph, ravenocIpcoreState());
+    const QList<ValidationResult> results =
+        runner.validate(&graph, ravenocCatalogEntry(), ravenocIpcoreStateRecord());
     QStringList messages;
     for (const ValidationResult& result : results) {
         messages.append(result.message());
@@ -246,7 +292,8 @@ void testDrcRunnerRejectsManualRaveTileNonMesh() {
             "failed to add fourth manual RaveTile");
 
     DRCRunner runner;
-    const QList<ValidationResult> results = runner.validate(&graph, ravenocIpcoreState());
+    const QList<ValidationResult> results =
+        runner.validate(&graph, ravenocCatalogEntry(), ravenocIpcoreStateRecord());
 
     require(hasMessageContaining(results, QStringLiteral("missing mesh link")),
             "manual RaveTile graph without mesh links should fail DRC");
@@ -259,7 +306,7 @@ int main(int argc, char** argv) {
 
     try {
         testBasicValidatorLeavesIpDrcToPluginCommand();
-        testDrcRunnerUsesPluginGraphFlavorForRaveNoC();
+        testDrcRunnerUsesIpcoreGraphForRaveNoC();
         testDrcRunnerAcceptsManualRaveTilePlacement();
         testDrcRunnerUsesConnectionsWhenRaveTileLogicalCoordinatesAreStale();
         testDrcRunnerRejectsManualRaveTileNonMesh();

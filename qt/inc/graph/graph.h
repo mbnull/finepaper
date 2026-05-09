@@ -1,21 +1,14 @@
 // Graph — central data model for the SoC/NoC topology.
 // Owns all Modules and Connections, enforces uniqueness and validity constraints,
 // and emits Qt signals when the topology changes so the UI stays in sync.
-// Supports plugin-facing graph JSON serialization.
 #pragma once
 
 #include "graph/module.h"
 #include "graph/connection.h"
 #include <QObject>
 #include <QMap>
-#include <QHash>
-#include <QJsonDocument>
 #include <vector>
 #include <memory>
-
-enum class GraphJsonFlavor {
-    Plugin
-};
 
 class Graph : public QObject {
     Q_OBJECT
@@ -51,11 +44,6 @@ public:
 
     const std::vector<std::unique_ptr<Module>>& modules() const { return m_modules; }
     const std::vector<std::unique_ptr<Connection>>& connections() const { return m_connections; }
-
-    // Serializes graph for plugin generator/DRC boundaries.
-    QJsonDocument toJsonDocument(const QString& designName,
-                                 GraphJsonFlavor flavor = GraphJsonFlavor::Plugin,
-                                 QHash<QString, QString>* externalToInternalIds = nullptr) const;
 
 signals:
     void moduleAdded(Module* module);

@@ -1,5 +1,5 @@
 {
-  "schema": "finepaper-plugin-graph-v1",
+  "schema": "finepaper-ipcore-graph-v1",
   "name": "ravenoc_internal_2x2",
   "ipcore_state": [
     {
@@ -28,7 +28,7 @@
   "modules": [
     {
       "id": "rave_0_0",
-      "plugin": "finepaper.ravenoc",
+      "ipcore": "finepaper.ravenoc",
       "type": "RaveTile",
       "parameters": {
         "x": 0,
@@ -39,7 +39,7 @@
     },
     {
       "id": "rave_0_1",
-      "plugin": "finepaper.ravenoc",
+      "ipcore": "finepaper.ravenoc",
       "type": "RaveTile",
       "parameters": {
         "x": 220,
@@ -50,7 +50,7 @@
     },
     {
       "id": "rave_1_0",
-      "plugin": "finepaper.ravenoc",
+      "ipcore": "finepaper.ravenoc",
       "type": "RaveTile",
       "parameters": {
         "x": 0,
@@ -61,7 +61,7 @@
     },
     {
       "id": "rave_1_1",
-      "plugin": "finepaper.ravenoc",
+      "ipcore": "finepaper.ravenoc",
       "type": "RaveTile",
       "parameters": {
         "x": 220,

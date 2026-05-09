@@ -47,7 +47,7 @@ private slots:
     void saveGraph();
     // Prompts for a new destination and saves there.
     void saveGraphAs();
-    // Exports plugin input and runs the Verilog generation entry point.
+    // Exports active IP-core input and runs the Verilog generation entry point.
     void generateVerilog();
     // Runs local + plugin validation and refreshes the log panel.
     void runValidation();

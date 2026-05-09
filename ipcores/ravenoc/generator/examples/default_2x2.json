@@ -1,5 +1,5 @@
 {
-  "schema": "finepaper-plugin-graph-v1",
+  "schema": "finepaper-ipcore-graph-v1",
   "name": "ravenoc_default_2x2",
   "ipcore_state": [
     {
@@ -28,7 +28,7 @@
   "modules": [
     {
       "id": "ravenoc_00",
-      "plugin": "finepaper.ravenoc",
+      "ipcore": "finepaper.ravenoc",
       "type": "RaveNoC",
       "parameters": {
         "rows": 2,

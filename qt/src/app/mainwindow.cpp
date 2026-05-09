@@ -7,6 +7,7 @@
 #include "graph/graph.h"
 #include "commands/commandmanager.h"
 #include "ipcore/ipcatalogservice.h"
+#include "ipcore/ipcoregraphexporter.h"
 #include "nodeeditor/nodeeditorwidget.h"
 #include "panels/ipcatalogpanel.h"
 #include "panels/propertypanel.h"
@@ -36,8 +37,6 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QInputDialog>
-#include <QJsonDocument>
-#include <QJsonObject>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
@@ -99,6 +98,21 @@ void appendLogLines(LogPanel* logPanel,
         }
         logPanel->appendMessage(prefix + trimmed, color);
     }
+}
+
+std::optional<ProjectIpInstanceRecord> selectedRecord(const ProjectStateService* stateService,
+                                                      const QString& ipcoreId,
+                                                      const QString& instanceId) {
+    if (!stateService) {
+        return std::nullopt;
+    }
+
+    for (const ProjectIpInstanceRecord& record : stateService->ipInstanceRecords()) {
+        if (record.ipcoreId == ipcoreId && record.instanceId == instanceId) {
+            return record;
+        }
+    }
+    return std::nullopt;
 }
 
 } // namespace
@@ -228,13 +242,32 @@ void MainWindow::generateVerilog() {
         return;
     }
 
-    // Persist the editor graph in the selected generator input shape, then call generator.
+    // Persist the active IP-core generator input, then call generator.
     const QString designName = sanitizedDesignName(outputDirectory);
     const QString jsonPath = outputDir.filePath(designName + ".json");
-    // Resolve the command before writing artifacts so plugin ownership and
-    // multi-plugin constraints fail early with a user-facing message.
+    if (!m_activeWorkspaceController || !m_activeWorkspaceController->state().hasActiveIp) {
+        const QString error = QStringLiteral("Select an IP core instance before generating.");
+        m_logPanel->appendMessage("[Generate] " + error, QColor(220, 50, 50));
+        QMessageBox::warning(this, "Generator Not Available", error);
+        return;
+    }
+
+    const ActiveWorkspaceState& workspace = m_activeWorkspaceController->state();
+    const std::optional<IpCatalogEntry> entry =
+        m_ipCatalogService ? m_ipCatalogService->entry(workspace.ipcoreId) : std::nullopt;
+    const std::optional<ProjectIpInstanceRecord> record =
+        selectedRecord(m_projectStateService.get(), workspace.ipcoreId, workspace.instanceId);
+    if (!entry.has_value() || !record.has_value()) {
+        const QString error = QStringLiteral("Active IP instance is not available for generation.");
+        m_logPanel->appendMessage("[Generate] " + error, QColor(220, 50, 50));
+        QMessageBox::warning(this, "Generator Not Available", error);
+        return;
+    }
+
+    // Resolve the command before writing artifacts so IP-core ownership and
+    // command availability fail early with a user-facing message.
     const GeneratorCommand generatorCommand =
-        GeneratorRunner::resolveForGraph(m_graph, jsonPath, outputDirectory);
+        GeneratorRunner::resolveForIpcore(*entry, jsonPath, outputDirectory);
     if (!generatorCommand.valid) {
         m_logPanel->appendMessage("[Generate] " + generatorCommand.errorMessage,
                                   QColor(220, 50, 50));
@@ -244,8 +277,22 @@ void MainWindow::generateVerilog() {
         return;
     }
 
+    const IpCoreGraphExportResult exportResult =
+        IpCoreGraphExporter::exportGraph(IpCoreGraphExportRequest{
+            m_graph,
+            *entry,
+            *record,
+            designName,
+            nullptr
+        });
+    if (!exportResult.success) {
+        m_logPanel->appendMessage("[Generate] " + exportResult.error, QColor(220, 50, 50));
+        QMessageBox::warning(this, "JSON Export Failed", exportResult.error);
+        return;
+    }
+
     QFile jsonFile(jsonPath);
-    // JSON is the contract boundary between the editor and the external plugin
+    // JSON is the contract boundary between the editor and the external IP-core
     // process, so fail before launching the generator if the handoff cannot be written.
     if (!jsonFile.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
         m_logPanel->appendMessage("[Generate] Could not write JSON: " + jsonPath,
@@ -255,9 +302,7 @@ void MainWindow::generateVerilog() {
                              "Could not write " + jsonPath);
         return;
     }
-    QJsonObject root = m_graph->toJsonDocument(designName, GraphJsonFlavor::Plugin).object();
-    attachIpcoreState(root, m_projectStateService->ipInstanceRecords());
-    jsonFile.write(QJsonDocument(root).toJson());
+    jsonFile.write(exportResult.document.toJson());
     jsonFile.close();
 
     // Keep a Finepaper project snapshot next to generated RTL so the produced
@@ -284,13 +329,13 @@ void MainWindow::generateVerilog() {
                               QColor(70, 110, 190));
     m_logPanel->appendMessage(QString("[Generate] Project=%1").arg(projectSnapshot.path),
                               QColor(70, 110, 190));
-    m_logPanel->appendMessage(QString("[Generate] Plugin=%1").arg(generatorCommand.pluginId),
+    m_logPanel->appendMessage(QString("[Generate] IP core=%1").arg(generatorCommand.ipcoreId),
                               QColor(70, 110, 190));
 
     statusBar()->showMessage("Generating Verilog...");
     QApplication::setOverrideCursor(Qt::WaitCursor);
 
-    // Run plugin generator synchronously so UI status/logging reflects one
+    // Run IP-core generator synchronously so UI status/logging reflects one
     // complete operation from start to finish.
     QProcess proc;
     proc.setWorkingDirectory(generatorCommand.workingDirectory);
@@ -303,7 +348,7 @@ void MainWindow::generateVerilog() {
     QApplication::restoreOverrideCursor();
 
     if (!started) {
-        const QString error = "Failed to start plugin generator: " + proc.errorString();
+        const QString error = "Failed to start IP core generator: " + proc.errorString();
         qWarning() << error;
         m_logPanel->appendMessage("[Generate] " + error, QColor(220, 50, 50));
         statusBar()->showMessage(error, 5000);
@@ -459,6 +504,8 @@ void MainWindow::setupPanels() {
     m_logPanel = new LogPanel(this);
     m_validationManager = new ValidationManager(m_graph,
                                                 m_projectStateService.get(),
+                                                m_ipCatalogService.get(),
+                                                m_activeWorkspaceController.get(),
                                                 m_logPanel,
                                                 this);
 

@@ -4,15 +4,8 @@
 //   remove      — destroy in-place and emit a signal
 //   take        — transfer ownership out (used by undo commands)
 #include "graph/graph.h"
-#include "modules/modulelabels.h"
-#include "modules/moduleregistry.h"
 #include <algorithm>
-#include <QJsonDocument>
-#include <QJsonObject>
-#include <QJsonArray>
 #include <QDebug>
-#include <QRegularExpression>
-#include <QSet>
 
 namespace {
 
@@ -26,92 +19,6 @@ const Port* findPort(const Module* module, const QString& portId) {
     }
 
     return nullptr;
-}
-
-QJsonValue parameterToJson(const Parameter::Value& value) {
-    if (std::holds_alternative<QString>(value)) return QJsonValue(std::get<QString>(value));
-    if (std::holds_alternative<int>(value)) return QJsonValue(std::get<int>(value));
-    if (std::holds_alternative<double>(value)) return QJsonValue(std::get<double>(value));
-    if (std::holds_alternative<bool>(value)) return QJsonValue(std::get<bool>(value));
-    return QJsonValue();
-}
-
-QString directionToJsonString(Port::Direction direction) {
-    if (direction == Port::Direction::Input) return QStringLiteral("input");
-    if (direction == Port::Direction::Output) return QStringLiteral("output");
-    return QStringLiteral("inout");
-}
-
-QJsonObject portToGenericJson(const Port& port) {
-    QJsonObject object;
-    object["id"] = port.id();
-    object["direction"] = directionToJsonString(port.direction());
-    object["type"] = port.type();
-    object["name"] = port.name();
-    if (!port.description().isEmpty()) object["description"] = port.description();
-    if (!port.role().isEmpty()) object["role"] = port.role();
-    if (!port.busType().isEmpty()) object["bus_type"] = port.busType();
-    if (!port.interfaceId().isEmpty()) object["interface"] = port.interfaceId();
-    return object;
-}
-
-QJsonObject parametersToGenericJson(const Module* module) {
-    QJsonObject parameters;
-    if (!module) return parameters;
-    for (auto it = module->parameters().constBegin(); it != module->parameters().constEnd(); ++it) {
-        parameters.insert(it.key(), parameterToJson(it.value().value()));
-    }
-    return parameters;
-}
-
-QString safeArtifactToken(QString token, const QString& fallback) {
-    token = token.trimmed();
-    if (token.isEmpty()) {
-        token = fallback.trimmed();
-    }
-    token.replace(QRegularExpression(QStringLiteral("[^A-Za-z0-9_$]+")), QStringLiteral("_"));
-    token.replace(QRegularExpression(QStringLiteral("_+")), QStringLiteral("_"));
-    token = token.trimmed();
-    while (token.startsWith(QStringLiteral("_"))) {
-        token.remove(0, 1);
-    }
-    while (token.endsWith(QStringLiteral("_"))) {
-        token.chop(1);
-    }
-    if (token.isEmpty()) {
-        token = QStringLiteral("module");
-    }
-    if (!token.front().isLetter() && token.front() != QLatin1Char('_')) {
-        token.prepend(QStringLiteral("m_"));
-    }
-    // Plugin-facing IDs become filenames or HDL-ish identifiers in downstream
-    // tools, so keep them deterministic and conservative.
-    return token;
-}
-
-QString uniqueArtifactToken(const QString& token, QSet<QString>& usedTokens) {
-    QString candidate = token;
-    int suffix = 1;
-    while (usedTokens.contains(candidate)) {
-        candidate = QStringLiteral("%1_%2").arg(token).arg(suffix++);
-    }
-    usedTokens.insert(candidate);
-    return candidate;
-}
-
-QString pluginModuleArtifactId(const Module* module, QSet<QString>& usedModuleIds) {
-    const QString fallback = module ? module->type().toLower() : QStringLiteral("module");
-    return uniqueArtifactToken(safeArtifactToken(ModuleLabels::externalId(module), fallback), usedModuleIds);
-}
-
-QString pluginConnectionArtifactId(const QString& sourceModuleId,
-                                   const QString& sourcePortId,
-                                   const QString& targetModuleId,
-                                   const QString& targetPortId,
-                                   QSet<QString>& usedConnectionIds) {
-    const QString raw = QStringLiteral("%1_%2_to_%3_%4")
-                            .arg(sourceModuleId, sourcePortId, targetModuleId, targetPortId);
-    return uniqueArtifactToken(safeArtifactToken(raw, QStringLiteral("connection")), usedConnectionIds);
 }
 
 } // namespace
@@ -329,84 +236,6 @@ bool Graph::isValidConnection(const PortRef& source, const PortRef& target) cons
                    connection->target().moduleId == target.moduleId &&
                    connection->target().portId == target.portId;
         });
-}
-
-QJsonDocument Graph::toJsonDocument(const QString& designName,
-                                    GraphJsonFlavor flavor,
-                                    QHash<QString, QString>* externalToInternalIds) const {
-    Q_UNUSED(flavor);
-    if (externalToInternalIds) {
-        // Callers such as DRCRunner use this map to translate generated artifact
-        // IDs back to editor-internal IDs for selection/highlighting.
-        externalToInternalIds->clear();
-    }
-
-    QJsonArray modules;
-    QJsonArray connections;
-    QHash<QString, QString> runtimeToArtifactIds;
-    QSet<QString> usedModuleIds;
-
-    for (const auto& module : m_modules) {
-        const ModuleType* type = ModuleRegistry::instance().getType(module->type());
-        // External ID parameters are user/plugin visible; uniqueArtifactToken
-        // protects against duplicates when several modules share a label.
-        const QString artifactId = pluginModuleArtifactId(module.get(), usedModuleIds);
-        runtimeToArtifactIds.insert(module->id(), artifactId);
-        if (externalToInternalIds) {
-            externalToInternalIds->insert(artifactId, module->id());
-        }
-
-        QJsonObject object;
-        object["id"] = artifactId;
-        object["plugin"] = type ? type->pluginId : QString();
-        object["type"] = module->type();
-        object["parameters"] = parametersToGenericJson(module.get());
-
-        QJsonArray ports;
-        for (const Port& port : module->ports()) {
-            // Generic plugin consumers need the effective runtime port list,
-            // not only the module type name.
-            ports.append(portToGenericJson(port));
-        }
-        object["ports"] = ports;
-        // Port and parameter snapshots are duplicated into the export so a
-        // generator does not have to re-open module bundle metadata.
-        modules.append(object);
-    }
-
-    QSet<QString> usedConnectionIds;
-    for (const auto& connection : m_connections) {
-        // Runtime IDs are editor-only UUIDs; plugin inputs receive stable,
-        // human-readable artifact IDs instead.
-        const QString sourceModuleId = runtimeToArtifactIds.value(connection->source().moduleId);
-        const QString targetModuleId = runtimeToArtifactIds.value(connection->target().moduleId);
-        if (sourceModuleId.isEmpty() || targetModuleId.isEmpty()) {
-            continue;
-        }
-
-        QJsonObject object;
-        object["id"] = pluginConnectionArtifactId(sourceModuleId,
-                                                  connection->source().portId,
-                                                  targetModuleId,
-                                                  connection->target().portId,
-                                                  usedConnectionIds);
-        object["source"] = QJsonObject{
-            {QStringLiteral("module"), sourceModuleId},
-            {QStringLiteral("port"), connection->source().portId}
-        };
-        object["target"] = QJsonObject{
-            {QStringLiteral("module"), targetModuleId},
-            {QStringLiteral("port"), connection->target().portId}
-        };
-        connections.append(object);
-    }
-
-    QJsonObject root;
-    root["schema"] = QStringLiteral("finepaper-plugin-graph-v1");
-    root["name"] = designName.isEmpty() ? QStringLiteral("design") : designName;
-    root["modules"] = modules;
-    root["connections"] = connections;
-    return QJsonDocument(root);
 }
 
 void Graph::onModuleParameterChanged(const QString& moduleId, const QString& paramName) {

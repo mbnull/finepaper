@@ -5,7 +5,7 @@
 #include <QList>
 #include <QHash>
 #include <QString>
-#include <QVector>
+#include "ipcore/ipcatalogservice.h"
 #include "project/pluginstate.h"
 #include "validation/validationresult.h"
 
@@ -14,7 +14,8 @@ class Graph;
 class DRCRunner {
 public:
     QList<ValidationResult> validate(const Graph* graph,
-                                     const QVector<ProjectIpInstanceRecord>& ipInstanceRecords);
+                                     const IpCatalogEntry& ipcore,
+                                     const ProjectIpInstanceRecord& instance);
 private:
     QList<ValidationResult> parseErrors(const QString& stderr);
 

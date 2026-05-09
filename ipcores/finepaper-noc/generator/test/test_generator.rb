@@ -18,13 +18,29 @@ DRC_BIN = File.join(__dir__, '..', 'bin', 'drc')
 MESH_3X3 = File.join(__dir__, '..', 'examples', 'mesh_3x3.json')
 MULTI_EP = File.join(__dir__, '..', 'examples', 'multi_endpoint.json')
 STUB_TEMPLATES = Dir[File.join(__dir__, '..', 'template', 'stubs', '*.sv')].sort
-GENERIC_GRAPH = {
-  'schema' => 'finepaper-plugin-graph-v1',
-  'name' => 'generic_noc',
+IPCORE_GRAPH = {
+  'schema' => 'finepaper-ipcore-graph-v1',
+  'name' => 'ipcore_noc',
+  'ipcore' => 'finepaper.noc',
+  'instance' => 'noc_0',
+  'ipcore_state' => [
+    {
+      'ipcore' => 'finepaper.noc',
+      'instance' => 'noc_0',
+      'state' => {
+        'global_parameters' => {
+          'data_width' => 64,
+          'flit_width' => 128,
+          'addr_width' => 32
+        }
+      }
+    }
+  ],
   'modules' => [
     {
       'id' => 'xp_0_0',
-      'plugin' => 'finepaper.noc',
+      'ipcore' => 'finepaper.noc',
+      'instance' => 'noc_0',
       'type' => 'XP',
       'parameters' => {
         'mesh_col' => 0,
@@ -36,7 +52,8 @@ GENERIC_GRAPH = {
     },
     {
       'id' => 'xp_0_1',
-      'plugin' => 'finepaper.noc',
+      'ipcore' => 'finepaper.noc',
+      'instance' => 'noc_0',
       'type' => 'XP',
       'parameters' => {
         'mesh_col' => 1,
@@ -48,7 +65,8 @@ GENERIC_GRAPH = {
     },
     {
       'id' => 'ep_cpu0',
-      'plugin' => 'finepaper.noc',
+      'ipcore' => 'finepaper.noc',
+      'instance' => 'noc_0',
       'type' => 'Endpoint',
       'parameters' => {
         'type' => 'master',
@@ -73,6 +91,36 @@ GENERIC_GRAPH = {
   ]
 }.freeze
 
+def ipcore_graph_json(name:, modules: [], connections: [], parameters: {})
+  JSON.generate({
+    'schema' => 'finepaper-ipcore-graph-v1',
+    'name' => name,
+    'ipcore' => 'finepaper.noc',
+    'instance' => 'noc_0',
+    'ipcore_state' => [
+      {
+        'ipcore' => 'finepaper.noc',
+        'instance' => 'noc_0',
+        'state' => {
+          'global_parameters' => parameters
+        }
+      }
+    ],
+    'modules' => modules,
+    'connections' => connections
+  })
+end
+
+def ipcore_module(id, type, parameters = {})
+  {
+    'id' => id,
+    'ipcore' => 'finepaper.noc',
+    'instance' => 'noc_0',
+    'type' => type,
+    'parameters' => parameters
+  }
+end
+
 class TestJsonParser < Minitest::Test
   def test_parses_noc
     noc = JsonParser.parse(EXAMPLE)
@@ -82,14 +130,14 @@ class TestJsonParser < Minitest::Test
     assert_equal 4, noc.endpoints.size
   end
 
-  def test_parses_generic_plugin_graph
-    f = Tempfile.new(['generic_graph', '.json'])
-    f.write(JSON.generate(GENERIC_GRAPH))
+  def test_parses_ipcore_graph
+    f = Tempfile.new(['ipcore_graph', '.json'])
+    f.write(JSON.generate(IPCORE_GRAPH))
     f.close
 
     noc = JsonParser.parse(f.path)
 
-    assert_equal 'generic_noc', noc.name
+    assert_equal 'ipcore_noc', noc.name
     assert_equal 2, noc.xps.size
     assert_equal 1, noc.connections.size
     assert_equal 1, noc.endpoints.size
@@ -101,7 +149,7 @@ class TestJsonParser < Minitest::Test
   def test_applies_parameter_defaults
     require 'tempfile'
     f = Tempfile.new(['minimal', '.json'])
-    f.write('{"name":"test","version":"1.0"}')
+    f.write('{"schema":"finepaper-ipcore-graph-v1","name":"test","ipcore":"finepaper.noc","instance":"noc_0","modules":[],"connections":[]}')
     f.close
     noc = JsonParser.parse(f.path)
     assert_equal 64, noc.parameters['data_width']
@@ -114,9 +162,31 @@ class TestJsonParser < Minitest::Test
   def test_validates_required_fields
     require 'tempfile'
     f = Tempfile.new(['invalid', '.json'])
-    f.write('{"version":"1.0"}')
+    f.write('{"schema":"finepaper-ipcore-graph-v1","version":"1.0"}')
     f.close
     assert_raises(RuntimeError) { JsonParser.parse(f.path) }
+  ensure
+    f&.unlink
+  end
+
+  def test_rejects_standalone_legacy_config
+    f = Tempfile.new(['legacy_standalone', '.json'])
+    f.write('{"name":"legacy","version":"1.0"}')
+    f.close
+
+    error = assert_raises(RuntimeError) { JsonParser.parse(f.path) }
+    assert_match(/expected schema finepaper-ipcore-graph-v1/, error.message)
+  ensure
+    f&.unlink
+  end
+
+  def test_rejects_old_plugin_graph_schema
+    f = Tempfile.new(['legacy_plugin_graph', '.json'])
+    f.write('{"schema":"finepaper-' + 'plugin-graph-v1","name":"legacy"}')
+    f.close
+
+    error = assert_raises(RuntimeError) { JsonParser.parse(f.path) }
+    assert_match(/expected schema finepaper-ipcore-graph-v1/, error.message)
   ensure
     f&.unlink
   end
@@ -203,15 +273,15 @@ class TestDrcRunner < Minitest::Test
     assert_includes stdout, 'DRC passed for my_noc'
   end
 
-  def test_drc_script_accepts_generic_plugin_graph
-    f = Tempfile.new(['generic_graph', '.json'])
-    f.write(JSON.generate(GENERIC_GRAPH))
+  def test_drc_script_accepts_ipcore_graph
+    f = Tempfile.new(['ipcore_graph', '.json'])
+    f.write(JSON.generate(IPCORE_GRAPH))
     f.close
 
     stdout, stderr, status = Open3.capture3(RbConfig.ruby, DRC_BIN, '-i', f.path)
 
     assert status.success?, stderr
-    assert_includes stdout, 'DRC passed for generic_noc'
+    assert_includes stdout, 'DRC passed for ipcore_noc'
   ensure
     f&.unlink
   end
@@ -296,25 +366,56 @@ class TestConfigSchema < Minitest::Test
 
   def test_parser_validates_type
     f = Tempfile.new(['type_err', '.json'])
-    f.write('{"name":"t","version":"1.0","endpoints":[{"id":"ep1","type":"master","protocol":"axi4","data_width":64,"config":{"buffer_depth":"invalid"}}],"xps":[],"connections":[]}')
+    f.write(ipcore_graph_json(
+      name: 't',
+      modules: [
+        ipcore_module('ep1', 'Endpoint', {
+          'type' => 'master',
+          'protocol' => 'axi4',
+          'data_width' => 64,
+          'buffer_depth' => 'invalid'
+        })
+      ]
+    ))
     f.close
     assert_raises(RuntimeError) { JsonParser.parse(f.path) }
   ensure
     f&.unlink
   end
 
-  def test_parser_rejects_unknown_field
+  def test_parser_ignores_unknown_editor_parameter
     f = Tempfile.new(['unknown', '.json'])
-    f.write('{"name":"t","version":"1.0","endpoints":[{"id":"ep1","type":"master","protocol":"axi4","data_width":64,"config":{"unknown_field":123}}],"xps":[],"connections":[]}')
+    f.write(ipcore_graph_json(
+      name: 't',
+      modules: [
+        ipcore_module('ep1', 'Endpoint', {
+          'type' => 'master',
+          'protocol' => 'axi4',
+          'data_width' => 64,
+          'unknown_editor_field' => 123
+        })
+      ]
+    ))
     f.close
-    assert_raises(RuntimeError) { JsonParser.parse(f.path) }
+    noc = JsonParser.parse(f.path)
+    refute_includes noc.endpoints[0].config.keys, :unknown_editor_field
   ensure
     f&.unlink
   end
 
   def test_parser_accepts_editor_saved_xp_collapsed_state
     f = Tempfile.new(['editor_xp_config', '.json'])
-    f.write('{"name":"t","version":"1.0","endpoints":[],"xps":[{"id":"xp1","x":0,"y":0,"endpoints":[],"config":{"routing_algorithm":"xy","collapsed":true}}],"connections":[]}')
+    f.write(ipcore_graph_json(
+      name: 't',
+      modules: [
+        ipcore_module('xp1', 'XP', {
+          'x' => 0,
+          'y' => 0,
+          'routing_algorithm' => 'xy',
+          'collapsed' => true
+        })
+      ]
+    ))
     f.close
     noc = JsonParser.parse(f.path)
     assert_equal 'xy', noc.xps[0].config[:routing_algorithm]
@@ -325,7 +426,16 @@ class TestConfigSchema < Minitest::Test
 
   def test_parser_handles_missing_config
     f = Tempfile.new(['no_cfg', '.json'])
-    f.write('{"name":"t","version":"1.0","endpoints":[{"id":"ep1","type":"master","protocol":"axi4","data_width":64}],"xps":[],"connections":[]}')
+    f.write(ipcore_graph_json(
+      name: 't',
+      modules: [
+        ipcore_module('ep1', 'Endpoint', {
+          'type' => 'master',
+          'protocol' => 'axi4',
+          'data_width' => 64
+        })
+      ]
+    ))
     f.close
     noc = JsonParser.parse(f.path)
     assert_equal 16, noc.endpoints[0].config[:buffer_depth]

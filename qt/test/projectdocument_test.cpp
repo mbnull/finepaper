@@ -5,6 +5,7 @@
 #include "graph/module.h"
 #include "graph/parameter.h"
 #include "graph/port.h"
+#include "ipcore/ipcoregraphexporter.h"
 #include "modules/moduleregistry.h"
 #include "project/graphprojectserializer.h"
 #include "project/projectreader.h"
@@ -955,12 +956,37 @@ void testGenerationHelpersShapeIpcoreStateForGeneratorBoundary() {
                 .toInt() == 64,
             "IP-core state helper should preserve global parameters");
 
-    QJsonObject root;
-    attachIpcoreState(root, records);
+    IpCatalogEntry entry;
+    entry.id = QStringLiteral("finepaper.ravenoc");
+    entry.name = QStringLiteral("RaveNoC");
+    entry.version = QStringLiteral("1.0");
+    entry.kind = QStringLiteral("noc");
+
+    Graph graph;
+    auto module = instantiate(makeProjectXpType(), QStringLiteral("node_1"));
+    module->setIpcoreId(QStringLiteral("finepaper.ravenoc"));
+    require(graph.addModule(std::move(module)), "failed to add generator boundary module");
+
+    const IpCoreGraphExportResult exportResult =
+        IpCoreGraphExporter::exportGraph(IpCoreGraphExportRequest{
+            &graph,
+            entry,
+            state,
+            QStringLiteral("generated_design"),
+            nullptr
+        });
+    require(exportResult.success, exportResult.error.toLocal8Bit().constData());
+    const QJsonObject root = exportResult.document.object();
+
+    require(root.value(QStringLiteral("schema")).toString() == QStringLiteral("finepaper-ipcore-graph-v1"),
+            "generated input should use IP-core graph schema");
     require(root.contains(QStringLiteral("ipcore_state")),
             "generated input should include ipcore_state");
     require(!root.contains(QStringLiteral("plugin_state")),
             "generated input should not include old plugin_state");
+    require(!root.value(QStringLiteral("modules")).toArray().first().toObject()
+                 .contains(QStringLiteral("plug") + QStringLiteral("in")),
+            "generated input module should not include plugin owner");
     const QString preV1IpInstanceField = QStringLiteral("ip_") + QStringLiteral("instance");
     require(!root.contains(preV1IpInstanceField),
             "generated input should not include pre-v1 IP instance field");

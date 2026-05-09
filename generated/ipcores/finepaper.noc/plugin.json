@@ -9,7 +9,7 @@
   "graphics": "graphics",
   "generator": {
     "command": "ruby",
-    "input_format": "generic_graph_v1",
+    "input_format": "ipcore_graph_v1",
     "args": [
       "generator/bin/generate",
       "-i",
@@ -22,7 +22,7 @@
   },
   "drc": {
     "command": "ruby",
-    "input_format": "generic_graph_v1",
+    "input_format": "ipcore_graph_v1",
     "args": [
       "generator/bin/drc",
       "-i",

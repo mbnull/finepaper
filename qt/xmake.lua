@@ -92,6 +92,26 @@ add_qt_test_target("connectionruleservice_test", "test/connectionruleservice_tes
     "inc/**/plugindescriptor.h"
 })
 
+add_qt_test_target("ipcoregraphexporter_test", "test/ipcoregraphexporter_test.cpp", {
+    "src/ipcore/ipcoregraphexporter.cpp",
+    "src/ipcore/ipcatalogservice.cpp",
+    "src/**/graph.cpp",
+    "src/**/module.cpp",
+    "src/**/connection.cpp",
+    "src/**/port.cpp",
+    "src/**/parameter.cpp",
+    "src/**/frameworkpaths.cpp",
+    "src/**/moduleregistry.cpp",
+    "src/**/moduleprovider.cpp",
+    "src/**/pluginregistry.cpp",
+    "inc/ipcore/ipcoregraphexporter.h",
+    "inc/ipcore/ipcatalogservice.h",
+    "inc/**/graph.h",
+    "inc/**/module.h",
+    "inc/**/pluginregistry.h",
+    "inc/**/plugindescriptor.h"
+})
+
 add_qt_test_target("commandmanager_test", "test/commandmanager_test.cpp", {
     "src/**/command.cpp",
     "src/commands/compositecommand.cpp",
@@ -119,6 +139,8 @@ add_qt_test_target("arrangecommand_test", "test/arrangecommand_test.cpp", {
 
 add_qt_test_target("validation_test", "test/validation_test.cpp", {
     "src/connection/connectionruleservice.cpp",
+    "src/ipcore/ipcoregraphexporter.cpp",
+    "src/ipcore/ipcatalogservice.cpp",
     "src/**/drcrunner.cpp",
     "src/app/generationartifacts.cpp",
     "src/**/generatorrunner.cpp",
@@ -139,6 +161,8 @@ add_qt_test_target("validation_test", "test/validation_test.cpp", {
     "inc/**/graph.h",
     "inc/**/module.h",
     "inc/**/drcrunner.h",
+    "inc/ipcore/ipcoregraphexporter.h",
+    "inc/ipcore/ipcatalogservice.h",
     "inc/app/generationartifacts.h",
     "inc/**/generatorrunner.h",
     "inc/**/graphprojectserializer.h",
@@ -161,6 +185,8 @@ add_qt_test_target("logformat_test", "test/logformat_test.cpp", {
 
 add_qt_test_target("projectdocument_test", "test/projectdocument_test.cpp", {
     "src/connection/connectionruleservice.cpp",
+    "src/ipcore/ipcoregraphexporter.cpp",
+    "src/ipcore/ipcatalogservice.cpp",
     "src/**/projectreader.cpp",
     "src/**/projectwriter.cpp",
     "src/**/projectstateservice.cpp",
@@ -183,6 +209,8 @@ add_qt_test_target("projectdocument_test", "test/projectdocument_test.cpp", {
     "inc/**/projectwriter.h",
     "inc/**/graphprojectserializer.h",
     "inc/app/generationartifacts.h",
+    "inc/ipcore/ipcoregraphexporter.h",
+    "inc/ipcore/ipcatalogservice.h",
     "inc/**/graph.h",
     "inc/**/module.h",
     "inc/**/pluginregistry.h",

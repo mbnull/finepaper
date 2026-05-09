@@ -200,9 +200,9 @@ PluginCommandDescriptor commandFromJson(const QJsonValue& value) {
     PluginCommandDescriptor command;
     command.command = object.value(QStringLiteral("command")).toString().trimmed();
     command.inputFormat =
-        object.value(QStringLiteral("input_format")).toString(QStringLiteral("generic_graph_v1")).trimmed();
+        object.value(QStringLiteral("input_format")).toString(QStringLiteral("ipcore_graph_v1")).trimmed();
     if (command.inputFormat.isEmpty()) {
-        command.inputFormat = QStringLiteral("generic_graph_v1");
+        command.inputFormat = QStringLiteral("ipcore_graph_v1");
     }
     command.args = stringArray(object.value(QStringLiteral("args")));
     return command;

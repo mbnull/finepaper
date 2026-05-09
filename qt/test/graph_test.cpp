@@ -1,4 +1,4 @@
-// Graph integration-style tests for JSON import/export and topology behavior.
+// Graph integration-style tests for topology and structural behavior.
 #include "commands/addconnectioncommand.h"
 #include "commands/commandmanager.h"
 #include "connection/connectionruleservice.h"
@@ -7,8 +7,6 @@
 #include "modules/moduleprovider.h"
 #include "common/portlayout.h"
 
-#include <QJsonArray>
-#include <QJsonObject>
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
@@ -600,111 +598,6 @@ void testXmlBundleLoadsExtendedParameterMetadataWhenPresent() {
             "external_id read_only flag should load from XML metadata");
 }
 
-void testGenericPluginExportKeepsNonNocModules() {
-    ModuleType accelType;
-    accelType.name = QStringLiteral("GenericAccel");
-    accelType.pluginId = QStringLiteral("finepaper.generic");
-    ModuleRegistry::instance().registerType(accelType);
-
-    Graph graph;
-    auto module = makeModule(
-        "accel_internal",
-        "GenericAccel",
-        {
-            Port("cfg", Port::Direction::Input, "axi_lite", "CFG", {}, "control", "axi_lite"),
-            Port("irq", Port::Direction::Output, "interrupt", "IRQ", {}, "status", "interrupt")
-        });
-    module->setParameter("display_name", QString("Generic Accel"));
-    module->setParameter("x", 15);
-    module->setParameter("y", 25);
-    module->setParameter("width", 64);
-
-    require(graph.addModule(std::move(module)), "failed to add generic module");
-
-    const QJsonObject root =
-        graph.toJsonDocument("generic_design", GraphJsonFlavor::Plugin).object();
-
-    require(root["schema"].toString() == "finepaper-plugin-graph-v1",
-            "generic plugin export should identify its schema");
-    require(root["name"].toString() == "generic_design",
-            "generic plugin export should include the design name");
-
-    const QJsonArray modules = root["modules"].toArray();
-    require(modules.size() == 1, "generic plugin export should include non-NoC module");
-    const QJsonObject exportedModule = modules.first().toObject();
-    require(exportedModule["id"].toString() == "generic_accel",
-            "generic plugin export should prefer readable artifact ids over internal runtime ids");
-    require(exportedModule["plugin"].toString() == "finepaper.generic",
-            "generic plugin export should include plugin owner");
-    require(exportedModule["type"].toString() == "GenericAccel",
-            "generic plugin export should include module type");
-    require(exportedModule["parameters"].toObject()["width"].toInt() == 64,
-            "generic plugin export should include module parameters");
-
-    const QJsonArray ports = exportedModule["ports"].toArray();
-    require(ports.size() == 2, "generic plugin export should include ports");
-    require(ports.first().toObject()["id"].toString() == "cfg",
-            "generic plugin export should include port ids");
-}
-
-void testPluginExportUsesArtifactIdsInsteadOfRuntimeIds() {
-    ModuleType sourceType;
-    sourceType.name = QStringLiteral("PluginSource");
-    sourceType.pluginId = QStringLiteral("finepaper.pluginids");
-    ModuleRegistry::instance().registerType(sourceType);
-
-    ModuleType targetType;
-    targetType.name = QStringLiteral("PluginTarget");
-    targetType.pluginId = QStringLiteral("finepaper.pluginids");
-    ModuleRegistry::instance().registerType(targetType);
-
-    Graph graph;
-    auto source = makeModule(
-        "0bf35d18_a3d3_4ce3_b89d_36e120b847b4",
-        "PluginSource",
-        {Port("out", Port::Direction::Output, "bus", "Out", {}, "source", "demo_bus")});
-    source->setParameter("external_id", QString("source_0"));
-    source->setParameter("display_name", QString("Source 0"));
-
-    auto target = makeModule(
-        "9ed21db3_a343_4420_afcb_d6b19cb997fe",
-        "PluginTarget",
-        {Port("in", Port::Direction::Input, "bus", "In", {}, "target", "demo_bus")});
-    target->setParameter("external_id", QString("target_0"));
-    target->setParameter("display_name", QString("Target 0"));
-
-    require(graph.addModule(std::move(source)), "failed to add plugin source");
-    require(graph.addModule(std::move(target)), "failed to add plugin target");
-    graph.addConnection(std::make_unique<Connection>(
-        "3c357093_4961_4ac7_8302_cad7f44f909d",
-        PortRef{"0bf35d18_a3d3_4ce3_b89d_36e120b847b4", "out"},
-        PortRef{"9ed21db3_a343_4420_afcb_d6b19cb997fe", "in"}));
-
-    const QJsonObject root =
-        graph.toJsonDocument("plugin_ids", GraphJsonFlavor::Plugin).object();
-    const QJsonArray modules = root["modules"].toArray();
-    const QJsonArray connections = root["connections"].toArray();
-
-    require(modules.at(0).toObject()["id"].toString() == "source_0",
-            "plugin export should use source external_id");
-    require(modules.at(1).toObject()["id"].toString() == "target_0",
-            "plugin export should use target external_id");
-    require(connections.first().toObject()["id"].toString() == "source_0_out_to_target_0_in",
-            "plugin export should generate readable connection id");
-    require(connections.first().toObject()["source"].toObject()["module"].toString() == "source_0",
-            "plugin export connection source should use external_id");
-    require(connections.first().toObject()["target"].toObject()["module"].toString() == "target_0",
-            "plugin export connection target should use external_id");
-
-    const QString exportedText = QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Compact));
-    require(!exportedText.contains("0bf35d18_a3d3_4ce3_b89d_36e120b847b4"),
-            "plugin export should not leak source runtime UUID");
-    require(!exportedText.contains("9ed21db3_a343_4420_afcb_d6b19cb997fe"),
-            "plugin export should not leak target runtime UUID");
-    require(!exportedText.contains("3c357093_4961_4ac7_8302_cad7f44f909d"),
-            "plugin export should not leak connection runtime UUID");
-}
-
 } // namespace
 
 int main(int argc, char** argv) {
@@ -726,8 +619,6 @@ int main(int argc, char** argv) {
         testBundleMetadataLoadsFromXml();
         testXmlBundleWithoutGraphicsFallsBackToSimpleNode();
         testXmlBundleLoadsExtendedParameterMetadataWhenPresent();
-        testGenericPluginExportKeepsNonNocModules();
-        testPluginExportUsesArtifactIdsInsteadOfRuntimeIds();
     } catch (const std::exception& error) {
         std::cerr << "graph_test failed: " << error.what() << '\n';
         return 1;

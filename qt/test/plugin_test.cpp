@@ -54,6 +54,22 @@ QString repositoryPluginPath(const QString& relativePluginPath) {
     return QFileInfo(QDir(startPaths.first()).filePath(relativePluginPath)).absoluteFilePath();
 }
 
+IpCatalogEntry entryFromPlugin(const PluginDescriptor& plugin) {
+    IpCatalogEntry entry;
+    entry.id = plugin.id;
+    entry.name = plugin.name;
+    entry.version = plugin.version;
+    entry.kind = plugin.kind;
+    entry.runtimeRootPath = plugin.runtimeRootPath;
+    entry.sourceRootPath = plugin.sourceRootPath;
+    entry.modulesPath = plugin.modulesPath;
+    entry.graphicsPath = plugin.graphicsPath;
+    entry.generator = plugin.generator;
+    entry.drc = plugin.drc;
+    entry.topologyPresets = plugin.topologyPresets;
+    return entry;
+}
+
 void testIpCoreManifestLoadsRuntimeAndSourcePaths() {
     QTemporaryDir temp;
     require(temp.isValid(), "temporary directory should be valid");
@@ -72,12 +88,12 @@ void testIpCoreManifestLoadsRuntimeAndSourcePaths() {
       "graphics": "graphics",
       "generator": {
         "command": "ruby",
-        "input_format": "generic_graph_v1",
+        "input_format": "ipcore_graph_v1",
         "args": ["generator/bin/generate", "-i", "{input}", "-o", "{output}"]
       },
       "drc": {
         "command": "ruby",
-        "input_format": "generic_graph_v1",
+        "input_format": "ipcore_graph_v1",
         "args": ["generator/bin/drc", "-i", "{input}"]
       },
       "topology_presets": [
@@ -128,10 +144,10 @@ void testIpCoreManifestLoadsRuntimeAndSourcePaths() {
             "graphics path should resolve against runtime root");
     require(plugins.first().native.enabled, "native metadata should be retained");
     require(plugins.first().generator.hasGenerator(), "generator should be retained");
-    require(plugins.first().generator.inputFormat == QStringLiteral("generic_graph_v1"),
+    require(plugins.first().generator.inputFormat == QStringLiteral("ipcore_graph_v1"),
             "generator input format should load");
     require(plugins.first().drc.hasCommand(), "DRC command should be retained");
-    require(plugins.first().drc.inputFormat == QStringLiteral("generic_graph_v1"),
+    require(plugins.first().drc.inputFormat == QStringLiteral("ipcore_graph_v1"),
             "DRC input format should load");
     require(plugins.first().drc.args.first() == QStringLiteral("generator/bin/drc"),
             "DRC args should load");
@@ -146,23 +162,21 @@ void testIpCoreManifestLoadsRuntimeAndSourcePaths() {
     require(plugins.first().topologyPresets.first().parameters.value(QStringLiteral("rows")).defaultValue == 2,
             "topology rows default should load");
 
-    Graph graph;
-    ModuleType type;
-    type.name = QStringLiteral("DemoIp");
-    type.pluginId = QStringLiteral("finepaper.demo");
-    ModuleRegistry::instance().registerType(type);
-    require(graph.addModule(std::make_unique<Module>(QStringLiteral("demo_ip"), QStringLiteral("DemoIp"))),
-            "failed to add demo module");
+    const IpCatalogEntry entry = entryFromPlugin(plugins.first());
 
     const GeneratorCommand generatorCommand =
-        GeneratorRunner::resolveForGraph(&graph, plugins, QStringLiteral("/tmp/in.json"), QStringLiteral("/tmp/out"));
-    require(generatorCommand.valid, "generator command should resolve for discovered plugin");
+        GeneratorRunner::resolveForIpcore(entry, QStringLiteral("/tmp/in.json"), QStringLiteral("/tmp/out"));
+    require(generatorCommand.valid, "generator command should resolve for discovered IP core");
+    require(generatorCommand.ipcoreId == QStringLiteral("finepaper.demo"),
+            "generator command should carry IP-core id");
     require(generatorCommand.workingDirectory == sourceRoot,
             "generator working directory should use source root");
 
     const GeneratorCommand drcCommand =
-        GeneratorRunner::resolveDrcForGraph(&graph, plugins, QStringLiteral("/tmp/in.json"), QStringLiteral("/tmp/out"));
-    require(drcCommand.valid, "DRC command should resolve for discovered plugin");
+        GeneratorRunner::resolveDrcForIpcore(entry, QStringLiteral("/tmp/in.json"), QStringLiteral("/tmp/out"));
+    require(drcCommand.valid, "DRC command should resolve for discovered IP core");
+    require(drcCommand.ipcoreId == QStringLiteral("finepaper.demo"),
+            "DRC command should carry IP-core id");
     require(drcCommand.workingDirectory == sourceRoot,
             "DRC working directory should use source root");
 }
@@ -279,60 +293,42 @@ void testGeneratorArgumentsSubstituteInputAndOutput() {
 }
 
 void testGeneratorRunnerPropagatesInputFormat() {
-    Graph graph;
-
-    ModuleType type;
-    type.name = QStringLiteral("FormatIp");
-    type.pluginId = QStringLiteral("finepaper.format");
-    ModuleRegistry::instance().registerType(type);
-
-    auto module = std::make_unique<Module>(QStringLiteral("format_node"), QStringLiteral("FormatIp"));
-    require(graph.addModule(std::move(module)), "failed to add format module");
-
-    PluginDescriptor plugin;
-    plugin.id = QStringLiteral("finepaper.format");
-    plugin.sourceRootPath = QStringLiteral("/tmp/finepaper-format-ipcore");
-    plugin.rootPath = plugin.sourceRootPath;
-    plugin.generator.command = QStringLiteral("ruby");
-    plugin.generator.inputFormat = QStringLiteral("generic_graph_v1");
-    plugin.generator.args = {QStringLiteral("generator/bin/generate")};
+    IpCatalogEntry entry;
+    entry.id = QStringLiteral("finepaper.format");
+    entry.sourceRootPath = QStringLiteral("/tmp/finepaper-format-ipcore");
+    entry.generator.command = QStringLiteral("ruby");
+    entry.generator.inputFormat = QStringLiteral("ipcore_graph_v1");
+    entry.generator.args = {QStringLiteral("generator/bin/generate")};
 
     const GeneratorCommand command =
-        GeneratorRunner::resolveForGraph(&graph, {plugin}, QStringLiteral("/tmp/in.json"), QStringLiteral("/tmp/out"));
+        GeneratorRunner::resolveForIpcore(entry, QStringLiteral("/tmp/in.json"), QStringLiteral("/tmp/out"));
 
     require(command.valid, "generator command should resolve");
-    require(command.inputFormat == QStringLiteral("generic_graph_v1"),
-            "resolved command should carry input format");
-    require(command.workingDirectory == plugin.sourceRootPath,
+    require(command.ipcoreId == QStringLiteral("finepaper.format"),
+            "resolved command should carry IP-core id");
+    require(command.inputFormat == QStringLiteral("ipcore_graph_v1"),
+            "resolved command should carry IP-core graph input format");
+    require(command.workingDirectory == entry.sourceRootPath,
             "resolved command should use IP core source root");
 }
 
 void testGeneratorRunnerResolvesDrcCommand() {
-    Graph graph;
-
-    ModuleType type;
-    type.name = QStringLiteral("DrcIp");
-    type.pluginId = QStringLiteral("finepaper.drc");
-    ModuleRegistry::instance().registerType(type);
-
-    auto module = std::make_unique<Module>(QStringLiteral("drc_node"), QStringLiteral("DrcIp"));
-    require(graph.addModule(std::move(module)), "failed to add DRC module");
-
-    PluginDescriptor plugin;
-    plugin.id = QStringLiteral("finepaper.drc");
-    plugin.sourceRootPath = QStringLiteral("/tmp/finepaper-drc-ipcore");
-    plugin.rootPath = plugin.sourceRootPath;
-    plugin.drc.command = QStringLiteral("ruby");
-    plugin.drc.inputFormat = QStringLiteral("generic_graph_v1");
-    plugin.drc.args = {QStringLiteral("generator/bin/drc"), QStringLiteral("-i"), QStringLiteral("{input}")};
+    IpCatalogEntry entry;
+    entry.id = QStringLiteral("finepaper.drc");
+    entry.sourceRootPath = QStringLiteral("/tmp/finepaper-drc-ipcore");
+    entry.drc.command = QStringLiteral("ruby");
+    entry.drc.inputFormat = QStringLiteral("ipcore_graph_v1");
+    entry.drc.args = {QStringLiteral("generator/bin/drc"), QStringLiteral("-i"), QStringLiteral("{input}")};
 
     const GeneratorCommand command =
-        GeneratorRunner::resolveDrcForGraph(&graph, {plugin}, QStringLiteral("/tmp/in.json"), QStringLiteral("/tmp/out"));
+        GeneratorRunner::resolveDrcForIpcore(entry, QStringLiteral("/tmp/in.json"), QStringLiteral("/tmp/out"));
 
     require(command.valid, "DRC command should resolve");
-    require(command.inputFormat == QStringLiteral("generic_graph_v1"),
-            "resolved DRC command should carry input format");
-    require(command.workingDirectory == plugin.sourceRootPath,
+    require(command.ipcoreId == QStringLiteral("finepaper.drc"),
+            "resolved DRC command should carry IP-core id");
+    require(command.inputFormat == QStringLiteral("ipcore_graph_v1"),
+            "resolved DRC command should carry IP-core graph input format");
+    require(command.workingDirectory == entry.sourceRootPath,
             "resolved DRC command should use IP core source root");
     require(command.arguments.contains(QStringLiteral("/tmp/in.json")),
             "resolved DRC command should substitute input");
@@ -422,12 +418,12 @@ void testRepositoryRaveNoCIpCoreMetadataLoads() {
             "RaveNoC routing algorithm choices should load as instance metadata");
     require(plugins.first().generator.command == QStringLiteral("ruby"),
             "RaveNoC IP core should use Ruby generator");
-    require(plugins.first().generator.inputFormat == QStringLiteral("generic_graph_v1"),
-            "RaveNoC IP core should request generic graph input");
+    require(plugins.first().generator.inputFormat == QStringLiteral("ipcore_graph_v1"),
+            "RaveNoC IP core should request IP-core graph input");
     require(plugins.first().drc.command == QStringLiteral("ruby"),
             "RaveNoC IP core should use Ruby DRC");
-    require(plugins.first().drc.inputFormat == QStringLiteral("generic_graph_v1"),
-            "RaveNoC DRC should request generic graph input");
+    require(plugins.first().drc.inputFormat == QStringLiteral("ipcore_graph_v1"),
+            "RaveNoC DRC should request IP-core graph input");
     require(plugins.first().topologyPresets.size() == 1,
             "RaveNoC IP core should expose topology presets");
     require(plugins.first().topologyPresets.first().routerModule == QStringLiteral("RaveTile"),

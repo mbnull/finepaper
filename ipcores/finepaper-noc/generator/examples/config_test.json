@@ -1,39 +1,68 @@
 {
+  "schema": "finepaper-ipcore-graph-v1",
   "name": "config_test_noc",
-  "version": "1.0",
-  "parameters": {
-    "data_width": 64
-  },
-  "endpoints": [
+  "ipcore": "finepaper.noc",
+  "instance": "noc_0",
+  "ipcore_state": [
+    {
+      "ipcore": "finepaper.noc",
+      "instance": "noc_0",
+      "state": {
+        "global_parameters": {
+          "data_width": 64
+        }
+      }
+    }
+  ],
+  "modules": [
+    {
+      "id": "xp_0_0",
+      "ipcore": "finepaper.noc",
+      "instance": "noc_0",
+      "type": "XP",
+      "parameters": {
+        "mesh_col": 0,
+        "mesh_row": 0,
+        "routing_algorithm": "xy",
+        "vc_count": 4,
+        "buffer_depth": 16
+      }
+    },
     {
       "id": "ep_cpu0",
-      "type": "master",
-      "protocol": "axi4",
-      "data_width": 64,
-      "config": {
+      "ipcore": "finepaper.noc",
+      "instance": "noc_0",
+      "type": "Endpoint",
+      "parameters": {
+        "type": "master",
+        "protocol": "axi4",
+        "data_width": 64,
         "buffer_depth": 32,
         "qos_enabled": true
       }
     },
     {
       "id": "ep_mem0",
-      "type": "slave",
-      "protocol": "axi4",
-      "data_width": 64
-    }
-  ],
-  "xps": [
-    {
-      "id": "xp_0_0",
-      "x": 0,
-      "y": 0,
-      "endpoints": ["ep_cpu0", "ep_mem0"],
-      "config": {
-        "routing_algorithm": "xy",
-        "vc_count": 4,
-        "buffer_depth": 16
+      "ipcore": "finepaper.noc",
+      "instance": "noc_0",
+      "type": "Endpoint",
+      "parameters": {
+        "type": "slave",
+        "protocol": "axi4",
+        "data_width": 64
       }
     }
   ],
-  "connections": []
+  "connections": [
+    {
+      "id": "ep_cpu0_to_xp_0_0_local0",
+      "source": { "module": "ep_cpu0", "port": "noc" },
+      "target": { "module": "xp_0_0", "port": "local0" }
+    },
+    {
+      "id": "ep_mem0_to_xp_0_0_local1",
+      "source": { "module": "ep_mem0", "port": "noc" },
+      "target": { "module": "xp_0_0", "port": "local1" }
+    }
+  ]
 }

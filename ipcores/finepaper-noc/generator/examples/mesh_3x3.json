@@ -1,35 +1,100 @@
 {
+  "schema": "finepaper-ipcore-graph-v1",
   "name": "mesh_3x3",
-  "version": "1.0",
-  "parameters": {
-    "data_width": 64,
-    "flit_width": 128,
-    "addr_width": 32,
-    "mesh": {
-      "width": 3,
-      "height": 3,
-      "endpoint_map": {
-        "xp_0_0": ["ep_0"],
-        "xp_1_0": ["ep_1"],
-        "xp_2_0": ["ep_2"],
-        "xp_0_1": ["ep_3"],
-        "xp_1_1": ["ep_4"],
-        "xp_2_1": ["ep_5"],
-        "xp_0_2": ["ep_6"],
-        "xp_1_2": ["ep_7"],
-        "xp_2_2": ["ep_8"]
+  "ipcore": "finepaper.noc",
+  "instance": "noc_0",
+  "ipcore_state": [
+    {
+      "ipcore": "finepaper.noc",
+      "instance": "noc_0",
+      "state": {
+        "global_parameters": {
+          "data_width": 64,
+          "flit_width": 128,
+          "addr_width": 32,
+          "mesh": {
+            "width": 3,
+            "height": 3,
+            "endpoint_map": {
+              "xp_0_0": ["ep_0"],
+              "xp_1_0": ["ep_1"],
+              "xp_2_0": ["ep_2"],
+              "xp_0_1": ["ep_3"],
+              "xp_1_1": ["ep_4"],
+              "xp_2_1": ["ep_5"],
+              "xp_0_2": ["ep_6"],
+              "xp_1_2": ["ep_7"],
+              "xp_2_2": ["ep_8"]
+            }
+          }
+        }
       }
     }
-  },
-  "endpoints": [
-    { "id": "ep_0", "type": "master", "protocol": "axi4", "data_width": 64 },
-    { "id": "ep_1", "type": "master", "protocol": "axi4", "data_width": 64 },
-    { "id": "ep_2", "type": "master", "protocol": "axi4", "data_width": 64 },
-    { "id": "ep_3", "type": "slave",  "protocol": "axi4", "data_width": 128 },
-    { "id": "ep_4", "type": "slave",  "protocol": "axi4", "data_width": 128 },
-    { "id": "ep_5", "type": "slave",  "protocol": "axi4", "data_width": 128 },
-    { "id": "ep_6", "type": "master", "protocol": "axi4", "data_width": 64 },
-    { "id": "ep_7", "type": "master", "protocol": "axi4", "data_width": 64 },
-    { "id": "ep_8", "type": "slave",  "protocol": "axi4", "data_width": 128 }
-  ]
+  ],
+  "modules": [
+    {
+      "id": "ep_0",
+      "ipcore": "finepaper.noc",
+      "instance": "noc_0",
+      "type": "Endpoint",
+      "parameters": { "type": "master", "protocol": "axi4", "data_width": 64 }
+    },
+    {
+      "id": "ep_1",
+      "ipcore": "finepaper.noc",
+      "instance": "noc_0",
+      "type": "Endpoint",
+      "parameters": { "type": "master", "protocol": "axi4", "data_width": 64 }
+    },
+    {
+      "id": "ep_2",
+      "ipcore": "finepaper.noc",
+      "instance": "noc_0",
+      "type": "Endpoint",
+      "parameters": { "type": "master", "protocol": "axi4", "data_width": 64 }
+    },
+    {
+      "id": "ep_3",
+      "ipcore": "finepaper.noc",
+      "instance": "noc_0",
+      "type": "Endpoint",
+      "parameters": { "type": "slave", "protocol": "axi4", "data_width": 128 }
+    },
+    {
+      "id": "ep_4",
+      "ipcore": "finepaper.noc",
+      "instance": "noc_0",
+      "type": "Endpoint",
+      "parameters": { "type": "slave", "protocol": "axi4", "data_width": 128 }
+    },
+    {
+      "id": "ep_5",
+      "ipcore": "finepaper.noc",
+      "instance": "noc_0",
+      "type": "Endpoint",
+      "parameters": { "type": "slave", "protocol": "axi4", "data_width": 128 }
+    },
+    {
+      "id": "ep_6",
+      "ipcore": "finepaper.noc",
+      "instance": "noc_0",
+      "type": "Endpoint",
+      "parameters": { "type": "master", "protocol": "axi4", "data_width": 64 }
+    },
+    {
+      "id": "ep_7",
+      "ipcore": "finepaper.noc",
+      "instance": "noc_0",
+      "type": "Endpoint",
+      "parameters": { "type": "master", "protocol": "axi4", "data_width": 64 }
+    },
+    {
+      "id": "ep_8",
+      "ipcore": "finepaper.noc",
+      "instance": "noc_0",
+      "type": "Endpoint",
+      "parameters": { "type": "slave", "protocol": "axi4", "data_width": 128 }
+    }
+  ],
+  "connections": []
 }

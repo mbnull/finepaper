@@ -5,7 +5,7 @@ require_relative '../model/connection'
 require_relative '../model/endpoint'
 
 class JsonParser
-  GENERIC_GRAPH_SCHEMA = 'finepaper-plugin-graph-v1'.freeze
+  IPCORE_GRAPH_SCHEMA = 'finepaper-ipcore-graph-v1'.freeze
   DEFAULTS = {
     'data_width' => 64,
     'flit_width' => 128,
@@ -18,28 +18,12 @@ class JsonParser
 
   def self.parse(path)
     data = JSON.parse(File.read(path))
-    return parse_generic_graph(data, path) if data['schema'] == GENERIC_GRAPH_SCHEMA
+    raise "expected schema #{IPCORE_GRAPH_SCHEMA}" unless data['schema'] == IPCORE_GRAPH_SCHEMA
 
-    parse_standalone_config(data, path)
+    parse_ipcore_graph(data, path)
   end
 
   private
-
-  def self.parse_standalone_config(data, path)
-    validate_required!(data, path)
-
-    params = DEFAULTS.merge(data['parameters'] || {})
-    endpoints = parse_endpoints(data['endpoints'] || [])
-    xps = parse_xps(data['xps'] || [])
-    connections = parse_connections(data['connections'] || [])
-
-    NocConfig.new(data['name'], data['version'], params, xps, connections, endpoints)
-  end
-
-  def self.validate_required!(data, path)
-    raise "Missing 'name' in #{path}" unless data['name']
-    raise "Missing 'version' in #{path}" unless data['version']
-  end
 
   def self.parse_config(json_config, schema, ignored_fields = [])
     return {} if json_config.nil?
@@ -68,33 +52,33 @@ class JsonParser
     raise "Invalid type for #{key}: expected #{expected_type}, got #{value.class}" unless valid
   end
 
-  def self.parse_generic_graph(data, path)
+  def self.parse_ipcore_graph(data, path)
     raise "Missing 'name' in #{path}" unless data['name']
 
     modules = data.fetch('modules', [])
     module_by_id = modules.to_h { |mod| [mod['id'], mod] }
     endpoint_ids_by_xp = Hash.new { |hash, key| hash[key] = [] }
-    connections = parse_generic_connections(data.fetch('connections', []), module_by_id, endpoint_ids_by_xp)
+    connections = parse_ipcore_connections(data.fetch('connections', []), module_by_id, endpoint_ids_by_xp)
     xps = modules
           .select { |mod| noc_module_type?(mod, 'XP') }
-          .map { |mod| parse_generic_xp(mod, endpoint_ids_by_xp[mod['id']]) }
+          .map { |mod| parse_ipcore_xp(mod, endpoint_ids_by_xp[mod['id']]) }
     endpoints = modules
                 .select { |mod| noc_module_type?(mod, 'Endpoint') }
-                .map { |mod| parse_generic_endpoint(mod) }
+                .map { |mod| parse_ipcore_endpoint(mod) }
 
     NocConfig.new(data['name'],
                   data.fetch('version', '1.0'),
-                  DEFAULTS.merge(generic_parameters(data)),
+                  DEFAULTS.merge(ipcore_parameters(data)),
                   xps,
                   connections,
                   endpoints)
   end
 
   def self.noc_module_type?(mod, type)
-    mod.is_a?(Hash) && mod['plugin'] == 'finepaper.noc' && mod['type'] == type
+    mod.is_a?(Hash) && mod['ipcore'] == 'finepaper.noc' && mod['type'] == type
   end
 
-  def self.generic_parameters(data)
+  def self.ipcore_parameters(data)
     ipcore_state = data['ipcore_state']
     return data['parameters'] || {} unless ipcore_state.is_a?(Array)
 
@@ -106,16 +90,16 @@ class JsonParser
     parameters.is_a?(Hash) ? parameters : (data['parameters'] || {})
   end
 
-  def self.parse_generic_xp(mod, endpoints)
+  def self.parse_ipcore_xp(mod, endpoints)
     params = mod['parameters'] || {}
-    x, y = generic_xp_coordinates(mod['id'], params)
+    x, y = ipcore_xp_coordinates(mod['id'], params)
     config = parse_config(select_schema_fields(params, Xp.config_schema),
                           Xp.config_schema,
                           EDITOR_ONLY_XP_CONFIG_FIELDS + GENERIC_XP_EDITOR_FIELDS)
     Xp.new(mod['id'], x, y, endpoints, config)
   end
 
-  def self.parse_generic_endpoint(mod)
+  def self.parse_ipcore_endpoint(mod)
     params = mod['parameters'] || {}
     config = parse_config(select_schema_fields(params, Endpoint.config_schema),
                           Endpoint.config_schema,
@@ -127,7 +111,7 @@ class JsonParser
                  config)
   end
 
-  def self.parse_generic_connections(list, module_by_id, endpoint_ids_by_xp)
+  def self.parse_ipcore_connections(list, module_by_id, endpoint_ids_by_xp)
     list.filter_map do |conn|
       source = conn['source'] || {}
       target = conn['target'] || {}
@@ -135,7 +119,7 @@ class JsonParser
       target_module = module_by_id[target['module']]
 
       if noc_module_type?(source_module, 'XP') && noc_module_type?(target_module, 'XP')
-        generic_router_connection(source, target)
+        ipcore_router_connection(source, target)
       elsif noc_module_type?(source_module, 'Endpoint') && noc_module_type?(target_module, 'XP')
         endpoint_ids_by_xp[target_module['id']] << source_module['id']
         nil
@@ -146,7 +130,7 @@ class JsonParser
     end
   end
 
-  def self.generic_router_connection(source, target)
+  def self.ipcore_router_connection(source, target)
     if ROUTER_FORWARD_PORTS.include?(source['port'])
       Connection.new(source['module'], target['module'], source['port'])
     elsif ROUTER_FORWARD_PORTS.include?(target['port'])
@@ -156,7 +140,7 @@ class JsonParser
     end
   end
 
-  def self.generic_xp_coordinates(id, params)
+  def self.ipcore_xp_coordinates(id, params)
     if params['mesh_col'].is_a?(Integer) && params['mesh_row'].is_a?(Integer)
       return [params['mesh_col'], params['mesh_row']]
     end
@@ -177,21 +161,4 @@ class JsonParser
     values.select { |key, _| field_names.include?(key) }
   end
 
-  def self.parse_endpoints(list)
-    list.map do |e|
-      config = parse_config(e['config'], Endpoint.config_schema)
-      Endpoint.new(e['id'], e['type'], e['protocol'], e['data_width'], config)
-    end
-  end
-
-  def self.parse_xps(list)
-    list.map do |x|
-      config = parse_config(x['config'], Xp.config_schema, EDITOR_ONLY_XP_CONFIG_FIELDS)
-      Xp.new(x['id'], x['x'], x['y'], x['endpoints'] || [], config)
-    end
-  end
-
-  def self.parse_connections(list)
-    list.map { |c| Connection.new(c['from'], c['to'], c['dir']) }
-  end
 end

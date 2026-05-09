@@ -1,10 +1,9 @@
-// DRCRunner serializes the graph, invokes external DRC, and maps findings back to editor IDs.
+// DRCRunner serializes the active IP-core graph, invokes external DRC, and maps findings back to editor IDs.
 #include "validation/drcrunner.h"
-#include "app/generationartifacts.h"
 #include "graph/graph.h"
+#include "ipcore/ipcoregraphexporter.h"
 #include "plugins/generatorrunner.h"
 #include <QJsonDocument>
-#include <QJsonObject>
 #include <QProcess>
 #include <QTemporaryDir>
 #include <QTemporaryFile>
@@ -13,11 +12,12 @@
 // Run external DRC tool on graph and parse validation results
 QList<ValidationResult> DRCRunner::validate(
     const Graph* graph,
-    const QVector<ProjectIpInstanceRecord>& ipInstanceRecords) {
+    const IpCatalogEntry& ipcore,
+    const ProjectIpInstanceRecord& instance) {
     m_externalToInternalIds.clear();
 
-    // External DRC consumes a serialized graph, so keep temporary input/output
-    // isolated and disposable for each validation run.
+    // External DRC consumes serialized IP-core input, so keep temporary
+    // input/output isolated and disposable for each validation run.
     QTemporaryFile tmpFile;
     if (!tmpFile.open()) {
         return {ValidationResult(ValidationSeverity::Error,
@@ -35,20 +35,26 @@ QList<ValidationResult> DRCRunner::validate(
     }
 
     const GeneratorCommand generatorCommand =
-        GeneratorRunner::resolveDrcForGraph(graph, tmpFile.fileName(), outputDir.path());
+        GeneratorRunner::resolveDrcForIpcore(ipcore, tmpFile.fileName(), outputDir.path());
     if (!generatorCommand.valid) {
         // Missing or incompatible DRC command is a validation finding, not a
         // process crash, so report it through the normal log panel path.
         return {ValidationResult(ValidationSeverity::Error, generatorCommand.errorMessage, "", "DRC")};
     }
 
-    // Capture external artifact ID -> internal module ID while serializing so
-    // parser results can select the right editor node in LogPanel.
-    QJsonObject root = graph->toJsonDocument(QStringLiteral("design"),
-                                             GraphJsonFlavor::Plugin,
-                                             &m_externalToInternalIds).object();
-    attachIpcoreState(root, ipInstanceRecords);
-    const QByteArray jsonBytes = QJsonDocument(root).toJson();
+    const IpCoreGraphExportResult exportResult =
+        IpCoreGraphExporter::exportGraph(IpCoreGraphExportRequest{
+            graph,
+            ipcore,
+            instance,
+            QStringLiteral("design"),
+            &m_externalToInternalIds
+        });
+    if (!exportResult.success) {
+        return {ValidationResult(ValidationSeverity::Error, exportResult.error, "", "DRC")};
+    }
+
+    const QByteArray jsonBytes = exportResult.document.toJson();
     if (tmpFile.write(jsonBytes) != jsonBytes.size() || !tmpFile.flush()) {
         // The external tool should never start with a partial input file.
         return {ValidationResult(ValidationSeverity::Error,

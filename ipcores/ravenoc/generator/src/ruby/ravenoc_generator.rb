@@ -6,6 +6,9 @@ require 'open3'
 class RaveNoCGenerator
   class GenerationError < StandardError; end
 
+  GRAPH_SCHEMA = 'finepaper-ipcore-graph-v1'.freeze
+  IPCORE_ID = 'finepaper.ravenoc'.freeze
+
   REQUIRED_VENDOR_FILES = [
     'bus_arch_sv_pkg/amba_axi_pkg.sv',
     'src/include/ravenoc_axi_fnc.svh',
@@ -134,7 +137,7 @@ class RaveNoCGenerator
 
   def read_graph
     data = JSON.parse(File.read(input_path))
-    raise GenerationError, 'expected schema finepaper-plugin-graph-v1' unless data['schema'] == 'finepaper-plugin-graph-v1'
+    raise GenerationError, "expected schema #{GRAPH_SCHEMA}" unless data['schema'] == GRAPH_SCHEMA
 
     data
   rescue Errno::ENOENT
@@ -145,13 +148,13 @@ class RaveNoCGenerator
 
   def ravenoc_module_record(graph)
     legacy = graph.fetch('modules', []).select do |mod|
-      mod['plugin'] == 'finepaper.ravenoc' && mod['type'] == 'RaveNoC'
+      mod['ipcore'] == IPCORE_ID && mod['type'] == 'RaveNoC'
     end
     raise GenerationError, "expected exactly one RaveNoC module, found #{legacy.size}" if legacy.size > 1
     return legacy.first if legacy.size == 1
 
     tiles = graph.fetch('modules', []).select do |mod|
-      mod['plugin'] == 'finepaper.ravenoc' && mod['type'] == 'RaveTile'
+      mod['ipcore'] == IPCORE_ID && mod['type'] == 'RaveTile'
     end
     raise GenerationError, 'expected RaveNoC module or RaveTile graph, found none' if tiles.empty?
 
@@ -197,11 +200,11 @@ class RaveNoCGenerator
     end
 
     ravenoc_states = ipcore_state.select do |state|
-      state.is_a?(Hash) && state.fetch('ipcore', nil) == 'finepaper.ravenoc'
+      state.is_a?(Hash) && state.fetch('ipcore', nil) == IPCORE_ID
     end
     raise GenerationError, 'missing ipcore_state' if ravenoc_states.empty?
     if ravenoc_states.size > 1
-      raise GenerationError, "expected exactly one finepaper.ravenoc ipcore_state, found #{ravenoc_states.size}"
+      raise GenerationError, "expected exactly one #{IPCORE_ID} ipcore_state, found #{ravenoc_states.size}"
     end
 
     state = ravenoc_states.first.fetch('state', nil)
@@ -412,7 +415,7 @@ class RaveNoCGenerator
     modules_by_id = graph.fetch('modules', []).to_h { |mod| [mod.fetch('id'), mod] }
     tile_ids = coordinate_by_id.keys
     endpoint_ids = modules_by_id.values.select do |mod|
-      mod['plugin'] == 'finepaper.ravenoc' && mod['type'] == 'RaveEndpoint'
+      mod['ipcore'] == IPCORE_ID && mod['type'] == 'RaveEndpoint'
     end.map { |mod| mod.fetch('id') }
 
     bindings = []
@@ -584,7 +587,7 @@ class RaveNoCGenerator
 
   def write_manifest(module_record, parameters)
     manifest = {
-      plugin: 'finepaper.ravenoc',
+      ipcore: IPCORE_ID,
       source: {
         repository: 'https://github.com/aignacio/ravenoc.git',
         commit: source_commit
