@@ -73,8 +73,6 @@ private slots:
     void appendStartupLog() const;
     void scheduleStartupLayoutLog();
     void logStartupLayout() const;
-    void setActiveIpcoreId(const QString& ipcoreId);
-    void ensureProjectStateRecordFromActiveIpcore();
     void rebuildTopologyMenu();
     bool maybeSaveChanges(const QString& actionDescription);
     bool loadDocument(const QString& path);
@@ -113,7 +111,6 @@ private slots:
     QAction* m_validateAction;
     QAction* m_arrangeAction;
     QMenu* m_topologyMenu;
-    QString m_activeIpcoreId;
     QString m_currentDocumentPath;
     int m_cleanStateId = 0;
     bool m_documentDirty = false;

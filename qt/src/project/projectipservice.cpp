@@ -1,6 +1,7 @@
 // Project IP service implementation.
 #include "project/projectipservice.h"
 
+#include "project/projectdocument.h"
 #include "project/projectstateservice.h"
 
 #include <QJsonObject>
@@ -71,6 +72,36 @@ ProjectIpInstanceRecord defaultRecordForEntry(const IpCatalogEntry& entry) {
 ProjectIpService::ProjectIpService(ProjectStateService* stateService, QObject* parent)
     : QObject(parent),
       m_stateService(stateService) {}
+
+void ProjectIpService::loadFromDocument(const ProjectDocument& document) {
+    if (!m_stateService) {
+        setSelectedInstance(std::nullopt);
+        return;
+    }
+
+    m_stateService->loadFromDocument(document);
+    if (m_stateService->ipInstanceRecords().isEmpty()) {
+        setSelectedInstance(std::nullopt);
+        return;
+    }
+
+    const ProjectIpInstanceRecord& first = m_stateService->ipInstanceRecords().first();
+    setSelectedInstance(ProjectIpInstanceRef{first.ipcoreId, first.instanceId});
+}
+
+void ProjectIpService::clear() {
+    if (!m_stateService) {
+        setSelectedInstance(std::nullopt);
+        return;
+    }
+
+    const bool hadRecords = !m_stateService->ipInstanceRecords().isEmpty();
+    m_stateService->clear();
+    if (hadRecords) {
+        emit ipInstancesChanged();
+    }
+    setSelectedInstance(std::nullopt);
+}
 
 ProjectIpServiceResult ProjectIpService::ensureInstanceForIpcore(const IpCatalogEntry& entry) {
     ProjectIpServiceResult result;
@@ -153,6 +184,19 @@ bool ProjectIpService::removeInstance(const QString& ipcoreId, const QString& in
 
 std::optional<ProjectIpInstanceRef> ProjectIpService::selectedIpInstance() const {
     return m_selectedIpInstance;
+}
+
+std::optional<ProjectIpInstanceRecord> ProjectIpService::selectedIpInstanceRecord() const {
+    if (!m_selectedIpInstance.has_value()) {
+        return std::nullopt;
+    }
+
+    const ProjectIpInstanceRecord* record =
+        findRecord(m_selectedIpInstance->ipcoreId, m_selectedIpInstance->instanceId);
+    if (!record) {
+        return std::nullopt;
+    }
+    return *record;
 }
 
 const ProjectIpInstanceRecord* ProjectIpService::findRecord(const QString& ipcoreId,

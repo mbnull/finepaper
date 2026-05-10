@@ -99,16 +99,40 @@ const ActiveWorkspaceState& ActiveWorkspaceController::state() const {
     return m_state;
 }
 
+std::optional<ActiveWorkspaceContext> ActiveWorkspaceController::activeContext() const {
+    if (!m_state.hasActiveIp || !m_projectIpService || !m_catalogService) {
+        return std::nullopt;
+    }
+
+    const std::optional<IpCatalogEntry> entry = m_catalogService->entry(m_state.ipcoreId);
+    const std::optional<ProjectIpInstanceRecord> record =
+        m_projectIpService->selectedIpInstanceRecord();
+    if (!entry.has_value() || !record.has_value()) {
+        return std::nullopt;
+    }
+    if (record->ipcoreId != m_state.ipcoreId || record->instanceId != m_state.instanceId) {
+        return std::nullopt;
+    }
+
+    ActiveWorkspaceContext context;
+    context.workspace = m_state;
+    context.entry = *entry;
+    context.record = *record;
+    return context;
+}
+
 void ActiveWorkspaceController::recompute() {
     ActiveWorkspaceState nextState;
     if (m_projectIpService && m_catalogService) {
-        const std::optional<ProjectIpInstanceRef> selected =
-            m_projectIpService->selectedIpInstance();
+        const std::optional<ProjectIpInstanceRecord> selected =
+            m_projectIpService->selectedIpInstanceRecord();
         if (selected.has_value()) {
             const std::optional<IpCatalogEntry> entry =
                 m_catalogService->entry(selected->ipcoreId);
             if (entry.has_value()) {
-                nextState = stateFromEntry(*selected, *entry);
+                nextState = stateFromEntry(ProjectIpInstanceRef{selected->ipcoreId,
+                                                                selected->instanceId},
+                                           *entry);
             }
         }
     }

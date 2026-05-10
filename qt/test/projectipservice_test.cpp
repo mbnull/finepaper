@@ -2,6 +2,7 @@
 #include "ipcore/ipcatalogservice.h"
 #include "modules/moduleregistry.h"
 #include "project/projectipservice.h"
+#include "project/projectdocument.h"
 #include "project/projectstateservice.h"
 #include "workspace/activeworkspacecontroller.h"
 
@@ -130,6 +131,79 @@ void testProjectIpServiceRemoveClearsSelection() {
             "removed selected instance should clear selection");
 }
 
+void testProjectIpServiceLoadRestoresSelectionAndWorkspaceContext() {
+    ProjectStateService stateService;
+    ProjectIpService projectIpService(&stateService);
+
+    ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
+    PluginDescriptor ravenocDescriptor;
+    ravenocDescriptor.id = QStringLiteral("finepaper.ravenoc");
+    ravenocDescriptor.name = QStringLiteral("RaveNoC");
+    ravenocDescriptor.kind = QStringLiteral("noc");
+    ModuleType raveTile;
+    raveTile.name = QStringLiteral("RaveTile");
+    raveTile.ipcoreId = ravenocDescriptor.id;
+    require(registry.registerType(raveTile), "RaveTile should register");
+
+    IpCatalogService catalog({ravenocDescriptor}, &registry);
+    ActiveWorkspaceController controller(&projectIpService, &catalog);
+
+    ProjectDocument document;
+    document.ipcoreState.push_back(existingRecord(QStringLiteral("finepaper.ravenoc"),
+                                                  QStringLiteral("ravenoc_0"),
+                                                  QStringLiteral("noc")));
+
+    projectIpService.loadFromDocument(document);
+
+    const std::optional<ProjectIpInstanceRef> selection = projectIpService.selectedIpInstance();
+    require(selection.has_value(), "project load should restore an IP instance selection");
+    require(selection->ipcoreId == QStringLiteral("finepaper.ravenoc"),
+            "loaded selection should point at the first project record ipcore");
+    require(selection->instanceId == QStringLiteral("ravenoc_0"),
+            "loaded selection should point at the first project record instance");
+    require(controller.state().hasActiveIp,
+            "active workspace should become active after project load");
+
+    const std::optional<ActiveWorkspaceContext> context = controller.activeContext();
+    require(context.has_value(), "workspace context should resolve after project load");
+    require(context->entry.id == QStringLiteral("finepaper.ravenoc"),
+            "workspace context should expose the active catalog entry");
+    require(context->record.instanceId == QStringLiteral("ravenoc_0"),
+            "workspace context should expose the active project record");
+}
+
+void testProjectIpServiceClearClearsSelectionAndWorkspaceContext() {
+    ProjectStateService stateService;
+    ProjectIpService projectIpService(&stateService);
+
+    ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
+    PluginDescriptor ravenocDescriptor;
+    ravenocDescriptor.id = QStringLiteral("finepaper.ravenoc");
+    ravenocDescriptor.name = QStringLiteral("RaveNoC");
+    ravenocDescriptor.kind = QStringLiteral("noc");
+    ModuleType raveTile;
+    raveTile.name = QStringLiteral("RaveTile");
+    raveTile.ipcoreId = ravenocDescriptor.id;
+    require(registry.registerType(raveTile), "RaveTile should register");
+
+    IpCatalogService catalog({ravenocDescriptor}, &registry);
+    ActiveWorkspaceController controller(&projectIpService, &catalog);
+    require(projectIpService.ensureInstanceForIpcore(ravenocEntry()).success,
+            "NoC instance should be created");
+    require(controller.state().hasActiveIp, "workspace should start active");
+
+    projectIpService.clear();
+
+    require(stateService.ipInstanceRecords().isEmpty(),
+            "project IP clear should remove project records");
+    require(!projectIpService.selectedIpInstance().has_value(),
+            "project IP clear should clear selection");
+    require(!controller.state().hasActiveIp,
+            "active workspace should clear after project IP clear");
+    require(!controller.activeContext().has_value(),
+            "workspace context should clear with the active workspace");
+}
+
 void testActiveWorkspaceChangesWhenSelectionChanges() {
     ProjectStateService stateService;
     ProjectIpService projectIpService(&stateService);
@@ -203,6 +277,8 @@ int main(int argc, char** argv) {
         testProjectIpServiceCreatesDefaultStateAndSelectsIt();
         testProjectIpServiceRejectsSecondNocInstance();
         testProjectIpServiceRemoveClearsSelection();
+        testProjectIpServiceLoadRestoresSelectionAndWorkspaceContext();
+        testProjectIpServiceClearClearsSelectionAndWorkspaceContext();
         testActiveWorkspaceChangesWhenSelectionChanges();
     } catch (const std::exception& error) {
         std::cerr << error.what() << std::endl;

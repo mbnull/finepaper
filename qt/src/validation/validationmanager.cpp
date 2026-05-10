@@ -10,25 +10,6 @@
 #include <QDebug>
 #include <optional>
 
-namespace {
-
-std::optional<ProjectIpInstanceRecord> selectedRecord(const ProjectStateService* stateService,
-                                                      const QString& ipcoreId,
-                                                      const QString& instanceId) {
-    if (!stateService) {
-        return std::nullopt;
-    }
-
-    for (const ProjectIpInstanceRecord& record : stateService->ipInstanceRecords()) {
-        if (record.ipcoreId == ipcoreId && record.instanceId == instanceId) {
-            return record;
-        }
-    }
-    return std::nullopt;
-}
-
-} // namespace
-
 // Initialize validators. Validation is triggered explicitly by the UI.
 ValidationManager::ValidationManager(Graph* graph,
                                      ProjectStateService* projectStateService,
@@ -55,13 +36,11 @@ void ValidationManager::runValidation() {
             << "modules" << m_graph->modules().size()
             << "connections" << m_graph->connections().size();
     QList<ValidationResult> results = m_validator->validate(m_graph);
-    if (m_activeWorkspaceController && m_activeWorkspaceController->state().hasActiveIp && m_catalogService) {
-        const ActiveWorkspaceState& workspace = m_activeWorkspaceController->state();
-        const std::optional<IpCatalogEntry> entry = m_catalogService->entry(workspace.ipcoreId);
-        const std::optional<ProjectIpInstanceRecord> record =
-            selectedRecord(m_projectStateService, workspace.ipcoreId, workspace.instanceId);
-        if (entry.has_value() && record.has_value()) {
-            results.append(m_drcRunner->validate(m_graph, *entry, *record));
+    if (m_activeWorkspaceController && m_activeWorkspaceController->state().hasActiveIp) {
+        const std::optional<ActiveWorkspaceContext> context =
+            m_activeWorkspaceController->activeContext();
+        if (context.has_value()) {
+            results.append(m_drcRunner->validate(m_graph, context->entry, context->record));
         } else {
             results.append(ValidationResult(ValidationSeverity::Error,
                                             QStringLiteral("Active IP instance is not available for DRC."),

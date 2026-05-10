@@ -9,6 +9,7 @@
 #include <optional>
 
 class ProjectStateService;
+struct ProjectDocument;
 
 struct ProjectIpInstanceRef {
     QString ipcoreId;
@@ -27,10 +28,13 @@ class ProjectIpService : public QObject {
 public:
     explicit ProjectIpService(ProjectStateService* stateService, QObject* parent = nullptr);
 
+    void loadFromDocument(const ProjectDocument& document);
+    void clear();
     ProjectIpServiceResult ensureInstanceForIpcore(const IpCatalogEntry& entry);
     bool selectInstance(const QString& ipcoreId, const QString& instanceId);
     bool removeInstance(const QString& ipcoreId, const QString& instanceId);
     std::optional<ProjectIpInstanceRef> selectedIpInstance() const;
+    std::optional<ProjectIpInstanceRecord> selectedIpInstanceRecord() const;
 
 signals:
     void ipInstancesChanged();

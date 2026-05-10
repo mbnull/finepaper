@@ -1,12 +1,14 @@
 // Active workspace controller exposes the selected IP instance as a read model.
 #pragma once
 
-#include "plugins/plugindescriptor.h"
+#include "ipcore/ipcatalogservice.h"
+#include "project/ipinstancestate.h"
 
 #include <QObject>
 #include <QString>
 #include <QStringList>
 #include <QVector>
+#include <optional>
 
 class IpCatalogService;
 class ProjectIpService;
@@ -21,6 +23,12 @@ struct ActiveWorkspaceState {
     QVector<TopologyPresetDescriptor> topologyPresets;
 };
 
+struct ActiveWorkspaceContext {
+    ActiveWorkspaceState workspace;
+    IpCatalogEntry entry;
+    ProjectIpInstanceRecord record;
+};
+
 class ActiveWorkspaceController : public QObject {
     Q_OBJECT
 
@@ -30,6 +38,7 @@ public:
                               QObject* parent = nullptr);
 
     const ActiveWorkspaceState& state() const;
+    std::optional<ActiveWorkspaceContext> activeContext() const;
 
 signals:
     void activeWorkspaceChanged();

@@ -100,21 +100,6 @@ void appendLogLines(LogPanel* logPanel,
     }
 }
 
-std::optional<ProjectIpInstanceRecord> selectedRecord(const ProjectStateService* stateService,
-                                                      const QString& ipcoreId,
-                                                      const QString& instanceId) {
-    if (!stateService) {
-        return std::nullopt;
-    }
-
-    for (const ProjectIpInstanceRecord& record : stateService->ipInstanceRecords()) {
-        if (record.ipcoreId == ipcoreId && record.instanceId == instanceId) {
-            return record;
-        }
-    }
-    return std::nullopt;
-}
-
 } // namespace
 
 MainWindow::MainWindow(QWidget *parent)
@@ -245,20 +230,10 @@ void MainWindow::generateVerilog() {
     // Persist the active IP-core generator input, then call generator.
     const QString designName = sanitizedDesignName(outputDirectory);
     const QString jsonPath = outputDir.filePath(designName + ".json");
-    if (!m_activeWorkspaceController || !m_activeWorkspaceController->state().hasActiveIp) {
+    const std::optional<ActiveWorkspaceContext> context =
+        m_activeWorkspaceController ? m_activeWorkspaceController->activeContext() : std::nullopt;
+    if (!context.has_value()) {
         const QString error = QStringLiteral("Select an IP core instance before generating.");
-        m_logPanel->appendMessage("[Generate] " + error, QColor(220, 50, 50));
-        QMessageBox::warning(this, "Generator Not Available", error);
-        return;
-    }
-
-    const ActiveWorkspaceState& workspace = m_activeWorkspaceController->state();
-    const std::optional<IpCatalogEntry> entry =
-        m_ipCatalogService ? m_ipCatalogService->entry(workspace.ipcoreId) : std::nullopt;
-    const std::optional<ProjectIpInstanceRecord> record =
-        selectedRecord(m_projectStateService.get(), workspace.ipcoreId, workspace.instanceId);
-    if (!entry.has_value() || !record.has_value()) {
-        const QString error = QStringLiteral("Active IP instance is not available for generation.");
         m_logPanel->appendMessage("[Generate] " + error, QColor(220, 50, 50));
         QMessageBox::warning(this, "Generator Not Available", error);
         return;
@@ -267,7 +242,7 @@ void MainWindow::generateVerilog() {
     // Resolve the command before writing artifacts so IP-core ownership and
     // command availability fail early with a user-facing message.
     const GeneratorCommand generatorCommand =
-        GeneratorRunner::resolveForIpcore(*entry, jsonPath, outputDirectory);
+        GeneratorRunner::resolveForIpcore(context->entry, jsonPath, outputDirectory);
     if (!generatorCommand.valid) {
         m_logPanel->appendMessage("[Generate] " + generatorCommand.errorMessage,
                                   QColor(220, 50, 50));
@@ -280,8 +255,8 @@ void MainWindow::generateVerilog() {
     const IpCoreGraphExportResult exportResult =
         IpCoreGraphExporter::exportGraph(IpCoreGraphExportRequest{
             m_graph,
-            *entry,
-            *record,
+            context->entry,
+            context->record,
             designName,
             nullptr
         });
@@ -567,15 +542,12 @@ void MainWindow::setupConnections() {
                     QMessageBox::warning(this, "IP Catalog", result.error);
                     return;
                 }
-                setActiveIpcoreId(ipcoreId);
             });
     connect(m_ipCatalogPanel,
             &IpCatalogPanel::selectIpInstanceRequested,
             this,
             [this](const QString& ipcoreId, const QString& instanceId) {
-                if (m_projectIpService->selectInstance(ipcoreId, instanceId)) {
-                    setActiveIpcoreId(ipcoreId);
-                }
+                m_projectIpService->selectInstance(ipcoreId, instanceId);
             });
 }
 
@@ -795,30 +767,6 @@ void MainWindow::logStartupLayout() const {
 #endif
 }
 
-void MainWindow::setActiveIpcoreId(const QString& ipcoreId) {
-    if (m_activeIpcoreId == ipcoreId) {
-        return;
-    }
-
-    m_activeIpcoreId = ipcoreId;
-    ensureProjectStateRecordFromActiveIpcore();
-    rebuildTopologyMenu();
-}
-
-void MainWindow::ensureProjectStateRecordFromActiveIpcore() {
-    if (!m_ipCatalogService || !m_projectIpService) {
-        return;
-    }
-    const std::optional<IpCatalogEntry> entry = m_ipCatalogService->entry(m_activeIpcoreId);
-    if (!entry.has_value()) {
-        return;
-    }
-
-    // Instance parameters are copied from catalog metadata into project state
-    // so save/generation observe one canonical IP-instance record.
-    m_projectIpService->ensureInstanceForIpcore(*entry);
-}
-
 void MainWindow::rebuildTopologyMenu() {
     if (!m_topologyMenu) {
         return;
@@ -894,13 +842,14 @@ bool MainWindow::loadDocument(const QString& path) {
         m_suppressDocumentTracking = true;
         const GraphProjectLoadResult loadResult =
             GraphProjectSerializer::loadProject(readResult.document, *m_graph);
-        m_suppressDocumentTracking = false;
         if (!loadResult.success) {
+            m_suppressDocumentTracking = false;
             qWarning() << "Failed to load project graph" << path << loadResult.error;
             QMessageBox::warning(this, "Open Failed", loadResult.error);
             return false;
         }
-        m_projectStateService->loadFromDocument(readResult.document);
+        m_projectIpService->loadFromDocument(readResult.document);
+        m_suppressDocumentTracking = false;
         if (m_propertyPanel) {
             m_propertyPanel->setSelectedModule(QString());
         }
@@ -951,8 +900,7 @@ QString MainWindow::defaultDocumentPath() const {
 void MainWindow::clearDocument() {
     m_suppressDocumentTracking = true;
     m_graph->clear();
-    m_projectStateService->clear();
-    ensureProjectStateRecordFromActiveIpcore();
+    m_projectIpService->clear();
     m_suppressDocumentTracking = false;
     if (m_propertyPanel) {
         m_propertyPanel->setSelectedModule(QString());
