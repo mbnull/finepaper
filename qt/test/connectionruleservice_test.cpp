@@ -35,9 +35,15 @@ std::unique_ptr<Module> makeConsumer(const QString& id) {
 std::unique_ptr<Module> makeRouter(const QString& id) {
     auto module = std::make_unique<Module>(id, QStringLiteral("Router"));
     module->setIpcoreId(QStringLiteral("finepaper.test"));
+    module->addPort(Port(QStringLiteral("north"), Port::Direction::InOut, QStringLiteral("bus"),
+                         QStringLiteral("North"), {}, QStringLiteral("router"),
+                         QStringLiteral("router_link"), QStringLiteral("north")));
     module->addPort(Port(QStringLiteral("east"), Port::Direction::InOut, QStringLiteral("bus"),
                          QStringLiteral("East"), {}, QStringLiteral("router"),
                          QStringLiteral("router_link"), QStringLiteral("east")));
+    module->addPort(Port(QStringLiteral("south"), Port::Direction::InOut, QStringLiteral("bus"),
+                         QStringLiteral("South"), {}, QStringLiteral("router"),
+                         QStringLiteral("router_link"), QStringLiteral("south")));
     module->addPort(Port(QStringLiteral("west"), Port::Direction::InOut, QStringLiteral("bus"),
                          QStringLiteral("West"), {}, QStringLiteral("router"),
                          QStringLiteral("router_link"), QStringLiteral("west")));
@@ -104,13 +110,29 @@ void registerRouterType() {
     router.ipcoreId = QStringLiteral("finepaper.test");
     router.graphGroup = QStringLiteral("routers");
     router.defaultPorts = {
+        Port(QStringLiteral("north"), Port::Direction::InOut, QStringLiteral("bus"),
+             QStringLiteral("North"), {}, QStringLiteral("router"),
+             QStringLiteral("router_link"), QStringLiteral("north")),
         Port(QStringLiteral("east"), Port::Direction::InOut, QStringLiteral("bus"),
              QStringLiteral("East"), {}, QStringLiteral("router"),
              QStringLiteral("router_link"), QStringLiteral("east")),
+        Port(QStringLiteral("south"), Port::Direction::InOut, QStringLiteral("bus"),
+             QStringLiteral("South"), {}, QStringLiteral("router"),
+             QStringLiteral("router_link"), QStringLiteral("south")),
         Port(QStringLiteral("west"), Port::Direction::InOut, QStringLiteral("bus"),
              QStringLiteral("West"), {}, QStringLiteral("router"),
              QStringLiteral("router_link"), QStringLiteral("west"))
     };
+
+    ModuleInterfaceMetadata north;
+    north.id = QStringLiteral("north");
+    north.bus = QStringLiteral("router_link");
+    north.role = QStringLiteral("target");
+    north.compatibleRoles = {QStringLiteral("initiator")};
+    north.cardinality = QStringLiteral("one");
+    north.autocompleteGroup = QStringLiteral("router_side");
+    north.topologyRule = QStringLiteral("opposite_side");
+    router.interfaceMetadata.insert(north.id, north);
 
     ModuleInterfaceMetadata east;
     east.id = QStringLiteral("east");
@@ -121,6 +143,16 @@ void registerRouterType() {
     east.autocompleteGroup = QStringLiteral("router_side");
     east.topologyRule = QStringLiteral("opposite_side");
     router.interfaceMetadata.insert(east.id, east);
+
+    ModuleInterfaceMetadata south;
+    south.id = QStringLiteral("south");
+    south.bus = QStringLiteral("router_link");
+    south.role = QStringLiteral("initiator");
+    south.compatibleRoles = {QStringLiteral("target")};
+    south.cardinality = QStringLiteral("one");
+    south.autocompleteGroup = QStringLiteral("router_side");
+    south.topologyRule = QStringLiteral("opposite_side");
+    router.interfaceMetadata.insert(south.id, south);
 
     ModuleInterfaceMetadata west;
     west.id = QStringLiteral("west");
@@ -253,6 +285,30 @@ void testRejectsSameSideTopologyRule() {
             "same-side topology should be rejected by feature layer");
     require(result.reasonCode == QStringLiteral("topology_rule_mismatch"),
             "same-side rejection should report topology rule mismatch");
+}
+
+void testAllowsBidirectionalRouterLinkFromTargetRoleToInitiatorRole() {
+    registerRouterType();
+    Graph graph;
+    require(graph.addModule(makeRouter(QStringLiteral("top"))), "failed to add top router");
+    require(graph.addModule(makeRouter(QStringLiteral("bottom"))), "failed to add bottom router");
+
+    ConnectionRuleService service(&graph, {});
+    const ConnectionCheckResult result = service.check(
+        ConnectionRequest::portToPort(PortRef{QStringLiteral("bottom"), QStringLiteral("north")},
+                                      PortRef{QStringLiteral("top"), QStringLiteral("south")},
+                                      ConnectionRequestKind::PortToPort));
+
+    require(result.status == ConnectionCheckStatus::Allowed,
+            "inout router peer links should allow target-role to initiator-role graph direction");
+    require(result.options.size() == 1,
+            "bidirectional router peer link should produce one option");
+    require(result.options.first().source.moduleId == QStringLiteral("bottom") &&
+                result.options.first().source.portId == QStringLiteral("north"),
+            "bidirectional router peer link should preserve the requested source");
+    require(result.options.first().target.moduleId == QStringLiteral("top") &&
+                result.options.first().target.portId == QStringLiteral("south"),
+            "bidirectional router peer link should preserve the requested target");
 }
 
 void testRejectsOccupiedCardinalityOnePort() {
@@ -462,6 +518,7 @@ int main(int argc, char** argv) {
         testDuplicateConnectionIsStructuralRejection();
         testSelfLoopIsStructuralRejection();
         testRejectsSameSideTopologyRule();
+        testAllowsBidirectionalRouterLinkFromTargetRoleToInitiatorRole();
         testRejectsOccupiedCardinalityOnePort();
         testVisualSideOrientsInOutPortToNodeCompletion();
         testNodeBodyAutocompleteUsesMatchingGroup();

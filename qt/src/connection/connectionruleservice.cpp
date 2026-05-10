@@ -107,6 +107,7 @@ bool endpointAllowsAsSource(const ConnectionEndpointRequest& endpoint);
 bool endpointAllowsAsTarget(const ConnectionEndpointRequest& endpoint);
 bool roleAllowsAsSource(const QString& role);
 bool roleAllowsAsTarget(const QString& role);
+bool endpointsAreBidirectionalPeerLink(const PortSemanticInfo& source, const PortSemanticInfo& target);
 
 struct CandidateEvaluation {
     bool accepted = false;
@@ -172,8 +173,9 @@ CandidateEvaluation checkFeatureDeclarativeRules(const Graph* graph,
                                  QStringLiteral("Connection bus types do not match"));
     }
 
-    if (!roleAllowsAsSource(source.interfaceRole) ||
-        !roleAllowsAsTarget(target.interfaceRole)) {
+    if (!endpointsAreBidirectionalPeerLink(source, target) &&
+        (!roleAllowsAsSource(source.interfaceRole) ||
+         !roleAllowsAsTarget(target.interfaceRole))) {
         return rejectedCandidate(ConnectionRuleLayer::FeaturePlugin,
                                  QStringLiteral("interface_role_mismatch"),
                                  QStringLiteral("Connection interface roles are not compatible"));
@@ -265,6 +267,14 @@ bool roleAllowsAsTarget(const QString& role) {
         return true;
     }
     return role != QStringLiteral("initiator");
+}
+
+bool endpointsAreBidirectionalPeerLink(const PortSemanticInfo& source,
+                                       const PortSemanticInfo& target) {
+    return source.supportsInput && source.supportsOutput &&
+           target.supportsInput && target.supportsOutput &&
+           (source.topologyRule == QStringLiteral("opposite_side") ||
+            target.topologyRule == QStringLiteral("opposite_side"));
 }
 
 } // namespace
