@@ -142,7 +142,7 @@ void testActiveWorkspaceChangesWhenSelectionChanges() {
     ravenocDescriptor.topologyPresets = ravenocEntry().topologyPresets;
     ModuleType raveTile;
     raveTile.name = QStringLiteral("RaveTile");
-    raveTile.pluginId = ravenocDescriptor.id;
+    raveTile.ipcoreId = ravenocDescriptor.id;
     require(registry.registerType(raveTile), "RaveTile should register");
 
     PluginDescriptor fabricDescriptor;
@@ -151,7 +151,7 @@ void testActiveWorkspaceChangesWhenSelectionChanges() {
     fabricDescriptor.kind = QStringLiteral("fabric");
     ModuleType fabricSwitch;
     fabricSwitch.name = QStringLiteral("FabricSwitch");
-    fabricSwitch.pluginId = fabricDescriptor.id;
+    fabricSwitch.ipcoreId = fabricDescriptor.id;
     require(registry.registerType(fabricSwitch), "FabricSwitch should register");
 
     IpCatalogService catalog({fabricDescriptor, ravenocDescriptor}, &registry);

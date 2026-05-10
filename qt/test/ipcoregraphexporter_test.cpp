@@ -28,7 +28,7 @@ QString legacyPluginOwnerKey() {
 ModuleType registerOwnedType(const QString& typeName, const QString& ipcoreId) {
     ModuleType type;
     type.name = typeName;
-    type.pluginId = ipcoreId;
+    type.ipcoreId = ipcoreId;
     ModuleRegistry::instance().registerType(type);
     return type;
 }

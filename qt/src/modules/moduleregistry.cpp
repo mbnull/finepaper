@@ -36,7 +36,7 @@ bool ModuleRegistry::registerType(const ModuleType& type) {
     }
     if (m_types.contains(type.name)) {
         qWarning() << "Skipping duplicate module type" << type.name
-                   << "from runtime bundle" << type.pluginId;
+                   << "from runtime bundle" << type.ipcoreId;
         return false;
     }
     m_types[type.name] = type;
@@ -65,7 +65,7 @@ bool ModuleRegistry::loadPlugins(const QList<PluginDescriptor>& plugins) {
 
         auto types = provider->loadModules();
         for (ModuleType& type : types) {
-            type.pluginId = plugin.id;
+            type.ipcoreId = plugin.id;
             loadedAnyType = registerType(type) || loadedAnyType;
         }
     }
@@ -87,10 +87,10 @@ const ModuleType* ModuleRegistry::getTypeForGraphGroup(const QString& graphGroup
     return nullptr;
 }
 
-const ModuleType* ModuleRegistry::getTypeForGraphGroup(const QString& pluginId,
+const ModuleType* ModuleRegistry::getTypeForGraphGroup(const QString& ipcoreId,
                                                        const QString& graphGroup) const {
     for (auto it = m_types.cbegin(); it != m_types.cend(); ++it) {
-        if (it.value().pluginId == pluginId && it.value().graphGroup == graphGroup) {
+        if (it.value().ipcoreId == ipcoreId && it.value().graphGroup == graphGroup) {
             return &it.value();
         }
     }
@@ -106,10 +106,10 @@ QStringList ModuleRegistry::availableTypes() const {
     return types;
 }
 
-QStringList ModuleRegistry::availableTypesForPlugin(const QString& pluginId) const {
+QStringList ModuleRegistry::availableTypesForIpcore(const QString& ipcoreId) const {
     QStringList types;
     for (auto it = m_types.cbegin(); it != m_types.cend(); ++it) {
-        if (it.value().pluginId == pluginId) {
+        if (it.value().ipcoreId == ipcoreId) {
             types.append(it.key());
         }
     }

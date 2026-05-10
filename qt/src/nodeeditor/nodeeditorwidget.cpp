@@ -292,7 +292,7 @@ bool NodeEditorWidget::acceptsScopedModulePayload(const ScopedModulePayload& pay
     }
 
     const ModuleType* type = ModuleRegistry::instance().getType(payload.moduleType);
-    return type && type->pluginId == state.ipcoreId;
+    return type && type->ipcoreId == state.ipcoreId;
 }
 
 void NodeEditorWidget::setArrangeEnabled(bool enabled) {

@@ -63,9 +63,9 @@ QStringList ipLogLines(const ModuleRegistry& registry) {
             continue;
         }
 
-        lines.append(QStringLiteral("[Startup] IP %1: plugin=%2 group=%3 ports=%4 parameters=%5 interfaces=%6")
+        lines.append(QStringLiteral("[Startup] IP %1: ipcore=%2 group=%3 ports=%4 parameters=%5 interfaces=%6")
                          .arg(type->name,
-                              emptyFallback(type->pluginId),
+                              emptyFallback(type->ipcoreId),
                               emptyFallback(type->graphGroup),
                               QString::number(static_cast<int>(type->defaultPorts.size())),
                               QString::number(type->defaultParameters.size()),

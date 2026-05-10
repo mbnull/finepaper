@@ -45,7 +45,7 @@ void testCatalogEntryCopiesDiscoveredMetadata() {
     ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
     ModuleType tile;
     tile.name = QStringLiteral("RaveTile");
-    tile.pluginId = QStringLiteral("finepaper.ravenoc");
+    tile.ipcoreId = QStringLiteral("finepaper.ravenoc");
     require(registry.registerType(tile), "test module type should register");
 
     const PluginDescriptor descriptor = ravenocDescriptor();
@@ -79,7 +79,7 @@ void testCatalogEntriesAreSortedAndSelectableEntriesAreFiltered() {
     ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
     ModuleType betaType;
     betaType.name = QStringLiteral("BetaTile");
-    betaType.pluginId = QStringLiteral("finepaper.beta");
+    betaType.ipcoreId = QStringLiteral("finepaper.beta");
     require(registry.registerType(betaType), "beta module type should register");
 
     PluginDescriptor alpha;

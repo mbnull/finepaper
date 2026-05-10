@@ -28,7 +28,7 @@ IpCatalogEntry catalogEntryFromDescriptor(const PluginDescriptor& descriptor,
     entry.drc = descriptor.drc;
     entry.topologyPresets = descriptor.topologyPresets;
     if (moduleRegistry) {
-        entry.moduleTypes = moduleRegistry->availableTypesForPlugin(descriptor.id);
+        entry.moduleTypes = moduleRegistry->availableTypesForIpcore(descriptor.id);
     }
     return entry;
 }

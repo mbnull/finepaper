@@ -65,7 +65,7 @@ std::unique_ptr<Module> createModule(Graph* graph,
                                      const QString& moduleType,
                                      const QString& ipcoreId) {
     const ModuleType* type = ModuleRegistry::instance().getType(moduleType);
-    if (!type || ipcoreId.trimmed().isEmpty() || type->pluginId != ipcoreId) {
+    if (!type || ipcoreId.trimmed().isEmpty() || type->ipcoreId != ipcoreId) {
         return {};
     }
 

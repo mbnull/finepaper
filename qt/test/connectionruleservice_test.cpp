@@ -75,7 +75,7 @@ ModuleType endpointTypeWithProtocol(const QString& typeName,
                                     const QString& protocol) {
     ModuleType type;
     type.name = typeName;
-    type.pluginId = ipcoreId;
+    type.ipcoreId = ipcoreId;
     type.defaultPorts.push_back(Port(QStringLiteral("noc"),
                                      Port::Direction::InOut,
                                      QStringLiteral("bus"),
@@ -101,7 +101,7 @@ ModuleType endpointTypeWithProtocol(const QString& typeName,
 void registerRouterType() {
     ModuleType router;
     router.name = QStringLiteral("Router");
-    router.pluginId = QStringLiteral("finepaper.test");
+    router.ipcoreId = QStringLiteral("finepaper.test");
     router.graphGroup = QStringLiteral("routers");
     router.defaultPorts = {
         Port(QStringLiteral("east"), Port::Direction::InOut, QStringLiteral("bus"),
@@ -315,7 +315,7 @@ void testVisualSideOrientsInOutPortToNodeCompletion() {
 void testNodeBodyAutocompleteUsesMatchingGroup() {
     ModuleType host;
     host.name = QStringLiteral("AutocompleteHost");
-    host.pluginId = QStringLiteral("finepaper.test");
+    host.ipcoreId = QStringLiteral("finepaper.test");
     host.defaultPorts.push_back(Port(QStringLiteral("router"),
                                      Port::Direction::InOut,
                                      QStringLiteral("bus"),

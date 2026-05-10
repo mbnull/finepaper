@@ -352,7 +352,7 @@ std::optional<PortSemanticInfo> ConnectionRuleService::resolvePort(const QString
     info.moduleType = module->type();
     info.ipcoreId = !module->ipcoreId().isEmpty()
         ? module->ipcoreId()
-        : (moduleType ? moduleType->pluginId : QString());
+        : (moduleType ? moduleType->ipcoreId : QString());
     info.graphGroup = moduleType ? moduleType->graphGroup : QString();
     info.editorLayout = ModuleTypeMetadata::editorLayout(module);
     info.portName = port->name();

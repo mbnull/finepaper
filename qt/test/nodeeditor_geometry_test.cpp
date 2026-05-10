@@ -58,7 +58,7 @@ PluginDescriptor nodeEditorFabricDescriptor() {
 ModuleType scopedEditorType(const QString& name, const QString& ipcoreId) {
     ModuleType type;
     type.name = name;
-    type.pluginId = ipcoreId;
+    type.ipcoreId = ipcoreId;
     type.paletteLabel = name;
     type.defaultParameters.insert(QStringLiteral("x"), Parameter(QStringLiteral("x"), 0));
     type.defaultParameters.insert(QStringLiteral("y"), Parameter(QStringLiteral("y"), 0));

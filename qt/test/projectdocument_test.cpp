@@ -68,7 +68,7 @@ T parameterValue(const Module* module, const QString& name) {
 ModuleType makeProjectXpType() {
     ModuleType type;
     type.name = QStringLiteral("ProjectDocXP");
-    type.pluginId = QStringLiteral("finepaper.test");
+    type.ipcoreId = QStringLiteral("finepaper.test");
     type.defaultPorts.push_back(Port(QStringLiteral("ep0"),
                                      Port::Direction::Output,
                                      QStringLiteral("bus"),
@@ -93,7 +93,7 @@ ModuleType makeProjectXpType() {
 ModuleType makeProjectEndpointType() {
     ModuleType type;
     type.name = QStringLiteral("ProjectDocEndpoint");
-    type.pluginId = QStringLiteral("finepaper.test");
+    type.ipcoreId = QStringLiteral("finepaper.test");
     type.defaultPorts.push_back(Port(QStringLiteral("noc"),
                                      Port::Direction::Input,
                                      QStringLiteral("bus"),
@@ -343,7 +343,7 @@ void testProjectWriterUsesIpcoreVocabulary() {
 void testProjectSerializerUsesModuleIpcoreOwnership() {
     ModuleType type = makeProjectXpType();
     type.name = QStringLiteral("ProjectDocOwnedXP");
-    type.pluginId = QStringLiteral("finepaper.owned");
+    type.ipcoreId = QStringLiteral("finepaper.owned");
     ModuleRegistry::instance().registerType(type);
 
     Graph graph;
@@ -706,7 +706,7 @@ void testProjectLoadRejectsConnectionRuleFailure() {
 void testProjectLoadReportsIpcoreConnectionRuleFailure() {
     ModuleType sourceType = makeProjectEndpointType();
     sourceType.name = QStringLiteral("ProjectDocAxiSource");
-    sourceType.pluginId = QStringLiteral("finepaper.test");
+    sourceType.ipcoreId = QStringLiteral("finepaper.test");
     sourceType.defaultPorts.clear();
     sourceType.defaultPorts.push_back(Port(QStringLiteral("noc"),
                                            Port::Direction::InOut,

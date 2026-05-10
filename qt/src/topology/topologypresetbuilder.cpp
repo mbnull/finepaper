@@ -231,7 +231,7 @@ TopologyPresetResult TopologyPresetBuilder::apply(Graph* graph,
         return failure(QStringLiteral("Graph is required"));
     }
     const ModuleType* routerType = registry.getType(request.preset.routerModule);
-    if (!routerType || routerType->pluginId != request.ipcoreId) {
+    if (!routerType || routerType->ipcoreId != request.ipcoreId) {
         return failure(QStringLiteral("Router module %1 is not part of active IP %2")
                            .arg(request.preset.routerModule, request.ipcoreId));
     }

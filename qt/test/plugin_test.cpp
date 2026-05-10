@@ -206,7 +206,7 @@ void testModuleTypesKeepPluginOwnershipAndSkipDuplicates() {
 
     const ModuleType* type = registry.getType(QStringLiteral("Shared"));
     require(type != nullptr, "Shared type should load");
-    require(type->pluginId == QStringLiteral("first"), "duplicate type should keep first plugin owner");
+    require(type->ipcoreId == QStringLiteral("first"), "duplicate type should keep first IP-core owner");
     require(registry.availableTypes().size() == 1, "duplicate type name should be skipped");
 }
 
@@ -247,18 +247,18 @@ void testModuleRegistryListsTypesByPlugin() {
 
     ModuleType nocType;
     nocType.name = QStringLiteral("XP");
-    nocType.pluginId = QStringLiteral("finepaper.noc");
+    nocType.ipcoreId = QStringLiteral("finepaper.noc");
     nocType.graphGroup = QStringLiteral("xps");
     require(registry.registerType(nocType), "noc type should register");
 
     ModuleType ravenType;
     ravenType.name = QStringLiteral("RaveTile");
-    ravenType.pluginId = QStringLiteral("finepaper.ravenoc");
+    ravenType.ipcoreId = QStringLiteral("finepaper.ravenoc");
     ravenType.graphGroup = QStringLiteral("xps");
     require(registry.registerType(ravenType), "ravenoc type should register");
 
-    const QStringList nocTypes = registry.availableTypesForPlugin(QStringLiteral("finepaper.noc"));
-    const QStringList ravenTypes = registry.availableTypesForPlugin(QStringLiteral("finepaper.ravenoc"));
+    const QStringList nocTypes = registry.availableTypesForIpcore(QStringLiteral("finepaper.noc"));
+    const QStringList ravenTypes = registry.availableTypesForIpcore(QStringLiteral("finepaper.ravenoc"));
 
     require(nocTypes == QStringList{QStringLiteral("XP")},
             "NoC active IP should only list NoC module types");
@@ -375,13 +375,13 @@ void testRepositoryFinepaperNoCIpCoreMetadataLoads() {
     ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
     registry.loadPlugins(plugins);
 
-    const QStringList nocTypes = registry.availableTypesForPlugin(QStringLiteral("finepaper.noc"));
+    const QStringList nocTypes = registry.availableTypesForIpcore(QStringLiteral("finepaper.noc"));
     require(nocTypes == QStringList({QStringLiteral("Endpoint"), QStringLiteral("XP")}),
             "Finepaper NoC IP core should list its internal editable module types");
 
     const ModuleType* xpType = registry.getType(QStringLiteral("XP"));
     require(xpType != nullptr, "XP module type should load");
-    require(xpType->pluginId == QStringLiteral("finepaper.noc"),
+    require(xpType->ipcoreId == QStringLiteral("finepaper.noc"),
             "XP module should keep IP core ownership");
     require(xpType->graphGroup == QStringLiteral("xps"),
             "XP should participate as the NoC router graph group");
@@ -432,13 +432,13 @@ void testRepositoryRaveNoCIpCoreMetadataLoads() {
     ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
     registry.loadPlugins(plugins);
 
-    const QStringList ravenTypes = registry.availableTypesForPlugin(QStringLiteral("finepaper.ravenoc"));
+    const QStringList ravenTypes = registry.availableTypesForIpcore(QStringLiteral("finepaper.ravenoc"));
     require(ravenTypes == QStringList({QStringLiteral("RaveEndpoint"), QStringLiteral("RaveTile")}),
             "RaveNoC active IP should list only its internal editable module types");
 
     const ModuleType* tileType = registry.getType(QStringLiteral("RaveTile"));
     require(tileType != nullptr, "RaveTile module type should load");
-    require(tileType->pluginId == QStringLiteral("finepaper.ravenoc"),
+    require(tileType->ipcoreId == QStringLiteral("finepaper.ravenoc"),
             "RaveTile module should keep IP core ownership");
     require(tileType->graphGroup == QStringLiteral("xps"),
             "RaveTile should participate as the RaveNoC router graph group");
@@ -462,7 +462,7 @@ void testRepositoryRaveNoCIpCoreMetadataLoads() {
 
     const ModuleType* endpointType = registry.getType(QStringLiteral("RaveEndpoint"));
     require(endpointType != nullptr, "RaveEndpoint module type should load");
-    require(endpointType->pluginId == QStringLiteral("finepaper.ravenoc"),
+    require(endpointType->ipcoreId == QStringLiteral("finepaper.ravenoc"),
             "RaveEndpoint module should keep IP core ownership");
     require(endpointType->graphGroup == QStringLiteral("endpoints"),
             "RaveEndpoint should participate as an editable endpoint graph group");
@@ -595,8 +595,8 @@ void testStartupDiagnosticsListLoadedPluginsAndIpTypes() {
             "startup diagnostics should include plugin display name and version");
     require(lines.join('\n').contains(QStringLiteral("[Startup] IP Shared")),
             "startup diagnostics should include loaded IP type");
-    require(lines.join('\n').contains(QStringLiteral("plugin=finepaper.demo")),
-            "startup diagnostics should include IP plugin owner");
+    require(lines.join('\n').contains(QStringLiteral("ipcore=finepaper.demo")),
+            "startup diagnostics should include IP-core owner");
     require(lines.join('\n').contains(QStringLiteral("ports=1 parameters=1 interfaces=1")),
             "startup diagnostics should include IP metadata counts");
 }

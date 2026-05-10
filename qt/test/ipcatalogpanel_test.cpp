@@ -72,13 +72,13 @@ struct TestHarness {
           workspaceController(&projectIpService, &catalog) {
         ModuleType raveTile;
         raveTile.name = QStringLiteral("RaveTile");
-        raveTile.pluginId = ravenoc.id;
+        raveTile.ipcoreId = ravenoc.id;
         raveTile.paletteLabel = QStringLiteral("Rave Tile");
         require(registry.registerType(raveTile), "RaveTile should register");
 
         ModuleType fabricSwitch;
         fabricSwitch.name = QStringLiteral("FabricSwitch");
-        fabricSwitch.pluginId = fabric.id;
+        fabricSwitch.ipcoreId = fabric.id;
         fabricSwitch.paletteLabel = QStringLiteral("Fabric Switch");
         require(registry.registerType(fabricSwitch), "FabricSwitch should register");
 

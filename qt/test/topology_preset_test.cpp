@@ -64,10 +64,10 @@ QString repositoryPluginPath(const QString& relativePluginPath) {
     return QFileInfo(QDir(startPaths.first()).filePath(relativePluginPath)).absoluteFilePath();
 }
 
-ModuleType routerType(const QString& name, const QString& pluginId) {
+ModuleType routerType(const QString& name, const QString& ipcoreId) {
     ModuleType type;
     type.name = name;
-    type.pluginId = pluginId;
+    type.ipcoreId = ipcoreId;
     type.graphGroup = QStringLiteral("xps");
     type.supportsCollapse = true;
     type.meshSpacingX = 220;

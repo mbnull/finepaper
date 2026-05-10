@@ -132,7 +132,7 @@ ProjectDocument GraphProjectSerializer::toProject(const Graph& graph, const QStr
     for (const auto& module : graph.modules()) {
         const ModuleType* type = ModuleRegistry::instance().getType(module->type());
         const QString ipcoreId = module->ipcoreId().isEmpty()
-            ? (type ? type->pluginId : QString())
+            ? (type ? type->ipcoreId : QString())
             : module->ipcoreId();
         if (!ipcoreId.isEmpty()) {
             ipcoreIds.insert(ipcoreId);
@@ -197,7 +197,7 @@ GraphProjectLoadResult GraphProjectSerializer::loadProject(const ProjectDocument
             // startup, so continuing would lose graph semantics.
             return failure(QStringLiteral("Missing module type: %1").arg(record.type));
         }
-        if (type->pluginId != record.ipcoreId) {
+        if (type->ipcoreId != record.ipcoreId) {
             // Type names are currently globally unique, but the project still
             // records IP core ownership to catch accidental cross-IP reuse.
             return failure(QStringLiteral("Module %1 requires ipcore %2").arg(record.id, record.ipcoreId));
