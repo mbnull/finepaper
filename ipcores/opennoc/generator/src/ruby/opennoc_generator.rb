@@ -127,8 +127,17 @@ class OpenNoCGenerator
   end
 
   def infer_coordinates(xps, connections)
-    coordinates = rectangular_coordinates(logical_xp_coordinates(xps)) ||
-                  rectangular_coordinates(connection_xp_coordinates(xps, connections)) ||
+    logical_coordinates = logical_xp_coordinates(xps)
+    if logical_coordinates
+      coordinates = rectangular_coordinates(logical_coordinates)
+      unless coordinates
+        raise GenerationError, "OpenNoCXP graph must be rectangular, found #{xps.size} XPs"
+      end
+
+      return coordinates
+    end
+
+    coordinates = rectangular_coordinates(connection_xp_coordinates(xps, connections)) ||
                   rectangular_coordinates(canvas_xp_coordinates(xps))
     unless coordinates
       raise GenerationError, "OpenNoCXP graph must be rectangular, found #{xps.size} XPs"

@@ -79,6 +79,21 @@ class OpenNoCGeneratorTest < Minitest::Test
     end
   end
 
+  def test_drc_rejects_duplicate_logical_coordinates
+    Dir.mktmpdir do |dir|
+      graph = valid_graph
+      xp = graph.fetch('modules').find { |mod| mod.fetch('id') == 'XP1_0' }
+      xp.fetch('parameters')['mesh_col'] = 0
+      xp.fetch('parameters')['mesh_row'] = 0
+      input = write_json(dir, 'duplicate_logical_coordinates.json', graph)
+
+      _stdout, stderr, status = run_drc(input)
+
+      refute status.success?
+      assert_includes stderr, 'OpenNoCXP graph must be rectangular'
+    end
+  end
+
   def test_projection_uses_external_id_for_mesh_json_keys
     require 'opennoc_generator'
 
