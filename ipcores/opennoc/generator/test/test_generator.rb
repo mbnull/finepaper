@@ -42,14 +42,18 @@ class OpenNoCGeneratorTest < Minitest::Test
       refute File.directory?(File.join(output, 'rtl/src/rnf'))
       assert File.file?(File.join(output, 'LICENSE'))
       assert_includes File.read(File.join(output, 'opennoc_filelist.f')), File.join(output, 'mesh_wrapper_2x2.sv')
-      assert_includes File.read(File.join(output, 'verify.sh')), '-GREQ_FLIT_WIDTH=128'
+      verify = File.read(File.join(output, 'verify.sh'))
+      assert_includes verify, 'cd "$(dirname "$0")"'
+      assert_includes verify, '-GREQ_FLIT_WIDTH=128'
       manifest = JSON.parse(File.read(File.join(output, 'manifest.json')))
       assert_equal 'finepaper.opennoc', manifest.fetch('ipcore')
       assert_equal 'mesh', manifest.fetch('topology')
       assert_equal 2, manifest.fetch('rows')
       assert_equal 2, manifest.fetch('cols')
       assert_equal 'mesh_wrapper_2x2.sv', manifest.fetch('wrapper')
-      assert_equal 'external', manifest.fetch('agents').find { |agent| agent.fetch('type') == 'OpenNoCRNF' }.fetch('rtl')
+      rnf_agent = manifest.fetch('agents').find { |agent| agent.fetch('type') == 'OpenNoCRNF' }
+      assert_equal 'RNF', rnf_agent.fetch('upstream_type')
+      assert_equal 'external', rnf_agent.fetch('rtl')
     end
   end
 

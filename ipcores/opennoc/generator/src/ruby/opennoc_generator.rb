@@ -266,6 +266,7 @@ class OpenNoCGenerator
       {
         id: artifact_id(agent),
         type: type,
+        upstream_type: attachment.fetch(:upstream_type),
         xp: artifact_id(module_by_id.fetch(attachment.fetch(:xp_id))),
         slot: attachment.fetch(:slot),
         rtl: rtl_dir ? "rtl/src/#{rtl_dir}" : 'external'
@@ -530,6 +531,7 @@ class OpenNoCGenerator
       agent = module_by_id.fetch(binding.fetch(:agent_id))
       binding[:agent_type] = agent.fetch('type')
       binding[:agent_enum] = AGENT_TYPE_TO_ENUM.fetch(agent.fetch('type'))
+      binding[:upstream_type] = binding.fetch(:agent_enum)
     end
 
     bindings.sort_by { |binding| [binding.fetch(:xp_id), binding.fetch(:slot), binding.fetch(:agent_id)] }

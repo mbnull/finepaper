@@ -1,6 +1,8 @@
 #!/usr/bin/env sh
 set -eu
 
+cd "$(dirname "$0")"
+
 verilator --lint-only --sv -Wno-PINMISSING \
   -GREQ_FLIT_WIDTH=<%= model.fetch(:parameters).fetch('req_flit_width') %> \
   -GRSP_FLIT_WIDTH=<%= model.fetch(:parameters).fetch('rsp_flit_width') %> \
