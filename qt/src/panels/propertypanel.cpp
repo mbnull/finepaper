@@ -11,6 +11,7 @@
 #include "commands/commandmanager.h"
 #include "commands/setipinstanceparametercommand.h"
 #include "commands/setparametercommand.h"
+#include "widgets/collapsiblesection.h"
 #include <cfloat>
 #include <climits>
 #include <QLabel>
@@ -23,6 +24,7 @@
 #include <QFormLayout>
 #include <QPlainTextEdit>
 #include <QScrollBar>
+#include <QToolButton>
 #include <limits>
 #include <utility>
 
@@ -177,6 +179,29 @@ bool defaultBoolValue(const Parameter::Value& value) {
         return *boolValue;
     }
     return false;
+}
+
+QString stableObjectSuffix(const QString& text) {
+    QString suffix;
+    suffix.reserve(text.size());
+
+    bool previousWasUnderscore = false;
+    for (const QChar& ch : text) {
+        if (ch.isLetterOrNumber()) {
+            suffix.append(ch.toLower());
+            previousWasUnderscore = false;
+            continue;
+        }
+        if (!previousWasUnderscore) {
+            suffix.append(QLatin1Char('_'));
+            previousWasUnderscore = true;
+        }
+    }
+
+    if (suffix.endsWith(QLatin1Char('_'))) {
+        suffix.chop(1);
+    }
+    return suffix;
 }
 
 QString ipInstanceValueAsString(const IpInstanceParameterField& field, const QJsonValue& storedValue) {
@@ -335,11 +360,18 @@ void PropertyPanel::populatePanel() {
             const QString title = instanceId.isEmpty()
                 ? baseLabel
                 : QStringLiteral("%1 / %2").arg(baseLabel, instanceId);
-            auto* header = new QLabel(title, this);
-            QFont font = header->font();
-            font.setBold(true);
-            header->setFont(font);
-            m_formLayout->addRow(header);
+            const QString sectionName = QStringLiteral("ipInstanceSection_%1")
+                .arg(stableObjectSuffix(section.ipcoreId + QStringLiteral("_") +
+                                        instanceId + QStringLiteral("_") + section.id));
+            auto* sectionWidget = new CollapsibleSection(title, this);
+            sectionWidget->setObjectName(sectionName);
+            sectionWidget->toggleButton()->setObjectName(sectionName + QStringLiteral("Toggle"));
+
+            auto* content = new QWidget(sectionWidget);
+            content->setObjectName(sectionName + QStringLiteral("Content"));
+            auto* sectionFormLayout = new QFormLayout(content);
+            sectionFormLayout->setContentsMargins(8, 4, 0, 4);
+            sectionFormLayout->setSpacing(6);
 
             for (const IpInstanceParameterField& field : section.fields) {
                 const QJsonValue stored = m_stateService->parameter(
@@ -350,7 +382,7 @@ void PropertyPanel::populatePanel() {
                     continue;
                 }
                 const QString label = field.label.isEmpty() ? humanizeIdentifier(field.name) : field.label;
-                QLabel* rowLabel = new QLabel(label, this);
+                QLabel* rowLabel = new QLabel(label, content);
                 if (!field.description.isEmpty()) {
                     rowLabel->setToolTip(field.description);
                     widget->setToolTip(field.description);
@@ -403,12 +435,15 @@ void PropertyPanel::populatePanel() {
                         });
                     }
                 }
-                m_formLayout->addRow(rowLabel, widget);
+                sectionFormLayout->addRow(rowLabel, widget);
                 m_ipParameterWidgets.insert(
                     section.ipcoreId + QStringLiteral("/") + instanceId +
                         QStringLiteral("/") + section.id + QStringLiteral("/") + field.name,
                     widget);
             }
+
+            sectionWidget->setContentWidget(content);
+            m_formLayout->addRow(sectionWidget);
         };
 
         for (const IIpInstanceParameterAdapter* adapter : m_ipInstanceParameterAdapters) {

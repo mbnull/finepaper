@@ -11,6 +11,7 @@
 #include <QJsonObject>
 #include <QLabel>
 #include <QSpinBox>
+#include <QToolButton>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
@@ -27,6 +28,12 @@ bool hasLabel(PropertyPanel& panel, const QString& text) {
     const QList<QLabel*> labels = panel.findChildren<QLabel*>();
     for (const QLabel* label : labels) {
         if (label->text() == text) {
+            return true;
+        }
+    }
+    const QList<QToolButton*> buttons = panel.findChildren<QToolButton*>();
+    for (const QToolButton* button : buttons) {
+        if (button->text() == text) {
             return true;
         }
     }
@@ -91,6 +98,59 @@ void testUnselectedPanelShowsIpInstanceParameters() {
             "undo should restore previous IP-instance parameter value");
     require(spinBox->value() == 32,
             "undo should refresh the visible IP-instance parameter widget");
+}
+
+void testIpInstanceParameterSectionCanCollapseAndExpand() {
+    Graph graph;
+    ProjectStateService stateService;
+    ProjectDocument document;
+    ProjectIpInstanceRecord state;
+    state.ipcoreId = QStringLiteral("finepaper.ravenoc");
+    state.instanceId = QStringLiteral("ravenoc_0");
+    state.schema = QStringLiteral("ravenoc-project-state-v1");
+    state.state = QJsonObject{
+        {QStringLiteral("global_parameters"), QJsonObject{
+            {QStringLiteral("flit_data_width"), 32}
+        }}
+    };
+    document.ipcoreState.push_back(state);
+    stateService.loadFromDocument(document);
+
+    PluginDescriptor plugin;
+    plugin.id = QStringLiteral("finepaper.ravenoc");
+    plugin.name = QStringLiteral("RaveNoC");
+    PluginInstanceParameterDescriptor width;
+    width.name = QStringLiteral("flit_data_width");
+    width.type = QStringLiteral("int");
+    width.defaultValue = 32;
+    width.label = QStringLiteral("Flit data width");
+    plugin.instanceParameters.insert(width.name, width);
+    ManifestIpInstanceParameterAdapter adapter(plugin);
+
+    CommandManager commandManager;
+    PropertyPanel panel(&graph, &stateService, {&adapter}, &commandManager);
+    panel.setSelectedModule(QString());
+
+    const QString sectionName =
+        QStringLiteral("ipInstanceSection_finepaper_ravenoc_ravenoc_0_global_parameters");
+    auto* toggle = panel.findChild<QToolButton*>(sectionName + QStringLiteral("Toggle"));
+    auto* content = panel.findChild<QWidget*>(sectionName + QStringLiteral("Content"));
+    require(toggle != nullptr, "IP-instance section toggle should exist");
+    require(content != nullptr, "IP-instance section content should exist");
+    require(!content->isHidden(), "IP-instance section should start expanded");
+
+    toggle->click();
+    require(content->isHidden(), "IP-instance section toggle should collapse content");
+    require(toggle->arrowType() == Qt::RightArrow, "collapsed section should show right arrow");
+
+    toggle->click();
+    require(!content->isHidden(), "IP-instance section toggle should expand content");
+    require(toggle->arrowType() == Qt::DownArrow, "expanded section should show down arrow");
+
+    QSpinBox* spinBox = panel.findChild<QSpinBox*>();
+    require(spinBox != nullptr, "collapsed section should retain parameter widgets");
+    require(spinBox->value() == 32,
+            "expanded section should keep the stored project state value");
 }
 
 void testUnselectedPanelUsesPersistedCustomIpInstanceId() {
@@ -189,6 +249,7 @@ int main(int argc, char** argv) {
 
     try {
         testUnselectedPanelShowsIpInstanceParameters();
+        testIpInstanceParameterSectionCanCollapseAndExpand();
         testUnselectedPanelUsesPersistedCustomIpInstanceId();
         testClearingGraphBeforePanelSelectionClearIsSafe();
         testDefaultIpInstanceSectionWithoutStateIsReadOnly();

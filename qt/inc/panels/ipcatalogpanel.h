@@ -11,6 +11,8 @@ class ProjectStateService;
 class QLineEdit;
 class QListWidget;
 class QListWidgetItem;
+class QTreeWidget;
+class QTreeWidgetItem;
 
 class IpCatalogPanel : public QWidget {
     Q_OBJECT
@@ -31,7 +33,7 @@ private:
     void refreshCatalog();
     void refreshProjectInstances();
     void refreshActiveWorkspace();
-    void emitAddRequest(QListWidgetItem* item);
+    void emitAddRequest(QTreeWidgetItem* item);
     void emitSelectRequest(QListWidgetItem* item);
     void scheduleProjectSelectionSync();
     void syncProjectSelection();
@@ -41,7 +43,7 @@ private:
     ProjectIpService* m_projectIpService = nullptr;
     ActiveWorkspaceController* m_workspaceController = nullptr;
     QLineEdit* m_search = nullptr;
-    QListWidget* m_catalogList = nullptr;
+    QTreeWidget* m_catalogList = nullptr;
     QListWidget* m_projectIpList = nullptr;
     QListWidget* m_activeModuleList = nullptr;
     QListWidget* m_activeToolList = nullptr;

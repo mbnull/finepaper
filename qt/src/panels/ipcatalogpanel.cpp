@@ -6,6 +6,7 @@
 #include "ipcore/iptoolsmodel.h"
 #include "project/projectipservice.h"
 #include "project/projectstateservice.h"
+#include "widgets/collapsiblesection.h"
 #include "workspace/activeworkspacecontroller.h"
 
 #include <QAbstractItemView>
@@ -13,13 +14,14 @@
 #include <QHash>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QMap>
 #include <QMimeData>
-#include <QSizePolicy>
 #include <QSignalBlocker>
 #include <QTimer>
+#include <QToolButton>
+#include <QTreeWidget>
 #include <QVBoxLayout>
 #include <functional>
 #include <optional>
@@ -54,6 +56,53 @@ QString projectInstanceLabel(const ProjectIpInstanceRecord& record) {
     return record.instanceId.trimmed().isEmpty()
         ? record.ipcoreId
         : record.instanceId + QStringLiteral(" - ") + record.ipcoreId;
+}
+
+QString humanizeCategory(const QString& category) {
+    const QString trimmed = category.trimmed();
+    if (trimmed.isEmpty()) {
+        return QStringLiteral("Uncategorized");
+    }
+    if (trimmed.compare(QStringLiteral("noc"), Qt::CaseInsensitive) == 0) {
+        return QStringLiteral("NoC");
+    }
+
+    QString text = trimmed;
+    text.replace('-', ' ');
+    text.replace('_', ' ');
+
+    bool capitalizeNext = true;
+    for (int index = 0; index < text.size(); ++index) {
+        if (text[index].isSpace()) {
+            capitalizeNext = true;
+            continue;
+        }
+        if (capitalizeNext) {
+            text[index] = text[index].toUpper();
+            capitalizeNext = false;
+        }
+    }
+    return text;
+}
+
+QWidget* contentWidget(QWidget* parent) {
+    auto* content = new QWidget(parent);
+    auto* layout = new QVBoxLayout(content);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(4);
+    return content;
+}
+
+CollapsibleSection* section(const QString& title,
+                            const QString& objectName,
+                            QWidget* content,
+                            QWidget* parent) {
+    auto* result = new CollapsibleSection(title, parent);
+    result->setObjectName(objectName);
+    result->toggleButton()->setObjectName(objectName + QStringLiteral("Toggle"));
+    content->setObjectName(objectName + QStringLiteral("Content"));
+    result->setContentWidget(content);
+    return result;
 }
 
 class ModuleListWidget : public QListWidget {
@@ -101,12 +150,6 @@ private:
     std::function<void(const QString&)> m_dragStartedCallback;
 };
 
-QLabel* sectionLabel(const QString& text, QWidget* parent) {
-    auto* label = new QLabel(text, parent);
-    label->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
-    return label;
-}
-
 } // namespace
 
 IpCatalogPanel::IpCatalogPanel(const IpCatalogService* catalogService,
@@ -125,42 +168,70 @@ IpCatalogPanel::IpCatalogPanel(const IpCatalogService* catalogService,
     layout->setContentsMargins(8, 8, 8, 8);
     layout->setSpacing(6);
 
-    layout->addWidget(sectionLabel(QStringLiteral("IP Cores"), this));
     m_search = new QLineEdit(this);
     m_search->setObjectName(QStringLiteral("ipCatalogSearch"));
     layout->addWidget(m_search);
 
-    m_catalogList = new QListWidget(this);
+    auto* catalogContent = contentWidget(this);
+    auto* catalogLayout = qobject_cast<QVBoxLayout*>(catalogContent->layout());
+    m_catalogList = new QTreeWidget(catalogContent);
     m_catalogList->setObjectName(QStringLiteral("ipCatalogList"));
-    layout->addWidget(m_catalogList, 2);
+    m_catalogList->setHeaderHidden(true);
+    m_catalogList->setItemsExpandable(true);
+    m_catalogList->setRootIsDecorated(true);
+    m_catalogList->setMinimumHeight(130);
+    catalogLayout->addWidget(m_catalogList);
+    layout->addWidget(section(QStringLiteral("IP Cores"),
+                              QStringLiteral("ipCatalogIpCoresSection"),
+                              catalogContent,
+                              this));
 
-    layout->addWidget(sectionLabel(QStringLiteral("Project Instances"), this));
-    m_projectIpList = new QListWidget(this);
+    auto* projectContent = contentWidget(this);
+    auto* projectLayout = qobject_cast<QVBoxLayout*>(projectContent->layout());
+    m_projectIpList = new QListWidget(projectContent);
     m_projectIpList->setObjectName(QStringLiteral("projectIpList"));
-    layout->addWidget(m_projectIpList, 1);
+    m_projectIpList->setMinimumHeight(80);
+    projectLayout->addWidget(m_projectIpList);
+    layout->addWidget(section(QStringLiteral("Project Instances"),
+                              QStringLiteral("ipCatalogProjectInstancesSection"),
+                              projectContent,
+                              this));
 
-    layout->addWidget(sectionLabel(QStringLiteral("Workspace Modules"), this));
-    auto* activeModuleList = new ModuleListWidget(this);
+    auto* modulesContent = contentWidget(this);
+    auto* modulesLayout = qobject_cast<QVBoxLayout*>(modulesContent->layout());
+    auto* activeModuleList = new ModuleListWidget(modulesContent);
     activeModuleList->setObjectName(QStringLiteral("activeModuleList"));
     activeModuleList->setDragEnabled(true);
     activeModuleList->setDragDropMode(QAbstractItemView::DragOnly);
     activeModuleList->setDefaultDropAction(Qt::CopyAction);
+    activeModuleList->setMinimumHeight(80);
     activeModuleList->setDragStartedCallback([this](const QString& moduleType) {
         emit moduleDragStarted(moduleType);
     });
     m_activeModuleList = activeModuleList;
-    layout->addWidget(m_activeModuleList, 1);
+    modulesLayout->addWidget(m_activeModuleList);
+    layout->addWidget(section(QStringLiteral("Workspace Modules"),
+                              QStringLiteral("ipCatalogWorkspaceModulesSection"),
+                              modulesContent,
+                              this));
 
-    layout->addWidget(sectionLabel(QStringLiteral("Workspace Tools"), this));
-    m_activeToolList = new QListWidget(this);
+    auto* toolsContent = contentWidget(this);
+    auto* toolsLayout = qobject_cast<QVBoxLayout*>(toolsContent->layout());
+    m_activeToolList = new QListWidget(toolsContent);
     m_activeToolList->setObjectName(QStringLiteral("activeToolList"));
-    layout->addWidget(m_activeToolList, 1);
+    m_activeToolList->setMinimumHeight(80);
+    toolsLayout->addWidget(m_activeToolList);
+    layout->addWidget(section(QStringLiteral("Workspace Tools"),
+                              QStringLiteral("ipCatalogWorkspaceToolsSection"),
+                              toolsContent,
+                              this));
+    layout->addStretch(1);
 
     connect(m_search, &QLineEdit::textChanged, this, [this] { refreshCatalog(); });
-    connect(m_catalogList, &QListWidget::itemActivated, this, [this](QListWidgetItem* item) {
+    connect(m_catalogList, &QTreeWidget::itemActivated, this, [this](QTreeWidgetItem* item, int) {
         emitAddRequest(item);
     });
-    connect(m_catalogList, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem* item) {
+    connect(m_catalogList, &QTreeWidget::itemDoubleClicked, this, [this](QTreeWidgetItem* item, int) {
         emitAddRequest(item);
     });
     connect(m_projectIpList,
@@ -210,14 +281,28 @@ void IpCatalogPanel::refreshCatalog() {
     }
 
     const QString filter = m_search ? m_search->text() : QString();
+    QMap<QString, QTreeWidgetItem*> categories;
     for (const IpCatalogEntry& entry : m_catalogService->selectableEntries()) {
         if (!catalogMatchesFilter(entry, filter)) {
             continue;
         }
 
-        auto* item = new QListWidgetItem(catalogLabel(entry));
-        item->setData(Qt::UserRole, entry.id);
-        m_catalogList->addItem(item);
+        const QString category = humanizeCategory(entry.kind);
+        QTreeWidgetItem* categoryItem = categories.value(category, nullptr);
+        if (!categoryItem) {
+            categoryItem = new QTreeWidgetItem(QStringList{category});
+            categoryItem->setFlags(Qt::ItemIsEnabled);
+            m_catalogList->addTopLevelItem(categoryItem);
+            categories.insert(category, categoryItem);
+        }
+
+        auto* item = new QTreeWidgetItem(categoryItem, QStringList{catalogLabel(entry)});
+        item->setData(0, Qt::UserRole, entry.id);
+        item->setToolTip(0, entry.id);
+    }
+
+    for (auto it = categories.cbegin(); it != categories.cend(); ++it) {
+        m_catalogList->expandItem(it.value());
     }
 }
 
@@ -295,12 +380,12 @@ void IpCatalogPanel::refreshActiveWorkspace() {
     }
 }
 
-void IpCatalogPanel::emitAddRequest(QListWidgetItem* item) {
+void IpCatalogPanel::emitAddRequest(QTreeWidgetItem* item) {
     if (!item) {
         return;
     }
 
-    const QString ipcoreId = item->data(Qt::UserRole).toString();
+    const QString ipcoreId = item->data(0, Qt::UserRole).toString();
     if (!ipcoreId.trimmed().isEmpty()) {
         emit addIpcoreRequested(ipcoreId);
     }

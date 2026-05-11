@@ -14,6 +14,8 @@
 #include <QListWidget>
 #include <QMetaObject>
 #include <QSignalBlocker>
+#include <QToolButton>
+#include <QTreeWidget>
 #include <iostream>
 #include <stdexcept>
 
@@ -23,6 +25,29 @@ void require(bool condition, const char* message) {
     if (!condition) {
         throw std::runtime_error(message);
     }
+}
+
+QTreeWidgetItem* firstCatalogEntry(QTreeWidget* catalog) {
+    if (!catalog || catalog->topLevelItemCount() == 0) {
+        return nullptr;
+    }
+
+    QTreeWidgetItem* category = catalog->topLevelItem(0);
+    return category && category->childCount() > 0 ? category->child(0) : nullptr;
+}
+
+QTreeWidgetItem* findCatalogCategory(QTreeWidget* catalog, const QString& text) {
+    if (!catalog) {
+        return nullptr;
+    }
+
+    for (int index = 0; index < catalog->topLevelItemCount(); ++index) {
+        QTreeWidgetItem* item = catalog->topLevelItem(index);
+        if (item && item->text(0) == text) {
+            return item;
+        }
+    }
+    return nullptr;
 }
 
 PluginDescriptor ravenocDescriptor() {
@@ -102,9 +127,9 @@ void testSearchFiltersCatalogEntries() {
     require(panel.objectName() == QStringLiteral("ipCatalogPanel"),
             "panel object name should be stable");
     auto* search = panel.findChild<QLineEdit*>(QStringLiteral("ipCatalogSearch"));
-    auto* catalog = panel.findChild<QListWidget*>(QStringLiteral("ipCatalogList"));
+    auto* catalog = panel.findChild<QTreeWidget*>(QStringLiteral("ipCatalogList"));
     require(search != nullptr, "search field should exist");
-    require(catalog != nullptr, "catalog list should exist");
+    require(catalog != nullptr, "catalog tree should exist");
     require(panel.findChild<QListWidget*>(QStringLiteral("projectIpList")) != nullptr,
             "project IP list should exist");
     require(panel.findChild<QListWidget*>(QStringLiteral("activeModuleList")) != nullptr,
@@ -112,12 +137,44 @@ void testSearchFiltersCatalogEntries() {
     require(panel.findChild<QListWidget*>(QStringLiteral("activeToolList")) != nullptr,
             "active tool list should exist");
 
-    require(catalog->count() == 2, "catalog should start with two entries");
+    require(catalog->topLevelItemCount() == 2, "catalog should start with two category rows");
+    require(findCatalogCategory(catalog, QStringLiteral("NoC")) != nullptr,
+            "catalog should group NoC entries under a category row");
     search->setText(QStringLiteral("rave"));
     QCoreApplication::processEvents();
-    require(catalog->count() == 1, "search should filter catalog entries");
-    require(catalog->item(0)->data(Qt::UserRole).toString() == QStringLiteral("finepaper.ravenoc"),
+    require(catalog->topLevelItemCount() == 1, "search should filter empty categories");
+    QTreeWidgetItem* category = catalog->topLevelItem(0);
+    require(category->childCount() == 1, "search should keep one matching catalog entry");
+    require(category->child(0)->data(0, Qt::UserRole).toString() == QStringLiteral("finepaper.ravenoc"),
             "search should keep matching RaveNoC entry");
+}
+
+void testCatalogSectionsAndCategoriesCanCollapse() {
+    TestHarness harness;
+    IpCatalogPanel panel(&harness.catalog,
+                         &harness.stateService,
+                         &harness.projectIpService,
+                         &harness.workspaceController);
+
+    auto* toggle = panel.findChild<QToolButton*>(QStringLiteral("ipCatalogIpCoresSectionToggle"));
+    auto* content = panel.findChild<QWidget*>(QStringLiteral("ipCatalogIpCoresSectionContent"));
+    auto* catalog = panel.findChild<QTreeWidget*>(QStringLiteral("ipCatalogList"));
+    require(toggle != nullptr, "IP cores section toggle should exist");
+    require(content != nullptr, "IP cores section content should exist");
+    require(catalog != nullptr, "catalog tree should exist");
+    require(!content->isHidden(), "IP cores section should start expanded");
+
+    toggle->click();
+    require(content->isHidden(), "IP cores section toggle should collapse content");
+    toggle->click();
+    require(!content->isHidden(), "IP cores section toggle should expand content");
+
+    QTreeWidgetItem* nocCategory = findCatalogCategory(catalog, QStringLiteral("NoC"));
+    require(nocCategory != nullptr, "NoC category should exist");
+    catalog->collapseItem(nocCategory);
+    require(!nocCategory->isExpanded(), "catalog category should collapse");
+    catalog->expandItem(nocCategory);
+    require(nocCategory->isExpanded(), "catalog category should expand");
 }
 
 void testSelectingIpInstanceUpdatesActiveModuleAndToolLists() {
@@ -150,11 +207,14 @@ void testPanelEmitsAddAndSelectSignals() {
     QString requestedAdd;
     QObject::connect(&panel, &IpCatalogPanel::addIpcoreRequested, &panel,
                      [&](const QString& ipcoreId) { requestedAdd = ipcoreId; });
-    auto* catalog = panel.findChild<QListWidget*>(QStringLiteral("ipCatalogList"));
+    auto* catalog = panel.findChild<QTreeWidget*>(QStringLiteral("ipCatalogList"));
+    QTreeWidgetItem* catalogEntry = firstCatalogEntry(catalog);
+    require(catalogEntry != nullptr, "catalog should expose selectable IP entries");
     QMetaObject::invokeMethod(catalog,
                               "itemActivated",
                               Qt::DirectConnection,
-                              Q_ARG(QListWidgetItem*, catalog->item(0)));
+                              Q_ARG(QTreeWidgetItem*, catalogEntry),
+                              Q_ARG(int, 0));
     require(!requestedAdd.isEmpty(), "panel should expose add intent signal");
 
     require(harness.projectIpService.ensureInstanceForIpcore(harness.ravenocEntry()).success,
@@ -197,6 +257,7 @@ int main(int argc, char** argv) {
 
     try {
         testSearchFiltersCatalogEntries();
+        testCatalogSectionsAndCategoriesCanCollapse();
         testSelectingIpInstanceUpdatesActiveModuleAndToolLists();
         testPanelEmitsAddAndSelectSignals();
         testMainWindowUsesIpCatalogDockWithoutActiveCombo();
