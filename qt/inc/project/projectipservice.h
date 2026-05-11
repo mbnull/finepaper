@@ -30,7 +30,7 @@ public:
 
     void loadFromDocument(const ProjectDocument& document);
     void clear();
-    ProjectIpServiceResult ensureInstanceForIpcore(const IpCatalogEntry& entry);
+    ProjectIpServiceResult createInstanceForIpcore(const IpCatalogEntry& entry);
     bool selectInstance(const QString& ipcoreId, const QString& instanceId);
     bool removeInstance(const QString& ipcoreId, const QString& instanceId);
     std::optional<ProjectIpInstanceRef> selectedIpInstance() const;
@@ -43,7 +43,7 @@ signals:
 private:
     const ProjectIpInstanceRecord* findRecord(const QString& ipcoreId,
                                               const QString& instanceId) const;
-    const ProjectIpInstanceRecord* firstRecordForIpcore(const QString& ipcoreId) const;
+    QString nextInstanceIdForIpcore(const QString& ipcoreId) const;
     void setSelectedInstance(std::optional<ProjectIpInstanceRef> selection);
 
     ProjectStateService* m_stateService = nullptr;

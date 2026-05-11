@@ -537,7 +537,7 @@ void MainWindow::setupConnections() {
                 if (!entry.has_value()) {
                     return;
                 }
-                const ProjectIpServiceResult result = m_projectIpService->ensureInstanceForIpcore(*entry);
+                const ProjectIpServiceResult result = m_projectIpService->createInstanceForIpcore(*entry);
                 if (!result.success) {
                     QMessageBox::warning(this, "IP Catalog", result.error);
                     return;

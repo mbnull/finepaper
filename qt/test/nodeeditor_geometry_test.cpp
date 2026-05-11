@@ -105,7 +105,7 @@ struct ScopedNodeEditorHarness {
     }
 
     void selectRavenoc() {
-        const ProjectIpServiceResult result = projectIpService.ensureInstanceForIpcore(ravenocEntry());
+        const ProjectIpServiceResult result = projectIpService.createInstanceForIpcore(ravenocEntry());
         require(result.success, "RaveNoC instance should be selected");
         QCoreApplication::processEvents();
     }

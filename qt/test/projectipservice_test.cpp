@@ -70,7 +70,7 @@ void testProjectIpServiceCreatesDefaultStateAndSelectsIt() {
     ProjectStateService stateService;
     ProjectIpService service(&stateService);
 
-    const ProjectIpServiceResult result = service.ensureInstanceForIpcore(ravenocEntry());
+    const ProjectIpServiceResult result = service.createInstanceForIpcore(ravenocEntry());
     require(result.success, "IP service should create NoC instance");
     require(stateService.ipInstanceRecords().size() == 1,
             "state service should store one instance");
@@ -98,46 +98,48 @@ void testProjectIpServiceCreatesDefaultStateAndSelectsIt() {
             "selection should point at new instance");
 }
 
-void testProjectIpServiceAllowsAdditionalNocInstance() {
+void testProjectIpServiceCreatesRepeatedInstancesForSameIpcore() {
     ProjectStateService stateService;
-    require(stateService.ensureIpInstanceRecord(existingRecord(QStringLiteral("finepaper.othernoc"),
-                                                               QStringLiteral("othernoc_0"),
-                                                               QStringLiteral("noc"))),
-            "seed NoC instance should insert");
     ProjectIpService service(&stateService);
 
-    const ProjectIpServiceResult result = service.ensureInstanceForIpcore(ravenocEntry());
-    require(result.success, "IP service should allow a second NoC instance");
+    const ProjectIpServiceResult firstResult = service.createInstanceForIpcore(ravenocEntry());
+    require(firstResult.success, "IP service should create first instance");
+    const ProjectIpServiceResult secondResult = service.createInstanceForIpcore(ravenocEntry());
+    require(secondResult.success, "IP service should create second instance for the same IP core");
     require(stateService.ipInstanceRecords().size() == 2,
-            "allowed NoC should append a second record");
-    require(result.record.ipcoreId == QStringLiteral("finepaper.ravenoc"),
-            "created record should keep the requested IP core id");
-    require(result.record.instanceId == QStringLiteral("ravenoc_0"),
-            "created record should use the deterministic default instance id");
+            "same IP core should append a second project record");
+    require(firstResult.record.ipcoreId == QStringLiteral("finepaper.ravenoc"),
+            "first record should keep the requested IP core id");
+    require(firstResult.record.instanceId == QStringLiteral("ravenoc_0"),
+            "first record should use the first deterministic instance id");
+    require(secondResult.record.ipcoreId == QStringLiteral("finepaper.ravenoc"),
+            "second record should keep the requested IP core id");
+    require(secondResult.record.instanceId == QStringLiteral("ravenoc_1"),
+            "second record should use the next deterministic instance id");
     require(service.selectedIpInstance().has_value(),
-            "created NoC instance should become the selection");
+            "new instance should become the selection");
     require(service.selectedIpInstance()->ipcoreId == QStringLiteral("finepaper.ravenoc"),
-            "selection should move to the new IP core");
-    require(service.selectedIpInstance()->instanceId == QStringLiteral("ravenoc_0"),
-            "selection should use the new instance id");
+            "selection should stay on the created IP core");
+    require(service.selectedIpInstance()->instanceId == QStringLiteral("ravenoc_1"),
+            "selection should move to the newest instance id");
 
-    const ProjectIpInstanceRecord& first = stateService.ipInstanceRecords().at(0);
-    const ProjectIpInstanceRecord& second = stateService.ipInstanceRecords().at(1);
-    require(first.ipcoreId == QStringLiteral("finepaper.othernoc"),
-            "existing NoC record should be preserved first");
-    require(first.instanceId == QStringLiteral("othernoc_0"),
-            "existing NoC record should keep its instance id");
-    require(second.ipcoreId == QStringLiteral("finepaper.ravenoc"),
-            "new NoC record should be appended");
-    require(second.instanceId == QStringLiteral("ravenoc_0"),
-            "new NoC record should use deterministic id allocation");
+    const ProjectIpInstanceRecord& firstRecord = stateService.ipInstanceRecords().at(0);
+    const ProjectIpInstanceRecord& secondRecord = stateService.ipInstanceRecords().at(1);
+    require(firstRecord.ipcoreId == QStringLiteral("finepaper.ravenoc"),
+            "first created record should be retained first");
+    require(firstRecord.instanceId == QStringLiteral("ravenoc_0"),
+            "first created record should keep its deterministic id");
+    require(secondRecord.ipcoreId == QStringLiteral("finepaper.ravenoc"),
+            "second created record should be appended");
+    require(secondRecord.instanceId == QStringLiteral("ravenoc_1"),
+            "second created record should use the next deterministic id");
 }
 
 void testProjectIpServiceRemoveClearsSelection() {
     ProjectStateService stateService;
     ProjectIpService service(&stateService);
 
-    require(service.ensureInstanceForIpcore(ravenocEntry()).success,
+    require(service.createInstanceForIpcore(ravenocEntry()).success,
             "NoC instance should be created");
     require(service.removeInstance(QStringLiteral("finepaper.ravenoc"),
                                    QStringLiteral("ravenoc_0")),
@@ -205,7 +207,7 @@ void testProjectIpServiceClearClearsSelectionAndWorkspaceContext() {
 
     IpCatalogService catalog({ravenocDescriptor}, &registry);
     ActiveWorkspaceController controller(&projectIpService, &catalog);
-    require(projectIpService.ensureInstanceForIpcore(ravenocEntry()).success,
+    require(projectIpService.createInstanceForIpcore(ravenocEntry()).success,
             "NoC instance should be created");
     require(controller.state().hasActiveIp, "workspace should start active");
 
@@ -292,7 +294,7 @@ int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
     try {
         testProjectIpServiceCreatesDefaultStateAndSelectsIt();
-        testProjectIpServiceAllowsAdditionalNocInstance();
+        testProjectIpServiceCreatesRepeatedInstancesForSameIpcore();
         testProjectIpServiceRemoveClearsSelection();
         testProjectIpServiceLoadRestoresSelectionAndWorkspaceContext();
         testProjectIpServiceClearClearsSelectionAndWorkspaceContext();

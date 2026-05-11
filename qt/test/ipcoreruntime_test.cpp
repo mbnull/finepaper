@@ -288,6 +288,35 @@ void testRuntimeManifestWithMissingModulesFileIsSkipped() {
     require(runtimes.empty(), "manifest with missing modules file should be skipped");
 }
 
+void testRuntimeManifestWithMissingDeclaredGraphicsDirectoryClearsGraphicsPath() {
+    QTemporaryDir temp;
+    require(temp.isValid(), "temporary directory should be valid");
+
+    QDir root(temp.path());
+    require(root.mkpath(QStringLiteral("missing_graphics/source")), "failed to create source directory");
+    require(root.mkpath(QStringLiteral("missing_graphics/runtime")), "failed to create runtime directory");
+    writeFile(root.filePath(QStringLiteral("missing_graphics/runtime/modules.xml")),
+              QByteArrayLiteral("<module-bundle/>"));
+    writeFile(root.filePath(QStringLiteral("missing_graphics/runtime/ipcore-runtime.json")),
+              QByteArrayLiteral(R"json({
+      "id":"missing.graphics",
+      "name":"Missing Graphics",
+      "version":"1",
+      "source_root":"../source",
+      "modules":"modules.xml",
+      "graphics":"missing-graphics"
+    })json"));
+
+    const QList<IpCoreRuntimeDescriptor> runtimes =
+        IpCoreRuntimeRegistry::discover({root.filePath(QStringLiteral("missing_graphics/runtime"))});
+
+    require(runtimes.size() == 1, "runtime with missing declared graphics directory should still load");
+    require(runtimes.first().id == QStringLiteral("missing.graphics"),
+            "loaded runtime should keep manifest id");
+    require(runtimes.first().graphicsPath.isEmpty(),
+            "missing declared graphics directory should clear graphics path");
+}
+
 void testModuleRegistryListsTypesByRuntime() {
     ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
 
@@ -792,6 +821,7 @@ int main(int argc, char** argv) {
         testRuntimeManifestWithoutSourceRootIsSkipped();
         testRuntimeManifestWithMissingSourceRootDirectoryIsSkipped();
         testRuntimeManifestWithMissingModulesFileIsSkipped();
+        testRuntimeManifestWithMissingDeclaredGraphicsDirectoryClearsGraphicsPath();
         testModuleRegistryListsTypesByRuntime();
         testGeneratorArgumentsSubstituteInputAndOutput();
         testIpCoreCommandRunnerPropagatesInputFormat();

@@ -184,7 +184,7 @@ void testSelectingIpInstanceUpdatesActiveModuleAndToolLists() {
                          &harness.projectIpService,
                          &harness.workspaceController);
 
-    require(harness.projectIpService.ensureInstanceForIpcore(harness.ravenocEntry()).success,
+    require(harness.projectIpService.createInstanceForIpcore(harness.ravenocEntry()).success,
             "RaveNoC instance should be created");
     auto* projectList = panel.findChild<QListWidget*>(QStringLiteral("projectIpList"));
     auto* moduleList = panel.findChild<QListWidget*>(QStringLiteral("activeModuleList"));
@@ -217,7 +217,7 @@ void testPanelEmitsAddAndSelectSignals() {
                               Q_ARG(int, 0));
     require(!requestedAdd.isEmpty(), "panel should expose add intent signal");
 
-    require(harness.projectIpService.ensureInstanceForIpcore(harness.ravenocEntry()).success,
+    require(harness.projectIpService.createInstanceForIpcore(harness.ravenocEntry()).success,
             "RaveNoC instance should be created");
     QString selectedIpcore;
     QString selectedInstance;

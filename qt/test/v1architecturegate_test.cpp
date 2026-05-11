@@ -134,7 +134,7 @@ void testRepositoryNoCMainlineFlow() {
     ProjectStateService stateService;
     ProjectIpService projectIpService(&stateService);
     ActiveWorkspaceController workspace(&projectIpService, &catalog);
-    const ProjectIpServiceResult created = projectIpService.ensureInstanceForIpcore(*nocEntry);
+    const ProjectIpServiceResult created = projectIpService.createInstanceForIpcore(*nocEntry);
     require(created.success, created.error.toLocal8Bit().constData());
     require(workspace.state().hasActiveIp, "workspace should activate selected NoC instance");
     require(workspace.state().ipcoreId == QStringLiteral("finepaper.noc"),

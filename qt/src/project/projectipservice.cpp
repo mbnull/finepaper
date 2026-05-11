@@ -7,6 +7,7 @@
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QRegularExpression>
+#include <QSet>
 #include <QStringList>
 #include <variant>
 
@@ -16,14 +17,14 @@ bool sameInstance(const ProjectIpInstanceRef& left, const ProjectIpInstanceRef& 
     return left.ipcoreId == right.ipcoreId && left.instanceId == right.instanceId;
 }
 
-QString defaultIpInstanceId(const QString& ipcoreId) {
+QString instanceIdToken(const QString& ipcoreId) {
     QString token = ipcoreId.section(QLatin1Char('.'), -1).trimmed().toLower();
     token.replace(QRegularExpression(QStringLiteral("[^a-z0-9_]+")), QStringLiteral("_"));
     token.remove(QRegularExpression(QStringLiteral("^_+|_+$")));
     if (token.isEmpty()) {
         token = QStringLiteral("ip");
     }
-    return token + QStringLiteral("_0");
+    return token;
 }
 
 QJsonValue parameterDefaultValueToJson(const Parameter::Value& value) {
@@ -52,10 +53,10 @@ QJsonObject globalParameterDefaults(const IpCatalogEntry& entry) {
     return defaults;
 }
 
-ProjectIpInstanceRecord defaultRecordForEntry(const IpCatalogEntry& entry) {
+ProjectIpInstanceRecord defaultRecordForEntry(const IpCatalogEntry& entry, const QString& instanceId) {
     ProjectIpInstanceRecord record;
     record.ipcoreId = entry.id;
-    record.instanceId = defaultIpInstanceId(entry.id);
+    record.instanceId = instanceId;
     record.schema = entry.id + QStringLiteral("-project-state-v1");
     record.state.insert(QStringLiteral("kind"), entry.kind);
     record.state.insert(QStringLiteral("type"), entry.name);
@@ -99,7 +100,7 @@ void ProjectIpService::clear() {
     setSelectedInstance(std::nullopt);
 }
 
-ProjectIpServiceResult ProjectIpService::ensureInstanceForIpcore(const IpCatalogEntry& entry) {
+ProjectIpServiceResult ProjectIpService::createInstanceForIpcore(const IpCatalogEntry& entry) {
     ProjectIpServiceResult result;
     if (!m_stateService) {
         result.error = QStringLiteral("Project state service is not available.");
@@ -110,16 +111,7 @@ ProjectIpServiceResult ProjectIpService::ensureInstanceForIpcore(const IpCatalog
         return result;
     }
 
-    if (const ProjectIpInstanceRecord* existing = firstRecordForIpcore(entry.id)) {
-        result.success = selectInstance(existing->ipcoreId, existing->instanceId);
-        result.record = *existing;
-        if (!result.success) {
-            result.error = QStringLiteral("Existing IP instance could not be selected.");
-        }
-        return result;
-    }
-
-    ProjectIpInstanceRecord record = defaultRecordForEntry(entry);
+    ProjectIpInstanceRecord record = defaultRecordForEntry(entry, nextInstanceIdForIpcore(entry.id));
     if (!m_stateService->ensureIpInstanceRecord(record)) {
         result.error = QStringLiteral("IP instance record already exists.");
         return result;
@@ -199,17 +191,31 @@ const ProjectIpInstanceRecord* ProjectIpService::findRecord(const QString& ipcor
     return nullptr;
 }
 
-const ProjectIpInstanceRecord* ProjectIpService::firstRecordForIpcore(const QString& ipcoreId) const {
+QString ProjectIpService::nextInstanceIdForIpcore(const QString& ipcoreId) const {
+    const QString token = instanceIdToken(ipcoreId);
+    const QRegularExpression pattern(
+        QStringLiteral("^%1_(\\d+)$").arg(QRegularExpression::escape(token)));
+    QSet<int> usedIndexes;
+
     if (!m_stateService) {
-        return nullptr;
+        return token + QStringLiteral("_0");
     }
 
     for (const ProjectIpInstanceRecord& record : m_stateService->ipInstanceRecords()) {
-        if (record.ipcoreId == ipcoreId) {
-            return &record;
+        if (record.ipcoreId != ipcoreId) {
+            continue;
+        }
+        const QRegularExpressionMatch match = pattern.match(record.instanceId);
+        if (match.hasMatch()) {
+            usedIndexes.insert(match.captured(1).toInt());
         }
     }
-    return nullptr;
+
+    int nextIndex = 0;
+    while (usedIndexes.contains(nextIndex)) {
+        ++nextIndex;
+    }
+    return QStringLiteral("%1_%2").arg(token).arg(nextIndex);
 }
 
 void ProjectIpService::setSelectedInstance(std::optional<ProjectIpInstanceRef> selection) {
