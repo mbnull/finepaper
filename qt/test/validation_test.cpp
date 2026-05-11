@@ -24,6 +24,7 @@ std::unique_ptr<Module> makeEndpoint(const QString& id) {
 std::unique_ptr<Module> makeRaveTile(const QString& id, int x, int y) {
     auto module = std::make_unique<Module>(id, "RaveTile");
     module->setIpcoreId(QStringLiteral("finepaper.ravenoc"));
+    module->setInstanceId(QStringLiteral("ravenoc_0"));
     module->addPort(Port(QStringLiteral("north"), Port::Direction::InOut, QStringLiteral("bus"),
                          QStringLiteral("North"), {}, QStringLiteral("router"),
                          QStringLiteral("ravenoc_router_link"), QStringLiteral("north")));
