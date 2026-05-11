@@ -1,0 +1,34 @@
+#!/usr/bin/env ruby
+
+$LOAD_PATH.unshift File.expand_path('../src/ruby', __dir__)
+
+require 'optparse'
+require 'opennoc_generator'
+
+options = {
+  template_dir: File.expand_path('../template', __dir__),
+  vendor_dir: File.expand_path('../../vendor/OpenNoC', __dir__)
+}
+
+OptionParser.new do |opts|
+  opts.on('-i INPUT') { |value| options[:input] = value }
+  opts.on('-o OUTPUT') { |value| options[:output] = value }
+  opts.on('-t TEMPLATE_DIR') { |value| options[:template_dir] = value }
+  opts.on('--vendor PATH') { |value| options[:vendor_dir] = value }
+end.parse!
+
+begin
+  OpenNoCGenerator.new(
+    input_path: options.fetch(:input),
+    output_dir: options.fetch(:output, Dir.pwd),
+    template_dir: options.fetch(:template_dir),
+    vendor_dir: options.fetch(:vendor_dir)
+  ).validate
+  puts 'OpenNoC DRC passed'
+rescue KeyError => error
+  warn "error: missing required option #{error.key}"
+  exit 1
+rescue OpenNoCGenerator::GenerationError => error
+  warn "error: #{error.message}"
+  exit 1
+end

@@ -79,6 +79,90 @@ class OpenNoCGeneratorTest < Minitest::Test
     end
   end
 
+  def test_projection_uses_external_id_for_mesh_json_keys
+    require 'opennoc_generator'
+
+    graph = valid_graph
+    xp_modules = graph.fetch('modules').select { |mod| mod.fetch('type') == 'OpenNoCXP' }
+    id_map = xp_modules.to_h do |mod|
+      original_id = mod.fetch('id')
+      runtime_id = "opennoc_0/#{original_id.downcase}"
+      mod['id'] = runtime_id
+      [original_id, runtime_id]
+    end
+    graph.fetch('connections').each do |connection|
+      %w[source target].each do |endpoint|
+        module_id = connection.fetch(endpoint).fetch('module')
+        connection.fetch(endpoint)['module'] = id_map.fetch(module_id, module_id)
+      end
+    end
+
+    Dir.mktmpdir do |dir|
+      generator = OpenNoCGenerator.new(
+        input_path: write_json(dir, 'runtime_ids.json', graph),
+        output_dir: File.join(dir, 'out'),
+        template_dir: File.join(dir, 'templates'),
+        vendor_dir: File.join(dir, 'vendor')
+      )
+
+      model = generator.build_model(generator.read_graph)
+
+      assert_equal %w[XP0_0 XP0_1 XP1_0 XP1_1], model.fetch(:mesh_json).keys.sort
+      assert_equal({ 'X' => 0, 'Y' => 0, 'P0' => 'RNF', 'P1' => 'RNI' }, model.fetch(:mesh_json).fetch('XP0_0'))
+    end
+  end
+
+  def test_drc_rejects_duplicate_xp_slot
+    Dir.mktmpdir do |dir|
+      graph = valid_graph
+      graph.fetch('connections') << {
+        'id' => 'rni_0_to_XP0_0_p0_duplicate',
+        'source' => { 'module' => 'rni_0', 'port' => 'chi' },
+        'target' => { 'module' => 'XP0_0', 'port' => 'p0' }
+      }
+      input = write_json(dir, 'duplicate_slot.json', graph)
+
+      _stdout, stderr, status = run_drc(input)
+
+      refute status.success?
+      assert_includes stderr, 'multiple OpenNoC agents connect to XP0_0.p0'
+    end
+  end
+
+  def test_drc_rejects_invalid_mesh_side_pairing
+    Dir.mktmpdir do |dir|
+      graph = valid_graph
+      graph.fetch('connections').find do |connection|
+        connection.fetch('id') == 'XP0_0_south_to_XP0_1_north'
+      end.replace({
+        'id' => 'bad_mesh',
+        'source' => { 'module' => 'XP0_0', 'port' => 'east' },
+        'target' => { 'module' => 'XP0_1', 'port' => 'north' }
+      })
+      input = write_json(dir, 'bad_mesh.json', graph)
+
+      _stdout, stderr, status = run_drc(input)
+
+      refute status.success?
+      assert_includes stderr, 'invalid mesh link bad_mesh'
+    end
+  end
+
+  def test_drc_rejects_wrong_agent_port
+    Dir.mktmpdir do |dir|
+      graph = valid_graph
+      graph.fetch('connections').find do |connection|
+        connection.fetch('id') == 'rnf_0_to_XP0_0_p0'
+      end.fetch('source')['port'] = 'bad'
+      input = write_json(dir, 'bad_agent_port.json', graph)
+
+      _stdout, stderr, status = run_drc(input)
+
+      refute status.success?
+      assert_includes stderr, 'invalid OpenNoC agent connection'
+    end
+  end
+
   def test_generator_rejects_missing_vendor
     Dir.mktmpdir do |dir|
       output = File.join(dir, 'out')
@@ -98,6 +182,10 @@ class OpenNoCGeneratorTest < Minitest::Test
 
   def run_drc(input)
     Open3.capture3(RbConfig.ruby, DRC, '-i', input)
+  end
+
+  def valid_graph
+    JSON.parse(File.read(File.expand_path('../examples/mesh_2x2.json', __dir__)))
   end
 
   def write_json(dir, name, data)
