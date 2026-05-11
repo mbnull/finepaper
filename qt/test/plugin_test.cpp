@@ -468,6 +468,67 @@ void testRepositoryRaveNoCIpCoreMetadataLoads() {
             "RaveEndpoint should participate as an editable endpoint graph group");
 }
 
+void testRepositoryOpenNoCIpCoreMetadataLoads() {
+    const QString pluginRoot = repositoryPluginPath(QStringLiteral("generated/ipcores/finepaper.opennoc"));
+    const QList<PluginDescriptor> plugins = PluginRegistry::discover({pluginRoot});
+
+    require(plugins.size() == 1, "OpenNoC IP core should be discovered");
+    require(plugins.first().id == QStringLiteral("finepaper.opennoc"),
+            "OpenNoC IP core id should load");
+    require(plugins.first().runtimeRootPath == pluginRoot,
+            "OpenNoC runtime root should be generated bundle directory");
+    require(plugins.first().sourceRootPath == repositoryPluginPath(QStringLiteral("ipcores/opennoc")),
+            "OpenNoC source root should resolve to concrete IP source package");
+    require(plugins.first().kind == QStringLiteral("noc"),
+            "OpenNoC IP core kind should load");
+    require(plugins.first().instanceParameters.contains(QStringLiteral("req_flit_width")),
+            "OpenNoC req flit width should load");
+    require(std::get<int>(plugins.first().instanceParameters.value(QStringLiteral("req_flit_width")).defaultValue) == 128,
+            "OpenNoC req flit width default should load");
+    require(plugins.first().generator.command == QStringLiteral("ruby"),
+            "OpenNoC IP core should use Ruby generator");
+    require(plugins.first().generator.inputFormat == QStringLiteral("ipcore_graph_v1"),
+            "OpenNoC generator should request IP-core graph input");
+    require(plugins.first().drc.command == QStringLiteral("ruby"),
+            "OpenNoC IP core should use Ruby DRC");
+    require(plugins.first().drc.inputFormat == QStringLiteral("ipcore_graph_v1"),
+            "OpenNoC DRC should request IP-core graph input");
+    require(plugins.first().topologyPresets.size() == 1,
+            "OpenNoC IP core should expose one topology preset");
+    require(plugins.first().topologyPresets.first().routerModule == QStringLiteral("OpenNoCXP"),
+            "OpenNoC mesh preset should create OpenNoCXP routers");
+
+    ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
+    registry.loadPlugins(plugins);
+
+    const QStringList types = registry.availableTypesForIpcore(QStringLiteral("finepaper.opennoc"));
+    require(types == QStringList({
+                QStringLiteral("OpenNoCHNF"),
+                QStringLiteral("OpenNoCHNI"),
+                QStringLiteral("OpenNoCRNF"),
+                QStringLiteral("OpenNoCRNI"),
+                QStringLiteral("OpenNoCSNF"),
+                QStringLiteral("OpenNoCXP")
+            }),
+            "OpenNoC active IP should list XP plus five agent module types");
+
+    const ModuleType* xpType = registry.getType(QStringLiteral("OpenNoCXP"));
+    require(xpType != nullptr, "OpenNoCXP module type should load");
+    require(xpType->ipcoreId == QStringLiteral("finepaper.opennoc"),
+            "OpenNoCXP should keep IP core ownership");
+    require(xpType->graphGroup == QStringLiteral("xps"),
+            "OpenNoCXP should participate as the router graph group");
+    require(xpType->interfaceMetadata.value(QStringLiteral("east")).topologyRule == QStringLiteral("opposite_side"),
+            "OpenNoCXP east should declare opposite_side topology rule");
+    require(xpType->interfaceMetadata.value(QStringLiteral("p0")).cardinality == QStringLiteral("one"),
+            "OpenNoCXP p0 should declare one attachment");
+
+    const ModuleType* rniType = registry.getType(QStringLiteral("OpenNoCRNI"));
+    require(rniType != nullptr, "OpenNoCRNI module type should load");
+    require(rniType->interfaceMetadata.value(QStringLiteral("chi")).autocompleteGroup == QStringLiteral("endpoint_attachment"),
+            "OpenNoCRNI CHI interface should use endpoint attachment autocomplete");
+}
+
 void testManifestIpInstanceAdapterExposesGlobalParameterSection() {
     PluginDescriptor plugin;
     plugin.id = QStringLiteral("finepaper.ravenoc");
@@ -631,6 +692,7 @@ int main(int argc, char** argv) {
         testDefaultDiscoveryIncludesGeneratedIpcores();
         testRepositoryFinepaperNoCIpCoreMetadataLoads();
         testRepositoryRaveNoCIpCoreMetadataLoads();
+        testRepositoryOpenNoCIpCoreMetadataLoads();
         testManifestIpInstanceAdapterExposesGlobalParameterSection();
         testManifestIpInstanceAdapterUsesIpcoreIdLabelAndSkipsEmptyParameters();
         testStartupDiagnosticsListLoadedPluginsAndIpTypes();
