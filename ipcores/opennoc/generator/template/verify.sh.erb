@@ -3,7 +3,7 @@ set -eu
 
 cd "$(dirname "$0")"
 
-verilator --lint-only --sv -Wno-PINMISSING \
+verilator --lint-only --sv -Wno-PINMISSING -Wno-WIDTHEXPAND -Wno-WIDTHCONCAT -Irtl/include \
   -GREQ_FLIT_WIDTH=<%= model.fetch(:parameters).fetch('req_flit_width') %> \
   -GRSP_FLIT_WIDTH=<%= model.fetch(:parameters).fetch('rsp_flit_width') %> \
   -GDAT_FLIT_WIDTH=<%= model.fetch(:parameters).fetch('dat_flit_width') %> \

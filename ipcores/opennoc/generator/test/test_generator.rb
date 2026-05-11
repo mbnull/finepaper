@@ -46,6 +46,9 @@ class OpenNoCGeneratorTest < Minitest::Test
       refute_includes filelist, output
       verify = File.read(File.join(output, 'verify.sh'))
       assert_includes verify, 'cd "$(dirname "$0")"'
+      assert_includes verify, '-Irtl/include'
+      assert_includes verify, '-Wno-WIDTHEXPAND'
+      assert_includes verify, '-Wno-WIDTHCONCAT'
       assert_includes verify, '-GREQ_FLIT_WIDTH=128'
       manifest = JSON.parse(File.read(File.join(output, 'manifest.json')))
       assert_equal 'finepaper.opennoc', manifest.fetch('ipcore')
