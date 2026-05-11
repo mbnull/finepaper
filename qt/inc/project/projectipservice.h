@@ -34,6 +34,13 @@ public:
     bool selectInstance(const QString& ipcoreId, const QString& instanceId);
     std::optional<ProjectIpInstanceRef> selectedIpInstance() const;
     std::optional<ProjectIpInstanceRecord> selectedIpInstanceRecord() const;
+    enum class SelectionFallbackPolicy {
+        PreserveCurrentOrFirst,
+        ExactOrClear,
+    };
+    void handleIpInstanceRecordsMutated(
+        std::optional<ProjectIpInstanceRef> preferredSelection,
+        SelectionFallbackPolicy fallbackPolicy = SelectionFallbackPolicy::PreserveCurrentOrFirst);
 
 signals:
     void ipInstancesChanged();

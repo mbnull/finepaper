@@ -1,6 +1,7 @@
 // ProjectStateService stores IP-instance project state outside Graph.
 #include "project/projectstateservice.h"
 
+#include <algorithm>
 #include <QSet>
 
 namespace {
@@ -25,6 +26,27 @@ void addIpcoreStateDependencies(ProjectDocument& document,
 ProjectStateService::ProjectStateService(QObject* parent)
     : QObject(parent) {}
 
+int ProjectStateService::indexOfIpInstanceRecord(const QString& ipcoreId,
+                                                 const QString& instanceId) const {
+    for (qsizetype index = 0; index < m_ipInstanceRecords.size(); ++index) {
+        const ProjectIpInstanceRecord& record = m_ipInstanceRecords.at(index);
+        if (record.ipcoreId == ipcoreId && record.instanceId == instanceId) {
+            return static_cast<int>(index);
+        }
+    }
+    return -1;
+}
+
+std::optional<ProjectIpInstanceRecord> ProjectStateService::ipInstanceRecord(
+    const QString& ipcoreId,
+    const QString& instanceId) const {
+    const int index = indexOfIpInstanceRecord(ipcoreId, instanceId);
+    if (index < 0) {
+        return std::nullopt;
+    }
+    return m_ipInstanceRecords.at(index);
+}
+
 void ProjectStateService::clear() {
     if (m_ipInstanceRecords.isEmpty()) {
         return;
@@ -44,29 +66,38 @@ void ProjectStateService::writeToDocument(ProjectDocument& document) const {
 }
 
 bool ProjectStateService::ensureIpInstanceRecord(const ProjectIpInstanceRecord& record) {
-    for (const ProjectIpInstanceRecord& existing : m_ipInstanceRecords) {
-        if (existing.ipcoreId == record.ipcoreId && existing.instanceId == record.instanceId) {
-            return false;
-        }
+    return insertIpInstanceRecord(static_cast<int>(m_ipInstanceRecords.size()), record);
+}
+
+bool ProjectStateService::insertIpInstanceRecord(int index, const ProjectIpInstanceRecord& record) {
+    if (indexOfIpInstanceRecord(record.ipcoreId, record.instanceId) >= 0) {
+        return false;
     }
 
-    m_ipInstanceRecords.push_back(record);
+    const int size = static_cast<int>(m_ipInstanceRecords.size());
+    const int insertIndex = std::clamp(index, 0, size);
+    m_ipInstanceRecords.insert(insertIndex, record);
     emit ipInstanceRecordsChanged();
     return true;
 }
 
+std::optional<ProjectIpInstanceRecord> ProjectStateService::takeIpInstanceRecord(
+    const QString& ipcoreId,
+    const QString& instanceId) {
+    const int index = indexOfIpInstanceRecord(ipcoreId, instanceId);
+    if (index < 0) {
+        return std::nullopt;
+    }
+
+    ProjectIpInstanceRecord record = m_ipInstanceRecords.at(index);
+    m_ipInstanceRecords.removeAt(index);
+    emit ipInstanceRecordsChanged();
+    return record;
+}
+
 bool ProjectStateService::removeIpInstanceRecord(const QString& ipcoreId,
                                                  const QString& instanceId) {
-    for (qsizetype i = 0; i < m_ipInstanceRecords.size(); ++i) {
-        const ProjectIpInstanceRecord& record = m_ipInstanceRecords.at(i);
-        if (record.ipcoreId != ipcoreId || record.instanceId != instanceId) {
-            continue;
-        }
-        m_ipInstanceRecords.removeAt(i);
-        emit ipInstanceRecordsChanged();
-        return true;
-    }
-    return false;
+    return takeIpInstanceRecord(ipcoreId, instanceId).has_value();
 }
 
 bool ProjectStateService::setParameter(const QString& ipcoreId,

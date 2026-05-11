@@ -11,8 +11,10 @@
 #include <QComboBox>
 #include <QDockWidget>
 #include <QFileInfo>
+#include <QKeyEvent>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QMenu>
 #include <QMessageBox>
 #include <QMetaObject>
 #include <QSettings>
@@ -40,6 +42,19 @@ void closeOpenMessageBoxes() {
     for (QWidget* widget : QApplication::topLevelWidgets()) {
         if (auto* messageBox = qobject_cast<QMessageBox*>(widget)) {
             messageBox->accept();
+        }
+    }
+}
+
+void triggerFirstOpenMenuAction() {
+    for (QWidget* widget : QApplication::topLevelWidgets()) {
+        if (auto* menu = qobject_cast<QMenu*>(widget)) {
+            const QList<QAction*> actions = menu->actions();
+            if (!actions.isEmpty()) {
+                actions.front()->trigger();
+            }
+            menu->close();
+            return;
         }
     }
 }
@@ -252,6 +267,167 @@ void testPanelEmitsAddAndSelectSignals() {
             "panel should emit selected instance");
 }
 
+void testPanelEmitsRemoveSignalForActiveInstance() {
+    TestHarness harness;
+    IpCatalogPanel panel(&harness.catalog,
+                         &harness.stateService,
+                         &harness.projectIpService,
+                         &harness.workspaceController);
+
+    require(harness.projectIpService.createInstanceForIpcore(harness.ravenocEntry()).success,
+            "RaveNoC instance should be created");
+    auto* projectList = panel.findChild<QListWidget*>(QStringLiteral("projectIpList"));
+    require(projectList != nullptr, "project list should exist");
+    require(projectList->count() == 1, "project list should show one instance");
+    projectList->setCurrentRow(0);
+    QCoreApplication::processEvents();
+
+    QString removedIpcore;
+    QString removedInstance;
+    int removeSignals = 0;
+    QObject::connect(&panel, &IpCatalogPanel::removeIpInstanceRequested, &panel,
+                     [&](const QString& ipcoreId, const QString& instanceId) {
+                         removedIpcore = ipcoreId;
+                         removedInstance = instanceId;
+                         ++removeSignals;
+                     });
+
+    const QList<QAction*> actions = projectList->actions();
+    require(actions.size() == 1, "project list should expose one remove action");
+    actions.front()->trigger();
+    require(removeSignals == 1, "remove action should emit one remove intent");
+    require(removedIpcore == QStringLiteral("finepaper.ravenoc"),
+            "remove intent should emit active ipcore id");
+    require(removedInstance == QStringLiteral("ravenoc_0"),
+            "remove intent should emit active instance id");
+
+    removedIpcore.clear();
+    removedInstance.clear();
+    panel.show();
+    projectList->setFocus();
+    QCoreApplication::processEvents();
+    QKeyEvent deleteKey(QEvent::KeyPress, Qt::Key_Delete, Qt::NoModifier);
+    QCoreApplication::sendEvent(projectList, &deleteKey);
+    QCoreApplication::processEvents();
+    require(removeSignals == 2, "Delete key should emit a second remove intent");
+    require(removedIpcore == QStringLiteral("finepaper.ravenoc"),
+            "Delete key should keep the active ipcore id");
+    require(removedInstance == QStringLiteral("ravenoc_0"),
+            "Delete key should keep the active instance id");
+}
+
+void testPanelContextMenuRemoveTargetsClickedItem() {
+    TestHarness harness;
+    IpCatalogPanel panel(&harness.catalog,
+                         &harness.stateService,
+                         &harness.projectIpService,
+                         &harness.workspaceController);
+
+    require(harness.projectIpService.createInstanceForIpcore(harness.ravenocEntry()).success,
+            "first RaveNoC instance should be created");
+    require(harness.projectIpService.createInstanceForIpcore(harness.ravenocEntry()).success,
+            "second RaveNoC instance should be created");
+
+    auto* projectList = panel.findChild<QListWidget*>(QStringLiteral("projectIpList"));
+    require(projectList != nullptr, "project list should exist");
+    require(projectList->count() == 2, "project list should show both instances");
+
+    panel.resize(320, 240);
+    panel.show();
+    QCoreApplication::processEvents();
+
+    projectList->setCurrentRow(0);
+    QCoreApplication::processEvents();
+    QListWidgetItem* secondItem = projectList->item(1);
+    require(secondItem != nullptr, "second project instance should exist");
+    const QRect secondRect = projectList->visualItemRect(secondItem);
+    require(secondRect.isValid(), "second project instance should have a visible rect");
+
+    QString removedIpcore;
+    QString removedInstance;
+    int removeSignals = 0;
+    QObject::connect(&panel, &IpCatalogPanel::removeIpInstanceRequested, &panel,
+                     [&](const QString& ipcoreId, const QString& instanceId) {
+                         removedIpcore = ipcoreId;
+                         removedInstance = instanceId;
+                         ++removeSignals;
+                     });
+
+    QTimer::singleShot(0, &triggerFirstOpenMenuAction);
+    const bool invoked = QMetaObject::invokeMethod(projectList,
+                                                   "customContextMenuRequested",
+                                                   Qt::DirectConnection,
+                                                   Q_ARG(QPoint, secondRect.center()));
+    require(invoked, "project list should expose a custom context-menu signal");
+    QCoreApplication::processEvents();
+
+    require(removeSignals == 1, "context menu remove should emit one remove intent");
+    require(removedIpcore == QStringLiteral("finepaper.ravenoc"),
+            "context menu remove should emit the clicked item ipcore");
+    require(removedInstance == QStringLiteral("ravenoc_1"),
+            "context menu remove should emit the clicked item instead of the current selection");
+}
+
+void testPanelContextMenuRemoveSurvivesListRefreshWhileMenuIsOpen() {
+    TestHarness harness;
+    IpCatalogPanel panel(&harness.catalog,
+                         &harness.stateService,
+                         &harness.projectIpService,
+                         &harness.workspaceController);
+
+    require(harness.projectIpService.createInstanceForIpcore(harness.ravenocEntry()).success,
+            "first RaveNoC instance should be created");
+    require(harness.projectIpService.createInstanceForIpcore(harness.ravenocEntry()).success,
+            "second RaveNoC instance should be created");
+
+    auto* projectList = panel.findChild<QListWidget*>(QStringLiteral("projectIpList"));
+    require(projectList != nullptr, "project list should exist");
+    require(projectList->count() == 2, "project list should show both instances");
+
+    panel.resize(320, 240);
+    panel.show();
+    QCoreApplication::processEvents();
+
+    QListWidgetItem* secondItem = projectList->item(1);
+    require(secondItem != nullptr, "second project instance should exist");
+    const QRect secondRect = projectList->visualItemRect(secondItem);
+    require(secondRect.isValid(), "second project instance should have a visible rect");
+
+    QString removedIpcore;
+    QString removedInstance;
+    int removeSignals = 0;
+    bool mutationSucceeded = false;
+    QObject::connect(&panel, &IpCatalogPanel::removeIpInstanceRequested, &panel,
+                     [&](const QString& ipcoreId, const QString& instanceId) {
+                         removedIpcore = ipcoreId;
+                         removedInstance = instanceId;
+                         ++removeSignals;
+                     });
+
+    QTimer::singleShot(0, &panel, [&harness, &mutationSucceeded] {
+        const ProjectIpServiceResult result = harness.projectIpService.createInstanceForIpcore(
+            harness.ravenocEntry());
+        if (result.success) {
+            mutationSucceeded = true;
+        }
+    });
+    QTimer::singleShot(0, &triggerFirstOpenMenuAction);
+    const bool invoked = QMetaObject::invokeMethod(projectList,
+                                                   "customContextMenuRequested",
+                                                   Qt::DirectConnection,
+                                                   Q_ARG(QPoint, secondRect.center()));
+    require(invoked, "project list should expose a custom context-menu signal");
+    QCoreApplication::processEvents();
+
+    require(mutationSucceeded, "state mutation during open menu should succeed");
+    require(removeSignals == 1,
+            "context menu remove should still emit after the list refreshes");
+    require(removedIpcore == QStringLiteral("finepaper.ravenoc"),
+            "context menu remove should preserve the clicked ipcore across refresh");
+    require(removedInstance == QStringLiteral("ravenoc_1"),
+            "context menu remove should preserve the clicked instance across refresh");
+}
+
 void testMainWindowUsesIpCatalogDockWithoutActiveCombo() {
     MainWindow window;
     require(window.findChild<QDockWidget*>(QStringLiteral("ipCatalogDock")) != nullptr,
@@ -316,6 +492,9 @@ int main(int argc, char** argv) {
         testCatalogSectionsAndCategoriesCanCollapse();
         testSelectingIpInstanceUpdatesActiveModuleAndToolLists();
         testPanelEmitsAddAndSelectSignals();
+        testPanelEmitsRemoveSignalForActiveInstance();
+        testPanelContextMenuRemoveTargetsClickedItem();
+        testPanelContextMenuRemoveSurvivesListRefreshWhileMenuIsOpen();
         testMainWindowUsesIpCatalogDockWithoutActiveCombo();
         testMainWindowStartsWithoutEditableUnsavedProject();
         testMainWindowUsesProjectDirectoryForNewProjectDefault();

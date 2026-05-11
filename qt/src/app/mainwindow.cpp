@@ -4,6 +4,8 @@
 #include "app/appsettings.h"
 #include "app/mainwindow.h"
 #include "app/generationartifacts.h"
+#include "commands/addipinstancecommand.h"
+#include "commands/removeipinstancecommand.h"
 #include "commands/topologypresetcommand.h"
 #include "graph/graph.h"
 #include "commands/commandmanager.h"
@@ -640,17 +642,44 @@ void MainWindow::setupConnections() {
                 if (!entry.has_value()) {
                     return;
                 }
-                const ProjectIpServiceResult result = m_projectIpService->createInstanceForIpcore(*entry);
-                if (!result.success) {
-                    QMessageBox::warning(this, "IP Catalog", result.error);
+                std::unique_ptr<Command> rejected = m_commandManager->executeCommand(
+                    std::make_unique<AddIpInstanceCommand>(m_projectStateService.get(),
+                                                           m_projectIpService.get(),
+                                                           *entry));
+                if (rejected) {
+                    QMessageBox::warning(this,
+                                         "IP Catalog",
+                                         "IP instance could not be created.");
                     return;
                 }
+                syncDocumentStateFromHistory();
             });
     connect(m_ipCatalogPanel,
             &IpCatalogPanel::selectIpInstanceRequested,
             this,
             [this](const QString& ipcoreId, const QString& instanceId) {
                 m_projectIpService->selectInstance(ipcoreId, instanceId);
+            });
+    connect(m_ipCatalogPanel,
+            &IpCatalogPanel::removeIpInstanceRequested,
+            this,
+            [this](const QString& ipcoreId, const QString& instanceId) {
+                if (!requireOpenProject(QStringLiteral("editing the IP catalog"))) {
+                    return;
+                }
+                std::unique_ptr<Command> rejected = m_commandManager->executeCommand(
+                    std::make_unique<RemoveIpInstanceCommand>(m_graph,
+                                                              m_projectStateService.get(),
+                                                              m_projectIpService.get(),
+                                                              ipcoreId,
+                                                              instanceId));
+                if (rejected) {
+                    QMessageBox::warning(this,
+                                         "IP Catalog",
+                                         QStringLiteral("Could not remove the selected IP instance."));
+                    return;
+                }
+                syncDocumentStateFromHistory();
             });
 }
 

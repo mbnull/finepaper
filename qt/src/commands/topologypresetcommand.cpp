@@ -15,6 +15,7 @@ TopologyPresetCommand::TopologyPresetCommand(Graph* graph,
 
 void TopologyPresetCommand::execute() {
     m_executed = false;
+    m_undone = false;
     m_result = {};
     if (!m_graph || !m_registry) {
         return;
@@ -24,6 +25,7 @@ void TopologyPresetCommand::execute() {
 }
 
 void TopologyPresetCommand::undo() {
+    m_undone = false;
     if (!m_graph || !m_result.success) {
         return;
     }
@@ -34,6 +36,7 @@ void TopologyPresetCommand::undo() {
         m_graph->removeModule(m_result.moduleIds.at(index));
     }
     m_executed = false;
+    m_undone = true;
 }
 
 const TopologyPresetResult& TopologyPresetCommand::result() const {

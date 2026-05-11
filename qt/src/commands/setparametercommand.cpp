@@ -8,6 +8,7 @@ SetParameterCommand::SetParameterCommand(Graph* graph, const QString& moduleId,
 // Set parameter value, storing old value for undo
 void SetParameterCommand::execute() {
     m_executed = false;
+    m_undone = false;
     Module* module = m_graph->getModule(m_moduleId);
     if (!module) return;
     const auto& params = module->parameters();
@@ -25,6 +26,7 @@ void SetParameterCommand::execute() {
 
 // Restore old parameter value or remove if it didn't exist
 void SetParameterCommand::undo() {
+    m_undone = false;
     Module* module = m_graph->getModule(m_moduleId);
     if (!module) return;
     if (m_parameterExisted) {
@@ -32,4 +34,5 @@ void SetParameterCommand::undo() {
     } else {
         module->removeParameter(m_paramName);
     }
+    m_undone = true;
 }

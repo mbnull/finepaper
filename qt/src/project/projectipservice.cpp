@@ -152,6 +152,33 @@ std::optional<ProjectIpInstanceRecord> ProjectIpService::selectedIpInstanceRecor
     return *record;
 }
 
+void ProjectIpService::handleIpInstanceRecordsMutated(
+    std::optional<ProjectIpInstanceRef> preferredSelection,
+    SelectionFallbackPolicy fallbackPolicy) {
+    if (!m_stateService) {
+        setSelectedInstance(std::nullopt);
+        emit ipInstancesChanged();
+        return;
+    }
+
+    std::optional<ProjectIpInstanceRef> nextSelection;
+    if (preferredSelection.has_value()
+        && findRecord(preferredSelection->ipcoreId, preferredSelection->instanceId)) {
+        nextSelection = preferredSelection;
+    } else if (fallbackPolicy == SelectionFallbackPolicy::ExactOrClear) {
+        nextSelection = std::nullopt;
+    } else if (m_selectedIpInstance.has_value()
+               && findRecord(m_selectedIpInstance->ipcoreId, m_selectedIpInstance->instanceId)) {
+        nextSelection = m_selectedIpInstance;
+    } else if (!m_stateService->ipInstanceRecords().isEmpty()) {
+        const ProjectIpInstanceRecord& first = m_stateService->ipInstanceRecords().first();
+        nextSelection = ProjectIpInstanceRef{first.ipcoreId, first.instanceId};
+    }
+
+    setSelectedInstance(nextSelection);
+    emit ipInstancesChanged();
+}
+
 const ProjectIpInstanceRecord* ProjectIpService::findRecord(const QString& ipcoreId,
                                                             const QString& instanceId) const {
     if (!m_stateService) {
@@ -177,9 +204,6 @@ QString ProjectIpService::nextInstanceIdForIpcore(const QString& ipcoreId) const
     }
 
     for (const ProjectIpInstanceRecord& record : m_stateService->ipInstanceRecords()) {
-        if (record.ipcoreId != ipcoreId) {
-            continue;
-        }
         const QRegularExpressionMatch match = pattern.match(record.instanceId);
         if (match.hasMatch()) {
             nextIndex = std::max(nextIndex, match.captured(1).toInt() + 1);

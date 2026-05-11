@@ -53,6 +53,13 @@ IpCatalogEntry fabricEntry() {
     return entry;
 }
 
+IpCatalogEntry ravenocVariantEntry() {
+    IpCatalogEntry entry = ravenocEntry();
+    entry.id = QStringLiteral("vendor.ravenoc");
+    entry.name = QStringLiteral("RaveNoC Variant");
+    return entry;
+}
+
 ProjectIpInstanceRecord existingRecord(const QString& ipcoreId,
                                        const QString& instanceId,
                                        const QString& kind) {
@@ -135,6 +142,25 @@ void testProjectIpServiceCreatesRepeatedInstancesForSameIpcore() {
             "second created record should use the next deterministic id");
 }
 
+void testProjectIpServiceCreatesProjectUniqueInstanceIdsAcrossIpcoreTokenCollisions() {
+    ProjectStateService stateService;
+    ProjectIpService service(&stateService);
+
+    const ProjectIpServiceResult firstResult = service.createInstanceForIpcore(ravenocEntry());
+    const ProjectIpServiceResult secondResult = service.createInstanceForIpcore(ravenocVariantEntry());
+
+    require(firstResult.success, "first IP core instance should be created");
+    require(secondResult.success, "second IP core with colliding token should be created");
+    require(firstResult.record.instanceId == QStringLiteral("ravenoc_0"),
+            "first token-colliding IP core should receive the first id");
+    require(secondResult.record.instanceId == QStringLiteral("ravenoc_1"),
+            "second token-colliding IP core should receive a project-unique id");
+    require(stateService.ipInstanceRecords().at(0).ipcoreId == QStringLiteral("finepaper.ravenoc"),
+            "first record should keep its IP core id");
+    require(stateService.ipInstanceRecords().at(1).ipcoreId == QStringLiteral("vendor.ravenoc"),
+            "second record should keep its distinct IP core id");
+}
+
 void testProjectIpServiceAllocatesMonotonicInstanceIdsAcrossStateGaps() {
     ProjectStateService stateService;
     ProjectIpService service(&stateService);
@@ -161,6 +187,61 @@ void testProjectIpServiceAllocatesMonotonicInstanceIdsAcrossStateGaps() {
     require(service.selectedIpInstance().has_value(), "newly created instance should be selected");
     require(service.selectedIpInstance()->instanceId == QStringLiteral("ravenoc_2"),
             "selection should move to the newest monotonic instance");
+}
+
+void testProjectIpServiceMutationHandlerPreservesCurrentSelectionWithoutPreferredSelection() {
+    ProjectStateService stateService;
+    ProjectIpService service(&stateService);
+
+    require(stateService.ensureIpInstanceRecord(existingRecord(QStringLiteral("finepaper.ravenoc"),
+                                                               QStringLiteral("ravenoc_0"),
+                                                               QStringLiteral("noc"))),
+            "first record should insert");
+    require(stateService.ensureIpInstanceRecord(existingRecord(QStringLiteral("finepaper.ravenoc"),
+                                                               QStringLiteral("ravenoc_1"),
+                                                               QStringLiteral("noc"))),
+            "second record should insert");
+    require(service.selectInstance(QStringLiteral("finepaper.ravenoc"),
+                                   QStringLiteral("ravenoc_1")),
+            "selection should point at the second record");
+
+    service.handleIpInstanceRecordsMutated(std::nullopt);
+
+    require(service.selectedIpInstance().has_value(),
+            "mutation handler should preserve a valid current selection");
+    require(service.selectedIpInstance()->ipcoreId == QStringLiteral("finepaper.ravenoc"),
+            "preserved selection should keep the same ipcore");
+    require(service.selectedIpInstance()->instanceId == QStringLiteral("ravenoc_1"),
+            "preserved selection should keep the same instance");
+}
+
+void testProjectIpServiceMutationHandlerFallsBackAfterDirectStateRemoval() {
+    ProjectStateService stateService;
+    ProjectIpService service(&stateService);
+
+    require(stateService.ensureIpInstanceRecord(existingRecord(QStringLiteral("finepaper.ravenoc"),
+                                                               QStringLiteral("ravenoc_0"),
+                                                               QStringLiteral("noc"))),
+            "first record should insert");
+    require(stateService.ensureIpInstanceRecord(existingRecord(QStringLiteral("finepaper.fabric"),
+                                                               QStringLiteral("fabric_0"),
+                                                               QStringLiteral("fabric"))),
+            "second record should insert");
+    require(service.selectInstance(QStringLiteral("finepaper.fabric"),
+                                   QStringLiteral("fabric_0")),
+            "selection should point at the record that will be removed directly");
+    require(stateService.removeIpInstanceRecord(QStringLiteral("finepaper.fabric"),
+                                                QStringLiteral("fabric_0")),
+            "test should remove the selected record directly from state");
+
+    service.handleIpInstanceRecordsMutated(std::nullopt);
+
+    require(service.selectedIpInstance().has_value(),
+            "mutation handler should fall back to a remaining record");
+    require(service.selectedIpInstance()->ipcoreId == QStringLiteral("finepaper.ravenoc"),
+            "fallback selection should choose the first remaining ipcore");
+    require(service.selectedIpInstance()->instanceId == QStringLiteral("ravenoc_0"),
+            "fallback selection should choose the first remaining instance");
 }
 
 void testProjectIpServiceLoadRestoresSelectionAndWorkspaceContext() {
@@ -308,7 +389,10 @@ int main(int argc, char** argv) {
     try {
         testProjectIpServiceCreatesDefaultStateAndSelectsIt();
         testProjectIpServiceCreatesRepeatedInstancesForSameIpcore();
+        testProjectIpServiceCreatesProjectUniqueInstanceIdsAcrossIpcoreTokenCollisions();
         testProjectIpServiceAllocatesMonotonicInstanceIdsAcrossStateGaps();
+        testProjectIpServiceMutationHandlerPreservesCurrentSelectionWithoutPreferredSelection();
+        testProjectIpServiceMutationHandlerFallsBackAfterDirectStateRemoval();
         testProjectIpServiceLoadRestoresSelectionAndWorkspaceContext();
         testProjectIpServiceClearClearsSelectionAndWorkspaceContext();
         testActiveWorkspaceChangesWhenSelectionChanges();

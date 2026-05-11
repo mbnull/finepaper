@@ -55,6 +55,8 @@ add_qt_test_target("graph_test", "test/graph_test.cpp", {
     "src/commands/addconnectioncommand.cpp",
     "src/commands/command.cpp",
     "src/commands/commandmanager.cpp",
+    "src/commands/removeconnectioncommand.cpp",
+    "src/commands/removemodulecommand.cpp",
     "src/connection/connectionruleservice.cpp",
     "src/**/graph.cpp",
     "src/**/module.cpp",
@@ -67,6 +69,8 @@ add_qt_test_target("graph_test", "test/graph_test.cpp", {
     "inc/**/connectionruleservice.h",
     "inc/**/addconnectioncommand.h",
     "inc/**/commandmanager.h",
+    "inc/**/removeconnectioncommand.h",
+    "inc/**/removemodulecommand.h",
     "inc/**/graph.h",
     "inc/**/module.h",
     "inc/**/ipcoreruntimeregistry.h",
@@ -261,6 +265,38 @@ target("projectipservice_test")
     add_tests("default", {
         trim_output = true,
         pass_outputs = "projectipservice_test passed"
+    })
+
+target("removeipinstancecommand_test")
+    add_rules("qt.console")
+    set_kind("binary")
+    set_group("test")
+    set_default(false)
+    set_languages("c++23")
+
+    add_includedirs("inc")
+    add_files("test/removeipinstancecommand_test.cpp")
+    add_files("src/commands/command.cpp")
+    add_files("src/commands/commandmanager.cpp")
+    add_files("src/commands/addipinstancecommand.cpp")
+    add_files("src/commands/removeipinstancecommand.cpp")
+    add_files("src/graph/graph.cpp")
+    add_files("src/graph/module.cpp")
+    add_files("src/graph/connection.cpp")
+    add_files("src/graph/port.cpp")
+    add_files("src/graph/parameter.cpp")
+    add_files("src/project/projectipservice.cpp")
+    add_files("src/project/projectstateservice.cpp")
+    add_files("inc/commands/commandmanager.h")
+    add_files("inc/commands/addipinstancecommand.h")
+    add_files("inc/commands/removeipinstancecommand.h")
+    add_files("inc/graph/graph.h")
+    add_files("inc/graph/module.h")
+    add_files("inc/project/projectipservice.h")
+    add_files("inc/project/projectstateservice.h")
+    add_tests("default", {
+        trim_output = true,
+        pass_outputs = "removeipinstancecommand_test passed"
     })
 
 target("logpanel_test")

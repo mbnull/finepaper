@@ -8,6 +8,7 @@
 #include <QJsonValue>
 #include <QString>
 #include <QVector>
+#include <optional>
 
 class ProjectStateService : public QObject {
     Q_OBJECT
@@ -18,7 +19,13 @@ public:
     void loadFromDocument(const ProjectDocument& document);
     void writeToDocument(ProjectDocument& document) const;
     const QVector<ProjectIpInstanceRecord>& ipInstanceRecords() const { return m_ipInstanceRecords; }
+    int indexOfIpInstanceRecord(const QString& ipcoreId, const QString& instanceId) const;
+    std::optional<ProjectIpInstanceRecord> ipInstanceRecord(const QString& ipcoreId,
+                                                            const QString& instanceId) const;
     bool ensureIpInstanceRecord(const ProjectIpInstanceRecord& record);
+    bool insertIpInstanceRecord(int index, const ProjectIpInstanceRecord& record);
+    std::optional<ProjectIpInstanceRecord> takeIpInstanceRecord(const QString& ipcoreId,
+                                                                const QString& instanceId);
     bool removeIpInstanceRecord(const QString& ipcoreId, const QString& instanceId);
 
     bool setParameter(const QString& ipcoreId,

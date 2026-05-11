@@ -1,12 +1,99 @@
 // RemoveModuleCommand removes one module plus incident edges and restores them on undo.
 #include "commands/removemodulecommand.h"
 
+namespace {
+
+const Module* findRestoredOrExistingModule(const Graph* graph,
+                                           const Module* restoredModule,
+                                           const QString& moduleId) {
+    if (restoredModule && restoredModule->id() == moduleId) {
+        return restoredModule;
+    }
+    return graph ? graph->getModule(moduleId) : nullptr;
+}
+
+const Port* findPort(const Module* module, const QString& portId) {
+    if (!module) {
+        return nullptr;
+    }
+
+    for (const auto& port : module->ports()) {
+        if (port.id() == portId) {
+            return &port;
+        }
+    }
+
+    return nullptr;
+}
+
+bool graphHasConnection(const Graph* graph, const PortRef& source, const PortRef& target) {
+    return std::any_of(graph->connections().begin(), graph->connections().end(),
+        [&](const std::unique_ptr<Connection>& connection) {
+            return connection &&
+                   connection->source().moduleId == source.moduleId &&
+                   connection->source().portId == source.portId &&
+                   connection->target().moduleId == target.moduleId &&
+                   connection->target().portId == target.portId;
+        });
+}
+
+bool canRestoreConnection(const Graph* graph,
+                          const Module* restoredModule,
+                          const Connection* connection) {
+    if (!graph || !restoredModule || !connection) {
+        return false;
+    }
+
+    const PortRef source = connection->source();
+    const PortRef target = connection->target();
+    if (source.moduleId == target.moduleId) {
+        return false;
+    }
+
+    const Module* sourceModule = findRestoredOrExistingModule(graph, restoredModule, source.moduleId);
+    const Module* targetModule = findRestoredOrExistingModule(graph, restoredModule, target.moduleId);
+    if (!sourceModule || !targetModule) {
+        return false;
+    }
+    if (!findPort(sourceModule, source.portId) || !findPort(targetModule, target.portId)) {
+        return false;
+    }
+
+    return !graphHasConnection(graph, source, target);
+}
+
+bool canRestoreModuleAndConnections(const Graph* graph,
+                                    const Module* restoredModule,
+                                    const std::vector<std::unique_ptr<Connection>>& connections) {
+    if (!graph || !restoredModule || restoredModule->id().isEmpty()) {
+        return false;
+    }
+    if (graph->getModule(restoredModule->id())) {
+        return false;
+    }
+
+    return std::all_of(connections.begin(), connections.end(),
+        [&](const std::unique_ptr<Connection>& connection) {
+            return canRestoreConnection(graph, restoredModule, connection.get());
+        });
+}
+
+std::unique_ptr<Connection> cloneConnection(const Connection& connection) {
+    return std::make_unique<Connection>(
+        connection.id(),
+        connection.source(),
+        connection.target());
+}
+
+} // namespace
+
 RemoveModuleCommand::RemoveModuleCommand(Graph* graph, const QString& moduleId)
     : m_graph(graph), m_moduleId(moduleId) {}
 
 // Remove module and all connected connections
 void RemoveModuleCommand::execute() {
     m_executed = false;
+    m_undone = false;
     if (!m_graph->getModule(m_moduleId)) return;
 
     std::vector<QString> connIds;
@@ -26,10 +113,35 @@ void RemoveModuleCommand::execute() {
 
 // Restore module and its connections
 void RemoveModuleCommand::undo() {
-    if (!m_module) return;
-    m_graph->insertModule(std::move(m_module));
-    for (auto& conn : m_connections) {
-        m_graph->insertConnection(std::move(conn));
+    m_undone = false;
+    if (!m_graph || !m_module) {
+        return;
     }
+    if (!canRestoreModuleAndConnections(m_graph, m_module.get(), m_connections)) {
+        return;
+    }
+
+    const QString moduleId = m_module->id();
+    if (!m_graph->insertModule(m_module->clone())) {
+        return;
+    }
+
+    for (const auto& conn : m_connections) {
+        if (!conn) {
+            m_graph->removeModule(moduleId);
+            return;
+        }
+
+        const qsizetype before = static_cast<qsizetype>(m_graph->connections().size());
+        m_graph->insertConnection(cloneConnection(*conn));
+        const qsizetype after = static_cast<qsizetype>(m_graph->connections().size());
+        if (after != before + 1) {
+            m_graph->removeModule(moduleId);
+            return;
+        }
+    }
+
+    m_module.reset();
     m_connections.clear();
+    m_undone = true;
 }

@@ -17,6 +17,7 @@ AddModuleCommand::AddModuleCommand(Graph* graph,
 // Insert module into graph if valid
 void AddModuleCommand::execute() {
     m_executed = false;
+    m_undone = false;
     if (!m_graph || !m_module || m_moduleId.isEmpty() || m_graph->getModule(m_moduleId)) {
         return;
     }
@@ -36,5 +37,9 @@ void AddModuleCommand::execute() {
 
 // Remove module from graph and restore ownership
 void AddModuleCommand::undo() {
+    m_undone = false;
     m_module = m_graph->takeModule(m_moduleId);
+    if (m_module) {
+        m_undone = true;
+    }
 }

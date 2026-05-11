@@ -13,6 +13,7 @@ AddConnectionCommand::AddConnectionCommand(Graph* graph,
 // Add connection if valid
 void AddConnectionCommand::execute() {
     m_executed = false;
+    m_undone = false;
     if (!m_graph || !m_connection) {
         return;
     }
@@ -38,8 +39,12 @@ void AddConnectionCommand::execute() {
 
 // Remove connection and restore ownership
 void AddConnectionCommand::undo() {
+    m_undone = false;
     if (!m_graph) {
         return;
     }
     m_connection = m_graph->takeConnection(m_connectionId);
+    if (m_connection) {
+        m_undone = true;
+    }
 }

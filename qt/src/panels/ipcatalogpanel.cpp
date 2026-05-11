@@ -10,12 +10,14 @@
 #include "workspace/activeworkspacecontroller.h"
 
 #include <QAbstractItemView>
+#include <QAction>
 #include <QDrag>
 #include <QHash>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QMenu>
 #include <QMap>
 #include <QMimeData>
 #include <QSignalBlocker>
@@ -191,11 +193,18 @@ IpCatalogPanel::IpCatalogPanel(const IpCatalogService* catalogService,
     m_projectIpList = new QListWidget(projectContent);
     m_projectIpList->setObjectName(QStringLiteral("projectIpList"));
     m_projectIpList->setMinimumHeight(80);
+    m_projectIpList->setContextMenuPolicy(Qt::CustomContextMenu);
     projectLayout->addWidget(m_projectIpList);
     layout->addWidget(section(QStringLiteral("Project Instances"),
                               QStringLiteral("ipCatalogProjectInstancesSection"),
                               projectContent,
                               this));
+    auto* removeProjectInstanceAction =
+        new QAction(QStringLiteral("Delete Instance"), m_projectIpList);
+    removeProjectInstanceAction->setObjectName(QStringLiteral("projectIpRemoveAction"));
+    removeProjectInstanceAction->setShortcut(QKeySequence::Delete);
+    removeProjectInstanceAction->setShortcutContext(Qt::WidgetShortcut);
+    m_projectIpList->addAction(removeProjectInstanceAction);
 
     auto* modulesContent = contentWidget(this);
     auto* modulesLayout = qobject_cast<QVBoxLayout*>(modulesContent->layout());
@@ -240,6 +249,31 @@ IpCatalogPanel::IpCatalogPanel(const IpCatalogService* catalogService,
             [this](QListWidgetItem* current, QListWidgetItem*) { emitSelectRequest(current); });
     connect(m_projectIpList, &QListWidget::itemActivated, this, [this](QListWidgetItem* item) {
         emitSelectRequest(item);
+    });
+    connect(m_projectIpList,
+            &QListWidget::customContextMenuRequested,
+            this,
+            [this](const QPoint& pos) {
+                if (!m_projectIpList) {
+                    return;
+                }
+
+                QListWidgetItem* item = m_projectIpList->itemAt(pos);
+                if (!item) {
+                    return;
+                }
+                const QString ipcoreId = item->data(Qt::UserRole).toString();
+                const QString instanceId = item->data(InstanceIdRole).toString();
+
+                QMenu menu;
+                QAction* removeAction = menu.addAction(QStringLiteral("Delete Instance"));
+                connect(removeAction, &QAction::triggered, this, [this, ipcoreId, instanceId] {
+                    emitRemoveRequest(ipcoreId, instanceId);
+                });
+                menu.exec(m_projectIpList->viewport()->mapToGlobal(pos));
+            });
+    connect(removeProjectInstanceAction, &QAction::triggered, this, [this] {
+        emitRemoveRequest(m_projectIpList ? m_projectIpList->currentItem() : nullptr);
     });
 
     if (m_stateService) {
@@ -401,6 +435,22 @@ void IpCatalogPanel::emitSelectRequest(QListWidgetItem* item) {
     if (!ipcoreId.trimmed().isEmpty() && !instanceId.trimmed().isEmpty()) {
         emit selectIpInstanceRequested(ipcoreId, instanceId);
     }
+}
+
+void IpCatalogPanel::emitRemoveRequest(const QString& ipcoreId, const QString& instanceId) {
+    if (!ipcoreId.trimmed().isEmpty() && !instanceId.trimmed().isEmpty()) {
+        emit removeIpInstanceRequested(ipcoreId, instanceId);
+    }
+}
+
+void IpCatalogPanel::emitRemoveRequest(QListWidgetItem* item) {
+    if (!item) {
+        return;
+    }
+
+    const QString ipcoreId = item->data(Qt::UserRole).toString();
+    const QString instanceId = item->data(InstanceIdRole).toString();
+    emitRemoveRequest(ipcoreId, instanceId);
 }
 
 void IpCatalogPanel::scheduleProjectSelectionSync() {

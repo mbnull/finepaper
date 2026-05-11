@@ -343,6 +343,7 @@ ArrangeCommand::ArrangeCommand(Graph* graph)
 
 void ArrangeCommand::execute() {
     m_executed = false;
+    m_undone = false;
     if (!m_graph) {
         return;
     }
@@ -358,11 +359,13 @@ void ArrangeCommand::execute() {
 }
 
 void ArrangeCommand::undo() {
+    m_undone = false;
     if (!m_graph || !m_initialized) {
         return;
     }
 
     applyState(m_before);
+    m_undone = true;
 }
 
 void ArrangeCommand::initializeSnapshots() {

@@ -18,6 +18,7 @@ SetIpInstanceParameterCommand::SetIpInstanceParameterCommand(ProjectStateService
 
 void SetIpInstanceParameterCommand::execute() {
     m_executed = false;
+    m_undone = false;
     if (!m_stateService) {
         return;
     }
@@ -32,9 +33,12 @@ void SetIpInstanceParameterCommand::execute() {
 }
 
 void SetIpInstanceParameterCommand::undo() {
+    m_undone = false;
     if (!m_stateService) {
         return;
     }
 
-    m_stateService->setParameter(m_ipcoreId, m_instanceId, m_section, m_name, m_oldValue);
+    if (m_stateService->setParameter(m_ipcoreId, m_instanceId, m_section, m_name, m_oldValue)) {
+        m_undone = true;
+    }
 }

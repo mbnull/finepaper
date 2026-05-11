@@ -46,6 +46,17 @@ void CommandManager::undo() {
     if (entry.command->wasExecuted()) {
         entry.command->undo();
     }
+    if (!entry.command->wasUndone()) {
+        if (entry.command->undoFailureChangedState()) {
+            m_currentStateId = m_nextStateId++;
+        }
+        m_undoStack.push(std::move(entry));
+        qDebug() << "Undo rejected or failed"
+                 << "undoDepth" << m_undoStack.size()
+                 << "redoDepth" << m_redoStack.size()
+                 << "stateId" << m_currentStateId;
+        return;
+    }
     m_currentStateId = entry.beforeStateId;
     m_redoStack.push(std::move(entry));
     qInfo() << "Undo complete"

@@ -1,6 +1,8 @@
 // Graph integration-style tests for topology and structural behavior.
 #include "commands/addconnectioncommand.h"
 #include "commands/commandmanager.h"
+#include "commands/removeconnectioncommand.h"
+#include "commands/removemodulecommand.h"
 #include "connection/connectionruleservice.h"
 #include "graph/graph.h"
 #include "modules/moduleregistry.h"
@@ -134,6 +136,106 @@ void testAddConnectionCommandRedoBuildsFreshRuleService() {
     commandManager.redo();
     require(providerCalls == 2, "redo should build a fresh rule service instead of reusing a stale pointer");
     require(graph.connections().size() == 1, "redo should restore the connection");
+}
+
+void testRemoveConnectionCommandUndoRetainsSavedConnectionForRetry() {
+    Graph graph;
+
+    require(graph.addModule(makeModule(
+        "source",
+        "Endpoint",
+        {Port("out", Port::Direction::Output, "endpoint", "out")})),
+        "failed to add source module");
+    require(graph.addModule(makeModule(
+        "target",
+        "Endpoint",
+        {Port("in", Port::Direction::Input, "endpoint", "in")})),
+        "failed to add target module");
+
+    const PortRef source{"source", "out"};
+    const PortRef target{"target", "in"};
+    graph.addConnection(std::make_unique<Connection>("link", source, target));
+
+    RemoveConnectionCommand command(&graph, "link");
+    command.execute();
+
+    require(command.wasExecuted(), "remove connection command should execute when the connection exists");
+    require(graph.connections().empty(), "execute should remove the target connection");
+
+    graph.addConnection(std::make_unique<Connection>("blocker", source, target));
+    require(graph.connections().size() == 1, "setup should install a blocking duplicate connection");
+
+    command.undo();
+
+    require(!command.wasUndone(), "undo should reject restoring a duplicate connection");
+    require(graph.connections().size() == 1, "failed undo should leave the blocking connection in place");
+    require(graph.connections().front()->id() == "blocker",
+            "failed undo should keep the original saved connection for retry");
+
+    graph.removeConnection("blocker");
+    command.undo();
+
+    require(command.wasUndone(), "undo should succeed after the blocking connection is removed");
+    require(graph.connections().size() == 1, "successful retry should restore exactly one connection");
+    require(graph.connections().front()->id() == "link",
+            "successful retry should restore the originally removed connection");
+}
+
+void testRemoveModuleCommandUndoRetainsSavedStateForRetryAfterRestoreConflict() {
+    Graph graph;
+
+    require(graph.addModule(makeModule(
+        "source",
+        "Endpoint",
+        {Port("out", Port::Direction::Output, "endpoint", "out")})),
+        "failed to add source module");
+    require(graph.addModule(makeModule(
+        "target",
+        "Endpoint",
+        {Port("in", Port::Direction::Input, "endpoint", "in")})),
+        "failed to add target module");
+
+    graph.addConnection(std::make_unique<Connection>(
+        "link",
+        PortRef{"source", "out"},
+        PortRef{"target", "in"}));
+
+    RemoveModuleCommand command(&graph, "source");
+    command.execute();
+
+    require(command.wasExecuted(), "remove module command should execute when the module exists");
+    require(graph.getModule("source") == nullptr, "execute should remove the target module");
+    require(graph.connections().empty(), "execute should remove incident connections");
+
+    require(graph.addModule(makeModule(
+        "source",
+        "Endpoint",
+        {Port("out", Port::Direction::Output, "endpoint", "out")})),
+        "failed to add blocking replacement module");
+    graph.addConnection(std::make_unique<Connection>(
+        "blocker",
+        PortRef{"source", "out"},
+        PortRef{"target", "in"}));
+    require(graph.connections().size() == 1,
+            "setup should install a blocking replacement connection");
+
+    command.undo();
+
+    require(!command.wasUndone(), "undo should reject when a conflicting module id is already present");
+    require(graph.getModule("source") != nullptr, "failed undo should leave the blocking module in place");
+    require(graph.connections().size() == 1, "failed undo should not partially restore saved connections");
+    require(graph.connections().front()->id() == "blocker",
+            "failed undo should preserve the blocking connection without losing saved restore state");
+
+    graph.removeConnection("blocker");
+    graph.removeModule("source");
+    command.undo();
+
+    require(command.wasUndone(), "undo should succeed after the module-id conflict is removed");
+    require(graph.getModule("source") != nullptr, "successful retry should restore the removed module");
+    require(graph.connections().size() == 1, "successful retry should restore the saved connection");
+    require(graph.connections().front()->id() == "link",
+            "successful retry should restore the originally removed connection");
 }
 
 void testInoutPortsCannotBeReusedAcrossConnectionSides() {
@@ -607,6 +709,8 @@ int main(int argc, char** argv) {
         testGraphConnectionValidationRejectsOnlyExactDuplicates();
         testInoutBusConnectionsAreValid();
         testAddConnectionCommandRedoBuildsFreshRuleService();
+        testRemoveConnectionCommandUndoRetainsSavedConnectionForRetry();
+        testRemoveModuleCommandUndoRetainsSavedStateForRetryAfterRestoreConflict();
         testInoutPortsCannotBeReusedAcrossConnectionSides();
         testInterfaceCompatibilityRejectsMismatchedConfiguredFields();
         testGraphStructuralValidationIgnoresSemanticMetadata();
