@@ -1,3 +1,6 @@
 [submodule "ipcores/ravenoc/vendor/ravenoc"]
 	path = ipcores/ravenoc/vendor/ravenoc
 	url = https://github.com/aignacio/ravenoc.git
+[submodule "ipcores/opennoc/vendor/OpenNoC"]
+	path = ipcores/opennoc/vendor/OpenNoC
+	url = https://github.com/RV-BOSC/OpenNoC.git
