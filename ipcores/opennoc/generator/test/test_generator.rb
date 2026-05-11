@@ -41,7 +41,9 @@ class OpenNoCGeneratorTest < Minitest::Test
       assert File.file?(File.join(output, 'rtl/src/snf/snf.v'))
       refute File.directory?(File.join(output, 'rtl/src/rnf'))
       assert File.file?(File.join(output, 'LICENSE'))
-      assert_includes File.read(File.join(output, 'opennoc_filelist.f')), File.join(output, 'mesh_wrapper_2x2.sv')
+      filelist = File.read(File.join(output, 'opennoc_filelist.f'))
+      assert_includes filelist, 'mesh_wrapper_2x2.sv'
+      refute_includes filelist, output
       verify = File.read(File.join(output, 'verify.sh'))
       assert_includes verify, 'cd "$(dirname "$0")"'
       assert_includes verify, '-GREQ_FLIT_WIDTH=128'
@@ -193,10 +195,43 @@ class OpenNoCGeneratorTest < Minitest::Test
     end
   end
 
+  def test_generator_filelist_works_with_relative_output_directory
+    Dir.mktmpdir do |dir|
+      vendor = File.join(dir, 'vendor/OpenNoC')
+      make_fake_vendor(vendor)
+
+      stdout, stderr, status = run_generator(File.expand_path('../examples/mesh_2x2.json', __dir__), 'out', vendor,
+                                             chdir: dir)
+
+      assert status.success?, stderr
+      assert_includes stdout, 'Generated OpenNoC mesh integration'
+      filelist = File.read(File.join(dir, 'out/opennoc_filelist.f'))
+      assert_includes filelist, "mesh_wrapper_2x2.sv\n"
+      refute_includes filelist, "out/mesh_wrapper_2x2.sv"
+      refute_includes filelist, "#{dir}/out"
+    end
+  end
+
+  def test_generator_does_not_mutate_preexisting_vendor_wrapper
+    Dir.mktmpdir do |dir|
+      vendor = File.join(dir, 'vendor/OpenNoC')
+      make_fake_vendor(vendor)
+      vendor_wrapper = File.join(vendor, 'tools/mesh_generator/mesh_wrapper_2x2.sv')
+      File.write(vendor_wrapper, "// preexisting wrapper\n")
+
+      _stdout, stderr, status = run_generator(File.expand_path('../examples/mesh_2x2.json', __dir__), File.join(dir, 'out'), vendor)
+
+      assert status.success?, stderr
+      assert_equal "// preexisting wrapper\n", File.read(vendor_wrapper)
+    end
+  end
+
   private
 
-  def run_generator(input, output, vendor)
-    Open3.capture3(RbConfig.ruby, GENERATOR, '-i', input, '-o', output, '--vendor', vendor)
+  def run_generator(input, output, vendor, chdir: nil)
+    options = {}
+    options[:chdir] = chdir if chdir
+    Open3.capture3(RbConfig.ruby, GENERATOR, '-i', input, '-o', output, '--vendor', vendor, **options)
   end
 
   def run_drc(input)

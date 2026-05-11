@@ -2,6 +2,7 @@ require 'json'
 require 'erb'
 require 'fileutils'
 require 'open3'
+require 'tmpdir'
 
 class OpenNoCGenerator
   class GenerationError < StandardError; end
@@ -155,19 +156,21 @@ class OpenNoCGenerator
 
   def run_mesh_generator(mesh_config, wrapper)
     mesh_dir = File.join(vendor_dir, 'tools/mesh_generator')
-    stdout, stderr, status = Open3.capture3('python3', 'mesh_gen.py', '-f', File.expand_path(mesh_config),
-                                            chdir: mesh_dir)
-    unless status.success?
-      message = stderr.empty? ? stdout : stderr
-      raise GenerationError, "OpenNoC mesh generator failed: #{message.strip}"
+    Dir.mktmpdir('finepaper-opennoc-mesh') do |dir|
+      FileUtils.cp_r(mesh_dir, dir)
+      working_dir = File.join(dir, 'mesh_generator')
+      stdout, stderr, status = Open3.capture3('python3', 'mesh_gen.py', '-f', File.expand_path(mesh_config),
+                                              chdir: working_dir)
+      unless status.success?
+        message = stderr.empty? ? stdout : stderr
+        raise GenerationError, "OpenNoC mesh generator failed: #{message.strip}"
+      end
+
+      generated_wrapper = File.join(working_dir, wrapper)
+      raise GenerationError, "OpenNoC mesh generator did not create #{wrapper}" unless File.file?(generated_wrapper)
+
+      FileUtils.cp(generated_wrapper, File.join(output_dir, wrapper))
     end
-
-    generated_wrapper = File.join(mesh_dir, wrapper)
-    raise GenerationError, "OpenNoC mesh generator did not create #{wrapper}" unless File.file?(generated_wrapper)
-
-    FileUtils.cp(generated_wrapper, File.join(output_dir, wrapper))
-  ensure
-    FileUtils.rm_f(File.join(vendor_dir, 'tools/mesh_generator', wrapper)) if wrapper
   end
 
   def copy_vendor_artifacts(model, _wrapper)
@@ -237,11 +240,13 @@ class OpenNoCGenerator
          .map { |path| relative_output_path(path) }
     end
 
-    (entries + include_files + misc_files + agent_files).uniq.map { |entry| File.join(output_dir, entry) }
+    (entries + include_files + misc_files + agent_files).uniq
   end
 
   def relative_output_path(path)
-    path.delete_prefix("#{output_dir}/")
+    path = File.expand_path(path)
+    root = File.expand_path(output_dir)
+    path.delete_prefix("#{root}/")
   end
 
   def manifest(model, wrapper)
