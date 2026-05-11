@@ -170,6 +170,44 @@ void testModuleTypesKeepRuntimeOwnershipAndSkipDuplicates() {
     require(registry.availableTypes().size() == 1, "duplicate type name should be skipped");
 }
 
+void testDuplicateRuntimeIdsKeepFirstDiscoveredRuntime() {
+    QTemporaryDir temp;
+    require(temp.isValid(), "temporary directory should be valid");
+
+    QDir root(temp.path());
+    require(root.mkpath(QStringLiteral("first")), "failed to create first runtime");
+    require(root.mkpath(QStringLiteral("second")), "failed to create second runtime");
+    require(root.mkpath(QStringLiteral("sources/first")), "failed to create first source root");
+    require(root.mkpath(QStringLiteral("sources/second")), "failed to create second source root");
+
+    writeFile(root.filePath(QStringLiteral("first/ipcore-runtime.json")),
+              QByteArrayLiteral(R"json({
+      "id":"finepaper.duplicate",
+      "name":"First Runtime",
+      "version":"1",
+      "source_root":"../sources/first"
+    })json"));
+    writeFile(root.filePath(QStringLiteral("second/ipcore-runtime.json")),
+              QByteArrayLiteral(R"json({
+      "id":"finepaper.duplicate",
+      "name":"Second Runtime",
+      "version":"2",
+      "source_root":"../sources/second"
+    })json"));
+
+    const QList<IpCoreRuntimeDescriptor> runtimes = IpCoreRuntimeRegistry::discover({temp.path()});
+
+    require(runtimes.size() == 1, "duplicate runtime ids should be skipped after the first runtime");
+    require(runtimes.first().id == QStringLiteral("finepaper.duplicate"),
+            "retained runtime should keep the duplicate id");
+    require(runtimes.first().name == QStringLiteral("First Runtime"),
+            "first discovered runtime should win duplicate id conflicts");
+    require(runtimes.first().runtimeRootPath == QFileInfo(root.filePath(QStringLiteral("first"))).absoluteFilePath(),
+            "retained duplicate runtime should keep the first runtime root");
+    require(runtimes.first().sourceRootPath == QFileInfo(root.filePath(QStringLiteral("sources/first"))).absoluteFilePath(),
+            "retained duplicate runtime should keep the first source root");
+}
+
 void testJsonModuleBundlesAreIgnored() {
     QTemporaryDir temp;
     require(temp.isValid(), "temporary directory should be valid");
@@ -665,6 +703,7 @@ int main(int argc, char** argv) {
     try {
         testIpCoreRuntimeManifestLoadsRuntimeAndSourcePaths();
         testModuleTypesKeepRuntimeOwnershipAndSkipDuplicates();
+        testDuplicateRuntimeIdsKeepFirstDiscoveredRuntime();
         testJsonModuleBundlesAreIgnored();
         testRuntimeManifestWithoutSourceRootIsSkipped();
         testModuleRegistryListsTypesByRuntime();

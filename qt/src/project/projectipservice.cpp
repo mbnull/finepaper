@@ -16,10 +16,6 @@ bool sameInstance(const ProjectIpInstanceRef& left, const ProjectIpInstanceRef& 
     return left.ipcoreId == right.ipcoreId && left.instanceId == right.instanceId;
 }
 
-bool isNocKind(const QString& kind) {
-    return kind.compare(QStringLiteral("noc"), Qt::CaseInsensitive) == 0;
-}
-
 QString defaultIpInstanceId(const QString& ipcoreId) {
     QString token = ipcoreId.section(QLatin1Char('.'), -1).trimmed().toLower();
     token.replace(QRegularExpression(QStringLiteral("[^a-z0-9_]+")), QStringLiteral("_"));
@@ -121,16 +117,6 @@ ProjectIpServiceResult ProjectIpService::ensureInstanceForIpcore(const IpCatalog
             result.error = QStringLiteral("Existing IP instance could not be selected.");
         }
         return result;
-    }
-
-    if (isNocKind(entry.kind)) {
-        for (const ProjectIpInstanceRecord& record : m_stateService->ipInstanceRecords()) {
-            if (record.ipcoreId != entry.id
-                && isNocKind(record.state.value(QStringLiteral("kind")).toString())) {
-                result.error = QStringLiteral("Project already contains a NoC IP instance.");
-                return result;
-            }
-        }
     }
 
     ProjectIpInstanceRecord record = defaultRecordForEntry(entry);

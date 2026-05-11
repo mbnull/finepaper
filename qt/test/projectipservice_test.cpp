@@ -98,7 +98,7 @@ void testProjectIpServiceCreatesDefaultStateAndSelectsIt() {
             "selection should point at new instance");
 }
 
-void testProjectIpServiceRejectsSecondNocInstance() {
+void testProjectIpServiceAllowsAdditionalNocInstance() {
     ProjectStateService stateService;
     require(stateService.ensureIpInstanceRecord(existingRecord(QStringLiteral("finepaper.othernoc"),
                                                                QStringLiteral("othernoc_0"),
@@ -107,13 +107,30 @@ void testProjectIpServiceRejectsSecondNocInstance() {
     ProjectIpService service(&stateService);
 
     const ProjectIpServiceResult result = service.ensureInstanceForIpcore(ravenocEntry());
-    require(!result.success, "IP service should reject second NoC instance");
-    require(result.error.contains(QStringLiteral("noc"), Qt::CaseInsensitive),
-            "error should mention NoC");
-    require(stateService.ipInstanceRecords().size() == 1,
-            "rejected NoC should not mutate records");
-    require(!service.selectedIpInstance().has_value(),
-            "rejected NoC should not change selection");
+    require(result.success, "IP service should allow a second NoC instance");
+    require(stateService.ipInstanceRecords().size() == 2,
+            "allowed NoC should append a second record");
+    require(result.record.ipcoreId == QStringLiteral("finepaper.ravenoc"),
+            "created record should keep the requested IP core id");
+    require(result.record.instanceId == QStringLiteral("ravenoc_0"),
+            "created record should use the deterministic default instance id");
+    require(service.selectedIpInstance().has_value(),
+            "created NoC instance should become the selection");
+    require(service.selectedIpInstance()->ipcoreId == QStringLiteral("finepaper.ravenoc"),
+            "selection should move to the new IP core");
+    require(service.selectedIpInstance()->instanceId == QStringLiteral("ravenoc_0"),
+            "selection should use the new instance id");
+
+    const ProjectIpInstanceRecord& first = stateService.ipInstanceRecords().at(0);
+    const ProjectIpInstanceRecord& second = stateService.ipInstanceRecords().at(1);
+    require(first.ipcoreId == QStringLiteral("finepaper.othernoc"),
+            "existing NoC record should be preserved first");
+    require(first.instanceId == QStringLiteral("othernoc_0"),
+            "existing NoC record should keep its instance id");
+    require(second.ipcoreId == QStringLiteral("finepaper.ravenoc"),
+            "new NoC record should be appended");
+    require(second.instanceId == QStringLiteral("ravenoc_0"),
+            "new NoC record should use deterministic id allocation");
 }
 
 void testProjectIpServiceRemoveClearsSelection() {
@@ -275,7 +292,7 @@ int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
     try {
         testProjectIpServiceCreatesDefaultStateAndSelectsIt();
-        testProjectIpServiceRejectsSecondNocInstance();
+        testProjectIpServiceAllowsAdditionalNocInstance();
         testProjectIpServiceRemoveClearsSelection();
         testProjectIpServiceLoadRestoresSelectionAndWorkspaceContext();
         testProjectIpServiceClearClearsSelectionAndWorkspaceContext();
