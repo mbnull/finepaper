@@ -1,4 +1,4 @@
-// Project IP service owns add/select/remove workflows for project IP instances.
+// Project IP service owns add/select workflows for project IP instances.
 #pragma once
 
 #include "ipcore/ipcatalogservice.h"
@@ -32,7 +32,6 @@ public:
     void clear();
     ProjectIpServiceResult createInstanceForIpcore(const IpCatalogEntry& entry);
     bool selectInstance(const QString& ipcoreId, const QString& instanceId);
-    bool removeInstance(const QString& ipcoreId, const QString& instanceId);
     std::optional<ProjectIpInstanceRef> selectedIpInstance() const;
     std::optional<ProjectIpInstanceRecord> selectedIpInstanceRecord() const;
 

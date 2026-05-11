@@ -56,6 +56,7 @@ struct PortSemanticInfo {
     PortRef ref;
     QString moduleType;
     QString ipcoreId;
+    QString instanceId;
     QString graphGroup;
     QString editorLayout;
     QString portName;

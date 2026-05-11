@@ -470,6 +470,31 @@ void testRejectsCrossIpcoreConnectionAtIpcoreLayer() {
             "cross-IP-core rejection should report ipcore_mismatch");
 }
 
+void testRejectsCrossInstanceConnectionAtIpcoreLayer() {
+    Graph graph;
+    auto producer = makeProducer(QStringLiteral("producer"));
+    producer->setInstanceId(QStringLiteral("ravenoc_0"));
+    auto consumer = makeConsumer(QStringLiteral("consumer"));
+    consumer->setInstanceId(QStringLiteral("ravenoc_1"));
+    require(graph.addModule(std::move(producer)), "producer should add");
+    require(graph.addModule(std::move(consumer)), "consumer should add");
+
+    ConnectionRuleService service(&graph, {});
+    const ConnectionCheckResult result = service.check(
+        ConnectionRequest::portToPort(PortRef{QStringLiteral("producer"), QStringLiteral("out")},
+                                      PortRef{QStringLiteral("consumer"), QStringLiteral("in")},
+                                      ConnectionRequestKind::Programmatic));
+
+    require(result.status == ConnectionCheckStatus::Rejected,
+            "cross-instance same-IP-core connection should reject");
+    require(result.layer == ConnectionRuleLayer::Ipcore,
+            "cross-instance rejection should happen at the IP-core layer");
+    require(result.reasonCode == QStringLiteral("ip_instance_mismatch"),
+            "cross-instance rejection should report ip_instance_mismatch");
+    require(result.message.contains(QStringLiteral("different IP instances")),
+            "cross-instance rejection should explain the instance mismatch");
+}
+
 void testRejectsInterfaceFieldMismatchAtIpcoreLayer() {
     ModuleRegistry::instance().registerType(endpointTypeWithProtocol(QStringLiteral("AxiEndpoint"),
                                                                      QStringLiteral("finepaper.test"),
@@ -523,6 +548,7 @@ int main(int argc, char** argv) {
         testVisualSideOrientsInOutPortToNodeCompletion();
         testNodeBodyAutocompleteUsesMatchingGroup();
         testRejectsCrossIpcoreConnectionAtIpcoreLayer();
+        testRejectsCrossInstanceConnectionAtIpcoreLayer();
         testRejectsInterfaceFieldMismatchAtIpcoreLayer();
     } catch (const std::exception& error) {
         std::cerr << "connectionruleservice_test failed: " << error.what() << '\n';

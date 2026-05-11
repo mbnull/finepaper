@@ -836,6 +836,27 @@ void testProjectLoadReportsIpcoreConnectionRuleFailure() {
     require(graph.modules().empty(), "failed load should not mutate graph");
 }
 
+void testProjectLoadRejectsCrossInstanceConnectionWithinSameIpcore() {
+    ProjectDocument document = validProjectDocument();
+    document.ipcoreState.push_back(ProjectIpInstanceRecord{
+        QStringLiteral("finepaper.test"),
+        QStringLiteral("test_1"),
+        QStringLiteral("finepaper.test-project-state-v1"),
+        QJsonObject{{QStringLiteral("global_parameters"), QJsonObject{}}}
+    });
+    document.modules.last().instanceId = QStringLiteral("test_1");
+    document.connections.first().id = QStringLiteral("cross_instance_conn");
+
+    Graph graph;
+    const GraphProjectLoadResult result = GraphProjectSerializer::loadProject(document, graph);
+
+    require(!result.success, "project load should reject same-IP cross-instance connections");
+    require(result.error.contains(QStringLiteral("cross_instance_conn")),
+            "cross-instance load failure should mention the connection id");
+    require(result.error.contains(QStringLiteral("ip_instance_mismatch")),
+            "cross-instance load failure should surface the instance mismatch reason code");
+}
+
 void testLoadRejectsConnectionInvalidatedByEarlierConnectionWithoutChangingGraph() {
     registerProjectTypes();
 
@@ -1145,6 +1166,7 @@ int main(int argc, char** argv) {
         testLoadRejectsInvalidConnectionReference();
         testProjectLoadRejectsConnectionRuleFailure();
         testProjectLoadReportsIpcoreConnectionRuleFailure();
+        testProjectLoadRejectsCrossInstanceConnectionWithinSameIpcore();
         testLoadRejectsConnectionInvalidatedByEarlierConnectionWithoutChangingGraph();
         testReaderRejectsMalformedProjectGraphArrays();
         testProjectReaderDetectsOnlyFinepaperProjects();

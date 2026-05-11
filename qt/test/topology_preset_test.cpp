@@ -44,8 +44,8 @@ bool boolParameter(const Module* module, const QString& name) {
 
 QString repositoryRuntimePath(const QString& relativeRuntimePath) {
     const QStringList startPaths = {
-        QDir::currentPath(),
-        QCoreApplication::applicationDirPath()
+        QCoreApplication::applicationDirPath(),
+        QDir::currentPath()
     };
 
     for (const QString& startPath : startPaths) {
@@ -62,6 +62,26 @@ QString repositoryRuntimePath(const QString& relativeRuntimePath) {
     }
 
     return QFileInfo(QDir(startPaths.first()).filePath(relativeRuntimePath)).absoluteFilePath();
+}
+
+QString stringParameter(const Module* module, const QString& name) {
+    require(module != nullptr, "module should exist");
+    const auto it = module->parameters().find(name);
+    require(it != module->parameters().end(), "string parameter should exist");
+    const Parameter::Value parameterValue = it.value().value();
+    const auto* value = std::get_if<QString>(&parameterValue);
+    require(value != nullptr, "parameter should be a string");
+    return *value;
+}
+
+QString scopedPresetModuleId(const QString& instanceId, const QString& logicalId) {
+    return instanceId + QLatin1Char('_') + logicalId;
+}
+
+QString scopedPresetConnectionId(const QString& instanceId,
+                                 const QString& logicalSourceId,
+                                 const QString& suffix) {
+    return scopedPresetModuleId(instanceId, logicalSourceId) + QLatin1Char('_') + suffix;
 }
 
 ModuleType routerType(const QString& name, const QString& ipcoreId) {
@@ -152,20 +172,29 @@ void testMeshPresetCreatesEditableGraph() {
 
     const TopologyPresetResult result = TopologyPresetBuilder::apply(&graph, registry, request);
 
+    const QString originId = scopedPresetModuleId(QStringLiteral("noc_0"), QStringLiteral("xp_0_0"));
+    const QString rightId = scopedPresetModuleId(QStringLiteral("noc_0"), QStringLiteral("xp_0_1"));
+    const QString belowId = scopedPresetModuleId(QStringLiteral("noc_0"), QStringLiteral("xp_1_0"));
     require(result.success, result.error.toLocal8Bit().constData());
     require(graph.modules().size() == 6, "2x3 mesh should create six routers");
     require(graph.connections().size() == 7, "2x3 mesh should create seven links");
-    require(graph.getModule(QStringLiteral("xp_0_0")) != nullptr, "mesh should create deterministic node ids");
-    require(graph.getModule(QStringLiteral("xp_0_0"))->instanceId() == QStringLiteral("noc_0"),
+    require(graph.getModule(originId) != nullptr, "mesh should create instance-scoped node ids");
+    require(graph.getModule(originId)->instanceId() == QStringLiteral("noc_0"),
             "mesh preset should stamp module instance ownership");
-    require(intParameter(graph.getModule(QStringLiteral("xp_0_1")), QStringLiteral("x")) == 220,
+    require(stringParameter(graph.getModule(originId), QStringLiteral("external_id")) ==
+                QStringLiteral("xp_0_0"),
+            "mesh preset should keep logical external_id values");
+    require(stringParameter(graph.getModule(originId), QStringLiteral("display_name")) ==
+                QStringLiteral("xp_0_0"),
+            "mesh preset should keep logical display names");
+    require(intParameter(graph.getModule(rightId), QStringLiteral("x")) == 220,
             "mesh preset should apply router horizontal spacing");
-    require(intParameter(graph.getModule(QStringLiteral("xp_1_0")), QStringLiteral("y")) == 168,
+    require(intParameter(graph.getModule(belowId), QStringLiteral("y")) == 168,
             "mesh preset should apply router vertical spacing");
-    require(!boolParameter(graph.getModule(QStringLiteral("xp_0_0")), QStringLiteral("collapsed")),
+    require(!boolParameter(graph.getModule(originId), QStringLiteral("collapsed")),
             "mesh preset should create routers expanded by default");
-    require(graph.isValidConnection(PortRef{QStringLiteral("xp_0_0"), QStringLiteral("east")},
-                                    PortRef{QStringLiteral("xp_0_1"), QStringLiteral("west")}) == false,
+    require(graph.isValidConnection(PortRef{originId, QStringLiteral("east")},
+                                    PortRef{rightId, QStringLiteral("west")}) == false,
             "created east/west ports should be occupied by normal graph connections");
 }
 
@@ -183,11 +212,15 @@ void testRingPresetCreatesClosedLoop() {
 
     const TopologyPresetResult result = TopologyPresetBuilder::apply(&graph, registry, request);
 
+    const QString ringId = scopedPresetModuleId(QStringLiteral("noc_0"), QStringLiteral("xp_3"));
     require(result.success, result.error.toLocal8Bit().constData());
     require(graph.modules().size() == 4, "ring should create four routers");
     require(graph.connections().size() == 4, "ring should close the loop");
-    require(graph.getModule(QStringLiteral("xp_3")) != nullptr, "ring should create deterministic ids");
-    require(intParameter(graph.getModule(QStringLiteral("xp_3")), QStringLiteral("x")) == 660,
+    require(graph.getModule(ringId) != nullptr, "ring should create instance-scoped ids");
+    require(stringParameter(graph.getModule(ringId), QStringLiteral("external_id")) ==
+                QStringLiteral("xp_3"),
+            "ring preset should keep logical external ids");
+    require(intParameter(graph.getModule(ringId), QStringLiteral("x")) == 660,
             "ring preset should apply router horizontal spacing");
 }
 
@@ -282,7 +315,7 @@ void testPresetConnectionIdCollisionDoesNotRemoveExistingConnection() {
              QStringLiteral("West"), {}, QStringLiteral("router"),
              QStringLiteral("router_link"), QStringLiteral("west")));
     graph.addConnection(std::make_unique<Connection>(
-        QStringLiteral("xp_0_0_east"),
+        scopedPresetConnectionId(QStringLiteral("noc_0"), QStringLiteral("xp_0_0"), QStringLiteral("east")),
         PortRef{QStringLiteral("existing_source"), QStringLiteral("east")},
         PortRef{QStringLiteral("existing_target"), QStringLiteral("west")}));
     require(graph.connections().size() == 1, "pre-existing connection should be present");
@@ -299,12 +332,65 @@ void testPresetConnectionIdCollisionDoesNotRemoveExistingConnection() {
 
     require(!result.success, "generated connection id collision should fail preset");
     require(graph.connections().size() == 1, "rollback should preserve pre-existing connection");
-    require(graph.connections().front()->id() == QStringLiteral("xp_0_0_east"),
+    require(graph.connections().front()->id() ==
+                scopedPresetConnectionId(QStringLiteral("noc_0"), QStringLiteral("xp_0_0"), QStringLiteral("east")),
             "existing connection id should remain");
     require(graph.getModule(QStringLiteral("existing_source")) != nullptr,
             "rollback should preserve pre-existing source module");
-    require(graph.getModule(QStringLiteral("xp_0_0")) == nullptr,
+    require(graph.getModule(scopedPresetModuleId(QStringLiteral("noc_0"), QStringLiteral("xp_0_0"))) == nullptr,
             "rollback should remove generated modules");
+}
+
+void testMeshPresetCanRepeatAcrossSameIpcoreInstances() {
+    ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
+    require(registry.registerType(routerType(QStringLiteral("XP"), QStringLiteral("finepaper.noc"))),
+            "router type should register");
+
+    Graph graph;
+
+    TopologyPresetRequest firstRequest;
+    firstRequest.ipcoreId = QStringLiteral("finepaper.noc");
+    firstRequest.instanceId = QStringLiteral("noc_0");
+    firstRequest.preset = meshPreset();
+    firstRequest.parameters.insert(QStringLiteral("rows"), 1);
+    firstRequest.parameters.insert(QStringLiteral("cols"), 2);
+
+    TopologyPresetRequest secondRequest = firstRequest;
+    secondRequest.instanceId = QStringLiteral("noc_1");
+
+    const TopologyPresetResult firstResult = TopologyPresetBuilder::apply(&graph, registry, firstRequest);
+    const TopologyPresetResult secondResult = TopologyPresetBuilder::apply(&graph, registry, secondRequest);
+
+    require(firstResult.success, firstResult.error.toLocal8Bit().constData());
+    require(secondResult.success, secondResult.error.toLocal8Bit().constData());
+    require(graph.modules().size() == 4, "repeating the preset for another instance should add another module set");
+    require(graph.connections().size() == 2,
+            "repeating the preset for another instance should add another connection set");
+
+    const QString noc0Left = scopedPresetModuleId(QStringLiteral("noc_0"), QStringLiteral("xp_0_0"));
+    const QString noc0Right = scopedPresetModuleId(QStringLiteral("noc_0"), QStringLiteral("xp_0_1"));
+    const QString noc1Left = scopedPresetModuleId(QStringLiteral("noc_1"), QStringLiteral("xp_0_0"));
+    const QString noc1Right = scopedPresetModuleId(QStringLiteral("noc_1"), QStringLiteral("xp_0_1"));
+    require(graph.getModule(noc0Left) != nullptr, "first instance should keep its scoped left module");
+    require(graph.getModule(noc0Right) != nullptr, "first instance should keep its scoped right module");
+    require(graph.getModule(noc1Left) != nullptr, "second instance should create its own scoped left module");
+    require(graph.getModule(noc1Right) != nullptr, "second instance should create its own scoped right module");
+    require(graph.getModule(noc0Left)->instanceId() == QStringLiteral("noc_0"),
+            "first instance modules should keep noc_0 ownership");
+    require(graph.getModule(noc1Left)->instanceId() == QStringLiteral("noc_1"),
+            "second instance modules should keep noc_1 ownership");
+    require(stringParameter(graph.getModule(noc0Left), QStringLiteral("external_id")) ==
+                QStringLiteral("xp_0_0"),
+            "first instance external_id should stay logical");
+    require(stringParameter(graph.getModule(noc1Left), QStringLiteral("external_id")) ==
+                QStringLiteral("xp_0_0"),
+            "second instance external_id should stay logical");
+    require(std::find(firstResult.moduleIds.cbegin(), firstResult.moduleIds.cend(), noc0Left) !=
+                firstResult.moduleIds.cend(),
+            "first preset result should report scoped module ids");
+    require(std::find(secondResult.moduleIds.cbegin(), secondResult.moduleIds.cend(), noc1Left) !=
+                secondResult.moduleIds.cend(),
+            "second preset result should report scoped module ids");
 }
 
 void testRepositoryRaveNoCMeshPresetCreatesInternalTiles() {
@@ -337,20 +423,26 @@ void testRepositoryRaveNoCMeshPresetCreatesInternalTiles() {
 
     const TopologyPresetResult result = TopologyPresetBuilder::apply(&graph, registry, request);
 
+    const QString tile00 = scopedPresetModuleId(QStringLiteral("ravenoc_0"), QStringLiteral("rave_0_0"));
+    const QString tile01 = scopedPresetModuleId(QStringLiteral("ravenoc_0"), QStringLiteral("rave_0_1"));
+    const QString tile10 = scopedPresetModuleId(QStringLiteral("ravenoc_0"), QStringLiteral("rave_1_0"));
     require(result.success, result.error.toLocal8Bit().constData());
     require(graph.modules().size() == 4, "RaveNoC 2x2 mesh should create four editable tiles");
     require(graph.connections().size() == 4, "RaveNoC 2x2 mesh should create four router links");
-    require(graph.getModule(QStringLiteral("rave_0_0")) != nullptr,
-            "RaveNoC mesh node id should be deterministic");
-    require(intParameter(graph.getModule(QStringLiteral("rave_0_1")), QStringLiteral("x")) == 220,
+    require(graph.getModule(tile00) != nullptr,
+            "RaveNoC mesh node id should be instance-scoped");
+    require(stringParameter(graph.getModule(tile00), QStringLiteral("external_id")) ==
+                QStringLiteral("rave_0_0"),
+            "RaveNoC mesh should keep logical external ids");
+    require(intParameter(graph.getModule(tile01), QStringLiteral("x")) == 220,
             "RaveNoC mesh preset should apply RaveTile horizontal spacing");
-    require(intParameter(graph.getModule(QStringLiteral("rave_1_0")), QStringLiteral("y")) == 168,
+    require(intParameter(graph.getModule(tile10), QStringLiteral("y")) == 168,
             "RaveNoC mesh preset should apply RaveTile vertical spacing");
-    require(!boolParameter(graph.getModule(QStringLiteral("rave_0_0")), QStringLiteral("collapsed")),
+    require(!boolParameter(graph.getModule(tile00), QStringLiteral("collapsed")),
             "RaveNoC mesh preset should create tiles expanded by default");
-    require(intParameter(graph.getModule(QStringLiteral("rave_0_1")), QStringLiteral("mesh_col")) == 1,
+    require(intParameter(graph.getModule(tile01), QStringLiteral("mesh_col")) == 1,
             "RaveNoC mesh preset should preserve logical mesh columns");
-    require(intParameter(graph.getModule(QStringLiteral("rave_1_0")), QStringLiteral("mesh_row")) == 1,
+    require(intParameter(graph.getModule(tile10), QStringLiteral("mesh_row")) == 1,
             "RaveNoC mesh preset should preserve logical mesh rows");
 }
 
@@ -444,6 +536,7 @@ int main(int argc, char** argv) {
         testPresetFailureRollsBackPartialGraph();
         testPresetModuleCreationFailureRollsBackPartialGraph();
         testPresetConnectionIdCollisionDoesNotRemoveExistingConnection();
+        testMeshPresetCanRepeatAcrossSameIpcoreInstances();
         testRepositoryRaveNoCMeshPresetCreatesInternalTiles();
         testTopologyPresetCommandIsUndoableAndRedoable();
         testTopologyPresetCommandStampsModuleOwnership();

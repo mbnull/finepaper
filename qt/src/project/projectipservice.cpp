@@ -7,8 +7,8 @@
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QRegularExpression>
-#include <QSet>
 #include <QStringList>
+#include <algorithm>
 #include <variant>
 
 namespace {
@@ -135,31 +135,6 @@ bool ProjectIpService::selectInstance(const QString& ipcoreId, const QString& in
     return true;
 }
 
-bool ProjectIpService::removeInstance(const QString& ipcoreId, const QString& instanceId) {
-    if (!m_stateService || !findRecord(ipcoreId, instanceId)) {
-        return false;
-    }
-
-    const bool removingSelection =
-        m_selectedIpInstance.has_value()
-        && m_selectedIpInstance->ipcoreId == ipcoreId
-        && m_selectedIpInstance->instanceId == instanceId;
-    if (!m_stateService->removeIpInstanceRecord(ipcoreId, instanceId)) {
-        return false;
-    }
-
-    emit ipInstancesChanged();
-    if (removingSelection) {
-        if (m_stateService->ipInstanceRecords().isEmpty()) {
-            setSelectedInstance(std::nullopt);
-        } else {
-            const ProjectIpInstanceRecord& first = m_stateService->ipInstanceRecords().first();
-            setSelectedInstance(ProjectIpInstanceRef{first.ipcoreId, first.instanceId});
-        }
-    }
-    return true;
-}
-
 std::optional<ProjectIpInstanceRef> ProjectIpService::selectedIpInstance() const {
     return m_selectedIpInstance;
 }
@@ -195,7 +170,7 @@ QString ProjectIpService::nextInstanceIdForIpcore(const QString& ipcoreId) const
     const QString token = instanceIdToken(ipcoreId);
     const QRegularExpression pattern(
         QStringLiteral("^%1_(\\d+)$").arg(QRegularExpression::escape(token)));
-    QSet<int> usedIndexes;
+    int nextIndex = 0;
 
     if (!m_stateService) {
         return token + QStringLiteral("_0");
@@ -207,13 +182,8 @@ QString ProjectIpService::nextInstanceIdForIpcore(const QString& ipcoreId) const
         }
         const QRegularExpressionMatch match = pattern.match(record.instanceId);
         if (match.hasMatch()) {
-            usedIndexes.insert(match.captured(1).toInt());
+            nextIndex = std::max(nextIndex, match.captured(1).toInt() + 1);
         }
-    }
-
-    int nextIndex = 0;
-    while (usedIndexes.contains(nextIndex)) {
-        ++nextIndex;
     }
     return QStringLiteral("%1_%2").arg(token).arg(nextIndex);
 }

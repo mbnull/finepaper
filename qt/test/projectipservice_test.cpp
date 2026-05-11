@@ -135,19 +135,32 @@ void testProjectIpServiceCreatesRepeatedInstancesForSameIpcore() {
             "second created record should use the next deterministic id");
 }
 
-void testProjectIpServiceRemoveClearsSelection() {
+void testProjectIpServiceAllocatesMonotonicInstanceIdsAcrossStateGaps() {
     ProjectStateService stateService;
     ProjectIpService service(&stateService);
 
     require(service.createInstanceForIpcore(ravenocEntry()).success,
-            "NoC instance should be created");
-    require(service.removeInstance(QStringLiteral("finepaper.ravenoc"),
-                                   QStringLiteral("ravenoc_0")),
-            "selected instance should remove");
-    require(stateService.ipInstanceRecords().isEmpty(),
-            "removed instance should leave no records");
-    require(!service.selectedIpInstance().has_value(),
-            "removed selected instance should clear selection");
+            "first NoC instance should be created");
+    require(service.createInstanceForIpcore(ravenocEntry()).success,
+            "second NoC instance should be created");
+    require(stateService.removeIpInstanceRecord(QStringLiteral("finepaper.ravenoc"),
+                                                QStringLiteral("ravenoc_0")),
+            "test should be able to simulate an instance-id gap directly in project state");
+
+    const ProjectIpServiceResult thirdResult = service.createInstanceForIpcore(ravenocEntry());
+
+    require(thirdResult.success, "creating after a gap should still succeed");
+    require(thirdResult.record.instanceId == QStringLiteral("ravenoc_2"),
+            "new instance id should advance monotonically instead of reusing the first hole");
+    require(stateService.ipInstanceRecords().size() == 2,
+            "state should keep the remaining instance and append the new one");
+    require(stateService.ipInstanceRecords().first().instanceId == QStringLiteral("ravenoc_1"),
+            "existing later instance should remain untouched");
+    require(stateService.ipInstanceRecords().last().instanceId == QStringLiteral("ravenoc_2"),
+            "new instance should append with the next monotonic id");
+    require(service.selectedIpInstance().has_value(), "newly created instance should be selected");
+    require(service.selectedIpInstance()->instanceId == QStringLiteral("ravenoc_2"),
+            "selection should move to the newest monotonic instance");
 }
 
 void testProjectIpServiceLoadRestoresSelectionAndWorkspaceContext() {
@@ -295,7 +308,7 @@ int main(int argc, char** argv) {
     try {
         testProjectIpServiceCreatesDefaultStateAndSelectsIt();
         testProjectIpServiceCreatesRepeatedInstancesForSameIpcore();
-        testProjectIpServiceRemoveClearsSelection();
+        testProjectIpServiceAllocatesMonotonicInstanceIdsAcrossStateGaps();
         testProjectIpServiceLoadRestoresSelectionAndWorkspaceContext();
         testProjectIpServiceClearClearsSelectionAndWorkspaceContext();
         testActiveWorkspaceChangesWhenSelectionChanges();

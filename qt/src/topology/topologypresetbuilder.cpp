@@ -29,6 +29,10 @@ QString ringNodeId(const QString& pattern, int index) {
     return replaceToken(pattern, QStringLiteral("index"), index);
 }
 
+QString scopedGraphId(const QString& instanceId, const QString& logicalId) {
+    return instanceId + QLatin1Char('_') + logicalId;
+}
+
 void rollbackCreated(Graph* graph, TopologyPresetResult& result) {
     if (!graph) {
         return;
@@ -65,12 +69,13 @@ bool connectionIdExists(const Graph* graph, const QString& id) {
 }
 
 std::unique_ptr<Module> instantiateModule(const ModuleType& type,
-                                          const QString& id,
+                                          const QString& graphId,
+                                          const QString& logicalId,
                                           const QString& ipcoreId,
                                           const QString& instanceId,
                                           int row,
                                           int col) {
-    auto module = std::make_unique<Module>(id, type.name);
+    auto module = std::make_unique<Module>(graphId, type.name);
     module->setIpcoreId(ipcoreId);
     module->setInstanceId(instanceId);
     for (const Port& port : type.defaultPorts) {
@@ -95,10 +100,10 @@ std::unique_ptr<Module> instantiateModule(const ModuleType& type,
         module->setParameter(QStringLiteral("mesh_row"), row);
     }
     if (module->parameters().contains(QStringLiteral("display_name"))) {
-        module->setParameter(QStringLiteral("display_name"), id);
+        module->setParameter(QStringLiteral("display_name"), logicalId);
     }
     if (module->parameters().contains(QStringLiteral("external_id"))) {
-        module->setParameter(QStringLiteral("external_id"), id);
+        module->setParameter(QStringLiteral("external_id"), logicalId);
     }
     return module;
 }
@@ -147,19 +152,21 @@ TopologyPresetResult createMesh(Graph* graph,
     TopologyPresetResult result;
     for (int row = 0; row < rows; ++row) {
         for (int col = 0; col < cols; ++col) {
-            const QString id = meshNodeId(request.preset.idPattern, row, col);
-            if (graph->getModule(id)) {
-                return failAndRollback(graph, result, QStringLiteral("Module already exists: %1").arg(id));
+            const QString logicalId = meshNodeId(request.preset.idPattern, row, col);
+            const QString graphId = scopedGraphId(request.instanceId, logicalId);
+            if (graph->getModule(graphId)) {
+                return failAndRollback(graph, result, QStringLiteral("Module already exists: %1").arg(graphId));
             }
             if (!graph->addModule(instantiateModule(routerType,
-                                                    id,
+                                                    graphId,
+                                                    logicalId,
                                                     request.ipcoreId,
                                                     request.instanceId,
                                                     row,
                                                     col))) {
-                return failAndRollback(graph, result, QStringLiteral("Could not add module: %1").arg(id));
+                return failAndRollback(graph, result, QStringLiteral("Could not add module: %1").arg(graphId));
             }
-            result.moduleIds.append(id);
+            result.moduleIds.append(graphId);
         }
     }
 
@@ -171,16 +178,19 @@ TopologyPresetResult createMesh(Graph* graph,
 
     for (int row = 0; row < rows; ++row) {
         for (int col = 0; col < cols; ++col) {
-            const QString current = meshNodeId(request.preset.idPattern, row, col);
+            const QString currentLogical = meshNodeId(request.preset.idPattern, row, col);
+            const QString current = scopedGraphId(request.instanceId, currentLogical);
             if (col + 1 < cols) {
-                const QString right = meshNodeId(request.preset.idPattern, row, col + 1);
+                const QString rightLogical = meshNodeId(request.preset.idPattern, row, col + 1);
+                const QString right = scopedGraphId(request.instanceId, rightLogical);
                 if (!addLink(graph, ruleService, result, current + QStringLiteral("_east"), current, east, right, west)) {
                     rollbackCreated(graph, result);
                     return result;
                 }
             }
             if (row + 1 < rows) {
-                const QString below = meshNodeId(request.preset.idPattern, row + 1, col);
+                const QString belowLogical = meshNodeId(request.preset.idPattern, row + 1, col);
+                const QString below = scopedGraphId(request.instanceId, belowLogical);
                 if (!addLink(graph, ruleService, result, current + QStringLiteral("_south"), current, south, below, north)) {
                     rollbackCreated(graph, result);
                     return result;
@@ -203,27 +213,31 @@ TopologyPresetResult createRing(Graph* graph,
 
     TopologyPresetResult result;
     for (int index = 0; index < nodes; ++index) {
-        const QString id = ringNodeId(request.preset.idPattern, index);
-        if (graph->getModule(id)) {
-            return failAndRollback(graph, result, QStringLiteral("Module already exists: %1").arg(id));
+        const QString logicalId = ringNodeId(request.preset.idPattern, index);
+        const QString graphId = scopedGraphId(request.instanceId, logicalId);
+        if (graph->getModule(graphId)) {
+            return failAndRollback(graph, result, QStringLiteral("Module already exists: %1").arg(graphId));
         }
         if (!graph->addModule(instantiateModule(routerType,
-                                                id,
+                                                graphId,
+                                                logicalId,
                                                 request.ipcoreId,
                                                 request.instanceId,
                                                 0,
                                                 index))) {
-            return failAndRollback(graph, result, QStringLiteral("Could not add module: %1").arg(id));
+            return failAndRollback(graph, result, QStringLiteral("Could not add module: %1").arg(graphId));
         }
-        result.moduleIds.append(id);
+        result.moduleIds.append(graphId);
     }
 
     const QString east = request.preset.ports.value(QStringLiteral("east"));
     const QString west = request.preset.ports.value(QStringLiteral("west"));
     const ConnectionRuleService ruleService(graph, {});
     for (int index = 0; index < nodes; ++index) {
-        const QString current = ringNodeId(request.preset.idPattern, index);
-        const QString next = ringNodeId(request.preset.idPattern, (index + 1) % nodes);
+        const QString current = scopedGraphId(request.instanceId,
+                                              ringNodeId(request.preset.idPattern, index));
+        const QString next = scopedGraphId(request.instanceId,
+                                           ringNodeId(request.preset.idPattern, (index + 1) % nodes));
         if (!addLink(graph, ruleService, result, current + QStringLiteral("_next"), current, east, next, west)) {
             rollbackCreated(graph, result);
             return result;

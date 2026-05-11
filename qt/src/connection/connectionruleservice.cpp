@@ -202,6 +202,13 @@ CandidateEvaluation checkIpcoreDeclarativeConstraints(const PortSemanticInfo& so
                                  QStringLiteral("ipcore_mismatch"),
                                  QStringLiteral("Connection endpoints belong to different IP cores"));
     }
+    if (!source.instanceId.trimmed().isEmpty() &&
+        !target.instanceId.trimmed().isEmpty() &&
+        source.instanceId != target.instanceId) {
+        return rejectedCandidate(ConnectionRuleLayer::Ipcore,
+                                 QStringLiteral("ip_instance_mismatch"),
+                                 QStringLiteral("Connection endpoints belong to different IP instances"));
+    }
 
     QStringList fields = source.matchFieldValues.keys();
     for (const QString& field : target.matchFieldValues.keys()) {
@@ -363,6 +370,7 @@ std::optional<PortSemanticInfo> ConnectionRuleService::resolvePort(const QString
     info.ipcoreId = !module->ipcoreId().isEmpty()
         ? module->ipcoreId()
         : (moduleType ? moduleType->ipcoreId : QString());
+    info.instanceId = module->instanceId();
     info.graphGroup = moduleType ? moduleType->graphGroup : QString();
     info.editorLayout = ModuleTypeMetadata::editorLayout(module);
     info.portName = port->name();
