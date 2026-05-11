@@ -409,6 +409,50 @@ void testLoadRejectsModuleWithoutMatchingIpcoreState() {
             "missing instance-state error should mention missing instance id");
 }
 
+void testLoadRejectsDuplicateIpcoreStateScope() {
+    ProjectDocument document = validProjectDocument();
+    document.ipcoreState.push_back(document.ipcoreState.first());
+
+    Graph graph;
+    const GraphProjectLoadResult result = GraphProjectSerializer::loadProject(document, graph);
+
+    require(!result.success, "duplicate ipcore_state scope should be rejected");
+    require(result.error.contains(QStringLiteral("Duplicate")),
+            "duplicate ipcore_state error should mention duplication");
+    require(result.error.contains(QStringLiteral("test_0")),
+            "duplicate ipcore_state error should mention the duplicated instance id");
+}
+
+void testLoadRejectsIpcoreStateMissingOwnerFields() {
+    {
+        ProjectDocument document = validProjectDocument();
+        document.ipcoreState.first().ipcoreId.clear();
+
+        Graph graph;
+        const GraphProjectLoadResult result = GraphProjectSerializer::loadProject(document, graph);
+
+        require(!result.success, "ipcore_state without ipcore should be rejected");
+        require(result.error.contains(QStringLiteral("ipcore_state")),
+                "missing ipcore_state ipcore error should mention ipcore_state");
+        require(result.error.contains(QStringLiteral("ipcore")),
+                "missing ipcore_state ipcore error should mention ipcore");
+    }
+
+    {
+        ProjectDocument document = validProjectDocument();
+        document.ipcoreState.first().instanceId.clear();
+
+        Graph graph;
+        const GraphProjectLoadResult result = GraphProjectSerializer::loadProject(document, graph);
+
+        require(!result.success, "ipcore_state without instance should be rejected");
+        require(result.error.contains(QStringLiteral("ipcore_state")),
+                "missing ipcore_state instance error should mention ipcore_state");
+        require(result.error.contains(QStringLiteral("instance")),
+                "missing ipcore_state instance error should mention instance");
+    }
+}
+
 void testProjectReaderRejectsPreV1IpInstances() {
     QJsonObject root = minimalProjectRoot();
     root.insert(QStringLiteral("ip_instances"), QJsonArray{
@@ -1149,6 +1193,8 @@ int main(int argc, char** argv) {
         testProjectWriterUsesIpcoreVocabulary();
         testProjectSerializerUsesModuleIpcoreOwnership();
         testLoadRejectsModuleWithoutMatchingIpcoreState();
+        testLoadRejectsDuplicateIpcoreStateScope();
+        testLoadRejectsIpcoreStateMissingOwnerFields();
         testProjectReaderRejectsPreV1IpInstances();
         testProjectReaderRejectsOldPluginRootKeys();
         testProjectReaderRejectsOldPluginStateKey();

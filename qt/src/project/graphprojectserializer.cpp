@@ -181,9 +181,19 @@ GraphProjectLoadResult GraphProjectSerializer::loadProject(const ProjectDocument
     QSet<QString> validInstanceScopes;
 
     for (const ProjectIpInstanceRecord& state : document.ipcoreState) {
-        if (!state.ipcoreId.trimmed().isEmpty() && !state.instanceId.trimmed().isEmpty()) {
-            validInstanceScopes.insert(instanceScopeKey(state.ipcoreId, state.instanceId));
+        if (state.ipcoreId.trimmed().isEmpty()) {
+            return failure(QStringLiteral("Project ipcore_state entry is missing ipcore"));
         }
+        if (state.instanceId.trimmed().isEmpty()) {
+            return failure(QStringLiteral("Project ipcore_state entry is missing instance"));
+        }
+
+        const QString scopeKey = instanceScopeKey(state.ipcoreId, state.instanceId);
+        if (validInstanceScopes.contains(scopeKey)) {
+            return failure(QStringLiteral("Duplicate ipcore_state scope for ipcore %1 instance %2")
+                               .arg(state.ipcoreId, state.instanceId));
+        }
+        validInstanceScopes.insert(scopeKey);
     }
 
     // First pass validates identifiers, IP core ownership, and parameter types
