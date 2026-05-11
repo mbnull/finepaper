@@ -387,6 +387,26 @@ void testIpCoreCommandRunnerPropagatesInputFormat() {
             "resolved command should use IP core source root");
 }
 
+void testIpCoreCommandRunnerRejectsMissingCommands() {
+    IpCatalogEntry entry;
+    entry.id = QStringLiteral("finepaper.missing");
+    entry.sourceRootPath = QStringLiteral("/tmp/finepaper-missing-ipcore");
+
+    const IpCoreResolvedCommand generatorCommand =
+        IpCoreCommandRunner::resolveGenerator(entry, QStringLiteral("/tmp/in.json"), QStringLiteral("/tmp/out"));
+    require(!generatorCommand.valid, "missing generator declaration should be rejected");
+    require(generatorCommand.errorMessage ==
+                QStringLiteral("IP core 'finepaper.missing' does not declare a generator."),
+            "missing generator error should be explicit");
+
+    const IpCoreResolvedCommand drcCommand =
+        IpCoreCommandRunner::resolveDrc(entry, QStringLiteral("/tmp/in.json"), QStringLiteral("/tmp/out"));
+    require(!drcCommand.valid, "missing DRC declaration should be rejected");
+    require(drcCommand.errorMessage ==
+                QStringLiteral("IP core 'finepaper.missing' does not declare a DRC command."),
+            "missing DRC error should be explicit");
+}
+
 void testIpCoreCommandRunnerRejectsUnsupportedGeneratorInputFormat() {
     IpCatalogEntry entry;
     entry.id = QStringLiteral("finepaper.unsupported-generator");
@@ -825,6 +845,7 @@ int main(int argc, char** argv) {
         testModuleRegistryListsTypesByRuntime();
         testGeneratorArgumentsSubstituteInputAndOutput();
         testIpCoreCommandRunnerPropagatesInputFormat();
+        testIpCoreCommandRunnerRejectsMissingCommands();
         testIpCoreCommandRunnerRejectsUnsupportedGeneratorInputFormat();
         testIpCoreCommandRunnerResolvesDrcCommand();
         testIpCoreCommandRunnerRejectsUnsupportedDrcInputFormat();
