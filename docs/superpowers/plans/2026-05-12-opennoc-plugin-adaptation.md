@@ -1513,7 +1513,9 @@ Expected: all PASS, with `test_smoke.rb` allowed to SKIP only for missing Verila
 Run:
 
 ```bash
-xmake build plugin_test ipcoregraphexporter_test validation_test
+xmake build plugin_test
+xmake build ipcoregraphexporter_test
+xmake build validation_test
 xmake run plugin_test
 xmake run ipcoregraphexporter_test
 xmake run validation_test
