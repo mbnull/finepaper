@@ -1,0 +1,10 @@
+#!/usr/bin/env sh
+set -eu
+
+verilator --lint-only --sv -Wno-PINMISSING \
+  -GREQ_FLIT_WIDTH=<%= model.fetch(:parameters).fetch('req_flit_width') %> \
+  -GRSP_FLIT_WIDTH=<%= model.fetch(:parameters).fetch('rsp_flit_width') %> \
+  -GDAT_FLIT_WIDTH=<%= model.fetch(:parameters).fetch('dat_flit_width') %> \
+  -GSNP_FLIT_WIDTH=<%= model.fetch(:parameters).fetch('snp_flit_width') %> \
+  -f opennoc_filelist.f \
+  --top-module <%= File.basename(wrapper, '.sv') %>

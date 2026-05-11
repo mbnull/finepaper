@@ -1,4 +1,7 @@
 require 'json'
+require 'erb'
+require 'fileutils'
+require 'open3'
 
 class OpenNoCGenerator
   class GenerationError < StandardError; end
@@ -22,6 +25,23 @@ class OpenNoCGenerator
     'OpenNoCSNF' => 'snf'
   }.freeze
 
+  REQUIRED_VENDOR_PATHS = [
+    'LICENSE',
+    'tools/mesh_generator/mesh_gen.py',
+    'tools/mesh_generator/template/mesh_wrapper.j2',
+    'tools/mesh_generator/chi_xp_node.sv',
+    'rtl/misc/chi_xp_channel.v',
+    'rtl/include/chie_defines.v',
+    'rtl/include/rni_param.v',
+    'rtl/include/hnf_param.v',
+    'rtl/include/hni_param.v',
+    'rtl/include/snf_param.v',
+    'rtl/src/rni/rni.v',
+    'rtl/src/hnf/hnf.v',
+    'rtl/src/hni/hni.v',
+    'rtl/src/snf/snf.v'
+  ].freeze
+
   DEFAULTS = {
     'req_flit_width' => 128,
     'rsp_flit_width' => 64,
@@ -40,8 +60,19 @@ class OpenNoCGenerator
 
   def generate
     graph = read_graph
-    build_model(graph)
-    raise GenerationError, 'OpenNoC artifact generation is not implemented yet'
+    model = build_model(graph)
+    validate_vendor!
+
+    FileUtils.mkdir_p(output_dir)
+    mesh_config = File.join(output_dir, 'opennoc_mesh.json')
+    File.write(mesh_config, JSON.pretty_generate(model.fetch(:mesh_json)))
+
+    wrapper = "mesh_wrapper_#{model.fetch(:cols)}x#{model.fetch(:rows)}.sv"
+    run_mesh_generator(mesh_config, wrapper)
+    copy_vendor_artifacts(model, wrapper)
+    render_outputs(model, wrapper)
+
+    puts "Generated OpenNoC mesh integration in #{output_dir}"
   end
 
   def validate
@@ -114,6 +145,133 @@ class OpenNoCGenerator
   end
 
   private
+
+  def validate_vendor!
+    missing = REQUIRED_VENDOR_PATHS.any? do |relative|
+      !File.file?(File.join(vendor_dir, relative))
+    end
+    raise GenerationError, 'OpenNoC vendor source is missing or incomplete.' if missing
+  end
+
+  def run_mesh_generator(mesh_config, wrapper)
+    mesh_dir = File.join(vendor_dir, 'tools/mesh_generator')
+    stdout, stderr, status = Open3.capture3('python3', 'mesh_gen.py', '-f', File.expand_path(mesh_config),
+                                            chdir: mesh_dir)
+    unless status.success?
+      message = stderr.empty? ? stdout : stderr
+      raise GenerationError, "OpenNoC mesh generator failed: #{message.strip}"
+    end
+
+    generated_wrapper = File.join(mesh_dir, wrapper)
+    raise GenerationError, "OpenNoC mesh generator did not create #{wrapper}" unless File.file?(generated_wrapper)
+
+    FileUtils.cp(generated_wrapper, File.join(output_dir, wrapper))
+  ensure
+    FileUtils.rm_f(File.join(vendor_dir, 'tools/mesh_generator', wrapper)) if wrapper
+  end
+
+  def copy_vendor_artifacts(model, _wrapper)
+    copy_vendor_file('LICENSE')
+    copy_vendor_file('tools/mesh_generator/chi_xp_node.sv')
+    copy_vendor_dir('rtl/include')
+    copy_vendor_dir('rtl/misc')
+
+    selected_agent_types(model).each do |agent_type|
+      rtl_dir = AGENT_RTL_DIR[agent_type]
+      copy_vendor_dir("rtl/src/#{rtl_dir}") if rtl_dir
+    end
+  end
+
+  def selected_agent_types(model)
+    model.fetch(:attachments).map { |attachment| attachment.fetch(:agent_type) }.uniq
+  end
+
+  def copy_vendor_file(relative)
+    destination = File.join(output_dir, relative)
+    FileUtils.mkdir_p(File.dirname(destination))
+    FileUtils.cp(File.join(vendor_dir, relative), destination)
+  end
+
+  def copy_vendor_dir(relative)
+    source = File.join(vendor_dir, relative)
+    destination = File.join(output_dir, relative)
+    FileUtils.rm_rf(destination)
+    FileUtils.mkdir_p(File.dirname(destination))
+    FileUtils.cp_r(source, destination)
+  end
+
+  def render_outputs(model, wrapper)
+    filelist_entries = filelist_entries(model, wrapper)
+    render_template('opennoc_filelist.f.erb', 'opennoc_filelist.f',
+                    model: model, wrapper: wrapper, filelist_entries: filelist_entries)
+    File.chmod(0o644, File.join(output_dir, 'opennoc_filelist.f'))
+
+    render_template('verify.sh.erb', 'verify.sh', model: model, wrapper: wrapper)
+    File.chmod(0o755, File.join(output_dir, 'verify.sh'))
+
+    File.write(File.join(output_dir, 'manifest.json'), JSON.pretty_generate(manifest(model, wrapper)))
+  end
+
+  def render_template(template_name, output_name, locals)
+    template_path = File.join(template_dir, template_name)
+    raise GenerationError, "missing template #{template_name}" unless File.file?(template_path)
+
+    rendered = ERB.new(File.read(template_path), trim_mode: '-').result_with_hash(locals)
+    File.write(File.join(output_dir, output_name), rendered)
+  end
+
+  def filelist_entries(model, wrapper)
+    entries = [
+      wrapper,
+      'tools/mesh_generator/chi_xp_node.sv',
+      'rtl/misc/chi_xp_channel.v'
+    ]
+
+    include_files = Dir.glob(File.join(output_dir, 'rtl/include/*')).select { |path| File.file?(path) }
+                       .map { |path| relative_output_path(path) }
+    misc_files = Dir.glob(File.join(output_dir, 'rtl/misc/*')).select { |path| File.file?(path) }
+                    .map { |path| relative_output_path(path) }
+    agent_files = selected_agent_types(model).filter_map { |type| AGENT_RTL_DIR[type] }
+                                       .flat_map do |dir|
+      Dir.glob(File.join(output_dir, "rtl/src/#{dir}/*")).select { |path| File.file?(path) }
+         .map { |path| relative_output_path(path) }
+    end
+
+    (entries + include_files + misc_files + agent_files).uniq.map { |entry| File.join(output_dir, entry) }
+  end
+
+  def relative_output_path(path)
+    path.delete_prefix("#{output_dir}/")
+  end
+
+  def manifest(model, wrapper)
+    {
+      ipcore: IPCORE_ID,
+      topology: 'mesh',
+      rows: model.fetch(:rows),
+      cols: model.fetch(:cols),
+      parameters: model.fetch(:parameters),
+      wrapper: wrapper,
+      agents: manifest_agents(model),
+      verify: './verify.sh'
+    }
+  end
+
+  def manifest_agents(model)
+    module_by_id = model.fetch(:graph).fetch('modules').to_h { |mod| [mod.fetch('id'), mod] }
+    model.fetch(:attachments).map do |attachment|
+      agent = module_by_id.fetch(attachment.fetch(:agent_id))
+      type = agent.fetch('type')
+      rtl_dir = AGENT_RTL_DIR[type]
+      {
+        id: artifact_id(agent),
+        type: type,
+        xp: artifact_id(module_by_id.fetch(attachment.fetch(:xp_id))),
+        slot: attachment.fetch(:slot),
+        rtl: rtl_dir ? "rtl/src/#{rtl_dir}" : 'external'
+      }
+    end
+  end
 
   def validate_parameters!(parameters)
     DEFAULTS.each_key { |name| positive_integer!(parameters, name) }
