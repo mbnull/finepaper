@@ -1,0 +1,45 @@
+{
+  "schema": "finepaper-ipcore-graph-v1",
+  "name": "opennoc_mesh_2x2",
+  "ipcore": "finepaper.opennoc",
+  "instance": "opennoc_0",
+  "ipcore_state": [
+    {
+      "ipcore": "finepaper.opennoc",
+      "instance": "opennoc_0",
+      "schema": "finepaper.opennoc-project-state-v1",
+      "state": {
+        "kind": "noc",
+        "type": "OpenNoC",
+        "global_parameters": {
+          "req_flit_width": 128,
+          "rsp_flit_width": 64,
+          "dat_flit_width": 256,
+          "snp_flit_width": 128
+        }
+      }
+    }
+  ],
+  "modules": [
+    { "id": "XP0_0", "ipcore": "finepaper.opennoc", "instance": "opennoc_0", "type": "OpenNoCXP", "parameters": { "external_id": "XP0_0", "mesh_col": 0, "mesh_row": 0, "x": 0, "y": 0 }, "ports": [] },
+    { "id": "XP1_0", "ipcore": "finepaper.opennoc", "instance": "opennoc_0", "type": "OpenNoCXP", "parameters": { "external_id": "XP1_0", "mesh_col": 1, "mesh_row": 0, "x": 180, "y": 0 }, "ports": [] },
+    { "id": "XP0_1", "ipcore": "finepaper.opennoc", "instance": "opennoc_0", "type": "OpenNoCXP", "parameters": { "external_id": "XP0_1", "mesh_col": 0, "mesh_row": 1, "x": 0, "y": 160 }, "ports": [] },
+    { "id": "XP1_1", "ipcore": "finepaper.opennoc", "instance": "opennoc_0", "type": "OpenNoCXP", "parameters": { "external_id": "XP1_1", "mesh_col": 1, "mesh_row": 1, "x": 180, "y": 160 }, "ports": [] },
+    { "id": "rnf_0", "ipcore": "finepaper.opennoc", "instance": "opennoc_0", "type": "OpenNoCRNF", "parameters": { "external_id": "RNF0", "x": -120, "y": 0 }, "ports": [] },
+    { "id": "rni_0", "ipcore": "finepaper.opennoc", "instance": "opennoc_0", "type": "OpenNoCRNI", "parameters": { "external_id": "RNI0", "x": -120, "y": 80 }, "ports": [] },
+    { "id": "hnf_0", "ipcore": "finepaper.opennoc", "instance": "opennoc_0", "type": "OpenNoCHNF", "parameters": { "external_id": "HNF0", "x": 300, "y": 0 }, "ports": [] },
+    { "id": "hni_0", "ipcore": "finepaper.opennoc", "instance": "opennoc_0", "type": "OpenNoCHNI", "parameters": { "external_id": "HNI0", "x": -120, "y": 160 }, "ports": [] },
+    { "id": "snf_0", "ipcore": "finepaper.opennoc", "instance": "opennoc_0", "type": "OpenNoCSNF", "parameters": { "external_id": "SNF0", "x": 300, "y": 160 }, "ports": [] }
+  ],
+  "connections": [
+    { "id": "XP0_0_east_to_XP1_0_west", "source": { "module": "XP0_0", "port": "east" }, "target": { "module": "XP1_0", "port": "west" } },
+    { "id": "XP0_1_east_to_XP1_1_west", "source": { "module": "XP0_1", "port": "east" }, "target": { "module": "XP1_1", "port": "west" } },
+    { "id": "XP0_0_south_to_XP0_1_north", "source": { "module": "XP0_0", "port": "south" }, "target": { "module": "XP0_1", "port": "north" } },
+    { "id": "XP1_0_south_to_XP1_1_north", "source": { "module": "XP1_0", "port": "south" }, "target": { "module": "XP1_1", "port": "north" } },
+    { "id": "rnf_0_to_XP0_0_p0", "source": { "module": "rnf_0", "port": "chi" }, "target": { "module": "XP0_0", "port": "p0" } },
+    { "id": "rni_0_to_XP0_0_p1", "source": { "module": "rni_0", "port": "chi" }, "target": { "module": "XP0_0", "port": "p1" } },
+    { "id": "hnf_0_to_XP1_0_p0", "source": { "module": "hnf_0", "port": "chi" }, "target": { "module": "XP1_0", "port": "p0" } },
+    { "id": "hni_0_to_XP0_1_p0", "source": { "module": "hni_0", "port": "chi" }, "target": { "module": "XP0_1", "port": "p0" } },
+    { "id": "snf_0_to_XP1_1_p0", "source": { "module": "snf_0", "port": "chi" }, "target": { "module": "XP1_1", "port": "p0" } }
+  ]
+}
