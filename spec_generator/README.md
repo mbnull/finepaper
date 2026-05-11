@@ -37,6 +37,9 @@ The editable packages under `ipcores/<package>/` are the source of truth. The ge
 - `generated/ipcores/finepaper.ravenoc/plugin.json`
 - `generated/ipcores/finepaper.ravenoc/modules.xml`
 - `generated/ipcores/finepaper.ravenoc/graphics/*.xml`
+- `generated/ipcores/finepaper.opennoc/plugin.json`
+- `generated/ipcores/finepaper.opennoc/modules.xml`
+- `generated/ipcores/finepaper.opennoc/graphics/*.xml`
 
 Do not edit generated runtime artifacts by hand. Change the matching `ipcores/<package>/ipcore.yml`, `views/`, `generator/`, or `vendor/` content, then regenerate:
 
@@ -48,7 +51,13 @@ ruby spec_generator/bin/spec-gen \
 ruby spec_generator/bin/spec-gen \
   --ipcore ipcores/ravenoc/ipcore.yml \
   --runtime-bundle generated/ipcores/finepaper.ravenoc
+
+ruby spec_generator/bin/spec-gen \
+  --ipcore ipcores/opennoc/ipcore.yml \
+  --runtime-bundle generated/ipcores/finepaper.opennoc
 ```
+
+OpenNoC generation keeps the upstream Python mesh generator under `ipcores/opennoc/vendor/OpenNoC` and wraps it from the Finepaper Ruby generator. The first OpenNoC runtime generator version supports mesh topology only.
 
 Before committing generated runtime metadata, run:
 
