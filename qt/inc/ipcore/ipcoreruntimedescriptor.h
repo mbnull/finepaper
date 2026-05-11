@@ -61,7 +61,6 @@ struct IpCoreRuntimeDescriptor {
     QString kind;
     QString runtimeRootPath;
     QString sourceRootPath;
-    QString rootPath;
     QString modulesPath;
     QString graphicsPath;
     QHash<QString, IpCoreInstanceParameterDescriptor> instanceParameters;

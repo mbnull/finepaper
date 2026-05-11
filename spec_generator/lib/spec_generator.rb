@@ -826,6 +826,7 @@ module SpecGenerator
     def write(bundle_dir)
       @bundle_dir = File.expand_path(bundle_dir)
       FileUtils.mkdir_p(File.join(bundle_dir, 'graphics'))
+      FileUtils.rm_f(File.join(bundle_dir, 'plugin.json'))
       File.write(File.join(bundle_dir, 'ipcore-runtime.json'), runtime_json)
       File.write(File.join(bundle_dir, 'modules.xml'), modules_xml)
 

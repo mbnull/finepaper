@@ -24,6 +24,7 @@ IpCoreResolvedCommand failure(const QString& message) {
 IpCoreResolvedCommand resolveIpcoreCommand(const IpCatalogEntry& entry,
                                            const QString& inputPath,
                                            const QString& outputDirectory,
+                                           const QString& commandLabel,
                                            const QString& missingCommandMessage,
                                            const IpCoreCommandDescriptor IpCatalogEntry::* commandMember) {
     if (entry.id.trimmed().isEmpty()) {
@@ -33,6 +34,10 @@ IpCoreResolvedCommand resolveIpcoreCommand(const IpCatalogEntry& entry,
     const IpCoreCommandDescriptor& descriptor = entry.*commandMember;
     if (!descriptor.hasCommand()) {
         return failure(missingCommandMessage.arg(entry.id));
+    }
+    if (!descriptor.usesIpcoreGraphInput()) {
+        return failure(QStringLiteral("IP core '%1' declares unsupported %2 input_format '%3'.")
+                           .arg(entry.id, commandLabel, descriptor.inputFormat));
     }
 
     IpCoreResolvedCommand command;
@@ -53,6 +58,7 @@ IpCoreResolvedCommand IpCoreCommandRunner::resolveGenerator(const IpCatalogEntry
     return resolveIpcoreCommand(entry,
                                 inputPath,
                                 outputDirectory,
+                                QStringLiteral("generator"),
                                 QStringLiteral("IP core '%1' does not declare a generator."),
                                 &IpCatalogEntry::generator);
 }
@@ -63,6 +69,7 @@ IpCoreResolvedCommand IpCoreCommandRunner::resolveDrc(const IpCatalogEntry& entr
     return resolveIpcoreCommand(entry,
                                 inputPath,
                                 outputDirectory,
+                                QStringLiteral("DRC"),
                                 QStringLiteral("IP core '%1' does not declare a DRC command."),
                                 &IpCatalogEntry::drc);
 }

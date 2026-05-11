@@ -233,9 +233,36 @@ std::optional<IpCoreRuntimeDescriptor> loadManifest(const QString& runtimeDirect
         return std::nullopt;
     }
     descriptor.sourceRootPath = resolvePath(descriptor.runtimeRootPath, sourceRoot);
-    descriptor.rootPath = descriptor.sourceRootPath;
-    descriptor.modulesPath = resolvePath(descriptor.runtimeRootPath, object.value(QStringLiteral("modules")).toString());
-    descriptor.graphicsPath = resolvePath(descriptor.runtimeRootPath, object.value(QStringLiteral("graphics")).toString());
+    if (!QFileInfo(descriptor.sourceRootPath).isDir()) {
+        qWarning() << "Skipping IP core runtime manifest with missing source_root directory"
+                   << manifestInfo.absoluteFilePath()
+                   << descriptor.sourceRootPath;
+        return std::nullopt;
+    }
+
+    const QString modules = object.value(QStringLiteral("modules")).toString().trimmed();
+    if (modules.isEmpty()) {
+        qWarning() << "Skipping IP core runtime manifest without modules"
+                   << manifestInfo.absoluteFilePath();
+        return std::nullopt;
+    }
+    descriptor.modulesPath = resolvePath(descriptor.runtimeRootPath, modules);
+    if (!QFileInfo(descriptor.modulesPath).isFile()) {
+        qWarning() << "Skipping IP core runtime manifest with missing modules file"
+                   << manifestInfo.absoluteFilePath()
+                   << descriptor.modulesPath;
+        return std::nullopt;
+    }
+
+    const QString graphics = object.value(QStringLiteral("graphics")).toString().trimmed();
+    descriptor.graphicsPath = resolvePath(descriptor.runtimeRootPath, graphics);
+    if (!graphics.isEmpty() && !QFileInfo(descriptor.graphicsPath).isDir()) {
+        qWarning() << "Ignoring missing graphics directory for IP core runtime"
+                   << descriptor.id
+                   << descriptor.graphicsPath;
+        descriptor.graphicsPath.clear();
+    }
+
     descriptor.instanceParameters = instanceParametersFromJson(object.value(QStringLiteral("instance_parameters")));
     descriptor.topologyPresets = topologyPresetsFromJson(object.value(QStringLiteral("topology_presets")));
     descriptor.generator = commandFromJson(object.value(QStringLiteral("generator")));

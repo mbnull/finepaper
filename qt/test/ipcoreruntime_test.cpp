@@ -179,20 +179,24 @@ void testDuplicateRuntimeIdsKeepFirstDiscoveredRuntime() {
     require(root.mkpath(QStringLiteral("second")), "failed to create second runtime");
     require(root.mkpath(QStringLiteral("sources/first")), "failed to create first source root");
     require(root.mkpath(QStringLiteral("sources/second")), "failed to create second source root");
+    writeFile(root.filePath(QStringLiteral("first/modules.xml")), QByteArrayLiteral("<module-bundle/>"));
+    writeFile(root.filePath(QStringLiteral("second/modules.xml")), QByteArrayLiteral("<module-bundle/>"));
 
     writeFile(root.filePath(QStringLiteral("first/ipcore-runtime.json")),
               QByteArrayLiteral(R"json({
       "id":"finepaper.duplicate",
       "name":"First Runtime",
       "version":"1",
-      "source_root":"../sources/first"
+      "source_root":"../sources/first",
+      "modules":"modules.xml"
     })json"));
     writeFile(root.filePath(QStringLiteral("second/ipcore-runtime.json")),
               QByteArrayLiteral(R"json({
       "id":"finepaper.duplicate",
       "name":"Second Runtime",
       "version":"2",
-      "source_root":"../sources/second"
+      "source_root":"../sources/second",
+      "modules":"modules.xml"
     })json"));
 
     const QList<IpCoreRuntimeDescriptor> runtimes = IpCoreRuntimeRegistry::discover({temp.path()});
@@ -238,6 +242,50 @@ void testRuntimeManifestWithoutSourceRootIsSkipped() {
     const QList<IpCoreRuntimeDescriptor> runtimes = IpCoreRuntimeRegistry::discover({temp.path()});
 
     require(runtimes.empty(), "manifest without source_root should be skipped");
+}
+
+void testRuntimeManifestWithMissingSourceRootDirectoryIsSkipped() {
+    QTemporaryDir temp;
+    require(temp.isValid(), "temporary directory should be valid");
+
+    QDir root(temp.path());
+    require(root.mkpath(QStringLiteral("missing_source")), "failed to create runtime directory");
+    writeFile(root.filePath(QStringLiteral("missing_source/modules.xml")),
+              QByteArrayLiteral("<module-bundle/>"));
+    writeFile(root.filePath(QStringLiteral("missing_source/ipcore-runtime.json")),
+              QByteArrayLiteral(R"json({
+      "id":"missing.source",
+      "name":"Missing Source",
+      "version":"1",
+      "source_root":"../does-not-exist",
+      "modules":"modules.xml"
+    })json"));
+
+    const QList<IpCoreRuntimeDescriptor> runtimes = IpCoreRuntimeRegistry::discover({temp.path()});
+
+    require(runtimes.empty(), "manifest with missing source_root directory should be skipped");
+}
+
+void testRuntimeManifestWithMissingModulesFileIsSkipped() {
+    QTemporaryDir temp;
+    require(temp.isValid(), "temporary directory should be valid");
+
+    QDir root(temp.path());
+    require(root.mkpath(QStringLiteral("missing_modules/source")), "failed to create source directory");
+    require(root.mkpath(QStringLiteral("missing_modules/runtime")), "failed to create runtime directory");
+    writeFile(root.filePath(QStringLiteral("missing_modules/runtime/ipcore-runtime.json")),
+              QByteArrayLiteral(R"json({
+      "id":"missing.modules",
+      "name":"Missing Modules",
+      "version":"1",
+      "source_root":"../source",
+      "modules":"modules.xml"
+    })json"));
+
+    const QList<IpCoreRuntimeDescriptor> runtimes =
+        IpCoreRuntimeRegistry::discover({root.filePath(QStringLiteral("missing_modules/runtime"))});
+
+    require(runtimes.empty(), "manifest with missing modules file should be skipped");
 }
 
 void testModuleRegistryListsTypesByRuntime() {
@@ -310,6 +358,24 @@ void testIpCoreCommandRunnerPropagatesInputFormat() {
             "resolved command should use IP core source root");
 }
 
+void testIpCoreCommandRunnerRejectsUnsupportedGeneratorInputFormat() {
+    IpCatalogEntry entry;
+    entry.id = QStringLiteral("finepaper.unsupported-generator");
+    entry.sourceRootPath = QStringLiteral("/tmp/finepaper-unsupported-generator");
+    entry.generator.command = QStringLiteral("ruby");
+    entry.generator.inputFormat = QStringLiteral("generic_graph_v1");
+    entry.generator.args = {QStringLiteral("generator/bin/generate")};
+
+    const IpCoreResolvedCommand command =
+        IpCoreCommandRunner::resolveGenerator(entry, QStringLiteral("/tmp/in.json"), QStringLiteral("/tmp/out"));
+
+    require(!command.valid, "unsupported generator input_format should be rejected");
+    require(command.errorMessage.contains(QStringLiteral("finepaper.unsupported-generator")),
+            "unsupported generator error should mention IP core id");
+    require(command.errorMessage.contains(QStringLiteral("generic_graph_v1")),
+            "unsupported generator error should mention input format");
+}
+
 void testIpCoreCommandRunnerResolvesDrcCommand() {
     IpCatalogEntry entry;
     entry.id = QStringLiteral("finepaper.drc");
@@ -330,6 +396,24 @@ void testIpCoreCommandRunnerResolvesDrcCommand() {
             "resolved DRC command should use IP core source root");
     require(command.arguments.contains(QStringLiteral("/tmp/in.json")),
             "resolved DRC command should substitute input");
+}
+
+void testIpCoreCommandRunnerRejectsUnsupportedDrcInputFormat() {
+    IpCatalogEntry entry;
+    entry.id = QStringLiteral("finepaper.unsupported-drc");
+    entry.sourceRootPath = QStringLiteral("/tmp/finepaper-unsupported-drc");
+    entry.drc.command = QStringLiteral("ruby");
+    entry.drc.inputFormat = QStringLiteral("generic_graph_v1");
+    entry.drc.args = {QStringLiteral("generator/bin/drc")};
+
+    const IpCoreResolvedCommand command =
+        IpCoreCommandRunner::resolveDrc(entry, QStringLiteral("/tmp/in.json"), QStringLiteral("/tmp/out"));
+
+    require(!command.valid, "unsupported DRC input_format should be rejected");
+    require(command.errorMessage.contains(QStringLiteral("finepaper.unsupported-drc")),
+            "unsupported DRC error should mention IP core id");
+    require(command.errorMessage.contains(QStringLiteral("generic_graph_v1")),
+            "unsupported DRC error should mention input format");
 }
 
 void testDefaultDiscoveryUsesIpcoreRuntimeRootsOnly() {
@@ -706,10 +790,14 @@ int main(int argc, char** argv) {
         testDuplicateRuntimeIdsKeepFirstDiscoveredRuntime();
         testJsonModuleBundlesAreIgnored();
         testRuntimeManifestWithoutSourceRootIsSkipped();
+        testRuntimeManifestWithMissingSourceRootDirectoryIsSkipped();
+        testRuntimeManifestWithMissingModulesFileIsSkipped();
         testModuleRegistryListsTypesByRuntime();
         testGeneratorArgumentsSubstituteInputAndOutput();
         testIpCoreCommandRunnerPropagatesInputFormat();
+        testIpCoreCommandRunnerRejectsUnsupportedGeneratorInputFormat();
         testIpCoreCommandRunnerResolvesDrcCommand();
+        testIpCoreCommandRunnerRejectsUnsupportedDrcInputFormat();
         testDefaultDiscoveryUsesIpcoreRuntimeRootsOnly();
         testDefaultDiscoveryFindsGeneratedIpCoreRuntimes();
         testRepositoryFinepaperNoCIpCoreMetadataLoads();

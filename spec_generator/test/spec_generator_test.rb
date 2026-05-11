@@ -138,6 +138,25 @@ class SpecGeneratorTest < Minitest::Test
     end
   end
 
+  def test_generation_removes_stale_plugin_json_from_existing_bundle_dir
+    Dir.mktmpdir do |dir|
+      write_ravenoc_source(dir)
+      bundle_dir = File.join(dir, 'generated/ipcores/finepaper.ravenoc')
+      FileUtils.mkdir_p(bundle_dir)
+      File.write(File.join(bundle_dir, 'plugin.json'), '{"stale":true}')
+
+      SpecGenerator.generate_ipcore(
+        ipcore_path: File.join(dir, 'ipcores/ravenoc/ipcore.yml'),
+        views_dir: File.join(dir, 'ipcores/ravenoc/views'),
+        runtime_bundle_dir: bundle_dir
+      )
+
+      refute File.exist?(File.join(bundle_dir, 'plugin.json'))
+      assert File.file?(File.join(bundle_dir, 'ipcore-runtime.json'))
+      assert File.file?(File.join(bundle_dir, 'modules.xml'))
+    end
+  end
+
   def test_generates_interface_anchor_bundle_for_renamed_noc_modules
     Dir.mktmpdir do |dir|
       write_file(dir, 'ipcores/renamed-noc/ipcore.yml', renamed_interface_anchor_ipcore_yaml)
