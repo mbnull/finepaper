@@ -132,6 +132,7 @@ ProjectReadResult ProjectReader::readFile(const QString& path) {
         ProjectModuleRecord module;
         module.id = object.value(QStringLiteral("id")).toString();
         module.ipcoreId = object.value(QStringLiteral("ipcore")).toString();
+        module.instanceId = object.value(QStringLiteral("instance")).toString();
         module.type = object.value(QStringLiteral("type")).toString();
         module.parameters = object.value(QStringLiteral("parameters")).toObject();
         document.modules.push_back(module);

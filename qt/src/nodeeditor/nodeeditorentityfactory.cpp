@@ -63,14 +63,19 @@ QString generateEntityId() {
 std::unique_ptr<Module> createModule(Graph* graph,
                                      const QString& moduleId,
                                      const QString& moduleType,
-                                     const QString& ipcoreId) {
+                                     const QString& ipcoreId,
+                                     const QString& instanceId) {
     const ModuleType* type = ModuleRegistry::instance().getType(moduleType);
-    if (!type || ipcoreId.trimmed().isEmpty() || type->ipcoreId != ipcoreId) {
+    if (!type ||
+        ipcoreId.trimmed().isEmpty() ||
+        instanceId.trimmed().isEmpty() ||
+        type->ipcoreId != ipcoreId) {
         return {};
     }
 
     auto module = std::make_unique<Module>(moduleId, moduleType);
     module->setIpcoreId(ipcoreId);
+    module->setInstanceId(instanceId);
     for (const auto& port : type->defaultPorts) {
         module->addPort(port);
     }

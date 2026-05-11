@@ -83,6 +83,10 @@ module SpecGenerator
         runtime_bundle_dir: File.join(dir, 'generated/ipcores/finepaper.opennoc')
       )
 
+      stale_generated_runtime_manifest_relpaths(root).each do |relpath|
+        mismatches << "stale committed: #{relpath}"
+      end
+
       GENERATED_OUTPUT_ROOTS.each do |relroot, type|
         relpaths = (generated_output_relpaths(root, relroot, type) +
                     generated_output_relpaths(dir, relroot, type)).uniq.sort
@@ -125,6 +129,13 @@ module SpecGenerator
     return relpaths unless type == :generated_files
 
     relpaths.reject { |relpath| HANDWRITTEN_MODEL_FILES.include?(File.basename(relpath)) }
+  end
+
+  def self.stale_generated_runtime_manifest_relpaths(root)
+    Dir.glob(File.join(root, 'generated/ipcores/*/plugin.json'))
+       .select { |path| File.file?(path) }
+       .map { |path| path.sub(%r{\A#{Regexp.escape(root)}/}, '') }
+       .sort
   end
 
   class IpCoreParser

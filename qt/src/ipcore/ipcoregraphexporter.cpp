@@ -124,10 +124,9 @@ IpCoreGraphExportResult IpCoreGraphExporter::exportGraph(const IpCoreGraphExport
     QSet<QString> usedModuleIds;
 
     for (const auto& module : request.graph->modules()) {
-        if (module->ipcoreId() != request.ipcore.id) {
-            return {false, {},
-                    QStringLiteral("Module '%1' belongs to IP core '%2', not selected IP core '%3'.")
-                        .arg(module->id(), module->ipcoreId(), request.ipcore.id)};
+        if (module->ipcoreId() != request.ipcore.id ||
+            module->instanceId() != request.instance.instanceId) {
+            continue;
         }
 
         const QString artifactId = moduleArtifactId(module.get(), usedModuleIds);
@@ -153,13 +152,18 @@ IpCoreGraphExportResult IpCoreGraphExporter::exportGraph(const IpCoreGraphExport
 
     QSet<QString> usedConnectionIds;
     for (const auto& connection : request.graph->connections()) {
+        const bool sourceSelected = runtimeToArtifactIds.contains(connection->source().moduleId);
+        const bool targetSelected = runtimeToArtifactIds.contains(connection->target().moduleId);
+        if (!sourceSelected && !targetSelected) {
+            continue;
+        }
+        if (sourceSelected != targetSelected) {
+            return {false, {},
+                    QStringLiteral("Connection '%1' crosses selected instance '%2'.")
+                        .arg(connection->id(), request.instance.instanceId)};
+        }
         const QString sourceModuleId = runtimeToArtifactIds.value(connection->source().moduleId);
         const QString targetModuleId = runtimeToArtifactIds.value(connection->target().moduleId);
-        if (sourceModuleId.isEmpty() || targetModuleId.isEmpty()) {
-            return {false, {},
-                    QStringLiteral("Connection '%1' references modules outside selected IP core '%2'.")
-                        .arg(connection->id(), request.ipcore.id)};
-        }
 
         QJsonObject object;
         object.insert(QStringLiteral("id"),

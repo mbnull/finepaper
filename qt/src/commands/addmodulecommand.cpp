@@ -3,10 +3,12 @@
 
 AddModuleCommand::AddModuleCommand(Graph* graph,
                                    std::unique_ptr<Module> module,
-                                   QString expectedIpcoreId)
+                                   QString expectedIpcoreId,
+                                   QString expectedInstanceId)
     : m_graph(graph),
       m_module(std::move(module)),
-      m_expectedIpcoreId(std::move(expectedIpcoreId)) {
+      m_expectedIpcoreId(std::move(expectedIpcoreId)),
+      m_expectedInstanceId(std::move(expectedInstanceId)) {
     if (m_module) {
         m_moduleId = m_module->id();
     }
@@ -19,6 +21,12 @@ void AddModuleCommand::execute() {
         return;
     }
     if (!m_expectedIpcoreId.isEmpty() && m_module->ipcoreId() != m_expectedIpcoreId) {
+        return;
+    }
+    if (m_module->instanceId().trimmed().isEmpty()) {
+        return;
+    }
+    if (!m_expectedInstanceId.isEmpty() && m_module->instanceId() != m_expectedInstanceId) {
         return;
     }
     if (m_graph->insertModule(std::move(m_module))) {

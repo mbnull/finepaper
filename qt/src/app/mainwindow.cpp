@@ -406,6 +406,7 @@ void MainWindow::createTopologyPreset() {
 
     TopologyPresetRequest request;
     request.ipcoreId = workspace.ipcoreId;
+    request.instanceId = workspace.instanceId;
     request.preset = *presetIt;
 
     QStringList parameterNames = presetIt->parameters.keys();

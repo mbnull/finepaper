@@ -15,6 +15,7 @@ struct ProjectIpcoreRecord {
 struct ProjectModuleRecord {
     QString id;
     QString ipcoreId;
+    QString instanceId;
     QString type;
     QJsonObject parameters;
 };

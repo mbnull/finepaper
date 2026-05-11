@@ -9,7 +9,10 @@
 class AddModuleCommand : public Command {
 public:
     // Takes ownership of a prepared module to be inserted into the graph.
-    AddModuleCommand(Graph* graph, std::unique_ptr<Module> module, QString expectedIpcoreId);
+    AddModuleCommand(Graph* graph,
+                     std::unique_ptr<Module> module,
+                     QString expectedIpcoreId,
+                     QString expectedInstanceId);
     // Inserts the module if ID and graph constraints are satisfied.
     void execute() override;
     // Removes the inserted module and restores local ownership.
@@ -20,4 +23,5 @@ private:
     std::unique_ptr<Module> m_module;
     QString m_moduleId;
     QString m_expectedIpcoreId;
+    QString m_expectedInstanceId;
 };

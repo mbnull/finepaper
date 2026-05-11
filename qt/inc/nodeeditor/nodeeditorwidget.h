@@ -49,6 +49,7 @@ public:
     // Returns whether auto-arrange behavior is currently enabled in the view.
     bool isArrangeEnabled() const;
     QStringList availableCreateModuleTypes() const;
+    QStringList visibleModuleIds() const;
 
 public slots:
     // Highlights a module/connection in the scene when selected from external UI (for example log panel).
@@ -147,6 +148,10 @@ private:
     bool acceptsScopedModulePayload(const ScopedModulePayload& payload) const;
     bool createModuleAt(const ScopedModulePayload& payload, const QPointF& scenePos);
     QString activeIpcoreId() const;
+    QString activeInstanceId() const;
+    bool moduleBelongsToActiveWorkspace(const Module* module) const;
+    bool connectionBelongsToActiveWorkspace(const Connection* connection) const;
+    void refreshVisibleGraphState();
     QPointF clampNodePosition(QtNodes::NodeId nodeId, const QPointF& position) const;
     QSize minimumNodeSize(QtNodes::NodeId nodeId) const;
     bool tryBeginNodeResize(const QPoint& viewportPos);

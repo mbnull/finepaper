@@ -70,6 +70,7 @@ QJsonObject toJson(const ProjectDocument& document) {
         QJsonObject object;
         object.insert(QStringLiteral("id"), module.id);
         object.insert(QStringLiteral("ipcore"), module.ipcoreId);
+        object.insert(QStringLiteral("instance"), module.instanceId);
         object.insert(QStringLiteral("type"), module.type);
         object.insert(QStringLiteral("parameters"), sortedObject(module.parameters));
         modules.append(object);

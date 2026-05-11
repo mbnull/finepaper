@@ -11,6 +11,7 @@ class ModuleRegistry;
 
 struct TopologyPresetRequest {
     QString ipcoreId;
+    QString instanceId;
     TopologyPresetDescriptor preset;
     QHash<QString, int> parameters;
 };

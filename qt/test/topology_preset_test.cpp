@@ -145,6 +145,7 @@ void testMeshPresetCreatesEditableGraph() {
     Graph graph;
     TopologyPresetRequest request;
     request.ipcoreId = QStringLiteral("finepaper.noc");
+    request.instanceId = QStringLiteral("noc_0");
     request.preset = meshPreset();
     request.parameters.insert(QStringLiteral("rows"), 2);
     request.parameters.insert(QStringLiteral("cols"), 3);
@@ -155,6 +156,8 @@ void testMeshPresetCreatesEditableGraph() {
     require(graph.modules().size() == 6, "2x3 mesh should create six routers");
     require(graph.connections().size() == 7, "2x3 mesh should create seven links");
     require(graph.getModule(QStringLiteral("xp_0_0")) != nullptr, "mesh should create deterministic node ids");
+    require(graph.getModule(QStringLiteral("xp_0_0"))->instanceId() == QStringLiteral("noc_0"),
+            "mesh preset should stamp module instance ownership");
     require(intParameter(graph.getModule(QStringLiteral("xp_0_1")), QStringLiteral("x")) == 220,
             "mesh preset should apply router horizontal spacing");
     require(intParameter(graph.getModule(QStringLiteral("xp_1_0")), QStringLiteral("y")) == 168,
@@ -174,6 +177,7 @@ void testRingPresetCreatesClosedLoop() {
     Graph graph;
     TopologyPresetRequest request;
     request.ipcoreId = QStringLiteral("finepaper.noc");
+    request.instanceId = QStringLiteral("noc_0");
     request.preset = ringPreset();
     request.parameters.insert(QStringLiteral("nodes"), 4);
 
@@ -195,6 +199,7 @@ void testPresetRejectsConnectionsThatFailRuleService() {
     Graph graph;
     TopologyPresetRequest request;
     request.ipcoreId = QStringLiteral("finepaper.noc");
+    request.instanceId = QStringLiteral("noc_0");
     request.preset = meshPreset();
     request.preset.ports.insert(QStringLiteral("west"), QStringLiteral("east"));
     request.parameters.insert(QStringLiteral("rows"), 1);
@@ -222,6 +227,7 @@ void testPresetFailureRollsBackPartialGraph() {
     Graph graph;
     TopologyPresetRequest request;
     request.ipcoreId = QStringLiteral("finepaper.noc");
+    request.instanceId = QStringLiteral("noc_0");
     request.preset = meshPreset();
     request.preset.routerModule = typeName;
     request.parameters.insert(QStringLiteral("rows"), 2);
@@ -242,6 +248,7 @@ void testPresetModuleCreationFailureRollsBackPartialGraph() {
     Graph graph;
     TopologyPresetRequest request;
     request.ipcoreId = QStringLiteral("finepaper.noc");
+    request.instanceId = QStringLiteral("noc_0");
     request.preset = meshPreset();
     request.preset.idPattern = QStringLiteral("xp");
     request.parameters.insert(QStringLiteral("rows"), 1);
@@ -282,6 +289,7 @@ void testPresetConnectionIdCollisionDoesNotRemoveExistingConnection() {
 
     TopologyPresetRequest request;
     request.ipcoreId = QStringLiteral("finepaper.noc");
+    request.instanceId = QStringLiteral("noc_0");
     request.preset = meshPreset();
     request.preset.routerModule = typeName;
     request.parameters.insert(QStringLiteral("rows"), 1);
@@ -322,6 +330,7 @@ void testRepositoryRaveNoCMeshPresetCreatesInternalTiles() {
     Graph graph;
     TopologyPresetRequest request;
     request.ipcoreId = runtimes.first().id;
+    request.instanceId = QStringLiteral("ravenoc_0");
     request.preset = *meshIt;
     request.parameters.insert(QStringLiteral("rows"), 2);
     request.parameters.insert(QStringLiteral("cols"), 2);
@@ -354,6 +363,7 @@ void testTopologyPresetCommandIsUndoableAndRedoable() {
     CommandManager manager;
     TopologyPresetRequest request;
     request.ipcoreId = QStringLiteral("finepaper.noc");
+    request.instanceId = QStringLiteral("noc_0");
     request.preset = meshPreset();
     request.parameters.insert(QStringLiteral("rows"), 2);
     request.parameters.insert(QStringLiteral("cols"), 2);
@@ -388,6 +398,7 @@ void testTopologyPresetCommandStampsModuleOwnership() {
     Graph graph;
     TopologyPresetRequest request;
     request.ipcoreId = QStringLiteral("finepaper.noc");
+    request.instanceId = QStringLiteral("noc_0");
     request.preset = meshPreset();
     request.parameters.insert(QStringLiteral("rows"), 1);
     request.parameters.insert(QStringLiteral("cols"), 1);
@@ -399,6 +410,27 @@ void testTopologyPresetCommandStampsModuleOwnership() {
     require(graph.modules().size() == 1, "one-node mesh should create one module");
     require(graph.modules().front()->ipcoreId() == QStringLiteral("finepaper.noc"),
             "topology command should stamp module IP-core ownership");
+    require(graph.modules().front()->instanceId() == QStringLiteral("noc_0"),
+            "topology command should stamp module instance ownership");
+}
+
+void testPresetRejectsMissingInstanceId() {
+    ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
+    require(registry.registerType(routerType(QStringLiteral("XP"), QStringLiteral("finepaper.noc"))),
+            "router type should register");
+
+    Graph graph;
+    TopologyPresetRequest request;
+    request.ipcoreId = QStringLiteral("finepaper.noc");
+    request.preset = meshPreset();
+    request.parameters.insert(QStringLiteral("rows"), 1);
+    request.parameters.insert(QStringLiteral("cols"), 1);
+
+    const TopologyPresetResult result = TopologyPresetBuilder::apply(&graph, registry, request);
+
+    require(!result.success, "topology preset should reject missing instance scope");
+    require(result.error.contains(QStringLiteral("instance")),
+            "missing instance error should mention instance scope");
 }
 
 } // namespace
@@ -415,6 +447,7 @@ int main(int argc, char** argv) {
         testRepositoryRaveNoCMeshPresetCreatesInternalTiles();
         testTopologyPresetCommandIsUndoableAndRedoable();
         testTopologyPresetCommandStampsModuleOwnership();
+        testPresetRejectsMissingInstanceId();
     } catch (const std::exception& error) {
         std::cerr << "topology_preset_test failed: " << error.what() << '\n';
         return 1;

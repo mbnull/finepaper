@@ -156,6 +156,7 @@ void testRepositoryNoCMainlineFlow() {
     Graph graph;
     TopologyPresetRequest request;
     request.ipcoreId = workspace.state().ipcoreId;
+    request.instanceId = workspace.state().instanceId;
     request.preset = *mesh;
     request.parameters.insert(QStringLiteral("rows"), 2);
     request.parameters.insert(QStringLiteral("cols"), 2);

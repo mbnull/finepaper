@@ -65,6 +65,17 @@ T parameterValue(const Module* module, const QString& name) {
     return *value;
 }
 
+const ProjectIpInstanceRecord& requireStateRecord(const QVector<ProjectIpInstanceRecord>& records,
+                                                  const QString& ipcoreId,
+                                                  const QString& instanceId) {
+    for (const ProjectIpInstanceRecord& record : records) {
+        if (record.ipcoreId == ipcoreId && record.instanceId == instanceId) {
+            return record;
+        }
+    }
+    throw std::runtime_error("expected IP-core state record to exist");
+}
+
 ModuleType makeProjectXpType() {
     ModuleType type;
     type.name = QStringLiteral("ProjectDocXP");
@@ -133,10 +144,19 @@ ProjectDocument validProjectDocument() {
     document.name = QStringLiteral("validation");
     document.ipcores.push_back(ProjectIpcoreRecord{QStringLiteral("finepaper.test"),
                                                    QStringLiteral("1.0")});
+    document.ipcoreState.push_back(ProjectIpInstanceRecord{
+        QStringLiteral("finepaper.test"),
+        QStringLiteral("test_0"),
+        QStringLiteral("finepaper.test-project-state-v1"),
+        QJsonObject{
+            {QStringLiteral("global_parameters"), QJsonObject{}}
+        }
+    });
 
     ProjectModuleRecord xp;
     xp.id = QStringLiteral("node_1");
     xp.ipcoreId = QStringLiteral("finepaper.test");
+    xp.instanceId = QStringLiteral("test_0");
     xp.type = QStringLiteral("ProjectDocXP");
     xp.parameters.insert(QStringLiteral("external_id"), QStringLiteral("xp_0_0"));
     xp.parameters.insert(QStringLiteral("display_name"), QStringLiteral("XP 0 0"));
@@ -151,6 +171,7 @@ ProjectDocument validProjectDocument() {
     ProjectModuleRecord endpoint;
     endpoint.id = QStringLiteral("node_2");
     endpoint.ipcoreId = QStringLiteral("finepaper.test");
+    endpoint.instanceId = QStringLiteral("test_0");
     endpoint.type = QStringLiteral("ProjectDocEndpoint");
     endpoint.parameters.insert(QStringLiteral("external_id"), QStringLiteral("ep_cpu0"));
     endpoint.parameters.insert(QStringLiteral("display_name"), QStringLiteral("CPU 0"));
@@ -174,6 +195,8 @@ ProjectDocument validProjectDocument() {
 
 std::unique_ptr<Module> instantiate(const ModuleType& type, const QString& id) {
     auto module = std::make_unique<Module>(id, type.name);
+    module->setIpcoreId(type.ipcoreId);
+    module->setInstanceId(QStringLiteral("test_0"));
     for (const Port& port : type.defaultPorts) {
         module->addPort(port);
     }
@@ -201,9 +224,9 @@ void testProjectRoundTripRestoresModulesParametersAndConnections() {
             PortRef{QStringLiteral("node_2"), QStringLiteral("noc")}));
     require(graph.connections().size() == 1, "setup connection should be valid");
     ProjectIpInstanceRecord state;
-    state.ipcoreId = QStringLiteral("finepaper.ravenoc");
-    state.instanceId = QStringLiteral("ravenoc_0");
-    state.schema = QStringLiteral("ravenoc-project-state-v1");
+    state.ipcoreId = QStringLiteral("finepaper.test");
+    state.instanceId = QStringLiteral("test_0");
+    state.schema = QStringLiteral("finepaper.test-project-state-v1");
     state.state = QJsonObject{
         {QStringLiteral("global_parameters"), QJsonObject{
             {QStringLiteral("flit_data_width"), 64}
@@ -223,6 +246,10 @@ void testProjectRoundTripRestoresModulesParametersAndConnections() {
     require(readResult.success, "project read should succeed");
     require(readResult.document.ipcoreState.size() == 1,
             "project read should restore IP-core state records");
+    require(readResult.document.modules.size() == 2,
+            "project read should restore graph modules");
+    require(readResult.document.modules.first().instanceId == QStringLiteral("test_0"),
+            "project read should preserve module instance ownership");
 
     Graph restored;
     const GraphProjectLoadResult loadResult =
@@ -238,6 +265,10 @@ void testProjectRoundTripRestoresModulesParametersAndConnections() {
 
     const Module* restoredXp = restored.getModule(QStringLiteral("node_1"));
     const Module* restoredEndpoint = restored.getModule(QStringLiteral("node_2"));
+    require(restoredXp->instanceId() == QStringLiteral("test_0"),
+            "restored XP should keep instance ownership");
+    require(restoredEndpoint->instanceId() == QStringLiteral("test_0"),
+            "restored endpoint should keep instance ownership");
     require(parameterValue<bool>(restoredXp, QStringLiteral("collapsed")) == true,
             "collapsed parameter should be restored");
     require(parameterValue<int>(restoredXp, QStringLiteral("vc_count")) == 4,
@@ -278,9 +309,9 @@ void testProjectPreservesOpaqueIpcoreState() {
 
     const ProjectReadResult readResult = ProjectReader::readFile(path);
     require(readResult.success, "project with IP-core state should read");
-    require(readResult.document.ipcoreState.size() == 1,
-            "IP-core state record should round-trip");
-    const ProjectIpInstanceRecord& restored = readResult.document.ipcoreState.first();
+    const ProjectIpInstanceRecord& restored = requireStateRecord(readResult.document.ipcoreState,
+                                                                 QStringLiteral("finepaper.ravenoc"),
+                                                                 QStringLiteral("ravenoc_0"));
     require(restored.ipcoreId == QStringLiteral("finepaper.ravenoc"),
             "IP-core state owner id should round-trip");
     require(restored.instanceId == QStringLiteral("ravenoc_0"),
@@ -316,6 +347,7 @@ void testProjectWriterUsesIpcoreVocabulary() {
     ProjectModuleRecord module;
     module.id = QStringLiteral("tile_0");
     module.ipcoreId = QStringLiteral("finepaper.ravenoc");
+    module.instanceId = QStringLiteral("ravenoc_0");
     module.type = QStringLiteral("RaveTile");
     document.modules.push_back(module);
 
@@ -337,6 +369,8 @@ void testProjectWriterUsesIpcoreVocabulary() {
                                         .toObject();
     require(firstModule.value(QStringLiteral("ipcore")).toString() == QStringLiteral("finepaper.ravenoc"),
             "module should emit ipcore owner");
+    require(firstModule.value(QStringLiteral("instance")).toString() == QStringLiteral("ravenoc_0"),
+            "module should emit instance owner");
     require(!firstModule.contains(QStringLiteral("plugin")), "module should not emit plugin owner");
 }
 
@@ -349,6 +383,7 @@ void testProjectSerializerUsesModuleIpcoreOwnership() {
     Graph graph;
     auto module = instantiate(type, QStringLiteral("owned_node"));
     module->setIpcoreId(QStringLiteral("finepaper.owned"));
+    module->setInstanceId(QStringLiteral("owned_0"));
     require(graph.addModule(std::move(module)), "owned module should add");
 
     const ProjectDocument document = GraphProjectSerializer::toProject(graph, QStringLiteral("owned"));
@@ -356,6 +391,22 @@ void testProjectSerializerUsesModuleIpcoreOwnership() {
     require(document.modules.size() == 1, "serializer should write one module");
     require(document.modules.first().ipcoreId == QStringLiteral("finepaper.owned"),
             "serializer should preserve module IP-core ownership");
+    require(document.modules.first().instanceId == QStringLiteral("owned_0"),
+            "serializer should preserve module instance ownership");
+}
+
+void testLoadRejectsModuleWithoutMatchingIpcoreState() {
+    ProjectDocument document = validProjectDocument();
+    document.modules.first().instanceId = QStringLiteral("missing_0");
+
+    Graph graph;
+    const GraphProjectLoadResult result = GraphProjectSerializer::loadProject(document, graph);
+
+    require(!result.success, "module without matching IP-core state should be rejected");
+    require(result.error.contains(QStringLiteral("node_1")),
+            "missing instance-state error should mention module id");
+    require(result.error.contains(QStringLiteral("missing_0")),
+            "missing instance-state error should mention missing instance id");
 }
 
 void testProjectReaderRejectsPreV1IpInstances() {
@@ -481,9 +532,9 @@ void testProjectStateServiceUpdatesIpcoreStateWithoutGraph() {
 
     ProjectDocument saved = validProjectDocument();
     service.writeToDocument(saved);
-    require(saved.ipcoreState.size() == 1,
-            "service should write one IP-core state record");
-    require(saved.ipcoreState.first()
+    require(requireStateRecord(saved.ipcoreState,
+                               QStringLiteral("finepaper.ravenoc"),
+                               QStringLiteral("ravenoc_0"))
                 .state.value(QStringLiteral("global_parameters"))
                 .toObject()
                 .value(QStringLiteral("flit_data_width"))
@@ -511,7 +562,10 @@ void testProjectStateServiceDoesNotCreateMissingSection() {
 
     ProjectDocument saved = validProjectDocument();
     service.writeToDocument(saved);
-    require(!saved.ipcoreState.first().state.contains(QStringLiteral("global_parameters")),
+    require(!requireStateRecord(saved.ipcoreState,
+                                QStringLiteral("finepaper.ravenoc"),
+                                QStringLiteral("ravenoc_0"))
+                 .state.contains(QStringLiteral("global_parameters")),
             "missing section should remain absent after failed update");
 }
 
@@ -537,7 +591,9 @@ void testProjectStateServiceDoesNotOverwriteNonObjectSection() {
 
     ProjectDocument saved = validProjectDocument();
     service.writeToDocument(saved);
-    require(saved.ipcoreState.first()
+    require(requireStateRecord(saved.ipcoreState,
+                               QStringLiteral("finepaper.ravenoc"),
+                               QStringLiteral("ravenoc_0"))
                 .state.value(QStringLiteral("global_parameters"))
                 .toString() == QStringLiteral("opaque"),
             "non-object section should remain unchanged after failed update");
@@ -669,10 +725,17 @@ void testProjectLoadRejectsConnectionRuleFailure() {
     ProjectDocument document = validProjectDocument();
     document.modules.clear();
     document.connections.clear();
+    document.ipcoreState.push_back(ProjectIpInstanceRecord{
+        QStringLiteral("finepaper.ravenoc"),
+        QStringLiteral("ravenoc_0"),
+        QStringLiteral("finepaper.ravenoc-project-state-v1"),
+        QJsonObject{{QStringLiteral("global_parameters"), QJsonObject{}}}
+    });
 
     ProjectModuleRecord left;
     left.id = QStringLiteral("left");
     left.ipcoreId = QStringLiteral("finepaper.ravenoc");
+    left.instanceId = QStringLiteral("ravenoc_0");
     left.type = QStringLiteral("RaveTile");
     left.parameters = QJsonObject{
         {QStringLiteral("x"), 0},
@@ -738,8 +801,26 @@ void testProjectLoadReportsIpcoreConnectionRuleFailure() {
     ProjectDocument document;
     document.name = QStringLiteral("ipcore_rule_failure");
     document.ipcores.push_back(ProjectIpcoreRecord{QStringLiteral("finepaper.test"), QStringLiteral("1.0")});
-    document.modules.push_back(ProjectModuleRecord{QStringLiteral("source"), QStringLiteral("finepaper.test"), sourceType.name, {}});
-    document.modules.push_back(ProjectModuleRecord{QStringLiteral("target"), QStringLiteral("finepaper.test"), targetType.name, {}});
+    document.ipcoreState.push_back(ProjectIpInstanceRecord{
+        QStringLiteral("finepaper.test"),
+        QStringLiteral("test_0"),
+        QStringLiteral("finepaper.test-project-state-v1"),
+        QJsonObject{{QStringLiteral("global_parameters"), QJsonObject{}}}
+    });
+    document.modules.push_back(ProjectModuleRecord{
+        QStringLiteral("source"),
+        QStringLiteral("finepaper.test"),
+        QStringLiteral("test_0"),
+        sourceType.name,
+        {}
+    });
+    document.modules.push_back(ProjectModuleRecord{
+        QStringLiteral("target"),
+        QStringLiteral("finepaper.test"),
+        QStringLiteral("test_0"),
+        targetType.name,
+        {}
+    });
     document.connections.push_back(ProjectConnectionRecord{
         QStringLiteral("bad_connection"),
         ProjectConnectionEndpoint{QStringLiteral("source"), QStringLiteral("noc")},
@@ -965,6 +1046,7 @@ void testGenerationHelpersShapeIpcoreStateForGeneratorBoundary() {
     Graph graph;
     auto module = instantiate(makeProjectXpType(), QStringLiteral("node_1"));
     module->setIpcoreId(QStringLiteral("finepaper.ravenoc"));
+    module->setInstanceId(QStringLiteral("ravenoc_0"));
     require(graph.addModule(std::move(module)), "failed to add generator boundary module");
 
     const IpCoreGraphExportResult exportResult =
@@ -1045,6 +1127,7 @@ int main(int argc, char** argv) {
         testProjectPreservesOpaqueIpcoreState();
         testProjectWriterUsesIpcoreVocabulary();
         testProjectSerializerUsesModuleIpcoreOwnership();
+        testLoadRejectsModuleWithoutMatchingIpcoreState();
         testProjectReaderRejectsPreV1IpInstances();
         testProjectReaderRejectsOldPluginRootKeys();
         testProjectReaderRejectsOldPluginStateKey();

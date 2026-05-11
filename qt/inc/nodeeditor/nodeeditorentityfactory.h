@@ -13,6 +13,7 @@ QString generateEntityId();
 std::unique_ptr<Module> createModule(Graph* graph,
                                      const QString& moduleId,
                                      const QString& moduleType,
-                                     const QString& ipcoreId);
+                                     const QString& ipcoreId,
+                                     const QString& instanceId);
 
 } // namespace NodeEditorEntityFactory

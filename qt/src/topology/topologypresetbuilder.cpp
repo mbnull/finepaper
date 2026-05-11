@@ -67,10 +67,12 @@ bool connectionIdExists(const Graph* graph, const QString& id) {
 std::unique_ptr<Module> instantiateModule(const ModuleType& type,
                                           const QString& id,
                                           const QString& ipcoreId,
+                                          const QString& instanceId,
                                           int row,
                                           int col) {
     auto module = std::make_unique<Module>(id, type.name);
     module->setIpcoreId(ipcoreId);
+    module->setInstanceId(instanceId);
     for (const Port& port : type.defaultPorts) {
         module->addPort(port);
     }
@@ -149,7 +151,12 @@ TopologyPresetResult createMesh(Graph* graph,
             if (graph->getModule(id)) {
                 return failAndRollback(graph, result, QStringLiteral("Module already exists: %1").arg(id));
             }
-            if (!graph->addModule(instantiateModule(routerType, id, request.ipcoreId, row, col))) {
+            if (!graph->addModule(instantiateModule(routerType,
+                                                    id,
+                                                    request.ipcoreId,
+                                                    request.instanceId,
+                                                    row,
+                                                    col))) {
                 return failAndRollback(graph, result, QStringLiteral("Could not add module: %1").arg(id));
             }
             result.moduleIds.append(id);
@@ -200,7 +207,12 @@ TopologyPresetResult createRing(Graph* graph,
         if (graph->getModule(id)) {
             return failAndRollback(graph, result, QStringLiteral("Module already exists: %1").arg(id));
         }
-        if (!graph->addModule(instantiateModule(routerType, id, request.ipcoreId, 0, index))) {
+        if (!graph->addModule(instantiateModule(routerType,
+                                                id,
+                                                request.ipcoreId,
+                                                request.instanceId,
+                                                0,
+                                                index))) {
             return failAndRollback(graph, result, QStringLiteral("Could not add module: %1").arg(id));
         }
         result.moduleIds.append(id);
@@ -229,6 +241,9 @@ TopologyPresetResult TopologyPresetBuilder::apply(Graph* graph,
                                                   const TopologyPresetRequest& request) {
     if (!graph) {
         return failure(QStringLiteral("Graph is required"));
+    }
+    if (request.instanceId.trimmed().isEmpty()) {
+        return failure(QStringLiteral("Active IP instance is required"));
     }
     const ModuleType* routerType = registry.getType(request.preset.routerModule);
     if (!routerType || routerType->ipcoreId != request.ipcoreId) {

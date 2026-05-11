@@ -457,6 +457,19 @@ class SpecGeneratorTest < Minitest::Test
     end
   end
 
+  def test_check_repository_generated_outputs_reports_stale_generated_plugin_manifest
+    Dir.mktmpdir do |dir|
+      build_generated_fixture_repo(dir)
+      File.write(File.join(dir, 'generated/ipcores/finepaper.noc/plugin.json'), '{"stale":true}')
+
+      error = assert_raises(SpecGenerator::SpecError) do
+        SpecGenerator.check_repository_generated_outputs(root: dir)
+      end
+
+      assert_match(%r{generated/ipcores/finepaper\.noc/plugin\.json}, error.message)
+    end
+  end
+
   def test_check_repository_generated_outputs_reports_stale_generated_model_file
     Dir.mktmpdir do |dir|
       build_generated_fixture_repo(dir)

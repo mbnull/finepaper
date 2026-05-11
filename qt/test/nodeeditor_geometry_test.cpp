@@ -492,8 +492,53 @@ void testScopedDropCreatesOwnedModule() {
             "created module should use payload module type");
     require(module->ipcoreId() == QStringLiteral("finepaper.ravenoc"),
             "created module should keep active IP-core ownership");
+    require(module->instanceId() == QStringLiteral("ravenoc_0"),
+            "created module should keep active instance ownership");
     require(harness.commandManager.canUndo(),
             "scoped module creation should enter command history");
+}
+
+void testActiveWorkspaceShowsOnlyModulesForSelectedInstance() {
+    ScopedNodeEditorHarness harness;
+    harness.selectRavenoc();
+    auto firstMime = scopedModuleMime(QStringLiteral("finepaper.ravenoc"),
+                                      QStringLiteral("ravenoc_0"),
+                                      QStringLiteral("RaveTile"));
+    require(sendScopedDrop(harness.editor, firstMime.get()),
+            "first scoped drop should create module for ravenoc_0");
+    require(harness.graph.modules().size() == 1, "first scoped drop should add one graph module");
+    const QString firstModuleId = harness.graph.modules().front()->id();
+
+    const ProjectIpServiceResult secondInstance =
+        harness.projectIpService.createInstanceForIpcore(harness.ravenocEntry());
+    require(secondInstance.success, "second RaveNoC instance should be created");
+    auto secondMime = scopedModuleMime(QStringLiteral("finepaper.ravenoc"),
+                                       QStringLiteral("ravenoc_1"),
+                                       QStringLiteral("RaveTile"));
+    require(sendScopedDrop(harness.editor, secondMime.get()),
+            "second scoped drop should create module for ravenoc_1");
+    require(harness.graph.modules().size() == 2, "second scoped drop should add another graph module");
+    const QString secondModuleId = harness.graph.modules().back()->id();
+
+    QStringList visibleIds = harness.editor.visibleModuleIds();
+    require(visibleIds == QStringList{secondModuleId},
+            "active workspace should only show modules for the selected instance");
+
+    require(harness.projectIpService.selectInstance(QStringLiteral("finepaper.ravenoc"),
+                                                    QStringLiteral("ravenoc_0")),
+            "first instance selection should succeed");
+    QCoreApplication::processEvents();
+    visibleIds = harness.editor.visibleModuleIds();
+    require(visibleIds == QStringList{firstModuleId},
+            "switching back to ravenoc_0 should hide ravenoc_1 modules");
+
+    require(harness.projectIpService.selectInstance(QStringLiteral("finepaper.ravenoc"),
+                                                    QStringLiteral("ravenoc_1")),
+            "second instance selection should succeed");
+    QCoreApplication::processEvents();
+    visibleIds = harness.editor.visibleModuleIds();
+    require(visibleIds == QStringList{secondModuleId},
+            "switching to ravenoc_1 should hide ravenoc_0 modules");
 }
 
 void testCreateMenuTypesFollowActiveWorkspace() {
@@ -529,6 +574,7 @@ int main(int argc, char** argv) {
         testScopedDropRejectsDifferentIpcore();
         testScopedDropRejectsLegacyModuleTypeMime();
         testScopedDropCreatesOwnedModule();
+        testActiveWorkspaceShowsOnlyModulesForSelectedInstance();
         testCreateMenuTypesFollowActiveWorkspace();
     } catch (const std::exception& error) {
         std::cerr << "nodeeditor_geometry_test failed: " << error.what() << '\n';

@@ -236,6 +236,12 @@ NodeEditorWidget::NodeEditorWidget(Graph* graph,
     connect(m_graph, &Graph::moduleRemoved, this, &NodeEditorWidget::onModuleRemoved);
     connect(m_graph, &Graph::connectionAdded, this, &NodeEditorWidget::onConnectionAdded);
     connect(m_graph, &Graph::connectionRemoved, this, &NodeEditorWidget::onConnectionRemoved);
+    if (m_workspaceController) {
+        connect(m_workspaceController,
+                &ActiveWorkspaceController::activeWorkspaceChanged,
+                this,
+                [this]() { refreshVisibleGraphState(); });
+    }
 
     connect(m_graphModel, &QtNodes::DataFlowGraphModel::connectionCreated, this, &NodeEditorWidget::onConnectionCreated);
     connect(m_graphModel, &QtNodes::DataFlowGraphModel::connectionDeleted, this, &NodeEditorWidget::onConnectionDeleted);
@@ -271,11 +277,41 @@ QString NodeEditorWidget::activeIpcoreId() const {
     return m_workspaceController->state().ipcoreId;
 }
 
+QString NodeEditorWidget::activeInstanceId() const {
+    if (!m_workspaceController || !m_workspaceController->state().hasActiveIp) {
+        return {};
+    }
+    return m_workspaceController->state().instanceId;
+}
+
 QStringList NodeEditorWidget::availableCreateModuleTypes() const {
     if (!m_workspaceController || !m_workspaceController->state().hasActiveIp) {
         return {};
     }
     return m_workspaceController->state().moduleTypes;
+}
+
+QStringList NodeEditorWidget::visibleModuleIds() const {
+    return m_moduleToNodeId.keys();
+}
+
+bool NodeEditorWidget::moduleBelongsToActiveWorkspace(const Module* module) const {
+    if (!module || !m_workspaceController || !m_workspaceController->state().hasActiveIp) {
+        return false;
+    }
+
+    const ActiveWorkspaceState& state = m_workspaceController->state();
+    return module->ipcoreId() == state.ipcoreId &&
+           module->instanceId() == state.instanceId;
+}
+
+bool NodeEditorWidget::connectionBelongsToActiveWorkspace(const Connection* connection) const {
+    if (!connection) {
+        return false;
+    }
+
+    return moduleBelongsToActiveWorkspace(m_graph->getModule(connection->source().moduleId)) &&
+           moduleBelongsToActiveWorkspace(m_graph->getModule(connection->target().moduleId));
 }
 
 bool NodeEditorWidget::acceptsScopedModulePayload(const ScopedModulePayload& payload) const {
@@ -321,7 +357,7 @@ void NodeEditorWidget::onModuleAdded(Module* module) {
 }
 
 void NodeEditorWidget::ensureModuleInView(Module* module) {
-    if (!module || m_moduleToNodeId.contains(module->id())) {
+    if (!module || !moduleBelongsToActiveWorkspace(module) || m_moduleToNodeId.contains(module->id())) {
         return;
     }
 
@@ -357,7 +393,9 @@ void NodeEditorWidget::removeModuleFromView(const QString& moduleId) {
 }
 
 void NodeEditorWidget::onConnectionAdded(Connection* connection) {
-    ensureConnectionInView(connection);
+    if (!ensureConnectionInView(connection)) {
+        return;
+    }
 
     QString hostModuleId;
     if (isEndpointAttachmentConnection(m_graph, *connection, &hostModuleId)) {
@@ -366,7 +404,7 @@ void NodeEditorWidget::onConnectionAdded(Connection* connection) {
 }
 
 bool NodeEditorWidget::ensureConnectionInView(Connection* connection) {
-    if (!connection) {
+    if (!connection || !connectionBelongsToActiveWorkspace(connection)) {
         return false;
     }
 
@@ -933,7 +971,8 @@ bool NodeEditorWidget::createModuleAt(const ScopedModulePayload& payload, const 
     auto module = NodeEditorEntityFactory::createModule(m_graph,
                                                         moduleId,
                                                         payload.moduleType,
-                                                        payload.ipcoreId);
+                                                        payload.ipcoreId,
+                                                        payload.instanceId);
     if (!module) {
         return false;
     }
@@ -948,9 +987,30 @@ bool NodeEditorWidget::createModuleAt(const ScopedModulePayload& payload, const 
 
     auto command = std::make_unique<AddModuleCommand>(m_graph,
                                                       std::move(module),
-                                                      payload.ipcoreId);
+                                                      payload.ipcoreId,
+                                                      payload.instanceId);
     m_commandManager->executeCommand(std::move(command));
     return m_graph->getModule(moduleId) != nullptr;
+}
+
+void NodeEditorWidget::refreshVisibleGraphState() {
+    const QStringList connectionIds = m_connectionToQtId.keys();
+    for (const QString& connectionId : connectionIds) {
+        removeConnectionFromView(connectionId);
+    }
+
+    const QStringList moduleIds = m_moduleToNodeId.keys();
+    for (const QString& moduleId : moduleIds) {
+        removeModuleFromView(moduleId);
+    }
+
+    for (const auto& module : m_graph->modules()) {
+        ensureModuleInView(module.get());
+    }
+    for (const auto& connection : m_graph->connections()) {
+        ensureConnectionInView(connection.get());
+    }
+    refreshAllModulePresentations();
 }
 
 QPointF NodeEditorWidget::clampNodePosition(QtNodes::NodeId nodeId, const QPointF& position) const {
@@ -1003,6 +1063,9 @@ NodeEditorWidget::ModulePresentationState NodeEditorWidget::collectModulePresent
     ModulePresentationState state;
 
     for (const auto& connection : m_graph->connections()) {
+        if (!connectionBelongsToActiveWorkspace(connection.get())) {
+            continue;
+        }
         if (connection->source().moduleId != moduleId && connection->target().moduleId != moduleId) {
             continue;
         }

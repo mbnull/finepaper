@@ -74,6 +74,10 @@ GraphProjectLoadResult failure(const QString& error) {
     return {false, error};
 }
 
+QString instanceScopeKey(const QString& ipcoreId, const QString& instanceId) {
+    return ipcoreId + QLatin1Char('/') + instanceId;
+}
+
 GraphProjectLoadResult populateGraph(const ProjectDocument& document,
                                      const QHash<QString, const ModuleType*>& moduleTypesById,
                                      Graph& graph) {
@@ -82,6 +86,7 @@ GraphProjectLoadResult populateGraph(const ProjectDocument& document,
 
         auto module = instantiateModule(*type, record.id);
         module->setIpcoreId(record.ipcoreId);
+        module->setInstanceId(record.instanceId);
         // Values were type-checked before this function; conversion can use the
         // module type default as the target variant shape.
         for (auto it = record.parameters.begin(); it != record.parameters.end(); ++it) {
@@ -143,6 +148,7 @@ ProjectDocument GraphProjectSerializer::toProject(const Graph& graph, const QStr
         // are parameters and may differ per IP core.
         record.id = module->id();
         record.ipcoreId = ipcoreId;
+        record.instanceId = module->instanceId();
         record.type = module->type();
         for (auto it = module->parameters().constBegin(); it != module->parameters().constEnd(); ++it) {
             record.parameters.insert(it.key(), parameterToJson(it.value().value()));
@@ -172,6 +178,13 @@ ProjectDocument GraphProjectSerializer::toProject(const Graph& graph, const QStr
 GraphProjectLoadResult GraphProjectSerializer::loadProject(const ProjectDocument& document, Graph& graph) {
     QSet<QString> moduleIds;
     QHash<QString, const ModuleType*> moduleTypesById;
+    QSet<QString> validInstanceScopes;
+
+    for (const ProjectIpInstanceRecord& state : document.ipcoreState) {
+        if (!state.ipcoreId.trimmed().isEmpty() && !state.instanceId.trimmed().isEmpty()) {
+            validInstanceScopes.insert(instanceScopeKey(state.ipcoreId, state.instanceId));
+        }
+    }
 
     // First pass validates identifiers, IP core ownership, and parameter types
     // without mutating the live graph.
@@ -187,8 +200,15 @@ GraphProjectLoadResult GraphProjectSerializer::loadProject(const ProjectDocument
         if (record.ipcoreId.isEmpty()) {
             return failure(QStringLiteral("Module %1 is missing ipcore").arg(record.id));
         }
+        if (record.instanceId.trimmed().isEmpty()) {
+            return failure(QStringLiteral("Module %1 is missing instance").arg(record.id));
+        }
         if (record.type.isEmpty()) {
             return failure(QStringLiteral("Module %1 is missing type").arg(record.id));
+        }
+        if (!validInstanceScopes.contains(instanceScopeKey(record.ipcoreId, record.instanceId))) {
+            return failure(QStringLiteral("Module %1 references missing instance %2 for ipcore %3")
+                               .arg(record.id, record.instanceId, record.ipcoreId));
         }
 
         const ModuleType* type = ModuleRegistry::instance().getType(record.type);
