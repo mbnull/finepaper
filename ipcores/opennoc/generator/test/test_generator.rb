@@ -47,6 +47,7 @@ class OpenNoCGeneratorTest < Minitest::Test
       verify = File.read(File.join(output, 'verify.sh'))
       assert_includes verify, 'cd "$(dirname "$0")"'
       assert_includes verify, '-Irtl/include'
+      assert_includes verify, 'Known lint noise from the pinned OpenNoC vendor snapshot'
       assert_includes verify, '-Wno-WIDTHEXPAND'
       assert_includes verify, '-Wno-WIDTHCONCAT'
       assert_includes verify, '-GREQ_FLIT_WIDTH=128'
