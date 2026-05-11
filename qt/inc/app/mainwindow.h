@@ -11,6 +11,7 @@
 #include <vector>
 
 class Graph;
+class AppSettings;
 class CommandManager;
 class IIpInstanceParameterAdapter;
 class NodeEditorWidget;
@@ -36,10 +37,12 @@ class MainWindow : public QMainWindow {
     ~MainWindow() override;
 
     // Loads a Finepaper project from disk as the active document.
-    void loadGraph(const QString& path);
+    bool loadGraph(const QString& path);
+    bool hasOpenProject() const;
+    bool createProjectAt(const QString& path);
 
 private slots:
-    // Creates a new empty document.
+    // Prompts for a project path and creates a saved empty project.
     void newGraph();
     // Opens an existing project.
     void openGraph();
@@ -78,16 +81,20 @@ private slots:
     bool loadDocument(const QString& path);
     bool saveDocument(const QString& path);
     QString defaultDocumentPath() const;
+    QString defaultProjectDirectoryPath() const;
     void clearDocument();
     void scheduleDocumentStateRefresh();
     void syncDocumentStateFromHistory();
     void setCurrentDocumentPath(const QString& path);
     void setDocumentDirty(bool dirty);
+    void setProjectOpen(bool open);
+    bool requireOpenProject(const QString& actionName);
     void updateWindowTitle();
     void updateCommandActions();
 
     Graph* m_graph;
     std::unique_ptr<CommandManager> m_commandManager;
+    std::unique_ptr<AppSettings> m_appSettings;
     std::unique_ptr<IpCatalogService> m_ipCatalogService;
     std::unique_ptr<ProjectStateService> m_projectStateService;
     std::unique_ptr<ProjectIpService> m_projectIpService;
@@ -115,6 +122,7 @@ private slots:
     int m_cleanStateId = 0;
     bool m_documentDirty = false;
     bool m_documentStateRefreshPending = false;
+    bool m_projectOpen = false;
     bool m_suppressDocumentTracking = false;
 };
 

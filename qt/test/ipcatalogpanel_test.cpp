@@ -1,5 +1,4 @@
 // IP catalog panel widget tests.
-#include "app/mainwindow.h"
 #include "ipcore/ipcatalogservice.h"
 #include "modules/moduleregistry.h"
 #include "panels/ipcatalogpanel.h"
@@ -7,23 +6,41 @@
 #include "project/projectstateservice.h"
 #include "workspace/activeworkspacecontroller.h"
 
+#include <QAction>
 #include <QApplication>
 #include <QComboBox>
 #include <QDockWidget>
+#include <QFileInfo>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QMessageBox>
 #include <QMetaObject>
+#include <QSettings>
 #include <QSignalBlocker>
+#include <QTemporaryDir>
+#include <QTimer>
 #include <QToolButton>
 #include <QTreeWidget>
 #include <iostream>
 #include <stdexcept>
+
+#define private public
+#include "app/mainwindow.h"
+#undef private
 
 namespace {
 
 void require(bool condition, const char* message) {
     if (!condition) {
         throw std::runtime_error(message);
+    }
+}
+
+void closeOpenMessageBoxes() {
+    for (QWidget* widget : QApplication::topLevelWidgets()) {
+        if (auto* messageBox = qobject_cast<QMessageBox*>(widget)) {
+            messageBox->accept();
+        }
     }
 }
 
@@ -247,6 +264,37 @@ void testMainWindowUsesIpCatalogDockWithoutActiveCombo() {
             "MainWindow should remove legacy palette dock");
 }
 
+void testMainWindowStartsWithoutEditableUnsavedProject() {
+    MainWindow window;
+    require(!window.hasOpenProject(), "MainWindow should start without an open project");
+    require(window.findChild<QAction*>(QStringLiteral("generateAction"))->isEnabled() == false,
+            "Generate should be disabled without a saved project");
+    require(window.findChild<QAction*>(QStringLiteral("validateAction"))->isEnabled() == false,
+            "Validate should be disabled without a saved project");
+    require(window.findChild<IpCatalogPanel*>(QStringLiteral("ipCatalogPanel"))->isEnabled() == false,
+            "IP catalog editing should be disabled without a saved project");
+}
+
+void testMainWindowUsesProjectDirectoryForNewProjectDefault() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "temporary directory should be valid");
+
+    MainWindow window;
+    const QString projectPath = tempDir.filePath(QStringLiteral("projects/current_design.fpproj"));
+    require(window.createProjectAt(projectPath), "project should be created");
+    require(window.defaultProjectDirectoryPath() == QFileInfo(projectPath).absolutePath(),
+            "new project flow should default to the current project directory");
+}
+
+void testLoadGraphReportsFailureForInvalidPath() {
+    MainWindow window;
+    QTimer::singleShot(0, &closeOpenMessageBoxes);
+    require(!window.loadGraph(QStringLiteral("/tmp/does-not-exist.fpproj")),
+            "loadGraph should report failure for invalid paths");
+    require(!window.hasOpenProject(),
+            "failed loadGraph should leave MainWindow without an open project");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -254,6 +302,14 @@ int main(int argc, char** argv) {
         qputenv("QT_QPA_PLATFORM", "offscreen");
     }
     QApplication app(argc, argv);
+    QApplication::setOrganizationName(QStringLiteral("finepaper"));
+    QApplication::setApplicationName(QStringLiteral("finepaper_ipcatalogpanel_test"));
+    QTemporaryDir settingsDir;
+    if (!settingsDir.isValid()) {
+        std::cerr << "ipcatalogpanel_test failed: temporary settings directory should be valid\n";
+        return 1;
+    }
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settingsDir.path());
 
     try {
         testSearchFiltersCatalogEntries();
@@ -261,6 +317,9 @@ int main(int argc, char** argv) {
         testSelectingIpInstanceUpdatesActiveModuleAndToolLists();
         testPanelEmitsAddAndSelectSignals();
         testMainWindowUsesIpCatalogDockWithoutActiveCombo();
+        testMainWindowStartsWithoutEditableUnsavedProject();
+        testMainWindowUsesProjectDirectoryForNewProjectDefault();
+        testLoadGraphReportsFailureForInvalidPath();
     } catch (const std::exception& error) {
         std::cerr << "ipcatalogpanel_test failed: " << error.what() << '\n';
         return 1;

@@ -1,6 +1,8 @@
 // Entry point for Qt NoC/SoC editor application
 #include "app/mainwindow.h"
 #include "app/logformat.h"
+#include "app/projectlauncher.h"
+#include "app/startupflow.h"
 #include "app/uiscale.h"
 #include <QApplication>
 #include <QDir>
@@ -81,7 +83,22 @@ int main(int argc, char *argv[]) {
     QApplication::setApplicationName("finepaper");
     QApplication::setOrganizationName("finepaper");
     installFileLogger();
-    MainWindow   w;
+    MainWindow w;
+    const StartupFlowResult startupResult = selectStartupProject(
+        a.arguments(),
+        StartupFlowCallbacks{
+            .loadProject = [&](const QString& path) { return w.loadGraph(path); },
+            .createProject = [&](const QString& path) { return w.createProjectAt(path); },
+            .showLauncher = [&]() {
+                ProjectLauncherDialog launcher;
+                launcher.exec();
+                return launcher.result();
+            }
+        });
+    if (startupResult.action != StartupFlowResult::Action::ShowMainWindow) {
+        return startupResult.exitCode;
+    }
+
     w.show();
     return a.exec();
 }

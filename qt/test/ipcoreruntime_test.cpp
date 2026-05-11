@@ -1,4 +1,5 @@
 // IP core runtime tests for manifest discovery and command metadata.
+#include "app/appsettings.h"
 #include "graph/graph.h"
 #include "ipcore/ipcorecommandrunner.h"
 #include "project/ipinstanceparameteradapter.h"
@@ -11,6 +12,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QSettings>
 #include <QStringList>
 #include <QTemporaryDir>
 #include <algorithm>
@@ -490,6 +492,44 @@ void testDefaultDiscoveryUsesIpcoreRuntimeRootsOnly() {
     }
 }
 
+void testDefaultDiscoveryIncludesAppSettingsIpcorePaths() {
+    const QByteArray previous = qgetenv("FINEPAPER_IPCORE_PATH");
+    QTemporaryDir settingsRoot;
+    QTemporaryDir envRoot;
+    QTemporaryDir appSettingsRoot;
+    require(settingsRoot.isValid(), "temporary settings root should be valid");
+    require(envRoot.isValid(), "temporary env runtime root should be valid");
+    require(appSettingsRoot.isValid(), "temporary app settings runtime root should be valid");
+
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settingsRoot.path());
+    QCoreApplication::setOrganizationName(QStringLiteral("ipcoreruntime_test_org"));
+    QCoreApplication::setApplicationName(QStringLiteral("ipcoreruntime_test_app"));
+    AppSettings().setIpcorePaths(QStringList{appSettingsRoot.path()});
+    qputenv("FINEPAPER_IPCORE_PATH", envRoot.path().toLocal8Bit());
+
+    const QStringList roots = IpCoreRuntimeRegistry::defaultRuntimeRoots();
+    const QString envPath = QFileInfo(envRoot.path()).absoluteFilePath();
+    const QString appSettingsPath = QFileInfo(appSettingsRoot.path()).absoluteFilePath();
+    const QString generatedRoot = repositoryRuntimePath(QStringLiteral("generated/ipcores"));
+    const qsizetype envIndex = roots.indexOf(envPath);
+    const qsizetype appSettingsIndex = roots.indexOf(appSettingsPath);
+    const qsizetype generatedIndex = roots.indexOf(generatedRoot);
+
+    require(envIndex >= 0, "FINEPAPER_IPCORE_PATH root should be included");
+    require(appSettingsIndex >= 0, "AppSettings IP core root should be included");
+    require(generatedIndex >= 0, "repository generated ipcores root should be included");
+    require(envIndex < appSettingsIndex,
+            "AppSettings IP core roots should come after environment roots");
+    require(appSettingsIndex < generatedIndex,
+            "AppSettings IP core roots should come before repository roots");
+
+    if (previous.isEmpty()) {
+        qunsetenv("FINEPAPER_IPCORE_PATH");
+    } else {
+        qputenv("FINEPAPER_IPCORE_PATH", previous);
+    }
+}
+
 void testDefaultDiscoveryFindsGeneratedIpCoreRuntimes() {
     const QStringList roots = IpCoreRuntimeRegistry::defaultRuntimeRoots();
 
@@ -850,6 +890,7 @@ int main(int argc, char** argv) {
         testIpCoreCommandRunnerResolvesDrcCommand();
         testIpCoreCommandRunnerRejectsUnsupportedDrcInputFormat();
         testDefaultDiscoveryUsesIpcoreRuntimeRootsOnly();
+        testDefaultDiscoveryIncludesAppSettingsIpcorePaths();
         testDefaultDiscoveryFindsGeneratedIpCoreRuntimes();
         testRepositoryFinepaperNoCIpCoreMetadataLoads();
         testRepositoryRaveNoCIpCoreMetadataLoads();

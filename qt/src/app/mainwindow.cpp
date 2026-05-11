@@ -1,6 +1,7 @@
 // MainWindow — constructs and connects all top-level UI components.
 // Layout: horizontal splitter (IP catalog | node editor | property panel)
 // inside a vertical splitter with the log panel below.
+#include "app/appsettings.h"
 #include "app/mainwindow.h"
 #include "app/generationartifacts.h"
 #include "commands/topologypresetcommand.h"
@@ -82,6 +83,16 @@ QString documentDisplayName(const QString& path) {
     return path.isEmpty() ? QStringLiteral("Untitled") : QFileInfo(path).fileName();
 }
 
+void updateRecentProjectState(AppSettings* settings, const QString& path) {
+    if (!settings || path.trimmed().isEmpty()) {
+        return;
+    }
+
+    const QFileInfo info(path);
+    settings->addRecentProject(info.absoluteFilePath());
+    settings->setLastDirectory(info.absolutePath());
+}
+
 void appendLogLines(LogPanel* logPanel,
                     const QString& text,
                     const QColor& color,
@@ -106,6 +117,7 @@ MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent),
       m_graph(new Graph(this)),
       m_commandManager(std::make_unique<CommandManager>()),
+      m_appSettings(std::make_unique<AppSettings>()),
       m_ipCatalogService(std::make_unique<IpCatalogService>(IpCatalogService::fromRuntimeRegistries())),
       m_projectStateService(std::make_unique<ProjectStateService>()),
       m_projectIpService(std::make_unique<ProjectIpService>(m_projectStateService.get())),
@@ -137,20 +149,65 @@ MainWindow::MainWindow(QWidget *parent)
     setupActions();
     setCentralWidget(createCentralContent());
     setupDocks();
-    updateWindowTitle();
-    updateCommandActions();
-    resize(1920, 1080);
+    const QByteArray geometry = m_appSettings ? m_appSettings->mainWindowGeometry() : QByteArray();
+    if (!geometry.isEmpty()) {
+        restoreGeometry(geometry);
+    } else {
+        resize(1920, 1080);
+    }
+    const QByteArray state = m_appSettings ? m_appSettings->mainWindowState() : QByteArray();
+    if (!state.isEmpty()) {
+        restoreState(state);
+    }
+    setProjectOpen(false);
     appendStartupLog();
     scheduleStartupLayoutLog();
 }
 
 MainWindow::~MainWindow() = default;
 
-void MainWindow::loadGraph(const QString& path) {
-    loadDocument(path);
+bool MainWindow::loadGraph(const QString& path) {
+    return loadDocument(path);
+}
+
+bool MainWindow::hasOpenProject() const {
+    return m_projectOpen;
+}
+
+bool MainWindow::createProjectAt(const QString& path) {
+    const QString projectPath = path.trimmed().isEmpty()
+        ? QString()
+        : QFileInfo(pathWithProjectExtension(path)).absoluteFilePath();
+    if (projectPath.isEmpty()) {
+        return false;
+    }
+
+    Graph emptyGraph;
+    ProjectDocument document =
+        GraphProjectSerializer::toProject(emptyGraph, QFileInfo(projectPath).completeBaseName());
+    const ProjectWriteResult result = ProjectWriter::writeFile(projectPath, document);
+    if (!result.success) {
+        qWarning() << "Failed to create project at" << projectPath << result.error;
+        QMessageBox::warning(this, "Create Project Failed", result.error);
+        return false;
+    }
+
+    clearDocument();
+    setCurrentDocumentPath(projectPath);
+    m_cleanStateId = m_commandManager->currentStateId();
+    setProjectOpen(true);
+    syncDocumentStateFromHistory();
+    updateRecentProjectState(m_appSettings.get(), projectPath);
+    statusBar()->showMessage("Created " + QFileInfo(projectPath).fileName(), 5000);
+    qInfo() << "Created project at" << projectPath;
+    return true;
 }
 
 void MainWindow::saveGraph() {
+    if (!requireOpenProject(QStringLiteral("saving the project"))) {
+        return;
+    }
+
     if (!m_currentDocumentPath.isEmpty()) {
         saveDocument(m_currentDocumentPath);
         return;
@@ -168,6 +225,10 @@ void MainWindow::saveGraph() {
 }
 
 void MainWindow::saveGraphAs() {
+    if (!requireOpenProject(QStringLiteral("saving the project"))) {
+        return;
+    }
+
     QString path = QFileDialog::getSaveFileName(this,
                                                 "Save Project As",
                                                 defaultDocumentPath(),
@@ -180,15 +241,23 @@ void MainWindow::saveGraphAs() {
 }
 
 void MainWindow::newGraph() {
-    if (!maybeSaveChanges(QStringLiteral("creating a new design"))) {
+    if (!maybeSaveChanges(QStringLiteral("creating a new project"))) {
         return;
     }
 
-    clearDocument();
+    const QString path = QFileDialog::getSaveFileName(this,
+                                                      "Create Project",
+                                                      defaultProjectDirectoryPath(),
+                                                      projectFileDialogSaveFilter());
+    if (path.isEmpty()) {
+        return;
+    }
+
+    createProjectAt(pathWithProjectExtension(path));
 }
 
 void MainWindow::openGraph() {
-    if (!maybeSaveChanges(QStringLiteral("opening another design"))) {
+    if (!maybeSaveChanges(QStringLiteral("opening another project"))) {
         return;
     }
 
@@ -204,15 +273,27 @@ void MainWindow::openGraph() {
 }
 
 void MainWindow::generateVerilog() {
+    if (!requireOpenProject(QStringLiteral("generating Verilog"))) {
+        return;
+    }
+
     // Generation starts from a user-chosen directory because the IP-core command
     // may emit multiple RTL/support files beside the JSON handoff.
+    const QString initialDirectory = m_appSettings && !m_appSettings->lastOutputRoot().isEmpty()
+        ? m_appSettings->lastOutputRoot()
+        : (!m_currentDocumentPath.isEmpty()
+              ? QFileInfo(m_currentDocumentPath).absolutePath()
+              : defaultDocumentPath());
     const QString outputDirectory = QFileDialog::getExistingDirectory(
         this,
         "Select Verilog Output Folder",
-        QDir::currentPath(),
+        initialDirectory,
         QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
     if (outputDirectory.isEmpty()) {
         return;
+    }
+    if (m_appSettings) {
+        m_appSettings->setLastOutputRoot(outputDirectory);
     }
 
     QDir outputDir(outputDirectory);
@@ -366,6 +447,10 @@ void MainWindow::generateVerilog() {
 }
 
 void MainWindow::runValidation() {
+    if (!requireOpenProject(QStringLiteral("running validation"))) {
+        return;
+    }
+
     if (!m_validationManager) {
         qCritical() << "Validation manager not initialized, cannot run validation";
         return;
@@ -376,16 +461,26 @@ void MainWindow::runValidation() {
 }
 
 void MainWindow::undo() {
+    if (!requireOpenProject(QStringLiteral("undoing changes"))) {
+        return;
+    }
     m_commandManager->undo();
     syncDocumentStateFromHistory();
 }
 
 void MainWindow::redo() {
+    if (!requireOpenProject(QStringLiteral("redoing changes"))) {
+        return;
+    }
     m_commandManager->redo();
     syncDocumentStateFromHistory();
 }
 
 void MainWindow::createTopologyPreset() {
+    if (!requireOpenProject(QStringLiteral("creating topology"))) {
+        return;
+    }
+
     auto* action = qobject_cast<QAction*>(sender());
     if (!action || !m_activeWorkspaceController || !m_activeWorkspaceController->state().hasActiveIp) {
         return;
@@ -446,6 +541,10 @@ void MainWindow::createTopologyPreset() {
 
 void MainWindow::closeEvent(QCloseEvent* event) {
     if (maybeSaveChanges(QStringLiteral("closing the window"))) {
+        if (m_appSettings) {
+            m_appSettings->setMainWindowGeometry(saveGeometry());
+            m_appSettings->setMainWindowState(saveState());
+        }
         event->accept();
         return;
     }
@@ -534,6 +633,9 @@ void MainWindow::setupConnections() {
             &IpCatalogPanel::addIpcoreRequested,
             this,
             [this](const QString& ipcoreId) {
+                if (!requireOpenProject(QStringLiteral("editing the IP catalog"))) {
+                    return;
+                }
                 const std::optional<IpCatalogEntry> entry = m_ipCatalogService->entry(ipcoreId);
                 if (!entry.has_value()) {
                     return;
@@ -556,31 +658,37 @@ void MainWindow::setupActions() {
     // Menu and toolbar share the same QAction instances to keep enabled/check
     // states synchronized automatically.
     m_newAction = new QAction("New", this);
+    m_newAction->setObjectName(QStringLiteral("newAction"));
     m_newAction->setShortcut(QKeySequence::New);
     m_newAction->setShortcutContext(Qt::WidgetWithChildrenShortcut);
     connect(m_newAction, &QAction::triggered, this, &MainWindow::newGraph);
 
     m_openAction = new QAction("Open...", this);
+    m_openAction->setObjectName(QStringLiteral("openAction"));
     m_openAction->setShortcut(QKeySequence::Open);
     m_openAction->setShortcutContext(Qt::WidgetWithChildrenShortcut);
     connect(m_openAction, &QAction::triggered, this, &MainWindow::openGraph);
 
     m_saveAction = new QAction("Save", this);
+    m_saveAction->setObjectName(QStringLiteral("saveAction"));
     m_saveAction->setShortcut(QKeySequence::Save);
     m_saveAction->setShortcutContext(Qt::WidgetWithChildrenShortcut);
     connect(m_saveAction, &QAction::triggered, this, &MainWindow::saveGraph);
 
     m_saveAsAction = new QAction("Save As...", this);
+    m_saveAsAction->setObjectName(QStringLiteral("saveAsAction"));
     m_saveAsAction->setShortcut(QKeySequence::SaveAs);
     m_saveAsAction->setShortcutContext(Qt::WidgetWithChildrenShortcut);
     connect(m_saveAsAction, &QAction::triggered, this, &MainWindow::saveGraphAs);
 
     m_undoAction = new QAction("Undo", this);
+    m_undoAction->setObjectName(QStringLiteral("undoAction"));
     m_undoAction->setShortcuts(QKeySequence::keyBindings(QKeySequence::Undo));
     m_undoAction->setShortcutContext(Qt::WidgetWithChildrenShortcut);
     connect(m_undoAction, &QAction::triggered, this, &MainWindow::undo);
 
     m_redoAction = new QAction("Redo", this);
+    m_redoAction->setObjectName(QStringLiteral("redoAction"));
     QList<QKeySequence> redoShortcuts = QKeySequence::keyBindings(QKeySequence::Redo);
     if (!redoShortcuts.contains(QKeySequence(QStringLiteral("Ctrl+Shift+Z")))) {
         redoShortcuts.push_back(QKeySequence(QStringLiteral("Ctrl+Shift+Z")));
@@ -602,14 +710,17 @@ void MainWindow::setupActions() {
     addAction(m_redoAction);
 
     m_generateAction = new QAction("Generate Verilog", this);
+    m_generateAction->setObjectName(QStringLiteral("generateAction"));
     m_generateAction->setToolTip("Write IP-core graph input and a project snapshot, then generate Verilog in a selected folder.");
     connect(m_generateAction, &QAction::triggered, this, &MainWindow::generateVerilog);
 
     m_validateAction = new QAction("Validate", this);
+    m_validateAction->setObjectName(QStringLiteral("validateAction"));
     m_validateAction->setToolTip("Run validation for the current graph.");
     connect(m_validateAction, &QAction::triggered, this, &MainWindow::runValidation);
 
     m_arrangeAction = new QAction("Arrange", this);
+    m_arrangeAction->setObjectName(QStringLiteral("arrangeAction"));
     m_arrangeAction->setCheckable(true);
     m_arrangeAction->setToolTip("Arrange the graph once into a mesh-style layout.");
     connect(m_arrangeAction, &QAction::toggled, m_nodeEditor, &NodeEditorWidget::setArrangeEnabled);
@@ -774,7 +885,8 @@ void MainWindow::rebuildTopologyMenu() {
     }
 
     m_topologyMenu->clear();
-    if (!m_activeWorkspaceController || !m_activeWorkspaceController->state().hasActiveIp) {
+    m_topologyMenu->setEnabled(false);
+    if (!m_projectOpen || !m_activeWorkspaceController || !m_activeWorkspaceController->state().hasActiveIp) {
         return;
     }
 
@@ -784,10 +896,11 @@ void MainWindow::rebuildTopologyMenu() {
         action->setData(preset.id);
         connect(action, &QAction::triggered, this, &MainWindow::createTopologyPreset);
     }
+    m_topologyMenu->setEnabled(!workspace.topologyPresets.isEmpty());
 }
 
 bool MainWindow::maybeSaveChanges(const QString& actionDescription) {
-    if (!m_documentDirty) {
+    if (!m_projectOpen || !m_documentDirty) {
         return true;
     }
 
@@ -823,17 +936,18 @@ bool MainWindow::maybeSaveChanges(const QString& actionDescription) {
 }
 
 bool MainWindow::loadDocument(const QString& path) {
-    qInfo() << "Loading document from" << path;
+    const QString absolutePath = QFileInfo(path).absoluteFilePath();
+    qInfo() << "Loading document from" << absolutePath;
 
     // Format detection is content-based instead of extension-based so renamed
     // project files still load through the correct path.
-    const ProjectFileKind kind = ProjectReader::detectKind(path);
+    const ProjectFileKind kind = ProjectReader::detectKind(absolutePath);
     if (kind == ProjectFileKind::Project) {
         // Project files carry IP-core ownership and typed parameters, so load
         // through the serializer.
-        const ProjectReadResult readResult = ProjectReader::readFile(path);
+        const ProjectReadResult readResult = ProjectReader::readFile(absolutePath);
         if (!readResult.success) {
-            qWarning() << "Failed to read project" << path << readResult.error;
+            qWarning() << "Failed to read project" << absolutePath << readResult.error;
             QMessageBox::warning(this, "Open Failed", readResult.error);
             return false;
         }
@@ -845,7 +959,7 @@ bool MainWindow::loadDocument(const QString& path) {
             GraphProjectSerializer::loadProject(readResult.document, *m_graph);
         if (!loadResult.success) {
             m_suppressDocumentTracking = false;
-            qWarning() << "Failed to load project graph" << path << loadResult.error;
+            qWarning() << "Failed to load project graph" << absolutePath << loadResult.error;
             QMessageBox::warning(this, "Open Failed", loadResult.error);
             return false;
         }
@@ -859,43 +973,64 @@ bool MainWindow::loadDocument(const QString& path) {
         // After a successful project load, the current command state becomes
         // the clean baseline for window title and save action enablement.
         m_cleanStateId = m_commandManager->currentStateId();
-        setCurrentDocumentPath(path);
+        setCurrentDocumentPath(absolutePath);
+        setProjectOpen(true);
         syncDocumentStateFromHistory();
-        statusBar()->showMessage("Opened " + QFileInfo(path).fileName(), 5000);
-        qInfo() << "Project load finished for" << path
+        updateRecentProjectState(m_appSettings.get(), absolutePath);
+        statusBar()->showMessage("Opened " + QFileInfo(absolutePath).fileName(), 5000);
+        qInfo() << "Project load finished for" << absolutePath
                 << "modules" << m_graph->modules().size()
                 << "connections" << m_graph->connections().size();
         return true;
     }
 
-    qWarning() << "Unsupported document format" << path;
+    qWarning() << "Unsupported document format" << absolutePath;
     // Unknown files leave the existing design untouched.
-    QMessageBox::warning(this, "Open Failed", "Unsupported document format: " + path);
+    QMessageBox::warning(this, "Open Failed", "Unsupported document format: " + absolutePath);
     return false;
 }
 
 bool MainWindow::saveDocument(const QString& path) {
-    qInfo() << "Saving project to" << path;
+    const QString absolutePath = QFileInfo(pathWithProjectExtension(path)).absoluteFilePath();
+    qInfo() << "Saving project to" << absolutePath;
     ProjectDocument document =
-        GraphProjectSerializer::toProject(*m_graph, QFileInfo(path).completeBaseName());
+        GraphProjectSerializer::toProject(*m_graph, QFileInfo(absolutePath).completeBaseName());
     m_projectStateService->writeToDocument(document);
-    const ProjectWriteResult result = ProjectWriter::writeFile(path, document);
+    const ProjectWriteResult result = ProjectWriter::writeFile(absolutePath, document);
     if (!result.success) {
-        qWarning() << "Failed to save project to" << path << result.error;
+        qWarning() << "Failed to save project to" << absolutePath << result.error;
         QMessageBox::warning(this, "Save Failed", result.error);
         return false;
     }
 
-    setCurrentDocumentPath(path);
+    setCurrentDocumentPath(absolutePath);
     m_cleanStateId = m_commandManager->currentStateId();
+    setProjectOpen(true);
     syncDocumentStateFromHistory();
-    statusBar()->showMessage("Saved " + QFileInfo(path).fileName(), 5000);
-    qInfo() << "Saved project to" << path;
+    updateRecentProjectState(m_appSettings.get(), absolutePath);
+    statusBar()->showMessage("Saved " + QFileInfo(absolutePath).fileName(), 5000);
+    qInfo() << "Saved project to" << absolutePath;
     return true;
 }
 
 QString MainWindow::defaultDocumentPath() const {
-    return m_currentDocumentPath.isEmpty() ? QDir::currentPath() : m_currentDocumentPath;
+    if (!m_currentDocumentPath.isEmpty()) {
+        return m_currentDocumentPath;
+    }
+    if (m_appSettings && !m_appSettings->lastDirectory().isEmpty()) {
+        return m_appSettings->lastDirectory();
+    }
+    return QDir::currentPath();
+}
+
+QString MainWindow::defaultProjectDirectoryPath() const {
+    if (!m_currentDocumentPath.isEmpty()) {
+        return QFileInfo(m_currentDocumentPath).absolutePath();
+    }
+    if (m_appSettings && !m_appSettings->lastDirectory().isEmpty()) {
+        return m_appSettings->lastDirectory();
+    }
+    return QDir::currentPath();
 }
 
 void MainWindow::clearDocument() {
@@ -909,8 +1044,8 @@ void MainWindow::clearDocument() {
     m_commandManager->clearHistory();
     m_cleanStateId = m_commandManager->currentStateId();
     setCurrentDocumentPath(QString());
+    setProjectOpen(false);
     syncDocumentStateFromHistory();
-    statusBar()->showMessage("Started a new design", 5000);
 }
 
 void MainWindow::scheduleDocumentStateRefresh() {
@@ -928,7 +1063,7 @@ void MainWindow::scheduleDocumentStateRefresh() {
 }
 
 void MainWindow::syncDocumentStateFromHistory() {
-    setDocumentDirty(m_commandManager->currentStateId() != m_cleanStateId);
+    setDocumentDirty(m_projectOpen && m_commandManager->currentStateId() != m_cleanStateId);
     updateCommandActions();
 }
 
@@ -946,21 +1081,62 @@ void MainWindow::setDocumentDirty(bool dirty) {
     updateWindowTitle();
 }
 
+void MainWindow::setProjectOpen(bool open) {
+    m_projectOpen = open;
+    if (m_nodeEditor) {
+        m_nodeEditor->setEnabled(open);
+    }
+    if (m_propertyPanel) {
+        m_propertyPanel->setEnabled(open);
+    }
+    if (m_ipCatalogPanel) {
+        m_ipCatalogPanel->setEnabled(open);
+    }
+    rebuildTopologyMenu();
+    updateWindowTitle();
+    updateCommandActions();
+}
+
+bool MainWindow::requireOpenProject(const QString& actionName) {
+    if (m_projectOpen) {
+        return true;
+    }
+
+    const QString message = QString("Create or open a project before %1.").arg(actionName);
+    statusBar()->showMessage(message, 5000);
+    qWarning().noquote() << message;
+    return false;
+}
+
 void MainWindow::updateWindowTitle() {
-    const QString title = QString("%1%2 - SoC/NoC Node Editor")
-                              .arg(documentDisplayName(m_currentDocumentPath),
-                                   m_documentDirty ? QStringLiteral("*") : QString());
+    const QString title = !m_projectOpen
+        ? QStringLiteral("Finepaper - SoC/NoC Node Editor")
+        : QString("%1%2 - SoC/NoC Node Editor")
+              .arg(documentDisplayName(m_currentDocumentPath),
+                   m_documentDirty ? QStringLiteral("*") : QString());
     setWindowTitle(title);
 }
 
 void MainWindow::updateCommandActions() {
     if (m_saveAction) {
-        m_saveAction->setEnabled(m_documentDirty || !m_currentDocumentPath.isEmpty());
+        m_saveAction->setEnabled(m_projectOpen && (m_documentDirty || !m_currentDocumentPath.isEmpty()));
+    }
+    if (m_saveAsAction) {
+        m_saveAsAction->setEnabled(m_projectOpen);
     }
     if (m_undoAction) {
-        m_undoAction->setEnabled(m_commandManager->canUndo());
+        m_undoAction->setEnabled(m_projectOpen && m_commandManager->canUndo());
     }
     if (m_redoAction) {
-        m_redoAction->setEnabled(m_commandManager->canRedo());
+        m_redoAction->setEnabled(m_projectOpen && m_commandManager->canRedo());
+    }
+    if (m_generateAction) {
+        m_generateAction->setEnabled(m_projectOpen);
+    }
+    if (m_validateAction) {
+        m_validateAction->setEnabled(m_projectOpen);
+    }
+    if (m_arrangeAction) {
+        m_arrangeAction->setEnabled(m_projectOpen);
     }
 }

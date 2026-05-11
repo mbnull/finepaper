@@ -41,6 +41,7 @@ local function add_qt_test_target(name, source_files, extra_files)
 
         add_includedirs("inc")
         add_files(source_files)
+        add_files("src/app/appsettings.cpp")
         if extra_files then
             add_files(extra_files)
         end
@@ -177,6 +178,16 @@ add_qt_test_target("logformat_test", "test/logformat_test.cpp", {
     "inc/**/logformat.h"
 })
 
+add_qt_test_target("appsettings_test", "test/appsettings_test.cpp", {
+    "inc/app/appsettings.h"
+})
+
+add_qt_test_target("startupflow_test", "test/startupflow_test.cpp", {
+    "src/app/startupflow.cpp",
+    "inc/app/startupflow.h",
+    "inc/app/projectlauncher.h"
+})
+
 add_qt_test_target("projectdocument_test", "test/projectdocument_test.cpp", {
     "src/connection/connectionruleservice.cpp",
     "src/ipcore/ipcoregraphexporter.cpp",
@@ -231,6 +242,7 @@ target("projectipservice_test")
 
     add_includedirs("inc")
     add_files("test/projectipservice_test.cpp")
+    add_files("src/app/appsettings.cpp")
     add_files("src/project/projectipservice.cpp")
     add_files("src/project/projectstateservice.cpp")
     add_files("src/ipcore/ipcatalogservice.cpp")
@@ -277,6 +289,7 @@ target("propertypanel_test")
 
     add_includedirs("inc")
     add_files("test/propertypanel_test.cpp")
+    add_files("src/app/appsettings.cpp")
     add_files("src/panels/propertypanel.cpp")
     add_files("src/widgets/collapsiblesection.cpp")
     add_files("src/project/projectstateservice.cpp")
@@ -318,9 +331,11 @@ target("ipcatalogpanel_test")
     add_packages("nodeeditor")
     add_includedirs("inc")
     add_files("test/ipcatalogpanel_test.cpp")
+    add_files("src/app/appsettings.cpp")
     add_files("src/app/mainwindow.cpp")
     add_files("src/app/generationartifacts.cpp")
     add_files("src/app/logformat.cpp")
+    add_files("src/app/projectlauncher.cpp")
     add_files("src/panels/*.cpp")
     add_files("src/widgets/*.cpp")
     add_files("src/ipcore/*.cpp")
@@ -361,6 +376,7 @@ target("nodeeditor_geometry_test")
     add_packages("nodeeditor")
     add_includedirs("inc")
     add_files("test/nodeeditor_geometry_test.cpp")
+    add_files("src/app/appsettings.cpp")
     add_files("src/connection/connectionruleservice.cpp")
     add_files("src/commands/addconnectioncommand.cpp")
     add_files("src/commands/addmodulecommand.cpp")

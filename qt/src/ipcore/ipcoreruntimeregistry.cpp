@@ -1,5 +1,6 @@
 // IpCoreRuntimeRegistry parses IP core runtime manifests discovered at startup.
 #include "ipcore/ipcoreruntimeregistry.h"
+#include "app/appsettings.h"
 
 #include <QCoreApplication>
 #include <QDebug>
@@ -360,6 +361,10 @@ QStringList IpCoreRuntimeRegistry::defaultRuntimeRoots() {
 
     const QString envPath = qEnvironmentVariable("FINEPAPER_IPCORE_PATH");
     for (const QString& path : envPath.split(QDir::listSeparator(), Qt::SkipEmptyParts)) {
+        appendUniquePath(roots, path);
+    }
+
+    for (const QString& path : AppSettings().ipcorePaths()) {
         appendUniquePath(roots, path);
     }
 
