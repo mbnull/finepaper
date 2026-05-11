@@ -15,8 +15,8 @@ void require(bool condition, const char* message) {
     }
 }
 
-PluginDescriptor ravenocDescriptor() {
-    PluginDescriptor descriptor;
+IpCoreRuntimeDescriptor ravenocDescriptor() {
+    IpCoreRuntimeDescriptor descriptor;
     descriptor.id = QStringLiteral("finepaper.ravenoc");
     descriptor.name = QStringLiteral("RaveNoC");
     descriptor.version = QStringLiteral("0.1");
@@ -26,9 +26,9 @@ PluginDescriptor ravenocDescriptor() {
     descriptor.modulesPath = QStringLiteral("/tmp/generated/ipcores/finepaper.ravenoc/modules.xml");
     descriptor.graphicsPath = QStringLiteral("/tmp/generated/ipcores/finepaper.ravenoc/graphics");
 
-    PluginInstanceParameterDescriptor width;
+    IpCoreInstanceParameterDescriptor width;
     width.name = QStringLiteral("flit_data_width");
-    width.type = QStringLiteral("integer");
+    width.type = QStringLiteral("int");
     width.defaultValue = 32;
     descriptor.instanceParameters.insert(width.name, width);
 
@@ -48,7 +48,7 @@ void testCatalogEntryCopiesDiscoveredMetadata() {
     tile.ipcoreId = QStringLiteral("finepaper.ravenoc");
     require(registry.registerType(tile), "test module type should register");
 
-    const PluginDescriptor descriptor = ravenocDescriptor();
+    const IpCoreRuntimeDescriptor descriptor = ravenocDescriptor();
     IpCatalogService service({descriptor}, &registry);
 
     const std::optional<IpCatalogEntry> entry =
@@ -82,12 +82,12 @@ void testCatalogEntriesAreSortedAndSelectableEntriesAreFiltered() {
     betaType.ipcoreId = QStringLiteral("finepaper.beta");
     require(registry.registerType(betaType), "beta module type should register");
 
-    PluginDescriptor alpha;
+    IpCoreRuntimeDescriptor alpha;
     alpha.id = QStringLiteral("finepaper.alpha");
     alpha.name = QStringLiteral("Alpha");
     alpha.version = QStringLiteral("1.0");
 
-    PluginDescriptor beta;
+    IpCoreRuntimeDescriptor beta;
     beta.id = QStringLiteral("finepaper.beta");
     beta.name = QStringLiteral("Beta");
     beta.version = QStringLiteral("1.0");

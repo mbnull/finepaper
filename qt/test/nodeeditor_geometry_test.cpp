@@ -37,8 +37,8 @@ void require(bool condition, const char* message) {
 
 constexpr auto ScopedModuleMime = "application/x-finepaper-module";
 
-PluginDescriptor nodeEditorRavenocDescriptor() {
-    PluginDescriptor descriptor;
+IpCoreRuntimeDescriptor nodeEditorRavenocDescriptor() {
+    IpCoreRuntimeDescriptor descriptor;
     descriptor.id = QStringLiteral("finepaper.ravenoc");
     descriptor.name = QStringLiteral("RaveNoC");
     descriptor.version = QStringLiteral("1.0");
@@ -46,8 +46,8 @@ PluginDescriptor nodeEditorRavenocDescriptor() {
     return descriptor;
 }
 
-PluginDescriptor nodeEditorFabricDescriptor() {
-    PluginDescriptor descriptor;
+IpCoreRuntimeDescriptor nodeEditorFabricDescriptor() {
+    IpCoreRuntimeDescriptor descriptor;
     descriptor.id = QStringLiteral("finepaper.fabric");
     descriptor.name = QStringLiteral("Fabric");
     descriptor.version = QStringLiteral("1.0");
@@ -73,8 +73,8 @@ struct ScopedNodeEditorHarness {
     Graph graph;
     CommandManager commandManager;
     ModuleRegistry registry{ModuleRegistry::LoadMode::Empty};
-    PluginDescriptor ravenoc = nodeEditorRavenocDescriptor();
-    PluginDescriptor fabric = nodeEditorFabricDescriptor();
+    IpCoreRuntimeDescriptor ravenoc = nodeEditorRavenocDescriptor();
+    IpCoreRuntimeDescriptor fabric = nodeEditorFabricDescriptor();
     IpCatalogService catalog;
     ProjectStateService stateService;
     ProjectIpService projectIpService;
@@ -82,7 +82,7 @@ struct ScopedNodeEditorHarness {
     NodeEditorWidget editor;
 
     ScopedNodeEditorHarness()
-        : catalog(QList<PluginDescriptor>{ravenoc, fabric}, &registry),
+        : catalog(QList<IpCoreRuntimeDescriptor>{ravenoc, fabric}, &registry),
           projectIpService(&stateService),
           workspaceController(&projectIpService, &catalog),
           editor(&graph, &stateService, &workspaceController, &commandManager) {
@@ -92,7 +92,7 @@ struct ScopedNodeEditorHarness {
         require(registry.registerType(scopedEditorType(QStringLiteral("FabricSwitch"),
                                                        QStringLiteral("finepaper.fabric"))),
                 "FabricSwitch test type should register");
-        catalog = IpCatalogService(QList<PluginDescriptor>{ravenoc, fabric}, &registry);
+        catalog = IpCatalogService(QList<IpCoreRuntimeDescriptor>{ravenoc, fabric}, &registry);
         editor.resize(320, 240);
         editor.show();
         QCoreApplication::processEvents();

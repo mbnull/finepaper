@@ -30,7 +30,7 @@ The main rule in the codebase is that the `Graph` is the source of truth. UI wid
 - one `LogPanel`
 - one `ValidationManager`
 
-Before module metadata is used, `PluginRegistry` discovers generated runtime manifests from `FINEPAPER_PLUGIN_PATH` and repository-local `generated/ipcores/<ipcore-id>/` directories. Discovery is startup-only. The registry stores directory runtime metadata and native plugin metadata, but native libraries are not loaded in this version.
+Before module metadata is used, `IpCoreRuntimeRegistry` discovers generated runtime manifests from `FINEPAPER_IPCORE_PATH` and repository-local `generated/ipcores/` directories. Discovery is startup-only.
 
 `IpCatalogService` turns those runtime manifests into `IpCatalogEntry` records. `ProjectIpService` owns project IP instances and the current selected instance. `ActiveWorkspaceController` combines the selected project instance with its catalog entry to expose the active workspace's IP core id, instance id, module types, and topology presets.
 
@@ -121,9 +121,9 @@ For each runtime bundle, the provider stack is:
 - `XmlModuleGraphicsOverlay` for per-IP graphics files
 - `LayeredModuleProvider` to combine the source and optional overlays
 
-Each loaded `ModuleType` stores the owning `pluginId`, which corresponds to the IP core id in the catalog. Type names are unique in the current registry; duplicate type names from later runtime bundles are skipped.
+Each loaded `ModuleType` stores the owning `ipcoreId`, which corresponds to the IP core id in the catalog. Type names are unique in the current registry; duplicate type names from later runtime bundles are skipped.
 
-Editable concrete IP core packages live under `ipcores/<package>/` with `ipcore.yml`, `views/`, `generator/`, and `vendor/`. The committed generated runtime metadata lives under `generated/ipcores/<ipcore-id>/` with `plugin.json`, `modules.xml`, and `graphics/`. In `plugin.json`, `source_root` points back to the editable package. Qt resolves `modules` and `graphics` against the generated runtime root, then stores the source package path as `IpCatalogEntry::sourceRootPath` for generator and DRC process working directories.
+Editable concrete IP core packages live under `ipcores/<package>/` with `ipcore.yml`, `views/`, `generator/`, and `vendor/`. The committed generated runtime metadata lives under `generated/ipcores/<ipcore-id>/` with `ipcore-runtime.json`, `modules.xml`, and `graphics/`. In `ipcore-runtime.json`, `source_root` points back to the editable package. Qt resolves `modules` and `graphics` against the generated runtime root, then stores the source package path as `IpCatalogEntry::sourceRootPath` for generator and DRC process working directories.
 
 Bundle metadata controls:
 
@@ -198,11 +198,10 @@ Generation uses the same active IP catalog entry and project instance. It writes
 ## Operational assumptions
 
 - Concrete IP core packages are editable directories under `ipcores/<package>/`; the bundled Finepaper NoC and RaveNoC packages use Ruby and provide `generator/bin/generate`.
-- Runtime bundles are generated under `generated/ipcores/<ipcore-id>/` and contain `plugin.json`, `modules.xml`, and per-IP graphics files.
-- In `plugin.json`, `source_root` points back to the source package. Qt resolves module and graphics metadata against the generated runtime root and executes generator/DRC commands in `IpCatalogEntry::sourceRootPath`.
+- Runtime bundles are generated under `generated/ipcores/<ipcore-id>/` and contain `ipcore-runtime.json`, `modules.xml`, and per-IP graphics files.
+- In `ipcore-runtime.json`, `source_root` points back to the source package. Qt resolves module and graphics metadata against the generated runtime root and executes generator/DRC commands in `IpCatalogEntry::sourceRootPath`.
 - Authored JSON module bundles are deprecated conversion inputs; IP-XACT remains a conversion input, not the preferred runtime layout.
 - Reserve `plugins/` wording for feature plugins or editor behavior extensions, not concrete NoC or RaveNoC IP packages.
-- Native plugin metadata may be present in `plugin.json`, but C++ dynamic libraries are not loaded yet.
 - Position is stored as module parameters such as `x` and `y`.
 - Some editor-only state, such as transient selection, is intentionally omitted from graph export.
 

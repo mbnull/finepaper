@@ -50,15 +50,15 @@ QTreeWidgetItem* findCatalogCategory(QTreeWidget* catalog, const QString& text) 
     return nullptr;
 }
 
-PluginDescriptor ravenocDescriptor() {
-    PluginDescriptor descriptor;
+IpCoreRuntimeDescriptor ravenocDescriptor() {
+    IpCoreRuntimeDescriptor descriptor;
     descriptor.id = QStringLiteral("finepaper.ravenoc");
     descriptor.name = QStringLiteral("RaveNoC");
     descriptor.version = QStringLiteral("0.1");
     descriptor.kind = QStringLiteral("noc");
     descriptor.generator.command = QStringLiteral("ruby");
 
-    PluginInstanceParameterDescriptor width;
+    IpCoreInstanceParameterDescriptor width;
     width.name = QStringLiteral("flit_data_width");
     width.type = QStringLiteral("int");
     width.defaultValue = 32;
@@ -72,8 +72,8 @@ PluginDescriptor ravenocDescriptor() {
     return descriptor;
 }
 
-PluginDescriptor fabricDescriptor() {
-    PluginDescriptor descriptor;
+IpCoreRuntimeDescriptor fabricDescriptor() {
+    IpCoreRuntimeDescriptor descriptor;
     descriptor.id = QStringLiteral("finepaper.fabric");
     descriptor.name = QStringLiteral("Fabric");
     descriptor.version = QStringLiteral("1.0");
@@ -84,15 +84,15 @@ PluginDescriptor fabricDescriptor() {
 
 struct TestHarness {
     ModuleRegistry registry{ModuleRegistry::LoadMode::Empty};
-    PluginDescriptor ravenoc = ravenocDescriptor();
-    PluginDescriptor fabric = fabricDescriptor();
+    IpCoreRuntimeDescriptor ravenoc = ravenocDescriptor();
+    IpCoreRuntimeDescriptor fabric = fabricDescriptor();
     IpCatalogService catalog;
     ProjectStateService stateService;
     ProjectIpService projectIpService;
     ActiveWorkspaceController workspaceController;
 
     TestHarness()
-        : catalog(QList<PluginDescriptor>{ravenoc, fabric}, &registry),
+        : catalog(QList<IpCoreRuntimeDescriptor>{ravenoc, fabric}, &registry),
           projectIpService(&stateService),
           workspaceController(&projectIpService, &catalog) {
         ModuleType raveTile;
@@ -107,7 +107,7 @@ struct TestHarness {
         fabricSwitch.paletteLabel = QStringLiteral("Fabric Switch");
         require(registry.registerType(fabricSwitch), "FabricSwitch should register");
 
-        catalog = IpCatalogService(QList<PluginDescriptor>{ravenoc, fabric}, &registry);
+        catalog = IpCatalogService(QList<IpCoreRuntimeDescriptor>{ravenoc, fabric}, &registry);
     }
 
     IpCatalogEntry ravenocEntry() const {

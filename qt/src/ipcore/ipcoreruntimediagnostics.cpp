@@ -1,5 +1,5 @@
-// StartupDiagnostics formats loaded plugin and IP metadata for UI/console logs.
-#include "plugins/startupdiagnostics.h"
+// IpCoreRuntimeDiagnostics formats loaded IP core runtime and IP metadata.
+#include "ipcore/ipcoreruntimediagnostics.h"
 
 #include <QFileInfo>
 
@@ -9,8 +9,8 @@ QString emptyFallback(const QString& value, const QString& fallback = QStringLit
     return value.trimmed().isEmpty() ? fallback : value;
 }
 
-QString pluginVersionText(const PluginDescriptor& plugin) {
-    return plugin.version.trimmed().isEmpty() ? QString() : QStringLiteral(" v%1").arg(plugin.version);
+QString runtimeVersionText(const IpCoreRuntimeDescriptor& runtime) {
+    return runtime.version.trimmed().isEmpty() ? QString() : QStringLiteral(" v%1").arg(runtime.version);
 }
 
 QString moduleBundleFormat(const QString& modulesPath) {
@@ -26,25 +26,25 @@ QString moduleBundleFormat(const QString& modulesPath) {
 
 } // namespace
 
-namespace StartupDiagnostics {
+namespace IpCoreRuntimeDiagnostics {
 
-QStringList pluginLogLines(const QList<PluginDescriptor>& plugins) {
-    if (plugins.isEmpty()) {
-        return {QStringLiteral("[Startup] No plugins loaded.")};
+QStringList runtimeLogLines(const QList<IpCoreRuntimeDescriptor>& runtimes) {
+    if (runtimes.isEmpty()) {
+        return {QStringLiteral("[Startup] No IP core runtimes loaded.")};
     }
 
     QStringList lines;
-    for (const PluginDescriptor& plugin : plugins) {
-        const QString generator = plugin.generator.hasGenerator()
-            ? plugin.generator.command
+    for (const IpCoreRuntimeDescriptor& runtime : runtimes) {
+        const QString generator = runtime.generator.hasCommand()
+            ? runtime.generator.command
             : QStringLiteral("(none)");
-        lines.append(QStringLiteral("[Startup] Plugin %1: %2%3 bundle=%4 modules=%5 graphics=%6 generator=%7")
-                         .arg(plugin.id,
-                              emptyFallback(plugin.name, plugin.id),
-                              pluginVersionText(plugin),
-                              moduleBundleFormat(plugin.modulesPath),
-                              emptyFallback(plugin.modulesPath),
-                              emptyFallback(plugin.graphicsPath),
+        lines.append(QStringLiteral("[Startup] IP core runtime %1: %2%3 bundle=%4 modules=%5 graphics=%6 generator=%7")
+                         .arg(runtime.id,
+                              emptyFallback(runtime.name, runtime.id),
+                              runtimeVersionText(runtime),
+                              moduleBundleFormat(runtime.modulesPath),
+                              emptyFallback(runtime.modulesPath),
+                              emptyFallback(runtime.graphicsPath),
                               generator));
     }
     return lines;
@@ -74,10 +74,10 @@ QStringList ipLogLines(const ModuleRegistry& registry) {
     return lines;
 }
 
-QStringList logLines(const QList<PluginDescriptor>& plugins, const ModuleRegistry& registry) {
-    QStringList lines = pluginLogLines(plugins);
+QStringList logLines(const QList<IpCoreRuntimeDescriptor>& runtimes, const ModuleRegistry& registry) {
+    QStringList lines = runtimeLogLines(runtimes);
     lines.append(ipLogLines(registry));
     return lines;
 }
 
-} // namespace StartupDiagnostics
+} // namespace IpCoreRuntimeDiagnostics

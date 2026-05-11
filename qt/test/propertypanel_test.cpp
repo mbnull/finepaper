@@ -56,16 +56,16 @@ void testUnselectedPanelShowsIpInstanceParameters() {
     document.ipcoreState.push_back(state);
     stateService.loadFromDocument(document);
 
-    PluginDescriptor plugin;
-    plugin.id = QStringLiteral("finepaper.ravenoc");
-    plugin.name = QStringLiteral("RaveNoC");
-    PluginInstanceParameterDescriptor width;
+    IpCoreRuntimeDescriptor runtime;
+    runtime.id = QStringLiteral("finepaper.ravenoc");
+    runtime.name = QStringLiteral("RaveNoC");
+    IpCoreInstanceParameterDescriptor width;
     width.name = QStringLiteral("flit_data_width");
     width.type = QStringLiteral("int");
     width.defaultValue = 32;
     width.label = QStringLiteral("Flit data width");
-    plugin.instanceParameters.insert(width.name, width);
-    ManifestIpInstanceParameterAdapter adapter(plugin);
+    runtime.instanceParameters.insert(width.name, width);
+    RuntimeIpInstanceParameterAdapter adapter(runtime);
 
     CommandManager commandManager;
     PropertyPanel panel(&graph, &stateService, {&adapter}, &commandManager);
@@ -116,16 +116,16 @@ void testIpInstanceParameterSectionCanCollapseAndExpand() {
     document.ipcoreState.push_back(state);
     stateService.loadFromDocument(document);
 
-    PluginDescriptor plugin;
-    plugin.id = QStringLiteral("finepaper.ravenoc");
-    plugin.name = QStringLiteral("RaveNoC");
-    PluginInstanceParameterDescriptor width;
+    IpCoreRuntimeDescriptor runtime;
+    runtime.id = QStringLiteral("finepaper.ravenoc");
+    runtime.name = QStringLiteral("RaveNoC");
+    IpCoreInstanceParameterDescriptor width;
     width.name = QStringLiteral("flit_data_width");
     width.type = QStringLiteral("int");
     width.defaultValue = 32;
     width.label = QStringLiteral("Flit data width");
-    plugin.instanceParameters.insert(width.name, width);
-    ManifestIpInstanceParameterAdapter adapter(plugin);
+    runtime.instanceParameters.insert(width.name, width);
+    RuntimeIpInstanceParameterAdapter adapter(runtime);
 
     CommandManager commandManager;
     PropertyPanel panel(&graph, &stateService, {&adapter}, &commandManager);
@@ -169,16 +169,16 @@ void testUnselectedPanelUsesPersistedCustomIpInstanceId() {
     document.ipcoreState.push_back(state);
     stateService.loadFromDocument(document);
 
-    PluginDescriptor plugin;
-    plugin.id = QStringLiteral("finepaper.ravenoc");
-    plugin.name = QStringLiteral("RaveNoC");
-    PluginInstanceParameterDescriptor width;
+    IpCoreRuntimeDescriptor runtime;
+    runtime.id = QStringLiteral("finepaper.ravenoc");
+    runtime.name = QStringLiteral("RaveNoC");
+    IpCoreInstanceParameterDescriptor width;
     width.name = QStringLiteral("flit_data_width");
     width.type = QStringLiteral("int");
     width.defaultValue = 32;
     width.label = QStringLiteral("Flit data width");
-    plugin.instanceParameters.insert(width.name, width);
-    ManifestIpInstanceParameterAdapter adapter(plugin);
+    runtime.instanceParameters.insert(width.name, width);
+    RuntimeIpInstanceParameterAdapter adapter(runtime);
 
     CommandManager commandManager;
     PropertyPanel panel(&graph, &stateService, {&adapter}, &commandManager);
@@ -213,16 +213,16 @@ void testDefaultIpInstanceSectionWithoutStateIsReadOnly() {
     Graph graph;
     ProjectStateService stateService;
 
-    PluginDescriptor plugin;
-    plugin.id = QStringLiteral("finepaper.ravenoc");
-    plugin.name = QStringLiteral("RaveNoC");
-    PluginInstanceParameterDescriptor width;
+    IpCoreRuntimeDescriptor runtime;
+    runtime.id = QStringLiteral("finepaper.ravenoc");
+    runtime.name = QStringLiteral("RaveNoC");
+    IpCoreInstanceParameterDescriptor width;
     width.name = QStringLiteral("flit_data_width");
     width.type = QStringLiteral("int");
     width.defaultValue = 32;
     width.label = QStringLiteral("Flit data width");
-    plugin.instanceParameters.insert(width.name, width);
-    ManifestIpInstanceParameterAdapter adapter(plugin);
+    runtime.instanceParameters.insert(width.name, width);
+    RuntimeIpInstanceParameterAdapter adapter(runtime);
 
     CommandManager commandManager;
     PropertyPanel panel(&graph, &stateService, {&adapter}, &commandManager);

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "plugins/plugindescriptor.h"
+#include "ipcore/ipcoreruntimedescriptor.h"
 
 #include <QHash>
 #include <QString>

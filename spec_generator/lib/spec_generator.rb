@@ -21,14 +21,14 @@ module SpecGenerator
   INTERFACE_CARDINALITIES = %w[one many].freeze
   INTERFACE_TOPOLOGY_RULES = %w[opposite_side].freeze
   GENERATED_OUTPUT_ROOTS = [
-    ['generated/ipcores/finepaper.noc/plugin.json', :file],
+    ['generated/ipcores/finepaper.noc/ipcore-runtime.json', :file],
     ['generated/ipcores/finepaper.noc/modules.xml', :file],
     ['generated/ipcores/finepaper.noc/graphics', :directory],
     ['ipcores/finepaper-noc/generator/src/ruby/model', :generated_files],
-    ['generated/ipcores/finepaper.ravenoc/plugin.json', :file],
+    ['generated/ipcores/finepaper.ravenoc/ipcore-runtime.json', :file],
     ['generated/ipcores/finepaper.ravenoc/modules.xml', :file],
     ['generated/ipcores/finepaper.ravenoc/graphics', :directory],
-    ['generated/ipcores/finepaper.opennoc/plugin.json', :file],
+    ['generated/ipcores/finepaper.opennoc/ipcore-runtime.json', :file],
     ['generated/ipcores/finepaper.opennoc/modules.xml', :file],
     ['generated/ipcores/finepaper.opennoc/graphics', :directory]
   ].freeze
@@ -826,7 +826,7 @@ module SpecGenerator
     def write(bundle_dir)
       @bundle_dir = File.expand_path(bundle_dir)
       FileUtils.mkdir_p(File.join(bundle_dir, 'graphics'))
-      File.write(File.join(bundle_dir, 'plugin.json'), plugin_json)
+      File.write(File.join(bundle_dir, 'ipcore-runtime.json'), runtime_json)
       File.write(File.join(bundle_dir, 'modules.xml'), modules_xml)
 
       @views.each do |module_name, view|
@@ -839,7 +839,7 @@ module SpecGenerator
 
     private
 
-    def plugin_json
+    def runtime_json
       runtime = @spec.fetch('runtime')
       generator = runtime.fetch('generator')
       drc = runtime.fetch('drc')
@@ -863,11 +863,7 @@ module SpecGenerator
             input_format: drc.fetch('input_format'),
             args: drc.fetch('args')
           },
-          topology_presets: @spec.fetch('topology_presets', []),
-          native: {
-            enabled: false,
-            library: ''
-          }
+          topology_presets: @spec.fetch('topology_presets', [])
         }
       ) + "\n"
     end

@@ -1,24 +1,24 @@
-// ManifestIpInstanceParameterAdapter exposes plugin.json instance_parameters as IP instance parameters.
+// RuntimeIpInstanceParameterAdapter exposes runtime-declared instance parameters to the UI.
 #include "project/ipinstanceparameteradapter.h"
 
 #include <QStringList>
 #include <utility>
 
-ManifestIpInstanceParameterAdapter::ManifestIpInstanceParameterAdapter(PluginDescriptor plugin)
-    : m_plugin(std::move(plugin)) {}
+RuntimeIpInstanceParameterAdapter::RuntimeIpInstanceParameterAdapter(IpCoreRuntimeDescriptor runtime)
+    : m_runtime(std::move(runtime)) {}
 
-QVector<IpInstanceParameterSection> ManifestIpInstanceParameterAdapter::parameterSections() const {
+QVector<IpInstanceParameterSection> RuntimeIpInstanceParameterAdapter::parameterSections() const {
     IpInstanceParameterSection section;
-    section.ipcoreId = m_plugin.id;
-    section.instanceId = m_plugin.id.section(QLatin1Char('.'), -1) + QStringLiteral("_0");
+    section.ipcoreId = m_runtime.id;
+    section.instanceId = m_runtime.id.section(QLatin1Char('.'), -1) + QStringLiteral("_0");
     section.id = QStringLiteral("global_parameters");
-    section.label = m_plugin.name.isEmpty() ? m_plugin.id : m_plugin.name;
+    section.label = m_runtime.name.isEmpty() ? m_runtime.id : m_runtime.name;
     section.expandedByDefault = true;
 
-    QStringList names = m_plugin.instanceParameters.keys();
+    QStringList names = m_runtime.instanceParameters.keys();
     names.sort();
     for (const QString& name : names) {
-        const PluginInstanceParameterDescriptor& descriptor = m_plugin.instanceParameters.value(name);
+        const IpCoreInstanceParameterDescriptor& descriptor = m_runtime.instanceParameters.value(name);
         IpInstanceParameterField field;
         field.name = descriptor.name;
         field.label = descriptor.label.isEmpty() ? descriptor.name : descriptor.label;

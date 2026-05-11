@@ -1,8 +1,8 @@
 // DRCRunner serializes the active IP-core graph, invokes external DRC, and maps findings back to editor IDs.
 #include "validation/drcrunner.h"
 #include "graph/graph.h"
+#include "ipcore/ipcorecommandrunner.h"
 #include "ipcore/ipcoregraphexporter.h"
-#include "plugins/generatorrunner.h"
 #include <QJsonDocument>
 #include <QProcess>
 #include <QTemporaryDir>
@@ -34,8 +34,8 @@ QList<ValidationResult> DRCRunner::validate(
                                  "DRC")};
     }
 
-    const GeneratorCommand generatorCommand =
-        GeneratorRunner::resolveDrcForIpcore(ipcore, tmpFile.fileName(), outputDir.path());
+    const IpCoreResolvedCommand generatorCommand =
+        IpCoreCommandRunner::resolveDrc(ipcore, tmpFile.fileName(), outputDir.path());
     if (!generatorCommand.valid) {
         // Missing or incompatible DRC command is a validation finding, not a
         // process crash, so report it through the normal log panel path.
@@ -65,8 +65,8 @@ QList<ValidationResult> DRCRunner::validate(
 
     QProcess proc;
     proc.setWorkingDirectory(generatorCommand.workingDirectory);
-    // Run from the IP-core source root to match generator-relative paths declared in
-    // plugin.json.
+    // Run from the IP-core source root to match generator-relative paths declared
+    // in ipcore-runtime.json.
     proc.start(generatorCommand.command, generatorCommand.arguments);
 
     if (!proc.waitForStarted()) {

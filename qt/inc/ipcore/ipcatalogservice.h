@@ -1,7 +1,7 @@
 // IP catalog service exposes discovered runtime IP cores as editor-ready entries.
 #pragma once
 
-#include "plugins/plugindescriptor.h"
+#include "ipcore/ipcoreruntimedescriptor.h"
 
 #include <QHash>
 #include <QList>
@@ -22,9 +22,9 @@ struct IpCatalogEntry {
     QString modulesPath;
     QString graphicsPath;
     QStringList moduleTypes;
-    QHash<QString, PluginInstanceParameterDescriptor> instanceParameters;
-    PluginCommandDescriptor generator;
-    PluginCommandDescriptor drc;
+    QHash<QString, IpCoreInstanceParameterDescriptor> instanceParameters;
+    IpCoreCommandDescriptor generator;
+    IpCoreCommandDescriptor drc;
     QVector<TopologyPresetDescriptor> topologyPresets;
 
     bool hasModules() const;
@@ -33,7 +33,7 @@ struct IpCatalogEntry {
 
 class IpCatalogService {
 public:
-    IpCatalogService(QList<PluginDescriptor> descriptors,
+    IpCatalogService(QList<IpCoreRuntimeDescriptor> descriptors,
                      const ModuleRegistry* moduleRegistry);
 
     static IpCatalogService fromRuntimeRegistries();

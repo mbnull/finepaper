@@ -1,7 +1,8 @@
-// PluginRegistry parses plugin manifests and exposes startup-loaded plugins.
-#include "plugins/pluginregistry.h"
+// IpCoreRuntimeRegistry parses IP core runtime manifests discovered at startup.
+#include "ipcore/ipcoreruntimeregistry.h"
 
 #include <QCoreApplication>
+#include <QDebug>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -10,7 +11,6 @@
 #include <QJsonObject>
 #include <QJsonParseError>
 #include <QSet>
-#include <QDebug>
 #include <optional>
 
 namespace {
@@ -20,8 +20,6 @@ void appendUniquePath(QStringList& paths, const QString& path) {
         return;
     }
 
-    // Store absolute paths so environment roots and ancestor-discovered roots
-    // deduplicate even when expressed with different relative spellings.
     const QFileInfo info(path);
     const QString absolutePath = info.absoluteFilePath();
     if (!paths.contains(absolutePath)) {
@@ -34,8 +32,6 @@ QString resolvePath(const QString& rootPath, const QString& path) {
         return {};
     }
 
-    // Manifest-local paths are resolved against the plugin root; absolute paths
-    // are preserved for development and installed-plugin layouts.
     const QFileInfo info(path);
     if (info.isAbsolute()) {
         return info.absoluteFilePath();
@@ -79,8 +75,6 @@ Parameter::Value parameterDefaultValue(const QString& type, const QJsonValue& va
         return value.toInt();
     }
     if (type == QStringLiteral("bool")) {
-        // Accept relaxed manifest booleans because early plugin drafts used
-        // numeric and string values before the schema settled.
         if (value.isBool()) {
             return value.toBool();
         }
@@ -98,8 +92,8 @@ Parameter::Value parameterDefaultValue(const QString& type, const QJsonValue& va
     return value.toString();
 }
 
-QVector<PluginInstanceParameterChoice> instanceParameterChoices(const QJsonObject& object) {
-    QVector<PluginInstanceParameterChoice> choices;
+QVector<IpCoreInstanceParameterChoice> instanceParameterChoices(const QJsonObject& object) {
+    QVector<IpCoreInstanceParameterChoice> choices;
     const QJsonArray enumValues = object.value(QStringLiteral("enum")).toArray();
     const QJsonObject labels = object.value(QStringLiteral("labels")).toObject();
     for (const QJsonValue& value : enumValues) {
@@ -107,7 +101,7 @@ QVector<PluginInstanceParameterChoice> instanceParameterChoices(const QJsonObjec
             continue;
         }
         const QString choiceValue = value.toString();
-        choices.push_back(PluginInstanceParameterChoice{
+        choices.push_back(IpCoreInstanceParameterChoice{
             choiceValue,
             labels.value(choiceValue).toString(choiceValue)
         });
@@ -115,18 +109,16 @@ QVector<PluginInstanceParameterChoice> instanceParameterChoices(const QJsonObjec
     return choices;
 }
 
-QHash<QString, PluginInstanceParameterDescriptor> instanceParametersFromJson(const QJsonValue& value) {
-    QHash<QString, PluginInstanceParameterDescriptor> parameters;
+QHash<QString, IpCoreInstanceParameterDescriptor> instanceParametersFromJson(const QJsonValue& value) {
+    QHash<QString, IpCoreInstanceParameterDescriptor> parameters;
     if (!value.isObject()) {
         return parameters;
     }
 
     const QJsonObject object = value.toObject();
     for (auto it = object.constBegin(); it != object.constEnd(); ++it) {
-        // Keep descriptor defaults typed here; project services copy them into
-        // the selected IP-instance state when an IP core is added.
         const QJsonObject parameterObject = it.value().toObject();
-        PluginInstanceParameterDescriptor parameter;
+        IpCoreInstanceParameterDescriptor parameter;
         parameter.name = it.key();
         parameter.type = parameterObject.value(QStringLiteral("type")).toString().trimmed();
         parameter.defaultValue = parameterDefaultValue(
@@ -165,8 +157,6 @@ QVector<TopologyPresetDescriptor> topologyPresetsFromJson(const QJsonValue& valu
     for (const QJsonValue& item : value.toArray()) {
         const QJsonObject object = item.toObject();
         TopologyPresetDescriptor preset;
-        // Presets stay declarative in plugin.json. The topology builder later
-        // interprets kind/router/ports with these typed parameters.
         preset.id = object.value(QStringLiteral("id")).toString().trimmed();
         preset.label = object.value(QStringLiteral("label")).toString().trimmed();
         preset.kind = object.value(QStringLiteral("kind")).toString().trimmed();
@@ -195,9 +185,9 @@ QVector<TopologyPresetDescriptor> topologyPresetsFromJson(const QJsonValue& valu
     return presets;
 }
 
-PluginCommandDescriptor commandFromJson(const QJsonValue& value) {
+IpCoreCommandDescriptor commandFromJson(const QJsonValue& value) {
     const QJsonObject object = value.toObject();
-    PluginCommandDescriptor command;
+    IpCoreCommandDescriptor command;
     command.command = object.value(QStringLiteral("command")).toString().trimmed();
     command.inputFormat =
         object.value(QStringLiteral("input_format")).toString(QStringLiteral("ipcore_graph_v1")).trimmed();
@@ -208,60 +198,38 @@ PluginCommandDescriptor commandFromJson(const QJsonValue& value) {
     return command;
 }
 
-bool boolValue(const QJsonValue& value, bool fallbackValue = false) {
-    if (value.isBool()) {
-        return value.toBool();
-    }
-    if (value.isDouble()) {
-        return value.toInt() != 0;
-    }
-    if (value.isString()) {
-        const QString text = value.toString().trimmed().toLower();
-        if (text == QStringLiteral("true") || text == QStringLiteral("1") || text == QStringLiteral("yes")) {
-            return true;
-        }
-        if (text == QStringLiteral("false") || text == QStringLiteral("0") || text == QStringLiteral("no")) {
-            return false;
-        }
-    }
-    return fallbackValue;
-}
-
-std::optional<PluginDescriptor> loadManifest(const QString& pluginDirectory) {
-    const QFileInfo manifestInfo(QDir(pluginDirectory).filePath(QStringLiteral("plugin.json")));
+std::optional<IpCoreRuntimeDescriptor> loadManifest(const QString& runtimeDirectory) {
+    const QFileInfo manifestInfo(QDir(runtimeDirectory).filePath(QStringLiteral("ipcore-runtime.json")));
     if (!manifestInfo.isFile()) {
-        // Discovery probes both roots and child directories; absence of a
-        // manifest is normal for container directories.
         return std::nullopt;
     }
 
     QFile file(manifestInfo.absoluteFilePath());
     if (!file.open(QIODevice::ReadOnly)) {
-        qWarning() << "Could not open plugin manifest" << manifestInfo.absoluteFilePath();
+        qWarning() << "Could not open IP core runtime manifest" << manifestInfo.absoluteFilePath();
         return std::nullopt;
     }
 
     QJsonParseError parseError;
     const QJsonDocument document = QJsonDocument::fromJson(file.readAll(), &parseError);
     if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
-        // Invalid manifests are skipped rather than aborting startup so one bad
-        // plugin cannot hide all other discovered plugins.
-        qWarning() << "Invalid plugin manifest" << manifestInfo.absoluteFilePath() << parseError.errorString();
+        qWarning() << "Invalid IP core runtime manifest"
+                   << manifestInfo.absoluteFilePath()
+                   << parseError.errorString();
         return std::nullopt;
     }
 
     const QJsonObject object = document.object();
-    PluginDescriptor descriptor;
-    // Paths and commands are normalized at discovery time so the rest of the
-    // app can treat PluginDescriptor as runtime-ready metadata.
+    IpCoreRuntimeDescriptor descriptor;
     descriptor.id = object.value(QStringLiteral("id")).toString().trimmed();
     descriptor.name = object.value(QStringLiteral("name")).toString().trimmed();
     descriptor.version = object.value(QStringLiteral("version")).toString().trimmed();
     descriptor.kind = object.value(QStringLiteral("kind")).toString().trimmed();
-    descriptor.runtimeRootPath = QFileInfo(pluginDirectory).absoluteFilePath();
+    descriptor.runtimeRootPath = QFileInfo(runtimeDirectory).absoluteFilePath();
     const QString sourceRoot = object.value(QStringLiteral("source_root")).toString().trimmed();
     if (sourceRoot.isEmpty()) {
-        qWarning() << "Skipping plugin manifest without source_root" << manifestInfo.absoluteFilePath();
+        qWarning() << "Skipping IP core runtime manifest without source_root"
+                   << manifestInfo.absoluteFilePath();
         return std::nullopt;
     }
     descriptor.sourceRootPath = resolvePath(descriptor.runtimeRootPath, sourceRoot);
@@ -270,65 +238,48 @@ std::optional<PluginDescriptor> loadManifest(const QString& pluginDirectory) {
     descriptor.graphicsPath = resolvePath(descriptor.runtimeRootPath, object.value(QStringLiteral("graphics")).toString());
     descriptor.instanceParameters = instanceParametersFromJson(object.value(QStringLiteral("instance_parameters")));
     descriptor.topologyPresets = topologyPresetsFromJson(object.value(QStringLiteral("topology_presets")));
-
     descriptor.generator = commandFromJson(object.value(QStringLiteral("generator")));
     descriptor.drc = commandFromJson(object.value(QStringLiteral("drc")));
 
-    // Native metadata is retained for future support but not loaded by this
-    // registry; commands and data bundles are the active integration mechanism.
-    const QJsonObject native = object.value(QStringLiteral("native")).toObject();
-    descriptor.native.enabled = boolValue(native.value(QStringLiteral("enabled")), false);
-    descriptor.native.library = native.value(QStringLiteral("library")).toString().trimmed();
-
     if (descriptor.id.isEmpty()) {
-        qWarning() << "Skipping plugin manifest without id" << manifestInfo.absoluteFilePath();
+        qWarning() << "Skipping IP core runtime manifest without id" << manifestInfo.absoluteFilePath();
         return std::nullopt;
     }
 
     if (descriptor.name.isEmpty()) {
-        // Fall back to ID so UI labels and diagnostics always have a stable name.
         descriptor.name = descriptor.id;
     }
 
     return descriptor;
 }
 
-void appendPluginFromDirectory(QList<PluginDescriptor>& plugins,
-                               QSet<QString>& seenIds,
-                               const QString& pluginDirectory) {
-    const auto descriptor = loadManifest(pluginDirectory);
+void appendRuntimeFromDirectory(QList<IpCoreRuntimeDescriptor>& runtimes,
+                                QSet<QString>& seenIds,
+                                const QString& runtimeDirectory) {
+    const auto descriptor = loadManifest(runtimeDirectory);
     if (!descriptor.has_value()) {
         return;
     }
 
     if (seenIds.contains(descriptor->id)) {
-        // First discovery root wins to keep plugin selection deterministic.
-        qWarning() << "Skipping duplicate plugin id" << descriptor->id << "from" << pluginDirectory;
+        qWarning() << "Skipping duplicate IP core runtime id" << descriptor->id << "from" << runtimeDirectory;
         return;
     }
 
     seenIds.insert(descriptor->id);
-    plugins.append(*descriptor);
+    runtimes.append(*descriptor);
 }
 
-void appendLocalPluginRootsFrom(QStringList& roots, const QString& startPath) {
+void appendLocalRuntimeRootsFrom(QStringList& roots, const QString& startPath) {
     if (startPath.isEmpty()) {
         return;
     }
 
-    // Walk ancestors so running from the repository root, qt build directory,
-    // or installed binary directory can still find repository-local plugin
-    // bundles.
     QDir dir(startPath);
     while (true) {
         const QString generatedIpcores = dir.filePath(QStringLiteral("generated/ipcores"));
         if (QFileInfo(generatedIpcores).isDir()) {
             appendUniquePath(roots, generatedIpcores);
-        }
-
-        const QString plugins = dir.filePath(QStringLiteral("plugins"));
-        if (QFileInfo(plugins).isDir()) {
-            appendUniquePath(roots, plugins);
         }
 
         if (!dir.cdUp()) {
@@ -339,74 +290,64 @@ void appendLocalPluginRootsFrom(QStringList& roots, const QString& startPath) {
 
 } // namespace
 
-PluginRegistry& PluginRegistry::instance() {
-    static PluginRegistry registry;
+IpCoreRuntimeRegistry& IpCoreRuntimeRegistry::instance() {
+    static IpCoreRuntimeRegistry registry;
     return registry;
 }
 
-PluginRegistry::PluginRegistry()
-    : m_plugins(discover(defaultPluginRoots())) {}
+IpCoreRuntimeRegistry::IpCoreRuntimeRegistry()
+    : m_runtimes(discover(defaultRuntimeRoots())) {}
 
-QList<PluginDescriptor> PluginRegistry::discover(const QStringList& roots) {
-    QList<PluginDescriptor> plugins;
+QList<IpCoreRuntimeDescriptor> IpCoreRuntimeRegistry::discover(const QStringList& roots) {
+    QList<IpCoreRuntimeDescriptor> runtimes;
     QSet<QString> seenIds;
     QSet<QString> seenDirectories;
 
     for (const QString& rootPath : roots) {
         const QFileInfo rootInfo(rootPath);
         if (!rootInfo.isDir()) {
-            // Missing roots are allowed because environment paths and install
-            // layouts can vary between developer machines.
             continue;
         }
 
         const QString absoluteRootPath = rootInfo.absoluteFilePath();
         if (seenDirectories.contains(absoluteRootPath)) {
-            // Ancestor walking can discover the same plugins/ directory from
-            // current path and application path; scan it once.
             continue;
         }
         seenDirectories.insert(absoluteRootPath);
 
-        // A root may itself be a plugin directory or a directory containing many
-        // plugin subdirectories; support both deployment styles.
-        appendPluginFromDirectory(plugins, seenIds, absoluteRootPath);
+        appendRuntimeFromDirectory(runtimes, seenIds, absoluteRootPath);
 
         const QDir rootDir(absoluteRootPath);
-        const QFileInfoList pluginDirectories =
+        const QFileInfoList runtimeDirectories =
             rootDir.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
-        // Sorted child directory traversal gives stable plugin ordering across
-        // repeated startups.
-        for (const QFileInfo& pluginDirectory : pluginDirectories) {
-            appendPluginFromDirectory(plugins, seenIds, pluginDirectory.absoluteFilePath());
+        for (const QFileInfo& runtimeDirectory : runtimeDirectories) {
+            appendRuntimeFromDirectory(runtimes, seenIds, runtimeDirectory.absoluteFilePath());
         }
     }
 
-    return plugins;
+    return runtimes;
 }
 
-QStringList PluginRegistry::defaultPluginRoots() {
+QStringList IpCoreRuntimeRegistry::defaultRuntimeRoots() {
     QStringList roots;
 
-    // Environment roots are honored first so tests and user installs can
-    // override repository-local plugins without changing the binary.
-    const QString envPath = qEnvironmentVariable("FINEPAPER_PLUGIN_PATH");
+    const QString envPath = qEnvironmentVariable("FINEPAPER_IPCORE_PATH");
     for (const QString& path : envPath.split(QDir::listSeparator(), Qt::SkipEmptyParts)) {
         appendUniquePath(roots, path);
     }
 
-    appendLocalPluginRootsFrom(roots, QDir::currentPath());
-    appendLocalPluginRootsFrom(roots, QCoreApplication::applicationDirPath());
+    appendLocalRuntimeRootsFrom(roots, QDir::currentPath());
+    appendLocalRuntimeRootsFrom(roots, QCoreApplication::applicationDirPath());
     return roots;
 }
 
-const QList<PluginDescriptor>& PluginRegistry::plugins() const {
-    return m_plugins;
+const QList<IpCoreRuntimeDescriptor>& IpCoreRuntimeRegistry::runtimes() const {
+    return m_runtimes;
 }
 
-const PluginDescriptor* PluginRegistry::plugin(const QString& pluginId) const {
-    for (const PluginDescriptor& descriptor : m_plugins) {
-        if (descriptor.id == pluginId) {
+const IpCoreRuntimeDescriptor* IpCoreRuntimeRegistry::runtime(const QString& ipcoreId) const {
+    for (const IpCoreRuntimeDescriptor& descriptor : m_runtimes) {
+        if (descriptor.id == ipcoreId) {
             return &descriptor;
         }
     }

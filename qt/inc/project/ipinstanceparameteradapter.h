@@ -1,8 +1,8 @@
-// IP instance parameter adapters expose manifest-declared project state to the core UI.
+// IP instance parameter adapters expose runtime-declared project state to the core UI.
 #pragma once
 
 #include "graph/parameter.h"
-#include "plugins/plugindescriptor.h"
+#include "ipcore/ipcoreruntimedescriptor.h"
 
 #include <QString>
 #include <QVector>
@@ -13,7 +13,7 @@ struct IpInstanceParameterField {
     QString description;
     QString type;
     Parameter::Value defaultValue = QString();
-    QVector<PluginInstanceParameterChoice> choices;
+    QVector<IpCoreInstanceParameterChoice> choices;
     bool configurable = true;
 };
 
@@ -32,11 +32,11 @@ public:
     virtual QVector<IpInstanceParameterSection> parameterSections() const = 0;
 };
 
-class ManifestIpInstanceParameterAdapter final : public IIpInstanceParameterAdapter {
+class RuntimeIpInstanceParameterAdapter final : public IIpInstanceParameterAdapter {
 public:
-    explicit ManifestIpInstanceParameterAdapter(PluginDescriptor plugin);
+    explicit RuntimeIpInstanceParameterAdapter(IpCoreRuntimeDescriptor runtime);
     QVector<IpInstanceParameterSection> parameterSections() const override;
 
 private:
-    PluginDescriptor m_plugin;
+    IpCoreRuntimeDescriptor m_runtime;
 };

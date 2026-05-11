@@ -154,9 +154,5 @@
         }
       }
     }
-  ],
-  "native": {
-    "enabled": false,
-    "library": ""
-  }
+  ]
 }

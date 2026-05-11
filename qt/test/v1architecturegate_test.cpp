@@ -2,10 +2,10 @@
 #include "app/generationartifacts.h"
 #include "graph/graph.h"
 #include "ipcore/ipcatalogservice.h"
+#include "ipcore/ipcorecommandrunner.h"
 #include "ipcore/ipcoregraphexporter.h"
+#include "ipcore/ipcoreruntimeregistry.h"
 #include "modules/moduleregistry.h"
-#include "plugins/generatorrunner.h"
-#include "plugins/pluginregistry.h"
 #include "project/graphprojectserializer.h"
 #include "project/projectipservice.h"
 #include "project/projectreader.h"
@@ -59,11 +59,11 @@ QString repositoryPath(const QString& relativePath) {
     return QFileInfo(QDir(startPaths.first()).filePath(relativePath)).absoluteFilePath();
 }
 
-const PluginDescriptor* findPlugin(const QList<PluginDescriptor>& plugins, const QString& id) {
-    const auto it = std::find_if(plugins.cbegin(), plugins.cend(), [&](const PluginDescriptor& plugin) {
-        return plugin.id == id;
+const IpCoreRuntimeDescriptor* findRuntime(const QList<IpCoreRuntimeDescriptor>& runtimes, const QString& id) {
+    const auto it = std::find_if(runtimes.cbegin(), runtimes.cend(), [&](const IpCoreRuntimeDescriptor& runtime) {
+        return runtime.id == id;
     });
-    return it == plugins.cend() ? nullptr : &(*it);
+    return it == runtimes.cend() ? nullptr : &(*it);
 }
 
 const TopologyPresetDescriptor* findPreset(const QVector<TopologyPresetDescriptor>& presets,
@@ -91,7 +91,7 @@ void writeJsonFile(const QString& path, const QJsonDocument& document) {
     require(file.write(bytes) == bytes.size(), "gate JSON input should be written completely");
 }
 
-QString runCommand(const GeneratorCommand& command) {
+QString runCommand(const IpCoreResolvedCommand& command) {
     QProcess process;
     process.setWorkingDirectory(command.workingDirectory);
     process.start(command.command, command.arguments);
@@ -110,16 +110,16 @@ QString runCommand(const GeneratorCommand& command) {
 }
 
 void testRepositoryNoCMainlineFlow() {
-    const QList<PluginDescriptor> plugins =
-        PluginRegistry::discover({repositoryPath(QStringLiteral("generated/ipcores"))});
-    const PluginDescriptor* nocPlugin = findPlugin(plugins, QStringLiteral("finepaper.noc"));
-    require(nocPlugin != nullptr, "Finepaper NoC IP core should be discovered");
+    const QList<IpCoreRuntimeDescriptor> runtimes =
+        IpCoreRuntimeRegistry::discover({repositoryPath(QStringLiteral("generated/ipcores"))});
+    const IpCoreRuntimeDescriptor* nocRuntime = findRuntime(runtimes, QStringLiteral("finepaper.noc"));
+    require(nocRuntime != nullptr, "Finepaper NoC IP core should be discovered");
 
     ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
-    require(registry.loadPlugins(plugins), "repository IP modules should load");
-    ModuleRegistry::instance().loadPlugins(plugins);
+    require(registry.loadIpCoreRuntimes(runtimes), "repository IP modules should load");
+    ModuleRegistry::instance().loadIpCoreRuntimes(runtimes);
 
-    IpCatalogService catalog(plugins, &registry);
+    IpCatalogService catalog(runtimes, &registry);
     const std::optional<IpCatalogEntry> nocEntry = catalog.entry(QStringLiteral("finepaper.noc"));
     require(nocEntry.has_value(), "catalog should expose Finepaper NoC");
     require(nocEntry->moduleTypes.contains(QStringLiteral("XP")),
@@ -220,8 +220,8 @@ void testRepositoryNoCMainlineFlow() {
     writeJsonFile(inputPath, exportResult.document);
     const QString outputPath = QDir(tempDir.path()).filePath(QStringLiteral("generated"));
     require(QDir().mkpath(outputPath), "generated output directory should be created");
-    const GeneratorCommand generator =
-        GeneratorRunner::resolveForIpcore(*nocEntry, inputPath, outputPath);
+    const IpCoreResolvedCommand generator =
+        IpCoreCommandRunner::resolveGenerator(*nocEntry, inputPath, outputPath);
     require(generator.valid, generator.errorMessage.toLocal8Bit().constData());
     const QString generatorError = runCommand(generator);
     require(generatorError.isEmpty(), generatorError.toLocal8Bit().constData());

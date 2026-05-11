@@ -1,8 +1,8 @@
 // IP catalog service implementation.
 #include "ipcore/ipcatalogservice.h"
 
+#include "ipcore/ipcoreruntimeregistry.h"
 #include "modules/moduleregistry.h"
-#include "plugins/pluginregistry.h"
 
 #include <algorithm>
 
@@ -12,7 +12,7 @@ QString catalogSortLabel(const IpCatalogEntry& entry) {
     return entry.name.trimmed().isEmpty() ? entry.id : entry.name;
 }
 
-IpCatalogEntry catalogEntryFromDescriptor(const PluginDescriptor& descriptor,
+IpCatalogEntry catalogEntryFromDescriptor(const IpCoreRuntimeDescriptor& descriptor,
                                           const ModuleRegistry* moduleRegistry) {
     IpCatalogEntry entry;
     entry.id = descriptor.id;
@@ -43,10 +43,10 @@ bool IpCatalogEntry::isSelectable() const {
     return !moduleTypes.isEmpty();
 }
 
-IpCatalogService::IpCatalogService(QList<PluginDescriptor> descriptors,
+IpCatalogService::IpCatalogService(QList<IpCoreRuntimeDescriptor> descriptors,
                                    const ModuleRegistry* moduleRegistry) {
     m_entries.reserve(descriptors.size());
-    for (const PluginDescriptor& descriptor : descriptors) {
+    for (const IpCoreRuntimeDescriptor& descriptor : descriptors) {
         m_entries.append(catalogEntryFromDescriptor(descriptor, moduleRegistry));
     }
 
@@ -64,7 +64,7 @@ IpCatalogService::IpCatalogService(QList<PluginDescriptor> descriptors,
 }
 
 IpCatalogService IpCatalogService::fromRuntimeRegistries() {
-    return IpCatalogService(PluginRegistry::instance().plugins(), &ModuleRegistry::instance());
+    return IpCatalogService(IpCoreRuntimeRegistry::instance().runtimes(), &ModuleRegistry::instance());
 }
 
 QList<IpCatalogEntry> IpCatalogService::entries() const {

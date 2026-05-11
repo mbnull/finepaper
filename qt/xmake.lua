@@ -62,14 +62,14 @@ add_qt_test_target("graph_test", "test/graph_test.cpp", {
     "src/**/parameter.cpp",
     "src/**/moduleregistry.cpp",
     "src/**/moduleprovider.cpp",
-    "src/**/pluginregistry.cpp",
+    "src/**/ipcoreruntimeregistry.cpp",
     "inc/**/connectionruleservice.h",
     "inc/**/addconnectioncommand.h",
     "inc/**/commandmanager.h",
     "inc/**/graph.h",
     "inc/**/module.h",
-    "inc/**/pluginregistry.h",
-    "inc/**/plugindescriptor.h"
+    "inc/**/ipcoreruntimeregistry.h",
+    "inc/**/ipcoreruntimedescriptor.h"
 })
 
 add_qt_test_target("connectionruleservice_test", "test/connectionruleservice_test.cpp", {
@@ -81,12 +81,12 @@ add_qt_test_target("connectionruleservice_test", "test/connectionruleservice_tes
     "src/**/parameter.cpp",
     "src/**/moduleregistry.cpp",
     "src/**/moduleprovider.cpp",
-    "src/**/pluginregistry.cpp",
+    "src/**/ipcoreruntimeregistry.cpp",
     "inc/**/connectionruleservice.h",
     "inc/**/graph.h",
     "inc/**/module.h",
-    "inc/**/pluginregistry.h",
-    "inc/**/plugindescriptor.h"
+    "inc/**/ipcoreruntimeregistry.h",
+    "inc/**/ipcoreruntimedescriptor.h"
 })
 
 add_qt_test_target("ipcoregraphexporter_test", "test/ipcoregraphexporter_test.cpp", {
@@ -99,13 +99,13 @@ add_qt_test_target("ipcoregraphexporter_test", "test/ipcoregraphexporter_test.cp
     "src/**/parameter.cpp",
     "src/**/moduleregistry.cpp",
     "src/**/moduleprovider.cpp",
-    "src/**/pluginregistry.cpp",
+    "src/**/ipcoreruntimeregistry.cpp",
     "inc/ipcore/ipcoregraphexporter.h",
     "inc/ipcore/ipcatalogservice.h",
     "inc/**/graph.h",
     "inc/**/module.h",
-    "inc/**/pluginregistry.h",
-    "inc/**/plugindescriptor.h"
+    "inc/**/ipcoreruntimeregistry.h",
+    "inc/**/ipcoreruntimedescriptor.h"
 })
 
 add_qt_test_target("commandmanager_test", "test/commandmanager_test.cpp", {
@@ -124,12 +124,12 @@ add_qt_test_target("arrangecommand_test", "test/arrangecommand_test.cpp", {
     "src/**/parameter.cpp",
     "src/**/moduleregistry.cpp",
     "src/**/moduleprovider.cpp",
-    "src/**/pluginregistry.cpp",
+    "src/**/ipcoreruntimeregistry.cpp",
     "inc/**/arrangecommand.h",
     "inc/**/graph.h",
     "inc/**/module.h",
-    "inc/**/pluginregistry.h",
-    "inc/**/plugindescriptor.h"
+    "inc/**/ipcoreruntimeregistry.h",
+    "inc/**/ipcoreruntimedescriptor.h"
 })
 
 add_qt_test_target("validation_test", "test/validation_test.cpp", {
@@ -138,7 +138,7 @@ add_qt_test_target("validation_test", "test/validation_test.cpp", {
     "src/ipcore/ipcatalogservice.cpp",
     "src/**/drcrunner.cpp",
     "src/app/generationartifacts.cpp",
-    "src/**/generatorrunner.cpp",
+    "src/**/ipcorecommandrunner.cpp",
     "src/**/graphprojectserializer.cpp",
     "src/**/projectwriter.cpp",
     "src/**/validator.cpp",
@@ -150,7 +150,7 @@ add_qt_test_target("validation_test", "test/validation_test.cpp", {
     "src/**/parameter.cpp",
     "src/**/moduleregistry.cpp",
     "src/**/moduleprovider.cpp",
-    "src/**/pluginregistry.cpp",
+    "src/**/ipcoreruntimeregistry.cpp",
     "inc/**/connectionruleservice.h",
     "inc/**/graph.h",
     "inc/**/module.h",
@@ -158,13 +158,13 @@ add_qt_test_target("validation_test", "test/validation_test.cpp", {
     "inc/ipcore/ipcoregraphexporter.h",
     "inc/ipcore/ipcatalogservice.h",
     "inc/app/generationartifacts.h",
-    "inc/**/generatorrunner.h",
+    "inc/**/ipcorecommandrunner.h",
     "inc/**/graphprojectserializer.h",
     "inc/**/projectdocument.h",
     "inc/**/projectwriter.h",
     "inc/**/ipinstancestate.h",
-    "inc/**/pluginregistry.h",
-    "inc/**/plugindescriptor.h"
+    "inc/**/ipcoreruntimeregistry.h",
+    "inc/**/ipcoreruntimedescriptor.h"
 })
 
 add_qt_test_target("uiscale_test", "test/uiscale_test.cpp", {
@@ -193,7 +193,7 @@ add_qt_test_target("projectdocument_test", "test/projectdocument_test.cpp", {
     "src/**/parameter.cpp",
     "src/**/moduleregistry.cpp",
     "src/**/moduleprovider.cpp",
-    "src/**/pluginregistry.cpp",
+    "src/**/ipcoreruntimeregistry.cpp",
     "inc/**/connectionruleservice.h",
     "inc/**/projectdocument.h",
     "inc/**/ipinstancestate.h",
@@ -206,20 +206,20 @@ add_qt_test_target("projectdocument_test", "test/projectdocument_test.cpp", {
     "inc/ipcore/ipcatalogservice.h",
     "inc/**/graph.h",
     "inc/**/module.h",
-    "inc/**/pluginregistry.h",
-    "inc/**/plugindescriptor.h"
+    "inc/**/ipcoreruntimeregistry.h",
+    "inc/**/ipcoreruntimedescriptor.h"
 })
 
 add_qt_test_target("ipcatalogservice_test", "test/ipcatalogservice_test.cpp", {
     "src/ipcore/ipcatalogservice.cpp",
     "src/modules/moduleregistry.cpp",
     "src/modules/moduleprovider.cpp",
-    "src/plugins/pluginregistry.cpp",
+    "src/ipcore/ipcoreruntimeregistry.cpp",
     "src/graph/parameter.cpp",
     "src/graph/port.cpp",
     "inc/ipcore/ipcatalogservice.h",
     "inc/**/moduleregistry.h",
-    "inc/**/plugindescriptor.h"
+    "inc/**/ipcoreruntimedescriptor.h"
 })
 
 target("projectipservice_test")
@@ -237,7 +237,7 @@ target("projectipservice_test")
     add_files("src/workspace/activeworkspacecontroller.cpp")
     add_files("src/modules/moduleregistry.cpp")
     add_files("src/modules/moduleprovider.cpp")
-    add_files("src/plugins/pluginregistry.cpp")
+    add_files("src/ipcore/ipcoreruntimeregistry.cpp")
     add_files("src/graph/parameter.cpp")
     add_files("src/graph/port.cpp")
     add_files("inc/project/projectipservice.h")
@@ -245,7 +245,7 @@ target("projectipservice_test")
     add_files("inc/ipcore/ipcatalogservice.h")
     add_files("inc/workspace/activeworkspacecontroller.h")
     add_files("inc/**/moduleregistry.h")
-    add_files("inc/**/plugindescriptor.h")
+    add_files("inc/**/ipcoreruntimedescriptor.h")
     add_tests("default", {
         trim_output = true,
         pass_outputs = "projectipservice_test passed"
@@ -280,7 +280,7 @@ target("propertypanel_test")
     add_files("src/panels/propertypanel.cpp")
     add_files("src/widgets/collapsiblesection.cpp")
     add_files("src/project/projectstateservice.cpp")
-    add_files("src/project/manifestipinstanceparameteradapter.cpp")
+    add_files("src/project/runtimeipinstanceparameteradapter.cpp")
     add_files("src/commands/setipinstanceparametercommand.cpp")
     add_files("src/commands/setparametercommand.cpp")
     add_files("src/commands/command.cpp")
@@ -292,7 +292,7 @@ target("propertypanel_test")
     add_files("src/graph/parameter.cpp")
     add_files("src/modules/moduleregistry.cpp")
     add_files("src/modules/moduleprovider.cpp")
-    add_files("src/plugins/pluginregistry.cpp")
+    add_files("src/ipcore/ipcoreruntimeregistry.cpp")
     add_files("inc/**/propertypanel.h")
     add_files("inc/**/graph.h")
     add_files("inc/**/module.h")
@@ -301,8 +301,8 @@ target("propertypanel_test")
     add_files("inc/**/setipinstanceparametercommand.h")
     add_files("inc/**/projectdocument.h")
     add_files("inc/**/ipinstancestate.h")
-    add_files("inc/**/pluginregistry.h")
-    add_files("inc/**/plugindescriptor.h")
+    add_files("inc/**/ipcoreruntimeregistry.h")
+    add_files("inc/**/ipcoreruntimedescriptor.h")
     add_tests("default", {
         trim_output = true,
         pass_outputs = "propertypanel_test passed"
@@ -327,7 +327,6 @@ target("ipcatalogpanel_test")
     add_files("src/workspace/*.cpp")
     add_files("src/project/*.cpp")
     add_files("src/validation/*.cpp")
-    add_files("src/plugins/*.cpp")
     add_files("src/topology/*.cpp")
     add_files("src/connection/*.cpp")
     add_files("src/commands/*.cpp")
@@ -382,7 +381,7 @@ target("nodeeditor_geometry_test")
     add_files("src/workspace/activeworkspacecontroller.cpp")
     add_files("src/**/moduleregistry.cpp")
     add_files("src/**/moduleprovider.cpp")
-    add_files("src/**/pluginregistry.cpp")
+    add_files("src/**/ipcoreruntimeregistry.cpp")
     add_files("src/nodeeditor/animatedgraphicsview.cpp")
     add_files("src/nodeeditor/events/nodeeditorwidget_events.cpp")
     add_files("src/nodeeditor/graphnodepainter.cpp")
@@ -402,32 +401,32 @@ target("nodeeditor_geometry_test")
     add_files("inc/**/projectstateservice.h")
     add_files("inc/**/activeworkspacecontroller.h")
     add_files("inc/**/ipinstancestate.h")
-    add_files("inc/**/pluginregistry.h")
-    add_files("inc/**/plugindescriptor.h")
+    add_files("inc/**/ipcoreruntimeregistry.h")
+    add_files("inc/**/ipcoreruntimedescriptor.h")
     add_files("inc/**/graphnodemodel.h")
     add_tests("default", {
         trim_output = true,
         pass_outputs = "nodeeditor_geometry_test passed"
     })
 
-add_qt_test_target("plugin_test", "test/plugin_test.cpp", {
-    "src/**/generatorrunner.cpp",
-    "src/project/manifestipinstanceparameteradapter.cpp",
+add_qt_test_target("ipcoreruntime_test", "test/ipcoreruntime_test.cpp", {
+    "src/**/ipcorecommandrunner.cpp",
+    "src/project/runtimeipinstanceparameteradapter.cpp",
     "src/**/graph.cpp",
     "src/**/module.cpp",
     "src/**/connection.cpp",
-    "src/**/pluginregistry.cpp",
-    "src/**/startupdiagnostics.cpp",
+    "src/**/ipcoreruntimeregistry.cpp",
+    "src/**/ipcoreruntimediagnostics.cpp",
     "src/**/moduleprovider.cpp",
     "src/**/moduleregistry.cpp",
     "src/**/parameter.cpp",
     "src/**/port.cpp",
-    "inc/**/generatorrunner.h",
+    "inc/**/ipcorecommandrunner.h",
     "inc/project/ipinstanceparameteradapter.h",
     "inc/**/graph.h",
     "inc/**/module.h",
-    "inc/**/pluginregistry.h",
-    "inc/**/plugindescriptor.h"
+    "inc/**/ipcoreruntimeregistry.h",
+    "inc/**/ipcoreruntimedescriptor.h"
 })
 
 add_qt_test_target("topology_preset_test", "test/topology_preset_test.cpp", {
@@ -443,14 +442,14 @@ add_qt_test_target("topology_preset_test", "test/topology_preset_test.cpp", {
     "src/**/parameter.cpp",
     "src/**/moduleregistry.cpp",
     "src/**/moduleprovider.cpp",
-    "src/**/pluginregistry.cpp",
+    "src/**/ipcoreruntimeregistry.cpp",
     "inc/**/connectionruleservice.h",
     "inc/**/commandmanager.h",
     "inc/**/topologypresetcommand.h",
     "inc/**/topologypresetbuilder.h",
     "inc/**/graph.h",
     "inc/**/module.h",
-    "inc/**/plugindescriptor.h"
+    "inc/**/ipcoreruntimedescriptor.h"
 })
 
 add_qt_test_target("v1architecturegate_test", "test/v1architecturegate_test.cpp", {
@@ -458,8 +457,8 @@ add_qt_test_target("v1architecturegate_test", "test/v1architecturegate_test.cpp"
     "src/connection/connectionruleservice.cpp",
     "src/ipcore/ipcatalogservice.cpp",
     "src/ipcore/ipcoregraphexporter.cpp",
-    "src/plugins/generatorrunner.cpp",
-    "src/plugins/pluginregistry.cpp",
+    "src/ipcore/ipcorecommandrunner.cpp",
+    "src/ipcore/ipcoreruntimeregistry.cpp",
     "src/project/graphprojectserializer.cpp",
     "src/project/projectipservice.cpp",
     "src/project/projectreader.cpp",
@@ -482,8 +481,8 @@ add_qt_test_target("v1architecturegate_test", "test/v1architecturegate_test.cpp"
     "inc/graph/module.h",
     "inc/ipcore/ipcatalogservice.h",
     "inc/ipcore/ipcoregraphexporter.h",
-    "inc/plugins/generatorrunner.h",
-    "inc/plugins/pluginregistry.h",
+    "inc/ipcore/ipcorecommandrunner.h",
+    "inc/ipcore/ipcoreruntimeregistry.h",
     "inc/project/graphprojectserializer.h",
     "inc/project/projectipservice.h",
     "inc/project/projectreader.h",

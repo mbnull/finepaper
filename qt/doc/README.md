@@ -36,7 +36,7 @@ This project is a Qt Widgets application for building and validating SoC/NoC top
 - `PropertyPanel`: auto-builds editors from module parameter types.
 - `ValidationManager`: runs built-in validation and external DRC checks.
 - `LogPanel`: shows validation, generation, and runtime messages.
-- `PluginRegistry`: discovers startup-loaded runtime manifests from `FINEPAPER_PLUGIN_PATH` and repository-local generated IP core bundles.
+- `IpCoreRuntimeRegistry`: discovers startup-loaded runtime manifests from `FINEPAPER_IPCORE_PATH` and repository-local generated IP core bundles.
 - `ModuleRegistry`: loads module definitions from runtime manifests and applies per-IP graphics XML files.
 - `IpCoreGraphExporter`: serializes the active IP core graph as the generator/DRC handoff format.
 
@@ -68,11 +68,11 @@ xmake run validation_test
 xmake build uiscale_test
 xmake run uiscale_test
 
-xmake build plugin_test
-xmake run plugin_test
+xmake build ipcoreruntime_test
+xmake run ipcoreruntime_test
 ```
 
-`graph_test` covers graph ownership, connection validation, parameter change forwarding, bundle loading, and JSON export behavior. `commandmanager_test` covers execute, undo, redo, and redo-stack invalidation. `validation_test` covers local topology validation. `uiscale_test` covers UI scaling helpers. `plugin_test` covers runtime manifest discovery, bundle-owned module loading, duplicate type handling, and generator argument substitution.
+`graph_test` covers graph ownership, connection validation, parameter change forwarding, bundle loading, and JSON export behavior. `commandmanager_test` covers execute, undo, redo, and redo-stack invalidation. `validation_test` covers local topology validation. `uiscale_test` covers UI scaling helpers. `ipcoreruntime_test` covers runtime manifest discovery, bundle-owned module loading, duplicate type handling, and generator argument substitution.
 
 ## IP Core Runtime Integration
 
@@ -80,12 +80,12 @@ Generation and DRC validation are provided by the active IP core selected in the
 
 Runtime bundle discovery works in this order:
 
-1. Directories listed in `FINEPAPER_PLUGIN_PATH`, using the platform path-list separator.
-2. Repository-local `generated/ipcores/<ipcore-id>/` directories found from the current working directory or application directory.
+1. Directories listed in `FINEPAPER_IPCORE_PATH`, using the platform path-list separator.
+2. Repository-local `generated/ipcores/` directories found from the current working directory or application directory.
 
-Each runtime bundle is a generated directory containing `plugin.json`. Editable concrete IP core packages live under `../ipcores/<package>/`; for example, `../ipcores/finepaper-noc/` and `../ipcores/ravenoc/`. The committed generated bundles live under `../generated/ipcores/finepaper.noc/` and `../generated/ipcores/finepaper.ravenoc/` and declare:
+Each runtime bundle is a generated directory containing `ipcore-runtime.json`. Editable concrete IP core packages live under `../ipcores/<package>/`; for example, `../ipcores/finepaper-noc/` and `../ipcores/ravenoc/`. The committed generated bundles live under `../generated/ipcores/finepaper.noc/` and `../generated/ipcores/finepaper.ravenoc/` and declare:
 
-- `plugin.json`
+- `ipcore-runtime.json`
 - `modules.xml`
 - `graphics/`
 
@@ -110,14 +110,10 @@ The first manifest schema is:
     "input_format": "ipcore_graph_v1",
     "args": ["generator/bin/drc", "-i", "{input}", "-o", "{output}"]
   },
-  "native": {
-    "enabled": false,
-    "library": ""
-  }
 }
 ```
 
-`modules` and `graphics` paths are resolved against the generated runtime bundle directory. `source_root` points back to the editable IP core package and becomes `IpCatalogEntry::sourceRootPath`; generator/DRC commands run from that source root so paths such as `generator/bin/generate` and `generator/template` resolve against `ipcores/<package>/`. `{input}` and `{output}` are replaced with the exported `finepaper-ipcore-graph-v1` JSON path and selected output directory. Native plugin metadata is retained for future C++ dynamic-library support, but native libraries are not loaded in this version.
+`modules` and `graphics` paths are resolved against the generated runtime bundle directory. `source_root` points back to the editable IP core package and becomes `IpCatalogEntry::sourceRootPath`; generator/DRC commands run from that source root so paths such as `generator/bin/generate` and `generator/template` resolve against `ipcores/<package>/`. `{input}` and `{output}` are replaced with the exported `finepaper-ipcore-graph-v1` JSON path and selected output directory.
 
 `IpCoreGraphExporter` serializes only the active workspace's selected IP instance. Generation and external DRC fail with a user-visible message if a module or connection references a different IP core than the selected active workspace.
 

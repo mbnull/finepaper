@@ -1,7 +1,7 @@
 // ModuleRegistry bootstraps, indexes, and serves module type metadata to the editor.
 #include "modules/moduleregistry.h"
+#include "ipcore/ipcoreruntimeregistry.h"
 #include "modules/moduleprovider.h"
-#include "plugins/pluginregistry.h"
 #include <QDebug>
 #include <QFileInfo>
 
@@ -10,13 +10,13 @@ ModuleRegistry& ModuleRegistry::instance() {
     return registry;
 }
 
-// Load module definitions from startup-discovered plugins only.
+// Load module definitions from startup-discovered IP core runtimes only.
 ModuleRegistry::ModuleRegistry(LoadMode loadMode) {
     if (loadMode == LoadMode::Empty) {
         return;
     }
 
-    if (loadPlugins(PluginRegistry::instance().plugins())) {
+    if (loadIpCoreRuntimes(IpCoreRuntimeRegistry::instance().runtimes())) {
         return;
     }
 
@@ -43,29 +43,31 @@ bool ModuleRegistry::registerType(const ModuleType& type) {
     return true;
 }
 
-bool ModuleRegistry::loadPlugins(const QList<PluginDescriptor>& plugins) {
+bool ModuleRegistry::loadIpCoreRuntimes(const QList<IpCoreRuntimeDescriptor>& runtimes) {
     bool loadedAnyType = false;
 
-    for (const PluginDescriptor& plugin : plugins) {
-        if (!plugin.hasModules() || !QFileInfo(plugin.modulesPath).isFile()) {
+    for (const IpCoreRuntimeDescriptor& runtime : runtimes) {
+        if (!runtime.hasModules() || !QFileInfo(runtime.modulesPath).isFile()) {
             continue;
         }
 
         std::unique_ptr<LayeredModuleProvider> provider;
-        if (plugin.modulesPath.endsWith(QStringLiteral(".xml"), Qt::CaseInsensitive)) {
+        if (runtime.modulesPath.endsWith(QStringLiteral(".xml"), Qt::CaseInsensitive)) {
             provider = std::make_unique<LayeredModuleProvider>(
-                std::make_unique<XmlModuleTypeSource>(plugin.modulesPath));
-            if (!plugin.graphicsPath.isEmpty() && QFileInfo(plugin.graphicsPath).isDir()) {
-                provider->addOverlay(std::make_unique<XmlModuleGraphicsOverlay>(plugin.graphicsPath));
+                std::make_unique<XmlModuleTypeSource>(runtime.modulesPath));
+            if (!runtime.graphicsPath.isEmpty() && QFileInfo(runtime.graphicsPath).isDir()) {
+                provider->addOverlay(std::make_unique<XmlModuleGraphicsOverlay>(runtime.graphicsPath));
             }
         } else {
-            qWarning() << "Skipping plugin with unsupported module bundle" << plugin.id << plugin.modulesPath;
+            qWarning() << "Skipping IP core runtime with unsupported module bundle"
+                       << runtime.id
+                       << runtime.modulesPath;
             continue;
         }
 
         auto types = provider->loadModules();
         for (ModuleType& type : types) {
-            type.ipcoreId = plugin.id;
+            type.ipcoreId = runtime.id;
             loadedAnyType = registerType(type) || loadedAnyType;
         }
     }

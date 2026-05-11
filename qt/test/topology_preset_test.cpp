@@ -1,9 +1,9 @@
 #include "commands/commandmanager.h"
 #include "commands/topologypresetcommand.h"
 #include "graph/graph.h"
+#include "ipcore/ipcoreruntimedescriptor.h"
+#include "ipcore/ipcoreruntimeregistry.h"
 #include "modules/moduleregistry.h"
-#include "plugins/plugindescriptor.h"
-#include "plugins/pluginregistry.h"
 #include "topology/topologypresetbuilder.h"
 
 #include <QDir>
@@ -42,7 +42,7 @@ bool boolParameter(const Module* module, const QString& name) {
     return *value;
 }
 
-QString repositoryPluginPath(const QString& relativePluginPath) {
+QString repositoryRuntimePath(const QString& relativeRuntimePath) {
     const QStringList startPaths = {
         QDir::currentPath(),
         QCoreApplication::applicationDirPath()
@@ -51,7 +51,7 @@ QString repositoryPluginPath(const QString& relativePluginPath) {
     for (const QString& startPath : startPaths) {
         QDir dir(startPath);
         while (true) {
-            const QFileInfo info(dir.filePath(relativePluginPath));
+            const QFileInfo info(dir.filePath(relativeRuntimePath));
             if (info.isDir()) {
                 return info.absoluteFilePath();
             }
@@ -61,7 +61,7 @@ QString repositoryPluginPath(const QString& relativePluginPath) {
         }
     }
 
-    return QFileInfo(QDir(startPaths.first()).filePath(relativePluginPath)).absoluteFilePath();
+    return QFileInfo(QDir(startPaths.first()).filePath(relativeRuntimePath)).absoluteFilePath();
 }
 
 ModuleType routerType(const QString& name, const QString& ipcoreId) {
@@ -300,28 +300,28 @@ void testPresetConnectionIdCollisionDoesNotRemoveExistingConnection() {
 }
 
 void testRepositoryRaveNoCMeshPresetCreatesInternalTiles() {
-    const QString pluginRoot = repositoryPluginPath(QStringLiteral("generated/ipcores/finepaper.ravenoc"));
-    const QList<PluginDescriptor> plugins = PluginRegistry::discover({pluginRoot});
-    require(plugins.size() == 1, "RaveNoC IP core should be discovered");
-    require(plugins.first().runtimeRootPath == pluginRoot,
+    const QString runtimeRoot = repositoryRuntimePath(QStringLiteral("generated/ipcores/finepaper.ravenoc"));
+    const QList<IpCoreRuntimeDescriptor> runtimes = IpCoreRuntimeRegistry::discover({runtimeRoot});
+    require(runtimes.size() == 1, "RaveNoC IP core should be discovered");
+    require(runtimes.first().runtimeRootPath == runtimeRoot,
             "RaveNoC runtime root should be generated bundle directory");
-    require(plugins.first().sourceRootPath == repositoryPluginPath(QStringLiteral("ipcores/ravenoc")),
+    require(runtimes.first().sourceRootPath == repositoryRuntimePath(QStringLiteral("ipcores/ravenoc")),
             "RaveNoC source root should resolve to concrete IP source package");
-    require(!plugins.first().topologyPresets.isEmpty(), "RaveNoC should expose topology presets");
+    require(!runtimes.first().topologyPresets.isEmpty(), "RaveNoC should expose topology presets");
 
     ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
-    registry.loadPlugins(plugins);
+    registry.loadIpCoreRuntimes(runtimes);
 
-    const auto meshIt = std::find_if(plugins.first().topologyPresets.cbegin(),
-                                     plugins.first().topologyPresets.cend(),
+    const auto meshIt = std::find_if(runtimes.first().topologyPresets.cbegin(),
+                                     runtimes.first().topologyPresets.cend(),
                                      [](const TopologyPresetDescriptor& preset) {
                                          return preset.id == QStringLiteral("mesh");
                                      });
-    require(meshIt != plugins.first().topologyPresets.cend(), "RaveNoC mesh preset should exist");
+    require(meshIt != runtimes.first().topologyPresets.cend(), "RaveNoC mesh preset should exist");
 
     Graph graph;
     TopologyPresetRequest request;
-    request.ipcoreId = plugins.first().id;
+    request.ipcoreId = runtimes.first().id;
     request.preset = *meshIt;
     request.parameters.insert(QStringLiteral("rows"), 2);
     request.parameters.insert(QStringLiteral("cols"), 2);

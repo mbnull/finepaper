@@ -11,11 +11,11 @@ Inputs:
 
 Outputs:
 
-- `generated/ipcores/<ipcore-id>/plugin.json`
+- `generated/ipcores/<ipcore-id>/ipcore-runtime.json`
 - `generated/ipcores/<ipcore-id>/modules.xml`
 - `generated/ipcores/<ipcore-id>/graphics/*.xml`
 
-`plugin.json` is the runtime manifest loaded by `PluginRegistry` and surfaced as an `IpCatalogEntry` by the Qt editor. It keeps `source_root`, generator, DRC, topology preset, instance parameter, and native plugin metadata. Generator and DRC commands consume `ipcore_graph_v1` input, which the editor writes as `finepaper-ipcore-graph-v1` JSON through `IpCoreGraphExporter`.
+`ipcore-runtime.json` is the runtime manifest loaded by `IpCoreRuntimeRegistry` and surfaced as an `IpCatalogEntry` by the Qt editor. It keeps `source_root`, generator, DRC, topology preset, and instance parameter metadata. Generator and DRC commands consume `ipcore_graph_v1` input, which the editor writes as `finepaper-ipcore-graph-v1` JSON through `IpCoreGraphExporter`.
 
 Run from the repository root:
 
@@ -31,13 +31,13 @@ Qt-visible connection points are interface anchors. Each interface should provid
 
 The editable packages under `ipcores/<package>/` are the source of truth. The generated runtime metadata under `generated/ipcores/<ipcore-id>/` is committed for simple local development and packaging:
 
-- `generated/ipcores/finepaper.noc/plugin.json`
+- `generated/ipcores/finepaper.noc/ipcore-runtime.json`
 - `generated/ipcores/finepaper.noc/modules.xml`
 - `generated/ipcores/finepaper.noc/graphics/*.xml`
-- `generated/ipcores/finepaper.ravenoc/plugin.json`
+- `generated/ipcores/finepaper.ravenoc/ipcore-runtime.json`
 - `generated/ipcores/finepaper.ravenoc/modules.xml`
 - `generated/ipcores/finepaper.ravenoc/graphics/*.xml`
-- `generated/ipcores/finepaper.opennoc/plugin.json`
+- `generated/ipcores/finepaper.opennoc/ipcore-runtime.json`
 - `generated/ipcores/finepaper.opennoc/modules.xml`
 - `generated/ipcores/finepaper.opennoc/graphics/*.xml`
 

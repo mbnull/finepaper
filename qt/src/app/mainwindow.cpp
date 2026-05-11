@@ -7,15 +7,15 @@
 #include "graph/graph.h"
 #include "commands/commandmanager.h"
 #include "ipcore/ipcatalogservice.h"
+#include "ipcore/ipcorecommandrunner.h"
 #include "ipcore/ipcoregraphexporter.h"
+#include "ipcore/ipcoreruntimediagnostics.h"
+#include "ipcore/ipcoreruntimeregistry.h"
 #include "nodeeditor/nodeeditorwidget.h"
 #include "panels/ipcatalogpanel.h"
 #include "panels/propertypanel.h"
 #include "panels/logpanel.h"
-#include "plugins/generatorrunner.h"
 #include "project/ipinstanceparameteradapter.h"
-#include "plugins/pluginregistry.h"
-#include "plugins/startupdiagnostics.h"
 #include "project/graphprojectserializer.h"
 #include "project/projectipservice.h"
 #include "project/projectreader.h"
@@ -241,8 +241,8 @@ void MainWindow::generateVerilog() {
 
     // Resolve the command before writing artifacts so IP-core ownership and
     // command availability fail early with a user-facing message.
-    const GeneratorCommand generatorCommand =
-        GeneratorRunner::resolveForIpcore(context->entry, jsonPath, outputDirectory);
+    const IpCoreResolvedCommand generatorCommand =
+        IpCoreCommandRunner::resolveGenerator(context->entry, jsonPath, outputDirectory);
     if (!generatorCommand.valid) {
         m_logPanel->appendMessage("[Generate] " + generatorCommand.errorMessage,
                                   QColor(220, 50, 50));
@@ -455,8 +455,8 @@ void MainWindow::closeEvent(QCloseEvent* event) {
 void MainWindow::setupPanels() {
     m_ipInstanceParameterAdapters.clear();
     QVector<IIpInstanceParameterAdapter*> ipInstanceParameterAdapters;
-    for (const PluginDescriptor& plugin : PluginRegistry::instance().plugins()) {
-        auto adapter = std::make_unique<ManifestIpInstanceParameterAdapter>(plugin);
+    for (const IpCoreRuntimeDescriptor& runtime : IpCoreRuntimeRegistry::instance().runtimes()) {
+        auto adapter = std::make_unique<RuntimeIpInstanceParameterAdapter>(runtime);
         ipInstanceParameterAdapters.push_back(adapter.get());
         m_ipInstanceParameterAdapters.push_back(std::move(adapter));
     }
@@ -729,8 +729,8 @@ void MainWindow::appendStartupLog() const {
     }
 
     const QStringList lines =
-        StartupDiagnostics::logLines(PluginRegistry::instance().plugins(),
-                                     ModuleRegistry::instance());
+        IpCoreRuntimeDiagnostics::logLines(IpCoreRuntimeRegistry::instance().runtimes(),
+                                           ModuleRegistry::instance());
     for (const QString& line : lines) {
         qInfo().noquote() << line;
         m_logPanel->appendMessage(line, QColor(70, 110, 190));

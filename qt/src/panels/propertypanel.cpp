@@ -281,7 +281,7 @@ QWidget* PropertyPanel::createIpInstanceParameterWidget(const IpInstanceParamete
                                                     bool editable) {
     if (!field.choices.isEmpty()) {
         auto* comboBox = new QComboBox(this);
-        for (const PluginInstanceParameterChoice& choice : field.choices) {
+        for (const IpCoreInstanceParameterChoice& choice : field.choices) {
             comboBox->addItem(choice.label, choice.value);
         }
         syncComboBoxValue(comboBox, ipInstanceValueAsString(field, storedValue));

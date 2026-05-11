@@ -28,9 +28,9 @@ IpCatalogEntry ravenocEntry() {
     entry.kind = QStringLiteral("noc");
     entry.moduleTypes = QStringList{QStringLiteral("RaveTile")};
 
-    PluginInstanceParameterDescriptor width;
+    IpCoreInstanceParameterDescriptor width;
     width.name = QStringLiteral("flit_data_width");
-    width.type = QStringLiteral("integer");
+    width.type = QStringLiteral("int");
     width.defaultValue = 32;
     entry.instanceParameters.insert(width.name, width);
 
@@ -136,7 +136,7 @@ void testProjectIpServiceLoadRestoresSelectionAndWorkspaceContext() {
     ProjectIpService projectIpService(&stateService);
 
     ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
-    PluginDescriptor ravenocDescriptor;
+    IpCoreRuntimeDescriptor ravenocDescriptor;
     ravenocDescriptor.id = QStringLiteral("finepaper.ravenoc");
     ravenocDescriptor.name = QStringLiteral("RaveNoC");
     ravenocDescriptor.kind = QStringLiteral("noc");
@@ -177,7 +177,7 @@ void testProjectIpServiceClearClearsSelectionAndWorkspaceContext() {
     ProjectIpService projectIpService(&stateService);
 
     ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
-    PluginDescriptor ravenocDescriptor;
+    IpCoreRuntimeDescriptor ravenocDescriptor;
     ravenocDescriptor.id = QStringLiteral("finepaper.ravenoc");
     ravenocDescriptor.name = QStringLiteral("RaveNoC");
     ravenocDescriptor.kind = QStringLiteral("noc");
@@ -209,7 +209,7 @@ void testActiveWorkspaceChangesWhenSelectionChanges() {
     ProjectIpService projectIpService(&stateService);
 
     ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
-    PluginDescriptor ravenocDescriptor;
+    IpCoreRuntimeDescriptor ravenocDescriptor;
     ravenocDescriptor.id = QStringLiteral("finepaper.ravenoc");
     ravenocDescriptor.name = QStringLiteral("RaveNoC");
     ravenocDescriptor.kind = QStringLiteral("noc");
@@ -219,7 +219,7 @@ void testActiveWorkspaceChangesWhenSelectionChanges() {
     raveTile.ipcoreId = ravenocDescriptor.id;
     require(registry.registerType(raveTile), "RaveTile should register");
 
-    PluginDescriptor fabricDescriptor;
+    IpCoreRuntimeDescriptor fabricDescriptor;
     fabricDescriptor.id = QStringLiteral("finepaper.fabric");
     fabricDescriptor.name = QStringLiteral("Fabric");
     fabricDescriptor.kind = QStringLiteral("fabric");

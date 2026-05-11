@@ -20,20 +20,22 @@ class SpecGeneratorTest < Minitest::Test
         ruby_model_dir: File.join(dir, 'ipcores/finepaper-noc/generator/src/ruby/model')
       )
 
-      plugin_json = JSON.parse(File.read(File.join(dir, 'generated/ipcores/finepaper.noc/plugin.json')))
-      assert_equal 'finepaper.noc', plugin_json.fetch('id')
-      assert_equal 'NoC', plugin_json.fetch('name')
-      assert_equal '1.0', plugin_json.fetch('version')
-      assert_equal 'noc', plugin_json.fetch('kind')
-      assert_equal '../../../ipcores/finepaper-noc', plugin_json.fetch('source_root')
-      assert_equal 'modules.xml', plugin_json.fetch('modules')
-      assert_equal 'graphics', plugin_json.fetch('graphics')
-      assert_equal 'ruby', plugin_json.fetch('generator').fetch('command')
-      assert_equal 'ipcore_graph_v1', plugin_json.fetch('generator').fetch('input_format')
-      assert_equal 'generator/bin/generate', plugin_json.fetch('generator').fetch('args').first
-      assert_equal 'ruby', plugin_json.fetch('drc').fetch('command')
-      assert_equal 'generator/bin/drc', plugin_json.fetch('drc').fetch('args').first
-      assert_equal 2, plugin_json.fetch('topology_presets').size
+      runtime_json = JSON.parse(File.read(File.join(dir, 'generated/ipcores/finepaper.noc/ipcore-runtime.json')))
+      assert_equal 'finepaper.noc', runtime_json.fetch('id')
+      assert_equal 'NoC', runtime_json.fetch('name')
+      assert_equal '1.0', runtime_json.fetch('version')
+      assert_equal 'noc', runtime_json.fetch('kind')
+      assert_equal '../../../ipcores/finepaper-noc', runtime_json.fetch('source_root')
+      assert_equal 'modules.xml', runtime_json.fetch('modules')
+      assert_equal 'graphics', runtime_json.fetch('graphics')
+      assert_equal 'ruby', runtime_json.fetch('generator').fetch('command')
+      assert_equal 'ipcore_graph_v1', runtime_json.fetch('generator').fetch('input_format')
+      assert_equal 'generator/bin/generate', runtime_json.fetch('generator').fetch('args').first
+      assert_equal 'ruby', runtime_json.fetch('drc').fetch('command')
+      assert_equal 'generator/bin/drc', runtime_json.fetch('drc').fetch('args').first
+      assert_equal 2, runtime_json.fetch('topology_presets').size
+      refute runtime_json.key?('native')
+      refute File.exist?(File.join(dir, 'generated/ipcores/finepaper.noc/plugin.json'))
 
       modules_xml = File.read(File.join(dir, 'generated/ipcores/finepaper.noc/modules.xml'))
       assert_includes modules_xml, '<bus name="ni_link"'
@@ -64,19 +66,20 @@ class SpecGeneratorTest < Minitest::Test
         runtime_bundle_dir: File.join(dir, 'generated/ipcores/finepaper.ravenoc')
       )
 
-      plugin_json = JSON.parse(File.read(File.join(dir, 'generated/ipcores/finepaper.ravenoc/plugin.json')))
-      assert_equal 'finepaper.ravenoc', plugin_json.fetch('id')
-      assert_equal 'RaveNoC', plugin_json.fetch('name')
-      assert_equal '1.0', plugin_json.fetch('version')
-      assert_equal 'noc', plugin_json.fetch('kind')
-      assert_equal '../../../ipcores/ravenoc', plugin_json.fetch('source_root')
-      assert_equal 11, plugin_json.fetch('instance_parameters').size
-      assert_equal 32, plugin_json.fetch('instance_parameters').fetch('flit_data_width').fetch('default')
-      assert_equal({ 'xy' => 'XY', 'yx' => 'YX' }, plugin_json.fetch('instance_parameters').fetch('routing_algorithm').fetch('labels'))
-      assert_equal 'generator/bin/generate', plugin_json.fetch('generator').fetch('args').first
-      assert_equal 'generator/bin/drc', plugin_json.fetch('drc').fetch('args').first
-      assert_equal 1, plugin_json.fetch('topology_presets').size
-      assert_equal({ 'enabled' => false, 'library' => '' }, plugin_json.fetch('native'))
+      runtime_json = JSON.parse(File.read(File.join(dir, 'generated/ipcores/finepaper.ravenoc/ipcore-runtime.json')))
+      assert_equal 'finepaper.ravenoc', runtime_json.fetch('id')
+      assert_equal 'RaveNoC', runtime_json.fetch('name')
+      assert_equal '1.0', runtime_json.fetch('version')
+      assert_equal 'noc', runtime_json.fetch('kind')
+      assert_equal '../../../ipcores/ravenoc', runtime_json.fetch('source_root')
+      assert_equal 11, runtime_json.fetch('instance_parameters').size
+      assert_equal 32, runtime_json.fetch('instance_parameters').fetch('flit_data_width').fetch('default')
+      assert_equal({ 'xy' => 'XY', 'yx' => 'YX' }, runtime_json.fetch('instance_parameters').fetch('routing_algorithm').fetch('labels'))
+      assert_equal 'generator/bin/generate', runtime_json.fetch('generator').fetch('args').first
+      assert_equal 'generator/bin/drc', runtime_json.fetch('drc').fetch('args').first
+      assert_equal 1, runtime_json.fetch('topology_presets').size
+      refute runtime_json.key?('native')
+      refute File.exist?(File.join(dir, 'generated/ipcores/finepaper.ravenoc/plugin.json'))
 
       modules_xml = File.read(File.join(dir, 'generated/ipcores/finepaper.ravenoc/modules.xml'))
       refute_includes modules_xml, '<buses>'
@@ -103,18 +106,20 @@ class SpecGeneratorTest < Minitest::Test
         runtime_bundle_dir: File.join(dir, 'generated/ipcores/finepaper.opennoc')
       )
 
-      plugin_json = JSON.parse(File.read(File.join(dir, 'generated/ipcores/finepaper.opennoc/plugin.json')))
-      assert_equal 'finepaper.opennoc', plugin_json.fetch('id')
-      assert_equal 'OpenNoC', plugin_json.fetch('name')
-      assert_equal '1.0', plugin_json.fetch('version')
-      assert_equal 'noc', plugin_json.fetch('kind')
-      assert_equal '../../../ipcores/opennoc', plugin_json.fetch('source_root')
-      assert_equal 4, plugin_json.fetch('instance_parameters').size
-      assert_equal 128, plugin_json.fetch('instance_parameters').fetch('req_flit_width').fetch('default')
-      assert_equal 'generator/bin/generate', plugin_json.fetch('generator').fetch('args').first
-      assert_equal 'generator/bin/drc', plugin_json.fetch('drc').fetch('args').first
-      assert_equal 1, plugin_json.fetch('topology_presets').size
-      assert_equal 'OpenNoCXP', plugin_json.fetch('topology_presets').first.fetch('router_module')
+      runtime_json = JSON.parse(File.read(File.join(dir, 'generated/ipcores/finepaper.opennoc/ipcore-runtime.json')))
+      assert_equal 'finepaper.opennoc', runtime_json.fetch('id')
+      assert_equal 'OpenNoC', runtime_json.fetch('name')
+      assert_equal '1.0', runtime_json.fetch('version')
+      assert_equal 'noc', runtime_json.fetch('kind')
+      assert_equal '../../../ipcores/opennoc', runtime_json.fetch('source_root')
+      assert_equal 4, runtime_json.fetch('instance_parameters').size
+      assert_equal 128, runtime_json.fetch('instance_parameters').fetch('req_flit_width').fetch('default')
+      assert_equal 'generator/bin/generate', runtime_json.fetch('generator').fetch('args').first
+      assert_equal 'generator/bin/drc', runtime_json.fetch('drc').fetch('args').first
+      assert_equal 1, runtime_json.fetch('topology_presets').size
+      assert_equal 'OpenNoCXP', runtime_json.fetch('topology_presets').first.fetch('router_module')
+      refute runtime_json.key?('native')
+      refute File.exist?(File.join(dir, 'generated/ipcores/finepaper.opennoc/plugin.json'))
 
       modules_xml = File.read(File.join(dir, 'generated/ipcores/finepaper.opennoc/modules.xml'))
       assert_includes modules_xml, '<module name="OpenNoCXP" palette_label="OpenNoC XP" graph_group="xps"'
@@ -332,7 +337,8 @@ class SpecGeneratorTest < Minitest::Test
 
       assert status.success?, stderr
       assert_includes stdout, 'Generated IP core runtime bundle'
-      assert File.file?(File.join(dir, 'generated/ipcores/finepaper.ravenoc/plugin.json'))
+      assert File.file?(File.join(dir, 'generated/ipcores/finepaper.ravenoc/ipcore-runtime.json'))
+      refute File.exist?(File.join(dir, 'generated/ipcores/finepaper.ravenoc/plugin.json'))
       assert File.file?(File.join(dir, 'generated/ipcores/finepaper.ravenoc/modules.xml'))
       assert File.file?(File.join(dir, 'generated/ipcores/finepaper.ravenoc/graphics/RaveTile.xml'))
       assert File.file?(File.join(dir, 'generated/ipcores/finepaper.ravenoc/graphics/RaveEndpoint.xml'))
@@ -351,12 +357,14 @@ class SpecGeneratorTest < Minitest::Test
 
       assert status.success?, stderr
       assert_includes stdout, 'Generated repository IP core runtime bundles'
-      assert File.file?(File.join(dir, 'generated/ipcores/finepaper.noc/plugin.json'))
+      assert File.file?(File.join(dir, 'generated/ipcores/finepaper.noc/ipcore-runtime.json'))
       assert File.file?(File.join(dir, 'generated/ipcores/finepaper.noc/modules.xml'))
       assert File.file?(File.join(dir, 'generated/ipcores/finepaper.noc/graphics/Endpoint.xml'))
-      assert File.file?(File.join(dir, 'generated/ipcores/finepaper.ravenoc/plugin.json'))
+      assert File.file?(File.join(dir, 'generated/ipcores/finepaper.ravenoc/ipcore-runtime.json'))
       assert File.file?(File.join(dir, 'generated/ipcores/finepaper.ravenoc/graphics/RaveTile.xml'))
       assert File.file?(File.join(dir, 'ipcores/finepaper-noc/generator/src/ruby/model/xp.rb'))
+      refute File.exist?(File.join(dir, 'generated/ipcores/finepaper.noc/plugin.json'))
+      refute File.exist?(File.join(dir, 'generated/ipcores/finepaper.ravenoc/plugin.json'))
     end
   end
 

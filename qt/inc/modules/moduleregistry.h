@@ -14,7 +14,7 @@
 #include <memory>
 
 class ModuleProvider;
-struct PluginDescriptor;
+struct IpCoreRuntimeDescriptor;
 
 struct ModuleParameterChoice {
     QString value;
@@ -116,8 +116,8 @@ public:
     void addProvider(std::unique_ptr<ModuleProvider> provider);
     // Inserts one module type definition; duplicate type names are skipped.
     bool registerType(const ModuleType& type);
-    // Imports module types from plugin manifests.
-    bool loadPlugins(const QList<PluginDescriptor>& plugins);
+    // Imports module types from IP core runtime manifests.
+    bool loadIpCoreRuntimes(const QList<IpCoreRuntimeDescriptor>& runtimes);
     // Looks up type metadata by canonical type name.
     const ModuleType* getType(const QString& name) const;
     // Looks up the first type that belongs to a graph group (e.g., "xps", "endpoints").
