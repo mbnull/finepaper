@@ -17,6 +17,11 @@ def generate_repository_ipcores
     views_dir: 'ipcores/ravenoc/views',
     runtime_bundle_dir: 'generated/ipcores/finepaper.ravenoc'
   )
+  SpecGenerator.generate_ipcore(
+    ipcore_path: 'ipcores/opennoc/ipcore.yml',
+    views_dir: 'ipcores/opennoc/views',
+    runtime_bundle_dir: 'generated/ipcores/finepaper.opennoc'
+  )
 end
 
 options = {

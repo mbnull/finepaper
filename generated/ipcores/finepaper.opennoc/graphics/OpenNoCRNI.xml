@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module-graphics type="OpenNoCRNI">
+  <graphics>
+    <node width="132" height="72" color="#f6f8fa" border="#57606a" />
+    <caption x="14" y="20" />
+  </graphics>
+  <anchors>
+    <anchor ref="chi" x="66" y="72" normal_x="0" normal_y="1" label="CHI" label_x="50" label_y="50" />
+  </anchors>
+</module-graphics>

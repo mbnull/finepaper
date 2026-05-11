@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module-bundle>
+  <buses>
+    <bus name="opennoc_mesh_link" description="OpenNoC router-to-router mesh link.">
+      <compatibility>
+        <role name="initiator" connects_to="target" />
+        <role name="target" connects_to="initiator" />
+      </compatibility>
+      <config>
+      </config>
+      <signals>
+        <signal name="link" direction="inout" width="OPENNOC_MESH_LINK" />
+      </signals>
+    </bus>
+    <bus name="opennoc_chi_attachment" description="OpenNoC CHI endpoint attachment.">
+      <compatibility>
+        <role name="initiator" connects_to="target" />
+        <role name="target" connects_to="initiator" />
+      </compatibility>
+      <config>
+      </config>
+      <signals>
+        <signal name="chi" direction="initiator_to_target" width="OPENNOC_CHI_ATTACHMENT" />
+      </signals>
+    </bus>
+  </buses>
+  <module name="OpenNoCXP" palette_label="OpenNoC XP" graph_group="xps" description="OpenNoC crosspoint router tile.">
+    <identity external_id_prefix="xp" display_prefix="XP" width="2" supports_mesh_coordinates="true" />
+    <interfaces>
+      <interface id="east" label="East" bus="opennoc_mesh_link" role="initiator" connects_to="target" match="" cardinality="one" autocomplete_group="router_side" topology_rule="opposite_side">
+      </interface>
+      <interface id="west" label="West" bus="opennoc_mesh_link" role="target" connects_to="initiator" match="" cardinality="one" autocomplete_group="router_side" topology_rule="opposite_side">
+      </interface>
+      <interface id="north" label="North" bus="opennoc_mesh_link" role="target" connects_to="initiator" match="" cardinality="one" autocomplete_group="router_side" topology_rule="opposite_side">
+      </interface>
+      <interface id="south" label="South" bus="opennoc_mesh_link" role="initiator" connects_to="target" match="" cardinality="one" autocomplete_group="router_side" topology_rule="opposite_side">
+      </interface>
+      <interface id="p0" label="P0" bus="opennoc_chi_attachment" role="target" connects_to="initiator" match="" cardinality="one" autocomplete_group="endpoint_attachment">
+      </interface>
+      <interface id="p1" label="P1" bus="opennoc_chi_attachment" role="target" connects_to="initiator" match="" cardinality="one" autocomplete_group="endpoint_attachment">
+      </interface>
+    </interfaces>
+    <ports>
+      <port id="east" direction="inout" type="bus" bus_type="opennoc_mesh_link" role="router" name="East" description="East OpenNoC mesh link" interface="east" />
+      <port id="west" direction="inout" type="bus" bus_type="opennoc_mesh_link" role="router" name="West" description="West OpenNoC mesh link" interface="west" />
+      <port id="north" direction="inout" type="bus" bus_type="opennoc_mesh_link" role="router" name="North" description="North OpenNoC mesh link" interface="north" />
+      <port id="south" direction="inout" type="bus" bus_type="opennoc_mesh_link" role="router" name="South" description="South OpenNoC mesh link" interface="south" />
+      <port id="p0" direction="input" type="bus" bus_type="opennoc_chi_attachment" role="attachment" name="P0" description="OpenNoC CHI attachment slot 0" interface="p0" />
+      <port id="p1" direction="input" type="bus" bus_type="opennoc_chi_attachment" role="attachment" name="P1" description="OpenNoC CHI attachment slot 1" interface="p1" />
+    </ports>
+    <parameters>
+      <parameter name="display_name" type="string" default="OpenNoC XP" label="Display name" description="Name shown on the canvas." />
+      <parameter name="external_id" type="string" default="xp_00" label="External ID" description="Stable generated artifact identifier." />
+      <parameter name="x" type="int" default="0" description="Canvas X position." configurable="false" />
+      <parameter name="y" type="int" default="0" description="Canvas Y position." configurable="false" />
+      <parameter name="mesh_col" type="int" default="0" description="Logical OpenNoC mesh column." configurable="false" />
+      <parameter name="mesh_row" type="int" default="0" description="Logical OpenNoC mesh row." configurable="false" />
+    </parameters>
+  </module>
+  <module name="OpenNoCRNF" palette_label="RNF" graph_group="opennoc_agents" description="OpenNoC CHI RNF agent.">
+    <identity external_id_prefix="rnf" display_prefix="RNF" width="2" supports_mesh_coordinates="false" />
+    <interfaces>
+      <interface id="chi" label="CHI" bus="opennoc_chi_attachment" role="initiator" connects_to="target" match="" cardinality="one" autocomplete_group="endpoint_attachment">
+      </interface>
+    </interfaces>
+    <ports>
+      <port id="chi" direction="output" type="bus" bus_type="opennoc_chi_attachment" role="attachment" name="CHI" description="OpenNoC RNF CHI attachment" interface="chi" />
+    </ports>
+    <parameters>
+      <parameter name="display_name" type="string" default="RNF" label="Display name" description="Name shown on the canvas." />
+      <parameter name="external_id" type="string" default="rnf_00" label="External ID" description="Stable generated artifact identifier." />
+      <parameter name="x" type="int" default="0" description="Canvas X position." configurable="false" />
+      <parameter name="y" type="int" default="0" description="Canvas Y position." configurable="false" />
+    </parameters>
+  </module>
+  <module name="OpenNoCRNI" palette_label="RNI" graph_group="opennoc_agents" description="OpenNoC CHI RNI agent.">
+    <identity external_id_prefix="rni" display_prefix="RNI" width="2" supports_mesh_coordinates="false" />
+    <interfaces>
+      <interface id="chi" label="CHI" bus="opennoc_chi_attachment" role="initiator" connects_to="target" match="" cardinality="one" autocomplete_group="endpoint_attachment">
+      </interface>
+    </interfaces>
+    <ports>
+      <port id="chi" direction="output" type="bus" bus_type="opennoc_chi_attachment" role="attachment" name="CHI" description="OpenNoC RNI CHI attachment" interface="chi" />
+    </ports>
+    <parameters>
+      <parameter name="display_name" type="string" default="RNI" label="Display name" description="Name shown on the canvas." />
+      <parameter name="external_id" type="string" default="rni_00" label="External ID" description="Stable generated artifact identifier." />
+      <parameter name="x" type="int" default="0" description="Canvas X position." configurable="false" />
+      <parameter name="y" type="int" default="0" description="Canvas Y position." configurable="false" />
+    </parameters>
+  </module>
+  <module name="OpenNoCHNF" palette_label="HNF" graph_group="opennoc_agents" description="OpenNoC CHI HNF agent.">
+    <identity external_id_prefix="hnf" display_prefix="HNF" width="2" supports_mesh_coordinates="false" />
+    <interfaces>
+      <interface id="chi" label="CHI" bus="opennoc_chi_attachment" role="initiator" connects_to="target" match="" cardinality="one" autocomplete_group="endpoint_attachment">
+      </interface>
+    </interfaces>
+    <ports>
+      <port id="chi" direction="output" type="bus" bus_type="opennoc_chi_attachment" role="attachment" name="CHI" description="OpenNoC HNF CHI attachment" interface="chi" />
+    </ports>
+    <parameters>
+      <parameter name="display_name" type="string" default="HNF" label="Display name" description="Name shown on the canvas." />
+      <parameter name="external_id" type="string" default="hnf_00" label="External ID" description="Stable generated artifact identifier." />
+      <parameter name="x" type="int" default="0" description="Canvas X position." configurable="false" />
+      <parameter name="y" type="int" default="0" description="Canvas Y position." configurable="false" />
+    </parameters>
+  </module>
+  <module name="OpenNoCHNI" palette_label="HNI" graph_group="opennoc_agents" description="OpenNoC CHI HNI agent.">
+    <identity external_id_prefix="hni" display_prefix="HNI" width="2" supports_mesh_coordinates="false" />
+    <interfaces>
+      <interface id="chi" label="CHI" bus="opennoc_chi_attachment" role="initiator" connects_to="target" match="" cardinality="one" autocomplete_group="endpoint_attachment">
+      </interface>
+    </interfaces>
+    <ports>
+      <port id="chi" direction="output" type="bus" bus_type="opennoc_chi_attachment" role="attachment" name="CHI" description="OpenNoC HNI CHI attachment" interface="chi" />
+    </ports>
+    <parameters>
+      <parameter name="display_name" type="string" default="HNI" label="Display name" description="Name shown on the canvas." />
+      <parameter name="external_id" type="string" default="hni_00" label="External ID" description="Stable generated artifact identifier." />
+      <parameter name="x" type="int" default="0" description="Canvas X position." configurable="false" />
+      <parameter name="y" type="int" default="0" description="Canvas Y position." configurable="false" />
+    </parameters>
+  </module>
+  <module name="OpenNoCSNF" palette_label="SNF" graph_group="opennoc_agents" description="OpenNoC CHI SNF agent.">
+    <identity external_id_prefix="snf" display_prefix="SNF" width="2" supports_mesh_coordinates="false" />
+    <interfaces>
+      <interface id="chi" label="CHI" bus="opennoc_chi_attachment" role="initiator" connects_to="target" match="" cardinality="one" autocomplete_group="endpoint_attachment">
+      </interface>
+    </interfaces>
+    <ports>
+      <port id="chi" direction="output" type="bus" bus_type="opennoc_chi_attachment" role="attachment" name="CHI" description="OpenNoC SNF CHI attachment" interface="chi" />
+    </ports>
+    <parameters>
+      <parameter name="display_name" type="string" default="SNF" label="Display name" description="Name shown on the canvas." />
+      <parameter name="external_id" type="string" default="snf_00" label="External ID" description="Stable generated artifact identifier." />
+      <parameter name="x" type="int" default="0" description="Canvas X position." configurable="false" />
+      <parameter name="y" type="int" default="0" description="Canvas Y position." configurable="false" />
+    </parameters>
+  </module>
+</module-bundle>

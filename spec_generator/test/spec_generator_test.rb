@@ -93,6 +93,46 @@ class SpecGeneratorTest < Minitest::Test
     end
   end
 
+  def test_generates_opennoc_ipcore_runtime_bundle
+    Dir.mktmpdir do |dir|
+      write_opennoc_source(dir)
+
+      SpecGenerator.generate_ipcore(
+        ipcore_path: File.join(dir, 'ipcores/opennoc/ipcore.yml'),
+        views_dir: File.join(dir, 'ipcores/opennoc/views'),
+        runtime_bundle_dir: File.join(dir, 'generated/ipcores/finepaper.opennoc')
+      )
+
+      plugin_json = JSON.parse(File.read(File.join(dir, 'generated/ipcores/finepaper.opennoc/plugin.json')))
+      assert_equal 'finepaper.opennoc', plugin_json.fetch('id')
+      assert_equal 'OpenNoC', plugin_json.fetch('name')
+      assert_equal '1.0', plugin_json.fetch('version')
+      assert_equal 'noc', plugin_json.fetch('kind')
+      assert_equal '../../../ipcores/opennoc', plugin_json.fetch('source_root')
+      assert_equal 4, plugin_json.fetch('instance_parameters').size
+      assert_equal 128, plugin_json.fetch('instance_parameters').fetch('req_flit_width').fetch('default')
+      assert_equal 'generator/bin/generate', plugin_json.fetch('generator').fetch('args').first
+      assert_equal 'generator/bin/drc', plugin_json.fetch('drc').fetch('args').first
+      assert_equal 1, plugin_json.fetch('topology_presets').size
+      assert_equal 'OpenNoCXP', plugin_json.fetch('topology_presets').first.fetch('router_module')
+
+      modules_xml = File.read(File.join(dir, 'generated/ipcores/finepaper.opennoc/modules.xml'))
+      assert_includes modules_xml, '<module name="OpenNoCXP" palette_label="OpenNoC XP" graph_group="xps"'
+      assert_includes modules_xml, '<module name="OpenNoCRNF" palette_label="RNF" graph_group="opennoc_agents"'
+      assert_includes modules_xml, '<module name="OpenNoCRNI" palette_label="RNI" graph_group="opennoc_agents"'
+      assert_includes modules_xml, '<module name="OpenNoCHNF" palette_label="HNF" graph_group="opennoc_agents"'
+      assert_includes modules_xml, '<module name="OpenNoCHNI" palette_label="HNI" graph_group="opennoc_agents"'
+      assert_includes modules_xml, '<module name="OpenNoCSNF" palette_label="SNF" graph_group="opennoc_agents"'
+      assert_includes modules_xml, '<interface id="p0" label="P0" bus="opennoc_chi_attachment" role="target" connects_to="initiator" match="" cardinality="one" autocomplete_group="endpoint_attachment">'
+      assert_includes modules_xml, '<interface id="chi" label="CHI" bus="opennoc_chi_attachment" role="initiator" connects_to="target" match="" cardinality="one" autocomplete_group="endpoint_attachment">'
+
+      %w[OpenNoCXP OpenNoCRNF OpenNoCRNI OpenNoCHNF OpenNoCHNI OpenNoCSNF].each do |name|
+        assert File.file?(File.join(dir, "generated/ipcores/finepaper.opennoc/graphics/#{name}.xml")),
+               "#{name} graphics should be generated"
+      end
+    end
+  end
+
   def test_generates_interface_anchor_bundle_for_renamed_noc_modules
     Dir.mktmpdir do |dir|
       write_file(dir, 'ipcores/renamed-noc/ipcore.yml', renamed_interface_anchor_ipcore_yaml)
@@ -265,6 +305,19 @@ class SpecGeneratorTest < Minitest::Test
     end
   end
 
+  def test_rejects_malformed_module_view_without_module_attribute
+    Dir.mktmpdir do |dir|
+      malformed = rave_tile_view_xml.sub(' module="RaveTile"', '')
+      write_ravenoc_source(dir, rave_tile_view: malformed)
+
+      error = assert_raises(SpecGenerator::SpecError) do
+        generate_ravenoc(dir)
+      end
+
+      assert_match(/view RaveTile is missing module attribute/, error.message)
+    end
+  end
+
   def test_cli_generates_ipcore_bundle
     Dir.mktmpdir do |dir|
       write_ravenoc_source(dir)
@@ -404,9 +457,18 @@ class SpecGeneratorTest < Minitest::Test
     File.read(repo_path('ipcores/ravenoc/ipcore.yml'))
   end
 
+  def opennoc_ipcore_yaml
+    File.read(repo_path('ipcores/opennoc/ipcore.yml'))
+  end
+
+  def opennoc_view_xml(name)
+    File.read(repo_path("ipcores/opennoc/views/#{name}.xml"))
+  end
+
   def write_source_fixture_repo(root)
     write_finepaper_noc_source(root)
     write_ravenoc_source(root)
+    write_opennoc_source(root)
   end
 
   def build_generated_fixture_repo(root)
@@ -417,6 +479,7 @@ class SpecGeneratorTest < Minitest::Test
   def generate_fixture_runtime(root)
     generate_finepaper_noc(root)
     generate_ravenoc(root)
+    generate_opennoc(root)
   end
 
   def write_finepaper_noc_source(root, yaml: finepaper_noc_ipcore_yaml, xp_view: xp_view_xml, endpoint_view: endpoint_view_xml)
@@ -429,6 +492,13 @@ class SpecGeneratorTest < Minitest::Test
     write_file(root, 'ipcores/ravenoc/ipcore.yml', yaml)
     write_file(root, 'ipcores/ravenoc/views/RaveTile.xml', rave_tile_view)
     write_file(root, 'ipcores/ravenoc/views/RaveEndpoint.xml', rave_endpoint_view)
+  end
+
+  def write_opennoc_source(root)
+    write_file(root, 'ipcores/opennoc/ipcore.yml', opennoc_ipcore_yaml)
+    %w[OpenNoCXP OpenNoCRNF OpenNoCRNI OpenNoCHNF OpenNoCHNI OpenNoCSNF].each do |name|
+      write_file(root, "ipcores/opennoc/views/#{name}.xml", opennoc_view_xml(name))
+    end
   end
 
   def generate_finepaper_noc(root)
@@ -445,6 +515,14 @@ class SpecGeneratorTest < Minitest::Test
       ipcore_path: File.join(root, 'ipcores/ravenoc/ipcore.yml'),
       views_dir: File.join(root, 'ipcores/ravenoc/views'),
       runtime_bundle_dir: File.join(root, 'generated/ipcores/finepaper.ravenoc')
+    )
+  end
+
+  def generate_opennoc(root)
+    SpecGenerator.generate_ipcore(
+      ipcore_path: File.join(root, 'ipcores/opennoc/ipcore.yml'),
+      views_dir: File.join(root, 'ipcores/opennoc/views'),
+      runtime_bundle_dir: File.join(root, 'generated/ipcores/finepaper.opennoc')
     )
   end
 

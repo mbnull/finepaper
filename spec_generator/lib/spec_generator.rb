@@ -27,7 +27,10 @@ module SpecGenerator
     ['ipcores/finepaper-noc/generator/src/ruby/model', :generated_files],
     ['generated/ipcores/finepaper.ravenoc/plugin.json', :file],
     ['generated/ipcores/finepaper.ravenoc/modules.xml', :file],
-    ['generated/ipcores/finepaper.ravenoc/graphics', :directory]
+    ['generated/ipcores/finepaper.ravenoc/graphics', :directory],
+    ['generated/ipcores/finepaper.opennoc/plugin.json', :file],
+    ['generated/ipcores/finepaper.opennoc/modules.xml', :file],
+    ['generated/ipcores/finepaper.opennoc/graphics', :directory]
   ].freeze
   HANDWRITTEN_MODEL_FILES = %w[connection.rb noc_config.rb].freeze
   IPCORE_INTERFACE_KEYS = %w[
@@ -59,6 +62,7 @@ module SpecGenerator
     Dir.mktmpdir('finepaper-spec-gen-check') do |dir|
       copy_ipcore_source(root, dir, 'finepaper-noc')
       copy_ipcore_source(root, dir, 'ravenoc')
+      copy_ipcore_source(root, dir, 'opennoc')
 
       generate_ipcore(
         ipcore_path: File.join(dir, 'ipcores/finepaper-noc/ipcore.yml'),
@@ -71,6 +75,12 @@ module SpecGenerator
         ipcore_path: File.join(dir, 'ipcores/ravenoc/ipcore.yml'),
         views_dir: File.join(dir, 'ipcores/ravenoc/views'),
         runtime_bundle_dir: File.join(dir, 'generated/ipcores/finepaper.ravenoc')
+      )
+
+      generate_ipcore(
+        ipcore_path: File.join(dir, 'ipcores/opennoc/ipcore.yml'),
+        views_dir: File.join(dir, 'ipcores/opennoc/views'),
+        runtime_bundle_dir: File.join(dir, 'generated/ipcores/finepaper.opennoc')
       )
 
       GENERATED_OUTPUT_ROOTS.each do |relroot, type|
@@ -573,16 +583,22 @@ module SpecGenerator
 
       text = File.read(path)
       declared_module = text[/<module-view\b[^>]*\bmodule="([^"]+)"/, 1]
-      raise SpecError, "view #{module_name} is missing module attribute" unless declared_module
-      raise SpecError, "view #{module_name} declares module #{declared_module}" unless declared_module == module_name
+      if declared_module
+        raise SpecError, "view #{module_name} declares module #{declared_module}" unless declared_module == module_name
 
-      schema = text[/<module-view\b[^>]*\bschema="([^"]+)"/, 1]
-      raise SpecError, "view #{module_name} schema must be v1" unless schema == 'v1'
+        schema = text[/<module-view\b[^>]*\bschema="([^"]+)"/, 1]
+        raise SpecError, "view #{module_name} schema must be v1" unless schema == 'v1'
+      elsif text.match?(/<module-view\b/)
+        raise SpecError, "view #{module_name} is missing module attribute"
+      elsif !bare_graphics_view?(text)
+        raise SpecError, "view #{module_name} is missing module attribute"
+      end
 
       graphics_xml = normalize_indentation(text[%r{(<graphics\b.*?</graphics>)}m, 1])
       raise SpecError, "view #{module_name} must contain graphics element" unless graphics_xml
 
       anchors_xml = normalize_indentation(text[%r{(<anchors\b.*?</anchors>)}m, 1])
+      graphics_xml = strip_nested_anchors(graphics_xml) if anchors_xml
       refs = text.scan(/<(?:interface|anchor)\b[^>]*\bref="([^"]+)"/).flatten
       View.new(
         module_name: module_name,
@@ -598,6 +614,14 @@ module SpecGenerator
       lines = text.strip.lines.map(&:rstrip)
       rest_indent = lines.drop(1).reject(&:empty?).map { |line| line[/\A */].size }.min || 0
       ([lines.first.strip] + lines.drop(1).map { |line| line.sub(/\A {0,#{rest_indent}}/, '') }).join("\n")
+    end
+
+    def strip_nested_anchors(text)
+      normalize_indentation(text.sub(%r{\n?\s*<anchors\b.*?</anchors>}m, ''))
+    end
+
+    def bare_graphics_view?(text)
+      text.match?(/\A\s*(?:<\?xml[^>]*>\s*)?<graphics\b/m)
     end
 
     def validate_view_refs!(view)
