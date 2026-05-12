@@ -3,12 +3,16 @@
 #include "modules/moduleregistry.h"
 #include "project/ipinstancestate.h"
 #include "validation/drcrunner.h"
+#include "validation/projectvalidationrunner.h"
+#include "validation/validationmanager.h"
 #include "validation/validator.h"
 
 #include <QCoreApplication>
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QStringList>
+#include <QTemporaryDir>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
@@ -18,6 +22,17 @@ namespace {
 std::unique_ptr<Module> makeEndpoint(const QString& id) {
     auto module = std::make_unique<Module>(id, "Endpoint");
     module->addPort(Port("noc", Port::Direction::Output, "bus", "NoC", {}, "attachment", "ni_link", "noc"));
+    return module;
+}
+
+std::unique_ptr<Module> makeOwnedModule(const QString& id,
+                                        const QString& ipcoreId,
+                                        const QString& instanceId,
+                                        const QString& externalId) {
+    auto module = std::make_unique<Module>(id, QStringLiteral("ScriptedTile"));
+    module->setIpcoreId(ipcoreId);
+    module->setInstanceId(instanceId);
+    module->setParameter(QStringLiteral("external_id"), externalId);
     return module;
 }
 
@@ -98,6 +113,19 @@ bool hasRule(const QList<ValidationResult>& results, const QString& ruleName) {
     return false;
 }
 
+int countResults(const QList<ValidationResult>& results,
+                 ValidationSeverity severity,
+                 const QString& messageText) {
+    int count = 0;
+    for (const auto& result : results) {
+        if (result.severity() == severity && result.message().contains(messageText)) {
+            ++count;
+        }
+    }
+
+    return count;
+}
+
 QString repositoryPath(const QString& relativePath) {
     const QStringList startPaths = {
         QDir::currentPath(),
@@ -160,6 +188,202 @@ ProjectIpInstanceRecord ravenocIpcoreStateRecord() {
         }}
     };
     return state;
+}
+
+IpCatalogEntry projectCatalogEntryWithoutDrc(const QString& ipcoreId) {
+    IpCatalogEntry entry;
+    entry.id = ipcoreId;
+    entry.name = ipcoreId;
+    entry.version = QStringLiteral("1.0");
+    entry.kind = QStringLiteral("noc");
+    return entry;
+}
+
+ProjectIpInstanceRecord projectInstanceRecord(const QString& ipcoreId,
+                                              const QString& instanceId) {
+    ProjectIpInstanceRecord state;
+    state.ipcoreId = ipcoreId;
+    state.instanceId = instanceId;
+    state.schema = ipcoreId + QStringLiteral("-project-state-v1");
+    state.state = QJsonObject{{QStringLiteral("kind"), QStringLiteral("noc")}};
+    return state;
+}
+
+IpCatalogEntry projectCatalogEntryWithDrc(const QString& ipcoreId,
+                                          const QString& sourceRootPath,
+                                          const QString& commandPath) {
+    IpCatalogEntry entry = projectCatalogEntryWithoutDrc(ipcoreId);
+    entry.sourceRootPath = sourceRootPath;
+    entry.drc.command = commandPath;
+    entry.drc.inputFormat = QStringLiteral("ipcore_graph_v1");
+    entry.drc.args = {QStringLiteral("{input}")};
+    return entry;
+}
+
+QString writeDrcScript(QTemporaryDir& tempDir) {
+    const QString path = tempDir.filePath(QStringLiteral("drc.sh"));
+    QFile file(path);
+    require(file.open(QIODevice::WriteOnly | QIODevice::Truncate),
+            "failed to create temporary DRC script");
+    file.write("#!/bin/sh\n");
+    file.write("echo \"ERROR design: scripted DRC violation\" >&2\n");
+    file.write("exit 0\n");
+    file.close();
+    require(file.setPermissions(QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner),
+            "failed to mark temporary DRC script executable");
+    return path;
+}
+
+QString writeDrcInputEchoScript(QTemporaryDir& tempDir) {
+    const QString path = tempDir.filePath(QStringLiteral("drc_input_echo.rb"));
+    QFile file(path);
+    require(file.open(QIODevice::WriteOnly | QIODevice::Truncate),
+            "failed to create temporary input echo DRC script");
+    file.write("#!/usr/bin/env ruby\n");
+    file.write("require 'json'\n");
+    file.write("input = JSON.parse(File.read(ARGV.fetch(0)))\n");
+    file.write("module_ids = input.fetch('modules').map { |mod| mod.fetch('id') }.sort.join(',')\n");
+    file.write("warn \"ERROR design: #{input.fetch('instance')} modules=#{module_ids}\"\n");
+    file.write("exit 0\n");
+    file.close();
+    require(file.setPermissions(QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner),
+            "failed to mark temporary input echo DRC script executable");
+    return path;
+}
+
+void testProjectValidationRunnerRejectsNullGraphWithoutCrashing() {
+    const QList<IpCatalogEntry> entries{
+        projectCatalogEntryWithoutDrc(QStringLiteral("finepaper.noc_a"))
+    };
+    const QVector<ProjectIpInstanceRecord> instances{
+        projectInstanceRecord(QStringLiteral("finepaper.noc_a"), QStringLiteral("noc_a_0"))
+    };
+
+    ProjectValidationRunner runner;
+    const QList<ValidationResult> results = runner.validate(nullptr, entries, instances);
+
+    require(results.size() == 1, "null graph should produce one validation error");
+    require(results.first().severity() == ValidationSeverity::Error,
+            "null graph validation result should be an error");
+    require(results.first().message().contains(QStringLiteral("Graph")),
+            "null graph validation result should explain that the graph is missing");
+}
+
+void testValidationManagerHandlesMissingGraphAndLogPanel() {
+    ValidationManager manager(nullptr, nullptr, nullptr, nullptr, nullptr);
+    manager.runValidation();
+}
+
+void testProjectValidationRunnerWarnsForEachProjectInstanceWithoutDrc() {
+    Graph graph;
+    const QList<IpCatalogEntry> entries{
+        projectCatalogEntryWithoutDrc(QStringLiteral("finepaper.noc_a")),
+        projectCatalogEntryWithoutDrc(QStringLiteral("finepaper.noc_b"))
+    };
+    const QVector<ProjectIpInstanceRecord> instances{
+        projectInstanceRecord(QStringLiteral("finepaper.noc_a"), QStringLiteral("noc_a_0")),
+        projectInstanceRecord(QStringLiteral("finepaper.noc_b"), QStringLiteral("noc_b_0"))
+    };
+
+    ProjectValidationRunner runner;
+    const QList<ValidationResult> results = runner.validate(&graph, entries, instances);
+
+    require(results.size() == 2, "two IP instances without DRC should produce two findings");
+    require(countResults(results, ValidationSeverity::Warning, QStringLiteral("noc_a_0")) == 1,
+            "first project instance without DRC should produce one warning containing its instance id");
+    require(countResults(results, ValidationSeverity::Warning, QStringLiteral("noc_b_0")) == 1,
+            "second project instance without DRC should produce one warning containing its instance id");
+}
+
+void testProjectValidationRunnerErrorsWhenCatalogEntryIsMissing() {
+    Graph graph;
+    const QList<IpCatalogEntry> entries{
+        projectCatalogEntryWithoutDrc(QStringLiteral("finepaper.present"))
+    };
+    const QVector<ProjectIpInstanceRecord> instances{
+        projectInstanceRecord(QStringLiteral("finepaper.missing"), QStringLiteral("missing_0"))
+    };
+
+    ProjectValidationRunner runner;
+    const QList<ValidationResult> results = runner.validate(&graph, entries, instances);
+
+    require(results.size() == 1, "missing runtime/catalog entry should produce one finding");
+    require(results.first().severity() == ValidationSeverity::Error,
+            "missing runtime/catalog entry should be an error");
+    require(results.first().ruleName() == QStringLiteral("DRC"),
+            "missing runtime/catalog entry should be reported from DRC validation");
+    require(results.first().message().contains(QStringLiteral("missing_0")),
+            "missing runtime/catalog entry error should include the instance id");
+    require(results.first().message().contains(QStringLiteral("finepaper.missing")),
+            "missing runtime/catalog entry error should include the IP core id");
+}
+
+void testProjectValidationRunnerRunsDrcForEveryProjectInstance() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "failed to create temporary DRC directory");
+    const QString scriptPath = writeDrcScript(tempDir);
+    Graph graph;
+    const QList<IpCatalogEntry> entries{
+        projectCatalogEntryWithDrc(QStringLiteral("finepaper.scripted"),
+                                   tempDir.path(),
+                                   scriptPath)
+    };
+    const QVector<ProjectIpInstanceRecord> instances{
+        projectInstanceRecord(QStringLiteral("finepaper.scripted"), QStringLiteral("scripted_0")),
+        projectInstanceRecord(QStringLiteral("finepaper.scripted"), QStringLiteral("scripted_1"))
+    };
+
+    ProjectValidationRunner runner;
+    const QList<ValidationResult> results = runner.validate(&graph, entries, instances);
+
+    require(results.size() == 2, "DRC should run for each project instance");
+    require(countResults(results,
+                         ValidationSeverity::Error,
+                         QStringLiteral("scripted_0: scripted DRC violation")) == 1,
+            "first project instance DRC result should be prefixed with its instance id");
+    require(countResults(results,
+                         ValidationSeverity::Error,
+                         QStringLiteral("scripted_1: scripted DRC violation")) == 1,
+            "second project instance DRC result should be prefixed with its instance id");
+}
+
+void testProjectValidationRunnerDrcReceivesEachInstanceScopedGraph() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "failed to create temporary DRC directory");
+    const QString scriptPath = writeDrcInputEchoScript(tempDir);
+    const QString ipcoreId = QStringLiteral("finepaper.scripted");
+    Graph graph;
+    require(graph.addModule(makeOwnedModule(QStringLiteral("module_a"),
+                                            ipcoreId,
+                                            QStringLiteral("scripted_0"),
+                                            QStringLiteral("only_a"))),
+            "first instance module should add");
+    require(graph.addModule(makeOwnedModule(QStringLiteral("module_b"),
+                                            ipcoreId,
+                                            QStringLiteral("scripted_1"),
+                                            QStringLiteral("only_b"))),
+            "second instance module should add");
+    const QList<IpCatalogEntry> entries{
+        projectCatalogEntryWithDrc(ipcoreId, tempDir.path(), scriptPath)
+    };
+    const QVector<ProjectIpInstanceRecord> instances{
+        projectInstanceRecord(ipcoreId, QStringLiteral("scripted_0")),
+        projectInstanceRecord(ipcoreId, QStringLiteral("scripted_1"))
+    };
+
+    ProjectValidationRunner runner;
+    const QList<ValidationResult> results = runner.validate(&graph, entries, instances);
+
+    require(results.size() == 2,
+            "DRC should receive one instance-scoped graph per project instance");
+    require(countResults(results,
+                         ValidationSeverity::Error,
+                         QStringLiteral("scripted_0: scripted_0 modules=only_a")) == 1,
+            "first DRC input should include only the first instance module");
+    require(countResults(results,
+                         ValidationSeverity::Error,
+                         QStringLiteral("scripted_1: scripted_1 modules=only_b")) == 1,
+            "second DRC input should include only the second instance module");
 }
 
 void testBasicValidatorLeavesIpDrcToPluginCommand() {
@@ -306,6 +530,12 @@ int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
 
     try {
+        testProjectValidationRunnerRejectsNullGraphWithoutCrashing();
+        testValidationManagerHandlesMissingGraphAndLogPanel();
+        testProjectValidationRunnerWarnsForEachProjectInstanceWithoutDrc();
+        testProjectValidationRunnerErrorsWhenCatalogEntryIsMissing();
+        testProjectValidationRunnerRunsDrcForEveryProjectInstance();
+        testProjectValidationRunnerDrcReceivesEachInstanceScopedGraph();
         testBasicValidatorLeavesIpDrcToPluginCommand();
         testDrcRunnerUsesIpcoreGraphForRaveNoC();
         testDrcRunnerAcceptsManualRaveTilePlacement();

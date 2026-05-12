@@ -791,7 +791,7 @@ void MainWindow::setupActions() {
 
     m_validateAction = new QAction("Validate", this);
     m_validateAction->setObjectName(QStringLiteral("validateAction"));
-    m_validateAction->setToolTip("Run validation for the current graph.");
+    m_validateAction->setToolTip("Run project validation across all IP instances.");
     connect(m_validateAction, &QAction::triggered, this, &MainWindow::runValidation);
 
     m_arrangeAction = new QAction("Arrange", this);

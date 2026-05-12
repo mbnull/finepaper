@@ -14,7 +14,7 @@ public:
 };
 
 // BasicValidator checks framework-level graph consistency only.
-// IP/domain DRC is provided by the active IP package's DRC command.
+// IP/domain DRC is provided by each project IP instance's DRC command.
 class BasicValidator : public Validator {
 public:
     QList<ValidationResult> validate(const Graph* graph) override;

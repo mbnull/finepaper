@@ -31,9 +31,9 @@ target("qt")
 
     add_includedirs("inc")
 
-local function add_qt_test_target(name, source_files, extra_files)
+local function add_qt_test_target(name, source_files, extra_files, qt_rule)
     target(name)
-        add_rules("qt.console")
+        add_rules(qt_rule or "qt.console")
         set_kind("binary")
         set_group("test")
         set_default(false)
@@ -142,6 +142,9 @@ add_qt_test_target("validation_test", "test/validation_test.cpp", {
     "src/ipcore/ipcoregraphexporter.cpp",
     "src/ipcore/ipcatalogservice.cpp",
     "src/**/drcrunner.cpp",
+    "src/**/projectvalidationrunner.cpp",
+    "src/**/validationmanager.cpp",
+    "src/**/logpanel.cpp",
     "src/app/generationartifacts.cpp",
     "src/**/ipcorecommandrunner.cpp",
     "src/**/graphprojectserializer.cpp",
@@ -160,6 +163,9 @@ add_qt_test_target("validation_test", "test/validation_test.cpp", {
     "inc/**/graph.h",
     "inc/**/module.h",
     "inc/**/drcrunner.h",
+    "inc/**/projectvalidationrunner.h",
+    "inc/**/validationmanager.h",
+    "inc/**/logpanel.h",
     "inc/ipcore/ipcoregraphexporter.h",
     "inc/ipcore/ipcatalogservice.h",
     "inc/app/generationartifacts.h",
@@ -170,7 +176,7 @@ add_qt_test_target("validation_test", "test/validation_test.cpp", {
     "inc/**/ipinstancestate.h",
     "inc/**/ipcoreruntimeregistry.h",
     "inc/**/ipcoreruntimedescriptor.h"
-})
+}, "qt.widgetapp")
 
 add_qt_test_target("uiscale_test", "test/uiscale_test.cpp", {
     "src/**/uiscale.cpp",

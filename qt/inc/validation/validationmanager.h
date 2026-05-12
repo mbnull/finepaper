@@ -6,11 +6,10 @@
 
 class Graph;
 class LogPanel;
-class BasicValidator;
-class DRCRunner;
 class IpCatalogService;
 class ProjectStateService;
 class ActiveWorkspaceController;
+class ProjectValidationRunner;
 
 class ValidationManager : public QObject {
     Q_OBJECT
@@ -33,10 +32,8 @@ private:
     Graph* m_graph;
     ProjectStateService* m_projectStateService;
     const IpCatalogService* m_catalogService;
-    const ActiveWorkspaceController* m_activeWorkspaceController;
     LogPanel* m_logPanel;
-    BasicValidator* m_validator;
-    DRCRunner* m_drcRunner;
+    ProjectValidationRunner* m_projectValidationRunner;
 };
 
 #endif
