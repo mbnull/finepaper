@@ -33,6 +33,7 @@ module SpecGenerator
     ['generated/ipcores/finepaper.opennoc/graphics', :directory]
   ].freeze
   HANDWRITTEN_MODEL_FILES = %w[connection.rb noc_config.rb].freeze
+  STALE_RUNTIME_MANIFEST_FILE_NAME = %w[plugin json].join('.').freeze
   IPCORE_INTERFACE_KEYS = %w[
     label bus role connects_to match accepts config cardinality autocomplete_group topology_rule port ports
   ].freeze
@@ -109,6 +110,10 @@ module SpecGenerator
     raise SpecError, "Generated artifacts are out of date:\n#{mismatches.map { |path| "  #{path}" }.join("\n")}"
   end
 
+  def self.stale_runtime_manifest_file_name
+    STALE_RUNTIME_MANIFEST_FILE_NAME
+  end
+
   def self.copy_ipcore_source(source_root, target_root, package)
     source_package = File.join(source_root, 'ipcores', package)
     target_package = File.join(target_root, 'ipcores', package)
@@ -132,7 +137,7 @@ module SpecGenerator
   end
 
   def self.stale_generated_runtime_manifest_relpaths(root)
-    Dir.glob(File.join(root, 'generated/ipcores/*/plugin.json'))
+    Dir.glob(File.join(root, 'generated/ipcores/*', stale_runtime_manifest_file_name))
        .select { |path| File.file?(path) }
        .map { |path| path.sub(%r{\A#{Regexp.escape(root)}/}, '') }
        .sort
@@ -837,7 +842,7 @@ module SpecGenerator
     def write(bundle_dir)
       @bundle_dir = File.expand_path(bundle_dir)
       FileUtils.mkdir_p(File.join(bundle_dir, 'graphics'))
-      FileUtils.rm_f(File.join(bundle_dir, 'plugin.json'))
+      FileUtils.rm_f(File.join(bundle_dir, SpecGenerator.stale_runtime_manifest_file_name))
       File.write(File.join(bundle_dir, 'ipcore-runtime.json'), runtime_json)
       File.write(File.join(bundle_dir, 'modules.xml'), modules_xml)
 

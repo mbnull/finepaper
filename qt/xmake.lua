@@ -547,6 +547,7 @@ add_qt_test_target("topology_preset_test", "test/topology_preset_test.cpp", {
 
 add_qt_test_target("v1architecturegate_test", "test/v1architecturegate_test.cpp", {
     "src/app/generationartifacts.cpp",
+    "src/app/projectgenerationrunner.cpp",
     "src/connection/connectionruleservice.cpp",
     "src/ipcore/ipcatalogservice.cpp",
     "src/ipcore/ipcoregraphexporter.cpp",
@@ -559,6 +560,8 @@ add_qt_test_target("v1architecturegate_test", "test/v1architecturegate_test.cpp"
     "src/project/projectwriter.cpp",
     "src/topology/topologypresetbuilder.cpp",
     "src/validation/drcrunner.cpp",
+    "src/validation/projectvalidationrunner.cpp",
+    "src/validation/validator.cpp",
     "src/validation/validationresult.cpp",
     "src/workspace/activeworkspacecontroller.cpp",
     "src/**/graph.cpp",
@@ -569,6 +572,7 @@ add_qt_test_target("v1architecturegate_test", "test/v1architecturegate_test.cpp"
     "src/**/moduleregistry.cpp",
     "src/**/moduleprovider.cpp",
     "inc/app/generationartifacts.h",
+    "inc/app/projectgenerationrunner.h",
     "inc/connection/connectionruleservice.h",
     "inc/graph/graph.h",
     "inc/graph/module.h",
@@ -583,6 +587,8 @@ add_qt_test_target("v1architecturegate_test", "test/v1architecturegate_test.cpp"
     "inc/project/projectwriter.h",
     "inc/topology/topologypresetbuilder.h",
     "inc/validation/drcrunner.h",
+    "inc/validation/projectvalidationrunner.h",
+    "inc/validation/validator.h",
     "inc/validation/validationresult.h",
     "inc/workspace/activeworkspacecontroller.h"
 })

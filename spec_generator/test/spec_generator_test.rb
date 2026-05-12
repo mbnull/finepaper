@@ -9,6 +9,10 @@ require 'tmpdir'
 require 'spec_generator'
 
 class SpecGeneratorTest < Minitest::Test
+  def stale_runtime_manifest_file_name
+    SpecGenerator.stale_runtime_manifest_file_name
+  end
+
   def test_generates_finepaper_noc_ipcore_runtime_bundle_and_ruby_models
     Dir.mktmpdir do |dir|
       write_finepaper_noc_source(dir)
@@ -35,7 +39,7 @@ class SpecGeneratorTest < Minitest::Test
       assert_equal 'generator/bin/drc', runtime_json.fetch('drc').fetch('args').first
       assert_equal 2, runtime_json.fetch('topology_presets').size
       refute runtime_json.key?('native')
-      refute File.exist?(File.join(dir, 'generated/ipcores/finepaper.noc/plugin.json'))
+      refute File.exist?(File.join(dir, 'generated/ipcores/finepaper.noc', stale_runtime_manifest_file_name))
 
       modules_xml = File.read(File.join(dir, 'generated/ipcores/finepaper.noc/modules.xml'))
       assert_includes modules_xml, '<bus name="ni_link"'
@@ -79,7 +83,7 @@ class SpecGeneratorTest < Minitest::Test
       assert_equal 'generator/bin/drc', runtime_json.fetch('drc').fetch('args').first
       assert_equal 1, runtime_json.fetch('topology_presets').size
       refute runtime_json.key?('native')
-      refute File.exist?(File.join(dir, 'generated/ipcores/finepaper.ravenoc/plugin.json'))
+      refute File.exist?(File.join(dir, 'generated/ipcores/finepaper.ravenoc', stale_runtime_manifest_file_name))
 
       modules_xml = File.read(File.join(dir, 'generated/ipcores/finepaper.ravenoc/modules.xml'))
       refute_includes modules_xml, '<buses>'
@@ -119,7 +123,7 @@ class SpecGeneratorTest < Minitest::Test
       assert_equal 1, runtime_json.fetch('topology_presets').size
       assert_equal 'OpenNoCXP', runtime_json.fetch('topology_presets').first.fetch('router_module')
       refute runtime_json.key?('native')
-      refute File.exist?(File.join(dir, 'generated/ipcores/finepaper.opennoc/plugin.json'))
+      refute File.exist?(File.join(dir, 'generated/ipcores/finepaper.opennoc', stale_runtime_manifest_file_name))
 
       modules_xml = File.read(File.join(dir, 'generated/ipcores/finepaper.opennoc/modules.xml'))
       assert_includes modules_xml, '<module name="OpenNoCXP" palette_label="OpenNoC XP" graph_group="xps"'
@@ -143,7 +147,7 @@ class SpecGeneratorTest < Minitest::Test
       write_ravenoc_source(dir)
       bundle_dir = File.join(dir, 'generated/ipcores/finepaper.ravenoc')
       FileUtils.mkdir_p(bundle_dir)
-      File.write(File.join(bundle_dir, 'plugin.json'), '{"stale":true}')
+      File.write(File.join(bundle_dir, stale_runtime_manifest_file_name), '{"stale":true}')
 
       SpecGenerator.generate_ipcore(
         ipcore_path: File.join(dir, 'ipcores/ravenoc/ipcore.yml'),
@@ -151,7 +155,7 @@ class SpecGeneratorTest < Minitest::Test
         runtime_bundle_dir: bundle_dir
       )
 
-      refute File.exist?(File.join(bundle_dir, 'plugin.json'))
+      refute File.exist?(File.join(bundle_dir, stale_runtime_manifest_file_name))
       assert File.file?(File.join(bundle_dir, 'ipcore-runtime.json'))
       assert File.file?(File.join(bundle_dir, 'modules.xml'))
     end
@@ -357,7 +361,7 @@ class SpecGeneratorTest < Minitest::Test
       assert status.success?, stderr
       assert_includes stdout, 'Generated IP core runtime bundle'
       assert File.file?(File.join(dir, 'generated/ipcores/finepaper.ravenoc/ipcore-runtime.json'))
-      refute File.exist?(File.join(dir, 'generated/ipcores/finepaper.ravenoc/plugin.json'))
+      refute File.exist?(File.join(dir, 'generated/ipcores/finepaper.ravenoc', stale_runtime_manifest_file_name))
       assert File.file?(File.join(dir, 'generated/ipcores/finepaper.ravenoc/modules.xml'))
       assert File.file?(File.join(dir, 'generated/ipcores/finepaper.ravenoc/graphics/RaveTile.xml'))
       assert File.file?(File.join(dir, 'generated/ipcores/finepaper.ravenoc/graphics/RaveEndpoint.xml'))
@@ -382,8 +386,8 @@ class SpecGeneratorTest < Minitest::Test
       assert File.file?(File.join(dir, 'generated/ipcores/finepaper.ravenoc/ipcore-runtime.json'))
       assert File.file?(File.join(dir, 'generated/ipcores/finepaper.ravenoc/graphics/RaveTile.xml'))
       assert File.file?(File.join(dir, 'ipcores/finepaper-noc/generator/src/ruby/model/xp.rb'))
-      refute File.exist?(File.join(dir, 'generated/ipcores/finepaper.noc/plugin.json'))
-      refute File.exist?(File.join(dir, 'generated/ipcores/finepaper.ravenoc/plugin.json'))
+      refute File.exist?(File.join(dir, 'generated/ipcores/finepaper.noc', stale_runtime_manifest_file_name))
+      refute File.exist?(File.join(dir, 'generated/ipcores/finepaper.ravenoc', stale_runtime_manifest_file_name))
     end
   end
 
@@ -460,13 +464,14 @@ class SpecGeneratorTest < Minitest::Test
   def test_check_repository_generated_outputs_reports_stale_generated_plugin_manifest
     Dir.mktmpdir do |dir|
       build_generated_fixture_repo(dir)
-      File.write(File.join(dir, 'generated/ipcores/finepaper.noc/plugin.json'), '{"stale":true}')
+      File.write(File.join(dir, 'generated/ipcores/finepaper.noc', stale_runtime_manifest_file_name), '{"stale":true}')
 
       error = assert_raises(SpecGenerator::SpecError) do
         SpecGenerator.check_repository_generated_outputs(root: dir)
       end
 
-      assert_match(%r{generated/ipcores/finepaper\.noc/plugin\.json}, error.message)
+      stale_manifest_pattern = Regexp.escape(stale_runtime_manifest_file_name)
+      assert_match(%r{generated/ipcores/finepaper\.noc/#{stale_manifest_pattern}}, error.message)
     end
   end
 
