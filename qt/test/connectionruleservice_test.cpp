@@ -281,8 +281,8 @@ void testRejectsSameSideTopologyRule() {
 
     require(result.status == ConnectionCheckStatus::Rejected,
             "same-side router connection should reject");
-    require(result.layer == ConnectionRuleLayer::FeaturePlugin,
-            "same-side topology should be rejected by feature layer");
+    require(result.layer == ConnectionRuleLayer::EditorRule,
+            "same-side topology should be rejected by editor-rule layer");
     require(result.reasonCode == QStringLiteral("topology_rule_mismatch"),
             "same-side rejection should report topology rule mismatch");
 }
@@ -330,8 +330,8 @@ void testRejectsOccupiedCardinalityOnePort() {
 
     require(result.status == ConnectionCheckStatus::Rejected,
             "occupied cardinality-one port should reject");
-    require(result.layer == ConnectionRuleLayer::FeaturePlugin,
-            "cardinality should be rejected by feature layer");
+    require(result.layer == ConnectionRuleLayer::EditorRule,
+            "cardinality should be rejected by editor-rule layer");
     require(result.reasonCode == QStringLiteral("port_occupied"),
             "occupied rejection should report port_occupied");
 }

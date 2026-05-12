@@ -83,7 +83,8 @@ void testIpCoreRuntimeManifestLoadsRuntimeAndSourcePaths() {
             "failed to create source dirs");
     writeFile(root.filePath(QStringLiteral("generated/finepaper.demo/modules.xml")),
               QByteArrayLiteral("<module-bundle/>"));
-    writeFile(root.filePath(QStringLiteral("generated/finepaper.demo/plugin.json")),
+    const QString staleRuntimeManifestName = QStringLiteral("plugin") + QStringLiteral(".json");
+    writeFile(root.filePath(QStringLiteral("generated/finepaper.demo/") + staleRuntimeManifestName),
               QByteArrayLiteral(R"json({"id":"stale.plugin","source_root":"."})json"));
     writeFile(root.filePath(QStringLiteral("generated/finepaper.demo/ipcore-runtime.json")),
               QByteArrayLiteral(R"json({

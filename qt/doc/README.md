@@ -31,12 +31,12 @@ This project is a Qt Widgets application for building and validating SoC/NoC top
 - `CommandManager`: executes undoable commands and manages undo/redo stacks.
 - `NodeEditorWidget`: bridges `Graph` to QtNodes and translates UI actions into commands.
 - `IpCatalogPanel`: lists discovered IP cores, project IP instances, active workspace modules, and workspace tools.
-- `IpCatalogService`: projects startup-discovered runtime manifests into selectable IP catalog entries.
+- `IpCatalogService`: projects startup-discovered `IpCoreRuntimeDescriptor` records into selectable IP catalog entries.
 - `ActiveWorkspaceController`: exposes the selected project IP instance and its available module types/topology presets.
 - `PropertyPanel`: auto-builds editors from module parameter types.
 - `ValidationManager`: runs built-in validation and external DRC checks.
 - `LogPanel`: shows validation, generation, and runtime messages.
-- `IpCoreRuntimeRegistry`: discovers startup-loaded runtime manifests from `FINEPAPER_IPCORE_PATH` and repository-local generated IP core bundles.
+- `IpCoreRuntimeRegistry`: discovers startup-loaded `ipcore-runtime.json` manifests from `FINEPAPER_IPCORE_PATH` and repository-local generated IP core bundles as `IpCoreRuntimeDescriptor` records.
 - `ModuleRegistry`: loads module definitions from runtime manifests and applies per-IP graphics XML files.
 - `IpCoreGraphExporter`: serializes the active IP core graph as the generator/DRC handoff format.
 
@@ -83,7 +83,7 @@ Runtime bundle discovery works in this order:
 1. Directories listed in `FINEPAPER_IPCORE_PATH`, using the platform path-list separator.
 2. Repository-local `generated/ipcores/` directories found from the current working directory or application directory.
 
-Each runtime bundle is a generated directory containing `ipcore-runtime.json`. Editable concrete IP core packages live under `../ipcores/<package>/`; for example, `../ipcores/finepaper-noc/` and `../ipcores/ravenoc/`. The committed generated bundles live under `../generated/ipcores/finepaper.noc/` and `../generated/ipcores/finepaper.ravenoc/` and declare:
+Each runtime bundle is a `generated/ipcores/<ipcore-id>/` directory containing `ipcore-runtime.json`. Editable concrete IP core packages live under `../ipcores/<package>/`; for example, `../ipcores/finepaper-noc/` and `../ipcores/ravenoc/`. The committed generated bundles live under `../generated/ipcores/finepaper.noc/` and `../generated/ipcores/finepaper.ravenoc/` and declare:
 
 - `ipcore-runtime.json`
 - `modules.xml`
@@ -117,7 +117,7 @@ The first manifest schema is:
 
 `IpCoreGraphExporter` serializes only the active workspace's selected IP instance. Generation and external DRC fail with a user-visible message if a module or connection references a different IP core than the selected active workspace.
 
-Use `plugins/` wording only for feature plugins or editor behavior extensions. Concrete NoC and RaveNoC IP packages should be described as IP core packages under `ipcores/` with generated runtime bundles under `generated/ipcores/`.
+The `plugins/` directory name is reserved for future feature extensions and editor behavior extensions, not concrete IP core runtimes. Concrete NoC and RaveNoC IP packages should be described as IP core packages under `ipcores/` with generated runtime bundles under `generated/ipcores/<ipcore-id>/`.
 
 ## Typical user flow
 

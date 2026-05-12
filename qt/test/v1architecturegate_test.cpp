@@ -83,6 +83,50 @@ QStringList presetIds(const QVector<TopologyPresetDescriptor>& presets) {
     return ids;
 }
 
+QStringList legacyRuntimeVocabularyTokens() {
+    return {
+        QStringLiteral("Plugin") + QStringLiteral("Registry"),
+        QStringLiteral("Plugin") + QStringLiteral("Descriptor"),
+        QStringLiteral("Plugin") + QStringLiteral("CommandDescriptor"),
+        QStringLiteral("Plugin") + QStringLiteral("InstanceParameterDescriptor"),
+        QStringLiteral("FINEPAPER_") + QStringLiteral("PLUGIN_PATH"),
+        QStringLiteral("plugin") + QStringLiteral(".json"),
+        QStringLiteral("ConnectionRuleLayer::") + QStringLiteral("FeaturePlugin")
+    };
+}
+
+void testRuntimeVocabularyHasNoQtPluginManifestPath() {
+    const QString qtRootPath =
+        QFileInfo(repositoryPath(QStringLiteral("qt/test/v1architecturegate_test.cpp")))
+            .absoluteDir()
+            .absolutePath() + QStringLiteral("/..");
+    const QFileInfo qtRootInfo(qtRootPath);
+    require(qtRootInfo.isDir(), "qt source directory should exist for vocabulary scan");
+
+    const QStringList tokens = legacyRuntimeVocabularyTokens();
+
+    for (const QString& token : tokens) {
+        QProcess process;
+        process.start(QStringLiteral("rg"), QStringList{QStringLiteral("-n"), token, qtRootInfo.absoluteFilePath()});
+        require(process.waitForFinished(),
+                "Qt vocabulary scan should finish");
+        if (process.exitCode() == 0) {
+            const QString output = QString::fromUtf8(process.readAllStandardOutput()).trimmed();
+            throw std::runtime_error(QStringLiteral("forbidden runtime token remains: %1\n%2")
+                                         .arg(token, output)
+                                         .toLocal8Bit()
+                                         .constData());
+        }
+        if (process.exitCode() != 1) {
+            const QString error = QString::fromUtf8(process.readAllStandardError()).trimmed();
+            throw std::runtime_error(QStringLiteral("Qt vocabulary scan failed for %1: %2")
+                                         .arg(token, error)
+                                         .toLocal8Bit()
+                                         .constData());
+        }
+    }
+}
+
 void writeJsonFile(const QString& path, const QJsonDocument& document) {
     QFile file(path);
     require(file.open(QIODevice::WriteOnly | QIODevice::Truncate),
@@ -250,6 +294,7 @@ void testRepositoryNoCMainlineFlow() {
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
     try {
+        testRuntimeVocabularyHasNoQtPluginManifestPath();
         testRepositoryNoCMainlineFlow();
     } catch (const std::exception& error) {
         std::cerr << "v1architecturegate_test failed: " << error.what() << '\n';

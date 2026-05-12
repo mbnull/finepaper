@@ -30,9 +30,9 @@ The main rule in the codebase is that the `Graph` is the source of truth. UI wid
 - one `LogPanel`
 - one `ValidationManager`
 
-Before module metadata is used, `IpCoreRuntimeRegistry` discovers generated runtime manifests from `FINEPAPER_IPCORE_PATH` and repository-local `generated/ipcores/` directories. Discovery is startup-only.
+Before module metadata is used, `IpCoreRuntimeRegistry` discovers generated `ipcore-runtime.json` manifests from `FINEPAPER_IPCORE_PATH` and repository-local `generated/ipcores/<ipcore-id>/` directories as `IpCoreRuntimeDescriptor` records. Discovery is startup-only.
 
-`IpCatalogService` turns those runtime manifests into `IpCatalogEntry` records. `ProjectIpService` owns project IP instances and the current selected instance. `ActiveWorkspaceController` combines the selected project instance with its catalog entry to expose the active workspace's IP core id, instance id, module types, and topology presets.
+`IpCatalogService` turns those `IpCoreRuntimeDescriptor` records into `IpCatalogEntry` records. `ProjectIpService` owns project IP instances and the current selected instance. `ActiveWorkspaceController` combines the selected project instance with its catalog entry to expose the active workspace's IP core id, instance id, module types, and topology presets.
 
 ### 2. Core model
 
@@ -102,7 +102,7 @@ All edits are committed through `SetParameterCommand`.
 
 `IpCatalogPanel` provides four workspace-facing lists:
 
-- IP cores discovered from generated runtime manifests
+- IP cores discovered from generated `ipcore-runtime.json` runtime manifests
 - Project IP instances saved with the project
 - Workspace Modules for the selected active IP instance
 - Workspace Tools derived from the active IP catalog entry
@@ -201,7 +201,7 @@ Generation uses the same active IP catalog entry and project instance. It writes
 - Runtime bundles are generated under `generated/ipcores/<ipcore-id>/` and contain `ipcore-runtime.json`, `modules.xml`, and per-IP graphics files.
 - In `ipcore-runtime.json`, `source_root` points back to the source package. Qt resolves module and graphics metadata against the generated runtime root and executes generator/DRC commands in `IpCatalogEntry::sourceRootPath`.
 - Authored JSON module bundles are deprecated conversion inputs; IP-XACT remains a conversion input, not the preferred runtime layout.
-- Reserve `plugins/` wording for feature plugins or editor behavior extensions, not concrete NoC or RaveNoC IP packages.
+- Reserve `plugins/` for future feature extensions and editor behavior extensions, not concrete IP core runtimes such as NoC or RaveNoC packages.
 - Position is stored as module parameters such as `x` and `y`.
 - Some editor-only state, such as transient selection, is intentionally omitted from graph export.
 

@@ -15,7 +15,9 @@ Outputs:
 - `generated/ipcores/<ipcore-id>/modules.xml`
 - `generated/ipcores/<ipcore-id>/graphics/*.xml`
 
-`ipcore-runtime.json` is the runtime manifest loaded by `IpCoreRuntimeRegistry` and surfaced as an `IpCatalogEntry` by the Qt editor. It keeps `source_root`, generator, DRC, topology preset, and instance parameter metadata. Generator and DRC commands consume `ipcore_graph_v1` input, which the editor writes as `finepaper-ipcore-graph-v1` JSON through `IpCoreGraphExporter`.
+`ipcore-runtime.json` is the runtime manifest loaded by `IpCoreRuntimeRegistry` as an `IpCoreRuntimeDescriptor` and surfaced as an `IpCatalogEntry` by the Qt editor. It keeps `source_root`, generator, DRC, topology preset, and instance parameter metadata. Generator and DRC commands consume `ipcore_graph_v1` input, which the editor writes as `finepaper-ipcore-graph-v1` JSON through `IpCoreGraphExporter`. The editor discovers generated runtime roots from repository-local `generated/ipcores/<ipcore-id>/` directories and any extra roots listed in `FINEPAPER_IPCORE_PATH`.
+
+The `plugins/` directory name is reserved for future feature extensions and is not used for concrete IP core runtimes.
 
 Run from the repository root:
 

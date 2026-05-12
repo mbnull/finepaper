@@ -80,7 +80,7 @@ struct PortSemanticInfo {
 
 enum class ConnectionRuleLayer {
     Structural,
-    FeaturePlugin,
+    EditorRule,
     Ipcore,
     FinalDrc
 };

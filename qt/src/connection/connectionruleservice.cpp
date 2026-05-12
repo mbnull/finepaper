@@ -111,7 +111,7 @@ bool endpointsAreBidirectionalPeerLink(const PortSemanticInfo& source, const Por
 
 struct CandidateEvaluation {
     bool accepted = false;
-    ConnectionRuleLayer layer = ConnectionRuleLayer::FeaturePlugin;
+    ConnectionRuleLayer layer = ConnectionRuleLayer::EditorRule;
     QString reasonCode;
     QString message;
 };
@@ -133,19 +133,19 @@ CandidateEvaluation rejectedCandidate(ConnectionRuleLayer layer,
     return evaluation;
 }
 
-CandidateEvaluation checkFeatureDeclarativeRules(const Graph* graph,
-                                                 const PortSemanticInfo& source,
-                                                 const PortSemanticInfo& target,
-                                                 const ConnectionEndpointRequest& sourceEndpoint,
-                                                 const ConnectionEndpointRequest& targetEndpoint) {
+CandidateEvaluation checkEditorDeclarativeRules(const Graph* graph,
+                                                const PortSemanticInfo& source,
+                                                const PortSemanticInfo& target,
+                                                const ConnectionEndpointRequest& sourceEndpoint,
+                                                const ConnectionEndpointRequest& targetEndpoint) {
     if (!endpointAllowsAsSource(sourceEndpoint) || !endpointAllowsAsTarget(targetEndpoint)) {
-        return rejectedCandidate(ConnectionRuleLayer::FeaturePlugin,
+        return rejectedCandidate(ConnectionRuleLayer::EditorRule,
                                  QStringLiteral("direction_mismatch"),
                                  QStringLiteral("No direction-compatible connection option"));
     }
 
     if (!source.supportsOutput || !target.supportsInput) {
-        return rejectedCandidate(ConnectionRuleLayer::FeaturePlugin,
+        return rejectedCandidate(ConnectionRuleLayer::EditorRule,
                                  QStringLiteral("direction_mismatch"),
                                  QStringLiteral("No direction-compatible connection option"));
     }
@@ -154,13 +154,13 @@ CandidateEvaluation checkFeatureDeclarativeRules(const Graph* graph,
          portOccupiedForCardinalityOne(graph, source.ref)) ||
         (target.cardinality == QStringLiteral("one") &&
          portOccupiedForCardinalityOne(graph, target.ref))) {
-        return rejectedCandidate(ConnectionRuleLayer::FeaturePlugin,
+        return rejectedCandidate(ConnectionRuleLayer::EditorRule,
                                  QStringLiteral("port_occupied"),
                                  QStringLiteral("Connection port is already occupied"));
     }
 
     if (!oppositeSideRulePasses(source, target)) {
-        return rejectedCandidate(ConnectionRuleLayer::FeaturePlugin,
+        return rejectedCandidate(ConnectionRuleLayer::EditorRule,
                                  QStringLiteral("topology_rule_mismatch"),
                                  QStringLiteral("Connection does not satisfy topology rule"));
     }
@@ -168,7 +168,7 @@ CandidateEvaluation checkFeatureDeclarativeRules(const Graph* graph,
     const QString sourceBus = source.interfaceBus.isEmpty() ? source.busType : source.interfaceBus;
     const QString targetBus = target.interfaceBus.isEmpty() ? target.busType : target.interfaceBus;
     if (sourceBus != targetBus) {
-        return rejectedCandidate(ConnectionRuleLayer::FeaturePlugin,
+        return rejectedCandidate(ConnectionRuleLayer::EditorRule,
                                  QStringLiteral("bus_mismatch"),
                                  QStringLiteral("Connection bus types do not match"));
     }
@@ -176,7 +176,7 @@ CandidateEvaluation checkFeatureDeclarativeRules(const Graph* graph,
     if (!endpointsAreBidirectionalPeerLink(source, target) &&
         (!roleAllowsAsSource(source.interfaceRole) ||
          !roleAllowsAsTarget(target.interfaceRole))) {
-        return rejectedCandidate(ConnectionRuleLayer::FeaturePlugin,
+        return rejectedCandidate(ConnectionRuleLayer::EditorRule,
                                  QStringLiteral("interface_role_mismatch"),
                                  QStringLiteral("Connection interface roles are not compatible"));
     }
@@ -184,7 +184,7 @@ CandidateEvaluation checkFeatureDeclarativeRules(const Graph* graph,
     if (!source.interfaceRole.isEmpty() || !target.interfaceRole.isEmpty()) {
         if (!source.compatibleRoles.contains(target.interfaceRole) ||
             !target.compatibleRoles.contains(source.interfaceRole)) {
-            return rejectedCandidate(ConnectionRuleLayer::FeaturePlugin,
+            return rejectedCandidate(ConnectionRuleLayer::EditorRule,
                                      QStringLiteral("interface_role_mismatch"),
                                      QStringLiteral("Connection interface roles are not compatible"));
         }
@@ -490,12 +490,12 @@ QVector<ConnectionResolvedOption> ConnectionRuleService::buildOptions(
             return;
         }
 
-        const CandidateEvaluation feature =
-            checkFeatureDeclarativeRules(m_graph, source, target, sourceEndpoint, targetEndpoint);
-        if (!feature.accepted) {
-            if (rejectionLayer) *rejectionLayer = feature.layer;
-            if (rejectionReason) *rejectionReason = feature.reasonCode;
-            if (rejectionMessage) *rejectionMessage = feature.message;
+        const CandidateEvaluation editorRule =
+            checkEditorDeclarativeRules(m_graph, source, target, sourceEndpoint, targetEndpoint);
+        if (!editorRule.accepted) {
+            if (rejectionLayer) *rejectionLayer = editorRule.layer;
+            if (rejectionReason) *rejectionReason = editorRule.reasonCode;
+            if (rejectionMessage) *rejectionMessage = editorRule.message;
             return;
         }
 
@@ -555,7 +555,7 @@ ConnectionCheckResult ConnectionRuleService::check(const ConnectionRequest& requ
                       QStringLiteral("Connection references a missing port"));
     }
 
-    ConnectionRuleLayer layer = ConnectionRuleLayer::FeaturePlugin;
+    ConnectionRuleLayer layer = ConnectionRuleLayer::EditorRule;
     QString reason;
     QString message;
     QVector<ConnectionResolvedOption> options = buildOptions(startPorts, endPorts, request, &layer, &reason, &message);
