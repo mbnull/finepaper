@@ -91,6 +91,9 @@ private slots:
     bool requireOpenProject(const QString& actionName);
     void updateWindowTitle();
     void updateCommandActions();
+    void createTopologyPresetFor(const QString& ipcoreId,
+                                 const QString& instanceId,
+                                 const QString& presetId);
 
     Graph* m_graph;
     std::unique_ptr<CommandManager> m_commandManager;

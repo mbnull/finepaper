@@ -10,7 +10,7 @@ struct IpCatalogEntry;
 struct IpToolEntry {
     QString id;
     QString label;
-    QString kind;
+    QString category;
 };
 
 class IpToolsModel {

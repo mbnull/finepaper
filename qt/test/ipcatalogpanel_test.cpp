@@ -1,5 +1,6 @@
 // IP catalog panel widget tests.
 #include "ipcore/ipcatalogservice.h"
+#include "graph/graph.h"
 #include "modules/moduleregistry.h"
 #include "panels/ipcatalogpanel.h"
 #include "project/projectipservice.h"
@@ -10,7 +11,9 @@
 #include <QApplication>
 #include <QComboBox>
 #include <QDockWidget>
+#include <QEventLoop>
 #include <QFileInfo>
+#include <QInputDialog>
 #include <QKeyEvent>
 #include <QLineEdit>
 #include <QListWidget>
@@ -57,6 +60,26 @@ void triggerFirstOpenMenuAction() {
             return;
         }
     }
+}
+
+void acceptOpenInputDialogs() {
+    for (QWidget* widget : QApplication::topLevelWidgets()) {
+        if (auto* dialog = qobject_cast<QInputDialog*>(widget)) {
+            dialog->accept();
+        }
+    }
+}
+
+void scheduleInputDialogAccepts() {
+    for (int index = 0; index < 8; ++index) {
+        QTimer::singleShot(index * 10, &acceptOpenInputDialogs);
+    }
+}
+
+void processEventsFor(int milliseconds) {
+    QEventLoop loop;
+    QTimer::singleShot(milliseconds, &loop, &QEventLoop::quit);
+    loop.exec();
 }
 
 QTreeWidgetItem* firstCatalogEntry(QTreeWidget* catalog) {
@@ -222,11 +245,64 @@ void testSelectingIpInstanceUpdatesActiveModuleAndToolLists() {
     auto* moduleList = panel.findChild<QListWidget*>(QStringLiteral("activeModuleList"));
     auto* toolList = panel.findChild<QListWidget*>(QStringLiteral("activeToolList"));
 
+    require(projectList != nullptr, "project list should exist");
+    require(moduleList != nullptr, "active module list should exist");
+    require(toolList != nullptr, "active tool list should exist");
     require(projectList->count() == 1, "project list should show one IP instance");
     require(moduleList->count() == 1, "active module list should show RaveTile");
     require(moduleList->item(0)->data(Qt::UserRole).toString() == QStringLiteral("RaveTile"),
             "active module row should store module type");
-    require(toolList->count() >= 2, "active tool list should include topology/generator tools");
+    require(toolList->count() == 1, "active tool list should only include topology tools");
+    require(toolList->item(0)->text() == QStringLiteral("Mesh"),
+            "active tool list should show the Mesh topology preset");
+    for (int row = 0; row < toolList->count(); ++row) {
+        QListWidgetItem* item = toolList->item(row);
+        require(item->data(Qt::UserRole).toString() != QStringLiteral("generate"),
+                "active tool list should not expose generate");
+        require(item->data(Qt::UserRole).toString() != QStringLiteral("drc"),
+                "active tool list should not expose DRC");
+    }
+}
+
+void testPanelEmitsWorkspaceToolIntentWithActiveInstance() {
+    TestHarness harness;
+    IpCatalogPanel panel(&harness.catalog,
+                         &harness.stateService,
+                         &harness.projectIpService,
+                         &harness.workspaceController);
+
+    require(harness.projectIpService.createInstanceForIpcore(harness.ravenocEntry()).success,
+            "RaveNoC instance should be created");
+    auto* toolList = panel.findChild<QListWidget*>(QStringLiteral("activeToolList"));
+    require(toolList != nullptr, "active tool list should exist");
+    require(toolList->count() == 1, "active tool list should expose the Mesh topology preset");
+
+    QString requestedTool;
+    QString requestedIpcore;
+    QString requestedInstance;
+    int requestCount = 0;
+    QObject::connect(&panel, &IpCatalogPanel::workspaceToolRequested, &panel,
+                     [&](const QString& toolId, const QString& ipcoreId, const QString& instanceId) {
+                         requestedTool = toolId;
+                         requestedIpcore = ipcoreId;
+                         requestedInstance = instanceId;
+                         ++requestCount;
+                     });
+
+    QListWidgetItem* item = toolList->item(0);
+    require(item != nullptr, "first workspace tool should exist");
+    const bool invoked = QMetaObject::invokeMethod(toolList,
+                                                   "itemActivated",
+                                                   Qt::DirectConnection,
+                                                   Q_ARG(QListWidgetItem*, item));
+    require(invoked, "active tool list should expose itemActivated");
+    require(requestCount == 1, "workspace tool activation should emit one intent");
+    require(requestedTool == QStringLiteral("topology:mesh"),
+            "workspace tool intent should include topology tool id");
+    require(requestedIpcore == QStringLiteral("finepaper.ravenoc"),
+            "workspace tool intent should include active ipcore id");
+    require(requestedInstance == QStringLiteral("ravenoc_0"),
+            "workspace tool intent should include active instance id");
 }
 
 void testPanelEmitsAddAndSelectSignals() {
@@ -462,6 +538,77 @@ void testMainWindowUsesProjectDirectoryForNewProjectDefault() {
             "new project flow should default to the current project directory");
 }
 
+void testMainWindowIgnoresStaleWorkspaceTopologyToolInstance() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "temporary directory should be valid");
+
+    MainWindow window;
+    const QString projectPath = tempDir.filePath(QStringLiteral("stale_tool_guard.fpproj"));
+    require(window.createProjectAt(projectPath), "project should be created for topology guard test");
+
+    const std::optional<IpCatalogEntry> entry =
+        window.m_ipCatalogService->entry(QStringLiteral("finepaper.ravenoc"));
+    require(entry.has_value(), "RaveNoC entry should exist in the runtime catalog");
+    const ProjectIpServiceResult result = window.m_projectIpService->createInstanceForIpcore(*entry);
+    require(result.success, "RaveNoC instance should be created");
+    require(window.m_activeWorkspaceController->activeContext().has_value(),
+            "test should have an active workspace context");
+    require(window.m_activeWorkspaceController->activeContext()->record.instanceId
+                == QStringLiteral("ravenoc_0"),
+            "active workspace should use the created instance");
+    require(window.m_graph->modules().empty(),
+            "graph should start without topology modules");
+
+    scheduleInputDialogAccepts();
+    window.createTopologyPresetFor(QStringLiteral("finepaper.ravenoc"),
+                                   QStringLiteral("stale_instance"),
+                                   QStringLiteral("mesh"));
+    processEventsFor(100);
+
+    require(window.m_graph->modules().empty(),
+            "stale workspace tool instance should not create topology modules");
+}
+
+void testMainWindowIgnoresTopologyToolWhenActiveInstanceChangesDuringPrompt() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "temporary directory should be valid");
+
+    MainWindow window;
+    const QString projectPath = tempDir.filePath(QStringLiteral("prompt_reentry_guard.fpproj"));
+    require(window.createProjectAt(projectPath), "project should be created for prompt guard test");
+
+    const std::optional<IpCatalogEntry> entry =
+        window.m_ipCatalogService->entry(QStringLiteral("finepaper.ravenoc"));
+    require(entry.has_value(), "RaveNoC entry should exist in the runtime catalog");
+    require(window.m_projectIpService->createInstanceForIpcore(*entry).success,
+            "first RaveNoC instance should be created");
+    require(window.m_projectIpService->createInstanceForIpcore(*entry).success,
+            "second RaveNoC instance should be created");
+    require(window.m_activeWorkspaceController->activeContext().has_value(),
+            "test should have an active workspace context");
+    require(window.m_activeWorkspaceController->activeContext()->record.instanceId
+                == QStringLiteral("ravenoc_1"),
+            "second instance should be active before topology request");
+
+    QTimer::singleShot(0, &window, [&window] {
+        window.m_projectIpService->selectInstance(QStringLiteral("finepaper.ravenoc"),
+                                                  QStringLiteral("ravenoc_0"));
+    });
+    scheduleInputDialogAccepts();
+    window.createTopologyPresetFor(QStringLiteral("finepaper.ravenoc"),
+                                   QStringLiteral("ravenoc_1"),
+                                   QStringLiteral("mesh"));
+    processEventsFor(100);
+
+    require(window.m_graph->modules().empty(),
+            "topology should not be created after active instance changes during prompts");
+    require(window.m_activeWorkspaceController->activeContext().has_value(),
+            "active context should remain available after prompt reentry");
+    require(window.m_activeWorkspaceController->activeContext()->record.instanceId
+                == QStringLiteral("ravenoc_0"),
+            "prompt reentry should have switched the active instance");
+}
+
 void testLoadGraphReportsFailureForInvalidPath() {
     MainWindow window;
     QTimer::singleShot(0, &closeOpenMessageBoxes);
@@ -491,6 +638,7 @@ int main(int argc, char** argv) {
         testSearchFiltersCatalogEntries();
         testCatalogSectionsAndCategoriesCanCollapse();
         testSelectingIpInstanceUpdatesActiveModuleAndToolLists();
+        testPanelEmitsWorkspaceToolIntentWithActiveInstance();
         testPanelEmitsAddAndSelectSignals();
         testPanelEmitsRemoveSignalForActiveInstance();
         testPanelContextMenuRemoveTargetsClickedItem();
@@ -498,6 +646,8 @@ int main(int argc, char** argv) {
         testMainWindowUsesIpCatalogDockWithoutActiveCombo();
         testMainWindowStartsWithoutEditableUnsavedProject();
         testMainWindowUsesProjectDirectoryForNewProjectDefault();
+        testMainWindowIgnoresStaleWorkspaceTopologyToolInstance();
+        testMainWindowIgnoresTopologyToolWhenActiveInstanceChangesDuringPrompt();
         testLoadGraphReportsFailureForInvalidPath();
     } catch (const std::exception& error) {
         std::cerr << "ipcatalogpanel_test failed: " << error.what() << '\n';

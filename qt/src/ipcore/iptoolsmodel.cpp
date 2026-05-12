@@ -11,26 +11,12 @@ QVector<IpToolEntry> IpToolsModel::entriesForWorkspace(const ActiveWorkspaceStat
         return entries;
     }
 
-    entries.reserve(entry.topologyPresets.size() + 2);
+    entries.reserve(entry.topologyPresets.size());
     for (const TopologyPresetDescriptor& preset : entry.topologyPresets) {
         entries.push_back(IpToolEntry{
             QStringLiteral("topology:") + preset.id,
             preset.label,
             QStringLiteral("topology"),
-        });
-    }
-    if (entry.generator.hasCommand()) {
-        entries.push_back(IpToolEntry{
-            QStringLiteral("generate"),
-            QStringLiteral("Generate Verilog"),
-            QStringLiteral("generator"),
-        });
-    }
-    if (entry.drc.hasCommand()) {
-        entries.push_back(IpToolEntry{
-            QStringLiteral("drc"),
-            QStringLiteral("Run DRC"),
-            QStringLiteral("drc"),
         });
     }
 

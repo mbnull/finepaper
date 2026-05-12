@@ -275,6 +275,9 @@ IpCatalogPanel::IpCatalogPanel(const IpCatalogService* catalogService,
     connect(removeProjectInstanceAction, &QAction::triggered, this, [this] {
         emitRemoveRequest(m_projectIpList ? m_projectIpList->currentItem() : nullptr);
     });
+    connect(m_activeToolList, &QListWidget::itemActivated, this, [this](QListWidgetItem* item) {
+        emitWorkspaceToolRequest(item);
+    });
 
     if (m_stateService) {
         connect(m_stateService,
@@ -409,7 +412,8 @@ void IpCatalogPanel::refreshActiveWorkspace() {
     for (const IpToolEntry& tool : toolsModel.entriesForWorkspace(state, *entry)) {
         auto* item = new QListWidgetItem(tool.label);
         item->setData(Qt::UserRole, tool.id);
-        item->setData(InstanceIdRole, tool.kind);
+        item->setData(IpcoreIdRole, state.ipcoreId);
+        item->setData(ActiveInstanceIdRole, state.instanceId);
         m_activeToolList->addItem(item);
     }
 }
@@ -451,6 +455,21 @@ void IpCatalogPanel::emitRemoveRequest(QListWidgetItem* item) {
     const QString ipcoreId = item->data(Qt::UserRole).toString();
     const QString instanceId = item->data(InstanceIdRole).toString();
     emitRemoveRequest(ipcoreId, instanceId);
+}
+
+void IpCatalogPanel::emitWorkspaceToolRequest(QListWidgetItem* item) {
+    if (!item) {
+        return;
+    }
+
+    const QString toolId = item->data(Qt::UserRole).toString();
+    const QString ipcoreId = item->data(IpcoreIdRole).toString();
+    const QString instanceId = item->data(ActiveInstanceIdRole).toString();
+    if (!toolId.trimmed().isEmpty() &&
+        !ipcoreId.trimmed().isEmpty() &&
+        !instanceId.trimmed().isEmpty()) {
+        emit workspaceToolRequested(toolId, ipcoreId, instanceId);
+    }
 }
 
 void IpCatalogPanel::scheduleProjectSelectionSync() {

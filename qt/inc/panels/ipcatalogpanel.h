@@ -28,6 +28,9 @@ signals:
     void addIpcoreRequested(const QString& ipcoreId);
     void selectIpInstanceRequested(const QString& ipcoreId, const QString& instanceId);
     void removeIpInstanceRequested(const QString& ipcoreId, const QString& instanceId);
+    void workspaceToolRequested(const QString& toolId,
+                                const QString& ipcoreId,
+                                const QString& instanceId);
     void moduleDragStarted(const QString& moduleType);
 
 private:
@@ -38,6 +41,7 @@ private:
     void emitSelectRequest(QListWidgetItem* item);
     void emitRemoveRequest(const QString& ipcoreId, const QString& instanceId);
     void emitRemoveRequest(QListWidgetItem* item);
+    void emitWorkspaceToolRequest(QListWidgetItem* item);
     void scheduleProjectSelectionSync();
     void syncProjectSelection();
 

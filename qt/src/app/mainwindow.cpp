@@ -479,31 +479,55 @@ void MainWindow::redo() {
 }
 
 void MainWindow::createTopologyPreset() {
-    if (!requireOpenProject(QStringLiteral("creating topology"))) {
-        return;
-    }
-
     auto* action = qobject_cast<QAction*>(sender());
     if (!action || !m_activeWorkspaceController || !m_activeWorkspaceController->state().hasActiveIp) {
         return;
     }
 
     const ActiveWorkspaceState& workspace = m_activeWorkspaceController->state();
-    const QString presetId = action->data().toString();
+    createTopologyPresetFor(workspace.ipcoreId, workspace.instanceId, action->data().toString());
+}
+
+void MainWindow::createTopologyPresetFor(const QString& ipcoreId,
+                                         const QString& instanceId,
+                                         const QString& presetId) {
+    if (!requireOpenProject(QStringLiteral("creating topology"))) {
+        return;
+    }
+    if (!m_activeWorkspaceController ||
+        ipcoreId.trimmed().isEmpty() ||
+        instanceId.trimmed().isEmpty() ||
+        presetId.trimmed().isEmpty()) {
+        qWarning().noquote() << "Ignoring incomplete topology preset request";
+        return;
+    }
+
+    const std::optional<ActiveWorkspaceContext> context =
+        m_activeWorkspaceController->activeContext();
+    if (!context.has_value() ||
+        context->record.ipcoreId != ipcoreId ||
+        context->record.instanceId != instanceId) {
+        qWarning().noquote() << "Ignoring topology preset request for inactive IP instance:"
+                             << ipcoreId << instanceId;
+        return;
+    }
+
     // Presets are IP-core-owned; look them up by ID at trigger time so rebuilt
     // menus cannot leave stale QAction pointers to deleted descriptors.
-    auto presetIt = std::find_if(workspace.topologyPresets.cbegin(),
-                                 workspace.topologyPresets.cend(),
+    const IpCatalogEntry& entry = context->entry;
+    auto presetIt = std::find_if(entry.topologyPresets.cbegin(),
+                                 entry.topologyPresets.cend(),
                                  [&](const TopologyPresetDescriptor& preset) {
                                      return preset.id == presetId;
                                  });
-    if (presetIt == workspace.topologyPresets.cend()) {
+    if (presetIt == entry.topologyPresets.cend()) {
+        qWarning().noquote() << "Ignoring unknown topology preset request:" << presetId;
         return;
     }
 
     TopologyPresetRequest request;
-    request.ipcoreId = workspace.ipcoreId;
-    request.instanceId = workspace.instanceId;
+    request.ipcoreId = ipcoreId;
+    request.instanceId = instanceId;
     request.preset = *presetIt;
 
     QStringList parameterNames = presetIt->parameters.keys();
@@ -525,6 +549,16 @@ void MainWindow::createTopologyPreset() {
             return;
         }
         request.parameters.insert(name, value);
+    }
+
+    const std::optional<ActiveWorkspaceContext> contextBeforeExecute =
+        m_activeWorkspaceController->activeContext();
+    if (!contextBeforeExecute.has_value() ||
+        contextBeforeExecute->record.ipcoreId != ipcoreId ||
+        contextBeforeExecute->record.instanceId != instanceId) {
+        qWarning().noquote() << "Ignoring topology preset request after active IP changed:"
+                             << ipcoreId << instanceId;
+        return;
     }
 
     std::unique_ptr<Command> rejected =
@@ -680,6 +714,18 @@ void MainWindow::setupConnections() {
                     return;
                 }
                 syncDocumentStateFromHistory();
+            });
+    connect(m_ipCatalogPanel,
+            &IpCatalogPanel::workspaceToolRequested,
+            this,
+            [this](const QString& toolId, const QString& ipcoreId, const QString& instanceId) {
+                static const QString topologyPrefix = QStringLiteral("topology:");
+                if (!toolId.startsWith(topologyPrefix)) {
+                    qWarning().noquote() << "Ignoring unsupported workspace tool request:" << toolId;
+                    return;
+                }
+
+                createTopologyPresetFor(ipcoreId, instanceId, toolId.mid(topologyPrefix.size()));
             });
 }
 
