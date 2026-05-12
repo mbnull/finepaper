@@ -3,15 +3,13 @@
 // inside a vertical splitter with the log panel below.
 #include "app/appsettings.h"
 #include "app/mainwindow.h"
-#include "app/generationartifacts.h"
+#include "app/projectgenerationrunner.h"
 #include "commands/addipinstancecommand.h"
 #include "commands/removeipinstancecommand.h"
 #include "commands/topologypresetcommand.h"
 #include "graph/graph.h"
 #include "commands/commandmanager.h"
 #include "ipcore/ipcatalogservice.h"
-#include "ipcore/ipcorecommandrunner.h"
-#include "ipcore/ipcoregraphexporter.h"
 #include "ipcore/ipcoreruntimediagnostics.h"
 #include "ipcore/ipcoreruntimeregistry.h"
 #include "nodeeditor/nodeeditorwidget.h"
@@ -43,10 +41,8 @@
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
-#include <QProcess>
 #include <QKeySequence>
 #include <QList>
-#include <QRegularExpression>
 #include <QStatusBar>
 #include <QStringList>
 #include <QTimer>
@@ -57,17 +53,6 @@
 #include <optional>
 
 namespace {
-
-QString sanitizedDesignName(const QString& directoryPath) {
-    QString designName = QFileInfo(directoryPath).fileName().trimmed().toLower();
-    designName.replace(QRegularExpression("[^a-z0-9_]+"), "_");
-    designName.remove(QRegularExpression("^_+|_+$"));
-    return designName.isEmpty() ? QStringLiteral("design") : designName;
-}
-
-QString trimmedProcessOutput(const QString& text) {
-    return text.trimmed().isEmpty() ? QStringLiteral("(no process output)") : text.trimmed();
-}
 
 QString projectFileDialogSaveFilter() {
     return QStringLiteral("Finepaper Project (*.fpproj)");
@@ -279,173 +264,86 @@ void MainWindow::generateVerilog() {
         return;
     }
 
-    // Generation starts from a user-chosen directory because the IP-core command
-    // may emit multiple RTL/support files beside the JSON handoff.
-    const QString initialDirectory = m_appSettings && !m_appSettings->lastOutputRoot().isEmpty()
-        ? m_appSettings->lastOutputRoot()
-        : (!m_currentDocumentPath.isEmpty()
-              ? QFileInfo(m_currentDocumentPath).absolutePath()
-              : defaultDocumentPath());
-    const QString outputDirectory = QFileDialog::getExistingDirectory(
-        this,
-        "Select Verilog Output Folder",
-        initialDirectory,
-        QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
-    if (outputDirectory.isEmpty()) {
-        return;
-    }
-    if (m_appSettings) {
-        m_appSettings->setLastOutputRoot(outputDirectory);
-    }
-
-    QDir outputDir(outputDirectory);
-    // QFileDialog normally returns an existing folder, but this check keeps the
-    // workflow robust for platform-specific symlink or permission edge cases.
-    if (!outputDir.mkpath(".")) {
-        m_logPanel->appendMessage("[Generate] Could not create output folder: " + outputDirectory,
-                                  QColor(220, 50, 50));
-        QMessageBox::warning(this,
-                             "Output Folder Error",
-                             "Could not create or access " + outputDirectory);
-        return;
-    }
-
-    // Persist the active IP-core generator input, then call generator.
-    const QString designName = sanitizedDesignName(outputDirectory);
-    const QString jsonPath = outputDir.filePath(designName + ".json");
-    const std::optional<ActiveWorkspaceContext> context =
-        m_activeWorkspaceController ? m_activeWorkspaceController->activeContext() : std::nullopt;
-    if (!context.has_value()) {
-        const QString error = QStringLiteral("Select an IP core instance before generating.");
-        m_logPanel->appendMessage("[Generate] " + error, QColor(220, 50, 50));
-        QMessageBox::warning(this, "Generator Not Available", error);
-        return;
-    }
-
-    // Resolve the command before writing artifacts so IP-core ownership and
-    // command availability fail early with a user-facing message.
-    const IpCoreResolvedCommand generatorCommand =
-        IpCoreCommandRunner::resolveGenerator(context->entry, jsonPath, outputDirectory);
-    if (!generatorCommand.valid) {
-        m_logPanel->appendMessage("[Generate] " + generatorCommand.errorMessage,
-                                  QColor(220, 50, 50));
-        QMessageBox::warning(this,
-                             "Generator Not Available",
-                             generatorCommand.errorMessage);
-        return;
-    }
-
-    const IpCoreGraphExportResult exportResult =
-        IpCoreGraphExporter::exportGraph(IpCoreGraphExportRequest{
-            m_graph,
-            context->entry,
-            context->record,
-            designName,
-            nullptr
-        });
-    if (!exportResult.success) {
-        m_logPanel->appendMessage("[Generate] " + exportResult.error, QColor(220, 50, 50));
-        QMessageBox::warning(this, "JSON Export Failed", exportResult.error);
-        return;
-    }
-
-    QFile jsonFile(jsonPath);
-    // JSON is the contract boundary between the editor and the external IP-core
-    // process, so fail before launching the generator if the handoff cannot be written.
-    if (!jsonFile.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        m_logPanel->appendMessage("[Generate] Could not write JSON: " + jsonPath,
-                                  QColor(220, 50, 50));
-        QMessageBox::warning(this,
-                             "JSON Export Failed",
-                             "Could not write " + jsonPath);
-        return;
-    }
-    jsonFile.write(exportResult.document.toJson());
-    jsonFile.close();
-
-    // Keep a Finepaper project snapshot next to generated RTL so the produced
-    // files can be traced back to an editor-loadable design.
-    const GeneratedProjectSnapshotResult projectSnapshot =
-        writeGeneratedProjectSnapshot(*m_graph,
-                                      outputDirectory,
-                                      designName,
-                                      m_projectStateService->ipInstanceRecords());
-    if (!projectSnapshot.success) {
-        m_logPanel->appendMessage("[Generate] Could not write project: " + projectSnapshot.error,
-                                  QColor(220, 50, 50));
-        QMessageBox::warning(this,
-                             "Project Snapshot Failed",
-                             projectSnapshot.error);
-        return;
-    }
-
-    // Log artifact paths before process launch; if the generator fails, users still
-    // know exactly which intermediate files were produced.
-    m_logPanel->appendMessage(QString("[Generate] Start output=%1").arg(outputDirectory),
-                              QColor(70, 110, 190));
-    m_logPanel->appendMessage(QString("[Generate] JSON=%1").arg(jsonPath),
-                              QColor(70, 110, 190));
-    m_logPanel->appendMessage(QString("[Generate] Project=%1").arg(projectSnapshot.path),
-                              QColor(70, 110, 190));
-    m_logPanel->appendMessage(QString("[Generate] IP core=%1").arg(generatorCommand.ipcoreId),
-                              QColor(70, 110, 190));
-
-    statusBar()->showMessage("Generating Verilog...");
-    QApplication::setOverrideCursor(Qt::WaitCursor);
-
-    // Run IP-core generator synchronously so UI status/logging reflects one
-    // complete operation from start to finish.
-    QProcess proc;
-    proc.setWorkingDirectory(generatorCommand.workingDirectory);
-    proc.start(generatorCommand.command, generatorCommand.arguments);
-
-    // The cursor is restored immediately after process completion/start failure
-    // so all later message boxes and status updates use the normal UI cursor.
-    const bool started = proc.waitForStarted();
-    const bool finished = started && proc.waitForFinished(-1);
-    QApplication::restoreOverrideCursor();
-
-    if (!started) {
-        const QString error = "Failed to start IP core generator: " + proc.errorString();
-        qWarning() << error;
+    if (m_currentDocumentPath.trimmed().isEmpty()) {
+        const QString error = QStringLiteral("Save the project before generation.");
         m_logPanel->appendMessage("[Generate] " + error, QColor(220, 50, 50));
         statusBar()->showMessage(error, 5000);
         QMessageBox::warning(this, "Generate Failed", error);
         return;
     }
 
-    const QString standardOutput = QString::fromUtf8(proc.readAllStandardOutput());
-    const QString standardError = QString::fromUtf8(proc.readAllStandardError());
-    // Generators are external tools; preserve stdout/stderr separately in the
-    // activity log so IP-core authors can diagnose failures without rerunning.
-    if (!finished || proc.exitStatus() != QProcess::NormalExit || proc.exitCode() != 0) {
-        const QString detail = trimmedProcessOutput(standardError.isEmpty() ? standardOutput : standardError);
-        const QString error = !finished
-            ? QStringLiteral("Generator timed out while producing Verilog.")
-            : QString("Generator failed (exit code %1).").arg(proc.exitCode());
-        qWarning().noquote() << error << detail;
+    ProjectGenerationRequest request;
+    request.graph = m_graph;
+    request.projectPath = m_currentDocumentPath;
+    request.designName = QFileInfo(m_currentDocumentPath).completeBaseName();
+    request.catalogEntries = m_ipCatalogService ? m_ipCatalogService->entries() : QList<IpCatalogEntry>{};
+    request.instances = m_projectStateService
+        ? m_projectStateService->ipInstanceRecords()
+        : QVector<ProjectIpInstanceRecord>{};
+
+    const QString outputRoot =
+        QFileInfo(m_currentDocumentPath).absoluteDir().filePath(QStringLiteral("generated"));
+    m_logPanel->appendMessage(QString("[Generate] Start project=%1 output=%2")
+                                  .arg(m_currentDocumentPath, outputRoot),
+                              QColor(70, 110, 190));
+
+    statusBar()->showMessage("Generating project IP instances...");
+    QApplication::setOverrideCursor(Qt::WaitCursor);
+
+    ProjectGenerationRunner runner;
+    const ProjectGenerationResult result = runner.generate(request);
+    QApplication::restoreOverrideCursor();
+
+    for (const ProjectGenerationInstanceResult& instance : result.instances) {
+        const QString instanceId = instance.instanceId.isEmpty()
+            ? QStringLiteral("<unknown>")
+            : instance.instanceId;
+        const QColor statusColor = instance.success ? QColor(40, 140, 80) : QColor(220, 50, 50);
+        m_logPanel->appendMessage(QString("[Generate][%1] output=%2")
+                                      .arg(instanceId, instance.outputDirectory),
+                                  QColor(70, 110, 190));
+        m_logPanel->appendMessage(QString("[Generate][%1] input=%2")
+                                      .arg(instanceId, instance.inputPath),
+                                  QColor(70, 110, 190));
+        m_logPanel->appendMessage(QString("[Generate][%1] manifest=%2")
+                                      .arg(instanceId, instance.manifestPath),
+                                  QColor(70, 110, 190));
+        m_logPanel->appendMessage(QString("[Generate][%1] %2")
+                                      .arg(instanceId,
+                                           instance.success ? QStringLiteral("complete")
+                                                            : instance.error),
+                                  statusColor);
+        appendLogLines(m_logPanel,
+                       instance.standardOutput,
+                       instance.success ? QColor(40, 140, 80) : QColor(80, 120, 180),
+                       QString("[Generate][%1][stdout] ").arg(instanceId));
+        appendLogLines(m_logPanel,
+                       instance.standardError,
+                       instance.success ? QColor(200, 150, 50) : QColor(220, 50, 50),
+                       QString("[Generate][%1][stderr] ").arg(instanceId));
+    }
+
+    if (!result.snapshotPath.isEmpty()) {
+        m_logPanel->appendMessage(QString("[Generate] Project snapshot=%1").arg(result.snapshotPath),
+                                  QColor(70, 110, 190));
+    }
+
+    if (!result.success) {
+        const QString error = result.error.isEmpty()
+            ? QStringLiteral("Generation failed.")
+            : result.error;
+        qWarning().noquote() << error;
         m_logPanel->appendMessage("[Generate] " + error, QColor(220, 50, 50));
-        appendLogLines(m_logPanel, standardOutput, QColor(80, 120, 180), "[Generate][stdout] ");
-        appendLogLines(m_logPanel, standardError, QColor(220, 50, 50), "[Generate][stderr] ");
         statusBar()->showMessage(error, 5000);
-        QMessageBox::warning(this,
-                             "Generate Failed",
-                             error + "\n\n" + detail);
+        QMessageBox::warning(this, "Generate Failed", error);
         return;
     }
 
-    const QString successMessage = "Generated Verilog and JSON in " + outputDirectory;
-    // Successful stderr is logged as a warning-colored channel because many
-    // command-line tools use stderr for progress even when exit code is zero.
+    const QString successMessage =
+        QStringLiteral("Generated project IP instances in %1").arg(result.outputRoot);
     qInfo().noquote() << successMessage;
     m_logPanel->appendMessage("[Generate] " + successMessage, QColor(40, 140, 80));
-    appendLogLines(m_logPanel, standardOutput, QColor(40, 140, 80), "[Generate][stdout] ");
-    appendLogLines(m_logPanel, standardError, QColor(200, 150, 50), "[Generate][stderr] ");
     statusBar()->showMessage(successMessage, 5000);
-    QMessageBox::information(this,
-                             "Generate Complete",
-                             successMessage + "\n\nJSON: " + jsonPath + "\n\n" +
-                                 trimmedProcessOutput(standardOutput));
 }
 
 void MainWindow::runValidation() {
@@ -786,7 +684,7 @@ void MainWindow::setupActions() {
 
     m_generateAction = new QAction("Generate Verilog", this);
     m_generateAction->setObjectName(QStringLiteral("generateAction"));
-    m_generateAction->setToolTip("Write IP-core graph input and a project snapshot, then generate Verilog in a selected folder.");
+    m_generateAction->setToolTip("Generate every project IP instance under the project generated directory.");
     connect(m_generateAction, &QAction::triggered, this, &MainWindow::generateVerilog);
 
     m_validateAction = new QAction("Validate", this);

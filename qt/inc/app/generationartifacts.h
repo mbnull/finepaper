@@ -24,3 +24,13 @@ GeneratedProjectSnapshotResult writeGeneratedProjectSnapshot(const Graph& graph,
                                                              const QString& outputDirectory,
                                                              const QString& designName,
                                                              const QVector<ProjectIpInstanceRecord>& ipcoreState);
+
+GeneratedProjectSnapshotResult writeGeneratedProjectSnapshotFile(const Graph& graph,
+                                                                 const QString& projectPath,
+                                                                 const QString& designName,
+                                                                 const QVector<ProjectIpInstanceRecord>& ipcoreState);
+
+GeneratedProjectSnapshotResult writeGeneratedProjectSnapshotInOutputRoot(const Graph& graph,
+                                                                         const QString& outputRoot,
+                                                                         const QString& designName,
+                                                                         const QVector<ProjectIpInstanceRecord>& ipcoreState);

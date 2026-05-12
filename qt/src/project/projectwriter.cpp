@@ -7,6 +7,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QSaveFile>
 #include <algorithm>
 
 namespace {
@@ -94,19 +95,23 @@ QJsonObject toJson(const ProjectDocument& document) {
 } // namespace
 
 ProjectWriteResult ProjectWriter::writeFile(const QString& path, const ProjectDocument& document) {
-    QFile file(path);
     const QFileInfo fileInfo(path);
     if (!fileInfo.absoluteDir().exists() && !QDir().mkpath(fileInfo.absolutePath())) {
         return {false, QStringLiteral("Could not create project directory: %1").arg(fileInfo.absolutePath())};
     }
 
+    QSaveFile file(path);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
         return {false, QStringLiteral("Could not open project file for writing: %1").arg(path)};
     }
 
     const QJsonDocument json(toJson(document));
-    if (file.write(json.toJson(QJsonDocument::Indented)) < 0) {
+    const QByteArray content = json.toJson(QJsonDocument::Indented);
+    if (file.write(content) != content.size()) {
         return {false, QStringLiteral("Could not write project file: %1").arg(path)};
+    }
+    if (!file.commit()) {
+        return {false, QStringLiteral("Could not commit project file: %1").arg(path)};
     }
 
     return {true, {}};

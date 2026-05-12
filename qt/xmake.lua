@@ -231,6 +231,40 @@ add_qt_test_target("projectdocument_test", "test/projectdocument_test.cpp", {
     "inc/**/ipcoreruntimedescriptor.h"
 })
 
+add_qt_test_target("projectgenerationrunner_test", "test/projectgenerationrunner_test.cpp", {
+    "src/app/projectgenerationrunner.cpp",
+    "src/connection/connectionruleservice.cpp",
+    "src/ipcore/ipcatalogservice.cpp",
+    "src/ipcore/ipcorecommandrunner.cpp",
+    "src/ipcore/ipcoregraphexporter.cpp",
+    "src/project/projectreader.cpp",
+    "src/project/projectwriter.cpp",
+    "src/project/graphprojectserializer.cpp",
+    "src/app/generationartifacts.cpp",
+    "src/**/graph.cpp",
+    "src/**/module.cpp",
+    "src/**/connection.cpp",
+    "src/**/port.cpp",
+    "src/**/parameter.cpp",
+    "src/**/moduleregistry.cpp",
+    "src/**/moduleprovider.cpp",
+    "src/**/ipcoreruntimeregistry.cpp",
+    "inc/app/projectgenerationrunner.h",
+    "inc/app/generationartifacts.h",
+    "inc/connection/connectionruleservice.h",
+    "inc/ipcore/ipcatalogservice.h",
+    "inc/ipcore/ipcorecommandrunner.h",
+    "inc/ipcore/ipcoregraphexporter.h",
+    "inc/project/projectreader.h",
+    "inc/project/projectwriter.h",
+    "inc/project/graphprojectserializer.h",
+    "inc/project/ipinstancestate.h",
+    "inc/**/graph.h",
+    "inc/**/module.h",
+    "inc/**/ipcoreruntimeregistry.h",
+    "inc/**/ipcoreruntimedescriptor.h"
+})
+
 add_qt_test_target("ipcatalogservice_test", "test/ipcatalogservice_test.cpp", {
     "src/ipcore/ipcatalogservice.cpp",
     "src/modules/moduleregistry.cpp",
@@ -377,6 +411,7 @@ target("ipcatalogpanel_test")
     add_files("src/app/mainwindow.cpp")
     add_files("src/app/generationartifacts.cpp")
     add_files("src/app/logformat.cpp")
+    add_files("src/app/projectgenerationrunner.cpp")
     add_files("src/app/projectlauncher.cpp")
     add_files("src/panels/*.cpp")
     add_files("src/widgets/*.cpp")

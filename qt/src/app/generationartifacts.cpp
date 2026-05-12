@@ -51,6 +51,13 @@ GeneratedProjectSnapshotResult writeGeneratedProjectSnapshot(const Graph& graph,
                                                              const QVector<ProjectIpInstanceRecord>& ipcoreState) {
     QDir outputDir(outputDirectory);
     const QString projectPath = outputDir.filePath(designName + QStringLiteral(".fpproj"));
+    return writeGeneratedProjectSnapshotFile(graph, projectPath, designName, ipcoreState);
+}
+
+GeneratedProjectSnapshotResult writeGeneratedProjectSnapshotFile(const Graph& graph,
+                                                                 const QString& projectPath,
+                                                                 const QString& designName,
+                                                                 const QVector<ProjectIpInstanceRecord>& ipcoreState) {
     ProjectDocument document = GraphProjectSerializer::toProject(graph, designName);
     document.ipcoreState = ipcoreState;
     addIpcoreStateDependencies(document, ipcoreState);
@@ -60,4 +67,12 @@ GeneratedProjectSnapshotResult writeGeneratedProjectSnapshot(const Graph& graph,
     }
 
     return {true, projectPath, {}};
+}
+
+GeneratedProjectSnapshotResult writeGeneratedProjectSnapshotInOutputRoot(const Graph& graph,
+                                                                         const QString& outputRoot,
+                                                                         const QString& designName,
+                                                                         const QVector<ProjectIpInstanceRecord>& ipcoreState) {
+    const QString projectPath = QDir(outputRoot).filePath(QStringLiteral("project-snapshot.fpproj"));
+    return writeGeneratedProjectSnapshotFile(graph, projectPath, designName, ipcoreState);
 }
