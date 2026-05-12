@@ -251,9 +251,18 @@ GraphProjectLoadResult GraphProjectSerializer::loadProject(const ProjectDocument
         }
     }
 
+    QSet<QString> connectionIds;
     for (const ProjectConnectionRecord& record : document.connections) {
         // Connection shape can be checked against module type defaults before
         // instantiating a candidate Graph.
+        if (record.id.trimmed().isEmpty()) {
+            return failure(QStringLiteral("Connection is missing id"));
+        }
+        if (connectionIds.contains(record.id)) {
+            return failure(QStringLiteral("Duplicate connection id: %1").arg(record.id));
+        }
+        connectionIds.insert(record.id);
+
         if (!moduleIds.contains(record.source.moduleId) || !moduleIds.contains(record.target.moduleId)) {
             return failure(QStringLiteral("Connection %1 references missing module").arg(record.id));
         }

@@ -765,6 +765,48 @@ void testLoadRejectsInvalidConnectionReference() {
             "invalid connection error should mention the connection id");
 }
 
+void testLoadRejectsEmptyConnectionIdWithoutChangingGraph() {
+    registerProjectTypes();
+
+    Graph graph;
+    require(graph.addModule(instantiate(makeProjectEndpointType(), QStringLiteral("existing_node"))),
+            "failed to add existing module");
+
+    ProjectDocument document = validProjectDocument();
+    document.connections.first().id.clear();
+
+    const GraphProjectLoadResult result = GraphProjectSerializer::loadProject(document, graph);
+
+    require(!result.success, "empty connection id should be rejected");
+    require(result.error.contains(QStringLiteral("Connection is missing id")),
+            "empty connection id error should mention missing id");
+    require(graph.modules().size() == 1, "failed project load should preserve existing modules");
+    require(graph.connections().empty(), "failed project load should preserve existing connections");
+    require(graph.getModule(QStringLiteral("existing_node")) != nullptr,
+            "failed project load should keep the previous graph");
+}
+
+void testLoadRejectsDuplicateConnectionIdsWithoutChangingGraph() {
+    registerProjectTypes();
+
+    Graph graph;
+    require(graph.addModule(instantiate(makeProjectEndpointType(), QStringLiteral("existing_node"))),
+            "failed to add existing module");
+
+    ProjectDocument document = validProjectDocument();
+    document.connections.push_back(document.connections.first());
+
+    const GraphProjectLoadResult result = GraphProjectSerializer::loadProject(document, graph);
+
+    require(!result.success, "duplicate connection id should be rejected");
+    require(result.error.contains(QStringLiteral("Duplicate connection id: conn_1")),
+            "duplicate connection id error should mention the duplicated id");
+    require(graph.modules().size() == 1, "failed project load should preserve existing modules");
+    require(graph.connections().empty(), "failed project load should preserve existing connections");
+    require(graph.getModule(QStringLiteral("existing_node")) != nullptr,
+            "failed project load should keep the previous graph");
+}
+
 void testProjectLoadRejectsConnectionRuleFailure() {
     ProjectDocument document = validProjectDocument();
     document.modules.clear();
@@ -1210,6 +1252,8 @@ int main(int argc, char** argv) {
         testLoadRejectsMissingModuleType();
         testLoadRejectsInvalidParameterType();
         testLoadRejectsInvalidConnectionReference();
+        testLoadRejectsEmptyConnectionIdWithoutChangingGraph();
+        testLoadRejectsDuplicateConnectionIdsWithoutChangingGraph();
         testProjectLoadRejectsConnectionRuleFailure();
         testProjectLoadReportsIpcoreConnectionRuleFailure();
         testProjectLoadRejectsCrossInstanceConnectionWithinSameIpcore();
