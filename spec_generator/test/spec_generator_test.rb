@@ -127,11 +127,11 @@ class SpecGeneratorTest < Minitest::Test
 
       modules_xml = File.read(File.join(dir, 'generated/ipcores/finepaper.opennoc/modules.xml'))
       assert_includes modules_xml, '<module name="OpenNoCXP" palette_label="OpenNoC XP" graph_group="xps"'
-      assert_includes modules_xml, '<module name="OpenNoCRNF" palette_label="RNF" graph_group="opennoc_agents"'
-      assert_includes modules_xml, '<module name="OpenNoCRNI" palette_label="RNI" graph_group="opennoc_agents"'
-      assert_includes modules_xml, '<module name="OpenNoCHNF" palette_label="HNF" graph_group="opennoc_agents"'
-      assert_includes modules_xml, '<module name="OpenNoCHNI" palette_label="HNI" graph_group="opennoc_agents"'
-      assert_includes modules_xml, '<module name="OpenNoCSNF" palette_label="SNF" graph_group="opennoc_agents"'
+      assert_includes modules_xml, '<module name="OpenNoCRNF" palette_label="RNF" graph_group="endpoints"'
+      assert_includes modules_xml, '<module name="OpenNoCRNI" palette_label="RNI" graph_group="endpoints"'
+      assert_includes modules_xml, '<module name="OpenNoCHNF" palette_label="HNF" graph_group="endpoints"'
+      assert_includes modules_xml, '<module name="OpenNoCHNI" palette_label="HNI" graph_group="endpoints"'
+      assert_includes modules_xml, '<module name="OpenNoCSNF" palette_label="SNF" graph_group="endpoints"'
       assert_includes modules_xml, '<interface id="p0" label="P0" bus="opennoc_chi_attachment" role="target" connects_to="initiator" match="" cardinality="one" autocomplete_group="endpoint_attachment">'
       assert_includes modules_xml, '<interface id="chi" label="CHI" bus="opennoc_chi_attachment" role="initiator" connects_to="target" match="" cardinality="one" autocomplete_group="endpoint_attachment">'
 
@@ -139,6 +139,11 @@ class SpecGeneratorTest < Minitest::Test
         assert File.file?(File.join(dir, "generated/ipcores/finepaper.opennoc/graphics/#{name}.xml")),
                "#{name} graphics should be generated"
       end
+      xp_graphics = File.read(File.join(dir, 'generated/ipcores/finepaper.opennoc/graphics/OpenNoCXP.xml'))
+      assert_includes xp_graphics, '<graphics layout="mesh_router"'
+      assert_includes xp_graphics, 'supports_collapse="true"'
+      rni_graphics = File.read(File.join(dir, 'generated/ipcores/finepaper.opennoc/graphics/OpenNoCRNI.xml'))
+      assert_includes rni_graphics, '<graphics layout="endpoint"'
     end
   end
 

@@ -57,7 +57,7 @@
       <parameter name="mesh_row" type="int" default="0" description="Logical OpenNoC mesh row." configurable="false" />
     </parameters>
   </module>
-  <module name="OpenNoCRNF" palette_label="RNF" graph_group="opennoc_agents" description="OpenNoC CHI RNF agent.">
+  <module name="OpenNoCRNF" palette_label="RNF" graph_group="endpoints" description="OpenNoC CHI RNF agent.">
     <identity external_id_prefix="rnf" display_prefix="RNF" width="2" supports_mesh_coordinates="false" />
     <interfaces>
       <interface id="chi" label="CHI" bus="opennoc_chi_attachment" role="initiator" connects_to="target" match="" cardinality="one" autocomplete_group="endpoint_attachment">
@@ -73,7 +73,7 @@
       <parameter name="y" type="int" default="0" description="Canvas Y position." configurable="false" />
     </parameters>
   </module>
-  <module name="OpenNoCRNI" palette_label="RNI" graph_group="opennoc_agents" description="OpenNoC CHI RNI agent.">
+  <module name="OpenNoCRNI" palette_label="RNI" graph_group="endpoints" description="OpenNoC CHI RNI agent.">
     <identity external_id_prefix="rni" display_prefix="RNI" width="2" supports_mesh_coordinates="false" />
     <interfaces>
       <interface id="chi" label="CHI" bus="opennoc_chi_attachment" role="initiator" connects_to="target" match="" cardinality="one" autocomplete_group="endpoint_attachment">
@@ -89,7 +89,7 @@
       <parameter name="y" type="int" default="0" description="Canvas Y position." configurable="false" />
     </parameters>
   </module>
-  <module name="OpenNoCHNF" palette_label="HNF" graph_group="opennoc_agents" description="OpenNoC CHI HNF agent.">
+  <module name="OpenNoCHNF" palette_label="HNF" graph_group="endpoints" description="OpenNoC CHI HNF agent.">
     <identity external_id_prefix="hnf" display_prefix="HNF" width="2" supports_mesh_coordinates="false" />
     <interfaces>
       <interface id="chi" label="CHI" bus="opennoc_chi_attachment" role="initiator" connects_to="target" match="" cardinality="one" autocomplete_group="endpoint_attachment">
@@ -105,7 +105,7 @@
       <parameter name="y" type="int" default="0" description="Canvas Y position." configurable="false" />
     </parameters>
   </module>
-  <module name="OpenNoCHNI" palette_label="HNI" graph_group="opennoc_agents" description="OpenNoC CHI HNI agent.">
+  <module name="OpenNoCHNI" palette_label="HNI" graph_group="endpoints" description="OpenNoC CHI HNI agent.">
     <identity external_id_prefix="hni" display_prefix="HNI" width="2" supports_mesh_coordinates="false" />
     <interfaces>
       <interface id="chi" label="CHI" bus="opennoc_chi_attachment" role="initiator" connects_to="target" match="" cardinality="one" autocomplete_group="endpoint_attachment">
@@ -121,7 +121,7 @@
       <parameter name="y" type="int" default="0" description="Canvas Y position." configurable="false" />
     </parameters>
   </module>
-  <module name="OpenNoCSNF" palette_label="SNF" graph_group="opennoc_agents" description="OpenNoC CHI SNF agent.">
+  <module name="OpenNoCSNF" palette_label="SNF" graph_group="endpoints" description="OpenNoC CHI SNF agent.">
     <identity external_id_prefix="snf" display_prefix="SNF" width="2" supports_mesh_coordinates="false" />
     <interfaces>
       <interface id="chi" label="CHI" bus="opennoc_chi_attachment" role="initiator" connects_to="target" match="" cardinality="one" autocomplete_group="endpoint_attachment">

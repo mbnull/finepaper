@@ -712,6 +712,10 @@ void testRepositoryOpenNoCIpCoreMetadataLoads() {
             "OpenNoCXP should keep IP core ownership");
     require(xpType->graphGroup == QStringLiteral("xps"),
             "OpenNoCXP should participate as the router graph group");
+    require(xpType->editorLayout == QStringLiteral("mesh_router"),
+            "OpenNoCXP should use the mesh-router editor layout");
+    require(xpType->supportsCollapse,
+            "OpenNoCXP should support collapse/expand presentation");
     require(xpType->interfaceMetadata.value(QStringLiteral("east")).topologyRule == QStringLiteral("opposite_side"),
             "OpenNoCXP east should declare opposite_side topology rule");
     require(xpType->interfaceMetadata.value(QStringLiteral("p0")).cardinality == QStringLiteral("one"),
@@ -719,6 +723,10 @@ void testRepositoryOpenNoCIpCoreMetadataLoads() {
 
     const ModuleType* rniType = registry.getType(QStringLiteral("OpenNoCRNI"));
     require(rniType != nullptr, "OpenNoCRNI module type should load");
+    require(rniType->graphGroup == QStringLiteral("endpoints"),
+            "OpenNoC agents should use endpoint presentation grouping");
+    require(rniType->editorLayout == QStringLiteral("endpoint"),
+            "OpenNoC agents should use endpoint editor layout");
     require(rniType->interfaceMetadata.value(QStringLiteral("chi")).autocompleteGroup == QStringLiteral("endpoint_attachment"),
             "OpenNoCRNI CHI interface should use endpoint attachment autocomplete");
 }

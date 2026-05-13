@@ -1,10 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <module-graphics type="OpenNoCHNF">
-  <graphics>
-    <node width="132" height="72" color="#f6f8fa" border="#57606a" />
-    <caption x="14" y="20" />
+  <graphics layout="endpoint" node_color="#f6f8fa">
+    <expanded min_width="132" height="72" caption_left="14" caption_top="20" />
+    <arrangement loose_endpoint_spacing_x="168"
+                 loose_endpoint_spacing_y="84"
+                 loose_endpoint_margin_y="116" />
   </graphics>
   <anchors>
-    <anchor ref="chi" x="66" y="72" normal_x="0" normal_y="1" label="CHI" label_x="50" label_y="50" />
+    <anchor ref="chi" x="132" y="36" normal_x="1" normal_y="0" label="CHI" label_x="98" label_y="50" />
   </anchors>
 </module-graphics>

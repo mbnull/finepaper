@@ -140,7 +140,7 @@ modules:
         port: { id: p1, direction: input, type: bus, bus_type: opennoc_chi_attachment, role: attachment, name: P1, description: OpenNoC CHI attachment slot 1 }
   OpenNoCRNF:
     palette_label: RNF
-    graph_group: opennoc_agents
+    graph_group: endpoints
     description: OpenNoC CHI RNF agent.
     identity:
       external_id_prefix: rnf
@@ -164,7 +164,7 @@ modules:
         port: { id: chi, direction: output, type: bus, bus_type: opennoc_chi_attachment, role: attachment, name: CHI, description: OpenNoC RNF CHI attachment }
   OpenNoCRNI:
     palette_label: RNI
-    graph_group: opennoc_agents
+    graph_group: endpoints
     description: OpenNoC CHI RNI agent.
     identity:
       external_id_prefix: rni
@@ -188,7 +188,7 @@ modules:
         port: { id: chi, direction: output, type: bus, bus_type: opennoc_chi_attachment, role: attachment, name: CHI, description: OpenNoC RNI CHI attachment }
   OpenNoCHNF:
     palette_label: HNF
-    graph_group: opennoc_agents
+    graph_group: endpoints
     description: OpenNoC CHI HNF agent.
     identity:
       external_id_prefix: hnf
@@ -212,7 +212,7 @@ modules:
         port: { id: chi, direction: output, type: bus, bus_type: opennoc_chi_attachment, role: attachment, name: CHI, description: OpenNoC HNF CHI attachment }
   OpenNoCHNI:
     palette_label: HNI
-    graph_group: opennoc_agents
+    graph_group: endpoints
     description: OpenNoC CHI HNI agent.
     identity:
       external_id_prefix: hni
@@ -236,7 +236,7 @@ modules:
         port: { id: chi, direction: output, type: bus, bus_type: opennoc_chi_attachment, role: attachment, name: CHI, description: OpenNoC HNI CHI attachment }
   OpenNoCSNF:
     palette_label: SNF
-    graph_group: opennoc_agents
+    graph_group: endpoints
     description: OpenNoC CHI SNF agent.
     identity:
       external_id_prefix: snf

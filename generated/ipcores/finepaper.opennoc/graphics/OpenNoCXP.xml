@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <module-graphics type="OpenNoCXP">
-  <graphics>
-    <node width="160" height="128" color="#e6edf3" border="#24292f" />
-    <caption x="16" y="20" />
+  <graphics layout="mesh_router" node_color="#e6edf3" supports_collapse="true">
+    <expanded min_width="160" height="128" caption_left="16" caption_top="20" port_inset="18" />
+    <collapsed min_width="112" height="96" caption_left="20" caption_top="28" endpoint_inset="18" />
+    <arrangement endpoint_offset_x="156" mesh_spacing_x="220" mesh_spacing_y="168" />
   </graphics>
   <anchors>
     <anchor ref="north" x="80" y="0" normal_x="0" normal_y="-1" label="N" label_x="88" label_y="18" />
