@@ -48,6 +48,33 @@ module SpecGenerator
   PARAMETER_TYPES = %w[string int bool].freeze
   EMIT_MODES = %w[attribute config editor editor_only].freeze
   PORT_DIRECTIONS = %w[input output inout].freeze
+  IPCRAFT_PACKAGE_TOP_LEVEL_KEYS = %w[
+    schema id name version plugin extensions ipxact parameters connection_classes modules views topologies commands
+  ].freeze
+  IPCRAFT_PLUGIN_KEYS = %w[library entry].freeze
+  IPCRAFT_IPXACT_KEYS = %w[root generated].freeze
+  IPCRAFT_CONNECTION_CLASS_KEYS = %w[id roles symmetric ipxact].freeze
+  IPCRAFT_MODULE_KEYS = %w[id name description graph_role attach parameters interfaces].freeze
+  IPCRAFT_INTERFACE_KEYS = %w[id name label modes accepts multi_connection ipxact parameters].freeze
+  IPCRAFT_ACCEPT_KEYS = %w[class role].freeze
+  IPCRAFT_VIEW_KEYS = %w[module file].freeze
+  IPCRAFT_COMMAND_KEYS = %w[executable input_schema args].freeze
+  IPCRAFT_EXTENSION_MODE_KEYS = %w[ipxact].freeze
+  IPCRAFT_EXTENSION_MODE_IPXACT_KEYS = %w[mode].freeze
+  IPCRAFT_INTERFACE_IPXACT_KEYS = %w[bus_interface mode modes].freeze
+  IPCRAFT_INTERFACE_IPXACT_MODE_KEYS = %w[mode].freeze
+  IPXACT_NATIVE_MODES = %w[
+    initiator target system mirroredInitiator mirroredTarget mirroredSystem monitor
+  ].freeze
+  NOC_EXTENSION_ID = 'noc.v1'.freeze
+  NOC_CHI_CONNECTION_ROLES = %w[node interconnect peer].freeze
+  NOC_CHI_MODE_MAPPINGS = {
+    'chi_interconnect' => { 'ipxact' => { 'mode' => 'target' } },
+    'chi_requester_node' => { 'ipxact' => { 'mode' => 'initiator' } },
+    'chi_home_node' => { 'ipxact' => { 'mode' => 'initiator' } },
+    'chi_subordinate_node' => { 'ipxact' => { 'mode' => 'initiator' } },
+    'chi_peer' => { 'ipxact' => { 'mode' => 'system' } }
+  }.freeze
 
   View = Struct.new(:module_name, :graphics_xml, :anchors_xml, :interface_refs, keyword_init: true)
   ParsedSpec = Struct.new(:data, :views, keyword_init: true)
@@ -56,6 +83,16 @@ module SpecGenerator
     parsed = IpCoreParser.new(ipcore_path, views_dir).parse
     IpCoreRuntimeEmitter.new(parsed, source_root: File.dirname(ipcore_path)).write(runtime_bundle_dir)
     RubyModelEmitter.new(parsed.data).write(ruby_model_dir) if ruby_model_dir
+  end
+
+  def self.check_ipcraft_package_source(ipcore_path:, package_root: File.dirname(ipcore_path))
+    IpcraftPackageParser.new(ipcore_path, package_root).parse
+    true
+  end
+
+  def self.build_ipcraft_manifest(ipcore_path:, package_root:)
+    manifest = IpcraftPackageParser.new(ipcore_path, package_root).parse
+    IpcraftManifestEmitter.new(manifest, package_root: package_root).write
   end
 
   def self.check_repository_generated_outputs(root: Dir.pwd)
@@ -269,6 +306,644 @@ module SpecGenerator
       when Array
         value.each { |child| stringify_version_fields!(child) }
       end
+    end
+  end
+
+  class IpcraftPackageParser
+    def initialize(ipcore_path, package_root)
+      @ipcore_path = ipcore_path
+      @package_root = File.expand_path(package_root)
+    end
+
+    def parse
+      data = load_yaml
+      case data['schema']
+      when 'ipcraft.package.v1'
+        IpcraftPackageNormalizer.new(data, package_root: @package_root).manifest
+      when 'finepaper.ipcore.v1'
+        parsed = IpCoreParser.new(@ipcore_path, File.join(@package_root, 'views')).parse
+        LegacyIpcraftManifestAdapter.new(parsed, package_root: @package_root).manifest
+      else
+        raise SpecError, 'schema must be ipcraft.package.v1'
+      end
+    end
+
+    private
+
+    def load_yaml
+      ConstrainedYamlLoader.load_file(@ipcore_path).tap do |data|
+        raise SpecError, 'ipcraft package source root must be a map' unless data.is_a?(Hash)
+      end
+    end
+  end
+
+  class IpcraftPackageNormalizer
+    def initialize(data, package_root:)
+      @data = data
+      @package_root = package_root
+      @extensions = {}
+      @connection_classes = []
+      @connection_class_index = {}
+      @modules = []
+      @module_interfaces = {}
+    end
+
+    def manifest
+      validate_top_level
+      @extensions = normalize_extensions
+      @connection_classes = normalize_connection_classes
+      @connection_class_index = @connection_classes.to_h { |klass| [klass.fetch('id'), klass] }
+      @modules = normalize_modules
+      validate_accept_rules!
+
+      compact_hash(
+        'schema' => 'ipcraft.manifest.v1',
+        'id' => required_string(@data, 'id', 'id'),
+        'name' => required_string(@data, 'name', 'name'),
+        'version' => required_string(@data, 'version', 'version'),
+        'plugin' => normalize_plugin,
+        'extensions' => @extensions,
+        'ipxact' => normalize_ipxact,
+        'parameters' => normalize_parameters,
+        'connection_classes' => @connection_classes,
+        'modules' => @modules,
+        'views' => normalize_views,
+        'topologies' => normalize_topologies,
+        'commands' => normalize_commands
+      )
+    end
+
+    private
+
+    def validate_top_level
+      validate_keys!(@data, IPCRAFT_PACKAGE_TOP_LEVEL_KEYS, 'ipcraft package top-level')
+      raise SpecError, 'schema must be ipcraft.package.v1' unless @data['schema'] == 'ipcraft.package.v1'
+      %w[id name version].each { |key| required_string(@data, key, key) }
+      raise SpecError, 'connection_classes must be a list' unless @data['connection_classes'].is_a?(Array)
+      raise SpecError, 'modules must be a list' unless @data['modules'].is_a?(Array)
+      raise SpecError, 'commands must be a map' unless @data['commands'].is_a?(Hash)
+    end
+
+    def normalize_plugin
+      plugin = @data['plugin']
+      return nil unless plugin
+      raise SpecError, 'plugin must be a map' unless plugin.is_a?(Hash)
+
+      validate_keys!(plugin, IPCRAFT_PLUGIN_KEYS, 'plugin')
+      normalized = {}
+      if plugin.key?('library')
+        library = required_string(plugin, 'library', 'plugin.library')
+        validate_package_local_path!(library, 'plugin.library')
+        normalized['library'] = library
+      end
+      normalized['entry'] = required_string(plugin, 'entry', 'plugin.entry') if plugin.key?('entry')
+      normalized
+    end
+
+    def normalize_extensions
+      raw = @data.fetch('extensions', {})
+      raise SpecError, 'extensions must be a map' unless raw.is_a?(Hash)
+
+      raw.to_h do |id, extension|
+        raise SpecError, "extension #{id} must be a map" unless extension.is_a?(Hash)
+
+        normalized = deep_copy(extension)
+        enabled = normalized.fetch('enabled', false)
+        unless enabled == true || enabled == false
+          raise SpecError, "extension #{id}.enabled must be a bool"
+        end
+        normalized['enabled'] = enabled
+        if id == NOC_EXTENSION_ID && enabled
+          validate_extension_modes!(id, normalized) if normalized.key?('modes')
+          normalized['modes'] = deep_copy(NOC_CHI_MODE_MAPPINGS).merge(deep_copy(normalized.fetch('modes', {})))
+        end
+        validate_extension_modes!(id, normalized)
+        [id, normalized]
+      end
+    end
+
+    def validate_extension_modes!(extension_id, extension)
+      return unless extension.key?('modes')
+      raise SpecError, "extension #{extension_id}.modes must be a map" unless extension['modes'].is_a?(Hash)
+
+      extension['modes'] = extension.fetch('modes').to_h do |mode, mapping|
+        raise SpecError, "extension #{extension_id}.modes keys must be strings" unless mode.is_a?(String)
+
+        [mode, normalize_extension_mode_mapping(extension_id, mode, mapping)]
+      end
+    end
+
+    def normalize_extension_mode_mapping(extension_id, mode, mapping)
+      context = "extension #{extension_id} mode #{mode}"
+      unless mapping.is_a?(Hash) && mapping['ipxact'].is_a?(Hash) && mapping['ipxact']['mode'].is_a?(String)
+        raise SpecError, "#{context} has no IP-XACT mapping"
+      end
+
+      validate_keys!(mapping, IPCRAFT_EXTENSION_MODE_KEYS, context)
+      ipxact = mapping.fetch('ipxact')
+      validate_keys!(ipxact, IPCRAFT_EXTENSION_MODE_IPXACT_KEYS, "#{context} ipxact")
+      native_mode = required_string(ipxact, 'mode', "#{context} ipxact.mode")
+      validate_ipxact_mode!(native_mode, "#{context} ipxact.mode")
+      { 'ipxact' => { 'mode' => native_mode } }
+    end
+
+    def normalize_ipxact
+      ipxact = @data['ipxact']
+      return nil unless ipxact
+      raise SpecError, 'ipxact must be a map' unless ipxact.is_a?(Hash)
+
+      validate_keys!(ipxact, IPCRAFT_IPXACT_KEYS, 'ipxact')
+      normalized = {}
+      if ipxact.key?('root')
+        root = required_string(ipxact, 'root', 'ipxact.root')
+        validate_package_local_path!(root, 'ipxact.root')
+        normalized['root'] = root
+      end
+      if ipxact.key?('generated')
+        unless ipxact['generated'] == true || ipxact['generated'] == false
+          raise SpecError, 'ipxact.generated must be a bool'
+        end
+        normalized['generated'] = ipxact['generated']
+      end
+      normalized
+    end
+
+    def normalize_parameters
+      parameters = @data.fetch('parameters', {})
+      raise SpecError, 'parameters must be a map' unless parameters.is_a?(Hash)
+
+      deep_copy(parameters)
+    end
+
+    def normalize_connection_classes
+      seen_ids = {}
+      @data.fetch('connection_classes').map do |klass|
+        raise SpecError, 'connection class must be a map' unless klass.is_a?(Hash)
+
+        validate_keys!(klass, IPCRAFT_CONNECTION_CLASS_KEYS, "connection class #{klass['id'] || '<unnamed>'}")
+        klass_id = required_string(klass, 'id', 'connection class id')
+        roles = required_string_list(klass, 'roles', "connection class #{klass_id} roles")
+        remember_unique!(seen_ids, klass_id, 'connection class id')
+        normalized = {
+          'id' => klass_id,
+          'roles' => roles,
+          'symmetric' => required_bool(klass, 'symmetric', "connection class #{klass_id}.symmetric")
+        }
+        if klass.key?('ipxact')
+          normalized['ipxact'] = normalize_connection_class_ipxact(klass_id, roles, klass['ipxact'])
+        end
+        validate_connection_class_mapping!(normalized)
+        normalized
+      end
+    end
+
+    def normalize_connection_class_ipxact(klass_id, roles, ipxact)
+      raise SpecError, "connection class #{klass_id} ipxact must be a map" unless ipxact.is_a?(Hash)
+      raise SpecError, "connection class #{klass_id} ipxact cannot be empty" if ipxact.empty?
+
+      expected_roles = roles.uniq
+      ipxact.each do |role, mode|
+        unless expected_roles.include?(role)
+          raise SpecError, "connection class #{klass_id} ipxact field #{role} is not recognized"
+        end
+        unless mode.is_a?(String)
+          raise SpecError, "connection class #{klass_id} ipxact.#{role} must be a string"
+        end
+
+        validate_ipxact_mode!(mode, "connection class #{klass_id} ipxact.#{role}")
+      end
+
+      expected_roles.each do |role|
+        raise SpecError, "connection class #{klass_id} ipxact.#{role} is required" unless ipxact.key?(role)
+      end
+
+      deep_copy(ipxact)
+    end
+
+    def normalize_modules
+      seen_ids = {}
+      @data.fetch('modules').map do |mod|
+        raise SpecError, 'module must be a map' unless mod.is_a?(Hash)
+
+        module_id = required_string(mod, 'id', 'module id')
+        remember_unique!(seen_ids, module_id, 'module id')
+        validate_keys!(mod, IPCRAFT_MODULE_KEYS, "module #{module_id}")
+        interfaces = normalize_interfaces(module_id, mod.fetch('interfaces', nil))
+        @module_interfaces[module_id] = interfaces.map { |interface| interface.fetch('id') }
+        compact_hash(
+          'id' => module_id,
+          'name' => optional_string(mod, 'name', "module #{module_id}.name"),
+          'description' => optional_string(mod, 'description', "module #{module_id}.description"),
+          'graph_role' => optional_string(mod, 'graph_role', "module #{module_id}.graph_role"),
+          'attach' => mod.key?('attach') ? deep_copy(mod['attach']) : nil,
+          'parameters' => mod.key?('parameters') ? normalize_module_parameters(module_id, mod['parameters']) : nil,
+          'interfaces' => interfaces
+        )
+      end
+    end
+
+    def normalize_module_parameters(module_id, parameters)
+      raise SpecError, "module #{module_id}.parameters must be a map" unless parameters.is_a?(Hash)
+
+      deep_copy(parameters)
+    end
+
+    def normalize_interfaces(module_id, interfaces)
+      raise SpecError, "module #{module_id}.interfaces must be a list" unless interfaces.is_a?(Array)
+
+      seen_ids = {}
+      interfaces.map do |interface|
+        raise SpecError, "module #{module_id} interface must be a map" unless interface.is_a?(Hash)
+
+        interface_id = required_string(interface, 'id', "module #{module_id} interface id")
+        remember_unique!(seen_ids, interface_id, "module #{module_id} interface id")
+        validate_keys!(interface, IPCRAFT_INTERFACE_KEYS, "#{module_id}.#{interface_id}")
+        modes = required_string_list(interface, 'modes', "#{module_id}.#{interface_id} modes")
+        ipxact = interface.key?('ipxact') ? normalize_interface_ipxact(module_id, interface_id, interface['ipxact']) : nil
+        modes.each { |mode| validate_interface_mode_mapping!(module_id, interface_id, ipxact, mode) }
+
+        compact_hash(
+          'id' => interface_id,
+          'name' => optional_string(interface, 'name', "#{module_id}.#{interface_id}.name"),
+          'label' => optional_string(interface, 'label', "#{module_id}.#{interface_id}.label"),
+          'modes' => modes,
+          'accepts' => normalize_accepts(module_id, interface_id, interface.fetch('accepts', nil)),
+          'multi_connection' => interface.key?('multi_connection') ? required_bool(interface, 'multi_connection', "#{module_id}.#{interface_id}.multi_connection") : nil,
+          'ipxact' => ipxact,
+          'parameters' => interface.key?('parameters') ? deep_copy(interface['parameters']) : nil
+        )
+      end
+    end
+
+    def normalize_accepts(module_id, interface_id, accepts)
+      raise SpecError, "#{module_id}.#{interface_id}.accepts must be a list" unless accepts.is_a?(Array)
+
+      accepts.map do |accept|
+        raise SpecError, "#{module_id}.#{interface_id}.accepts entry must be a map" unless accept.is_a?(Hash)
+
+        validate_keys!(accept, IPCRAFT_ACCEPT_KEYS, "#{module_id}.#{interface_id}.accepts")
+        {
+          'class' => required_string(accept, 'class', "#{module_id}.#{interface_id}.accepts.class"),
+          'role' => required_string(accept, 'role', "#{module_id}.#{interface_id}.accepts.role")
+        }
+      end
+    end
+
+    def normalize_interface_ipxact(module_id, interface_id, ipxact)
+      raise SpecError, "#{module_id}.#{interface_id}.ipxact must be a map" unless ipxact.is_a?(Hash)
+
+      validate_keys!(ipxact, IPCRAFT_INTERFACE_IPXACT_KEYS, "#{module_id}.#{interface_id}.ipxact")
+      normalized = {}
+      if ipxact.key?('bus_interface')
+        normalized['bus_interface'] = required_string(ipxact, 'bus_interface', "#{module_id}.#{interface_id} ipxact.bus_interface")
+      end
+      if ipxact.key?('mode')
+        mode = required_string(ipxact, 'mode', "#{module_id}.#{interface_id} ipxact.mode")
+        validate_ipxact_mode!(mode, "#{module_id}.#{interface_id} ipxact.mode")
+        normalized['mode'] = mode
+      end
+      if ipxact.key?('modes')
+        raise SpecError, "#{module_id}.#{interface_id} ipxact.modes must be a map" unless ipxact['modes'].is_a?(Hash)
+
+        normalized['modes'] = ipxact['modes'].to_h do |mode, mapping|
+          raise SpecError, "#{module_id}.#{interface_id} ipxact.modes keys must be strings" unless mode.is_a?(String)
+
+          [mode, normalize_interface_ipxact_mode_mapping(module_id, interface_id, mode, mapping)]
+        end
+      end
+      normalized
+    end
+
+    def normalize_interface_ipxact_mode_mapping(module_id, interface_id, mode, mapping)
+      context = "#{module_id}.#{interface_id} ipxact.modes.#{mode}"
+      unless mapping.is_a?(Hash) && mapping['mode'].is_a?(String)
+        raise SpecError, "#{context} has no IP-XACT mapping"
+      end
+
+      validate_keys!(mapping, IPCRAFT_INTERFACE_IPXACT_MODE_KEYS, context)
+      native_mode = required_string(mapping, 'mode', "#{context}.mode")
+      validate_ipxact_mode!(native_mode, "#{context}.mode")
+      { 'mode' => native_mode }
+    end
+
+    def normalize_views
+      views = @data.fetch('views', [])
+      raise SpecError, 'views must be a list' unless views.is_a?(Array)
+
+      seen_modules = {}
+      views.map do |view|
+        raise SpecError, 'view must be a map' unless view.is_a?(Hash)
+
+        validate_keys!(view, IPCRAFT_VIEW_KEYS, "view #{view['module'] || '<unnamed>'}")
+        module_id = required_string(view, 'module', 'view.module')
+        remember_unique!(seen_modules, module_id, 'view module')
+        file = required_string(view, 'file', 'view.file')
+        validate_package_local_path!(file, "view #{module_id} file")
+        normalized = {
+          'module' => module_id,
+          'file' => file
+        }
+        validate_view!(normalized)
+        normalized
+      end
+    end
+
+    def normalize_topologies
+      topologies = @data.fetch('topologies', [])
+      raise SpecError, 'topologies must be a list' unless topologies.is_a?(Array)
+
+      seen_ids = {}
+      topologies.each do |topology|
+        raise SpecError, 'topology must be a map' unless topology.is_a?(Hash)
+
+        topology_id = required_string(topology, 'id', 'topology id')
+        remember_unique!(seen_ids, topology_id, 'topology id')
+      end
+      deep_copy(topologies)
+    end
+
+    def normalize_commands
+      @data.fetch('commands').to_h do |name, command|
+        raise SpecError, "commands.#{name} must be a map" unless command.is_a?(Hash)
+
+        validate_keys!(command, IPCRAFT_COMMAND_KEYS, "commands.#{name}")
+        executable = required_string(command, 'executable', "commands.#{name}.executable")
+        validate_package_local_path!(executable, "commands.#{name}.executable")
+        normalized = {
+          'executable' => executable,
+          'input_schema' => required_string(command, 'input_schema', "commands.#{name}.input_schema")
+        }
+        if command.key?('args')
+          raise SpecError, "commands.#{name}.args must be a list" unless command['args'].is_a?(Array)
+          command['args'].each do |arg|
+            raise SpecError, "commands.#{name}.args entries must be strings" unless arg.is_a?(String)
+          end
+          normalized['args'] = command['args']
+        end
+        [name, normalized]
+      end
+    end
+
+    def validate_accept_rules!
+      @modules.each do |mod|
+        mod.fetch('interfaces').each do |interface|
+          interface.fetch('accepts').each do |accept|
+            klass = @connection_class_index[accept.fetch('class')]
+            unless klass
+              raise SpecError, "#{mod.fetch('id')}.#{interface.fetch('id')} accepts unknown connection class #{accept.fetch('class')}"
+            end
+            next if klass.fetch('roles').include?(accept.fetch('role'))
+
+            raise SpecError, "#{mod.fetch('id')}.#{interface.fetch('id')} role #{accept.fetch('role')} is not in connection class #{klass.fetch('id')}"
+          end
+        end
+      end
+    end
+
+    def validate_interface_mode_mapping!(module_id, interface_id, ipxact, mode)
+      return if IPXACT_NATIVE_MODES.include?(mode)
+      return if extension_mode_mapping(mode)
+      return if explicit_interface_mode_mapping?(ipxact, mode)
+
+      raise SpecError, "#{module_id}.#{interface_id} mode #{mode} has no IP-XACT mapping"
+    end
+
+    def explicit_interface_mode_mapping?(ipxact, mode)
+      return false unless ipxact.is_a?(Hash)
+
+      ipxact['mode'].is_a?(String) ||
+        (ipxact['modes'].is_a?(Hash) && ipxact['modes'].key?(mode))
+    end
+
+    def extension_mode_mapping(mode)
+      @extensions.each_value do |extension|
+        next unless extension['enabled'] == true && extension['modes'].is_a?(Hash)
+
+        mapping = extension['modes'][mode]
+        return mapping if mapping
+      end
+      nil
+    end
+
+    def validate_connection_class_mapping!(klass)
+      return if klass['ipxact'].is_a?(Hash)
+      return if klass.fetch('roles').all? { |role| IPXACT_NATIVE_MODES.include?(role) }
+      return if noc_chi_connection_class?(klass)
+
+      raise SpecError, "connection class #{klass.fetch('id')} has no IP-XACT mapping"
+    end
+
+    def noc_chi_connection_class?(klass)
+      extension = @extensions[NOC_EXTENSION_ID]
+      return false unless extension && extension['enabled'] == true
+      return false unless klass.fetch('id').start_with?('chi_')
+
+      klass.fetch('roles').all? { |role| NOC_CHI_CONNECTION_ROLES.include?(role) }
+    end
+
+    def validate_view!(view)
+      module_id = view.fetch('module')
+      interfaces = @module_interfaces[module_id]
+      raise SpecError, "view references unknown module #{module_id}" unless interfaces
+
+      path = File.expand_path(view.fetch('file'), @package_root)
+      raise SpecError, "Missing view XML for #{module_id}: #{path}" unless File.file?(path)
+
+      text = File.read(path)
+      declared_module = text[/<module-view\b[^>]*\bmodule="([^"]+)"/, 1]
+      raise SpecError, "view #{module_id} declares module #{declared_module}" if declared_module && declared_module != module_id
+
+      text.scan(/<(?:interface|anchor)\b[^>]*\bref="([^"]+)"/).flatten.each do |ref|
+        raise SpecError, "view #{module_id} references unknown interface #{ref}" unless interfaces.include?(ref)
+      end
+    end
+
+    def validate_keys!(hash, allowed, context)
+      hash.each_key do |key|
+        next if allowed.include?(key)
+
+        raise SpecError, "Unknown #{context} field: #{key}"
+      end
+    end
+
+    def remember_unique!(seen, id, context)
+      raise SpecError, "Duplicate #{context}: #{id}" if seen.key?(id)
+
+      seen[id] = true
+    end
+
+    def validate_package_local_path!(path, context)
+      raise SpecError, "#{context} cannot be empty" if path.empty?
+      raise SpecError, "#{context} must be package-local" if absolute_path?(path)
+
+      root = File.expand_path(@package_root)
+      expanded = File.expand_path(path, root)
+      return if expanded == root || expanded.start_with?("#{root}#{File::SEPARATOR}")
+
+      raise SpecError, "#{context} escapes package root"
+    end
+
+    def absolute_path?(path)
+      Pathname.new(path).absolute? || path.match?(/\A(?:[A-Za-z]:[\\\/]|\\\\|\/\/)/)
+    end
+
+    def validate_ipxact_mode!(mode, context)
+      return if IPXACT_NATIVE_MODES.include?(mode)
+
+      raise SpecError, "#{context} is invalid"
+    end
+
+    def required_string(hash, key, context)
+      raise SpecError, "#{context} is required" unless hash.key?(key)
+      raise SpecError, "#{context} must be a string" unless hash[key].is_a?(String)
+
+      hash[key]
+    end
+
+    def optional_string(hash, key, context)
+      return nil unless hash.key?(key)
+
+      required_string(hash, key, context)
+    end
+
+    def required_bool(hash, key, context)
+      raise SpecError, "#{context} is required" unless hash.key?(key)
+      return hash[key] if hash[key] == true || hash[key] == false
+
+      raise SpecError, "#{context} must be a bool"
+    end
+
+    def required_string_list(hash, key, context)
+      raise SpecError, "#{context} is required" unless hash.key?(key)
+      raise SpecError, "#{context} must be a list" unless hash[key].is_a?(Array)
+      raise SpecError, "#{context} cannot be empty" if hash[key].empty?
+
+      hash[key].each do |value|
+        raise SpecError, "#{context} entries must be strings" unless value.is_a?(String)
+      end
+      hash[key]
+    end
+
+    def compact_hash(hash)
+      hash.reject { |_, value| value.nil? }
+    end
+
+    def deep_copy(value)
+      case value
+      when Hash
+        value.to_h { |key, child| [key, deep_copy(child)] }
+      when Array
+        value.map { |child| deep_copy(child) }
+      else
+        value
+      end
+    end
+  end
+
+  class LegacyIpcraftManifestAdapter
+    def initialize(parsed, package_root:)
+      @spec = parsed.data
+      @views = parsed.views
+      @package_root = package_root
+    end
+
+    def manifest
+      {
+        'schema' => 'ipcraft.manifest.v1',
+        'id' => @spec.fetch('id'),
+        'name' => @spec.fetch('name'),
+        'version' => @spec.fetch('version'),
+        'extensions' => {},
+        'parameters' => @spec.fetch('instance_parameters', {}),
+        'connection_classes' => connection_classes,
+        'modules' => modules,
+        'views' => views,
+        'topologies' => @spec.fetch('topology_presets', []),
+        'commands' => commands
+      }
+    end
+
+    private
+
+    def connection_classes
+      @spec.fetch('buses', {}).map do |bus_name, bus|
+        roles = bus.fetch('compatibility').fetch('roles').keys
+        {
+          'id' => bus_name,
+          'roles' => roles,
+          'symmetric' => roles.size == 1
+        }
+      end
+    end
+
+    def modules
+      @spec.fetch('modules').map do |module_id, mod|
+        {
+          'id' => module_id,
+          'name' => mod.fetch('palette_label'),
+          'description' => mod.fetch('description'),
+          'graph_role' => graph_role(mod.fetch('graph_group')),
+          'parameters' => mod.fetch('parameters'),
+          'interfaces' => interfaces(mod.fetch('interfaces'))
+        }
+      end
+    end
+
+    def interfaces(interfaces)
+      interfaces.map do |interface_id, interface|
+        {
+          'id' => interface_id,
+          'label' => interface['label'],
+          'modes' => [interface.fetch('role')],
+          'accepts' => [{ 'class' => interface.fetch('bus'), 'role' => interface.fetch('role') }],
+          'multi_connection' => interface['cardinality'] == 'many',
+          'ipxact' => { 'bus_interface' => interface_id }
+        }
+      end
+    end
+
+    def views
+      @views.keys.map do |module_id|
+        { 'module' => module_id, 'file' => "views/#{module_id}.xml" }
+      end
+    end
+
+    def commands
+      runtime = @spec.fetch('runtime')
+      {
+        'validate' => legacy_command(runtime.fetch('drc')),
+        'generate' => legacy_command(runtime.fetch('generator'))
+      }
+    end
+
+    def legacy_command(command)
+      executable = command.fetch('args').first || command.fetch('command')
+      {
+        'executable' => executable,
+        'input_schema' => 'ipcraft.noc.project.v1'
+      }
+    end
+
+    def graph_role(group)
+      case group
+      when 'xps' then 'host'
+      when 'endpoints' then 'attached'
+      else group
+      end
+    end
+  end
+
+  class IpcraftManifestEmitter
+    def initialize(manifest, package_root:)
+      @manifest = manifest
+      @package_root = package_root
+    end
+
+    def write
+      path = File.join(@package_root, 'ipcraft.json')
+      FileUtils.mkdir_p(@package_root)
+      File.write(path, "#{JSON.pretty_generate(@manifest)}\n")
+      path
     end
   end
 

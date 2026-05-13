@@ -453,6 +453,490 @@ class SpecGeneratorTest < Minitest::Test
     assert_equal '2', data.fetch('nested').first.fetch('version')
   end
 
+  def test_builds_ipcraft_manifest_with_interfaces_and_connection_classes
+    Dir.mktmpdir do |dir|
+      package_root = write_ipcraft_package_source(dir)
+
+      manifest_path = SpecGenerator.build_ipcraft_manifest(
+        ipcore_path: File.join(package_root, 'ipcore.yml'),
+        package_root: package_root
+      )
+
+      assert_equal File.join(package_root, 'ipcraft.json'), manifest_path
+      manifest = JSON.parse(File.read(manifest_path))
+      assert_equal 'ipcraft.manifest.v1', manifest.fetch('schema')
+      assert_equal 'org.example.opennoc', manifest.fetch('id')
+      assert_equal({ 'enabled' => true }, manifest.fetch('extensions').fetch('noc.v1').slice('enabled'))
+      assert_equal [
+        { 'id' => 'chi_node_interface', 'roles' => %w[node interconnect], 'symmetric' => false }
+      ], manifest.fetch('connection_classes').map { |item| item.slice('id', 'roles', 'symmetric') }
+
+      xp = manifest.fetch('modules').find { |mod| mod.fetch('id') == 'xp' }
+      refute_nil xp
+      assert_equal [
+        {
+          'id' => 'rnf0',
+          'modes' => ['chi_interconnect'],
+          'accepts' => [{ 'class' => 'chi_node_interface', 'role' => 'interconnect' }]
+        }
+      ], xp.fetch('interfaces').map { |item| item.slice('id', 'modes', 'accepts') }
+      assert_equal(
+        {
+          'validate' => { 'executable' => 'tools/validate', 'input_schema' => 'ipcraft.noc.project.v1' },
+          'generate' => { 'executable' => 'tools/generate', 'input_schema' => 'ipcraft.noc.project.v1' }
+        },
+        manifest.fetch('commands')
+      )
+    end
+  end
+
+  def test_requires_command_input_schema
+    Dir.mktmpdir do |dir|
+      package_root = write_ipcraft_package_source(
+        dir,
+        yaml: ipcraft_package_yaml.sub("    input_schema: ipcraft.noc.project.v1\n\n  generate:", "\n  generate:")
+      )
+
+      error = assert_raises(SpecGenerator::SpecError) do
+        SpecGenerator.build_ipcraft_manifest(
+          ipcore_path: File.join(package_root, 'ipcore.yml'),
+          package_root: package_root
+        )
+      end
+
+      assert_match(/commands\.validate\.input_schema is required/, error.message)
+    end
+  end
+
+  def test_rejects_interface_mode_without_ipxact_mapping
+    Dir.mktmpdir do |dir|
+      package_root = write_ipcraft_package_source(
+        dir,
+        yaml: ipcraft_package_yaml.sub('modes: [chi_interconnect]', 'modes: [chi_unknown]')
+      )
+
+      error = assert_raises(SpecGenerator::SpecError) do
+        SpecGenerator.build_ipcraft_manifest(
+          ipcore_path: File.join(package_root, 'ipcore.yml'),
+          package_root: package_root
+        )
+      end
+
+      assert_match(/xp\.rnf0 mode chi_unknown has no IP-XACT mapping/, error.message)
+    end
+  end
+
+  def test_rejects_invalid_explicit_ipxact_mode_mapping
+    Dir.mktmpdir do |dir|
+      yaml = ipcraft_package_yaml
+             .sub('modes: [chi_interconnect]', 'modes: [definitely_not_ipxact]')
+             .sub(
+               "        ipxact:\n          bus_interface: rnf0\n",
+               "        ipxact:\n          bus_interface: rnf0\n          mode: definitely_not_ipxact\n"
+             )
+      package_root = write_ipcraft_package_source(dir, yaml: yaml)
+
+      error = assert_raises(SpecGenerator::SpecError) do
+        build_ipcraft_manifest(package_root)
+      end
+
+      assert_match(/xp\.rnf0 ipxact\.mode is invalid/, error.message)
+    end
+  end
+
+  def test_rejects_empty_explicit_ipxact_mode_mapping
+    Dir.mktmpdir do |dir|
+      yaml = ipcraft_package_yaml
+             .sub('modes: [chi_interconnect]', 'modes: [custom_mode]')
+             .sub(
+               "        ipxact:\n          bus_interface: rnf0\n",
+               "        ipxact:\n          bus_interface: rnf0\n          modes:\n            custom_mode: {}\n"
+             )
+      package_root = write_ipcraft_package_source(dir, yaml: yaml)
+
+      error = assert_raises(SpecGenerator::SpecError) do
+        build_ipcraft_manifest(package_root)
+      end
+
+      assert_match(/xp\.rnf0 ipxact\.modes\.custom_mode has no IP-XACT mapping/, error.message)
+    end
+  end
+
+  def test_rejects_extension_mode_mapping_to_invalid_ipxact_mode
+    Dir.mktmpdir do |dir|
+      yaml = ipcraft_package_yaml
+             .sub(
+               "    enabled: true\n",
+               "    enabled: true\n    modes:\n      custom_mode:\n        ipxact:\n          mode: definitely_not_ipxact\n"
+             )
+             .sub('modes: [chi_interconnect]', 'modes: [custom_mode]')
+      package_root = write_ipcraft_package_source(dir, yaml: yaml)
+
+      error = assert_raises(SpecGenerator::SpecError) do
+        build_ipcraft_manifest(package_root)
+      end
+
+      assert_match(/extension noc\.v1 mode custom_mode ipxact\.mode is invalid/, error.message)
+    end
+  end
+
+  def test_rejects_noc_extension_modes_that_are_not_a_map
+    Dir.mktmpdir do |dir|
+      yaml = ipcraft_package_yaml.sub("    enabled: true\n", "    enabled: true\n    modes: []\n")
+      package_root = write_ipcraft_package_source(dir, yaml: yaml)
+
+      error = assert_raises(SpecGenerator::SpecError) do
+        build_ipcraft_manifest(package_root)
+      end
+
+      assert_match(/extension noc\.v1\.modes must be a map/, error.message)
+    end
+  end
+
+  def test_rejects_arbitrary_connection_class_ipxact_mapping
+    Dir.mktmpdir do |dir|
+      yaml = ipcraft_package_yaml.sub(
+        "    symmetric: false\n",
+        "    symmetric: false\n    ipxact:\n      arbitrary: data\n"
+      )
+      package_root = write_ipcraft_package_source(dir, yaml: yaml)
+
+      error = assert_raises(SpecGenerator::SpecError) do
+        build_ipcraft_manifest(package_root)
+      end
+
+      assert_match(/connection class chi_node_interface ipxact field arbitrary is not recognized/, error.message)
+    end
+  end
+
+  def test_rejects_empty_connection_class_ipxact_mapping
+    Dir.mktmpdir do |dir|
+      yaml = ipcraft_package_yaml.sub(
+        "    symmetric: false\n",
+        "    symmetric: false\n    ipxact: {}\n"
+      )
+      package_root = write_ipcraft_package_source(dir, yaml: yaml)
+
+      error = assert_raises(SpecGenerator::SpecError) do
+        build_ipcraft_manifest(package_root)
+      end
+
+      assert_match(/connection class chi_node_interface ipxact cannot be empty/, error.message)
+    end
+  end
+
+  def test_expands_noc_chi_extension_modes
+    Dir.mktmpdir do |dir|
+      package_root = write_ipcraft_package_source(dir)
+
+      SpecGenerator.build_ipcraft_manifest(
+        ipcore_path: File.join(package_root, 'ipcore.yml'),
+        package_root: package_root
+      )
+
+      manifest = JSON.parse(File.read(File.join(package_root, 'ipcraft.json')))
+      modes = manifest.fetch('extensions').fetch('noc.v1').fetch('modes')
+      assert_equal 'target', modes.fetch('chi_interconnect').fetch('ipxact').fetch('mode')
+      assert_equal 'initiator', modes.fetch('chi_requester_node').fetch('ipxact').fetch('mode')
+    end
+  end
+
+  def test_does_not_write_generated_ipcore_runtime_bundle
+    Dir.mktmpdir do |dir|
+      package_root = write_ipcraft_package_source(dir)
+
+      SpecGenerator.build_ipcraft_manifest(
+        ipcore_path: File.join(package_root, 'ipcore.yml'),
+        package_root: package_root
+      )
+
+      assert File.file?(File.join(package_root, 'ipcraft.json'))
+      refute File.exist?(File.join(dir, 'generated/ipcores/org.example.opennoc/ipcore-runtime.json'))
+      refute File.exist?(File.join(dir, 'generated/ipcores/org.example.opennoc/modules.xml'))
+      refute File.exist?(File.join(dir, 'generated/ipcores/org.example.opennoc/graphics'))
+    end
+  end
+
+  def test_rejects_view_path_outside_package_root
+    Dir.mktmpdir do |dir|
+      write_file(dir, 'ipcores/outside.xml', ipcraft_xp_view_xml)
+      package_root = write_ipcraft_package_source(
+        dir,
+        yaml: ipcraft_package_yaml.sub('file: views/xp.xml', 'file: ../outside.xml')
+      )
+
+      error = assert_raises(SpecGenerator::SpecError) do
+        build_ipcraft_manifest(package_root)
+      end
+
+      assert_match(/view xp file escapes package root/, error.message)
+    end
+  end
+
+  def test_rejects_absolute_view_path
+    Dir.mktmpdir do |dir|
+      outside_path = write_file(dir, 'outside.xml', ipcraft_xp_view_xml)
+      package_root = write_ipcraft_package_source(
+        dir,
+        yaml: ipcraft_package_yaml.sub('file: views/xp.xml', "file: #{outside_path}")
+      )
+
+      error = assert_raises(SpecGenerator::SpecError) do
+        build_ipcraft_manifest(package_root)
+      end
+
+      assert_match(/view xp file must be package-local/, error.message)
+    end
+  end
+
+  def test_rejects_command_executable_path_outside_package_root
+    Dir.mktmpdir do |dir|
+      package_root = write_ipcraft_package_source(
+        dir,
+        yaml: ipcraft_package_yaml.sub('executable: tools/validate', 'executable: ../bin/validate')
+      )
+
+      error = assert_raises(SpecGenerator::SpecError) do
+        build_ipcraft_manifest(package_root)
+      end
+
+      assert_match(/commands\.validate\.executable escapes package root/, error.message)
+    end
+  end
+
+  def test_rejects_absolute_command_executable_path
+    Dir.mktmpdir do |dir|
+      package_root = write_ipcraft_package_source(
+        dir,
+        yaml: ipcraft_package_yaml.sub('executable: tools/validate', 'executable: /bin/validate')
+      )
+
+      error = assert_raises(SpecGenerator::SpecError) do
+        build_ipcraft_manifest(package_root)
+      end
+
+      assert_match(/commands\.validate\.executable must be package-local/, error.message)
+    end
+  end
+
+  def test_rejects_plugin_library_path_outside_package_root
+    Dir.mktmpdir do |dir|
+      package_root = write_ipcraft_package_source(
+        dir,
+        yaml: ipcraft_package_yaml.sub(
+          "version: '1.0.0'\n",
+          "version: '1.0.0'\nplugin:\n  library: ../lib/plugin.rb\n"
+        )
+      )
+
+      error = assert_raises(SpecGenerator::SpecError) do
+        build_ipcraft_manifest(package_root)
+      end
+
+      assert_match(/plugin\.library escapes package root/, error.message)
+    end
+  end
+
+  def test_rejects_absolute_plugin_library_path
+    Dir.mktmpdir do |dir|
+      package_root = write_ipcraft_package_source(
+        dir,
+        yaml: ipcraft_package_yaml.sub(
+          "version: '1.0.0'\n",
+          "version: '1.0.0'\nplugin:\n  library: /opt/ipcraft/plugin.rb\n"
+        )
+      )
+
+      error = assert_raises(SpecGenerator::SpecError) do
+        build_ipcraft_manifest(package_root)
+      end
+
+      assert_match(/plugin\.library must be package-local/, error.message)
+    end
+  end
+
+  def test_rejects_ipxact_root_path_outside_package_root
+    Dir.mktmpdir do |dir|
+      package_root = write_ipcraft_package_source(
+        dir,
+        yaml: ipcraft_package_yaml.sub(
+          "ipxact:\n  generated: true\n",
+          "ipxact:\n  root: ../ipxact\n  generated: true\n"
+        )
+      )
+
+      error = assert_raises(SpecGenerator::SpecError) do
+        build_ipcraft_manifest(package_root)
+      end
+
+      assert_match(/ipxact\.root escapes package root/, error.message)
+    end
+  end
+
+  def test_rejects_absolute_ipxact_root_path
+    Dir.mktmpdir do |dir|
+      package_root = write_ipcraft_package_source(
+        dir,
+        yaml: ipcraft_package_yaml.sub(
+          "ipxact:\n  generated: true\n",
+          "ipxact:\n  root: /opt/ipcraft\n  generated: true\n"
+        )
+      )
+
+      error = assert_raises(SpecGenerator::SpecError) do
+        build_ipcraft_manifest(package_root)
+      end
+
+      assert_match(/ipxact\.root must be package-local/, error.message)
+    end
+  end
+
+  def test_rejects_duplicate_connection_class_ids
+    Dir.mktmpdir do |dir|
+      yaml = ipcraft_package_yaml.sub(
+        "connection_classes:\n  - id: chi_node_interface\n    roles: [node, interconnect]\n    symmetric: false\n",
+        "connection_classes:\n  - id: chi_node_interface\n    roles: [node, interconnect]\n    symmetric: false\n  - id: chi_node_interface\n    roles: [node, interconnect]\n    symmetric: false\n"
+      )
+      package_root = write_ipcraft_package_source(dir, yaml: yaml)
+
+      error = assert_raises(SpecGenerator::SpecError) do
+        build_ipcraft_manifest(package_root)
+      end
+
+      assert_match(/Duplicate connection class id: chi_node_interface/, error.message)
+    end
+  end
+
+  def test_rejects_duplicate_module_ids
+    Dir.mktmpdir do |dir|
+      yaml = ipcraft_package_yaml.sub(
+        "views:\n",
+        "  - id: xp\n    name: Duplicate XP\n    interfaces: []\nviews:\n"
+      )
+      package_root = write_ipcraft_package_source(dir, yaml: yaml)
+
+      error = assert_raises(SpecGenerator::SpecError) do
+        build_ipcraft_manifest(package_root)
+      end
+
+      assert_match(/Duplicate module id: xp/, error.message)
+    end
+  end
+
+  def test_rejects_duplicate_interface_ids_within_module
+    Dir.mktmpdir do |dir|
+      yaml = ipcraft_package_yaml.sub(
+        "views:\n",
+        "      - id: rnf0\n        modes: [chi_interconnect]\n        accepts:\n          - class: chi_node_interface\n            role: interconnect\n        multi_connection: false\n        ipxact:\n          bus_interface: rnf0_duplicate\nviews:\n"
+      )
+      package_root = write_ipcraft_package_source(dir, yaml: yaml)
+
+      error = assert_raises(SpecGenerator::SpecError) do
+        build_ipcraft_manifest(package_root)
+      end
+
+      assert_match(/Duplicate module xp interface id: rnf0/, error.message)
+    end
+  end
+
+  def test_rejects_duplicate_view_module_entries
+    Dir.mktmpdir do |dir|
+      yaml = ipcraft_package_yaml.sub(
+        "topologies:\n",
+        "  - module: xp\n    file: views/xp.xml\ntopologies:\n"
+      )
+      package_root = write_ipcraft_package_source(dir, yaml: yaml)
+
+      error = assert_raises(SpecGenerator::SpecError) do
+        build_ipcraft_manifest(package_root)
+      end
+
+      assert_match(/Duplicate view module: xp/, error.message)
+    end
+  end
+
+  def test_rejects_duplicate_topology_ids
+    Dir.mktmpdir do |dir|
+      yaml = ipcraft_package_yaml.sub(
+        "commands:\n",
+        "  - id: mesh\n    kind: mesh\n    module: xp\ncommands:\n"
+      )
+      package_root = write_ipcraft_package_source(dir, yaml: yaml)
+
+      error = assert_raises(SpecGenerator::SpecError) do
+        build_ipcraft_manifest(package_root)
+      end
+
+      assert_match(/Duplicate topology id: mesh/, error.message)
+    end
+  end
+
+  def test_cli_checks_and_builds_ipcraft_manifest
+    Dir.mktmpdir do |dir|
+      package_root = write_ipcraft_package_source(dir)
+      ipcore_path = File.join(package_root, 'ipcore.yml')
+
+      check_stdout, check_stderr, check_status = Open3.capture3(
+        RbConfig.ruby,
+        File.expand_path('../bin/spec-gen', __dir__),
+        'check',
+        '--ipcore',
+        ipcore_path
+      )
+      assert check_status.success?, check_stderr
+      assert_includes check_stdout, "Checked ipcraft package source: #{ipcore_path}"
+
+      build_stdout, build_stderr, build_status = Open3.capture3(
+        RbConfig.ruby,
+        File.expand_path('../bin/spec-gen', __dir__),
+        'build',
+        '--ipcore',
+        ipcore_path,
+        '--package-root',
+        package_root
+      )
+      assert build_status.success?, build_stderr
+      assert_includes build_stdout, "Built ipcraft manifest: #{File.join(package_root, 'ipcraft.json')}"
+      assert File.file?(File.join(package_root, 'ipcraft.json'))
+    end
+  end
+
+  def test_cli_rejects_unknown_positional_command
+    Dir.mktmpdir do |dir|
+      package_root = write_ipcraft_package_source(dir)
+
+      stdout, stderr, status = Open3.capture3(
+        RbConfig.ruby,
+        File.expand_path('../bin/spec-gen', __dir__),
+        'chek',
+        '--ipcore',
+        File.join(package_root, 'ipcore.yml')
+      )
+
+      refute status.success?
+      assert_empty stdout
+      assert_includes stderr, 'error: unknown command: chek'
+      refute_includes stderr, '--runtime-bundle is required'
+    end
+  end
+
+  def test_cli_rejects_unknown_positional_arg_after_options
+    Dir.mktmpdir do |dir|
+      stdout, stderr, status = Open3.capture3(
+        RbConfig.ruby,
+        File.expand_path('../bin/spec-gen', __dir__),
+        '--ipcore',
+        File.join(dir, 'nonexistent.yml'),
+        'chek'
+      )
+
+      refute status.success?
+      assert_empty stdout
+      assert_includes stderr, 'error: unknown command: chek'
+      refute_includes stderr, '--runtime-bundle is required'
+    end
+  end
+
   def test_rejects_malformed_module_view_without_module_attribute
     Dir.mktmpdir do |dir|
       malformed = rave_tile_view_xml.sub(' module="RaveTile"', '')
@@ -666,6 +1150,13 @@ class SpecGeneratorTest < Minitest::Test
     end
   end
 
+  def write_ipcraft_package_source(root, yaml: ipcraft_package_yaml, xp_view: ipcraft_xp_view_xml)
+    package_root = File.join(root, 'ipcores/opennoc')
+    write_file(root, 'ipcores/opennoc/ipcore.yml', yaml)
+    write_file(root, 'ipcores/opennoc/views/xp.xml', xp_view)
+    package_root
+  end
+
   def generate_finepaper_noc(root)
     SpecGenerator.generate_ipcore(
       ipcore_path: File.join(root, 'ipcores/finepaper-noc/ipcore.yml'),
@@ -688,6 +1179,13 @@ class SpecGeneratorTest < Minitest::Test
       ipcore_path: File.join(root, 'ipcores/opennoc/ipcore.yml'),
       views_dir: File.join(root, 'ipcores/opennoc/views'),
       runtime_bundle_dir: File.join(root, 'generated/ipcores/finepaper.opennoc')
+    )
+  end
+
+  def build_ipcraft_manifest(package_root)
+    SpecGenerator.build_ipcraft_manifest(
+      ipcore_path: File.join(package_root, 'ipcore.yml'),
+      package_root: package_root
     )
   end
 
@@ -724,6 +1222,70 @@ class SpecGeneratorTest < Minitest::Test
           args: []
       modules: {}
     YAML
+  end
+
+  def ipcraft_package_yaml
+    <<~YAML
+      schema: ipcraft.package.v1
+      id: org.example.opennoc
+      name: OpenNoC
+      version: '1.0.0'
+      extensions:
+        noc.v1:
+          enabled: true
+      ipxact:
+        generated: true
+      parameters:
+        req_flit_width: { type: int, default: 128, min: 1, max: 1024, label: REQ flit width }
+      connection_classes:
+        - id: chi_node_interface
+          roles: [node, interconnect]
+          symmetric: false
+      modules:
+        - id: xp
+          name: XP
+          graph_role: host
+          parameters:
+            x: { type: int, default: 0, configurable: false }
+          interfaces:
+            - id: rnf0
+              modes: [chi_interconnect]
+              accepts:
+                - class: chi_node_interface
+                  role: interconnect
+              multi_connection: false
+              ipxact:
+                bus_interface: rnf0
+      views:
+        - module: xp
+          file: views/xp.xml
+      topologies:
+        - id: mesh
+          kind: mesh
+          module: xp
+      commands:
+        validate:
+          executable: tools/validate
+          input_schema: ipcraft.noc.project.v1
+
+        generate:
+          executable: tools/generate
+          input_schema: ipcraft.noc.project.v1
+    YAML
+  end
+
+  def ipcraft_xp_view_xml
+    <<~XML
+      <?xml version="1.0" encoding="UTF-8"?>
+      <module-view schema="v1" module="xp">
+        <graphics layout="mesh_router">
+          <expanded min_width="136" height="116" caption_left="30" caption_top="6" />
+        </graphics>
+        <anchors>
+          <anchor ref="rnf0" x="0" y="30" normal_x="-1" normal_y="0" label="RNF0" label_x="30" label_y="30" />
+        </anchors>
+      </module-view>
+    XML
   end
 
   def renamed_interface_anchor_ipcore_yaml

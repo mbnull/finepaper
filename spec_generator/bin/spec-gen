@@ -29,20 +29,48 @@ options = {
   ipcore_path: nil,
   views_dir: nil,
   runtime_bundle_dir: nil,
-  ruby_model_dir: nil
+  ruby_model_dir: nil,
+  package_root: nil
 }
 
 begin
+  known_commands = %w[check build]
+  if ARGV.first && !ARGV.first.start_with?('-')
+    raise SpecGenerator::SpecError, "unknown command: #{ARGV.first}" unless known_commands.include?(ARGV.first)
+
+    command = ARGV.shift
+  end
+
   OptionParser.new do |parser|
     parser.banner = 'Usage: spec-gen [options]'
     parser.on('--check', 'Verify committed generated artifacts match specs') { options[:check] = true }
     parser.on('--ipcore PATH', 'IP core YAML path') { |value| options[:ipcore_path] = value }
+    parser.on('--package-root DIR', 'Ipcraft package root') { |value| options[:package_root] = value }
     parser.on('--views DIR', 'IP core view XML directory') { |value| options[:views_dir] = value }
     parser.on('--runtime-bundle DIR', 'Generated runtime bundle output directory') { |value| options[:runtime_bundle_dir] = value }
     parser.on('--ruby-model DIR', 'Generated Ruby model output directory') { |value| options[:ruby_model_dir] = value }
   end.parse!
 
-  if options[:check]
+  raise SpecGenerator::SpecError, "unknown command: #{ARGV.first}" unless ARGV.empty?
+
+  if command == 'check'
+    raise SpecGenerator::SpecError, '--ipcore is required with check' unless options[:ipcore_path]
+
+    SpecGenerator.check_ipcraft_package_source(
+      ipcore_path: options[:ipcore_path],
+      package_root: options[:package_root] || File.dirname(options[:ipcore_path])
+    )
+    puts "Checked ipcraft package source: #{options[:ipcore_path]}"
+  elsif command == 'build'
+    raise SpecGenerator::SpecError, '--ipcore is required with build' unless options[:ipcore_path]
+    raise SpecGenerator::SpecError, '--package-root is required with build' unless options[:package_root]
+
+    manifest_path = SpecGenerator.build_ipcraft_manifest(
+      ipcore_path: options[:ipcore_path],
+      package_root: options[:package_root]
+    )
+    puts "Built ipcraft manifest: #{manifest_path}"
+  elsif options[:check]
     SpecGenerator.check_repository_generated_outputs(root: Dir.pwd)
     puts 'Generated IP core runtime artifacts are up to date'
   elsif options[:ipcore_path]
