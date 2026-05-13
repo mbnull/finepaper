@@ -55,6 +55,15 @@ IpCoreRuntimeDescriptor nodeEditorFabricDescriptor() {
     return descriptor;
 }
 
+IpCoreRuntimeDescriptor attachmentPresentationDescriptor() {
+    IpCoreRuntimeDescriptor descriptor;
+    descriptor.id = QStringLiteral("finepaper.attachmenttest");
+    descriptor.name = QStringLiteral("Attachment Test");
+    descriptor.version = QStringLiteral("1.0");
+    descriptor.kind = QStringLiteral("noc");
+    return descriptor;
+}
+
 ModuleType scopedEditorType(const QString& name, const QString& ipcoreId) {
     ModuleType type;
     type.name = name;
@@ -67,6 +76,91 @@ ModuleType scopedEditorType(const QString& name, const QString& ipcoreId) {
                                      QStringLiteral("bus"),
                                      QStringLiteral("Out")));
     return type;
+}
+
+ModuleInterfaceMetadata attachmentInterface(const QString& id,
+                                            const QString& role,
+                                            const QString& connectsTo) {
+    ModuleInterfaceMetadata metadata;
+    metadata.id = id;
+    metadata.label = id;
+    metadata.bus = QStringLiteral("attachment_link");
+    metadata.role = role;
+    metadata.compatibleRoles = {connectsTo};
+    metadata.cardinality = QStringLiteral("one");
+    metadata.autocompleteGroup = QStringLiteral("endpoint_attachment");
+    return metadata;
+}
+
+ModuleType attachmentHostType() {
+    ModuleType type;
+    type.name = QStringLiteral("AttachmentHostTile");
+    type.ipcoreId = QStringLiteral("finepaper.attachmenttest");
+    type.paletteLabel = QStringLiteral("Attachment Host");
+    type.graphGroup = QStringLiteral("xps");
+    type.editorLayout = QStringLiteral("mesh_router");
+    type.supportsCollapse = true;
+    type.expandedNodeMinWidth = 136;
+    type.expandedNodeHeight = 116;
+    type.collapsedNodeMinWidth = 104;
+    type.collapsedNodeHeight = 92;
+    type.defaultPorts.push_back(Port(QStringLiteral("local"),
+                                     Port::Direction::Input,
+                                     QStringLiteral("bus"),
+                                     QStringLiteral("Local"),
+                                     {},
+                                     QStringLiteral("attachment"),
+                                     QStringLiteral("attachment_link"),
+                                     QStringLiteral("local")));
+    type.defaultParameters.insert(QStringLiteral("x"), Parameter(QStringLiteral("x"), 0));
+    type.defaultParameters.insert(QStringLiteral("y"), Parameter(QStringLiteral("y"), 0));
+    type.defaultParameters.insert(QStringLiteral("collapsed"), Parameter(QStringLiteral("collapsed"), true));
+    type.interfaceMetadata.insert(QStringLiteral("local"),
+                                  attachmentInterface(QStringLiteral("local"),
+                                                      QStringLiteral("target"),
+                                                      QStringLiteral("initiator")));
+    return type;
+}
+
+ModuleType attachmentEndpointType() {
+    ModuleType type;
+    type.name = QStringLiteral("AttachmentEndpointNode");
+    type.ipcoreId = QStringLiteral("finepaper.attachmenttest");
+    type.paletteLabel = QStringLiteral("Attachment Endpoint");
+    type.graphGroup = QStringLiteral("endpoints");
+    type.editorLayout = QStringLiteral("endpoint");
+    type.expandedNodeMinWidth = 104;
+    type.expandedNodeHeight = 54;
+    type.defaultPorts.push_back(Port(QStringLiteral("noc"),
+                                     Port::Direction::Output,
+                                     QStringLiteral("bus"),
+                                     QStringLiteral("NoC"),
+                                     {},
+                                     QStringLiteral("attachment"),
+                                     QStringLiteral("attachment_link"),
+                                     QStringLiteral("noc")));
+    type.defaultParameters.insert(QStringLiteral("x"), Parameter(QStringLiteral("x"), 0));
+    type.defaultParameters.insert(QStringLiteral("y"), Parameter(QStringLiteral("y"), 0));
+    type.interfaceMetadata.insert(QStringLiteral("noc"),
+                                  attachmentInterface(QStringLiteral("noc"),
+                                                      QStringLiteral("initiator"),
+                                                      QStringLiteral("target")));
+    return type;
+}
+
+std::unique_ptr<Module> moduleFromType(const ModuleType& type,
+                                       const QString& moduleId,
+                                       const QString& instanceId) {
+    auto module = std::make_unique<Module>(moduleId, type.name);
+    module->setIpcoreId(type.ipcoreId);
+    module->setInstanceId(instanceId);
+    for (const Port& port : type.defaultPorts) {
+        module->addPort(port);
+    }
+    for (auto it = type.defaultParameters.constBegin(); it != type.defaultParameters.constEnd(); ++it) {
+        module->setParameter(it.key(), it.value().value());
+    }
+    return module;
 }
 
 struct ScopedNodeEditorHarness {
@@ -554,6 +648,62 @@ void testCreateMenuTypesFollowActiveWorkspace() {
             "create menu should list RaveNoC module type");
 }
 
+void testCollapsedHostAbsorbsEndpointWhenAttachmentConnectionIsAdded() {
+    Graph graph;
+    CommandManager commandManager;
+    ProjectStateService stateService;
+    ProjectIpService projectIpService(&stateService);
+    ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
+    const ModuleType hostType = attachmentHostType();
+    const ModuleType endpointType = attachmentEndpointType();
+    require(registry.registerType(hostType), "attachment host should register locally");
+    require(registry.registerType(endpointType), "attachment endpoint should register locally");
+    ModuleRegistry::instance().registerType(hostType);
+    ModuleRegistry::instance().registerType(endpointType);
+
+    const IpCoreRuntimeDescriptor runtime = attachmentPresentationDescriptor();
+    IpCatalogService catalog(QList<IpCoreRuntimeDescriptor>{runtime}, &registry);
+    ActiveWorkspaceController workspaceController(&projectIpService, &catalog);
+    NodeEditorWidget editor(&graph, &stateService, &workspaceController, &commandManager);
+    editor.resize(360, 240);
+    editor.show();
+
+    const std::optional<IpCatalogEntry> entry = catalog.entry(runtime.id);
+    require(entry.has_value(), "attachment runtime should be in catalog");
+    const ProjectIpServiceResult instance = projectIpService.createInstanceForIpcore(*entry);
+    require(instance.success, "attachment IP instance should be selected");
+
+    require(graph.addModule(moduleFromType(hostType,
+                                           QStringLiteral("host"),
+                                           instance.record.instanceId)),
+            "collapsed host should add");
+    require(graph.addModule(moduleFromType(endpointType,
+                                           QStringLiteral("endpoint"),
+                                           instance.record.instanceId)),
+            "endpoint should add");
+    QCoreApplication::processEvents();
+
+    QStringList visibleIds = editor.visibleModuleIds();
+    require(visibleIds.contains(QStringLiteral("host")),
+            "host should be visible before attachment");
+    require(visibleIds.contains(QStringLiteral("endpoint")),
+            "loose endpoint should be visible before attachment");
+
+    graph.addConnection(std::make_unique<Connection>(
+        QStringLiteral("endpoint_to_host"),
+        PortRef{QStringLiteral("endpoint"), QStringLiteral("noc")},
+        PortRef{QStringLiteral("host"), QStringLiteral("local")}));
+    QCoreApplication::processEvents();
+
+    require(graph.connections().size() == 1,
+            "attachment connection should be stored in the graph");
+    visibleIds = editor.visibleModuleIds();
+    require(visibleIds.contains(QStringLiteral("host")),
+            "collapsed host should remain visible after attachment");
+    require(!visibleIds.contains(QStringLiteral("endpoint")),
+            "collapsed host should absorb the attached endpoint visual");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -576,6 +726,7 @@ int main(int argc, char** argv) {
         testScopedDropCreatesOwnedModule();
         testActiveWorkspaceShowsOnlyModulesForSelectedInstance();
         testCreateMenuTypesFollowActiveWorkspace();
+        testCollapsedHostAbsorbsEndpointWhenAttachmentConnectionIsAdded();
     } catch (const std::exception& error) {
         std::cerr << "nodeeditor_geometry_test failed: " << error.what() << '\n';
         return 1;

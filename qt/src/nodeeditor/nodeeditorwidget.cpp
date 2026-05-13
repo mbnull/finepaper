@@ -393,12 +393,13 @@ void NodeEditorWidget::removeModuleFromView(const QString& moduleId) {
 }
 
 void NodeEditorWidget::onConnectionAdded(Connection* connection) {
-    if (!ensureConnectionInView(connection)) {
-        return;
-    }
-
     QString hostModuleId;
-    if (isEndpointAttachmentConnection(m_graph, *connection, &hostModuleId)) {
+    const bool endpointAttachment =
+        connection && isEndpointAttachmentConnection(m_graph, *connection, &hostModuleId);
+
+    ensureConnectionInView(connection);
+
+    if (endpointAttachment) {
         refreshModulePresentation(hostModuleId);
     }
 }
