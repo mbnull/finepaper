@@ -240,9 +240,6 @@ IpCatalogPanel::IpCatalogPanel(const IpCatalogService* catalogService,
     connect(m_catalogList, &QTreeWidget::itemActivated, this, [this](QTreeWidgetItem* item, int) {
         emitAddRequest(item);
     });
-    connect(m_catalogList, &QTreeWidget::itemDoubleClicked, this, [this](QTreeWidgetItem* item, int) {
-        emitAddRequest(item);
-    });
     connect(m_projectIpList,
             &QListWidget::currentItemChanged,
             this,

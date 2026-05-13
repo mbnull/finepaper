@@ -343,6 +343,46 @@ void testPanelEmitsAddAndSelectSignals() {
             "panel should emit selected instance");
 }
 
+void testCatalogActivationDoesNotEmitDuplicateAddIntent() {
+    TestHarness harness;
+    IpCatalogPanel panel(&harness.catalog,
+                         &harness.stateService,
+                         &harness.projectIpService,
+                         &harness.workspaceController);
+
+    int addSignals = 0;
+    QString requestedAdd;
+    QObject::connect(&panel, &IpCatalogPanel::addIpcoreRequested, &panel,
+                     [&](const QString& ipcoreId) {
+                         requestedAdd = ipcoreId;
+                         ++addSignals;
+                     });
+
+    auto* catalog = panel.findChild<QTreeWidget*>(QStringLiteral("ipCatalogList"));
+    QTreeWidgetItem* nocCategory = findCatalogCategory(catalog, QStringLiteral("NoC"));
+    require(nocCategory != nullptr, "NoC category should exist");
+    QTreeWidgetItem* catalogEntry = nocCategory->childCount() > 0 ? nocCategory->child(0) : nullptr;
+    require(catalogEntry != nullptr, "catalog should expose selectable IP entries");
+
+    const bool doubleClicked = QMetaObject::invokeMethod(catalog,
+                                                         "itemDoubleClicked",
+                                                         Qt::DirectConnection,
+                                                         Q_ARG(QTreeWidgetItem*, catalogEntry),
+                                                         Q_ARG(int, 0));
+    require(doubleClicked, "catalog should expose itemDoubleClicked");
+    const bool activated = QMetaObject::invokeMethod(catalog,
+                                                     "itemActivated",
+                                                     Qt::DirectConnection,
+                                                     Q_ARG(QTreeWidgetItem*, catalogEntry),
+                                                     Q_ARG(int, 0));
+    require(activated, "catalog should expose itemActivated");
+
+    require(addSignals == 1,
+            "catalog double-click activation should emit one add intent");
+    require(requestedAdd == QStringLiteral("finepaper.ravenoc"),
+            "catalog activation should keep the requested IP core id");
+}
+
 void testPanelEmitsRemoveSignalForActiveInstance() {
     TestHarness harness;
     IpCatalogPanel panel(&harness.catalog,
@@ -640,6 +680,7 @@ int main(int argc, char** argv) {
         testSelectingIpInstanceUpdatesActiveModuleAndToolLists();
         testPanelEmitsWorkspaceToolIntentWithActiveInstance();
         testPanelEmitsAddAndSelectSignals();
+        testCatalogActivationDoesNotEmitDuplicateAddIntent();
         testPanelEmitsRemoveSignalForActiveInstance();
         testPanelContextMenuRemoveTargetsClickedItem();
         testPanelContextMenuRemoveSurvivesListRefreshWhileMenuIsOpen();
