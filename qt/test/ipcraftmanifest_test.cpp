@@ -1,0 +1,633 @@
+// Ipcraft manifest tests for strict package loading and registry behavior.
+#include "ipcraft/ipcraftmanifestreader.h"
+#include "ipcraft/ipcraftregistry.h"
+
+#include <QCoreApplication>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QTemporaryDir>
+#include <iostream>
+#include <stdexcept>
+
+namespace {
+
+void require(bool condition, const char* message) {
+    if (!condition) {
+        throw std::runtime_error(message);
+    }
+}
+
+void writeFile(const QString& path, const QByteArray& content) {
+    QFile file(path);
+    require(file.open(QIODevice::WriteOnly | QIODevice::Truncate), "failed to open test file");
+    require(file.write(content) == content.size(), "failed to write test file");
+}
+
+QString createView(QDir& packageRoot,
+                   const QString& module = QStringLiteral("Module"),
+                   const QString& interfaceId = QStringLiteral("bus")) {
+    require(packageRoot.mkpath(QStringLiteral("views")), "failed to create views directory");
+    const QString relativePath = QStringLiteral("views/") + module + QStringLiteral(".xml");
+    const QByteArray xml = QStringLiteral(R"xml(<?xml version="1.0" encoding="UTF-8"?>
+<module-view schema="v1" module="%1">
+  <graphics layout="endpoint" />
+  <anchors>
+    <anchor ref="%2" x="0" y="0" normal_x="1" normal_y="0" />
+  </anchors>
+</module-view>
+)xml").arg(module, interfaceId).toUtf8();
+    writeFile(packageRoot.filePath(relativePath), xml);
+    return relativePath;
+}
+
+QByteArray minimalManifest(
+    const QString& viewPath = QStringLiteral("views/Module.xml"),
+    const QString& packageId = QStringLiteral("org.example.demo"),
+    const QString& validateExecutablePath = QStringLiteral("tools/validate")) {
+    return QStringLiteral(R"json({
+  "schema": "ipcraft.manifest.v1",
+  "id": "%1",
+  "name": "Demo",
+  "version": "1.0.0",
+  "connection_classes": [
+    { "id": "demo_link", "roles": ["initiator", "target"], "symmetric": false }
+  ],
+  "modules": [
+    {
+      "id": "Module",
+      "name": "Module",
+      "interfaces": [
+        {
+          "id": "bus",
+          "modes": ["initiator"],
+          "accepts": [
+            { "class": "demo_link", "role": "initiator" }
+          ],
+          "multi_connection": false
+        }
+      ]
+    }
+  ],
+  "views": [
+    { "module": "Module", "file": "%2" }
+  ],
+  "commands": {
+    "validate": {
+      "executable": "%3",
+      "input_schema": "ipcraft.noc.project.v1",
+      "args": ["-i", "{input}"]
+    },
+    "generate": {
+      "executable": "tools/generate",
+      "input_schema": "ipcraft.noc.project.v1",
+      "args": ["-i", "{input}", "-o", "{output}"]
+    }
+  }
+})json").arg(packageId, viewPath, validateExecutablePath).toUtf8();
+}
+
+bool diagnosticsContain(const QVector<IpcraftDiagnostic>& diagnostics, const QString& text) {
+    for (const IpcraftDiagnostic& diagnostic : diagnostics) {
+        if (diagnostic.path.contains(text) || diagnostic.message.contains(text)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void testLoadsMinimalPackageManifest() {
+    QTemporaryDir temp;
+    require(temp.isValid(), "temporary directory should be valid");
+
+    QDir root(temp.path());
+    createView(root);
+    writeFile(root.filePath(QStringLiteral("ipcraft.json")), minimalManifest());
+
+    const IpcraftManifestReadResult result = IpcraftManifestReader().readPackage(temp.path());
+
+    require(result.ok, "minimal manifest should load");
+    require(result.manifest.id == QStringLiteral("org.example.demo"), "manifest id should load");
+    require(result.manifest.modules.size() == 1, "one module should load");
+    require(result.manifest.modules.first().interfaces.size() == 1, "one interface should load");
+    require(result.manifest.connectionClasses.size() == 1, "one connection class should load");
+    require(result.manifest.views.size() == 1, "one view should load");
+    require(QFileInfo(result.manifest.views.first().resolvedFilePath).isAbsolute(),
+            "view path should be package-root resolved");
+    require(result.manifest.commands.contains(QStringLiteral("validate")),
+            "validate command should load");
+    require(QFileInfo(result.manifest.commands.value(QStringLiteral("validate")).resolvedExecutablePath).isAbsolute(),
+            "command executable path should be package-root resolved");
+}
+
+void testRejectsDuplicateJsonKeys() {
+    QTemporaryDir temp;
+    require(temp.isValid(), "temporary directory should be valid");
+
+    QDir root(temp.path());
+    createView(root);
+    writeFile(root.filePath(QStringLiteral("ipcraft.json")),
+              QByteArrayLiteral(R"json({
+  "schema": "ipcraft.manifest.v1",
+  "id": "org.example.first",
+  "id": "org.example.second",
+  "name": "Demo",
+  "version": "1.0.0",
+  "modules": [],
+  "views": [],
+  "connection_classes": []
+})json"));
+
+    const IpcraftManifestReadResult result = IpcraftManifestReader().readPackage(temp.path());
+
+    require(!result.ok, "duplicate JSON keys should be rejected");
+    require(!result.diagnostics.isEmpty(), "duplicate key rejection should emit diagnostics");
+    require(result.diagnostics.first().message.contains(QStringLiteral("Duplicate JSON key")),
+            "duplicate key diagnostic should be explicit");
+}
+
+void testRejectsDuplicateJsonKeysAfterUnicodeDecoding() {
+    QTemporaryDir temp;
+    require(temp.isValid(), "temporary directory should be valid");
+
+    QDir root(temp.path());
+    createView(root);
+
+    QByteArray manifest = QByteArrayLiteral(R"json({
+  "schema": "ipcraft.manifest.v1",
+  "id": "org.example.demo",
+  "name": "Demo",
+  "version": "1.0.0",
+  "\u00e9": "escaped",
+  ")json");
+    manifest += QByteArray::fromHex("c3a9");
+    manifest += QByteArrayLiteral(R"json(": "raw",
+  "connection_classes": [
+    { "id": "demo_link", "roles": ["initiator", "target"], "symmetric": false }
+  ],
+  "modules": [
+    {
+      "id": "Module",
+      "name": "Module",
+      "interfaces": [
+        {
+          "id": "bus",
+          "modes": ["initiator"],
+          "accepts": [
+            { "class": "demo_link", "role": "initiator" }
+          ]
+        }
+      ]
+    }
+  ],
+  "views": [{ "module": "Module", "file": "views/Module.xml" }]
+})json");
+    writeFile(root.filePath(QStringLiteral("ipcraft.json")), manifest);
+
+    const IpcraftManifestReadResult result = IpcraftManifestReader().readPackage(temp.path());
+
+    require(!result.ok, "escaped Unicode and raw UTF-8 duplicate JSON keys should be rejected");
+    require(!result.diagnostics.isEmpty(), "Unicode duplicate key rejection should emit diagnostics");
+    require(result.diagnostics.first().message.contains(QStringLiteral("Duplicate JSON key")),
+            "Unicode duplicate key diagnostic should be explicit");
+}
+
+void testRejectsMissingCommandInputSchema() {
+    QTemporaryDir temp;
+    require(temp.isValid(), "temporary directory should be valid");
+
+    QDir root(temp.path());
+    createView(root);
+    writeFile(root.filePath(QStringLiteral("ipcraft.json")),
+              QByteArrayLiteral(R"json({
+  "schema": "ipcraft.manifest.v1",
+  "id": "org.example.demo",
+  "name": "Demo",
+  "version": "1.0.0",
+  "connection_classes": [
+    { "id": "demo_link", "roles": ["initiator", "target"], "symmetric": false }
+  ],
+  "modules": [
+    {
+      "id": "Module",
+      "interfaces": [
+        {
+          "id": "bus",
+          "modes": ["initiator"],
+          "accepts": [{ "class": "demo_link", "role": "initiator" }]
+        }
+      ]
+    }
+  ],
+  "views": [{ "module": "Module", "file": "views/Module.xml" }],
+  "commands": {
+    "validate": { "executable": "tools/validate" }
+  }
+})json"));
+
+    const IpcraftManifestReadResult result = IpcraftManifestReader().readPackage(temp.path());
+
+    require(!result.ok, "commands without input_schema should be rejected");
+    require(!result.diagnostics.isEmpty(), "missing input_schema should emit diagnostics");
+    require(result.diagnostics.first().message.contains(QStringLiteral("input_schema")),
+            "diagnostic should mention input_schema");
+}
+
+void testRejectsUnknownRequiredShapeFields() {
+    QTemporaryDir temp;
+    require(temp.isValid(), "temporary directory should be valid");
+
+    QDir root(temp.path());
+    createView(root);
+    writeFile(root.filePath(QStringLiteral("ipcraft.json")),
+              QByteArrayLiteral(R"json({
+  "schema": "ipcraft.manifest.v1",
+  "id": "org.example.demo",
+  "name": "Demo",
+  "version": "1.0.0",
+  "connection_classes": [
+    { "id": "demo_link", "roles": ["initiator", "target"], "symmetric": false }
+  ],
+  "modules": [
+    {
+      "id": "Module",
+      "interfaces": [
+        {
+          "id": "bus",
+          "modes": ["initiator"],
+          "accepts": [{ "class": "demo_link", "role": "initiator" }]
+        }
+      ]
+    }
+  ],
+  "views": [
+    {
+      "module": "Module",
+      "file": "views/Module.xml",
+      "required_shape": { "unknown_anchor_family": true }
+    }
+  ]
+})json"));
+
+    const IpcraftManifestReadResult result = IpcraftManifestReader().readPackage(temp.path());
+
+    require(!result.ok, "unknown required_shape fields should be rejected");
+    require(!result.diagnostics.isEmpty(), "unknown required_shape should emit diagnostics");
+    require(result.diagnostics.first().message.contains(QStringLiteral("required_shape")),
+            "diagnostic should mention required_shape");
+}
+
+void testRejectsDottedUnknownRequiredShapeFields() {
+    QTemporaryDir temp;
+    require(temp.isValid(), "temporary directory should be valid");
+
+    QDir root(temp.path());
+    createView(root);
+    writeFile(root.filePath(QStringLiteral("ipcraft.json")),
+              QByteArrayLiteral(R"json({
+  "schema": "ipcraft.manifest.v1",
+  "id": "org.example.demo",
+  "name": "Demo",
+  "version": "1.0.0",
+  "connection_classes": [
+    { "id": "demo_link", "roles": ["initiator", "target"], "symmetric": false }
+  ],
+  "modules": [
+    {
+      "id": "Module",
+      "interfaces": [
+        {
+          "id": "bus",
+          "modes": ["initiator"],
+          "accepts": [{ "class": "demo_link", "role": "initiator" }]
+        }
+      ]
+    }
+  ],
+  "views": [
+    {
+      "module": "Module",
+      "file": "views/Module.xml",
+      "required_shape": { "bad.field": true }
+    }
+  ]
+})json"));
+
+    const IpcraftManifestReadResult result = IpcraftManifestReader().readPackage(temp.path());
+
+    require(!result.ok, "dotted unknown required_shape fields should be rejected");
+    require(!result.diagnostics.isEmpty(), "dotted unknown required_shape should emit diagnostics");
+    require(result.diagnostics.first().message.contains(QStringLiteral("required_shape")),
+            "diagnostic should mention required_shape");
+}
+
+void testRejectsNonStringArrayEntries() {
+    QTemporaryDir temp;
+    require(temp.isValid(), "temporary directory should be valid");
+
+    QDir root(temp.path());
+    createView(root);
+    QByteArray manifest = minimalManifest();
+    manifest.replace(QByteArrayLiteral(R"json("roles": ["initiator", "target"])json"),
+                     QByteArrayLiteral(R"json("roles": ["initiator", 7])json"));
+    writeFile(root.filePath(QStringLiteral("ipcraft.json")), manifest);
+
+    const IpcraftManifestReadResult result = IpcraftManifestReader().readPackage(temp.path());
+
+    require(!result.ok, "string arrays should reject non-string entries");
+    require(diagnosticsContain(result.diagnostics, QStringLiteral("roles")),
+            "string array diagnostic should mention the invalid field");
+}
+
+void testRejectsWrongPluginFieldTypes() {
+    QTemporaryDir temp;
+    require(temp.isValid(), "temporary directory should be valid");
+
+    QDir root(temp.path());
+    createView(root);
+    writeFile(root.filePath(QStringLiteral("ipcraft.json")),
+              QByteArrayLiteral(R"json({
+  "schema": "ipcraft.manifest.v1",
+  "id": "org.example.demo",
+  "name": "Demo",
+  "version": "1.0.0",
+  "plugin": {
+    "id": "org.example.demo.plugin",
+    "library": 7,
+    "entry": "DemoPlugin"
+  },
+  "connection_classes": [
+    { "id": "demo_link", "roles": ["initiator", "target"], "symmetric": false }
+  ],
+  "modules": [
+    {
+      "id": "Module",
+      "interfaces": [
+        {
+          "id": "bus",
+          "modes": ["initiator"],
+          "accepts": [{ "class": "demo_link", "role": "initiator" }]
+        }
+      ]
+    }
+  ],
+  "views": [{ "module": "Module", "file": "views/Module.xml" }]
+})json"));
+
+    const IpcraftManifestReadResult result = IpcraftManifestReader().readPackage(temp.path());
+
+    require(!result.ok, "plugin fields should reject non-string values");
+    require(diagnosticsContain(result.diagnostics, QStringLiteral("plugin.library")),
+            "plugin field diagnostic should mention the invalid field");
+}
+
+void testRejectsNonObjectExtensionValues() {
+    QTemporaryDir temp;
+    require(temp.isValid(), "temporary directory should be valid");
+
+    QDir root(temp.path());
+    createView(root);
+    QByteArray manifest = minimalManifest();
+    manifest.replace(QByteArrayLiteral(R"json("connection_classes")json"),
+                     QByteArrayLiteral(R"json("extensions": { "noc.v1": true },
+  "connection_classes")json"));
+    writeFile(root.filePath(QStringLiteral("ipcraft.json")), manifest);
+
+    const IpcraftManifestReadResult result = IpcraftManifestReader().readPackage(temp.path());
+
+    require(!result.ok, "extensions entries should reject non-object values");
+    require(diagnosticsContain(result.diagnostics, QStringLiteral("extensions.noc.v1")),
+            "extension diagnostic should mention the invalid extension id");
+}
+
+void testRejectsWrongTopLevelCollectionTypes() {
+    QTemporaryDir temp;
+    require(temp.isValid(), "temporary directory should be valid");
+
+    QDir root(temp.path());
+    writeFile(root.filePath(QStringLiteral("ipcraft.json")),
+              QByteArrayLiteral(R"json({
+  "schema": "ipcraft.manifest.v1",
+  "id": "org.example.demo",
+  "name": "Demo",
+  "version": "1.0.0",
+  "connection_classes": [],
+  "modules": {},
+  "views": [],
+  "commands": [],
+  "topologies": {}
+})json"));
+
+    const IpcraftManifestReadResult result = IpcraftManifestReader().readPackage(temp.path());
+
+    require(!result.ok, "top-level arrays and maps should reject wrong JSON types");
+    require(diagnosticsContain(result.diagnostics, QStringLiteral("modules")),
+            "top-level type diagnostic should mention the invalid field");
+}
+
+void testRejectsAbsoluteViewPath() {
+    QTemporaryDir temp;
+    require(temp.isValid(), "temporary directory should be valid");
+
+    QDir root(temp.path());
+    const QString viewPath = createView(root);
+    writeFile(root.filePath(QStringLiteral("ipcraft.json")),
+              minimalManifest(root.filePath(viewPath)));
+
+    const IpcraftManifestReadResult result = IpcraftManifestReader().readPackage(temp.path());
+
+    require(!result.ok, "absolute view paths should be rejected");
+    require(diagnosticsContain(result.diagnostics, QStringLiteral("views.Module.file")),
+            "absolute view path diagnostic should mention the view file");
+}
+
+void testRejectsTraversingViewPath() {
+    QTemporaryDir temp;
+    require(temp.isValid(), "temporary directory should be valid");
+
+    QDir workspace(temp.path());
+    require(workspace.mkpath(QStringLiteral("package")), "failed to create package directory");
+    require(workspace.mkpath(QStringLiteral("outside")), "failed to create outside directory");
+
+    QDir packageRoot(workspace.filePath(QStringLiteral("package")));
+    QDir outsideRoot(workspace.filePath(QStringLiteral("outside")));
+    createView(outsideRoot);
+    writeFile(packageRoot.filePath(QStringLiteral("ipcraft.json")),
+              minimalManifest(QStringLiteral("../outside/views/Module.xml")));
+
+    const IpcraftManifestReadResult result = IpcraftManifestReader().readPackage(packageRoot.absolutePath());
+
+    require(!result.ok, "view paths using parent traversal should be rejected");
+    require(diagnosticsContain(result.diagnostics, QStringLiteral("views.Module.file")),
+            "traversing view path diagnostic should mention the view file");
+}
+
+void testRejectsAbsoluteCommandExecutable() {
+    QTemporaryDir temp;
+    require(temp.isValid(), "temporary directory should be valid");
+
+    QDir root(temp.path());
+    createView(root);
+    writeFile(root.filePath(QStringLiteral("ipcraft.json")),
+              minimalManifest(QStringLiteral("views/Module.xml"),
+                              QStringLiteral("org.example.demo"),
+                              QStringLiteral("/bin/echo")));
+
+    const IpcraftManifestReadResult result = IpcraftManifestReader().readPackage(temp.path());
+
+    require(!result.ok, "absolute command executable paths should be rejected");
+    require(diagnosticsContain(result.diagnostics, QStringLiteral("commands.validate.executable")),
+            "absolute command path diagnostic should mention the command executable");
+}
+
+void testRejectsTraversingCommandExecutable() {
+    QTemporaryDir temp;
+    require(temp.isValid(), "temporary directory should be valid");
+
+    QDir root(temp.path());
+    createView(root);
+    writeFile(root.filePath(QStringLiteral("ipcraft.json")),
+              minimalManifest(QStringLiteral("views/Module.xml"),
+                              QStringLiteral("org.example.demo"),
+                              QStringLiteral("../tools/validate")));
+
+    const IpcraftManifestReadResult result = IpcraftManifestReader().readPackage(temp.path());
+
+    require(!result.ok, "command executable paths using parent traversal should be rejected");
+    require(diagnosticsContain(result.diagnostics, QStringLiteral("commands.validate.executable")),
+            "traversing command path diagnostic should mention the command executable");
+}
+
+void testRejectsPartialPackageRegistration() {
+    QTemporaryDir temp;
+    require(temp.isValid(), "temporary directory should be valid");
+
+    QDir root(temp.path());
+    createView(root, QStringLiteral("Module"), QStringLiteral("missing_interface"));
+    writeFile(root.filePath(QStringLiteral("ipcraft.json")), minimalManifest());
+
+    IpcraftRegistry registry;
+    const bool loaded = registry.loadPackageRoots({temp.path()});
+
+    require(!loaded, "package with invalid view XML should fail registry load");
+    require(registry.packages().isEmpty(), "failed package should not be partially registered");
+    require(registry.package(QStringLiteral("org.example.demo")) == nullptr,
+            "failed package id should not be registered");
+    require(!registry.diagnostics().isEmpty(), "registry should expose diagnostics for failed package");
+}
+
+void testRejectsBatchPackageRegistrationOnAnyFailure() {
+    QTemporaryDir temp;
+    require(temp.isValid(), "temporary directory should be valid");
+
+    QDir workspace(temp.path());
+    require(workspace.mkpath(QStringLiteral("valid")), "failed to create valid package directory");
+    require(workspace.mkpath(QStringLiteral("invalid")), "failed to create invalid package directory");
+
+    QDir validRoot(workspace.filePath(QStringLiteral("valid")));
+    createView(validRoot);
+    writeFile(validRoot.filePath(QStringLiteral("ipcraft.json")),
+              minimalManifest(QStringLiteral("views/Module.xml"),
+                              QStringLiteral("org.example.valid")));
+
+    QDir invalidRoot(workspace.filePath(QStringLiteral("invalid")));
+    createView(invalidRoot, QStringLiteral("Module"), QStringLiteral("missing_interface"));
+    writeFile(invalidRoot.filePath(QStringLiteral("ipcraft.json")),
+              minimalManifest(QStringLiteral("views/Module.xml"),
+                              QStringLiteral("org.example.invalid")));
+
+    IpcraftRegistry registry;
+    const bool loaded = registry.loadPackageRoots({validRoot.absolutePath(), invalidRoot.absolutePath()});
+
+    require(!loaded, "batch with any invalid package should fail registry load");
+    require(registry.packages().isEmpty(), "failed batch should not register earlier valid packages");
+    require(registry.package(QStringLiteral("org.example.valid")) == nullptr,
+            "valid package from failed batch should not remain registered");
+    require(!registry.diagnostics().isEmpty(), "failed batch should expose diagnostics");
+}
+
+void testPluginAndExtensionsAreDistinct() {
+    QTemporaryDir temp;
+    require(temp.isValid(), "temporary directory should be valid");
+
+    QDir root(temp.path());
+    createView(root);
+    writeFile(root.filePath(QStringLiteral("ipcraft.json")),
+              QByteArrayLiteral(R"json({
+  "schema": "ipcraft.manifest.v1",
+  "id": "org.example.demo",
+  "name": "Demo",
+  "version": "1.0.0",
+  "plugin": {
+    "library": "plugins/libdemo.so",
+    "entry": "DemoPlugin"
+  },
+  "extensions": {
+    "noc.v1": { "enabled": true }
+  },
+  "connection_classes": [
+    { "id": "demo_link", "roles": ["initiator", "target"], "symmetric": false }
+  ],
+  "modules": [
+    {
+      "id": "Module",
+      "interfaces": [
+        {
+          "id": "bus",
+          "modes": ["initiator"],
+          "accepts": [{ "class": "demo_link", "role": "initiator" }]
+        }
+      ]
+    }
+  ],
+  "views": [{ "module": "Module", "file": "views/Module.xml" }]
+})json"));
+
+    const IpcraftManifestReadResult result = IpcraftManifestReader().readPackage(temp.path());
+
+    require(result.ok, "manifest with plugin and extensions should load");
+    require(result.manifest.plugin.has_value(), "plugin descriptor should be populated");
+    require(result.manifest.plugin->id.isEmpty(), "plugin id should remain optional");
+    require(result.manifest.plugin->libraryPath == QStringLiteral("plugins/libdemo.so"),
+            "plugin library should load");
+    require(result.manifest.plugin->entrypoint == QStringLiteral("DemoPlugin"),
+            "plugin entry should load into plugin metadata");
+    require(result.manifest.extensions.contains(QStringLiteral("noc.v1")),
+            "extension descriptor should be populated");
+    require(result.manifest.extensions.value(QStringLiteral("noc.v1")).id == QStringLiteral("noc.v1"),
+            "extension id should load independently of plugin metadata");
+    require(result.manifest.plugin->libraryPath != result.manifest.extensions.value(QStringLiteral("noc.v1")).id,
+            "plugin and extension descriptors should remain distinct");
+}
+
+} // namespace
+
+int main(int argc, char** argv) {
+    QCoreApplication app(argc, argv);
+
+    try {
+        testLoadsMinimalPackageManifest();
+        testRejectsDuplicateJsonKeys();
+        testRejectsDuplicateJsonKeysAfterUnicodeDecoding();
+        testRejectsMissingCommandInputSchema();
+        testRejectsUnknownRequiredShapeFields();
+        testRejectsDottedUnknownRequiredShapeFields();
+        testRejectsNonStringArrayEntries();
+        testRejectsWrongPluginFieldTypes();
+        testRejectsNonObjectExtensionValues();
+        testRejectsWrongTopLevelCollectionTypes();
+        testRejectsAbsoluteViewPath();
+        testRejectsTraversingViewPath();
+        testRejectsAbsoluteCommandExecutable();
+        testRejectsTraversingCommandExecutable();
+        testRejectsPartialPackageRegistration();
+        testRejectsBatchPackageRegistrationOnAnyFailure();
+        testPluginAndExtensionsAreDistinct();
+    } catch (const std::exception& error) {
+        std::cerr << "ipcraftmanifest_test failed: " << error.what() << '\n';
+        return 1;
+    }
+
+    std::cout << "ipcraftmanifest_test passed\n";
+    return 0;
+}

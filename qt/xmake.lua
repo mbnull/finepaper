@@ -277,6 +277,11 @@ add_qt_test_target("ipcatalogservice_test", "test/ipcatalogservice_test.cpp", {
     "inc/**/ipcoreruntimedescriptor.h"
 })
 
+add_qt_test_target("ipcraftmanifest_test", "test/ipcraftmanifest_test.cpp", {
+    "src/ipcraft/*.cpp",
+    "inc/ipcraft/*.h"
+})
+
 target("projectipservice_test")
     add_rules("qt.console")
     set_kind("binary")
