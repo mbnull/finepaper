@@ -338,6 +338,121 @@ class SpecGeneratorTest < Minitest::Test
     end
   end
 
+  def test_rejects_yaml_anchors_aliases_and_merge_keys
+    Dir.mktmpdir do |dir|
+      yaml = minimal_ipcore_yaml.sub(
+        "runtime:\n",
+        "shared_runtime: &runtime_defaults\n  command: ruby\n  input_format: ipcore_graph_v1\n  args: []\nruntime:\n"
+      ).sub(
+        "    command: ruby\n    input_format: ipcore_graph_v1\n    args: []\n",
+        "    <<: *runtime_defaults\n"
+      )
+      write_file(dir, 'ipcore.yml', yaml)
+
+      error = assert_raises(SpecGenerator::SpecError) do
+        parse_minimal_ipcore(dir)
+      end
+
+      assert_match(/YAML anchors and aliases are not allowed/, error.message)
+    end
+  end
+
+  def test_rejects_duplicate_yaml_keys
+    Dir.mktmpdir do |dir|
+      yaml = minimal_ipcore_yaml.sub("name: Minimal NoC\n", "name: Minimal NoC\nname: Duplicate NoC\n")
+      write_file(dir, 'ipcore.yml', yaml)
+
+      error = assert_raises(SpecGenerator::SpecError) do
+        parse_minimal_ipcore(dir)
+      end
+
+      assert_match(/Duplicate YAML key/, error.message)
+    end
+  end
+
+  def test_rejects_normalized_duplicate_yaml_keys
+    duplicate_cases = [
+      "true: first\nTrue: second\n",
+      "1: first\n01: second\n"
+    ]
+
+    duplicate_cases.each do |yaml|
+      error = assert_raises(SpecGenerator::SpecError) do
+        SpecGenerator::ConstrainedYamlLoader.new(yaml).load
+      end
+
+      assert_match(/Duplicate YAML key/, error.message)
+    end
+  end
+
+  def test_rejects_multi_document_yaml
+    Dir.mktmpdir do |dir|
+      write_file(dir, 'ipcore.yml', "#{minimal_ipcore_yaml}\n---\nschema: finepaper.ipcore.v1\n")
+
+      error = assert_raises(SpecGenerator::SpecError) do
+        parse_minimal_ipcore(dir)
+      end
+
+      assert_match(/YAML multi-document streams are not allowed/, error.message)
+    end
+  end
+
+  def test_rejects_implicit_timestamp_fields
+    Dir.mktmpdir do |dir|
+      yaml = minimal_ipcore_yaml.sub("version: '1.0'\n", "version: 2026-05-14\n")
+      write_file(dir, 'ipcore.yml', yaml)
+
+      error = assert_raises(SpecGenerator::SpecError) do
+        parse_minimal_ipcore(dir)
+      end
+
+      assert_match(/Implicit timestamp values are not allowed/, error.message)
+    end
+  end
+
+  def test_rejects_implicit_timestamp_keys
+    error = assert_raises(SpecGenerator::SpecError) do
+      SpecGenerator::ConstrainedYamlLoader.new("2026-05-14: release\n").load
+    end
+
+    assert_match(/Implicit timestamp values are not allowed/, error.message)
+  end
+
+  def test_rejects_yaml_custom_tags
+    Dir.mktmpdir do |dir|
+      yaml = minimal_ipcore_yaml.sub('name: Minimal NoC', 'name: !ipcraft.example Minimal NoC')
+      write_file(dir, 'ipcore.yml', yaml)
+
+      error = assert_raises(SpecGenerator::SpecError) do
+        parse_minimal_ipcore(dir)
+      end
+
+      assert_match(/YAML custom tags are not allowed/, error.message)
+    end
+  end
+
+  def test_allows_block_scalar_text_that_looks_like_restricted_yaml_constructs
+    data = SpecGenerator::ConstrainedYamlLoader.new(<<~YAML).load
+      notes: |
+        ---
+        &name
+        !tag
+    YAML
+
+    assert_equal "---\n&name\n!tag\n", data.fetch('notes')
+  end
+
+  def test_stringifies_numeric_version_fields
+    data = SpecGenerator::ConstrainedYamlLoader.new(<<~YAML).load
+      version: 1.0
+      nested:
+        - version: 2
+    YAML
+
+    assert_equal '1.0', data.fetch('version')
+    assert_equal '2', data.fetch('nested').first.fetch('version')
+  end
+
   def test_rejects_malformed_module_view_without_module_attribute
     Dir.mktmpdir do |dir|
       malformed = rave_tile_view_xml.sub(' module="RaveTile"', '')
@@ -576,11 +691,39 @@ class SpecGeneratorTest < Minitest::Test
     )
   end
 
+  def parse_minimal_ipcore(root)
+    SpecGenerator.generate_ipcore(
+      ipcore_path: File.join(root, 'ipcore.yml'),
+      views_dir: File.join(root, 'views'),
+      runtime_bundle_dir: File.join(root, 'generated/ipcores/minimal')
+    )
+  end
+
   def write_file(root, relative_path, content)
     path = File.join(root, relative_path)
     FileUtils.mkdir_p(File.dirname(path))
     File.write(path, content)
     path
+  end
+
+  def minimal_ipcore_yaml
+    <<~YAML
+      schema: finepaper.ipcore.v1
+      id: finepaper.minimal
+      name: Minimal NoC
+      version: '1.0'
+      kind: noc
+      runtime:
+        generator:
+          command: ruby
+          input_format: ipcore_graph_v1
+          args: []
+        drc:
+          command: ruby
+          input_format: ipcore_graph_v1
+          args: []
+      modules: {}
+    YAML
   end
 
   def renamed_interface_anchor_ipcore_yaml

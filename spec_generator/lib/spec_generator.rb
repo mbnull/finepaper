@@ -1,4 +1,5 @@
 require 'fileutils'
+require 'date'
 require 'json'
 require 'pathname'
 require 'tmpdir'
@@ -143,6 +144,134 @@ module SpecGenerator
        .sort
   end
 
+  class ConstrainedYamlLoader
+    ANCHOR_ALIAS_ERROR = 'YAML anchors and aliases are not allowed'.freeze
+    CUSTOM_TAG_ERROR = 'YAML custom tags are not allowed'.freeze
+    DOCUMENT_SEPARATOR_ERROR = 'YAML multi-document streams are not allowed'.freeze
+    IMPLICIT_TIMESTAMP_ERROR = 'Implicit timestamp values are not allowed'.freeze
+
+    class DocumentMarkerHandler < Psych::Handler
+      def start_document(_version, _tag_directives, implicit)
+        raise SpecError, DOCUMENT_SEPARATOR_ERROR unless implicit
+      end
+
+      def end_document(implicit)
+        raise SpecError, DOCUMENT_SEPARATOR_ERROR unless implicit
+      end
+    end
+
+    def self.load_file(path)
+      new(File.read(path)).load
+    end
+
+    def initialize(text)
+      @text = text
+    end
+
+    def load
+      validate_parse_tree!
+      data = safe_load
+      reject_implicit_timestamps!(data)
+      stringify_version_fields!(data)
+      data
+    end
+
+    private
+
+    def validate_parse_tree!
+      Psych::Parser.new(DocumentMarkerHandler.new).parse(@text)
+      stream = Psych.parse_stream(@text)
+      raise SpecError, DOCUMENT_SEPARATOR_ERROR if stream.children.size > 1
+
+      stream.children.each do |document|
+        validate_node!(document.root) if document.root
+      end
+    rescue Psych::Exception => error
+      raise SpecError, "Invalid YAML: #{error.message}"
+    end
+
+    def validate_node!(node)
+      raise SpecError, ANCHOR_ALIAS_ERROR if node.is_a?(Psych::Nodes::Alias)
+      raise SpecError, ANCHOR_ALIAS_ERROR if node.respond_to?(:anchor) && node.anchor
+      raise SpecError, CUSTOM_TAG_ERROR if node.respond_to?(:tag) && node.tag
+
+      case node
+      when Psych::Nodes::Mapping
+        validate_mapping_node!(node)
+      when Psych::Nodes::Sequence, Psych::Nodes::Document, Psych::Nodes::Stream
+        node.children.each { |child| validate_node!(child) } if node.children
+      end
+    end
+
+    def validate_mapping_node!(node)
+      seen_keys = {}
+
+      node.children.each_slice(2) do |key_node, value_node|
+        validate_node!(key_node)
+        raise SpecError, ANCHOR_ALIAS_ERROR if key_node.is_a?(Psych::Nodes::Scalar) && key_node.value == '<<'
+
+        key = duplicate_key_identity(key_node)
+        raise SpecError, "Duplicate YAML key: #{describe_key(key_node)}" if seen_keys.key?(key)
+
+        seen_keys[key] = true
+        validate_node!(value_node)
+      end
+    end
+
+    def duplicate_key_identity(node)
+      value = Psych::Visitors::ToRuby.create.accept(node)
+      reject_implicit_timestamps!(value)
+      [value.class, value]
+    rescue Psych::Exception => error
+      raise SpecError, "Invalid YAML: #{error.message}"
+    end
+
+    def describe_key(node)
+      return node.value.inspect if node.respond_to?(:value)
+
+      node.class.name
+    end
+
+    def safe_load
+      Psych.safe_load(
+        @text,
+        aliases: false,
+        permitted_classes: [Date, DateTime, Time]
+      )
+    rescue Psych::Exception => error
+      raise SpecError, "Invalid YAML: #{error.message}"
+    end
+
+    def reject_implicit_timestamps!(value)
+      case value
+      when Date, DateTime, Time
+        raise SpecError, IMPLICIT_TIMESTAMP_ERROR
+      when Hash
+        value.each do |key, child|
+          reject_implicit_timestamps!(key)
+          reject_implicit_timestamps!(child)
+        end
+      when Array
+        value.each { |child| reject_implicit_timestamps!(child) }
+      end
+    end
+
+    def stringify_version_fields!(value)
+      case value
+      when Hash
+        value.each do |key, child|
+          if key == 'version' && !child.nil? && !child.is_a?(Hash) && !child.is_a?(Array)
+            value[key] = child.to_s
+          else
+            stringify_version_fields!(child)
+          end
+        end
+      when Array
+        value.each { |child| stringify_version_fields!(child) }
+      end
+    end
+  end
+
   class IpCoreParser
     def initialize(ipcore_path, views_dir)
       @ipcore_path = ipcore_path
@@ -163,11 +292,9 @@ module SpecGenerator
     private
 
     def load_yaml
-      YAML.safe_load(File.read(@ipcore_path), aliases: false).tap do |data|
+      ConstrainedYamlLoader.load_file(@ipcore_path).tap do |data|
         raise SpecError, 'IP core spec root must be a map' unless data.is_a?(Hash)
       end
-    rescue Psych::Exception => error
-      raise SpecError, "Invalid YAML: #{error.message}"
     end
 
     def validate_top_level(data)
