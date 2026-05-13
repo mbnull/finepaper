@@ -1,0 +1,448 @@
+{
+  "schema": "ipcraft.manifest.v1",
+  "id": "finepaper.noc",
+  "name": "NoC",
+  "version": "1.0",
+  "extensions": {
+    "noc.v1": {
+      "enabled": true,
+      "modes": {
+        "chi_interconnect": {
+          "ipxact": {
+            "mode": "target"
+          }
+        },
+        "chi_requester_node": {
+          "ipxact": {
+            "mode": "initiator"
+          }
+        },
+        "chi_home_node": {
+          "ipxact": {
+            "mode": "initiator"
+          }
+        },
+        "chi_subordinate_node": {
+          "ipxact": {
+            "mode": "initiator"
+          }
+        },
+        "chi_peer": {
+          "ipxact": {
+            "mode": "system"
+          }
+        }
+      }
+    }
+  },
+  "parameters": {},
+  "connection_classes": [
+    {
+      "id": "ni_link",
+      "roles": [
+        "initiator",
+        "target"
+      ],
+      "symmetric": false
+    },
+    {
+      "id": "router_link",
+      "roles": [
+        "initiator",
+        "target"
+      ],
+      "symmetric": false
+    }
+  ],
+  "modules": [
+    {
+      "id": "XP",
+      "name": "XP",
+      "description": "Mesh router with four directional links and four local endpoint attachment slots.",
+      "graph_role": "host",
+      "parameters": {
+        "x": {
+          "type": "int",
+          "default": 0,
+          "configurable": false,
+          "emit": "attribute",
+          "description": "Canvas X position."
+        },
+        "y": {
+          "type": "int",
+          "default": 0,
+          "configurable": false,
+          "emit": "attribute",
+          "description": "Canvas Y position."
+        },
+        "mesh_col": {
+          "type": "int",
+          "default": 0,
+          "configurable": false,
+          "emit": "attribute",
+          "description": "Logical mesh column."
+        },
+        "mesh_row": {
+          "type": "int",
+          "default": 0,
+          "configurable": false,
+          "emit": "attribute",
+          "description": "Logical mesh row."
+        },
+        "display_name": {
+          "type": "string",
+          "default": "",
+          "emit": "editor",
+          "label": "Display name",
+          "description": "Name shown on the canvas."
+        },
+        "external_id": {
+          "type": "string",
+          "default": "",
+          "emit": "editor",
+          "label": "External ID",
+          "description": "Framework-facing identifier."
+        },
+        "collapsed": {
+          "type": "bool",
+          "default": true,
+          "configurable": false,
+          "emit": "editor_only",
+          "description": "Collapsed editor state."
+        },
+        "routing_algorithm": {
+          "type": "string",
+          "enum": [
+            "xy",
+            "yx"
+          ],
+          "default": "xy",
+          "emit": "config",
+          "label": "Routing algorithm",
+          "description": "Router path selection strategy."
+        },
+        "vc_count": {
+          "type": "int",
+          "default": 2,
+          "emit": "config",
+          "label": "VC count",
+          "description": "Virtual channel count."
+        },
+        "buffer_depth": {
+          "type": "int",
+          "default": 8,
+          "emit": "config",
+          "label": "Buffer depth",
+          "description": "Depth of each input buffer."
+        }
+      },
+      "interfaces": [
+        {
+          "id": "local0",
+          "label": "Local 0",
+          "modes": [
+            "target"
+          ],
+          "accepts": [
+            {
+              "class": "ni_link",
+              "role": "target"
+            }
+          ],
+          "multi_connection": false,
+          "ipxact": {
+            "bus_interface": "local0"
+          }
+        },
+        {
+          "id": "local1",
+          "label": "Local 1",
+          "modes": [
+            "target"
+          ],
+          "accepts": [
+            {
+              "class": "ni_link",
+              "role": "target"
+            }
+          ],
+          "multi_connection": false,
+          "ipxact": {
+            "bus_interface": "local1"
+          }
+        },
+        {
+          "id": "local2",
+          "label": "Local 2",
+          "modes": [
+            "target"
+          ],
+          "accepts": [
+            {
+              "class": "ni_link",
+              "role": "target"
+            }
+          ],
+          "multi_connection": false,
+          "ipxact": {
+            "bus_interface": "local2"
+          }
+        },
+        {
+          "id": "local3",
+          "label": "Local 3",
+          "modes": [
+            "target"
+          ],
+          "accepts": [
+            {
+              "class": "ni_link",
+              "role": "target"
+            }
+          ],
+          "multi_connection": false,
+          "ipxact": {
+            "bus_interface": "local3"
+          }
+        },
+        {
+          "id": "north",
+          "label": "North",
+          "modes": [
+            "target"
+          ],
+          "accepts": [
+            {
+              "class": "router_link",
+              "role": "target"
+            }
+          ],
+          "multi_connection": false,
+          "ipxact": {
+            "bus_interface": "north"
+          }
+        },
+        {
+          "id": "east",
+          "label": "East",
+          "modes": [
+            "initiator"
+          ],
+          "accepts": [
+            {
+              "class": "router_link",
+              "role": "initiator"
+            }
+          ],
+          "multi_connection": false,
+          "ipxact": {
+            "bus_interface": "east"
+          }
+        },
+        {
+          "id": "south",
+          "label": "South",
+          "modes": [
+            "initiator"
+          ],
+          "accepts": [
+            {
+              "class": "router_link",
+              "role": "initiator"
+            }
+          ],
+          "multi_connection": false,
+          "ipxact": {
+            "bus_interface": "south"
+          }
+        },
+        {
+          "id": "west",
+          "label": "West",
+          "modes": [
+            "target"
+          ],
+          "accepts": [
+            {
+              "class": "router_link",
+              "role": "target"
+            }
+          ],
+          "multi_connection": false,
+          "ipxact": {
+            "bus_interface": "west"
+          }
+        }
+      ]
+    },
+    {
+      "id": "Endpoint",
+      "name": "Endpoint",
+      "description": "Endpoint interface block that terminates a local NoC connection.",
+      "graph_role": "attached",
+      "parameters": {
+        "display_name": {
+          "type": "string",
+          "default": "",
+          "emit": "editor",
+          "label": "Display name",
+          "description": "Name shown on the canvas."
+        },
+        "external_id": {
+          "type": "string",
+          "default": "",
+          "emit": "editor",
+          "label": "External ID",
+          "description": "Framework-facing identifier."
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "master",
+            "slave"
+          ],
+          "default": "master",
+          "emit": "attribute",
+          "label": "Type",
+          "description": "Endpoint traffic role."
+        },
+        "protocol": {
+          "type": "string",
+          "enum": [
+            "axi4",
+            "chi"
+          ],
+          "default": "axi4",
+          "emit": "attribute",
+          "label": "Protocol",
+          "description": "Interface protocol."
+        },
+        "data_width": {
+          "type": "int",
+          "enum": [
+            32,
+            64,
+            128
+          ],
+          "default": 64,
+          "emit": "attribute",
+          "label": "Data width",
+          "description": "Bus width in bits."
+        },
+        "qos_enabled": {
+          "type": "bool",
+          "default": false,
+          "emit": "config",
+          "label": "QoS enabled",
+          "description": "Enable QoS tagging support."
+        },
+        "buffer_depth": {
+          "type": "int",
+          "default": 16,
+          "emit": "config",
+          "label": "Buffer depth",
+          "description": "Ingress buffer depth."
+        }
+      },
+      "interfaces": [
+        {
+          "id": "noc",
+          "label": "NoC",
+          "modes": [
+            "initiator"
+          ],
+          "accepts": [
+            {
+              "class": "ni_link",
+              "role": "initiator"
+            }
+          ],
+          "multi_connection": false,
+          "ipxact": {
+            "bus_interface": "noc"
+          }
+        }
+      ]
+    }
+  ],
+  "views": [
+    {
+      "module": "XP",
+      "file": "views/XP.xml"
+    },
+    {
+      "module": "Endpoint",
+      "file": "views/Endpoint.xml"
+    }
+  ],
+  "topologies": [
+    {
+      "id": "mesh",
+      "label": "Mesh",
+      "kind": "mesh",
+      "module": "XP",
+      "id_pattern": "xp_{row}_{col}",
+      "ports": {
+        "east": "east",
+        "west": "west",
+        "north": "north",
+        "south": "south"
+      },
+      "parameters": {
+        "rows": {
+          "label": "Rows",
+          "default": 2,
+          "min": 1,
+          "max": 16
+        },
+        "cols": {
+          "label": "Columns",
+          "default": 2,
+          "min": 1,
+          "max": 16
+        }
+      }
+    },
+    {
+      "id": "ring",
+      "label": "Ring",
+      "kind": "ring",
+      "module": "XP",
+      "id_pattern": "xp_{index}",
+      "ports": {
+        "east": "east",
+        "west": "west"
+      },
+      "parameters": {
+        "nodes": {
+          "label": "Nodes",
+          "default": 4,
+          "min": 2,
+          "max": 64
+        }
+      }
+    }
+  ],
+  "commands": {
+    "validate": {
+      "executable": "generator/bin/drc",
+      "input_schema": "ipcraft.noc.project.v1",
+      "args": [
+        "-i",
+        "{input}"
+      ]
+    },
+    "generate": {
+      "executable": "generator/bin/generate",
+      "input_schema": "ipcraft.noc.project.v1",
+      "args": [
+        "-i",
+        "{input}",
+        "-o",
+        "{output}",
+        "-t",
+        "generator/template"
+      ]
+    }
+  }
+}

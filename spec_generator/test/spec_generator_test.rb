@@ -657,6 +657,41 @@ class SpecGeneratorTest < Minitest::Test
     end
   end
 
+  def test_repository_finepaper_noc_builds_ipcraft_manifest
+    assert_repository_package_source_schema('finepaper-noc')
+
+    manifest = build_repository_ipcraft_manifest('finepaper-noc')
+
+    assert_repository_ipcraft_manifest_contract(manifest)
+  end
+
+  def test_repository_ravenoc_builds_ipcraft_manifest
+    assert_repository_package_source_schema('ravenoc')
+
+    manifest = build_repository_ipcraft_manifest('ravenoc')
+
+    assert_repository_ipcraft_manifest_contract(manifest)
+  end
+
+  def test_repository_opennoc_builds_ipcraft_manifest
+    assert_repository_package_source_schema('opennoc')
+
+    manifest = build_repository_ipcraft_manifest('opennoc')
+
+    assert_repository_ipcraft_manifest_contract(manifest)
+    extension_modes = manifest.fetch('extensions').fetch('noc.v1').fetch('modes')
+    chi_modes = manifest.fetch('modules').flat_map do |mod|
+      mod.fetch('interfaces').flat_map { |interface| interface.fetch('modes') }
+    end.select { |mode| mode.start_with?('chi_') }.uniq
+    refute_empty chi_modes
+    chi_modes.each do |mode|
+      assert_includes extension_modes.keys, mode
+      assert extension_modes.fetch(mode).fetch('ipxact').fetch('mode')
+    end
+    assert_equal 'target', extension_modes.fetch('chi_interconnect').fetch('ipxact').fetch('mode')
+    assert_equal 'initiator', extension_modes.fetch('chi_requester_node').fetch('ipxact').fetch('mode')
+  end
+
   def test_rejects_view_path_outside_package_root
     Dir.mktmpdir do |dir|
       write_file(dir, 'ipcores/outside.xml', ipcraft_xp_view_xml)
@@ -972,9 +1007,9 @@ class SpecGeneratorTest < Minitest::Test
     end
   end
 
-  def test_cli_default_generates_repository_ipcore_bundles
+  def test_cli_default_builds_repository_ipcraft_manifests
     Dir.mktmpdir do |dir|
-      write_source_fixture_repo(dir)
+      write_repository_ipcraft_source_repo(dir)
 
       stdout, stderr, status = Open3.capture3(
         RbConfig.ruby,
@@ -983,21 +1018,17 @@ class SpecGeneratorTest < Minitest::Test
       )
 
       assert status.success?, stderr
-      assert_includes stdout, 'Generated repository IP core runtime bundles'
-      assert File.file?(File.join(dir, 'generated/ipcores/finepaper.noc/ipcore-runtime.json'))
-      assert File.file?(File.join(dir, 'generated/ipcores/finepaper.noc/modules.xml'))
-      assert File.file?(File.join(dir, 'generated/ipcores/finepaper.noc/graphics/Endpoint.xml'))
-      assert File.file?(File.join(dir, 'generated/ipcores/finepaper.ravenoc/ipcore-runtime.json'))
-      assert File.file?(File.join(dir, 'generated/ipcores/finepaper.ravenoc/graphics/RaveTile.xml'))
-      assert File.file?(File.join(dir, 'ipcores/finepaper-noc/generator/src/ruby/model/xp.rb'))
-      refute File.exist?(File.join(dir, 'generated/ipcores/finepaper.noc', stale_runtime_manifest_file_name))
-      refute File.exist?(File.join(dir, 'generated/ipcores/finepaper.ravenoc', stale_runtime_manifest_file_name))
+      assert_includes stdout, 'Generated repository ipcraft manifests'
+      repository_ipcraft_package_dirs.each do |package_dir|
+        assert File.file?(File.join(dir, 'ipcores', package_dir, 'ipcraft.json'))
+      end
+      refute File.exist?(File.join(dir, 'generated/ipcores/finepaper.noc/ipcore-runtime.json'))
     end
   end
 
-  def test_cli_check_passes_when_generated_runtime_artifacts_match_specs
+  def test_cli_check_passes_when_repository_ipcraft_manifests_match_sources
     Dir.mktmpdir do |dir|
-      build_generated_fixture_repo(dir)
+      write_repository_ipcraft_source_repo(dir, include_manifests: true)
 
       stdout, stderr, status = Open3.capture3(
         RbConfig.ruby,
@@ -1007,7 +1038,23 @@ class SpecGeneratorTest < Minitest::Test
       )
 
       assert status.success?, stderr
-      assert_includes stdout, 'Generated IP core runtime artifacts are up to date'
+      assert_includes stdout, 'Repository ipcraft manifests are up to date'
+    end
+  end
+
+  def test_check_repository_ipcraft_manifests_reports_manifest_drift
+    Dir.mktmpdir do |dir|
+      write_repository_ipcraft_source_repo(dir, include_manifests: true)
+      path = File.join(dir, 'ipcores/ravenoc/ipcraft.json')
+      manifest = JSON.parse(File.read(path))
+      manifest['name'] = 'Drifted RaveNoC'
+      File.write(path, "#{JSON.pretty_generate(manifest)}\n")
+
+      error = assert_raises(SpecGenerator::SpecError) do
+        SpecGenerator.check_repository_ipcraft_manifests(root: dir)
+      end
+
+      assert_match(%r{content mismatch: ipcores/ravenoc/ipcraft\.json}, error.message)
     end
   end
 
@@ -1098,16 +1145,63 @@ class SpecGeneratorTest < Minitest::Test
     File.expand_path(File.join('..', '..', *parts), __dir__)
   end
 
+  def repository_ipcraft_package_dirs
+    %w[finepaper-noc ravenoc opennoc]
+  end
+
   def finepaper_noc_ipcore_yaml
-    File.read(repo_path('ipcores/finepaper-noc/ipcore.yml'))
+    legacy_ipcore_yaml('finepaper-noc')
   end
 
   def ravenoc_ipcore_yaml
-    File.read(repo_path('ipcores/ravenoc/ipcore.yml'))
+    legacy_ipcore_yaml('ravenoc')
   end
 
   def opennoc_ipcore_yaml
-    File.read(repo_path('ipcores/opennoc/ipcore.yml'))
+    legacy_ipcore_yaml('opennoc')
+  end
+
+  def legacy_ipcore_yaml(package_dir)
+    @legacy_ipcore_yaml ||= {}
+    @legacy_ipcore_yaml[package_dir] ||= begin
+      relpath = "ipcores/#{package_dir}/ipcore.yml"
+      fixture = legacy_ipcore_yaml_from_git(relpath)
+      fixture ||= begin
+        current = File.read(repo_path(relpath))
+        current if legacy_ipcore_yaml?(current)
+      end
+      raise "Legacy IP core fixture not found for #{package_dir}" unless fixture
+
+      fixture
+    end
+  end
+
+  def legacy_ipcore_yaml_from_git(relpath)
+    revisions, _stderr, status = Open3.capture3(
+      'git',
+      'rev-list',
+      '--max-count=50',
+      'HEAD',
+      '--',
+      relpath,
+      chdir: repo_path
+    )
+    return nil unless status.success?
+
+    revisions.each_line do |revision|
+      text, _stderr, show_status = Open3.capture3(
+        'git',
+        'show',
+        "#{revision.strip}:#{relpath}",
+        chdir: repo_path
+      )
+      return text if show_status.success? && legacy_ipcore_yaml?(text)
+    end
+    nil
+  end
+
+  def legacy_ipcore_yaml?(text)
+    text.start_with?("schema: finepaper.ipcore.v1\n")
   end
 
   def opennoc_view_xml(name)
@@ -1118,6 +1212,18 @@ class SpecGeneratorTest < Minitest::Test
     write_finepaper_noc_source(root)
     write_ravenoc_source(root)
     write_opennoc_source(root)
+  end
+
+  def write_repository_ipcraft_source_repo(root, include_manifests: false)
+    repository_ipcraft_package_dirs.each do |package_dir|
+      package_root = File.join(root, 'ipcores', package_dir)
+      FileUtils.mkdir_p(package_root)
+      FileUtils.cp(repo_path('ipcores', package_dir, 'ipcore.yml'), File.join(package_root, 'ipcore.yml'))
+      FileUtils.cp_r(repo_path('ipcores', package_dir, 'views'), File.join(package_root, 'views'))
+      if include_manifests
+        FileUtils.cp(repo_path('ipcores', package_dir, 'ipcraft.json'), File.join(package_root, 'ipcraft.json'))
+      end
+    end
   end
 
   def build_generated_fixture_repo(root)
@@ -1187,6 +1293,51 @@ class SpecGeneratorTest < Minitest::Test
       ipcore_path: File.join(package_root, 'ipcore.yml'),
       package_root: package_root
     )
+  end
+
+  def assert_repository_package_source_schema(package_dir)
+    source = SpecGenerator::ConstrainedYamlLoader.load_file(repo_path('ipcores', package_dir, 'ipcore.yml'))
+
+    assert_equal 'ipcraft.package.v1', source.fetch('schema')
+  end
+
+  def build_repository_ipcraft_manifest(package_dir)
+    Dir.mktmpdir do |dir|
+      package_root = File.join(dir, 'ipcores', package_dir)
+      FileUtils.mkdir_p(package_root)
+      FileUtils.cp(repo_path('ipcores', package_dir, 'ipcore.yml'), File.join(package_root, 'ipcore.yml'))
+      FileUtils.cp_r(repo_path('ipcores', package_dir, 'views'), File.join(package_root, 'views'))
+
+      manifest_path = SpecGenerator.build_ipcraft_manifest(
+        ipcore_path: File.join(package_root, 'ipcore.yml'),
+        package_root: package_root
+      )
+      assert_equal File.join(package_root, 'ipcraft.json'), manifest_path
+
+      JSON.parse(File.read(manifest_path))
+    end
+  end
+
+  def assert_repository_ipcraft_manifest_contract(manifest)
+    assert_equal 'ipcraft.manifest.v1', manifest.fetch('schema')
+
+    manifest.fetch('commands').each_value do |command|
+      assert command.fetch('input_schema')
+    end
+
+    module_ids = manifest.fetch('modules').map { |mod| mod.fetch('id') }
+    manifest.fetch('views').each do |view|
+      assert_includes module_ids, view.fetch('module')
+    end
+
+    connection_class_ids = manifest.fetch('connection_classes').map { |klass| klass.fetch('id') }
+    manifest.fetch('modules').each do |mod|
+      mod.fetch('interfaces').each do |interface|
+        interface.fetch('accepts').each do |accept|
+          assert_includes connection_class_ids, accept.fetch('class')
+        end
+      end
+    end
   end
 
   def parse_minimal_ipcore(root)

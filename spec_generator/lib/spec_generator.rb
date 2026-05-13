@@ -95,6 +95,51 @@ module SpecGenerator
     IpcraftManifestEmitter.new(manifest, package_root: package_root).write
   end
 
+  def self.build_repository_ipcraft_manifests(root: Dir.pwd)
+    root = File.expand_path(root)
+    repository_ipcraft_source_package_dirs(root).map do |package|
+      package_root = File.join(root, 'ipcores', package)
+      build_ipcraft_manifest(
+        ipcore_path: File.join(package_root, 'ipcore.yml'),
+        package_root: package_root
+      )
+    end
+  end
+
+  def self.check_repository_ipcraft_manifests(root: Dir.pwd)
+    root = File.expand_path(root)
+    mismatches = []
+
+    Dir.mktmpdir('finepaper-ipcraft-manifest-check') do |dir|
+      repository_ipcraft_source_package_dirs(root).each do |package|
+        copy_ipcraft_package_source(root, dir, package)
+        package_root = File.join(dir, 'ipcores', package)
+        build_ipcraft_manifest(
+          ipcore_path: File.join(package_root, 'ipcore.yml'),
+          package_root: package_root
+        )
+      end
+
+      repository_ipcraft_package_dirs(root).each do |package|
+        source_relpath = File.join('ipcores', package, 'ipcore.yml')
+        manifest_relpath = File.join('ipcores', package, 'ipcraft.json')
+        if !File.file?(File.join(root, source_relpath))
+          mismatches << "missing source: #{source_relpath}"
+        elsif !File.file?(File.join(root, manifest_relpath))
+          mismatches << "missing committed: #{manifest_relpath}"
+        elsif !File.file?(File.join(dir, manifest_relpath))
+          mismatches << "missing generated: #{manifest_relpath}"
+        elsif File.binread(File.join(root, manifest_relpath)) != File.binread(File.join(dir, manifest_relpath))
+          mismatches << "content mismatch: #{manifest_relpath}"
+        end
+      end
+    end
+
+    return true if mismatches.empty?
+
+    raise SpecError, "Ipcraft manifests are out of date:\n#{mismatches.map { |path| "  #{path}" }.join("\n")}"
+  end
+
   def self.check_repository_generated_outputs(root: Dir.pwd)
     root = File.expand_path(root)
     mismatches = []
@@ -158,6 +203,28 @@ module SpecGenerator
     FileUtils.mkdir_p(target_package)
     FileUtils.cp(File.join(source_package, 'ipcore.yml'), File.join(target_package, 'ipcore.yml'))
     FileUtils.cp_r(File.join(source_package, 'views'), File.join(target_package, 'views'))
+  end
+
+  def self.copy_ipcraft_package_source(source_root, target_root, package)
+    source_package = File.join(source_root, 'ipcores', package)
+    target_package = File.join(target_root, 'ipcores', package)
+    FileUtils.mkdir_p(target_package)
+    FileUtils.cp(File.join(source_package, 'ipcore.yml'), File.join(target_package, 'ipcore.yml'))
+    FileUtils.cp_r(File.join(source_package, 'views'), File.join(target_package, 'views')) if File.directory?(File.join(source_package, 'views'))
+  end
+
+  def self.repository_ipcraft_source_package_dirs(root)
+    Dir.glob(File.join(root, 'ipcores', '*', 'ipcore.yml'))
+       .map { |path| File.basename(File.dirname(path)) }
+       .sort
+  end
+
+  def self.repository_ipcraft_package_dirs(root)
+    (Dir.glob(File.join(root, 'ipcores', '*', 'ipcore.yml')) +
+     Dir.glob(File.join(root, 'ipcores', '*', 'ipcraft.json')))
+      .map { |path| File.basename(File.dirname(path)) }
+      .uniq
+      .sort
   end
 
   def self.generated_output_relpaths(root, relroot, type)

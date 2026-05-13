@@ -1,77 +1,31 @@
-schema: finepaper.ipcore.v1
+schema: ipcraft.package.v1
 id: finepaper.opennoc
 name: OpenNoC
 version: '1.0'
-kind: noc
-runtime:
-  generator:
-    command: ruby
-    input_format: ipcore_graph_v1
-    args:
-      - generator/bin/generate
-      - -i
-      - "{input}"
-      - -o
-      - "{output}"
-      - -t
-      - generator/template
-  drc:
-    command: ruby
-    input_format: ipcore_graph_v1
-    args:
-      - generator/bin/drc
-      - -i
-      - "{input}"
-instance_parameters:
+
+extensions:
+  noc.v1:
+    enabled: true
+
+parameters:
   req_flit_width: { type: int, default: 128, min: 1, max: 1024, label: REQ flit width, description: OpenNoC REQ channel flit width used by verification. }
   rsp_flit_width: { type: int, default: 64, min: 1, max: 1024, label: RSP flit width, description: OpenNoC RSP channel flit width used by verification. }
   dat_flit_width: { type: int, default: 256, min: 1, max: 2048, label: DAT flit width, description: OpenNoC DAT channel flit width used by verification. }
   snp_flit_width: { type: int, default: 128, min: 1, max: 1024, label: SNP flit width, description: OpenNoC SNP channel flit width used by verification before the router appends target id bits. }
-topology_presets:
-  - id: mesh
-    label: Mesh
-    kind: mesh
-    router_module: OpenNoCXP
-    id_pattern: xp_{row}_{col}
-    ports: { east: east, west: west, north: north, south: south }
-    parameters:
-      rows: { label: Rows, default: 2, min: 1, max: 8 }
-      cols: { label: Columns, default: 2, min: 1, max: 8 }
-buses:
-  opennoc_mesh_link:
-    description: OpenNoC router-to-router mesh link.
-    compatibility:
-      roles:
-        initiator: [target]
-        target: [initiator]
-      match: []
-    config: {}
-    signals:
-      - name: link
-        direction: inout
-        width: OPENNOC_MESH_LINK
-  opennoc_chi_attachment:
-    description: OpenNoC CHI endpoint attachment.
-    compatibility:
-      roles:
-        initiator: [target]
-        target: [initiator]
-      match: []
-    config: {}
-    signals:
-      - name: chi
-        direction: initiator_to_target
-        width: OPENNOC_CHI_ATTACHMENT
+
+connection_classes:
+  - id: opennoc_mesh_link
+    roles: [initiator, target]
+    symmetric: false
+  - id: chi_node_interface
+    roles: [node, interconnect]
+    symmetric: false
+
 modules:
-  OpenNoCXP:
-    palette_label: OpenNoC XP
-    graph_group: xps
+  - id: OpenNoCXP
+    name: OpenNoC XP
     description: OpenNoC crosspoint router tile.
-    identity:
-      external_id_prefix: xp
-      display_prefix: XP
-      width: 2
-      supports_mesh_coordinates: true
+    graph_role: host
     parameters:
       display_name: { type: string, default: OpenNoC XP, label: Display name, description: Name shown on the canvas. }
       external_id: { type: string, default: xp_00, label: External ID, description: Stable generated artifact identifier. }
@@ -80,181 +34,159 @@ modules:
       mesh_col: { type: int, default: 0, configurable: false, description: Logical OpenNoC mesh column. }
       mesh_row: { type: int, default: 0, configurable: false, description: Logical OpenNoC mesh row. }
     interfaces:
-      east:
+      - id: east
         label: East
-        bus: opennoc_mesh_link
-        role: initiator
-        connects_to: target
-        match: []
-        cardinality: one
-        autocomplete_group: router_side
-        topology_rule: opposite_side
-        port: { id: east, direction: inout, type: bus, bus_type: opennoc_mesh_link, role: router, name: East, description: East OpenNoC mesh link }
-      west:
+        modes: [initiator]
+        accepts: [{ class: opennoc_mesh_link, role: initiator }]
+        multi_connection: false
+        ipxact: { bus_interface: east }
+      - id: west
         label: West
-        bus: opennoc_mesh_link
-        role: target
-        connects_to: initiator
-        match: []
-        cardinality: one
-        autocomplete_group: router_side
-        topology_rule: opposite_side
-        port: { id: west, direction: inout, type: bus, bus_type: opennoc_mesh_link, role: router, name: West, description: West OpenNoC mesh link }
-      north:
+        modes: [target]
+        accepts: [{ class: opennoc_mesh_link, role: target }]
+        multi_connection: false
+        ipxact: { bus_interface: west }
+      - id: north
         label: North
-        bus: opennoc_mesh_link
-        role: target
-        connects_to: initiator
-        match: []
-        cardinality: one
-        autocomplete_group: router_side
-        topology_rule: opposite_side
-        port: { id: north, direction: inout, type: bus, bus_type: opennoc_mesh_link, role: router, name: North, description: North OpenNoC mesh link }
-      south:
+        modes: [target]
+        accepts: [{ class: opennoc_mesh_link, role: target }]
+        multi_connection: false
+        ipxact: { bus_interface: north }
+      - id: south
         label: South
-        bus: opennoc_mesh_link
-        role: initiator
-        connects_to: target
-        match: []
-        cardinality: one
-        autocomplete_group: router_side
-        topology_rule: opposite_side
-        port: { id: south, direction: inout, type: bus, bus_type: opennoc_mesh_link, role: router, name: South, description: South OpenNoC mesh link }
-      p0:
+        modes: [initiator]
+        accepts: [{ class: opennoc_mesh_link, role: initiator }]
+        multi_connection: false
+        ipxact: { bus_interface: south }
+      - id: p0
         label: P0
-        bus: opennoc_chi_attachment
-        role: target
-        connects_to: initiator
-        match: []
-        cardinality: one
-        autocomplete_group: endpoint_attachment
-        port: { id: p0, direction: input, type: bus, bus_type: opennoc_chi_attachment, role: attachment, name: P0, description: OpenNoC CHI attachment slot 0 }
-      p1:
+        modes: [chi_interconnect]
+        accepts: [{ class: chi_node_interface, role: interconnect }]
+        multi_connection: false
+        ipxact: { bus_interface: p0 }
+      - id: p1
         label: P1
-        bus: opennoc_chi_attachment
-        role: target
-        connects_to: initiator
-        match: []
-        cardinality: one
-        autocomplete_group: endpoint_attachment
-        port: { id: p1, direction: input, type: bus, bus_type: opennoc_chi_attachment, role: attachment, name: P1, description: OpenNoC CHI attachment slot 1 }
-  OpenNoCRNF:
-    palette_label: RNF
-    graph_group: endpoints
+        modes: [chi_interconnect]
+        accepts: [{ class: chi_node_interface, role: interconnect }]
+        multi_connection: false
+        ipxact: { bus_interface: p1 }
+
+  - id: OpenNoCRNF
+    name: RNF
     description: OpenNoC CHI RNF agent.
-    identity:
-      external_id_prefix: rnf
-      display_prefix: RNF
-      width: 2
-      supports_mesh_coordinates: false
+    graph_role: attached
     parameters:
       display_name: { type: string, default: RNF, label: Display name, description: Name shown on the canvas. }
       external_id: { type: string, default: rnf_00, label: External ID, description: Stable generated artifact identifier. }
       x: { type: int, default: 0, configurable: false, description: Canvas X position. }
       y: { type: int, default: 0, configurable: false, description: Canvas Y position. }
     interfaces:
-      chi:
+      - id: chi
         label: CHI
-        bus: opennoc_chi_attachment
-        role: initiator
-        connects_to: target
-        match: []
-        cardinality: one
-        autocomplete_group: endpoint_attachment
-        port: { id: chi, direction: output, type: bus, bus_type: opennoc_chi_attachment, role: attachment, name: CHI, description: OpenNoC RNF CHI attachment }
-  OpenNoCRNI:
-    palette_label: RNI
-    graph_group: endpoints
+        modes: [chi_requester_node]
+        accepts: [{ class: chi_node_interface, role: node }]
+        multi_connection: false
+        ipxact: { bus_interface: chi }
+
+  - id: OpenNoCRNI
+    name: RNI
     description: OpenNoC CHI RNI agent.
-    identity:
-      external_id_prefix: rni
-      display_prefix: RNI
-      width: 2
-      supports_mesh_coordinates: false
+    graph_role: attached
     parameters:
       display_name: { type: string, default: RNI, label: Display name, description: Name shown on the canvas. }
       external_id: { type: string, default: rni_00, label: External ID, description: Stable generated artifact identifier. }
       x: { type: int, default: 0, configurable: false, description: Canvas X position. }
       y: { type: int, default: 0, configurable: false, description: Canvas Y position. }
     interfaces:
-      chi:
+      - id: chi
         label: CHI
-        bus: opennoc_chi_attachment
-        role: initiator
-        connects_to: target
-        match: []
-        cardinality: one
-        autocomplete_group: endpoint_attachment
-        port: { id: chi, direction: output, type: bus, bus_type: opennoc_chi_attachment, role: attachment, name: CHI, description: OpenNoC RNI CHI attachment }
-  OpenNoCHNF:
-    palette_label: HNF
-    graph_group: endpoints
+        modes: [chi_requester_node]
+        accepts: [{ class: chi_node_interface, role: node }]
+        multi_connection: false
+        ipxact: { bus_interface: chi }
+
+  - id: OpenNoCHNF
+    name: HNF
     description: OpenNoC CHI HNF agent.
-    identity:
-      external_id_prefix: hnf
-      display_prefix: HNF
-      width: 2
-      supports_mesh_coordinates: false
+    graph_role: attached
     parameters:
       display_name: { type: string, default: HNF, label: Display name, description: Name shown on the canvas. }
       external_id: { type: string, default: hnf_00, label: External ID, description: Stable generated artifact identifier. }
       x: { type: int, default: 0, configurable: false, description: Canvas X position. }
       y: { type: int, default: 0, configurable: false, description: Canvas Y position. }
     interfaces:
-      chi:
+      - id: chi
         label: CHI
-        bus: opennoc_chi_attachment
-        role: initiator
-        connects_to: target
-        match: []
-        cardinality: one
-        autocomplete_group: endpoint_attachment
-        port: { id: chi, direction: output, type: bus, bus_type: opennoc_chi_attachment, role: attachment, name: CHI, description: OpenNoC HNF CHI attachment }
-  OpenNoCHNI:
-    palette_label: HNI
-    graph_group: endpoints
+        modes: [chi_home_node]
+        accepts: [{ class: chi_node_interface, role: node }]
+        multi_connection: false
+        ipxact: { bus_interface: chi }
+
+  - id: OpenNoCHNI
+    name: HNI
     description: OpenNoC CHI HNI agent.
-    identity:
-      external_id_prefix: hni
-      display_prefix: HNI
-      width: 2
-      supports_mesh_coordinates: false
+    graph_role: attached
     parameters:
       display_name: { type: string, default: HNI, label: Display name, description: Name shown on the canvas. }
       external_id: { type: string, default: hni_00, label: External ID, description: Stable generated artifact identifier. }
       x: { type: int, default: 0, configurable: false, description: Canvas X position. }
       y: { type: int, default: 0, configurable: false, description: Canvas Y position. }
     interfaces:
-      chi:
+      - id: chi
         label: CHI
-        bus: opennoc_chi_attachment
-        role: initiator
-        connects_to: target
-        match: []
-        cardinality: one
-        autocomplete_group: endpoint_attachment
-        port: { id: chi, direction: output, type: bus, bus_type: opennoc_chi_attachment, role: attachment, name: CHI, description: OpenNoC HNI CHI attachment }
-  OpenNoCSNF:
-    palette_label: SNF
-    graph_group: endpoints
+        modes: [chi_home_node]
+        accepts: [{ class: chi_node_interface, role: node }]
+        multi_connection: false
+        ipxact: { bus_interface: chi }
+
+  - id: OpenNoCSNF
+    name: SNF
     description: OpenNoC CHI SNF agent.
-    identity:
-      external_id_prefix: snf
-      display_prefix: SNF
-      width: 2
-      supports_mesh_coordinates: false
+    graph_role: attached
     parameters:
       display_name: { type: string, default: SNF, label: Display name, description: Name shown on the canvas. }
       external_id: { type: string, default: snf_00, label: External ID, description: Stable generated artifact identifier. }
       x: { type: int, default: 0, configurable: false, description: Canvas X position. }
       y: { type: int, default: 0, configurable: false, description: Canvas Y position. }
     interfaces:
-      chi:
+      - id: chi
         label: CHI
-        bus: opennoc_chi_attachment
-        role: initiator
-        connects_to: target
-        match: []
-        cardinality: one
-        autocomplete_group: endpoint_attachment
-        port: { id: chi, direction: output, type: bus, bus_type: opennoc_chi_attachment, role: attachment, name: CHI, description: OpenNoC SNF CHI attachment }
+        modes: [chi_subordinate_node]
+        accepts: [{ class: chi_node_interface, role: node }]
+        multi_connection: false
+        ipxact: { bus_interface: chi }
+
+views:
+  - module: OpenNoCXP
+    file: views/OpenNoCXP.xml
+  - module: OpenNoCRNF
+    file: views/OpenNoCRNF.xml
+  - module: OpenNoCRNI
+    file: views/OpenNoCRNI.xml
+  - module: OpenNoCHNF
+    file: views/OpenNoCHNF.xml
+  - module: OpenNoCHNI
+    file: views/OpenNoCHNI.xml
+  - module: OpenNoCSNF
+    file: views/OpenNoCSNF.xml
+
+topologies:
+  - id: mesh
+    label: Mesh
+    kind: mesh
+    module: OpenNoCXP
+    id_pattern: xp_{row}_{col}
+    ports: { east: east, west: west, north: north, south: south }
+    parameters:
+      rows: { label: Rows, default: 2, min: 1, max: 8 }
+      cols: { label: Columns, default: 2, min: 1, max: 8 }
+
+commands:
+  validate:
+    executable: generator/bin/drc
+    input_schema: ipcraft.noc.project.v1
+    args: [-i, "{input}"]
+  generate:
+    executable: generator/bin/generate
+    input_schema: ipcraft.noc.project.v1
+    args: [-i, "{input}", -o, "{output}"]
