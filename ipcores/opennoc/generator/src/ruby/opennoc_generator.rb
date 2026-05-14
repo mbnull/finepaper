@@ -8,6 +8,8 @@ class OpenNoCGenerator
   class GenerationError < StandardError; end
 
   GRAPH_SCHEMA = 'finepaper-ipcore-graph-v1'.freeze
+  IPCRAFT_PROJECT_SCHEMA = 'ipcraft.noc.project.v1'.freeze
+  SUPPORTED_SCHEMAS = [IPCRAFT_PROJECT_SCHEMA, GRAPH_SCHEMA].freeze
   IPCORE_ID = 'finepaper.opennoc'.freeze
   XP_TYPE = 'OpenNoCXP'.freeze
 
@@ -84,7 +86,11 @@ class OpenNoCGenerator
 
   def read_graph
     data = JSON.parse(File.read(input_path))
-    raise GenerationError, "expected schema #{GRAPH_SCHEMA}" unless data['schema'] == GRAPH_SCHEMA
+    unless SUPPORTED_SCHEMAS.include?(data['schema'])
+      raise GenerationError,
+            "expected schema #{IPCRAFT_PROJECT_SCHEMA} (or #{GRAPH_SCHEMA} for legacy compatibility)"
+    end
+    data = normalize_ipcraft_project(data) if data['schema'] == IPCRAFT_PROJECT_SCHEMA
     raise GenerationError, "expected ipcore #{IPCORE_ID}" unless data['ipcore'] == IPCORE_ID
 
     data.delete('errors')
@@ -93,6 +99,127 @@ class OpenNoCGenerator
     raise GenerationError, "input graph not found: #{input_path}"
   rescue JSON::ParserError => error
     raise GenerationError, "invalid JSON input: #{error.message}"
+  end
+
+  def normalize_ipcraft_project(data)
+    package = required_string(data, 'package')
+    project = required_hash(data, 'project')
+    project_instance = required_hash(project, 'instance')
+    instances = required_array(data, 'instances')
+
+    {
+      'schema' => GRAPH_SCHEMA,
+      'name' => project_name(data, project),
+      'ipcore' => package,
+      'instance' => required_string(project_instance, 'id'),
+      'ipcore_state' => [ipcraft_project_state(package, project_instance)],
+      'modules' => normalize_ipcraft_instances(instances, package, project_instance.fetch('id')),
+      'connections' => normalize_ipcraft_connections(data.fetch('connections', []), instances)
+    }
+  end
+
+  def ipcraft_project_state(package, project_instance)
+    state = project_instance.fetch('state', {})
+    unless state.is_a?(Hash)
+      raise GenerationError, 'ipcraft.noc.project.v1 project.instance.state must be an object'
+    end
+
+    {
+      'ipcore' => package,
+      'instance' => required_string(project_instance, 'id'),
+      'schema' => project_instance['schema'],
+      'state' => state
+    }
+  end
+
+  def normalize_ipcraft_instances(instances, package, instance_id)
+    instances.map do |instance|
+      {
+        'id' => instance.fetch('id'),
+        'ipcore' => package,
+        'instance' => instance_id,
+        'type' => instance.fetch('module'),
+        'parameters' => instance.fetch('parameters', {}),
+        'ports' => instance.fetch('interfaces', [])
+      }
+    end
+  end
+
+  def normalize_ipcraft_connections(connections, instances)
+    return [] unless connections
+    raise GenerationError, 'ipcraft.noc.project.v1 connections must be an array' unless connections.is_a?(Array)
+
+    interface_port_by_instance = ipcraft_interface_ports(instances)
+    connections.map do |connection|
+      refs = connection.fetch('interfaces', nil)
+      unless refs.is_a?(Array) && refs.size == 2
+        raise GenerationError,
+              "ipcraft.noc.project.v1 connection #{connection.fetch('id', '<unnamed>')} must have exactly two interfaces"
+      end
+
+      {
+        'id' => connection.fetch('id', '<unnamed>'),
+        'source' => ipcraft_connection_endpoint(refs[0], interface_port_by_instance, connection),
+        'target' => ipcraft_connection_endpoint(refs[1], interface_port_by_instance, connection)
+      }
+    end
+  end
+
+  def ipcraft_interface_ports(instances)
+    instances.to_h do |instance|
+      interfaces = instance.fetch('interfaces', [])
+      unless interfaces.is_a?(Array)
+        raise GenerationError,
+              "ipcraft.noc.project.v1 instance #{instance.fetch('id', '<unnamed>')} interfaces must be an array"
+      end
+
+      ports = interfaces.to_h do |interface|
+        id = interface.fetch('id', interface['port'])
+        port = interface.fetch('port', id)
+        [id, port]
+      end
+      [instance.fetch('id'), ports]
+    end
+  end
+
+  def ipcraft_connection_endpoint(ref, interface_port_by_instance, connection)
+    instance_id = ref.fetch('instance', nil)
+    interface_id = ref.fetch('interface', nil)
+    port = interface_port_by_instance.fetch(instance_id, {})[interface_id]
+    unless port
+      raise GenerationError,
+            "ipcraft.noc.project.v1 connection #{connection.fetch('id', '<unnamed>')} references unknown interface #{instance_id}.#{interface_id}"
+    end
+
+    { 'module' => instance_id, 'port' => port }
+  end
+
+  def project_name(data, project)
+    name = data.dig('graph', 'name') || project['name']
+    raise GenerationError, 'ipcraft.noc.project.v1 graph.name must be a string' unless name.is_a?(String) && !name.empty?
+
+    name
+  end
+
+  def required_hash(data, key)
+    value = data[key]
+    raise GenerationError, "ipcraft.noc.project.v1 #{key} must be an object" unless value.is_a?(Hash)
+
+    value
+  end
+
+  def required_array(data, key)
+    value = data[key]
+    raise GenerationError, "ipcraft.noc.project.v1 #{key} must be an array" unless value.is_a?(Array)
+
+    value
+  end
+
+  def required_string(data, key)
+    value = data[key]
+    raise GenerationError, "ipcraft.noc.project.v1 #{key} must be a string" unless value.is_a?(String) && !value.empty?
+
+    value
   end
 
   def global_parameters(graph)

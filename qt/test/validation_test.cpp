@@ -1,4 +1,5 @@
 // BasicValidator and plugin DRC integration tests.
+#include "app/appsettings.h"
 #include "graph/graph.h"
 #include "ipcraft/ipcraftbuiltinvalidator.h"
 #include "modules/moduleregistry.h"
@@ -16,6 +17,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QSettings>
 #include <QStringList>
 #include <QTemporaryDir>
 #include <iostream>
@@ -152,6 +154,16 @@ QString repositoryPath(const QString& relativePath) {
     }
 
     return QFileInfo(QDir(startPaths.first()).filePath(relativePath)).absoluteFilePath();
+}
+
+void configureDefaultPackageRootsForTest() {
+    static QTemporaryDir settingsRoot;
+    require(settingsRoot.isValid(), "temporary settings root should be valid");
+
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settingsRoot.path());
+    QCoreApplication::setOrganizationName(QStringLiteral("validation_test_org"));
+    QCoreApplication::setApplicationName(QStringLiteral("validation_test_app"));
+    AppSettings().setIpcorePaths(QStringList{repositoryPath(QStringLiteral("ipcores"))});
 }
 
 IpCatalogEntry ravenocCatalogEntry() {
@@ -1023,6 +1035,7 @@ void testDrcRunnerRejectsManualRaveTileNonMesh() {
 
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
+    configureDefaultPackageRootsForTest();
 
     try {
         testProjectValidationRunnerRejectsNullGraphWithoutCrashing();

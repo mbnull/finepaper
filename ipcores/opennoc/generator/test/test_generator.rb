@@ -63,6 +63,41 @@ class OpenNoCGeneratorTest < Minitest::Test
     end
   end
 
+  def test_generator_accepts_ipcraft_project_schema
+    Dir.mktmpdir do |dir|
+      graph = ipcraft_project_from_ipcore_graph(valid_graph)
+      assert_equal package_command_schema('generate'), graph.fetch('schema')
+      input = write_json(dir, 'ipcraft_project.json', graph)
+      vendor = File.join(dir, 'vendor/OpenNoC')
+      make_fake_vendor(vendor)
+      output = File.join(dir, 'out')
+
+      stdout, stderr, status = run_generator(input, output, vendor)
+
+      assert status.success?, stderr
+      assert_includes stdout, 'Generated OpenNoC mesh integration'
+      mesh = JSON.parse(File.read(File.join(output, 'opennoc_mesh.json')))
+      assert_equal({ 'X' => 0, 'Y' => 0, 'P0' => 'RNF', 'P1' => 'RNI' }, mesh.fetch('XP0_0'))
+      manifest = JSON.parse(File.read(File.join(output, 'manifest.json')))
+      assert_equal 'finepaper.opennoc', manifest.fetch('ipcore')
+      assert_equal 2, manifest.fetch('rows')
+      assert_equal 2, manifest.fetch('cols')
+    end
+  end
+
+  def test_drc_accepts_ipcraft_project_schema
+    Dir.mktmpdir do |dir|
+      graph = ipcraft_project_from_ipcore_graph(valid_graph)
+      assert_equal package_command_schema('validate'), graph.fetch('schema')
+      input = write_json(dir, 'ipcraft_project.json', graph)
+
+      stdout, stderr, status = run_drc(input)
+
+      assert status.success?, stderr
+      assert_includes stdout, 'OpenNoC DRC passed'
+    end
+  end
+
   def test_drc_rejects_unconnected_agent
     Dir.mktmpdir do |dir|
       graph = JSON.parse(File.read(File.expand_path('../examples/mesh_2x2.json', __dir__)))
@@ -230,6 +265,17 @@ class OpenNoCGeneratorTest < Minitest::Test
     end
   end
 
+  def test_drc_schema_error_mentions_current_schema
+    Dir.mktmpdir do |dir|
+      input = write_json(dir, 'bad_schema.json', { 'schema' => 'unexpected.schema.v1' })
+
+      _stdout, stderr, status = run_drc(input)
+
+      refute status.success?
+      assert_includes stderr, 'ipcraft.noc.project.v1'
+    end
+  end
+
   private
 
   def run_generator(input, output, vendor, chdir: nil)
@@ -250,6 +296,67 @@ class OpenNoCGeneratorTest < Minitest::Test
     path = File.join(dir, name)
     File.write(path, JSON.pretty_generate(data))
     path
+  end
+
+  def package_manifest
+    @package_manifest ||= JSON.parse(File.read(File.expand_path('../../ipcraft.json', __dir__)))
+  end
+
+  def package_id
+    package_manifest.fetch('id')
+  end
+
+  def package_command_schema(command)
+    package_manifest.fetch('commands').fetch(command).fetch('input_schema')
+  end
+
+  def ipcraft_project_from_ipcore_graph(graph)
+    legacy = JSON.parse(JSON.generate(graph))
+    state = legacy.fetch('ipcore_state', []).find { |record| record['ipcore'] == package_id } || {}
+    port_ids_by_module = Hash.new { |hash, key| hash[key] = [] }
+
+    legacy.fetch('connections', []).each do |connection|
+      %w[source target].each do |endpoint|
+        ref = connection.fetch(endpoint)
+        port_ids_by_module[ref.fetch('module')] << ref.fetch('port')
+      end
+    end
+
+    {
+      'schema' => package_command_schema('generate'),
+      'package' => package_id,
+      'graph' => { 'name' => legacy.fetch('name') },
+      'project' => {
+        'name' => legacy.fetch('name'),
+        'instance' => {
+          'id' => state.fetch('instance', legacy.fetch('instance', 'opennoc_0')),
+          'package' => package_id,
+          'schema' => state.fetch('schema', 'finepaper.opennoc-project-state-v1'),
+          'state' => state.fetch('state', {})
+        }
+      },
+      'instances' => legacy.fetch('modules', []).map do |mod|
+        {
+          'id' => mod.fetch('id'),
+          'module' => mod.fetch('type'),
+          'parameters' => mod.fetch('parameters', {}),
+          'interfaces' => port_ids_by_module[mod.fetch('id')].uniq.map do |port|
+            { 'id' => "if_#{port}", 'port' => port }
+          end
+        }
+      end,
+      'connections' => legacy.fetch('connections', []).map do |connection|
+        {
+          'id' => connection.fetch('id'),
+          'class' => 'router_link',
+          'status' => 'valid',
+          'interfaces' => %w[source target].map do |endpoint|
+            ref = connection.fetch(endpoint)
+            { 'instance' => ref.fetch('module'), 'interface' => "if_#{ref.fetch('port')}" }
+          end
+        }
+      end
+    }
   end
 
   def make_fake_vendor(root)

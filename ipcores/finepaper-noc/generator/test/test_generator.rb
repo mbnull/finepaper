@@ -15,6 +15,7 @@ require 'generator/rtl_generator'
 
 EXAMPLE = File.join(__dir__, '..', 'examples', 'simple_mesh.json')
 DRC_BIN = File.join(__dir__, '..', 'bin', 'drc')
+GEN_BIN = File.join(__dir__, '..', 'bin', 'generate')
 MESH_3X3 = File.join(__dir__, '..', 'examples', 'mesh_3x3.json')
 MULTI_EP = File.join(__dir__, '..', 'examples', 'multi_endpoint.json')
 STUB_TEMPLATES = Dir[File.join(__dir__, '..', 'template', 'stubs', '*.sv')].sort
@@ -121,6 +122,56 @@ def ipcore_module(id, type, parameters = {})
   }
 end
 
+def ipcraft_project_from_ipcore_graph(graph)
+  legacy = JSON.parse(JSON.generate(graph))
+  package = legacy.fetch('ipcore', 'finepaper.noc')
+  state = legacy.fetch('ipcore_state', []).find { |record| record['ipcore'] == package } || {}
+  port_ids_by_module = Hash.new { |hash, key| hash[key] = [] }
+
+  legacy.fetch('connections', []).each do |connection|
+    %w[source target].each do |endpoint|
+      ref = connection.fetch(endpoint)
+      port_ids_by_module[ref.fetch('module')] << ref.fetch('port')
+    end
+  end
+
+  {
+    'schema' => 'ipcraft.noc.project.v1',
+    'package' => package,
+    'graph' => { 'name' => legacy.fetch('name') },
+    'project' => {
+      'name' => legacy.fetch('name'),
+      'instance' => {
+        'id' => state.fetch('instance', legacy.fetch('instance', 'noc_0')),
+        'package' => package,
+        'schema' => state.fetch('schema', 'finepaper.noc-project-state-v1'),
+        'state' => state.fetch('state', {})
+      }
+    },
+    'instances' => legacy.fetch('modules', []).map do |mod|
+      {
+        'id' => mod.fetch('id'),
+        'module' => mod.fetch('type'),
+        'parameters' => mod.fetch('parameters', {}),
+        'interfaces' => port_ids_by_module[mod.fetch('id')].uniq.map do |port|
+          { 'id' => "if_#{port}", 'port' => port }
+        end
+      }
+    end,
+    'connections' => legacy.fetch('connections', []).map do |connection|
+      {
+        'id' => connection.fetch('id'),
+        'class' => 'router_link',
+        'status' => 'valid',
+        'interfaces' => %w[source target].map do |endpoint|
+          ref = connection.fetch(endpoint)
+          { 'instance' => ref.fetch('module'), 'interface' => "if_#{ref.fetch('port')}" }
+        end
+      }
+    end
+  }
+end
+
 class TestJsonParser < Minitest::Test
   def test_parses_noc
     noc = JsonParser.parse(EXAMPLE)
@@ -133,6 +184,22 @@ class TestJsonParser < Minitest::Test
   def test_parses_ipcore_graph
     f = Tempfile.new(['ipcore_graph', '.json'])
     f.write(JSON.generate(IPCORE_GRAPH))
+    f.close
+
+    noc = JsonParser.parse(f.path)
+
+    assert_equal 'ipcore_noc', noc.name
+    assert_equal 2, noc.xps.size
+    assert_equal 1, noc.connections.size
+    assert_equal 1, noc.endpoints.size
+    assert_equal ['ep_cpu0'], noc.xps.find { |xp| xp.id == 'xp_0_0' }.endpoints
+  ensure
+    f&.unlink
+  end
+
+  def test_parses_ipcraft_project_schema
+    f = Tempfile.new(['ipcraft_project', '.json'])
+    f.write(JSON.generate(ipcraft_project_from_ipcore_graph(IPCORE_GRAPH)))
     f.close
 
     noc = JsonParser.parse(f.path)
@@ -175,7 +242,7 @@ class TestJsonParser < Minitest::Test
     f.close
 
     error = assert_raises(RuntimeError) { JsonParser.parse(f.path) }
-    assert_match(/expected schema finepaper-ipcore-graph-v1/, error.message)
+    assert_match(/expected schema ipcraft\.noc\.project\.v1.*finepaper-ipcore-graph-v1/m, error.message)
   ensure
     f&.unlink
   end
@@ -186,7 +253,7 @@ class TestJsonParser < Minitest::Test
     f.close
 
     error = assert_raises(RuntimeError) { JsonParser.parse(f.path) }
-    assert_match(/expected schema finepaper-ipcore-graph-v1/, error.message)
+    assert_match(/expected schema ipcraft\.noc\.project\.v1.*finepaper-ipcore-graph-v1/m, error.message)
   ensure
     f&.unlink
   end
@@ -284,6 +351,39 @@ class TestDrcRunner < Minitest::Test
     assert_includes stdout, 'DRC passed for ipcore_noc'
   ensure
     f&.unlink
+  end
+
+  def test_drc_script_accepts_ipcraft_project_schema
+    f = Tempfile.new(['ipcraft_project', '.json'])
+    f.write(JSON.generate(ipcraft_project_from_ipcore_graph(IPCORE_GRAPH)))
+    f.close
+
+    stdout, stderr, status = Open3.capture3(RbConfig.ruby, DRC_BIN, '-i', f.path)
+
+    assert status.success?, stderr
+    assert_includes stdout, 'DRC passed for ipcore_noc'
+  ensure
+    f&.unlink
+  end
+
+  def test_generator_accepts_ipcraft_project_schema
+    f = Tempfile.new(['ipcraft_project', '.json'])
+    f.write(JSON.generate(ipcraft_project_from_ipcore_graph(IPCORE_GRAPH)))
+    f.close
+    out = Dir.mktmpdir
+
+    stdout, stderr, status = Open3.capture3(RbConfig.ruby,
+                                            GEN_BIN,
+                                            '-i', f.path,
+                                            '-o', out,
+                                            '-t', File.join(__dir__, '..', 'template'))
+
+    assert status.success?, stderr
+    assert_includes stdout, 'Generated'
+    assert File.exist?(File.join(out, 'ipcore_noc_top.v'))
+  ensure
+    f&.unlink
+    FileUtils.rm_rf(out)
   end
 end
 

@@ -297,35 +297,23 @@ add_qt_test_target("ipxactconnectionchecker_test", "test/ipxactconnectionchecker
     "inc/ipcraft/ipxactconnectionchecker.h"
 })
 
-target("projectipservice_test")
-    add_rules("qt.console")
-    set_kind("binary")
-    set_group("test")
-    set_default(false)
-    set_languages("c++23")
-
-    add_includedirs("inc")
-    add_files("test/projectipservice_test.cpp")
-    add_files("src/app/appsettings.cpp")
-    add_files("src/project/projectipservice.cpp")
-    add_files("src/project/projectstateservice.cpp")
-    add_files("src/ipcore/ipcatalogservice.cpp")
-    add_files("src/workspace/activeworkspacecontroller.cpp")
-    add_files("src/modules/moduleregistry.cpp")
-    add_files("src/modules/moduleprovider.cpp")
-    add_files("src/ipcore/ipcoreruntimeregistry.cpp")
-    add_files("src/graph/parameter.cpp")
-    add_files("src/graph/port.cpp")
-    add_files("inc/project/projectipservice.h")
-    add_files("inc/project/projectstateservice.h")
-    add_files("inc/ipcore/ipcatalogservice.h")
-    add_files("inc/workspace/activeworkspacecontroller.h")
-    add_files("inc/**/moduleregistry.h")
-    add_files("inc/**/ipcoreruntimedescriptor.h")
-    add_tests("default", {
-        trim_output = true,
-        pass_outputs = "projectipservice_test passed"
-    })
+add_qt_test_target("projectipservice_test", "test/projectipservice_test.cpp", {
+    "src/project/projectipservice.cpp",
+    "src/project/projectstateservice.cpp",
+    "src/ipcore/ipcatalogservice.cpp",
+    "src/workspace/activeworkspacecontroller.cpp",
+    "src/modules/moduleregistry.cpp",
+    "src/modules/moduleprovider.cpp",
+    "src/ipcore/ipcoreruntimeregistry.cpp",
+    "src/graph/parameter.cpp",
+    "src/graph/port.cpp",
+    "inc/project/projectipservice.h",
+    "inc/project/projectstateservice.h",
+    "inc/ipcore/ipcatalogservice.h",
+    "inc/workspace/activeworkspacecontroller.h",
+    "inc/**/moduleregistry.h",
+    "inc/**/ipcoreruntimedescriptor.h"
+})
 
 target("removeipinstancecommand_test")
     add_rules("qt.console")

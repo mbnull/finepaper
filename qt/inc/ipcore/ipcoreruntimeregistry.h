@@ -10,6 +10,7 @@ class IpCoreRuntimeRegistry {
 public:
     static IpCoreRuntimeRegistry& instance();
 
+    // Legacy descriptor discovery is retired; package loading uses Ipcraft manifests.
     static QList<IpCoreRuntimeDescriptor> discover(const QStringList& roots);
     static QStringList defaultRuntimeRoots();
 

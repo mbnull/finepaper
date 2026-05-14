@@ -1,9 +1,8 @@
 #include "commands/commandmanager.h"
 #include "commands/topologypresetcommand.h"
 #include "graph/graph.h"
-#include "ipcore/ipcoreruntimedescriptor.h"
-#include "ipcore/ipcoreruntimeregistry.h"
 #include "modules/moduleregistry.h"
+#include "modules/moduleprovider.h"
 #include "topology/topologypresetbuilder.h"
 
 #include <QDir>
@@ -43,7 +42,7 @@ bool boolParameter(const Module* module, const QString& name) {
     return *value;
 }
 
-QString repositoryRuntimePath(const QString& relativeRuntimePath) {
+QString repositoryPath(const QString& relativePath) {
     const QStringList startPaths = {
         QCoreApplication::applicationDirPath(),
         QDir::currentPath()
@@ -52,7 +51,7 @@ QString repositoryRuntimePath(const QString& relativeRuntimePath) {
     for (const QString& startPath : startPaths) {
         QDir dir(startPath);
         while (true) {
-            const QFileInfo info(dir.filePath(relativeRuntimePath));
+            const QFileInfo info(dir.filePath(relativePath));
             if (info.isDir()) {
                 return info.absoluteFilePath();
             }
@@ -62,7 +61,7 @@ QString repositoryRuntimePath(const QString& relativeRuntimePath) {
         }
     }
 
-    return QFileInfo(QDir(startPaths.first()).filePath(relativeRuntimePath)).absoluteFilePath();
+    return QFileInfo(QDir(startPaths.first()).filePath(relativePath)).absoluteFilePath();
 }
 
 QString stringParameter(const Module* module, const QString& name) {
@@ -445,14 +444,19 @@ void testRingPresetCreatesClosedLoop() {
 
 void testPresetRejectsConnectionsThatFailRuleService() {
     ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
-    require(registry.registerType(routerType(QStringLiteral("XP"), QStringLiteral("finepaper.noc"))),
+    const QString typeName = QStringLiteral("XPRuleReject");
+    const ModuleType type = routerType(typeName, QStringLiteral("finepaper.noc"));
+    require(registry.registerType(type),
             "router type should register");
+    require(ModuleRegistry::instance().registerType(type),
+            "global router type should register for connection rule metadata");
 
     Graph graph;
     TopologyPresetRequest request;
     request.ipcoreId = QStringLiteral("finepaper.noc");
     request.instanceId = QStringLiteral("noc_0");
     request.preset = meshPreset();
+    request.preset.routerModule = typeName;
     request.preset.ports.insert(QStringLiteral("west"), QStringLiteral("east"));
     request.parameters.insert(QStringLiteral("rows"), 1);
     request.parameters.insert(QStringLiteral("cols"), 2);
@@ -613,28 +617,55 @@ void testMeshPresetCanRepeatAcrossSameIpcoreInstances() {
 }
 
 void testRepositoryRaveNoCMeshPresetCreatesInternalTiles() {
-    const QString runtimeRoot = repositoryRuntimePath(QStringLiteral("generated/ipcores/finepaper.ravenoc"));
-    const QList<IpCoreRuntimeDescriptor> runtimes = IpCoreRuntimeRegistry::discover({runtimeRoot});
-    require(runtimes.size() == 1, "RaveNoC IP core should be discovered");
-    require(runtimes.first().runtimeRootPath == runtimeRoot,
-            "RaveNoC runtime root should be generated bundle directory");
-    require(runtimes.first().sourceRootPath == repositoryRuntimePath(QStringLiteral("ipcores/ravenoc")),
-            "RaveNoC source root should resolve to concrete IP source package");
-    require(!runtimes.first().topologyPresets.isEmpty(), "RaveNoC should expose topology presets");
+    const QVector<IpcraftPackageManifest> packages =
+        loadIpcraftPackageManifests({repositoryPath(QStringLiteral("ipcores"))});
+    const auto packageIt = std::find_if(packages.cbegin(),
+                                        packages.cend(),
+                                        [](const IpcraftPackageManifest& package) {
+                                            return package.id == QStringLiteral("finepaper.ravenoc");
+                                        });
+    require(packageIt != packages.cend(), "RaveNoC package should be discovered");
 
     ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
-    registry.loadIpCoreRuntimes(runtimes);
+    require(registry.loadIpcraftPackages({*packageIt}),
+            "RaveNoC package module types should load");
 
-    const auto meshIt = std::find_if(runtimes.first().topologyPresets.cbegin(),
-                                     runtimes.first().topologyPresets.cend(),
+    QVector<TopologyPresetDescriptor> presets;
+    for (const QJsonObject& topology : packageIt->topologies) {
+        TopologyPresetDescriptor preset;
+        preset.id = topology.value(QStringLiteral("id")).toString();
+        preset.label = topology.value(QStringLiteral("label")).toString();
+        preset.kind = topology.value(QStringLiteral("kind")).toString();
+        preset.routerModule = topology.value(QStringLiteral("module")).toString();
+        preset.idPattern = topology.value(QStringLiteral("id_pattern")).toString();
+        const QJsonObject ports = topology.value(QStringLiteral("ports")).toObject();
+        for (auto it = ports.constBegin(); it != ports.constEnd(); ++it) {
+            preset.ports.insert(it.key(), it.value().toString());
+        }
+        const QJsonObject parameters = topology.value(QStringLiteral("parameters")).toObject();
+        for (auto it = parameters.constBegin(); it != parameters.constEnd(); ++it) {
+            const QJsonObject parameterObject = it.value().toObject();
+            preset.parameters.insert(it.key(),
+                                     TopologyPresetParameterDescriptor{
+                                         parameterObject.value(QStringLiteral("label")).toString(),
+                                         parameterObject.value(QStringLiteral("default")).toInt(),
+                                         parameterObject.value(QStringLiteral("min")).toInt(),
+                                         parameterObject.value(QStringLiteral("max")).toInt()
+                                     });
+        }
+        presets.push_back(preset);
+    }
+
+    const auto meshIt = std::find_if(presets.cbegin(),
+                                     presets.cend(),
                                      [](const TopologyPresetDescriptor& preset) {
                                          return preset.id == QStringLiteral("mesh");
                                      });
-    require(meshIt != runtimes.first().topologyPresets.cend(), "RaveNoC mesh preset should exist");
+    require(meshIt != presets.cend(), "RaveNoC mesh preset should exist");
 
     Graph graph;
     TopologyPresetRequest request;
-    request.ipcoreId = runtimes.first().id;
+    request.ipcoreId = packageIt->id;
     request.instanceId = QStringLiteral("ravenoc_0");
     request.preset = *meshIt;
     request.parameters.insert(QStringLiteral("rows"), 2);

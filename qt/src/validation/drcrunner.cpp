@@ -79,8 +79,7 @@ QList<ValidationResult> DRCRunner::validate(
 
     QProcess proc;
     proc.setWorkingDirectory(generatorCommand.workingDirectory);
-    // Run from the IP-core source root to match generator-relative paths declared
-    // in ipcore-runtime.json.
+    // Run from the package source root to match package-relative command paths.
     proc.start(generatorCommand.command, generatorCommand.arguments);
 
     if (!proc.waitForStarted()) {

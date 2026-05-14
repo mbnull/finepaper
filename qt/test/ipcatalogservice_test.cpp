@@ -1,4 +1,5 @@
 // IP catalog service tests.
+#include "app/appsettings.h"
 #include "ipcore/ipcatalogservice.h"
 #include "ipcore/ipcorecommandrunner.h"
 #include "modules/moduleregistry.h"
@@ -6,7 +7,9 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QFileInfo>
+#include <QSettings>
 #include <QStringList>
+#include <QTemporaryDir>
 #include <algorithm>
 #include <iostream>
 #include <stdexcept>
@@ -47,10 +50,10 @@ IpCoreRuntimeDescriptor ravenocDescriptor() {
     descriptor.name = QStringLiteral("RaveNoC");
     descriptor.version = QStringLiteral("0.1");
     descriptor.kind = QStringLiteral("noc");
-    descriptor.runtimeRootPath = QStringLiteral("/tmp/generated/ipcores/finepaper.ravenoc");
+    descriptor.runtimeRootPath = QStringLiteral("/tmp/ipcores/ravenoc");
     descriptor.sourceRootPath = QStringLiteral("/tmp/ipcores/ravenoc");
-    descriptor.modulesPath = QStringLiteral("/tmp/generated/ipcores/finepaper.ravenoc/modules.xml");
-    descriptor.graphicsPath = QStringLiteral("/tmp/generated/ipcores/finepaper.ravenoc/graphics");
+    descriptor.modulesPath = QStringLiteral("/tmp/ipcores/ravenoc/module-bundle.xml");
+    descriptor.graphicsPath = QStringLiteral("/tmp/ipcores/ravenoc/views");
 
     IpCoreInstanceParameterDescriptor width;
     width.name = QStringLiteral("flit_data_width");
@@ -65,6 +68,16 @@ IpCoreRuntimeDescriptor ravenocDescriptor() {
     descriptor.topologyPresets.push_back(mesh);
 
     return descriptor;
+}
+
+void configureDefaultPackageRootsForTest() {
+    static QTemporaryDir settingsRoot;
+    require(settingsRoot.isValid(), "temporary settings root should be valid");
+
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settingsRoot.path());
+    QCoreApplication::setOrganizationName(QStringLiteral("ipcatalogservice_test_org"));
+    QCoreApplication::setApplicationName(QStringLiteral("ipcatalogservice_test_app"));
+    AppSettings().setIpcorePaths(QStringList{repositoryPath(QStringLiteral("ipcores"))});
 }
 
 void testCatalogEntryCopiesDiscoveredMetadata() {
@@ -131,12 +144,14 @@ void testCatalogEntriesAreSortedAndSelectableEntriesAreFiltered() {
             "selectable entry should be beta");
 }
 
-void testDefaultCatalogDiscoversRepositoryIpcraftPackages() {
+void testDefaultCatalogDiscoversConfiguredIpcraftPackages() {
+    configureDefaultPackageRootsForTest();
+
     const IpCatalogService service = IpCatalogService::fromRuntimeRegistries();
     const std::optional<IpCatalogEntry> entry =
         service.entry(QStringLiteral("finepaper.ravenoc"));
 
-    require(entry.has_value(), "default catalog should discover RaveNoC ipcraft package");
+    require(entry.has_value(), "default catalog should discover configured RaveNoC ipcraft package");
     require(entry->id == QStringLiteral("finepaper.ravenoc"),
             "catalog id should use package id");
     require(entry->runtimeRootPath == repositoryPath(QStringLiteral("ipcores/ravenoc")),
@@ -145,19 +160,22 @@ void testDefaultCatalogDiscoversRepositoryIpcraftPackages() {
             "catalog source root compatibility path should be the ipcraft package root");
     require(QFileInfo(QDir(entry->runtimeRootPath).filePath(QStringLiteral("ipcraft.json"))).isFile(),
             "catalog package root should contain ipcraft.json");
-    require(!entry->runtimeRootPath.contains(QStringLiteral("generated/ipcores")),
-            "default catalog discovery should not depend on generated ipcores");
+    const QString retiredBundleRoot = QStringLiteral("generated") + QLatin1Char('/') + QStringLiteral("ipcores");
+    require(!entry->runtimeRootPath.contains(retiredBundleRoot),
+            "default catalog discovery should not depend on retired bundle roots");
     require(entry->modulesPath.isEmpty(),
-            "ipcraft catalog entries should not expose generated modules.xml paths");
+            "ipcraft catalog entries should not expose legacy module bundle paths");
     require(entry->graphicsPath.isEmpty(),
             "ipcraft catalog entries should not expose generated graphics paths");
-    require(!entry->modulesPath.contains(QStringLiteral("generated/ipcores")),
-            "catalog module compatibility path should not point into generated ipcores");
-    require(!entry->graphicsPath.contains(QStringLiteral("generated/ipcores")),
-            "catalog graphics compatibility path should not point into generated ipcores");
+    require(!entry->modulesPath.contains(retiredBundleRoot),
+            "catalog module compatibility path should not point into retired bundle roots");
+    require(!entry->graphicsPath.contains(retiredBundleRoot),
+            "catalog graphics compatibility path should not point into retired bundle roots");
 }
 
 void testCatalogEntryExposesIpcraftManifestData() {
+    configureDefaultPackageRootsForTest();
+
     const IpCatalogService service = IpCatalogService::fromRuntimeRegistries();
     const std::optional<IpCatalogEntry> entry =
         service.entry(QStringLiteral("finepaper.ravenoc"));
@@ -232,6 +250,8 @@ void testCatalogEntryExposesIpcraftManifestData() {
 }
 
 void testDefaultPackageCommandsResolveWithIpcraftProjectSchema() {
+    configureDefaultPackageRootsForTest();
+
     const IpCatalogService service = IpCatalogService::fromRuntimeRegistries();
     const std::optional<IpCatalogEntry> entry =
         service.entry(QStringLiteral("finepaper.ravenoc"));
@@ -270,7 +290,7 @@ int main(int argc, char** argv) {
     try {
         testCatalogEntryCopiesDiscoveredMetadata();
         testCatalogEntriesAreSortedAndSelectableEntriesAreFiltered();
-        testDefaultCatalogDiscoversRepositoryIpcraftPackages();
+        testDefaultCatalogDiscoversConfiguredIpcraftPackages();
         testCatalogEntryExposesIpcraftManifestData();
         testDefaultPackageCommandsResolveWithIpcraftProjectSchema();
     } catch (const std::exception& error) {

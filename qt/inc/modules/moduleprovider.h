@@ -30,7 +30,7 @@ public:
     virtual void apply(QHash<QString, ModuleType>& types) = 0;
 };
 
-// XmlModuleTypeSource loads module core metadata from modules.xml.
+// XmlModuleTypeSource loads module core metadata from legacy XML bundles.
 class XmlModuleTypeSource : public ModuleTypeSource {
 public:
     explicit XmlModuleTypeSource(const QString& bundlePath);

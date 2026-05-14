@@ -1,4 +1,5 @@
 // Project document tests for .fpproj save/load behavior.
+#include "app/appsettings.h"
 #include "app/generationartifacts.h"
 #include "graph/connection.h"
 #include "graph/graph.h"
@@ -14,9 +15,12 @@
 
 #include <QCoreApplication>
 #include <QDir>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QSettings>
+#include <QStringList>
 #include <QTemporaryDir>
 #include <iostream>
 #include <memory>
@@ -36,6 +40,38 @@ void writeJsonFile(const QString& path, const QJsonObject& object) {
             "failed to write JSON fixture");
     file.write(QJsonDocument(object).toJson());
     file.close();
+}
+
+QString repositoryPath(const QString& relativePath) {
+    const QStringList startPaths = {
+        QDir::currentPath(),
+        QCoreApplication::applicationDirPath()
+    };
+
+    for (const QString& startPath : startPaths) {
+        QDir dir(startPath);
+        while (true) {
+            const QFileInfo info(dir.filePath(relativePath));
+            if (info.exists()) {
+                return info.absoluteFilePath();
+            }
+            if (!dir.cdUp()) {
+                break;
+            }
+        }
+    }
+
+    return QFileInfo(QDir(startPaths.first()).filePath(relativePath)).absoluteFilePath();
+}
+
+void configureDefaultPackageRootsForTest() {
+    static QTemporaryDir settingsRoot;
+    require(settingsRoot.isValid(), "temporary settings root should be valid");
+
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settingsRoot.path());
+    QCoreApplication::setOrganizationName(QStringLiteral("projectdocument_test_org"));
+    QCoreApplication::setApplicationName(QStringLiteral("projectdocument_test_app"));
+    AppSettings().setIpcorePaths(QStringList{repositoryPath(QStringLiteral("ipcores"))});
 }
 
 QJsonObject minimalProjectRoot() {
@@ -1756,6 +1792,8 @@ int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
 
     try {
+        configureDefaultPackageRootsForTest();
+
         testProjectWritesInterfaceConnectionsWithoutFromTo();
         testProjectReadsAmbiguousConnectionAlternatives();
         testProjectReaderRejectsMalformedInterfaceConnections();

@@ -1,4 +1,5 @@
 // IP catalog panel widget tests.
+#include "app/appsettings.h"
 #include "ipcore/ipcatalogservice.h"
 #include "graph/graph.h"
 #include "modules/moduleregistry.h"
@@ -10,7 +11,9 @@
 #include <QAction>
 #include <QApplication>
 #include <QComboBox>
+#include <QCoreApplication>
 #include <QDockWidget>
+#include <QDir>
 #include <QEventLoop>
 #include <QFileInfo>
 #include <QInputDialog>
@@ -22,6 +25,7 @@
 #include <QMetaObject>
 #include <QSettings>
 #include <QSignalBlocker>
+#include <QStringList>
 #include <QTemporaryDir>
 #include <QTimer>
 #include <QToolButton>
@@ -80,6 +84,28 @@ void processEventsFor(int milliseconds) {
     QEventLoop loop;
     QTimer::singleShot(milliseconds, &loop, &QEventLoop::quit);
     loop.exec();
+}
+
+QString repositoryPath(const QString& relativePath) {
+    const QStringList startPaths = {
+        QDir::currentPath(),
+        QCoreApplication::applicationDirPath()
+    };
+
+    for (const QString& startPath : startPaths) {
+        QDir dir(startPath);
+        while (true) {
+            const QFileInfo info(dir.filePath(relativePath));
+            if (info.exists()) {
+                return info.absoluteFilePath();
+            }
+            if (!dir.cdUp()) {
+                break;
+            }
+        }
+    }
+
+    return QFileInfo(QDir(startPaths.first()).filePath(relativePath)).absoluteFilePath();
 }
 
 QTreeWidgetItem* firstCatalogEntry(QTreeWidget* catalog) {
@@ -673,6 +699,7 @@ int main(int argc, char** argv) {
         return 1;
     }
     QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settingsDir.path());
+    AppSettings().setIpcorePaths(QStringList{repositoryPath(QStringLiteral("ipcores"))});
 
     try {
         testSearchFiltersCatalogEntries();

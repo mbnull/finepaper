@@ -2,7 +2,6 @@
 #include "modules/moduleprovider.h"
 #include "app/appsettings.h"
 #include "ipcraft/ipcraftregistry.h"
-#include <QCoreApplication>
 #include <QDebug>
 #include <QDir>
 #include <QFile>
@@ -68,24 +67,6 @@ void appendUniquePath(QStringList& paths, const QString& path) {
     const QString absolutePath = info.absoluteFilePath();
     if (!paths.contains(absolutePath)) {
         paths.append(absolutePath);
-    }
-}
-
-void appendLocalIpcraftRootsFrom(QStringList& roots, const QString& startPath) {
-    if (startPath.trimmed().isEmpty()) {
-        return;
-    }
-
-    QDir dir(startPath);
-    while (true) {
-        const QString ipcoresRoot = dir.filePath(QStringLiteral("ipcores"));
-        if (QFileInfo(ipcoresRoot).isDir()) {
-            appendUniquePath(roots, ipcoresRoot);
-        }
-
-        if (!dir.cdUp()) {
-            break;
-        }
     }
 }
 
@@ -947,17 +928,10 @@ void logIpcraftDiagnostics(const QVector<IpcraftDiagnostic>& diagnostics) {
 QStringList defaultIpcraftPackageRoots() {
     QStringList roots;
 
-    const QString envPath = qEnvironmentVariable("FINEPAPER_IPCORE_PATH");
-    for (const QString& path : envPath.split(QDir::listSeparator(), Qt::SkipEmptyParts)) {
-        appendUniquePath(roots, path);
-    }
-
     for (const QString& path : AppSettings().ipcorePaths()) {
         appendUniquePath(roots, path);
     }
 
-    appendLocalIpcraftRootsFrom(roots, QDir::currentPath());
-    appendLocalIpcraftRootsFrom(roots, QCoreApplication::applicationDirPath());
     return roots;
 }
 

@@ -1,6 +1,8 @@
 # Finepaper Spec Generator
 
-`spec_generator` turns editable IP core package metadata into the committed runtime metadata consumed by the current Qt editor and the IP core generator/DRC tools.
+`spec_generator` validates editable IP core package metadata and writes the
+package-local Ipcraft manifest consumed by the Qt editor and package
+generator/validation tools.
 
 Inputs:
 
@@ -9,15 +11,13 @@ Inputs:
 - `ipcores/<package>/generator/` for the source generator and DRC implementation executed by Qt.
 - `ipcores/<package>/vendor/` for vendored upstream RTL or support files when the package needs them.
 
-Outputs:
+Output:
 
-- `generated/ipcores/<ipcore-id>/ipcore-runtime.json`
-- `generated/ipcores/<ipcore-id>/modules.xml`
-- `generated/ipcores/<ipcore-id>/graphics/*.xml`
+- `ipcores/<package>/ipcraft.json`
 
-`ipcore-runtime.json` is the runtime manifest loaded by `IpCoreRuntimeRegistry` as an `IpCoreRuntimeDescriptor` and surfaced as an `IpCatalogEntry` by the Qt editor. It keeps `source_root`, generator, DRC, topology preset, and instance parameter metadata. Generator and DRC commands consume `ipcore_graph_v1` input, which the editor writes as `finepaper-ipcore-graph-v1` JSON through `IpCoreGraphExporter`. The editor discovers generated runtime roots from repository-local `generated/ipcores/<ipcore-id>/` directories and any extra roots listed in `FINEPAPER_IPCORE_PATH`.
-
-The `plugins/` directory name is reserved for future feature extensions and is not used for concrete IP core runtimes.
+`ipcraft.json` is the package manifest loaded by the Qt editor. It keeps package
+identity, module/interface metadata, connection classes, views, topology
+presets, and command descriptors next to the package source.
 
 Run from the repository root:
 
@@ -25,43 +25,30 @@ Run from the repository root:
 ruby spec_generator/bin/spec-gen
 ```
 
-The parser intentionally supports only `finepaper.ipcore.v1` source packages. Module names are spec-defined; NoC backend model generation is selected by semantic `graph_group` values such as `xps` and `endpoints`. Unknown fields are errors.
+The parser supports `ipcraft.package.v1` source packages. Module names are
+package-defined; NoC editor behavior is selected through `noc.v1` package
+metadata. Unknown fields are errors.
 
 Qt-visible connection points are interface anchors. Each interface should provide one editor-visible `port` whose `id` is the interface id, and each view may provide pixel coordinates in an `<anchors>` block.
 
-## Generated Runtime Artifacts
+## Package Manifest
 
-The editable packages under `ipcores/<package>/` are the source of truth. The generated runtime metadata under `generated/ipcores/<ipcore-id>/` is committed for simple local development and packaging:
-
-- `generated/ipcores/finepaper.noc/ipcore-runtime.json`
-- `generated/ipcores/finepaper.noc/modules.xml`
-- `generated/ipcores/finepaper.noc/graphics/*.xml`
-- `generated/ipcores/finepaper.ravenoc/ipcore-runtime.json`
-- `generated/ipcores/finepaper.ravenoc/modules.xml`
-- `generated/ipcores/finepaper.ravenoc/graphics/*.xml`
-- `generated/ipcores/finepaper.opennoc/ipcore-runtime.json`
-- `generated/ipcores/finepaper.opennoc/modules.xml`
-- `generated/ipcores/finepaper.opennoc/graphics/*.xml`
-
-Do not edit generated runtime artifacts by hand. Change the matching `ipcores/<package>/ipcore.yml`, `views/`, `generator/`, or `vendor/` content, then regenerate:
+The editable package source under `ipcores/<package>/` is the source of truth.
+Do not edit package manifests by hand. Change the matching
+`ipcores/<package>/ipcore.yml`, `views/`, `generator/`, or `vendor/` content,
+then validate or rebuild:
 
 ```bash
-ruby spec_generator/bin/spec-gen \
-  --ipcore ipcores/finepaper-noc/ipcore.yml \
-  --runtime-bundle generated/ipcores/finepaper.noc
+ruby spec_generator/bin/spec-gen check --ipcore ipcores/opennoc/ipcore.yml
 
-ruby spec_generator/bin/spec-gen \
-  --ipcore ipcores/ravenoc/ipcore.yml \
-  --runtime-bundle generated/ipcores/finepaper.ravenoc
-
-ruby spec_generator/bin/spec-gen \
-  --ipcore ipcores/opennoc/ipcore.yml \
-  --runtime-bundle generated/ipcores/finepaper.opennoc
+ruby spec_generator/bin/spec-gen build --ipcore ipcores/opennoc/ipcore.yml --package-root ipcores/opennoc
 ```
 
-OpenNoC generation keeps the upstream Python mesh generator under `ipcores/opennoc/vendor/OpenNoC` and wraps it from the Finepaper Ruby generator. The first OpenNoC runtime generator version supports mesh topology only.
+OpenNoC generation keeps the upstream Python mesh generator under
+`ipcores/opennoc/vendor/OpenNoC` and wraps it from the Finepaper Ruby generator.
+The first OpenNoC package generator version supports mesh topology only.
 
-Before committing generated runtime metadata, run:
+Before committing package manifest changes, run:
 
 ```bash
 ruby spec_generator/bin/spec-gen --check

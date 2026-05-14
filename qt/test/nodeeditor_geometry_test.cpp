@@ -83,6 +83,27 @@ ModuleType scopedEditorType(const QString& name, const QString& ipcoreId) {
     return type;
 }
 
+void registerScopedEditorGlobalTypes() {
+    static bool registered = false;
+    if (registered) {
+        return;
+    }
+
+    ModuleRegistry& registry = ModuleRegistry::instance();
+    if (registry.getType(QStringLiteral("RaveTile")) == nullptr) {
+        require(registry.registerType(scopedEditorType(QStringLiteral("RaveTile"),
+                                                       QStringLiteral("finepaper.ravenoc"))),
+                "RaveTile test type should register globally");
+    }
+    if (registry.getType(QStringLiteral("FabricSwitch")) == nullptr) {
+        require(registry.registerType(scopedEditorType(QStringLiteral("FabricSwitch"),
+                                                       QStringLiteral("finepaper.fabric"))),
+                "FabricSwitch test type should register globally");
+    }
+
+    registered = true;
+}
+
 ModuleInterfaceMetadata attachmentInterface(const QString& id,
                                             const QString& role,
                                             const QString& connectsTo) {
@@ -267,6 +288,7 @@ struct ScopedNodeEditorHarness {
           projectIpService(&stateService),
           workspaceController(&projectIpService, &catalog),
           editor(&graph, &stateService, &workspaceController, &commandManager) {
+        registerScopedEditorGlobalTypes();
         require(registry.registerType(scopedEditorType(QStringLiteral("RaveTile"),
                                                        QStringLiteral("finepaper.ravenoc"))),
                 "RaveTile test type should register");

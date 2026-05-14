@@ -1,4 +1,5 @@
 // Graph integration-style tests for topology and structural behavior.
+#include "app/appsettings.h"
 #include "commands/addconnectioncommand.h"
 #include "commands/commandmanager.h"
 #include "commands/removeconnectioncommand.h"
@@ -13,6 +14,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QSettings>
 #include <QString>
 #include <QStringList>
 #include <QTemporaryDir>
@@ -85,6 +87,16 @@ QString repositoryPath(const QString& relativePath) {
     }
 
     return QFileInfo(QDir(startPaths.first()).filePath(relativePath)).absoluteFilePath();
+}
+
+void configureDefaultPackageRootsForTest() {
+    static QTemporaryDir settingsRoot;
+    require(settingsRoot.isValid(), "temporary settings root should be valid");
+
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settingsRoot.path());
+    QCoreApplication::setOrganizationName(QStringLiteral("graph_test_org"));
+    QCoreApplication::setApplicationName(QStringLiteral("graph_test_app"));
+    AppSettings().setIpcorePaths(QStringList{repositoryPath(QStringLiteral("ipcores"))});
 }
 
 void testGraphConnectionValidationRejectsOnlyExactDuplicates() {
@@ -813,6 +825,7 @@ void testXmlBundleLoadsExtendedParameterMetadataWhenPresent() {
 
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
+    configureDefaultPackageRootsForTest();
 
     try {
         testGraphConnectionValidationRejectsOnlyExactDuplicates();

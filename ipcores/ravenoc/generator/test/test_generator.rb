@@ -113,6 +113,27 @@ class RaveNoCGeneratorTest < Minitest::Test
     end
   end
 
+  def test_generates_from_ipcraft_project_schema
+    Dir.mktmpdir do |dir|
+      graph = ipcraft_project_from_ipcore_graph(internal_graph_with_endpoint)
+      assert_equal package_command_schema('generate'), graph.fetch('schema')
+      input = write_json(dir, 'ipcraft_project.json', graph)
+      vendor = File.join(dir, 'vendor/ravenoc')
+      make_fake_vendor(vendor)
+      out = File.join(dir, 'out')
+
+      stdout, stderr, status = run_generator(input, out, vendor)
+
+      assert status.success?, stderr
+      assert_includes stdout, 'Generated RaveNoC integration'
+      manifest = JSON.parse(File.read(File.join(out, 'manifest.json')))
+      assert_equal 'internal_graph', manifest.fetch('module').fetch('type')
+      endpoint = manifest.fetch('module').fetch('endpoints').first
+      assert_equal 'host_0', endpoint.fetch('id')
+      assert_equal 'rave_00', endpoint.fetch('tile')
+    end
+  end
+
   def test_drc_validates_internal_graph_without_vendor_source
     Dir.mktmpdir do |_dir|
       input = File.expand_path('../examples/internal_mesh_2x2.json', __dir__)
@@ -127,6 +148,19 @@ class RaveNoCGeneratorTest < Minitest::Test
   def test_drc_accepts_manually_placed_tiles_with_default_mesh_coordinates
     Dir.mktmpdir do |dir|
       input = write_json(dir, 'manual_tiles.json', manually_placed_tile_graph(include_mesh_connections: true))
+
+      stdout, stderr, status = run_drc(input)
+
+      assert status.success?, stderr
+      assert_includes stdout, 'RaveNoC DRC passed'
+    end
+  end
+
+  def test_drc_accepts_ipcraft_project_schema
+    Dir.mktmpdir do |dir|
+      graph = ipcraft_project_from_ipcore_graph(internal_graph_with_endpoint)
+      assert_equal package_command_schema('validate'), graph.fetch('schema')
+      input = write_json(dir, 'ipcraft_project.json', graph)
 
       stdout, stderr, status = run_drc(input)
 
@@ -266,6 +300,17 @@ class RaveNoCGeneratorTest < Minitest::Test
     end
   end
 
+  def test_drc_schema_error_mentions_current_schema
+    Dir.mktmpdir do |dir|
+      input = write_json(dir, 'bad_schema.json', { 'schema' => 'unexpected.schema.v1' })
+
+      _stdout, stderr, status = run_drc(input)
+
+      refute status.success?
+      assert_includes stderr, 'ipcraft.noc.project.v1'
+    end
+  end
+
   private
 
   def run_generator(input, output, vendor)
@@ -292,6 +337,67 @@ class RaveNoCGeneratorTest < Minitest::Test
     FileUtils.mkdir_p(File.dirname(path))
     File.write(path, JSON.pretty_generate(data))
     path
+  end
+
+  def package_manifest
+    @package_manifest ||= JSON.parse(File.read(File.expand_path('../../ipcraft.json', __dir__)))
+  end
+
+  def package_id
+    package_manifest.fetch('id')
+  end
+
+  def package_command_schema(command)
+    package_manifest.fetch('commands').fetch(command).fetch('input_schema')
+  end
+
+  def ipcraft_project_from_ipcore_graph(graph)
+    legacy = JSON.parse(JSON.generate(graph))
+    state = legacy.fetch('ipcore_state', []).find { |record| record['ipcore'] == package_id } || {}
+    port_ids_by_module = Hash.new { |hash, key| hash[key] = [] }
+
+    legacy.fetch('connections', []).each do |connection|
+      %w[source target].each do |endpoint|
+        ref = connection.fetch(endpoint)
+        port_ids_by_module[ref.fetch('module')] << ref.fetch('port')
+      end
+    end
+
+    {
+      'schema' => package_command_schema('generate'),
+      'package' => package_id,
+      'graph' => { 'name' => legacy.fetch('name') },
+      'project' => {
+        'name' => legacy.fetch('name'),
+        'instance' => {
+          'id' => state.fetch('instance', 'ravenoc_0'),
+          'package' => package_id,
+          'schema' => state.fetch('schema', 'finepaper.ravenoc-project-state-v1'),
+          'state' => state.fetch('state', {})
+        }
+      },
+      'instances' => legacy.fetch('modules', []).map do |mod|
+        {
+          'id' => mod.fetch('id'),
+          'module' => mod.fetch('type'),
+          'parameters' => mod.fetch('parameters', {}),
+          'interfaces' => port_ids_by_module[mod.fetch('id')].uniq.map do |port|
+            { 'id' => "if_#{port}", 'port' => port }
+          end
+        }
+      end,
+      'connections' => legacy.fetch('connections', []).map do |connection|
+        {
+          'id' => connection.fetch('id'),
+          'class' => 'router_link',
+          'status' => 'valid',
+          'interfaces' => %w[source target].map do |endpoint|
+            ref = connection.fetch(endpoint)
+            { 'instance' => ref.fetch('module'), 'interface' => "if_#{ref.fetch('port')}" }
+          end
+        }
+      end
+    }
   end
 
   def valid_graph

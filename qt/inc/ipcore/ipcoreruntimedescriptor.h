@@ -71,5 +71,6 @@ struct IpCoreRuntimeDescriptor {
     IpCoreCommandDescriptor drc;
     QVector<TopologyPresetDescriptor> topologyPresets;
 
+    // Retained for compatibility with descriptor-backed tests and adapters.
     bool hasModules() const { return !modulesPath.isEmpty(); }
 };

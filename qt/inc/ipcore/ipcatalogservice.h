@@ -20,7 +20,7 @@ struct IpCatalogEntry {
     QString version;
     QString kind;
     IpcraftPackageManifest packageManifest;
-    // TODO(Task 12): Remove runtime-bundle compatibility fields below after all UI paths consume packageManifest.
+    // Compatibility fields mirror package metadata for descriptor-facing UI and runner paths.
     QString runtimeRootPath;
     QString sourceRootPath;
     QString modulesPath;

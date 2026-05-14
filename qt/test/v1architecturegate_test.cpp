@@ -4,8 +4,8 @@
 #include "graph/module.h"
 #include "ipcore/ipcatalogservice.h"
 #include "ipcore/ipcoregraphexporter.h"
-#include "ipcore/ipcoreruntimeregistry.h"
 #include "modules/moduleregistry.h"
+#include "modules/moduleprovider.h"
 #include "project/graphprojectserializer.h"
 #include "project/projectipservice.h"
 #include "project/projectreader.h"
@@ -17,6 +17,7 @@
 
 #include <QCoreApplication>
 #include <QDir>
+#include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonDocument>
@@ -60,11 +61,12 @@ QString repositoryPath(const QString& relativePath) {
     return QFileInfo(QDir(startPaths.first()).filePath(relativePath)).absoluteFilePath();
 }
 
-const IpCoreRuntimeDescriptor* findRuntime(const QList<IpCoreRuntimeDescriptor>& runtimes, const QString& id) {
-    const auto it = std::find_if(runtimes.cbegin(), runtimes.cend(), [&](const IpCoreRuntimeDescriptor& runtime) {
-        return runtime.id == id;
-    });
-    return it == runtimes.cend() ? nullptr : &(*it);
+QString repositoryRootPath() {
+    QDir root(QFileInfo(repositoryPath(QStringLiteral("qt/test/v1architecturegate_test.cpp")))
+                  .absoluteDir());
+    require(root.cdUp() && root.cdUp(),
+            "repository root should be reachable from architecture gate source");
+    return root.absolutePath();
 }
 
 const TopologyPresetDescriptor* findPreset(const QVector<TopologyPresetDescriptor>& presets,
@@ -84,6 +86,12 @@ QStringList presetIds(const QVector<TopologyPresetDescriptor>& presets) {
     return ids;
 }
 
+void writeFile(const QString& path, const QByteArray& content) {
+    QFile file(path);
+    require(file.open(QIODevice::WriteOnly | QIODevice::Truncate), "failed to open test file");
+    require(file.write(content) == content.size(), "failed to write test file");
+}
+
 QStringList legacyRuntimeVocabularyTokens() {
     return {
         QStringLiteral("Plugin") + QStringLiteral("Registry"),
@@ -96,6 +104,102 @@ QStringList legacyRuntimeVocabularyTokens() {
     };
 }
 
+QString generatedRuntimeRootToken() {
+    return QStringLiteral("generated") + QLatin1Char('/') + QStringLiteral("ipcores");
+}
+
+QString legacyRuntimeManifestToken() {
+    return QStringLiteral("ipcore-runtime") + QStringLiteral(".json");
+}
+
+QString legacyModuleBundleToken() {
+    return QStringLiteral("modules") + QStringLiteral(".xml");
+}
+
+QString legacyRuntimeEnvironmentToken() {
+    return QStringLiteral("FINEPAPER_") + QStringLiteral("IPCORE_PATH");
+}
+
+QStringList maintainedRuntimeScanPaths() {
+    return {
+        QStringLiteral("spec_generator/README.md"),
+        QStringLiteral("spec_generator/lib"),
+        QStringLiteral("spec_generator/bin"),
+        QStringLiteral("qt/inc/ipcore"),
+        QStringLiteral("qt/src/ipcore"),
+        QStringLiteral("qt/inc/modules"),
+        QStringLiteral("qt/src/modules/moduleprovider.cpp"),
+        QStringLiteral("qt/src/modules/moduleregistry.cpp"),
+        QStringLiteral("qt/doc"),
+        QStringLiteral("qt/test/ipcoreruntime_test.cpp"),
+        QStringLiteral("qt/test/ipcatalogservice_test.cpp"),
+        QStringLiteral("qt/test/topology_preset_test.cpp"),
+        QStringLiteral("qt/test/v1architecturegate_test.cpp")
+    };
+}
+
+QVector<QFileInfo> scanFilesForPath(const QString& relativePath) {
+    const QFileInfo info(repositoryPath(relativePath));
+    require(info.exists(),
+            QStringLiteral("maintained runtime scan path should exist: %1")
+                .arg(relativePath)
+                .toLocal8Bit()
+                .constData());
+
+    if (info.isFile()) {
+        return {info};
+    }
+
+    QVector<QFileInfo> files;
+    QDirIterator iterator(info.absoluteFilePath(), QDir::Files, QDirIterator::Subdirectories);
+    while (iterator.hasNext()) {
+        iterator.next();
+        files.push_back(iterator.fileInfo());
+    }
+    return files;
+}
+
+void testMaintainedRuntimeSurfaceDoesNotRequireGeneratedBundles() {
+    const QStringList forbiddenTokens{
+        generatedRuntimeRootToken(),
+        legacyRuntimeManifestToken(),
+        legacyModuleBundleToken(),
+        legacyRuntimeEnvironmentToken()
+    };
+
+    QStringList violations;
+    for (const QString& scanPath : maintainedRuntimeScanPaths()) {
+        for (const QFileInfo& fileInfo : scanFilesForPath(scanPath)) {
+            QFile file(fileInfo.absoluteFilePath());
+            require(file.open(QIODevice::ReadOnly),
+                    QStringLiteral("maintained runtime scan file should be readable: %1")
+                        .arg(fileInfo.absoluteFilePath())
+                        .toLocal8Bit()
+                        .constData());
+            const QString source = QString::fromUtf8(file.readAll());
+            for (const QString& token : forbiddenTokens) {
+                if (source.contains(token)) {
+                    violations.append(QStringLiteral("%1 contains %2")
+                                          .arg(fileInfo.absoluteFilePath(), token));
+                }
+            }
+        }
+    }
+
+    const QFileInfo generatedBundleInfo(QDir(repositoryRootPath()).filePath(generatedRuntimeRootToken()));
+    if (generatedBundleInfo.exists()) {
+        violations.append(QStringLiteral("%1 exists")
+                              .arg(generatedBundleInfo.absoluteFilePath()));
+    }
+
+    if (!violations.isEmpty()) {
+        throw std::runtime_error(QStringLiteral("generated runtime bundle dependency remains:\n%1")
+                                     .arg(violations.join(QStringLiteral("\n")))
+                                     .toLocal8Bit()
+                                     .constData());
+    }
+}
+
 bool sameIpInstanceRecord(const ProjectIpInstanceRecord& left,
                           const ProjectIpInstanceRecord& right) {
     return left.ipcoreId == right.ipcoreId &&
@@ -104,38 +208,10 @@ bool sameIpInstanceRecord(const ProjectIpInstanceRecord& left,
            left.state == right.state;
 }
 
-QString staleRuntimeManifestFileName() {
-    return QStringLiteral("plugin") + QLatin1Char('.') + QStringLiteral("json");
-}
-
 bool containsRtlArtifact(const QStringList& artifactPaths) {
     return std::any_of(artifactPaths.cbegin(), artifactPaths.cend(), [](const QString& path) {
         return path.endsWith(QStringLiteral(".sv")) || path.endsWith(QStringLiteral(".v"));
     });
-}
-
-void testRepositoryRuntimeArtifactsUseIpCoreManifest() {
-    const QString manifestFileName = QStringLiteral("ipcore-runtime.json");
-    const QString staleManifestFileName = staleRuntimeManifestFileName();
-    const QStringList ipcoreIds{
-        QStringLiteral("finepaper.noc"),
-        QStringLiteral("finepaper.ravenoc"),
-        QStringLiteral("finepaper.opennoc")
-    };
-
-    for (const QString& ipcoreId : ipcoreIds) {
-        const QDir runtimeDir(repositoryPath(QStringLiteral("generated/ipcores/") + ipcoreId));
-        require(QFileInfo::exists(runtimeDir.filePath(manifestFileName)),
-                QStringLiteral("runtime manifest should exist for %1")
-                    .arg(ipcoreId)
-                    .toLocal8Bit()
-                    .constData());
-        require(!QFileInfo::exists(runtimeDir.filePath(staleManifestFileName)),
-                QStringLiteral("stale runtime manifest should not exist for %1")
-                    .arg(ipcoreId)
-                    .toLocal8Bit()
-                    .constData());
-    }
 }
 
 void testRuntimeVocabularyHasNoQtPluginManifestPath() {
@@ -180,6 +256,61 @@ void testMainWindowDefaultPathDoesNotUseRuntimeSingleton() {
             "MainWindow default path should consume ipcraft catalog/package entries, not runtime singleton runtimes");
 }
 
+QString writeStubIpcraftCommand(const QString& directory) {
+    const QString path = QDir(directory).filePath(QStringLiteral("stub-ipcraft-command.rb"));
+    writeFile(path, QByteArrayLiteral(R"ruby(#!/usr/bin/env ruby
+require 'fileutils'
+require 'json'
+input = nil
+output = nil
+ARGV.each_with_index do |arg, index|
+  input = ARGV[index + 1] if arg == '-i'
+  output = ARGV[index + 1] if arg == '-o'
+end
+abort 'missing input' unless input
+document = JSON.parse(File.read(input))
+abort "expected schema ipcraft.noc.project.v1" unless document['schema'] == 'ipcraft.noc.project.v1'
+if output
+  FileUtils.mkdir_p(output)
+  File.write(File.join(output, 'stub.sv'), "module stub; endmodule\n")
+end
+puts 'stub command passed'
+)ruby"));
+    QFile::setPermissions(path,
+                          QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner |
+                              QFile::ReadGroup | QFile::ExeGroup |
+                              QFile::ReadOther | QFile::ExeOther);
+    return path;
+}
+
+void replaceCommandsWithStub(IpCatalogEntry& entry, const QString& commandPath) {
+    IpcraftCommandDescriptor command;
+    command.executablePath = commandPath;
+    command.resolvedExecutablePath = commandPath;
+    command.inputSchema = QStringLiteral("ipcraft.noc.project.v1");
+    command.args = {
+        QStringLiteral("-i"),
+        QStringLiteral("{input}"),
+        QStringLiteral("-o"),
+        QStringLiteral("{output}")
+    };
+    entry.packageManifest.commands.insert(QStringLiteral("validate"), command);
+    entry.packageManifest.commands.insert(QStringLiteral("generate"), command);
+    entry.drc.command = commandPath;
+    entry.drc.inputFormat = command.inputSchema;
+    entry.drc.args = command.args;
+    entry.generator = entry.drc;
+}
+
+void replaceEntry(QList<IpCatalogEntry>& entries, const IpCatalogEntry& replacement) {
+    for (IpCatalogEntry& entry : entries) {
+        if (entry.id == replacement.id) {
+            entry = replacement;
+            return;
+        }
+    }
+}
+
 std::unique_ptr<Module> makeManualModule(const ModuleType& type,
                                          const QString& moduleId,
                                          const QString& logicalId,
@@ -216,26 +347,30 @@ std::unique_ptr<Module> makeManualModule(const ModuleType& type,
 }
 
 void testRepositoryNoCMainlineFlow() {
-    const QList<IpCoreRuntimeDescriptor> runtimes =
-        IpCoreRuntimeRegistry::discover({repositoryPath(QStringLiteral("generated/ipcores"))});
-    const IpCoreRuntimeDescriptor* nocRuntime = findRuntime(runtimes, QStringLiteral("finepaper.noc"));
-    require(nocRuntime != nullptr, "Finepaper NoC IP core should be discovered");
+    const QVector<IpcraftPackageManifest> packages =
+        loadIpcraftPackageManifests({repositoryPath(QStringLiteral("ipcores"))});
 
     ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
-    require(registry.loadIpCoreRuntimes(runtimes), "repository IP modules should load");
-    ModuleRegistry::instance().loadIpCoreRuntimes(runtimes);
+    require(registry.loadIpcraftPackages(packages), "repository IP modules should load");
+    ModuleRegistry::instance().loadIpcraftPackages(packages);
 
-    IpCatalogService catalog(runtimes, &registry);
-    const std::optional<IpCatalogEntry> nocEntry = catalog.entry(QStringLiteral("finepaper.noc"));
+    IpCatalogService catalog(packages, &registry);
+    std::optional<IpCatalogEntry> nocEntry = catalog.entry(QStringLiteral("finepaper.noc"));
     require(nocEntry.has_value(), "catalog should expose Finepaper NoC");
     require(nocEntry->moduleTypes.contains(QStringLiteral("XP")),
             "active NoC module list should include XP");
     require(nocEntry->moduleTypes.contains(QStringLiteral("Endpoint")),
             "active NoC module list should include Endpoint");
-    require(nocEntry->generator.inputFormat == QStringLiteral("ipcore_graph_v1"),
-            "NoC generator should consume IP-core graph input");
-    require(nocEntry->drc.inputFormat == QStringLiteral("ipcore_graph_v1"),
-            "NoC DRC should consume IP-core graph input");
+    require(nocEntry->generator.inputFormat == QStringLiteral("ipcraft.noc.project.v1"),
+            "NoC generator should consume package project input");
+    require(nocEntry->drc.inputFormat == QStringLiteral("ipcraft.noc.project.v1"),
+            "NoC DRC should consume package project input");
+
+    QTemporaryDir commandDir;
+    require(commandDir.isValid(), "temporary command directory should be created");
+    replaceCommandsWithStub(*nocEntry, writeStubIpcraftCommand(commandDir.path()));
+    QList<IpCatalogEntry> catalogEntries = catalog.entries();
+    replaceEntry(catalogEntries, *nocEntry);
 
     ProjectStateService stateService;
     ProjectIpService projectIpService(&stateService);
@@ -327,12 +462,12 @@ void testRepositoryNoCMainlineFlow() {
         });
     require(exportResult.success, exportResult.error.toLocal8Bit().constData());
     require(exportResult.document.object().value(QStringLiteral("schema")).toString() ==
-                QStringLiteral("finepaper-ipcore-graph-v1"),
-            "generator input should use final IP-core schema");
+                QStringLiteral("ipcraft.noc.project.v1"),
+            "generator input should use package project schema");
 
     ProjectValidationRunner validationRunner;
     const QList<ValidationResult> validationResults =
-        validationRunner.validate(&restored, catalog.entries(), readResult.document.ipcoreState);
+        validationRunner.validate(&restored, catalogEntries, readResult.document.ipcoreState);
     for (const ValidationResult& result : validationResults) {
         require(result.severity() != ValidationSeverity::Error,
                 result.message().toLocal8Bit().constData());
@@ -343,7 +478,7 @@ void testRepositoryNoCMainlineFlow() {
     generationRequest.projectPath = projectPath;
     generationRequest.designName = QStringLiteral("v1_gate");
     generationRequest.outputRoot = QDir(tempDir.path()).filePath(QStringLiteral("project_generated"));
-    generationRequest.catalogEntries = catalog.entries();
+    generationRequest.catalogEntries = catalogEntries;
     generationRequest.instances = readResult.document.ipcoreState;
 
     const ProjectGenerationResult generationResult =
@@ -375,7 +510,7 @@ void testRepositoryNoCMainlineFlow() {
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
     try {
-        testRepositoryRuntimeArtifactsUseIpCoreManifest();
+        testMaintainedRuntimeSurfaceDoesNotRequireGeneratedBundles();
         testRuntimeVocabularyHasNoQtPluginManifestPath();
         testMainWindowDefaultPathDoesNotUseRuntimeSingleton();
         testRepositoryNoCMainlineFlow();
