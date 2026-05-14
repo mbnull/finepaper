@@ -337,7 +337,7 @@ TopologyPresetResult TopologyPresetBuilder::apply(Graph* graph,
     if (request.instanceId.trimmed().isEmpty()) {
         return failure(QStringLiteral("Active IP instance is required"));
     }
-    const ModuleType* routerType = registry.getType(request.preset.routerModule);
+    const ModuleType* routerType = registry.getType(request.ipcoreId, request.preset.routerModule);
     if (!routerType || routerType->ipcoreId != request.ipcoreId) {
         return failure(QStringLiteral("Router module %1 is not part of active IP %2")
                            .arg(request.preset.routerModule, request.ipcoreId));

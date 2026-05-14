@@ -33,6 +33,16 @@ ModuleType registerOwnedType(const QString& typeName, const QString& ipcoreId) {
     return type;
 }
 
+ModuleType registerPackageScopedType(const QString& packageId, const QString& moduleId) {
+    ModuleType type;
+    type.name = ModuleRegistry::scopedTypeName(packageId, moduleId);
+    type.packageId = packageId;
+    type.moduleId = moduleId;
+    type.ipcoreId = packageId;
+    ModuleRegistry::instance().registerType(type);
+    return type;
+}
+
 std::unique_ptr<Module> makeModule(const QString& id,
                                    const QString& type,
                                    const QString& ipcoreId,
@@ -214,6 +224,40 @@ void testExportsInterfaceConnections() {
             "ipcraft connection should export class alternatives");
 }
 
+void testExportsManifestModuleIdForPackageScopedModuleTypes() {
+    const QString packageId = QStringLiteral("org.example.ravenoc");
+    const ModuleType type = registerPackageScopedType(packageId, QStringLiteral("Tile"));
+    Graph graph;
+    auto tile = makeModule(QStringLiteral("runtime_tile"),
+                           type.name,
+                           packageId,
+                           QStringLiteral("noc_0"),
+                           {Port(QStringLiteral("noc"),
+                                 Port::Direction::InOut,
+                                 QStringLiteral("bus"),
+                                 QStringLiteral("NoC"))});
+    tile->setParameter(QStringLiteral("external_id"), QStringLiteral("tile_0"));
+    require(graph.addModule(std::move(tile)), "package-scoped module should add");
+
+    const IpCoreGraphExportResult result =
+        IpCoreGraphExporter::exportGraph(IpCoreGraphExportRequest{
+            &graph,
+            ipcraftCatalogEntry(packageId),
+            instanceRecord(packageId, QStringLiteral("noc_0")),
+            QStringLiteral("design"),
+            nullptr
+        });
+
+    require(result.success, result.error.toLocal8Bit().constData());
+    const QJsonObject instance =
+        result.document.object().value(QStringLiteral("instances")).toArray().first().toObject();
+    require(instance.value(QStringLiteral("module")).toString() == QStringLiteral("Tile"),
+            "ipcraft project export should use manifest module id, not Qt package-scoped type name");
+    const QString text = QString::fromUtf8(result.document.toJson(QJsonDocument::Compact));
+    require(!text.contains(type.name),
+            "ipcraft command input should not leak Qt package-scoped module type names");
+}
+
 void testExportsIpcoreSchemaStateAndModuleOwner() {
     registerOwnedType(QStringLiteral("RaveTile"), QStringLiteral("finepaper.ravenoc"));
     Graph graph;
@@ -376,6 +420,7 @@ int main(int argc, char** argv) {
     try {
         testExportsIpcraftNocProjectV1Schema();
         testExportsInterfaceConnections();
+        testExportsManifestModuleIdForPackageScopedModuleTypes();
         testExportsIpcoreSchemaStateAndModuleOwner();
         testExporterUsesArtifactIdsAndMapping();
         testExporterIgnoresModulesOutsideSelectedInstance();

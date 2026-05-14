@@ -488,6 +488,9 @@ void testGenerateExportsIpcraftSchemaForPackageCommand() {
             "ipcraft package generator should receive ipcraft NoC project schema");
     const QJsonObject manifest =
         readJsonObject(root.filePath(QStringLiteral("project/generated/alpha_0/generation-manifest.json")));
+    require(manifest.value(QStringLiteral("schema")).toString()
+                == QStringLiteral("ipcraft.generation.manifest.v1"),
+            "generation manifest should use the public ipcraft generation manifest schema");
     require(manifest.value(QStringLiteral("input")).toObject()
                 .value(QStringLiteral("schema")).toString() == QStringLiteral("ipcraft.noc.project.v1"),
             "generation manifest should record the exported ipcraft schema");

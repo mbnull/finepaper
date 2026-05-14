@@ -84,6 +84,8 @@ struct ModuleType {
     QString packageId;
     QString moduleId;
     QString graphRole;
+    QStringList attachHostModuleIds;
+    QString attachZoneId;
     QString viewFilePath;
     QString ipcoreId;
     QHash<QString, ModuleInterfaceMetadata> interfaceMetadata;
@@ -126,6 +128,7 @@ public:
     };
 
     static ModuleRegistry& instance();
+    static QString scopedTypeName(const QString& packageId, const QString& moduleId);
 
     explicit ModuleRegistry(LoadMode loadMode = LoadMode::Auto);
 
@@ -139,6 +142,8 @@ public:
     bool loadIpcraftPackages(const QVector<IpcraftPackageManifest>& packages);
     // Looks up type metadata by canonical type name.
     const ModuleType* getType(const QString& name) const;
+    // Looks up type metadata by package and manifest module ID.
+    const ModuleType* getType(const QString& packageId, const QString& moduleId) const;
     // Looks up the first type that belongs to a graph group (e.g., "xps", "endpoints").
     const ModuleType* getTypeForGraphGroup(const QString& graphGroup) const;
     // Looks up the first type in a graph group owned by one IP core.

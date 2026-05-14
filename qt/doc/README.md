@@ -8,8 +8,8 @@ This project is a Qt Widgets application for building and validating SoC/NoC top
 - Lets users drag active workspace modules onto a canvas, use canvas creation menus, and connect compatible ports.
 - Exposes module parameters in a property panel.
 - Saves editor state as a `.fpproj` project.
-- Exports `ipcraft.noc.project.v1` JSON and invokes the active IP core generator to produce Verilog.
-- Runs local validation plus active IP core-backed DRC checks and shows findings in the log panel.
+- Exports `ipcraft.noc.project.v1` JSON and invokes project IP instance generators to produce Verilog.
+- Runs local validation plus package-backed DRC checks for project IP instances and shows findings in the log panel.
 
 ## Repository layout
 
@@ -37,7 +37,7 @@ This project is a Qt Widgets application for building and validating SoC/NoC top
 - `LogPanel`: shows validation, generation, and runtime messages.
 - `IpCoreRuntimeRegistry`: compatibility-only descriptor registry retained for older descriptor-facing code paths.
 - `ModuleRegistry`: loads module definitions from package-local `ipcraft.json` manifests and applies package view XML files.
-- `IpCoreGraphExporter`: serializes the active IP core graph as the generator/DRC handoff format.
+- `IpCoreGraphExporter`: serializes one project IP instance as the generator/DRC handoff format.
 
 ## Build and run
 
@@ -75,7 +75,7 @@ xmake run ipcoreruntime_test
 
 ## IP Core Package Integration
 
-Generation and DRC validation are provided by the active IP core selected in the IP Catalog workspace. Package metadata is loaded once at startup; package installation, unloading, and refresh are not supported.
+Generation and DRC validation are provided by the project IP packages in the current project. The active IP Catalog workspace controls editing and palette scope, but Generate and Validate operate across all project IP instances after Qt built-in validation passes. Package metadata is loaded once at startup; package installation, unloading, and refresh are not supported.
 
 The package boundary is split intentionally:
 
@@ -143,7 +143,7 @@ Each command declaration must provide `input_schema`. Validate and Generate run 
 
 An IP-XACT XML file is optional. Package semantics are still required to map to IP-XACT connection concepts: modules map to components, interfaces to `busInterface`, project instances to component instances, and project connections to interconnections with active interfaces. When a package includes an IP-XACT root, Qt can run the strict IP-XACT connection sub-pass in addition to its built-in validation.
 
-`IpCoreGraphExporter` serializes only the active workspace's selected IP instance. Generation and external DRC fail with a user-visible message if a module or connection references a different IP core than the selected active workspace.
+`IpCoreGraphExporter` serializes one project IP instance at a time for package commands. Project-level generation and external DRC iterate every saved project IP instance after built-in package, project, graph, connection, and command checks pass; each package command receives the instance-local `ipcraft.noc.project.v1` JSON for the instance being generated or validated.
 
 New `.fpproj` IP-instance records use the public state schema `ipcraft.noc.instance-state.v1`. The project reader preserves loaded `ipcore_state[].schema` values so legacy or package-owned state records can still round-trip.
 
@@ -156,13 +156,13 @@ The `plugins/` directory name is reserved for optional Qt dynamic plugin binarie
 3. Drag module types from Workspace Modules, or use the canvas creation menu, to add modules for the active workspace.
 4. Connect output ports to input ports.
 5. Select a module or IP instance and edit parameters in the property panel.
-6. Run validation to collect built-in and active IP core DRC findings.
-7. Save a Finepaper project or generate Verilog into a chosen output directory.
+6. Run validation to collect built-in findings and DRC findings for all project IP instances.
+7. Save a Finepaper project or generate Verilog for all project IP instances into a chosen output directory.
 
 ## Generated and saved data
 
 - `saveGraph()` writes a `.fpproj` through `ProjectWriter`.
-- `generateVerilog()` writes `ipcraft.noc.project.v1` JSON through `IpCoreGraphExporter` and a `.fpproj` snapshot to the selected output directory, then runs the active IP core generator from `IpCatalogEntry::sourceRootPath`.
+- `generateVerilog()` runs built-in validation, writes one `ipcraft.noc.project.v1` JSON per project IP instance through `IpCoreGraphExporter`, writes a `.fpproj` snapshot to the output root, and runs each instance's IP core generator from its `IpCatalogEntry::sourceRootPath`.
 - Application logs are written to the platform-local app data directory as `finepaper.log`.
 
 ## IP Core Package Format

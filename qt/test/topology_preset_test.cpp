@@ -84,6 +84,10 @@ QString scopedPresetConnectionId(const QString& instanceId,
     return scopedPresetModuleId(instanceId, logicalSourceId) + QLatin1Char('_') + suffix;
 }
 
+QString scopedTypeName(const QString& packageId, const QString& moduleId) {
+    return packageId + QStringLiteral("::") + moduleId;
+}
+
 ModuleType routerType(const QString& name, const QString& ipcoreId) {
     ModuleType type;
     type.name = name;
@@ -414,6 +418,52 @@ void testMeshPresetUsesManifestConnectionClassesNotEastWestNames() {
     require(connection->interfaces().at(1).instanceId == rightId &&
                 connection->interfaces().at(1).interfaceId == QStringLiteral("link_in"),
             "generated link should store the mapped target interface id");
+}
+
+void testPackageScopedTopologyPresetUsesActivePackageRouter() {
+    ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
+    const IpcraftPackageManifest alpha =
+        manifestNamedMeshPackage(QStringLiteral("finepaper.alpha_router"), QStringLiteral("Router"));
+    const IpcraftPackageManifest beta =
+        manifestNamedMeshPackage(QStringLiteral("finepaper.beta_router"), QStringLiteral("Router"));
+    require(registry.loadIpcraftPackages({alpha, beta}),
+            "duplicate Router modules should load from separate packages");
+
+    const QString betaTypeName =
+        scopedTypeName(QStringLiteral("finepaper.beta_router"), QStringLiteral("Router"));
+    const ModuleType* betaRouter = registry.getType(betaTypeName);
+    require(betaRouter != nullptr,
+            "beta Router should be registered with a package-scoped type name");
+
+    TopologyPresetDescriptor preset;
+    preset.id = QStringLiteral("mesh");
+    preset.label = QStringLiteral("Mesh");
+    preset.kind = QStringLiteral("mesh");
+    preset.routerModule = QStringLiteral("Router");
+    preset.idPattern = QStringLiteral("tile_{row}_{col}");
+    preset.ports.insert(QStringLiteral("east"), QStringLiteral("link_out"));
+    preset.ports.insert(QStringLiteral("west"), QStringLiteral("link_in"));
+    preset.ports.insert(QStringLiteral("south"), QStringLiteral("down_out"));
+    preset.ports.insert(QStringLiteral("north"), QStringLiteral("up_in"));
+
+    Graph graph;
+    TopologyPresetRequest request;
+    request.ipcoreId = QStringLiteral("finepaper.beta_router");
+    request.instanceId = QStringLiteral("beta_0");
+    request.preset = preset;
+    request.parameters.insert(QStringLiteral("rows"), 1);
+    request.parameters.insert(QStringLiteral("cols"), 2);
+
+    const TopologyPresetResult result = TopologyPresetBuilder::apply(&graph, registry, request);
+
+    const QString leftId = scopedPresetModuleId(QStringLiteral("beta_0"), QStringLiteral("tile_0_0"));
+    require(result.success, result.error.toLocal8Bit().constData());
+    require(graph.getModule(leftId) != nullptr,
+            "package-scoped topology should create the active package router");
+    require(graph.getModule(leftId)->type() == betaTypeName,
+            "topology-created modules should store the package-scoped module type");
+    require(graph.getModule(leftId)->ipcoreId() == QStringLiteral("finepaper.beta_router"),
+            "topology-created modules should belong to the active package");
 }
 
 void testRingPresetCreatesClosedLoop() {
@@ -783,6 +833,7 @@ int main(int argc, char** argv) {
         testMeshPresetCreatesEditableGraph();
         testPackageBackedPresetConnectionsPreserveResolvedMetadata();
         testMeshPresetUsesManifestConnectionClassesNotEastWestNames();
+        testPackageScopedTopologyPresetUsesActivePackageRouter();
         testRingPresetCreatesClosedLoop();
         testPresetRejectsConnectionsThatFailRuleService();
         testPresetFailureRollsBackPartialGraph();

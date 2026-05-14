@@ -207,7 +207,38 @@ struct HostAttachmentAnchor {
     const ModuleAttachmentZone* zone = nullptr;
 };
 
+bool attachedModuleMatchesHost(const ModuleType* attachedType,
+                               const ModuleType* hostType) {
+    if (!attachedType || !hostType) {
+        return false;
+    }
+
+    const QStringList hostModuleIds = ModuleTypeMetadata::attachHostModuleIds(attachedType);
+    if (hostModuleIds.isEmpty()) {
+        return true;
+    }
+
+    const QString hostModuleId = ModuleTypeMetadata::moduleId(hostType);
+    const QString hostPackageId = ModuleTypeMetadata::packageId(hostType);
+    const QString scopedHostTypeName = ModuleRegistry::scopedTypeName(hostPackageId, hostModuleId);
+    return hostModuleIds.contains(hostModuleId) ||
+           hostModuleIds.contains(hostType->name) ||
+           hostModuleIds.contains(scopedHostTypeName);
+}
+
+const ModuleAttachmentZone* manifestAttachmentZoneForAttachedModule(const Module* hostModule,
+                                                                    const Module* attachedModule) {
+    const ModuleType* attachedType = ModuleTypeMetadata::type(attachedModule);
+    const ModuleType* hostType = ModuleTypeMetadata::type(hostModule);
+    const QString zoneId = ModuleTypeMetadata::attachZoneId(attachedType);
+    if (zoneId.isEmpty() || !attachedModuleMatchesHost(attachedType, hostType)) {
+        return nullptr;
+    }
+    return ModuleTypeMetadata::attachmentZone(hostModule, zoneId);
+}
+
 std::optional<HostAttachmentAnchor> hostAttachmentAnchor(const Module* module,
+                                                         const Module* attachedModule,
                                                          const Port* port,
                                                          const QPointF& portPosition,
                                                          const QSize& nodeSize) {
@@ -216,7 +247,12 @@ std::optional<HostAttachmentAnchor> hostAttachmentAnchor(const Module* module,
     }
 
     HostAttachmentAnchor anchor;
-    if (const ModuleAttachmentZone* zone = ModuleTypeMetadata::attachmentZone(module, *port)) {
+    const ModuleAttachmentZone* zone =
+        manifestAttachmentZoneForAttachedModule(module, attachedModule);
+    if (!zone) {
+        zone = ModuleTypeMetadata::attachmentZone(module, *port);
+    }
+    if (zone) {
         anchor.position = scaledViewPoint(module, nodeSize, zone->x, zone->y);
         if (zone->normalX.has_value() && zone->normalY.has_value()) {
             anchor.normal = QPointF(*zone->normalX, *zone->normalY);
@@ -1353,6 +1389,7 @@ void NodeEditorWidget::positionAttachedEndpoint(Connection* connection) {
     const Port* hostPort = findPort(hostModule, hostPortId);
     const std::optional<HostAttachmentAnchor> hostAnchor =
         hostAttachmentAnchor(hostModule,
+                             endpointModule,
                              hostPort,
                              hostPortPosition,
                              geometry.size(hostNodeIt.value()));

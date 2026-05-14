@@ -157,19 +157,20 @@ Local validation:
 
 External validation:
 
-- `DRCRunner` receives the active `IpCatalogEntry` and selected project IP instance
-- `IpCoreGraphExporter` writes active IP-instance project JSON to a temporary file
-- runs that package's declared DRC command from `IpCatalogEntry::sourceRootPath`
+- `ProjectValidationRunner` runs built-in package/project checks before external package commands
+- for each project IP instance without blocking built-in diagnostics, `DRCRunner` receives that instance's `IpCatalogEntry`
+- `IpCoreGraphExporter` writes instance-local project JSON to a temporary file
+- runs that instance package's declared DRC command from `IpCatalogEntry::sourceRootPath`
 - parses stderr into `ValidationResult` objects
 - maps external IDs back to internal graph IDs when possible
 
-The exported generator/DRC package command document uses schema `ipcraft.noc.project.v1`, includes the package id, graph name, selected project instance state, module instances, and interface connections, and rejects connections that cross the active IP instance.
+The exported generator/DRC package command document uses schema `ipcraft.noc.project.v1`, includes the package id, graph name, current project instance state, module instances, and interface connections for one project IP instance. Project-level validation and generation iterate all project IP instances after built-in validation, while each exported command document remains instance-local.
 
 Newly created `.fpproj` IP-instance records use `ipcraft.noc.instance-state.v1`; loaded `ipcore_state[].schema` values remain opaque project state and are preserved for compatibility.
 
 IP-XACT files are optional package inputs. Even without an IP-XACT XML file, package interfaces, modes, and connection classes must be mappable to IP-XACT connection semantics. When a package declares an IP-XACT root, the strict IP-XACT sub-pass checks connection compatibility in addition to the built-in editor checks.
 
-Generation uses the same active IP catalog entry and project instance. It writes `ipcraft.noc.project.v1` JSON plus a Finepaper `.fpproj` snapshot into the chosen output directory before invoking the package command from `IpCatalogEntry::sourceRootPath`.
+Generation uses `ProjectGenerationRunner` to run built-in validation once, then invoke each project IP instance's package generator. It writes one `ipcraft.noc.project.v1` JSON and generation manifest under that instance's output directory, plus a Finepaper `.fpproj` snapshot in the output root, before invoking each package command from its `IpCatalogEntry::sourceRootPath`.
 
 ## Data flow examples
 
@@ -197,9 +198,9 @@ Generation uses the same active IP catalog entry and project instance. It writes
 
 1. User triggers validation from the main window.
 2. `ValidationManager` runs `BasicValidator`.
-3. `ValidationManager` resolves the active workspace to an `IpCatalogEntry` and selected project IP instance.
-4. `ValidationManager` runs `DRCRunner`.
-5. `DRCRunner` uses `IpCoreGraphExporter` and the IP core's DRC command.
+3. `ValidationManager` passes all project IP instances and catalog entries to `ProjectValidationRunner`.
+4. `ProjectValidationRunner` runs built-in package/project validation and skips package DRC only for instances with blocking built-in diagnostics.
+5. `DRCRunner` uses `IpCoreGraphExporter` and each instance IP core's DRC command.
 6. Results are pushed to `LogPanel`.
 7. Selecting a log entry can highlight the related element in the editor.
 

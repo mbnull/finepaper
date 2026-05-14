@@ -23,7 +23,7 @@
 namespace {
 
 QString generationSchemaName() {
-    return QStringLiteral("finepaper-generation-manifest-v1");
+    return QStringLiteral("ipcraft.generation.manifest.v1");
 }
 
 QString defaultOutputRootForProject(const QString& projectPath) {

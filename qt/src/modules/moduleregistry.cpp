@@ -10,6 +10,18 @@ ModuleRegistry& ModuleRegistry::instance() {
     return registry;
 }
 
+QString ModuleRegistry::scopedTypeName(const QString& packageId, const QString& moduleId) {
+    const QString trimmedModuleId = moduleId.trimmed();
+    const QString trimmedPackageId = packageId.trimmed();
+    if (trimmedModuleId.isEmpty() || trimmedPackageId.isEmpty()) {
+        return trimmedModuleId;
+    }
+    if (trimmedModuleId.contains(QStringLiteral("::"))) {
+        return trimmedModuleId;
+    }
+    return trimmedPackageId + QStringLiteral("::") + trimmedModuleId;
+}
+
 // Load module definitions from startup-discovered Ipcraft packages.
 ModuleRegistry::ModuleRegistry(LoadMode loadMode) {
     if (loadMode == LoadMode::Empty) {
@@ -101,7 +113,53 @@ bool ModuleRegistry::loadIpcraftPackages(const QVector<IpcraftPackageManifest>& 
 
 const ModuleType* ModuleRegistry::getType(const QString& name) const {
     auto it = m_types.find(name);
-    return it != m_types.end() ? &it.value() : nullptr;
+    if (it != m_types.end()) {
+        return &it.value();
+    }
+
+    const ModuleType* match = nullptr;
+    for (auto candidate = m_types.cbegin(); candidate != m_types.cend(); ++candidate) {
+        if (candidate.value().moduleId != name) {
+            continue;
+        }
+        if (match != nullptr) {
+            return nullptr;
+        }
+        match = &candidate.value();
+    }
+    return match;
+}
+
+const ModuleType* ModuleRegistry::getType(const QString& packageId, const QString& moduleId) const {
+    if (moduleId.trimmed().isEmpty()) {
+        return nullptr;
+    }
+
+    const auto exactIt = m_types.find(moduleId);
+    if (exactIt != m_types.end()) {
+        const QString owner = exactIt.value().packageId.isEmpty()
+            ? exactIt.value().ipcoreId
+            : exactIt.value().packageId;
+        if (packageId.trimmed().isEmpty() || owner == packageId) {
+            return &exactIt.value();
+        }
+    }
+
+    const QString scopedName = scopedTypeName(packageId, moduleId);
+    const auto scopedIt = m_types.find(scopedName);
+    if (scopedIt != m_types.end()) {
+        return &scopedIt.value();
+    }
+
+    for (auto candidate = m_types.cbegin(); candidate != m_types.cend(); ++candidate) {
+        const ModuleType& type = candidate.value();
+        const QString owner = type.packageId.isEmpty() ? type.ipcoreId : type.packageId;
+        if (owner == packageId && (type.moduleId == moduleId || type.name == moduleId)) {
+            return &candidate.value();
+        }
+    }
+
+    return nullptr;
 }
 
 const ModuleType* ModuleRegistry::getTypeForGraphGroup(const QString& graphGroup) const {

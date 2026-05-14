@@ -405,6 +405,20 @@ QStringList prioritizedParameterNames(const QJsonObject& parameters) {
     return names;
 }
 
+QStringList stringListFromJsonArray(const QJsonArray& values) {
+    QStringList result;
+    for (const QJsonValue& value : values) {
+        if (!value.isString()) {
+            continue;
+        }
+        const QString text = value.toString().trimmed();
+        if (!text.isEmpty() && !result.contains(text)) {
+            result.append(text);
+        }
+    }
+    return result;
+}
+
 Parameter::Value ipcraftParameterValue(const QString& parameterType, const QJsonValue& value) {
     if (parameterType == QStringLiteral("int")) {
         return value.toInt();
@@ -481,12 +495,6 @@ QString externalIdPrefixFromIpcraft(const IpcraftModuleDescriptor& module) {
     if (!externalId.isEmpty()) {
         return externalId;
     }
-    if (module.id == QStringLiteral("XP")) {
-        return QStringLiteral("xp");
-    }
-    if (module.id == QStringLiteral("Endpoint")) {
-        return QStringLiteral("ep");
-    }
 
     QString fallback = module.id.toLower();
     fallback.replace(QLatin1Char('-'), QLatin1Char('_'));
@@ -499,19 +507,19 @@ QString displayPrefixFromIpcraft(const IpcraftModuleDescriptor& module) {
     if (!displayName.isEmpty()) {
         return displayName.section(QLatin1Char(' '), 0, 0);
     }
-    if (module.id == QStringLiteral("Endpoint")) {
-        return QStringLiteral("EP");
-    }
     return module.name.isEmpty() ? module.id : module.name;
 }
 
 ModuleType moduleTypeFromIpcraft(const IpcraftPackageManifest& manifest,
                                  const IpcraftModuleDescriptor& module) {
     ModuleType type;
-    type.name = module.id;
+    type.name = ModuleRegistry::scopedTypeName(manifest.id, module.id);
     type.packageId = manifest.id;
     type.moduleId = module.id;
     type.graphRole = module.graphRole;
+    type.attachHostModuleIds =
+        stringListFromJsonArray(module.attach.value(QStringLiteral("hosts")).toArray());
+    type.attachZoneId = module.attach.value(QStringLiteral("zone")).toString().trimmed();
     type.ipcoreId = manifest.id;
     type.paletteLabel = module.name.isEmpty() ? module.id : module.name;
     type.description = module.description;
@@ -780,6 +788,21 @@ void loadInterfacesFromXml(ModuleType& type, QXmlStreamReader& xml) {
             type.interfaceMetadata.insert(metadata.id, metadata);
         }
     }
+}
+
+QHash<QString, ModuleType>::iterator findTypeForManifestModule(QHash<QString, ModuleType>& types,
+                                                               const QString& moduleIdOrTypeName) {
+    auto typeIt = types.find(moduleIdOrTypeName);
+    if (typeIt != types.end()) {
+        return typeIt;
+    }
+
+    for (auto candidate = types.begin(); candidate != types.end(); ++candidate) {
+        if (candidate.value().moduleId == moduleIdOrTypeName) {
+            return candidate;
+        }
+    }
+    return types.end();
 }
 
 ParameterLoadResult loadParametersFromXml(ModuleType& type, QXmlStreamReader& xml) {
@@ -1078,7 +1101,7 @@ void IpcraftModuleViewOverlay::apply(QHash<QString, ModuleType>& types) {
             const QString moduleAttribute = attributeValue(xml.attributes(), u"module");
             const QString moduleTypeName =
                 moduleAttribute.isEmpty() ? view.moduleId : moduleAttribute;
-            auto typeIt = types.find(moduleTypeName);
+            auto typeIt = findTypeForManifestModule(types, moduleTypeName);
             if (typeIt == types.end()) {
                 xml.skipCurrentElement();
                 continue;

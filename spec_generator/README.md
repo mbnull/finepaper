@@ -39,7 +39,9 @@ The parser supports `ipcraft.package.v1` source packages. Module names are
 package-defined; NoC editor behavior is selected through `noc.v1` package
 metadata. Unknown fields are errors.
 
-Qt-visible connection points are interface anchors. Each interface should provide one editor-visible `port` whose `id` is the interface id, and each view may provide pixel coordinates in an `<anchors>` block.
+Qt-visible connection points are interface anchors. Package sources declare
+interfaces under `interfaces`, and view XML provides editor-visible coordinates
+with `<anchors>` entries whose `ref` values match interface ids.
 
 `extensions` are schema/specgen extension namespaces such as `noc.v1`. They add
 authoring rules, defaults, and semantic mappings. `plugin`, when present in a

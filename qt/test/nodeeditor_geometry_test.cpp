@@ -22,6 +22,7 @@
 #include <QDir>
 #include <QFile>
 #include <QGraphicsView>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QMimeData>
@@ -41,6 +42,10 @@ void require(bool condition, const char* message) {
 }
 
 constexpr auto ScopedModuleMime = "application/x-finepaper-module";
+
+QString scopedTypeName(const QString& packageId, const QString& moduleId) {
+    return packageId + QStringLiteral("::") + moduleId;
+}
 
 IpCoreRuntimeDescriptor nodeEditorRavenocDescriptor() {
     IpCoreRuntimeDescriptor descriptor;
@@ -643,6 +648,151 @@ AttachmentZoneViewTypes registerAttachmentZoneViewTypes() {
     const ModuleType* loadedAgentType = registry.getType(agentModuleId);
     require(loadedHostType != nullptr, "attachment-zone host module type should load");
     require(loadedAgentType != nullptr, "attachment-zone agent module type should load");
+    ModuleRegistry::instance().registerType(*loadedHostType);
+    ModuleRegistry::instance().registerType(*loadedAgentType);
+    return AttachmentZoneViewTypes{*loadedHostType, *loadedAgentType};
+}
+
+AttachmentZoneViewTypes registerManifestAttachZoneViewTypes() {
+    QTemporaryDir packageRoot;
+    require(packageRoot.isValid(), "failed to create temporary manifest attach-zone package");
+    require(QDir(packageRoot.path()).mkpath(QStringLiteral("views")),
+            "failed to create temporary manifest attach-zone view directory");
+
+    const QString packageId = QStringLiteral("finepaper.manifest_attachment_zone_view");
+    const QString hostModuleId = QStringLiteral("ManifestZoneHost");
+    const QString agentModuleId = QStringLiteral("ManifestZoneAgent");
+    const QString hostViewPath = packageRoot.filePath(QStringLiteral("views/ManifestZoneHost.xml"));
+    QFile hostViewFile(hostViewPath);
+    require(hostViewFile.open(QIODevice::WriteOnly | QIODevice::Text),
+            "failed to write temporary manifest attach-zone host view XML");
+    hostViewFile.write(QByteArrayLiteral(R"xml(<?xml version="1.0" encoding="UTF-8"?>
+<module-view schema="v1" module="ManifestZoneHost">
+  <graphics layout="manifest_zone_host_visual" node_color="#dde8f2" supports_collapse="true">
+    <expanded min_width="180" height="100" caption_left="16" caption_top="12" />
+    <collapsed min_width="132" height="74" caption_left="16" caption_top="12" />
+    <arrangement endpoint_offset_x="70" />
+  </graphics>
+  <anchors>
+    <anchor ref="socket" x="12" y="12" normal_x="-1" normal_y="0" label="Socket" label_x="24" label_y="24" />
+  </anchors>
+  <attachment-zones>
+    <zone id="agent_slot" x="160" y="64" normal_x="1" normal_y="0" label="Agent" mirror="false" />
+  </attachment-zones>
+</module-view>
+)xml"));
+    hostViewFile.close();
+
+    const QString agentViewPath = packageRoot.filePath(QStringLiteral("views/ManifestZoneAgent.xml"));
+    QFile agentViewFile(agentViewPath);
+    require(agentViewFile.open(QIODevice::WriteOnly | QIODevice::Text),
+            "failed to write temporary manifest attach-zone agent view XML");
+    agentViewFile.write(QByteArrayLiteral(R"xml(<?xml version="1.0" encoding="UTF-8"?>
+<module-view schema="v1" module="ManifestZoneAgent">
+  <graphics layout="manifest_zone_agent_visual" node_color="#ecf6dd">
+    <expanded min_width="96" height="60" caption_left="8" caption_top="6" />
+  </graphics>
+  <anchors>
+    <anchor ref="link" x="96" y="42" normal_x="1" normal_y="0" label="Link" label_x="68" label_y="48" />
+  </anchors>
+</module-view>
+)xml"));
+    agentViewFile.close();
+
+    IpcraftPackageManifest manifest;
+    manifest.id = packageId;
+    manifest.connectionClasses.push_back(IpcraftConnectionClass{
+        QStringLiteral("manifest_zone_link"),
+        QStringList{QStringLiteral("initiator"), QStringLiteral("target")},
+        false
+    });
+
+    const QJsonObject commonCoordinateParameters{
+        {QStringLiteral("x"), QJsonObject{
+            {QStringLiteral("type"), QStringLiteral("int")},
+            {QStringLiteral("default"), 0},
+            {QStringLiteral("configurable"), false}
+        }},
+        {QStringLiteral("y"), QJsonObject{
+            {QStringLiteral("type"), QStringLiteral("int")},
+            {QStringLiteral("default"), 0},
+            {QStringLiteral("configurable"), false}
+        }},
+        {QStringLiteral("display_name"), QJsonObject{
+            {QStringLiteral("type"), QStringLiteral("string")},
+            {QStringLiteral("default"), QStringLiteral("MZ")},
+            {QStringLiteral("configurable"), false}
+        }}
+    };
+
+    QJsonObject hostParameters = commonCoordinateParameters;
+    hostParameters.insert(QStringLiteral("collapsed"), QJsonObject{
+        {QStringLiteral("type"), QStringLiteral("bool")},
+        {QStringLiteral("default"), false},
+        {QStringLiteral("configurable"), false}
+    });
+
+    IpcraftModuleDescriptor hostModule;
+    hostModule.id = hostModuleId;
+    hostModule.name = QStringLiteral("Manifest Zone Host");
+    hostModule.graphRole = QStringLiteral("host");
+    hostModule.parameters = hostParameters;
+    hostModule.interfaces = {
+        IpcraftInterfaceDescriptor{
+            QStringLiteral("socket"),
+            QStringLiteral("Socket"),
+            {},
+            QVector<IpcraftInterfaceAcceptRule>{
+                IpcraftInterfaceAcceptRule{QStringLiteral("manifest_zone_link"), QStringLiteral("target")}
+            }
+        }
+    };
+
+    IpcraftModuleDescriptor agentModule;
+    agentModule.id = agentModuleId;
+    agentModule.name = QStringLiteral("Manifest Zone Agent");
+    agentModule.graphRole = QStringLiteral("attached");
+    agentModule.attach = QJsonObject{
+        {QStringLiteral("hosts"), QJsonArray{hostModuleId}},
+        {QStringLiteral("zone"), QStringLiteral("agent_slot")}
+    };
+    agentModule.parameters = commonCoordinateParameters;
+    agentModule.interfaces = {
+        IpcraftInterfaceDescriptor{
+            QStringLiteral("link"),
+            QStringLiteral("Link"),
+            {},
+            QVector<IpcraftInterfaceAcceptRule>{
+                IpcraftInterfaceAcceptRule{QStringLiteral("manifest_zone_link"), QStringLiteral("initiator")}
+            }
+        }
+    };
+
+    manifest.modules.push_back(hostModule);
+    manifest.modules.push_back(agentModule);
+    manifest.views.push_back(IpcraftViewDescriptor{
+        hostModuleId,
+        QStringLiteral("views/ManifestZoneHost.xml"),
+        hostViewPath
+    });
+    manifest.views.push_back(IpcraftViewDescriptor{
+        agentModuleId,
+        QStringLiteral("views/ManifestZoneAgent.xml"),
+        agentViewPath
+    });
+
+    ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
+    require(registry.loadIpcraftPackages({manifest}), "temporary manifest attach-zone package should load");
+    const ModuleType* loadedHostType = registry.getType(scopedTypeName(packageId, hostModuleId));
+    if (!loadedHostType) {
+        loadedHostType = registry.getType(hostModuleId);
+    }
+    const ModuleType* loadedAgentType = registry.getType(scopedTypeName(packageId, agentModuleId));
+    if (!loadedAgentType) {
+        loadedAgentType = registry.getType(agentModuleId);
+    }
+    require(loadedHostType != nullptr, "manifest attach-zone host module type should load");
+    require(loadedAgentType != nullptr, "manifest attach-zone agent module type should load");
     ModuleRegistry::instance().registerType(*loadedHostType);
     ModuleRegistry::instance().registerType(*loadedAgentType);
     return AttachmentZoneViewTypes{*loadedHostType, *loadedAgentType};
@@ -1339,6 +1489,62 @@ void testAttachmentZoneViewMetadataPlacesAttachedNodeWithoutMirroringWhenDisable
             "view XML attachment-zone anchor and mirror=false metadata should drive attached-node placement");
 }
 
+void testManifestAttachZonePlacesAttachedNodeWhenZoneDiffersFromHostInterface() {
+    const AttachmentZoneViewTypes types = registerManifestAttachZoneViewTypes();
+
+    Graph graph;
+    CommandManager commandManager;
+    ProjectStateService stateService;
+    ProjectIpService projectIpService(&stateService);
+    ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
+    require(registry.registerType(types.host), "manifest attach-zone host should register locally");
+    require(registry.registerType(types.agent), "manifest attach-zone agent should register locally");
+
+    IpCoreRuntimeDescriptor runtime = attachmentPresentationDescriptor();
+    runtime.id = types.host.ipcoreId;
+    runtime.name = QStringLiteral("Manifest Attachment Zone View");
+    IpCatalogService catalog(QList<IpCoreRuntimeDescriptor>{runtime}, &registry);
+    ActiveWorkspaceController workspaceController(&projectIpService, &catalog);
+    NodeEditorWidget editor(&graph, &stateService, &workspaceController, &commandManager);
+    editor.resize(420, 280);
+    editor.show();
+
+    const std::optional<IpCatalogEntry> entry = catalog.entry(runtime.id);
+    require(entry.has_value(), "manifest attach-zone runtime should be in catalog");
+    const ProjectIpServiceResult instance = projectIpService.createInstanceForIpcore(*entry);
+    require(instance.success, "manifest attach-zone IP instance should be selected");
+
+    require(graph.addModule(moduleFromType(types.host,
+                                           QStringLiteral("manifest_zone_host"),
+                                           instance.record.instanceId)),
+            "manifest attach-zone host should add");
+    require(graph.addModule(moduleFromType(types.agent,
+                                           QStringLiteral("manifest_zone_agent"),
+                                           instance.record.instanceId)),
+            "manifest attach-zone agent should add");
+    Module* host = graph.getModule(QStringLiteral("manifest_zone_host"));
+    Module* agent = graph.getModule(QStringLiteral("manifest_zone_agent"));
+    require(host != nullptr && agent != nullptr, "manifest attach-zone modules should exist");
+    host->setParameter(QStringLiteral("x"), 25);
+    host->setParameter(QStringLiteral("y"), 35);
+    host->setParameter(QStringLiteral("collapsed"), false);
+    agent->setParameter(QStringLiteral("x"), 400);
+    agent->setParameter(QStringLiteral("y"), 400);
+    QCoreApplication::processEvents();
+
+    graph.addConnection(std::make_unique<Connection>(
+        QStringLiteral("manifest_zone_agent_to_host"),
+        PortRef{QStringLiteral("manifest_zone_agent"), QStringLiteral("link")},
+        PortRef{QStringLiteral("manifest_zone_host"), QStringLiteral("socket")}));
+    QCoreApplication::processEvents();
+
+    const std::optional<QPointF> agentPosition =
+        visibleModulePosition(editor, QStringLiteral("manifest_zone_agent"));
+    require(agentPosition.has_value(), "manifest attach-zone agent should remain visible while host is expanded");
+    require(*agentPosition == QPointF(255.0, 57.0),
+            "manifest attach.zone should drive host-zone placement even when zone id differs from host interface id");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -1367,6 +1573,7 @@ int main(int argc, char** argv) {
         testCollapsedAttachedNodeMirrorsIntoHostZone();
         testVisualStyleAndEndpointLikeNamesDoNotImplyAttachmentBehavior();
         testAttachmentZoneViewMetadataPlacesAttachedNodeWithoutMirroringWhenDisabled();
+        testManifestAttachZonePlacesAttachedNodeWhenZoneDiffersFromHostInterface();
     } catch (const std::exception& error) {
         std::cerr << "nodeeditor_geometry_test failed: " << error.what() << '\n';
         return 1;

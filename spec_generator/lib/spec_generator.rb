@@ -49,6 +49,8 @@ module SpecGenerator
   IPCRAFT_EXTENSION_MODE_IPXACT_KEYS = %w[mode].freeze
   IPCRAFT_INTERFACE_IPXACT_KEYS = %w[bus_interface mode modes].freeze
   IPCRAFT_INTERFACE_IPXACT_MODE_KEYS = %w[mode].freeze
+  IPCRAFT_TOPOLOGY_KEYS = %w[id label kind module id_pattern ports parameters].freeze
+  IPCRAFT_TOPOLOGY_PARAMETER_KEYS = %w[label default min max].freeze
   IPXACT_NATIVE_MODES = %w[
     initiator target system mirroredInitiator mirroredTarget mirroredSystem monitor
   ].freeze
@@ -278,15 +280,9 @@ module SpecGenerator
 
     def parse
       data = load_yaml
-      case data['schema']
-      when 'ipcraft.package.v1'
-        IpcraftPackageNormalizer.new(data, package_root: @package_root).manifest
-      when 'finepaper.ipcore.v1'
-        parsed = IpCoreParser.new(@ipcore_path, File.join(@package_root, 'views')).parse
-        LegacyIpcraftManifestAdapter.new(parsed, package_root: @package_root).manifest
-      else
-        raise SpecError, 'schema must be ipcraft.package.v1'
-      end
+      raise SpecError, 'schema must be ipcraft.package.v1' unless data['schema'] == 'ipcraft.package.v1'
+
+      IpcraftPackageNormalizer.new(data, package_root: @package_root).manifest
     end
 
     private
@@ -614,13 +610,65 @@ module SpecGenerator
       raise SpecError, 'topologies must be a list' unless topologies.is_a?(Array)
 
       seen_ids = {}
-      topologies.each do |topology|
+      topologies.map do |topology|
         raise SpecError, 'topology must be a map' unless topology.is_a?(Hash)
 
         topology_id = required_string(topology, 'id', 'topology id')
         remember_unique!(seen_ids, topology_id, 'topology id')
+        validate_keys!(topology, IPCRAFT_TOPOLOGY_KEYS, "topology #{topology_id}")
+        kind = required_string(topology, 'kind', "topology #{topology_id}.kind")
+        module_id = required_string(topology, 'module', "topology #{topology_id}.module")
+        interfaces = @module_interfaces[module_id]
+        raise SpecError, "topology #{topology_id} references unknown module #{module_id}" unless interfaces
+
+        compact_hash(
+          'id' => topology_id,
+          'label' => optional_string(topology, 'label', "topology #{topology_id}.label"),
+          'kind' => kind,
+          'module' => module_id,
+          'id_pattern' => optional_string(topology, 'id_pattern', "topology #{topology_id}.id_pattern"),
+          'ports' => topology.key?('ports') ? normalize_topology_ports(topology_id, module_id, interfaces, topology['ports']) : nil,
+          'parameters' => topology.key?('parameters') ? normalize_topology_parameters(topology_id, topology['parameters']) : nil
+        )
       end
-      deep_copy(topologies)
+    end
+
+    def normalize_topology_ports(topology_id, module_id, interfaces, ports)
+      raise SpecError, "topology #{topology_id} ports must be a map" unless ports.is_a?(Hash)
+
+      ports.to_h do |name, interface_id|
+        raise SpecError, "topology #{topology_id} ports keys must be strings" unless name.is_a?(String)
+        raise SpecError, "topology #{topology_id} port #{name} must be a string" unless interface_id.is_a?(String)
+        unless interfaces.include?(interface_id)
+          raise SpecError, "topology #{topology_id} port #{name} references unknown #{module_id} interface #{interface_id}"
+        end
+
+        [name, interface_id]
+      end
+    end
+
+    def normalize_topology_parameters(topology_id, parameters)
+      raise SpecError, "topology #{topology_id} parameters must be a map" unless parameters.is_a?(Hash)
+
+      parameters.to_h do |name, parameter|
+        raise SpecError, "topology #{topology_id} parameters keys must be strings" unless name.is_a?(String)
+        raise SpecError, "topology #{topology_id} parameter #{name} must be a map" unless parameter.is_a?(Hash)
+
+        validate_keys!(parameter, IPCRAFT_TOPOLOGY_PARAMETER_KEYS, "topology #{topology_id} parameter #{name}")
+        context = "topology #{topology_id} parameter #{name}"
+        default = required_integer(parameter, 'default', "#{context} default")
+        min = required_integer(parameter, 'min', "#{context} min")
+        max = required_integer(parameter, 'max', "#{context} max")
+        raise SpecError, "#{context} min cannot exceed max" if min > max
+        raise SpecError, "#{context} default must be between min and max" if default < min || default > max
+
+        [name, {
+          'label' => required_string(parameter, 'label', "#{context} label"),
+          'default' => default,
+          'min' => min,
+          'max' => max
+        }]
+      end
     end
 
     def normalize_commands
@@ -774,6 +822,13 @@ module SpecGenerator
       raise SpecError, "#{context} must be a bool"
     end
 
+    def required_integer(hash, key, context)
+      raise SpecError, "#{context} is required" unless hash.key?(key)
+      raise SpecError, "#{context} must be an integer" unless hash[key].is_a?(Integer)
+
+      hash[key]
+    end
+
     def required_string_list(hash, key, context)
       raise SpecError, "#{context} is required" unless hash.key?(key)
       raise SpecError, "#{context} must be a list" unless hash[key].is_a?(Array)
@@ -797,99 +852,6 @@ module SpecGenerator
         value.map { |child| deep_copy(child) }
       else
         value
-      end
-    end
-  end
-
-  class LegacyIpcraftManifestAdapter
-    def initialize(parsed, package_root:)
-      @spec = parsed.data
-      @views = parsed.views
-      @package_root = package_root
-    end
-
-    def manifest
-      {
-        'schema' => 'ipcraft.manifest.v1',
-        'id' => @spec.fetch('id'),
-        'name' => @spec.fetch('name'),
-        'version' => @spec.fetch('version'),
-        'extensions' => {},
-        'parameters' => @spec.fetch('instance_parameters', {}),
-        'connection_classes' => connection_classes,
-        'modules' => modules,
-        'views' => views,
-        'topologies' => @spec.fetch('topology_presets', []),
-        'commands' => commands
-      }
-    end
-
-    private
-
-    def connection_classes
-      @spec.fetch('buses', {}).map do |bus_name, bus|
-        roles = bus.fetch('compatibility').fetch('roles').keys
-        {
-          'id' => bus_name,
-          'roles' => roles,
-          'symmetric' => roles.size == 1
-        }
-      end
-    end
-
-    def modules
-      @spec.fetch('modules').map do |module_id, mod|
-        {
-          'id' => module_id,
-          'name' => mod.fetch('palette_label'),
-          'description' => mod.fetch('description'),
-          'graph_role' => graph_role(mod.fetch('graph_group')),
-          'parameters' => mod.fetch('parameters'),
-          'interfaces' => interfaces(mod.fetch('interfaces'))
-        }
-      end
-    end
-
-    def interfaces(interfaces)
-      interfaces.map do |interface_id, interface|
-        {
-          'id' => interface_id,
-          'label' => interface['label'],
-          'modes' => [interface.fetch('role')],
-          'accepts' => [{ 'class' => interface.fetch('bus'), 'role' => interface.fetch('role') }],
-          'multi_connection' => interface['cardinality'] == 'many',
-          'ipxact' => { 'bus_interface' => interface_id }
-        }
-      end
-    end
-
-    def views
-      @views.keys.map do |module_id|
-        { 'module' => module_id, 'file' => "views/#{module_id}.xml" }
-      end
-    end
-
-    def commands
-      runtime = @spec.fetch('runtime')
-      {
-        'validate' => legacy_command(runtime.fetch('drc')),
-        'generate' => legacy_command(runtime.fetch('generator'))
-      }
-    end
-
-    def legacy_command(command)
-      executable = command.fetch('args').first || command.fetch('command')
-      {
-        'executable' => executable,
-        'input_schema' => 'ipcraft.noc.project.v1'
-      }
-    end
-
-    def graph_role(group)
-      case group
-      when 'xps' then 'host'
-      when 'endpoints' then 'attached'
-      else group
       end
     end
   end

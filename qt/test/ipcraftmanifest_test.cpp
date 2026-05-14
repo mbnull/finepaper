@@ -41,6 +41,15 @@ QString createView(QDir& packageRoot,
     return relativePath;
 }
 
+QString createViewXml(QDir& packageRoot,
+                      const QString& module,
+                      const QByteArray& xml) {
+    require(packageRoot.mkpath(QStringLiteral("views")), "failed to create views directory");
+    const QString relativePath = QStringLiteral("views/") + module + QStringLiteral(".xml");
+    writeFile(packageRoot.filePath(relativePath), xml);
+    return relativePath;
+}
+
 QByteArray minimalManifest(
     const QString& viewPath = QStringLiteral("views/Module.xml"),
     const QString& packageId = QStringLiteral("org.example.demo"),
@@ -580,6 +589,75 @@ void testRejectsPartialPackageRegistration() {
     require(!registry.diagnostics().isEmpty(), "registry should expose diagnostics for failed package");
 }
 
+void testRejectsRegistryPackageWithInvalidViewInterfaceReferenceAttributes() {
+    const QVector<QString> attributeNames{
+        QStringLiteral("ref"),
+        QStringLiteral("interface"),
+        QStringLiteral("interface_id"),
+        QStringLiteral("interface_ref")
+    };
+
+    for (const QString& attributeName : attributeNames) {
+        QTemporaryDir temp;
+        require(temp.isValid(), "temporary directory should be valid");
+
+        QDir root(temp.path());
+        createViewXml(
+            root,
+            QStringLiteral("Module"),
+            QStringLiteral(R"xml(<module-view schema="v1" module="Module">
+  <decorations><marker %1="missing_interface" /></decorations>
+</module-view>)xml").arg(attributeName).toUtf8());
+        writeFile(root.filePath(QStringLiteral("ipcraft.json")), minimalManifest());
+
+        IpcraftRegistry registry;
+        const bool loaded = registry.loadPackageRoots({temp.path()});
+
+        require(!loaded,
+                "package with invalid view XML interface reference attribute should fail registry load");
+        require(registry.packages().isEmpty(),
+                "failed interface-reference package should not be partially registered");
+        require(diagnosticsContain(registry.diagnostics(), attributeName),
+                "registry diagnostic should identify the invalid interface reference attribute");
+        require(diagnosticsContain(registry.diagnostics(), QStringLiteral("missing_interface")),
+                "registry diagnostic should identify the missing referenced interface");
+    }
+}
+
+void testRejectsRegistryPackageWithInvalidViewAttachmentZoneReferences() {
+    const QVector<QString> attributeNames{
+        QStringLiteral("zone"),
+        QStringLiteral("attach_zone"),
+        QStringLiteral("attachment_zone")
+    };
+
+    for (const QString& attributeName : attributeNames) {
+        QTemporaryDir temp;
+        require(temp.isValid(), "temporary directory should be valid");
+
+        QDir root(temp.path());
+        createViewXml(
+            root,
+            QStringLiteral("Module"),
+            QStringLiteral(R"xml(<module-view schema="v1" module="Module">
+  <attachment-zones><attachment-zone %1="missing_zone" x="0" y="0" /></attachment-zones>
+</module-view>)xml").arg(attributeName).toUtf8());
+        writeFile(root.filePath(QStringLiteral("ipcraft.json")), minimalManifest());
+
+        IpcraftRegistry registry;
+        const bool loaded = registry.loadPackageRoots({temp.path()});
+
+        require(!loaded,
+                "package with invalid view XML attachment zone reference should fail registry load");
+        require(registry.packages().isEmpty(),
+                "failed attachment-zone package should not be partially registered");
+        require(diagnosticsContain(registry.diagnostics(), attributeName),
+                "registry diagnostic should identify the invalid attachment zone attribute");
+        require(diagnosticsContain(registry.diagnostics(), QStringLiteral("missing_zone")),
+                "registry diagnostic should identify the missing referenced attachment zone");
+    }
+}
+
 void testRejectsBatchPackageRegistrationOnAnyFailure() {
     QTemporaryDir temp;
     require(temp.isValid(), "temporary directory should be valid");
@@ -686,6 +764,8 @@ int main(int argc, char** argv) {
         testRejectsAbsoluteCommandExecutable();
         testRejectsTraversingCommandExecutable();
         testRejectsPartialPackageRegistration();
+        testRejectsRegistryPackageWithInvalidViewInterfaceReferenceAttributes();
+        testRejectsRegistryPackageWithInvalidViewAttachmentZoneReferences();
         testRejectsBatchPackageRegistrationOnAnyFailure();
         testPluginAndExtensionsAreDistinct();
     } catch (const std::exception& error) {

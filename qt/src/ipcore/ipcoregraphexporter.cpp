@@ -3,6 +3,7 @@
 
 #include "graph/graph.h"
 #include "modules/modulelabels.h"
+#include "modules/moduletypemetadata.h"
 
 #include <QJsonArray>
 #include <QJsonObject>
@@ -141,7 +142,9 @@ QJsonObject interfaceToIpcraftJson(const Port& port) {
 QJsonObject moduleToIpcraftJson(const Module* module, const QString& artifactId) {
     QJsonObject object;
     object.insert(QStringLiteral("id"), artifactId);
-    object.insert(QStringLiteral("module"), module ? module->type() : QString());
+    const QString manifestModuleId = ModuleTypeMetadata::moduleId(module);
+    object.insert(QStringLiteral("module"),
+                  manifestModuleId.isEmpty() && module ? module->type() : manifestModuleId);
     object.insert(QStringLiteral("parameters"), parametersToIpcoreJson(module));
 
     QJsonArray interfaces;

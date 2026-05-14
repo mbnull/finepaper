@@ -7,6 +7,7 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QFileInfo>
+#include <QJsonObject>
 #include <QSettings>
 #include <QStringList>
 #include <QTemporaryDir>
@@ -78,6 +79,27 @@ void configureDefaultPackageRootsForTest() {
     QCoreApplication::setOrganizationName(QStringLiteral("ipcatalogservice_test_org"));
     QCoreApplication::setApplicationName(QStringLiteral("ipcatalogservice_test_app"));
     AppSettings().setIpcorePaths(QStringList{repositoryPath(QStringLiteral("ipcores"))});
+}
+
+QString scopedTypeName(const QString& packageId, const QString& moduleId) {
+    return packageId + QStringLiteral("::") + moduleId;
+}
+
+IpcraftPackageManifest packageWithSingleModule(const QString& packageId,
+                                               const QString& moduleId,
+                                               const QString& moduleName,
+                                               const QString& graphRole = QStringLiteral("host")) {
+    IpcraftPackageManifest manifest;
+    manifest.id = packageId;
+    manifest.name = packageId;
+
+    IpcraftModuleDescriptor module;
+    module.id = moduleId;
+    module.name = moduleName;
+    module.graphRole = graphRole;
+    manifest.modules.push_back(module);
+
+    return manifest;
 }
 
 void testCatalogEntryCopiesDiscoveredMetadata() {
@@ -189,7 +211,10 @@ void testCatalogEntryExposesIpcraftManifestData() {
             "entry should retain package root path");
     require(entry->packageManifest.modules.size() == 2,
             "entry should expose manifest modules");
-    require(entry->moduleTypes == QStringList({QStringLiteral("RaveEndpoint"), QStringLiteral("RaveTile")}),
+    require(entry->moduleTypes == QStringList({
+                scopedTypeName(QStringLiteral("finepaper.ravenoc"), QStringLiteral("RaveEndpoint")),
+                scopedTypeName(QStringLiteral("finepaper.ravenoc"), QStringLiteral("RaveTile"))
+            }),
             "entry should expose module type ids from the manifest");
 
     const auto tileIt = std::find_if(entry->packageManifest.modules.cbegin(),
@@ -283,6 +308,71 @@ void testDefaultPackageCommandsResolveWithIpcraftProjectSchema() {
             "resolved DRC should carry package command input schema");
 }
 
+void testIpcraftModuleTypesAreScopedByPackage() {
+    ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
+    const IpcraftPackageManifest fabric =
+        packageWithSingleModule(QStringLiteral("org.example.fabric"),
+                                QStringLiteral("Tile"),
+                                QStringLiteral("Fabric Tile"));
+    const IpcraftPackageManifest noc =
+        packageWithSingleModule(QStringLiteral("org.example.noc"),
+                                QStringLiteral("Tile"),
+                                QStringLiteral("NoC Tile"));
+
+    require(registry.loadIpcraftPackages({fabric, noc}),
+            "duplicate bare manifest module ids should load when packages differ");
+
+    const QString fabricTypeName =
+        scopedTypeName(QStringLiteral("org.example.fabric"), QStringLiteral("Tile"));
+    const QString nocTypeName =
+        scopedTypeName(QStringLiteral("org.example.noc"), QStringLiteral("Tile"));
+    const ModuleType* fabricType = registry.getType(fabricTypeName);
+    const ModuleType* nocType = registry.getType(nocTypeName);
+    require(fabricType != nullptr, "fabric Tile should be registered under a package-scoped type name");
+    require(nocType != nullptr, "NoC Tile should be registered under a package-scoped type name");
+    require(fabricType->moduleId == QStringLiteral("Tile") &&
+                nocType->moduleId == QStringLiteral("Tile"),
+            "scoped module types should preserve bare manifest module ids");
+    require(fabricType->paletteLabel == QStringLiteral("Fabric Tile") &&
+                nocType->paletteLabel == QStringLiteral("NoC Tile"),
+            "scoped module type keys should not replace user-visible labels");
+    require(registry.getType(QStringLiteral("Tile")) == nullptr,
+            "ambiguous bare module id lookup should not select one package globally");
+
+    IpCatalogService catalog(QVector<IpcraftPackageManifest>{fabric, noc}, &registry);
+    const std::optional<IpCatalogEntry> fabricEntry = catalog.entry(QStringLiteral("org.example.fabric"));
+    const std::optional<IpCatalogEntry> nocEntry = catalog.entry(QStringLiteral("org.example.noc"));
+    require(fabricEntry.has_value() && nocEntry.has_value(),
+            "catalog should expose both packages");
+    require(fabricEntry->moduleTypes == QStringList{fabricTypeName},
+            "fabric catalog entry should expose its package-scoped Tile type");
+    require(nocEntry->moduleTypes == QStringList{nocTypeName},
+            "NoC catalog entry should expose its package-scoped Tile type");
+}
+
+void testIpcraftIdentityFallbacksDoNotSpecialCaseLegacyEndpointNames() {
+    ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
+    const IpcraftPackageManifest manifest =
+        packageWithSingleModule(QStringLiteral("org.example.attachments"),
+                                QStringLiteral("Endpoint"),
+                                QStringLiteral("Attachment Endpoint"),
+                                QStringLiteral("attached"));
+
+    require(registry.loadIpcraftPackages({manifest}),
+            "Endpoint module should load from manifest metadata");
+
+    const ModuleType* endpointType =
+        registry.getType(scopedTypeName(QStringLiteral("org.example.attachments"),
+                                        QStringLiteral("Endpoint")));
+    require(endpointType != nullptr, "Endpoint type should use package-scoped lookup");
+    require(endpointType->graphRole == QStringLiteral("attached"),
+            "Endpoint role should come from manifest graph_role");
+    require(endpointType->externalIdPrefix == QStringLiteral("endpoint"),
+            "Endpoint external id prefix should use generic manifest-derived fallback");
+    require(endpointType->displayPrefix == QStringLiteral("Attachment Endpoint"),
+            "Endpoint display prefix should use manifest label instead of legacy EP fallback");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -293,6 +383,8 @@ int main(int argc, char** argv) {
         testDefaultCatalogDiscoversConfiguredIpcraftPackages();
         testCatalogEntryExposesIpcraftManifestData();
         testDefaultPackageCommandsResolveWithIpcraftProjectSchema();
+        testIpcraftModuleTypesAreScopedByPackage();
+        testIpcraftIdentityFallbacksDoNotSpecialCaseLegacyEndpointNames();
     } catch (const std::exception& error) {
         std::cerr << error.what() << std::endl;
         return 1;

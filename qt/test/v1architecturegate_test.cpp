@@ -75,6 +75,10 @@ QString repositoryRootPath() {
     return root.absolutePath();
 }
 
+QString scopedTypeName(const QString& packageId, const QString& moduleId) {
+    return packageId + QStringLiteral("::") + moduleId;
+}
+
 const TopologyPresetDescriptor* findPreset(const QVector<TopologyPresetDescriptor>& presets,
                                            const QString& id) {
     const auto it = std::find_if(presets.cbegin(), presets.cend(), [&](const TopologyPresetDescriptor& preset) {
@@ -96,6 +100,14 @@ void writeFile(const QString& path, const QByteArray& content) {
     QFile file(path);
     require(file.open(QIODevice::WriteOnly | QIODevice::Truncate), "failed to open test file");
     require(file.write(content) == content.size(), "failed to write test file");
+}
+
+QJsonObject readJsonObject(const QString& path) {
+    QFile file(path);
+    require(file.open(QIODevice::ReadOnly), "failed to read JSON file");
+    const QJsonDocument document = QJsonDocument::fromJson(file.readAll());
+    require(document.isObject(), "JSON file should contain an object");
+    return document.object();
 }
 
 QString writeGatePackageView(QDir& packageRoot,
@@ -570,9 +582,13 @@ void testRepositoryNoCMainlineFlow() {
     IpCatalogService catalog(packages, &registry);
     std::optional<IpCatalogEntry> nocEntry = catalog.entry(QStringLiteral("finepaper.noc"));
     require(nocEntry.has_value(), "catalog should expose Finepaper NoC");
-    require(nocEntry->moduleTypes.contains(QStringLiteral("XP")),
+    const QString nocEndpointType =
+        scopedTypeName(QStringLiteral("finepaper.noc"), QStringLiteral("Endpoint"));
+    const QString nocXpType =
+        scopedTypeName(QStringLiteral("finepaper.noc"), QStringLiteral("XP"));
+    require(nocEntry->moduleTypes.contains(nocXpType),
             "active NoC module list should include XP");
-    require(nocEntry->moduleTypes.contains(QStringLiteral("Endpoint")),
+    require(nocEntry->moduleTypes.contains(nocEndpointType),
             "active NoC module list should include Endpoint");
     require(nocEntry->generator.inputFormat == QStringLiteral("ipcraft.noc.project.v1"),
             "NoC generator should consume package project input");
@@ -602,8 +618,8 @@ void testRepositoryNoCMainlineFlow() {
     require(workspace.state().ipcoreId == QStringLiteral("finepaper.noc"),
             "workspace should expose selected NoC id");
     require(workspace.state().moduleTypes == QStringList({
-                QStringLiteral("Endpoint"),
-                QStringLiteral("XP")
+                nocEndpointType,
+                nocXpType
             }),
             "workspace should expose only selected NoC modules");
     require(presetIds(workspace.state().topologyPresets) == QStringList({
@@ -768,6 +784,13 @@ void testRepositoryNoCMainlineFlow() {
                 "project generation should persist each IP-core graph input");
         require(QFileInfo::exists(instanceResult.manifestPath),
                 "project generation should persist each generation manifest");
+        const QJsonObject generationManifest = readJsonObject(instanceResult.manifestPath);
+        const QString generationManifestSchema =
+            generationManifest.value(QStringLiteral("schema")).toString();
+        require(generationManifestSchema == QStringLiteral("ipcraft.generation.manifest.v1"),
+                "generation manifest should use the public ipcraft generation schema");
+        requirePublicSchemaName(generationManifestSchema,
+                                QStringLiteral("ProjectGenerationRunner generation manifest"));
         require(!instanceResult.artifactPaths.isEmpty(),
                 "project generation should report generated artifacts for each instance");
         require(containsRtlArtifact(instanceResult.artifactPaths),

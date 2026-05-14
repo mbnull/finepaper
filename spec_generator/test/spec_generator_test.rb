@@ -690,6 +690,72 @@ class SpecGeneratorTest < Minitest::Test
     end
   end
 
+  def test_rejects_unknown_topology_fields
+    Dir.mktmpdir do |dir|
+      package_root = write_ipcraft_package_source(
+        dir,
+        yaml: ipcraft_package_yaml.sub("    module: xp\n", "    module: xp\n    stray: true\n")
+      )
+
+      error = assert_raises(SpecGenerator::SpecError) do
+        build_ipcraft_manifest(package_root)
+      end
+
+      assert_match(/Unknown topology mesh field: stray/, error.message)
+    end
+  end
+
+  def test_rejects_topology_module_missing_from_package
+    Dir.mktmpdir do |dir|
+      package_root = write_ipcraft_package_source(
+        dir,
+        yaml: ipcraft_package_yaml.sub("    module: xp\n", "    module: missing_router\n")
+      )
+
+      error = assert_raises(SpecGenerator::SpecError) do
+        build_ipcraft_manifest(package_root)
+      end
+
+      assert_match(/topology mesh references unknown module missing_router/, error.message)
+    end
+  end
+
+  def test_rejects_topology_port_values_missing_from_module_interfaces
+    Dir.mktmpdir do |dir|
+      package_root = write_ipcraft_package_source(
+        dir,
+        yaml: ipcraft_package_yaml.sub(
+          "    module: xp\n",
+          "    module: xp\n    ports: { north: missing_north }\n"
+        )
+      )
+
+      error = assert_raises(SpecGenerator::SpecError) do
+        build_ipcraft_manifest(package_root)
+      end
+
+      assert_match(/topology mesh port north references unknown xp interface missing_north/, error.message)
+    end
+  end
+
+  def test_rejects_malformed_topology_parameters
+    Dir.mktmpdir do |dir|
+      package_root = write_ipcraft_package_source(
+        dir,
+        yaml: ipcraft_package_yaml.sub(
+          "    module: xp\n",
+          "    module: xp\n    parameters:\n      rows: { label: Rows, default: two, min: 1, max: 8 }\n"
+        )
+      )
+
+      error = assert_raises(SpecGenerator::SpecError) do
+        build_ipcraft_manifest(package_root)
+      end
+
+      assert_match(/topology mesh parameter rows default must be an integer/, error.message)
+    end
+  end
+
   def test_cli_checks_and_builds_ipcraft_manifest
     Dir.mktmpdir do |dir|
       package_root = write_ipcraft_package_source(dir)
@@ -717,6 +783,39 @@ class SpecGeneratorTest < Minitest::Test
       assert build_status.success?, build_stderr
       assert_includes build_stdout, "Built ipcraft manifest: #{File.join(package_root, 'ipcraft.json')}"
       assert File.file?(File.join(package_root, 'ipcraft.json'))
+    end
+  end
+
+  def test_cli_rejects_legacy_finepaper_schema_for_ipcraft_check_and_build
+    Dir.mktmpdir do |dir|
+      write_ravenoc_source(dir)
+      ipcore_path = File.join(dir, 'ipcores/ravenoc/ipcore.yml')
+      package_root = File.dirname(ipcore_path)
+
+      check_stdout, check_stderr, check_status = Open3.capture3(
+        RbConfig.ruby,
+        File.expand_path('../bin/spec-gen', __dir__),
+        'check',
+        '--ipcore',
+        ipcore_path
+      )
+      refute check_status.success?
+      assert_empty check_stdout
+      assert_includes check_stderr, 'error: schema must be ipcraft.package.v1'
+
+      build_stdout, build_stderr, build_status = Open3.capture3(
+        RbConfig.ruby,
+        File.expand_path('../bin/spec-gen', __dir__),
+        'build',
+        '--ipcore',
+        ipcore_path,
+        '--package-root',
+        package_root
+      )
+      refute build_status.success?
+      assert_empty build_stdout
+      assert_includes build_stderr, 'error: schema must be ipcraft.package.v1'
+      refute File.file?(File.join(package_root, 'ipcraft.json'))
     end
   end
 

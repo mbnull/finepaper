@@ -4,6 +4,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonArray>
 #include <QSet>
 #include <QXmlStreamReader>
 
@@ -68,6 +69,72 @@ QSet<QString> interfaceIdsForModule(const IpcraftModuleDescriptor& module) {
         interfaceIds.insert(descriptor.id);
     }
     return interfaceIds;
+}
+
+bool isInterfaceReferenceAttribute(const QString& attributeName) {
+    static const QSet<QString> kInterfaceReferenceAttributes{
+        QStringLiteral("ref"),
+        QStringLiteral("interface"),
+        QStringLiteral("interface_id"),
+        QStringLiteral("interface_ref")
+    };
+    return kInterfaceReferenceAttributes.contains(attributeName);
+}
+
+bool isAttachmentZoneReferenceAttribute(const QString& attributeName) {
+    static const QSet<QString> kAttachmentZoneReferenceAttributes{
+        QStringLiteral("zone"),
+        QStringLiteral("attach_zone"),
+        QStringLiteral("attachment_zone")
+    };
+    return kAttachmentZoneReferenceAttributes.contains(attributeName);
+}
+
+QString attachZone(const IpcraftModuleDescriptor& module) {
+    return module.attach.value(QStringLiteral("zone")).toString().trimmed();
+}
+
+QStringList attachHosts(const IpcraftModuleDescriptor& module) {
+    QStringList hosts;
+    const QJsonValue hostsValue = module.attach.value(QStringLiteral("hosts"));
+    if (hostsValue.isArray()) {
+        const QJsonArray hostArray = hostsValue.toArray();
+        for (const QJsonValue& hostValue : hostArray) {
+            const QString host = hostValue.toString().trimmed();
+            if (!host.isEmpty() && !hosts.contains(host)) {
+                hosts.append(host);
+            }
+        }
+    }
+
+    const QString host = module.attach.value(QStringLiteral("host")).toString().trimmed();
+    if (!host.isEmpty() && !hosts.contains(host)) {
+        hosts.append(host);
+    }
+    return hosts;
+}
+
+QSet<QString> attachmentZonesForModule(const IpcraftPackageManifest& manifest,
+                                       const QString& moduleId) {
+    QSet<QString> zones;
+    const IpcraftModuleDescriptor* module = manifest.module(moduleId);
+    if (module != nullptr) {
+        const QString selfZone = attachZone(*module);
+        if (!selfZone.isEmpty()) {
+            zones.insert(selfZone);
+        }
+    }
+
+    for (const IpcraftModuleDescriptor& candidate : manifest.modules) {
+        const QString zone = attachZone(candidate);
+        if (zone.isEmpty()) {
+            continue;
+        }
+        if (attachHosts(candidate).contains(moduleId)) {
+            zones.insert(zone);
+        }
+    }
+    return zones;
 }
 
 } // namespace
@@ -163,6 +230,7 @@ bool IpcraftRegistry::validateViewXml(const IpcraftPackageManifest& manifest,
     QXmlStreamReader xml(&file);
     bool sawRoot = false;
     const QSet<QString> interfaceIds = interfaceIdsForModule(*module);
+    const QSet<QString> attachmentZones = attachmentZonesForModule(manifest, view.moduleId);
 
     while (!xml.atEnd()) {
         xml.readNext();
@@ -193,16 +261,46 @@ bool IpcraftRegistry::validateViewXml(const IpcraftPackageManifest& manifest,
             continue;
         }
 
-        if (xml.name() == QStringLiteral("anchor")) {
-            const QString interfaceId =
-                xml.attributes().value(QStringLiteral("ref")).toString().trimmed();
-            if (!interfaceIds.contains(interfaceId)) {
+        const QXmlStreamAttributes attributes = xml.attributes();
+        for (const QXmlStreamAttribute& attribute : attributes) {
+            const QString attributeName = attribute.name().toString();
+            const QString attributeValue = attribute.value().toString().trimmed();
+
+            if (isInterfaceReferenceAttribute(attributeName)
+                && !interfaceIds.contains(attributeValue)) {
+                const bool isAnchorRef =
+                    xml.name() == QStringLiteral("anchor")
+                    && attributeName == QStringLiteral("ref");
+                const QString message = isAnchorRef
+                    ? QStringLiteral("View XML anchor references missing interface '%1' on module '%2'")
+                          .arg(attributeValue, view.moduleId)
+                    : QStringLiteral("View XML interface reference attribute '%1' references missing interface '%2' on module '%3'")
+                          .arg(attributeName, attributeValue, view.moduleId);
                 addDiagnostic(diagnostics,
                               manifest,
                               view.filePath,
-                              QStringLiteral("View XML anchor references missing interface '%1' on module '%2'")
-                                  .arg(interfaceId, view.moduleId));
+                              message);
                 return false;
+            }
+
+            if (isAttachmentZoneReferenceAttribute(attributeName)) {
+                if (attributeValue.isEmpty()) {
+                    addDiagnostic(diagnostics,
+                                  manifest,
+                                  view.filePath,
+                                  QStringLiteral("View XML attachment zone attribute '%1' must not be empty on module '%2'")
+                                      .arg(attributeName, view.moduleId));
+                    return false;
+                }
+
+                if (!attachmentZones.contains(attributeValue)) {
+                    addDiagnostic(diagnostics,
+                                  manifest,
+                                  view.filePath,
+                                  QStringLiteral("View XML attachment zone attribute '%1' references missing attachment zone '%2' on module '%3'")
+                                      .arg(attributeName, attributeValue, view.moduleId));
+                    return false;
+                }
             }
         }
     }

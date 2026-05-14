@@ -12,7 +12,16 @@ inline const ModuleType* type(const QString& typeName) {
 }
 
 inline const ModuleType* type(const Module* module) {
-    return module ? type(module->type()) : nullptr;
+    if (!module) return nullptr;
+
+    const QString ipcoreId = module->ipcoreId();
+    if (!ipcoreId.isEmpty()) {
+        if (const ModuleType* moduleType =
+                ModuleRegistry::instance().getType(ipcoreId, module->type())) {
+            return moduleType;
+        }
+    }
+    return type(module->type());
 }
 
 inline QString paletteLabel(const ModuleType* moduleType) {
@@ -61,6 +70,14 @@ inline QString moduleId(const Module* module) {
 inline QString graphRole(const Module* module) {
     const ModuleType* moduleType = type(module);
     return moduleType ? moduleType->graphRole : QString();
+}
+
+inline QStringList attachHostModuleIds(const ModuleType* moduleType) {
+    return moduleType ? moduleType->attachHostModuleIds : QStringList();
+}
+
+inline QString attachZoneId(const ModuleType* moduleType) {
+    return moduleType ? moduleType->attachZoneId : QString();
 }
 
 inline QString viewFilePath(const Module* module) {

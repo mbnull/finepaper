@@ -7,6 +7,7 @@
 #include "graph/port.h"
 #include "ipcraft/ipcraftconnectionvalidator.h"
 #include "ipcraft/ipxactconnectionchecker.h"
+#include "modules/moduletypemetadata.h"
 
 #include <QFile>
 #include <QHash>
@@ -102,6 +103,10 @@ QString manifestPackageId(const IpCatalogEntry& entry) {
 }
 
 QString moduleManifestId(const IpCatalogEntry& entry, const Module& module) {
+    const QString metadataModuleId = ModuleTypeMetadata::moduleId(&module);
+    if (entry.packageManifest.module(metadataModuleId) != nullptr) {
+        return metadataModuleId;
+    }
     if (entry.packageManifest.module(module.type()) != nullptr) {
         return module.type();
     }
@@ -1260,8 +1265,10 @@ void validateModuleOwnershipAndTypes(const Graph* graph,
 
         const bool hasManifestModules = !entry->packageManifest.modules.isEmpty();
         const bool hasCatalogTypes = !entry->moduleTypes.isEmpty();
-        const IpcraftModuleDescriptor* manifestModule =
-            entry->packageManifest.module(module.type());
+        const QString manifestModuleId = moduleManifestId(*entry, module);
+        const IpcraftModuleDescriptor* manifestModule = manifestModuleId.isEmpty()
+            ? nullptr
+            : entry->packageManifest.module(manifestModuleId);
         const bool typeInCatalog = entry->moduleTypes.contains(module.type());
         if ((hasManifestModules && manifestModule == nullptr)
             || (!hasManifestModules && hasCatalogTypes && !typeInCatalog)) {
