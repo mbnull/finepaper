@@ -9,6 +9,7 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QCoreApplication>
+#include <QJsonObject>
 #include <algorithm>
 #include <iostream>
 #include <memory>
@@ -163,6 +164,15 @@ ModuleType packageBackedRouterType(const QString& name, const QString& packageId
     return type;
 }
 
+const Port* defaultPortById(const ModuleType& type, const QString& portId) {
+    const auto it = std::find_if(type.defaultPorts.cbegin(),
+                                 type.defaultPorts.cend(),
+                                 [&](const Port& port) {
+                                     return port.id() == portId;
+                                 });
+    return it == type.defaultPorts.cend() ? nullptr : &(*it);
+}
+
 IpcraftPackageManifest packageBackedRouterManifest(const QString& packageId,
                                                    const QString& moduleId) {
     IpcraftPackageManifest manifest;
@@ -172,19 +182,73 @@ IpcraftPackageManifest packageBackedRouterManifest(const QString& packageId,
         QStringList{QStringLiteral("initiator"), QStringLiteral("target")},
         false
     });
-    manifest.modules.push_back(IpcraftModuleDescriptor{
-        moduleId,
-        QStringLiteral("Package-backed XP"),
-        QString(),
-        QString(),
-        QJsonObject{},
-        QVector<IpcraftInterfaceDescriptor>{
-            topologyInterfaceDescriptor(QStringLiteral("east"), QStringLiteral("initiator")),
-            topologyInterfaceDescriptor(QStringLiteral("south"), QStringLiteral("initiator")),
-            topologyInterfaceDescriptor(QStringLiteral("west"), QStringLiteral("target")),
-            topologyInterfaceDescriptor(QStringLiteral("north"), QStringLiteral("target"))
-        }
+    IpcraftModuleDescriptor module;
+    module.id = moduleId;
+    module.name = QStringLiteral("Package-backed XP");
+    module.interfaces = {
+        topologyInterfaceDescriptor(QStringLiteral("east"), QStringLiteral("initiator")),
+        topologyInterfaceDescriptor(QStringLiteral("south"), QStringLiteral("initiator")),
+        topologyInterfaceDescriptor(QStringLiteral("west"), QStringLiteral("target")),
+        topologyInterfaceDescriptor(QStringLiteral("north"), QStringLiteral("target"))
+    };
+    manifest.modules.push_back(module);
+    return manifest;
+}
+
+IpcraftInterfaceDescriptor manifestMeshInterface(const QString& id,
+                                                 const QString& role) {
+    IpcraftInterfaceDescriptor descriptor;
+    descriptor.id = id;
+    descriptor.accepts.push_back(topologyAcceptRule(QStringLiteral("manifest_mesh_link"), role));
+    return descriptor;
+}
+
+IpcraftPackageManifest manifestNamedMeshPackage(const QString& packageId,
+                                                const QString& moduleId) {
+    IpcraftPackageManifest manifest;
+    manifest.id = packageId;
+    manifest.connectionClasses.push_back(IpcraftConnectionClass{
+        QStringLiteral("manifest_mesh_link"),
+        QStringList{QStringLiteral("source"), QStringLiteral("sink")},
+        false
     });
+
+    IpcraftModuleDescriptor module;
+    module.id = moduleId;
+    module.name = QStringLiteral("Manifest Named Mesh Tile");
+    module.graphRole = QStringLiteral("host");
+    module.parameters = QJsonObject{
+        {QStringLiteral("x"), QJsonObject{{QStringLiteral("type"), QStringLiteral("int")},
+                                          {QStringLiteral("default"), 0}}},
+        {QStringLiteral("y"), QJsonObject{{QStringLiteral("type"), QStringLiteral("int")},
+                                          {QStringLiteral("default"), 0}}},
+        {QStringLiteral("display_name"), QJsonObject{{QStringLiteral("type"), QStringLiteral("string")},
+                                                     {QStringLiteral("default"), QString()}}},
+        {QStringLiteral("external_id"), QJsonObject{{QStringLiteral("type"), QStringLiteral("string")},
+                                                    {QStringLiteral("default"), QString()}}}
+    };
+    module.interfaces = {
+        manifestMeshInterface(QStringLiteral("link_out"), QStringLiteral("source")),
+        manifestMeshInterface(QStringLiteral("link_in"), QStringLiteral("sink")),
+        manifestMeshInterface(QStringLiteral("down_out"), QStringLiteral("source")),
+        manifestMeshInterface(QStringLiteral("up_in"), QStringLiteral("sink"))
+    };
+    manifest.modules.push_back(module);
+
+    manifest.topologies.push_back(QJsonObject{
+        {QStringLiteral("id"), QStringLiteral("mesh")},
+        {QStringLiteral("label"), QStringLiteral("Mesh")},
+        {QStringLiteral("kind"), QStringLiteral("mesh")},
+        {QStringLiteral("module"), moduleId},
+        {QStringLiteral("id_pattern"), QStringLiteral("tile_{row}_{col}")},
+        {QStringLiteral("ports"), QJsonObject{
+            {QStringLiteral("east"), QStringLiteral("link_out")},
+            {QStringLiteral("west"), QStringLiteral("link_in")},
+            {QStringLiteral("south"), QStringLiteral("down_out")},
+            {QStringLiteral("north"), QStringLiteral("up_in")}
+        }}
+    });
+
     return manifest;
 }
 
@@ -293,6 +357,64 @@ void testPackageBackedPresetConnectionsPreserveResolvedMetadata() {
     require(connection->interfaces().at(1).instanceId == rightId &&
                 connection->interfaces().at(1).interfaceId == QStringLiteral("west"),
             "generated package-backed link should store target interface metadata");
+}
+
+void testMeshPresetUsesManifestConnectionClassesNotEastWestNames() {
+    ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
+    const QString packageId = QStringLiteral("finepaper.manifest_named_mesh");
+    const QString typeName = QStringLiteral("ManifestNamedMeshTile");
+    const IpcraftPackageManifest manifest = manifestNamedMeshPackage(packageId, typeName);
+    require(registry.loadIpcraftPackages({manifest}), "manifest-named mesh package should load");
+    const ModuleType* loadedType = registry.getType(typeName);
+    require(loadedType != nullptr, "manifest-named mesh type should register");
+    ModuleRegistry::instance().registerType(*loadedType);
+
+    const ModuleInterfaceMetadata linkOutMetadata =
+        loadedType->interfaceMetadata.value(QStringLiteral("link_out"));
+    require(linkOutMetadata.autocompleteGroup == QStringLiteral("router_side"),
+            "topology preset ports should be marked as router-side metadata without east/west ids");
+    require(linkOutMetadata.topologyRule == QStringLiteral("opposite_side"),
+            "topology preset ports should carry topology rules from the manifest mapping");
+    const Port* linkOutPort = defaultPortById(*loadedType, QStringLiteral("link_out"));
+    require(linkOutPort != nullptr && linkOutPort->role() == QStringLiteral("router"),
+            "topology preset ports should use router port role without hardcoded interface names");
+
+    Graph graph;
+    TopologyPresetRequest request;
+    request.ipcoreId = packageId;
+    request.instanceId = QStringLiteral("noc_0");
+    request.preset.id = QStringLiteral("mesh");
+    request.preset.label = QStringLiteral("Mesh");
+    request.preset.kind = QStringLiteral("mesh");
+    request.preset.routerModule = typeName;
+    request.preset.idPattern = QStringLiteral("tile_{row}_{col}");
+    request.preset.ports.insert(QStringLiteral("east"), QStringLiteral("link_out"));
+    request.preset.ports.insert(QStringLiteral("west"), QStringLiteral("link_in"));
+    request.preset.ports.insert(QStringLiteral("south"), QStringLiteral("down_out"));
+    request.preset.ports.insert(QStringLiteral("north"), QStringLiteral("up_in"));
+    request.parameters.insert(QStringLiteral("rows"), 1);
+    request.parameters.insert(QStringLiteral("cols"), 2);
+
+    const TopologyPresetResult result = TopologyPresetBuilder::apply(&graph, registry, request);
+
+    const QString leftId = scopedPresetModuleId(QStringLiteral("noc_0"), QStringLiteral("tile_0_0"));
+    const QString rightId = scopedPresetModuleId(QStringLiteral("noc_0"), QStringLiteral("tile_0_1"));
+    require(result.success, result.error.toLocal8Bit().constData());
+    require(graph.connections().size() == 1,
+            "1x2 mesh with manifest-named interfaces should create one link");
+    require(result.connectionIds.first().endsWith(QStringLiteral("_link_out")),
+            "generated connection ids should use the mapped interface id instead of an east literal");
+    const Connection* connection = graph.connections().front().get();
+    require(connection->connectionClassId() == QStringLiteral("manifest_mesh_link"),
+            "generated link should resolve the manifest connection class");
+    require(connection->interfaces().size() == 2,
+            "generated link should store normalized manifest interfaces");
+    require(connection->interfaces().at(0).instanceId == leftId &&
+                connection->interfaces().at(0).interfaceId == QStringLiteral("link_out"),
+            "generated link should store the mapped source interface id");
+    require(connection->interfaces().at(1).instanceId == rightId &&
+                connection->interfaces().at(1).interfaceId == QStringLiteral("link_in"),
+            "generated link should store the mapped target interface id");
 }
 
 void testRingPresetCreatesClosedLoop() {
@@ -629,6 +751,7 @@ int main(int argc, char** argv) {
     try {
         testMeshPresetCreatesEditableGraph();
         testPackageBackedPresetConnectionsPreserveResolvedMetadata();
+        testMeshPresetUsesManifestConnectionClassesNotEastWestNames();
         testRingPresetCreatesClosedLoop();
         testPresetRejectsConnectionsThatFailRuleService();
         testPresetFailureRollsBackPartialGraph();

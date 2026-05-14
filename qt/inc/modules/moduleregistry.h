@@ -66,6 +66,16 @@ struct ModuleInterfaceAnchor {
     std::optional<double> labelY;
 };
 
+struct ModuleAttachmentZone {
+    QString id;
+    double x = 0.0;
+    double y = 0.0;
+    std::optional<double> normalX;
+    std::optional<double> normalY;
+    QString label;
+    std::optional<bool> mirrorAttachedNode;
+};
+
 struct ModuleType {
     QString name;
     std::vector<Port> defaultPorts;
@@ -83,6 +93,7 @@ struct ModuleType {
     QString editorLayout;
     QString graphGroup;
     QHash<QString, ModuleInterfaceAnchor> interfaceAnchors;
+    QHash<QString, ModuleAttachmentZone> attachmentZones;
     int expandedNodeMinWidth = 104;
     int expandedNodeHeight = 54;
     int collapsedNodeMinWidth = 104;

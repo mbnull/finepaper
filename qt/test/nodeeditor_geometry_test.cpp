@@ -15,13 +15,18 @@
 
 #include <QtNodes/DataFlowGraphModel>
 #include <QtNodes/NodeDelegateModelRegistry>
+#include <QtNodes/internal/NodeGraphicsObject.hpp>
 #include <QApplication>
 #include <QDragEnterEvent>
 #include <QDropEvent>
+#include <QDir>
+#include <QFile>
+#include <QGraphicsView>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QMimeData>
 #include <QPointF>
+#include <QTemporaryDir>
 #include <iostream>
 #include <memory>
 #include <optional>
@@ -98,6 +103,7 @@ ModuleType attachmentHostType() {
     type.ipcoreId = QStringLiteral("finepaper.attachmenttest");
     type.paletteLabel = QStringLiteral("Attachment Host");
     type.graphGroup = QStringLiteral("xps");
+    type.graphRole = QStringLiteral("host");
     type.editorLayout = QStringLiteral("mesh_router");
     type.supportsCollapse = true;
     type.expandedNodeMinWidth = 136;
@@ -128,6 +134,7 @@ ModuleType attachmentEndpointType() {
     type.ipcoreId = QStringLiteral("finepaper.attachmenttest");
     type.paletteLabel = QStringLiteral("Attachment Endpoint");
     type.graphGroup = QStringLiteral("endpoints");
+    type.graphRole = QStringLiteral("attached");
     type.editorLayout = QStringLiteral("endpoint");
     type.expandedNodeMinWidth = 104;
     type.expandedNodeHeight = 54;
@@ -145,6 +152,86 @@ ModuleType attachmentEndpointType() {
                                   attachmentInterface(QStringLiteral("noc"),
                                                       QStringLiteral("initiator"),
                                                       QStringLiteral("target")));
+    return type;
+}
+
+ModuleType manifestAttachmentHostType() {
+    ModuleType type = attachmentHostType();
+    type.name = QStringLiteral("ManifestAttachmentHostTile");
+    type.graphRole = QStringLiteral("host");
+    type.graphGroup = QStringLiteral("tiles");
+    type.editorLayout = QStringLiteral("tile_socket");
+    type.defaultPorts.clear();
+    type.defaultPorts.push_back(Port(QStringLiteral("p0"),
+                                     Port::Direction::Input,
+                                     QStringLiteral("bus"),
+                                     QStringLiteral("P0"),
+                                     {},
+                                     QStringLiteral("fabric_socket"),
+                                     QStringLiteral("attachment_link"),
+                                     QStringLiteral("p0")));
+    type.interfaceMetadata.clear();
+    type.interfaceMetadata.insert(QStringLiteral("p0"),
+                                  attachmentInterface(QStringLiteral("p0"),
+                                                      QStringLiteral("target"),
+                                                      QStringLiteral("initiator")));
+    type.interfaceAnchors.clear();
+    type.interfaceAnchors.insert(QStringLiteral("p0"),
+                                 ModuleInterfaceAnchor{QStringLiteral("p0"),
+                                                       68.0,
+                                                       116.0,
+                                                       0.0,
+                                                       1.0,
+                                                       QStringLiteral("P0"),
+                                                       56.0,
+                                                       96.0});
+    return type;
+}
+
+ModuleType manifestAttachedAgentType() {
+    ModuleType type = attachmentEndpointType();
+    type.name = QStringLiteral("ManifestAttachedAgentNode");
+    type.graphRole = QStringLiteral("attached");
+    type.graphGroup = QStringLiteral("agents");
+    type.editorLayout = QStringLiteral("agent_socket");
+    type.defaultPorts.clear();
+    type.defaultPorts.push_back(Port(QStringLiteral("chi"),
+                                     Port::Direction::Output,
+                                     QStringLiteral("bus"),
+                                     QStringLiteral("CHI"),
+                                     {},
+                                     QStringLiteral("fabric_socket"),
+                                     QStringLiteral("attachment_link"),
+                                     QStringLiteral("chi")));
+    type.interfaceMetadata.clear();
+    type.interfaceMetadata.insert(QStringLiteral("chi"),
+                                  attachmentInterface(QStringLiteral("chi"),
+                                                      QStringLiteral("initiator"),
+                                                      QStringLiteral("target")));
+    type.interfaceAnchors.clear();
+    type.interfaceAnchors.insert(QStringLiteral("chi"),
+                                 ModuleInterfaceAnchor{QStringLiteral("chi"),
+                                                       104.0,
+                                                       27.0,
+                                                       1.0,
+                                                       0.0,
+                                                       QStringLiteral("CHI"),
+                                                       76.0,
+                                                       40.0});
+    return type;
+}
+
+ModuleType visualOnlyAttachmentHostType() {
+    ModuleType type = attachmentHostType();
+    type.name = QStringLiteral("VisualOnlyAttachmentHostTile");
+    type.interfaceMetadata.clear();
+    return type;
+}
+
+ModuleType visualOnlyAttachedEndpointType() {
+    ModuleType type = attachmentEndpointType();
+    type.name = QStringLiteral("VisualOnlyAttachedEndpointNode");
+    type.interfaceMetadata.clear();
     return type;
 }
 
@@ -236,6 +323,30 @@ bool sendScopedDrop(NodeEditorWidget& editor, QMimeData* mimeData) {
     return drop.isAccepted();
 }
 
+std::optional<QPointF> visibleModulePosition(NodeEditorWidget& editor, const QString& moduleId) {
+    auto* view = editor.findChild<QGraphicsView*>();
+    if (!view || !view->scene()) {
+        return std::nullopt;
+    }
+
+    for (QGraphicsItem* item : view->scene()->items()) {
+        auto* nodeGraphics = qgraphicsitem_cast<QtNodes::NodeGraphicsObject*>(item);
+        if (!nodeGraphics) {
+            continue;
+        }
+
+        auto* graphModel = dynamic_cast<QtNodes::DataFlowGraphModel*>(&nodeGraphics->graphModel());
+        auto* nodeModel = graphModel
+            ? graphModel->delegateModel<GraphNodeModel>(nodeGraphics->nodeId())
+            : nullptr;
+        if (nodeModel && nodeModel->module() && nodeModel->module()->id() == moduleId) {
+            return nodeGraphics->pos();
+        }
+    }
+
+    return std::nullopt;
+}
+
 void registerScaledAnchorType() {
     static bool registered = false;
     if (registered) {
@@ -287,6 +398,232 @@ void registerEndpointTypeWithLeftDefaultAnchor() {
 
     ModuleRegistry::instance().registerType(type);
     registered = true;
+}
+
+ModuleType registerOpenNocViewAnchoredType() {
+    QTemporaryDir packageRoot;
+    require(packageRoot.isValid(), "failed to create temporary OpenNoC view package");
+    require(QDir(packageRoot.path()).mkpath(QStringLiteral("views")),
+            "failed to create temporary view directory");
+
+    const QString moduleId = QStringLiteral("GeometryOpenNoCXPAnchored");
+    const QString viewPath = packageRoot.filePath(QStringLiteral("views/OpenNoCXP.xml"));
+    QFile viewFile(viewPath);
+    require(viewFile.open(QIODevice::WriteOnly | QIODevice::Text),
+            "failed to write temporary OpenNoC view XML");
+    viewFile.write(QByteArrayLiteral(R"xml(<?xml version="1.0" encoding="UTF-8"?>
+<module-view schema="v1" module="GeometryOpenNoCXPAnchored">
+  <graphics layout="mesh_router" node_color="#e6edf3" supports_collapse="true">
+    <expanded min_width="160" height="128" caption_left="16" caption_top="20" port_inset="18" />
+    <collapsed min_width="112" height="96" caption_left="20" caption_top="28" endpoint_inset="18" />
+  </graphics>
+  <anchors>
+    <anchor ref="p0" x="42" y="128" normal_x="0" normal_y="1" label="P0" label_x="30" label_y="106" />
+    <anchor ref="p1" x="118" y="128" normal_x="0" normal_y="1" label="P1" label_x="106" label_y="106" />
+  </anchors>
+</module-view>
+)xml"));
+    viewFile.close();
+
+    IpcraftPackageManifest manifest;
+    manifest.id = QStringLiteral("finepaper.geometry.opennoc");
+    manifest.connectionClasses.push_back(IpcraftConnectionClass{
+        QStringLiteral("chi_node_interface"),
+        QStringList{QStringLiteral("node"), QStringLiteral("interconnect")},
+        false
+    });
+
+    IpcraftModuleDescriptor module;
+    module.id = moduleId;
+    module.name = QStringLiteral("OpenNoC XP");
+    module.graphRole = QStringLiteral("host");
+    module.interfaces = {
+        IpcraftInterfaceDescriptor{
+            QStringLiteral("p0"),
+            QStringLiteral("P0"),
+            {},
+            QVector<IpcraftInterfaceAcceptRule>{
+                IpcraftInterfaceAcceptRule{QStringLiteral("chi_node_interface"),
+                                           QStringLiteral("interconnect")}
+            }
+        },
+        IpcraftInterfaceDescriptor{
+            QStringLiteral("p1"),
+            QStringLiteral("P1"),
+            {},
+            QVector<IpcraftInterfaceAcceptRule>{
+                IpcraftInterfaceAcceptRule{QStringLiteral("chi_node_interface"),
+                                           QStringLiteral("interconnect")}
+            }
+        }
+    };
+    manifest.modules.push_back(module);
+
+    IpcraftViewDescriptor view;
+    view.moduleId = moduleId;
+    view.filePath = QStringLiteral("views/OpenNoCXP.xml");
+    view.resolvedFilePath = viewPath;
+    manifest.views.push_back(view);
+
+    ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
+    require(registry.loadIpcraftPackages({manifest}), "temporary OpenNoC package should load");
+    const ModuleType* loadedType = registry.getType(moduleId);
+    require(loadedType != nullptr, "temporary OpenNoC module type should load");
+    ModuleRegistry::instance().registerType(*loadedType);
+    return *loadedType;
+}
+
+struct AttachmentZoneViewTypes {
+    ModuleType host;
+    ModuleType agent;
+};
+
+AttachmentZoneViewTypes registerAttachmentZoneViewTypes() {
+    QTemporaryDir packageRoot;
+    require(packageRoot.isValid(), "failed to create temporary attachment-zone view package");
+    require(QDir(packageRoot.path()).mkpath(QStringLiteral("views")),
+            "failed to create temporary attachment-zone view directory");
+
+    const QString hostModuleId = QStringLiteral("ZoneHost");
+    const QString agentModuleId = QStringLiteral("ZoneAgent");
+    const QString hostViewPath = packageRoot.filePath(QStringLiteral("views/ZoneHost.xml"));
+    QFile hostViewFile(hostViewPath);
+    require(hostViewFile.open(QIODevice::WriteOnly | QIODevice::Text),
+            "failed to write temporary attachment-zone host view XML");
+    hostViewFile.write(QByteArrayLiteral(R"xml(<?xml version="1.0" encoding="UTF-8"?>
+<module-view schema="v1" module="ZoneHost">
+  <graphics layout="zone_host_visual" node_color="#dde8f2" supports_collapse="true">
+    <expanded min_width="180" height="100" caption_left="16" caption_top="12" />
+    <collapsed min_width="132" height="74" caption_left="16" caption_top="12" />
+    <arrangement endpoint_offset_x="70" />
+  </graphics>
+  <anchors>
+    <anchor ref="socket" x="12" y="12" normal_x="-1" normal_y="0" label="Socket" label_x="24" label_y="24" />
+  </anchors>
+  <attachment-zones>
+    <zone id="socket" x="160" y="64" normal_x="1" normal_y="0" label="Socket" mirror="false" />
+  </attachment-zones>
+</module-view>
+)xml"));
+    hostViewFile.close();
+
+    const QString agentViewPath = packageRoot.filePath(QStringLiteral("views/ZoneAgent.xml"));
+    QFile agentViewFile(agentViewPath);
+    require(agentViewFile.open(QIODevice::WriteOnly | QIODevice::Text),
+            "failed to write temporary attachment-zone agent view XML");
+    agentViewFile.write(QByteArrayLiteral(R"xml(<?xml version="1.0" encoding="UTF-8"?>
+<module-view schema="v1" module="ZoneAgent">
+  <graphics layout="zone_agent_visual" node_color="#ecf6dd">
+    <expanded min_width="96" height="60" caption_left="8" caption_top="6" />
+  </graphics>
+  <anchors>
+    <anchor ref="link" x="96" y="42" normal_x="1" normal_y="0" label="Link" label_x="68" label_y="48" />
+  </anchors>
+</module-view>
+)xml"));
+    agentViewFile.close();
+
+    IpcraftPackageManifest manifest;
+    manifest.id = QStringLiteral("finepaper.attachment_zone_view");
+    manifest.connectionClasses.push_back(IpcraftConnectionClass{
+        QStringLiteral("zone_link"),
+        QStringList{QStringLiteral("initiator"), QStringLiteral("target")},
+        false
+    });
+
+    QJsonObject hostParameters;
+    hostParameters.insert(QStringLiteral("x"), QJsonObject{
+        {QStringLiteral("type"), QStringLiteral("int")},
+        {QStringLiteral("default"), 0},
+        {QStringLiteral("configurable"), false}
+    });
+    hostParameters.insert(QStringLiteral("y"), QJsonObject{
+        {QStringLiteral("type"), QStringLiteral("int")},
+        {QStringLiteral("default"), 0},
+        {QStringLiteral("configurable"), false}
+    });
+    hostParameters.insert(QStringLiteral("collapsed"), QJsonObject{
+        {QStringLiteral("type"), QStringLiteral("bool")},
+        {QStringLiteral("default"), false},
+        {QStringLiteral("configurable"), false}
+    });
+    hostParameters.insert(QStringLiteral("display_name"), QJsonObject{
+        {QStringLiteral("type"), QStringLiteral("string")},
+        {QStringLiteral("default"), QStringLiteral("ZH")},
+        {QStringLiteral("configurable"), false}
+    });
+
+    IpcraftModuleDescriptor hostModule;
+    hostModule.id = hostModuleId;
+    hostModule.name = QStringLiteral("Zone Host");
+    hostModule.graphRole = QStringLiteral("host");
+    hostModule.parameters = hostParameters;
+    hostModule.interfaces = {
+        IpcraftInterfaceDescriptor{
+            QStringLiteral("socket"),
+            QStringLiteral("Socket"),
+            {},
+            QVector<IpcraftInterfaceAcceptRule>{
+                IpcraftInterfaceAcceptRule{QStringLiteral("zone_link"), QStringLiteral("target")}
+            }
+        }
+    };
+
+    QJsonObject agentParameters;
+    agentParameters.insert(QStringLiteral("x"), QJsonObject{
+        {QStringLiteral("type"), QStringLiteral("int")},
+        {QStringLiteral("default"), 0},
+        {QStringLiteral("configurable"), false}
+    });
+    agentParameters.insert(QStringLiteral("y"), QJsonObject{
+        {QStringLiteral("type"), QStringLiteral("int")},
+        {QStringLiteral("default"), 0},
+        {QStringLiteral("configurable"), false}
+    });
+    agentParameters.insert(QStringLiteral("display_name"), QJsonObject{
+        {QStringLiteral("type"), QStringLiteral("string")},
+        {QStringLiteral("default"), QStringLiteral("ZA")},
+        {QStringLiteral("configurable"), false}
+    });
+
+    IpcraftModuleDescriptor agentModule;
+    agentModule.id = agentModuleId;
+    agentModule.name = QStringLiteral("Zone Agent");
+    agentModule.graphRole = QStringLiteral("attached");
+    agentModule.parameters = agentParameters;
+    agentModule.interfaces = {
+        IpcraftInterfaceDescriptor{
+            QStringLiteral("link"),
+            QStringLiteral("Link"),
+            {},
+            QVector<IpcraftInterfaceAcceptRule>{
+                IpcraftInterfaceAcceptRule{QStringLiteral("zone_link"), QStringLiteral("initiator")}
+            }
+        }
+    };
+
+    manifest.modules.push_back(hostModule);
+    manifest.modules.push_back(agentModule);
+    manifest.views.push_back(IpcraftViewDescriptor{
+        hostModuleId,
+        QStringLiteral("views/ZoneHost.xml"),
+        hostViewPath
+    });
+    manifest.views.push_back(IpcraftViewDescriptor{
+        agentModuleId,
+        QStringLiteral("views/ZoneAgent.xml"),
+        agentViewPath
+    });
+
+    ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
+    require(registry.loadIpcraftPackages({manifest}), "temporary attachment-zone package should load");
+    const ModuleType* loadedHostType = registry.getType(hostModuleId);
+    const ModuleType* loadedAgentType = registry.getType(agentModuleId);
+    require(loadedHostType != nullptr, "attachment-zone host module type should load");
+    require(loadedAgentType != nullptr, "attachment-zone agent module type should load");
+    ModuleRegistry::instance().registerType(*loadedHostType);
+    ModuleRegistry::instance().registerType(*loadedAgentType);
+    return AttachmentZoneViewTypes{*loadedHostType, *loadedAgentType};
 }
 
 std::unique_ptr<Module> makeRouter(bool collapsed, const QString& id = QStringLiteral("router")) {
@@ -514,6 +851,43 @@ void testStoredNodeSizeOverridesDefaultAndProvidesResizeHandle() {
     require(!resizeHandle.isEmpty(), "resizable nodes should expose a drag handle");
     require(resizeHandle.right() <= nodeSize.width() && resizeHandle.bottom() <= nodeSize.height(),
             "resize handle should sit inside the bottom-right node bounds");
+}
+
+void testOpenNocMultipleInterfacesRenderFromViewAnchors() {
+    const ModuleType type = registerOpenNocViewAnchoredType();
+
+    auto registry = std::make_shared<QtNodes::NodeDelegateModelRegistry>();
+    registry->registerModel<GraphNodeModel>(QStringLiteral("GraphNode"));
+    QtNodes::DataFlowGraphModel graphModel(registry);
+
+    std::unique_ptr<Module> xp = moduleFromType(type,
+                                                QStringLiteral("opennoc_xp"),
+                                                QStringLiteral("opennoc_0"));
+    xp->setParameter(QStringLiteral("display_name"), QStringLiteral("XP"));
+    xp->setParameter(QStringLiteral("collapsed"), false);
+    QtNodes::NodeId nodeId = QtNodes::InvalidNodeId;
+    GraphNodeModel* nodeModel = addGraphNode(graphModel, xp.get(), nodeId);
+    GraphNodeGeometry geometry(graphModel);
+
+    const QPointF p0 = geometry.portPosition(
+        nodeId,
+        QtNodes::PortType::In,
+        nodeModel->portIndex(QStringLiteral("p0"), QtNodes::PortType::In));
+    const QPointF p1 = geometry.portPosition(
+        nodeId,
+        QtNodes::PortType::In,
+        nodeModel->portIndex(QStringLiteral("p1"), QtNodes::PortType::In));
+    const QPointF p0Label = geometry.portTextPosition(
+        nodeId,
+        QtNodes::PortType::In,
+        nodeModel->portIndex(QStringLiteral("p0"), QtNodes::PortType::In));
+
+    require(p0 == QPointF(42.0, 128.0),
+            "OpenNoC p0 should render from its view XML anchor");
+    require(p1 == QPointF(118.0, 128.0),
+            "OpenNoC p1 should render from its view XML anchor instead of sharing p0 fallback");
+    require(p0Label == QPointF(30.0, 106.0),
+            "OpenNoC p0 label should render from its view XML label anchor");
 }
 
 void testNodeEditorWidgetOwnsConnectionRuleServiceInputs() {
@@ -757,6 +1131,192 @@ void testCollapsedHostAbsorbsEndpointWhenAttachmentConnectionIsAdded() {
             "collapsed host should absorb the attached endpoint visual");
 }
 
+void testCollapsedAttachedNodeMirrorsIntoHostZone() {
+    Graph graph;
+    CommandManager commandManager;
+    ProjectStateService stateService;
+    ProjectIpService projectIpService(&stateService);
+    ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
+    const ModuleType hostType = manifestAttachmentHostType();
+    const ModuleType agentType = manifestAttachedAgentType();
+    require(registry.registerType(hostType), "manifest attachment host should register locally");
+    require(registry.registerType(agentType), "manifest attached agent should register locally");
+    ModuleRegistry::instance().registerType(hostType);
+    ModuleRegistry::instance().registerType(agentType);
+
+    const IpCoreRuntimeDescriptor runtime = attachmentPresentationDescriptor();
+    IpCatalogService catalog(QList<IpCoreRuntimeDescriptor>{runtime}, &registry);
+    ActiveWorkspaceController workspaceController(&projectIpService, &catalog);
+    NodeEditorWidget editor(&graph, &stateService, &workspaceController, &commandManager);
+    editor.resize(360, 240);
+    editor.show();
+
+    const std::optional<IpCatalogEntry> entry = catalog.entry(runtime.id);
+    require(entry.has_value(), "attachment runtime should be in catalog");
+    const ProjectIpServiceResult instance = projectIpService.createInstanceForIpcore(*entry);
+    require(instance.success, "attachment IP instance should be selected");
+
+    require(graph.addModule(moduleFromType(hostType,
+                                           QStringLiteral("host"),
+                                           instance.record.instanceId)),
+            "manifest collapsed host should add");
+    require(graph.addModule(moduleFromType(agentType,
+                                           QStringLiteral("agent"),
+                                           instance.record.instanceId)),
+            "manifest attached agent should add");
+    Module* host = graph.getModule(QStringLiteral("host"));
+    Module* agent = graph.getModule(QStringLiteral("agent"));
+    require(host != nullptr && agent != nullptr, "manifest attachment modules should exist");
+    host->setParameter(QStringLiteral("x"), 40);
+    host->setParameter(QStringLiteral("y"), 50);
+    host->setParameter(QStringLiteral("collapsed"), false);
+    agent->setParameter(QStringLiteral("x"), 320);
+    agent->setParameter(QStringLiteral("y"), 80);
+    QCoreApplication::processEvents();
+
+    QStringList visibleIds = editor.visibleModuleIds();
+    require(visibleIds.contains(QStringLiteral("host")),
+            "manifest host should be visible before attachment");
+    require(visibleIds.contains(QStringLiteral("agent")),
+            "manifest attached agent should be visible before attachment");
+
+    graph.addConnection(std::make_unique<Connection>(
+        QStringLiteral("agent_to_host"),
+        PortRef{QStringLiteral("agent"), QStringLiteral("chi")},
+        PortRef{QStringLiteral("host"), QStringLiteral("p0")}));
+    QCoreApplication::processEvents();
+
+    visibleIds = editor.visibleModuleIds();
+    require(visibleIds.contains(QStringLiteral("host")),
+            "expanded manifest host should remain visible after attachment");
+    require(visibleIds.contains(QStringLiteral("agent")),
+            "expanded manifest host should keep attached node visible");
+    const std::optional<QPointF> expandedAgentPosition =
+        visibleModulePosition(editor, QStringLiteral("agent"));
+    require(expandedAgentPosition.has_value(), "expanded manifest attached node should have a visible position");
+    require(*expandedAgentPosition == QPointF(4.0, 322.0),
+            "manifest attachment metadata should place non-legacy attached node from its host interface anchor");
+
+    host->setParameter(QStringLiteral("collapsed"), true);
+    QCoreApplication::processEvents();
+
+    visibleIds = editor.visibleModuleIds();
+    require(visibleIds.contains(QStringLiteral("host")),
+            "collapsed manifest host should remain visible after attachment");
+    require(!visibleIds.contains(QStringLiteral("agent")),
+            "collapsed manifest host should absorb attached nodes through graph role and endpoint_attachment metadata");
+}
+
+void testVisualStyleAndEndpointLikeNamesDoNotImplyAttachmentBehavior() {
+    Graph graph;
+    CommandManager commandManager;
+    ProjectStateService stateService;
+    ProjectIpService projectIpService(&stateService);
+    ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
+    const ModuleType hostType = visualOnlyAttachmentHostType();
+    const ModuleType endpointType = visualOnlyAttachedEndpointType();
+    require(registry.registerType(hostType), "visual-only host should register locally");
+    require(registry.registerType(endpointType), "visual-only endpoint should register locally");
+    ModuleRegistry::instance().registerType(hostType);
+    ModuleRegistry::instance().registerType(endpointType);
+
+    const IpCoreRuntimeDescriptor runtime = attachmentPresentationDescriptor();
+    IpCatalogService catalog(QList<IpCoreRuntimeDescriptor>{runtime}, &registry);
+    ActiveWorkspaceController workspaceController(&projectIpService, &catalog);
+    NodeEditorWidget editor(&graph, &stateService, &workspaceController, &commandManager);
+    editor.resize(360, 240);
+    editor.show();
+
+    const std::optional<IpCatalogEntry> entry = catalog.entry(runtime.id);
+    require(entry.has_value(), "visual-only runtime should be in catalog");
+    const ProjectIpServiceResult instance = projectIpService.createInstanceForIpcore(*entry);
+    require(instance.success, "visual-only IP instance should be selected");
+
+    require(graph.addModule(moduleFromType(hostType,
+                                           QStringLiteral("visual_host"),
+                                           instance.record.instanceId)),
+            "visual-only collapsed host should add");
+    require(graph.addModule(moduleFromType(endpointType,
+                                           QStringLiteral("visual_endpoint"),
+                                           instance.record.instanceId)),
+            "visual-only endpoint should add");
+    QCoreApplication::processEvents();
+
+    QStringList visibleIds = editor.visibleModuleIds();
+    require(visibleIds.contains(QStringLiteral("visual_host")),
+            "visual-only host should be visible before connection");
+    require(visibleIds.contains(QStringLiteral("visual_endpoint")),
+            "visual-only endpoint should be visible before connection");
+
+    graph.addConnection(std::make_unique<Connection>(
+        QStringLiteral("visual_endpoint_to_host"),
+        PortRef{QStringLiteral("visual_endpoint"), QStringLiteral("noc")},
+        PortRef{QStringLiteral("visual_host"), QStringLiteral("local")}));
+    QCoreApplication::processEvents();
+
+    visibleIds = editor.visibleModuleIds();
+    require(visibleIds.contains(QStringLiteral("visual_host")),
+            "visual-only host should remain visible after connection");
+    require(visibleIds.contains(QStringLiteral("visual_endpoint")),
+            "endpoint-like port ids and visual collapse style must not hide nodes without endpoint_attachment metadata");
+}
+
+void testAttachmentZoneViewMetadataPlacesAttachedNodeWithoutMirroringWhenDisabled() {
+    const AttachmentZoneViewTypes types = registerAttachmentZoneViewTypes();
+
+    Graph graph;
+    CommandManager commandManager;
+    ProjectStateService stateService;
+    ProjectIpService projectIpService(&stateService);
+    ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
+    require(registry.registerType(types.host), "attachment-zone host should register locally");
+    require(registry.registerType(types.agent), "attachment-zone agent should register locally");
+
+    IpCoreRuntimeDescriptor runtime = attachmentPresentationDescriptor();
+    runtime.id = types.host.ipcoreId;
+    runtime.name = QStringLiteral("Attachment Zone View");
+    IpCatalogService catalog(QList<IpCoreRuntimeDescriptor>{runtime}, &registry);
+    ActiveWorkspaceController workspaceController(&projectIpService, &catalog);
+    NodeEditorWidget editor(&graph, &stateService, &workspaceController, &commandManager);
+    editor.resize(420, 280);
+    editor.show();
+
+    const std::optional<IpCatalogEntry> entry = catalog.entry(runtime.id);
+    require(entry.has_value(), "attachment-zone runtime should be in catalog");
+    const ProjectIpServiceResult instance = projectIpService.createInstanceForIpcore(*entry);
+    require(instance.success, "attachment-zone IP instance should be selected");
+
+    require(graph.addModule(moduleFromType(types.host,
+                                           QStringLiteral("zone_host"),
+                                           instance.record.instanceId)),
+            "attachment-zone host should add");
+    require(graph.addModule(moduleFromType(types.agent,
+                                           QStringLiteral("zone_agent"),
+                                           instance.record.instanceId)),
+            "attachment-zone agent should add");
+    Module* host = graph.getModule(QStringLiteral("zone_host"));
+    Module* agent = graph.getModule(QStringLiteral("zone_agent"));
+    require(host != nullptr && agent != nullptr, "attachment-zone modules should exist");
+    host->setParameter(QStringLiteral("x"), 25);
+    host->setParameter(QStringLiteral("y"), 35);
+    host->setParameter(QStringLiteral("collapsed"), false);
+    agent->setParameter(QStringLiteral("x"), 400);
+    agent->setParameter(QStringLiteral("y"), 400);
+    QCoreApplication::processEvents();
+
+    graph.addConnection(std::make_unique<Connection>(
+        QStringLiteral("zone_agent_to_host"),
+        PortRef{QStringLiteral("zone_agent"), QStringLiteral("link")},
+        PortRef{QStringLiteral("zone_host"), QStringLiteral("socket")}));
+    QCoreApplication::processEvents();
+
+    const std::optional<QPointF> agentPosition =
+        visibleModulePosition(editor, QStringLiteral("zone_agent"));
+    require(agentPosition.has_value(), "attachment-zone agent should remain visible while host is expanded");
+    require(*agentPosition == QPointF(255.0, 57.0),
+            "view XML attachment-zone anchor and mirror=false metadata should drive attached-node placement");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -772,6 +1332,7 @@ int main(int argc, char** argv) {
         testEndpointInterfaceFlipsTowardHostAnchor();
         testEndpointInterfaceFollowsRelativeNodePosition();
         testStoredNodeSizeOverridesDefaultAndProvidesResizeHandle();
+        testOpenNocMultipleInterfacesRenderFromViewAnchors();
         testNodeEditorWidgetOwnsConnectionRuleServiceInputs();
         testConnectionSelectionEmitsConnectionId();
         testScopedDropRejectsMissingActiveInstance();
@@ -781,6 +1342,9 @@ int main(int argc, char** argv) {
         testActiveWorkspaceShowsOnlyModulesForSelectedInstance();
         testCreateMenuTypesFollowActiveWorkspace();
         testCollapsedHostAbsorbsEndpointWhenAttachmentConnectionIsAdded();
+        testCollapsedAttachedNodeMirrorsIntoHostZone();
+        testVisualStyleAndEndpointLikeNamesDoNotImplyAttachmentBehavior();
+        testAttachmentZoneViewMetadataPlacesAttachedNodeWithoutMirroringWhenDisabled();
     } catch (const std::exception& error) {
         std::cerr << "nodeeditor_geometry_test failed: " << error.what() << '\n';
         return 1;

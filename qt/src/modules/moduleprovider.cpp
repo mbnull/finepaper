@@ -9,6 +9,7 @@
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QSet>
 #include <QXmlStreamReader>
 #include <utility>
 
@@ -116,6 +117,14 @@ QStringList stringListAttribute(const QXmlStreamAttributes& attributes, QStringV
 bool boolAttribute(const QXmlStreamAttributes& attributes, QStringView name, bool fallbackValue) {
     const auto value = attributes.value(name);
     return value.isEmpty() ? fallbackValue : parseBoolString(value, fallbackValue);
+}
+
+std::optional<bool> optionalBoolAttribute(const QXmlStreamAttributes& attributes, QStringView name) {
+    const auto value = attributes.value(name);
+    if (value.isEmpty()) {
+        return std::nullopt;
+    }
+    return parseBoolString(value, false);
 }
 
 int intAttribute(const QXmlStreamAttributes& attributes, QStringView name, int fallbackValue) {
@@ -266,13 +275,6 @@ QString graphGroupForIpcraftRole(const QString& graphRole) {
     return graphRole;
 }
 
-bool isRouterSideInterface(const QString& interfaceId) {
-    return interfaceId == QStringLiteral("north") ||
-           interfaceId == QStringLiteral("east") ||
-           interfaceId == QStringLiteral("south") ||
-           interfaceId == QStringLiteral("west");
-}
-
 QString firstAcceptConnectionClass(const IpcraftInterfaceDescriptor& interfaceDescriptor) {
     return interfaceDescriptor.accepts.isEmpty()
         ? QString()
@@ -307,29 +309,58 @@ QStringList compatibleRolesForAccept(const IpcraftPackageManifest& manifest,
     return compatibleRoles;
 }
 
+bool isRouterCapableGraphRole(const QString& graphRole) {
+    return graphRole == QStringLiteral("host") ||
+           graphRole == QStringLiteral("router");
+}
+
+QSet<QString> topologyInterfaceIdsForModule(const IpcraftPackageManifest& manifest,
+                                            const QString& moduleId) {
+    QSet<QString> interfaceIds;
+    for (const QJsonObject& topology : manifest.topologies) {
+        QString topologyModuleId = topology.value(QStringLiteral("module")).toString().trimmed();
+        if (topologyModuleId.isEmpty()) {
+            topologyModuleId = topology.value(QStringLiteral("router_module")).toString().trimmed();
+        }
+        if (topologyModuleId != moduleId) {
+            continue;
+        }
+
+        const QJsonObject ports = topology.value(QStringLiteral("ports")).toObject();
+        for (auto it = ports.constBegin(); it != ports.constEnd(); ++it) {
+            if (!it.value().isString()) {
+                continue;
+            }
+            const QString interfaceId = it.value().toString().trimmed();
+            if (!interfaceId.isEmpty()) {
+                interfaceIds.insert(interfaceId);
+            }
+        }
+    }
+    return interfaceIds;
+}
+
 QString autocompleteGroupForInterface(const IpcraftModuleDescriptor& module,
-                                      const IpcraftInterfaceDescriptor& interfaceDescriptor) {
-    if (module.graphRole == QStringLiteral("host") &&
-        isRouterSideInterface(interfaceDescriptor.id)) {
+                                      bool topologyInterface) {
+    if (isRouterCapableGraphRole(module.graphRole) && topologyInterface) {
         return QStringLiteral("router_side");
     }
     return QStringLiteral("endpoint_attachment");
 }
 
 QString topologyRuleForInterface(const IpcraftModuleDescriptor& module,
-                                 const IpcraftInterfaceDescriptor& interfaceDescriptor) {
-    if (module.graphRole == QStringLiteral("host") &&
-        isRouterSideInterface(interfaceDescriptor.id)) {
+                                 bool topologyInterface) {
+    if (isRouterCapableGraphRole(module.graphRole) && topologyInterface) {
         return QStringLiteral("opposite_side");
     }
     return {};
 }
 
 QString portRoleForInterface(const IpcraftModuleDescriptor& module,
-                             const IpcraftInterfaceDescriptor& interfaceDescriptor) {
-    return topologyRuleForInterface(module, interfaceDescriptor).isEmpty()
-        ? QStringLiteral("attachment")
-        : QStringLiteral("router");
+                             bool topologyInterface) {
+    return isRouterCapableGraphRole(module.graphRole) && topologyInterface
+        ? QStringLiteral("router")
+        : QStringLiteral("attachment");
 }
 
 std::optional<double> optionalJsonDouble(const QJsonValue& value) {
@@ -428,7 +459,9 @@ void loadIpcraftParameters(ModuleType& type, const QJsonObject& parameters) {
 
 ModuleInterfaceMetadata interfaceMetadataFromIpcraft(const IpcraftPackageManifest& manifest,
                                                      const IpcraftModuleDescriptor& module,
-                                                     const IpcraftInterfaceDescriptor& interfaceDescriptor) {
+                                                     const IpcraftInterfaceDescriptor& interfaceDescriptor,
+                                                     const QSet<QString>& topologyInterfaceIds) {
+    const bool topologyInterface = topologyInterfaceIds.contains(interfaceDescriptor.id);
     ModuleInterfaceMetadata metadata;
     metadata.id = interfaceDescriptor.id;
     metadata.label = interfaceDescriptor.label.isEmpty()
@@ -440,8 +473,8 @@ ModuleInterfaceMetadata interfaceMetadataFromIpcraft(const IpcraftPackageManifes
     metadata.cardinality = interfaceDescriptor.multiConnection
         ? QStringLiteral("many")
         : QStringLiteral("one");
-    metadata.autocompleteGroup = autocompleteGroupForInterface(module, interfaceDescriptor);
-    metadata.topologyRule = topologyRuleForInterface(module, interfaceDescriptor);
+    metadata.autocompleteGroup = autocompleteGroupForInterface(module, topologyInterface);
+    metadata.topologyRule = topologyRuleForInterface(module, topologyInterface);
     metadata.acceptRules = interfaceDescriptor.accepts;
     return metadata;
 }
@@ -512,16 +545,22 @@ ModuleType moduleTypeFromIpcraft(const IpcraftPackageManifest& manifest,
         type.viewFilePath = view->resolvedFilePath;
     }
 
+    const QSet<QString> topologyInterfaceIds =
+        topologyInterfaceIdsForModule(manifest, module.id);
     for (const IpcraftInterfaceDescriptor& interfaceDescriptor : module.interfaces) {
         ModuleInterfaceMetadata metadata =
-            interfaceMetadataFromIpcraft(manifest, module, interfaceDescriptor);
+            interfaceMetadataFromIpcraft(manifest,
+                                         module,
+                                         interfaceDescriptor,
+                                         topologyInterfaceIds);
         type.interfaceMetadata.insert(metadata.id, metadata);
         type.defaultPorts.emplace_back(interfaceDescriptor.id,
                                        Port::Direction::InOut,
                                        QStringLiteral("bus"),
                                        metadata.label,
                                        QStringLiteral("%1 interface").arg(metadata.label),
-                                       portRoleForInterface(module, interfaceDescriptor),
+                                       portRoleForInterface(module,
+                                                            topologyInterfaceIds.contains(interfaceDescriptor.id)),
                                        metadata.bus,
                                        interfaceDescriptor.id);
     }
@@ -616,6 +655,39 @@ void loadAnchorsFromXml(ModuleType& type, QXmlStreamReader& xml) {
             type.interfaceAnchors.insert(anchor.interfaceId, anchor);
         }
         xml.skipCurrentElement();
+    }
+}
+
+void loadAttachmentZoneElement(ModuleType& type, QXmlStreamReader& xml) {
+    const QXmlStreamAttributes attrs = xml.attributes();
+    QString zoneId = attributeValue(attrs, u"id");
+    if (zoneId.isEmpty()) {
+        zoneId = attributeValue(attrs, u"ref");
+    }
+
+    const std::optional<double> x = optionalDoubleAttribute(attrs, u"x");
+    const std::optional<double> y = optionalDoubleAttribute(attrs, u"y");
+    if (!zoneId.isEmpty() && x.has_value() && y.has_value()) {
+        ModuleAttachmentZone zone;
+        zone.id = zoneId;
+        zone.x = *x;
+        zone.y = *y;
+        zone.normalX = optionalDoubleAttribute(attrs, u"normal_x");
+        zone.normalY = optionalDoubleAttribute(attrs, u"normal_y");
+        zone.label = attributeValue(attrs, u"label");
+        zone.mirrorAttachedNode = optionalBoolAttribute(attrs, u"mirror");
+        type.attachmentZones.insert(zone.id, zone);
+    }
+    xml.skipCurrentElement();
+}
+
+void loadAttachmentZonesFromXml(ModuleType& type, QXmlStreamReader& xml) {
+    while (xml.readNextStartElement()) {
+        if (xml.name() == u"zone" || xml.name() == u"attachment-zone") {
+            loadAttachmentZoneElement(type, xml);
+        } else {
+            xml.skipCurrentElement();
+        }
     }
 }
 
@@ -823,6 +895,10 @@ ModuleType loadModuleTypeFromXml(QXmlStreamReader& xml) {
             applyGraphicsElement(type, xml);
         } else if (xml.name() == u"anchors") {
             loadAnchorsFromXml(type, xml);
+        } else if (xml.name() == u"attachment-zones") {
+            loadAttachmentZonesFromXml(type, xml);
+        } else if (xml.name() == u"attachment-zone") {
+            loadAttachmentZoneElement(type, xml);
         } else if (xml.name() == u"interfaces") {
             loadInterfacesFromXml(type, xml);
         } else if (xml.name() == u"ports") {
@@ -992,6 +1068,10 @@ void XmlModuleGraphicsOverlay::apply(QHash<QString, ModuleType>& types) {
                     applyGraphicsElement(typeIt.value(), xml);
                 } else if (xml.name() == u"anchors") {
                     loadAnchorsFromXml(typeIt.value(), xml);
+                } else if (xml.name() == u"attachment-zones") {
+                    loadAttachmentZonesFromXml(typeIt.value(), xml);
+                } else if (xml.name() == u"attachment-zone") {
+                    loadAttachmentZoneElement(typeIt.value(), xml);
                 } else {
                     xml.skipCurrentElement();
                 }
@@ -1036,6 +1116,10 @@ void IpcraftModuleViewOverlay::apply(QHash<QString, ModuleType>& types) {
                     applyGraphicsElement(typeIt.value(), xml);
                 } else if (xml.name() == u"anchors") {
                     loadAnchorsFromXml(typeIt.value(), xml);
+                } else if (xml.name() == u"attachment-zones") {
+                    loadAttachmentZonesFromXml(typeIt.value(), xml);
+                } else if (xml.name() == u"attachment-zone") {
+                    loadAttachmentZoneElement(typeIt.value(), xml);
                 } else {
                     xml.skipCurrentElement();
                 }

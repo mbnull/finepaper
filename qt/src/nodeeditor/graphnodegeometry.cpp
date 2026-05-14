@@ -143,6 +143,15 @@ bool shouldUseInterfaceAnchors(const GraphNodeModel& model) {
     return !(model.isCollapsed() && ModuleTypeMetadata::supportsCollapse(model.module()));
 }
 
+bool isPackageViewBacked(const Module* module) {
+    const ModuleType* type = ModuleTypeMetadata::type(module);
+    return type && (!type->packageId.isEmpty() || !type->viewFilePath.isEmpty());
+}
+
+bool shouldPreferInterfaceAnchors(const GraphNodeModel& model) {
+    return shouldUseInterfaceAnchors(model) && isPackageViewBacked(model.module());
+}
+
 bool hasStatefulPortLayout(const Module* module) {
     return ModuleTypeMetadata::hasEditorLayout(module, u"mesh_router") ||
            ModuleTypeMetadata::hasEditorLayout(module, u"endpoint");
@@ -188,6 +197,12 @@ QPointF GraphNodeGeometry::portPosition(QtNodes::NodeId nodeId,
     if (!port) return {};
 
     const QSize nodeSize = size(nodeId);
+    if (shouldPreferInterfaceAnchors(*model)) {
+        if (const ModuleInterfaceAnchor* anchor = ModuleTypeMetadata::interfaceAnchor(model->module(), *port)) {
+            return scaledAnchorPoint(model->module(), nodeSize, anchor->x, anchor->y);
+        }
+    }
+
     if (ModuleTypeMetadata::hasEditorLayout(model->module(), u"endpoint")) {
         return endpointPortPosition(nodeId, portType, index, *port, nodeSize);
     }
@@ -214,6 +229,14 @@ QPointF GraphNodeGeometry::portTextPosition(QtNodes::NodeId nodeId,
     const Port* port = model ? model->portAt(portType, portIndex) : nullptr;
     if (!port) {
         return {};
+    }
+
+    if (model && shouldPreferInterfaceAnchors(*model)) {
+        if (const ModuleInterfaceAnchor* anchor = ModuleTypeMetadata::interfaceAnchor(model->module(), *port)) {
+            if (anchor->labelX.has_value() && anchor->labelY.has_value()) {
+                return scaledAnchorPoint(model->module(), nodeSize, *anchor->labelX, *anchor->labelY);
+            }
+        }
     }
 
     if (model &&
@@ -396,6 +419,14 @@ std::optional<QPointF> GraphNodeGeometry::connectedPortNormal(QtNodes::NodeId no
         const Port* otherPort = otherModel ? otherModel->portAt(otherPortType, otherPortIndex) : nullptr;
         if (!otherModel || !otherPort) {
             continue;
+        }
+
+        if (shouldPreferInterfaceAnchors(*otherModel)) {
+            if (const ModuleInterfaceAnchor* anchor =
+                    ModuleTypeMetadata::interfaceAnchor(otherModel->module(), *otherPort);
+                anchor && anchor->normalX.has_value() && anchor->normalY.has_value()) {
+                return QPointF(*anchor->normalX, *anchor->normalY);
+            }
         }
 
         const QSize otherSize = size(otherNodeId);

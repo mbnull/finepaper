@@ -57,12 +57,48 @@ private:
     int& m_counter;
 };
 
-bool usesMeshRouterPresentation(const Module* module) {
-    return ModuleTypeMetadata::hasEditorLayout(module, u"mesh_router");
+const Port* findPort(const Module* module, const QString& portId) {
+    if (!module) return nullptr;
+
+    for (const auto& port : module->ports()) {
+        if (port.id() == portId) {
+            return &port;
+        }
+    }
+
+    return nullptr;
 }
 
-bool isEndpointModule(const Module* module) {
-    return ModuleTypeMetadata::isInGraphGroup(module, u"endpoints");
+bool isHostAttachmentModule(const Module* module) {
+    const QString graphRole = ModuleTypeMetadata::graphRole(module);
+    return graphRole == QStringLiteral("host") ||
+           graphRole == QStringLiteral("router");
+}
+
+bool isAttachedModule(const Module* module) {
+    const QString graphRole = ModuleTypeMetadata::graphRole(module);
+    return graphRole == QStringLiteral("attached") ||
+           graphRole == QStringLiteral("attachment");
+}
+
+QString interfaceIdForPort(const Port& port) {
+    return port.interfaceId().isEmpty() ? port.id() : port.interfaceId();
+}
+
+bool isAttachmentPort(const Module* module, const QString& portId) {
+    const Port* port = findPort(module, portId);
+    if (!port) {
+        return false;
+    }
+
+    const QString interfaceId = interfaceIdForPort(*port);
+    const ModuleInterfaceMetadata* metadata =
+        ModuleTypeMetadata::interfaceMetadata(module, interfaceId);
+    if (metadata && metadata->autocompleteGroup == QStringLiteral("endpoint_attachment")) {
+        return true;
+    }
+
+    return ModuleTypeMetadata::attachmentZone(module, interfaceId) != nullptr;
 }
 
 bool boolParameter(const Module* module, const QString& name, bool fallbackValue) {
@@ -94,32 +130,26 @@ bool isEndpointAttachmentConnection(const Graph* graph,
     if (!sourceModule || !targetModule) return false;
 
     // Endpoint attachment presentation normalizes either stored direction to
-    // host-router and endpoint IDs.
-    if (isEndpointModule(sourceModule) && usesMeshRouterPresentation(targetModule) &&
-        PortLayout::isEndpointPortId(connection.target().portId)) {
+    // host and attached-node IDs using manifest roles and attachment metadata.
+    if (isAttachedModule(sourceModule) &&
+        isHostAttachmentModule(targetModule) &&
+        isAttachmentPort(sourceModule, connection.source().portId) &&
+        isAttachmentPort(targetModule, connection.target().portId)) {
         if (hostModuleId) *hostModuleId = targetModule->id();
         if (endpointModuleId) *endpointModuleId = sourceModule->id();
         return true;
     }
 
-    if (!usesMeshRouterPresentation(sourceModule) || !isEndpointModule(targetModule)) return false;
-    if (!PortLayout::isEndpointPortId(connection.source().portId)) return false;
+    if (!isHostAttachmentModule(sourceModule) ||
+        !isAttachedModule(targetModule) ||
+        !isAttachmentPort(sourceModule, connection.source().portId) ||
+        !isAttachmentPort(targetModule, connection.target().portId)) {
+        return false;
+    }
 
     if (hostModuleId) *hostModuleId = sourceModule->id();
     if (endpointModuleId) *endpointModuleId = targetModule->id();
     return true;
-}
-
-const Port* findPort(const Module* module, const QString& portId) {
-    if (!module) return nullptr;
-
-    for (const auto& port : module->ports()) {
-        if (port.id() == portId) {
-            return &port;
-        }
-    }
-
-    return nullptr;
 }
 
 QPointF normalForSide(const QString& side) {
@@ -139,15 +169,15 @@ QPointF portNormal(const Module* module,
     }
 
     const QPointF edgeNormal = PortAnchorGeometry::normalFromEdge(portPosition, nodeSize);
+    if (const ModuleInterfaceAnchor* anchor = ModuleTypeMetadata::interfaceAnchor(module, *port);
+        anchor && anchor->normalX.has_value() && anchor->normalY.has_value()) {
+        return QPointF(*anchor->normalX, *anchor->normalY);
+    }
+
     if ((ModuleTypeMetadata::hasEditorLayout(module, u"mesh_router") ||
          ModuleTypeMetadata::hasEditorLayout(module, u"endpoint")) &&
         !edgeNormal.isNull()) {
         return edgeNormal;
-    }
-
-    if (const ModuleInterfaceAnchor* anchor = ModuleTypeMetadata::interfaceAnchor(module, *port);
-        anchor && anchor->normalX.has_value() && anchor->normalY.has_value()) {
-        return QPointF(*anchor->normalX, *anchor->normalY);
     }
 
     if (!edgeNormal.isNull()) {
@@ -158,6 +188,65 @@ QPointF portNormal(const Module* module,
         return normalForSide(PortLayout::routerSideId(port->id()));
     }
     return normalForSide(PortLayout::fallbackSide(*port));
+}
+
+QPointF scaledViewPoint(const Module* module,
+                        const QSize& nodeSize,
+                        double x,
+                        double y) {
+    const double baselineWidth = static_cast<double>(ModuleTypeMetadata::expandedNodeMinWidth(module));
+    const double baselineHeight = static_cast<double>(ModuleTypeMetadata::expandedNodeHeight(module));
+    const double xScale = baselineWidth > 0.0 ? static_cast<double>(nodeSize.width()) / baselineWidth : 1.0;
+    const double yScale = baselineHeight > 0.0 ? static_cast<double>(nodeSize.height()) / baselineHeight : 1.0;
+    return QPointF(x * xScale, y * yScale);
+}
+
+struct HostAttachmentAnchor {
+    QPointF position;
+    QPointF normal;
+    const ModuleAttachmentZone* zone = nullptr;
+};
+
+std::optional<HostAttachmentAnchor> hostAttachmentAnchor(const Module* module,
+                                                         const Port* port,
+                                                         const QPointF& portPosition,
+                                                         const QSize& nodeSize) {
+    if (!module || !port) {
+        return std::nullopt;
+    }
+
+    HostAttachmentAnchor anchor;
+    if (const ModuleAttachmentZone* zone = ModuleTypeMetadata::attachmentZone(module, *port)) {
+        anchor.position = scaledViewPoint(module, nodeSize, zone->x, zone->y);
+        if (zone->normalX.has_value() && zone->normalY.has_value()) {
+            anchor.normal = QPointF(*zone->normalX, *zone->normalY);
+        }
+        anchor.zone = zone;
+    } else {
+        anchor.position = portPosition;
+    }
+
+    if (anchor.normal.isNull()) {
+        anchor.normal = portNormal(module, port, anchor.position, nodeSize);
+    }
+    if (anchor.normal.isNull()) {
+        return std::nullopt;
+    }
+
+    return anchor;
+}
+
+QPointF attachmentPortAnchor(const Module* module,
+                             const Port* port,
+                             const QSize& nodeSize,
+                             const QPointF& fallbackNormal) {
+    if (module && port) {
+        if (const ModuleInterfaceAnchor* anchor = ModuleTypeMetadata::interfaceAnchor(module, *port)) {
+            return scaledViewPoint(module, nodeSize, anchor->x, anchor->y);
+        }
+    }
+
+    return EndpointAttachmentLayout::endpointAnchorForHostNormal(nodeSize, fallbackNormal);
 }
 
 constexpr qreal kCanvasHalfExtent = 2000.0;
@@ -1262,25 +1351,34 @@ void NodeEditorWidget::positionAttachedEndpoint(Connection* connection) {
         m_graphModel->nodeData(hostNodeIt.value(), QtNodes::NodeRole::Position).value<QPointF>();
     const QPointF hostPortPosition = geometry.portPosition(hostNodeIt.value(), hostPortType, hostPortIndex);
     const Port* hostPort = findPort(hostModule, hostPortId);
-    const QPointF normal = portNormal(hostModule, hostPort, hostPortPosition, geometry.size(hostNodeIt.value()));
-    if (normal.isNull()) {
+    const std::optional<HostAttachmentAnchor> hostAnchor =
+        hostAttachmentAnchor(hostModule,
+                             hostPort,
+                             hostPortPosition,
+                             geometry.size(hostNodeIt.value()));
+    if (!hostAnchor.has_value()) {
         // Without a stable outward normal, there is no deterministic side for
         // endpoint attachment.
         return;
     }
 
-    const QPointF endpointPortPosition =
-        EndpointAttachmentLayout::endpointAnchorForHostNormal(geometry.size(endpointNodeIt.value()), normal);
+    const Port* endpointPort = findPort(endpointModule, endpointPortId);
+    const QSize endpointSize = geometry.size(endpointNodeIt.value());
+    const bool mirrorAttachedNode =
+        hostAnchor->zone ? hostAnchor->zone->mirrorAttachedNode.value_or(true) : true;
+    const QPointF endpointPortPosition = mirrorAttachedNode
+        ? EndpointAttachmentLayout::endpointAnchorForHostNormal(endpointSize, hostAnchor->normal)
+        : attachmentPortAnchor(endpointModule, endpointPort, endpointSize, hostAnchor->normal);
     // Offset is measured along the host-port normal so north/east/south/west
     // attachments share the same geometry path.
     const qreal configuredOffset = static_cast<qreal>(ModuleTypeMetadata::linkedEndpointOffsetX(hostModule));
-    const qreal projectedEndpointAnchor = QPointF::dotProduct(endpointPortPosition, normal);
+    const qreal projectedEndpointAnchor = QPointF::dotProduct(endpointPortPosition, hostAnchor->normal);
     const qreal gap = std::max<qreal>(32.0, configuredOffset + projectedEndpointAnchor);
     const QPointF targetPosition = clampNodePosition(
         endpointNodeIt.value(),
         EndpointAttachmentLayout::endpointTopLeft(
-            hostPosition + hostPortPosition,
-            normal,
+            hostPosition + hostAnchor->position,
+            hostAnchor->normal,
             endpointPortPosition,
             gap));
 

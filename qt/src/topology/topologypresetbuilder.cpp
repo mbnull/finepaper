@@ -35,6 +35,21 @@ QString scopedGraphId(const QString& instanceId, const QString& logicalId) {
     return instanceId + QLatin1Char('_') + logicalId;
 }
 
+QString generatedConnectionId(const QString& sourceModuleId,
+                              const QString& sourceInterfaceId,
+                              const QString& fallbackSuffix) {
+    const QString suffix = sourceInterfaceId.trimmed().isEmpty()
+        ? fallbackSuffix
+        : sourceInterfaceId.trimmed();
+    return sourceModuleId + QLatin1Char('_') + suffix;
+}
+
+bool isRouterCapableGraphRole(const QString& graphRole) {
+    return graphRole.isEmpty() ||
+           graphRole == QStringLiteral("host") ||
+           graphRole == QStringLiteral("router");
+}
+
 void rollbackCreated(Graph* graph, TopologyPresetResult& result) {
     if (!graph) {
         return;
@@ -224,7 +239,14 @@ TopologyPresetResult createMesh(Graph* graph,
             if (col + 1 < cols) {
                 const QString rightLogical = meshNodeId(request.preset.idPattern, row, col + 1);
                 const QString right = scopedGraphId(request.instanceId, rightLogical);
-                if (!addLink(graph, ruleService, result, current + QStringLiteral("_east"), current, east, right, west)) {
+                if (!addLink(graph,
+                             ruleService,
+                             result,
+                             generatedConnectionId(current, east, QStringLiteral("east")),
+                             current,
+                             east,
+                             right,
+                             west)) {
                     rollbackCreated(graph, result);
                     return result;
                 }
@@ -232,7 +254,14 @@ TopologyPresetResult createMesh(Graph* graph,
             if (row + 1 < rows) {
                 const QString belowLogical = meshNodeId(request.preset.idPattern, row + 1, col);
                 const QString below = scopedGraphId(request.instanceId, belowLogical);
-                if (!addLink(graph, ruleService, result, current + QStringLiteral("_south"), current, south, below, north)) {
+                if (!addLink(graph,
+                             ruleService,
+                             result,
+                             generatedConnectionId(current, south, QStringLiteral("south")),
+                             current,
+                             south,
+                             below,
+                             north)) {
                     rollbackCreated(graph, result);
                     return result;
                 }
@@ -280,7 +309,14 @@ TopologyPresetResult createRing(Graph* graph,
                                               ringNodeId(request.preset.idPattern, index));
         const QString next = scopedGraphId(request.instanceId,
                                            ringNodeId(request.preset.idPattern, (index + 1) % nodes));
-        if (!addLink(graph, ruleService, result, current + QStringLiteral("_next"), current, east, next, west)) {
+        if (!addLink(graph,
+                     ruleService,
+                     result,
+                     generatedConnectionId(current, east, QStringLiteral("next")),
+                     current,
+                     east,
+                     next,
+                     west)) {
             rollbackCreated(graph, result);
             return result;
         }
@@ -305,6 +341,10 @@ TopologyPresetResult TopologyPresetBuilder::apply(Graph* graph,
     if (!routerType || routerType->ipcoreId != request.ipcoreId) {
         return failure(QStringLiteral("Router module %1 is not part of active IP %2")
                            .arg(request.preset.routerModule, request.ipcoreId));
+    }
+    if (!isRouterCapableGraphRole(routerType->graphRole)) {
+        return failure(QStringLiteral("Topology module %1 graph role %2 is not host/router-capable")
+                           .arg(request.preset.routerModule, routerType->graphRole));
     }
     if (request.preset.kind == QStringLiteral("mesh")) {
         return createMesh(graph,

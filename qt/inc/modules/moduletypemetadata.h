@@ -220,6 +220,21 @@ inline const ModuleInterfaceAnchor* interfaceAnchor(const Module* module, const 
     return interfaceAnchor(module, interfaceId);
 }
 
+inline const ModuleAttachmentZone* attachmentZone(const Module* module, const QString& zoneId) {
+    const ModuleType* moduleType = type(module);
+    if (!moduleType || zoneId.isEmpty()) {
+        return nullptr;
+    }
+
+    const auto it = moduleType->attachmentZones.find(zoneId);
+    return it != moduleType->attachmentZones.end() ? &it.value() : nullptr;
+}
+
+inline const ModuleAttachmentZone* attachmentZone(const Module* module, const Port& port) {
+    const QString interfaceId = port.interfaceId().isEmpty() ? port.id() : port.interfaceId();
+    return attachmentZone(module, interfaceId);
+}
+
 inline QString interfaceLabel(const Module* module, const Port& port) {
     const ModuleInterfaceAnchor* anchor = interfaceAnchor(module, port);
     if (anchor && !anchor->label.isEmpty()) {
