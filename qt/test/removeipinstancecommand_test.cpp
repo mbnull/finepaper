@@ -73,6 +73,59 @@ void addConnection(Graph& graph,
                                                      PortRef{targetModuleId, targetPortId}));
 }
 
+void addConnectionWithMetadata(Graph& graph,
+                               const QString& id,
+                               const QString& sourceModuleId,
+                               const QString& sourcePortId,
+                               const QString& targetModuleId,
+                               const QString& targetPortId) {
+    graph.addConnection(std::make_unique<Connection>(
+        id,
+        PortRef{sourceModuleId, sourcePortId},
+        PortRef{targetModuleId, targetPortId},
+        QStringLiteral("chi_node_interface"),
+        QVector<ConnectionInterfaceRef>{
+            ConnectionInterfaceRef{sourceModuleId, sourcePortId},
+            ConnectionInterfaceRef{targetModuleId, targetPortId}
+        },
+        QStringLiteral("ambiguous"),
+        QStringList{QStringLiteral("chi_node_interface"), QStringLiteral("monitor_tap")}));
+}
+
+const Connection* findConnection(const Graph& graph, const QString& id) {
+    for (const std::unique_ptr<Connection>& connection : graph.connections()) {
+        if (connection && connection->id() == id) {
+            return connection.get();
+        }
+    }
+    return nullptr;
+}
+
+void requireConnectionMetadata(const Connection* connection,
+                               const QString& sourceModuleId,
+                               const QString& sourcePortId,
+                               const QString& targetModuleId,
+                               const QString& targetPortId) {
+    require(connection != nullptr, "expected restored connection to exist");
+    require(connection->connectionClassId() == QStringLiteral("chi_node_interface"),
+            "undo should preserve restored connection class");
+    require(connection->status() == QStringLiteral("ambiguous"),
+            "undo should preserve restored connection status");
+    require(connection->alternatives() == QStringList({QStringLiteral("chi_node_interface"),
+                                                       QStringLiteral("monitor_tap")}),
+            "undo should preserve restored alternatives");
+    require(connection->interfaces().size() == 2,
+            "undo should preserve restored interface participants");
+    require(connection->interfaces().at(0).instanceId == sourceModuleId,
+            "undo should preserve first participant instance");
+    require(connection->interfaces().at(0).interfaceId == sourcePortId,
+            "undo should preserve first participant interface");
+    require(connection->interfaces().at(1).instanceId == targetModuleId,
+            "undo should preserve second participant instance");
+    require(connection->interfaces().at(1).interfaceId == targetPortId,
+            "undo should preserve second participant interface");
+}
+
 void testProjectStateServiceSupportsIndexedTakeAndInsert() {
     ProjectStateService stateService;
     const ProjectIpInstanceRecord ravenoc0 =
@@ -166,12 +219,12 @@ void testRemoveIpInstanceCommandRemovesOwnedStateAndSupportsUndoRedo() {
                   QStringLiteral("local"),
                   QStringLiteral("target_endpoint"),
                   QStringLiteral("noc"));
-    addConnection(graph,
-                  QStringLiteral("cross_instance"),
-                  QStringLiteral("target_router"),
-                  QStringLiteral("east"),
-                  QStringLiteral("other_router"),
-                  QStringLiteral("west"));
+    addConnectionWithMetadata(graph,
+                              QStringLiteral("cross_instance"),
+                              QStringLiteral("target_router"),
+                              QStringLiteral("east"),
+                              QStringLiteral("other_router"),
+                              QStringLiteral("west"));
     addConnection(graph,
                   QStringLiteral("other_internal"),
                   QStringLiteral("other_router"),
@@ -220,6 +273,11 @@ void testRemoveIpInstanceCommandRemovesOwnedStateAndSupportsUndoRedo() {
             "undo should restore all removed modules");
     require(graph.connections().size() == 3,
             "undo should restore removed connections");
+    requireConnectionMetadata(findConnection(graph, QStringLiteral("cross_instance")),
+                              QStringLiteral("target_router"),
+                              QStringLiteral("east"),
+                              QStringLiteral("other_router"),
+                              QStringLiteral("west"));
     require(projectIpService.selectedIpInstance().has_value(),
             "undo should restore the previous selection");
     require(projectIpService.selectedIpInstance()->instanceId == removedInstanceId,

@@ -25,10 +25,7 @@ void RemoveConnectionCommand::undo() {
     }
 
     const qsizetype before = static_cast<qsizetype>(m_graph->connections().size());
-    m_graph->insertConnection(std::make_unique<Connection>(
-        m_connection->id(),
-        m_connection->source(),
-        m_connection->target()));
+    m_graph->insertConnection(m_connection->clone());
     const qsizetype after = static_cast<qsizetype>(m_graph->connections().size());
     if (after == before + 1) {
         m_connection.reset();

@@ -22,6 +22,10 @@ ProjectConnectionEndpoint endpointFromObject(const QJsonObject& object) {
     return endpoint;
 }
 
+bool isNonEmptyString(const QJsonValue& value) {
+    return value.isString() && !value.toString().trimmed().isEmpty();
+}
+
 } // namespace
 
 ProjectFileKind ProjectReader::detectKind(const QString& path) {
@@ -145,11 +149,60 @@ ProjectReadResult ProjectReader::readFile(const QString& path) {
 
     const QJsonArray connections = connectionsValue.toArray();
     for (const QJsonValue& value : connections) {
+        if (!value.isObject()) {
+            return failure(QStringLiteral("Project graph.connections entries must be objects"));
+        }
         const QJsonObject object = value.toObject();
         ProjectConnectionRecord connection;
         connection.id = object.value(QStringLiteral("id")).toString();
-        connection.source = endpointFromObject(object.value(QStringLiteral("source")).toObject());
-        connection.target = endpointFromObject(object.value(QStringLiteral("target")).toObject());
+        const QJsonValue interfacesValue = object.value(QStringLiteral("interfaces"));
+        if (!interfacesValue.isUndefined()) {
+            if (!interfacesValue.isArray()) {
+                return failure(QStringLiteral("Project connection %1 interfaces must be an array")
+                                   .arg(connection.id));
+            }
+            connection.connectionClassId = object.value(QStringLiteral("class")).toString();
+            connection.status = object.value(QStringLiteral("status")).toString(QStringLiteral("valid"));
+            const QJsonArray interfaces = interfacesValue.toArray();
+            if (interfaces.size() != 2) {
+                return failure(QStringLiteral("Project connection %1 interfaces must contain exactly two participants")
+                                   .arg(connection.id));
+            }
+            for (const QJsonValue& participantValue : interfaces) {
+                if (!participantValue.isObject()) {
+                    return failure(QStringLiteral("Project connection %1 interface participants must be objects")
+                                       .arg(connection.id));
+                }
+                const QJsonObject participant = participantValue.toObject();
+                if (!isNonEmptyString(participant.value(QStringLiteral("instance"))) ||
+                    !isNonEmptyString(participant.value(QStringLiteral("interface")))) {
+                    return failure(QStringLiteral("Project connection %1 interface participant must include instance and interface")
+                                       .arg(connection.id));
+                }
+                connection.interfaces.push_back(ProjectConnectionInterfaceRef{
+                    participant.value(QStringLiteral("instance")).toString(),
+                    participant.value(QStringLiteral("interface")).toString()
+                });
+            }
+
+            const QJsonValue alternativesValue = object.value(QStringLiteral("alternatives"));
+            if (!alternativesValue.isUndefined()) {
+                if (!alternativesValue.isArray()) {
+                    return failure(QStringLiteral("Project connection %1 alternatives must be an array")
+                                       .arg(connection.id));
+                }
+                for (const QJsonValue& alternative : alternativesValue.toArray()) {
+                    if (!alternative.isString()) {
+                        return failure(QStringLiteral("Project connection %1 alternatives must contain strings")
+                                           .arg(connection.id));
+                    }
+                    connection.alternatives.append(alternative.toString());
+                }
+            }
+        } else {
+            connection.source = endpointFromObject(object.value(QStringLiteral("source")).toObject());
+            connection.target = endpointFromObject(object.value(QStringLiteral("target")).toObject());
+        }
         document.connections.push_back(connection);
     }
 

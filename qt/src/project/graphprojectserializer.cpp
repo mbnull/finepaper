@@ -13,6 +13,8 @@
 #include <algorithm>
 #include <cmath>
 #include <memory>
+#include <optional>
+#include <utility>
 
 namespace {
 
@@ -58,7 +60,9 @@ std::unique_ptr<Module> instantiateModule(const ModuleType& type, const QString&
 }
 
 bool hasPort(const Module* module, const QString& portId) {
-    if (!module) return false;
+    if (!module) {
+        return false;
+    }
     return std::any_of(module->ports().begin(), module->ports().end(), [&](const Port& port) {
         return port.id() == portId;
     });
@@ -70,12 +74,232 @@ bool hasPort(const ModuleType& type, const QString& portId) {
     });
 }
 
+const Port* findPort(const Module* module, const QString& portId) {
+    if (!module) {
+        return nullptr;
+    }
+    const auto it = std::find_if(module->ports().begin(), module->ports().end(), [&](const Port& port) {
+        return port.id() == portId;
+    });
+    return it != module->ports().end() ? &(*it) : nullptr;
+}
+
+const Port* findPortByInterface(const ModuleType& type, const QString& interfaceId) {
+    auto it = std::find_if(type.defaultPorts.begin(), type.defaultPorts.end(), [&](const Port& port) {
+        return port.interfaceId() == interfaceId;
+    });
+    if (it != type.defaultPorts.end()) {
+        return &(*it);
+    }
+
+    it = std::find_if(type.defaultPorts.begin(), type.defaultPorts.end(), [&](const Port& port) {
+        return port.id() == interfaceId;
+    });
+    return it != type.defaultPorts.end() ? &(*it) : nullptr;
+}
+
+QString interfaceIdForPort(const Port& port) {
+    return port.interfaceId().isEmpty() ? port.id() : port.interfaceId();
+}
+
+ProjectConnectionInterfaceRef projectInterfaceRef(const Module* module, const PortRef& portRef) {
+    const Port* port = findPort(module, portRef.portId);
+    return ProjectConnectionInterfaceRef{
+        module ? module->id() : portRef.moduleId,
+        port ? interfaceIdForPort(*port) : portRef.portId
+    };
+}
+
+ConnectionInterfaceRef graphInterfaceRef(const ProjectConnectionInterfaceRef& interfaceRef) {
+    return ConnectionInterfaceRef{interfaceRef.instanceId, interfaceRef.interfaceId};
+}
+
+const ModuleInterfaceMetadata* interfaceMetadata(const Module* module, const PortRef& portRef) {
+    if (!module) {
+        return nullptr;
+    }
+    const ModuleType* type = ModuleRegistry::instance().getType(module->type());
+    const Port* port = findPort(module, portRef.portId);
+    if (!type || !port) {
+        return nullptr;
+    }
+    const QString interfaceId = interfaceIdForPort(*port);
+    const auto metadataIt = type->interfaceMetadata.find(interfaceId);
+    return metadataIt != type->interfaceMetadata.end() ? &metadataIt.value() : nullptr;
+}
+
+QString acceptRoleForClass(const ModuleInterfaceMetadata* metadata,
+                           const QString& connectionClassId) {
+    if (!metadata) {
+        return {};
+    }
+    for (const IpcraftInterfaceAcceptRule& rule : metadata->acceptRules) {
+        if (rule.connectionClassId == connectionClassId) {
+            return rule.role;
+        }
+    }
+    return {};
+}
+
+bool acceptsClass(const ModuleInterfaceMetadata* metadata,
+                  const QString& connectionClassId) {
+    if (!metadata) {
+        return false;
+    }
+    return std::any_of(metadata->acceptRules.cbegin(), metadata->acceptRules.cend(),
+        [&](const IpcraftInterfaceAcceptRule& rule) {
+            return rule.connectionClassId == connectionClassId;
+        });
+}
+
+QString deriveConnectionClassId(const QString& explicitConnectionClassId,
+                                const PortRef& source,
+                                const PortRef& target,
+                                const Module* sourceModule,
+                                const Module* targetModule) {
+    if (!explicitConnectionClassId.isEmpty()) {
+        return explicitConnectionClassId;
+    }
+
+    const ModuleInterfaceMetadata* sourceMetadata = interfaceMetadata(sourceModule, source);
+    const ModuleInterfaceMetadata* targetMetadata = interfaceMetadata(targetModule, target);
+    if (sourceMetadata && targetMetadata) {
+        for (const IpcraftInterfaceAcceptRule& rule : sourceMetadata->acceptRules) {
+            if (acceptsClass(targetMetadata, rule.connectionClassId)) {
+                return rule.connectionClassId;
+            }
+        }
+        if (!sourceMetadata->bus.isEmpty() && sourceMetadata->bus == targetMetadata->bus) {
+            return sourceMetadata->bus;
+        }
+    }
+
+    const Port* sourcePort = findPort(sourceModule, source.portId);
+    const Port* targetPort = findPort(targetModule, target.portId);
+    if (sourcePort && targetPort &&
+        !sourcePort->busType().isEmpty() &&
+        sourcePort->busType() == targetPort->busType()) {
+        return sourcePort->busType();
+    }
+    return {};
+}
+
+QString deriveConnectionClassId(const Connection& connection,
+                                const Module* sourceModule,
+                                const Module* targetModule) {
+    return deriveConnectionClassId(connection.connectionClassId(),
+                                   connection.source(),
+                                   connection.target(),
+                                   sourceModule,
+                                   targetModule);
+}
+
+bool symmetricConnectionClass(const QString& connectionClassId,
+                              const ModuleInterfaceMetadata* sourceMetadata,
+                              const ModuleInterfaceMetadata* targetMetadata) {
+    const QString sourceRole = acceptRoleForClass(sourceMetadata, connectionClassId);
+    const QString targetRole = acceptRoleForClass(targetMetadata, connectionClassId);
+    return !connectionClassId.isEmpty() &&
+           !sourceRole.isEmpty() &&
+           sourceRole == targetRole;
+}
+
+QVector<ProjectConnectionInterfaceRef> normalizedInterfaces(
+    QVector<ProjectConnectionInterfaceRef> interfaces,
+    bool symmetricClass) {
+    if (!symmetricClass) {
+        return interfaces;
+    }
+    std::sort(interfaces.begin(), interfaces.end(), [](const auto& lhs, const auto& rhs) {
+        if (lhs.instanceId != rhs.instanceId) {
+            return lhs.instanceId < rhs.instanceId;
+        }
+        return lhs.interfaceId < rhs.interfaceId;
+    });
+    return interfaces;
+}
+
 GraphProjectLoadResult failure(const QString& error) {
     return {false, error};
 }
 
 QString instanceScopeKey(const QString& ipcoreId, const QString& instanceId) {
     return ipcoreId + QLatin1Char('/') + instanceId;
+}
+
+std::optional<PortRef> resolveInterfaceParticipant(const ProjectConnectionRecord& record,
+                                                   const ProjectConnectionInterfaceRef& participant,
+                                                   const QSet<QString>& moduleIds,
+                                                   const QHash<QString, const ModuleType*>& moduleTypesById,
+                                                   QString* error) {
+    if (!moduleIds.contains(participant.instanceId)) {
+        if (error) {
+            *error = QStringLiteral("Connection %1 references missing instance %2")
+                         .arg(record.id, participant.instanceId);
+        }
+        return std::nullopt;
+    }
+
+    const ModuleType* type = moduleTypesById.value(participant.instanceId);
+    const Port* port = type ? findPortByInterface(*type, participant.interfaceId) : nullptr;
+    if (!port) {
+        if (error) {
+            *error = QStringLiteral("Connection %1 references missing interface %2 on instance %3")
+                         .arg(record.id, participant.interfaceId, participant.instanceId);
+        }
+        return std::nullopt;
+    }
+
+    return PortRef{participant.instanceId, port->id()};
+}
+
+std::optional<std::pair<PortRef, PortRef>> connectionPortRefs(
+    const ProjectConnectionRecord& record,
+    const QSet<QString>& moduleIds,
+    const QHash<QString, const ModuleType*>& moduleTypesById,
+    QString* error) {
+    if (!record.interfaces.isEmpty()) {
+        if (record.interfaces.size() != 2) {
+            if (error) {
+                *error = QStringLiteral("Connection %1 requires exactly two interface participants")
+                             .arg(record.id);
+            }
+            return std::nullopt;
+        }
+
+        const std::optional<PortRef> first =
+            resolveInterfaceParticipant(record, record.interfaces.at(0), moduleIds, moduleTypesById, error);
+        if (!first.has_value()) {
+            return std::nullopt;
+        }
+        const std::optional<PortRef> second =
+            resolveInterfaceParticipant(record, record.interfaces.at(1), moduleIds, moduleTypesById, error);
+        if (!second.has_value()) {
+            return std::nullopt;
+        }
+        return std::make_pair(*first, *second);
+    }
+
+    if (!moduleIds.contains(record.source.moduleId) || !moduleIds.contains(record.target.moduleId)) {
+        if (error) {
+            *error = QStringLiteral("Connection %1 references missing module").arg(record.id);
+        }
+        return std::nullopt;
+    }
+
+    const ModuleType* sourceType = moduleTypesById.value(record.source.moduleId);
+    const ModuleType* targetType = moduleTypesById.value(record.target.moduleId);
+    if (!sourceType || !targetType ||
+        !hasPort(*sourceType, record.source.portId) ||
+        !hasPort(*targetType, record.target.portId)) {
+        if (error) {
+            *error = QStringLiteral("Connection %1 references missing port").arg(record.id);
+        }
+        return std::nullopt;
+    }
+
+    return std::make_pair(PortRef{record.source.moduleId, record.source.portId},
+                          PortRef{record.target.moduleId, record.target.portId});
 }
 
 GraphProjectLoadResult populateGraph(const ProjectDocument& document,
@@ -99,29 +323,81 @@ GraphProjectLoadResult populateGraph(const ProjectDocument& document,
         }
     }
 
+    QSet<QString> moduleIds;
+    for (auto it = moduleTypesById.constBegin(); it != moduleTypesById.constEnd(); ++it) {
+        moduleIds.insert(it.key());
+    }
+
     const ConnectionRuleService ruleService(&graph, document.ipcoreState);
     for (const ProjectConnectionRecord& record : document.connections) {
+        QString connectionError;
+        const std::optional<std::pair<PortRef, PortRef>> refs =
+            connectionPortRefs(record, moduleIds, moduleTypesById, &connectionError);
+        if (!refs.has_value()) {
+            return failure(connectionError);
+        }
+
+        PortRef source = refs->first;
+        PortRef target = refs->second;
+        const auto checkConnection = [&](const PortRef& candidateSource,
+                                         const PortRef& candidateTarget) {
+            return ruleService.check(
+                ConnectionRequest::portToPort(candidateSource,
+                                              candidateTarget,
+                                              ConnectionRequestKind::ProjectLoad));
+        };
+
         // Validate against the concrete Graph again because module defaults and
         // interface metadata may reject edges that pass basic project shape checks.
-        const Module* sourceModule = graph.getModule(record.source.moduleId);
-        const Module* targetModule = graph.getModule(record.target.moduleId);
+        const Module* sourceModule = graph.getModule(source.moduleId);
+        const Module* targetModule = graph.getModule(target.moduleId);
         if (!sourceModule || !targetModule) {
             return failure(QStringLiteral("Connection %1 references missing module").arg(record.id));
         }
-        if (!hasPort(sourceModule, record.source.portId) || !hasPort(targetModule, record.target.portId)) {
+        if (!hasPort(sourceModule, source.portId) || !hasPort(targetModule, target.portId)) {
             return failure(QStringLiteral("Connection %1 references missing port").arg(record.id));
         }
 
-        const PortRef source{record.source.moduleId, record.source.portId};
-        const PortRef target{record.target.moduleId, record.target.portId};
-        const ConnectionCheckResult check = ruleService.check(
-            ConnectionRequest::portToPort(source, target, ConnectionRequestKind::ProjectLoad));
+        ConnectionCheckResult check = checkConnection(source, target);
+        if (!check.hasSingleOption() && !record.interfaces.isEmpty()) {
+            const ConnectionCheckResult reverseCheck = checkConnection(target, source);
+            if (reverseCheck.hasSingleOption()) {
+                std::swap(source, target);
+                std::swap(sourceModule, targetModule);
+                check = reverseCheck;
+            }
+        }
         if (!check.hasSingleOption()) {
             return failure(QStringLiteral("Invalid connection %1: %2")
                                .arg(record.id,
                                     check.reasonCode.isEmpty() ? check.message : check.reasonCode));
         }
-        graph.addConnection(std::make_unique<Connection>(record.id, source, target));
+
+        QVector<ProjectConnectionInterfaceRef> projectInterfaces = record.interfaces;
+        if (projectInterfaces.isEmpty()) {
+            projectInterfaces.push_back(projectInterfaceRef(sourceModule, source));
+            projectInterfaces.push_back(projectInterfaceRef(targetModule, target));
+        }
+
+        const QString connectionClassId =
+            deriveConnectionClassId(record.connectionClassId, source, target, sourceModule, targetModule);
+        const bool symmetricClass =
+            symmetricConnectionClass(connectionClassId,
+                                     interfaceMetadata(sourceModule, source),
+                                     interfaceMetadata(targetModule, target));
+        QVector<ConnectionInterfaceRef> graphInterfaces;
+        for (const ProjectConnectionInterfaceRef& interfaceRef :
+             normalizedInterfaces(std::move(projectInterfaces), symmetricClass)) {
+            graphInterfaces.push_back(graphInterfaceRef(interfaceRef));
+        }
+
+        graph.addConnection(std::make_unique<Connection>(record.id,
+                                                         source,
+                                                         target,
+                                                         connectionClassId,
+                                                         graphInterfaces,
+                                                         record.status,
+                                                         record.alternatives));
     }
 
     return {true, {}};
@@ -169,6 +445,26 @@ ProjectDocument GraphProjectSerializer::toProject(const Graph& graph, const QStr
                                                   connection->source().portId};
         record.target = ProjectConnectionEndpoint{connection->target().moduleId,
                                                   connection->target().portId};
+        const Module* sourceModule = graph.getModule(connection->source().moduleId);
+        const Module* targetModule = graph.getModule(connection->target().moduleId);
+        record.connectionClassId = deriveConnectionClassId(*connection, sourceModule, targetModule);
+        record.status = connection->status().isEmpty() ? QStringLiteral("valid") : connection->status();
+        record.alternatives = connection->alternatives();
+        for (const ConnectionInterfaceRef& interfaceRef : connection->interfaces()) {
+            record.interfaces.push_back(ProjectConnectionInterfaceRef{
+                interfaceRef.instanceId,
+                interfaceRef.interfaceId
+            });
+        }
+        if (record.interfaces.isEmpty()) {
+            record.interfaces.push_back(projectInterfaceRef(sourceModule, connection->source()));
+            record.interfaces.push_back(projectInterfaceRef(targetModule, connection->target()));
+        }
+        const bool symmetricClass =
+            symmetricConnectionClass(record.connectionClassId,
+                                     interfaceMetadata(sourceModule, connection->source()),
+                                     interfaceMetadata(targetModule, connection->target()));
+        record.interfaces = normalizedInterfaces(std::move(record.interfaces), symmetricClass);
         document.connections.push_back(record);
     }
 
@@ -263,16 +559,9 @@ GraphProjectLoadResult GraphProjectSerializer::loadProject(const ProjectDocument
         }
         connectionIds.insert(record.id);
 
-        if (!moduleIds.contains(record.source.moduleId) || !moduleIds.contains(record.target.moduleId)) {
-            return failure(QStringLiteral("Connection %1 references missing module").arg(record.id));
-        }
-
-        const ModuleType* sourceType = moduleTypesById.value(record.source.moduleId);
-        const ModuleType* targetType = moduleTypesById.value(record.target.moduleId);
-        if (!sourceType || !targetType ||
-            !hasPort(*sourceType, record.source.portId) ||
-            !hasPort(*targetType, record.target.portId)) {
-            return failure(QStringLiteral("Connection %1 references missing port").arg(record.id));
+        QString connectionError;
+        if (!connectionPortRefs(record, moduleIds, moduleTypesById, &connectionError).has_value()) {
+            return failure(connectionError);
         }
     }
 

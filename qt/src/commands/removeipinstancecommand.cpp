@@ -317,8 +317,7 @@ void RemoveIpInstanceCommand::undo() {
     for (auto& connection : m_removedConnections) {
         if (connection) {
             const qsizetype connectionCountBefore = static_cast<qsizetype>(m_graph->connections().size());
-            m_graph->insertConnection(
-                std::make_unique<Connection>(connection->id(), connection->source(), connection->target()));
+            m_graph->insertConnection(connection->clone());
             const qsizetype connectionCountAfter = static_cast<qsizetype>(m_graph->connections().size());
             if (connectionCountAfter != connectionCountBefore + 1) {
                 while (restoredConnections > 0) {

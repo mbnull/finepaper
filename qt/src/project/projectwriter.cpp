@@ -23,11 +23,32 @@ QJsonObject sortedObject(const QJsonObject& object) {
     return sorted;
 }
 
-QJsonObject endpointObject(const ProjectConnectionEndpoint& endpoint) {
+QJsonObject interfaceObject(const ProjectConnectionInterfaceRef& interfaceRef) {
     QJsonObject object;
-    object.insert(QStringLiteral("module"), endpoint.moduleId);
-    object.insert(QStringLiteral("port"), endpoint.portId);
+    object.insert(QStringLiteral("instance"), interfaceRef.instanceId);
+    object.insert(QStringLiteral("interface"), interfaceRef.interfaceId);
     return object;
+}
+
+QVector<ProjectConnectionInterfaceRef> writableInterfaces(const ProjectConnectionRecord& connection) {
+    if (!connection.interfaces.isEmpty()) {
+        return connection.interfaces;
+    }
+
+    QVector<ProjectConnectionInterfaceRef> interfaces;
+    if (!connection.source.moduleId.isEmpty() || !connection.source.portId.isEmpty()) {
+        interfaces.push_back(ProjectConnectionInterfaceRef{
+            connection.source.moduleId,
+            connection.source.portId
+        });
+    }
+    if (!connection.target.moduleId.isEmpty() || !connection.target.portId.isEmpty()) {
+        interfaces.push_back(ProjectConnectionInterfaceRef{
+            connection.target.moduleId,
+            connection.target.portId
+        });
+    }
+    return interfaces;
 }
 
 QJsonObject toJson(const ProjectDocument& document) {
@@ -82,8 +103,21 @@ QJsonObject toJson(const ProjectDocument& document) {
     for (const ProjectConnectionRecord& connection : document.connections) {
         QJsonObject object;
         object.insert(QStringLiteral("id"), connection.id);
-        object.insert(QStringLiteral("source"), endpointObject(connection.source));
-        object.insert(QStringLiteral("target"), endpointObject(connection.target));
+        object.insert(QStringLiteral("class"), connection.connectionClassId);
+        QJsonArray interfaces;
+        for (const ProjectConnectionInterfaceRef& interfaceRef : writableInterfaces(connection)) {
+            interfaces.append(interfaceObject(interfaceRef));
+        }
+        object.insert(QStringLiteral("interfaces"), interfaces);
+        object.insert(QStringLiteral("status"),
+                      connection.status.isEmpty() ? QStringLiteral("valid") : connection.status);
+        if (!connection.alternatives.isEmpty()) {
+            QJsonArray alternatives;
+            for (const QString& alternative : connection.alternatives) {
+                alternatives.append(alternative);
+            }
+            object.insert(QStringLiteral("alternatives"), alternatives);
+        }
         connections.append(object);
     }
     graph.insert(QStringLiteral("connections"), connections);

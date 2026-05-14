@@ -79,10 +79,7 @@ bool canRestoreModuleAndConnections(const Graph* graph,
 }
 
 std::unique_ptr<Connection> cloneConnection(const Connection& connection) {
-    return std::make_unique<Connection>(
-        connection.id(),
-        connection.source(),
-        connection.target());
+    return connection.clone();
 }
 
 } // namespace

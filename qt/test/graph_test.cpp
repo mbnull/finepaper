@@ -44,6 +44,27 @@ void require(bool condition, const char* message) {
     }
 }
 
+void requireConnectionMetadata(const Connection* connection) {
+    require(connection != nullptr, "expected connection to exist");
+    require(connection->connectionClassId() == QStringLiteral("chi_node_interface"),
+            "restored connection should preserve connection class");
+    require(connection->status() == QStringLiteral("ambiguous"),
+            "restored connection should preserve status");
+    require(connection->alternatives() == QStringList({QStringLiteral("chi_node_interface"),
+                                                       QStringLiteral("monitor_tap")}),
+            "restored connection should preserve alternatives");
+    require(connection->interfaces().size() == 2,
+            "restored connection should preserve interface participants");
+    require(connection->interfaces().at(0).instanceId == QStringLiteral("source"),
+            "restored connection should preserve first participant instance");
+    require(connection->interfaces().at(0).interfaceId == QStringLiteral("out"),
+            "restored connection should preserve first participant interface");
+    require(connection->interfaces().at(1).instanceId == QStringLiteral("target"),
+            "restored connection should preserve second participant instance");
+    require(connection->interfaces().at(1).interfaceId == QStringLiteral("in"),
+            "restored connection should preserve second participant interface");
+}
+
 QString repositoryPath(const QString& relativePath) {
     const QStringList startPaths = {
         QDir::currentPath(),
@@ -178,7 +199,17 @@ void testRemoveConnectionCommandUndoRetainsSavedConnectionForRetry() {
 
     const PortRef source{"source", "out"};
     const PortRef target{"target", "in"};
-    graph.addConnection(std::make_unique<Connection>("link", source, target));
+    graph.addConnection(std::make_unique<Connection>(
+        QStringLiteral("link"),
+        source,
+        target,
+        QStringLiteral("chi_node_interface"),
+        QVector<ConnectionInterfaceRef>{
+            ConnectionInterfaceRef{QStringLiteral("source"), QStringLiteral("out")},
+            ConnectionInterfaceRef{QStringLiteral("target"), QStringLiteral("in")}
+        },
+        QStringLiteral("ambiguous"),
+        QStringList{QStringLiteral("chi_node_interface"), QStringLiteral("monitor_tap")}));
 
     RemoveConnectionCommand command(&graph, "link");
     command.execute();
@@ -203,6 +234,7 @@ void testRemoveConnectionCommandUndoRetainsSavedConnectionForRetry() {
     require(graph.connections().size() == 1, "successful retry should restore exactly one connection");
     require(graph.connections().front()->id() == "link",
             "successful retry should restore the originally removed connection");
+    requireConnectionMetadata(graph.connections().front().get());
 }
 
 void testRemoveModuleCommandUndoRetainsSavedStateForRetryAfterRestoreConflict() {
@@ -220,9 +252,16 @@ void testRemoveModuleCommandUndoRetainsSavedStateForRetryAfterRestoreConflict() 
         "failed to add target module");
 
     graph.addConnection(std::make_unique<Connection>(
-        "link",
+        QStringLiteral("link"),
         PortRef{"source", "out"},
-        PortRef{"target", "in"}));
+        PortRef{"target", "in"},
+        QStringLiteral("chi_node_interface"),
+        QVector<ConnectionInterfaceRef>{
+            ConnectionInterfaceRef{QStringLiteral("source"), QStringLiteral("out")},
+            ConnectionInterfaceRef{QStringLiteral("target"), QStringLiteral("in")}
+        },
+        QStringLiteral("ambiguous"),
+        QStringList{QStringLiteral("chi_node_interface"), QStringLiteral("monitor_tap")}));
 
     RemoveModuleCommand command(&graph, "source");
     command.execute();
@@ -260,6 +299,7 @@ void testRemoveModuleCommandUndoRetainsSavedStateForRetryAfterRestoreConflict() 
     require(graph.connections().size() == 1, "successful retry should restore the saved connection");
     require(graph.connections().front()->id() == "link",
             "successful retry should restore the originally removed connection");
+    requireConnectionMetadata(graph.connections().front().get());
 }
 
 void testInoutPortsCannotBeReusedAcrossConnectionSides() {
@@ -408,6 +448,34 @@ void testGraphStructuralValidationIgnoresSemanticMetadata() {
     require(graph.isValidConnection(PortRef{QStringLiteral("source"), QStringLiteral("out")},
                                     PortRef{QStringLiteral("target"), QStringLiteral("in")}),
             "Graph structural validation should not reject semantic bus/role mismatches");
+}
+
+void testReverseInterfaceConnectionNormalizesForSymmetricClass() {
+    const Connection connection(
+        QStringLiteral("peer_link"),
+        PortRef{QStringLiteral("b"), QStringLiteral("link")},
+        PortRef{QStringLiteral("a"), QStringLiteral("link")},
+        QStringLiteral("chi_peer_link"),
+        QVector<ConnectionInterfaceRef>{
+            ConnectionInterfaceRef{QStringLiteral("b"), QStringLiteral("link")},
+            ConnectionInterfaceRef{QStringLiteral("a"), QStringLiteral("link")}
+        },
+        QStringLiteral("valid"),
+        QStringList{},
+        true);
+
+    require(connection.connectionClassId() == QStringLiteral("chi_peer_link"),
+            "symmetric connection class should be stored");
+    require(connection.interfaces().size() == 2,
+            "symmetric connection should store two interface participants");
+    require(connection.interfaces().at(0).instanceId == QStringLiteral("a"),
+            "symmetric connection should normalize first participant");
+    require(connection.interfaces().at(0).interfaceId == QStringLiteral("link"),
+            "symmetric connection should preserve first participant interface");
+    require(connection.interfaces().at(1).instanceId == QStringLiteral("b"),
+            "symmetric connection should normalize second participant");
+    require(connection.interfaces().at(1).interfaceId == QStringLiteral("link"),
+            "symmetric connection should preserve second participant interface");
 }
 
 void testInterfaceCompatibilityAcceptsMatchingConfiguredFields() {
@@ -755,6 +823,7 @@ int main(int argc, char** argv) {
         testInoutPortsCannotBeReusedAcrossConnectionSides();
         testInterfaceCompatibilityRejectsMismatchedConfiguredFields();
         testGraphStructuralValidationIgnoresSemanticMetadata();
+        testReverseInterfaceConnectionNormalizesForSymmetricClass();
         testInterfaceCompatibilityAcceptsMatchingConfiguredFields();
         testRouterLinksRequireOppositeSides();
         testRemovingModuleAlsoRemovesAttachedConnections();

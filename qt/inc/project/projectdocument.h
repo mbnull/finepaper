@@ -5,6 +5,7 @@
 
 #include <QJsonObject>
 #include <QString>
+#include <QStringList>
 #include <QVector>
 
 struct ProjectIpcoreRecord {
@@ -25,10 +26,20 @@ struct ProjectConnectionEndpoint {
     QString portId;
 };
 
+struct ProjectConnectionInterfaceRef {
+    QString instanceId;
+    QString interfaceId;
+};
+
 struct ProjectConnectionRecord {
     QString id;
+    // Legacy port endpoints remain internal for the Task 6 migration path.
     ProjectConnectionEndpoint source;
     ProjectConnectionEndpoint target;
+    QString connectionClassId;
+    QVector<ProjectConnectionInterfaceRef> interfaces;
+    QString status = QStringLiteral("valid");
+    QStringList alternatives;
 };
 
 struct ProjectDocument {

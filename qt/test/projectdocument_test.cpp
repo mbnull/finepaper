@@ -126,6 +126,59 @@ ModuleType makeProjectEndpointType() {
     return type;
 }
 
+ModuleInterfaceMetadata makeProjectConnectionInterface(const QString& id,
+                                                       const QString& role,
+                                                       const QString& connectionClassId) {
+    ModuleInterfaceMetadata metadata;
+    metadata.id = id;
+    metadata.label = id.toUpper();
+    metadata.bus = connectionClassId;
+    metadata.role = role;
+    metadata.compatibleRoles = role == QStringLiteral("node")
+        ? QStringList{QStringLiteral("interconnect")}
+        : QStringList{QStringLiteral("node")};
+    metadata.acceptRules.push_back(IpcraftInterfaceAcceptRule{connectionClassId, role});
+    return metadata;
+}
+
+ModuleType makeProjectChiRnfType() {
+    ModuleType type;
+    type.name = QStringLiteral("ProjectDocChiRnf");
+    type.ipcoreId = QStringLiteral("finepaper.chi");
+    type.defaultPorts.push_back(Port(QStringLiteral("chi"),
+                                     Port::Direction::InOut,
+                                     QStringLiteral("bus"),
+                                     QStringLiteral("CHI"),
+                                     QStringLiteral("CHI requester interface"),
+                                     QStringLiteral("attachment"),
+                                     QStringLiteral("chi_node_interface"),
+                                     QStringLiteral("chi")));
+    type.interfaceMetadata.insert(QStringLiteral("chi"),
+                                  makeProjectConnectionInterface(QStringLiteral("chi"),
+                                                                 QStringLiteral("node"),
+                                                                 QStringLiteral("chi_node_interface")));
+    return type;
+}
+
+ModuleType makeProjectChiXpType() {
+    ModuleType type;
+    type.name = QStringLiteral("ProjectDocChiXp");
+    type.ipcoreId = QStringLiteral("finepaper.chi");
+    type.defaultPorts.push_back(Port(QStringLiteral("rnf0"),
+                                     Port::Direction::InOut,
+                                     QStringLiteral("bus"),
+                                     QStringLiteral("RNF0"),
+                                     QStringLiteral("CHI interconnect interface"),
+                                     QStringLiteral("attachment"),
+                                     QStringLiteral("chi_node_interface"),
+                                     QStringLiteral("rnf0")));
+    type.interfaceMetadata.insert(QStringLiteral("rnf0"),
+                                  makeProjectConnectionInterface(QStringLiteral("rnf0"),
+                                                                 QStringLiteral("interconnect"),
+                                                                 QStringLiteral("chi_node_interface")));
+    return type;
+}
+
 void registerProjectTypes() {
     static bool registered = false;
     if (registered) {
@@ -134,6 +187,17 @@ void registerProjectTypes() {
 
     ModuleRegistry::instance().registerType(makeProjectXpType());
     ModuleRegistry::instance().registerType(makeProjectEndpointType());
+    registered = true;
+}
+
+void registerProjectConnectionTypes() {
+    static bool registered = false;
+    if (registered) {
+        return;
+    }
+
+    ModuleRegistry::instance().registerType(makeProjectChiRnfType());
+    ModuleRegistry::instance().registerType(makeProjectChiXpType());
     registered = true;
 }
 
@@ -204,6 +268,256 @@ std::unique_ptr<Module> instantiate(const ModuleType& type, const QString& id) {
         module->setParameter(it.key(), it.value().value());
     }
     return module;
+}
+
+void testProjectWritesInterfaceConnectionsWithoutFromTo() {
+    registerProjectConnectionTypes();
+
+    Graph graph;
+    auto rnf = instantiate(makeProjectChiRnfType(), QStringLiteral("rnf_0"));
+    rnf->setInstanceId(QStringLiteral("opennoc_0"));
+    auto xp = instantiate(makeProjectChiXpType(), QStringLiteral("xp_0"));
+    xp->setInstanceId(QStringLiteral("opennoc_0"));
+
+    require(graph.addModule(std::move(rnf)), "failed to add RNF module");
+    require(graph.addModule(std::move(xp)), "failed to add XP module");
+    graph.addConnection(std::make_unique<Connection>(
+        QStringLiteral("conn_0"),
+        PortRef{QStringLiteral("rnf_0"), QStringLiteral("chi")},
+        PortRef{QStringLiteral("xp_0"), QStringLiteral("rnf0")}));
+    require(graph.connections().size() == 1, "setup connection should be valid");
+
+    ProjectDocument document = GraphProjectSerializer::toProject(graph, QStringLiteral("interfaces"));
+    document.ipcoreState.push_back(ProjectIpInstanceRecord{
+        QStringLiteral("finepaper.chi"),
+        QStringLiteral("opennoc_0"),
+        QStringLiteral("finepaper.chi-project-state-v1"),
+        QJsonObject{{QStringLiteral("global_parameters"), QJsonObject{}}}
+    });
+
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "failed to create temporary directory");
+    const QString path = QDir(tempDir.path()).filePath(QStringLiteral("interfaces.fpproj"));
+    require(ProjectWriter::writeFile(path, document).success, "project should write");
+
+    QFile file(path);
+    require(file.open(QIODevice::ReadOnly), "project should reopen");
+    const QJsonObject connection = QJsonDocument::fromJson(file.readAll())
+                                       .object()
+                                       .value(QStringLiteral("graph"))
+                                       .toObject()
+                                       .value(QStringLiteral("connections"))
+                                       .toArray()
+                                       .first()
+                                       .toObject();
+
+    require(connection.value(QStringLiteral("id")).toString() == QStringLiteral("conn_0"),
+            "connection id should be written");
+    require(connection.value(QStringLiteral("class")).toString() == QStringLiteral("chi_node_interface"),
+            "connection class should be written");
+    require(connection.value(QStringLiteral("status")).toString() == QStringLiteral("valid"),
+            "connection status should be written");
+    require(!connection.contains(QStringLiteral("source")),
+            "new project connection should not write source endpoint");
+    require(!connection.contains(QStringLiteral("target")),
+            "new project connection should not write target endpoint");
+    require(!connection.contains(QStringLiteral("from")),
+            "new project connection should not write from endpoint");
+    require(!connection.contains(QStringLiteral("to")),
+            "new project connection should not write to endpoint");
+
+    const QJsonArray interfaces = connection.value(QStringLiteral("interfaces")).toArray();
+    require(interfaces.size() == 2, "connection should write two interface participants");
+    require(interfaces.at(0).toObject().value(QStringLiteral("instance")).toString() ==
+                QStringLiteral("rnf_0"),
+            "first participant instance should be written");
+    require(interfaces.at(0).toObject().value(QStringLiteral("interface")).toString() ==
+                QStringLiteral("chi"),
+            "first participant interface should be written");
+    require(interfaces.at(1).toObject().value(QStringLiteral("instance")).toString() ==
+                QStringLiteral("xp_0"),
+            "second participant instance should be written");
+    require(interfaces.at(1).toObject().value(QStringLiteral("interface")).toString() ==
+                QStringLiteral("rnf0"),
+            "second participant interface should be written");
+}
+
+void testProjectReadsAmbiguousConnectionAlternatives() {
+    QJsonObject root = minimalProjectRoot();
+    QJsonObject graph = root.value(QStringLiteral("graph")).toObject();
+    graph.insert(QStringLiteral("connections"), QJsonArray{
+        QJsonObject{
+            {QStringLiteral("id"), QStringLiteral("conn_1")},
+            {QStringLiteral("class"), QStringLiteral("chi_node_interface")},
+            {QStringLiteral("interfaces"), QJsonArray{
+                QJsonObject{
+                    {QStringLiteral("instance"), QStringLiteral("a")},
+                    {QStringLiteral("interface"), QStringLiteral("x")}
+                },
+                QJsonObject{
+                    {QStringLiteral("instance"), QStringLiteral("b")},
+                    {QStringLiteral("interface"), QStringLiteral("y")}
+                }
+            }},
+            {QStringLiteral("status"), QStringLiteral("ambiguous")},
+            {QStringLiteral("alternatives"), QJsonArray{
+                QStringLiteral("chi_node_interface"),
+                QStringLiteral("monitor_tap")
+            }}
+        }
+    });
+    root.insert(QStringLiteral("graph"), graph);
+
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "failed to create temporary directory");
+    const QString inputPath = QDir(tempDir.path()).filePath(QStringLiteral("ambiguous.fpproj"));
+    const QString outputPath = QDir(tempDir.path()).filePath(QStringLiteral("ambiguous_roundtrip.fpproj"));
+    writeJsonFile(inputPath, root);
+
+    const ProjectReadResult readResult = ProjectReader::readFile(inputPath);
+    require(readResult.success, "project with ambiguous interface connection should read");
+    require(ProjectWriter::writeFile(outputPath, readResult.document).success,
+            "ambiguous project should write");
+
+    QFile file(outputPath);
+    require(file.open(QIODevice::ReadOnly), "round-tripped project should reopen");
+    const QJsonObject connection = QJsonDocument::fromJson(file.readAll())
+                                       .object()
+                                       .value(QStringLiteral("graph"))
+                                       .toObject()
+                                       .value(QStringLiteral("connections"))
+                                       .toArray()
+                                       .first()
+                                       .toObject();
+    const QJsonArray alternatives = connection.value(QStringLiteral("alternatives")).toArray();
+
+    require(connection.value(QStringLiteral("class")).toString() == QStringLiteral("chi_node_interface"),
+            "ambiguous connection class should be preserved");
+    require(connection.value(QStringLiteral("status")).toString() == QStringLiteral("ambiguous"),
+            "ambiguous connection status should be preserved");
+    require(alternatives.size() == 2, "ambiguous connection alternatives should be preserved");
+    require(alternatives.at(0).toString() == QStringLiteral("chi_node_interface"),
+            "first ambiguous alternative should be preserved");
+    require(alternatives.at(1).toString() == QStringLiteral("monitor_tap"),
+            "second ambiguous alternative should be preserved");
+}
+
+void testProjectReaderRejectsMalformedInterfaceConnections() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "failed to create temporary directory");
+
+    auto participant = [](const QString& instanceId, const QString& interfaceId) {
+        return QJsonObject{
+            {QStringLiteral("instance"), instanceId},
+            {QStringLiteral("interface"), interfaceId}
+        };
+    };
+
+    auto connection = [](const QString& id, const QJsonValue& interfaces) {
+        return QJsonObject{
+            {QStringLiteral("id"), id},
+            {QStringLiteral("class"), QStringLiteral("chi_node_interface")},
+            {QStringLiteral("interfaces"), interfaces},
+            {QStringLiteral("status"), QStringLiteral("valid")}
+        };
+    };
+
+    auto expectRejected = [&](const QString& fileName,
+                              QJsonObject connectionObject,
+                              const QString& expectedError) {
+        QJsonObject root = minimalProjectRoot();
+        QJsonObject graph = root.value(QStringLiteral("graph")).toObject();
+        graph.insert(QStringLiteral("connections"), QJsonArray{connectionObject});
+        root.insert(QStringLiteral("graph"), graph);
+
+        const QString path = QDir(tempDir.path()).filePath(fileName);
+        writeJsonFile(path, root);
+
+        const ProjectReadResult result = ProjectReader::readFile(path);
+        require(!result.success, "malformed interface connection should be rejected");
+        require(result.error.contains(expectedError),
+                "malformed interface connection error should mention the malformed field");
+    };
+
+    expectRejected(QStringLiteral("interfaces_non_array.fpproj"),
+                   connection(QStringLiteral("conn_non_array"), QJsonObject{}),
+                   QStringLiteral("interfaces"));
+
+    expectRejected(QStringLiteral("interfaces_participant_non_object.fpproj"),
+                   connection(QStringLiteral("conn_participant_non_object"),
+                              QJsonArray{
+                                  QStringLiteral("not-an-object"),
+                                  participant(QStringLiteral("b"), QStringLiteral("y"))
+                              }),
+                   QStringLiteral("participants"));
+
+    expectRejected(QStringLiteral("interfaces_missing_instance.fpproj"),
+                   connection(QStringLiteral("conn_missing_instance"),
+                              QJsonArray{
+                                  QJsonObject{{QStringLiteral("interface"), QStringLiteral("x")}},
+                                  participant(QStringLiteral("b"), QStringLiteral("y"))
+                              }),
+                   QStringLiteral("instance"));
+
+    expectRejected(QStringLiteral("interfaces_blank_instance.fpproj"),
+                   connection(QStringLiteral("conn_blank_instance"),
+                              QJsonArray{
+                                  participant(QStringLiteral("   "), QStringLiteral("x")),
+                                  participant(QStringLiteral("b"), QStringLiteral("y"))
+                              }),
+                   QStringLiteral("instance"));
+
+    expectRejected(QStringLiteral("interfaces_missing_interface.fpproj"),
+                   connection(QStringLiteral("conn_missing_interface"),
+                              QJsonArray{
+                                  QJsonObject{{QStringLiteral("instance"), QStringLiteral("a")}},
+                                  participant(QStringLiteral("b"), QStringLiteral("y"))
+                              }),
+                   QStringLiteral("interface"));
+
+    expectRejected(QStringLiteral("interfaces_blank_interface.fpproj"),
+                   connection(QStringLiteral("conn_blank_interface"),
+                              QJsonArray{
+                                  participant(QStringLiteral("a"), QStringLiteral("   ")),
+                                  participant(QStringLiteral("b"), QStringLiteral("y"))
+                              }),
+                   QStringLiteral("interface"));
+
+    expectRejected(QStringLiteral("interfaces_one_participant.fpproj"),
+                   connection(QStringLiteral("conn_one_participant"),
+                              QJsonArray{participant(QStringLiteral("a"), QStringLiteral("x"))}),
+                   QStringLiteral("exactly two"));
+
+    expectRejected(QStringLiteral("interfaces_three_participants.fpproj"),
+                   connection(QStringLiteral("conn_three_participants"),
+                              QJsonArray{
+                                  participant(QStringLiteral("a"), QStringLiteral("x")),
+                                  participant(QStringLiteral("b"), QStringLiteral("y")),
+                                  participant(QStringLiteral("c"), QStringLiteral("z"))
+                              }),
+                   QStringLiteral("exactly two"));
+
+    QJsonObject nonArrayAlternatives = connection(
+        QStringLiteral("conn_alternatives_non_array"),
+        QJsonArray{
+            participant(QStringLiteral("a"), QStringLiteral("x")),
+            participant(QStringLiteral("b"), QStringLiteral("y"))
+        });
+    nonArrayAlternatives.insert(QStringLiteral("alternatives"), QJsonObject{});
+    expectRejected(QStringLiteral("alternatives_non_array.fpproj"),
+                   nonArrayAlternatives,
+                   QStringLiteral("alternatives"));
+
+    QJsonObject nonStringAlternative = connection(
+        QStringLiteral("conn_alternatives_non_string"),
+        QJsonArray{
+            participant(QStringLiteral("a"), QStringLiteral("x")),
+            participant(QStringLiteral("b"), QStringLiteral("y"))
+        });
+    nonStringAlternative.insert(QStringLiteral("alternatives"), QJsonArray{42});
+    expectRejected(QStringLiteral("alternatives_non_string.fpproj"),
+                   nonStringAlternative,
+                   QStringLiteral("alternatives"));
 }
 
 void testProjectRoundTripRestoresModulesParametersAndConnections() {
@@ -1230,6 +1544,9 @@ int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
 
     try {
+        testProjectWritesInterfaceConnectionsWithoutFromTo();
+        testProjectReadsAmbiguousConnectionAlternatives();
+        testProjectReaderRejectsMalformedInterfaceConnections();
         testProjectRoundTripRestoresModulesParametersAndConnections();
         testProjectPreservesOpaqueIpcoreState();
         testProjectWriterUsesIpcoreVocabulary();
