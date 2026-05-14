@@ -32,6 +32,8 @@ The main rule in the codebase is that the `Graph` is the source of truth. UI wid
 
 Before module metadata is used, `ModuleRegistry` loads package-local `ipcraft.json` manifests from package roots stored in application settings. Tests and tools can load manifests from explicit package-root paths. Startup discovery does not infer repository-local package roots from the current working directory or executable location.
 
+The package authoring source is `ipcore.yml`, a constrained YAML format with explicit schema names, stable IDs, and strict key validation. Qt does not parse authoring YAML during runtime loading. Qt consumes the normalized `ipcraft.json` runtime manifest, referenced view XML, and declared command paths from each configured package root.
+
 `IpCatalogService` turns those Ipcraft package manifests into `IpCatalogEntry` records. `ProjectIpService` owns project IP instances and the current selected instance. `ActiveWorkspaceController` combines the selected project instance with its catalog entry to expose the active workspace's IP core id, instance id, module types, and topology presets.
 
 ### 2. Core model
@@ -136,6 +138,8 @@ Package metadata controls:
 - parameter descriptions and config visibility
 - node color and editor layout through graphics overlays
 
+`extensions` are schema/specgen extension descriptors such as `noc.v1`; they provide validation, defaults, and semantic mappings before the runtime manifest is consumed. `plugin`, when present, is Qt dynamic plugin metadata only. Dynamic plugins are optional editor behavior and are distinct from schema/specgen extensions.
+
 `ModuleTypeMetadata` centralizes lookup helpers so UI and validation code can ask semantic questions such as:
 
 - is this module a mesh router?
@@ -144,7 +148,7 @@ Package metadata controls:
 
 ### 6. Validation and generation
 
-Validation is composed in `ValidationManager`.
+Validation is composed in `ValidationManager`. Validate and Generate both run Qt built-in validation before invoking package commands. Generate stops on built-in validation errors; Validate reports built-in diagnostics and only runs package validators for executable package instances.
 
 Local validation:
 
@@ -160,6 +164,10 @@ External validation:
 - maps external IDs back to internal graph IDs when possible
 
 The exported generator/DRC package command document uses schema `ipcraft.noc.project.v1`, includes the package id, graph name, selected project instance state, module instances, and interface connections, and rejects connections that cross the active IP instance.
+
+Newly created `.fpproj` IP-instance records use `ipcraft.noc.instance-state.v1`; loaded `ipcore_state[].schema` values remain opaque project state and are preserved for compatibility.
+
+IP-XACT files are optional package inputs. Even without an IP-XACT XML file, package interfaces, modes, and connection classes must be mappable to IP-XACT connection semantics. When a package declares an IP-XACT root, the strict IP-XACT sub-pass checks connection compatibility in addition to the built-in editor checks.
 
 Generation uses the same active IP catalog entry and project instance. It writes `ipcraft.noc.project.v1` JSON plus a Finepaper `.fpproj` snapshot into the chosen output directory before invoking the package command from `IpCatalogEntry::sourceRootPath`.
 
@@ -200,8 +208,9 @@ Generation uses the same active IP catalog entry and project instance. It writes
 - Concrete IP core packages are editable directories under `ipcores/<package>/`; the bundled Finepaper NoC and RaveNoC packages use Ruby and provide `generator/bin/generate`.
 - Package roots are configured through application settings for startup loading, or passed explicitly by tests and tools.
 - Package-local `ipcraft.json` is the maintained Qt runtime input. Qt resolves module metadata, view XML, generator commands, and DRC commands against the package root.
-- Authored JSON module bundles are deprecated conversion inputs; IP-XACT remains a conversion input, not the preferred runtime layout.
-- Reserve `plugins/` for future feature extensions and editor behavior extensions, not concrete IP core runtimes such as NoC or RaveNoC packages.
+- `ipcore.yml` is constrained authoring YAML for specgen. Qt does not parse it in the runtime path.
+- Authored JSON module bundles are deprecated conversion inputs. IP-XACT XML is optional package metadata for strict connection checks and can also be a conversion input; it is not the preferred runtime layout.
+- Reserve `plugins/` for optional Qt dynamic plugin binaries, not concrete IP core runtimes such as NoC or RaveNoC packages. Use `extensions` for schema/specgen extension metadata.
 - Position is stored as module parameters such as `x` and `y`.
 - Some editor-only state, such as transient selection, is intentionally omitted from graph export.
 

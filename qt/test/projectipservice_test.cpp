@@ -87,8 +87,8 @@ void testProjectIpServiceCreatesDefaultStateAndSelectsIt() {
             "record should keep ipcore id");
     require(record.instanceId == QStringLiteral("ravenoc_0"),
             "record should use default instance id");
-    require(record.schema == QStringLiteral("finepaper.ravenoc-project-state-v1"),
-            "record should use ipcore state schema");
+    require(record.schema == QStringLiteral("ipcraft.noc.instance-state.v1"),
+            "record should use public ipcraft instance state schema");
     require(record.state.value(QStringLiteral("kind")).toString() == QStringLiteral("noc"),
             "record should keep kind");
     require(record.state.value(QStringLiteral("type")).toString() == QStringLiteral("RaveNoC"),

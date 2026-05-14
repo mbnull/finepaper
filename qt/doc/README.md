@@ -17,7 +17,7 @@ This project is a Qt Widgets application for building and validating SoC/NoC top
 - `inc/`: public headers for the application classes.
 - `src/commands/`, `inc/commands/`: undoable editing commands.
 - `test/`: lightweight executable tests for the graph model and command manager.
-- `../ipcores/<package>/`: editable concrete IP core packages with package-local `ipcraft.json`, `ipcore.yml`, `views/`, `generator/`, and `vendor/`.
+- `../ipcores/<package>/`: editable concrete IP core packages with constrained authoring `ipcore.yml`, package-local runtime `ipcraft.json`, `views/`, `generator/`, and `vendor/`.
 - `deps/packages.lua`: xmake package declarations.
 - `tools/convert_module_bundle.py`: converts deprecated authored JSON module bundles, module-bundle XML, or IP-XACT into the split XML bundle format.
 - `docs/`: older working notes and reference material.
@@ -77,6 +77,12 @@ xmake run ipcoreruntime_test
 
 Generation and DRC validation are provided by the active IP core selected in the IP Catalog workspace. Package metadata is loaded once at startup; package installation, unloading, and refresh are not supported.
 
+The package boundary is split intentionally:
+
+- `ipcore.yml` is constrained authoring YAML for package developers. It uses explicit schema names and stable IDs, and rejects ambiguous YAML features such as duplicate keys, aliases, anchors, merge keys, custom tags, multi-document streams, and unknown fields outside documented extension namespaces.
+- `ipcraft.json` is the normalized runtime manifest. Qt loads this file, referenced view XML, and declared commands from the package root.
+- Qt does not parse authoring YAML during normal runtime loading.
+
 Package root discovery is intentionally explicit:
 
 - The application reads IP-core package roots persisted in `AppSettings`.
@@ -131,9 +137,17 @@ The package manifest schema is:
 
 Manifest-relative paths are resolved against the package root. `views/<type>.xml` files provide editor graphics, and generator/DRC commands run from the same package root so executable paths such as `generator/bin/generate` and `generator/bin/drc` resolve inside `ipcores/<package>/`. `{input}` and `{output}` are replaced with the exported `ipcraft.noc.project.v1` JSON path and selected output directory.
 
+Each command declaration must provide `input_schema`. Validate and Generate run Qt built-in validation first; package `validate` and `generate` commands run only after the editor-owned package, project, graph, connection, and command checks pass for the requested operation.
+
+`extensions` are schema/specgen extension descriptors, for example `noc.v1`. They are used to validate and normalize package semantics. `plugin`, when present, means Qt dynamic plugin metadata. A Qt dynamic plugin is optional future editor behavior; it is separate from schema/specgen extensions and is not required for baseline package loading.
+
+An IP-XACT XML file is optional. Package semantics are still required to map to IP-XACT connection concepts: modules map to components, interfaces to `busInterface`, project instances to component instances, and project connections to interconnections with active interfaces. When a package includes an IP-XACT root, Qt can run the strict IP-XACT connection sub-pass in addition to its built-in validation.
+
 `IpCoreGraphExporter` serializes only the active workspace's selected IP instance. Generation and external DRC fail with a user-visible message if a module or connection references a different IP core than the selected active workspace.
 
-The `plugins/` directory name is reserved for future feature extensions and editor behavior extensions, not concrete IP core packages. Concrete NoC and RaveNoC IP packages should be described as package roots under `ipcores/`.
+New `.fpproj` IP-instance records use the public state schema `ipcraft.noc.instance-state.v1`. The project reader preserves loaded `ipcore_state[].schema` values so legacy or package-owned state records can still round-trip.
+
+The `plugins/` directory name is reserved for optional Qt dynamic plugin binaries, not concrete IP core packages. Concrete NoC and RaveNoC IP packages should be described as package roots under `ipcores/`.
 
 ## Typical user flow
 
@@ -153,7 +167,7 @@ The `plugins/` directory name is reserved for future feature extensions and edit
 
 ## IP Core Package Format
 
-The preferred runtime input is the package-local `ipcraft.json` manifest in `ipcores/<package>/`. It describes:
+The runtime input is the package-local `ipcraft.json` manifest in `ipcores/<package>/`. It is generated from the constrained `ipcore.yml` authoring source and describes:
 
 - package identity, display name, and version
 - module palette label and description
@@ -164,6 +178,7 @@ The preferred runtime input is the package-local `ipcraft.json` manifest in `ipc
 - config-zone field order and labels when custom ordering is needed
 - generator and DRC commands
 - NoC topology presets
+- optional IP-XACT root metadata
 
 Each package view XML file can describe:
 
@@ -181,8 +196,8 @@ If a module has no graphics overlay, the editor falls back to a simple node layo
 
 ## Extension points
 
-- Add new module types by editing the source package `ipcraft.json` and optionally adding `views/<type>.xml`.
-- Add new concrete IP support by creating an `ipcores/<package>/` package root with `ipcraft.json`, `ipcore.yml`, `views/`, `generator/`, and `vendor/`.
+- Add new module types by editing the source package `ipcore.yml`, optionally adding `views/<type>.xml`, and rebuilding `ipcraft.json` with specgen.
+- Add new concrete IP support by creating an `ipcores/<package>/` package root with constrained `ipcore.yml`, generated `ipcraft.json`, `views/`, `generator/`, and `vendor/`.
 - Add new validation rules in `BasicValidator` or extend `DRCRunner` parsing if IP core generator output changes.
 - Add new editing operations by implementing `Command` subclasses in `src/commands/`.
 

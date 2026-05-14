@@ -1,7 +1,10 @@
 // Final V1 architecture gate for the repository IP-core mainline flow.
+#include "app/appsettings.h"
 #include "app/projectgenerationrunner.h"
 #include "graph/graph.h"
 #include "graph/module.h"
+#include "ipcraft/ipcraftmanifestreader.h"
+#include "ipcraft/ipcraftregistry.h"
 #include "ipcore/ipcatalogservice.h"
 #include "ipcore/ipcoregraphexporter.h"
 #include "modules/moduleregistry.h"
@@ -20,9 +23,12 @@
 #include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonArray>
 #include <QJsonDocument>
+#include <QJsonObject>
 #include <QList>
 #include <QProcess>
+#include <QSettings>
 #include <QTemporaryDir>
 #include <QStringList>
 #include <algorithm>
@@ -92,6 +98,61 @@ void writeFile(const QString& path, const QByteArray& content) {
     require(file.write(content) == content.size(), "failed to write test file");
 }
 
+QString writeGatePackageView(QDir& packageRoot,
+                             const QString& module = QStringLiteral("Module"),
+                             const QString& interfaceId = QStringLiteral("bus")) {
+    require(packageRoot.mkpath(QStringLiteral("views")),
+            "failed to create gate package views directory");
+    const QString relativePath = QStringLiteral("views/") + module + QStringLiteral(".xml");
+    const QByteArray xml = QStringLiteral(R"xml(<?xml version="1.0" encoding="UTF-8"?>
+<module-view schema="v1" module="%1">
+  <anchors>
+    <anchor ref="%2" x="0" y="0" normal_x="1" normal_y="0" />
+  </anchors>
+</module-view>
+)xml").arg(module, interfaceId).toUtf8();
+    writeFile(packageRoot.filePath(relativePath), xml);
+    return relativePath;
+}
+
+QByteArray gatePackageManifest(const QString& packageId,
+                               const QString& viewPath = QStringLiteral("views/Module.xml")) {
+    return QStringLiteral(R"json({
+  "schema": "ipcraft.manifest.v1",
+  "id": "%1",
+  "name": "Gate Package",
+  "version": "1.0.0",
+  "connection_classes": [
+    { "id": "gate_link", "roles": ["initiator", "target"], "symmetric": false }
+  ],
+  "modules": [
+    {
+      "id": "Module",
+      "interfaces": [
+        {
+          "id": "bus",
+          "modes": ["initiator"],
+          "accepts": [
+            { "class": "gate_link", "role": "initiator" }
+          ],
+          "multi_connection": false
+        }
+      ]
+    }
+  ],
+  "views": [
+    { "module": "Module", "file": "%2" }
+  ],
+  "commands": {
+    "validate": {
+      "executable": "tools/validate",
+      "input_schema": "ipcraft.noc.project.v1",
+      "args": ["-i", "{input}"]
+    }
+  }
+})json").arg(packageId, viewPath).toUtf8();
+}
+
 QStringList legacyRuntimeVocabularyTokens() {
     return {
         QStringLiteral("Plugin") + QStringLiteral("Registry"),
@@ -102,6 +163,10 @@ QStringList legacyRuntimeVocabularyTokens() {
         QStringLiteral("plugin") + QStringLiteral(".json"),
         QStringLiteral("ConnectionRuleLayer::") + QStringLiteral("FeaturePlugin")
     };
+}
+
+bool containsLegacyProductName(const QString& schemaName) {
+    return schemaName.contains(QStringLiteral("finepaper"), Qt::CaseInsensitive);
 }
 
 QString generatedRuntimeRootToken() {
@@ -256,6 +321,154 @@ void testMainWindowDefaultPathDoesNotUseRuntimeSingleton() {
             "MainWindow default path should consume ipcraft catalog/package entries, not runtime singleton runtimes");
 }
 
+void requirePublicSchemaName(const QString& schemaName, const QString& source) {
+    require(!schemaName.trimmed().isEmpty(),
+            QStringLiteral("public schema name should be declared in %1")
+                .arg(source)
+                .toLocal8Bit()
+                .constData());
+    require(!containsLegacyProductName(schemaName),
+            QStringLiteral("public schema name should not contain finepaper: %1 in %2")
+                .arg(schemaName, source)
+                .toLocal8Bit()
+                .constData());
+}
+
+QString authoredPackageSchema(const QString& packageRootPath) {
+    QFile sourceFile(QDir(packageRootPath).filePath(QStringLiteral("ipcore.yml")));
+    if (!sourceFile.exists()) {
+        return {};
+    }
+    require(sourceFile.open(QIODevice::ReadOnly | QIODevice::Text),
+            "authoring YAML should be readable for schema gate");
+
+    while (!sourceFile.atEnd()) {
+        const QString line = QString::fromUtf8(sourceFile.readLine()).trimmed();
+        if (line.startsWith(QStringLiteral("schema:"))) {
+            return line.mid(QStringLiteral("schema:").size()).trimmed();
+        }
+    }
+
+    return {};
+}
+
+void testPublicSchemaNamesDoNotUseLegacyProductName() {
+    requirePublicSchemaName(QStringLiteral("ipcraft.package.v1"),
+                            QStringLiteral("authoring package schema"));
+    requirePublicSchemaName(IpCoreGraphExporter::ipcraftNocProjectSchemaName(),
+                            QStringLiteral("Qt command project schema"));
+
+    const QVector<IpcraftPackageManifest> packages =
+        loadIpcraftPackageManifests({repositoryPath(QStringLiteral("ipcores"))});
+    require(!packages.isEmpty(), "repository packages should load for schema gate");
+
+    for (const IpcraftPackageManifest& package : packages) {
+        requirePublicSchemaName(package.schema,
+                                QStringLiteral("%1/ipcraft.json")
+                                    .arg(package.packageRootPath));
+
+        const QString authoredSchema = authoredPackageSchema(package.packageRootPath);
+        if (!authoredSchema.isEmpty()) {
+            requirePublicSchemaName(authoredSchema,
+                                    QStringLiteral("%1/ipcore.yml")
+                                        .arg(package.packageRootPath));
+        }
+
+        for (auto it = package.commands.cbegin(); it != package.commands.cend(); ++it) {
+            requirePublicSchemaName(it.value().inputSchema,
+                                    QStringLiteral("%1 commands.%2.input_schema")
+                                        .arg(package.id, it.key()));
+        }
+    }
+}
+
+void testDefaultPackageDiscoveryUsesOnlyConfiguredRoots() {
+    QTemporaryDir settingsRoot;
+    QTemporaryDir workspaceRoot;
+    QTemporaryDir configuredPackageRoot;
+    require(settingsRoot.isValid(), "temporary settings root should be valid");
+    require(workspaceRoot.isValid(), "temporary workspace root should be valid");
+    require(configuredPackageRoot.isValid(), "temporary configured package root should be valid");
+
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settingsRoot.path());
+    QCoreApplication::setOrganizationName(QStringLiteral("v1architecturegate_test_org"));
+    QCoreApplication::setApplicationName(QStringLiteral("default_package_roots_gate"));
+    AppSettings().setIpcorePaths({});
+
+    QDir workspace(workspaceRoot.path());
+    require(workspace.mkpath(generatedRuntimeRootToken() + QStringLiteral("/unused-package")),
+            "generated runtime fixture should be created");
+
+    const QString previousCurrentPath = QDir::currentPath();
+    require(QDir::setCurrent(workspace.path()),
+            "current directory should switch to generated runtime fixture");
+    const QStringList emptyRoots = defaultIpcraftPackageRoots();
+    require(QDir::setCurrent(previousCurrentPath),
+            "current directory should be restored after package root check");
+    require(emptyRoots.isEmpty(),
+            "default Qt package discovery should not infer generated runtime or local package roots");
+
+    AppSettings().setIpcorePaths({configuredPackageRoot.path()});
+    const QStringList configuredRoots = defaultIpcraftPackageRoots();
+    const QString configuredPath = QFileInfo(configuredPackageRoot.path()).absoluteFilePath();
+    require(configuredRoots == QStringList{configuredPath},
+            "default Qt package discovery should use AppSettings package roots");
+    require(!configuredRoots.join(QStringLiteral("\n")).contains(generatedRuntimeRootToken()),
+            "default Qt package discovery should not depend on generated runtime roots");
+}
+
+void testManifestLoaderHasStrictJsonAndAtomicRegistrationTests() {
+    QTemporaryDir duplicateKeyRoot;
+    require(duplicateKeyRoot.isValid(), "duplicate-key package root should be valid");
+    QDir duplicateRoot(duplicateKeyRoot.path());
+    writeFile(duplicateRoot.filePath(QStringLiteral("ipcraft.json")),
+              QByteArrayLiteral(R"json({
+  "schema": "ipcraft.manifest.v1",
+  "id": "org.example.first",
+  "id": "org.example.second",
+  "name": "Duplicate Key",
+  "version": "1.0.0",
+  "connection_classes": [],
+  "modules": [],
+  "views": []
+})json"));
+
+    const IpcraftManifestReadResult duplicateResult =
+        IpcraftManifestReader().readPackage(duplicateRoot.absolutePath());
+    require(!duplicateResult.ok, "manifest reader should reject duplicate JSON keys");
+    require(!duplicateResult.diagnostics.isEmpty(),
+            "duplicate-key rejection should produce a diagnostic");
+    require(duplicateResult.diagnostics.first().message.contains(QStringLiteral("Duplicate JSON key")),
+            "duplicate-key rejection should come from the strict manifest loader");
+
+    QTemporaryDir batchRoot;
+    require(batchRoot.isValid(), "partial-registration package root should be valid");
+    QDir workspace(batchRoot.path());
+    require(workspace.mkpath(QStringLiteral("valid")), "failed to create valid package directory");
+    require(workspace.mkpath(QStringLiteral("invalid")), "failed to create invalid package directory");
+
+    QDir validRoot(workspace.filePath(QStringLiteral("valid")));
+    writeGatePackageView(validRoot);
+    writeFile(validRoot.filePath(QStringLiteral("ipcraft.json")),
+              gatePackageManifest(QStringLiteral("org.example.valid")));
+
+    QDir invalidRoot(workspace.filePath(QStringLiteral("invalid")));
+    writeGatePackageView(invalidRoot,
+                         QStringLiteral("Module"),
+                         QStringLiteral("missing_interface"));
+    writeFile(invalidRoot.filePath(QStringLiteral("ipcraft.json")),
+              gatePackageManifest(QStringLiteral("org.example.invalid")));
+
+    IpcraftRegistry registry;
+    const bool loaded =
+        registry.loadPackageRoots({validRoot.absolutePath(), invalidRoot.absolutePath()});
+    require(!loaded, "registry should reject a batch that contains an invalid package");
+    require(registry.packages().isEmpty(),
+            "partial package load rejection should leave registry packages empty");
+    require(!registry.diagnostics().isEmpty(),
+            "partial package load rejection should expose loader diagnostics");
+}
+
 QString writeStubIpcraftCommand(const QString& directory) {
     const QString path = QDir(directory).filePath(QStringLiteral("stub-ipcraft-command.rb"));
     writeFile(path, QByteArrayLiteral(R"ruby(#!/usr/bin/env ruby
@@ -365,6 +578,14 @@ void testRepositoryNoCMainlineFlow() {
             "NoC generator should consume package project input");
     require(nocEntry->drc.inputFormat == QStringLiteral("ipcraft.noc.project.v1"),
             "NoC DRC should consume package project input");
+    require(!nocEntry->packageManifest.commands.isEmpty(),
+            "NoC package should declare package commands");
+    for (auto it = nocEntry->packageManifest.commands.cbegin();
+         it != nocEntry->packageManifest.commands.cend();
+         ++it) {
+        require(!it.value().inputSchema.trimmed().isEmpty(),
+                "package commands should declare input_schema");
+    }
 
     QTemporaryDir commandDir;
     require(commandDir.isValid(), "temporary command directory should be created");
@@ -433,6 +654,41 @@ void testRepositoryNoCMainlineFlow() {
     const QString projectPath = QDir(tempDir.path()).filePath(QStringLiteral("v1_gate.fpproj"));
     const ProjectWriteResult writeResult = ProjectWriter::writeFile(projectPath, document);
     require(writeResult.success, writeResult.error.toLocal8Bit().constData());
+
+    QFile projectFile(projectPath);
+    require(projectFile.open(QIODevice::ReadOnly),
+            "written project should be readable for connection schema gate");
+    const QJsonObject projectJson = QJsonDocument::fromJson(projectFile.readAll()).object();
+    const QJsonArray projectIpState = projectJson.value(QStringLiteral("ipcore_state")).toArray();
+    require(projectIpState.size() == 2,
+            "written project should include saved IP-instance state for schema gate");
+    for (const QJsonValue& stateValue : projectIpState) {
+        const QString schemaName = stateValue.toObject().value(QStringLiteral("schema")).toString();
+        require(schemaName == QStringLiteral("ipcraft.noc.instance-state.v1"),
+                "newly saved IP-instance state should use the public ipcraft instance schema");
+        requirePublicSchemaName(schemaName, QStringLiteral("ProjectWriter ipcore_state.schema"));
+    }
+
+    const QJsonArray projectConnections = projectJson.value(QStringLiteral("graph"))
+        .toObject()
+        .value(QStringLiteral("connections"))
+        .toArray();
+    require(!projectConnections.isEmpty(),
+            "written project should include connection records for schema gate");
+    for (const QJsonValue& connectionValue : projectConnections) {
+        const QJsonObject connection = connectionValue.toObject();
+        require(connection.contains(QStringLiteral("interfaces")),
+                "new project connection records should use interfaces");
+        require(!connection.contains(QStringLiteral("from")),
+                "new project connection records should not use from");
+        require(!connection.contains(QStringLiteral("to")),
+                "new project connection records should not use to");
+        require(!connection.contains(QStringLiteral("source")),
+                "new project connection records should not use legacy source endpoint");
+        require(!connection.contains(QStringLiteral("target")),
+                "new project connection records should not use legacy target endpoint");
+    }
+
     const ProjectReadResult readResult = ProjectReader::readFile(projectPath);
     require(readResult.success, readResult.error.toLocal8Bit().constData());
 
@@ -464,6 +720,26 @@ void testRepositoryNoCMainlineFlow() {
     require(exportResult.document.object().value(QStringLiteral("schema")).toString() ==
                 QStringLiteral("ipcraft.noc.project.v1"),
             "generator input should use package project schema");
+    require(!containsLegacyProductName(
+                exportResult.document.object().value(QStringLiteral("schema")).toString()),
+            "generator input public schema should not contain finepaper");
+    const QJsonArray commandConnections =
+        exportResult.document.object().value(QStringLiteral("connections")).toArray();
+    require(!commandConnections.isEmpty(),
+            "generator input should include connection records for schema gate");
+    for (const QJsonValue& connectionValue : commandConnections) {
+        const QJsonObject connection = connectionValue.toObject();
+        require(connection.contains(QStringLiteral("interfaces")),
+                "ipcraft.noc.project.v1 connection records should use interfaces");
+        require(!connection.contains(QStringLiteral("from")),
+                "ipcraft.noc.project.v1 connection records should not use from");
+        require(!connection.contains(QStringLiteral("to")),
+                "ipcraft.noc.project.v1 connection records should not use to");
+        require(!connection.contains(QStringLiteral("source")),
+                "ipcraft.noc.project.v1 connection records should not use legacy source endpoint");
+        require(!connection.contains(QStringLiteral("target")),
+                "ipcraft.noc.project.v1 connection records should not use legacy target endpoint");
+    }
 
     ProjectValidationRunner validationRunner;
     const QList<ValidationResult> validationResults =
@@ -510,9 +786,12 @@ void testRepositoryNoCMainlineFlow() {
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
     try {
+        testPublicSchemaNamesDoNotUseLegacyProductName();
         testMaintainedRuntimeSurfaceDoesNotRequireGeneratedBundles();
         testRuntimeVocabularyHasNoQtPluginManifestPath();
         testMainWindowDefaultPathDoesNotUseRuntimeSingleton();
+        testDefaultPackageDiscoveryUsesOnlyConfiguredRoots();
+        testManifestLoaderHasStrictJsonAndAtomicRegistrationTests();
         testRepositoryNoCMainlineFlow();
     } catch (const std::exception& error) {
         std::cerr << "v1architecturegate_test failed: " << error.what() << '\n';

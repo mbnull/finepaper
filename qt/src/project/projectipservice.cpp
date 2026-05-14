@@ -57,7 +57,7 @@ ProjectIpInstanceRecord defaultRecordForEntry(const IpCatalogEntry& entry, const
     ProjectIpInstanceRecord record;
     record.ipcoreId = entry.id;
     record.instanceId = instanceId;
-    record.schema = entry.id + QStringLiteral("-project-state-v1");
+    record.schema = QStringLiteral("ipcraft.noc.instance-state.v1");
     record.state.insert(QStringLiteral("kind"), entry.kind);
     record.state.insert(QStringLiteral("type"), entry.name);
     record.state.insert(QStringLiteral("global_parameters"), globalParameterDefaults(entry));
