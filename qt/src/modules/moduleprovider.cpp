@@ -419,6 +419,15 @@ QStringList stringListFromJsonArray(const QJsonArray& values) {
     return result;
 }
 
+QStringList attachHostsFromIpcraft(const QJsonObject& attach) {
+    QStringList result = stringListFromJsonArray(attach.value(QStringLiteral("hosts")).toArray());
+    const QString host = attach.value(QStringLiteral("host")).toString().trimmed();
+    if (!host.isEmpty() && !result.contains(host)) {
+        result.append(host);
+    }
+    return result;
+}
+
 Parameter::Value ipcraftParameterValue(const QString& parameterType, const QJsonValue& value) {
     if (parameterType == QStringLiteral("int")) {
         return value.toInt();
@@ -517,8 +526,7 @@ ModuleType moduleTypeFromIpcraft(const IpcraftPackageManifest& manifest,
     type.packageId = manifest.id;
     type.moduleId = module.id;
     type.graphRole = module.graphRole;
-    type.attachHostModuleIds =
-        stringListFromJsonArray(module.attach.value(QStringLiteral("hosts")).toArray());
+    type.attachHostModuleIds = attachHostsFromIpcraft(module.attach);
     type.attachZoneId = module.attach.value(QStringLiteral("zone")).toString().trimmed();
     type.ipcoreId = manifest.id;
     type.paletteLabel = module.name.isEmpty() ? module.id : module.name;

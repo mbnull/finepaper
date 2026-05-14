@@ -720,6 +720,21 @@ class SpecGeneratorTest < Minitest::Test
     end
   end
 
+  def test_rejects_unsupported_topology_kind
+    Dir.mktmpdir do |dir|
+      package_root = write_ipcraft_package_source(
+        dir,
+        yaml: ipcraft_package_yaml.sub('kind: mesh', 'kind: star')
+      )
+
+      error = assert_raises(SpecGenerator::SpecError) do
+        build_ipcraft_manifest(package_root)
+      end
+
+      assert_match(/topology mesh kind star is unsupported/, error.message)
+    end
+  end
+
   def test_rejects_topology_port_values_missing_from_module_interfaces
     Dir.mktmpdir do |dir|
       package_root = write_ipcraft_package_source(

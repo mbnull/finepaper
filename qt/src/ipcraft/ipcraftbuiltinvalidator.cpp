@@ -253,9 +253,17 @@ QString connectionClassMappingError(const IpcraftPackageManifest& manifest,
         .arg(connectionClass.id);
 }
 
-bool isInterfaceReferenceAttribute(const QString& attributeName) {
+bool isAttachmentZoneElement(const QString& elementName) {
+    return elementName == QStringLiteral("zone")
+           || elementName == QStringLiteral("attachment-zone");
+}
+
+bool isInterfaceReferenceAttribute(const QString& elementName, const QString& attributeName) {
+    if (attributeName == QStringLiteral("ref")) {
+        return elementName == QStringLiteral("anchor")
+               || elementName == QStringLiteral("interface");
+    }
     static const QSet<QString> kInterfaceReferenceAttributes{
-        QStringLiteral("ref"),
         QStringLiteral("interface"),
         QStringLiteral("interface_id"),
         QStringLiteral("interface_ref")
@@ -263,7 +271,10 @@ bool isInterfaceReferenceAttribute(const QString& attributeName) {
     return kInterfaceReferenceAttributes.contains(attributeName);
 }
 
-bool isAttachmentZoneReferenceAttribute(const QString& attributeName) {
+bool isAttachmentZoneReferenceAttribute(const QString& elementName, const QString& attributeName) {
+    if (attributeName == QStringLiteral("ref")) {
+        return isAttachmentZoneElement(elementName);
+    }
     static const QSet<QString> kAttachmentZoneReferenceAttributes{
         QStringLiteral("zone"),
         QStringLiteral("attach_zone"),
@@ -1132,15 +1143,16 @@ void validateViewXml(const IpCatalogEntry& entry,
             continue;
         }
 
+        const QString elementName = xml.name().toString();
         const QXmlStreamAttributes attributes = xml.attributes();
         for (const QXmlStreamAttribute& attribute : attributes) {
             const QString attributeName = attribute.name().toString();
             const QString attributeValue = attribute.value().toString().trimmed();
 
-            if (isInterfaceReferenceAttribute(attributeName)
+            if (isInterfaceReferenceAttribute(elementName, attributeName)
                 && !interfaceIds.contains(attributeValue)) {
                 const bool isAnchorRef =
-                    xml.name() == QStringLiteral("anchor")
+                    elementName == QStringLiteral("anchor")
                     && attributeName == QStringLiteral("ref");
                 const QString message = isAnchorRef
                     ? QStringLiteral("View XML anchor references missing interface '%1' on module '%2'.")
@@ -1155,7 +1167,7 @@ void validateViewXml(const IpCatalogEntry& entry,
                 return;
             }
 
-            if (isAttachmentZoneReferenceAttribute(attributeName)) {
+            if (isAttachmentZoneReferenceAttribute(elementName, attributeName)) {
                 if (attributeValue.isEmpty()) {
                     accumulator.addPackageError(
                         entry,

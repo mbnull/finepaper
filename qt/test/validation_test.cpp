@@ -851,6 +851,53 @@ void testBuiltInValidationReportsViewAttachmentZoneReferenceError() {
             "invalid attachment zone XML should use built_in_view");
 }
 
+void testBuiltInValidationAllowsAttachmentZoneRefAlias() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "failed to create temporary package directory");
+    QDir root(tempDir.path());
+    require(root.mkpath(QStringLiteral("views")), "failed to create views directory");
+    const QString viewPath = root.filePath(QStringLiteral("views/Tile.xml"));
+    QFile viewFile(viewPath);
+    require(viewFile.open(QIODevice::WriteOnly | QIODevice::Truncate),
+            "failed to create test view XML");
+    viewFile.write(QByteArrayLiteral(R"xml(<module-view schema="v1" module="Tile">
+  <anchors><anchor ref="link" x="0.5" y="0.5"/></anchors>
+  <attachment-zones><zone ref="valid_zone" x="0.25" y="0.25"/></attachment-zones>
+</module-view>)xml"));
+    viewFile.close();
+
+    const QString ipcoreId = QStringLiteral("finepaper.viewed_zone_ref");
+    IpCatalogEntry entry = ipcraftCatalogEntryWithoutDrc(ipcoreId);
+    IpcraftModuleDescriptor endpoint = manifestModule(QStringLiteral("Endpoint"));
+    endpoint.attach = QJsonObject{
+        {QStringLiteral("hosts"), QJsonArray{QStringLiteral("Tile")}},
+        {QStringLiteral("zone"), QStringLiteral("valid_zone")}
+    };
+    entry.packageManifest.modules.append(endpoint);
+    entry.packageManifest.packageRootPath = root.path();
+    IpcraftViewDescriptor view;
+    view.moduleId = QStringLiteral("Tile");
+    view.filePath = QStringLiteral("views/Tile.xml");
+    view.resolvedFilePath = viewPath;
+    entry.packageManifest.views = {view};
+
+    Graph graph;
+    const QList<IpCatalogEntry> entries{entry};
+    const QVector<ProjectIpInstanceRecord> instances{
+        projectInstanceRecord(ipcoreId, QStringLiteral("viewed_zone_ref_0"))
+    };
+
+    ProjectValidationRunner runner;
+    const QList<ValidationResult> results = runner.validate(&graph, entries, instances);
+
+    require(countResults(results,
+                         ValidationSeverity::Error,
+                         QStringLiteral("built-in view")) == 0,
+            "attachment-zone ref alias should not produce built-in view validation errors");
+    require(!hasRule(results, QStringLiteral("built_in_view")),
+            "valid attachment-zone ref alias should not use built_in_view");
+}
+
 void testBuiltInValidationReportsTopologyMetadataReferenceErrors() {
     const QString ipcoreId = QStringLiteral("finepaper.topology");
     IpCatalogEntry entry = ipcraftCatalogEntryWithoutDrc(ipcoreId);
@@ -1119,6 +1166,7 @@ int main(int argc, char** argv) {
         testBuiltInValidationReportsViewReferenceError();
         testBuiltInValidationReportsViewInterfaceAttributeReferenceError();
         testBuiltInValidationReportsViewAttachmentZoneReferenceError();
+        testBuiltInValidationAllowsAttachmentZoneRefAlias();
         testBuiltInValidationReportsTopologyMetadataReferenceErrors();
         testProjectValidationRunnerRunsDrcForEveryProjectInstance();
         testProjectValidationRunnerDrcReceivesEachInstanceScopedGraph();

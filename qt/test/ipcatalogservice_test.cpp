@@ -338,6 +338,10 @@ void testIpcraftModuleTypesAreScopedByPackage() {
             "scoped module type keys should not replace user-visible labels");
     require(registry.getType(QStringLiteral("Tile")) == nullptr,
             "ambiguous bare module id lookup should not select one package globally");
+    require(registry.getType(QStringLiteral("org.example.noc"), QStringLiteral("Tile")) == nocType,
+            "package-scoped lookup should resolve the requested package module");
+    require(registry.getType(QStringLiteral("org.example.fabric"), nocTypeName) == nullptr,
+            "package-scoped lookup should not return an already-scoped type from another package");
 
     IpCatalogService catalog(QVector<IpcraftPackageManifest>{fabric, noc}, &registry);
     const std::optional<IpCatalogEntry> fabricEntry = catalog.entry(QStringLiteral("org.example.fabric"));
@@ -373,6 +377,39 @@ void testIpcraftIdentityFallbacksDoNotSpecialCaseLegacyEndpointNames() {
             "Endpoint display prefix should use manifest label instead of legacy EP fallback");
 }
 
+void testIpcraftSingularAttachHostPropagatesToModuleType() {
+    ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
+    IpcraftPackageManifest manifest;
+    manifest.id = QStringLiteral("org.example.attach_host");
+    manifest.name = QStringLiteral("Attach Host");
+
+    IpcraftModuleDescriptor host;
+    host.id = QStringLiteral("Host");
+    host.name = QStringLiteral("Host");
+    host.graphRole = QStringLiteral("host");
+
+    IpcraftModuleDescriptor endpoint;
+    endpoint.id = QStringLiteral("Endpoint");
+    endpoint.name = QStringLiteral("Endpoint");
+    endpoint.graphRole = QStringLiteral("attached");
+    endpoint.attach = QJsonObject{
+        {QStringLiteral("host"), QStringLiteral("Host")},
+        {QStringLiteral("zone"), QStringLiteral("endpoint_slot")}
+    };
+
+    manifest.modules = {host, endpoint};
+    require(registry.loadIpcraftPackages({manifest}),
+            "package with singular attach.host should load");
+
+    const ModuleType* endpointType =
+        registry.getType(QStringLiteral("org.example.attach_host"), QStringLiteral("Endpoint"));
+    require(endpointType != nullptr, "attached module type should be registered");
+    require(endpointType->attachHostModuleIds == QStringList{QStringLiteral("Host")},
+            "singular attach.host should propagate to ModuleType attach host ids");
+    require(endpointType->attachZoneId == QStringLiteral("endpoint_slot"),
+            "attach.zone should propagate with singular attach.host");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -385,6 +422,7 @@ int main(int argc, char** argv) {
         testDefaultPackageCommandsResolveWithIpcraftProjectSchema();
         testIpcraftModuleTypesAreScopedByPackage();
         testIpcraftIdentityFallbacksDoNotSpecialCaseLegacyEndpointNames();
+        testIpcraftSingularAttachHostPropagatesToModuleType();
     } catch (const std::exception& error) {
         std::cerr << error.what() << std::endl;
         return 1;

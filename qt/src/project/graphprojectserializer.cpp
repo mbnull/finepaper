@@ -522,7 +522,7 @@ GraphProjectLoadResult GraphProjectSerializer::loadProject(const ProjectDocument
                                .arg(record.id, record.instanceId, record.ipcoreId));
         }
 
-        const ModuleType* type = ModuleRegistry::instance().getType(record.type);
+        const ModuleType* type = ModuleRegistry::instance().getType(record.ipcoreId, record.type);
         if (!type) {
             // Missing type means the required IP core bundle was not loaded at
             // startup, so continuing would lose graph semantics.

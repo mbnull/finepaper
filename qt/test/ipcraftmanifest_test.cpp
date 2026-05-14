@@ -591,7 +591,6 @@ void testRejectsPartialPackageRegistration() {
 
 void testRejectsRegistryPackageWithInvalidViewInterfaceReferenceAttributes() {
     const QVector<QString> attributeNames{
-        QStringLiteral("ref"),
         QStringLiteral("interface"),
         QStringLiteral("interface_id"),
         QStringLiteral("interface_ref")
@@ -624,8 +623,64 @@ void testRejectsRegistryPackageWithInvalidViewInterfaceReferenceAttributes() {
     }
 }
 
+QByteArray attachmentZoneManifest(const QString& viewPath = QStringLiteral("views/Module.xml")) {
+    return QStringLiteral(R"json({
+  "schema": "ipcraft.manifest.v1",
+  "id": "org.example.attach_zone",
+  "name": "Attach Zone",
+  "version": "1.0.0",
+  "connection_classes": [
+    { "id": "demo_link", "roles": ["initiator", "target"], "symmetric": false }
+  ],
+  "modules": [
+    {
+      "id": "Module",
+      "name": "Module",
+      "interfaces": [
+        { "id": "bus", "modes": ["target"], "accepts": [{ "class": "demo_link", "role": "target" }] }
+      ]
+    },
+    {
+      "id": "Endpoint",
+      "name": "Endpoint",
+      "attach": { "hosts": ["Module"], "zone": "agent_slot" },
+      "interfaces": [
+        { "id": "link", "modes": ["initiator"], "accepts": [{ "class": "demo_link", "role": "initiator" }] }
+      ]
+    }
+  ],
+  "views": [
+    { "module": "Module", "file": "%1" }
+  ]
+})json").arg(viewPath).toUtf8();
+}
+
+void testRegistryAcceptsAttachmentZoneRefAlias() {
+    QTemporaryDir temp;
+    require(temp.isValid(), "temporary directory should be valid");
+
+    QDir root(temp.path());
+    createViewXml(
+        root,
+        QStringLiteral("Module"),
+        QByteArrayLiteral(R"xml(<module-view schema="v1" module="Module">
+  <anchors><anchor ref="bus" x="0" y="0" /></anchors>
+  <attachment-zones><zone ref="agent_slot" x="10" y="10" /></attachment-zones>
+</module-view>)xml"));
+    writeFile(root.filePath(QStringLiteral("ipcraft.json")), attachmentZoneManifest());
+
+    IpcraftRegistry registry;
+    const bool loaded = registry.loadPackageRoots({temp.path()});
+
+    require(loaded,
+            "attachment-zone ref should be interpreted as a zone id, not an interface reference");
+    require(registry.package(QStringLiteral("org.example.attach_zone")) != nullptr,
+            "package with attachment-zone ref alias should load");
+}
+
 void testRejectsRegistryPackageWithInvalidViewAttachmentZoneReferences() {
     const QVector<QString> attributeNames{
+        QStringLiteral("ref"),
         QStringLiteral("zone"),
         QStringLiteral("attach_zone"),
         QStringLiteral("attachment_zone")
@@ -640,7 +695,7 @@ void testRejectsRegistryPackageWithInvalidViewAttachmentZoneReferences() {
             root,
             QStringLiteral("Module"),
             QStringLiteral(R"xml(<module-view schema="v1" module="Module">
-  <attachment-zones><attachment-zone %1="missing_zone" x="0" y="0" /></attachment-zones>
+  <attachment-zones><zone %1="missing_zone" x="0" y="0" /></attachment-zones>
 </module-view>)xml").arg(attributeName).toUtf8());
         writeFile(root.filePath(QStringLiteral("ipcraft.json")), minimalManifest());
 
@@ -765,6 +820,7 @@ int main(int argc, char** argv) {
         testRejectsTraversingCommandExecutable();
         testRejectsPartialPackageRegistration();
         testRejectsRegistryPackageWithInvalidViewInterfaceReferenceAttributes();
+        testRegistryAcceptsAttachmentZoneRefAlias();
         testRejectsRegistryPackageWithInvalidViewAttachmentZoneReferences();
         testRejectsBatchPackageRegistrationOnAnyFailure();
         testPluginAndExtensionsAreDistinct();

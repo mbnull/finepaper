@@ -301,6 +301,15 @@ void registerProjectConnectionTypes() {
     registered = true;
 }
 
+void registerScopedProjectType(const QString& packageId, const QString& moduleId) {
+    ModuleType type;
+    type.name = ModuleRegistry::scopedTypeName(packageId, moduleId);
+    type.packageId = packageId;
+    type.moduleId = moduleId;
+    type.ipcoreId = packageId;
+    ModuleRegistry::instance().registerType(type);
+}
+
 ProjectDocument validProjectDocument() {
     registerProjectTypes();
 
@@ -1305,6 +1314,38 @@ void testLoadRejectsMissingModuleType() {
             "missing type error should mention the type");
 }
 
+void testLoadDisambiguatesBareModuleTypeByIpcoreId() {
+    const QString moduleId = QStringLiteral("ProjectDocSharedTile");
+    const QString alphaPackage = QStringLiteral("finepaper.project_doc_alpha");
+    const QString betaPackage = QStringLiteral("finepaper.project_doc_beta");
+    registerScopedProjectType(alphaPackage, moduleId);
+    registerScopedProjectType(betaPackage, moduleId);
+
+    ProjectDocument document;
+    ProjectIpInstanceRecord state;
+    state.ipcoreId = betaPackage;
+    state.instanceId = QStringLiteral("beta_0");
+    state.schema = QStringLiteral("ipcraft.noc.instance-state.v1");
+    state.state = QJsonObject{};
+    document.ipcoreState.push_back(state);
+
+    ProjectModuleRecord module;
+    module.id = QStringLiteral("node_0");
+    module.type = moduleId;
+    module.ipcoreId = betaPackage;
+    module.instanceId = state.instanceId;
+    document.modules.push_back(module);
+
+    Graph graph;
+    const GraphProjectLoadResult result = GraphProjectSerializer::loadProject(document, graph);
+
+    require(result.success, result.error.toLocal8Bit().constData());
+    const Module* restored = graph.getModule(QStringLiteral("node_0"));
+    require(restored != nullptr, "bare typed module should load");
+    require(restored->type() == ModuleRegistry::scopedTypeName(betaPackage, moduleId),
+            "bare project module type should resolve through the owning ipcore id");
+}
+
 void testLoadRejectsInvalidParameterType() {
     ProjectDocument document = validProjectDocument();
     document.modules.last().parameters.insert(QStringLiteral("data_width"), QStringLiteral("wide"));
@@ -1820,6 +1861,7 @@ int main(int argc, char** argv) {
         testReaderRejectsWrongKind();
         testLoadRejectsDuplicateModuleIds();
         testLoadRejectsMissingModuleType();
+        testLoadDisambiguatesBareModuleTypeByIpcoreId();
         testLoadRejectsInvalidParameterType();
         testLoadRejectsInvalidConnectionReference();
         testLoadRejectsEmptyConnectionIdWithoutChangingGraph();

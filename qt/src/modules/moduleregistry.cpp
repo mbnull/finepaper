@@ -135,26 +135,28 @@ const ModuleType* ModuleRegistry::getType(const QString& packageId, const QStrin
         return nullptr;
     }
 
+    const QString requestedPackageId = packageId.trimmed();
+    auto ownerMatches = [&](const ModuleType& type) {
+        const QString owner = type.packageId.isEmpty() ? type.ipcoreId : type.packageId;
+        return requestedPackageId.isEmpty() || owner == requestedPackageId;
+    };
+
     const auto exactIt = m_types.find(moduleId);
     if (exactIt != m_types.end()) {
-        const QString owner = exactIt.value().packageId.isEmpty()
-            ? exactIt.value().ipcoreId
-            : exactIt.value().packageId;
-        if (packageId.trimmed().isEmpty() || owner == packageId) {
+        if (ownerMatches(exactIt.value())) {
             return &exactIt.value();
         }
     }
 
     const QString scopedName = scopedTypeName(packageId, moduleId);
     const auto scopedIt = m_types.find(scopedName);
-    if (scopedIt != m_types.end()) {
+    if (scopedIt != m_types.end() && ownerMatches(scopedIt.value())) {
         return &scopedIt.value();
     }
 
     for (auto candidate = m_types.cbegin(); candidate != m_types.cend(); ++candidate) {
         const ModuleType& type = candidate.value();
-        const QString owner = type.packageId.isEmpty() ? type.ipcoreId : type.packageId;
-        if (owner == packageId && (type.moduleId == moduleId || type.name == moduleId)) {
+        if (ownerMatches(type) && (type.moduleId == moduleId || type.name == moduleId)) {
             return &candidate.value();
         }
     }

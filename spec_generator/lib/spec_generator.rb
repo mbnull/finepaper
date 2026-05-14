@@ -51,6 +51,7 @@ module SpecGenerator
   IPCRAFT_INTERFACE_IPXACT_MODE_KEYS = %w[mode].freeze
   IPCRAFT_TOPOLOGY_KEYS = %w[id label kind module id_pattern ports parameters].freeze
   IPCRAFT_TOPOLOGY_PARAMETER_KEYS = %w[label default min max].freeze
+  IPCRAFT_TOPOLOGY_KINDS = %w[mesh ring].freeze
   IPXACT_NATIVE_MODES = %w[
     initiator target system mirroredInitiator mirroredTarget mirroredSystem monitor
   ].freeze
@@ -617,6 +618,7 @@ module SpecGenerator
         remember_unique!(seen_ids, topology_id, 'topology id')
         validate_keys!(topology, IPCRAFT_TOPOLOGY_KEYS, "topology #{topology_id}")
         kind = required_string(topology, 'kind', "topology #{topology_id}.kind")
+        raise SpecError, "topology #{topology_id} kind #{kind} is unsupported" unless IPCRAFT_TOPOLOGY_KINDS.include?(kind)
         module_id = required_string(topology, 'module', "topology #{topology_id}.module")
         interfaces = @module_interfaces[module_id]
         raise SpecError, "topology #{topology_id} references unknown module #{module_id}" unless interfaces
