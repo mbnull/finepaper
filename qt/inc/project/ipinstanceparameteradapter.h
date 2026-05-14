@@ -4,6 +4,7 @@
 #include "graph/parameter.h"
 #include "ipcore/ipcoreruntimedescriptor.h"
 
+#include <QHash>
 #include <QString>
 #include <QVector>
 
@@ -39,4 +40,17 @@ public:
 
 private:
     IpCoreRuntimeDescriptor m_runtime;
+};
+
+class CatalogIpInstanceParameterAdapter final : public IIpInstanceParameterAdapter {
+public:
+    CatalogIpInstanceParameterAdapter(QString ipcoreId,
+                                      QString displayName,
+                                      QHash<QString, IpCoreInstanceParameterDescriptor> instanceParameters);
+    QVector<IpInstanceParameterSection> parameterSections() const override;
+
+private:
+    QString m_ipcoreId;
+    QString m_displayName;
+    QHash<QString, IpCoreInstanceParameterDescriptor> m_instanceParameters;
 };

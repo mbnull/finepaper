@@ -1,8 +1,16 @@
 // ModuleProvider loaders parse XML/JSON bundles into normalized ModuleType definitions.
 #include "modules/moduleprovider.h"
+#include "app/appsettings.h"
+#include "ipcraft/ipcraftregistry.h"
+#include <QCoreApplication>
+#include <QDebug>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
+#include <QJsonArray>
+#include <QJsonObject>
 #include <QXmlStreamReader>
+#include <utility>
 
 namespace {
 
@@ -48,6 +56,49 @@ QString humanizeIdentifier(const QString& identifier) {
     }
 
     return text;
+}
+
+void appendUniquePath(QStringList& paths, const QString& path) {
+    if (path.trimmed().isEmpty()) {
+        return;
+    }
+
+    const QFileInfo info(path);
+    const QString absolutePath = info.absoluteFilePath();
+    if (!paths.contains(absolutePath)) {
+        paths.append(absolutePath);
+    }
+}
+
+void appendLocalIpcraftRootsFrom(QStringList& roots, const QString& startPath) {
+    if (startPath.trimmed().isEmpty()) {
+        return;
+    }
+
+    QDir dir(startPath);
+    while (true) {
+        const QString ipcoresRoot = dir.filePath(QStringLiteral("ipcores"));
+        if (QFileInfo(ipcoresRoot).isDir()) {
+            appendUniquePath(roots, ipcoresRoot);
+        }
+
+        if (!dir.cdUp()) {
+            break;
+        }
+    }
+}
+
+bool jsonBoolValue(const QJsonValue& value, bool fallbackValue = false) {
+    if (value.isBool()) {
+        return value.toBool();
+    }
+    if (value.isDouble()) {
+        return value.toInt() != 0;
+    }
+    if (value.isString()) {
+        return parseBoolString(value.toString(), fallbackValue);
+    }
+    return fallbackValue;
 }
 
 QString attributeValue(const QXmlStreamAttributes& attributes, QStringView name) {
@@ -183,6 +234,309 @@ Port::Direction portDirection(const QString& directionText) {
         return Port::Direction::InOut;
     }
     return Port::Direction::Output;
+}
+
+const IpcraftConnectionClass* connectionClassForId(const IpcraftPackageManifest& manifest,
+                                                   const QString& connectionClassId) {
+    for (const IpcraftConnectionClass& connectionClass : manifest.connectionClasses) {
+        if (connectionClass.id == connectionClassId) {
+            return &connectionClass;
+        }
+    }
+    return nullptr;
+}
+
+const IpcraftViewDescriptor* viewForModuleId(const IpcraftPackageManifest& manifest,
+                                             const QString& moduleId) {
+    for (const IpcraftViewDescriptor& view : manifest.views) {
+        if (view.moduleId == moduleId) {
+            return &view;
+        }
+    }
+    return nullptr;
+}
+
+QString graphGroupForIpcraftRole(const QString& graphRole) {
+    if (graphRole == QStringLiteral("host")) {
+        return QStringLiteral("xps");
+    }
+    if (graphRole == QStringLiteral("attached")) {
+        return QStringLiteral("endpoints");
+    }
+    return graphRole;
+}
+
+bool isRouterSideInterface(const QString& interfaceId) {
+    return interfaceId == QStringLiteral("north") ||
+           interfaceId == QStringLiteral("east") ||
+           interfaceId == QStringLiteral("south") ||
+           interfaceId == QStringLiteral("west");
+}
+
+QString firstAcceptConnectionClass(const IpcraftInterfaceDescriptor& interfaceDescriptor) {
+    return interfaceDescriptor.accepts.isEmpty()
+        ? QString()
+        : interfaceDescriptor.accepts.first().connectionClassId;
+}
+
+QString firstAcceptRole(const IpcraftInterfaceDescriptor& interfaceDescriptor) {
+    if (!interfaceDescriptor.accepts.isEmpty()) {
+        return interfaceDescriptor.accepts.first().role;
+    }
+    return interfaceDescriptor.modes.isEmpty() ? QString() : interfaceDescriptor.modes.first();
+}
+
+QStringList compatibleRolesForAccept(const IpcraftPackageManifest& manifest,
+                                     const IpcraftInterfaceDescriptor& interfaceDescriptor) {
+    const QString role = firstAcceptRole(interfaceDescriptor);
+    const IpcraftConnectionClass* connectionClass =
+        connectionClassForId(manifest, firstAcceptConnectionClass(interfaceDescriptor));
+    if (connectionClass == nullptr) {
+        return {};
+    }
+
+    QStringList compatibleRoles;
+    for (const QString& candidate : connectionClass->roles) {
+        if (candidate != role && !compatibleRoles.contains(candidate)) {
+            compatibleRoles.append(candidate);
+        }
+    }
+    if (compatibleRoles.isEmpty() && connectionClass->symmetric) {
+        compatibleRoles = connectionClass->roles;
+    }
+    return compatibleRoles;
+}
+
+QString autocompleteGroupForInterface(const IpcraftModuleDescriptor& module,
+                                      const IpcraftInterfaceDescriptor& interfaceDescriptor) {
+    if (module.graphRole == QStringLiteral("host") &&
+        isRouterSideInterface(interfaceDescriptor.id)) {
+        return QStringLiteral("router_side");
+    }
+    return QStringLiteral("endpoint_attachment");
+}
+
+QString topologyRuleForInterface(const IpcraftModuleDescriptor& module,
+                                 const IpcraftInterfaceDescriptor& interfaceDescriptor) {
+    if (module.graphRole == QStringLiteral("host") &&
+        isRouterSideInterface(interfaceDescriptor.id)) {
+        return QStringLiteral("opposite_side");
+    }
+    return {};
+}
+
+QString portRoleForInterface(const IpcraftModuleDescriptor& module,
+                             const IpcraftInterfaceDescriptor& interfaceDescriptor) {
+    return topologyRuleForInterface(module, interfaceDescriptor).isEmpty()
+        ? QStringLiteral("attachment")
+        : QStringLiteral("router");
+}
+
+std::optional<double> optionalJsonDouble(const QJsonValue& value) {
+    if (!value.isDouble()) {
+        return std::nullopt;
+    }
+    return value.toDouble();
+}
+
+ModuleParameterMetadata parameterMetadataFromIpcraft(const QString& name,
+                                                     const QJsonObject& object) {
+    ModuleParameterMetadata metadata;
+    metadata.name = name;
+    metadata.label = object.value(QStringLiteral("label")).toString().trimmed();
+    metadata.description = object.value(QStringLiteral("description")).toString().trimmed();
+    metadata.unit = object.value(QStringLiteral("unit")).toString().trimmed();
+    metadata.minimumValue = optionalJsonDouble(object.value(QStringLiteral("minimum")));
+    if (!metadata.minimumValue.has_value()) {
+        metadata.minimumValue = optionalJsonDouble(object.value(QStringLiteral("min")));
+    }
+    metadata.maximumValue = optionalJsonDouble(object.value(QStringLiteral("maximum")));
+    if (!metadata.maximumValue.has_value()) {
+        metadata.maximumValue = optionalJsonDouble(object.value(QStringLiteral("max")));
+    }
+    metadata.configurable = jsonBoolValue(object.value(QStringLiteral("configurable")), true);
+    metadata.readOnly = jsonBoolValue(object.value(QStringLiteral("read_only")), false);
+
+    const QJsonArray enumValues = object.value(QStringLiteral("enum")).toArray();
+    const QJsonObject labels = object.value(QStringLiteral("labels")).toObject();
+    for (const QJsonValue& value : enumValues) {
+        if (!value.isString()) {
+            continue;
+        }
+        const QString choiceValue = value.toString().trimmed();
+        metadata.choices.append(parameterChoice(choiceValue,
+                                                labels.value(choiceValue).toString(choiceValue)));
+    }
+
+    if (metadata.label.isEmpty()) {
+        metadata.label = humanizeIdentifier(name);
+    }
+    return metadata;
+}
+
+QStringList prioritizedParameterNames(const QJsonObject& parameters) {
+    QStringList names = parameters.keys();
+    std::sort(names.begin(), names.end(), [](const QString& left, const QString& right) {
+        const auto priority = [](const QString& name) {
+            if (name == QStringLiteral("display_name")) return 0;
+            if (name == QStringLiteral("external_id")) return 1;
+            return 2;
+        };
+
+        const int leftPriority = priority(left);
+        const int rightPriority = priority(right);
+        if (leftPriority != rightPriority) {
+            return leftPriority < rightPriority;
+        }
+        return QString::compare(left, right, Qt::CaseInsensitive) < 0;
+    });
+    return names;
+}
+
+Parameter::Value ipcraftParameterValue(const QString& parameterType, const QJsonValue& value) {
+    if (parameterType == QStringLiteral("int")) {
+        return value.toInt();
+    }
+    if (parameterType == QStringLiteral("double")) {
+        return value.toDouble();
+    }
+    if (parameterType == QStringLiteral("bool")) {
+        return jsonBoolValue(value, false);
+    }
+    return value.toString();
+}
+
+void loadIpcraftParameters(ModuleType& type, const QJsonObject& parameters) {
+    for (const QString& name : prioritizedParameterNames(parameters)) {
+        const QJsonObject parameterObject = parameters.value(name).toObject();
+        const QString parameterType = parameterObject.value(QStringLiteral("type")).toString().trimmed();
+        ModuleParameterMetadata metadata = parameterMetadataFromIpcraft(name, parameterObject);
+        type.defaultParameters[name] =
+            Parameter(name, ipcraftParameterValue(parameterType,
+                                                 parameterObject.value(QStringLiteral("default"))));
+        type.parameterMetadata.insert(name, metadata);
+
+        if (metadata.configurable) {
+            type.configFields.push_back(ModuleConfigField{
+                name,
+                metadata.label,
+                metadata.description
+            });
+        }
+    }
+}
+
+ModuleInterfaceMetadata interfaceMetadataFromIpcraft(const IpcraftPackageManifest& manifest,
+                                                     const IpcraftModuleDescriptor& module,
+                                                     const IpcraftInterfaceDescriptor& interfaceDescriptor) {
+    ModuleInterfaceMetadata metadata;
+    metadata.id = interfaceDescriptor.id;
+    metadata.label = interfaceDescriptor.label.isEmpty()
+        ? humanizeIdentifier(interfaceDescriptor.id)
+        : interfaceDescriptor.label;
+    metadata.bus = firstAcceptConnectionClass(interfaceDescriptor);
+    metadata.role = firstAcceptRole(interfaceDescriptor);
+    metadata.compatibleRoles = compatibleRolesForAccept(manifest, interfaceDescriptor);
+    metadata.cardinality = interfaceDescriptor.multiConnection
+        ? QStringLiteral("many")
+        : QStringLiteral("one");
+    metadata.autocompleteGroup = autocompleteGroupForInterface(module, interfaceDescriptor);
+    metadata.topologyRule = topologyRuleForInterface(module, interfaceDescriptor);
+    metadata.acceptRules = interfaceDescriptor.accepts;
+    return metadata;
+}
+
+QString stringDefaultParameter(const QJsonObject& parameters, const QString& parameterName) {
+    return parameters.value(parameterName).toObject()
+        .value(QStringLiteral("default")).toString().trimmed();
+}
+
+QString externalIdPrefixFromIpcraft(const IpcraftModuleDescriptor& module) {
+    QString externalId = stringDefaultParameter(module.parameters, QStringLiteral("external_id"));
+    const int underscore = externalId.lastIndexOf(QLatin1Char('_'));
+    if (underscore > 0) {
+        const QString suffix = externalId.mid(underscore + 1);
+        bool numeric = !suffix.isEmpty();
+        for (const QChar& ch : suffix) {
+            numeric = numeric && ch.isDigit();
+        }
+        if (numeric) {
+            externalId = externalId.left(underscore);
+        }
+    }
+    if (!externalId.isEmpty()) {
+        return externalId;
+    }
+    if (module.id == QStringLiteral("XP")) {
+        return QStringLiteral("xp");
+    }
+    if (module.id == QStringLiteral("Endpoint")) {
+        return QStringLiteral("ep");
+    }
+
+    QString fallback = module.id.toLower();
+    fallback.replace(QLatin1Char('-'), QLatin1Char('_'));
+    fallback.replace(QLatin1Char(' '), QLatin1Char('_'));
+    return fallback;
+}
+
+QString displayPrefixFromIpcraft(const IpcraftModuleDescriptor& module) {
+    const QString displayName = stringDefaultParameter(module.parameters, QStringLiteral("display_name"));
+    if (!displayName.isEmpty()) {
+        return displayName.section(QLatin1Char(' '), 0, 0);
+    }
+    if (module.id == QStringLiteral("Endpoint")) {
+        return QStringLiteral("EP");
+    }
+    return module.name.isEmpty() ? module.id : module.name;
+}
+
+ModuleType moduleTypeFromIpcraft(const IpcraftPackageManifest& manifest,
+                                 const IpcraftModuleDescriptor& module) {
+    ModuleType type;
+    type.name = module.id;
+    type.packageId = manifest.id;
+    type.moduleId = module.id;
+    type.graphRole = module.graphRole;
+    type.ipcoreId = manifest.id;
+    type.paletteLabel = module.name.isEmpty() ? module.id : module.name;
+    type.description = module.description;
+    type.graphGroup = graphGroupForIpcraftRole(module.graphRole);
+    type.externalIdPrefix = externalIdPrefixFromIpcraft(module);
+    type.displayPrefix = displayPrefixFromIpcraft(module);
+    type.supportsMeshCoordinates =
+        module.parameters.contains(QStringLiteral("mesh_col")) &&
+        module.parameters.contains(QStringLiteral("mesh_row"));
+
+    if (const IpcraftViewDescriptor* view = viewForModuleId(manifest, module.id)) {
+        type.viewFilePath = view->resolvedFilePath;
+    }
+
+    for (const IpcraftInterfaceDescriptor& interfaceDescriptor : module.interfaces) {
+        ModuleInterfaceMetadata metadata =
+            interfaceMetadataFromIpcraft(manifest, module, interfaceDescriptor);
+        type.interfaceMetadata.insert(metadata.id, metadata);
+        type.defaultPorts.emplace_back(interfaceDescriptor.id,
+                                       Port::Direction::InOut,
+                                       QStringLiteral("bus"),
+                                       metadata.label,
+                                       QStringLiteral("%1 interface").arg(metadata.label),
+                                       portRoleForInterface(module, interfaceDescriptor),
+                                       metadata.bus,
+                                       interfaceDescriptor.id);
+    }
+
+    loadIpcraftParameters(type, module.parameters);
+
+    if (type.paletteLabel.isEmpty()) {
+        type.paletteLabel = humanizeIdentifier(type.name);
+    }
+    if (type.editorLayout.isEmpty()) {
+        type.editorLayout = defaultEditorLayout(type);
+    }
+
+    normalizeCollapsedMetrics(type);
+    return type;
 }
 
 void applyGraphicsElement(ModuleType& type, QXmlStreamReader& xml) {
@@ -501,7 +855,43 @@ ModuleType loadModuleTypeFromXml(QXmlStreamReader& xml) {
     return type;
 }
 
+void logIpcraftDiagnostics(const QVector<IpcraftDiagnostic>& diagnostics) {
+    for (const IpcraftDiagnostic& diagnostic : diagnostics) {
+        qWarning().noquote()
+            << QStringLiteral("Ipcraft package diagnostic [%1] %2 %3: %4")
+                   .arg(diagnostic.severity,
+                        diagnostic.packageRootPath,
+                        diagnostic.path,
+                        diagnostic.message);
+    }
+}
+
 } // namespace
+
+QStringList defaultIpcraftPackageRoots() {
+    QStringList roots;
+
+    const QString envPath = qEnvironmentVariable("FINEPAPER_IPCORE_PATH");
+    for (const QString& path : envPath.split(QDir::listSeparator(), Qt::SkipEmptyParts)) {
+        appendUniquePath(roots, path);
+    }
+
+    for (const QString& path : AppSettings().ipcorePaths()) {
+        appendUniquePath(roots, path);
+    }
+
+    appendLocalIpcraftRootsFrom(roots, QDir::currentPath());
+    appendLocalIpcraftRootsFrom(roots, QCoreApplication::applicationDirPath());
+    return roots;
+}
+
+QVector<IpcraftPackageManifest> loadIpcraftPackageManifests(const QStringList& rootPaths) {
+    IpcraftRegistry registry;
+    if (!registry.loadPackageRoots(rootPaths)) {
+        logIpcraftDiagnostics(registry.diagnostics());
+    }
+    return registry.packages();
+}
 
 XmlModuleTypeSource::XmlModuleTypeSource(const QString& bundlePath)
     : m_bundlePath(bundlePath) {}
@@ -543,6 +933,30 @@ QStringList XmlModuleTypeSource::orderedTypeNames() const {
     return m_orderedTypeNames;
 }
 
+IpcraftModuleTypeSource::IpcraftModuleTypeSource(IpcraftPackageManifest manifest)
+    : m_manifest(std::move(manifest)) {}
+
+QHash<QString, ModuleType> IpcraftModuleTypeSource::loadModuleTypes() {
+    QHash<QString, ModuleType> types;
+    m_orderedTypeNames.clear();
+
+    for (const IpcraftModuleDescriptor& module : m_manifest.modules) {
+        if (module.id.isEmpty()) {
+            continue;
+        }
+
+        ModuleType type = moduleTypeFromIpcraft(m_manifest, module);
+        m_orderedTypeNames.push_back(type.name);
+        types.insert(type.name, type);
+    }
+
+    return types;
+}
+
+QStringList IpcraftModuleTypeSource::orderedTypeNames() const {
+    return m_orderedTypeNames;
+}
+
 XmlModuleGraphicsOverlay::XmlModuleGraphicsOverlay(const QString& graphicsDirectory)
     : m_graphicsDirectory(graphicsDirectory) {}
 
@@ -573,6 +987,50 @@ void XmlModuleGraphicsOverlay::apply(QHash<QString, ModuleType>& types) {
                 continue;
             }
 
+            while (xml.readNextStartElement()) {
+                if (xml.name() == u"graphics") {
+                    applyGraphicsElement(typeIt.value(), xml);
+                } else if (xml.name() == u"anchors") {
+                    loadAnchorsFromXml(typeIt.value(), xml);
+                } else {
+                    xml.skipCurrentElement();
+                }
+            }
+        }
+    }
+}
+
+IpcraftModuleViewOverlay::IpcraftModuleViewOverlay(QVector<IpcraftViewDescriptor> views)
+    : m_views(std::move(views)) {}
+
+void IpcraftModuleViewOverlay::apply(QHash<QString, ModuleType>& types) {
+    for (const IpcraftViewDescriptor& view : m_views) {
+        if (view.resolvedFilePath.isEmpty()) {
+            continue;
+        }
+
+        QFile file(view.resolvedFilePath);
+        if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            continue;
+        }
+
+        QXmlStreamReader xml(&file);
+        while (xml.readNextStartElement()) {
+            if (xml.name() != u"module-view") {
+                xml.skipCurrentElement();
+                continue;
+            }
+
+            const QString moduleAttribute = attributeValue(xml.attributes(), u"module");
+            const QString moduleTypeName =
+                moduleAttribute.isEmpty() ? view.moduleId : moduleAttribute;
+            auto typeIt = types.find(moduleTypeName);
+            if (typeIt == types.end()) {
+                xml.skipCurrentElement();
+                continue;
+            }
+
+            typeIt.value().viewFilePath = view.resolvedFilePath;
             while (xml.readNextStartElement()) {
                 if (xml.name() == u"graphics") {
                     applyGraphicsElement(typeIt.value(), xml);

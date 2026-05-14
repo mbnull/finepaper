@@ -468,19 +468,91 @@ void testIpCoreCommandRunnerRejectsUnsupportedDrcInputFormat() {
             "unsupported DRC error should mention input format");
 }
 
-void testDefaultDiscoveryUsesIpcoreRuntimeRootsOnly() {
+void testIpCoreCommandRunnerRejectsIpcraftProjectSchemaWithoutPackageManifest() {
+    IpCatalogEntry entry;
+    entry.id = QStringLiteral("finepaper.runtime-ipcraft-schema");
+    entry.sourceRootPath = QStringLiteral("/tmp/finepaper-runtime-ipcraft-schema");
+    entry.generator.command = QStringLiteral("ruby");
+    entry.generator.inputFormat = QStringLiteral("ipcraft.noc.project.v1");
+    entry.generator.args = {QStringLiteral("generator/bin/generate")};
+
+    const IpCoreResolvedCommand command =
+        IpCoreCommandRunner::resolveGenerator(entry, QStringLiteral("/tmp/in.json"), QStringLiteral("/tmp/out"));
+
+    require(!command.valid,
+            "ipcraft project schema should only be bridged for package manifest commands");
+    require(command.errorMessage.contains(QStringLiteral("ipcraft.noc.project.v1")),
+            "unsupported package schema error should mention input format");
+}
+
+void testIpcraftPackageLoadingRejectsMissingDeclaredViews() {
+    QTemporaryDir temp;
+    require(temp.isValid(), "temporary package root should be valid");
+
+    QDir root(temp.path());
+    require(root.mkpath(QStringLiteral("broken")), "failed to create broken package");
+    writeFile(root.filePath(QStringLiteral("broken/ipcraft.json")),
+              QByteArrayLiteral(R"json({
+      "schema": "ipcraft.manifest.v1",
+      "id": "finepaper.brokenview",
+      "name": "Broken View",
+      "version": "1.0",
+      "modules": [
+        {"id": "Tile", "name": "Tile", "interfaces": []}
+      ],
+      "views": [
+        {"module": "Tile", "file": "views/Missing.xml"}
+      ]
+    })json"));
+
+    const QVector<IpcraftPackageManifest> manifests =
+        loadIpcraftPackageManifests({temp.path()});
+
+    require(manifests.isEmpty(),
+            "default ipcraft package loading should reject packages with missing declared views");
+}
+
+void testIpcraftPackageLoadingRejectsInvalidDeclaredViewXml() {
+    QTemporaryDir temp;
+    require(temp.isValid(), "temporary package root should be valid");
+
+    QDir root(temp.path());
+    require(root.mkpath(QStringLiteral("broken/views")), "failed to create broken package views");
+    writeFile(root.filePath(QStringLiteral("broken/views/Tile.xml")),
+              QByteArrayLiteral(R"xml(<module-view module="Tile">
+      <anchors><anchor ref="missing_interface" x="0.5" y="0.5"/></anchors>
+    </module-view>)xml"));
+    writeFile(root.filePath(QStringLiteral("broken/ipcraft.json")),
+              QByteArrayLiteral(R"json({
+      "schema": "ipcraft.manifest.v1",
+      "id": "finepaper.invalidview",
+      "name": "Invalid View",
+      "version": "1.0",
+      "modules": [
+        {"id": "Tile", "name": "Tile", "interfaces": [{"id": "valid"}]}
+      ],
+      "views": [
+        {"module": "Tile", "file": "views/Tile.xml"}
+      ]
+    })json"));
+
+    const QVector<IpcraftPackageManifest> manifests =
+        loadIpcraftPackageManifests({temp.path()});
+
+    require(manifests.isEmpty(),
+            "default ipcraft package loading should reject packages with invalid declared view XML");
+}
+
+void testDefaultRuntimeRootDiscoveryKeepsEnvironmentRootsForCompatibility() {
     const QByteArray previous = qgetenv("FINEPAPER_IPCORE_PATH");
     QTemporaryDir extra;
     require(extra.isValid(), "temporary runtime root should be valid");
     qputenv("FINEPAPER_IPCORE_PATH", extra.path().toLocal8Bit());
 
     const QStringList roots = IpCoreRuntimeRegistry::defaultRuntimeRoots();
-    const QString generatedRoot = repositoryRuntimePath(QStringLiteral("generated/ipcores"));
 
     require(roots.contains(QFileInfo(extra.path()).absoluteFilePath()),
             "FINEPAPER_IPCORE_PATH should be included");
-    require(roots.contains(generatedRoot),
-            "default roots should include generated ipcores");
     for (const QString& root : roots) {
         require(!root.endsWith(QStringLiteral("/plugins")),
                 "runtime roots should not scan plugins directories");
@@ -511,18 +583,13 @@ void testDefaultDiscoveryIncludesAppSettingsIpcorePaths() {
     const QStringList roots = IpCoreRuntimeRegistry::defaultRuntimeRoots();
     const QString envPath = QFileInfo(envRoot.path()).absoluteFilePath();
     const QString appSettingsPath = QFileInfo(appSettingsRoot.path()).absoluteFilePath();
-    const QString generatedRoot = repositoryRuntimePath(QStringLiteral("generated/ipcores"));
     const qsizetype envIndex = roots.indexOf(envPath);
     const qsizetype appSettingsIndex = roots.indexOf(appSettingsPath);
-    const qsizetype generatedIndex = roots.indexOf(generatedRoot);
 
     require(envIndex >= 0, "FINEPAPER_IPCORE_PATH root should be included");
     require(appSettingsIndex >= 0, "AppSettings IP core root should be included");
-    require(generatedIndex >= 0, "repository generated ipcores root should be included");
     require(envIndex < appSettingsIndex,
             "AppSettings IP core roots should come after environment roots");
-    require(appSettingsIndex < generatedIndex,
-            "AppSettings IP core roots should come before repository roots");
 
     if (previous.isEmpty()) {
         qunsetenv("FINEPAPER_IPCORE_PATH");
@@ -531,10 +598,40 @@ void testDefaultDiscoveryIncludesAppSettingsIpcorePaths() {
     }
 }
 
-void testDefaultDiscoveryFindsGeneratedIpCoreRuntimes() {
-    const QStringList roots = IpCoreRuntimeRegistry::defaultRuntimeRoots();
+void testDefaultRuntimeRootDiscoveryDoesNotScanRepositoryGeneratedIpcores() {
+    const QByteArray previous = qgetenv("FINEPAPER_IPCORE_PATH");
+    qunsetenv("FINEPAPER_IPCORE_PATH");
 
-    const QList<IpCoreRuntimeDescriptor> runtimes = IpCoreRuntimeRegistry::discover(roots);
+    QTemporaryDir settingsRoot;
+    require(settingsRoot.isValid(), "temporary settings root should be valid");
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settingsRoot.path());
+    QCoreApplication::setOrganizationName(QStringLiteral("ipcoreruntime_test_org_no_generated"));
+    QCoreApplication::setApplicationName(QStringLiteral("ipcoreruntime_test_app_no_generated"));
+    AppSettings().setIpcorePaths(QStringList{});
+
+    const QString generatedRoot = repositoryRuntimePath(QStringLiteral("generated/ipcores"));
+    require(QFileInfo(generatedRoot).isDir(), "repository generated/ipcores test fixture should exist");
+
+    const QStringList roots = IpCoreRuntimeRegistry::defaultRuntimeRoots();
+    const QString absoluteGeneratedRoot = QFileInfo(generatedRoot).absoluteFilePath();
+    require(!roots.contains(absoluteGeneratedRoot),
+            "default runtime roots should not include repository generated/ipcores");
+    for (const QString& root : roots) {
+        require(!QDir::fromNativeSeparators(root).contains(QStringLiteral("/generated/ipcores")),
+                "default runtime roots should not scan generated/ipcores descendants");
+    }
+
+    if (previous.isEmpty()) {
+        qunsetenv("FINEPAPER_IPCORE_PATH");
+    } else {
+        qputenv("FINEPAPER_IPCORE_PATH", previous);
+    }
+}
+
+void testCompatibilityDiscoveryFindsExplicitGeneratedIpCoreRuntimes() {
+    const QString generatedRoot = repositoryRuntimePath(QStringLiteral("generated/ipcores"));
+
+    const QList<IpCoreRuntimeDescriptor> runtimes = IpCoreRuntimeRegistry::discover({generatedRoot});
     const auto nocIt = std::find_if(runtimes.cbegin(), runtimes.cend(), [](const IpCoreRuntimeDescriptor& runtime) {
         return runtime.id == QStringLiteral("finepaper.noc");
     });
@@ -542,12 +639,12 @@ void testDefaultDiscoveryFindsGeneratedIpCoreRuntimes() {
         return runtime.id == QStringLiteral("finepaper.ravenoc");
     });
 
-    require(nocIt != runtimes.cend(), "generated NoC bundle should be discovered by default roots");
-    require(ravenIt != runtimes.cend(), "generated RaveNoC bundle should be discovered by default roots");
+    require(nocIt != runtimes.cend(), "generated NoC bundle should be discoverable explicitly");
+    require(ravenIt != runtimes.cend(), "generated RaveNoC bundle should be discoverable explicitly");
     require(nocIt->runtimeRootPath == repositoryRuntimePath(QStringLiteral("generated/ipcores/finepaper.noc")),
-            "default NoC discovery should load the generated runtime bundle");
+            "explicit NoC compatibility discovery should load the generated runtime bundle");
     require(ravenIt->runtimeRootPath == repositoryRuntimePath(QStringLiteral("generated/ipcores/finepaper.ravenoc")),
-            "default RaveNoC discovery should load the generated runtime bundle");
+            "explicit RaveNoC compatibility discovery should load the generated runtime bundle");
 }
 
 void testRepositoryFinepaperNoCIpCoreMetadataLoads() {
@@ -819,6 +916,34 @@ void testRuntimeIpInstanceAdapterUsesIpcoreIdLabelAndSkipsEmptyParameters() {
             "section label should fall back to IP-core id");
 }
 
+void testCatalogIpInstanceAdapterExposesPackageParameterSection() {
+    QHash<QString, IpCoreInstanceParameterDescriptor> parameters;
+
+    IpCoreInstanceParameterDescriptor routing;
+    routing.name = QStringLiteral("routing_algorithm");
+    routing.type = QStringLiteral("string");
+    routing.defaultValue = QStringLiteral("xy");
+    routing.label = QStringLiteral("Routing algorithm");
+    parameters.insert(routing.name, routing);
+
+    CatalogIpInstanceParameterAdapter adapter(QStringLiteral("finepaper.ravenoc"),
+                                              QStringLiteral("RaveNoC"),
+                                              parameters);
+    const QVector<IpInstanceParameterSection> sections = adapter.parameterSections();
+
+    require(sections.size() == 1, "catalog adapter should expose one global parameter section");
+    require(sections.first().ipcoreId == QStringLiteral("finepaper.ravenoc"),
+            "catalog adapter section should retain package id");
+    require(sections.first().instanceId == QStringLiteral("ravenoc_0"),
+            "catalog adapter section should use stable package id suffix");
+    require(sections.first().label == QStringLiteral("RaveNoC"),
+            "catalog adapter section should use package display name");
+    require(sections.first().fields.size() == 1,
+            "catalog adapter should expose package parameters");
+    require(sections.first().fields.first().name == QStringLiteral("routing_algorithm"),
+            "catalog adapter field should retain package parameter name");
+}
+
 void testIpCoreRuntimeDiagnosticsListLoadedRuntimesAndIpTypes() {
     QTemporaryDir temp;
     require(temp.isValid(), "temporary directory should be valid");
@@ -898,14 +1023,19 @@ int main(int argc, char** argv) {
         testIpCoreCommandRunnerRejectsUnsupportedGeneratorInputFormat();
         testIpCoreCommandRunnerResolvesDrcCommand();
         testIpCoreCommandRunnerRejectsUnsupportedDrcInputFormat();
-        testDefaultDiscoveryUsesIpcoreRuntimeRootsOnly();
+        testIpCoreCommandRunnerRejectsIpcraftProjectSchemaWithoutPackageManifest();
+        testIpcraftPackageLoadingRejectsMissingDeclaredViews();
+        testIpcraftPackageLoadingRejectsInvalidDeclaredViewXml();
+        testDefaultRuntimeRootDiscoveryKeepsEnvironmentRootsForCompatibility();
         testDefaultDiscoveryIncludesAppSettingsIpcorePaths();
-        testDefaultDiscoveryFindsGeneratedIpCoreRuntimes();
+        testDefaultRuntimeRootDiscoveryDoesNotScanRepositoryGeneratedIpcores();
+        testCompatibilityDiscoveryFindsExplicitGeneratedIpCoreRuntimes();
         testRepositoryFinepaperNoCIpCoreMetadataLoads();
         testRepositoryRaveNoCIpCoreMetadataLoads();
         testRepositoryOpenNoCIpCoreMetadataLoads();
         testRuntimeIpInstanceAdapterExposesGlobalParameterSection();
         testRuntimeIpInstanceAdapterUsesIpcoreIdLabelAndSkipsEmptyParameters();
+        testCatalogIpInstanceAdapterExposesPackageParameterSection();
         testIpCoreRuntimeDiagnosticsListLoadedRuntimesAndIpTypes();
         testIpCoreRuntimeDiagnosticsMarksJsonModuleBundlesUnsupported();
     } catch (const std::exception& error) {

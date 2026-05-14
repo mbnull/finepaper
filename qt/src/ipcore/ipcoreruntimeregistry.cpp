@@ -2,7 +2,6 @@
 #include "ipcore/ipcoreruntimeregistry.h"
 #include "app/appsettings.h"
 
-#include <QCoreApplication>
 #include <QDebug>
 #include <QDir>
 #include <QFile>
@@ -298,24 +297,6 @@ void appendRuntimeFromDirectory(QList<IpCoreRuntimeDescriptor>& runtimes,
     runtimes.append(*descriptor);
 }
 
-void appendLocalRuntimeRootsFrom(QStringList& roots, const QString& startPath) {
-    if (startPath.isEmpty()) {
-        return;
-    }
-
-    QDir dir(startPath);
-    while (true) {
-        const QString generatedIpcores = dir.filePath(QStringLiteral("generated/ipcores"));
-        if (QFileInfo(generatedIpcores).isDir()) {
-            appendUniquePath(roots, generatedIpcores);
-        }
-
-        if (!dir.cdUp()) {
-            break;
-        }
-    }
-}
-
 } // namespace
 
 IpCoreRuntimeRegistry& IpCoreRuntimeRegistry::instance() {
@@ -368,8 +349,6 @@ QStringList IpCoreRuntimeRegistry::defaultRuntimeRoots() {
         appendUniquePath(roots, path);
     }
 
-    appendLocalRuntimeRootsFrom(roots, QDir::currentPath());
-    appendLocalRuntimeRootsFrom(roots, QCoreApplication::applicationDirPath());
     return roots;
 }
 

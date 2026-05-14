@@ -170,6 +170,16 @@ void testRuntimeVocabularyHasNoQtPluginManifestPath() {
     }
 }
 
+void testMainWindowDefaultPathDoesNotUseRuntimeSingleton() {
+    QFile sourceFile(repositoryPath(QStringLiteral("qt/src/app/mainwindow.cpp")));
+    require(sourceFile.open(QIODevice::ReadOnly),
+            "MainWindow source should be readable for default-path architecture scan");
+    const QString source = QString::fromUtf8(sourceFile.readAll());
+
+    require(!source.contains(QStringLiteral("IpCoreRuntimeRegistry::instance().runtimes()")),
+            "MainWindow default path should consume ipcraft catalog/package entries, not runtime singleton runtimes");
+}
+
 std::unique_ptr<Module> makeManualModule(const ModuleType& type,
                                          const QString& moduleId,
                                          const QString& logicalId,
@@ -367,6 +377,7 @@ int main(int argc, char** argv) {
     try {
         testRepositoryRuntimeArtifactsUseIpCoreManifest();
         testRuntimeVocabularyHasNoQtPluginManifestPath();
+        testMainWindowDefaultPathDoesNotUseRuntimeSingleton();
         testRepositoryNoCMainlineFlow();
     } catch (const std::exception& error) {
         std::cerr << "v1architecturegate_test failed: " << error.what() << '\n';

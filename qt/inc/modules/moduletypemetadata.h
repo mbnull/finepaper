@@ -40,6 +40,34 @@ inline QString graphGroup(const Module* module) {
     return moduleType ? moduleType->graphGroup : QString();
 }
 
+inline QString packageId(const ModuleType* moduleType) {
+    if (!moduleType) return {};
+    return moduleType->packageId.isEmpty() ? moduleType->ipcoreId : moduleType->packageId;
+}
+
+inline QString packageId(const Module* module) {
+    return packageId(type(module));
+}
+
+inline QString moduleId(const ModuleType* moduleType) {
+    if (!moduleType) return {};
+    return moduleType->moduleId.isEmpty() ? moduleType->name : moduleType->moduleId;
+}
+
+inline QString moduleId(const Module* module) {
+    return moduleId(type(module));
+}
+
+inline QString graphRole(const Module* module) {
+    const ModuleType* moduleType = type(module);
+    return moduleType ? moduleType->graphRole : QString();
+}
+
+inline QString viewFilePath(const Module* module) {
+    const ModuleType* moduleType = type(module);
+    return moduleType ? moduleType->viewFilePath : QString();
+}
+
 inline QString description(const Module* module) {
     const ModuleType* moduleType = type(module);
     return moduleType ? moduleType->description : QString();

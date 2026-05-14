@@ -12,7 +12,9 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QString>
+#include <QStringList>
 #include <QTemporaryDir>
 #include <algorithm>
 #include <iostream>
@@ -40,6 +42,28 @@ void require(bool condition, const char* message) {
     if (!condition) {
         throw std::runtime_error(message);
     }
+}
+
+QString repositoryPath(const QString& relativePath) {
+    const QStringList startPaths = {
+        QDir::currentPath(),
+        QCoreApplication::applicationDirPath()
+    };
+
+    for (const QString& startPath : startPaths) {
+        QDir dir(startPath);
+        while (true) {
+            const QFileInfo info(dir.filePath(relativePath));
+            if (info.exists()) {
+                return info.absoluteFilePath();
+            }
+            if (!dir.cdUp()) {
+                break;
+            }
+        }
+    }
+
+    return QFileInfo(QDir(startPaths.first()).filePath(relativePath)).absoluteFilePath();
 }
 
 void testGraphConnectionValidationRejectsOnlyExactDuplicates() {
@@ -563,12 +587,19 @@ void testEndpointTypeStillClassifiesAsEndpointPort() {
 void testBundleMetadataLoadsFromXml() {
     const ModuleType* xpType = ModuleRegistry::instance().getType("XP");
     require(xpType != nullptr, "XP type should be registered");
-    require(xpType->ipcoreId == "finepaper.noc", "XP type should come from bundled NoC IP core");
-    require(xpType->description.contains("Mesh router"), "XP description should come from bundle XML");
-    require(xpType->nodeColor == "#7cb9e8", "XP node color should come from bundle XML");
-    require(xpType->editorLayout == "mesh_router", "XP layout should come from bundle XML");
-    require(xpType->supportsCollapse, "XP collapse capability should come from bundle XML");
-    require(xpType->expandedNodeHeight == 116, "XP expanded height should come from bundle XML");
+    require(xpType->packageId == "finepaper.noc", "XP type should carry package id");
+    require(xpType->moduleId == "XP", "XP type should carry manifest module id");
+    require(xpType->graphRole == "host", "XP type should carry manifest graph role");
+    require(xpType->ipcoreId == "finepaper.noc", "XP type should keep compatibility IP core owner");
+    require(xpType->viewFilePath == repositoryPath("ipcores/finepaper-noc/views/XP.xml"),
+            "XP view path should resolve to package source XML");
+    require(!xpType->viewFilePath.contains("generated/ipcores"),
+            "XP view path should not use generated graphics overlays");
+    require(xpType->description.contains("Mesh router"), "XP description should come from ipcraft manifest");
+    require(xpType->nodeColor == "#7cb9e8", "XP node color should come from package view XML");
+    require(xpType->editorLayout == "mesh_router", "XP layout should come from package view XML");
+    require(xpType->supportsCollapse, "XP collapse capability should come from package view XML");
+    require(xpType->expandedNodeHeight == 116, "XP expanded height should come from package view XML");
     require(xpType->configFields.size() == 5, "XP config zone should be generated from configurable parameters");
     require(xpType->configFields.first().description.contains("canvas"),
             "XP parameter descriptions should be preserved in config fields");
@@ -582,6 +613,11 @@ void testBundleMetadataLoadsFromXml() {
     require(eastInterface != xpType->interfaceMetadata.end(), "XP east interface metadata should load");
     require(eastInterface->label == "East", "XP east interface label should load");
     require(eastInterface->role == "initiator", "XP east interface should use IP-XACT-compatible initiator role");
+    require(eastInterface->acceptRules.size() == 1 &&
+                eastInterface->acceptRules.first().connectionClassId == "router_link",
+            "XP east interface should retain attachment connection class metadata");
+    require(eastInterface->topologyRule == "opposite_side",
+            "XP east interface should carry package-derived topology attachment metadata");
 
     const auto eastAnchor = xpType->interfaceAnchors.find("east");
     require(eastAnchor != xpType->interfaceAnchors.end(), "XP east anchor should load from view XML");
@@ -597,10 +633,15 @@ void testBundleMetadataLoadsFromXml() {
 
     const ModuleType* endpointType = ModuleRegistry::instance().getType("Endpoint");
     require(endpointType != nullptr, "Endpoint type should be registered");
-    require(endpointType->ipcoreId == "finepaper.noc", "Endpoint type should come from bundled NoC IP core");
+    require(endpointType->packageId == "finepaper.noc", "Endpoint type should carry package id");
+    require(endpointType->moduleId == "Endpoint", "Endpoint type should carry manifest module id");
+    require(endpointType->graphRole == "attached", "Endpoint type should carry manifest graph role");
+    require(endpointType->ipcoreId == "finepaper.noc", "Endpoint type should keep compatibility IP core owner");
+    require(endpointType->viewFilePath == repositoryPath("ipcores/finepaper-noc/views/Endpoint.xml"),
+            "Endpoint view path should resolve to package source XML");
     require(endpointType->description.contains("Endpoint interface"),
-            "Endpoint description should come from bundle XML");
-    require(endpointType->nodeColor == "#d6f4b6", "Endpoint node color should come from bundle XML");
+            "Endpoint description should come from ipcraft manifest");
+    require(endpointType->nodeColor == "#d6f4b6", "Endpoint node color should come from package view XML");
     require(endpointType->configFields.size() == 7,
             "Endpoint config zone should be generated from configurable parameters");
     require(moduleTypeHasPort(endpointType, "noc"), "Endpoint should expose noc as the visible interface");

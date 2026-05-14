@@ -13,6 +13,10 @@ QString runtimeVersionText(const IpCoreRuntimeDescriptor& runtime) {
     return runtime.version.trimmed().isEmpty() ? QString() : QStringLiteral(" v%1").arg(runtime.version);
 }
 
+QString catalogVersionText(const IpCatalogEntry& entry) {
+    return entry.version.trimmed().isEmpty() ? QString() : QStringLiteral(" v%1").arg(entry.version);
+}
+
 QString moduleBundleFormat(const QString& modulesPath) {
     const QString suffix = QFileInfo(modulesPath).suffix().toLower();
     if (suffix == QStringLiteral("json")) {
@@ -50,6 +54,27 @@ QStringList runtimeLogLines(const QList<IpCoreRuntimeDescriptor>& runtimes) {
     return lines;
 }
 
+QStringList catalogLogLines(const QList<IpCatalogEntry>& entries) {
+    if (entries.isEmpty()) {
+        return {QStringLiteral("[Startup] No IP core packages loaded.")};
+    }
+
+    QStringList lines;
+    for (const IpCatalogEntry& entry : entries) {
+        const QString generator = entry.generator.hasCommand()
+            ? entry.generator.command
+            : QStringLiteral("(none)");
+        lines.append(QStringLiteral("[Startup] IP core package %1: %2%3 root=%4 modules=%5 generator=%6")
+                         .arg(entry.id,
+                              emptyFallback(entry.name, entry.id),
+                              catalogVersionText(entry),
+                              emptyFallback(entry.runtimeRootPath),
+                              QString::number(entry.moduleTypes.size()),
+                              generator));
+    }
+    return lines;
+}
+
 QStringList ipLogLines(const ModuleRegistry& registry) {
     const QStringList typeNames = registry.availableTypes();
     if (typeNames.isEmpty()) {
@@ -76,6 +101,12 @@ QStringList ipLogLines(const ModuleRegistry& registry) {
 
 QStringList logLines(const QList<IpCoreRuntimeDescriptor>& runtimes, const ModuleRegistry& registry) {
     QStringList lines = runtimeLogLines(runtimes);
+    lines.append(ipLogLines(registry));
+    return lines;
+}
+
+QStringList logLines(const QList<IpCatalogEntry>& entries, const ModuleRegistry& registry) {
+    QStringList lines = catalogLogLines(entries);
     lines.append(ipLogLines(registry));
     return lines;
 }

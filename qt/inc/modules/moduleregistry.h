@@ -3,6 +3,7 @@
 
 #include "graph/port.h"
 #include "graph/parameter.h"
+#include "ipcraft/ipcraftmanifest.h"
 #include <QString>
 #include <QStringList>
 #include <QHash>
@@ -51,6 +52,7 @@ struct ModuleInterfaceMetadata {
     QString cardinality = QStringLiteral("one");
     QString autocompleteGroup;
     QString topologyRule;
+    QVector<IpcraftInterfaceAcceptRule> acceptRules;
 };
 
 struct ModuleInterfaceAnchor {
@@ -69,6 +71,10 @@ struct ModuleType {
     std::vector<Port> defaultPorts;
     QHash<QString, Parameter> defaultParameters;
     QHash<QString, ModuleParameterMetadata> parameterMetadata;
+    QString packageId;
+    QString moduleId;
+    QString graphRole;
+    QString viewFilePath;
     QString ipcoreId;
     QHash<QString, ModuleInterfaceMetadata> interfaceMetadata;
     QString paletteLabel;
@@ -118,6 +124,8 @@ public:
     bool registerType(const ModuleType& type);
     // Imports module types from IP core runtime manifests.
     bool loadIpCoreRuntimes(const QList<IpCoreRuntimeDescriptor>& runtimes);
+    // Imports module types from Ipcraft package manifests.
+    bool loadIpcraftPackages(const QVector<IpcraftPackageManifest>& packages);
     // Looks up type metadata by canonical type name.
     const ModuleType* getType(const QString& name) const;
     // Looks up the first type that belongs to a graph group (e.g., "xps", "endpoints").

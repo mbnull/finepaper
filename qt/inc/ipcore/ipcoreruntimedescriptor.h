@@ -17,6 +17,9 @@ struct IpCoreCommandDescriptor {
     bool usesIpcoreGraphInput() const {
         return inputFormat == QStringLiteral("ipcore_graph_v1");
     }
+    bool usesIpcraftNocProjectInput() const {
+        return inputFormat == QStringLiteral("ipcraft.noc.project.v1");
+    }
     QStringList arguments(const QString& inputPath, const QString& outputDirectory) const;
 };
 

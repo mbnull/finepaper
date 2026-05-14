@@ -42,6 +42,7 @@ local function add_qt_test_target(name, source_files, extra_files, qt_rule)
         add_includedirs("inc")
         add_files(source_files)
         add_files("src/app/appsettings.cpp")
+        add_files("src/ipcraft/*.cpp")
         if extra_files then
             add_files(extra_files)
         end
@@ -267,18 +268,19 @@ add_qt_test_target("projectgenerationrunner_test", "test/projectgenerationrunner
 
 add_qt_test_target("ipcatalogservice_test", "test/ipcatalogservice_test.cpp", {
     "src/ipcore/ipcatalogservice.cpp",
+    "src/ipcore/ipcorecommandrunner.cpp",
     "src/modules/moduleregistry.cpp",
     "src/modules/moduleprovider.cpp",
     "src/ipcore/ipcoreruntimeregistry.cpp",
     "src/graph/parameter.cpp",
     "src/graph/port.cpp",
     "inc/ipcore/ipcatalogservice.h",
+    "inc/ipcore/ipcorecommandrunner.h",
     "inc/**/moduleregistry.h",
     "inc/**/ipcoreruntimedescriptor.h"
 })
 
 add_qt_test_target("ipcraftmanifest_test", "test/ipcraftmanifest_test.cpp", {
-    "src/ipcraft/*.cpp",
     "inc/ipcraft/*.h"
 })
 

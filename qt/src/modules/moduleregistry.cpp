@@ -10,17 +10,17 @@ ModuleRegistry& ModuleRegistry::instance() {
     return registry;
 }
 
-// Load module definitions from startup-discovered IP core runtimes only.
+// Load module definitions from startup-discovered Ipcraft packages.
 ModuleRegistry::ModuleRegistry(LoadMode loadMode) {
     if (loadMode == LoadMode::Empty) {
         return;
     }
 
-    if (loadIpCoreRuntimes(IpCoreRuntimeRegistry::instance().runtimes())) {
+    if (loadIpcraftPackages(loadIpcraftPackageManifests(defaultIpcraftPackageRoots()))) {
         return;
     }
 
-    qWarning() << "No runtime-owned module definitions found.";
+    qWarning() << "No Ipcraft package module definitions found.";
 }
 
 void ModuleRegistry::addProvider(std::unique_ptr<ModuleProvider> provider) {
@@ -36,7 +36,7 @@ bool ModuleRegistry::registerType(const ModuleType& type) {
     }
     if (m_types.contains(type.name)) {
         qWarning() << "Skipping duplicate module type" << type.name
-                   << "from runtime bundle" << type.ipcoreId;
+                   << "from package/runtime owner" << type.ipcoreId;
         return false;
     }
     m_types[type.name] = type;
@@ -68,6 +68,27 @@ bool ModuleRegistry::loadIpCoreRuntimes(const QList<IpCoreRuntimeDescriptor>& ru
         auto types = provider->loadModules();
         for (ModuleType& type : types) {
             type.ipcoreId = runtime.id;
+            loadedAnyType = registerType(type) || loadedAnyType;
+        }
+    }
+
+    return loadedAnyType;
+}
+
+bool ModuleRegistry::loadIpcraftPackages(const QVector<IpcraftPackageManifest>& packages) {
+    bool loadedAnyType = false;
+
+    for (const IpcraftPackageManifest& package : packages) {
+        if (package.modules.isEmpty()) {
+            continue;
+        }
+
+        auto provider = std::make_unique<LayeredModuleProvider>(
+            std::make_unique<IpcraftModuleTypeSource>(package));
+        provider->addOverlay(std::make_unique<IpcraftModuleViewOverlay>(package.views));
+
+        auto types = provider->loadModules();
+        for (ModuleType& type : types) {
             loadedAnyType = registerType(type) || loadedAnyType;
         }
     }

@@ -21,6 +21,16 @@ IpCoreResolvedCommand failure(const QString& message) {
     return command;
 }
 
+bool supportsCommandInputFormat(const IpCatalogEntry& entry,
+                                const IpCoreCommandDescriptor& descriptor) {
+    if (descriptor.usesIpcoreGraphInput()) {
+        return true;
+    }
+
+    return descriptor.usesIpcraftNocProjectInput() &&
+           !entry.packageManifest.id.trimmed().isEmpty();
+}
+
 IpCoreResolvedCommand resolveIpcoreCommand(const IpCatalogEntry& entry,
                                            const QString& inputPath,
                                            const QString& outputDirectory,
@@ -35,7 +45,7 @@ IpCoreResolvedCommand resolveIpcoreCommand(const IpCatalogEntry& entry,
     if (!descriptor.hasCommand()) {
         return failure(missingCommandMessage.arg(entry.id));
     }
-    if (!descriptor.usesIpcoreGraphInput()) {
+    if (!supportsCommandInputFormat(entry, descriptor)) {
         return failure(QStringLiteral("IP core '%1' declares unsupported %2 input_format '%3'.")
                            .arg(entry.id, commandLabel, descriptor.inputFormat));
     }

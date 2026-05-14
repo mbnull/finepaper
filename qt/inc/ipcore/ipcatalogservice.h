@@ -1,6 +1,7 @@
 // IP catalog service exposes discovered runtime IP cores as editor-ready entries.
 #pragma once
 
+#include "ipcraft/ipcraftmanifest.h"
 #include "ipcore/ipcoreruntimedescriptor.h"
 
 #include <QHash>
@@ -14,9 +15,12 @@ class ModuleRegistry;
 
 struct IpCatalogEntry {
     QString id;
+    QString packageId;
     QString name;
     QString version;
     QString kind;
+    IpcraftPackageManifest packageManifest;
+    // TODO(Task 12): Remove runtime-bundle compatibility fields below after all UI paths consume packageManifest.
     QString runtimeRootPath;
     QString sourceRootPath;
     QString modulesPath;
@@ -34,6 +38,8 @@ struct IpCatalogEntry {
 class IpCatalogService {
 public:
     IpCatalogService(QList<IpCoreRuntimeDescriptor> descriptors,
+                     const ModuleRegistry* moduleRegistry);
+    IpCatalogService(QVector<IpcraftPackageManifest> manifests,
                      const ModuleRegistry* moduleRegistry);
 
     static IpCatalogService fromRuntimeRegistries();

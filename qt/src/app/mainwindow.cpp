@@ -11,7 +11,6 @@
 #include "commands/commandmanager.h"
 #include "ipcore/ipcatalogservice.h"
 #include "ipcore/ipcoreruntimediagnostics.h"
-#include "ipcore/ipcoreruntimeregistry.h"
 #include "nodeeditor/nodeeditorwidget.h"
 #include "panels/ipcatalogpanel.h"
 #include "panels/propertypanel.h"
@@ -489,8 +488,11 @@ void MainWindow::closeEvent(QCloseEvent* event) {
 void MainWindow::setupPanels() {
     m_ipInstanceParameterAdapters.clear();
     QVector<IIpInstanceParameterAdapter*> ipInstanceParameterAdapters;
-    for (const IpCoreRuntimeDescriptor& runtime : IpCoreRuntimeRegistry::instance().runtimes()) {
-        auto adapter = std::make_unique<RuntimeIpInstanceParameterAdapter>(runtime);
+    for (const IpCatalogEntry& entry : m_ipCatalogService->entries()) {
+        auto adapter = std::make_unique<CatalogIpInstanceParameterAdapter>(
+            entry.id,
+            entry.name,
+            entry.instanceParameters);
         ipInstanceParameterAdapters.push_back(adapter.get());
         m_ipInstanceParameterAdapters.push_back(std::move(adapter));
     }
@@ -814,8 +816,7 @@ void MainWindow::appendStartupLog() const {
     }
 
     const QStringList lines =
-        IpCoreRuntimeDiagnostics::logLines(IpCoreRuntimeRegistry::instance().runtimes(),
-                                           ModuleRegistry::instance());
+        IpCoreRuntimeDiagnostics::logLines(m_ipCatalogService->entries(), ModuleRegistry::instance());
     for (const QString& line : lines) {
         qInfo().noquote() << line;
         m_logPanel->appendMessage(line, QColor(70, 110, 190));
