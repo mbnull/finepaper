@@ -42,7 +42,10 @@ local function add_qt_test_target(name, source_files, extra_files, qt_rule)
         add_includedirs("inc")
         add_files(source_files)
         add_files("src/app/appsettings.cpp")
-        add_files("src/ipcraft/*.cpp")
+        add_files("src/ipcraft/ipcraftconnectionvalidator.cpp")
+        add_files("src/ipcraft/ipcraftmanifest.cpp")
+        add_files("src/ipcraft/ipcraftmanifestreader.cpp")
+        add_files("src/ipcraft/ipcraftregistry.cpp")
         if extra_files then
             add_files(extra_files)
         end
@@ -140,6 +143,7 @@ add_qt_test_target("arrangecommand_test", "test/arrangecommand_test.cpp", {
 
 add_qt_test_target("validation_test", "test/validation_test.cpp", {
     "src/connection/connectionruleservice.cpp",
+    "src/ipcraft/ipcraftbuiltinvalidator.cpp",
     "src/ipcore/ipcoregraphexporter.cpp",
     "src/ipcore/ipcatalogservice.cpp",
     "src/**/drcrunner.cpp",
@@ -235,6 +239,7 @@ add_qt_test_target("projectdocument_test", "test/projectdocument_test.cpp", {
 add_qt_test_target("projectgenerationrunner_test", "test/projectgenerationrunner_test.cpp", {
     "src/app/projectgenerationrunner.cpp",
     "src/connection/connectionruleservice.cpp",
+    "src/ipcraft/ipcraftbuiltinvalidator.cpp",
     "src/ipcore/ipcatalogservice.cpp",
     "src/ipcore/ipcorecommandrunner.cpp",
     "src/ipcore/ipcoregraphexporter.cpp",
@@ -242,6 +247,7 @@ add_qt_test_target("projectgenerationrunner_test", "test/projectgenerationrunner
     "src/project/projectwriter.cpp",
     "src/project/graphprojectserializer.cpp",
     "src/app/generationartifacts.cpp",
+    "src/validation/validationresult.cpp",
     "src/**/graph.cpp",
     "src/**/module.cpp",
     "src/**/connection.cpp",
@@ -390,7 +396,10 @@ target("propertypanel_test")
     add_files("src/graph/parameter.cpp")
     add_files("src/modules/moduleregistry.cpp")
     add_files("src/modules/moduleprovider.cpp")
-    add_files("src/ipcraft/*.cpp")
+    add_files("src/ipcraft/ipcraftconnectionvalidator.cpp")
+    add_files("src/ipcraft/ipcraftmanifest.cpp")
+    add_files("src/ipcraft/ipcraftmanifestreader.cpp")
+    add_files("src/ipcraft/ipcraftregistry.cpp")
     add_files("src/ipcore/ipcoreruntimeregistry.cpp")
     add_files("inc/**/propertypanel.h")
     add_files("inc/**/graph.h")
@@ -426,6 +435,11 @@ target("ipcatalogpanel_test")
     add_files("src/app/projectlauncher.cpp")
     add_files("src/panels/*.cpp")
     add_files("src/widgets/*.cpp")
+    add_files("src/ipcraft/ipcraftbuiltinvalidator.cpp")
+    add_files("src/ipcraft/ipcraftconnectionvalidator.cpp")
+    add_files("src/ipcraft/ipcraftmanifest.cpp")
+    add_files("src/ipcraft/ipcraftmanifestreader.cpp")
+    add_files("src/ipcraft/ipcraftregistry.cpp")
     add_files("src/ipcore/*.cpp")
     add_files("src/workspace/*.cpp")
     add_files("src/project/*.cpp")
@@ -479,7 +493,10 @@ target("nodeeditor_geometry_test")
     add_files("src/**/module.cpp")
     add_files("src/**/parameter.cpp")
     add_files("src/**/port.cpp")
-    add_files("src/ipcraft/*.cpp")
+    add_files("src/ipcraft/ipcraftconnectionvalidator.cpp")
+    add_files("src/ipcraft/ipcraftmanifest.cpp")
+    add_files("src/ipcraft/ipcraftmanifestreader.cpp")
+    add_files("src/ipcraft/ipcraftregistry.cpp")
     add_files("src/ipcore/ipcatalogservice.cpp")
     add_files("src/project/projectipservice.cpp")
     add_files("src/project/projectstateservice.cpp")
@@ -561,6 +578,7 @@ add_qt_test_target("v1architecturegate_test", "test/v1architecturegate_test.cpp"
     "src/app/generationartifacts.cpp",
     "src/app/projectgenerationrunner.cpp",
     "src/connection/connectionruleservice.cpp",
+    "src/ipcraft/ipcraftbuiltinvalidator.cpp",
     "src/ipcore/ipcatalogservice.cpp",
     "src/ipcore/ipcoregraphexporter.cpp",
     "src/ipcore/ipcorecommandrunner.cpp",

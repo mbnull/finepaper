@@ -3,8 +3,10 @@
 
 #include "app/generationartifacts.h"
 #include "graph/graph.h"
+#include "ipcraft/ipcraftbuiltinvalidator.h"
 #include "ipcore/ipcorecommandrunner.h"
 #include "ipcore/ipcoregraphexporter.h"
+#include "validation/validationresult.h"
 
 #include <QDir>
 #include <QDirIterator>
@@ -65,6 +67,19 @@ ProjectGenerationResult requestFailure(const QString& message) {
     result.error = message;
     result.errors.append(message);
     return result;
+}
+
+ProjectGenerationResult builtInValidationFailure(
+    const IpcraftBuiltInValidator::Result& validation) {
+    QStringList errors;
+    for (const ValidationResult& diagnostic : validation.diagnostics) {
+        if (diagnostic.severity() == ValidationSeverity::Error) {
+            errors.append(diagnostic.message());
+        }
+    }
+
+    return requestFailure(QStringLiteral("Built-in validation failed:\n%1")
+                              .arg(errors.join(QStringLiteral("\n"))));
 }
 
 const IpCatalogEntry* findCatalogEntry(const QList<IpCatalogEntry>& entries, const QString& ipcoreId) {
@@ -320,6 +335,16 @@ ProjectGenerationInstanceResult generateInstance(const ProjectGenerationRequest&
 } // namespace
 
 ProjectGenerationResult ProjectGenerationRunner::generate(const ProjectGenerationRequest& request) const {
+    IpcraftBuiltInValidator builtInValidator;
+    const IpcraftBuiltInValidator::Result builtInResult =
+        builtInValidator.validate(request.graph,
+                                  request.catalogEntries,
+                                  request.instances,
+                                  IpcraftBuiltInValidator::CommandPurpose::Generate);
+    if (builtInResult.hasErrors()) {
+        return builtInValidationFailure(builtInResult);
+    }
+
     if (!request.graph) {
         return requestFailure(QStringLiteral("Project graph is not available."));
     }

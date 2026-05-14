@@ -11,11 +11,13 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonArray>
 #include <QStringList>
 #include <QTemporaryDir>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
+#include <utility>
 
 namespace {
 
@@ -220,6 +222,107 @@ IpCatalogEntry projectCatalogEntryWithDrc(const QString& ipcoreId,
     return entry;
 }
 
+IpcraftInterfaceAcceptRule acceptRule(const QString& connectionClassId, const QString& role) {
+    IpcraftInterfaceAcceptRule rule;
+    rule.connectionClassId = connectionClassId;
+    rule.role = role;
+    return rule;
+}
+
+IpcraftInterfaceDescriptor interfaceDescriptor(const QString& id,
+                                               const QString& connectionClassId = QStringLiteral("link"),
+                                               const QString& role = QStringLiteral("initiator")) {
+    IpcraftInterfaceDescriptor descriptor;
+    descriptor.id = id;
+    descriptor.label = id;
+    descriptor.modes = {role};
+    descriptor.ipxactBusInterface = id;
+    descriptor.multiConnection = true;
+    descriptor.accepts = {acceptRule(connectionClassId, role)};
+    return descriptor;
+}
+
+IpcraftModuleDescriptor manifestModule(const QString& id,
+                                       QVector<IpcraftInterfaceDescriptor> interfaces = {
+                                           interfaceDescriptor(QStringLiteral("link"))
+                                       }) {
+    IpcraftModuleDescriptor descriptor;
+    descriptor.id = id;
+    descriptor.name = id;
+    descriptor.graphRole = QStringLiteral("attached");
+    descriptor.interfaces = std::move(interfaces);
+    return descriptor;
+}
+
+IpcraftConnectionClass peerConnectionClass(const QString& id = QStringLiteral("link")) {
+    IpcraftConnectionClass connectionClass;
+    connectionClass.id = id;
+    connectionClass.roles = {QStringLiteral("initiator")};
+    connectionClass.symmetric = true;
+    return connectionClass;
+}
+
+IpcraftCommandDescriptor manifestCommand(const QString& name, const QString& executablePath) {
+    IpcraftCommandDescriptor command;
+    command.name = name;
+    command.executablePath = executablePath;
+    command.resolvedExecutablePath = executablePath;
+    command.inputSchema = QStringLiteral("ipcraft.noc.project.v1");
+    command.args = {QStringLiteral("{input}")};
+    return command;
+}
+
+IpcraftPackageManifest packageManifest(const QString& ipcoreId) {
+    IpcraftPackageManifest manifest;
+    manifest.schema = QStringLiteral("ipcraft.manifest.v1");
+    manifest.id = ipcoreId;
+    manifest.name = ipcoreId;
+    manifest.version = QStringLiteral("1.0");
+    manifest.connectionClasses = {peerConnectionClass()};
+    manifest.modules = {manifestModule(QStringLiteral("Tile"))};
+    return manifest;
+}
+
+IpCatalogEntry ipcraftCatalogEntryWithoutDrc(const QString& ipcoreId) {
+    IpCatalogEntry entry = projectCatalogEntryWithoutDrc(ipcoreId);
+    entry.packageId = ipcoreId;
+    entry.packageManifest = packageManifest(ipcoreId);
+    entry.moduleTypes = {QStringLiteral("Tile")};
+    return entry;
+}
+
+IpCatalogEntry ipcraftCatalogEntryWithValidate(const QString& ipcoreId,
+                                               const QString& sourceRootPath,
+                                               const QString& commandPath) {
+    IpCatalogEntry entry = ipcraftCatalogEntryWithoutDrc(ipcoreId);
+    entry.sourceRootPath = sourceRootPath;
+    entry.packageManifest.packageRootPath = sourceRootPath;
+    entry.packageManifest.commands.insert(QStringLiteral("validate"),
+                                          manifestCommand(QStringLiteral("validate"), commandPath));
+    entry.drc.command = commandPath;
+    entry.drc.inputFormat = QStringLiteral("ipcraft.noc.project.v1");
+    entry.drc.args = {QStringLiteral("{input}")};
+    return entry;
+}
+
+std::unique_ptr<Module> makeManifestOwnedModule(const QString& id,
+                                                const QString& ipcoreId,
+                                                const QString& instanceId,
+                                                const QString& type = QStringLiteral("Tile")) {
+    auto module = std::make_unique<Module>(id, type);
+    module->setIpcoreId(ipcoreId);
+    module->setInstanceId(instanceId);
+    module->addPort(Port(QStringLiteral("link"),
+                         Port::Direction::InOut,
+                         QStringLiteral("bus"),
+                         QStringLiteral("Link"),
+                         {},
+                         QStringLiteral("attachment"),
+                         QStringLiteral("link"),
+                         QStringLiteral("link")));
+    return module;
+}
+
 QString writeDrcScript(QTemporaryDir& tempDir) {
     const QString path = tempDir.filePath(QStringLiteral("drc.sh"));
     QFile file(path);
@@ -310,12 +413,340 @@ void testProjectValidationRunnerErrorsWhenCatalogEntryIsMissing() {
     require(results.size() == 1, "missing runtime/catalog entry should produce one finding");
     require(results.first().severity() == ValidationSeverity::Error,
             "missing runtime/catalog entry should be an error");
-    require(results.first().ruleName() == QStringLiteral("DRC"),
-            "missing runtime/catalog entry should be reported from DRC validation");
+    require(results.first().ruleName().startsWith(QStringLiteral("built_in")),
+            "missing runtime/catalog entry should be reported from built-in validation");
     require(results.first().message().contains(QStringLiteral("missing_0")),
             "missing runtime/catalog entry error should include the instance id");
     require(results.first().message().contains(QStringLiteral("finepaper.missing")),
             "missing runtime/catalog entry error should include the IP core id");
+}
+
+void testBuiltInValidationReportsMissingPackage() {
+    Graph graph;
+    const QList<IpCatalogEntry> entries{
+        ipcraftCatalogEntryWithoutDrc(QStringLiteral("finepaper.present"))
+    };
+    const QVector<ProjectIpInstanceRecord> instances{
+        projectInstanceRecord(QStringLiteral("finepaper.missing"), QStringLiteral("missing_0"))
+    };
+
+    ProjectValidationRunner runner;
+    const QList<ValidationResult> results = runner.validate(&graph, entries, instances);
+
+    require(results.size() == 1, "missing package should produce one built-in finding");
+    require(results.first().severity() == ValidationSeverity::Error,
+            "missing package should be an error");
+    require(results.first().ruleName().startsWith(QStringLiteral("built_in")),
+            "missing package should use a built-in rule");
+    require(results.first().message().contains(QStringLiteral("missing_0")),
+            "missing package error should include the instance id");
+    require(results.first().message().contains(QStringLiteral("finepaper.missing")),
+            "missing package error should include the package id");
+}
+
+void testBuiltInValidationRunsBeforePackageValidate() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "failed to create temporary DRC directory");
+    const QString scriptPath = writeDrcScript(tempDir);
+    const QString ipcoreId = QStringLiteral("finepaper.scripted");
+    Graph graph;
+    require(graph.addModule(makeManifestOwnedModule(QStringLiteral("bad_module"),
+                                                    ipcoreId,
+                                                    QStringLiteral("bad_0"),
+                                                    QStringLiteral("MissingTile"))),
+            "bad module should add");
+    require(graph.addModule(makeManifestOwnedModule(QStringLiteral("good_module"),
+                                                    ipcoreId,
+                                                    QStringLiteral("good_0"))),
+            "good module should add");
+    const QList<IpCatalogEntry> entries{
+        ipcraftCatalogEntryWithValidate(ipcoreId, tempDir.path(), scriptPath)
+    };
+    const QVector<ProjectIpInstanceRecord> instances{
+        projectInstanceRecord(ipcoreId, QStringLiteral("bad_0")),
+        projectInstanceRecord(ipcoreId, QStringLiteral("good_0"))
+    };
+
+    ProjectValidationRunner runner;
+    const QList<ValidationResult> results = runner.validate(&graph, entries, instances);
+
+    require(results.size() == 2,
+            "built-in error should block only the bad instance while good instance DRC still runs");
+    require(results.at(0).ruleName().startsWith(QStringLiteral("built_in")),
+            "built-in diagnostics should appear before package DRC diagnostics");
+    require(results.at(0).message().contains(QStringLiteral("MissingTile")),
+            "first result should report the bad module type");
+    require(results.at(1).ruleName() == QStringLiteral("DRC"),
+            "second result should be the package DRC result for the unblocked instance");
+    require(results.at(1).message().contains(QStringLiteral("good_0: scripted DRC violation")),
+            "DRC should run only for the unblocked good instance");
+    require(!hasMessageContaining(results, QStringLiteral("bad_0: scripted DRC violation")),
+            "DRC should not run for the instance with a blocking built-in error");
+}
+
+void testBuiltInValidationReportsMissingInterface() {
+    const QString ipcoreId = QStringLiteral("finepaper.links");
+    Graph graph;
+    require(graph.addModule(makeManifestOwnedModule(QStringLiteral("tile_a"),
+                                                    ipcoreId,
+                                                    QStringLiteral("links_0"))),
+            "first tile should add");
+    require(graph.addModule(makeManifestOwnedModule(QStringLiteral("tile_b"),
+                                                    ipcoreId,
+                                                    QStringLiteral("links_0"))),
+            "second tile should add");
+    graph.addConnection(std::make_unique<Connection>(
+        QStringLiteral("bad_link"),
+        PortRef{QStringLiteral("tile_a"), QStringLiteral("link")},
+        PortRef{QStringLiteral("tile_b"), QStringLiteral("link")},
+        QStringLiteral("link"),
+        QVector<ConnectionInterfaceRef>{
+            {QStringLiteral("tile_a"), QStringLiteral("link")},
+            {QStringLiteral("tile_b"), QStringLiteral("missing")}
+        }));
+    const QList<IpCatalogEntry> entries{
+        ipcraftCatalogEntryWithoutDrc(ipcoreId)
+    };
+    const QVector<ProjectIpInstanceRecord> instances{
+        projectInstanceRecord(ipcoreId, QStringLiteral("links_0"))
+    };
+
+    ProjectValidationRunner runner;
+    const QList<ValidationResult> results = runner.validate(&graph, entries, instances);
+
+    require(countResults(results, ValidationSeverity::Error, QStringLiteral("missing interface")) == 1,
+            "built-in validation should report saved connection interfaces that are not in the manifest");
+    require(hasRule(results, QStringLiteral("built_in_connection")),
+            "missing connection interface should use built_in_connection");
+}
+
+void testBuiltInValidationReportsUnmappableInterfaceMode() {
+    const QString ipcoreId = QStringLiteral("finepaper.mode");
+    IpCatalogEntry entry = ipcraftCatalogEntryWithoutDrc(ipcoreId);
+    entry.packageManifest.modules[0].interfaces[0].modes = {QStringLiteral("custom_mode")};
+
+    Graph graph;
+    const QList<IpCatalogEntry> entries{entry};
+    const QVector<ProjectIpInstanceRecord> instances{
+        projectInstanceRecord(ipcoreId, QStringLiteral("mode_0"))
+    };
+
+    ProjectValidationRunner runner;
+    const QList<ValidationResult> results = runner.validate(&graph, entries, instances);
+
+    require(countResults(results,
+                         ValidationSeverity::Error,
+                         QStringLiteral("mode 'custom_mode' is not mappable to IP-XACT")) == 1,
+            "built-in validation should reject interface modes without native or enabled extension mapping");
+    require(hasRule(results, QStringLiteral("built_in_manifest")),
+            "unmappable interface mode should use built_in_manifest");
+}
+
+void testBuiltInValidationReportsUnmappableConnectionClass() {
+    const QString ipcoreId = QStringLiteral("finepaper.connection_class");
+    IpCatalogEntry entry = ipcraftCatalogEntryWithoutDrc(ipcoreId);
+    entry.packageManifest.connectionClasses[0].roles = {QStringLiteral("custom_role")};
+    entry.packageManifest.modules[0].interfaces[0].accepts = {
+        acceptRule(QStringLiteral("link"), QStringLiteral("custom_role"))
+    };
+
+    Graph graph;
+    const QList<IpCatalogEntry> entries{entry};
+    const QVector<ProjectIpInstanceRecord> instances{
+        projectInstanceRecord(ipcoreId, QStringLiteral("connection_class_0"))
+    };
+
+    ProjectValidationRunner runner;
+    const QList<ValidationResult> results = runner.validate(&graph, entries, instances);
+
+    require(countResults(results,
+                         ValidationSeverity::Error,
+                         QStringLiteral("Connection class 'link' is not mappable to IP-XACT")) == 1,
+            "built-in validation should reject connection classes without native, extension, or explicit IP-XACT mapping");
+    require(hasRule(results, QStringLiteral("built_in_manifest")),
+            "unmappable connection class should use built_in_manifest");
+}
+
+void testBuiltInValidationReportsMissingIpxactBusInterface() {
+    const QString ipcoreId = QStringLiteral("finepaper.ipxact");
+    IpCatalogEntry entry = ipcraftCatalogEntryWithoutDrc(ipcoreId);
+    entry.packageManifest.modules[0].interfaces[0].ipxactBusInterface.clear();
+
+    Graph graph;
+    const QList<IpCatalogEntry> entries{entry};
+    const QVector<ProjectIpInstanceRecord> instances{
+        projectInstanceRecord(ipcoreId, QStringLiteral("ipxact_0"))
+    };
+
+    ProjectValidationRunner runner;
+    const QList<ValidationResult> results = runner.validate(&graph, entries, instances);
+
+    require(countResults(results,
+                         ValidationSeverity::Error,
+                         QStringLiteral("ipxact.bus_interface")) == 1,
+            "built-in validation should reject connection-capable interfaces without an IP-XACT bus interface");
+    require(hasRule(results, QStringLiteral("built_in_manifest")),
+            "missing IP-XACT bus interface should use built_in_manifest");
+}
+
+void testBuiltInValidationReportsViewReferenceError() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "failed to create temporary package directory");
+    QDir root(tempDir.path());
+    require(root.mkpath(QStringLiteral("views")), "failed to create views directory");
+    const QString viewPath = root.filePath(QStringLiteral("views/Tile.xml"));
+    QFile viewFile(viewPath);
+    require(viewFile.open(QIODevice::WriteOnly | QIODevice::Truncate),
+            "failed to create test view XML");
+    viewFile.write(QByteArrayLiteral(R"xml(<module-view schema="v1" module="Tile">
+  <anchors><anchor ref="missing" x="0.5" y="0.5"/></anchors>
+</module-view>)xml"));
+    viewFile.close();
+
+    const QString ipcoreId = QStringLiteral("finepaper.viewed");
+    IpCatalogEntry entry = ipcraftCatalogEntryWithoutDrc(ipcoreId);
+    entry.packageManifest.packageRootPath = root.path();
+    IpcraftViewDescriptor view;
+    view.moduleId = QStringLiteral("Tile");
+    view.filePath = QStringLiteral("views/Tile.xml");
+    view.resolvedFilePath = viewPath;
+    entry.packageManifest.views = {view};
+
+    Graph graph;
+    const QList<IpCatalogEntry> entries{entry};
+    const QVector<ProjectIpInstanceRecord> instances{
+        projectInstanceRecord(ipcoreId, QStringLiteral("viewed_0"))
+    };
+
+    ProjectValidationRunner runner;
+    const QList<ValidationResult> results = runner.validate(&graph, entries, instances);
+
+    require(countResults(results, ValidationSeverity::Error, QStringLiteral("View XML anchor references missing interface")) == 1,
+            "built-in validation should report invalid view XML interface references");
+    require(hasRule(results, QStringLiteral("built_in_view")),
+            "invalid view XML should use built_in_view");
+}
+
+void testBuiltInValidationReportsViewInterfaceAttributeReferenceError() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "failed to create temporary package directory");
+    QDir root(tempDir.path());
+    require(root.mkpath(QStringLiteral("views")), "failed to create views directory");
+    const QString viewPath = root.filePath(QStringLiteral("views/Tile.xml"));
+    QFile viewFile(viewPath);
+    require(viewFile.open(QIODevice::WriteOnly | QIODevice::Truncate),
+            "failed to create test view XML");
+    viewFile.write(QByteArrayLiteral(R"xml(<module-view schema="v1" module="Tile">
+  <decorations><marker interface="missing" /></decorations>
+</module-view>)xml"));
+    viewFile.close();
+
+    const QString ipcoreId = QStringLiteral("finepaper.viewed_attr");
+    IpCatalogEntry entry = ipcraftCatalogEntryWithoutDrc(ipcoreId);
+    entry.packageManifest.packageRootPath = root.path();
+    IpcraftViewDescriptor view;
+    view.moduleId = QStringLiteral("Tile");
+    view.filePath = QStringLiteral("views/Tile.xml");
+    view.resolvedFilePath = viewPath;
+    entry.packageManifest.views = {view};
+
+    Graph graph;
+    const QList<IpCatalogEntry> entries{entry};
+    const QVector<ProjectIpInstanceRecord> instances{
+        projectInstanceRecord(ipcoreId, QStringLiteral("viewed_attr_0"))
+    };
+
+    ProjectValidationRunner runner;
+    const QList<ValidationResult> results = runner.validate(&graph, entries, instances);
+
+    require(countResults(results,
+                         ValidationSeverity::Error,
+                         QStringLiteral("View XML interface reference attribute 'interface' references missing interface 'missing'")) == 1,
+            "built-in validation should report invalid generic view XML interface references");
+    require(hasRule(results, QStringLiteral("built_in_view")),
+            "invalid generic view XML interface reference should use built_in_view");
+}
+
+void testBuiltInValidationReportsViewAttachmentZoneReferenceError() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "failed to create temporary package directory");
+    QDir root(tempDir.path());
+    require(root.mkpath(QStringLiteral("views")), "failed to create views directory");
+    const QString viewPath = root.filePath(QStringLiteral("views/Tile.xml"));
+    QFile viewFile(viewPath);
+    require(viewFile.open(QIODevice::WriteOnly | QIODevice::Truncate),
+            "failed to create test view XML");
+    viewFile.write(QByteArrayLiteral(R"xml(<module-view schema="v1" module="Tile">
+  <attachment-zone zone="missing_zone" />
+</module-view>)xml"));
+    viewFile.close();
+
+    const QString ipcoreId = QStringLiteral("finepaper.viewed_zone");
+    IpCatalogEntry entry = ipcraftCatalogEntryWithoutDrc(ipcoreId);
+    IpcraftModuleDescriptor endpoint = manifestModule(QStringLiteral("Endpoint"));
+    endpoint.attach = QJsonObject{
+        {QStringLiteral("hosts"), QJsonArray{QStringLiteral("Tile")}},
+        {QStringLiteral("zone"), QStringLiteral("valid_zone")}
+    };
+    entry.packageManifest.modules.append(endpoint);
+    entry.packageManifest.packageRootPath = root.path();
+    IpcraftViewDescriptor view;
+    view.moduleId = QStringLiteral("Tile");
+    view.filePath = QStringLiteral("views/Tile.xml");
+    view.resolvedFilePath = viewPath;
+    entry.packageManifest.views = {view};
+
+    Graph graph;
+    const QList<IpCatalogEntry> entries{entry};
+    const QVector<ProjectIpInstanceRecord> instances{
+        projectInstanceRecord(ipcoreId, QStringLiteral("viewed_zone_0"))
+    };
+
+    ProjectValidationRunner runner;
+    const QList<ValidationResult> results = runner.validate(&graph, entries, instances);
+
+    require(countResults(results,
+                         ValidationSeverity::Error,
+                         QStringLiteral("references missing attachment zone 'missing_zone'")) == 1,
+            "built-in validation should reject view XML references to undeclared attachment zones");
+    require(hasRule(results, QStringLiteral("built_in_view")),
+            "invalid attachment zone XML should use built_in_view");
+}
+
+void testBuiltInValidationReportsTopologyMetadataReferenceErrors() {
+    const QString ipcoreId = QStringLiteral("finepaper.topology");
+    IpCatalogEntry entry = ipcraftCatalogEntryWithoutDrc(ipcoreId);
+    entry.packageManifest.topologies = {
+        QJsonObject{
+            {QStringLiteral("id"), QStringLiteral("mesh")},
+            {QStringLiteral("kind"), QStringLiteral("mesh")},
+            {QStringLiteral("module"), QStringLiteral("Tile")},
+            {QStringLiteral("connection_class"), QStringLiteral("missing")},
+            {QStringLiteral("ports"), QJsonObject{
+                {QStringLiteral("east"), QStringLiteral("link")}
+            }}
+        }
+    };
+
+    Graph graph;
+    const QList<IpCatalogEntry> entries{entry};
+    const QVector<ProjectIpInstanceRecord> instances{
+        projectInstanceRecord(ipcoreId, QStringLiteral("topology_0"))
+    };
+
+    ProjectValidationRunner runner;
+    const QList<ValidationResult> results = runner.validate(&graph, entries, instances);
+
+    require(countResults(results,
+                         ValidationSeverity::Error,
+                         QStringLiteral("connection class 'missing'")) == 1,
+            "built-in validation should reject topology connection_class values that do not exist");
+    require(countResults(results,
+                         ValidationSeverity::Error,
+                         QStringLiteral("graph_role 'attached' is not host/router-capable")) == 1,
+            "built-in validation should reject mesh topologies backed by attached modules");
+    require(hasRule(results, QStringLiteral("built_in_topology")),
+            "invalid topology metadata should use built_in_topology");
 }
 
 void testProjectValidationRunnerRunsDrcForEveryProjectInstance() {
@@ -534,6 +965,16 @@ int main(int argc, char** argv) {
         testValidationManagerHandlesMissingGraphAndLogPanel();
         testProjectValidationRunnerWarnsForEachProjectInstanceWithoutDrc();
         testProjectValidationRunnerErrorsWhenCatalogEntryIsMissing();
+        testBuiltInValidationReportsMissingPackage();
+        testBuiltInValidationRunsBeforePackageValidate();
+        testBuiltInValidationReportsMissingInterface();
+        testBuiltInValidationReportsUnmappableInterfaceMode();
+        testBuiltInValidationReportsUnmappableConnectionClass();
+        testBuiltInValidationReportsMissingIpxactBusInterface();
+        testBuiltInValidationReportsViewReferenceError();
+        testBuiltInValidationReportsViewInterfaceAttributeReferenceError();
+        testBuiltInValidationReportsViewAttachmentZoneReferenceError();
+        testBuiltInValidationReportsTopologyMetadataReferenceErrors();
         testProjectValidationRunnerRunsDrcForEveryProjectInstance();
         testProjectValidationRunnerDrcReceivesEachInstanceScopedGraph();
         testBasicValidatorLeavesIpDrcToPluginCommand();

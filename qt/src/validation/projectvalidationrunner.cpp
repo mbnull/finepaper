@@ -1,6 +1,7 @@
 // ProjectValidationRunner implementation.
 #include "validation/projectvalidationrunner.h"
 
+#include "ipcraft/ipcraftbuiltinvalidator.h"
 #include "validation/drcrunner.h"
 #include "validation/validator.h"
 
@@ -30,25 +31,28 @@ QList<ValidationResult> ProjectValidationRunner::validate(
     const Graph* graph,
     const QList<IpCatalogEntry>& entries,
     const QVector<ProjectIpInstanceRecord>& instances) const {
+    IpcraftBuiltInValidator builtInValidator;
+    const IpcraftBuiltInValidator::Result builtInResult =
+        builtInValidator.validate(graph,
+                                  entries,
+                                  instances,
+                                  IpcraftBuiltInValidator::CommandPurpose::Validate);
+    QList<ValidationResult> results = builtInResult.diagnostics;
+
     if (!graph) {
-        return {ValidationResult(ValidationSeverity::Error,
-                                 QStringLiteral("Graph is not available."),
-                                 QString(),
-                                 QStringLiteral("validation"))};
+        return results;
     }
 
     BasicValidator basicValidator;
-    QList<ValidationResult> results = basicValidator.validate(graph);
+    results += basicValidator.validate(graph);
 
     for (const ProjectIpInstanceRecord& instance : instances) {
+        if (builtInResult.blockingInstanceIds.contains(instance.instanceId)) {
+            continue;
+        }
+
         const IpCatalogEntry* entry = findEntry(entries, instance.ipcoreId);
         if (!entry) {
-            results.append(ValidationResult(
-                ValidationSeverity::Error,
-                QStringLiteral("IP instance '%1' references missing IP core runtime/catalog entry '%2'.")
-                    .arg(instance.instanceId, instance.ipcoreId),
-                instance.instanceId,
-                QStringLiteral("DRC")));
             continue;
         }
 

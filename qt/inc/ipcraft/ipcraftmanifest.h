@@ -31,6 +31,7 @@ struct IpcraftConnectionClass {
     QString id;
     QStringList roles;
     bool symmetric = false;
+    QJsonObject ipxact;
 };
 
 struct IpcraftInterfaceAcceptRule {
@@ -53,6 +54,7 @@ struct IpcraftModuleDescriptor {
     QString name;
     QString description;
     QString graphRole;
+    QJsonObject attach;
     QJsonObject parameters;
     QVector<IpcraftInterfaceDescriptor> interfaces;
 

@@ -606,6 +606,15 @@ IpcraftConnectionClass connectionClassFromJson(const QJsonObject& object,
                                     context,
                                     packageRootPath,
                                     diagnostics);
+    QJsonObject ipxact;
+    if (optionalObject(object,
+                       QStringLiteral("ipxact"),
+                       context,
+                       packageRootPath,
+                       diagnostics,
+                       &ipxact)) {
+        descriptor.ipxact = ipxact;
+    }
     if (descriptor.roles.isEmpty()) {
         addDiagnostic(diagnostics,
                       packageRootPath,
@@ -731,6 +740,16 @@ IpcraftModuleDescriptor moduleFromJson(const QJsonObject& object,
                                           context,
                                           packageRootPath,
                                           diagnostics);
+
+    QJsonObject attach;
+    if (optionalObject(object,
+                       QStringLiteral("attach"),
+                       context,
+                       packageRootPath,
+                       diagnostics,
+                       &attach)) {
+        descriptor.attach = attach;
+    }
 
     QJsonObject parameters;
     if (optionalObject(object,

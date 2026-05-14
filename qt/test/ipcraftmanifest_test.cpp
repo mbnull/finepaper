@@ -339,6 +339,70 @@ void testRejectsNonStringArrayEntries() {
             "string array diagnostic should mention the invalid field");
 }
 
+void testLoadsConnectionClassIpxactAndAttachMetadata() {
+    QTemporaryDir temp;
+    require(temp.isValid(), "temporary directory should be valid");
+
+    QDir root(temp.path());
+    createView(root);
+    writeFile(root.filePath(QStringLiteral("ipcraft.json")),
+              QByteArrayLiteral(R"json({
+  "schema": "ipcraft.manifest.v1",
+  "id": "org.example.demo",
+  "name": "Demo",
+  "version": "1.0.0",
+  "extensions": {
+    "noc.v1": { "enabled": true }
+  },
+  "connection_classes": [
+    {
+      "id": "chi_node_interface",
+      "roles": ["node", "interconnect"],
+      "symmetric": false,
+      "ipxact": {
+        "node": "initiator",
+        "interconnect": "target"
+      }
+    }
+  ],
+  "modules": [
+    {
+      "id": "Module",
+      "interfaces": [
+        {
+          "id": "bus",
+          "modes": ["chi_interconnect"],
+          "accepts": [{ "class": "chi_node_interface", "role": "interconnect" }]
+        }
+      ]
+    },
+    {
+      "id": "Agent",
+      "graph_role": "attached",
+      "attach": { "hosts": ["Module"], "zone": "agent" },
+      "interfaces": [
+        {
+          "id": "chi",
+          "modes": ["chi_requester_node"],
+          "accepts": [{ "class": "chi_node_interface", "role": "node" }]
+        }
+      ]
+    }
+  ],
+  "views": [{ "module": "Module", "file": "views/Module.xml" }]
+})json"));
+
+    const IpcraftManifestReadResult result = IpcraftManifestReader().readPackage(temp.path());
+
+    require(result.ok, "manifest with connection class ipxact and attach metadata should load");
+    require(result.manifest.connectionClasses.first().ipxact.value(QStringLiteral("node")).toString() ==
+                QStringLiteral("initiator"),
+            "connection class IP-XACT role mapping should be preserved");
+    require(result.manifest.modules.at(1).attach.value(QStringLiteral("zone")).toString() ==
+                QStringLiteral("agent"),
+            "module attach metadata should be preserved for attachment-zone validation");
+}
+
 void testRejectsWrongPluginFieldTypes() {
     QTemporaryDir temp;
     require(temp.isValid(), "temporary directory should be valid");
@@ -613,6 +677,7 @@ int main(int argc, char** argv) {
         testRejectsUnknownRequiredShapeFields();
         testRejectsDottedUnknownRequiredShapeFields();
         testRejectsNonStringArrayEntries();
+        testLoadsConnectionClassIpxactAndAttachMetadata();
         testRejectsWrongPluginFieldTypes();
         testRejectsNonObjectExtensionValues();
         testRejectsWrongTopLevelCollectionTypes();

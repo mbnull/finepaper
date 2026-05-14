@@ -18,6 +18,7 @@
 #include <iostream>
 #include <memory>
 #include <stdexcept>
+#include <utility>
 
 namespace {
 
@@ -101,6 +102,50 @@ IpCatalogEntry catalogEntry(const QString& ipcoreId, const QString& generatorPat
         QStringLiteral("{input}"),
         QStringLiteral("{output}")
     };
+    return entry;
+}
+
+IpcraftInterfaceDescriptor manifestInterface(const QString& id) {
+    IpcraftInterfaceDescriptor descriptor;
+    descriptor.id = id;
+    descriptor.label = id;
+    return descriptor;
+}
+
+IpcraftModuleDescriptor manifestModule(const QString& id) {
+    IpcraftModuleDescriptor descriptor;
+    descriptor.id = id;
+    descriptor.name = id;
+    descriptor.interfaces = {manifestInterface(QStringLiteral("out"))};
+    return descriptor;
+}
+
+IpcraftCommandDescriptor manifestCommand(const QString& name, const QString& executablePath) {
+    IpcraftCommandDescriptor command;
+    command.name = name;
+    command.executablePath = executablePath;
+    command.resolvedExecutablePath = executablePath;
+    command.inputSchema = QStringLiteral("ipcraft.noc.project.v1");
+    command.args = {
+        QStringLiteral("{input}"),
+        QStringLiteral("{output}")
+    };
+    return command;
+}
+
+IpCatalogEntry ipcraftCatalogEntry(const QString& ipcoreId, const QString& generatorPath) {
+    IpCatalogEntry entry = catalogEntry(ipcoreId, generatorPath);
+    entry.packageId = ipcoreId;
+    entry.moduleTypes = {QStringLiteral("Tile")};
+    entry.packageManifest.schema = QStringLiteral("ipcraft.manifest.v1");
+    entry.packageManifest.id = ipcoreId;
+    entry.packageManifest.name = ipcoreId;
+    entry.packageManifest.version = QStringLiteral("1.0");
+    entry.packageManifest.packageRootPath = QFileInfo(generatorPath).absolutePath();
+    entry.packageManifest.modules = {manifestModule(QStringLiteral("Tile"))};
+    entry.packageManifest.commands.insert(QStringLiteral("generate"),
+                                          manifestCommand(QStringLiteral("generate"), generatorPath));
+    entry.generator.inputFormat = QStringLiteral("ipcraft.noc.project.v1");
     return entry;
 }
 
@@ -407,6 +452,40 @@ void testGenerationRequiresSavedProjectPath() {
             "generation without project path should ask user to save project first");
 }
 
+void testGenerateStopsOnBuiltInValidationError() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "temporary directory should be valid");
+    QDir root(tempDir.path());
+    const QString generatorPath = createCopyingGenerator(root);
+    const QString ipcoreId = QStringLiteral("finepaper.alpha");
+    Graph graph;
+    require(graph.addModule(makeModule(QStringLiteral("alpha_runtime"),
+                                       QStringLiteral("MissingTile"),
+                                       ipcoreId,
+                                       QStringLiteral("alpha_0"),
+                                       QStringLiteral("alpha_tile"))),
+            "invalid package-owned module should add");
+
+    const QString projectPath = root.filePath(QStringLiteral("project/design.fpproj"));
+    ProjectGenerationRequest request;
+    request.graph = &graph;
+    request.projectPath = projectPath;
+    request.catalogEntries = {ipcraftCatalogEntry(ipcoreId, generatorPath)};
+    request.instances = {
+        instanceRecord(ipcoreId, QStringLiteral("alpha_0"), QStringLiteral("alpha-marker"))
+    };
+
+    const ProjectGenerationResult result = ProjectGenerationRunner().generate(request);
+
+    require(!result.success, "built-in validation error should stop generation");
+    require(result.error.contains(QStringLiteral("Built-in validation failed")),
+            "generation error should report built-in validation failure");
+    require(result.error.contains(QStringLiteral("MissingTile")),
+            "generation error should include the built-in validation diagnostic");
+    require(!QFileInfo::exists(root.filePath(QStringLiteral("project/generated/alpha_0/artifact.sv"))),
+            "generator should not run after a built-in validation error");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -418,6 +497,7 @@ int main(int argc, char** argv) {
         testGenerationFailureAndTimeoutFailWholeResult();
         testGenerationManifestExcludesStaleArtifacts();
         testGenerationRequiresSavedProjectPath();
+        testGenerateStopsOnBuiltInValidationError();
     } catch (const std::exception& error) {
         std::cerr << "projectgenerationrunner_test failed: " << error.what() << '\n';
         return 1;
