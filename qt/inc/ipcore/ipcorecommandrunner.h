@@ -12,6 +12,7 @@ struct IpCoreResolvedCommand {
     QString workingDirectory;
     QString command;
     QString inputFormat = QStringLiteral("ipcore_graph_v1");
+    QString inputSchema;
     QStringList arguments;
 };
 

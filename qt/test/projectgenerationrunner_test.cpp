@@ -109,6 +109,8 @@ IpcraftInterfaceDescriptor manifestInterface(const QString& id) {
     IpcraftInterfaceDescriptor descriptor;
     descriptor.id = id;
     descriptor.label = id;
+    descriptor.modes = {QStringLiteral("initiator")};
+    descriptor.ipxactBusInterface = id;
     return descriptor;
 }
 
@@ -452,7 +454,46 @@ void testGenerationRequiresSavedProjectPath() {
             "generation without project path should ask user to save project first");
 }
 
-void testGenerateStopsOnBuiltInValidationError() {
+void testGenerateExportsIpcraftSchemaForPackageCommand() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "temporary directory should be valid");
+    QDir root(tempDir.path());
+    const QString generatorPath = createCopyingGenerator(root);
+    const QString ipcoreId = QStringLiteral("org.example.alpha");
+    Graph graph;
+    require(graph.addModule(makeModule(QStringLiteral("alpha_runtime"),
+                                       QStringLiteral("Tile"),
+                                       ipcoreId,
+                                       QStringLiteral("alpha_0"),
+                                       QStringLiteral("alpha_tile"))),
+            "ipcraft package module should add");
+
+    const QString projectPath = root.filePath(QStringLiteral("project/design.fpproj"));
+    ProjectGenerationRequest request;
+    request.graph = &graph;
+    request.projectPath = projectPath;
+    request.catalogEntries = {ipcraftCatalogEntry(ipcoreId, generatorPath)};
+    request.instances = {
+        instanceRecord(ipcoreId, QStringLiteral("alpha_0"), QStringLiteral("alpha-marker"))
+    };
+
+    const ProjectGenerationResult result = ProjectGenerationRunner().generate(request);
+
+    require(result.success, result.error.toLocal8Bit().constData());
+    const QString inputPath =
+        root.filePath(QStringLiteral("project/generated/alpha_0/ipcore-graph.json"));
+    const QJsonObject input = readJsonObject(inputPath);
+    require(input.value(QStringLiteral("schema")).toString() ==
+                QStringLiteral("ipcraft.noc.project.v1"),
+            "ipcraft package generator should receive ipcraft NoC project schema");
+    const QJsonObject manifest =
+        readJsonObject(root.filePath(QStringLiteral("project/generated/alpha_0/generation-manifest.json")));
+    require(manifest.value(QStringLiteral("input")).toObject()
+                .value(QStringLiteral("schema")).toString() == QStringLiteral("ipcraft.noc.project.v1"),
+            "generation manifest should record the exported ipcraft schema");
+}
+
+void testGenerateRunsBuiltInValidationBeforeCommand() {
     QTemporaryDir tempDir;
     require(tempDir.isValid(), "temporary directory should be valid");
     QDir root(tempDir.path());
@@ -497,7 +538,8 @@ int main(int argc, char** argv) {
         testGenerationFailureAndTimeoutFailWholeResult();
         testGenerationManifestExcludesStaleArtifacts();
         testGenerationRequiresSavedProjectPath();
-        testGenerateStopsOnBuiltInValidationError();
+        testGenerateExportsIpcraftSchemaForPackageCommand();
+        testGenerateRunsBuiltInValidationBeforeCommand();
     } catch (const std::exception& error) {
         std::cerr << "projectgenerationrunner_test failed: " << error.what() << '\n';
         return 1;

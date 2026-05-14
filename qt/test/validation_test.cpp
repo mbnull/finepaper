@@ -2,6 +2,7 @@
 #include "graph/graph.h"
 #include "ipcraft/ipcraftbuiltinvalidator.h"
 #include "modules/moduleregistry.h"
+#include "ipcore/ipcorecommandrunner.h"
 #include "project/ipinstancestate.h"
 #include "validation/drcrunner.h"
 #include "validation/projectvalidationrunner.h"
@@ -13,6 +14,8 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QStringList>
 #include <QTemporaryDir>
 #include <iostream>
@@ -483,6 +486,35 @@ void testBuiltInValidationRunsBeforePackageValidate() {
             "DRC should run only for the unblocked good instance");
     require(!hasMessageContaining(results, QStringLiteral("bad_0: scripted DRC violation")),
             "DRC should not run for the instance with a blocking built-in error");
+}
+
+void testCommandRunnerRejectsSchemaMismatch() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "failed to create temporary command directory");
+    const QString scriptPath = writeDrcScript(tempDir);
+    const QString inputPath = tempDir.filePath(QStringLiteral("input.json"));
+    QFile inputFile(inputPath);
+    require(inputFile.open(QIODevice::WriteOnly | QIODevice::Truncate),
+            "failed to create command input JSON");
+    inputFile.write(QJsonDocument(QJsonObject{
+        {QStringLiteral("schema"), QStringLiteral("finepaper-ipcore-graph-v1")}
+    }).toJson(QJsonDocument::Compact));
+    inputFile.close();
+
+    const IpCatalogEntry entry =
+        ipcraftCatalogEntryWithValidate(QStringLiteral("org.example.schema"),
+                                        tempDir.path(),
+                                        scriptPath);
+
+    const IpCoreResolvedCommand command =
+        IpCoreCommandRunner::resolveDrc(entry, inputPath, tempDir.path());
+
+    require(!command.valid,
+            "command runner should reject exported project schema mismatches");
+    require(command.errorMessage.contains(QStringLiteral("ipcraft.noc.project.v1")),
+            "schema mismatch error should mention the declared input schema");
+    require(command.errorMessage.contains(QStringLiteral("finepaper-ipcore-graph-v1")),
+            "schema mismatch error should mention the exported schema");
 }
 
 void testBuiltInValidationReportsMissingInterface() {
@@ -999,6 +1031,7 @@ int main(int argc, char** argv) {
         testProjectValidationRunnerErrorsWhenCatalogEntryIsMissing();
         testBuiltInValidationReportsMissingPackage();
         testBuiltInValidationRunsBeforePackageValidate();
+        testCommandRunnerRejectsSchemaMismatch();
         testBuiltInValidationReportsMissingInterface();
         testBuiltInValidationReportsUnmappableInterfaceMode();
         testBuiltInValidationReportsUnmappableConnectionClass();

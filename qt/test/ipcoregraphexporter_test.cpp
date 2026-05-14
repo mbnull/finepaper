@@ -50,11 +50,22 @@ std::unique_ptr<Module> makeModule(const QString& id,
 IpCatalogEntry catalogEntry(const QString& ipcoreId) {
     IpCatalogEntry entry;
     entry.id = ipcoreId;
+    entry.packageId = ipcoreId;
     entry.name = ipcoreId;
     entry.version = QStringLiteral("1.0");
     entry.kind = QStringLiteral("noc");
     entry.generator.command = QStringLiteral("ruby");
     entry.generator.inputFormat = QStringLiteral("ipcore_graph_v1");
+    return entry;
+}
+
+IpCatalogEntry ipcraftCatalogEntry(const QString& packageId) {
+    IpCatalogEntry entry = catalogEntry(packageId);
+    entry.packageManifest.schema = QStringLiteral("ipcraft.manifest.v1");
+    entry.packageManifest.id = packageId;
+    entry.packageManifest.name = packageId;
+    entry.packageManifest.version = QStringLiteral("1.0");
+    entry.generator.inputFormat = QStringLiteral("ipcraft.noc.project.v1");
     return entry;
 }
 
@@ -81,6 +92,126 @@ IpCoreGraphExportResult exportGraph(const Graph& graph,
         QStringLiteral("design"),
         externalToInternalIds
     });
+}
+
+bool hasInterface(const QJsonArray& interfaces,
+                  const QString& instanceId,
+                  const QString& interfaceId) {
+    for (const QJsonValue& value : interfaces) {
+        const QJsonObject object = value.toObject();
+        if (object.value(QStringLiteral("instance")).toString() == instanceId &&
+            object.value(QStringLiteral("interface")).toString() == interfaceId) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void testExportsIpcraftNocProjectV1Schema() {
+    Graph graph;
+    const QString packageId = QStringLiteral("org.example.ravenoc");
+    const IpCoreGraphExportResult result =
+        IpCoreGraphExporter::exportGraph(IpCoreGraphExportRequest{
+            &graph,
+            ipcraftCatalogEntry(packageId),
+            instanceRecord(packageId, QStringLiteral("noc_0")),
+            QStringLiteral("design"),
+            nullptr
+        });
+
+    require(result.success, result.error.toLocal8Bit().constData());
+    const QJsonObject root = result.document.object();
+
+    require(root.value(QStringLiteral("schema")).toString() ==
+                QStringLiteral("ipcraft.noc.project.v1"),
+            "ipcraft package export should use the public NoC project schema");
+    require(!root.value(QStringLiteral("schema")).toString().contains(QStringLiteral("finepaper")),
+            "ipcraft command input schema should not use finepaper public names");
+    require(root.value(QStringLiteral("package")).toString() == packageId,
+            "ipcraft project export should include package id");
+    require(root.value(QStringLiteral("instances")).isArray(),
+            "ipcraft project export should include instances array");
+    require(root.value(QStringLiteral("instances")).toArray().isEmpty(),
+            "empty ipcraft project export should have no module instances");
+    require(root.value(QStringLiteral("connections")).isArray(),
+            "ipcraft project export should include connections array");
+    require(root.value(QStringLiteral("connections")).toArray().isEmpty(),
+            "empty ipcraft project export should have no connections");
+}
+
+void testExportsInterfaceConnections() {
+    const QString packageId = QStringLiteral("org.example.ravenoc");
+    registerOwnedType(QStringLiteral("Tile"), packageId);
+    Graph graph;
+    auto source = makeModule(QStringLiteral("runtime_source"),
+                             QStringLiteral("Tile"),
+                             packageId,
+                             QStringLiteral("noc_0"),
+                             {Port(QStringLiteral("noc_port"),
+                                   Port::Direction::InOut,
+                                   QStringLiteral("bus"),
+                                   QStringLiteral("NoC"),
+                                   {},
+                                   QStringLiteral("router"),
+                                   QStringLiteral("noc_link"),
+                                   QStringLiteral("noc"))});
+    source->setParameter(QStringLiteral("external_id"), QStringLiteral("tile_a"));
+    auto target = makeModule(QStringLiteral("runtime_target"),
+                             QStringLiteral("Tile"),
+                             packageId,
+                             QStringLiteral("noc_0"),
+                             {Port(QStringLiteral("noc_port"),
+                                   Port::Direction::InOut,
+                                   QStringLiteral("bus"),
+                                   QStringLiteral("NoC"),
+                                   {},
+                                   QStringLiteral("router"),
+                                   QStringLiteral("noc_link"),
+                                   QStringLiteral("noc"))});
+    target->setParameter(QStringLiteral("external_id"), QStringLiteral("tile_b"));
+    require(graph.addModule(std::move(source)), "source should add");
+    require(graph.addModule(std::move(target)), "target should add");
+    graph.addConnection(std::make_unique<Connection>(
+        QStringLiteral("runtime_connection"),
+        PortRef{QStringLiteral("runtime_source"), QStringLiteral("noc_port")},
+        PortRef{QStringLiteral("runtime_target"), QStringLiteral("noc_port")},
+        QStringLiteral("noc_link"),
+        QVector<ConnectionInterfaceRef>{
+            {QStringLiteral("runtime_source"), QStringLiteral("noc")},
+            {QStringLiteral("runtime_target"), QStringLiteral("noc")}
+        },
+        QStringLiteral("ambiguous"),
+        QStringList{QStringLiteral("noc_link"), QStringLiteral("monitor_tap")}));
+
+    const IpCoreGraphExportResult result =
+        IpCoreGraphExporter::exportGraph(IpCoreGraphExportRequest{
+            &graph,
+            ipcraftCatalogEntry(packageId),
+            instanceRecord(packageId, QStringLiteral("noc_0")),
+            QStringLiteral("design"),
+            nullptr
+        });
+
+    require(result.success, result.error.toLocal8Bit().constData());
+    const QJsonObject root = result.document.object();
+    const QJsonObject connection =
+        root.value(QStringLiteral("connections")).toArray().first().toObject();
+    const QJsonArray interfaces = connection.value(QStringLiteral("interfaces")).toArray();
+
+    require(connection.value(QStringLiteral("class")).toString() == QStringLiteral("noc_link"),
+            "ipcraft connection should export selected class");
+    require(!connection.contains(QStringLiteral("source")) &&
+                !connection.contains(QStringLiteral("target")),
+            "ipcraft connection should use unordered interfaces instead of source/target");
+    require(interfaces.size() == 2, "ipcraft connection should export both interfaces");
+    require(hasInterface(interfaces, QStringLiteral("tile_a"), QStringLiteral("noc")),
+            "ipcraft connection should export source interface by artifact instance id");
+    require(hasInterface(interfaces, QStringLiteral("tile_b"), QStringLiteral("noc")),
+            "ipcraft connection should export target interface by artifact instance id");
+    require(connection.value(QStringLiteral("status")).toString() == QStringLiteral("ambiguous"),
+            "ipcraft connection should export connection status");
+    require(connection.value(QStringLiteral("alternatives")).toArray().size() == 2,
+            "ipcraft connection should export class alternatives");
 }
 
 void testExportsIpcoreSchemaStateAndModuleOwner() {
@@ -243,6 +374,8 @@ int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
 
     try {
+        testExportsIpcraftNocProjectV1Schema();
+        testExportsInterfaceConnections();
         testExportsIpcoreSchemaStateAndModuleOwner();
         testExporterUsesArtifactIdsAndMapping();
         testExporterIgnoresModulesOutsideSelectedInstance();

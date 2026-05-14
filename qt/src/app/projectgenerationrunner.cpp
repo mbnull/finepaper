@@ -165,7 +165,9 @@ QJsonDocument manifestDocument(const ProjectGenerationRequest& request,
 
     QJsonObject input;
     input.insert(QStringLiteral("path"), result.inputPath);
-    input.insert(QStringLiteral("schema"), IpCoreGraphExporter::schemaName());
+    input.insert(QStringLiteral("schema"), result.inputSchema.isEmpty()
+                                          ? command.inputSchema
+                                          : result.inputSchema);
 
     QJsonObject output;
     output.insert(QStringLiteral("directory"), result.outputDirectory);
@@ -254,18 +256,33 @@ ProjectGenerationInstanceResult generateInstance(const ProjectGenerationRequest&
         return result;
     }
 
+    IpCoreResolvedCommand command =
+        IpCoreCommandRunner::resolveGenerator(*entry, result.inputPath, result.outputDirectory);
+    if (!command.valid) {
+        result.error = withInstanceContext(instance, command.errorMessage);
+        result.artifactPaths = generatedFiles(result.outputDirectory);
+        const QString manifestError = writeManifest(request, designName, *entry, command, result);
+        if (!manifestError.isEmpty()) {
+            result.error += QStringLiteral(" Manifest error: %1").arg(manifestError);
+        }
+        return result;
+    }
+
+    IpCoreGraphExportRequest exportRequest{
+        request.graph,
+        *entry,
+        instance,
+        designName,
+        nullptr
+    };
+    exportRequest.inputSchema = command.inputSchema;
     const IpCoreGraphExportResult exportResult =
-        IpCoreGraphExporter::exportGraph(IpCoreGraphExportRequest{
-            request.graph,
-            *entry,
-            instance,
-            designName,
-            nullptr
-        });
+        IpCoreGraphExporter::exportGraph(exportRequest);
     if (!exportResult.success) {
         result.error = withInstanceContext(instance, exportResult.error);
         return result;
     }
+    result.inputSchema = exportResult.document.object().value(QStringLiteral("schema")).toString();
 
     const QString writeInputError = writeJsonFile(result.inputPath, exportResult.document);
     if (!writeInputError.isEmpty()) {
@@ -273,7 +290,7 @@ ProjectGenerationInstanceResult generateInstance(const ProjectGenerationRequest&
         return result;
     }
 
-    const IpCoreResolvedCommand command =
+    command =
         IpCoreCommandRunner::resolveGenerator(*entry, result.inputPath, result.outputDirectory);
     if (!command.valid) {
         result.error = withInstanceContext(instance, command.errorMessage);

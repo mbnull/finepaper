@@ -16,6 +16,7 @@ struct IpCoreGraphExportRequest {
     ProjectIpInstanceRecord instance;
     QString designName;
     QHash<QString, QString>* externalToInternalIds = nullptr;
+    QString inputSchema;
 };
 
 struct IpCoreGraphExportResult {
@@ -27,5 +28,7 @@ struct IpCoreGraphExportResult {
 class IpCoreGraphExporter {
 public:
     static QString schemaName();
+    static QString ipcraftNocProjectSchemaName();
+    static QString legacyIpcoreGraphSchemaName();
     static IpCoreGraphExportResult exportGraph(const IpCoreGraphExportRequest& request);
 };

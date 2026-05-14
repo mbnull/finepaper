@@ -18,6 +18,7 @@ struct ProjectGenerationInstanceResult {
     QString instanceId;
     QString outputDirectory;
     QString inputPath;
+    QString inputSchema;
     QString manifestPath;
     QString standardOutput;
     QString standardError;

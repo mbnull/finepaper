@@ -9,6 +9,18 @@
 #include <QTemporaryFile>
 #include <QRegularExpression>
 
+namespace {
+
+QString drcInputSchema(const IpCatalogEntry& ipcore) {
+    const IpcraftCommandDescriptor command =
+        ipcore.packageManifest.commands.value(QStringLiteral("validate"));
+    return command.inputSchema.trimmed().isEmpty()
+        ? ipcore.drc.inputFormat
+        : command.inputSchema;
+}
+
+} // namespace
+
 // Run external DRC tool on graph and parse validation results
 QList<ValidationResult> DRCRunner::validate(
     const Graph* graph,
@@ -34,22 +46,16 @@ QList<ValidationResult> DRCRunner::validate(
                                  "DRC")};
     }
 
-    const IpCoreResolvedCommand generatorCommand =
-        IpCoreCommandRunner::resolveDrc(ipcore, tmpFile.fileName(), outputDir.path());
-    if (!generatorCommand.valid) {
-        // Missing or incompatible DRC command is a validation finding, not a
-        // process crash, so report it through the normal log panel path.
-        return {ValidationResult(ValidationSeverity::Error, generatorCommand.errorMessage, "", "DRC")};
-    }
-
+    IpCoreGraphExportRequest exportRequest{
+        graph,
+        ipcore,
+        instance,
+        QStringLiteral("design"),
+        &m_externalToInternalIds
+    };
+    exportRequest.inputSchema = drcInputSchema(ipcore);
     const IpCoreGraphExportResult exportResult =
-        IpCoreGraphExporter::exportGraph(IpCoreGraphExportRequest{
-            graph,
-            ipcore,
-            instance,
-            QStringLiteral("design"),
-            &m_externalToInternalIds
-        });
+        IpCoreGraphExporter::exportGraph(exportRequest);
     if (!exportResult.success) {
         return {ValidationResult(ValidationSeverity::Error, exportResult.error, "", "DRC")};
     }
@@ -61,6 +67,14 @@ QList<ValidationResult> DRCRunner::validate(
                                  "DRC validation failed: could not write temporary JSON file: " + tmpFile.errorString(),
                                  "",
                                  "DRC")};
+    }
+
+    const IpCoreResolvedCommand generatorCommand =
+        IpCoreCommandRunner::resolveDrc(ipcore, tmpFile.fileName(), outputDir.path());
+    if (!generatorCommand.valid) {
+        // Missing or incompatible DRC command is a validation finding, not a
+        // process crash, so report it through the normal log panel path.
+        return {ValidationResult(ValidationSeverity::Error, generatorCommand.errorMessage, "", "DRC")};
     }
 
     QProcess proc;
