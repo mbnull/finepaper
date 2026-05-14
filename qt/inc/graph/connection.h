@@ -32,6 +32,9 @@ public:
     QString status() const { return m_status; }
     QStringList alternatives() const { return m_alternatives; }
     std::unique_ptr<Connection> clone() const;
+    void setConnectionMetadata(QString connectionClassId,
+                               QString status,
+                               QStringList alternatives);
 
     static QVector<ConnectionInterfaceRef> normalizedInterfaces(
         QVector<ConnectionInterfaceRef> interfaces,

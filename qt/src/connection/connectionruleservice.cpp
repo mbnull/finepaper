@@ -3,6 +3,7 @@
 #include "common/portlayout.h"
 #include "graph/graph.h"
 #include "graph/module.h"
+#include "ipcraft/ipcraftconnectionvalidator.h"
 #include "modules/moduleregistry.h"
 #include "modules/moduletypemetadata.h"
 
@@ -103,11 +104,18 @@ bool valuesOverlap(const QStringList& lhs, const QStringList& rhs) {
 
 bool portOccupiedForCardinalityOne(const Graph* graph, const PortRef& ref);
 bool oppositeSideRulePasses(const PortSemanticInfo& source, const PortSemanticInfo& target);
+bool classValidationOppositeSideRulePasses(const PortSemanticInfo& source,
+                                           const PortSemanticInfo& target);
 bool endpointAllowsAsSource(const ConnectionEndpointRequest& endpoint);
 bool endpointAllowsAsTarget(const ConnectionEndpointRequest& endpoint);
 bool roleAllowsAsSource(const QString& role);
 bool roleAllowsAsTarget(const QString& role);
 bool endpointsAreBidirectionalPeerLink(const PortSemanticInfo& source, const PortSemanticInfo& target);
+ProjectConnectionInterfaceRef interfaceRefForPort(const PortSemanticInfo& port);
+QVector<ProjectConnectionRecord> currentProjectConnectionRecords(const Graph* graph);
+bool usesIpcraftClassValidation(const PortSemanticInfo& source, const PortSemanticInfo& target);
+IpcraftConnectionParticipant participantForPort(const PortSemanticInfo& port);
+QString statusString(IpcraftConnectionStatus status);
 
 struct CandidateEvaluation {
     bool accepted = false;
@@ -193,6 +201,25 @@ CandidateEvaluation checkEditorDeclarativeRules(const Graph* graph,
     return acceptedCandidate();
 }
 
+CandidateEvaluation checkEditorDirectionRules(const PortSemanticInfo& source,
+                                              const PortSemanticInfo& target,
+                                              const ConnectionEndpointRequest& sourceEndpoint,
+                                              const ConnectionEndpointRequest& targetEndpoint) {
+    if (!endpointAllowsAsSource(sourceEndpoint) || !endpointAllowsAsTarget(targetEndpoint)) {
+        return rejectedCandidate(ConnectionRuleLayer::EditorRule,
+                                 QStringLiteral("direction_mismatch"),
+                                 QStringLiteral("No direction-compatible connection option"));
+    }
+
+    if (!source.supportsOutput || !target.supportsInput) {
+        return rejectedCandidate(ConnectionRuleLayer::EditorRule,
+                                 QStringLiteral("direction_mismatch"),
+                                 QStringLiteral("No direction-compatible connection option"));
+    }
+
+    return acceptedCandidate();
+}
+
 CandidateEvaluation checkIpcoreDeclarativeConstraints(const PortSemanticInfo& source,
                                                       const PortSemanticInfo& target) {
     if (!source.ipcoreId.isEmpty() &&
@@ -254,6 +281,22 @@ bool oppositeSideRulePasses(const PortSemanticInfo& source,
            PortLayout::oppositeRouterSide(sourceSide) == targetSide;
 }
 
+bool classValidationOppositeSideRulePasses(const PortSemanticInfo& source,
+                                           const PortSemanticInfo& target) {
+    if (source.topologyRule != QStringLiteral("opposite_side") &&
+        target.topologyRule != QStringLiteral("opposite_side")) {
+        return true;
+    }
+    if (!PortLayout::isDirectionalRouterPortId(source.ref.portId) ||
+        !PortLayout::isDirectionalRouterPortId(target.ref.portId)) {
+        return true;
+    }
+
+    const QString sourceSide = PortLayout::routerSideId(source.ref.portId);
+    const QString targetSide = PortLayout::routerSideId(target.ref.portId);
+    return PortLayout::oppositeRouterSide(sourceSide) == targetSide;
+}
+
 bool endpointAllowsAsSource(const ConnectionEndpointRequest& endpoint) {
     return endpoint.visualSide != ConnectionVisualSide::Input;
 }
@@ -284,6 +327,83 @@ bool endpointsAreBidirectionalPeerLink(const PortSemanticInfo& source,
             target.topologyRule == QStringLiteral("opposite_side"));
 }
 
+QString interfaceIdForPort(const Module* module, const QString& portId) {
+    const Port* port = findPort(module, portId);
+    if (!port) {
+        return portId;
+    }
+    return port->interfaceId().isEmpty() ? port->id() : port->interfaceId();
+}
+
+ProjectConnectionInterfaceRef interfaceRefForPort(const PortSemanticInfo& port) {
+    return ProjectConnectionInterfaceRef{
+        port.ref.moduleId,
+        port.interfaceId.isEmpty() ? port.ref.portId : port.interfaceId
+    };
+}
+
+QVector<ProjectConnectionRecord> currentProjectConnectionRecords(const Graph* graph) {
+    QVector<ProjectConnectionRecord> records;
+    if (!graph) {
+        return records;
+    }
+
+    for (const std::unique_ptr<Connection>& connection : graph->connections()) {
+        ProjectConnectionRecord record;
+        record.id = connection->id();
+        record.source = ProjectConnectionEndpoint{connection->source().moduleId,
+                                                  connection->source().portId};
+        record.target = ProjectConnectionEndpoint{connection->target().moduleId,
+                                                  connection->target().portId};
+        record.connectionClassId = connection->connectionClassId();
+        record.status = connection->status();
+        record.alternatives = connection->alternatives();
+        for (const ConnectionInterfaceRef& interfaceRef : connection->interfaces()) {
+            record.interfaces.push_back(ProjectConnectionInterfaceRef{
+                interfaceRef.instanceId,
+                interfaceRef.interfaceId
+            });
+        }
+        if (record.interfaces.isEmpty()) {
+            record.interfaces.push_back(ProjectConnectionInterfaceRef{
+                connection->source().moduleId,
+                interfaceIdForPort(graph->getModule(connection->source().moduleId),
+                                   connection->source().portId)
+            });
+            record.interfaces.push_back(ProjectConnectionInterfaceRef{
+                connection->target().moduleId,
+                interfaceIdForPort(graph->getModule(connection->target().moduleId),
+                                   connection->target().portId)
+            });
+        }
+        records.push_back(record);
+    }
+    return records;
+}
+
+bool usesIpcraftClassValidation(const PortSemanticInfo& source,
+                                const PortSemanticInfo& target) {
+    return !source.acceptRules.isEmpty() && !target.acceptRules.isEmpty();
+}
+
+IpcraftConnectionParticipant participantForPort(const PortSemanticInfo& port) {
+    IpcraftConnectionParticipant participant;
+    participant.packageId = port.packageId.isEmpty() ? port.ipcoreId : port.packageId;
+    participant.moduleId = port.manifestModuleId.isEmpty() ? port.moduleType : port.manifestModuleId;
+    participant.interfaceRef = interfaceRefForPort(port);
+    return participant;
+}
+
+QString statusString(IpcraftConnectionStatus status) {
+    if (status == IpcraftConnectionStatus::Valid) {
+        return QStringLiteral("valid");
+    }
+    if (status == IpcraftConnectionStatus::Ambiguous) {
+        return QStringLiteral("ambiguous");
+    }
+    return QStringLiteral("invalid");
+}
+
 } // namespace
 
 ConnectionRequest ConnectionRequest::portToPort(const PortRef& start,
@@ -301,8 +421,16 @@ ConnectionRequest ConnectionRequest::portToPort(const PortRef& start,
 
 ConnectionRuleService::ConnectionRuleService(const Graph* graph,
                                              QVector<ProjectIpInstanceRecord> ipInstanceRecords)
+    : ConnectionRuleService(graph,
+                            std::move(ipInstanceRecords),
+                            ModuleRegistry::instance().packageManifests()) {}
+
+ConnectionRuleService::ConnectionRuleService(const Graph* graph,
+                                             QVector<ProjectIpInstanceRecord> ipInstanceRecords,
+                                             QVector<IpcraftPackageManifest> manifests)
     : m_graph(graph),
-      m_ipInstanceRecords(std::move(ipInstanceRecords)) {}
+      m_ipInstanceRecords(std::move(ipInstanceRecords)),
+      m_manifests(std::move(manifests)) {}
 
 ConnectionCheckResult ConnectionRuleService::reject(ConnectionRuleLayer layer,
                                                     QString reasonCode,
@@ -370,6 +498,8 @@ std::optional<PortSemanticInfo> ConnectionRuleService::resolvePort(const QString
     info.ipcoreId = !module->ipcoreId().isEmpty()
         ? module->ipcoreId()
         : (moduleType ? moduleType->ipcoreId : QString());
+    info.packageId = moduleType ? ModuleTypeMetadata::packageId(moduleType) : info.ipcoreId;
+    info.manifestModuleId = moduleType ? ModuleTypeMetadata::moduleId(moduleType) : module->type();
     info.instanceId = module->instanceId();
     info.graphGroup = moduleType ? moduleType->graphGroup : QString();
     info.editorLayout = ModuleTypeMetadata::editorLayout(module);
@@ -395,6 +525,7 @@ std::optional<PortSemanticInfo> ConnectionRuleService::resolvePort(const QString
                                                               : metadata.cardinality;
             info.autocompleteGroup = metadata.autocompleteGroup;
             info.topologyRule = metadata.topologyRule;
+            info.acceptRules = metadata.acceptRules;
             QStringList fields = metadata.matchFields;
             fields.sort();
             for (const QString& field : fields) {
@@ -490,13 +621,50 @@ QVector<ConnectionResolvedOption> ConnectionRuleService::buildOptions(
             return;
         }
 
-        const CandidateEvaluation editorRule =
-            checkEditorDeclarativeRules(m_graph, source, target, sourceEndpoint, targetEndpoint);
-        if (!editorRule.accepted) {
-            if (rejectionLayer) *rejectionLayer = editorRule.layer;
-            if (rejectionReason) *rejectionReason = editorRule.reasonCode;
-            if (rejectionMessage) *rejectionMessage = editorRule.message;
-            return;
+        std::optional<IpcraftConnectionDecision> ipcraftDecision;
+        if (usesIpcraftClassValidation(source, target)) {
+            const CandidateEvaluation editorRule =
+                checkEditorDirectionRules(source, target, sourceEndpoint, targetEndpoint);
+            if (!editorRule.accepted) {
+                if (rejectionLayer) *rejectionLayer = editorRule.layer;
+                if (rejectionReason) *rejectionReason = editorRule.reasonCode;
+                if (rejectionMessage) *rejectionMessage = editorRule.message;
+                return;
+            }
+            if (!classValidationOppositeSideRulePasses(source, target)) {
+                if (rejectionLayer) *rejectionLayer = ConnectionRuleLayer::EditorRule;
+                if (rejectionReason) *rejectionReason = QStringLiteral("topology_rule_mismatch");
+                if (rejectionMessage) {
+                    *rejectionMessage = QStringLiteral("Connection does not satisfy topology rule");
+                }
+                return;
+            }
+
+            IpcraftConnectionValidator validator(m_manifests,
+                                                 currentProjectConnectionRecords(m_graph));
+            const IpcraftConnectionDecision decision = validator.validate(
+                {participantForPort(source), participantForPort(target)},
+                request.connectionClassId);
+            if (decision.status == IpcraftConnectionStatus::Invalid) {
+                if (rejectionLayer) *rejectionLayer = ConnectionRuleLayer::EditorRule;
+                if (rejectionReason) {
+                    *rejectionReason = decision.message.contains(QStringLiteral("already used"))
+                        ? QStringLiteral("interface_occupied")
+                        : QStringLiteral("interface_class_mismatch");
+                }
+                if (rejectionMessage) *rejectionMessage = decision.message;
+                return;
+            }
+            ipcraftDecision = decision;
+        } else {
+            const CandidateEvaluation editorRule =
+                checkEditorDeclarativeRules(m_graph, source, target, sourceEndpoint, targetEndpoint);
+            if (!editorRule.accepted) {
+                if (rejectionLayer) *rejectionLayer = editorRule.layer;
+                if (rejectionReason) *rejectionReason = editorRule.reasonCode;
+                if (rejectionMessage) *rejectionMessage = editorRule.message;
+                return;
+            }
         }
 
         const CandidateEvaluation ipcore = checkIpcoreDeclarativeConstraints(source, target);
@@ -511,13 +679,21 @@ QVector<ConnectionResolvedOption> ConnectionRuleService::buildOptions(
             return;
         }
 
-        options.push_back(ConnectionResolvedOption{
-            source.ref,
-            target.ref,
-            QStringLiteral("%1.%2 -> %3.%4")
-                .arg(source.ref.moduleId, source.ref.portId, target.ref.moduleId, target.ref.portId),
-            0
-        });
+        ConnectionResolvedOption option;
+        option.source = source.ref;
+        option.target = target.ref;
+        option.label = QStringLiteral("%1.%2 -> %3.%4")
+                           .arg(source.ref.moduleId,
+                                source.ref.portId,
+                                target.ref.moduleId,
+                                target.ref.portId);
+        if (ipcraftDecision.has_value()) {
+            option.connectionClassId = ipcraftDecision->selectedClassId;
+            option.connectionStatus = statusString(ipcraftDecision->status);
+            option.alternatives = ipcraftDecision->alternatives;
+            option.normalizedInterfaces = ipcraftDecision->normalizedInterfaces;
+        }
+        options.push_back(std::move(option));
     };
 
     for (const PortSemanticInfo& start : effectiveStartPorts) {

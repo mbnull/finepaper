@@ -108,6 +108,12 @@ Module* Graph::getModule(const QString& moduleId) const {
     return it != m_modules.end() ? it->get() : nullptr;
 }
 
+Connection* Graph::getConnection(const QString& connectionId) const {
+    auto it = std::find_if(m_connections.begin(), m_connections.end(),
+        [&connectionId](const std::unique_ptr<Connection>& c) { return c->id() == connectionId; });
+    return it != m_connections.end() ? it->get() : nullptr;
+}
+
 std::unique_ptr<Module> Graph::takeModule(const QString& moduleId) {
     auto it = std::find_if(m_modules.begin(), m_modules.end(),
         [&moduleId](const std::unique_ptr<Module>& m) { return m->id() == moduleId; });
@@ -212,6 +218,25 @@ void Graph::insertConnection(std::unique_ptr<Connection> connection) {
             << "target" << ptr->target().moduleId << ptr->target().portId
             << "totalConnections" << m_connections.size();
     emit connectionAdded(ptr);
+}
+
+bool Graph::setConnectionMetadata(const QString& connectionId,
+                                  const QString& connectionClassId,
+                                  const QString& status,
+                                  QStringList alternatives) {
+    Connection* connection = getConnection(connectionId);
+    if (!connection) {
+        qDebug() << "Requested metadata update for unknown connection" << connectionId;
+        return false;
+    }
+
+    connection->setConnectionMetadata(connectionClassId, status, std::move(alternatives));
+    qInfo() << "Updated connection metadata"
+            << "id" << connectionId
+            << "class" << connectionClassId
+            << "status" << connection->status();
+    emit connectionChanged(connection);
+    return true;
 }
 
 bool Graph::isValidConnection(const PortRef& source, const PortRef& target) const {

@@ -9,6 +9,7 @@
 #include "project/ipinstanceparameteradapter.h"
 #include "project/projectstateservice.h"
 #include "commands/commandmanager.h"
+#include "commands/setconnectionclasscommand.h"
 #include "commands/setipinstanceparametercommand.h"
 #include "commands/setparametercommand.h"
 #include "widgets/collapsiblesection.h"
@@ -24,11 +25,15 @@
 #include <QFormLayout>
 #include <QPlainTextEdit>
 #include <QScrollBar>
+#include <QSignalBlocker>
 #include <QToolButton>
+#include <QMetaObject>
 #include <limits>
 #include <utility>
 
 namespace {
+
+constexpr const char* kSelectedConnectionIdProperty = "_finepaperSelectedConnectionId";
 
 QString humanizeIdentifier(const QString& identifier) {
     QString text = identifier;
@@ -239,6 +244,37 @@ void applyIpInstanceConfigurability(QWidget* widget, bool configurable) {
         widget->setEnabled(false);
     }
 }
+
+const Connection* findConnection(const Graph* graph, const QString& connectionId) {
+    if (!graph || connectionId.isEmpty()) {
+        return nullptr;
+    }
+
+    for (const std::unique_ptr<Connection>& connection : graph->connections()) {
+        if (connection->id() == connectionId) {
+            return connection.get();
+        }
+    }
+    return nullptr;
+}
+
+void syncConnectionClassOptions(QComboBox* comboBox, const Connection& connection) {
+    if (!comboBox) {
+        return;
+    }
+
+    const QSignalBlocker blocker(comboBox);
+    comboBox->clear();
+    QStringList classes = connection.alternatives();
+    if (!connection.connectionClassId().isEmpty() &&
+        !classes.contains(connection.connectionClassId())) {
+        classes.prepend(connection.connectionClassId());
+    }
+    for (const QString& classId : classes) {
+        comboBox->addItem(classId, classId);
+    }
+    syncComboBoxValue(comboBox, connection.connectionClassId());
+}
 } // namespace
 
 PropertyPanel::PropertyPanel(Graph* graph,
@@ -269,6 +305,10 @@ PropertyPanel::PropertyPanel(Graph* graph,
                 &ProjectStateService::parameterChanged,
                 this,
                 &PropertyPanel::onIpInstanceParameterChanged);
+    }
+    if (m_graph) {
+        connect(m_graph, &Graph::connectionChanged, this, &PropertyPanel::onConnectionChanged);
+        connect(m_graph, &Graph::connectionRemoved, this, &PropertyPanel::onConnectionRemoved);
     }
 }
 
@@ -319,10 +359,25 @@ QWidget* PropertyPanel::createIpInstanceParameterWidget(const IpInstanceParamete
 
 void PropertyPanel::setSelectedModule(QString moduleId) {
     Module* module = moduleId.isEmpty() ? nullptr : m_graph->getModule(moduleId);
+    if (!module && !moduleId.isEmpty() && findConnection(m_graph, moduleId)) {
+        if (m_selectedModule) {
+            disconnect(m_selectedModule, &Module::parameterChanged, this, &PropertyPanel::onParameterChanged);
+        }
+
+        setProperty(kSelectedConnectionIdProperty, moduleId);
+        m_selectedModule = nullptr;
+        clearPanel();
+        populatePanel();
+        return;
+    }
+
+    setProperty(kSelectedConnectionIdProperty, QString());
     setSelectedModule(module);
 }
 
 void PropertyPanel::setSelectedModule(Module* module) {
+    setProperty(kSelectedConnectionIdProperty, QString());
+
     if (m_selectedModule) {
         disconnect(m_selectedModule, &Module::parameterChanged, this, &PropertyPanel::onParameterChanged);
     }
@@ -347,8 +402,63 @@ void PropertyPanel::clearPanel() {
     m_ipParameterWidgets.clear();
 }
 
+void PropertyPanel::queueSelectedConnectionRefresh(const QString& connectionId,
+                                                   bool clearSelectionWhenMissing) {
+    if (connectionId.isEmpty()) {
+        return;
+    }
+
+    QMetaObject::invokeMethod(this, [this, connectionId, clearSelectionWhenMissing]() {
+        const QString selectedConnectionId =
+            property(kSelectedConnectionIdProperty).toString();
+        if (selectedConnectionId != connectionId) {
+            return;
+        }
+
+        if (clearSelectionWhenMissing && !findConnection(m_graph, connectionId)) {
+            setProperty(kSelectedConnectionIdProperty, QString());
+        }
+
+        clearPanel();
+        populatePanel();
+    }, Qt::QueuedConnection);
+}
+
 void PropertyPanel::populatePanel() {
     if (!m_selectedModule) {
+        const QString selectedConnectionId =
+            property(kSelectedConnectionIdProperty).toString();
+        if (!selectedConnectionId.isEmpty()) {
+            const Connection* connection = findConnection(m_graph, selectedConnectionId);
+            if (!connection) {
+                return;
+            }
+            if (connection->status() == QStringLiteral("ambiguous")) {
+                auto* comboBox = new QComboBox(this);
+                syncConnectionClassOptions(comboBox, *connection);
+                comboBox->setObjectName(QStringLiteral("connectionClassCombo"));
+                comboBox->setEnabled(connection->alternatives().size() > 1);
+                if (m_commandManager) {
+                    const QString connectionId = connection->id();
+                    connect(comboBox,
+                            QOverload<int>::of(&QComboBox::currentIndexChanged),
+                            this,
+                            [this, comboBox, connectionId](int index) {
+                                if (index < 0) {
+                                    return;
+                                }
+                                auto command = std::make_unique<SetConnectionClassCommand>(
+                                    m_graph,
+                                    connectionId,
+                                    comboBox->itemData(index).toString());
+                                m_commandManager->executeCommand(std::move(command));
+                            });
+                }
+                m_formLayout->addRow(new QLabel(QStringLiteral("Connection class"), this), comboBox);
+            }
+            return;
+        }
+
         if (!m_stateService) {
             return;
         }
@@ -687,4 +797,28 @@ void PropertyPanel::onIpInstanceParameterChanged(const QString& ipcoreId,
                                                    : checkBox->isChecked()));
         checkBox->blockSignals(false);
     }
+}
+
+void PropertyPanel::onConnectionChanged(Connection* connection) {
+    if (!connection) {
+        return;
+    }
+
+    const QString selectedConnectionId =
+        property(kSelectedConnectionIdProperty).toString();
+    if (selectedConnectionId != connection->id()) {
+        return;
+    }
+
+    queueSelectedConnectionRefresh(connection->id(), false);
+}
+
+void PropertyPanel::onConnectionRemoved(const QString& connectionId) {
+    const QString selectedConnectionId =
+        property(kSelectedConnectionIdProperty).toString();
+    if (selectedConnectionId != connectionId) {
+        return;
+    }
+
+    queueSelectedConnectionRefresh(connectionId, true);
 }

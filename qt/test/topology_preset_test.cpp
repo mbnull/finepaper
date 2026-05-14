@@ -131,6 +131,63 @@ ModuleType routerType(const QString& name, const QString& ipcoreId) {
     return type;
 }
 
+IpcraftInterfaceAcceptRule topologyAcceptRule(const QString& connectionClassId,
+                                              const QString& role) {
+    IpcraftInterfaceAcceptRule rule;
+    rule.connectionClassId = connectionClassId;
+    rule.role = role;
+    return rule;
+}
+
+IpcraftInterfaceDescriptor topologyInterfaceDescriptor(const QString& id,
+                                                       const QString& role) {
+    IpcraftInterfaceDescriptor descriptor;
+    descriptor.id = id;
+    descriptor.accepts.push_back(topologyAcceptRule(QStringLiteral("router_link"), role));
+    return descriptor;
+}
+
+ModuleType packageBackedRouterType(const QString& name, const QString& packageId) {
+    ModuleType type = routerType(name, packageId);
+    type.packageId = packageId;
+    type.moduleId = name;
+
+    type.interfaceMetadata[QStringLiteral("east")].acceptRules.push_back(
+        topologyAcceptRule(QStringLiteral("router_link"), QStringLiteral("initiator")));
+    type.interfaceMetadata[QStringLiteral("south")].acceptRules.push_back(
+        topologyAcceptRule(QStringLiteral("router_link"), QStringLiteral("initiator")));
+    type.interfaceMetadata[QStringLiteral("west")].acceptRules.push_back(
+        topologyAcceptRule(QStringLiteral("router_link"), QStringLiteral("target")));
+    type.interfaceMetadata[QStringLiteral("north")].acceptRules.push_back(
+        topologyAcceptRule(QStringLiteral("router_link"), QStringLiteral("target")));
+    return type;
+}
+
+IpcraftPackageManifest packageBackedRouterManifest(const QString& packageId,
+                                                   const QString& moduleId) {
+    IpcraftPackageManifest manifest;
+    manifest.id = packageId;
+    manifest.connectionClasses.push_back(IpcraftConnectionClass{
+        QStringLiteral("router_link"),
+        QStringList{QStringLiteral("initiator"), QStringLiteral("target")},
+        false
+    });
+    manifest.modules.push_back(IpcraftModuleDescriptor{
+        moduleId,
+        QStringLiteral("Package-backed XP"),
+        QString(),
+        QString(),
+        QJsonObject{},
+        QVector<IpcraftInterfaceDescriptor>{
+            topologyInterfaceDescriptor(QStringLiteral("east"), QStringLiteral("initiator")),
+            topologyInterfaceDescriptor(QStringLiteral("south"), QStringLiteral("initiator")),
+            topologyInterfaceDescriptor(QStringLiteral("west"), QStringLiteral("target")),
+            topologyInterfaceDescriptor(QStringLiteral("north"), QStringLiteral("target"))
+        }
+    });
+    return manifest;
+}
+
 TopologyPresetDescriptor meshPreset() {
     TopologyPresetDescriptor preset;
     preset.id = QStringLiteral("mesh");
@@ -196,6 +253,46 @@ void testMeshPresetCreatesEditableGraph() {
     require(graph.isValidConnection(PortRef{originId, QStringLiteral("east")},
                                     PortRef{rightId, QStringLiteral("west")}) == false,
             "created east/west ports should be occupied by normal graph connections");
+}
+
+void testPackageBackedPresetConnectionsPreserveResolvedMetadata() {
+    ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
+    const QString packageId = QStringLiteral("finepaper.topology_metadata");
+    const QString typeName = QStringLiteral("PackageBackedXP");
+    const ModuleType type = packageBackedRouterType(typeName, packageId);
+    require(registry.registerType(type), "package-backed router type should register");
+    registry.loadIpcraftPackages({packageBackedRouterManifest(packageId, typeName)});
+    ModuleRegistry::instance().registerType(type);
+
+    Graph graph;
+    TopologyPresetRequest request;
+    request.ipcoreId = packageId;
+    request.instanceId = QStringLiteral("noc_0");
+    request.preset = meshPreset();
+    request.preset.routerModule = typeName;
+    request.parameters.insert(QStringLiteral("rows"), 1);
+    request.parameters.insert(QStringLiteral("cols"), 2);
+
+    const TopologyPresetResult result = TopologyPresetBuilder::apply(&graph, registry, request);
+
+    const QString leftId = scopedPresetModuleId(QStringLiteral("noc_0"), QStringLiteral("xp_0_0"));
+    const QString rightId = scopedPresetModuleId(QStringLiteral("noc_0"), QStringLiteral("xp_0_1"));
+    require(result.success, result.error.toLocal8Bit().constData());
+    require(graph.connections().size() == 1,
+            "1x2 package-backed mesh should create one link");
+    const Connection* connection = graph.connections().front().get();
+    require(connection->connectionClassId() == QStringLiteral("router_link"),
+            "generated package-backed link should store the resolved connection class");
+    require(connection->status() == QStringLiteral("valid"),
+            "generated package-backed link should store resolved connection status");
+    require(connection->interfaces().size() == 2,
+            "generated package-backed link should store normalized interfaces");
+    require(connection->interfaces().at(0).instanceId == leftId &&
+                connection->interfaces().at(0).interfaceId == QStringLiteral("east"),
+            "generated package-backed link should store source interface metadata");
+    require(connection->interfaces().at(1).instanceId == rightId &&
+                connection->interfaces().at(1).interfaceId == QStringLiteral("west"),
+            "generated package-backed link should store target interface metadata");
 }
 
 void testRingPresetCreatesClosedLoop() {
@@ -531,6 +628,7 @@ int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
     try {
         testMeshPresetCreatesEditableGraph();
+        testPackageBackedPresetConnectionsPreserveResolvedMetadata();
         testRingPresetCreatesClosedLoop();
         testPresetRejectsConnectionsThatFailRuleService();
         testPresetFailureRollsBackPartialGraph();

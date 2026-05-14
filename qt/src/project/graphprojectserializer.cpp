@@ -328,7 +328,9 @@ GraphProjectLoadResult populateGraph(const ProjectDocument& document,
         moduleIds.insert(it.key());
     }
 
-    const ConnectionRuleService ruleService(&graph, document.ipcoreState);
+    const ConnectionRuleService ruleService(&graph,
+                                            document.ipcoreState,
+                                            ModuleRegistry::instance().packageManifests());
     for (const ProjectConnectionRecord& record : document.connections) {
         QString connectionError;
         const std::optional<std::pair<PortRef, PortRef>> refs =
@@ -341,10 +343,12 @@ GraphProjectLoadResult populateGraph(const ProjectDocument& document,
         PortRef target = refs->second;
         const auto checkConnection = [&](const PortRef& candidateSource,
                                          const PortRef& candidateTarget) {
-            return ruleService.check(
+            ConnectionRequest request =
                 ConnectionRequest::portToPort(candidateSource,
                                               candidateTarget,
-                                              ConnectionRequestKind::ProjectLoad));
+                                              ConnectionRequestKind::ProjectLoad);
+            request.connectionClassId = record.connectionClassId;
+            return ruleService.check(request);
         };
 
         // Validate against the concrete Graph again because module defaults and
@@ -379,8 +383,9 @@ GraphProjectLoadResult populateGraph(const ProjectDocument& document,
             projectInterfaces.push_back(projectInterfaceRef(targetModule, target));
         }
 
-        const QString connectionClassId =
-            deriveConnectionClassId(record.connectionClassId, source, target, sourceModule, targetModule);
+        const QString connectionClassId = record.interfaces.isEmpty()
+            ? deriveConnectionClassId(record.connectionClassId, source, target, sourceModule, targetModule)
+            : record.connectionClassId;
         const bool symmetricClass =
             symmetricConnectionClass(connectionClassId,
                                      interfaceMetadata(sourceModule, source),
@@ -558,6 +563,10 @@ GraphProjectLoadResult GraphProjectSerializer::loadProject(const ProjectDocument
             return failure(QStringLiteral("Duplicate connection id: %1").arg(record.id));
         }
         connectionIds.insert(record.id);
+
+        if (!record.interfaces.isEmpty() && record.connectionClassId.trimmed().isEmpty()) {
+            return failure(QStringLiteral("Connection %1 is missing class").arg(record.id));
+        }
 
         QString connectionError;
         if (!connectionPortRefs(record, moduleIds, moduleTypesById, &connectionError).has_value()) {

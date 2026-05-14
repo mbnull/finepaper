@@ -25,6 +25,8 @@ public:
     void clear();
     // Returns the module by ID, or nullptr if not found.
     Module* getModule(const QString& moduleId) const;
+    // Returns the connection by ID, or nullptr if not found.
+    Connection* getConnection(const QString& connectionId) const;
     // Removes a module from the graph and transfers ownership to the caller.
     std::unique_ptr<Module> takeModule(const QString& moduleId);
     // Inserts a pre-built module without creating it internally (used by undo/redo).
@@ -38,6 +40,11 @@ public:
     std::unique_ptr<Connection> takeConnection(const QString& connectionId);
     // Inserts a pre-built connection (used by undo/redo).
     void insertConnection(std::unique_ptr<Connection> connection);
+    // Updates project-facing connection metadata and emits connectionChanged.
+    bool setConnectionMetadata(const QString& connectionId,
+                               const QString& connectionClassId,
+                               const QString& status,
+                               QStringList alternatives);
     // Validates structural integrity only: endpoints exist, no self-loop, no exact duplicate.
     // Semantic/editor rules live in ConnectionRuleService.
     bool isValidConnection(const PortRef& source, const PortRef& target) const;
@@ -50,6 +57,7 @@ signals:
     void moduleRemoved(const QString& moduleId);
     void connectionAdded(Connection* connection);
     void connectionRemoved(const QString& connectionId);
+    void connectionChanged(Connection* connection);
     void parameterChanged(const QString& moduleId, const QString& paramName);
 
 private slots:

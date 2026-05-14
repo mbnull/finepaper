@@ -79,6 +79,9 @@ bool ModuleRegistry::loadIpcraftPackages(const QVector<IpcraftPackageManifest>& 
     bool loadedAnyType = false;
 
     for (const IpcraftPackageManifest& package : packages) {
+        if (!package.id.isEmpty()) {
+            m_packageManifests.insert(package.id, package);
+        }
         if (package.modules.isEmpty()) {
             continue;
         }
@@ -118,6 +121,20 @@ const ModuleType* ModuleRegistry::getTypeForGraphGroup(const QString& ipcoreId,
         }
     }
     return nullptr;
+}
+
+const IpcraftPackageManifest* ModuleRegistry::packageManifest(const QString& packageId) const {
+    auto it = m_packageManifests.constFind(packageId);
+    return it == m_packageManifests.cend() ? nullptr : &it.value();
+}
+
+QVector<IpcraftPackageManifest> ModuleRegistry::packageManifests() const {
+    QVector<IpcraftPackageManifest> manifests;
+    manifests.reserve(m_packageManifests.size());
+    for (auto it = m_packageManifests.cbegin(); it != m_packageManifests.cend(); ++it) {
+        manifests.push_back(it.value());
+    }
+    return manifests;
 }
 
 QStringList ModuleRegistry::availableTypes() const {

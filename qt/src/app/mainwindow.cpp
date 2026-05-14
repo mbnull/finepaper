@@ -532,6 +532,10 @@ void MainWindow::setupConnections() {
             &NodeEditorWidget::moduleSelected,
             m_propertyPanel,
             QOverload<QString>::of(&PropertyPanel::setSelectedModule));
+    connect(m_nodeEditor,
+            &NodeEditorWidget::connectionSelected,
+            m_propertyPanel,
+            QOverload<QString>::of(&PropertyPanel::setSelectedModule));
 
     const auto trackGraphChange = [this]() {
         // Bulk load/import paths suppress tracking until the graph is fully
@@ -544,8 +548,14 @@ void MainWindow::setupConnections() {
 
     connect(m_graph, &Graph::moduleAdded, this, [trackGraphChange](Module*) { trackGraphChange(); });
     connect(m_graph, &Graph::moduleRemoved, this, [trackGraphChange](const QString&) { trackGraphChange(); });
-    connect(m_graph, &Graph::connectionAdded, this, [trackGraphChange](Connection*) { trackGraphChange(); });
+    connect(m_graph, &Graph::connectionAdded, this, [this, trackGraphChange](Connection* connection) {
+        trackGraphChange();
+        if (m_logPanel && connection) {
+            m_logPanel->appendConnectionAmbiguityWarning(*connection);
+        }
+    });
     connect(m_graph, &Graph::connectionRemoved, this, [trackGraphChange](const QString&) { trackGraphChange(); });
+    connect(m_graph, &Graph::connectionChanged, this, [trackGraphChange](Connection*) { trackGraphChange(); });
     connect(m_graph, &Graph::parameterChanged, this, [trackGraphChange](const QString&, const QString&) {
         trackGraphChange();
     });

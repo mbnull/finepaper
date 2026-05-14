@@ -37,6 +37,14 @@ std::unique_ptr<Connection> Connection::clone() const {
     return std::make_unique<Connection>(*this);
 }
 
+void Connection::setConnectionMetadata(QString connectionClassId,
+                                       QString status,
+                                       QStringList alternatives) {
+    m_connectionClassId = std::move(connectionClassId);
+    m_status = normalizedStatus(status);
+    m_alternatives = std::move(alternatives);
+}
+
 QVector<ConnectionInterfaceRef> Connection::normalizedInterfaces(
     QVector<ConnectionInterfaceRef> interfaces,
     bool symmetricConnectionClass) {

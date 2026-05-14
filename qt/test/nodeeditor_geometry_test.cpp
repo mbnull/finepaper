@@ -520,13 +520,66 @@ void testNodeEditorWidgetOwnsConnectionRuleServiceInputs() {
     Graph graph;
     ProjectStateService stateService;
     ProjectIpService projectIpService(&stateService);
-    IpCatalogService catalog({}, &ModuleRegistry::instance());
+    IpCatalogService catalog(QList<IpCoreRuntimeDescriptor>{}, &ModuleRegistry::instance());
     ActiveWorkspaceController workspaceController(&projectIpService, &catalog);
     CommandManager commandManager;
     NodeEditorWidget widget(&graph, &stateService, &workspaceController, &commandManager);
 
     require(!widget.isArrangeEnabled(),
             "widget should construct with project state service dependency");
+}
+
+std::unique_ptr<Module> selectableConnectionModule(const QString& id,
+                                                   const QString& type,
+                                                   const QString& ipcoreId,
+                                                   const QString& instanceId,
+                                                   const Port& port) {
+    auto module = std::make_unique<Module>(id, type);
+    module->setIpcoreId(ipcoreId);
+    module->setInstanceId(instanceId);
+    module->addPort(port);
+    return module;
+}
+
+void testConnectionSelectionEmitsConnectionId() {
+    ScopedNodeEditorHarness harness;
+    harness.selectRavenoc();
+    const std::optional<ProjectIpInstanceRecord> activeInstance =
+        harness.projectIpService.selectedIpInstanceRecord();
+    require(activeInstance.has_value(), "test harness should select a RaveNoC instance");
+
+    require(harness.graph.addModule(selectableConnectionModule(
+                QStringLiteral("source"),
+                QStringLiteral("SelectableSource"),
+                activeInstance->ipcoreId,
+                activeInstance->instanceId,
+                Port(QStringLiteral("out"), Port::Direction::Output, QStringLiteral("bus"), QStringLiteral("Out")))),
+            "source module should add");
+    require(harness.graph.addModule(selectableConnectionModule(
+                QStringLiteral("target"),
+                QStringLiteral("SelectableTarget"),
+                activeInstance->ipcoreId,
+                activeInstance->instanceId,
+                Port(QStringLiteral("in"), Port::Direction::Input, QStringLiteral("bus"), QStringLiteral("In")))),
+            "target module should add");
+    harness.graph.addConnection(std::make_unique<Connection>(
+        QStringLiteral("conn_1"),
+        PortRef{QStringLiteral("source"), QStringLiteral("out")},
+        PortRef{QStringLiteral("target"), QStringLiteral("in")}));
+    QCoreApplication::processEvents();
+
+    QString selectedConnectionId;
+    QObject::connect(&harness.editor,
+                     &NodeEditorWidget::connectionSelected,
+                     [&selectedConnectionId](const QString& connectionId) {
+                         selectedConnectionId = connectionId;
+                     });
+
+    harness.editor.highlightElement(QStringLiteral("conn_1"));
+    QCoreApplication::processEvents();
+
+    require(selectedConnectionId == QStringLiteral("conn_1"),
+            "selecting a rendered connection should emit its graph connection id");
 }
 
 void testScopedDropRejectsMissingActiveInstance() {
@@ -720,6 +773,7 @@ int main(int argc, char** argv) {
         testEndpointInterfaceFollowsRelativeNodePosition();
         testStoredNodeSizeOverridesDefaultAndProvidesResizeHandle();
         testNodeEditorWidgetOwnsConnectionRuleServiceInputs();
+        testConnectionSelectionEmitsConnectionId();
         testScopedDropRejectsMissingActiveInstance();
         testScopedDropRejectsDifferentIpcore();
         testScopedDropRejectsLegacyModuleTypeMime();

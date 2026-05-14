@@ -10,11 +10,13 @@
 class AddConnectionCommand : public Command {
 public:
     using IpInstanceRecordsProvider = std::function<QVector<ProjectIpInstanceRecord>()>;
+    using PackageManifestsProvider = std::function<QVector<IpcraftPackageManifest>()>;
 
     // Takes ownership of a prepared connection to be inserted into the graph.
     AddConnectionCommand(Graph* graph,
                          IpInstanceRecordsProvider ipInstanceRecordsProvider,
-                         std::unique_ptr<Connection> connection);
+                         std::unique_ptr<Connection> connection,
+                         PackageManifestsProvider packageManifestsProvider = {});
     // Inserts the connection if it passes graph validation rules.
     void execute() override;
     // Removes the inserted connection and restores local ownership.
@@ -23,6 +25,7 @@ public:
 private:
     Graph* m_graph = nullptr;
     IpInstanceRecordsProvider m_ipInstanceRecordsProvider;
+    PackageManifestsProvider m_packageManifestsProvider;
     std::unique_ptr<Connection> m_connection;
     QString m_connectionId;
 };

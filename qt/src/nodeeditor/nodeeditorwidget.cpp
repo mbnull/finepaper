@@ -193,6 +193,39 @@ std::optional<DraftConnectionStart> resolveDraftConnectionStart(const QtNodes::C
     return start;
 }
 
+QVector<ConnectionInterfaceRef> graphInterfaceRefs(
+    const QVector<ProjectConnectionInterfaceRef>& projectInterfaces) {
+    QVector<ConnectionInterfaceRef> interfaces;
+    interfaces.reserve(projectInterfaces.size());
+    for (const ProjectConnectionInterfaceRef& interfaceRef : projectInterfaces) {
+        interfaces.push_back(ConnectionInterfaceRef{interfaceRef.instanceId, interfaceRef.interfaceId});
+    }
+    return interfaces;
+}
+
+bool samePortPair(const ConnectionResolvedOption& option,
+                  const PortRef& source,
+                  const PortRef& target) {
+    return option.source.moduleId == source.moduleId &&
+           option.source.portId == source.portId &&
+           option.target.moduleId == target.moduleId &&
+           option.target.portId == target.portId;
+}
+
+QVector<IpcraftPackageManifest> activePackageManifests(
+    const ActiveWorkspaceController* workspaceController) {
+    if (!workspaceController) {
+        return {};
+    }
+
+    const std::optional<ActiveWorkspaceContext> context = workspaceController->activeContext();
+    if (!context.has_value() || context->entry.packageManifest.id.isEmpty()) {
+        return {};
+    }
+
+    return {context->entry.packageManifest};
+}
+
 } // namespace
 
 NodeEditorWidget::NodeEditorWidget(Graph* graph,
@@ -261,6 +294,9 @@ NodeEditorWidget::NodeEditorWidget(Graph* graph,
 }
 
 NodeEditorWidget::~NodeEditorWidget() {
+    if (m_scene) {
+        disconnect(m_scene, &QGraphicsScene::selectionChanged, this, &NodeEditorWidget::onSelectionChanged);
+    }
     if (m_view && m_view->viewport()) {
         m_view->viewport()->removeEventFilter(this);
     }
@@ -587,7 +623,23 @@ void NodeEditorWidget::onSelectionChanged() {
             return;
         }
     }
+
     updateConnectedConnectionHighlights(QtNodes::InvalidNodeId);
+
+    for (QGraphicsItem* item : m_scene->selectedItems()) {
+        auto* connection = qgraphicsitem_cast<QtNodes::ConnectionGraphicsObject*>(item);
+        if (!connection || connection->connectionState().requiresPort()) {
+            continue;
+        }
+        const QtNodes::ConnectionId selectedQtConnectionId = connection->connectionId();
+        for (auto it = m_connectionToQtId.cbegin(); it != m_connectionToQtId.cend(); ++it) {
+            if (it.value() == selectedQtConnectionId) {
+                emit connectionSelected(it.key());
+                return;
+            }
+        }
+    }
+
     emit moduleSelected(QString());
 }
 
@@ -631,7 +683,8 @@ void NodeEditorWidget::refreshConnectionRuleService() {
     m_connectionRuleService = std::make_unique<ConnectionRuleService>(
         m_graph,
         m_projectStateService ? m_projectStateService->ipInstanceRecords()
-                              : QVector<ProjectIpInstanceRecord>{});
+                              : QVector<ProjectIpInstanceRecord>{},
+        activePackageManifests(m_workspaceController));
 }
 
 void NodeEditorWidget::setConnectionHighlighted(QtNodes::ConnectionId connectionId, bool highlighted) {
@@ -762,14 +815,50 @@ void NodeEditorWidget::showConnectionOptionsMenu(
 }
 
 void NodeEditorWidget::executeAddConnection(const PortRef& source, const PortRef& target) {
-    auto connection = std::make_unique<Connection>(NodeEditorEntityFactory::generateEntityId(), source, target);
+    refreshConnectionRuleService();
+    ConnectionResolvedOption selectedOption;
+    selectedOption.source = source;
+    selectedOption.target = target;
+
+    if (m_connectionRuleService) {
+        const ConnectionCheckResult result = m_connectionRuleService->check(
+            ConnectionRequest::portToPort(source, target, ConnectionRequestKind::Programmatic));
+        for (const ConnectionResolvedOption& option : result.options) {
+            if (samePortPair(option, source, target)) {
+                selectedOption = option;
+                break;
+            }
+        }
+    }
+
+    std::unique_ptr<Connection> connection;
+    if (!selectedOption.connectionClassId.isEmpty() ||
+        !selectedOption.normalizedInterfaces.isEmpty() ||
+        selectedOption.connectionStatus != QStringLiteral("valid") ||
+        !selectedOption.alternatives.isEmpty()) {
+        connection = std::make_unique<Connection>(
+            NodeEditorEntityFactory::generateEntityId(),
+            selectedOption.source,
+            selectedOption.target,
+            selectedOption.connectionClassId,
+            graphInterfaceRefs(selectedOption.normalizedInterfaces),
+            selectedOption.connectionStatus,
+            selectedOption.alternatives);
+    } else {
+        connection = std::make_unique<Connection>(NodeEditorEntityFactory::generateEntityId(), source, target);
+    }
+
     auto ipInstanceRecordsProvider = [projectStateService = m_projectStateService]() {
         return projectStateService ? projectStateService->ipInstanceRecords()
                                    : QVector<ProjectIpInstanceRecord>{};
     };
+    auto packageManifestsProvider = [workspaceController = m_workspaceController]() {
+        return activePackageManifests(workspaceController);
+    };
     auto command = std::make_unique<AddConnectionCommand>(m_graph,
                                                           std::move(ipInstanceRecordsProvider),
-                                                          std::move(connection));
+                                                          std::move(connection),
+                                                          std::move(packageManifestsProvider));
     m_commandManager->executeCommand(std::move(command));
 }
 

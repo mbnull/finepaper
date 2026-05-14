@@ -1,7 +1,9 @@
 // LogPanel renders application activity and exposes click-to-select validation elements.
 #include "panels/logpanel.h"
+#include "graph/connection.h"
 #include <QDateTime>
 #include <QVBoxLayout>
+#include <algorithm>
 
 LogPanel::LogPanel(QWidget* parent) : QWidget(parent) {
     QVBoxLayout* layout = new QVBoxLayout(this);
@@ -15,6 +17,18 @@ LogPanel::LogPanel(QWidget* parent) : QWidget(parent) {
 
 // Append validation results with color-coded severity.
 void LogPanel::setResults(const QList<ValidationResult>& results) {
+    const bool onlyConnectionAmbiguity =
+        !results.isEmpty() &&
+        std::all_of(results.cbegin(), results.cend(), [](const ValidationResult& result) {
+            return result.ruleName() == QStringLiteral("connection_ambiguity");
+        });
+    if (onlyConnectionAmbiguity) {
+        for (const ValidationResult& result : results) {
+            appendMessage(result.message(), QColor(200, 150, 50), result.elementId());
+        }
+        return;
+    }
+
     int errorCount = 0;
     int warningCount = 0;
     for (const auto& result : results) {
@@ -48,6 +62,19 @@ void LogPanel::setResults(const QList<ValidationResult>& results) {
             : QColor(200, 150, 50);
         appendMessage(QString("%1 %2").arg(prefix, result.message()), color, result.elementId());
     }
+}
+
+void LogPanel::appendConnectionAmbiguityWarning(const Connection& connection) {
+    if (connection.status() != QStringLiteral("ambiguous") ||
+        connection.alternatives().size() < 2) {
+        return;
+    }
+
+    appendMessage(QStringLiteral("Connection %1 has multiple valid classes: %2")
+                      .arg(connection.id(),
+                           connection.alternatives().join(QStringLiteral(", "))),
+                  QColor(200, 150, 50),
+                  connection.id());
 }
 
 void LogPanel::appendMessage(const QString& message,

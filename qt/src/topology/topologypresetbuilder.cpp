@@ -6,7 +6,9 @@
 #include "connection/connectionruleservice.h"
 #include "modules/moduleregistry.h"
 
+#include <algorithm>
 #include <memory>
+#include <utility>
 
 namespace {
 
@@ -66,6 +68,16 @@ bool connectionIdExists(const Graph* graph, const QString& id) {
         }
     }
     return false;
+}
+
+QVector<ConnectionInterfaceRef> graphInterfaceRefs(
+    const QVector<ProjectConnectionInterfaceRef>& interfaceRefs) {
+    QVector<ConnectionInterfaceRef> refs;
+    refs.reserve(interfaceRefs.size());
+    for (const ProjectConnectionInterfaceRef& interfaceRef : interfaceRefs) {
+        refs.push_back(ConnectionInterfaceRef{interfaceRef.instanceId, interfaceRef.interfaceId});
+    }
+    return refs;
 }
 
 std::unique_ptr<Module> instantiateModule(const ModuleType& type,
@@ -135,14 +147,43 @@ bool addLink(Graph* graph,
         result.error = QStringLiteral("Generated invalid connection: %1").arg(id);
         return false;
     }
-    graph->addConnection(std::make_unique<Connection>(id, option.source, option.target));
+    graph->addConnection(std::make_unique<Connection>(
+        id,
+        option.source,
+        option.target,
+        option.connectionClassId,
+        graphInterfaceRefs(option.normalizedInterfaces),
+        option.connectionStatus,
+        option.alternatives));
     result.connectionIds.append(id);
     return true;
 }
 
+QVector<IpcraftPackageManifest> packageManifestsForPreset(const ModuleRegistry& registry) {
+    QVector<IpcraftPackageManifest> manifests = registry.packageManifests();
+    const ModuleRegistry& globalRegistry = ModuleRegistry::instance();
+    if (&registry != &globalRegistry) {
+        const QVector<IpcraftPackageManifest> globalManifests = globalRegistry.packageManifests();
+        for (const IpcraftPackageManifest& manifest : globalManifests) {
+            const auto existing = std::find_if(
+                manifests.cbegin(),
+                manifests.cend(),
+                [&](const IpcraftPackageManifest& candidate) {
+                    return candidate.id == manifest.id;
+                });
+            if (existing == manifests.cend()) {
+                manifests.push_back(manifest);
+            }
+        }
+    }
+
+    return manifests;
+}
+
 TopologyPresetResult createMesh(Graph* graph,
                                 const ModuleType& routerType,
-                                const TopologyPresetRequest& request) {
+                                const TopologyPresetRequest& request,
+                                QVector<IpcraftPackageManifest> packageManifests) {
     const int rows = request.parameters.value(QStringLiteral("rows"), 2);
     const int cols = request.parameters.value(QStringLiteral("cols"), 2);
     if (rows < 1 || cols < 1) {
@@ -174,7 +215,7 @@ TopologyPresetResult createMesh(Graph* graph,
     const QString west = request.preset.ports.value(QStringLiteral("west"));
     const QString north = request.preset.ports.value(QStringLiteral("north"));
     const QString south = request.preset.ports.value(QStringLiteral("south"));
-    const ConnectionRuleService ruleService(graph, {});
+    const ConnectionRuleService ruleService(graph, {}, std::move(packageManifests));
 
     for (int row = 0; row < rows; ++row) {
         for (int col = 0; col < cols; ++col) {
@@ -205,7 +246,8 @@ TopologyPresetResult createMesh(Graph* graph,
 
 TopologyPresetResult createRing(Graph* graph,
                                 const ModuleType& routerType,
-                                const TopologyPresetRequest& request) {
+                                const TopologyPresetRequest& request,
+                                QVector<IpcraftPackageManifest> packageManifests) {
     const int nodes = request.parameters.value(QStringLiteral("nodes"), 4);
     if (nodes < 2) {
         return failure(QStringLiteral("Ring nodes must be at least 2"));
@@ -232,7 +274,7 @@ TopologyPresetResult createRing(Graph* graph,
 
     const QString east = request.preset.ports.value(QStringLiteral("east"));
     const QString west = request.preset.ports.value(QStringLiteral("west"));
-    const ConnectionRuleService ruleService(graph, {});
+    const ConnectionRuleService ruleService(graph, {}, std::move(packageManifests));
     for (int index = 0; index < nodes; ++index) {
         const QString current = scopedGraphId(request.instanceId,
                                               ringNodeId(request.preset.idPattern, index));
@@ -265,10 +307,16 @@ TopologyPresetResult TopologyPresetBuilder::apply(Graph* graph,
                            .arg(request.preset.routerModule, request.ipcoreId));
     }
     if (request.preset.kind == QStringLiteral("mesh")) {
-        return createMesh(graph, *routerType, request);
+        return createMesh(graph,
+                          *routerType,
+                          request,
+                          packageManifestsForPreset(registry));
     }
     if (request.preset.kind == QStringLiteral("ring")) {
-        return createRing(graph, *routerType, request);
+        return createRing(graph,
+                          *routerType,
+                          request,
+                          packageManifestsForPreset(registry));
     }
     return failure(QStringLiteral("Unsupported topology preset kind: %1").arg(request.preset.kind));
 }

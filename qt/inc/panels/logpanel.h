@@ -7,6 +7,8 @@
 #include <QListWidget>
 #include "validation/validationresult.h"
 
+class Connection;
+
 class LogPanel : public QWidget {
     Q_OBJECT
 
@@ -14,6 +16,7 @@ public:
     explicit LogPanel(QWidget* parent = nullptr);
 
     void setResults(const QList<ValidationResult>& results);
+    void appendConnectionAmbiguityWarning(const Connection& connection);
     void appendMessage(const QString& message,
                        const QColor& color = QColor(),
                        const QString& elementId = QString());

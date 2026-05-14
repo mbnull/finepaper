@@ -132,6 +132,10 @@ public:
     const ModuleType* getTypeForGraphGroup(const QString& graphGroup) const;
     // Looks up the first type in a graph group owned by one IP core.
     const ModuleType* getTypeForGraphGroup(const QString& ipcoreId, const QString& graphGroup) const;
+    // Looks up a loaded Ipcraft package manifest by package ID.
+    const IpcraftPackageManifest* packageManifest(const QString& packageId) const;
+    // Returns the loaded Ipcraft package manifests.
+    QVector<IpcraftPackageManifest> packageManifests() const;
     // Returns type names sorted for stable UI listing.
     QStringList availableTypes() const;
     // Returns type names owned by one IP core, sorted for stable UI listing.
@@ -139,4 +143,5 @@ public:
 
 private:
     QHash<QString, ModuleType> m_types;
+    QHash<QString, IpcraftPackageManifest> m_packageManifests;
 };

@@ -3,7 +3,9 @@
 
 #include "graph/connection.h"
 #include "graph/parameter.h"
+#include "ipcraft/ipcraftmanifest.h"
 #include "project/ipinstancestate.h"
+#include "project/projectdocument.h"
 
 #include <QHash>
 #include <QPointF>
@@ -46,6 +48,7 @@ struct ConnectionRequest {
     bool interactive = true;
     bool allowAutoComplete = true;
     bool allowAlternatives = true;
+    QString connectionClassId;
 
     static ConnectionRequest portToPort(const PortRef& start,
                                         const PortRef& end,
@@ -56,6 +59,8 @@ struct PortSemanticInfo {
     PortRef ref;
     QString moduleType;
     QString ipcoreId;
+    QString packageId;
+    QString manifestModuleId;
     QString instanceId;
     QString graphGroup;
     QString editorLayout;
@@ -71,6 +76,7 @@ struct PortSemanticInfo {
     QString cardinality = QStringLiteral("one");
     QString autocompleteGroup;
     QString topologyRule;
+    QVector<IpcraftInterfaceAcceptRule> acceptRules;
     bool supportsInput = false;
     bool supportsOutput = false;
     bool occupiedAsSource = false;
@@ -95,6 +101,10 @@ struct ConnectionResolvedOption {
     PortRef source;
     PortRef target;
     QString label;
+    QString connectionClassId;
+    QString connectionStatus = QStringLiteral("valid");
+    QStringList alternatives;
+    QVector<ProjectConnectionInterfaceRef> normalizedInterfaces;
     int priority = 0;
 };
 
@@ -114,6 +124,9 @@ class ConnectionRuleService {
 public:
     ConnectionRuleService(const Graph* graph,
                           QVector<ProjectIpInstanceRecord> ipInstanceRecords);
+    ConnectionRuleService(const Graph* graph,
+                          QVector<ProjectIpInstanceRecord> ipInstanceRecords,
+                          QVector<IpcraftPackageManifest> manifests);
 
     ConnectionCheckResult check(const ConnectionRequest& request) const;
 
@@ -133,4 +146,5 @@ private:
 
     const Graph* m_graph = nullptr;
     QVector<ProjectIpInstanceRecord> m_ipInstanceRecords;
+    QVector<IpcraftPackageManifest> m_manifests;
 };

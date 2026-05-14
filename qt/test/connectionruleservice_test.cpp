@@ -1,6 +1,7 @@
 // ConnectionRuleService tests for v1 editor-time connection decisions.
 #include "connection/connectionruleservice.h"
 #include "graph/graph.h"
+#include "ipcraft/ipcraftconnectionvalidator.h"
 #include "modules/moduleregistry.h"
 
 #include <QCoreApplication>
@@ -165,6 +166,364 @@ void registerRouterType() {
     router.interfaceMetadata.insert(west.id, west);
 
     ModuleRegistry::instance().registerType(router);
+}
+
+IpcraftInterfaceAcceptRule acceptRule(const QString& connectionClassId,
+                                      const QString& role) {
+    IpcraftInterfaceAcceptRule rule;
+    rule.connectionClassId = connectionClassId;
+    rule.role = role;
+    return rule;
+}
+
+IpcraftInterfaceDescriptor interfaceDescriptor(
+    const QString& id,
+    QVector<IpcraftInterfaceAcceptRule> accepts,
+    bool multiConnection = false) {
+    IpcraftInterfaceDescriptor descriptor;
+    descriptor.id = id;
+    descriptor.accepts = std::move(accepts);
+    descriptor.multiConnection = multiConnection;
+    return descriptor;
+}
+
+IpcraftModuleDescriptor moduleDescriptor(const QString& id,
+                                         QVector<IpcraftInterfaceDescriptor> interfaces) {
+    IpcraftModuleDescriptor descriptor;
+    descriptor.id = id;
+    descriptor.interfaces = std::move(interfaces);
+    return descriptor;
+}
+
+IpcraftConnectionClass connectionClass(const QString& id,
+                                       QStringList roles,
+                                       bool symmetric = false) {
+    IpcraftConnectionClass descriptor;
+    descriptor.id = id;
+    descriptor.roles = std::move(roles);
+    descriptor.symmetric = symmetric;
+    return descriptor;
+}
+
+IpcraftPackageManifest validatorManifest(bool ambiguous = false) {
+    IpcraftPackageManifest manifest;
+    manifest.id = QStringLiteral("finepaper.test");
+    manifest.connectionClasses.push_back(
+        connectionClass(QStringLiteral("chi_node_interface"),
+                        {QStringLiteral("node"), QStringLiteral("interconnect")}));
+    if (ambiguous) {
+        manifest.connectionClasses.push_back(
+            connectionClass(QStringLiteral("monitor_tap"),
+                            {QStringLiteral("node"), QStringLiteral("interconnect")}));
+    }
+    manifest.connectionClasses.push_back(
+        connectionClass(QStringLiteral("chi_peer_link"),
+                        {QStringLiteral("peer")},
+                        true));
+
+    QVector<IpcraftInterfaceAcceptRule> endpointAccepts{
+        acceptRule(QStringLiteral("chi_node_interface"), QStringLiteral("node"))
+    };
+    QVector<IpcraftInterfaceAcceptRule> interconnectAccepts{
+        acceptRule(QStringLiteral("chi_node_interface"), QStringLiteral("interconnect"))
+    };
+    if (ambiguous) {
+        endpointAccepts.push_back(acceptRule(QStringLiteral("monitor_tap"), QStringLiteral("node")));
+        interconnectAccepts.push_back(
+            acceptRule(QStringLiteral("monitor_tap"), QStringLiteral("interconnect")));
+    }
+
+    manifest.modules.push_back(moduleDescriptor(
+        QStringLiteral("Endpoint"),
+        {interfaceDescriptor(QStringLiteral("noc"), std::move(endpointAccepts))}));
+    manifest.modules.push_back(moduleDescriptor(
+        QStringLiteral("XP"),
+        {interfaceDescriptor(QStringLiteral("local0"), std::move(interconnectAccepts))}));
+    manifest.modules.push_back(moduleDescriptor(
+        QStringLiteral("Peer"),
+        {interfaceDescriptor(QStringLiteral("link"),
+                             {acceptRule(QStringLiteral("chi_peer_link"), QStringLiteral("peer"))})}));
+    return manifest;
+}
+
+IpcraftConnectionParticipant participant(const QString& moduleId,
+                                         const QString& instanceId,
+                                         const QString& interfaceId) {
+    IpcraftConnectionParticipant participant;
+    participant.packageId = QStringLiteral("finepaper.test");
+    participant.moduleId = moduleId;
+    participant.interfaceRef = ProjectConnectionInterfaceRef{instanceId, interfaceId};
+    return participant;
+}
+
+void testAcceptsMatchingClassAndRoles() {
+    IpcraftConnectionValidator validator({validatorManifest()});
+    const IpcraftConnectionDecision decision = validator.validate(
+        {participant(QStringLiteral("Endpoint"), QStringLiteral("endpoint"), QStringLiteral("noc")),
+         participant(QStringLiteral("XP"), QStringLiteral("xp"), QStringLiteral("local0"))},
+        QStringLiteral("chi_node_interface"));
+
+    require(decision.status == IpcraftConnectionStatus::Valid,
+            "matching connection class roles should be valid");
+    require(decision.selectedClassId == QStringLiteral("chi_node_interface"),
+            "validator should preserve selected class id");
+    require(decision.normalizedInterfaces.size() == 2,
+            "valid decision should include normalized interface participants");
+    require(decision.normalizedInterfaces.at(0).instanceId == QStringLiteral("endpoint"),
+            "non-symmetric class should preserve drag order");
+}
+
+void testRejectsMissingParticipantPackageMetadata() {
+    IpcraftConnectionParticipant endpoint =
+        participant(QStringLiteral("Endpoint"), QStringLiteral("endpoint"), QStringLiteral("noc"));
+    endpoint.packageId.clear();
+
+    IpcraftConnectionValidator validator({validatorManifest()});
+    const IpcraftConnectionDecision decision = validator.validate(
+        {endpoint,
+         participant(QStringLiteral("XP"), QStringLiteral("xp"), QStringLiteral("local0"))},
+        QStringLiteral("chi_node_interface"));
+
+    require(decision.status == IpcraftConnectionStatus::Invalid,
+            "validator should reject a participant without package metadata");
+    require(decision.message.contains(QStringLiteral("package metadata")),
+            "missing package metadata rejection should be explicit");
+}
+
+void testRejectsRoleMismatch() {
+    IpcraftConnectionValidator validator({validatorManifest()});
+    const IpcraftConnectionDecision decision = validator.validate(
+        {participant(QStringLiteral("XP"), QStringLiteral("xp"), QStringLiteral("local0")),
+         participant(QStringLiteral("Endpoint"), QStringLiteral("endpoint"), QStringLiteral("noc"))},
+        QStringLiteral("chi_node_interface"));
+
+    require(decision.status == IpcraftConnectionStatus::Invalid,
+            "reverse drag for non-symmetric class should reject role mismatch");
+    require(decision.message.contains(QStringLiteral("role")),
+            "role mismatch rejection should explain role incompatibility");
+}
+
+void testRejectsUsedSingleConnectionInterface() {
+    ProjectConnectionRecord existing;
+    existing.id = QStringLiteral("conn_existing");
+    existing.connectionClassId = QStringLiteral("chi_node_interface");
+    existing.interfaces = {
+        ProjectConnectionInterfaceRef{QStringLiteral("endpoint"), QStringLiteral("noc")},
+        ProjectConnectionInterfaceRef{QStringLiteral("xp"), QStringLiteral("local0")}
+    };
+
+    IpcraftConnectionValidator validator({validatorManifest()}, {existing});
+    const IpcraftConnectionDecision decision = validator.validate(
+        {participant(QStringLiteral("Endpoint"), QStringLiteral("endpoint"), QStringLiteral("noc")),
+         participant(QStringLiteral("XP"), QStringLiteral("xp_2"), QStringLiteral("local0"))},
+        QStringLiteral("chi_node_interface"));
+
+    require(decision.status == IpcraftConnectionStatus::Invalid,
+            "single-connection interface already in use should reject");
+    require(decision.message.contains(QStringLiteral("already used")),
+            "occupied interface rejection should mention that the interface is already used");
+}
+
+void testSymmetricClassNormalizesReverseDrag() {
+    IpcraftConnectionValidator validator({validatorManifest()});
+    const IpcraftConnectionDecision decision = validator.validate(
+        {participant(QStringLiteral("Peer"), QStringLiteral("b"), QStringLiteral("link")),
+         participant(QStringLiteral("Peer"), QStringLiteral("a"), QStringLiteral("link"))},
+        QStringLiteral("chi_peer_link"));
+
+    require(decision.status == IpcraftConnectionStatus::Valid,
+            "symmetric class reverse drag should be valid");
+    require(decision.normalizedInterfaces.size() == 2,
+            "symmetric class should return two normalized participants");
+    require(decision.normalizedInterfaces.at(0).instanceId == QStringLiteral("a"),
+            "symmetric class should normalize reverse drag by instance id");
+    require(decision.normalizedInterfaces.at(1).instanceId == QStringLiteral("b"),
+            "symmetric class should normalize second participant by instance id");
+}
+
+void testAmbiguousClassCreatesWarningResult() {
+    IpcraftConnectionValidator validator({validatorManifest(true)});
+    const IpcraftConnectionDecision decision = validator.validate(
+        {participant(QStringLiteral("Endpoint"), QStringLiteral("endpoint"), QStringLiteral("noc")),
+         participant(QStringLiteral("XP"), QStringLiteral("xp"), QStringLiteral("local0"))});
+
+    require(decision.status == IpcraftConnectionStatus::Ambiguous,
+            "multiple matching classes should create an ambiguous decision");
+    require(decision.selectedClassId == QStringLiteral("chi_node_interface"),
+            "ambiguous decision should choose deterministic first class");
+    require(decision.alternatives == QStringList({QStringLiteral("chi_node_interface"),
+                                                  QStringLiteral("monitor_tap")}),
+            "ambiguous decision should expose every valid class alternative");
+}
+
+ModuleType classValidationType(const QString& typeName,
+                               const QString& manifestModuleId,
+                               const QString& portId,
+                               const QString& legacyBus,
+                               QVector<IpcraftInterfaceAcceptRule> acceptRules,
+                               const QString& topologyRule = {}) {
+    ModuleType type;
+    type.name = typeName;
+    type.packageId = QStringLiteral("finepaper.test");
+    type.ipcoreId = QStringLiteral("finepaper.test");
+    type.moduleId = manifestModuleId;
+    type.defaultPorts.push_back(Port(portId,
+                                     Port::Direction::InOut,
+                                     QStringLiteral("bus"),
+                                     portId,
+                                     {},
+                                     {},
+                                     legacyBus,
+                                     portId));
+
+    ModuleInterfaceMetadata metadata;
+    metadata.id = portId;
+    metadata.bus = legacyBus;
+    metadata.role = acceptRules.first().role;
+    metadata.cardinality = QStringLiteral("one");
+    metadata.acceptRules = std::move(acceptRules);
+    metadata.topologyRule = topologyRule;
+    type.interfaceMetadata.insert(metadata.id, metadata);
+    return type;
+}
+
+void testConnectionRuleServiceUsesInterfaceClassesNotLegacyBusNames() {
+    const ModuleType endpointType = classValidationType(
+        QStringLiteral("ClassEndpoint"),
+        QStringLiteral("Endpoint"),
+        QStringLiteral("noc"),
+        QStringLiteral("legacy_source_bus"),
+        {acceptRule(QStringLiteral("chi_node_interface"), QStringLiteral("node")),
+         acceptRule(QStringLiteral("monitor_tap"), QStringLiteral("node"))});
+    const ModuleType xpType = classValidationType(
+        QStringLiteral("ClassXp"),
+        QStringLiteral("XP"),
+        QStringLiteral("local0"),
+        QStringLiteral("legacy_target_bus"),
+        {acceptRule(QStringLiteral("chi_node_interface"), QStringLiteral("interconnect")),
+         acceptRule(QStringLiteral("monitor_tap"), QStringLiteral("interconnect"))});
+    ModuleRegistry::instance().registerType(endpointType);
+    ModuleRegistry::instance().registerType(xpType);
+
+    Graph graph;
+    auto endpoint = makeOwnedModule(QStringLiteral("endpoint"),
+                                    endpointType.name,
+                                    QStringLiteral("finepaper.test"));
+    endpoint->addPort(endpointType.defaultPorts.front());
+    auto xp = makeOwnedModule(QStringLiteral("xp"),
+                              xpType.name,
+                              QStringLiteral("finepaper.test"));
+    xp->addPort(xpType.defaultPorts.front());
+    require(graph.addModule(std::move(endpoint)), "class endpoint should add");
+    require(graph.addModule(std::move(xp)), "class XP should add");
+
+    ConnectionRuleService service(&graph, {}, {validatorManifest(true)});
+    const ConnectionCheckResult result = service.check(
+        ConnectionRequest::portToPort(PortRef{QStringLiteral("endpoint"), QStringLiteral("noc")},
+                                      PortRef{QStringLiteral("xp"), QStringLiteral("local0")},
+                                      ConnectionRequestKind::Programmatic));
+
+    require(result.status == ConnectionCheckStatus::Allowed,
+            result.message.toLocal8Bit().constData());
+    require(result.options.size() == 1,
+            "interface class validation should produce one port option");
+    require(result.options.first().connectionStatus == QStringLiteral("ambiguous"),
+            "multiple valid classes should create an ambiguous connection option");
+    require(result.options.first().connectionClassId == QStringLiteral("chi_node_interface"),
+            "ambiguous option should select deterministic first class");
+    require(result.options.first().alternatives == QStringList({QStringLiteral("chi_node_interface"),
+                                                                QStringLiteral("monitor_tap")}),
+            "ambiguous option should expose class alternatives");
+    require(result.options.first().normalizedInterfaces.size() == 2,
+            "connection option should carry normalized interface participants");
+}
+
+void testConnectionRuleServiceClassValidationIgnoresLegacyTopologySideNames() {
+    const ModuleType endpointType = classValidationType(
+        QStringLiteral("ClassEndpointTopologyBypass"),
+        QStringLiteral("Endpoint"),
+        QStringLiteral("noc"),
+        QStringLiteral("legacy_source_bus"),
+        {acceptRule(QStringLiteral("chi_node_interface"), QStringLiteral("node"))},
+        QStringLiteral("opposite_side"));
+    const ModuleType xpType = classValidationType(
+        QStringLiteral("ClassXpTopologyBypass"),
+        QStringLiteral("XP"),
+        QStringLiteral("local0"),
+        QStringLiteral("legacy_target_bus"),
+        {acceptRule(QStringLiteral("chi_node_interface"), QStringLiteral("interconnect"))},
+        QStringLiteral("opposite_side"));
+    ModuleRegistry::instance().registerType(endpointType);
+    ModuleRegistry::instance().registerType(xpType);
+
+    Graph graph;
+    auto endpoint = makeOwnedModule(QStringLiteral("endpoint_topology"),
+                                    endpointType.name,
+                                    QStringLiteral("finepaper.test"));
+    endpoint->addPort(endpointType.defaultPorts.front());
+    auto xp = makeOwnedModule(QStringLiteral("xp_topology"),
+                              xpType.name,
+                              QStringLiteral("finepaper.test"));
+    xp->addPort(xpType.defaultPorts.front());
+    require(graph.addModule(std::move(endpoint)), "class topology endpoint should add");
+    require(graph.addModule(std::move(xp)), "class topology XP should add");
+
+    ConnectionRuleService service(&graph, {}, {validatorManifest()});
+    const ConnectionCheckResult result = service.check(
+        ConnectionRequest::portToPort(PortRef{QStringLiteral("endpoint_topology"), QStringLiteral("noc")},
+                                      PortRef{QStringLiteral("xp_topology"), QStringLiteral("local0")},
+                                      ConnectionRequestKind::Programmatic));
+
+    require(result.status == ConnectionCheckStatus::Allowed,
+            result.message.toLocal8Bit().constData());
+    require(result.options.size() == 1,
+            "manifest class validation should not depend on cardinal side port names");
+    require(result.options.first().connectionClassId == QStringLiteral("chi_node_interface"),
+            "manifest class validation should still select the valid class");
+}
+
+void testConnectionRuleServiceRejectsMissingPackageManifestMetadata() {
+    const ModuleType endpointType = classValidationType(
+        QStringLiteral("ClassEndpointMissingManifest"),
+        QStringLiteral("Endpoint"),
+        QStringLiteral("noc"),
+        QStringLiteral("legacy_source_bus"),
+        {acceptRule(QStringLiteral("chi_node_interface"), QStringLiteral("node"))});
+    const ModuleType xpType = classValidationType(
+        QStringLiteral("ClassXpMissingManifest"),
+        QStringLiteral("XP"),
+        QStringLiteral("local0"),
+        QStringLiteral("legacy_target_bus"),
+        {acceptRule(QStringLiteral("chi_node_interface"), QStringLiteral("interconnect"))});
+    ModuleRegistry::instance().registerType(endpointType);
+    ModuleRegistry::instance().registerType(xpType);
+
+    Graph graph;
+    auto endpoint = makeOwnedModule(QStringLiteral("endpoint_missing_manifest"),
+                                    endpointType.name,
+                                    QStringLiteral("finepaper.test"));
+    endpoint->addPort(endpointType.defaultPorts.front());
+    auto xp = makeOwnedModule(QStringLiteral("xp_missing_manifest"),
+                              xpType.name,
+                              QStringLiteral("finepaper.test"));
+    xp->addPort(xpType.defaultPorts.front());
+    require(graph.addModule(std::move(endpoint)), "missing manifest endpoint should add");
+    require(graph.addModule(std::move(xp)), "missing manifest XP should add");
+
+    ConnectionRuleService service(&graph, {}, {});
+    const ConnectionCheckResult result = service.check(
+        ConnectionRequest::portToPort(PortRef{QStringLiteral("endpoint_missing_manifest"),
+                                              QStringLiteral("noc")},
+                                      PortRef{QStringLiteral("xp_missing_manifest"),
+                                              QStringLiteral("local0")},
+                                      ConnectionRequestKind::Programmatic));
+
+    require(result.status == ConnectionCheckStatus::Rejected,
+            "class validation should reject when loaded package metadata is missing");
+    require(result.reasonCode == QStringLiteral("interface_class_mismatch"),
+            "missing package metadata should reject at interface-class validation");
+    require(result.message.contains(QStringLiteral("missing package")),
+            "missing package metadata rejection should explain the missing package");
 }
 
 void testAllowsSimplePortToPortConnection() {
@@ -550,6 +909,15 @@ int main(int argc, char** argv) {
         testRejectsCrossIpcoreConnectionAtIpcoreLayer();
         testRejectsCrossInstanceConnectionAtIpcoreLayer();
         testRejectsInterfaceFieldMismatchAtIpcoreLayer();
+        testAcceptsMatchingClassAndRoles();
+        testRejectsMissingParticipantPackageMetadata();
+        testRejectsRoleMismatch();
+        testRejectsUsedSingleConnectionInterface();
+        testSymmetricClassNormalizesReverseDrag();
+        testAmbiguousClassCreatesWarningResult();
+        testConnectionRuleServiceUsesInterfaceClassesNotLegacyBusNames();
+        testConnectionRuleServiceClassValidationIgnoresLegacyTopologySideNames();
+        testConnectionRuleServiceRejectsMissingPackageManifestMetadata();
     } catch (const std::exception& error) {
         std::cerr << "connectionruleservice_test failed: " << error.what() << '\n';
         return 1;

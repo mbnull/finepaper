@@ -59,6 +59,7 @@ public slots:
 
 signals:
     void moduleSelected(QString moduleId);
+    void connectionSelected(QString connectionId);
 
 protected:
     void dragEnterEvent(QDragEnterEvent* event) override;

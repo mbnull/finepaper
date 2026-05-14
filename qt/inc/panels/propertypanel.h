@@ -11,6 +11,7 @@
 class Graph;
 class IIpInstanceParameterAdapter;
 class Module;
+class Connection;
 class CommandManager;
 class ProjectStateService;
 class QFormLayout;
@@ -39,10 +40,14 @@ private slots:
                                        const QString& instanceId,
                                        const QString& section,
                                        const QString& name);
+    void onConnectionChanged(Connection* connection);
+    void onConnectionRemoved(const QString& connectionId);
 
 private:
     void clearPanel();
     void populatePanel();
+    void queueSelectedConnectionRefresh(const QString& connectionId,
+                                        bool clearSelectionWhenMissing);
     QWidget* createIpInstanceParameterWidget(const IpInstanceParameterSection& section,
                                          const IpInstanceParameterField& field,
                                          const QJsonValue& storedValue,

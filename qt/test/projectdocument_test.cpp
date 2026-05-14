@@ -179,6 +179,70 @@ ModuleType makeProjectChiXpType() {
     return type;
 }
 
+IpcraftInterfaceAcceptRule projectAcceptRule(const QString& connectionClassId,
+                                             const QString& role) {
+    IpcraftInterfaceAcceptRule rule;
+    rule.connectionClassId = connectionClassId;
+    rule.role = role;
+    return rule;
+}
+
+IpcraftInterfaceDescriptor projectInterfaceDescriptor(
+    const QString& id,
+    QVector<IpcraftInterfaceAcceptRule> accepts) {
+    IpcraftInterfaceDescriptor descriptor;
+    descriptor.id = id;
+    descriptor.accepts = std::move(accepts);
+    return descriptor;
+}
+
+IpcraftModuleDescriptor projectManifestModule(
+    const QString& id,
+    QVector<IpcraftInterfaceDescriptor> interfaces) {
+    IpcraftModuleDescriptor descriptor;
+    descriptor.id = id;
+    descriptor.interfaces = std::move(interfaces);
+    return descriptor;
+}
+
+IpcraftPackageManifest projectLoadManifest() {
+    IpcraftPackageManifest manifest;
+    manifest.id = QStringLiteral("finepaper.project_load_manifest");
+    manifest.connectionClasses.push_back(IpcraftConnectionClass{
+        QStringLiteral("project_load_link"),
+        QStringList{QStringLiteral("endpoint"), QStringLiteral("interconnect")},
+        false
+    });
+    manifest.connectionClasses.push_back(IpcraftConnectionClass{
+        QStringLiteral("project_load_unaccepted"),
+        QStringList{QStringLiteral("endpoint"), QStringLiteral("interconnect")},
+        false
+    });
+    manifest.modules.push_back(projectManifestModule(
+        QStringLiteral("ProjectLoadEndpoint"),
+        {projectInterfaceDescriptor(
+            QStringLiteral("noc"),
+            {projectAcceptRule(QStringLiteral("project_load_link"),
+                               QStringLiteral("endpoint"))})}));
+    manifest.modules.push_back(projectManifestModule(
+        QStringLiteral("ProjectLoadXp"),
+        {projectInterfaceDescriptor(
+            QStringLiteral("local0"),
+            {projectAcceptRule(QStringLiteral("project_load_link"),
+                               QStringLiteral("interconnect"))})}));
+    return manifest;
+}
+
+void ensureProjectLoadManifestRegistered(const IpcraftPackageManifest& manifest) {
+    ModuleRegistry::instance().loadIpcraftPackages({manifest});
+    require(ModuleRegistry::instance().packageManifest(manifest.id) != nullptr,
+            "project-load manifest fixture should be registered");
+    require(ModuleRegistry::instance().getType(QStringLiteral("ProjectLoadEndpoint")) != nullptr,
+            "project-load endpoint type should be registered");
+    require(ModuleRegistry::instance().getType(QStringLiteral("ProjectLoadXp")) != nullptr,
+            "project-load XP type should be registered");
+}
+
 void registerProjectTypes() {
     static bool registered = false;
     if (registered) {
@@ -599,6 +663,154 @@ void testProjectRoundTripRestoresModulesParametersAndConnections() {
     require(restoredConnection->target().moduleId == QStringLiteral("node_2") &&
                 restoredConnection->target().portId == QStringLiteral("noc"),
             "connection target should be restored");
+}
+
+void testProjectLoadUsesLoadedPackageManifestsForInterfaceRules() {
+    const IpcraftPackageManifest manifest = projectLoadManifest();
+    ensureProjectLoadManifestRegistered(manifest);
+
+    ProjectDocument document;
+    document.name = QStringLiteral("manifest_connection_load");
+    document.ipcores.push_back(ProjectIpcoreRecord{manifest.id, QStringLiteral("1.0")});
+    document.ipcoreState.push_back(ProjectIpInstanceRecord{
+        manifest.id,
+        QStringLiteral("manifest_0"),
+        manifest.id + QStringLiteral("-project-state-v1"),
+        QJsonObject{{QStringLiteral("global_parameters"), QJsonObject{}}}
+    });
+    document.modules.push_back(ProjectModuleRecord{
+        QStringLiteral("endpoint"),
+        manifest.id,
+        QStringLiteral("manifest_0"),
+        QStringLiteral("ProjectLoadEndpoint"),
+        {}
+    });
+    document.modules.push_back(ProjectModuleRecord{
+        QStringLiteral("xp"),
+        manifest.id,
+        QStringLiteral("manifest_0"),
+        QStringLiteral("ProjectLoadXp"),
+        {}
+    });
+    document.connections.push_back(ProjectConnectionRecord{
+        QStringLiteral("conn_manifest"),
+        ProjectConnectionEndpoint{QStringLiteral("endpoint"), QStringLiteral("noc")},
+        ProjectConnectionEndpoint{QStringLiteral("xp"), QStringLiteral("local0")}
+    });
+
+    Graph graph;
+    const GraphProjectLoadResult result = GraphProjectSerializer::loadProject(document, graph);
+
+    require(result.success, result.error.toLocal8Bit().constData());
+    require(graph.connections().size() == 1,
+            "project load should restore the manifest-backed connection");
+    const Connection* connection = graph.connections().front().get();
+    require(connection->connectionClassId() == QStringLiteral("project_load_link"),
+            "project load should validate and store the manifest connection class");
+    require(connection->status() == QStringLiteral("valid"),
+            "manifest-backed project connection should load as valid");
+}
+
+void testProjectLoadRejectsSavedConnectionClassNotAcceptedByInterfaces() {
+    const IpcraftPackageManifest manifest = projectLoadManifest();
+    ensureProjectLoadManifestRegistered(manifest);
+
+    ProjectDocument document;
+    document.name = QStringLiteral("manifest_connection_bad_class");
+    document.ipcores.push_back(ProjectIpcoreRecord{manifest.id, QStringLiteral("1.0")});
+    document.ipcoreState.push_back(ProjectIpInstanceRecord{
+        manifest.id,
+        QStringLiteral("manifest_bad_class_0"),
+        manifest.id + QStringLiteral("-project-state-v1"),
+        QJsonObject{{QStringLiteral("global_parameters"), QJsonObject{}}}
+    });
+    document.modules.push_back(ProjectModuleRecord{
+        QStringLiteral("endpoint_bad_class"),
+        manifest.id,
+        QStringLiteral("manifest_bad_class_0"),
+        QStringLiteral("ProjectLoadEndpoint"),
+        {}
+    });
+    document.modules.push_back(ProjectModuleRecord{
+        QStringLiteral("xp_bad_class"),
+        manifest.id,
+        QStringLiteral("manifest_bad_class_0"),
+        QStringLiteral("ProjectLoadXp"),
+        {}
+    });
+
+    ProjectConnectionRecord connection{
+        QStringLiteral("conn_bad_class"),
+        ProjectConnectionEndpoint{QStringLiteral("endpoint_bad_class"), QStringLiteral("noc")},
+        ProjectConnectionEndpoint{QStringLiteral("xp_bad_class"), QStringLiteral("local0")}
+    };
+    connection.connectionClassId = QStringLiteral("project_load_unaccepted");
+    document.connections.push_back(connection);
+
+    Graph graph;
+    const GraphProjectLoadResult result = GraphProjectSerializer::loadProject(document, graph);
+
+    require(!result.success,
+            "project load should reject a saved connection class not accepted by its interfaces");
+    require(result.error.contains(QStringLiteral("conn_bad_class")),
+            "saved class rejection should mention the connection id");
+    require(result.error.contains(QStringLiteral("interface_class_mismatch")),
+            "saved class rejection should surface the interface class validation reason");
+    require(graph.modules().empty(),
+            "failed saved class validation should not mutate the graph");
+    require(graph.connections().empty(),
+            "failed saved class validation should not restore the bad connection");
+}
+
+void testProjectLoadRejectsInterfaceConnectionMissingSavedClass() {
+    const IpcraftPackageManifest manifest = projectLoadManifest();
+    ensureProjectLoadManifestRegistered(manifest);
+
+    ProjectDocument document;
+    document.name = QStringLiteral("manifest_connection_missing_class");
+    document.ipcores.push_back(ProjectIpcoreRecord{manifest.id, QStringLiteral("1.0")});
+    document.ipcoreState.push_back(ProjectIpInstanceRecord{
+        manifest.id,
+        QStringLiteral("manifest_missing_class_0"),
+        manifest.id + QStringLiteral("-project-state-v1"),
+        QJsonObject{{QStringLiteral("global_parameters"), QJsonObject{}}}
+    });
+    document.modules.push_back(ProjectModuleRecord{
+        QStringLiteral("endpoint_missing_class"),
+        manifest.id,
+        QStringLiteral("manifest_missing_class_0"),
+        QStringLiteral("ProjectLoadEndpoint"),
+        {}
+    });
+    document.modules.push_back(ProjectModuleRecord{
+        QStringLiteral("xp_missing_class"),
+        manifest.id,
+        QStringLiteral("manifest_missing_class_0"),
+        QStringLiteral("ProjectLoadXp"),
+        {}
+    });
+
+    ProjectConnectionRecord connection;
+    connection.id = QStringLiteral("conn_missing_class");
+    connection.interfaces = {
+        ProjectConnectionInterfaceRef{QStringLiteral("endpoint_missing_class"), QStringLiteral("noc")},
+        ProjectConnectionInterfaceRef{QStringLiteral("xp_missing_class"), QStringLiteral("local0")}
+    };
+    document.connections.push_back(connection);
+
+    Graph graph;
+    const GraphProjectLoadResult result = GraphProjectSerializer::loadProject(document, graph);
+
+    require(!result.success,
+            "interface-based project load should reject missing saved connection class");
+    require(result.error.contains(QStringLiteral("conn_missing_class")),
+            "missing saved class rejection should mention the connection id");
+    require(result.error.contains(QStringLiteral("class")),
+            "missing saved class rejection should explain the missing class");
+    require(graph.modules().empty(),
+            "failed missing class validation should not mutate the graph");
+    require(graph.connections().empty(),
+            "failed missing class validation should not restore the bad connection");
 }
 
 void testProjectPreservesOpaqueIpcoreState() {
@@ -1548,6 +1760,9 @@ int main(int argc, char** argv) {
         testProjectReadsAmbiguousConnectionAlternatives();
         testProjectReaderRejectsMalformedInterfaceConnections();
         testProjectRoundTripRestoresModulesParametersAndConnections();
+        testProjectLoadUsesLoadedPackageManifestsForInterfaceRules();
+        testProjectLoadRejectsSavedConnectionClassNotAcceptedByInterfaces();
+        testProjectLoadRejectsInterfaceConnectionMissingSavedClass();
         testProjectPreservesOpaqueIpcoreState();
         testProjectWriterUsesIpcoreVocabulary();
         testProjectSerializerUsesModuleIpcoreOwnership();
