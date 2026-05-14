@@ -6,6 +6,7 @@
 #include "graph/module.h"
 #include "graph/port.h"
 #include "ipcraft/ipcraftconnectionvalidator.h"
+#include "ipcraft/ipxactconnectionchecker.h"
 
 #include <QFile>
 #include <QHash>
@@ -16,6 +17,7 @@
 #include <QXmlStreamAttributes>
 #include <QXmlStreamReader>
 #include <algorithm>
+#include <optional>
 
 namespace {
 
@@ -34,6 +36,19 @@ const IpCatalogEntry* findEntry(const QList<IpCatalogEntry>& entries, const QStr
         }
     }
     return nullptr;
+}
+
+QSet<QString> collectReferencedPackageIds(const QVector<ProjectIpInstanceRecord>& instances) {
+    QSet<QString> packageIds;
+    for (const ProjectIpInstanceRecord& instance : instances) {
+        packageIds.insert(instance.ipcoreId);
+    }
+    return packageIds;
+}
+
+bool entryMatchesReferencedPackage(const IpCatalogEntry& entry,
+                                   const QSet<QString>& packageIds) {
+    return packageIds.contains(entry.id) || packageIds.contains(entry.packageId);
 }
 
 const Module* findModule(const Graph* graph, const QString& moduleId) {
@@ -55,6 +70,18 @@ const Port* findPort(const Module* module, const QString& portId) {
     for (const Port& port : module->ports()) {
         if (port.id() == portId) {
             return &port;
+        }
+    }
+    return nullptr;
+}
+
+const Connection* findConnection(const Graph* graph, const QString& connectionId) {
+    if (!graph) {
+        return nullptr;
+    }
+    for (const std::unique_ptr<Connection>& connection : graph->connections()) {
+        if (connection->id() == connectionId) {
+            return connection.get();
         }
     }
     return nullptr;
@@ -401,7 +428,25 @@ struct ValidationAccumulator {
                       message,
                       connection.id(),
                       QStringLiteral("built_in_connection"));
+        blockConnectionInstances(graph, connection);
+    }
 
+    void addIpxactConnectionError(const Graph* graph,
+                                  const QString& connectionId,
+                                  const QString& message) {
+        addDiagnostic(ValidationSeverity::Error,
+                      message,
+                      connectionId,
+                      QStringLiteral("built_in_ipxact_connection"));
+
+        const Connection* connection = findConnection(graph, connectionId);
+        if (connection != nullptr) {
+            blockConnectionInstances(graph, *connection);
+        }
+    }
+
+    void blockConnectionInstances(const Graph* graph,
+                                  const Connection& connection) {
         const Module* sourceModule = findModule(graph, connection.source().moduleId);
         const Module* targetModule = findModule(graph, connection.target().moduleId);
         if (sourceModule && !sourceModule->instanceId().trimmed().isEmpty()) {
@@ -426,6 +471,28 @@ QHash<QString, const ProjectIpInstanceRecord*> instanceRecordsByKey(
         records.insert(instanceKey(instance.ipcoreId, instance.instanceId), &instance);
     }
     return records;
+}
+
+QVector<ConnectionInterfaceRef> effectiveConnectionInterfaces(const Graph* graph,
+                                                              const Connection& connection) {
+    if (!connection.interfaces().isEmpty()) {
+        return connection.interfaces();
+    }
+
+    QVector<ConnectionInterfaceRef> interfaces;
+    const Module* sourceModule = findModule(graph, connection.source().moduleId);
+    const Module* targetModule = findModule(graph, connection.target().moduleId);
+    const Port* sourcePort = findPort(sourceModule, connection.source().portId);
+    const Port* targetPort = findPort(targetModule, connection.target().portId);
+    interfaces.push_back(ConnectionInterfaceRef{
+        connection.source().moduleId,
+        sourcePort ? interfaceIdForPort(*sourcePort) : connection.source().portId
+    });
+    interfaces.push_back(ConnectionInterfaceRef{
+        connection.target().moduleId,
+        targetPort ? interfaceIdForPort(*targetPort) : connection.target().portId
+    });
+    return interfaces;
 }
 
 QVector<ProjectConnectionRecord> currentProjectConnections(const Graph* graph) {
@@ -1383,17 +1450,96 @@ void validateConnections(const Graph* graph,
     }
 }
 
+std::optional<IpxactConnection> ipxactConnectionForEntry(const Graph* graph,
+                                                         const IpCatalogEntry& entry,
+                                                         const Connection& connection) {
+    IpxactConnection ipxactConnection;
+    ipxactConnection.id = connection.id();
+    const QVector<ConnectionInterfaceRef> interfaces =
+        effectiveConnectionInterfaces(graph, connection);
+    if (interfaces.size() != 2) {
+        return std::nullopt;
+    }
+
+    for (const ConnectionInterfaceRef& interfaceRef : interfaces) {
+        const Module* module = findModule(graph, interfaceRef.instanceId);
+        if (module == nullptr || !entryMatchesIpcore(entry, module->ipcoreId())) {
+            return std::nullopt;
+        }
+
+        const QString manifestModuleId = moduleManifestId(entry, *module);
+        if (manifestModuleId.isEmpty()) {
+            return std::nullopt;
+        }
+        if (entry.packageManifest.interfaceDescriptor(manifestModuleId,
+                                                      interfaceRef.interfaceId) == nullptr) {
+            return std::nullopt;
+        }
+
+        ipxactConnection.participants.push_back(IpxactConnectionParticipant{
+            module->id(),
+            manifestModuleId,
+            manifestModuleId,
+            interfaceRef.interfaceId
+        });
+    }
+
+    return ipxactConnection;
+}
+
+void validateIpxactConnections(const Graph* graph,
+                               const QList<IpCatalogEntry>& entries,
+                               ValidationAccumulator& accumulator) {
+    if (!graph) {
+        return;
+    }
+
+    const QSet<QString> referencedPackageIds =
+        collectReferencedPackageIds(accumulator.instances);
+    IpxactConnectionChecker checker;
+    for (const IpCatalogEntry& entry : entries) {
+        if (!entryMatchesReferencedPackage(entry, referencedPackageIds)) {
+            continue;
+        }
+        if (!entry.packageManifest.ipxact.has_value()) {
+            continue;
+        }
+
+        QVector<IpxactConnection> connections;
+        for (const std::unique_ptr<Connection>& connection : graph->connections()) {
+            const std::optional<IpxactConnection> ipxactConnection =
+                ipxactConnectionForEntry(graph, entry, *connection);
+            if (ipxactConnection.has_value()) {
+                connections.push_back(*ipxactConnection);
+            }
+        }
+
+        const IpxactConnectionCheckResult checkResult =
+            checker.check(entry.packageManifest, connections);
+        for (const IpxactConnectionDiagnostic& diagnostic : checkResult.diagnostics) {
+            if (diagnostic.connectionId.trimmed().isEmpty()) {
+                accumulator.addPackageError(entry,
+                                            diagnostic.message,
+                                            manifestPackageId(entry),
+                                            QStringLiteral("built_in_ipxact_connection"));
+                continue;
+            }
+
+            accumulator.addIpxactConnectionError(graph,
+                                                 diagnostic.connectionId,
+                                                 diagnostic.message);
+        }
+    }
+}
+
 void validatePackageMetadata(const QList<IpCatalogEntry>& entries,
                              IpcraftBuiltInValidator::CommandPurpose commandPurpose,
                              ValidationAccumulator& accumulator) {
-    QSet<QString> referencedPackageIds;
-    for (const ProjectIpInstanceRecord& instance : accumulator.instances) {
-        referencedPackageIds.insert(instance.ipcoreId);
-    }
+    const QSet<QString> referencedPackageIds =
+        collectReferencedPackageIds(accumulator.instances);
 
     for (const IpCatalogEntry& entry : entries) {
-        if (!referencedPackageIds.contains(entry.id)
-            && !referencedPackageIds.contains(entry.packageId)) {
+        if (!entryMatchesReferencedPackage(entry, referencedPackageIds)) {
             continue;
         }
         validateManifestReferences(entry, accumulator);
@@ -1436,6 +1582,7 @@ IpcraftBuiltInValidator::Result IpcraftBuiltInValidator::validate(
                                     instanceRecordsByKey(instances),
                                     accumulator);
     validateConnections(graph, entries, accumulator);
+    validateIpxactConnections(graph, entries, accumulator);
 
     return accumulator.result;
 }

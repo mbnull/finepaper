@@ -1,5 +1,6 @@
 // BasicValidator and plugin DRC integration tests.
 #include "graph/graph.h"
+#include "ipcraft/ipcraftbuiltinvalidator.h"
 #include "modules/moduleregistry.h"
 #include "project/ipinstancestate.h"
 #include "validation/drcrunner.h"
@@ -589,6 +590,37 @@ void testBuiltInValidationReportsMissingIpxactBusInterface() {
             "missing IP-XACT bus interface should use built_in_manifest");
 }
 
+void testBuiltInValidationSkipsIpxactRootForUnusedCatalogPackage() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "failed to create temporary package directory");
+
+    const QString usedPackageId = QStringLiteral("finepaper.used_ipxact");
+    const QString unusedPackageId = QStringLiteral("finepaper.unused_ipxact");
+    IpCatalogEntry usedEntry = ipcraftCatalogEntryWithoutDrc(usedPackageId);
+    IpCatalogEntry unusedEntry = ipcraftCatalogEntryWithoutDrc(unusedPackageId);
+
+    IpcraftIpxactDescriptor unusedIpxact;
+    unusedIpxact.rootPath = QDir(tempDir.path()).filePath(QStringLiteral("missing_component.xml"));
+    unusedIpxact.resolvedRootPath = unusedIpxact.rootPath;
+    unusedEntry.packageManifest.ipxact = unusedIpxact;
+
+    Graph graph;
+    const QList<IpCatalogEntry> entries{usedEntry, unusedEntry};
+    const QVector<ProjectIpInstanceRecord> instances{
+        projectInstanceRecord(usedPackageId, QStringLiteral("used_ipxact_0"))
+    };
+
+    IpcraftBuiltInValidator validator;
+    const IpcraftBuiltInValidator::Result result =
+        validator.validate(&graph,
+                           entries,
+                           instances,
+                           IpcraftBuiltInValidator::CommandPurpose::Validate);
+
+    require(!hasRule(result.diagnostics, QStringLiteral("built_in_ipxact_connection")),
+            "built-in validation should not check IP-XACT roots for unused catalog packages");
+}
+
 void testBuiltInValidationReportsViewReferenceError() {
     QTemporaryDir tempDir;
     require(tempDir.isValid(), "failed to create temporary package directory");
@@ -971,6 +1003,7 @@ int main(int argc, char** argv) {
         testBuiltInValidationReportsUnmappableInterfaceMode();
         testBuiltInValidationReportsUnmappableConnectionClass();
         testBuiltInValidationReportsMissingIpxactBusInterface();
+        testBuiltInValidationSkipsIpxactRootForUnusedCatalogPackage();
         testBuiltInValidationReportsViewReferenceError();
         testBuiltInValidationReportsViewInterfaceAttributeReferenceError();
         testBuiltInValidationReportsViewAttachmentZoneReferenceError();

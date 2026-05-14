@@ -144,6 +144,7 @@ add_qt_test_target("arrangecommand_test", "test/arrangecommand_test.cpp", {
 add_qt_test_target("validation_test", "test/validation_test.cpp", {
     "src/connection/connectionruleservice.cpp",
     "src/ipcraft/ipcraftbuiltinvalidator.cpp",
+    "src/ipcraft/ipxactconnectionchecker.cpp",
     "src/ipcore/ipcoregraphexporter.cpp",
     "src/ipcore/ipcatalogservice.cpp",
     "src/**/drcrunner.cpp",
@@ -240,6 +241,7 @@ add_qt_test_target("projectgenerationrunner_test", "test/projectgenerationrunner
     "src/app/projectgenerationrunner.cpp",
     "src/connection/connectionruleservice.cpp",
     "src/ipcraft/ipcraftbuiltinvalidator.cpp",
+    "src/ipcraft/ipxactconnectionchecker.cpp",
     "src/ipcore/ipcatalogservice.cpp",
     "src/ipcore/ipcorecommandrunner.cpp",
     "src/ipcore/ipcoregraphexporter.cpp",
@@ -288,6 +290,11 @@ add_qt_test_target("ipcatalogservice_test", "test/ipcatalogservice_test.cpp", {
 
 add_qt_test_target("ipcraftmanifest_test", "test/ipcraftmanifest_test.cpp", {
     "inc/ipcraft/*.h"
+})
+
+add_qt_test_target("ipxactconnectionchecker_test", "test/ipxactconnectionchecker_test.cpp", {
+    "src/ipcraft/ipxactconnectionchecker.cpp",
+    "inc/ipcraft/ipxactconnectionchecker.h"
 })
 
 target("projectipservice_test")
@@ -436,6 +443,7 @@ target("ipcatalogpanel_test")
     add_files("src/panels/*.cpp")
     add_files("src/widgets/*.cpp")
     add_files("src/ipcraft/ipcraftbuiltinvalidator.cpp")
+    add_files("src/ipcraft/ipxactconnectionchecker.cpp")
     add_files("src/ipcraft/ipcraftconnectionvalidator.cpp")
     add_files("src/ipcraft/ipcraftmanifest.cpp")
     add_files("src/ipcraft/ipcraftmanifestreader.cpp")
@@ -579,6 +587,7 @@ add_qt_test_target("v1architecturegate_test", "test/v1architecturegate_test.cpp"
     "src/app/projectgenerationrunner.cpp",
     "src/connection/connectionruleservice.cpp",
     "src/ipcraft/ipcraftbuiltinvalidator.cpp",
+    "src/ipcraft/ipxactconnectionchecker.cpp",
     "src/ipcore/ipcatalogservice.cpp",
     "src/ipcore/ipcoregraphexporter.cpp",
     "src/ipcore/ipcorecommandrunner.cpp",
