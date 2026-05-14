@@ -4,12 +4,14 @@
 #include "ipcraft/ipcraftbuiltinvalidator.h"
 #include "modules/moduleregistry.h"
 #include "ipcore/ipcorecommandrunner.h"
+#include "panels/logpanel.h"
 #include "project/ipinstancestate.h"
 #include "validation/drcrunner.h"
 #include "validation/projectvalidationrunner.h"
 #include "validation/validationmanager.h"
 #include "validation/validator.h"
 
+#include <QApplication>
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
@@ -17,6 +19,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QListWidget>
 #include <QSettings>
 #include <QStringList>
 #include <QTemporaryDir>
@@ -132,6 +135,20 @@ int countResults(const QList<ValidationResult>& results,
     }
 
     return count;
+}
+
+int indexOfLogItemContaining(const QListWidget* list, const QString& text) {
+    if (!list) {
+        return -1;
+    }
+
+    for (int row = 0; row < list->count(); ++row) {
+        const QListWidgetItem* item = list->item(row);
+        if (item && item->text().contains(text)) {
+            return row;
+        }
+    }
+    return -1;
 }
 
 QString repositoryPath(const QString& relativePath) {
@@ -498,6 +515,51 @@ void testBuiltInValidationRunsBeforePackageValidate() {
             "DRC should run only for the unblocked good instance");
     require(!hasMessageContaining(results, QStringLiteral("bad_0: scripted DRC violation")),
             "DRC should not run for the instance with a blocking built-in error");
+}
+
+void testValidateRunsBuiltInThenPackageValidate() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "failed to create temporary DRC directory");
+    const QString scriptPath = writeDrcScript(tempDir);
+    const QString ipcoreId = QStringLiteral("finepaper.scripted");
+    Graph graph;
+    require(graph.addModule(makeManifestOwnedModule(QStringLiteral("bad_module"),
+                                                    ipcoreId,
+                                                    QStringLiteral("bad_0"),
+                                                    QStringLiteral("MissingTile"))),
+            "bad module should add");
+    require(graph.addModule(makeManifestOwnedModule(QStringLiteral("good_module"),
+                                                    ipcoreId,
+                                                    QStringLiteral("good_0"))),
+            "good module should add");
+
+    IpcraftPackageManifest manifest = packageManifest(ipcoreId);
+    manifest.packageRootPath = tempDir.path();
+    manifest.commands.insert(QStringLiteral("validate"),
+                             manifestCommand(QStringLiteral("validate"), scriptPath));
+    IpCatalogService catalog(QVector<IpcraftPackageManifest>{manifest}, nullptr);
+
+    const QVector<ProjectIpInstanceRecord> instances{
+        projectInstanceRecord(ipcoreId, QStringLiteral("bad_0")),
+        projectInstanceRecord(ipcoreId, QStringLiteral("good_0"))
+    };
+
+    ProjectValidationRunner runner;
+    const QList<ValidationResult> results =
+        runner.validate(&graph, catalog.entries(), instances);
+    LogPanel logPanel;
+    logPanel.setResults(results);
+
+    auto* logList = logPanel.findChild<QListWidget*>();
+    const int builtInIndex = indexOfLogItemContaining(logList, QStringLiteral("MissingTile"));
+    const int packageIndex =
+        indexOfLogItemContaining(logList, QStringLiteral("good_0: scripted DRC violation"));
+    require(builtInIndex >= 0,
+            "validation log should include the built-in diagnostic for the invalid instance");
+    require(packageIndex > builtInIndex,
+            "validation log should show built-in diagnostics before package validate diagnostics");
+    require(indexOfLogItemContaining(logList, QStringLiteral("bad_0: scripted DRC violation")) < 0,
+            "package validate should not run for the instance with a blocking built-in error");
 }
 
 void testCommandRunnerRejectsSchemaMismatch() {
@@ -1034,7 +1096,10 @@ void testDrcRunnerRejectsManualRaveTileNonMesh() {
 } // namespace
 
 int main(int argc, char** argv) {
-    QCoreApplication app(argc, argv);
+    if (!qEnvironmentVariableIsSet("QT_QPA_PLATFORM")) {
+        qputenv("QT_QPA_PLATFORM", "offscreen");
+    }
+    QApplication app(argc, argv);
     configureDefaultPackageRootsForTest();
 
     try {
@@ -1044,6 +1109,7 @@ int main(int argc, char** argv) {
         testProjectValidationRunnerErrorsWhenCatalogEntryIsMissing();
         testBuiltInValidationReportsMissingPackage();
         testBuiltInValidationRunsBeforePackageValidate();
+        testValidateRunsBuiltInThenPackageValidate();
         testCommandRunnerRejectsSchemaMismatch();
         testBuiltInValidationReportsMissingInterface();
         testBuiltInValidationReportsUnmappableInterfaceMode();

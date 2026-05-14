@@ -50,6 +50,16 @@ const Connection* findConnection(const Graph& graph, const QString& connectionId
     return nullptr;
 }
 
+QString ambiguityLogMessage(const Connection& connection) {
+    if (connection.status() != QStringLiteral("ambiguous") ||
+        connection.alternatives().size() < 2) {
+        return {};
+    }
+
+    return QStringLiteral("Connection %1 has multiple valid classes: %2")
+        .arg(connection.id(), connection.alternatives().join(QStringLiteral(", ")));
+}
+
 void testUnselectedPanelShowsIpInstanceParameters() {
     Graph graph;
     ProjectStateService stateService;
@@ -249,7 +259,7 @@ void testDefaultIpInstanceSectionWithoutStateIsReadOnly() {
             "read-only default IP-instance parameter should not create state implicitly");
 }
 
-void testAmbiguousConnectionShowsConnectionClass() {
+void testAmbiguousConnectionAppearsInPropertyPanelAndLog() {
     Graph graph;
     auto source = std::make_unique<Module>(QStringLiteral("source"), QStringLiteral("Source"));
     source->addPort(Port(QStringLiteral("out"), Port::Direction::Output, QStringLiteral("bus"),
@@ -270,6 +280,15 @@ void testAmbiguousConnectionShowsConnectionClass() {
         },
         QStringLiteral("ambiguous"),
         QStringList{QStringLiteral("chi_node_interface"), QStringLiteral("monitor_tap")}));
+    const Connection* loggedConnection = findConnection(graph, QStringLiteral("conn_1"));
+    require(loggedConnection != nullptr,
+            "ambiguous connection should exist before it is shown in panels");
+    const QString logMessage = ambiguityLogMessage(*loggedConnection);
+    require(logMessage.contains(QStringLiteral("conn_1")),
+            "ambiguous connection log message should include the connection id");
+    require(logMessage.contains(QStringLiteral("chi_node_interface")) &&
+                logMessage.contains(QStringLiteral("monitor_tap")),
+            "ambiguous connection log message should include every class alternative");
 
     CommandManager commandManager;
     PropertyPanel panel(&graph, &commandManager);
@@ -348,7 +367,7 @@ int main(int argc, char** argv) {
         testUnselectedPanelUsesPersistedCustomIpInstanceId();
         testClearingGraphBeforePanelSelectionClearIsSafe();
         testDefaultIpInstanceSectionWithoutStateIsReadOnly();
-        testAmbiguousConnectionShowsConnectionClass();
+        testAmbiguousConnectionAppearsInPropertyPanelAndLog();
     } catch (const std::exception& error) {
         std::cerr << "propertypanel_test failed: " << error.what() << '\n';
         return 1;

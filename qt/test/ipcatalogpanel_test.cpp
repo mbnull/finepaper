@@ -4,6 +4,8 @@
 #include "graph/graph.h"
 #include "modules/moduleregistry.h"
 #include "panels/ipcatalogpanel.h"
+#include "panels/logpanel.h"
+#include "panels/propertypanel.h"
 #include "project/projectipservice.h"
 #include "project/projectstateservice.h"
 #include "workspace/activeworkspacecontroller.h"
@@ -125,6 +127,54 @@ QTreeWidgetItem* findCatalogCategory(QTreeWidget* catalog, const QString& text) 
     for (int index = 0; index < catalog->topLevelItemCount(); ++index) {
         QTreeWidgetItem* item = catalog->topLevelItem(index);
         if (item && item->text(0) == text) {
+            return item;
+        }
+    }
+    return nullptr;
+}
+
+QTreeWidgetItem* findCatalogEntry(QTreeWidget* catalog, const QString& ipcoreId) {
+    if (!catalog) {
+        return nullptr;
+    }
+
+    for (int categoryIndex = 0; categoryIndex < catalog->topLevelItemCount(); ++categoryIndex) {
+        QTreeWidgetItem* category = catalog->topLevelItem(categoryIndex);
+        if (!category) {
+            continue;
+        }
+        for (int childIndex = 0; childIndex < category->childCount(); ++childIndex) {
+            QTreeWidgetItem* item = category->child(childIndex);
+            if (item && item->data(0, Qt::UserRole).toString() == ipcoreId) {
+                return item;
+            }
+        }
+    }
+    return nullptr;
+}
+
+bool listContainsText(QListWidget* list, const QString& text) {
+    if (!list) {
+        return false;
+    }
+
+    for (int row = 0; row < list->count(); ++row) {
+        const QListWidgetItem* item = list->item(row);
+        if (item && item->text().contains(text)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+QListWidgetItem* firstListItemContaining(QListWidget* list, const QString& text) {
+    if (!list) {
+        return nullptr;
+    }
+
+    for (int row = 0; row < list->count(); ++row) {
+        QListWidgetItem* item = list->item(row);
+        if (item && item->text().contains(text)) {
             return item;
         }
     }
@@ -684,6 +734,113 @@ void testLoadGraphReportsFailureForInvalidPath() {
             "failed loadGraph should leave MainWindow without an open project");
 }
 
+void testNewProjectAddsIpcraftPackageInstanceFromCatalog() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "temporary directory should be valid");
+
+    MainWindow window;
+    const QString projectPath = tempDir.filePath(QStringLiteral("catalog_add_package.fpproj"));
+    require(window.createProjectAt(projectPath), "project should be created before catalog edits");
+
+    auto* catalog = window.findChild<QTreeWidget*>(QStringLiteral("ipCatalogList"));
+    require(catalog != nullptr, "MainWindow catalog tree should exist");
+    QTreeWidgetItem* ravenocItem = findCatalogEntry(catalog, QStringLiteral("finepaper.ravenoc"));
+    require(ravenocItem != nullptr, "RaveNoC package manifest entry should appear in the catalog");
+
+    const bool activated = QMetaObject::invokeMethod(catalog,
+                                                     "itemActivated",
+                                                     Qt::DirectConnection,
+                                                     Q_ARG(QTreeWidgetItem*, ravenocItem),
+                                                     Q_ARG(int, 0));
+    require(activated, "catalog tree should expose itemActivated");
+    QCoreApplication::processEvents();
+
+    const QVector<ProjectIpInstanceRecord>& records =
+        window.m_projectStateService->ipInstanceRecords();
+    require(records.size() == 1, "catalog activation should add one project IP instance");
+    require(records.first().ipcoreId == QStringLiteral("finepaper.ravenoc"),
+            "project instance should use the package id from the manifest catalog entry");
+    require(records.first().instanceId == QStringLiteral("ravenoc_0"),
+            "project instance should get a stable package-derived instance id");
+    require(records.first().state.value(QStringLiteral("global_parameters"))
+                .toObject()
+                .contains(QStringLiteral("flit_data_width")),
+            "project instance should be initialized from package parameters");
+
+    auto* projectList = window.findChild<QListWidget*>(QStringLiteral("projectIpList"));
+    auto* moduleList = window.findChild<QListWidget*>(QStringLiteral("activeModuleList"));
+    auto* toolList = window.findChild<QListWidget*>(QStringLiteral("activeToolList"));
+    require(projectList != nullptr && projectList->count() == 1,
+            "project instance list should show the added package instance");
+    require(listContainsText(moduleList, QStringLiteral("Rave")),
+            "active workspace module list should show package modules for the added instance");
+    require(toolList != nullptr && toolList->count() == 1,
+            "workspace tools should expose only active-instance editing helpers");
+    require(toolList->item(0)->data(Qt::UserRole).toString() == QStringLiteral("topology:mesh"),
+            "workspace tools should expose the package topology preset");
+
+    auto* logList = window.m_logPanel->findChild<QListWidget*>();
+    require(listContainsText(logList, QStringLiteral("IP core package finepaper.ravenoc")),
+            "startup log should include the loaded package manifest");
+}
+
+void testAmbiguousConnectionAppearsInPropertyPanelAndLog() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "temporary directory should be valid");
+
+    MainWindow window;
+    const QString projectPath = tempDir.filePath(QStringLiteral("ambiguous_connection.fpproj"));
+    require(window.createProjectAt(projectPath), "project should be created before graph edits");
+
+    auto source = std::make_unique<Module>(QStringLiteral("source"), QStringLiteral("Source"));
+    source->addPort(Port(QStringLiteral("out"),
+                         Port::Direction::Output,
+                         QStringLiteral("bus"),
+                         QStringLiteral("Out")));
+    auto target = std::make_unique<Module>(QStringLiteral("target"), QStringLiteral("Target"));
+    target->addPort(Port(QStringLiteral("in"),
+                         Port::Direction::Input,
+                         QStringLiteral("bus"),
+                         QStringLiteral("In")));
+    require(window.m_graph->addModule(std::move(source)), "source module should add");
+    require(window.m_graph->addModule(std::move(target)), "target module should add");
+
+    window.m_graph->addConnection(std::make_unique<Connection>(
+        QStringLiteral("ambiguous_conn"),
+        PortRef{QStringLiteral("source"), QStringLiteral("out")},
+        PortRef{QStringLiteral("target"), QStringLiteral("in")},
+        QStringLiteral("chi_node_interface"),
+        QVector<ConnectionInterfaceRef>{
+            ConnectionInterfaceRef{QStringLiteral("source"), QStringLiteral("out")},
+            ConnectionInterfaceRef{QStringLiteral("target"), QStringLiteral("in")}
+        },
+        QStringLiteral("ambiguous"),
+        QStringList{QStringLiteral("chi_node_interface"), QStringLiteral("monitor_tap")}));
+    QCoreApplication::processEvents();
+
+    auto* logList = window.m_logPanel->findChild<QListWidget*>();
+    QListWidgetItem* ambiguityLog =
+        firstListItemContaining(logList, QStringLiteral("multiple valid classes"));
+    require(ambiguityLog != nullptr,
+            "ambiguous connection should append a warning to the activity log");
+
+    const bool clicked = QMetaObject::invokeMethod(logList,
+                                                   "itemClicked",
+                                                   Qt::DirectConnection,
+                                                   Q_ARG(QListWidgetItem*, ambiguityLog));
+    require(clicked, "log list should expose itemClicked");
+    QCoreApplication::processEvents();
+
+    auto* comboBox = window.m_propertyPanel->findChild<QComboBox*>(
+        QStringLiteral("connectionClassCombo"));
+    require(comboBox != nullptr,
+            "clicking the ambiguity log entry should show the connection in the property panel");
+    require(comboBox->currentText() == QStringLiteral("chi_node_interface"),
+            "property panel should show the selected ambiguous connection class");
+    require(comboBox->findText(QStringLiteral("monitor_tap")) >= 0,
+            "property panel should show every ambiguous connection class alternative");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -717,6 +874,8 @@ int main(int argc, char** argv) {
         testMainWindowIgnoresStaleWorkspaceTopologyToolInstance();
         testMainWindowIgnoresTopologyToolWhenActiveInstanceChangesDuringPrompt();
         testLoadGraphReportsFailureForInvalidPath();
+        testNewProjectAddsIpcraftPackageInstanceFromCatalog();
+        testAmbiguousConnectionAppearsInPropertyPanelAndLog();
     } catch (const std::exception& error) {
         std::cerr << "ipcatalogpanel_test failed: " << error.what() << '\n';
         return 1;

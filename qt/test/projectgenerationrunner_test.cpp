@@ -493,6 +493,88 @@ void testGenerateExportsIpcraftSchemaForPackageCommand() {
             "generation manifest should record the exported ipcraft schema");
 }
 
+void testGenerateExportsIpcraftProjectForEveryInstance() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "temporary directory should be valid");
+    QDir root(tempDir.path());
+    const QString generatorPath = createCopyingGenerator(root);
+    const QString ipcoreId = QStringLiteral("org.example.alpha");
+    Graph graph;
+    require(graph.addModule(makeModule(QStringLiteral("alpha_runtime"),
+                                       QStringLiteral("Tile"),
+                                       ipcoreId,
+                                       QStringLiteral("alpha_0"),
+                                       QStringLiteral("alpha_tile"))),
+            "first ipcraft package module should add");
+    require(graph.addModule(makeModule(QStringLiteral("beta_runtime"),
+                                       QStringLiteral("Tile"),
+                                       ipcoreId,
+                                       QStringLiteral("beta_0"),
+                                       QStringLiteral("beta_tile"))),
+            "second ipcraft package module should add");
+
+    const QString projectPath = root.filePath(QStringLiteral("project/design.fpproj"));
+    ProjectGenerationRequest request;
+    request.graph = &graph;
+    request.projectPath = projectPath;
+    request.catalogEntries = {ipcraftCatalogEntry(ipcoreId, generatorPath)};
+    request.instances = {
+        instanceRecord(ipcoreId, QStringLiteral("alpha_0"), QStringLiteral("alpha-marker")),
+        instanceRecord(ipcoreId, QStringLiteral("beta_0"), QStringLiteral("beta-marker"))
+    };
+
+    const ProjectGenerationResult result = ProjectGenerationRunner().generate(request);
+
+    require(result.success, result.error.toLocal8Bit().constData());
+    require(result.instances.size() == 2,
+            "generate should run once for every project IP instance");
+
+    const QString alphaRoot = root.filePath(QStringLiteral("project/generated/alpha_0"));
+    const QString betaRoot = root.filePath(QStringLiteral("project/generated/beta_0"));
+    const QJsonObject alphaInput =
+        readJsonObject(QDir(alphaRoot).filePath(QStringLiteral("ipcore-graph.json")));
+    const QJsonObject betaInput =
+        readJsonObject(QDir(betaRoot).filePath(QStringLiteral("ipcore-graph.json")));
+    require(alphaInput.value(QStringLiteral("schema")).toString()
+                == QStringLiteral("ipcraft.noc.project.v1"),
+            "first package instance should receive the ipcraft NoC project schema");
+    require(betaInput.value(QStringLiteral("schema")).toString()
+                == QStringLiteral("ipcraft.noc.project.v1"),
+            "second package instance should receive the ipcraft NoC project schema");
+    require(alphaInput.value(QStringLiteral("project")).toObject()
+                .value(QStringLiteral("instance")).toObject()
+                .value(QStringLiteral("id")).toString() == QStringLiteral("alpha_0"),
+            "first package input should identify the first project instance");
+    require(betaInput.value(QStringLiteral("project")).toObject()
+                .value(QStringLiteral("instance")).toObject()
+                .value(QStringLiteral("id")).toString() == QStringLiteral("beta_0"),
+            "second package input should identify the second project instance");
+
+    const QJsonArray alphaInstances = alphaInput.value(QStringLiteral("instances")).toArray();
+    const QJsonArray betaInstances = betaInput.value(QStringLiteral("instances")).toArray();
+    require(alphaInstances.size() == 1 &&
+                alphaInstances.first().toObject().value(QStringLiteral("id")).toString()
+                    == QStringLiteral("alpha_tile"),
+            "first package input should include only the first instance modules");
+    require(betaInstances.size() == 1 &&
+                betaInstances.first().toObject().value(QStringLiteral("id")).toString()
+                    == QStringLiteral("beta_tile"),
+            "second package input should include only the second instance modules");
+
+    const QJsonObject alphaManifest =
+        readJsonObject(QDir(alphaRoot).filePath(QStringLiteral("generation-manifest.json")));
+    const QJsonObject betaManifest =
+        readJsonObject(QDir(betaRoot).filePath(QStringLiteral("generation-manifest.json")));
+    require(alphaManifest.value(QStringLiteral("input")).toObject()
+                .value(QStringLiteral("schema")).toString()
+                    == QStringLiteral("ipcraft.noc.project.v1"),
+            "first generation manifest should record the ipcraft schema");
+    require(betaManifest.value(QStringLiteral("input")).toObject()
+                .value(QStringLiteral("schema")).toString()
+                    == QStringLiteral("ipcraft.noc.project.v1"),
+            "second generation manifest should record the ipcraft schema");
+}
+
 void testGenerateRunsBuiltInValidationBeforeCommand() {
     QTemporaryDir tempDir;
     require(tempDir.isValid(), "temporary directory should be valid");
@@ -539,6 +621,7 @@ int main(int argc, char** argv) {
         testGenerationManifestExcludesStaleArtifacts();
         testGenerationRequiresSavedProjectPath();
         testGenerateExportsIpcraftSchemaForPackageCommand();
+        testGenerateExportsIpcraftProjectForEveryInstance();
         testGenerateRunsBuiltInValidationBeforeCommand();
     } catch (const std::exception& error) {
         std::cerr << "projectgenerationrunner_test failed: " << error.what() << '\n';
