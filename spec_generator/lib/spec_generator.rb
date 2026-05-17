@@ -489,7 +489,7 @@ module SpecGenerator
         remember_unique!(seen_ids, module_id, 'module id')
         validate_keys!(mod, IPCRAFT_MODULE_KEYS, "module #{module_id}")
         parameters = mod.key?('parameters') ? normalize_module_parameters(module_id, mod['parameters']) : nil
-        display = normalize_module_display(module_id, mod['display'], parameters || {})
+        display = mod.key?('display') ? normalize_module_display(module_id, mod['display'], parameters || {}) : nil
         interfaces = normalize_interfaces(module_id, mod.fetch('interfaces', nil))
         @module_interfaces[module_id] = interfaces.map { |interface| interface.fetch('id') }
         compact_hash(
@@ -512,7 +512,6 @@ module SpecGenerator
     end
 
     def normalize_module_display(module_id, display, parameters)
-      return nil unless display
       raise SpecError, "module #{module_id}.display must be a map" unless display.is_a?(Hash)
 
       validate_keys!(display, IPCRAFT_MODULE_DISPLAY_KEYS, "module #{module_id}.display")
@@ -557,13 +556,12 @@ module SpecGenerator
           'multi_connection' => interface.key?('multi_connection') ? required_bool(interface, 'multi_connection', "#{module_id}.#{interface_id}.multi_connection") : nil,
           'ipxact' => ipxact,
           'parameters' => interface.key?('parameters') ? deep_copy(interface['parameters']) : nil,
-          'topology' => normalize_interface_topology(module_id, interface_id, interface['topology'], known_interfaces)
+          'topology' => interface.key?('topology') ? normalize_interface_topology(module_id, interface_id, interface['topology'], known_interfaces) : nil
         )
       end
     end
 
     def normalize_interface_topology(module_id, interface_id, topology, known_interfaces)
-      return nil unless topology
       raise SpecError, "#{module_id}.#{interface_id}.topology must be a map" unless topology.is_a?(Hash)
 
       validate_keys!(topology, IPCRAFT_INTERFACE_TOPOLOGY_KEYS, "#{module_id}.#{interface_id}.topology")

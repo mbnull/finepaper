@@ -296,7 +296,7 @@ class SpecGeneratorTest < Minitest::Test
         dir,
         yaml: ipcraft_package_yaml.sub(
           "parameters:\n      x:",
-          "display:\n      label_parameter: display_name\n    parameters:\n      display_name: { type: string, default: XP }\n      x:"
+          "display:\n      label_parameter: display_name\n      short_label_parameter: short_name\n    parameters:\n      display_name: { type: string, default: XP }\n      short_name: { type: string, default: X }\n      x:"
         )
       )
 
@@ -304,7 +304,40 @@ class SpecGeneratorTest < Minitest::Test
       manifest = JSON.parse(File.read(File.join(package_root, 'ipcraft.json')))
       xp = manifest.fetch('modules').find { |mod| mod.fetch('id') == 'xp' }
 
-      assert_equal({ 'label_parameter' => 'display_name' }, xp.fetch('display'))
+      assert_equal(
+        { 'label_parameter' => 'display_name', 'short_label_parameter' => 'short_name' },
+        xp.fetch('display')
+      )
+    end
+  end
+
+  def test_rejects_false_display_metadata
+    Dir.mktmpdir do |dir|
+      package_root = write_ipcraft_package_source(
+        dir,
+        yaml: ipcraft_package_yaml.sub(
+          "parameters:\n      x:",
+          "display: false\n    parameters:\n      x:"
+        )
+      )
+
+      error = assert_raises(SpecGenerator::SpecError) { build_ipcraft_manifest(package_root) }
+      assert_match(/module xp\.display must be a map/, error.message)
+    end
+  end
+
+  def test_rejects_empty_display_metadata
+    Dir.mktmpdir do |dir|
+      package_root = write_ipcraft_package_source(
+        dir,
+        yaml: ipcraft_package_yaml.sub(
+          "parameters:\n      x:",
+          "display:\n    parameters:\n      x:"
+        )
+      )
+
+      error = assert_raises(SpecGenerator::SpecError) { build_ipcraft_manifest(package_root) }
+      assert_match(/module xp\.display must be a map/, error.message)
     end
   end
 
@@ -327,7 +360,7 @@ class SpecGeneratorTest < Minitest::Test
     Dir.mktmpdir do |dir|
       yaml = ipcraft_package_yaml.sub(
         "modes: [chi_interconnect]\n        accepts:",
-        "topology:\n          side: east\n          opposite: west\n        modes: [chi_interconnect]\n        accepts:"
+        "topology:\n          side: east\n          opposite: west\n          role: router_port\n        modes: [chi_interconnect]\n        accepts:"
       ).sub(
         "views:\n",
         "      - id: west\n        modes: [chi_interconnect]\n        accepts:\n          - class: chi_node_interface\n            role: interconnect\n        multi_connection: false\nviews:\n"
@@ -339,7 +372,33 @@ class SpecGeneratorTest < Minitest::Test
       xp = manifest.fetch('modules').find { |mod| mod.fetch('id') == 'xp' }
       rnf0 = xp.fetch('interfaces').find { |interface| interface.fetch('id') == 'rnf0' }
 
-      assert_equal({ 'side' => 'east', 'opposite' => 'west' }, rnf0.fetch('topology'))
+      assert_equal({ 'side' => 'east', 'opposite' => 'west', 'role' => 'router_port' }, rnf0.fetch('topology'))
+    end
+  end
+
+  def test_rejects_false_interface_topology_metadata
+    Dir.mktmpdir do |dir|
+      yaml = ipcraft_package_yaml.sub(
+        "modes: [chi_interconnect]\n        accepts:",
+        "topology: false\n        modes: [chi_interconnect]\n        accepts:"
+      )
+      package_root = write_ipcraft_package_source(dir, yaml: yaml)
+
+      error = assert_raises(SpecGenerator::SpecError) { build_ipcraft_manifest(package_root) }
+      assert_match(/xp\.rnf0\.topology must be a map/, error.message)
+    end
+  end
+
+  def test_rejects_empty_interface_topology_metadata
+    Dir.mktmpdir do |dir|
+      yaml = ipcraft_package_yaml.sub(
+        "modes: [chi_interconnect]\n        accepts:",
+        "topology:\n        modes: [chi_interconnect]\n        accepts:"
+      )
+      package_root = write_ipcraft_package_source(dir, yaml: yaml)
+
+      error = assert_raises(SpecGenerator::SpecError) { build_ipcraft_manifest(package_root) }
+      assert_match(/xp\.rnf0\.topology must be a map/, error.message)
     end
   end
 
