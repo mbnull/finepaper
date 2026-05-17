@@ -458,6 +458,99 @@ class SpecGeneratorTest < Minitest::Test
     end
   end
 
+  def test_rejects_generation_output_path_with_backslash_traversal
+    Dir.mktmpdir do |dir|
+      bad_path = %q(..\manifest.json)
+      yaml = ipcraft_package_yaml.sub(
+        "commands:\n",
+        "generation:\n  engine: ipcraft.common.v1\n  outputs:\n    - id: bad\n      kind: json\n      path: #{bad_path}\ncommands:\n"
+      )
+      package_root = write_ipcraft_package_source(dir, yaml: yaml)
+
+      error = assert_raises(SpecGenerator::SpecError) { build_ipcraft_manifest(package_root) }
+      assert_match(/generation output bad path .*backslash/, error.message)
+    end
+  end
+
+  def test_rejects_generation_template_path_with_backslash_traversal
+    Dir.mktmpdir do |dir|
+      bad_path = %q(..\template.erb)
+      yaml = ipcraft_package_yaml.sub(
+        "commands:\n",
+        "generation:\n  engine: ipcraft.common.v1\n  templates:\n    top: #{bad_path}\ncommands:\n"
+      )
+      package_root = write_ipcraft_package_source(dir, yaml: yaml)
+
+      error = assert_raises(SpecGenerator::SpecError) { build_ipcraft_manifest(package_root) }
+      assert_match(/generation\.templates\.top .*backslash/, error.message)
+    end
+  end
+
+  def test_rejects_duplicate_generation_output_ids
+    Dir.mktmpdir do |dir|
+      yaml = ipcraft_package_yaml.sub(
+        "commands:\n",
+        "generation:\n  engine: ipcraft.common.v1\n  outputs:\n    - id: manifest\n      kind: json\n      path: manifest.json\n    - id: manifest\n      kind: json\n      path: manifest-copy.json\ncommands:\n"
+      )
+      package_root = write_ipcraft_package_source(dir, yaml: yaml)
+
+      error = assert_raises(SpecGenerator::SpecError) { build_ipcraft_manifest(package_root) }
+      assert_match(/Duplicate generation output id: manifest/, error.message)
+    end
+  end
+
+  def test_rejects_duplicate_generation_command_ids
+    Dir.mktmpdir do |dir|
+      yaml = ipcraft_package_yaml.sub(
+        "commands:\n",
+        "generation:\n  engine: ipcraft.common.v1\n  commands:\n    - id: build\n      executable: tools/generate\n      args: []\n    - id: build\n      executable: tools/validate\n      args: []\ncommands:\n"
+      )
+      package_root = write_ipcraft_package_source(dir, yaml: yaml)
+
+      error = assert_raises(SpecGenerator::SpecError) { build_ipcraft_manifest(package_root) }
+      assert_match(/Duplicate generation command id: build/, error.message)
+    end
+  end
+
+  def test_rejects_generation_coordinate_binding_missing_parameter
+    Dir.mktmpdir do |dir|
+      yaml = ipcraft_package_yaml.sub(
+        "commands:\n",
+        "generation:\n  engine: ipcraft.common.v1\n  coordinate_bindings:\n    xp: { col: missing_col }\ncommands:\n"
+      )
+      package_root = write_ipcraft_package_source(dir, yaml: yaml)
+
+      error = assert_raises(SpecGenerator::SpecError) { build_ipcraft_manifest(package_root) }
+      assert_match(/generation\.coordinate_bindings\.xp\.col references unknown parameter missing_col/, error.message)
+    end
+  end
+
+  def test_rejects_generation_attachment_binding_missing_interface
+    Dir.mktmpdir do |dir|
+      yaml = ipcraft_package_yaml.sub(
+        "commands:\n",
+        "generation:\n  engine: ipcraft.common.v1\n  attachment_bindings:\n    xp:\n      local: missing_interface\ncommands:\n"
+      )
+      package_root = write_ipcraft_package_source(dir, yaml: yaml)
+
+      error = assert_raises(SpecGenerator::SpecError) { build_ipcraft_manifest(package_root) }
+      assert_match(/generation\.attachment_bindings\.xp\.local references unknown interface missing_interface/, error.message)
+    end
+  end
+
+  def test_rejects_generation_parameter_projection_missing_parameter
+    Dir.mktmpdir do |dir|
+      yaml = ipcraft_package_yaml.sub(
+        "commands:\n",
+        "generation:\n  engine: ipcraft.common.v1\n  parameter_projections:\n    top_width: missing_width\ncommands:\n"
+      )
+      package_root = write_ipcraft_package_source(dir, yaml: yaml)
+
+      error = assert_raises(SpecGenerator::SpecError) { build_ipcraft_manifest(package_root) }
+      assert_match(/generation\.parameter_projections\.top_width references unknown parameter missing_width/, error.message)
+    end
+  end
+
   def test_emits_framework_tool_command
     Dir.mktmpdir do |dir|
       yaml = ipcraft_package_yaml.sub(

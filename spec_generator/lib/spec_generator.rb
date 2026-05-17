@@ -757,12 +757,14 @@ module SpecGenerator
     def normalize_generation_outputs(outputs)
       raise SpecError, 'generation.outputs must be a list' unless outputs.is_a?(Array)
 
+      seen_ids = {}
       outputs.map do |output|
         raise SpecError, 'generation output must be a map' unless output.is_a?(Hash)
 
         output_id = output['id'] || '<unnamed>'
         validate_keys!(output, IPCRAFT_GENERATION_OUTPUT_KEYS, "generation output #{output_id}")
         id = required_string(output, 'id', 'generation output id')
+        remember_unique!(seen_ids, id, 'generation output id')
         kind = required_string(output, 'kind', "generation output #{id}.kind")
         path = required_string(output, 'path', "generation output #{id}.path")
         validate_relative_output_path!(path, "generation output #{id} path")
@@ -818,12 +820,14 @@ module SpecGenerator
     def normalize_generation_commands(commands)
       raise SpecError, 'generation.commands must be a list' unless commands.is_a?(Array)
 
+      seen_ids = {}
       commands.map do |command|
         raise SpecError, 'generation command must be a map' unless command.is_a?(Hash)
 
         command_id = command['id'] || '<unnamed>'
         validate_keys!(command, IPCRAFT_GENERATION_COMMAND_KEYS, "generation command #{command_id}")
         id = required_string(command, 'id', 'generation command id')
+        remember_unique!(seen_ids, id, 'generation command id')
         executable = required_string(command, 'executable', "generation command #{id}.executable")
         validate_package_local_path!(executable, "generation command #{id}.executable")
         args = required_string_array(command, 'args', "generation command #{id}.args")
@@ -1088,6 +1092,7 @@ module SpecGenerator
     def validate_package_local_path!(path, context)
       raise SpecError, "#{context} cannot be empty" if path.empty?
       raise SpecError, "#{context} must be package-local" if absolute_path?(path)
+      validate_forward_slash_path!(path, context)
 
       root = File.expand_path(@package_root)
       expanded = File.expand_path(path, root)
@@ -1099,12 +1104,17 @@ module SpecGenerator
     def validate_relative_output_path!(path, context)
       raise SpecError, "#{context} cannot be empty" if path.empty?
       raise SpecError, "#{context} must be relative" if absolute_path?(path)
+      validate_forward_slash_path!(path, context)
 
       root = File.expand_path(@package_root)
       expanded = File.expand_path(path, root)
       return if expanded == root || expanded.start_with?("#{root}#{File::SEPARATOR}")
 
       raise SpecError, "#{context} escapes package root"
+    end
+
+    def validate_forward_slash_path!(path, context)
+      raise SpecError, "#{context} cannot contain backslashes" if path.include?('\\')
     end
 
     def absolute_path?(path)
