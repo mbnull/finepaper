@@ -61,6 +61,8 @@ views/*.xml
 
 The `generation` section is configuration, not package-local generator code. It declares how framework-owned generation should project a command input graph into output artifacts.
 
+Semantic topology metadata belongs in `ipcore.yml` and the generated manifest, not in view XML. View XML may carry visual normals, anchor labels, and attachment geometry, but legal connection direction, topology roles, opposite-side relationships, preset links, and parameter bindings must be present in manifest metadata after `specgen` runs.
+
 ### Specgen Layer
 
 `specgen` validates package sources and writes `ipcraft.json`.
@@ -69,6 +71,7 @@ The `generation` section is configuration, not package-local generator code. It 
 
 - validate the constrained `ipcore.yml` shape;
 - load and validate view XML references;
+- merge semantic metadata from `ipcore.yml` with presentation metadata from view XML into runtime indexes;
 - normalize display labels, module IDs, interfaces, connection classes, topology presets, and commands;
 - validate `generation` metadata syntax;
 - reject unresolved module/interface/parameter references;
@@ -76,6 +79,8 @@ The `generation` section is configuration, not package-local generator code. It 
 - fail with precise diagnostics.
 
 For this phase, `specgen` is considered correct only if it can regenerate equivalent runtime manifests for `finepaper-noc`, `opennoc`, and `ravenoc`.
+
+`specgen` must not rely on Qt fallback heuristics to recover missing direction or attachment metadata for these three packages. If a current view lacks direction data, the source package must add that information either as semantic metadata in `ipcore.yml` or as visual metadata in the view, depending on whether the data affects legality or presentation.
 
 ### Qt Runtime Layer
 
@@ -111,6 +116,33 @@ The first supported generation capabilities should cover the behavior already pr
 
 The existing package-local generators remain as migration references until the common path has tests proving equivalent key outputs.
 
+The common generator must not become a general programming language embedded in YAML. Phase 3 starts with a short metadata spike for each of the three packages. Each spike records the exact graph traversals, projections, template inputs, external commands, and file operations needed by that package. The first schema is then limited to the intersection and small union required by those spikes.
+
+Parity is functional, not byte-for-byte unless the artifact is already deterministic. Tests should compare normalized JSON, selected manifest fields, generated file lists, required wrapper/header/template outputs, and command invocations. Timestamps, comments, and non-semantic formatting differences should be ignored only through explicit per-test normalization.
+
+## Manifest and View Boundary
+
+`ipcraft.json` is the runtime join point between package semantics and view presentation. Qt should not need to reopen `ipcore.yml` to decide how a module can connect, where a topology preset should link nodes, or which parameter stores a coordinate.
+
+`ipcore.yml` owns:
+
+- module and interface IDs;
+- connection classes and accepted roles;
+- topology roles and opposite-side relationships;
+- topology preset link patterns;
+- parameter bindings for coordinates, display labels, external IDs, and collapsed state;
+- generation metadata.
+
+View XML owns:
+
+- rendered shapes;
+- anchor positions and visual normals;
+- anchor text labels;
+- attachment-zone geometry;
+- collapsed and expanded visual geometry.
+
+`specgen` must validate the join. A view anchor that references an unknown interface is an error. A topology preset that references an interface without semantic topology metadata is an error. If a package provides both visual normal and semantic side data, `specgen` must ensure they do not contradict each other where the schema makes that comparison possible.
+
 ## Runtime Package Discovery UX
 
 Add a top-level UI path for IP package roots. The exact UI can be a menu action or settings dialog, but it must support:
@@ -120,6 +152,8 @@ Add a top-level UI path for IP package roots. The exact UI can be a menu action 
 - reloading packages without restarting the app;
 - showing configured roots;
 - showing load errors for invalid roots or malformed packages;
+- detecting duplicate package IDs across configured roots;
+- reporting the package path and, when the parser has it, the source file and line for malformed package data;
 - persisting roots through `AppSettings::ipcorePaths()`.
 
 Startup behavior should be explicit. If no package roots are configured or no valid packages are discovered, the log panel should say so and point users to the package-root action.
@@ -136,9 +170,13 @@ Connection option labels should be composed from display-oriented fields:
 - port label/name as a final fallback;
 - internal graph IDs only as a last-resort debug fallback.
 
+`display_name` is not an implicit hidden convention. If a package wants a dynamic instance label, the module definition must declare the parameter and mark it as the display label binding in manifest metadata. If no display label binding is declared, Qt uses the static module label/name from the manifest.
+
+Qt command input export must include the dynamic display parameter value when it is part of the module parameters, but generators must not rely on display text for identity. Stable manifest module IDs and instance IDs remain the generator identity fields.
+
 The stable internal IDs remain unchanged. This is a presentation change, not a graph identity change.
 
-Connection lists should still remain unambiguous. If two options have the same display text, append a small disambiguator derived from stable IDs.
+Connection lists should still remain unambiguous. If two options have the same display text, Qt should first use an author-provided short label or disambiguation label from manifest metadata. Stable IDs are a final fallback and should be formatted as secondary debug text, not as the main label.
 
 ## Frontend Hardcoding Cleanup
 
@@ -169,6 +207,10 @@ The export must contain enough design instance state for generators:
 - package instance state.
 
 Package commands must declare `input_schema: ipcraft.noc.project.v1`. Legacy graph input may remain for compatibility tests, but new command declarations should use the public schema.
+
+The saved `.fpproj` document remains the editor persistence format. `ipcraft.noc.project.v1` is produced on demand for command execution. The implementation must keep these two concepts separate in UI text, logs, filenames, and tests so users do not mistake the command input export for the source project file.
+
+The command input export must be sufficient to drive generation without reading the saved project document. If the common generator needs data that is only present in `.fpproj`, the exporter or manifest schema must be extended rather than letting generators parse project documents directly.
 
 ## Generation Metadata
 
@@ -207,6 +249,8 @@ Phase 1: make `specgen` authoritative for runtime manifests.
 - Add or harden source `ipcore.yml` definitions for all three packages.
 - Regenerate `ipcraft.json` deterministically.
 - Add drift tests that fail when committed manifests do not match `specgen` output.
+- Keep `ipcraft.json` committed in this repository for now as the runtime artifact and fixture used by Qt tests.
+- Treat manual edits to committed `ipcraft.json` as invalid unless they are produced by `specgen`.
 
 Phase 2: harden Qt UX and remove visible hardcoding.
 
@@ -217,6 +261,7 @@ Phase 2: harden Qt UX and remove visible hardcoding.
 
 Phase 3: introduce the common generator path.
 
+- Run the package-by-package generation metadata spikes before finalizing the first schema.
 - Define the first `generation` metadata subset.
 - Implement framework-owned generation for the three current output shapes.
 - Keep package-local generators as references during migration.
@@ -237,6 +282,7 @@ Implementation should follow TDD. Tests should be added before or alongside beha
 - `specgen` accepts the three package source directories.
 - `specgen` rejects malformed `ipcore.yml` with precise errors.
 - `specgen` rejects view XML that references missing modules or interfaces.
+- `specgen` rejects topology metadata that cannot be joined to view anchors or manifest interfaces.
 - Generated `ipcraft.json` is deterministic.
 - Generated `ipcraft.json` matches committed runtime manifests for the three packages.
 - `generation` metadata validates unresolved module, parameter, interface, template, and vendor references.
@@ -246,9 +292,10 @@ Implementation should follow TDD. Tests should be added before or alongside beha
 - `AppSettings` persists IP package roots.
 - The catalog service reloads packages from configured roots.
 - Invalid package roots produce diagnostics and do not register partial packages.
+- Duplicate package IDs across roots produce diagnostics and select no ambiguous package silently.
 - An empty catalog produces a user-facing diagnostic.
 - Connection options use display names and labels instead of internal graph IDs where metadata exists.
-- Duplicate display labels are disambiguated.
+- Duplicate display labels are disambiguated through author-provided short labels before falling back to stable IDs.
 - Topology presets can create package-owned graphs using manifest metadata.
 - Preset creation does not depend on hardcoded package IDs or module type names.
 
@@ -264,6 +311,7 @@ Implementation should follow TDD. Tests should be added before or alongside beha
 - The common generator can reproduce key `finepaper-noc` artifacts from command input.
 - The common generator can reproduce key `opennoc` mesh projection artifacts from command input.
 - The common generator can reproduce key `ravenoc` configuration/template/filelist artifacts from command input.
+- Parity tests normalize or ignore non-semantic timestamp, comment, and formatting differences explicitly.
 - Missing vendor requirements fail with actionable errors.
 - Invalid graph shapes fail before writing partial output.
 
