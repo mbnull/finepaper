@@ -386,10 +386,6 @@ ProjectGenerationRunner::ProjectGenerationRunner(QStringList frameworkToolSearch
 QStringList ProjectGenerationRunner::defaultFrameworkToolSearchPaths() {
     QStringList paths;
 
-    const QDir current(QDir::currentPath());
-    appendUniquePath(paths, current.filePath(QStringLiteral("ipcraft_generator/bin")));
-    appendUniquePath(paths, current.filePath(QStringLiteral("../ipcraft_generator/bin")));
-
     const QDir application(QCoreApplication::applicationDirPath());
     appendUniquePath(paths, application.filePath(QStringLiteral("ipcraft_generator/bin")));
     appendUniquePath(paths, application.filePath(QStringLiteral("../ipcraft_generator/bin")));

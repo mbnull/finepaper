@@ -268,6 +268,31 @@ bool jsonArrayContainsString(const QJsonArray& array, const QString& text) {
     return false;
 }
 
+void testDefaultFrameworkToolSearchPathsIgnoreCurrentWorkingDirectory() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "temporary directory should be valid");
+    QDir root(tempDir.path());
+    require(root.mkpath(QStringLiteral("project/ipcraft_generator/bin")),
+            "project-local framework tool directory should be created");
+    require(root.mkpath(QStringLiteral("ipcraft_generator/bin")),
+            "parent framework tool directory should be created");
+
+    const QString previousCurrentPath = QDir::currentPath();
+    const QString projectPath = root.filePath(QStringLiteral("project"));
+    require(QDir::setCurrent(projectPath), "current directory should switch to test project");
+    const QStringList searchPaths = ProjectGenerationRunner::defaultFrameworkToolSearchPaths();
+    require(QDir::setCurrent(previousCurrentPath), "current directory should be restored");
+
+    const QString projectLocalToolPath =
+        QFileInfo(QDir(projectPath).filePath(QStringLiteral("ipcraft_generator/bin"))).absoluteFilePath();
+    const QString parentLocalToolPath =
+        QFileInfo(root.filePath(QStringLiteral("ipcraft_generator/bin"))).absoluteFilePath();
+    require(!searchPaths.contains(projectLocalToolPath),
+            "default framework tool paths should not include CWD-local tool directories");
+    require(!searchPaths.contains(parentLocalToolPath),
+            "default framework tool paths should not include CWD-parent tool directories");
+}
+
 void testGeneratesEveryProjectInstanceIntoSeparateOutputDirectories() {
     QTemporaryDir tempDir;
     require(tempDir.isValid(), "temporary directory should be valid");
@@ -817,6 +842,7 @@ int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
 
     try {
+        testDefaultFrameworkToolSearchPathsIgnoreCurrentWorkingDirectory();
         testGeneratesEveryProjectInstanceIntoSeparateOutputDirectories();
         testGenerationRejectsUnsafeAndDuplicateInstanceOutputKeys();
         testGenerationFailureAndTimeoutFailWholeResult();
