@@ -11,11 +11,33 @@ class IpcraftGeneratorTest < Minitest::Test
   CLI = File.join(ROOT, 'bin/ipcraft-generate')
 
   def test_cli_requires_manifest
-    stdout, stderr, status = Open3.capture3(RbConfig.ruby, CLI)
+    assert_cli_error('error: --manifest is required')
+  end
 
-    refute status.success?
-    assert_empty stdout
-    assert_includes stderr, 'error: --manifest is required'
+  def test_cli_rejects_invalid_option
+    assert_cli_error('error: invalid option: --bogus', '--bogus')
+  end
+
+  def test_cli_rejects_missing_option_argument
+    assert_cli_error('error: missing argument: --manifest', '--manifest')
+  end
+
+  def test_cli_rejects_unexpected_positional_argument
+    Dir.mktmpdir do |dir|
+      manifest_path = File.join(dir, 'ipcraft.json')
+      input_path = File.join(dir, 'input.json')
+      output = File.join(dir, 'out')
+      File.write(manifest_path, JSON.pretty_generate(minimal_manifest))
+      File.write(input_path, JSON.pretty_generate(minimal_project))
+
+      assert_cli_error(
+        'error: unexpected argument: extra',
+        '--manifest', manifest_path,
+        '--input', input_path,
+        '--output', output,
+        'extra'
+      )
+    end
   end
 
   def test_loads_manifest_project_and_writes_output_manifest
@@ -35,11 +57,19 @@ class IpcraftGeneratorTest < Minitest::Test
 
       assert status.success?, stderr
       assert_includes stdout, "Generated ipcraft output in #{output}"
-      assert File.file?(File.join(output, 'manifest.json'))
+      assert_equal expected_output_manifest, JSON.parse(File.read(File.join(output, 'manifest.json')))
     end
   end
 
   private
+
+  def assert_cli_error(message, *args)
+    stdout, stderr, status = Open3.capture3(RbConfig.ruby, CLI, *args)
+
+    refute status.success?
+    assert_empty stdout
+    assert_includes stderr, message
+  end
 
   def minimal_manifest
     {
@@ -59,8 +89,22 @@ class IpcraftGeneratorTest < Minitest::Test
     {
       'schema' => 'ipcraft.noc.project.v1',
       'package' => 'org.example.noc',
-      'instances' => [],
-      'connections' => []
+      'instances' => [
+        { 'id' => 'router' },
+        { 'id' => 'endpoint' }
+      ],
+      'connections' => [
+        { 'id' => 'link' }
+      ]
+    }
+  end
+
+  def expected_output_manifest
+    {
+      'ipcore' => 'org.example.noc',
+      'schema' => 'ipcraft.noc.project.v1',
+      'instance_count' => 2,
+      'connection_count' => 1
     }
   end
 end

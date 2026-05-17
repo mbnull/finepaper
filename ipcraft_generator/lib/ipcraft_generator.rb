@@ -14,6 +14,10 @@ module IpcraftGenerator
         parser.on('--input PATH', 'Ipcraft project input JSON path') { |value| options[:input] = value }
         parser.on('--output DIR', 'Generated output directory') { |value| options[:output] = value }
       end.parse!(argv)
+    rescue OptionParser::ParseError => error
+      raise Error, error.message
+    else
+      raise Error, "unexpected argument: #{argv.first}" unless argv.empty?
 
       raise Error, '--manifest is required' unless options[:manifest]
       raise Error, '--input is required' unless options[:input]
