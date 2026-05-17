@@ -34,6 +34,12 @@ module IpcraftGenerator
   end
 
   class Generator
+    PACKAGE_HANDLERS = {
+      'finepaper.noc' => :generate_finepaper_noc,
+      'finepaper.opennoc' => :generate_opennoc
+    }.freeze
+    OPENNOC_AGENT_TYPES = %w[RNF RNI HNF HNI SNF].freeze
+
     def initialize(manifest:, input:, output:)
       @manifest_path = manifest
       @input_path = input
@@ -47,11 +53,7 @@ module IpcraftGenerator
       validate!(manifest, input)
 
       FileUtils.mkdir_p(@output_dir)
-      if manifest.fetch('id') == 'finepaper.noc'
-        generate_finepaper_noc(manifest, input)
-      else
-        generate_generic(manifest, input)
-      end
+      send(PACKAGE_HANDLERS.fetch(manifest.fetch('id'), :generate_generic), manifest, input)
     end
 
     private
@@ -88,6 +90,238 @@ module IpcraftGenerator
       write_json(File.join(@output_dir, 'manifest.json'), finepaper_output_manifest(manifest, input, routers, endpoints))
     end
 
+    def generate_opennoc(manifest, input)
+      projection = opennoc_projection(manifest, input)
+
+      write_json(File.join(@output_dir, 'opennoc_mesh.json'), projection.fetch(:mesh))
+      write_json(File.join(@output_dir, 'manifest.json'), opennoc_output_manifest(manifest, input, projection))
+    end
+
+    def opennoc_projection(manifest, input)
+      mappings = opennoc_module_mappings(manifest)
+      xp_modules = modules_for_upstream_type(mappings, 'XP')
+      agent_type_by_module = mappings.select { |_module_id, upstream_type| OPENNOC_AGENT_TYPES.include?(upstream_type) }
+      instances = input.fetch('instances', [])
+      xps = instances.select { |instance| xp_modules.include?(instance['module']) }
+      raise Error, 'expected at least one OpenNoC XP instance' if xps.empty?
+
+      coordinates = opennoc_xp_coordinates(xps)
+      rows, cols = validate_rectangular_opennoc_mesh!(coordinates, xps.size)
+      agent_slots = opennoc_agent_slots(input, coordinates.keys, agent_type_by_module)
+
+      {
+        mesh: opennoc_mesh_json(xps, coordinates, agent_slots),
+        rows: rows,
+        cols: cols
+      }
+    end
+
+    def opennoc_module_mappings(manifest)
+      mappings = manifest.dig('generation', 'module_mappings')
+      raise Error, 'OpenNoC generation.module_mappings must be an object' unless mappings.is_a?(Hash)
+
+      mappings
+    end
+
+    def modules_for_upstream_type(mappings, upstream_type)
+      mappings.select { |_module_id, mapped_type| mapped_type == upstream_type }.keys
+    end
+
+    def opennoc_xp_coordinates(xps)
+      xps.to_h do |xp|
+        parameters = xp.fetch('parameters', {})
+        x = parameters.fetch('mesh_col', nil)
+        y = parameters.fetch('mesh_row', nil)
+        unless x.is_a?(Integer) && y.is_a?(Integer)
+          raise Error, "OpenNoCXP #{artifact_id(xp)} mesh_col/mesh_row must be integers"
+        end
+
+        [xp.fetch('id'), [x, y]]
+      end
+    end
+
+    def validate_rectangular_opennoc_mesh!(coordinates, xp_count)
+      if coordinates.size != xp_count || coordinates.values.any? { |x, y| x.negative? || y.negative? }
+        raise Error, "OpenNoCXP graph must be rectangular, found #{xp_count} XPs"
+      end
+
+      cols = coordinates.values.map(&:first).max + 1
+      rows = coordinates.values.map(&:last).max + 1
+      occupied = coordinates.values
+      rectangular = occupied.uniq.size == occupied.size && occupied.size == rows * cols
+      rectangular &&= (0...rows).all? do |row|
+        (0...cols).all? { |col| occupied.include?([col, row]) }
+      end
+      raise Error, "OpenNoCXP graph must be rectangular, found #{xp_count} XPs" unless rectangular
+
+      [rows, cols]
+    end
+
+    def opennoc_agent_slots(input, xp_ids, agent_type_by_module)
+      instances = input.fetch('instances', [])
+      module_by_id = instances.to_h { |instance| [instance.fetch('id'), instance] }
+      interface_ports = interface_ports_by_instance(instances)
+      slots = {}
+
+      input.fetch('connections', []).each do |connection|
+        binding = opennoc_agent_connection(connection, interface_ports, module_by_id, xp_ids, agent_type_by_module)
+        next unless binding
+
+        slot_key = [binding.fetch(:xp_id), binding.fetch(:slot)]
+        if slots.key?(slot_key)
+          xp = module_by_id.fetch(binding.fetch(:xp_id))
+          raise Error, "multiple OpenNoC agents connect to #{artifact_id(xp)}.#{binding.fetch(:slot)}"
+        end
+
+        slots[slot_key] = binding.fetch(:agent_type)
+      end
+
+      slots
+    end
+
+    def opennoc_agent_connection(connection, interface_ports, module_by_id, xp_ids, agent_type_by_module)
+      endpoints = connection_endpoints(connection, interface_ports)
+      return nil unless endpoints.size == 2
+
+      left, right = endpoints
+      left_type = upstream_type_for_endpoint(left, module_by_id, agent_type_by_module)
+      right_type = upstream_type_for_endpoint(right, module_by_id, agent_type_by_module)
+      left_is_xp = xp_ids.include?(left.fetch(:instance))
+      right_is_xp = xp_ids.include?(right.fetch(:instance))
+      left_is_agent = OPENNOC_AGENT_TYPES.include?(left_type)
+      right_is_agent = OPENNOC_AGENT_TYPES.include?(right_type)
+
+      return nil if left_is_xp && right_is_xp
+      return nil unless left_is_xp || right_is_xp || left_is_agent || right_is_agent
+
+      if left_is_agent && right_is_xp
+        return opennoc_agent_binding(connection, left, left_type, right)
+      end
+
+      if right_is_agent && left_is_xp
+        return opennoc_agent_binding(connection, right, right_type, left)
+      end
+
+      raise Error, "invalid OpenNoC agent connection #{connection.fetch('id', '<unnamed>')}"
+    end
+
+    def upstream_type_for_endpoint(endpoint, module_by_id, agent_type_by_module)
+      instance = module_by_id[endpoint.fetch(:instance)]
+      return nil unless instance
+
+      agent_type_by_module[instance['module']]
+    end
+
+    def opennoc_agent_binding(connection, agent_endpoint, agent_type, xp_endpoint)
+      agent_port = agent_endpoint.fetch(:port).to_s.downcase
+      xp_slot = xp_endpoint.fetch(:port).to_s.downcase
+      if agent_port == 'chi' && %w[p0 p1].include?(xp_slot)
+        return {
+          agent_id: agent_endpoint.fetch(:instance),
+          xp_id: xp_endpoint.fetch(:instance),
+          slot: xp_slot,
+          agent_type: agent_type
+        }
+      end
+
+      raise Error, "invalid OpenNoC agent connection #{connection.fetch('id', '<unnamed>')}"
+    end
+
+    def connection_endpoints(connection, interface_ports)
+      if connection.key?('interfaces')
+        refs = connection.fetch('interfaces')
+        unless refs.is_a?(Array) && refs.size == 2
+          raise Error, "ipcraft.noc.project.v1 connection #{connection.fetch('id', '<unnamed>')} must have exactly two interfaces"
+        end
+
+        return refs.map { |ref| endpoint_from_interface_ref(ref, interface_ports, connection) }
+      end
+
+      if connection.key?('source') && connection.key?('target')
+        return %w[source target].map { |key| endpoint_from_direct_ref(connection.fetch(key), interface_ports, connection) }
+      end
+
+      if connection.key?('from') && connection.key?('to')
+        return %w[from to].map { |key| endpoint_from_direct_ref(connection.fetch(key), interface_ports, connection) }
+      end
+
+      []
+    end
+
+    def endpoint_from_interface_ref(ref, interface_ports, connection)
+      unless ref.is_a?(Hash)
+        raise Error, "ipcraft.noc.project.v1 connection #{connection.fetch('id', '<unnamed>')} has invalid interface reference"
+      end
+
+      instance_id = ref['instance'] || ref['module']
+      interface_id = ref['interface'] || ref['port']
+      unless instance_id && interface_id
+        raise Error, "ipcraft.noc.project.v1 connection #{connection.fetch('id', '<unnamed>')} has invalid interface reference"
+      end
+
+      { instance: instance_id, port: port_for_interface(instance_id, interface_id, interface_ports) }
+    end
+
+    def endpoint_from_direct_ref(ref, interface_ports, connection)
+      unless ref.is_a?(Hash)
+        raise Error, "ipcraft.noc.project.v1 connection #{connection.fetch('id', '<unnamed>')} has invalid endpoint reference"
+      end
+
+      instance_id = ref['instance'] || ref['module']
+      port = ref['port'] || port_for_interface(instance_id, ref['interface'], interface_ports)
+      unless instance_id && port
+        raise Error, "ipcraft.noc.project.v1 connection #{connection.fetch('id', '<unnamed>')} has invalid endpoint reference"
+      end
+
+      { instance: instance_id, port: port }
+    end
+
+    def interface_ports_by_instance(instances)
+      instances.to_h do |instance|
+        interfaces = instance.fetch('interfaces', [])
+        unless interfaces.is_a?(Array)
+          raise Error, "ipcraft.noc.project.v1 instance #{instance.fetch('id', '<unnamed>')} interfaces must be an array"
+        end
+
+        ports = interfaces.to_h do |interface|
+          id = interface.fetch('id', interface['port'])
+          [id, interface.fetch('port', id)]
+        end
+        [instance.fetch('id'), ports]
+      end
+    end
+
+    def port_for_interface(instance_id, interface_id, interface_ports)
+      return nil unless instance_id && interface_id
+
+      interface_ports.fetch(instance_id, {}).fetch(interface_id, interface_id)
+    end
+
+    def opennoc_mesh_json(xps, coordinates, agent_slots)
+      xp_by_id = xps.to_h { |xp| [xp.fetch('id'), xp] }
+
+      coordinates.keys.sort_by { |xp_id| coordinates.fetch(xp_id).reverse }.to_h do |xp_id|
+        x, y = coordinates.fetch(xp_id)
+        [
+          artifact_id(xp_by_id.fetch(xp_id)),
+          {
+            'X' => x,
+            'Y' => y,
+            'P0' => agent_slots.fetch([xp_id, 'p0'], 'NONE'),
+            'P1' => agent_slots.fetch([xp_id, 'p1'], 'NONE')
+          }
+        ]
+      end
+    end
+
+    def opennoc_output_manifest(manifest, input, projection)
+      output_manifest(manifest, input).merge(
+        topology: 'mesh',
+        rows: projection.fetch(:rows),
+        cols: projection.fetch(:cols)
+      )
+    end
+
     def module_id_for_role(manifest, role, fallback)
       mappings = manifest.dig('generation', 'module_mappings') || {}
       mappings.find { |_module_id, mapped_role| mapped_role == role }&.first || fallback
@@ -121,6 +355,16 @@ module IpcraftGenerator
       parameters = instance.fetch('parameters', {})
       parameter_text = parameters.map { |key, value| "#{key}=#{value}" }.join(', ')
       [instance.fetch('id'), parameter_text].reject(&:empty?).join(' ')
+    end
+
+    def artifact_id(instance)
+      parameters = instance.fetch('parameters', {})
+      safe_identifier(parameters.fetch('external_id', instance.fetch('id')))
+    end
+
+    def safe_identifier(value)
+      identifier = value.to_s.gsub(/[^a-zA-Z0-9_$]/, '_')
+      identifier.match?(/\A[a-zA-Z_]/) ? identifier : "ipcraft_#{identifier}"
     end
 
     def write_json(path, value)

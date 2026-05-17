@@ -85,6 +85,32 @@ class IpcraftGeneratorTest < Minitest::Test
     end
   end
 
+  def test_generates_opennoc_mesh_projection_without_vendor
+    Dir.mktmpdir do |dir|
+      input_path = File.join(dir, 'input.json')
+      output = File.join(dir, 'out')
+      File.write(input_path, JSON.pretty_generate(opennoc_mesh_project))
+
+      IpcraftGenerator::Generator.new(
+        manifest: File.join(PROJECT_ROOT, 'ipcores/opennoc/ipcraft.json'),
+        input: input_path,
+        output: output
+      ).generate
+
+      mesh_path = File.join(output, 'opennoc_mesh.json')
+      assert_path_exists mesh_path
+
+      mesh = JSON.parse(File.read(mesh_path))
+      assert_equal({ 'X' => 0, 'Y' => 0, 'P0' => 'RNF', 'P1' => 'RNI' }, mesh.fetch('XP0_0'))
+      assert_equal({ 'X' => 1, 'Y' => 0, 'P0' => 'HNF', 'P1' => 'NONE' }, mesh.fetch('XP1_0'))
+
+      output_manifest = JSON.parse(File.read(File.join(output, 'manifest.json')))
+      assert_equal 'finepaper.opennoc', output_manifest.fetch('ipcore')
+      assert_equal 2, output_manifest.fetch('rows')
+      assert_equal 2, output_manifest.fetch('cols')
+    end
+  end
+
   private
 
   def assert_cli_error(message, *args)
@@ -181,6 +207,64 @@ class IpcraftGeneratorTest < Minitest::Test
           'from' => { 'instance' => 'endpoint_1', 'interface' => 'noc' },
           'to' => { 'instance' => 'xp_1_1', 'interface' => 'local0' }
         }
+      ]
+    }
+  end
+
+  def opennoc_mesh_project
+    {
+      'schema' => 'ipcraft.noc.project.v1',
+      'package' => 'finepaper.opennoc',
+      'instances' => [
+        opennoc_xp('XP0_0', 0, 0),
+        opennoc_xp('XP1_0', 1, 0),
+        opennoc_xp('XP0_1', 0, 1),
+        opennoc_xp('XP1_1', 1, 1),
+        opennoc_agent('rnf_0', 'OpenNoCRNF'),
+        opennoc_agent('rni_0', 'OpenNoCRNI'),
+        opennoc_agent('hnf_0', 'OpenNoCHNF'),
+        opennoc_agent('hni_0', 'OpenNoCHNI'),
+        opennoc_agent('snf_0', 'OpenNoCSNF')
+      ],
+      'connections' => [
+        opennoc_connection('XP0_0_east_to_XP1_0_west', 'opennoc_mesh_link', ['XP0_0', 'east'], ['XP1_0', 'west']),
+        opennoc_connection('XP0_1_east_to_XP1_1_west', 'opennoc_mesh_link', ['XP0_1', 'east'], ['XP1_1', 'west']),
+        opennoc_connection('XP0_0_south_to_XP0_1_north', 'opennoc_mesh_link', ['XP0_0', 'south'], ['XP0_1', 'north']),
+        opennoc_connection('XP1_0_south_to_XP1_1_north', 'opennoc_mesh_link', ['XP1_0', 'south'], ['XP1_1', 'north']),
+        opennoc_connection('rnf_0_to_XP0_0_p0', 'chi_node_interface', ['rnf_0', 'chi'], ['XP0_0', 'p0']),
+        opennoc_connection('rni_0_to_XP0_0_p1', 'chi_node_interface', ['rni_0', 'chi'], ['XP0_0', 'p1']),
+        opennoc_connection('hnf_0_to_XP1_0_p0', 'chi_node_interface', ['hnf_0', 'chi'], ['XP1_0', 'p0']),
+        opennoc_connection('hni_0_to_XP0_1_p0', 'chi_node_interface', ['hni_0', 'chi'], ['XP0_1', 'p0']),
+        opennoc_connection('snf_0_to_XP1_1_p0', 'chi_node_interface', ['snf_0', 'chi'], ['XP1_1', 'p0'])
+      ]
+    }
+  end
+
+  def opennoc_xp(id, col, row)
+    {
+      'id' => id,
+      'module' => 'OpenNoCXP',
+      'parameters' => { 'external_id' => id, 'mesh_col' => col, 'mesh_row' => row },
+      'interfaces' => %w[east west north south p0 p1].map { |port| { 'id' => "if_#{port}", 'port' => port } }
+    }
+  end
+
+  def opennoc_agent(id, mod)
+    {
+      'id' => id,
+      'module' => mod,
+      'parameters' => {},
+      'interfaces' => [{ 'id' => 'if_chi', 'port' => 'chi' }]
+    }
+  end
+
+  def opennoc_connection(id, connection_class, left, right)
+    {
+      'id' => id,
+      'class' => connection_class,
+      'interfaces' => [
+        { 'instance' => left.fetch(0), 'interface' => "if_#{left.fetch(1)}" },
+        { 'instance' => right.fetch(0), 'interface' => "if_#{right.fetch(1)}" }
       ]
     }
   end
