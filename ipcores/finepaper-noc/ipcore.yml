@@ -126,6 +126,18 @@ topologies:
     parameters:
       nodes: { label: Nodes, default: 4, min: 2, max: 64 }
 
+generation:
+  engine: ipcraft.common.v1
+  module_mappings:
+    XP: router
+    Endpoint: endpoint
+  coordinate_bindings:
+    XP: { col: mesh_col, row: mesh_row }
+  outputs:
+    - id: top
+      kind: template
+      path: top.v
+
 commands:
   validate:
     executable: generator/bin/drc

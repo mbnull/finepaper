@@ -374,6 +374,26 @@
       }
     }
   ],
+  "generation": {
+    "engine": "ipcraft.common.v1",
+    "outputs": [
+      {
+        "id": "config_header",
+        "kind": "template",
+        "path": "ravenoc_config.svh"
+      }
+    ],
+    "module_mappings": {
+      "RaveTile": "tile",
+      "RaveEndpoint": "endpoint"
+    },
+    "coordinate_bindings": {
+      "RaveTile": {
+        "col": "mesh_col",
+        "row": "mesh_row"
+      }
+    }
+  },
   "commands": {
     "validate": {
       "executable": "generator/bin/drc",

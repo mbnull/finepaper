@@ -415,6 +415,102 @@ class SpecGeneratorTest < Minitest::Test
     end
   end
 
+  def test_emits_generation_metadata
+    Dir.mktmpdir do |dir|
+      yaml = ipcraft_package_yaml.sub(
+        "commands:\n",
+        "generation:\n  engine: ipcraft.common.v1\n  outputs:\n    - id: manifest\n      kind: json\n      path: manifest.json\n  module_mappings:\n    xp: XP\ncommands:\n"
+      )
+      package_root = write_ipcraft_package_source(dir, yaml: yaml)
+
+      build_ipcraft_manifest(package_root)
+      manifest = JSON.parse(File.read(File.join(package_root, 'ipcraft.json')))
+
+      assert_equal 'ipcraft.common.v1', manifest.fetch('generation').fetch('engine')
+      assert_equal 'manifest.json', manifest.fetch('generation').fetch('outputs').first.fetch('path')
+      assert_equal({ 'xp' => 'XP' }, manifest.fetch('generation').fetch('module_mappings'))
+    end
+  end
+
+  def test_rejects_generation_module_mapping_for_unknown_module
+    Dir.mktmpdir do |dir|
+      yaml = ipcraft_package_yaml.sub(
+        "commands:\n",
+        "generation:\n  engine: ipcraft.common.v1\n  module_mappings:\n    missing_module: XP\ncommands:\n"
+      )
+      package_root = write_ipcraft_package_source(dir, yaml: yaml)
+
+      error = assert_raises(SpecGenerator::SpecError) { build_ipcraft_manifest(package_root) }
+      assert_match(/generation.module_mappings references unknown module missing_module/, error.message)
+    end
+  end
+
+  def test_rejects_generation_output_path_outside_package
+    Dir.mktmpdir do |dir|
+      yaml = ipcraft_package_yaml.sub(
+        "commands:\n",
+        "generation:\n  engine: ipcraft.common.v1\n  outputs:\n    - id: bad\n      kind: json\n      path: ../manifest.json\ncommands:\n"
+      )
+      package_root = write_ipcraft_package_source(dir, yaml: yaml)
+
+      error = assert_raises(SpecGenerator::SpecError) { build_ipcraft_manifest(package_root) }
+      assert_match(/generation output bad path escapes package root/, error.message)
+    end
+  end
+
+  def test_emits_framework_tool_command
+    Dir.mktmpdir do |dir|
+      yaml = ipcraft_package_yaml.sub(
+        "  generate:\n    executable: tools/generate\n",
+        "  generate:\n    framework_tool: ipcraft-generate\n"
+      )
+      package_root = write_ipcraft_package_source(dir, yaml: yaml)
+
+      build_ipcraft_manifest(package_root)
+      manifest = JSON.parse(File.read(File.join(package_root, 'ipcraft.json')))
+      command = manifest.fetch('commands').fetch('generate')
+
+      assert_equal 'ipcraft-generate', command.fetch('framework_tool')
+      refute command.key?('executable')
+    end
+  end
+
+  def test_rejects_command_with_executable_and_framework_tool
+    Dir.mktmpdir do |dir|
+      yaml = ipcraft_package_yaml.sub(
+        "  generate:\n    executable: tools/generate\n",
+        "  generate:\n    executable: tools/generate\n    framework_tool: ipcraft-generate\n"
+      )
+      package_root = write_ipcraft_package_source(dir, yaml: yaml)
+
+      error = assert_raises(SpecGenerator::SpecError) { build_ipcraft_manifest(package_root) }
+      assert_match(/commands\.generate must specify exactly one of executable or framework_tool/, error.message)
+    end
+  end
+
+  def test_rejects_command_without_executable_or_framework_tool
+    Dir.mktmpdir do |dir|
+      yaml = ipcraft_package_yaml.sub("    executable: tools/generate\n", '')
+      package_root = write_ipcraft_package_source(dir, yaml: yaml)
+
+      error = assert_raises(SpecGenerator::SpecError) { build_ipcraft_manifest(package_root) }
+      assert_match(/commands\.generate must specify exactly one of executable or framework_tool/, error.message)
+    end
+  end
+
+  def test_rejects_unknown_framework_tool
+    Dir.mktmpdir do |dir|
+      yaml = ipcraft_package_yaml.sub(
+        "  generate:\n    executable: tools/generate\n",
+        "  generate:\n    framework_tool: unknown-tool\n"
+      )
+      package_root = write_ipcraft_package_source(dir, yaml: yaml)
+
+      error = assert_raises(SpecGenerator::SpecError) { build_ipcraft_manifest(package_root) }
+      assert_match(/commands\.generate\.framework_tool unknown tool unknown-tool/, error.message)
+    end
+  end
+
   def test_requires_command_input_schema
     Dir.mktmpdir do |dir|
       package_root = write_ipcraft_package_source(

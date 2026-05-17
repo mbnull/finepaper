@@ -423,6 +423,26 @@
       }
     }
   ],
+  "generation": {
+    "engine": "ipcraft.common.v1",
+    "outputs": [
+      {
+        "id": "top",
+        "kind": "template",
+        "path": "top.v"
+      }
+    ],
+    "module_mappings": {
+      "XP": "router",
+      "Endpoint": "endpoint"
+    },
+    "coordinate_bindings": {
+      "XP": {
+        "col": "mesh_col",
+        "row": "mesh_row"
+      }
+    }
+  },
   "commands": {
     "validate": {
       "executable": "generator/bin/drc",

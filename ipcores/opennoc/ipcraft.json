@@ -547,6 +547,30 @@
       }
     }
   ],
+  "generation": {
+    "engine": "ipcraft.common.v1",
+    "outputs": [
+      {
+        "id": "mesh_json",
+        "kind": "json",
+        "path": "opennoc_mesh.json"
+      }
+    ],
+    "module_mappings": {
+      "OpenNoCXP": "XP",
+      "OpenNoCRNF": "RNF",
+      "OpenNoCRNI": "RNI",
+      "OpenNoCHNF": "HNF",
+      "OpenNoCHNI": "HNI",
+      "OpenNoCSNF": "SNF"
+    },
+    "coordinate_bindings": {
+      "OpenNoCXP": {
+        "col": "mesh_col",
+        "row": "mesh_row"
+      }
+    }
+  },
   "commands": {
     "validate": {
       "executable": "generator/bin/drc",

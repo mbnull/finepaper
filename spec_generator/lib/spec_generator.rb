@@ -35,7 +35,7 @@ module SpecGenerator
   EMIT_MODES = %w[attribute config editor editor_only].freeze
   PORT_DIRECTIONS = %w[input output inout].freeze
   IPCRAFT_PACKAGE_TOP_LEVEL_KEYS = %w[
-    schema id name version plugin extensions ipxact parameters connection_classes modules views topologies commands
+    schema id name version plugin extensions ipxact parameters connection_classes modules views topologies generation commands
   ].freeze
   IPCRAFT_PLUGIN_KEYS = %w[library entry].freeze
   IPCRAFT_IPXACT_KEYS = %w[root generated].freeze
@@ -46,7 +46,14 @@ module SpecGenerator
   IPCRAFT_INTERFACE_TOPOLOGY_KEYS = %w[side opposite role].freeze
   IPCRAFT_ACCEPT_KEYS = %w[class role].freeze
   IPCRAFT_VIEW_KEYS = %w[module file].freeze
-  IPCRAFT_COMMAND_KEYS = %w[executable input_schema args].freeze
+  IPCRAFT_GENERATION_KEYS = %w[
+    engine outputs templates file_copies vendor_requirements commands module_mappings
+    coordinate_bindings attachment_bindings parameter_projections
+  ].freeze
+  IPCRAFT_GENERATION_OUTPUT_KEYS = %w[id kind path].freeze
+  IPCRAFT_GENERATION_FILE_COPY_KEYS = %w[from to].freeze
+  IPCRAFT_GENERATION_COMMAND_KEYS = %w[id executable args].freeze
+  IPCRAFT_COMMAND_KEYS = %w[executable framework_tool input_schema args].freeze
   IPCRAFT_EXTENSION_MODE_KEYS = %w[ipxact].freeze
   IPCRAFT_EXTENSION_MODE_IPXACT_KEYS = %w[mode].freeze
   IPCRAFT_INTERFACE_IPXACT_KEYS = %w[bus_interface mode modes].freeze
@@ -302,15 +309,18 @@ module SpecGenerator
       @data = data
       @package_root = package_root
       @extensions = {}
+      @parameters = {}
       @connection_classes = []
       @connection_class_index = {}
       @modules = []
+      @module_parameters = {}
       @module_interfaces = {}
     end
 
     def manifest
       validate_top_level
       @extensions = normalize_extensions
+      @parameters = normalize_parameters
       @connection_classes = normalize_connection_classes
       @connection_class_index = @connection_classes.to_h { |klass| [klass.fetch('id'), klass] }
       @modules = normalize_modules
@@ -324,11 +334,12 @@ module SpecGenerator
         'plugin' => normalize_plugin,
         'extensions' => @extensions,
         'ipxact' => normalize_ipxact,
-        'parameters' => normalize_parameters,
+        'parameters' => @parameters,
         'connection_classes' => @connection_classes,
         'modules' => @modules,
         'views' => normalize_views,
         'topologies' => normalize_topologies,
+        'generation' => normalize_generation,
         'commands' => normalize_commands
       )
     end
@@ -491,6 +502,7 @@ module SpecGenerator
         parameters = mod.key?('parameters') ? normalize_module_parameters(module_id, mod['parameters']) : nil
         display = mod.key?('display') ? normalize_module_display(module_id, mod['display'], parameters || {}) : nil
         interfaces = normalize_interfaces(module_id, mod.fetch('interfaces', nil))
+        @module_parameters[module_id] = parameters || {}
         @module_interfaces[module_id] = interfaces.map { |interface| interface.fetch('id') }
         compact_hash(
           'id' => module_id,
@@ -718,17 +730,262 @@ module SpecGenerator
       end
     end
 
+    def normalize_generation
+      return nil unless @data.key?('generation')
+
+      generation = @data['generation']
+      raise SpecError, 'generation must be a map' unless generation.is_a?(Hash)
+
+      validate_keys!(generation, IPCRAFT_GENERATION_KEYS, 'generation')
+      engine = required_string(generation, 'engine', 'generation.engine')
+      raise SpecError, "generation.engine #{engine} is unsupported" unless engine == 'ipcraft.common.v1'
+
+      compact_hash(
+        'engine' => engine,
+        'outputs' => generation.key?('outputs') ? normalize_generation_outputs(generation['outputs']) : nil,
+        'templates' => generation.key?('templates') ? normalize_generation_templates(generation['templates']) : nil,
+        'file_copies' => generation.key?('file_copies') ? normalize_generation_file_copies(generation['file_copies']) : nil,
+        'vendor_requirements' => generation.key?('vendor_requirements') ? normalize_generation_vendor_requirements(generation['vendor_requirements']) : nil,
+        'commands' => generation.key?('commands') ? normalize_generation_commands(generation['commands']) : nil,
+        'module_mappings' => generation.key?('module_mappings') ? normalize_generation_module_mappings(generation['module_mappings']) : nil,
+        'coordinate_bindings' => generation.key?('coordinate_bindings') ? normalize_generation_coordinate_bindings(generation['coordinate_bindings']) : nil,
+        'attachment_bindings' => generation.key?('attachment_bindings') ? normalize_generation_attachment_bindings(generation['attachment_bindings']) : nil,
+        'parameter_projections' => generation.key?('parameter_projections') ? normalize_generation_parameter_projections(generation['parameter_projections']) : nil
+      )
+    end
+
+    def normalize_generation_outputs(outputs)
+      raise SpecError, 'generation.outputs must be a list' unless outputs.is_a?(Array)
+
+      outputs.map do |output|
+        raise SpecError, 'generation output must be a map' unless output.is_a?(Hash)
+
+        output_id = output['id'] || '<unnamed>'
+        validate_keys!(output, IPCRAFT_GENERATION_OUTPUT_KEYS, "generation output #{output_id}")
+        id = required_string(output, 'id', 'generation output id')
+        kind = required_string(output, 'kind', "generation output #{id}.kind")
+        path = required_string(output, 'path', "generation output #{id}.path")
+        validate_relative_output_path!(path, "generation output #{id} path")
+        {
+          'id' => id,
+          'kind' => kind,
+          'path' => path
+        }
+      end
+    end
+
+    def normalize_generation_templates(templates)
+      raise SpecError, 'generation.templates must be a map' unless templates.is_a?(Hash)
+
+      templates.to_h do |id, path|
+        raise SpecError, 'generation.templates keys must be strings' unless id.is_a?(String)
+        raise SpecError, "generation.templates.#{id} must be a string" unless path.is_a?(String)
+
+        validate_package_local_path!(path, "generation.templates.#{id}")
+        [id, path]
+      end
+    end
+
+    def normalize_generation_file_copies(file_copies)
+      raise SpecError, 'generation.file_copies must be a list' unless file_copies.is_a?(Array)
+
+      file_copies.map do |file_copy|
+        raise SpecError, 'generation file_copy must be a map' unless file_copy.is_a?(Hash)
+
+        validate_keys!(file_copy, IPCRAFT_GENERATION_FILE_COPY_KEYS, 'generation file_copy')
+        from = required_string(file_copy, 'from', 'generation file_copy.from')
+        to = required_string(file_copy, 'to', 'generation file_copy.to')
+        validate_package_local_path!(from, 'generation file_copy.from')
+        validate_relative_output_path!(to, 'generation file_copy.to')
+        {
+          'from' => from,
+          'to' => to
+        }
+      end
+    end
+
+    def normalize_generation_vendor_requirements(vendor_requirements)
+      raise SpecError, 'generation.vendor_requirements must be a list' unless vendor_requirements.is_a?(Array)
+
+      vendor_requirements.each do |path|
+        raise SpecError, 'generation.vendor_requirements entries must be strings' unless path.is_a?(String)
+
+        validate_package_local_path!(path, 'generation.vendor_requirements entry')
+      end
+      vendor_requirements
+    end
+
+    def normalize_generation_commands(commands)
+      raise SpecError, 'generation.commands must be a list' unless commands.is_a?(Array)
+
+      commands.map do |command|
+        raise SpecError, 'generation command must be a map' unless command.is_a?(Hash)
+
+        command_id = command['id'] || '<unnamed>'
+        validate_keys!(command, IPCRAFT_GENERATION_COMMAND_KEYS, "generation command #{command_id}")
+        id = required_string(command, 'id', 'generation command id')
+        executable = required_string(command, 'executable', "generation command #{id}.executable")
+        validate_package_local_path!(executable, "generation command #{id}.executable")
+        args = required_string_array(command, 'args', "generation command #{id}.args")
+        {
+          'id' => id,
+          'executable' => executable,
+          'args' => args
+        }
+      end
+    end
+
+    def normalize_generation_module_mappings(module_mappings)
+      raise SpecError, 'generation.module_mappings must be a map' unless module_mappings.is_a?(Hash)
+
+      module_mappings.to_h do |module_id, mapped_name|
+        raise SpecError, 'generation.module_mappings keys must be strings' unless module_id.is_a?(String)
+        raise SpecError, "generation.module_mappings.#{module_id} must be a string" unless mapped_name.is_a?(String)
+
+        validate_generation_module_id!(module_id, 'generation.module_mappings')
+        [module_id, mapped_name]
+      end
+    end
+
+    def normalize_generation_coordinate_bindings(coordinate_bindings)
+      raise SpecError, 'generation.coordinate_bindings must be a map' unless coordinate_bindings.is_a?(Hash)
+
+      coordinate_bindings.to_h do |module_id, bindings|
+        raise SpecError, 'generation.coordinate_bindings keys must be strings' unless module_id.is_a?(String)
+        validate_generation_module_id!(module_id, 'generation.coordinate_bindings')
+        raise SpecError, "generation.coordinate_bindings.#{module_id} must be a map" unless bindings.is_a?(Hash)
+
+        normalized = bindings.to_h do |coordinate, parameter|
+          raise SpecError, "generation.coordinate_bindings.#{module_id} keys must be strings" unless coordinate.is_a?(String)
+          raise SpecError, "generation.coordinate_bindings.#{module_id}.#{coordinate} must be a string" unless parameter.is_a?(String)
+          unless @module_parameters.fetch(module_id).key?(parameter)
+            raise SpecError, "generation.coordinate_bindings.#{module_id}.#{coordinate} references unknown parameter #{parameter}"
+          end
+
+          [coordinate, parameter]
+        end
+        [module_id, normalized]
+      end
+    end
+
+    def normalize_generation_attachment_bindings(attachment_bindings)
+      raise SpecError, 'generation.attachment_bindings must be a map' unless attachment_bindings.is_a?(Hash)
+
+      attachment_bindings.to_h do |module_id, bindings|
+        raise SpecError, 'generation.attachment_bindings keys must be strings' unless module_id.is_a?(String)
+        validate_generation_module_id!(module_id, 'generation.attachment_bindings')
+        raise SpecError, "generation.attachment_bindings.#{module_id} must be a map" unless bindings.is_a?(Hash)
+
+        normalized = bindings.to_h do |name, value|
+          raise SpecError, "generation.attachment_bindings.#{module_id} keys must be strings" unless name.is_a?(String)
+
+          [
+            name,
+            normalize_generation_interface_reference(
+              module_id,
+              value,
+              "generation.attachment_bindings.#{module_id}.#{name}"
+            )
+          ]
+        end
+        [module_id, normalized]
+      end
+    end
+
+    def normalize_generation_interface_reference(module_id, value, context)
+      case value
+      when String
+        validate_generation_interface_id!(module_id, value, context)
+        value
+      when Array
+        value.each do |interface_id|
+          raise SpecError, "#{context} entries must be strings" unless interface_id.is_a?(String)
+
+          validate_generation_interface_id!(module_id, interface_id, context)
+        end
+        value
+      else
+        raise SpecError, "#{context} must be a string or list"
+      end
+    end
+
+    def normalize_generation_parameter_projections(parameter_projections)
+      raise SpecError, 'generation.parameter_projections must be a map' unless parameter_projections.is_a?(Hash)
+
+      parameter_projections.to_h do |name, value|
+        raise SpecError, 'generation.parameter_projections keys must be strings' unless name.is_a?(String)
+
+        module_id = @module_parameters.key?(name) ? name : nil
+        [name, normalize_generation_parameter_projection_value(name, value, module_id)]
+      end
+    end
+
+    def normalize_generation_parameter_projection_value(context, value, module_id)
+      case value
+      when String
+        validate_generation_parameter_reference!(value, "generation.parameter_projections.#{context}", module_id)
+        value
+      when Hash
+        value.to_h do |name, child|
+          raise SpecError, "generation.parameter_projections.#{context} keys must be strings" unless name.is_a?(String)
+
+          child_module_id = @module_parameters.key?(name) ? name : module_id
+          [
+            name,
+            normalize_generation_parameter_projection_value("#{context}.#{name}", child, child_module_id)
+          ]
+        end
+      else
+        raise SpecError, "generation.parameter_projections.#{context} must be a string or map"
+      end
+    end
+
+    def validate_generation_module_id!(module_id, context)
+      return if @module_interfaces.key?(module_id)
+
+      raise SpecError, "#{context} references unknown module #{module_id}"
+    end
+
+    def validate_generation_interface_id!(module_id, interface_id, context)
+      return if @module_interfaces.fetch(module_id).include?(interface_id)
+
+      raise SpecError, "#{context} references unknown interface #{interface_id}"
+    end
+
+    def validate_generation_parameter_reference!(parameter, context, module_id)
+      return if @parameters.key?(parameter)
+      return if module_id && @module_parameters.fetch(module_id).key?(parameter)
+
+      if parameter.include?('.')
+        referenced_module_id, referenced_parameter = parameter.split('.', 2)
+        return if @module_parameters.fetch(referenced_module_id, {}).key?(referenced_parameter)
+      end
+
+      raise SpecError, "#{context} references unknown parameter #{parameter}"
+    end
+
     def normalize_commands
       @data.fetch('commands').to_h do |name, command|
         raise SpecError, "commands.#{name} must be a map" unless command.is_a?(Hash)
 
         validate_keys!(command, IPCRAFT_COMMAND_KEYS, "commands.#{name}")
-        executable = required_string(command, 'executable', "commands.#{name}.executable")
-        validate_package_local_path!(executable, "commands.#{name}.executable")
-        normalized = {
-          'executable' => executable,
-          'input_schema' => required_string(command, 'input_schema', "commands.#{name}.input_schema")
-        }
+        if command.key?('executable') == command.key?('framework_tool')
+          raise SpecError, "commands.#{name} must specify exactly one of executable or framework_tool"
+        end
+
+        normalized = {}
+        if command.key?('executable')
+          executable = required_string(command, 'executable', "commands.#{name}.executable")
+          validate_package_local_path!(executable, "commands.#{name}.executable")
+          normalized['executable'] = executable
+        else
+          framework_tool = required_string(command, 'framework_tool', "commands.#{name}.framework_tool")
+          unless framework_tool == 'ipcraft-generate'
+            raise SpecError, "commands.#{name}.framework_tool unknown tool #{framework_tool}"
+          end
+          normalized['framework_tool'] = framework_tool
+        end
+        normalized['input_schema'] = required_string(command, 'input_schema', "commands.#{name}.input_schema")
         if command.key?('args')
           raise SpecError, "commands.#{name}.args must be a list" unless command['args'].is_a?(Array)
           command['args'].each do |arg|
@@ -839,6 +1096,17 @@ module SpecGenerator
       raise SpecError, "#{context} escapes package root"
     end
 
+    def validate_relative_output_path!(path, context)
+      raise SpecError, "#{context} cannot be empty" if path.empty?
+      raise SpecError, "#{context} must be relative" if absolute_path?(path)
+
+      root = File.expand_path(@package_root)
+      expanded = File.expand_path(path, root)
+      return if expanded == root || expanded.start_with?("#{root}#{File::SEPARATOR}")
+
+      raise SpecError, "#{context} escapes package root"
+    end
+
     def absolute_path?(path)
       Pathname.new(path).absolute? || path.match?(/\A(?:[A-Za-z]:[\\\/]|\\\\|\/\/)/)
     end
@@ -880,6 +1148,16 @@ module SpecGenerator
       raise SpecError, "#{context} is required" unless hash.key?(key)
       raise SpecError, "#{context} must be a list" unless hash[key].is_a?(Array)
       raise SpecError, "#{context} cannot be empty" if hash[key].empty?
+
+      hash[key].each do |value|
+        raise SpecError, "#{context} entries must be strings" unless value.is_a?(String)
+      end
+      hash[key]
+    end
+
+    def required_string_array(hash, key, context)
+      raise SpecError, "#{context} is required" unless hash.key?(key)
+      raise SpecError, "#{context} must be a list" unless hash[key].is_a?(Array)
 
       hash[key].each do |value|
         raise SpecError, "#{context} entries must be strings" unless value.is_a?(String)

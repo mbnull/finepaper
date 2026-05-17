@@ -106,6 +106,18 @@ topologies:
       rows: { label: Rows, default: 2, min: 1, max: 16 }
       cols: { label: Columns, default: 2, min: 1, max: 16 }
 
+generation:
+  engine: ipcraft.common.v1
+  module_mappings:
+    RaveTile: tile
+    RaveEndpoint: endpoint
+  coordinate_bindings:
+    RaveTile: { col: mesh_col, row: mesh_row }
+  outputs:
+    - id: config_header
+      kind: template
+      path: ravenoc_config.svh
+
 commands:
   validate:
     executable: generator/bin/drc
