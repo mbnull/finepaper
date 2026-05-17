@@ -93,6 +93,10 @@
       "name": "OpenNoC XP",
       "description": "OpenNoC crosspoint router tile.",
       "graph_role": "host",
+      "display": {
+        "label_parameter": "display_name",
+        "short_label_parameter": "external_id"
+      },
       "parameters": {
         "display_name": {
           "type": "string",
@@ -241,6 +245,10 @@
       "name": "RNF",
       "description": "OpenNoC CHI RNF agent.",
       "graph_role": "attached",
+      "display": {
+        "label_parameter": "display_name",
+        "short_label_parameter": "external_id"
+      },
       "parameters": {
         "display_name": {
           "type": "string",
@@ -292,6 +300,10 @@
       "name": "RNI",
       "description": "OpenNoC CHI RNI agent.",
       "graph_role": "attached",
+      "display": {
+        "label_parameter": "display_name",
+        "short_label_parameter": "external_id"
+      },
       "parameters": {
         "display_name": {
           "type": "string",
@@ -343,6 +355,10 @@
       "name": "HNF",
       "description": "OpenNoC CHI HNF agent.",
       "graph_role": "attached",
+      "display": {
+        "label_parameter": "display_name",
+        "short_label_parameter": "external_id"
+      },
       "parameters": {
         "display_name": {
           "type": "string",
@@ -394,6 +410,10 @@
       "name": "HNI",
       "description": "OpenNoC CHI HNI agent.",
       "graph_role": "attached",
+      "display": {
+        "label_parameter": "display_name",
+        "short_label_parameter": "external_id"
+      },
       "parameters": {
         "display_name": {
           "type": "string",
@@ -445,6 +465,10 @@
       "name": "SNF",
       "description": "OpenNoC CHI SNF agent.",
       "graph_role": "attached",
+      "display": {
+        "label_parameter": "display_name",
+        "short_label_parameter": "external_id"
+      },
       "parameters": {
         "display_name": {
           "type": "string",

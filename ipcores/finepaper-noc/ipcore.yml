@@ -20,6 +20,9 @@ modules:
     name: XP
     description: Mesh router with four directional links and four local endpoint attachment slots.
     graph_role: host
+    display:
+      label_parameter: display_name
+      short_label_parameter: external_id
     parameters:
       x: { type: int, default: 0, configurable: false, emit: attribute, description: Canvas X position. }
       y: { type: int, default: 0, configurable: false, emit: attribute, description: Canvas Y position. }
@@ -85,6 +88,9 @@ modules:
     name: Endpoint
     description: Endpoint interface block that terminates a local NoC connection.
     graph_role: attached
+    display:
+      label_parameter: display_name
+      short_label_parameter: external_id
     parameters:
       display_name: { type: string, default: '', emit: editor, label: Display name, description: Name shown on the canvas. }
       external_id: { type: string, default: '', emit: editor, label: External ID, description: Framework-facing identifier. }
@@ -136,7 +142,10 @@ generation:
   outputs:
     - id: top
       kind: template
-      path: top.v
+      path: rtl/top.v
+    - id: filelist
+      kind: filelist
+      path: filelist.f
 
 commands:
   validate:

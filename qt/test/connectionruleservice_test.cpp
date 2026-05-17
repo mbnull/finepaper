@@ -2,6 +2,7 @@
 #include "connection/connectionruleservice.h"
 #include "graph/graph.h"
 #include "ipcraft/ipcraftconnectionvalidator.h"
+#include "modules/modulelabels.h"
 #include "modules/moduleregistry.h"
 
 #include <QCoreApplication>
@@ -295,6 +296,29 @@ IpcraftPackageManifest displayNamedManifest(const QString& packageId,
     return manifest;
 }
 
+IpcraftPackageManifest staticDisplayNameParameterManifest(const QString& packageId) {
+    IpcraftPackageManifest manifest;
+    manifest.id = packageId;
+
+    IpcraftModuleDescriptor endpoint;
+    endpoint.id = QStringLiteral("Endpoint");
+    endpoint.name = QStringLiteral("Endpoint");
+    endpoint.parameters.insert(QStringLiteral("display_name"), stringParameterDescriptor());
+    endpoint.interfaces.push_back(
+        displayInterfaceDescriptor(QStringLiteral("noc"), QStringLiteral("NoC Fabric")));
+
+    IpcraftModuleDescriptor routerTile;
+    routerTile.id = QStringLiteral("RouterTile");
+    routerTile.name = QStringLiteral("Router Tile");
+    routerTile.parameters.insert(QStringLiteral("display_name"), stringParameterDescriptor());
+    routerTile.interfaces.push_back(
+        displayInterfaceDescriptor(QStringLiteral("local"), QStringLiteral("Local Link")));
+
+    manifest.modules.push_back(endpoint);
+    manifest.modules.push_back(routerTile);
+    return manifest;
+}
+
 void loadDisplayNamedManifest(const IpcraftPackageManifest& manifest) {
     require(ModuleRegistry::instance().loadIpcraftPackages({manifest}),
             "display-named module types should load");
@@ -314,6 +338,22 @@ std::unique_ptr<Module> makeDisplayNamedModule(const QString& packageId,
 
     const ModuleType* type = ModuleRegistry::instance().getType(packageId, moduleId);
     require(type != nullptr, "display-named type should be registered");
+    for (const Port& port : type->defaultPorts) {
+        module->addPort(port);
+    }
+    return module;
+}
+
+std::unique_ptr<Module> makeStaticDisplayNameParameterModule(const QString& packageId,
+                                                            const QString& id,
+                                                            const QString& moduleId,
+                                                            const QString& displayName) {
+    auto module = std::make_unique<Module>(id, moduleId);
+    module->setIpcoreId(packageId);
+    module->setParameter(QStringLiteral("display_name"), displayName);
+
+    const ModuleType* type = ModuleRegistry::instance().getType(packageId, moduleId);
+    require(type != nullptr, "static display-name parameter type should be registered");
     for (const Port& port : type->defaultPorts) {
         module->addPort(port);
     }
@@ -530,6 +570,49 @@ void testConnectionOptionsPreferDisplayNamesAndInterfaceLabels() {
             "option should not show raw endpoint port id when an interface label exists");
     require(!label.contains(QStringLiteral(".local")),
             "option should not show raw router port id when an interface label exists");
+}
+
+void testModuleLabelsUseStaticNameWithoutDisplayBinding() {
+    Module module(QStringLiteral("runtime_id"), QStringLiteral("StaticModule"));
+    module.setParameter(QStringLiteral("display_name"), QStringLiteral("Runtime Label"));
+
+    require(ModuleLabels::userFacingName(&module) == QStringLiteral("StaticModule"),
+            "module labels should use the static module name without display binding");
+}
+
+void testConnectionOptionLabelsIgnoreDisplayNameParameterWithoutBinding() {
+    const QString packageId = QStringLiteral("finepaper.display.static_labels");
+    const IpcraftPackageManifest manifest = staticDisplayNameParameterManifest(packageId);
+    loadDisplayNamedManifest(manifest);
+
+    Graph graph;
+    auto xp = makeStaticDisplayNameParameterModule(packageId,
+                                                  QStringLiteral("uuid_xp_static"),
+                                                  QStringLiteral("RouterTile"),
+                                                  QStringLiteral("Runtime XP"));
+    auto ep = makeStaticDisplayNameParameterModule(packageId,
+                                                  QStringLiteral("uuid_ep_static"),
+                                                  QStringLiteral("Endpoint"),
+                                                  QStringLiteral("Runtime DMA"));
+    require(graph.addModule(std::move(xp)), "static-label router should add");
+    require(graph.addModule(std::move(ep)), "static-label endpoint should add");
+
+    ConnectionRuleService service(&graph, {}, {manifest});
+    const ConnectionCheckResult result = service.check(
+        ConnectionRequest::portToPort(PortRef{QStringLiteral("uuid_ep_static"), QStringLiteral("noc")},
+                                      PortRef{QStringLiteral("uuid_xp_static"), QStringLiteral("local")},
+                                      ConnectionRequestKind::PortToPort));
+
+    require(result.hasSingleOption(), "static-label test should have one option");
+    const QString label = result.options.first().label;
+    require(label.contains(QStringLiteral("Endpoint.NoC Fabric")),
+            "option should use static endpoint name without display binding");
+    require(label.contains(QStringLiteral("Router Tile.Local Link")),
+            "option should use static router name without display binding");
+    require(!label.contains(QStringLiteral("Runtime DMA")),
+            "option should not use display_name without display binding");
+    require(!label.contains(QStringLiteral("Runtime XP")),
+            "option should not use display_name without display binding");
 }
 
 void testDuplicateConnectionOptionLabelsUseShortLabelBeforeIds() {
@@ -1159,6 +1242,8 @@ int main(int argc, char** argv) {
         testSymmetricClassNormalizesReverseDrag();
         testAmbiguousClassCreatesWarningResult();
         testConnectionOptionsPreferDisplayNamesAndInterfaceLabels();
+        testModuleLabelsUseStaticNameWithoutDisplayBinding();
+        testConnectionOptionLabelsIgnoreDisplayNameParameterWithoutBinding();
         testDuplicateConnectionOptionLabelsUseShortLabelBeforeIds();
         testConnectionOptionLabelsUseAnchorInterfaceLabels();
         testConnectionRuleServiceUsesInterfaceClassesNotLegacyBusNames();

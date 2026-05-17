@@ -25,6 +25,28 @@ inline QString displayName(const Module* module) {
     return stringParameter(module, "display_name", module ? module->id() : QString());
 }
 
+inline QString staticModuleName(const Module* module) {
+    const ModuleType* type = ModuleTypeMetadata::type(module);
+    if (type) {
+        const QString label = ModuleTypeMetadata::paletteLabel(type).trimmed();
+        if (!label.isEmpty()) {
+            return label;
+        }
+
+        const QString moduleId = ModuleTypeMetadata::moduleId(type).trimmed();
+        if (!moduleId.isEmpty()) {
+            return moduleId;
+        }
+    }
+
+    if (!module) {
+        return {};
+    }
+
+    const QString moduleType = module->type().trimmed();
+    return moduleType.isEmpty() ? module->id() : moduleType;
+}
+
 inline QString userFacingName(const Module* module) {
     const ModuleType* type = ModuleTypeMetadata::type(module);
     const QString binding = type ? type->displayLabelParameter.trimmed() : QString();
@@ -35,7 +57,7 @@ inline QString userFacingName(const Module* module) {
         }
     }
 
-    return displayName(module);
+    return staticModuleName(module);
 }
 
 inline QString shortDisambiguator(const Module* module) {

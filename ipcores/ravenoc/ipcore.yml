@@ -33,6 +33,9 @@ modules:
     name: Rave Tile
     description: Editable RaveNoC router tile backed by upstream RTL mesh.
     graph_role: host
+    display:
+      label_parameter: display_name
+      short_label_parameter: external_id
     parameters:
       display_name: { type: string, default: Rave Tile, label: Display name, description: Name shown on the canvas. }
       external_id: { type: string, default: rave_00, label: External ID, description: Stable generated artifact identifier. }
@@ -76,6 +79,9 @@ modules:
     name: Rave Endpoint
     description: Editable RaveNoC endpoint attachment for a router tile.
     graph_role: attached
+    display:
+      label_parameter: display_name
+      short_label_parameter: external_id
     parameters:
       display_name: { type: string, default: Rave Endpoint, label: Display name, description: Name shown on the canvas. }
       external_id: { type: string, default: rave_ep_00, label: External ID, description: Stable generated artifact identifier. }

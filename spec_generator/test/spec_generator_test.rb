@@ -1432,6 +1432,13 @@ class SpecGeneratorTest < Minitest::Test
 
     connection_class_ids = manifest.fetch('connection_classes').map { |klass| klass.fetch('id') }
     manifest.fetch('modules').each do |mod|
+      parameters = mod.fetch('parameters', {})
+      if parameters.key?('display_name')
+        display = mod.fetch('display')
+        assert_equal 'display_name', display.fetch('label_parameter')
+        assert_equal 'external_id', display.fetch('short_label_parameter') if parameters.key?('external_id')
+      end
+
       mod.fetch('interfaces').each do |interface|
         interface.fetch('accepts').each do |accept|
           assert_includes connection_class_ids, accept.fetch('class')
