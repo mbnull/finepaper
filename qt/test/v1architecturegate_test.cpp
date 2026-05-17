@@ -475,8 +475,10 @@ void testManifestLoaderHasStrictJsonAndAtomicRegistrationTests() {
     const bool loaded =
         registry.loadPackageRoots({validRoot.absolutePath(), invalidRoot.absolutePath()});
     require(!loaded, "registry should reject a batch that contains an invalid package");
-    require(registry.packages().isEmpty(),
-            "partial package load rejection should leave registry packages empty");
+    require(registry.packages().size() == 1,
+            "partial package load rejection should keep valid packages registered");
+    require(registry.package(QStringLiteral("org.example.valid")) != nullptr,
+            "partial package load rejection should retain the valid package");
     require(!registry.diagnostics().isEmpty(),
             "partial package load rejection should expose loader diagnostics");
 }
