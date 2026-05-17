@@ -443,7 +443,8 @@ void testManifestReaderParsesDisplayTopologyAndGeneration() {
           "accepts": [{ "class": "mesh_link", "role": "source" }],
           "topology": {
             "side": "east",
-            "opposite": "link_in"
+            "opposite": "link_in",
+            "role": "source"
           }
         },
         {
@@ -480,6 +481,8 @@ void testManifestReaderParsesDisplayTopologyAndGeneration() {
             "topology side should parse");
     require(output->topology.oppositeInterfaceId == QStringLiteral("link_in"),
             "topology opposite interface should parse");
+    require(output->topology.role == QStringLiteral("source"),
+            "topology role should parse");
     require(result.manifest.generation.engine == QStringLiteral("ipcraft.common.v1"),
             "generation engine should parse");
     require(result.manifest.generation.metadata.value(QStringLiteral("module_mappings"))
