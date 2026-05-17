@@ -92,6 +92,14 @@ inline QString hintedSide(const Port& port) {
     return {};
 }
 
+template <typename Metadata>
+inline QString semanticSide(const Port& port, const Metadata* metadata) {
+    if (metadata && !metadata->topologySide.isEmpty()) {
+        return metadata->topologySide;
+    }
+    return hintedSide(port);
+}
+
 inline QString fallbackSide(const Port& port) {
     const QString hinted = hintedSide(port);
     if (!hinted.isEmpty()) {
@@ -127,6 +135,14 @@ inline QString oppositeRouterSide(const QString& side) {
     if (side == "east") return "west";
     if (side == "west") return "east";
     return {};
+}
+
+template <typename Metadata>
+inline QString oppositeSide(const QString& side, const Metadata* metadata) {
+    if (metadata && !metadata->oppositeInterfaceId.isEmpty()) {
+        return metadata->oppositeInterfaceId;
+    }
+    return oppositeRouterSide(side);
 }
 
 inline QString routerInputPortId(const QString& side) {

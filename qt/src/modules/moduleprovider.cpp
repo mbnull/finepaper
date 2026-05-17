@@ -321,6 +321,12 @@ QSet<QString> topologyInterfaceIdsForModule(const IpcraftPackageManifest& manife
     return interfaceIds;
 }
 
+bool hasTopologyMetadata(const IpcraftInterfaceDescriptor& interfaceDescriptor) {
+    return !interfaceDescriptor.topology.side.isEmpty() ||
+           !interfaceDescriptor.topology.oppositeInterfaceId.isEmpty() ||
+           !interfaceDescriptor.topology.role.isEmpty();
+}
+
 QString autocompleteGroupForInterface(const IpcraftModuleDescriptor& module,
                                       bool topologyInterface) {
     if (isRouterCapableGraphRole(module.graphRole) && topologyInterface) {
@@ -465,7 +471,9 @@ ModuleInterfaceMetadata interfaceMetadataFromIpcraft(const IpcraftPackageManifes
                                                      const IpcraftModuleDescriptor& module,
                                                      const IpcraftInterfaceDescriptor& interfaceDescriptor,
                                                      const QSet<QString>& topologyInterfaceIds) {
-    const bool topologyInterface = topologyInterfaceIds.contains(interfaceDescriptor.id);
+    const bool topologyInterface =
+        topologyInterfaceIds.contains(interfaceDescriptor.id) ||
+        hasTopologyMetadata(interfaceDescriptor);
     ModuleInterfaceMetadata metadata;
     metadata.id = interfaceDescriptor.id;
     metadata.label = interfaceDescriptor.label.isEmpty()
@@ -479,6 +487,9 @@ ModuleInterfaceMetadata interfaceMetadataFromIpcraft(const IpcraftPackageManifes
         : QStringLiteral("one");
     metadata.autocompleteGroup = autocompleteGroupForInterface(module, topologyInterface);
     metadata.topologyRule = topologyRuleForInterface(module, topologyInterface);
+    metadata.topologySide = interfaceDescriptor.topology.side;
+    metadata.oppositeInterfaceId = interfaceDescriptor.topology.oppositeInterfaceId;
+    metadata.topologyRole = interfaceDescriptor.topology.role;
     metadata.acceptRules = interfaceDescriptor.accepts;
     return metadata;
 }
@@ -547,6 +558,9 @@ ModuleType moduleTypeFromIpcraft(const IpcraftPackageManifest& manifest,
     const QSet<QString> topologyInterfaceIds =
         topologyInterfaceIdsForModule(manifest, module.id);
     for (const IpcraftInterfaceDescriptor& interfaceDescriptor : module.interfaces) {
+        const bool topologyInterface =
+            topologyInterfaceIds.contains(interfaceDescriptor.id) ||
+            hasTopologyMetadata(interfaceDescriptor);
         ModuleInterfaceMetadata metadata =
             interfaceMetadataFromIpcraft(manifest,
                                          module,
@@ -559,7 +573,7 @@ ModuleType moduleTypeFromIpcraft(const IpcraftPackageManifest& manifest,
                                        metadata.label,
                                        QStringLiteral("%1 interface").arg(metadata.label),
                                        portRoleForInterface(module,
-                                                            topologyInterfaceIds.contains(interfaceDescriptor.id)),
+                                                            topologyInterface),
                                        metadata.bus,
                                        interfaceDescriptor.id);
     }

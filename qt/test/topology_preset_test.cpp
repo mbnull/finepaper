@@ -206,6 +206,17 @@ IpcraftInterfaceDescriptor manifestMeshInterface(const QString& id,
     return descriptor;
 }
 
+IpcraftInterfaceDescriptor manifestMetadataMeshInterface(const QString& id,
+                                                         const QString& role,
+                                                         const QString& side,
+                                                         const QString& oppositeInterfaceId) {
+    IpcraftInterfaceDescriptor descriptor = manifestMeshInterface(id, role);
+    descriptor.topology.side = side;
+    descriptor.topology.oppositeInterfaceId = oppositeInterfaceId;
+    descriptor.topology.role = role;
+    return descriptor;
+}
+
 IpcraftPackageManifest manifestNamedMeshPackage(const QString& packageId,
                                                 const QString& moduleId) {
     IpcraftPackageManifest manifest;
@@ -252,6 +263,44 @@ IpcraftPackageManifest manifestNamedMeshPackage(const QString& packageId,
         }}
     });
 
+    return manifest;
+}
+
+IpcraftPackageManifest manifestTopologyMetadataMeshPackage(const QString& packageId,
+                                                           const QString& moduleId) {
+    IpcraftPackageManifest manifest;
+    manifest.id = packageId;
+    manifest.connectionClasses.push_back(IpcraftConnectionClass{
+        QStringLiteral("manifest_mesh_link"),
+        QStringList{QStringLiteral("source"), QStringLiteral("sink")},
+        false
+    });
+
+    IpcraftModuleDescriptor module;
+    module.id = moduleId;
+    module.name = QStringLiteral("Manifest Metadata Mesh Tile");
+    module.graphRole = QStringLiteral("host");
+    module.parameters = QJsonObject{
+        {QStringLiteral("x"), QJsonObject{{QStringLiteral("type"), QStringLiteral("int")},
+                                          {QStringLiteral("default"), 0}}},
+        {QStringLiteral("y"), QJsonObject{{QStringLiteral("type"), QStringLiteral("int")},
+                                          {QStringLiteral("default"), 0}}},
+        {QStringLiteral("display_name"), QJsonObject{{QStringLiteral("type"), QStringLiteral("string")},
+                                                     {QStringLiteral("default"), QString()}}},
+        {QStringLiteral("external_id"), QJsonObject{{QStringLiteral("type"), QStringLiteral("string")},
+                                                    {QStringLiteral("default"), QString()}}}
+    };
+    module.interfaces = {
+        manifestMetadataMeshInterface(QStringLiteral("mesh_out"),
+                                      QStringLiteral("source"),
+                                      QStringLiteral("east"),
+                                      QStringLiteral("mesh_in")),
+        manifestMetadataMeshInterface(QStringLiteral("mesh_in"),
+                                      QStringLiteral("sink"),
+                                      QStringLiteral("west"),
+                                      QStringLiteral("mesh_out"))
+    };
+    manifest.modules.push_back(module);
     return manifest;
 }
 
@@ -418,6 +467,42 @@ void testMeshPresetUsesManifestConnectionClassesNotEastWestNames() {
     require(connection->interfaces().at(1).instanceId == rightId &&
                 connection->interfaces().at(1).interfaceId == QStringLiteral("link_in"),
             "generated link should store the mapped target interface id");
+}
+
+void testMeshPresetUsesManifestTopologyMetadataWithoutPortMappings() {
+    ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
+    const QString packageId = QStringLiteral("finepaper.manifest_topology_metadata_mesh");
+    const QString typeName = QStringLiteral("ManifestTopologyMetadataMeshTile");
+    const IpcraftPackageManifest manifest =
+        manifestTopologyMetadataMeshPackage(packageId, typeName);
+    require(registry.loadIpcraftPackages({manifest}),
+            "manifest topology metadata mesh package should load");
+    const ModuleType* loadedType = registry.getType(typeName);
+    require(loadedType != nullptr, "manifest topology metadata mesh type should register");
+    ModuleRegistry::instance().registerType(*loadedType);
+
+    Graph graph;
+    TopologyPresetRequest request;
+    request.ipcoreId = packageId;
+    request.instanceId = QStringLiteral("noc_0");
+    request.preset.id = QStringLiteral("mesh");
+    request.preset.label = QStringLiteral("Mesh");
+    request.preset.kind = QStringLiteral("mesh");
+    request.preset.routerModule = typeName;
+    request.preset.idPattern = QStringLiteral("tile_{row}_{col}");
+    request.parameters.insert(QStringLiteral("rows"), 1);
+    request.parameters.insert(QStringLiteral("cols"), 2);
+
+    const TopologyPresetResult result = TopologyPresetBuilder::apply(&graph, registry, request);
+
+    require(result.success, result.error.toLocal8Bit().constData());
+    require(graph.connections().size() == 1,
+            "1x2 metadata mesh should create one link without explicit directional port mappings");
+    const Connection* connection = graph.connections().front().get();
+    require(connection->source().portId == QStringLiteral("mesh_out"),
+            "metadata mesh source port should come from topology side metadata");
+    require(connection->target().portId == QStringLiteral("mesh_in"),
+            "metadata mesh target port should come from topology opposite metadata");
 }
 
 void testPackageScopedTopologyPresetUsesActivePackageRouter() {
@@ -833,6 +918,7 @@ int main(int argc, char** argv) {
         testMeshPresetCreatesEditableGraph();
         testPackageBackedPresetConnectionsPreserveResolvedMetadata();
         testMeshPresetUsesManifestConnectionClassesNotEastWestNames();
+        testMeshPresetUsesManifestTopologyMetadataWithoutPortMappings();
         testPackageScopedTopologyPresetUsesActivePackageRouter();
         testRingPresetCreatesClosedLoop();
         testPresetRejectsConnectionsThatFailRuleService();

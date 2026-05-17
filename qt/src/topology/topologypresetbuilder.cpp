@@ -1,5 +1,6 @@
 #include "topology/topologypresetbuilder.h"
 
+#include "common/portlayout.h"
 #include "graph/connection.h"
 #include "graph/graph.h"
 #include "graph/module.h"
@@ -93,6 +94,125 @@ QVector<ConnectionInterfaceRef> graphInterfaceRefs(
         refs.push_back(ConnectionInterfaceRef{interfaceRef.instanceId, interfaceRef.interfaceId});
     }
     return refs;
+}
+
+QString interfaceIdForPort(const Port& port) {
+    return port.interfaceId().isEmpty() ? port.id() : port.interfaceId();
+}
+
+const ModuleInterfaceMetadata* interfaceMetadataForId(const ModuleType& type,
+                                                      const QString& interfaceId) {
+    if (interfaceId.trimmed().isEmpty()) {
+        return nullptr;
+    }
+    const auto it = type.interfaceMetadata.constFind(interfaceId);
+    return it == type.interfaceMetadata.cend() ? nullptr : &it.value();
+}
+
+const ModuleInterfaceMetadata* interfaceMetadataForPort(const ModuleType& type,
+                                                        const Port& port) {
+    return interfaceMetadataForId(type, interfaceIdForPort(port));
+}
+
+const Port* defaultPortForIdOrInterface(const ModuleType& type, const QString& portOrInterfaceId) {
+    const QString requestedId = portOrInterfaceId.trimmed();
+    if (requestedId.isEmpty()) {
+        return nullptr;
+    }
+    const auto portIt = std::find_if(type.defaultPorts.cbegin(),
+                                     type.defaultPorts.cend(),
+                                     [&](const Port& port) {
+                                         return port.id() == requestedId ||
+                                                interfaceIdForPort(port) == requestedId;
+                                     });
+    return portIt == type.defaultPorts.cend() ? nullptr : &(*portIt);
+}
+
+const Port* defaultPortForSemanticSide(const ModuleType& type, const QString& side) {
+    if (side.trimmed().isEmpty()) {
+        return nullptr;
+    }
+    const auto portIt = std::find_if(type.defaultPorts.cbegin(),
+                                     type.defaultPorts.cend(),
+                                     [&](const Port& port) {
+                                         return PortLayout::semanticSide(
+                                                    port,
+                                                    interfaceMetadataForPort(type, port)) == side;
+                                     });
+    return portIt == type.defaultPorts.cend() ? nullptr : &(*portIt);
+}
+
+struct MeshPortResolution {
+    QString portId;
+    QString side;
+    const ModuleInterfaceMetadata* metadata = nullptr;
+};
+
+MeshPortResolution meshPortFromPort(const ModuleType& type,
+                                    const Port& port,
+                                    const QString& fallbackSide) {
+    const ModuleInterfaceMetadata* metadata = interfaceMetadataForPort(type, port);
+    QString side = PortLayout::semanticSide(port, metadata);
+    if (side.isEmpty()) {
+        side = fallbackSide;
+    }
+    return MeshPortResolution{port.id(), side, metadata};
+}
+
+MeshPortResolution meshPortFromId(const ModuleType& type,
+                                  const QString& portOrInterfaceId,
+                                  const QString& fallbackSide) {
+    if (const Port* port = defaultPortForIdOrInterface(type, portOrInterfaceId)) {
+        return meshPortFromPort(type, *port, fallbackSide);
+    }
+
+    const ModuleInterfaceMetadata* metadata = interfaceMetadataForId(type, portOrInterfaceId);
+    QString side = metadata ? metadata->topologySide : QString();
+    if (side.isEmpty()) {
+        side = fallbackSide;
+    }
+    return MeshPortResolution{portOrInterfaceId.trimmed(), side, metadata};
+}
+
+MeshPortResolution resolveMeshSourcePort(const ModuleType& type,
+                                         const QHash<QString, QString>& explicitPorts,
+                                         const QString& direction) {
+    const QString mappedPort = explicitPorts.value(direction).trimmed();
+    if (!mappedPort.isEmpty()) {
+        return meshPortFromId(type, mappedPort, direction);
+    }
+    if (const Port* port = defaultPortForSemanticSide(type, direction)) {
+        return meshPortFromPort(type, *port, direction);
+    }
+    return meshPortFromId(type, direction, direction);
+}
+
+MeshPortResolution resolveMeshTargetPort(const ModuleType& type,
+                                         const QHash<QString, QString>& explicitPorts,
+                                         const QString& direction,
+                                         const MeshPortResolution& source) {
+    const QString mappedPort = explicitPorts.value(direction).trimmed();
+    if (!mappedPort.isEmpty()) {
+        return meshPortFromId(type, mappedPort, direction);
+    }
+
+    const QString opposite = PortLayout::oppositeSide(source.side, source.metadata);
+    if (!opposite.isEmpty()) {
+        if (source.metadata && !source.metadata->oppositeInterfaceId.isEmpty()) {
+            return meshPortFromId(type, opposite, direction);
+        }
+        if (const Port* port = defaultPortForSemanticSide(type, opposite)) {
+            return meshPortFromPort(type, *port, direction);
+        }
+        if (const Port* port = defaultPortForIdOrInterface(type, opposite)) {
+            return meshPortFromPort(type, *port, direction);
+        }
+    }
+
+    if (const Port* port = defaultPortForSemanticSide(type, direction)) {
+        return meshPortFromPort(type, *port, direction);
+    }
+    return meshPortFromId(type, direction, direction);
 }
 
 std::unique_ptr<Module> instantiateModule(const ModuleType& type,
@@ -226,10 +346,14 @@ TopologyPresetResult createMesh(Graph* graph,
         }
     }
 
-    const QString east = request.preset.ports.value(QStringLiteral("east"));
-    const QString west = request.preset.ports.value(QStringLiteral("west"));
-    const QString north = request.preset.ports.value(QStringLiteral("north"));
-    const QString south = request.preset.ports.value(QStringLiteral("south"));
+    const MeshPortResolution eastSource =
+        resolveMeshSourcePort(routerType, request.preset.ports, QStringLiteral("east"));
+    const MeshPortResolution eastTarget =
+        resolveMeshTargetPort(routerType, request.preset.ports, QStringLiteral("west"), eastSource);
+    const MeshPortResolution southSource =
+        resolveMeshSourcePort(routerType, request.preset.ports, QStringLiteral("south"));
+    const MeshPortResolution southTarget =
+        resolveMeshTargetPort(routerType, request.preset.ports, QStringLiteral("north"), southSource);
     const ConnectionRuleService ruleService(graph, {}, std::move(packageManifests));
 
     for (int row = 0; row < rows; ++row) {
@@ -242,11 +366,11 @@ TopologyPresetResult createMesh(Graph* graph,
                 if (!addLink(graph,
                              ruleService,
                              result,
-                             generatedConnectionId(current, east, QStringLiteral("east")),
+                             generatedConnectionId(current, eastSource.portId, QStringLiteral("east")),
                              current,
-                             east,
+                             eastSource.portId,
                              right,
-                             west)) {
+                             eastTarget.portId)) {
                     rollbackCreated(graph, result);
                     return result;
                 }
@@ -257,11 +381,11 @@ TopologyPresetResult createMesh(Graph* graph,
                 if (!addLink(graph,
                              ruleService,
                              result,
-                             generatedConnectionId(current, south, QStringLiteral("south")),
+                             generatedConnectionId(current, southSource.portId, QStringLiteral("south")),
                              current,
-                             south,
+                             southSource.portId,
                              below,
-                             north)) {
+                             southTarget.portId)) {
                     rollbackCreated(graph, result);
                     return result;
                 }
