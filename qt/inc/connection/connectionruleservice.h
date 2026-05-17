@@ -76,6 +76,9 @@ struct PortSemanticInfo {
     QString cardinality = QStringLiteral("one");
     QString autocompleteGroup;
     QString topologyRule;
+    QString topologySide;
+    QString oppositeInterfaceId;
+    QString topologyRole;
     QVector<IpcraftInterfaceAcceptRule> acceptRules;
     bool supportsInput = false;
     bool supportsOutput = false;

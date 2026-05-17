@@ -105,6 +105,31 @@ bool valuesOverlap(const QStringList& lhs, const QStringList& rhs) {
     return false;
 }
 
+bool requiresOppositeSideRule(const PortSemanticInfo& source, const PortSemanticInfo& target) {
+    return source.topologyRule == QStringLiteral("opposite_side") ||
+           target.topologyRule == QStringLiteral("opposite_side");
+}
+
+QString topologySideForPort(const PortSemanticInfo& port) {
+    if (!port.topologySide.isEmpty()) {
+        return port.topologySide;
+    }
+    return PortLayout::routerSideId(port.ref.portId);
+}
+
+bool hasExplicitOrDirectionalTopologySide(const PortSemanticInfo& port) {
+    return !port.topologySide.isEmpty() ||
+           PortLayout::isDirectionalRouterPortId(port.ref.portId);
+}
+
+bool topologySidesAreOpposite(const PortSemanticInfo& source,
+                              const PortSemanticInfo& target) {
+    const QString sourceSide = topologySideForPort(source);
+    const QString targetSide = topologySideForPort(target);
+    return !sourceSide.isEmpty() &&
+           PortLayout::oppositeRouterSide(sourceSide) == targetSide;
+}
+
 bool portOccupiedForCardinalityOne(const Graph* graph, const PortRef& ref);
 bool oppositeSideRulePasses(const PortSemanticInfo& source, const PortSemanticInfo& target);
 bool classValidationOppositeSideRulePasses(const PortSemanticInfo& source,
@@ -273,31 +298,24 @@ bool portOccupiedForCardinalityOne(const Graph* graph, const PortRef& ref) {
 
 bool oppositeSideRulePasses(const PortSemanticInfo& source,
                             const PortSemanticInfo& target) {
-    if (source.topologyRule != QStringLiteral("opposite_side") &&
-        target.topologyRule != QStringLiteral("opposite_side")) {
+    if (!requiresOppositeSideRule(source, target)) {
         return true;
     }
 
-    const QString sourceSide = PortLayout::routerSideId(source.ref.portId);
-    const QString targetSide = PortLayout::routerSideId(target.ref.portId);
-    return !sourceSide.isEmpty() &&
-           PortLayout::oppositeRouterSide(sourceSide) == targetSide;
+    return topologySidesAreOpposite(source, target);
 }
 
 bool classValidationOppositeSideRulePasses(const PortSemanticInfo& source,
                                            const PortSemanticInfo& target) {
-    if (source.topologyRule != QStringLiteral("opposite_side") &&
-        target.topologyRule != QStringLiteral("opposite_side")) {
+    if (!requiresOppositeSideRule(source, target)) {
         return true;
     }
-    if (!PortLayout::isDirectionalRouterPortId(source.ref.portId) ||
-        !PortLayout::isDirectionalRouterPortId(target.ref.portId)) {
+    if (!hasExplicitOrDirectionalTopologySide(source) ||
+        !hasExplicitOrDirectionalTopologySide(target)) {
         return true;
     }
 
-    const QString sourceSide = PortLayout::routerSideId(source.ref.portId);
-    const QString targetSide = PortLayout::routerSideId(target.ref.portId);
-    return PortLayout::oppositeRouterSide(sourceSide) == targetSide;
+    return topologySidesAreOpposite(source, target);
 }
 
 bool endpointAllowsAsSource(const ConnectionEndpointRequest& endpoint) {
@@ -683,6 +701,9 @@ std::optional<PortSemanticInfo> ConnectionRuleService::resolvePort(const QString
                                                               : metadata.cardinality;
             info.autocompleteGroup = metadata.autocompleteGroup;
             info.topologyRule = metadata.topologyRule;
+            info.topologySide = metadata.topologySide;
+            info.oppositeInterfaceId = metadata.oppositeInterfaceId;
+            info.topologyRole = metadata.topologyRole;
             info.acceptRules = metadata.acceptRules;
             QStringList fields = metadata.matchFields;
             fields.sort();

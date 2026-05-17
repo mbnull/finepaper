@@ -170,6 +170,37 @@ void registerRouterType() {
     ModuleRegistry::instance().registerType(router);
 }
 
+ModuleType nonCardinalTopologyRouterType(const QString& typeName,
+                                         const QString& portId,
+                                         const QString& role,
+                                         const QString& compatibleRole,
+                                         const QString& topologySide) {
+    ModuleType type;
+    type.name = typeName;
+    type.ipcoreId = QStringLiteral("finepaper.test");
+    type.graphGroup = QStringLiteral("routers");
+    type.defaultPorts.push_back(Port(portId,
+                                     Port::Direction::InOut,
+                                     QStringLiteral("bus"),
+                                     portId,
+                                     {},
+                                     QStringLiteral("router"),
+                                     QStringLiteral("router_link"),
+                                     portId));
+
+    ModuleInterfaceMetadata metadata;
+    metadata.id = portId;
+    metadata.bus = QStringLiteral("router_link");
+    metadata.role = role;
+    metadata.compatibleRoles = {compatibleRole};
+    metadata.cardinality = QStringLiteral("one");
+    metadata.autocompleteGroup = QStringLiteral("router_side");
+    metadata.topologyRule = QStringLiteral("opposite_side");
+    metadata.topologySide = topologySide;
+    type.interfaceMetadata.insert(metadata.id, metadata);
+    return type;
+}
+
 IpcraftInterfaceAcceptRule acceptRule(const QString& connectionClassId,
                                       const QString& role) {
     IpcraftInterfaceAcceptRule rule;
@@ -808,6 +839,55 @@ void testConnectionRuleServiceClassValidationIgnoresLegacyTopologySideNames() {
             "manifest class validation should still select the valid class");
 }
 
+void testConnectionRuleServiceClassValidationRejectsNonOppositeTopologyMetadata() {
+    ModuleType endpointType = classValidationType(
+        QStringLiteral("ClassEndpointSameTopologySide"),
+        QStringLiteral("Endpoint"),
+        QStringLiteral("link_out"),
+        QStringLiteral("legacy_source_bus"),
+        {acceptRule(QStringLiteral("chi_node_interface"), QStringLiteral("node"))},
+        QStringLiteral("opposite_side"));
+    endpointType.interfaceMetadata[QStringLiteral("link_out")].topologySide =
+        QStringLiteral("east");
+    ModuleType xpType = classValidationType(
+        QStringLiteral("ClassXpSameTopologySide"),
+        QStringLiteral("XP"),
+        QStringLiteral("link_in"),
+        QStringLiteral("legacy_target_bus"),
+        {acceptRule(QStringLiteral("chi_node_interface"), QStringLiteral("interconnect"))},
+        QStringLiteral("opposite_side"));
+    xpType.interfaceMetadata[QStringLiteral("link_in")].topologySide =
+        QStringLiteral("east");
+    ModuleRegistry::instance().registerType(endpointType);
+    ModuleRegistry::instance().registerType(xpType);
+
+    Graph graph;
+    auto endpoint = makeOwnedModule(QStringLiteral("endpoint_same_topology_side"),
+                                    endpointType.name,
+                                    QStringLiteral("finepaper.test"));
+    endpoint->addPort(endpointType.defaultPorts.front());
+    auto xp = makeOwnedModule(QStringLiteral("xp_same_topology_side"),
+                              xpType.name,
+                              QStringLiteral("finepaper.test"));
+    xp->addPort(xpType.defaultPorts.front());
+    require(graph.addModule(std::move(endpoint)), "same-side class endpoint should add");
+    require(graph.addModule(std::move(xp)), "same-side class XP should add");
+
+    ConnectionRuleService service(&graph, {}, {validatorManifest()});
+    const ConnectionCheckResult result = service.check(
+        ConnectionRequest::portToPort(
+            PortRef{QStringLiteral("endpoint_same_topology_side"), QStringLiteral("link_out")},
+            PortRef{QStringLiteral("xp_same_topology_side"), QStringLiteral("link_in")},
+            ConnectionRequestKind::Programmatic));
+
+    require(result.status == ConnectionCheckStatus::Rejected,
+            "non-opposite topology side metadata should reject class validation connections");
+    require(result.layer == ConnectionRuleLayer::EditorRule,
+            "class validation topology side mismatch should reject at editor-rule layer");
+    require(result.reasonCode == QStringLiteral("topology_rule_mismatch"),
+            "class validation same-side rejection should report topology rule mismatch");
+}
+
 void testConnectionRuleServiceRejectsMissingPackageManifestMetadata() {
     const ModuleType endpointType = classValidationType(
         QStringLiteral("ClassEndpointMissingManifest"),
@@ -970,6 +1050,50 @@ void testRejectsSameSideTopologyRule() {
             "same-side topology should be rejected by editor-rule layer");
     require(result.reasonCode == QStringLiteral("topology_rule_mismatch"),
             "same-side rejection should report topology rule mismatch");
+}
+
+void testAllowsNonCardinalRouterPortsWithOppositeTopologySides() {
+    const ModuleType sourceType = nonCardinalTopologyRouterType(
+        QStringLiteral("MetadataSideRouterOut"),
+        QStringLiteral("link_out"),
+        QStringLiteral("initiator"),
+        QStringLiteral("target"),
+        QStringLiteral("east"));
+    const ModuleType targetType = nonCardinalTopologyRouterType(
+        QStringLiteral("MetadataSideRouterIn"),
+        QStringLiteral("link_in"),
+        QStringLiteral("target"),
+        QStringLiteral("initiator"),
+        QStringLiteral("west"));
+    ModuleRegistry::instance().registerType(sourceType);
+    ModuleRegistry::instance().registerType(targetType);
+
+    Graph graph;
+    auto source = makeOwnedModule(QStringLiteral("source_router"),
+                                  sourceType.name,
+                                  QStringLiteral("finepaper.test"));
+    source->addPort(sourceType.defaultPorts.front());
+    auto target = makeOwnedModule(QStringLiteral("target_router"),
+                                  targetType.name,
+                                  QStringLiteral("finepaper.test"));
+    target->addPort(targetType.defaultPorts.front());
+    require(graph.addModule(std::move(source)), "source metadata-side router should add");
+    require(graph.addModule(std::move(target)), "target metadata-side router should add");
+
+    ConnectionRuleService service(&graph, {});
+    const ConnectionCheckResult result = service.check(
+        ConnectionRequest::portToPort(PortRef{QStringLiteral("source_router"), QStringLiteral("link_out")},
+                                      PortRef{QStringLiteral("target_router"), QStringLiteral("link_in")},
+                                      ConnectionRequestKind::Programmatic));
+
+    require(result.status == ConnectionCheckStatus::Allowed,
+            result.message.toLocal8Bit().constData());
+    require(result.options.size() == 1,
+            "topology side metadata should allow non-cardinal router port IDs");
+    require(result.options.first().source.portId == QStringLiteral("link_out"),
+            "non-cardinal metadata-side source port should be preserved");
+    require(result.options.first().target.portId == QStringLiteral("link_in"),
+            "non-cardinal metadata-side target port should be preserved");
 }
 
 void testAllowsBidirectionalRouterLinkFromTargetRoleToInitiatorRole() {
@@ -1228,6 +1352,7 @@ int main(int argc, char** argv) {
         testDuplicateConnectionIsStructuralRejection();
         testSelfLoopIsStructuralRejection();
         testRejectsSameSideTopologyRule();
+        testAllowsNonCardinalRouterPortsWithOppositeTopologySides();
         testAllowsBidirectionalRouterLinkFromTargetRoleToInitiatorRole();
         testRejectsOccupiedCardinalityOnePort();
         testVisualSideOrientsInOutPortToNodeCompletion();
@@ -1248,6 +1373,7 @@ int main(int argc, char** argv) {
         testConnectionOptionLabelsUseAnchorInterfaceLabels();
         testConnectionRuleServiceUsesInterfaceClassesNotLegacyBusNames();
         testConnectionRuleServiceClassValidationIgnoresLegacyTopologySideNames();
+        testConnectionRuleServiceClassValidationRejectsNonOppositeTopologyMetadata();
         testConnectionRuleServiceRejectsMissingPackageManifestMetadata();
     } catch (const std::exception& error) {
         std::cerr << "connectionruleservice_test failed: " << error.what() << '\n';
