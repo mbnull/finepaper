@@ -7,6 +7,7 @@
 
 #include <QMainWindow>
 #include <QString>
+#include <QVector>
 #include <memory>
 #include <vector>
 
@@ -77,6 +78,7 @@ private slots:
     void scheduleStartupLayoutLog();
     void logStartupLayout() const;
     void rebuildTopologyMenu();
+    QVector<IIpInstanceParameterAdapter*> rebuildIpInstanceParameterAdapters();
     void manageIpcorePackageRoots();
     void reloadIpcoreCatalog();
     bool maybeSaveChanges(const QString& actionDescription);

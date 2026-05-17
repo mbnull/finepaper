@@ -315,6 +315,15 @@ PropertyPanel::PropertyPanel(Graph* graph,
 PropertyPanel::PropertyPanel(Graph* graph, CommandManager* commandManager, QWidget* parent)
     : PropertyPanel(graph, nullptr, {}, commandManager, parent) {}
 
+void PropertyPanel::setIpInstanceParameterAdapters(
+    QVector<IIpInstanceParameterAdapter*> adapters) {
+    m_ipInstanceParameterAdapters = std::move(adapters);
+    if (!m_selectedModule && property(kSelectedConnectionIdProperty).toString().isEmpty()) {
+        clearPanel();
+        populatePanel();
+    }
+}
+
 QWidget* PropertyPanel::createIpInstanceParameterWidget(const IpInstanceParameterSection&,
                                                     const IpInstanceParameterField& field,
                                                     const QJsonValue& storedValue,

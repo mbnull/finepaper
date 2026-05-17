@@ -516,17 +516,6 @@ void MainWindow::closeEvent(QCloseEvent* event) {
 }
 
 void MainWindow::setupPanels() {
-    m_ipInstanceParameterAdapters.clear();
-    QVector<IIpInstanceParameterAdapter*> ipInstanceParameterAdapters;
-    for (const IpCatalogEntry& entry : m_ipCatalogService->entries()) {
-        auto adapter = std::make_unique<CatalogIpInstanceParameterAdapter>(
-            entry.id,
-            entry.name,
-            entry.instanceParameters);
-        ipInstanceParameterAdapters.push_back(adapter.get());
-        m_ipInstanceParameterAdapters.push_back(std::move(adapter));
-    }
-
     m_nodeEditor = new NodeEditorWidget(m_graph,
                                         m_projectStateService.get(),
                                         m_activeWorkspaceController.get(),
@@ -534,7 +523,7 @@ void MainWindow::setupPanels() {
                                         this);
     m_propertyPanel = new PropertyPanel(m_graph,
                                         m_projectStateService.get(),
-                                        ipInstanceParameterAdapters,
+                                        rebuildIpInstanceParameterAdapters(),
                                         m_commandManager.get(),
                                         this);
     m_ipCatalogPanel = new IpCatalogPanel(m_ipCatalogService.get(),
@@ -932,6 +921,24 @@ void MainWindow::rebuildTopologyMenu() {
     m_topologyMenu->setEnabled(!workspace.topologyPresets.isEmpty());
 }
 
+QVector<IIpInstanceParameterAdapter*> MainWindow::rebuildIpInstanceParameterAdapters() {
+    m_ipInstanceParameterAdapters.clear();
+    QVector<IIpInstanceParameterAdapter*> adapters;
+    if (!m_ipCatalogService) {
+        return adapters;
+    }
+
+    for (const IpCatalogEntry& entry : m_ipCatalogService->entries()) {
+        auto adapter = std::make_unique<CatalogIpInstanceParameterAdapter>(
+            entry.id,
+            entry.name,
+            entry.instanceParameters);
+        adapters.push_back(adapter.get());
+        m_ipInstanceParameterAdapters.push_back(std::move(adapter));
+    }
+    return adapters;
+}
+
 void MainWindow::manageIpcorePackageRoots() {
     IpcorePathsDialog dialog(this);
     const QStringList currentPaths = m_appSettings ? m_appSettings->ipcorePaths() : QStringList{};
@@ -961,6 +968,9 @@ void MainWindow::reloadIpcoreCatalog() {
     moduleRegistry = ModuleRegistry(ModuleRegistry::LoadMode::Empty);
     moduleRegistry.loadIpcraftPackages(loadResult.manifests);
     *m_ipCatalogService = IpCatalogService(loadResult.manifests, &moduleRegistry);
+    if (m_propertyPanel) {
+        m_propertyPanel->setIpInstanceParameterAdapters(rebuildIpInstanceParameterAdapters());
+    }
 
     if (m_logPanel) {
         m_logPanel->appendMessage(

@@ -21,6 +21,7 @@
 #include <QFileInfo>
 #include <QInputDialog>
 #include <QKeyEvent>
+#include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QMenu>
@@ -158,6 +159,47 @@ void writeMinimalPackage(const QString& packageRootPath, const QString& packageI
 })json").arg(packageId).toUtf8());
 }
 
+void writePackageWithParameter(const QString& packageRootPath,
+                               const QString& packageId,
+                               const QString& parameterName,
+                               const QString& parameterLabel) {
+    QDir root(packageRootPath);
+    require(root.mkpath(QStringLiteral("views")), "failed to create views directory");
+    writeFile(root.filePath(QStringLiteral("views/Module.xml")),
+              QByteArrayLiteral(R"xml(<module-view schema="v1" module="Module">
+  <anchors><anchor ref="bus" x="0" y="0" /></anchors>
+</module-view>)xml"));
+    writeFile(root.filePath(QStringLiteral("ipcraft.json")),
+              QStringLiteral(R"json({
+  "schema": "ipcraft.manifest.v1",
+  "id": "%1",
+  "name": "Reload Package",
+  "version": "1.0.0",
+  "connection_classes": [
+    { "id": "demo_link", "roles": ["initiator", "target"], "symmetric": false }
+  ],
+  "parameters": {
+    "%2": { "type": "int", "default": 7, "label": "%3" }
+  },
+  "modules": [
+    {
+      "id": "Module",
+      "name": "Reload Module",
+      "interfaces": [
+        {
+          "id": "bus",
+          "modes": ["initiator"],
+          "accepts": [{ "class": "demo_link", "role": "initiator" }]
+        }
+      ]
+    }
+  ],
+  "views": [
+    { "module": "Module", "file": "views/Module.xml" }
+  ]
+})json").arg(packageId, parameterName, parameterLabel).toUtf8());
+}
+
 QTreeWidgetItem* firstCatalogEntry(QTreeWidget* catalog) {
     if (!catalog || catalog->topLevelItemCount() == 0) {
         return nullptr;
@@ -228,6 +270,34 @@ QListWidgetItem* firstListItemContaining(QListWidget* list, const QString& text)
     }
     return nullptr;
 }
+
+bool widgetHasLabel(QWidget* root, const QString& label) {
+    if (!root) {
+        return false;
+    }
+
+    for (const QLabel* child : root->findChildren<QLabel*>()) {
+        if (child && child->text() == label) {
+            return true;
+        }
+    }
+    return false;
+}
+
+class ModuleRegistryRestore {
+public:
+    ModuleRegistryRestore()
+        : m_packages(ModuleRegistry::instance().packageManifests()) {}
+
+    ~ModuleRegistryRestore() {
+        ModuleRegistry& registry = ModuleRegistry::instance();
+        registry = ModuleRegistry(ModuleRegistry::LoadMode::Empty);
+        registry.loadIpcraftPackages(m_packages);
+    }
+
+private:
+    QVector<IpcraftPackageManifest> m_packages;
+};
 
 IpCoreRuntimeDescriptor ravenocDescriptor() {
     IpCoreRuntimeDescriptor descriptor;
@@ -890,6 +960,7 @@ void testAmbiguousConnectionAppearsInPropertyPanelAndLog() {
 }
 
 void testCatalogReloadUsesConfiguredPackageRoots() {
+    ModuleRegistryRestore restoreRegistry;
     QTemporaryDir settingsRoot;
     QTemporaryDir packageRoot;
     require(settingsRoot.isValid() && packageRoot.isValid(),
@@ -917,6 +988,65 @@ void testCatalogReloadUsesConfiguredPackageRoots() {
     auto* logList = window.m_logPanel->findChild<QListWidget*>();
     require(listContainsText(logList, QStringLiteral("org.example.reload")),
             "catalog reload should append package reload details to the activity log");
+}
+
+void testCatalogReloadRefreshesPropertyPanelParameters() {
+    ModuleRegistryRestore restoreRegistry;
+    QTemporaryDir settingsRoot;
+    QTemporaryDir firstPackageRoot;
+    QTemporaryDir secondPackageRoot;
+    QTemporaryDir projectRoot;
+    require(settingsRoot.isValid() &&
+                firstPackageRoot.isValid() &&
+                secondPackageRoot.isValid() &&
+                projectRoot.isValid(),
+            "temporary directories should be valid");
+
+    const QString packageId = QStringLiteral("org.example.parameters");
+    writePackageWithParameter(firstPackageRoot.path(),
+                              packageId,
+                              QStringLiteral("old_width"),
+                              QStringLiteral("Old Width"));
+    writePackageWithParameter(secondPackageRoot.path(),
+                              packageId,
+                              QStringLiteral("new_width"),
+                              QStringLiteral("New Width"));
+    configureSettingsRoot(settingsRoot.path(), QStringLiteral("ipcatalogpanel_parameters_test_app"));
+    AppSettings().setIpcorePaths({firstPackageRoot.path()});
+
+    MainWindow window;
+    require(window.createProjectAt(projectRoot.filePath(QStringLiteral("parameters.fpproj"))),
+            "project should be created for property panel reload test");
+    const std::optional<IpCatalogEntry> oldEntry = window.m_ipCatalogService->entry(packageId);
+    require(oldEntry.has_value(), "initial package entry should load");
+    require(window.m_projectIpService->createInstanceForIpcore(*oldEntry).success,
+            "initial package instance should be created");
+    window.m_propertyPanel->setSelectedModule(QString());
+    require(widgetHasLabel(window.m_propertyPanel, QStringLiteral("Old Width")),
+            "property panel should render the initial package parameter");
+
+    AppSettings().setIpcorePaths({secondPackageRoot.path()});
+    window.reloadIpcoreCatalog();
+    window.m_propertyPanel->setSelectedModule(QString());
+
+    require(widgetHasLabel(window.m_propertyPanel, QStringLiteral("New Width")),
+            "property panel should render reloaded package parameters");
+    require(!widgetHasLabel(window.m_propertyPanel, QStringLiteral("Old Width")),
+            "property panel should drop stale package parameters after reload");
+}
+
+void testDefaultRegistrySurvivesCatalogReloadTests() {
+    QTemporaryDir settingsRoot;
+    require(settingsRoot.isValid(), "temporary settings directory should be valid");
+    configureSettingsRoot(settingsRoot.path(), QStringLiteral("ipcatalogpanel_registry_guard_app"));
+    AppSettings().setIpcorePaths({repositoryPath(QStringLiteral("ipcores"))});
+
+    MainWindow window;
+    const ModuleType* raveTile =
+        ModuleRegistry::instance().getType(QStringLiteral("finepaper.ravenoc"),
+                                           QStringLiteral("RaveTile"));
+    require(raveTile != nullptr,
+            "tests after catalog reload should still see the default module registry");
 }
 
 } // namespace
@@ -955,6 +1085,8 @@ int main(int argc, char** argv) {
         testNewProjectAddsIpcraftPackageInstanceFromCatalog();
         testAmbiguousConnectionAppearsInPropertyPanelAndLog();
         testCatalogReloadUsesConfiguredPackageRoots();
+        testCatalogReloadRefreshesPropertyPanelParameters();
+        testDefaultRegistrySurvivesCatalogReloadTests();
     } catch (const std::exception& error) {
         std::cerr << "ipcatalogpanel_test failed: " << error.what() << '\n';
         return 1;

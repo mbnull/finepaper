@@ -30,6 +30,7 @@ public:
                   QWidget* parent = nullptr);
     PropertyPanel(Graph* graph, CommandManager* commandManager, QWidget* parent = nullptr);
     void setSelectedModule(Module* module);
+    void setIpInstanceParameterAdapters(QVector<IIpInstanceParameterAdapter*> adapters);
 
 public slots:
     void setSelectedModule(QString moduleId);
