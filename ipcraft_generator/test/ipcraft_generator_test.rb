@@ -103,12 +103,147 @@ class IpcraftGeneratorTest < Minitest::Test
       mesh = JSON.parse(File.read(mesh_path))
       assert_equal({ 'X' => 0, 'Y' => 0, 'P0' => 'RNF', 'P1' => 'RNI' }, mesh.fetch('XP0_0'))
       assert_equal({ 'X' => 1, 'Y' => 0, 'P0' => 'HNF', 'P1' => 'NONE' }, mesh.fetch('XP1_0'))
+      assert_equal({ 'X' => 0, 'Y' => 1, 'P0' => 'HNI', 'P1' => 'NONE' }, mesh.fetch('XP0_1'))
+      assert_equal({ 'X' => 1, 'Y' => 1, 'P0' => 'SNF', 'P1' => 'NONE' }, mesh.fetch('XP1_1'))
 
       output_manifest = JSON.parse(File.read(File.join(output, 'manifest.json')))
       assert_equal 'finepaper.opennoc', output_manifest.fetch('ipcore')
       assert_equal 2, output_manifest.fetch('rows')
       assert_equal 2, output_manifest.fetch('cols')
     end
+  end
+
+  def test_opennoc_projection_supports_legacy_source_target_connections
+    Dir.mktmpdir do |dir|
+      input_path = File.join(dir, 'input.json')
+      output = File.join(dir, 'out')
+      project = opennoc_mesh_project
+      project['connections'] = project.fetch('connections').map { |connection| legacy_source_target_connection(connection) }
+      File.write(input_path, JSON.pretty_generate(project))
+
+      IpcraftGenerator::Generator.new(
+        manifest: File.join(PROJECT_ROOT, 'ipcores/opennoc/ipcraft.json'),
+        input: input_path,
+        output: output
+      ).generate
+
+      mesh = JSON.parse(File.read(File.join(output, 'opennoc_mesh.json')))
+      assert_equal({ 'X' => 0, 'Y' => 0, 'P0' => 'RNF', 'P1' => 'RNI' }, mesh.fetch('XP0_0'))
+      assert_equal({ 'X' => 1, 'Y' => 1, 'P0' => 'SNF', 'P1' => 'NONE' }, mesh.fetch('XP1_1'))
+    end
+  end
+
+  def test_opennoc_projection_supports_legacy_from_to_connections
+    Dir.mktmpdir do |dir|
+      input_path = File.join(dir, 'input.json')
+      output = File.join(dir, 'out')
+      project = opennoc_mesh_project
+      project['connections'] = project.fetch('connections').map { |connection| legacy_from_to_connection(connection) }
+      File.write(input_path, JSON.pretty_generate(project))
+
+      IpcraftGenerator::Generator.new(
+        manifest: File.join(PROJECT_ROOT, 'ipcores/opennoc/ipcraft.json'),
+        input: input_path,
+        output: output
+      ).generate
+
+      mesh = JSON.parse(File.read(File.join(output, 'opennoc_mesh.json')))
+      assert_equal({ 'X' => 0, 'Y' => 1, 'P0' => 'HNI', 'P1' => 'NONE' }, mesh.fetch('XP0_1'))
+      assert_equal({ 'X' => 1, 'Y' => 1, 'P0' => 'SNF', 'P1' => 'NONE' }, mesh.fetch('XP1_1'))
+    end
+  end
+
+  def test_opennoc_projection_rejects_unknown_interface_reference
+    project = opennoc_mesh_project
+    project.fetch('connections').find do |connection|
+      connection.fetch('id') == 'rnf_0_to_XP0_0_p0'
+    end.fetch('interfaces').first['interface'] = 'if_missing'
+
+    error = assert_raises(IpcraftGenerator::Error) do
+      generate_opennoc_project(project)
+    end
+    assert_includes error.message, 'rnf_0_to_XP0_0_p0'
+    assert_includes error.message, 'unknown interface rnf_0.if_missing'
+  end
+
+  def test_opennoc_projection_rejects_unknown_interface_instance
+    project = opennoc_mesh_project
+    project.fetch('connections').find do |connection|
+      connection.fetch('id') == 'rnf_0_to_XP0_0_p0'
+    end.fetch('interfaces').first['instance'] = 'missing_agent'
+
+    error = assert_raises(IpcraftGenerator::Error) do
+      generate_opennoc_project(project)
+    end
+    assert_includes error.message, 'rnf_0_to_XP0_0_p0'
+    assert_includes error.message, 'unknown instance missing_agent'
+  end
+
+  def test_opennoc_projection_rejects_invalid_legacy_endpoint_shape
+    project = opennoc_mesh_project
+    project.fetch('connections').map! { |connection| legacy_source_target_connection(connection) }
+    project.fetch('connections').find do |connection|
+      connection.fetch('id') == 'rnf_0_to_XP0_0_p0'
+    end['source'] = 'rnf_0.chi'
+
+    error = assert_raises(IpcraftGenerator::Error) do
+      generate_opennoc_project(project)
+    end
+    assert_includes error.message, 'rnf_0_to_XP0_0_p0'
+    assert_includes error.message, 'invalid source endpoint reference'
+  end
+
+  def test_opennoc_projection_rejects_invalid_xp_mesh_connection
+    project = opennoc_mesh_project
+    project.fetch('connections').find do |connection|
+      connection.fetch('id') == 'XP0_0_east_to_XP1_0_west'
+    end.fetch('interfaces').last['interface'] = 'if_north'
+
+    error = assert_raises(IpcraftGenerator::Error) do
+      generate_opennoc_project(project)
+    end
+    assert_includes error.message, 'XP0_0_east_to_XP1_0_west'
+    assert_includes error.message, 'invalid OpenNoC XP mesh connection'
+  end
+
+  def test_opennoc_projection_reports_duplicate_coordinate
+    project = opennoc_mesh_project
+    project.fetch('instances').find { |instance| instance.fetch('id') == 'XP1_0' }.fetch('parameters')['mesh_col'] = 0
+
+    error = assert_raises(IpcraftGenerator::Error) do
+      generate_opennoc_project(project)
+    end
+    assert_includes error.message, 'duplicate coordinate 0,0'
+  end
+
+  def test_opennoc_projection_reports_negative_coordinate
+    project = opennoc_mesh_project
+    project.fetch('instances').find { |instance| instance.fetch('id') == 'XP0_0' }.fetch('parameters')['mesh_col'] = -1
+
+    error = assert_raises(IpcraftGenerator::Error) do
+      generate_opennoc_project(project)
+    end
+    assert_includes error.message, 'negative coordinate -1,0'
+  end
+
+  def test_opennoc_projection_reports_missing_coordinate
+    project = opennoc_mesh_project
+    project.fetch('instances').find { |instance| instance.fetch('id') == 'XP1_1' }.fetch('parameters')['mesh_row'] = 2
+
+    error = assert_raises(IpcraftGenerator::Error) do
+      generate_opennoc_project(project)
+    end
+    assert_includes error.message, 'missing coordinate 1,1'
+  end
+
+  def test_opennoc_projection_reports_missing_xp_mapping
+    manifest = opennoc_manifest
+    manifest.fetch('generation').fetch('module_mappings').delete('OpenNoCXP')
+
+    error = assert_raises(IpcraftGenerator::Error) do
+      generate_opennoc_project(opennoc_mesh_project, manifest: manifest)
+    end
+    assert_includes error.message, 'OpenNoC generation.module_mappings must include an XP mapping'
   end
 
   private
@@ -267,5 +402,51 @@ class IpcraftGeneratorTest < Minitest::Test
         { 'instance' => right.fetch(0), 'interface' => "if_#{right.fetch(1)}" }
       ]
     }
+  end
+
+  def legacy_source_target_connection(connection)
+    refs = connection.fetch('interfaces')
+    {
+      'id' => connection.fetch('id'),
+      'class' => connection.fetch('class'),
+      'source' => legacy_endpoint(refs.fetch(0)),
+      'target' => legacy_endpoint(refs.fetch(1))
+    }
+  end
+
+  def legacy_from_to_connection(connection)
+    refs = connection.fetch('interfaces')
+    {
+      'id' => connection.fetch('id'),
+      'class' => connection.fetch('class'),
+      'from' => legacy_endpoint(refs.fetch(0)),
+      'to' => legacy_endpoint(refs.fetch(1))
+    }
+  end
+
+  def legacy_endpoint(ref)
+    {
+      'module' => ref.fetch('instance'),
+      'port' => ref.fetch('interface').delete_prefix('if_')
+    }
+  end
+
+  def generate_opennoc_project(project, manifest: opennoc_manifest)
+    Dir.mktmpdir do |dir|
+      manifest_path = File.join(dir, 'ipcraft.json')
+      input_path = File.join(dir, 'input.json')
+      File.write(manifest_path, JSON.pretty_generate(manifest))
+      File.write(input_path, JSON.pretty_generate(project))
+
+      IpcraftGenerator::Generator.new(
+        manifest: manifest_path,
+        input: input_path,
+        output: File.join(dir, 'out')
+      ).generate
+    end
+  end
+
+  def opennoc_manifest
+    JSON.parse(File.read(File.join(PROJECT_ROOT, 'ipcores/opennoc/ipcraft.json')))
   end
 end

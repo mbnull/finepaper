@@ -100,6 +100,10 @@ module IpcraftGenerator
     def opennoc_projection(manifest, input)
       mappings = opennoc_module_mappings(manifest)
       xp_modules = modules_for_upstream_type(mappings, 'XP')
+      if xp_modules.empty?
+        raise Error, 'OpenNoC generation.module_mappings must include an XP mapping'
+      end
+
       agent_type_by_module = mappings.select { |_module_id, upstream_type| OPENNOC_AGENT_TYPES.include?(upstream_type) }
       instances = input.fetch('instances', [])
       xps = instances.select { |instance| xp_modules.include?(instance['module']) }
@@ -107,7 +111,7 @@ module IpcraftGenerator
 
       coordinates = opennoc_xp_coordinates(xps)
       rows, cols = validate_rectangular_opennoc_mesh!(coordinates, xps.size)
-      agent_slots = opennoc_agent_slots(input, coordinates.keys, agent_type_by_module)
+      agent_slots = opennoc_agent_slots(input, coordinates, agent_type_by_module)
 
       {
         mesh: opennoc_mesh_json(xps, coordinates, agent_slots),
@@ -141,31 +145,47 @@ module IpcraftGenerator
     end
 
     def validate_rectangular_opennoc_mesh!(coordinates, xp_count)
-      if coordinates.size != xp_count || coordinates.values.any? { |x, y| x.negative? || y.negative? }
-        raise Error, "OpenNoCXP graph must be rectangular, found #{xp_count} XPs"
+      if coordinates.size != xp_count
+        raise Error, 'OpenNoCXP graph has duplicate instance ids'
+      end
+
+      negative = coordinates.find { |_id, (x, y)| x.negative? || y.negative? }
+      if negative
+        _id, coordinate = negative
+        raise Error, "OpenNoCXP graph has negative coordinate #{coordinate.join(',')}"
+      end
+
+      duplicate = coordinates.group_by { |_id, coordinate| coordinate }.find { |_coordinate, entries| entries.size > 1 }
+      if duplicate
+        coordinate, entries = duplicate
+        ids = entries.map(&:first).join(', ')
+        raise Error, "OpenNoCXP graph has duplicate coordinate #{coordinate.join(',')} for #{ids}"
       end
 
       cols = coordinates.values.map(&:first).max + 1
       rows = coordinates.values.map(&:last).max + 1
       occupied = coordinates.values
-      rectangular = occupied.uniq.size == occupied.size && occupied.size == rows * cols
-      rectangular &&= (0...rows).all? do |row|
-        (0...cols).all? { |col| occupied.include?([col, row]) }
+      (0...rows).each do |row|
+        (0...cols).each do |col|
+          next if occupied.include?([col, row])
+
+          raise Error, "OpenNoCXP graph has missing coordinate #{col},#{row}"
+        end
       end
-      raise Error, "OpenNoCXP graph must be rectangular, found #{xp_count} XPs" unless rectangular
 
       [rows, cols]
     end
 
-    def opennoc_agent_slots(input, xp_ids, agent_type_by_module)
+    def opennoc_agent_slots(input, coordinates, agent_type_by_module)
       instances = input.fetch('instances', [])
       module_by_id = instances.to_h { |instance| [instance.fetch('id'), instance] }
       interface_ports = interface_ports_by_instance(instances)
       slots = {}
 
       input.fetch('connections', []).each do |connection|
-        binding = opennoc_agent_connection(connection, interface_ports, module_by_id, xp_ids, agent_type_by_module)
+        binding = opennoc_agent_connection(connection, interface_ports, module_by_id, coordinates, agent_type_by_module)
         next unless binding
+        next if binding == :mesh
 
         slot_key = [binding.fetch(:xp_id), binding.fetch(:slot)]
         if slots.key?(slot_key)
@@ -179,19 +199,24 @@ module IpcraftGenerator
       slots
     end
 
-    def opennoc_agent_connection(connection, interface_ports, module_by_id, xp_ids, agent_type_by_module)
+    def opennoc_agent_connection(connection, interface_ports, module_by_id, coordinates, agent_type_by_module)
       endpoints = connection_endpoints(connection, interface_ports)
       return nil unless endpoints.size == 2
 
       left, right = endpoints
       left_type = upstream_type_for_endpoint(left, module_by_id, agent_type_by_module)
       right_type = upstream_type_for_endpoint(right, module_by_id, agent_type_by_module)
+      xp_ids = coordinates.keys
       left_is_xp = xp_ids.include?(left.fetch(:instance))
       right_is_xp = xp_ids.include?(right.fetch(:instance))
       left_is_agent = OPENNOC_AGENT_TYPES.include?(left_type)
       right_is_agent = OPENNOC_AGENT_TYPES.include?(right_type)
 
-      return nil if left_is_xp && right_is_xp
+      if left_is_xp && right_is_xp
+        validate_opennoc_mesh_connection!(connection, left, right, coordinates)
+        return :mesh
+      end
+
       return nil unless left_is_xp || right_is_xp || left_is_agent || right_is_agent
 
       if left_is_agent && right_is_xp
@@ -227,6 +252,30 @@ module IpcraftGenerator
       raise Error, "invalid OpenNoC agent connection #{connection.fetch('id', '<unnamed>')}"
     end
 
+    def validate_opennoc_mesh_connection!(connection, left, right, coordinates)
+      return if valid_opennoc_mesh_connection?(left, right, coordinates)
+
+      raise Error, "invalid OpenNoC XP mesh connection #{connection.fetch('id', '<unnamed>')}"
+    end
+
+    def valid_opennoc_mesh_connection?(left, right, coordinates)
+      left_x, left_y = coordinates.fetch(left.fetch(:instance))
+      right_x, right_y = coordinates.fetch(right.fetch(:instance))
+
+      case [left.fetch(:port).to_s.downcase, right.fetch(:port).to_s.downcase]
+      when %w[east west]
+        right_x == left_x + 1 && right_y == left_y
+      when %w[west east]
+        right_x == left_x - 1 && right_y == left_y
+      when %w[south north]
+        right_x == left_x && right_y == left_y + 1
+      when %w[north south]
+        right_x == left_x && right_y == left_y - 1
+      else
+        false
+      end
+    end
+
     def connection_endpoints(connection, interface_ports)
       if connection.key?('interfaces')
         refs = connection.fetch('interfaces')
@@ -238,11 +287,15 @@ module IpcraftGenerator
       end
 
       if connection.key?('source') && connection.key?('target')
-        return %w[source target].map { |key| endpoint_from_direct_ref(connection.fetch(key), interface_ports, connection) }
+        return %w[source target].map do |key|
+          endpoint_from_direct_ref(connection.fetch(key), interface_ports, connection, key)
+        end
       end
 
       if connection.key?('from') && connection.key?('to')
-        return %w[from to].map { |key| endpoint_from_direct_ref(connection.fetch(key), interface_ports, connection) }
+        return %w[from to].map do |key|
+          endpoint_from_direct_ref(connection.fetch(key), interface_ports, connection, key)
+        end
       end
 
       []
@@ -259,18 +312,26 @@ module IpcraftGenerator
         raise Error, "ipcraft.noc.project.v1 connection #{connection.fetch('id', '<unnamed>')} has invalid interface reference"
       end
 
-      { instance: instance_id, port: port_for_interface(instance_id, interface_id, interface_ports) }
+      { instance: instance_id, port: port_for_interface!(instance_id, interface_id, interface_ports, connection) }
     end
 
-    def endpoint_from_direct_ref(ref, interface_ports, connection)
+    def endpoint_from_direct_ref(ref, interface_ports, connection, endpoint_name)
       unless ref.is_a?(Hash)
-        raise Error, "ipcraft.noc.project.v1 connection #{connection.fetch('id', '<unnamed>')} has invalid endpoint reference"
+        raise Error,
+              "ipcraft.noc.project.v1 connection #{connection.fetch('id', '<unnamed>')} has invalid #{endpoint_name} endpoint reference"
       end
 
       instance_id = ref['instance'] || ref['module']
-      port = ref['port'] || port_for_interface(instance_id, ref['interface'], interface_ports)
-      unless instance_id && port
-        raise Error, "ipcraft.noc.project.v1 connection #{connection.fetch('id', '<unnamed>')} has invalid endpoint reference"
+      unless instance_id
+        raise Error,
+              "ipcraft.noc.project.v1 connection #{connection.fetch('id', '<unnamed>')} has invalid #{endpoint_name} endpoint reference"
+      end
+
+      port = ref['port']
+      port ||= port_for_interface!(instance_id, ref['interface'], interface_ports, connection) if ref.key?('interface')
+      unless port
+        raise Error,
+              "ipcraft.noc.project.v1 connection #{connection.fetch('id', '<unnamed>')} has invalid #{endpoint_name} endpoint reference"
       end
 
       { instance: instance_id, port: port }
@@ -291,10 +352,24 @@ module IpcraftGenerator
       end
     end
 
-    def port_for_interface(instance_id, interface_id, interface_ports)
-      return nil unless instance_id && interface_id
+    def port_for_interface!(instance_id, interface_id, interface_ports, connection)
+      unless instance_id && interface_id
+        raise Error, "ipcraft.noc.project.v1 connection #{connection.fetch('id', '<unnamed>')} has invalid interface reference"
+      end
 
-      interface_ports.fetch(instance_id, {}).fetch(interface_id, interface_id)
+      ports = interface_ports[instance_id]
+      unless ports
+        raise Error,
+              "ipcraft.noc.project.v1 connection #{connection.fetch('id', '<unnamed>')} references unknown instance #{instance_id}"
+      end
+
+      port = ports[interface_id]
+      unless port
+        raise Error,
+              "ipcraft.noc.project.v1 connection #{connection.fetch('id', '<unnamed>')} references unknown interface #{instance_id}.#{interface_id}"
+      end
+
+      port
     end
 
     def opennoc_mesh_json(xps, coordinates, agent_slots)
