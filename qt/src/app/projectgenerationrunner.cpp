@@ -156,6 +156,24 @@ void appendUniquePath(QStringList& paths, const QString& path) {
     }
 }
 
+bool isSourceTreeWithFrameworkTool(const QDir& dir) {
+    return QFileInfo(dir.filePath(QStringLiteral("qt/xmake.lua"))).isFile()
+           && QFileInfo(dir.filePath(QStringLiteral("ipcraft_generator/bin/ipcraft-generate"))).isFile();
+}
+
+void appendSourceTreeFrameworkToolPath(QStringList& paths, const QDir& applicationDir) {
+    QDir candidate = applicationDir;
+    while (true) {
+        if (isSourceTreeWithFrameworkTool(candidate)) {
+            appendUniquePath(paths, candidate.filePath(QStringLiteral("ipcraft_generator/bin")));
+            return;
+        }
+        if (!candidate.cdUp()) {
+            return;
+        }
+    }
+}
+
 QString exitStatusString(QProcess::ExitStatus status) {
     return status == QProcess::NormalExit ? QStringLiteral("normal") : QStringLiteral("crash");
 }
@@ -387,6 +405,7 @@ QStringList ProjectGenerationRunner::defaultFrameworkToolSearchPaths() {
     QStringList paths;
 
     const QDir application(QCoreApplication::applicationDirPath());
+    appendSourceTreeFrameworkToolPath(paths, application);
     appendUniquePath(paths, application.filePath(QStringLiteral("ipcraft_generator/bin")));
     appendUniquePath(paths, application.filePath(QStringLiteral("../ipcraft_generator/bin")));
     appendUniquePath(paths, application.filePath(QStringLiteral("../../ipcraft_generator/bin")));

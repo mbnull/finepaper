@@ -69,6 +69,21 @@ void makeExecutable(const QString& path) {
             "failed to make test generator executable");
 }
 
+QString repositoryPathFromApplicationDir(const QString& relativePath) {
+    QDir dir(QCoreApplication::applicationDirPath());
+    while (true) {
+        const QFileInfo info(dir.filePath(relativePath));
+        if (info.exists()) {
+            return info.absoluteFilePath();
+        }
+        if (!dir.cdUp()) {
+            break;
+        }
+    }
+    return QFileInfo(QDir(QCoreApplication::applicationDirPath()).filePath(relativePath))
+        .absoluteFilePath();
+}
+
 std::unique_ptr<Module> makeModule(const QString& id,
                                    const QString& type,
                                    const QString& ipcoreId,
@@ -291,6 +306,18 @@ void testDefaultFrameworkToolSearchPathsIgnoreCurrentWorkingDirectory() {
             "default framework tool paths should not include CWD-local tool directories");
     require(!searchPaths.contains(parentLocalToolPath),
             "default framework tool paths should not include CWD-parent tool directories");
+}
+
+void testDefaultFrameworkToolSearchPathsFindRepositoryToolFromApplicationDir() {
+    const QString toolDirectory =
+        repositoryPathFromApplicationDir(QStringLiteral("ipcraft_generator/bin"));
+    require(QFileInfo(QDir(toolDirectory).filePath(QStringLiteral("ipcraft-generate"))).isFile(),
+            "repository ipcraft-generate tool should exist for default search path coverage");
+
+    const QStringList searchPaths = ProjectGenerationRunner::defaultFrameworkToolSearchPaths();
+
+    require(searchPaths.contains(toolDirectory),
+            "default framework tool paths should include repo tool directory from application dir layout");
 }
 
 void testGeneratesEveryProjectInstanceIntoSeparateOutputDirectories() {
@@ -843,6 +870,7 @@ int main(int argc, char** argv) {
 
     try {
         testDefaultFrameworkToolSearchPathsIgnoreCurrentWorkingDirectory();
+        testDefaultFrameworkToolSearchPathsFindRepositoryToolFromApplicationDir();
         testGeneratesEveryProjectInstanceIntoSeparateOutputDirectories();
         testGenerationRejectsUnsafeAndDuplicateInstanceOutputKeys();
         testGenerationFailureAndTimeoutFailWholeResult();
