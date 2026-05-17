@@ -203,6 +203,6 @@ commands:
     input_schema: ipcraft.noc.project.v1
     args: [-i, "{input}"]
   generate:
-    executable: generator/bin/generate
+    framework_tool: ipcraft-generate
     input_schema: ipcraft.noc.project.v1
-    args: [-i, "{input}", -o, "{output}"]
+    args: ["--manifest", "{manifest}", "--input", "{input}", "--output", "{output}"]

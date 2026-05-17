@@ -404,12 +404,14 @@
       ]
     },
     "generate": {
-      "executable": "generator/bin/generate",
+      "framework_tool": "ipcraft-generate",
       "input_schema": "ipcraft.noc.project.v1",
       "args": [
-        "-i",
+        "--manifest",
+        "{manifest}",
+        "--input",
         "{input}",
-        "-o",
+        "--output",
         "{output}"
       ]
     }

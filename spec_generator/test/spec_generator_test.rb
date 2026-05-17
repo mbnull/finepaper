@@ -554,8 +554,8 @@ class SpecGeneratorTest < Minitest::Test
   def test_emits_framework_tool_command
     Dir.mktmpdir do |dir|
       yaml = ipcraft_package_yaml.sub(
-        "  generate:\n    executable: tools/generate\n",
-        "  generate:\n    framework_tool: ipcraft-generate\n"
+        "  generate:\n    executable: tools/generate\n    input_schema: ipcraft.noc.project.v1\n",
+        "  generate:\n    framework_tool: ipcraft-generate\n    input_schema: ipcraft.noc.project.v1\n    args:\n      - --manifest\n      - \"{manifest}\"\n      - --input\n      - \"{input}\"\n      - --output\n      - \"{output}\"\n"
       )
       package_root = write_ipcraft_package_source(dir, yaml: yaml)
 
@@ -563,8 +563,14 @@ class SpecGeneratorTest < Minitest::Test
       manifest = JSON.parse(File.read(File.join(package_root, 'ipcraft.json')))
       command = manifest.fetch('commands').fetch('generate')
 
-      assert_equal 'ipcraft-generate', command.fetch('framework_tool')
-      refute command.key?('executable')
+      assert_equal(
+        {
+          'framework_tool' => 'ipcraft-generate',
+          'input_schema' => 'ipcraft.noc.project.v1',
+          'args' => common_ipcraft_generate_args
+        },
+        command
+      )
     end
   end
 
@@ -1401,9 +1407,23 @@ class SpecGeneratorTest < Minitest::Test
   def assert_repository_ipcraft_manifest_contract(manifest)
     assert_equal 'ipcraft.manifest.v1', manifest.fetch('schema')
 
-    manifest.fetch('commands').each_value do |command|
-      assert command.fetch('input_schema')
-    end
+    commands = manifest.fetch('commands')
+    assert_equal(
+      {
+        'executable' => 'generator/bin/drc',
+        'input_schema' => 'ipcraft.noc.project.v1',
+        'args' => ['-i', '{input}']
+      },
+      commands.fetch('validate')
+    )
+    assert_equal(
+      {
+        'framework_tool' => 'ipcraft-generate',
+        'input_schema' => 'ipcraft.noc.project.v1',
+        'args' => common_ipcraft_generate_args
+      },
+      commands.fetch('generate')
+    )
 
     module_ids = manifest.fetch('modules').map { |mod| mod.fetch('id') }
     manifest.fetch('views').each do |view|
@@ -1418,6 +1438,10 @@ class SpecGeneratorTest < Minitest::Test
         end
       end
     end
+  end
+
+  def common_ipcraft_generate_args
+    ['--manifest', '{manifest}', '--input', '{input}', '--output', '{output}']
   end
 
   def parse_minimal_ipcore(root)
