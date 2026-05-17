@@ -1,0 +1,12 @@
+#!/usr/bin/env ruby
+
+$LOAD_PATH.unshift File.expand_path('../lib', __dir__)
+
+require 'ipcraft_generator'
+
+begin
+  IpcraftGenerator::CLI.run(ARGV)
+rescue IpcraftGenerator::Error => error
+  warn "error: #{error.message}"
+  exit 1
+end
