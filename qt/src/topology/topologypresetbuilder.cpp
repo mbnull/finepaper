@@ -128,18 +128,39 @@ const Port* defaultPortForIdOrInterface(const ModuleType& type, const QString& p
     return portIt == type.defaultPorts.cend() ? nullptr : &(*portIt);
 }
 
-const Port* defaultPortForSemanticSide(const ModuleType& type, const QString& side) {
+const Port* defaultPortForMetadataSide(const ModuleType& type, const QString& side) {
     if (side.trimmed().isEmpty()) {
         return nullptr;
     }
     const auto portIt = std::find_if(type.defaultPorts.cbegin(),
                                      type.defaultPorts.cend(),
                                      [&](const Port& port) {
-                                         return PortLayout::semanticSide(
-                                                    port,
-                                                    interfaceMetadataForPort(type, port)) == side;
+                                         const ModuleInterfaceMetadata* metadata =
+                                             interfaceMetadataForPort(type, port);
+                                         return metadata &&
+                                                metadata->topologySide == side;
                                      });
     return portIt == type.defaultPorts.cend() ? nullptr : &(*portIt);
+}
+
+const Port* defaultPortForLegacySide(const ModuleType& type, const QString& side) {
+    if (side.trimmed().isEmpty()) {
+        return nullptr;
+    }
+    const auto portIt = std::find_if(type.defaultPorts.cbegin(),
+                                     type.defaultPorts.cend(),
+                                     [&](const Port& port) {
+                                         return PortLayout::hintedSide(port) == side ||
+                                                PortLayout::routerSideId(port.id()) == side;
+                                     });
+    return portIt == type.defaultPorts.cend() ? nullptr : &(*portIt);
+}
+
+const Port* defaultPortForSide(const ModuleType& type, const QString& side) {
+    if (const Port* metadataPort = defaultPortForMetadataSide(type, side)) {
+        return metadataPort;
+    }
+    return defaultPortForLegacySide(type, side);
 }
 
 struct MeshPortResolution {
@@ -181,7 +202,7 @@ MeshPortResolution resolveMeshSourcePort(const ModuleType& type,
     if (!mappedPort.isEmpty()) {
         return meshPortFromId(type, mappedPort, direction);
     }
-    if (const Port* port = defaultPortForSemanticSide(type, direction)) {
+    if (const Port* port = defaultPortForSide(type, direction)) {
         return meshPortFromPort(type, *port, direction);
     }
     return meshPortFromId(type, direction, direction);
@@ -201,7 +222,7 @@ MeshPortResolution resolveMeshTargetPort(const ModuleType& type,
         if (source.metadata && !source.metadata->oppositeInterfaceId.isEmpty()) {
             return meshPortFromId(type, opposite, direction);
         }
-        if (const Port* port = defaultPortForSemanticSide(type, opposite)) {
+        if (const Port* port = defaultPortForSide(type, opposite)) {
             return meshPortFromPort(type, *port, direction);
         }
         if (const Port* port = defaultPortForIdOrInterface(type, opposite)) {
@@ -209,7 +230,7 @@ MeshPortResolution resolveMeshTargetPort(const ModuleType& type,
         }
     }
 
-    if (const Port* port = defaultPortForSemanticSide(type, direction)) {
+    if (const Port* port = defaultPortForSide(type, direction)) {
         return meshPortFromPort(type, *port, direction);
     }
     return meshPortFromId(type, direction, direction);

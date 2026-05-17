@@ -304,6 +304,15 @@ IpcraftPackageManifest manifestTopologyMetadataMeshPackage(const QString& packag
     return manifest;
 }
 
+IpcraftPackageManifest manifestMixedLegacyAndMetadataMeshPackage(const QString& packageId,
+                                                                 const QString& moduleId) {
+    IpcraftPackageManifest manifest = manifestTopologyMetadataMeshPackage(packageId, moduleId);
+    require(!manifest.modules.isEmpty(), "mixed metadata manifest should contain a module");
+    manifest.modules.front().interfaces.prepend(
+        manifestMeshInterface(QStringLiteral("east"), QStringLiteral("source")));
+    return manifest;
+}
+
 TopologyPresetDescriptor meshPreset() {
     TopologyPresetDescriptor preset;
     preset.id = QStringLiteral("mesh");
@@ -503,6 +512,46 @@ void testMeshPresetUsesManifestTopologyMetadataWithoutPortMappings() {
             "metadata mesh source port should come from topology side metadata");
     require(connection->target().portId == QStringLiteral("mesh_in"),
             "metadata mesh target port should come from topology opposite metadata");
+}
+
+void testMeshPresetPrefersTopologyMetadataOverLegacyPortHints() {
+    ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
+    const QString packageId = QStringLiteral("finepaper.mixed_legacy_metadata_mesh");
+    const QString typeName = QStringLiteral("MixedLegacyMetadataMeshTile");
+    const IpcraftPackageManifest manifest =
+        manifestMixedLegacyAndMetadataMeshPackage(packageId, typeName);
+    require(registry.loadIpcraftPackages({manifest}),
+            "mixed legacy and metadata mesh package should load");
+    const ModuleType* loadedType = registry.getType(typeName);
+    require(loadedType != nullptr, "mixed legacy and metadata mesh type should register");
+    require(loadedType->defaultPorts.size() >= 3,
+            "mixed mesh type should include legacy and metadata ports");
+    require(loadedType->defaultPorts.front().id() == QStringLiteral("east"),
+            "legacy east port should appear before metadata mesh_out");
+    ModuleRegistry::instance().registerType(*loadedType);
+
+    Graph graph;
+    TopologyPresetRequest request;
+    request.ipcoreId = packageId;
+    request.instanceId = QStringLiteral("noc_0");
+    request.preset.id = QStringLiteral("mesh");
+    request.preset.label = QStringLiteral("Mesh");
+    request.preset.kind = QStringLiteral("mesh");
+    request.preset.routerModule = typeName;
+    request.preset.idPattern = QStringLiteral("tile_{row}_{col}");
+    request.parameters.insert(QStringLiteral("rows"), 1);
+    request.parameters.insert(QStringLiteral("cols"), 2);
+
+    const TopologyPresetResult result = TopologyPresetBuilder::apply(&graph, registry, request);
+
+    require(result.success, result.error.toLocal8Bit().constData());
+    require(graph.connections().size() == 1,
+            "1x2 mixed metadata mesh should create one link without explicit port mappings");
+    const Connection* connection = graph.connections().front().get();
+    require(connection->source().portId == QStringLiteral("mesh_out"),
+            "metadata topology side should win over an earlier legacy east port");
+    require(connection->target().portId == QStringLiteral("mesh_in"),
+            "metadata topology opposite should still select the paired target port");
 }
 
 void testPackageScopedTopologyPresetUsesActivePackageRouter() {
@@ -919,6 +968,7 @@ int main(int argc, char** argv) {
         testPackageBackedPresetConnectionsPreserveResolvedMetadata();
         testMeshPresetUsesManifestConnectionClassesNotEastWestNames();
         testMeshPresetUsesManifestTopologyMetadataWithoutPortMappings();
+        testMeshPresetPrefersTopologyMetadataOverLegacyPortHints();
         testPackageScopedTopologyPresetUsesActivePackageRouter();
         testRingPresetCreatesClosedLoop();
         testPresetRejectsConnectionsThatFailRuleService();
