@@ -21,7 +21,15 @@ public:
     static IpCoreResolvedCommand resolveGenerator(const IpCatalogEntry& entry,
                                                   const QString& inputPath,
                                                   const QString& outputDirectory);
+    static IpCoreResolvedCommand resolveGenerator(const IpCatalogEntry& entry,
+                                                  const QString& inputPath,
+                                                  const QString& outputDirectory,
+                                                  const QStringList& frameworkToolSearchPaths);
     static IpCoreResolvedCommand resolveDrc(const IpCatalogEntry& entry,
                                             const QString& inputPath,
                                             const QString& outputDirectory);
+    static IpCoreResolvedCommand resolveDrc(const IpCatalogEntry& entry,
+                                            const QString& inputPath,
+                                            const QString& outputDirectory,
+                                            const QStringList& frameworkToolSearchPaths);
 };

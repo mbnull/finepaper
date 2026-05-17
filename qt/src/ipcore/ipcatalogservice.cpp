@@ -140,7 +140,9 @@ QVector<TopologyPresetDescriptor> topologyPresetsFromManifest(
 
 IpCoreCommandDescriptor compatibilityCommand(const IpcraftCommandDescriptor& command) {
     IpCoreCommandDescriptor descriptor;
-    descriptor.command = command.executablePath;
+    descriptor.command = command.executablePath.trimmed().isEmpty()
+        ? command.frameworkTool
+        : command.executablePath;
     descriptor.inputFormat = command.inputSchema;
     descriptor.args = command.args;
     return descriptor;

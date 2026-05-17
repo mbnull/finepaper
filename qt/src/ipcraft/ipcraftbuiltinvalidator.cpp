@@ -564,10 +564,11 @@ void validateCommand(const IpCatalogEntry& entry,
     if (hasManifestCommand) {
         const IpcraftCommandDescriptor command = entry.packageManifest.commands.value(name);
         if (command.executablePath.trimmed().isEmpty()
-            && command.resolvedExecutablePath.trimmed().isEmpty()) {
+            && command.resolvedExecutablePath.trimmed().isEmpty()
+            && command.frameworkTool.trimmed().isEmpty()) {
             accumulator.addPackageError(
                 entry,
-                QStringLiteral("Package '%1' %2 command does not declare an executable.")
+                QStringLiteral("Package '%1' %2 command does not declare an executable or framework_tool.")
                     .arg(entry.id, name),
                 entry.id,
                 QStringLiteral("built_in_command"));

@@ -33,6 +33,18 @@ void writeFile(const QString& path, const QByteArray& content) {
     require(file.write(content) == content.size(), "failed to write test file");
 }
 
+void makeExecutable(const QString& path) {
+    QFile file(path);
+    require(file.setPermissions(QFile::ReadOwner |
+                                QFile::WriteOwner |
+                                QFile::ExeOwner |
+                                QFile::ReadGroup |
+                                QFile::ExeGroup |
+                                QFile::ReadOther |
+                                QFile::ExeOther),
+            "failed to make test framework tool executable");
+}
+
 void testRuntimeRegistryDefaultRootsComeFromAppSettings() {
     QTemporaryDir settingsRoot;
     QTemporaryDir appSettingsRoot;
@@ -259,6 +271,95 @@ void testIpCoreCommandRunnerResolvesIpcraftPackageCommand() {
             "package command should substitute input placeholder");
 }
 
+void testIpCoreCommandRunnerResolvesPackageFrameworkToolGenerateCommand() {
+    QTemporaryDir temp;
+    require(temp.isValid(), "temporary directory should be valid");
+    QDir root(temp.path());
+    require(root.mkpath(QStringLiteral("framework-tools")), "framework tool directory should be created");
+    require(root.mkpath(QStringLiteral("package")), "package directory should be created");
+
+    const QString toolsDir = root.filePath(QStringLiteral("framework-tools"));
+    const QString toolPath = QDir(toolsDir).filePath(QStringLiteral("ipcraft-generate"));
+    writeFile(toolPath, QByteArrayLiteral("#!/bin/sh\nexit 0\n"));
+    makeExecutable(toolPath);
+
+    const QString packageRoot = root.filePath(QStringLiteral("package"));
+    const QString manifestPath = QDir(packageRoot).filePath(QStringLiteral("ipcraft.json"));
+    writeFile(manifestPath, QByteArrayLiteral("{}\n"));
+    const QString inputPath = root.filePath(QStringLiteral("input.json"));
+    writeFile(inputPath, QByteArrayLiteral(R"json({"schema":"ipcraft.noc.project.v1"})json"));
+    const QString outputPath = root.filePath(QStringLiteral("generated"));
+
+    IpCatalogEntry entry;
+    entry.id = QStringLiteral("finepaper.framework-tool");
+    entry.sourceRootPath = packageRoot;
+    entry.packageManifest.id = entry.id;
+    entry.packageManifest.packageRootPath = packageRoot;
+
+    IpcraftCommandDescriptor commandDescriptor;
+    commandDescriptor.frameworkTool = QStringLiteral("ipcraft-generate");
+    commandDescriptor.inputSchema = QStringLiteral("ipcraft.noc.project.v1");
+    commandDescriptor.args = {
+        QStringLiteral("--manifest"),
+        QStringLiteral("{manifest}"),
+        QStringLiteral("--input"),
+        QStringLiteral("{input}"),
+        QStringLiteral("--output"),
+        QStringLiteral("{output}")
+    };
+    entry.packageManifest.commands.insert(QStringLiteral("generate"), commandDescriptor);
+
+    const IpCoreResolvedCommand command =
+        IpCoreCommandRunner::resolveGenerator(entry, inputPath, outputPath, QStringList{toolsDir});
+
+    require(command.valid, command.errorMessage.toLocal8Bit().constData());
+    require(command.command == toolPath,
+            "framework_tool command should resolve from injected search path");
+    require(command.arguments.contains(manifestPath),
+            "framework_tool command should substitute manifest placeholder");
+    require(command.arguments.contains(inputPath),
+            "framework_tool command should substitute input placeholder");
+    require(command.arguments.contains(outputPath),
+            "framework_tool command should substitute output placeholder");
+}
+
+void testIpCoreCommandRunnerReportsFrameworkToolSearchPaths() {
+    QTemporaryDir temp;
+    require(temp.isValid(), "temporary directory should be valid");
+    QDir root(temp.path());
+    require(root.mkpath(QStringLiteral("package")), "package directory should be created");
+
+    const QString packageRoot = root.filePath(QStringLiteral("package"));
+    const QString inputPath = root.filePath(QStringLiteral("input.json"));
+    writeFile(inputPath, QByteArrayLiteral(R"json({"schema":"ipcraft.noc.project.v1"})json"));
+    const QString firstSearchPath = root.filePath(QStringLiteral("framework-tools-a"));
+    const QString secondSearchPath = root.filePath(QStringLiteral("framework-tools-b"));
+
+    IpCatalogEntry entry;
+    entry.id = QStringLiteral("finepaper.missing-framework-tool");
+    entry.sourceRootPath = packageRoot;
+    entry.packageManifest.id = entry.id;
+    entry.packageManifest.packageRootPath = packageRoot;
+
+    IpcraftCommandDescriptor commandDescriptor;
+    commandDescriptor.frameworkTool = QStringLiteral("ipcraft-generate");
+    commandDescriptor.inputSchema = QStringLiteral("ipcraft.noc.project.v1");
+    entry.packageManifest.commands.insert(QStringLiteral("generate"), commandDescriptor);
+
+    const IpCoreResolvedCommand command =
+        IpCoreCommandRunner::resolveGenerator(entry,
+                                              inputPath,
+                                              root.filePath(QStringLiteral("generated")),
+                                              QStringList{firstSearchPath, secondSearchPath});
+
+    require(!command.valid, "missing framework tool should fail resolution");
+    require(command.errorMessage.contains(QStringLiteral("Searched paths")),
+            "missing framework tool diagnostic should mention searched paths");
+    require(command.errorMessage.contains(QFileInfo(firstSearchPath).absoluteFilePath()) &&
+                command.errorMessage.contains(QFileInfo(secondSearchPath).absoluteFilePath()),
+            "missing framework tool diagnostic should list every searched path");
+}
+
 void testIpcraftPackageLoadingRejectsMissingDeclaredViews() {
     QTemporaryDir temp;
     require(temp.isValid(), "temporary directory should be valid");
@@ -455,6 +556,8 @@ int main(int argc, char** argv) {
         testIpCoreCommandRunnerResolvesDrcCommand();
         testIpCoreCommandRunnerRejectsIpcraftProjectSchemaWithoutPackageManifest();
         testIpCoreCommandRunnerResolvesIpcraftPackageCommand();
+        testIpCoreCommandRunnerResolvesPackageFrameworkToolGenerateCommand();
+        testIpCoreCommandRunnerReportsFrameworkToolSearchPaths();
         testIpcraftPackageLoadingRejectsMissingDeclaredViews();
         testIpcraftPackageLoadingRejectsInvalidDeclaredViewXml();
         testRuntimeIpInstanceAdapterExposesGlobalParameterSection();

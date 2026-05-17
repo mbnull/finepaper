@@ -331,14 +331,18 @@ void testDefaultPackageCommandsResolveWithIpcraftProjectSchema() {
     require(entry->drc.inputFormat == QStringLiteral("ipcraft.noc.project.v1"),
             "DRC should retain package command input schema");
 
+    const QString frameworkToolsPath = repositoryPath(QStringLiteral("ipcraft_generator/bin"));
     const IpCoreResolvedCommand generator =
         IpCoreCommandRunner::resolveGenerator(*entry,
                                               QStringLiteral("/tmp/project.json"),
-                                              QStringLiteral("/tmp/generated"));
+                                              QStringLiteral("/tmp/generated"),
+                                              QStringList{frameworkToolsPath});
     require(generator.valid,
             "package generator should resolve instead of rejecting ipcraft.noc.project.v1");
     require(generator.inputFormat == QStringLiteral("ipcraft.noc.project.v1"),
             "resolved generator should carry package command input schema");
+    require(generator.command == QDir(frameworkToolsPath).filePath(QStringLiteral("ipcraft-generate")),
+            "resolved generator should use the controlled framework tool path");
 
     const IpCoreResolvedCommand drc =
         IpCoreCommandRunner::resolveDrc(*entry,

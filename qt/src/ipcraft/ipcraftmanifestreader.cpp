@@ -93,6 +93,14 @@ QString resolvePackageRelativePath(const QString& packageRootPath,
     return resolvedPath;
 }
 
+bool hasJsonField(const QJsonObject& object, const QString& key) {
+    return !object.value(key).isUndefined();
+}
+
+bool isAllowedFrameworkTool(const QString& tool) {
+    return tool == QStringLiteral("ipcraft-generate");
+}
+
 QStringList stringArray(const QJsonObject& object,
                         const QString& key,
                         const QString& context,
@@ -911,16 +919,46 @@ IpcraftCommandDescriptor commandFromJson(const QString& commandName,
     IpcraftCommandDescriptor descriptor;
     descriptor.name = commandName;
     const QString context = QStringLiteral("commands.%1").arg(commandName);
-    descriptor.executablePath = requiredString(object,
-                                               QStringLiteral("executable"),
-                                               context,
-                                               packageRootPath,
-                                               diagnostics);
-    descriptor.resolvedExecutablePath =
-        resolvePackageRelativePath(packageRootPath,
-                                   descriptor.executablePath,
-                                   fieldPath(context, QStringLiteral("executable")),
-                                   diagnostics);
+    const bool hasExecutable = hasJsonField(object, QStringLiteral("executable"));
+    const bool hasFrameworkTool = hasJsonField(object, QStringLiteral("framework_tool"));
+    if (hasExecutable == hasFrameworkTool) {
+        const QString diagnosticPath = hasFrameworkTool
+            ? fieldPath(context, QStringLiteral("framework_tool"))
+            : context;
+        addDiagnostic(diagnostics,
+                      packageRootPath,
+                      diagnosticPath,
+                      QStringLiteral("Command must declare exactly one of 'executable' or 'framework_tool'"));
+    }
+
+    if (hasExecutable) {
+        descriptor.executablePath = requiredString(object,
+                                                   QStringLiteral("executable"),
+                                                   context,
+                                                   packageRootPath,
+                                                   diagnostics);
+        descriptor.resolvedExecutablePath =
+            resolvePackageRelativePath(packageRootPath,
+                                       descriptor.executablePath,
+                                       fieldPath(context, QStringLiteral("executable")),
+                                       diagnostics);
+    }
+
+    if (hasFrameworkTool) {
+        descriptor.frameworkTool = requiredString(object,
+                                                  QStringLiteral("framework_tool"),
+                                                  context,
+                                                  packageRootPath,
+                                                  diagnostics);
+        if (!descriptor.frameworkTool.isEmpty()
+            && !isAllowedFrameworkTool(descriptor.frameworkTool)) {
+            addDiagnostic(diagnostics,
+                          packageRootPath,
+                          fieldPath(context, QStringLiteral("framework_tool")),
+                          QStringLiteral("Unknown framework_tool '%1'").arg(descriptor.frameworkTool));
+        }
+    }
+
     descriptor.inputSchema = requiredString(object,
                                             QStringLiteral("input_schema"),
                                             context,

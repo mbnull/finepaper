@@ -8,6 +8,7 @@
 #include "ipcore/ipcoregraphexporter.h"
 #include "validation/validationresult.h"
 
+#include <QCoreApplication>
 #include <QDir>
 #include <QDirIterator>
 #include <QFile>
@@ -19,6 +20,7 @@
 #include <QSaveFile>
 #include <QSet>
 #include <algorithm>
+#include <utility>
 
 namespace {
 
@@ -143,6 +145,17 @@ QJsonArray argumentsArray(const QStringList& arguments) {
     return stringArray(arguments);
 }
 
+void appendUniquePath(QStringList& paths, const QString& path) {
+    const QString trimmedPath = path.trimmed();
+    if (trimmedPath.isEmpty()) {
+        return;
+    }
+    const QString absolutePath = QFileInfo(trimmedPath).absoluteFilePath();
+    if (!paths.contains(absolutePath)) {
+        paths.append(absolutePath);
+    }
+}
+
 QString exitStatusString(QProcess::ExitStatus status) {
     return status == QProcess::NormalExit ? QStringLiteral("normal") : QStringLiteral("crash");
 }
@@ -218,7 +231,8 @@ QString writeManifest(const ProjectGenerationRequest& request,
 ProjectGenerationInstanceResult generateInstance(const ProjectGenerationRequest& request,
                                                  const QString& outputRoot,
                                                  const QString& designName,
-                                                 const ProjectIpInstanceRecord& instance) {
+                                                 const ProjectIpInstanceRecord& instance,
+                                                 const QStringList& frameworkToolSearchPaths) {
     ProjectGenerationInstanceResult result;
     result.instance = instance;
     result.ipcoreId = instance.ipcoreId;
@@ -263,7 +277,10 @@ ProjectGenerationInstanceResult generateInstance(const ProjectGenerationRequest&
     }
 
     IpCoreResolvedCommand command =
-        IpCoreCommandRunner::resolveGenerator(*entry, result.inputPath, result.outputDirectory);
+        IpCoreCommandRunner::resolveGenerator(*entry,
+                                              result.inputPath,
+                                              result.outputDirectory,
+                                              frameworkToolSearchPaths);
     if (!command.valid) {
         result.error = withInstanceContext(instance, command.errorMessage);
         result.artifactPaths = generatedFiles(result.outputDirectory);
@@ -297,7 +314,10 @@ ProjectGenerationInstanceResult generateInstance(const ProjectGenerationRequest&
     }
 
     command =
-        IpCoreCommandRunner::resolveGenerator(*entry, result.inputPath, result.outputDirectory);
+        IpCoreCommandRunner::resolveGenerator(*entry,
+                                              result.inputPath,
+                                              result.outputDirectory,
+                                              frameworkToolSearchPaths);
     if (!command.valid) {
         result.error = withInstanceContext(instance, command.errorMessage);
         result.artifactPaths = generatedFiles(result.outputDirectory);
@@ -357,6 +377,37 @@ ProjectGenerationInstanceResult generateInstance(const ProjectGenerationRequest&
 
 } // namespace
 
+ProjectGenerationRunner::ProjectGenerationRunner()
+    : m_frameworkToolSearchPaths(defaultFrameworkToolSearchPaths()) {}
+
+ProjectGenerationRunner::ProjectGenerationRunner(QStringList frameworkToolSearchPaths)
+    : m_frameworkToolSearchPaths(std::move(frameworkToolSearchPaths)) {}
+
+QStringList ProjectGenerationRunner::defaultFrameworkToolSearchPaths() {
+    QStringList paths;
+
+    const QDir current(QDir::currentPath());
+    appendUniquePath(paths, current.filePath(QStringLiteral("ipcraft_generator/bin")));
+    appendUniquePath(paths, current.filePath(QStringLiteral("../ipcraft_generator/bin")));
+
+    const QDir application(QCoreApplication::applicationDirPath());
+    appendUniquePath(paths, application.filePath(QStringLiteral("ipcraft_generator/bin")));
+    appendUniquePath(paths, application.filePath(QStringLiteral("../ipcraft_generator/bin")));
+    appendUniquePath(paths, application.filePath(QStringLiteral("../../ipcraft_generator/bin")));
+
+    appendUniquePath(paths, QStringLiteral("/usr/local/libexec/finepaper"));
+    appendUniquePath(paths, QStringLiteral("/usr/local/bin"));
+    return paths;
+}
+
+QStringList ProjectGenerationRunner::frameworkToolSearchPaths() const {
+    return m_frameworkToolSearchPaths;
+}
+
+void ProjectGenerationRunner::setFrameworkToolSearchPaths(QStringList searchPaths) {
+    m_frameworkToolSearchPaths = std::move(searchPaths);
+}
+
 ProjectGenerationResult ProjectGenerationRunner::generate(const ProjectGenerationRequest& request) const {
     IpcraftBuiltInValidator builtInValidator;
     const IpcraftBuiltInValidator::Result builtInResult =
@@ -409,7 +460,11 @@ ProjectGenerationResult ProjectGenerationRunner::generate(const ProjectGeneratio
     bool allInstancesSucceeded = true;
     for (const ProjectIpInstanceRecord& instance : request.instances) {
         ProjectGenerationInstanceResult instanceResult =
-            generateInstance(request, result.outputRoot, designName, instance);
+            generateInstance(request,
+                             result.outputRoot,
+                             designName,
+                             instance,
+                             m_frameworkToolSearchPaths);
         if (!instanceResult.success) {
             allInstancesSucceeded = false;
             result.errors.append(instanceResult.error);

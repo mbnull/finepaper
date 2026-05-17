@@ -49,5 +49,16 @@ struct ProjectGenerationResult {
 
 class ProjectGenerationRunner {
 public:
+    ProjectGenerationRunner();
+    explicit ProjectGenerationRunner(QStringList frameworkToolSearchPaths);
+
+    static QStringList defaultFrameworkToolSearchPaths();
+
+    QStringList frameworkToolSearchPaths() const;
+    void setFrameworkToolSearchPaths(QStringList searchPaths);
+
     ProjectGenerationResult generate(const ProjectGenerationRequest& request) const;
+
+private:
+    QStringList m_frameworkToolSearchPaths;
 };

@@ -242,6 +242,104 @@ void testRejectsMissingCommandInputSchema() {
             "diagnostic should mention input_schema");
 }
 
+QByteArray manifestWithGenerateCommand(const QByteArray& generateCommand) {
+    QByteArray manifest = minimalManifest();
+    const QByteArray oldGenerateCommand = QByteArrayLiteral(R"json("generate": {
+      "executable": "tools/generate",
+      "input_schema": "ipcraft.noc.project.v1",
+      "args": ["-i", "{input}", "-o", "{output}"]
+    })json");
+    require(manifest.contains(oldGenerateCommand),
+            "test manifest generate command should be present");
+    manifest.replace(oldGenerateCommand, generateCommand);
+    return manifest;
+}
+
+void testLoadsFrameworkToolGenerateCommand() {
+    QTemporaryDir temp;
+    require(temp.isValid(), "temporary directory should be valid");
+
+    QDir root(temp.path());
+    createView(root);
+    writeFile(root.filePath(QStringLiteral("ipcraft.json")),
+              manifestWithGenerateCommand(QByteArrayLiteral(R"json("generate": {
+      "framework_tool": "ipcraft-generate",
+      "input_schema": "ipcraft.noc.project.v1",
+      "args": ["--manifest", "{manifest}", "--input", "{input}", "--output", "{output}"]
+    })json")));
+
+    const IpcraftManifestReadResult result = IpcraftManifestReader().readPackage(temp.path());
+
+    require(result.ok, "framework_tool generate command should load");
+    const IpcraftCommandDescriptor command =
+        result.manifest.commands.value(QStringLiteral("generate"));
+    require(command.frameworkTool == QStringLiteral("ipcraft-generate"),
+            "framework_tool should be preserved on the command descriptor");
+    require(command.executablePath.isEmpty(),
+            "framework_tool command should not populate package executable path");
+    require(command.resolvedExecutablePath.isEmpty(),
+            "framework_tool command should not resolve through package root");
+    require(command.args.contains(QStringLiteral("{manifest}")),
+            "framework_tool command args should preserve manifest placeholder");
+}
+
+void testRejectsCommandWithExecutableAndFrameworkTool() {
+    QTemporaryDir temp;
+    require(temp.isValid(), "temporary directory should be valid");
+
+    QDir root(temp.path());
+    createView(root);
+    writeFile(root.filePath(QStringLiteral("ipcraft.json")),
+              manifestWithGenerateCommand(QByteArrayLiteral(R"json("generate": {
+      "executable": "tools/generate",
+      "framework_tool": "ipcraft-generate",
+      "input_schema": "ipcraft.noc.project.v1"
+    })json")));
+
+    const IpcraftManifestReadResult result = IpcraftManifestReader().readPackage(temp.path());
+
+    require(!result.ok, "commands with executable and framework_tool should be rejected");
+    require(diagnosticsContain(result.diagnostics, QStringLiteral("commands.generate.framework_tool")),
+            "both-fields diagnostic should mention framework_tool");
+}
+
+void testRejectsCommandWithoutExecutableOrFrameworkTool() {
+    QTemporaryDir temp;
+    require(temp.isValid(), "temporary directory should be valid");
+
+    QDir root(temp.path());
+    createView(root);
+    writeFile(root.filePath(QStringLiteral("ipcraft.json")),
+              manifestWithGenerateCommand(QByteArrayLiteral(R"json("generate": {
+      "input_schema": "ipcraft.noc.project.v1"
+    })json")));
+
+    const IpcraftManifestReadResult result = IpcraftManifestReader().readPackage(temp.path());
+
+    require(!result.ok, "commands without executable or framework_tool should be rejected");
+    require(diagnosticsContain(result.diagnostics, QStringLiteral("commands.generate")),
+            "missing command target diagnostic should mention command path");
+}
+
+void testRejectsUnknownFrameworkToolCommand() {
+    QTemporaryDir temp;
+    require(temp.isValid(), "temporary directory should be valid");
+
+    QDir root(temp.path());
+    createView(root);
+    writeFile(root.filePath(QStringLiteral("ipcraft.json")),
+              manifestWithGenerateCommand(QByteArrayLiteral(R"json("generate": {
+      "framework_tool": "unknown-tool",
+      "input_schema": "ipcraft.noc.project.v1"
+    })json")));
+
+    const IpcraftManifestReadResult result = IpcraftManifestReader().readPackage(temp.path());
+
+    require(!result.ok, "unknown framework_tool should be rejected");
+    require(diagnosticsContain(result.diagnostics, QStringLiteral("unknown-tool")),
+            "unknown framework_tool diagnostic should mention the tool name");
+}
+
 void testRejectsUnknownRequiredShapeFields() {
     QTemporaryDir temp;
     require(temp.isValid(), "temporary directory should be valid");
@@ -887,6 +985,10 @@ int main(int argc, char** argv) {
         testRejectsDuplicateJsonKeys();
         testRejectsDuplicateJsonKeysAfterUnicodeDecoding();
         testRejectsMissingCommandInputSchema();
+        testLoadsFrameworkToolGenerateCommand();
+        testRejectsCommandWithExecutableAndFrameworkTool();
+        testRejectsCommandWithoutExecutableOrFrameworkTool();
+        testRejectsUnknownFrameworkToolCommand();
         testRejectsUnknownRequiredShapeFields();
         testRejectsDottedUnknownRequiredShapeFields();
         testRejectsNonStringArrayEntries();

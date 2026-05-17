@@ -81,6 +81,7 @@ struct IpcraftCommandDescriptor {
     QString name;
     QString executablePath;
     QString resolvedExecutablePath;
+    QString frameworkTool;
     QString inputSchema;
     QStringList args;
 };
