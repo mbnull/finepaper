@@ -443,6 +443,11 @@
         "id": "filelist",
         "kind": "filelist",
         "path": "filelist.f"
+      },
+      {
+        "id": "manifest",
+        "kind": "json",
+        "path": "manifest.json"
       }
     ],
     "module_mappings": {

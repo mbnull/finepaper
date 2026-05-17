@@ -75,14 +75,14 @@ class IpcraftGeneratorTest < Minitest::Test
         output: output
       ).generate
 
-      assert_path_exists File.join(output, 'manifest.json')
-      assert_path_exists File.join(output, 'filelist.f')
-      assert_path_exists File.join(output, 'rtl/top.v')
+      expected_common_outputs = ['filelist.f', 'manifest.json', 'rtl/top.v']
+      expected_common_outputs.each do |path|
+        assert_path_exists File.join(output, path)
+      end
 
       manifest = JSON.parse(File.read(File.join(PROJECT_ROOT, 'ipcores/finepaper-noc/ipcraft.json')))
       declared_outputs = manifest.fetch('generation').fetch('outputs').map { |entry| entry.fetch('path') }
-      assert_includes declared_outputs, 'rtl/top.v'
-      assert_includes declared_outputs, 'filelist.f'
+      assert_empty expected_common_outputs - declared_outputs
       declared_outputs.each do |path|
         assert_path_exists File.join(output, path)
       end

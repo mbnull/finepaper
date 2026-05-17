@@ -146,6 +146,9 @@ generation:
     - id: filelist
       kind: filelist
       path: filelist.f
+    - id: manifest
+      kind: json
+      path: manifest.json
 
 commands:
   validate:
