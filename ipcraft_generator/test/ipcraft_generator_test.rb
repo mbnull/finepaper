@@ -85,6 +85,31 @@ class IpcraftGeneratorTest < Minitest::Test
     end
   end
 
+  def test_generates_ravenoc_config_and_manifest
+    Dir.mktmpdir do |dir|
+      input_path = File.join(dir, 'input.json')
+      output = File.join(dir, 'out')
+      File.write(input_path, JSON.pretty_generate(ravenoc_project))
+
+      IpcraftGenerator::Generator.new(
+        manifest: File.join(PROJECT_ROOT, 'ipcores/ravenoc/ipcraft.json'),
+        input: input_path,
+        output: output
+      ).generate
+
+      config = File.read(File.join(output, 'ravenoc_config.svh'))
+      assert_includes config, '`define NOC_CFG_SZ_ROWS 2'
+      assert_includes config, '`define NOC_CFG_SZ_COLS 2'
+
+      filelist = File.read(File.join(output, 'ravenoc_filelist.f'))
+      assert_includes filelist, 'ravenoc_top.sv'
+
+      output_manifest = JSON.parse(File.read(File.join(output, 'manifest.json')))
+      assert_equal 'finepaper.ravenoc', output_manifest.fetch('ipcore')
+      assert_equal 4, output_manifest.fetch('tiles')
+    end
+  end
+
   def test_generates_opennoc_mesh_projection_without_vendor
     Dir.mktmpdir do |dir|
       input_path = File.join(dir, 'input.json')
@@ -343,6 +368,54 @@ class IpcraftGeneratorTest < Minitest::Test
           'to' => { 'instance' => 'xp_1_1', 'interface' => 'local0' }
         }
       ]
+    }
+  end
+
+  def ravenoc_project
+    {
+      'schema' => 'ipcraft.noc.project.v1',
+      'package' => 'finepaper.ravenoc',
+      'project' => {
+        'name' => 'ravenoc_common_2x2',
+        'instance' => {
+          'id' => 'ravenoc_0',
+          'package' => 'finepaper.ravenoc',
+          'schema' => 'finepaper.ravenoc-project-state-v1',
+          'state' => {
+            'kind' => 'noc',
+            'type' => 'RaveNoC',
+            'global_parameters' => {
+              'flit_data_width' => 32,
+              'flit_type_width' => 2,
+              'flit_buffer_depth' => 2,
+              'virtual_channels' => 3,
+              'routing_algorithm' => 'xy',
+              'priority' => 'zero_high',
+              'max_packet_flits' => 256,
+              'axi_addr_width' => 32,
+              'axi_data_width' => 32,
+              'axi_cdc_required' => 'all',
+              'bypass_cdc' => false
+            }
+          }
+        }
+      },
+      'instances' => [
+        ravenoc_tile('rave_0_0', 0, 0),
+        ravenoc_tile('rave_0_1', 1, 0),
+        ravenoc_tile('rave_1_0', 0, 1),
+        ravenoc_tile('rave_1_1', 1, 1)
+      ],
+      'connections' => []
+    }
+  end
+
+  def ravenoc_tile(id, col, row)
+    {
+      'id' => id,
+      'module' => 'RaveTile',
+      'parameters' => { 'external_id' => id, 'mesh_col' => col, 'mesh_row' => row },
+      'interfaces' => %w[east west north south local].map { |port| { 'id' => "if_#{port}", 'port' => port } }
     }
   end
 

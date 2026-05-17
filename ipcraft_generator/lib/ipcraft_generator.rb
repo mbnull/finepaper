@@ -36,9 +36,46 @@ module IpcraftGenerator
   class Generator
     PACKAGE_HANDLERS = {
       'finepaper.noc' => :generate_finepaper_noc,
+      'finepaper.ravenoc' => :generate_ravenoc,
       'finepaper.opennoc' => :generate_opennoc
     }.freeze
     OPENNOC_AGENT_TYPES = %w[RNF RNI HNF HNI SNF].freeze
+    RAVENOC_DEFAULTS = {
+      'rows' => 2,
+      'cols' => 2,
+      'flit_data_width' => 32,
+      'flit_type_width' => 2,
+      'flit_buffer_depth' => 2,
+      'virtual_channels' => 3,
+      'routing_algorithm' => 'xy',
+      'priority' => 'zero_high',
+      'max_packet_flits' => 256,
+      'axi_addr_width' => 32,
+      'axi_data_width' => 32,
+      'axi_cdc_required' => 'all',
+      'bypass_cdc' => false
+    }.freeze
+    RAVENOC_ROUTING_MAP = {
+      'xy' => 'XYAlg',
+      'yx' => 'YXAlg'
+    }.freeze
+    RAVENOC_PRIORITY_MAP = {
+      'zero_high' => 'ZeroHighPrior',
+      'zero_low' => 'ZeroLowPrior'
+    }.freeze
+    RAVENOC_DEFINE_NAMES = {
+      'rows' => 'NOC_CFG_SZ_ROWS',
+      'cols' => 'NOC_CFG_SZ_COLS',
+      'flit_data_width' => 'FLIT_DATA_WIDTH',
+      'flit_type_width' => 'FLIT_TP_WIDTH',
+      'flit_buffer_depth' => 'FLIT_BUFF',
+      'virtual_channels' => 'N_VIRT_CHN',
+      'routing_algorithm' => 'ROUTING_ALG',
+      'priority' => 'H_PRIORITY',
+      'max_packet_flits' => 'MAX_SZ_PKT',
+      'axi_addr_width' => 'AXI_ADDR_WIDTH',
+      'axi_data_width' => 'AXI_DATA_WIDTH'
+    }.freeze
 
     def initialize(manifest:, input:, output:)
       @manifest_path = manifest
@@ -90,11 +127,153 @@ module IpcraftGenerator
       write_json(File.join(@output_dir, 'manifest.json'), finepaper_output_manifest(manifest, input, routers, endpoints))
     end
 
+    def generate_ravenoc(manifest, input)
+      projection = ravenoc_projection(manifest, input)
+
+      File.write(File.join(@output_dir, 'ravenoc_config.svh'), ravenoc_config_header(projection.fetch(:defines)))
+      File.write(File.join(@output_dir, 'ravenoc_top.sv'), ravenoc_top)
+      File.write(File.join(@output_dir, 'ravenoc_filelist.f'), ravenoc_filelist(projection.fetch(:defines)))
+      write_json(File.join(@output_dir, 'manifest.json'), ravenoc_output_manifest(manifest, input, projection))
+    end
+
     def generate_opennoc(manifest, input)
       projection = opennoc_projection(manifest, input)
 
       write_json(File.join(@output_dir, 'opennoc_mesh.json'), projection.fetch(:mesh))
       write_json(File.join(@output_dir, 'manifest.json'), opennoc_output_manifest(manifest, input, projection))
+    end
+
+    def ravenoc_projection(manifest, input)
+      parameters = ravenoc_parameters(manifest, input)
+      dimensions = ravenoc_dimensions(manifest, input, parameters)
+      parameters = parameters.merge(
+        'rows' => dimensions.fetch(:rows),
+        'cols' => dimensions.fetch(:cols)
+      )
+
+      {
+        parameters: parameters,
+        rows: dimensions.fetch(:rows),
+        cols: dimensions.fetch(:cols),
+        tiles: dimensions.fetch(:tiles),
+        defines: ravenoc_define_values(parameters)
+      }
+    end
+
+    def ravenoc_parameters(manifest, input)
+      parameters = RAVENOC_DEFAULTS.merge(ravenoc_manifest_parameter_defaults(manifest))
+      ravenoc_parameter_sources(manifest, input).each do |source|
+        parameters.merge!(source)
+      end
+      parameters
+    end
+
+    def ravenoc_manifest_parameter_defaults(manifest)
+      manifest.fetch('parameters', {}).each_with_object({}) do |(name, spec), defaults|
+        defaults[name] = spec['default'] if spec.is_a?(Hash) && spec.key?('default')
+      end
+    end
+
+    def ravenoc_parameter_sources(manifest, input)
+      [
+        input.dig('project', 'global_parameters'),
+        input.dig('project', 'instance', 'state', 'global_parameters'),
+        input.dig('project', 'instance', 'parameters'),
+        input['parameters'],
+        ravenoc_single_wrapper_parameters(manifest, input)
+      ].select { |source| source.is_a?(Hash) }
+    end
+
+    def ravenoc_dimensions(manifest, input, parameters)
+      tiles = instances_for_module(input, module_id_for_role(manifest, 'tile', 'RaveTile'))
+      unless tiles.empty?
+        coordinates = mesh_coordinates(tiles, col_key: 'mesh_col', row_key: 'mesh_row', item_label: 'RaveTile')
+        rows, cols = validate_rectangular_mesh!(coordinates, tiles.size, 'RaveTile graph')
+        validate_ravenoc_mesh_size!(rows, cols)
+        return { rows: rows, cols: cols, tiles: tiles.size }
+      end
+
+      wrappers = ravenoc_wrapper_instances(manifest, input)
+      if wrappers.size > 1
+        raise Error, "expected at most one RaveNoC wrapper instance, found #{wrappers.size}"
+      end
+
+      wrapper_parameters = wrappers.first&.fetch('parameters', {}) || {}
+      rows = positive_integer_value!(wrapper_parameters.fetch('rows', parameters.fetch('rows')), 'RaveNoC rows')
+      cols = positive_integer_value!(wrapper_parameters.fetch('cols', parameters.fetch('cols')), 'RaveNoC cols')
+      validate_ravenoc_mesh_size!(rows, cols)
+      { rows: rows, cols: cols, tiles: rows * cols }
+    end
+
+    def ravenoc_single_wrapper_parameters(manifest, input)
+      wrappers = ravenoc_wrapper_instances(manifest, input)
+      return nil unless wrappers.size == 1
+
+      wrappers.first.fetch('parameters', {})
+    end
+
+    def ravenoc_wrapper_instances(manifest, input)
+      wrapper_modules = [
+        module_id_for_role(manifest, 'wrapper', 'RaveNoC'),
+        module_id_for_role(manifest, 'noc', 'RaveNoC'),
+        'RaveNoC'
+      ].uniq
+      input.fetch('instances', []).select { |instance| wrapper_modules.include?(instance['module']) }
+    end
+
+    def positive_integer_value!(value, name)
+      raise Error, "#{name} must be a positive integer" unless value.is_a?(Integer) && value.positive?
+
+      value
+    end
+
+    def validate_ravenoc_mesh_size!(rows, cols)
+      raise Error, '1x1 is not a legal RaveNoC mesh' if rows == 1 && cols == 1
+    end
+
+    def ravenoc_define_values(parameters)
+      RAVENOC_DEFINE_NAMES.to_h do |parameter_name, define_name|
+        [define_name, ravenoc_define_value(parameter_name, parameters.fetch(parameter_name))]
+      end
+    end
+
+    def ravenoc_define_value(parameter_name, value)
+      case parameter_name
+      when 'routing_algorithm'
+        RAVENOC_ROUTING_MAP.fetch(value, value)
+      when 'priority'
+        RAVENOC_PRIORITY_MAP.fetch(value, value)
+      else
+        value
+      end
+    end
+
+    def ravenoc_config_header(defines)
+      lines = [
+        '`ifndef FINEPAPER_RAVENOC_CONFIG_SVH',
+        '`define FINEPAPER_RAVENOC_CONFIG_SVH'
+      ]
+      lines.concat(defines.map { |name, value| "`define #{name} #{value}" })
+      lines << '`endif'
+      "#{lines.join("\n")}\n"
+    end
+
+    def ravenoc_filelist(defines)
+      lines = ["+incdir+#{@output_dir}"]
+      lines.concat(defines.map { |name, value| "+define+#{name}=#{value}" })
+      lines << File.join(@output_dir, 'ravenoc_top.sv')
+      "#{lines.join("\n")}\n"
+    end
+
+    def ravenoc_top
+      <<~SV
+        // Generated by ipcraft_generator for finepaper.ravenoc
+        module ravenoc_top (
+          input logic clk_noc,
+          input logic arst_noc
+        );
+        endmodule
+      SV
     end
 
     def opennoc_projection(manifest, input)
@@ -132,34 +311,42 @@ module IpcraftGenerator
     end
 
     def opennoc_xp_coordinates(xps)
-      xps.to_h do |xp|
-        parameters = xp.fetch('parameters', {})
-        x = parameters.fetch('mesh_col', nil)
-        y = parameters.fetch('mesh_row', nil)
-        unless x.is_a?(Integer) && y.is_a?(Integer)
-          raise Error, "OpenNoCXP #{artifact_id(xp)} mesh_col/mesh_row must be integers"
-        end
-
-        [xp.fetch('id'), [x, y]]
-      end
+      mesh_coordinates(xps, col_key: 'mesh_col', row_key: 'mesh_row', item_label: 'OpenNoCXP')
     end
 
     def validate_rectangular_opennoc_mesh!(coordinates, xp_count)
-      if coordinates.size != xp_count
-        raise Error, 'OpenNoCXP graph has duplicate instance ids'
+      validate_rectangular_mesh!(coordinates, xp_count, 'OpenNoCXP graph')
+    end
+
+    def mesh_coordinates(instances, col_key:, row_key:, item_label:)
+      instances.to_h do |instance|
+        parameters = instance.fetch('parameters', {})
+        x = parameters.fetch(col_key, nil)
+        y = parameters.fetch(row_key, nil)
+        unless x.is_a?(Integer) && y.is_a?(Integer)
+          raise Error, "#{item_label} #{artifact_id(instance)} #{col_key}/#{row_key} must be integers"
+        end
+
+        [instance.fetch('id'), [x, y]]
+      end
+    end
+
+    def validate_rectangular_mesh!(coordinates, instance_count, graph_label)
+      if coordinates.size != instance_count
+        raise Error, "#{graph_label} has duplicate instance ids"
       end
 
       negative = coordinates.find { |_id, (x, y)| x.negative? || y.negative? }
       if negative
         _id, coordinate = negative
-        raise Error, "OpenNoCXP graph has negative coordinate #{coordinate.join(',')}"
+        raise Error, "#{graph_label} has negative coordinate #{coordinate.join(',')}"
       end
 
       duplicate = coordinates.group_by { |_id, coordinate| coordinate }.find { |_coordinate, entries| entries.size > 1 }
       if duplicate
         coordinate, entries = duplicate
         ids = entries.map(&:first).join(', ')
-        raise Error, "OpenNoCXP graph has duplicate coordinate #{coordinate.join(',')} for #{ids}"
+        raise Error, "#{graph_label} has duplicate coordinate #{coordinate.join(',')} for #{ids}"
       end
 
       cols = coordinates.values.map(&:first).max + 1
@@ -169,7 +356,7 @@ module IpcraftGenerator
         (0...cols).each do |col|
           next if occupied.include?([col, row])
 
-          raise Error, "OpenNoCXP graph has missing coordinate #{col},#{row}"
+          raise Error, "#{graph_label} has missing coordinate #{col},#{row}"
         end
       end
 
@@ -394,6 +581,16 @@ module IpcraftGenerator
         topology: 'mesh',
         rows: projection.fetch(:rows),
         cols: projection.fetch(:cols)
+      )
+    end
+
+    def ravenoc_output_manifest(manifest, input, projection)
+      output_manifest(manifest, input).merge(
+        topology: 'mesh',
+        rows: projection.fetch(:rows),
+        cols: projection.fetch(:cols),
+        tiles: projection.fetch(:tiles),
+        parameters: projection.fetch(:parameters)
       )
     end
 
