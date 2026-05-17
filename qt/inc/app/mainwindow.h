@@ -77,6 +77,8 @@ private slots:
     void scheduleStartupLayoutLog();
     void logStartupLayout() const;
     void rebuildTopologyMenu();
+    void manageIpcorePackageRoots();
+    void reloadIpcoreCatalog();
     bool maybeSaveChanges(const QString& actionDescription);
     bool loadDocument(const QString& path);
     bool saveDocument(const QString& path);

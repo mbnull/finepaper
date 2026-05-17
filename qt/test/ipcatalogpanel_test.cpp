@@ -17,6 +17,7 @@
 #include <QDockWidget>
 #include <QDir>
 #include <QEventLoop>
+#include <QFile>
 #include <QFileInfo>
 #include <QInputDialog>
 #include <QKeyEvent>
@@ -108,6 +109,53 @@ QString repositoryPath(const QString& relativePath) {
     }
 
     return QFileInfo(QDir(startPaths.first()).filePath(relativePath)).absoluteFilePath();
+}
+
+void configureSettingsRoot(const QString& rootPath, const QString& applicationName) {
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, rootPath);
+    QCoreApplication::setOrganizationName(QStringLiteral("ipcatalogpanel_reload_test_org"));
+    QCoreApplication::setApplicationName(applicationName);
+}
+
+void writeFile(const QString& path, const QByteArray& content) {
+    QFile file(path);
+    require(file.open(QIODevice::WriteOnly | QIODevice::Truncate), "failed to open test file");
+    require(file.write(content) == content.size(), "failed to write test file");
+}
+
+void writeMinimalPackage(const QString& packageRootPath, const QString& packageId) {
+    QDir root(packageRootPath);
+    require(root.mkpath(QStringLiteral("views")), "failed to create views directory");
+    writeFile(root.filePath(QStringLiteral("views/Module.xml")),
+              QByteArrayLiteral(R"xml(<module-view schema="v1" module="Module">
+  <anchors><anchor ref="bus" x="0" y="0" /></anchors>
+</module-view>)xml"));
+    writeFile(root.filePath(QStringLiteral("ipcraft.json")),
+              QStringLiteral(R"json({
+  "schema": "ipcraft.manifest.v1",
+  "id": "%1",
+  "name": "Reload Package",
+  "version": "1.0.0",
+  "connection_classes": [
+    { "id": "demo_link", "roles": ["initiator", "target"], "symmetric": false }
+  ],
+  "modules": [
+    {
+      "id": "Module",
+      "name": "Reload Module",
+      "interfaces": [
+        {
+          "id": "bus",
+          "modes": ["initiator"],
+          "accepts": [{ "class": "demo_link", "role": "initiator" }]
+        }
+      ]
+    }
+  ],
+  "views": [
+    { "module": "Module", "file": "views/Module.xml" }
+  ]
+})json").arg(packageId).toUtf8());
 }
 
 QTreeWidgetItem* firstCatalogEntry(QTreeWidget* catalog) {
@@ -841,6 +889,36 @@ void testAmbiguousConnectionAppearsInPropertyPanelAndLog() {
             "property panel should show every ambiguous connection class alternative");
 }
 
+void testCatalogReloadUsesConfiguredPackageRoots() {
+    QTemporaryDir settingsRoot;
+    QTemporaryDir packageRoot;
+    require(settingsRoot.isValid() && packageRoot.isValid(),
+            "temporary directories should be valid");
+    writeMinimalPackage(packageRoot.path(), QStringLiteral("org.example.reload"));
+    configureSettingsRoot(settingsRoot.path(), QStringLiteral("ipcatalogpanel_reload_test_app"));
+
+    MainWindow window;
+    require(!window.m_ipCatalogService->entry(QStringLiteral("org.example.reload")).has_value(),
+            "test package should not be loaded before configuring package roots");
+
+    AppSettings().setIpcorePaths({packageRoot.path()});
+    window.reloadIpcoreCatalog();
+
+    require(window.m_ipCatalogService->entry(QStringLiteral("org.example.reload")).has_value(),
+            "catalog reload should use configured package roots");
+    require(ModuleRegistry::instance().getType(QStringLiteral("org.example.reload"),
+                                               QStringLiteral("Module")) != nullptr,
+            "catalog reload should load configured package modules into the registry");
+
+    auto* catalog = window.findChild<QTreeWidget*>(QStringLiteral("ipCatalogList"));
+    require(findCatalogEntry(catalog, QStringLiteral("org.example.reload")) != nullptr,
+            "catalog reload should refresh the IP catalog panel");
+
+    auto* logList = window.m_logPanel->findChild<QListWidget*>();
+    require(listContainsText(logList, QStringLiteral("org.example.reload")),
+            "catalog reload should append package reload details to the activity log");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -876,6 +954,7 @@ int main(int argc, char** argv) {
         testLoadGraphReportsFailureForInvalidPath();
         testNewProjectAddsIpcraftPackageInstanceFromCatalog();
         testAmbiguousConnectionAppearsInPropertyPanelAndLog();
+        testCatalogReloadUsesConfiguredPackageRoots();
     } catch (const std::exception& error) {
         std::cerr << "ipcatalogpanel_test failed: " << error.what() << '\n';
         return 1;

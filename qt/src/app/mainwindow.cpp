@@ -9,9 +9,11 @@
 #include "commands/topologypresetcommand.h"
 #include "graph/graph.h"
 #include "commands/commandmanager.h"
+#include "ipcraft/ipcraftmanifest.h"
 #include "ipcore/ipcatalogservice.h"
 #include "ipcore/ipcoreruntimediagnostics.h"
 #include "nodeeditor/nodeeditorwidget.h"
+#include "panels/ipcorepathsdialog.h"
 #include "panels/ipcatalogpanel.h"
 #include "panels/propertypanel.h"
 #include "panels/logpanel.h"
@@ -41,6 +43,7 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QKeySequence>
+#include <QLineEdit>
 #include <QList>
 #include <QStatusBar>
 #include <QStringList>
@@ -95,6 +98,33 @@ void appendLogLines(LogPanel* logPanel,
         }
         logPanel->appendMessage(prefix + trimmed, color);
     }
+}
+
+QString ipcraftDiagnosticLine(const IpcraftDiagnostic& diagnostic) {
+    QStringList locationParts;
+    if (!diagnostic.packageRootPath.trimmed().isEmpty()) {
+        locationParts.append(diagnostic.packageRootPath.trimmed());
+    }
+    if (!diagnostic.path.trimmed().isEmpty()) {
+        locationParts.append(diagnostic.path.trimmed());
+    }
+
+    const QString location = locationParts.isEmpty()
+        ? QString()
+        : QStringLiteral(" %1").arg(locationParts.join(QStringLiteral(" ")));
+    const QString severity = diagnostic.severity.trimmed().isEmpty()
+        ? QStringLiteral("error")
+        : diagnostic.severity.trimmed();
+    return QStringLiteral("[%1]%2: %3")
+        .arg(severity, location, diagnostic.message.trimmed());
+}
+
+QStringList ipcraftDiagnosticLines(const QVector<IpcraftDiagnostic>& diagnostics) {
+    QStringList lines;
+    for (const IpcraftDiagnostic& diagnostic : diagnostics) {
+        lines.append(ipcraftDiagnosticLine(diagnostic));
+    }
+    return lines;
 }
 
 } // namespace
@@ -744,6 +774,15 @@ void MainWindow::setupActions() {
     auto* toolsMenu = menuBar()->addMenu("&Tools");
     toolsMenu->addAction(m_generateAction);
     toolsMenu->addAction(m_validateAction);
+    auto* manageIpcorePathsAction = new QAction("IP Core Packages...", this);
+    manageIpcorePathsAction->setObjectName(QStringLiteral("manageIpcorePathsAction"));
+    manageIpcorePathsAction->setToolTip("Add, remove, and reload IP core package roots.");
+    connect(manageIpcorePathsAction,
+            &QAction::triggered,
+            this,
+            &MainWindow::manageIpcorePackageRoots);
+    toolsMenu->addSeparator();
+    toolsMenu->addAction(manageIpcorePathsAction);
 
     auto* layoutMenu = menuBar()->addMenu("&Layout");
     layoutMenu->addAction(m_arrangeAction);
@@ -891,6 +930,76 @@ void MainWindow::rebuildTopologyMenu() {
         connect(action, &QAction::triggered, this, &MainWindow::createTopologyPreset);
     }
     m_topologyMenu->setEnabled(!workspace.topologyPresets.isEmpty());
+}
+
+void MainWindow::manageIpcorePackageRoots() {
+    IpcorePathsDialog dialog(this);
+    const QStringList currentPaths = m_appSettings ? m_appSettings->ipcorePaths() : QStringList{};
+    dialog.setPaths(currentPaths);
+    dialog.setDiagnostics(ipcraftDiagnosticLines(
+        loadIpcraftPackageManifestsWithDiagnostics(currentPaths).diagnostics));
+
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+
+    if (m_appSettings) {
+        m_appSettings->setIpcorePaths(dialog.paths());
+    }
+    reloadIpcoreCatalog();
+}
+
+void MainWindow::reloadIpcoreCatalog() {
+    if (!m_ipCatalogService) {
+        return;
+    }
+
+    const QStringList rootPaths = m_appSettings ? m_appSettings->ipcorePaths() : QStringList{};
+    const IpcraftRegistryLoadResult loadResult =
+        loadIpcraftPackageManifestsWithDiagnostics(rootPaths);
+    ModuleRegistry& moduleRegistry = ModuleRegistry::instance();
+    moduleRegistry = ModuleRegistry(ModuleRegistry::LoadMode::Empty);
+    moduleRegistry.loadIpcraftPackages(loadResult.manifests);
+    *m_ipCatalogService = IpCatalogService(loadResult.manifests, &moduleRegistry);
+
+    if (m_logPanel) {
+        m_logPanel->appendMessage(
+            QStringLiteral("[IP Catalog] Reloaded %1 package root(s), %2 package(s).")
+                .arg(rootPaths.size())
+                .arg(loadResult.manifests.size()),
+            QColor(70, 110, 190));
+        for (const QString& line : ipcraftDiagnosticLines(loadResult.diagnostics)) {
+            m_logPanel->appendMessage(QStringLiteral("[IP Catalog] %1").arg(line),
+                                      QColor(220, 50, 50));
+        }
+        const QStringList lines =
+            IpCoreRuntimeDiagnostics::logLines(m_ipCatalogService->entries(), moduleRegistry);
+        for (const QString& line : lines) {
+            m_logPanel->appendMessage(line, QColor(70, 110, 190));
+        }
+    }
+
+    if (m_ipCatalogPanel) {
+        if (auto* search = m_ipCatalogPanel->findChild<QLineEdit*>(
+                QStringLiteral("ipCatalogSearch"))) {
+            const QString filter = search->text();
+            search->setText(filter + QStringLiteral(" "));
+            search->setText(filter);
+        }
+    }
+
+    if (m_projectIpService) {
+        const std::optional<ProjectIpInstanceRef> selected = m_projectIpService->selectedIpInstance();
+        if (selected.has_value()) {
+            m_projectIpService->handleIpInstanceRecordsMutated(
+                std::nullopt,
+                ProjectIpService::SelectionFallbackPolicy::ExactOrClear);
+            m_projectIpService->selectInstance(selected->ipcoreId, selected->instanceId);
+        }
+    }
+
+    rebuildTopologyMenu();
+    statusBar()->showMessage(QStringLiteral("Reloaded IP core catalog"), 5000);
 }
 
 bool MainWindow::maybeSaveChanges(const QString& actionDescription) {

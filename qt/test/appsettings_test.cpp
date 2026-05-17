@@ -61,6 +61,25 @@ void testIpcorePathsPersistAsAbsoluteUniquePaths() {
             "ipcore path B should persist as absolute");
 }
 
+void testIpcorePathsDeduplicateAndPersist() {
+    QTemporaryDir root;
+    require(root.isValid(), "temporary settings root should be valid");
+
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, root.path());
+    QCoreApplication::setOrganizationName(QStringLiteral("ipcore_paths_test_org"));
+    QCoreApplication::setApplicationName(QStringLiteral("ipcore_paths_test_app"));
+
+    AppSettings settings;
+    settings.setIpcorePaths({QStringLiteral("/tmp/a"),
+                             QStringLiteral("/tmp/a"),
+                             QStringLiteral("/tmp/b")});
+
+    const QStringList paths = settings.ipcorePaths();
+    require(paths.size() == 2, "ipcore paths should deduplicate");
+    require(paths.at(0).endsWith(QStringLiteral("/tmp/a")), "first path should persist");
+    require(paths.at(1).endsWith(QStringLiteral("/tmp/b")), "second path should persist");
+}
+
 void testDefaultConstructorUsesCurrentApplicationIdentity() {
     QTemporaryDir tempDir;
     require(tempDir.isValid(), "temporary directory should be valid");
@@ -98,6 +117,7 @@ int main(int argc, char** argv) {
     try {
         testRecentProjectsAreNewestFirstUniqueAndAbsolute();
         testIpcorePathsPersistAsAbsoluteUniquePaths();
+        testIpcorePathsDeduplicateAndPersist();
         testDefaultConstructorUsesCurrentApplicationIdentity();
     } catch (const std::exception& exception) {
         qCritical("%s", exception.what());
