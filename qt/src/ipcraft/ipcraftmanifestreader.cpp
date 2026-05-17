@@ -669,6 +669,36 @@ IpcraftInterfaceDescriptor interfaceFromJson(const QJsonObject& object,
                                           packageRootPath,
                                           diagnostics);
 
+    QJsonObject topology;
+    if (optionalObject(object,
+                       QStringLiteral("topology"),
+                       context,
+                       packageRootPath,
+                       diagnostics,
+                       &topology)) {
+        const QString topologyContext =
+            descriptor.id.isEmpty()
+                ? fieldPath(context, QStringLiteral("topology"))
+                : QStringLiteral("modules.%1.interfaces.%2.topology")
+                      .arg(moduleId, descriptor.id);
+        descriptor.topology.side = optionalString(topology,
+                                                  QStringLiteral("side"),
+                                                  topologyContext,
+                                                  packageRootPath,
+                                                  diagnostics);
+        descriptor.topology.oppositeInterfaceId =
+            optionalString(topology,
+                           QStringLiteral("opposite"),
+                           topologyContext,
+                           packageRootPath,
+                           diagnostics);
+        descriptor.topology.role = optionalString(topology,
+                                                  QStringLiteral("role"),
+                                                  topologyContext,
+                                                  packageRootPath,
+                                                  diagnostics);
+    }
+
     QJsonObject ipxact;
     if (optionalObject(object,
                        QStringLiteral("ipxact"),
@@ -740,6 +770,28 @@ IpcraftModuleDescriptor moduleFromJson(const QJsonObject& object,
                                           context,
                                           packageRootPath,
                                           diagnostics);
+
+    QJsonObject display;
+    if (optionalObject(object,
+                       QStringLiteral("display"),
+                       context,
+                       packageRootPath,
+                       diagnostics,
+                       &display)) {
+        const QString displayContext = fieldPath(context, QStringLiteral("display"));
+        descriptor.displayLabelParameter =
+            optionalString(display,
+                           QStringLiteral("label_parameter"),
+                           displayContext,
+                           packageRootPath,
+                           diagnostics);
+        descriptor.shortLabelParameter =
+            optionalString(display,
+                           QStringLiteral("short_label_parameter"),
+                           displayContext,
+                           packageRootPath,
+                           diagnostics);
+    }
 
     QJsonObject attach;
     if (optionalObject(object,
@@ -940,6 +992,28 @@ void parseTopologies(const QJsonObject& manifestObject,
         }
         manifest.topologies.append(value.toObject());
     }
+}
+
+void parseGeneration(const QJsonObject& manifestObject,
+                     IpcraftPackageManifest& manifest,
+                     QVector<IpcraftDiagnostic>& diagnostics) {
+    QJsonObject generation;
+    if (!optionalObject(manifestObject,
+                        QStringLiteral("generation"),
+                        QString(),
+                        manifest.packageRootPath,
+                        diagnostics,
+                        &generation)) {
+        return;
+    }
+
+    manifest.generation.engine = optionalString(generation,
+                                                QStringLiteral("engine"),
+                                                QStringLiteral("generation"),
+                                                manifest.packageRootPath,
+                                                diagnostics);
+    manifest.generation.metadata = generation;
+    manifest.generation.metadata.remove(QStringLiteral("engine"));
 }
 
 void validateReferences(const IpcraftPackageManifest& manifest,
@@ -1176,6 +1250,7 @@ IpcraftManifestReader::readManifestFile(const QString& manifestPath) const {
                                                 result.diagnostics);
     }
     parseExtensions(object, result.manifest, result.diagnostics);
+    parseGeneration(object, result.manifest, result.diagnostics);
 
     QJsonObject ipxactObject;
     if (optionalObject(object,

@@ -1,11 +1,13 @@
 // IP catalog service tests.
 #include "app/appsettings.h"
+#include "ipcraft/ipcraftmanifest.h"
 #include "ipcore/ipcatalogservice.h"
 #include "ipcore/ipcorecommandrunner.h"
 #include "modules/moduleregistry.h"
 
 #include <QCoreApplication>
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QJsonObject>
 #include <QSettings>
@@ -83,6 +85,46 @@ void configureDefaultPackageRootsForTest() {
 
 QString scopedTypeName(const QString& packageId, const QString& moduleId) {
     return packageId + QStringLiteral("::") + moduleId;
+}
+
+void writeFile(const QString& path, const QByteArray& content) {
+    QFile file(path);
+    require(file.open(QIODevice::WriteOnly | QIODevice::Truncate), "failed to open test file");
+    require(file.write(content) == content.size(), "failed to write test file");
+}
+
+void writeMinimalPackage(const QString& packageRootPath, const QString& packageId) {
+    QDir root(packageRootPath);
+    require(root.mkpath(QStringLiteral("views")), "failed to create views directory");
+    writeFile(root.filePath(QStringLiteral("views/Module.xml")),
+              QByteArrayLiteral(R"xml(<module-view schema="v1" module="Module">
+  <anchors><anchor ref="bus" x="0" y="0" /></anchors>
+</module-view>)xml"));
+    writeFile(root.filePath(QStringLiteral("ipcraft.json")),
+              QStringLiteral(R"json({
+  "schema": "ipcraft.manifest.v1",
+  "id": "%1",
+  "name": "Duplicate Test",
+  "version": "1.0.0",
+  "connection_classes": [
+    { "id": "demo_link", "roles": ["initiator", "target"], "symmetric": false }
+  ],
+  "modules": [
+    {
+      "id": "Module",
+      "interfaces": [
+        {
+          "id": "bus",
+          "modes": ["initiator"],
+          "accepts": [{ "class": "demo_link", "role": "initiator" }]
+        }
+      ]
+    }
+  ],
+  "views": [
+    { "module": "Module", "file": "views/Module.xml" }
+  ]
+})json").arg(packageId).toUtf8());
 }
 
 IpcraftPackageManifest packageWithSingleModule(const QString& packageId,
@@ -354,6 +396,25 @@ void testIpcraftModuleTypesAreScopedByPackage() {
             "NoC catalog entry should expose its package-scoped Tile type");
 }
 
+void testDuplicatePackageIdsAreDiagnosed() {
+    QTemporaryDir first;
+    QTemporaryDir second;
+    require(first.isValid() && second.isValid(), "temporary directories should be valid");
+    writeMinimalPackage(first.path(), QStringLiteral("org.example.dup"));
+    writeMinimalPackage(second.path(), QStringLiteral("org.example.dup"));
+
+    const IpcraftRegistryLoadResult result =
+        loadIpcraftPackageManifestsWithDiagnostics({first.path(), second.path()});
+
+    require(result.manifests.empty(), "duplicate package IDs should not silently select one package");
+    require(result.diagnostics.size() == 1, "duplicate package ID should produce one diagnostic");
+    require(result.diagnostics.first().message.contains(QStringLiteral("Duplicate package id org.example.dup")),
+            "diagnostic should name duplicate package id");
+    require(result.diagnostics.first().message.contains(first.path()) &&
+                result.diagnostics.first().message.contains(second.path()),
+            "diagnostic should name involved roots");
+}
+
 void testIpcraftIdentityFallbacksDoNotSpecialCaseLegacyEndpointNames() {
     ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
     const IpcraftPackageManifest manifest =
@@ -421,6 +482,7 @@ int main(int argc, char** argv) {
         testCatalogEntryExposesIpcraftManifestData();
         testDefaultPackageCommandsResolveWithIpcraftProjectSchema();
         testIpcraftModuleTypesAreScopedByPackage();
+        testDuplicatePackageIdsAreDiagnosed();
         testIpcraftIdentityFallbacksDoNotSpecialCaseLegacyEndpointNames();
         testIpcraftSingularAttachHostPropagatesToModuleType();
     } catch (const std::exception& error) {

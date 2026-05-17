@@ -4,6 +4,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QHash>
 #include <QJsonArray>
 #include <QSet>
 #include <QXmlStreamReader>
@@ -148,78 +149,9 @@ QSet<QString> attachmentZonesForModule(const IpcraftPackageManifest& manifest,
     return zones;
 }
 
-} // namespace
-
-bool IpcraftRegistry::loadPackageRoots(const QStringList& rootPaths) {
-    m_packages.clear();
-    m_diagnostics.clear();
-
-    const QVector<QString> packageRoots = discoverPackageRoots(rootPaths);
-    QVector<IpcraftPackageManifest> loadedPackages;
-    QSet<QString> loadedPackageIds;
-    bool loadedAll = true;
-
-    for (const QString& packageRoot : packageRoots) {
-        const IpcraftManifestReadResult result = IpcraftManifestReader().readPackage(packageRoot);
-        if (!result.ok) {
-            m_diagnostics += result.diagnostics;
-            loadedAll = false;
-            continue;
-        }
-
-        if (loadedPackageIds.contains(result.manifest.id)) {
-            IpcraftDiagnostic diagnostic;
-            diagnostic.packageRootPath = result.manifest.packageRootPath;
-            diagnostic.path = QStringLiteral("manifest.id");
-            diagnostic.message = QStringLiteral("Duplicate ipcraft package id '%1'")
-                                     .arg(result.manifest.id);
-            m_diagnostics.append(diagnostic);
-            loadedAll = false;
-            continue;
-        }
-
-        QVector<IpcraftDiagnostic> packageDiagnostics;
-        for (const IpcraftViewDescriptor& view : result.manifest.views) {
-            validateViewXml(result.manifest, view, packageDiagnostics);
-        }
-
-        if (!packageDiagnostics.isEmpty()) {
-            m_diagnostics += packageDiagnostics;
-            loadedAll = false;
-            continue;
-        }
-
-        loadedPackageIds.insert(result.manifest.id);
-        loadedPackages.append(result.manifest);
-    }
-
-    if (loadedAll) {
-        m_packages = loadedPackages;
-    }
-
-    return loadedAll;
-}
-
-const QVector<IpcraftPackageManifest>& IpcraftRegistry::packages() const {
-    return m_packages;
-}
-
-const IpcraftPackageManifest* IpcraftRegistry::package(const QString& packageId) const {
-    for (const IpcraftPackageManifest& manifest : m_packages) {
-        if (manifest.id == packageId) {
-            return &manifest;
-        }
-    }
-    return nullptr;
-}
-
-const QVector<IpcraftDiagnostic>& IpcraftRegistry::diagnostics() const {
-    return m_diagnostics;
-}
-
-bool IpcraftRegistry::validateViewXml(const IpcraftPackageManifest& manifest,
-                                      const IpcraftViewDescriptor& view,
-                                      QVector<IpcraftDiagnostic>& diagnostics) const {
+bool validateViewXmlDescriptor(const IpcraftPackageManifest& manifest,
+                               const IpcraftViewDescriptor& view,
+                               QVector<IpcraftDiagnostic>& diagnostics) {
     const IpcraftModuleDescriptor* module = manifest.module(view.moduleId);
     if (module == nullptr) {
         addDiagnostic(diagnostics,
@@ -335,4 +267,114 @@ bool IpcraftRegistry::validateViewXml(const IpcraftPackageManifest& manifest,
     }
 
     return true;
+}
+
+} // namespace
+
+IpcraftRegistryLoadResult loadIpcraftPackageManifestsWithDiagnostics(const QStringList& rootPaths) {
+    struct CandidateManifest {
+        IpcraftPackageManifest manifest;
+        QVector<IpcraftDiagnostic> diagnostics;
+    };
+
+    IpcraftRegistryLoadResult loadResult;
+    const QVector<QString> packageRoots = discoverPackageRoots(rootPaths);
+    QVector<CandidateManifest> candidates;
+    QHash<QString, QVector<int>> indexesByPackageId;
+    QHash<QString, QStringList> rootsByPackageId;
+    QStringList packageIdOrder;
+
+    for (const QString& packageRoot : packageRoots) {
+        const IpcraftManifestReadResult result = IpcraftManifestReader().readPackage(packageRoot);
+        if (!result.ok) {
+            loadResult.diagnostics += result.diagnostics;
+            continue;
+        }
+
+        CandidateManifest candidate;
+        candidate.manifest = result.manifest;
+        for (const IpcraftViewDescriptor& view : result.manifest.views) {
+            validateViewXmlDescriptor(result.manifest, view, candidate.diagnostics);
+        }
+
+        if (!indexesByPackageId.contains(result.manifest.id)) {
+            packageIdOrder.append(result.manifest.id);
+        }
+        indexesByPackageId[result.manifest.id].append(candidates.size());
+        rootsByPackageId[result.manifest.id].append(result.manifest.packageRootPath);
+        candidates.append(candidate);
+    }
+
+    QSet<int> duplicateCandidateIndexes;
+    for (const QString& packageId : packageIdOrder) {
+        const QVector<int> duplicateIndexes = indexesByPackageId.value(packageId);
+        if (duplicateIndexes.size() < 2) {
+            continue;
+        }
+
+        for (int index : duplicateIndexes) {
+            duplicateCandidateIndexes.insert(index);
+        }
+
+        const QStringList duplicateRoots = rootsByPackageId.value(packageId);
+        IpcraftDiagnostic diagnostic;
+        diagnostic.packageRootPath = duplicateRoots.isEmpty() ? QString() : duplicateRoots.first();
+        diagnostic.path = QStringLiteral("manifest.id");
+        diagnostic.message = QStringLiteral("Duplicate package id %1 in package roots: %2")
+                                 .arg(packageId, duplicateRoots.join(QStringLiteral(", ")));
+        loadResult.diagnostics.append(diagnostic);
+    }
+
+    for (qsizetype i = 0; i < candidates.size(); ++i) {
+        if (duplicateCandidateIndexes.contains(static_cast<int>(i))) {
+            continue;
+        }
+
+        if (!candidates.at(i).diagnostics.isEmpty()) {
+            loadResult.diagnostics += candidates.at(i).diagnostics;
+            continue;
+        }
+
+        loadResult.manifests.append(candidates.at(i).manifest);
+    }
+
+    return loadResult;
+}
+
+bool IpcraftRegistry::loadPackageRoots(const QStringList& rootPaths) {
+    m_packages.clear();
+    m_diagnostics.clear();
+
+    const IpcraftRegistryLoadResult loadResult =
+        loadIpcraftPackageManifestsWithDiagnostics(rootPaths);
+    m_diagnostics = loadResult.diagnostics;
+    if (!m_diagnostics.isEmpty()) {
+        return false;
+    }
+
+    m_packages = loadResult.manifests;
+    return true;
+}
+
+const QVector<IpcraftPackageManifest>& IpcraftRegistry::packages() const {
+    return m_packages;
+}
+
+const IpcraftPackageManifest* IpcraftRegistry::package(const QString& packageId) const {
+    for (const IpcraftPackageManifest& manifest : m_packages) {
+        if (manifest.id == packageId) {
+            return &manifest;
+        }
+    }
+    return nullptr;
+}
+
+const QVector<IpcraftDiagnostic>& IpcraftRegistry::diagnostics() const {
+    return m_diagnostics;
+}
+
+bool IpcraftRegistry::validateViewXml(const IpcraftPackageManifest& manifest,
+                                      const IpcraftViewDescriptor& view,
+                                      QVector<IpcraftDiagnostic>& diagnostics) const {
+    return validateViewXmlDescriptor(manifest, view, diagnostics);
 }

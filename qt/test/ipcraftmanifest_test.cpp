@@ -412,6 +412,83 @@ void testLoadsConnectionClassIpxactAndAttachMetadata() {
             "module attach metadata should be preserved for attachment-zone validation");
 }
 
+void testManifestReaderParsesDisplayTopologyAndGeneration() {
+    QTemporaryDir temp;
+    require(temp.isValid(), "temporary directory should be valid");
+
+    QDir root(temp.path());
+    createView(root, QStringLiteral("Tile"), QStringLiteral("link_out"));
+    writeFile(root.filePath(QStringLiteral("ipcraft.json")),
+              QByteArrayLiteral(R"json({
+  "schema": "ipcraft.manifest.v1",
+  "id": "org.example.display",
+  "name": "Display",
+  "version": "1.0.0",
+  "connection_classes": [
+    { "id": "mesh_link", "roles": ["source", "sink"], "symmetric": false }
+  ],
+  "modules": [
+    {
+      "id": "Tile",
+      "name": "Tile",
+      "display": {
+        "label_parameter": "display_name",
+        "short_label_parameter": "short_name"
+      },
+      "interfaces": [
+        {
+          "id": "link_out",
+          "label": "Out",
+          "modes": ["initiator"],
+          "accepts": [{ "class": "mesh_link", "role": "source" }],
+          "topology": {
+            "side": "east",
+            "opposite": "link_in"
+          }
+        },
+        {
+          "id": "link_in",
+          "label": "In",
+          "modes": ["target"],
+          "accepts": [{ "class": "mesh_link", "role": "sink" }]
+        }
+      ]
+    }
+  ],
+  "views": [
+    { "module": "Tile", "file": "views/Tile.xml" }
+  ],
+  "generation": {
+    "engine": "ipcraft.common.v1",
+    "module_mappings": { "Tile": "tile" }
+  }
+})json"));
+
+    const IpcraftManifestReadResult result = IpcraftManifestReader().readPackage(temp.path());
+
+    require(result.ok, "manifest with display/topology/generation metadata should parse");
+    const IpcraftModuleDescriptor* parsed = result.manifest.module(QStringLiteral("Tile"));
+    require(parsed != nullptr, "Tile module should parse");
+    require(parsed->displayLabelParameter == QStringLiteral("display_name"),
+            "display label binding should parse");
+    require(parsed->shortLabelParameter == QStringLiteral("short_name"),
+            "short display label binding should parse");
+    const IpcraftInterfaceDescriptor* output =
+        parsed->interfaceDescriptor(QStringLiteral("link_out"));
+    require(output != nullptr, "link_out interface should parse");
+    require(output->topology.side == QStringLiteral("east"),
+            "topology side should parse");
+    require(output->topology.oppositeInterfaceId == QStringLiteral("link_in"),
+            "topology opposite interface should parse");
+    require(result.manifest.generation.engine == QStringLiteral("ipcraft.common.v1"),
+            "generation engine should parse");
+    require(result.manifest.generation.metadata.value(QStringLiteral("module_mappings"))
+                .toObject()
+                .value(QStringLiteral("Tile"))
+                .toString() == QStringLiteral("tile"),
+            "generation metadata should parse");
+}
+
 void testRejectsWrongPluginFieldTypes() {
     QTemporaryDir temp;
     require(temp.isValid(), "temporary directory should be valid");
@@ -811,6 +888,7 @@ int main(int argc, char** argv) {
         testRejectsDottedUnknownRequiredShapeFields();
         testRejectsNonStringArrayEntries();
         testLoadsConnectionClassIpxactAndAttachMetadata();
+        testManifestReaderParsesDisplayTopologyAndGeneration();
         testRejectsWrongPluginFieldTypes();
         testRejectsNonObjectExtensionValues();
         testRejectsWrongTopLevelCollectionTypes();

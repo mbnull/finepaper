@@ -39,6 +39,12 @@ struct IpcraftInterfaceAcceptRule {
     QString role;
 };
 
+struct IpcraftInterfaceTopology {
+    QString side;
+    QString oppositeInterfaceId;
+    QString role;
+};
+
 struct IpcraftInterfaceDescriptor {
     QString id;
     QString label;
@@ -47,6 +53,7 @@ struct IpcraftInterfaceDescriptor {
     bool multiConnection = false;
     QJsonObject ipxact;
     QString ipxactBusInterface;
+    IpcraftInterfaceTopology topology;
 };
 
 struct IpcraftModuleDescriptor {
@@ -54,6 +61,8 @@ struct IpcraftModuleDescriptor {
     QString name;
     QString description;
     QString graphRole;
+    QString displayLabelParameter;
+    QString shortLabelParameter;
     QJsonObject attach;
     QJsonObject parameters;
     QVector<IpcraftInterfaceDescriptor> interfaces;
@@ -82,6 +91,11 @@ struct IpcraftIpxactDescriptor {
     bool generated = false;
 };
 
+struct IpcraftGenerationDescriptor {
+    QString engine;
+    QJsonObject metadata;
+};
+
 struct IpcraftPackageManifest {
     QString schema;
     QString id;
@@ -97,6 +111,7 @@ struct IpcraftPackageManifest {
     std::optional<IpcraftIpxactDescriptor> ipxact;
     QJsonObject parameters;
     QVector<QJsonObject> topologies;
+    IpcraftGenerationDescriptor generation;
 
     const IpcraftConnectionClass* connectionClass(const QString& connectionClassId) const;
     const IpcraftModuleDescriptor* module(const QString& moduleId) const;
@@ -104,3 +119,10 @@ struct IpcraftPackageManifest {
                                                           const QString& interfaceId) const;
     const IpcraftViewDescriptor* viewForModule(const QString& moduleId) const;
 };
+
+struct IpcraftRegistryLoadResult {
+    QVector<IpcraftPackageManifest> manifests;
+    QVector<IpcraftDiagnostic> diagnostics;
+};
+
+IpcraftRegistryLoadResult loadIpcraftPackageManifestsWithDiagnostics(const QStringList& rootPaths);
