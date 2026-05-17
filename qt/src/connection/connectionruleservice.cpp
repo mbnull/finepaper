@@ -122,6 +122,23 @@ bool hasExplicitOrDirectionalTopologySide(const PortSemanticInfo& port) {
            PortLayout::isDirectionalRouterPortId(port.ref.portId);
 }
 
+QString effectiveInterfaceId(const PortSemanticInfo& port) {
+    return port.interfaceId.isEmpty() ? port.ref.portId : port.interfaceId;
+}
+
+bool topologyOppositeInterfacesMatch(const PortSemanticInfo& source,
+                                     const PortSemanticInfo& target) {
+    if (!source.oppositeInterfaceId.isEmpty() &&
+        effectiveInterfaceId(target) != source.oppositeInterfaceId) {
+        return false;
+    }
+    if (!target.oppositeInterfaceId.isEmpty() &&
+        effectiveInterfaceId(source) != target.oppositeInterfaceId) {
+        return false;
+    }
+    return true;
+}
+
 bool topologySidesAreOpposite(const PortSemanticInfo& source,
                               const PortSemanticInfo& target) {
     const QString sourceSide = topologySideForPort(source);
@@ -298,6 +315,9 @@ bool portOccupiedForCardinalityOne(const Graph* graph, const PortRef& ref) {
 
 bool oppositeSideRulePasses(const PortSemanticInfo& source,
                             const PortSemanticInfo& target) {
+    if (!topologyOppositeInterfacesMatch(source, target)) {
+        return false;
+    }
     if (!requiresOppositeSideRule(source, target)) {
         return true;
     }
@@ -307,6 +327,9 @@ bool oppositeSideRulePasses(const PortSemanticInfo& source,
 
 bool classValidationOppositeSideRulePasses(const PortSemanticInfo& source,
                                            const PortSemanticInfo& target) {
+    if (!topologyOppositeInterfacesMatch(source, target)) {
+        return false;
+    }
     if (!requiresOppositeSideRule(source, target)) {
         return true;
     }

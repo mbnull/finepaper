@@ -174,7 +174,8 @@ ModuleType nonCardinalTopologyRouterType(const QString& typeName,
                                          const QString& portId,
                                          const QString& role,
                                          const QString& compatibleRole,
-                                         const QString& topologySide) {
+                                         const QString& topologySide,
+                                         const QString& oppositeInterfaceId = {}) {
     ModuleType type;
     type.name = typeName;
     type.ipcoreId = QStringLiteral("finepaper.test");
@@ -197,6 +198,7 @@ ModuleType nonCardinalTopologyRouterType(const QString& typeName,
     metadata.autocompleteGroup = QStringLiteral("router_side");
     metadata.topologyRule = QStringLiteral("opposite_side");
     metadata.topologySide = topologySide;
+    metadata.oppositeInterfaceId = oppositeInterfaceId;
     type.interfaceMetadata.insert(metadata.id, metadata);
     return type;
 }
@@ -276,6 +278,26 @@ IpcraftPackageManifest validatorManifest(bool ambiguous = false) {
         QStringLiteral("Peer"),
         {interfaceDescriptor(QStringLiteral("link"),
                              {acceptRule(QStringLiteral("chi_peer_link"), QStringLiteral("peer"))})}));
+    return manifest;
+}
+
+IpcraftPackageManifest validatorManifestForEndpointXpInterfaces(const QString& endpointInterfaceId,
+                                                                const QString& xpInterfaceId) {
+    IpcraftPackageManifest manifest;
+    manifest.id = QStringLiteral("finepaper.test");
+    manifest.connectionClasses.push_back(
+        connectionClass(QStringLiteral("chi_node_interface"),
+                        {QStringLiteral("node"), QStringLiteral("interconnect")}));
+    manifest.modules.push_back(moduleDescriptor(
+        QStringLiteral("Endpoint"),
+        {interfaceDescriptor(endpointInterfaceId,
+                             {acceptRule(QStringLiteral("chi_node_interface"),
+                                         QStringLiteral("node"))})}));
+    manifest.modules.push_back(moduleDescriptor(
+        QStringLiteral("XP"),
+        {interfaceDescriptor(xpInterfaceId,
+                             {acceptRule(QStringLiteral("chi_node_interface"),
+                                         QStringLiteral("interconnect"))})}));
     return manifest;
 }
 
@@ -839,6 +861,59 @@ void testConnectionRuleServiceClassValidationIgnoresLegacyTopologySideNames() {
             "manifest class validation should still select the valid class");
 }
 
+void testConnectionRuleServiceClassValidationRejectsWrongOppositeInterfaceWithoutPeerSide() {
+    ModuleType endpointType = classValidationType(
+        QStringLiteral("ClassEndpointWrongOppositeInterface"),
+        QStringLiteral("Endpoint"),
+        QStringLiteral("link_out"),
+        QStringLiteral("legacy_source_bus"),
+        {acceptRule(QStringLiteral("chi_node_interface"), QStringLiteral("node"))},
+        QStringLiteral("opposite_side"));
+    endpointType.interfaceMetadata[QStringLiteral("link_out")].oppositeInterfaceId =
+        QStringLiteral("link_in");
+    const ModuleType xpType = classValidationType(
+        QStringLiteral("ClassXpWrongOppositeInterface"),
+        QStringLiteral("XP"),
+        QStringLiteral("link_other"),
+        QStringLiteral("legacy_target_bus"),
+        {acceptRule(QStringLiteral("chi_node_interface"), QStringLiteral("interconnect"))},
+        QStringLiteral("opposite_side"));
+    ModuleRegistry::instance().registerType(endpointType);
+    ModuleRegistry::instance().registerType(xpType);
+
+    Graph graph;
+    auto endpoint = makeOwnedModule(QStringLiteral("endpoint_wrong_opposite_interface"),
+                                    endpointType.name,
+                                    QStringLiteral("finepaper.test"));
+    endpoint->addPort(endpointType.defaultPorts.front());
+    auto xp = makeOwnedModule(QStringLiteral("xp_wrong_opposite_interface"),
+                              xpType.name,
+                              QStringLiteral("finepaper.test"));
+    xp->addPort(xpType.defaultPorts.front());
+    require(graph.addModule(std::move(endpoint)), "wrong-opposite endpoint should add");
+    require(graph.addModule(std::move(xp)), "wrong-opposite XP should add");
+
+    ConnectionRuleService service(
+        &graph,
+        {},
+        {validatorManifestForEndpointXpInterfaces(QStringLiteral("link_out"),
+                                                  QStringLiteral("link_other"))});
+    const ConnectionCheckResult result = service.check(
+        ConnectionRequest::portToPort(
+            PortRef{QStringLiteral("endpoint_wrong_opposite_interface"),
+                    QStringLiteral("link_out")},
+            PortRef{QStringLiteral("xp_wrong_opposite_interface"),
+                    QStringLiteral("link_other")},
+            ConnectionRequestKind::Programmatic));
+
+    require(result.status == ConnectionCheckStatus::Rejected,
+            "class validation should reject a peer that does not match topology.opposite");
+    require(result.layer == ConnectionRuleLayer::EditorRule,
+            "class validation opposite-interface mismatch should reject at editor-rule layer");
+    require(result.reasonCode == QStringLiteral("topology_rule_mismatch"),
+            "class validation opposite-interface mismatch should report topology rule mismatch");
+}
+
 void testConnectionRuleServiceClassValidationRejectsNonOppositeTopologyMetadata() {
     ModuleType endpointType = classValidationType(
         QStringLiteral("ClassEndpointSameTopologySide"),
@@ -1094,6 +1169,50 @@ void testAllowsNonCardinalRouterPortsWithOppositeTopologySides() {
             "non-cardinal metadata-side source port should be preserved");
     require(result.options.first().target.portId == QStringLiteral("link_in"),
             "non-cardinal metadata-side target port should be preserved");
+}
+
+void testRejectsNonCardinalRouterPortWithWrongOppositeInterfaceId() {
+    const ModuleType sourceType = nonCardinalTopologyRouterType(
+        QStringLiteral("MetadataOppositeRouterOut"),
+        QStringLiteral("link_out"),
+        QStringLiteral("initiator"),
+        QStringLiteral("target"),
+        QStringLiteral("east"),
+        QStringLiteral("link_in"));
+    const ModuleType targetType = nonCardinalTopologyRouterType(
+        QStringLiteral("MetadataOppositeRouterOther"),
+        QStringLiteral("link_other"),
+        QStringLiteral("target"),
+        QStringLiteral("initiator"),
+        QStringLiteral("west"));
+    ModuleRegistry::instance().registerType(sourceType);
+    ModuleRegistry::instance().registerType(targetType);
+
+    Graph graph;
+    auto source = makeOwnedModule(QStringLiteral("source_router_wrong_opposite"),
+                                  sourceType.name,
+                                  QStringLiteral("finepaper.test"));
+    source->addPort(sourceType.defaultPorts.front());
+    auto target = makeOwnedModule(QStringLiteral("target_router_wrong_opposite"),
+                                  targetType.name,
+                                  QStringLiteral("finepaper.test"));
+    target->addPort(targetType.defaultPorts.front());
+    require(graph.addModule(std::move(source)), "source wrong-opposite router should add");
+    require(graph.addModule(std::move(target)), "target wrong-opposite router should add");
+
+    ConnectionRuleService service(&graph, {});
+    const ConnectionCheckResult result = service.check(
+        ConnectionRequest::portToPort(
+            PortRef{QStringLiteral("source_router_wrong_opposite"), QStringLiteral("link_out")},
+            PortRef{QStringLiteral("target_router_wrong_opposite"), QStringLiteral("link_other")},
+            ConnectionRequestKind::Programmatic));
+
+    require(result.status == ConnectionCheckStatus::Rejected,
+            "topology.opposite should reject the wrong peer interface id");
+    require(result.layer == ConnectionRuleLayer::EditorRule,
+            "opposite-interface mismatch should reject at editor-rule layer");
+    require(result.reasonCode == QStringLiteral("topology_rule_mismatch"),
+            "opposite-interface mismatch should report topology rule mismatch");
 }
 
 void testAllowsBidirectionalRouterLinkFromTargetRoleToInitiatorRole() {
@@ -1353,6 +1472,7 @@ int main(int argc, char** argv) {
         testSelfLoopIsStructuralRejection();
         testRejectsSameSideTopologyRule();
         testAllowsNonCardinalRouterPortsWithOppositeTopologySides();
+        testRejectsNonCardinalRouterPortWithWrongOppositeInterfaceId();
         testAllowsBidirectionalRouterLinkFromTargetRoleToInitiatorRole();
         testRejectsOccupiedCardinalityOnePort();
         testVisualSideOrientsInOutPortToNodeCompletion();
@@ -1373,6 +1493,7 @@ int main(int argc, char** argv) {
         testConnectionOptionLabelsUseAnchorInterfaceLabels();
         testConnectionRuleServiceUsesInterfaceClassesNotLegacyBusNames();
         testConnectionRuleServiceClassValidationIgnoresLegacyTopologySideNames();
+        testConnectionRuleServiceClassValidationRejectsWrongOppositeInterfaceWithoutPeerSide();
         testConnectionRuleServiceClassValidationRejectsNonOppositeTopologyMetadata();
         testConnectionRuleServiceRejectsMissingPackageManifestMetadata();
     } catch (const std::exception& error) {
