@@ -128,6 +128,7 @@ ModuleType attachmentHostType() {
     type.name = QStringLiteral("AttachmentHostTile");
     type.ipcoreId = QStringLiteral("finepaper.attachmenttest");
     type.paletteLabel = QStringLiteral("Attachment Host");
+    type.displayLabelParameter = QStringLiteral("display_name");
     type.graphGroup = QStringLiteral("xps");
     type.graphRole = QStringLiteral("host");
     type.editorLayout = QStringLiteral("mesh_router");
@@ -159,6 +160,7 @@ ModuleType attachmentEndpointType() {
     type.name = QStringLiteral("AttachmentEndpointNode");
     type.ipcoreId = QStringLiteral("finepaper.attachmenttest");
     type.paletteLabel = QStringLiteral("Attachment Endpoint");
+    type.displayLabelParameter = QStringLiteral("display_name");
     type.graphGroup = QStringLiteral("endpoints");
     type.graphRole = QStringLiteral("attached");
     type.editorLayout = QStringLiteral("endpoint");
@@ -273,6 +275,10 @@ std::unique_ptr<Module> moduleFromType(const ModuleType& type,
     for (auto it = type.defaultParameters.constBegin(); it != type.defaultParameters.constEnd(); ++it) {
         module->setParameter(it.key(), it.value().value());
     }
+    if (type.displayLabelParameter == QStringLiteral("display_name") &&
+        !module->parameters().contains(QStringLiteral("display_name"))) {
+        module->setParameter(QStringLiteral("display_name"), moduleId);
+    }
     return module;
 }
 
@@ -382,6 +388,7 @@ void registerScaledAnchorType() {
 
     ModuleType type;
     type.name = QStringLiteral("GeometryScaledXP");
+    type.displayLabelParameter = QStringLiteral("display_name");
     type.editorLayout = QStringLiteral("mesh_router");
     type.supportsCollapse = true;
     type.expandedNodeMinWidth = 136;
@@ -1062,6 +1069,39 @@ void testOpenNocMultipleInterfacesRenderFromViewAnchors() {
             "OpenNoC p0 label should render from its view XML label anchor");
 }
 
+void testNodeCaptionUsesManifestBoundUserFacingLabel() {
+    ModuleType staticType;
+    staticType.name = QStringLiteral("NodeCaptionStaticType");
+    staticType.paletteLabel = QStringLiteral("Static Canvas Label");
+    require(ModuleRegistry::instance().registerType(staticType),
+            "static node caption type should register");
+
+    Module staticModule(QStringLiteral("static_runtime_id"), staticType.name);
+    staticModule.setParameter(QStringLiteral("display_name"),
+                              QStringLiteral("Hidden Convention"));
+    GraphNodeModel staticModel;
+    staticModel.setModule(&staticModule);
+    require(staticModel.caption() == QStringLiteral("Static Canvas Label"),
+            "canvas caption should ignore display_name without a display binding");
+
+    ModuleType boundType;
+    boundType.name = QStringLiteral("NodeCaptionBoundType");
+    boundType.paletteLabel = QStringLiteral("Bound Static Label");
+    boundType.displayLabelParameter = QStringLiteral("label");
+    require(ModuleRegistry::instance().registerType(boundType),
+            "bound node caption type should register");
+
+    Module boundModule(QStringLiteral("bound_runtime_id"), boundType.name);
+    boundModule.setParameter(QStringLiteral("label"),
+                             QStringLiteral("Bound Instance Label"));
+    boundModule.setParameter(QStringLiteral("display_name"),
+                             QStringLiteral("Hidden Convention"));
+    GraphNodeModel boundModel;
+    boundModel.setModule(&boundModule);
+    require(boundModel.caption() == QStringLiteral("Bound Instance Label"),
+            "canvas caption should use the manifest display binding when present");
+}
+
 void testNodeEditorWidgetOwnsConnectionRuleServiceInputs() {
     Graph graph;
     ProjectStateService stateService;
@@ -1561,6 +1601,7 @@ int main(int argc, char** argv) {
         testEndpointInterfaceFollowsRelativeNodePosition();
         testStoredNodeSizeOverridesDefaultAndProvidesResizeHandle();
         testOpenNocMultipleInterfacesRenderFromViewAnchors();
+        testNodeCaptionUsesManifestBoundUserFacingLabel();
         testNodeEditorWidgetOwnsConnectionRuleServiceInputs();
         testConnectionSelectionEmitsConnectionId();
         testScopedDropRejectsMissingActiveInstance();

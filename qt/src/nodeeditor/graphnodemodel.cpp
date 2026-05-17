@@ -39,7 +39,7 @@ bool matchesPortType(const Port& port, QtNodes::PortType portType) {
 } // namespace
 
 QString GraphNodeModel::caption() const {
-    return ModuleLabels::displayName(m_module);
+    return ModuleLabels::userFacingName(m_module);
 }
 
 // Count ports matching the given direction
