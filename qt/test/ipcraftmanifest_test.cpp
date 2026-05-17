@@ -891,7 +891,7 @@ void testRejectsRegistryPackageWithInvalidViewAttachmentZoneReferences() {
     }
 }
 
-void testRejectsBatchPackageRegistrationOnAnyFailure() {
+void testRegistryKeepsValidPackagesWhenOtherRootsHaveDiagnostics() {
     QTemporaryDir temp;
     require(temp.isValid(), "temporary directory should be valid");
 
@@ -914,11 +914,58 @@ void testRejectsBatchPackageRegistrationOnAnyFailure() {
     IpcraftRegistry registry;
     const bool loaded = registry.loadPackageRoots({validRoot.absolutePath(), invalidRoot.absolutePath()});
 
-    require(!loaded, "batch with any invalid package should fail registry load");
-    require(registry.packages().isEmpty(), "failed batch should not register earlier valid packages");
-    require(registry.package(QStringLiteral("org.example.valid")) == nullptr,
-            "valid package from failed batch should not remain registered");
+    require(!loaded, "batch with any invalid package should expose registry load failure");
+    require(registry.packages().size() == 1, "valid package should remain registered with diagnostics");
+    require(registry.package(QStringLiteral("org.example.valid")) != nullptr,
+            "valid package from failed batch should remain addressable");
+    require(registry.package(QStringLiteral("org.example.invalid")) == nullptr,
+            "invalid package from failed batch should not be registered");
     require(!registry.diagnostics().isEmpty(), "failed batch should expose diagnostics");
+}
+
+void testRegistrySkipsDuplicatePackageIdsButKeepsUnrelatedPackages() {
+    QTemporaryDir temp;
+    require(temp.isValid(), "temporary directory should be valid");
+
+    QDir workspace(temp.path());
+    require(workspace.mkpath(QStringLiteral("valid")), "failed to create valid package directory");
+    require(workspace.mkpath(QStringLiteral("duplicate_a")), "failed to create first duplicate package directory");
+    require(workspace.mkpath(QStringLiteral("duplicate_b")), "failed to create second duplicate package directory");
+
+    QDir validRoot(workspace.filePath(QStringLiteral("valid")));
+    createView(validRoot);
+    writeFile(validRoot.filePath(QStringLiteral("ipcraft.json")),
+              minimalManifest(QStringLiteral("views/Module.xml"),
+                              QStringLiteral("org.example.valid")));
+
+    QDir firstDuplicateRoot(workspace.filePath(QStringLiteral("duplicate_a")));
+    createView(firstDuplicateRoot);
+    writeFile(firstDuplicateRoot.filePath(QStringLiteral("ipcraft.json")),
+              minimalManifest(QStringLiteral("views/Module.xml"),
+                              QStringLiteral("org.example.duplicate")));
+
+    QDir secondDuplicateRoot(workspace.filePath(QStringLiteral("duplicate_b")));
+    createView(secondDuplicateRoot);
+    writeFile(secondDuplicateRoot.filePath(QStringLiteral("ipcraft.json")),
+              minimalManifest(QStringLiteral("views/Module.xml"),
+                              QStringLiteral("org.example.duplicate")));
+
+    IpcraftRegistry registry;
+    const bool loaded = registry.loadPackageRoots({
+        validRoot.absolutePath(),
+        firstDuplicateRoot.absolutePath(),
+        secondDuplicateRoot.absolutePath()
+    });
+
+    require(!loaded, "duplicate package IDs should expose registry load failure");
+    require(registry.packages().size() == 1, "unrelated valid package should remain registered");
+    require(registry.package(QStringLiteral("org.example.valid")) != nullptr,
+            "unrelated valid package should remain addressable");
+    require(registry.package(QStringLiteral("org.example.duplicate")) == nullptr,
+            "neither duplicate package should be registered");
+    require(registry.diagnostics().size() == 1, "duplicate package IDs should emit one diagnostic");
+    require(registry.diagnostics().first().message.contains(QStringLiteral("Duplicate package id org.example.duplicate")),
+            "duplicate diagnostic should name duplicate package id");
 }
 
 void testPluginAndExtensionsAreDistinct() {
@@ -1005,7 +1052,8 @@ int main(int argc, char** argv) {
         testRejectsRegistryPackageWithInvalidViewInterfaceReferenceAttributes();
         testRegistryAcceptsAttachmentZoneRefAlias();
         testRejectsRegistryPackageWithInvalidViewAttachmentZoneReferences();
-        testRejectsBatchPackageRegistrationOnAnyFailure();
+        testRegistryKeepsValidPackagesWhenOtherRootsHaveDiagnostics();
+        testRegistrySkipsDuplicatePackageIdsButKeepsUnrelatedPackages();
         testPluginAndExtensionsAreDistinct();
     } catch (const std::exception& error) {
         std::cerr << "ipcraftmanifest_test failed: " << error.what() << '\n';

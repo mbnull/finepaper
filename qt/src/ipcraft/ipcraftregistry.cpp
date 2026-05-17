@@ -348,12 +348,8 @@ bool IpcraftRegistry::loadPackageRoots(const QStringList& rootPaths) {
     const IpcraftRegistryLoadResult loadResult =
         loadIpcraftPackageManifestsWithDiagnostics(rootPaths);
     m_diagnostics = loadResult.diagnostics;
-    if (!m_diagnostics.isEmpty()) {
-        return false;
-    }
-
     m_packages = loadResult.manifests;
-    return true;
+    return m_diagnostics.isEmpty();
 }
 
 const QVector<IpcraftPackageManifest>& IpcraftRegistry::packages() const {
