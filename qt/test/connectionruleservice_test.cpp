@@ -246,6 +246,107 @@ IpcraftPackageManifest validatorManifest(bool ambiguous = false) {
     return manifest;
 }
 
+IpcraftInterfaceDescriptor displayInterfaceDescriptor(const QString& id, const QString& label) {
+    IpcraftInterfaceDescriptor descriptor;
+    descriptor.id = id;
+    descriptor.label = label;
+    return descriptor;
+}
+
+QJsonObject stringParameterDescriptor(const QString& defaultValue = {}) {
+    return QJsonObject{
+        {QStringLiteral("type"), QStringLiteral("string")},
+        {QStringLiteral("default"), defaultValue}
+    };
+}
+
+IpcraftPackageManifest displayNamedManifest(const QString& packageId,
+                                            bool includeShortLabel = false) {
+    IpcraftPackageManifest manifest;
+    manifest.id = packageId;
+
+    IpcraftModuleDescriptor endpoint;
+    endpoint.id = QStringLiteral("Endpoint");
+    endpoint.name = QStringLiteral("Endpoint");
+    endpoint.displayLabelParameter = QStringLiteral("label");
+    if (includeShortLabel) {
+        endpoint.shortLabelParameter = QStringLiteral("slot");
+        endpoint.parameters.insert(QStringLiteral("slot"), stringParameterDescriptor());
+    }
+    endpoint.parameters.insert(QStringLiteral("label"), stringParameterDescriptor());
+    endpoint.interfaces.push_back(
+        displayInterfaceDescriptor(QStringLiteral("noc"), QStringLiteral("NoC Fabric")));
+
+    IpcraftModuleDescriptor routerTile;
+    routerTile.id = QStringLiteral("RouterTile");
+    routerTile.name = QStringLiteral("Router Tile");
+    routerTile.displayLabelParameter = QStringLiteral("label");
+    if (includeShortLabel) {
+        routerTile.shortLabelParameter = QStringLiteral("slot");
+        routerTile.parameters.insert(QStringLiteral("slot"), stringParameterDescriptor());
+    }
+    routerTile.parameters.insert(QStringLiteral("label"), stringParameterDescriptor());
+    routerTile.interfaces.push_back(
+        displayInterfaceDescriptor(QStringLiteral("local"), QStringLiteral("Local Link")));
+
+    manifest.modules.push_back(endpoint);
+    manifest.modules.push_back(routerTile);
+    return manifest;
+}
+
+void loadDisplayNamedManifest(const IpcraftPackageManifest& manifest) {
+    require(ModuleRegistry::instance().loadIpcraftPackages({manifest}),
+            "display-named module types should load");
+}
+
+std::unique_ptr<Module> makeDisplayNamedModule(const QString& packageId,
+                                               const QString& id,
+                                               const QString& moduleId,
+                                               const QString& label,
+                                               const QString& slot = {}) {
+    auto module = std::make_unique<Module>(id, moduleId);
+    module->setIpcoreId(packageId);
+    module->setParameter(QStringLiteral("label"), label);
+    if (!slot.isEmpty()) {
+        module->setParameter(QStringLiteral("slot"), slot);
+    }
+
+    const ModuleType* type = ModuleRegistry::instance().getType(packageId, moduleId);
+    require(type != nullptr, "display-named type should be registered");
+    for (const Port& port : type->defaultPorts) {
+        module->addPort(port);
+    }
+    return module;
+}
+
+std::unique_ptr<Graph> graphWithTwoDisplayIdenticalEndpoints(const QString& packageId) {
+    auto graph = std::make_unique<Graph>();
+    auto first = makeDisplayNamedModule(packageId,
+                                        QStringLiteral("uuid_ep0"),
+                                        QStringLiteral("Endpoint"),
+                                        QStringLiteral("DMA"),
+                                        QStringLiteral("slot 0"));
+    auto second = makeDisplayNamedModule(packageId,
+                                         QStringLiteral("uuid_ep1"),
+                                         QStringLiteral("Endpoint"),
+                                         QStringLiteral("DMA"),
+                                         QStringLiteral("slot 1"));
+    require(graph->addModule(std::move(first)), "first display endpoint should add");
+    require(graph->addModule(std::move(second)), "second display endpoint should add");
+    return graph;
+}
+
+ConnectionRequest nodeToPortRequest() {
+    ConnectionRequest request;
+    request.kind = ConnectionRequestKind::NodeToPort;
+    request.start.moduleId = QStringLiteral("uuid_ep0");
+    request.start.fromNodeBody = true;
+    request.start.hiddenPortsAllowed = true;
+    request.end.moduleId = QStringLiteral("uuid_ep1");
+    request.end.portId = QStringLiteral("noc");
+    return request;
+}
+
 IpcraftConnectionParticipant participant(const QString& moduleId,
                                          const QString& instanceId,
                                          const QString& interfaceId) {
@@ -354,6 +455,68 @@ void testAmbiguousClassCreatesWarningResult() {
     require(decision.alternatives == QStringList({QStringLiteral("chi_node_interface"),
                                                   QStringLiteral("monitor_tap")}),
             "ambiguous decision should expose every valid class alternative");
+}
+
+void testConnectionOptionsPreferDisplayNamesAndInterfaceLabels() {
+    const QString packageId = QStringLiteral("finepaper.display.labels");
+    const IpcraftPackageManifest manifest = displayNamedManifest(packageId);
+    loadDisplayNamedManifest(manifest);
+
+    Graph graph;
+    auto xp = makeDisplayNamedModule(packageId,
+                                     QStringLiteral("uuid_xp"),
+                                     QStringLiteral("RouterTile"),
+                                     QStringLiteral("XP A"));
+    auto ep = makeDisplayNamedModule(packageId,
+                                     QStringLiteral("uuid_ep"),
+                                     QStringLiteral("Endpoint"),
+                                     QStringLiteral("DMA 0"));
+    require(graph.addModule(std::move(xp)), "display router should add");
+    require(graph.addModule(std::move(ep)), "display endpoint should add");
+
+    ConnectionRuleService service(&graph, {}, {manifest});
+    const ConnectionCheckResult result = service.check(
+        ConnectionRequest::portToPort(PortRef{QStringLiteral("uuid_ep"), QStringLiteral("noc")},
+                                      PortRef{QStringLiteral("uuid_xp"), QStringLiteral("local")},
+                                      ConnectionRequestKind::PortToPort));
+
+    require(result.hasSingleOption(), "display-name test should have one option");
+    const QString label = result.options.first().label;
+    require(label.contains(QStringLiteral("DMA 0")),
+            "option should show endpoint display name");
+    require(label.contains(QStringLiteral("XP A")),
+            "option should show router display name");
+    require(label.contains(QStringLiteral("NoC Fabric")),
+            "option should show endpoint interface label");
+    require(label.contains(QStringLiteral("Local Link")),
+            "option should show router interface label");
+    require(!label.contains(QStringLiteral("uuid_ep")),
+            "option main label should not expose endpoint runtime ID");
+    require(!label.contains(QStringLiteral("uuid_xp")),
+            "option main label should not expose router runtime ID");
+    require(!label.contains(QStringLiteral(".noc")),
+            "option should not show raw endpoint port id when an interface label exists");
+    require(!label.contains(QStringLiteral(".local")),
+            "option should not show raw router port id when an interface label exists");
+}
+
+void testDuplicateConnectionOptionLabelsUseShortLabelBeforeIds() {
+    const QString packageId = QStringLiteral("finepaper.display.short_labels");
+    const IpcraftPackageManifest manifest = displayNamedManifest(packageId, true);
+    loadDisplayNamedManifest(manifest);
+
+    std::unique_ptr<Graph> graph = graphWithTwoDisplayIdenticalEndpoints(packageId);
+    ConnectionRuleService service(graph.get(), {}, {manifest});
+    const ConnectionCheckResult result = service.check(nodeToPortRequest());
+
+    require(result.status == ConnectionCheckStatus::NeedsSelection,
+            "duplicate visible options should require selection");
+    require(result.options.at(0).label.contains(QStringLiteral("slot 0")) ||
+            result.options.at(1).label.contains(QStringLiteral("slot 0")),
+            "short label should disambiguate duplicate display names");
+    require(!result.options.at(0).label.contains(QStringLiteral("uuid_ep")) &&
+            !result.options.at(1).label.contains(QStringLiteral("uuid_ep")),
+            "short labels should be used before runtime IDs");
 }
 
 ModuleType classValidationType(const QString& typeName,
@@ -915,6 +1078,8 @@ int main(int argc, char** argv) {
         testRejectsUsedSingleConnectionInterface();
         testSymmetricClassNormalizesReverseDrag();
         testAmbiguousClassCreatesWarningResult();
+        testConnectionOptionsPreferDisplayNamesAndInterfaceLabels();
+        testDuplicateConnectionOptionLabelsUseShortLabelBeforeIds();
         testConnectionRuleServiceUsesInterfaceClassesNotLegacyBusNames();
         testConnectionRuleServiceClassValidationIgnoresLegacyTopologySideNames();
         testConnectionRuleServiceRejectsMissingPackageManifestMetadata();

@@ -531,6 +531,8 @@ ModuleType moduleTypeFromIpcraft(const IpcraftPackageManifest& manifest,
     type.ipcoreId = manifest.id;
     type.paletteLabel = module.name.isEmpty() ? module.id : module.name;
     type.description = module.description;
+    type.displayLabelParameter = module.displayLabelParameter;
+    type.shortLabelParameter = module.shortLabelParameter;
     type.graphGroup = graphGroupForIpcraftRole(module.graphRole);
     type.externalIdPrefix = externalIdPrefixFromIpcraft(module);
     type.displayPrefix = displayPrefixFromIpcraft(module);

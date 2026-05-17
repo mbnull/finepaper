@@ -91,6 +91,8 @@ struct ModuleType {
     QHash<QString, ModuleInterfaceMetadata> interfaceMetadata;
     QString paletteLabel;
     QString description;
+    QString displayLabelParameter;
+    QString shortLabelParameter;
     QString nodeColor;
     QString editorLayout;
     QString graphGroup;

@@ -4,9 +4,11 @@
 #include "graph/graph.h"
 #include "graph/module.h"
 #include "ipcraft/ipcraftconnectionvalidator.h"
+#include "modules/modulelabels.h"
 #include "modules/moduleregistry.h"
 #include "modules/moduletypemetadata.h"
 
+#include <QSet>
 #include <algorithm>
 #include <memory>
 #include <utility>
@@ -333,6 +335,148 @@ QString interfaceIdForPort(const Module* module, const QString& portId) {
         return portId;
     }
     return port->interfaceId().isEmpty() ? port->id() : port->interfaceId();
+}
+
+QString interfaceLabelForPort(const Module* module, const QString& portId) {
+    const Port* port = findPort(module, portId);
+    if (!port) {
+        return portId;
+    }
+
+    const QString interfaceId = port->interfaceId().isEmpty() ? port->id() : port->interfaceId();
+    const ModuleType* type = ModuleTypeMetadata::type(module);
+    if (type) {
+        const auto metadataIt = type->interfaceMetadata.find(interfaceId);
+        if (metadataIt != type->interfaceMetadata.end()) {
+            const QString label = metadataIt.value().label.trimmed();
+            if (!label.isEmpty()) {
+                return label;
+            }
+        }
+    }
+
+    const QString portName = port->name().trimmed();
+    return portName.isEmpty() ? port->id() : portName;
+}
+
+QString connectionOptionLabel(const Graph* graph, const PortRef& source, const PortRef& target) {
+    const Module* sourceModule = graph ? graph->getModule(source.moduleId) : nullptr;
+    const Module* targetModule = graph ? graph->getModule(target.moduleId) : nullptr;
+    return QStringLiteral("%1.%2 -> %3.%4")
+        .arg(ModuleLabels::userFacingName(sourceModule),
+             interfaceLabelForPort(sourceModule, source.portId),
+             ModuleLabels::userFacingName(targetModule),
+             interfaceLabelForPort(targetModule, target.portId));
+}
+
+QString sourceShortDisambiguator(const Graph* graph, const ConnectionResolvedOption& option) {
+    return ModuleLabels::shortDisambiguator(graph ? graph->getModule(option.source.moduleId) : nullptr);
+}
+
+QString targetShortDisambiguator(const Graph* graph, const ConnectionResolvedOption& option) {
+    return ModuleLabels::shortDisambiguator(graph ? graph->getModule(option.target.moduleId) : nullptr);
+}
+
+QString combinedShortDisambiguator(const Graph* graph, const ConnectionResolvedOption& option) {
+    const QString source = sourceShortDisambiguator(graph, option);
+    const QString target = targetShortDisambiguator(graph, option);
+    if (source.isEmpty() || target.isEmpty()) {
+        return {};
+    }
+    return QStringLiteral("%1 -> %2").arg(source, target);
+}
+
+QString sourceRuntimeDisambiguator(const ConnectionResolvedOption& option) {
+    return QStringLiteral("%1.%2").arg(option.source.moduleId, option.source.portId);
+}
+
+QString targetRuntimeDisambiguator(const ConnectionResolvedOption& option) {
+    return QStringLiteral("%1.%2").arg(option.target.moduleId, option.target.portId);
+}
+
+QString combinedRuntimeDisambiguator(const ConnectionResolvedOption& option) {
+    return QStringLiteral("%1 -> %2")
+        .arg(sourceRuntimeDisambiguator(option),
+             targetRuntimeDisambiguator(option));
+}
+
+template <typename Suffix>
+bool applyUniqueSuffix(QVector<ConnectionResolvedOption>& options,
+                       const QVector<int>& duplicateIndexes,
+                       Suffix suffixForOption) {
+    QSet<QString> labels;
+    QSet<int> duplicateIndexSet;
+    for (int index : duplicateIndexes) {
+        duplicateIndexSet.insert(index);
+    }
+    for (int index = 0; index < options.size(); ++index) {
+        if (!duplicateIndexSet.contains(index)) {
+            labels.insert(options.at(index).label);
+        }
+    }
+
+    QVector<QString> suffixedLabels;
+    suffixedLabels.reserve(duplicateIndexes.size());
+
+    for (int index : duplicateIndexes) {
+        const QString suffix = suffixForOption(options.at(index)).trimmed();
+        if (suffix.isEmpty()) {
+            return false;
+        }
+
+        const QString label = QStringLiteral("%1 [%2]").arg(options.at(index).label, suffix);
+        if (labels.contains(label)) {
+            return false;
+        }
+        labels.insert(label);
+        suffixedLabels.push_back(label);
+    }
+
+    for (int i = 0; i < duplicateIndexes.size(); ++i) {
+        options[duplicateIndexes.at(i)].label = suffixedLabels.at(i);
+    }
+    return true;
+}
+
+void disambiguateDuplicateLabels(QVector<ConnectionResolvedOption>& options, const Graph* graph) {
+    QHash<QString, QVector<int>> indexesByLabel;
+    for (int index = 0; index < options.size(); ++index) {
+        indexesByLabel[options.at(index).label].push_back(index);
+    }
+
+    for (const QVector<int>& duplicateIndexes : indexesByLabel) {
+        if (duplicateIndexes.size() < 2) {
+            continue;
+        }
+
+        if (applyUniqueSuffix(options, duplicateIndexes,
+                              [graph](const ConnectionResolvedOption& option) {
+                                  return sourceShortDisambiguator(graph, option);
+                              }) ||
+            applyUniqueSuffix(options, duplicateIndexes,
+                              [graph](const ConnectionResolvedOption& option) {
+                                  return targetShortDisambiguator(graph, option);
+                              }) ||
+            applyUniqueSuffix(options, duplicateIndexes,
+                              [graph](const ConnectionResolvedOption& option) {
+                                  return combinedShortDisambiguator(graph, option);
+                              }) ||
+            applyUniqueSuffix(options, duplicateIndexes,
+                              [](const ConnectionResolvedOption& option) {
+                                  return sourceRuntimeDisambiguator(option);
+                              }) ||
+            applyUniqueSuffix(options, duplicateIndexes,
+                              [](const ConnectionResolvedOption& option) {
+                                  return targetRuntimeDisambiguator(option);
+                              })) {
+            continue;
+        }
+
+        applyUniqueSuffix(options, duplicateIndexes,
+                          [](const ConnectionResolvedOption& option) {
+                              return combinedRuntimeDisambiguator(option);
+                          });
+    }
 }
 
 ProjectConnectionInterfaceRef interfaceRefForPort(const PortSemanticInfo& port) {
@@ -682,11 +826,7 @@ QVector<ConnectionResolvedOption> ConnectionRuleService::buildOptions(
         ConnectionResolvedOption option;
         option.source = source.ref;
         option.target = target.ref;
-        option.label = QStringLiteral("%1.%2 -> %3.%4")
-                           .arg(source.ref.moduleId,
-                                source.ref.portId,
-                                target.ref.moduleId,
-                                target.ref.portId);
+        option.label = connectionOptionLabel(m_graph, source.ref, target.ref);
         if (ipcraftDecision.has_value()) {
             option.connectionClassId = ipcraftDecision->selectedClassId;
             option.connectionStatus = statusString(ipcraftDecision->status);
@@ -711,6 +851,7 @@ QVector<ConnectionResolvedOption> ConnectionRuleService::buildOptions(
             }
         }
     }
+    disambiguateDuplicateLabels(options, m_graph);
     if (options.isEmpty() && rejectionReason && rejectionReason->isEmpty()) {
         *rejectionReason = QStringLiteral("direction_mismatch");
         if (rejectionMessage) *rejectionMessage = QStringLiteral("No direction-compatible connection option");
