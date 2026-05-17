@@ -110,6 +110,60 @@ class IpcraftGeneratorTest < Minitest::Test
     end
   end
 
+  def test_ravenoc_generation_rejects_project_without_tiles_or_wrapper
+    project = ravenoc_project
+    project['instances'] = []
+    project['connections'] = []
+
+    error = assert_raises(IpcraftGenerator::Error) do
+      generate_ravenoc_project(project)
+    end
+    assert_includes error.message, 'expected RaveTile instances or one RaveNoC wrapper instance'
+  end
+
+  def test_ravenoc_generation_validates_global_parameters
+    invalid_parameters = [
+      ['flit_data_width', '32', 'flit_data_width must be a positive integer'],
+      ['flit_data_width', 16, 'flit_data_width must be 32 or 64'],
+      ['flit_type_width', 3, 'flit_type_width must be 2'],
+      ['flit_buffer_depth', 3, 'flit_buffer_depth must be a power of two'],
+      ['virtual_channels', 33, 'virtual_channels must be 1-32'],
+      ['max_packet_flits', 0, 'max_packet_flits must be a positive integer'],
+      ['axi_addr_width', 0, 'axi_addr_width must be a positive integer'],
+      ['axi_data_width', 64, 'axi_data_width must equal flit_data_width'],
+      ['routing_algorithm', 'odd_even', 'routing_algorithm must be xy or yx'],
+      ['priority', 'middle', 'priority must be zero_high or zero_low'],
+      ['axi_cdc_required', '101', 'axi_cdc_required must be all, none, or a 4-bit binary mask']
+    ]
+
+    invalid_parameters.each do |name, value, message|
+      project = ravenoc_project
+      ravenoc_global_parameters(project)[name] = value
+
+      error = assert_raises(IpcraftGenerator::Error, "expected #{name}=#{value.inspect} to fail") do
+        generate_ravenoc_project(project)
+      end
+      assert_includes error.message, message
+    end
+  end
+
+  def test_ravenoc_generation_validates_wrapper_dimensions
+    invalid_dimensions = [
+      [{'rows' => 0, 'cols' => 2}, 'RaveNoC rows must be a positive integer'],
+      [{'rows' => 2, 'cols' => '2'}, 'RaveNoC cols must be a positive integer'],
+      [{'rows' => 1, 'cols' => 1}, '1x1 is not a legal RaveNoC mesh']
+    ]
+
+    invalid_dimensions.each do |parameters, message|
+      project = ravenoc_wrapper_project(parameters)
+
+      error = assert_raises(IpcraftGenerator::Error, "expected #{parameters.inspect} to fail") do
+        generate_ravenoc_project(project)
+      end
+      assert_includes error.message, message
+    end
+  end
+
   def test_generates_opennoc_mesh_projection_without_vendor
     Dir.mktmpdir do |dir|
       input_path = File.join(dir, 'input.json')
@@ -406,8 +460,26 @@ class IpcraftGeneratorTest < Minitest::Test
         ravenoc_tile('rave_1_0', 0, 1),
         ravenoc_tile('rave_1_1', 1, 1)
       ],
-      'connections' => []
+      'connections' => [
+        ravenoc_mesh_connection('rave_0_0_east_to_rave_0_1_west', ['rave_0_0', 'east'], ['rave_0_1', 'west']),
+        ravenoc_mesh_connection('rave_1_0_east_to_rave_1_1_west', ['rave_1_0', 'east'], ['rave_1_1', 'west']),
+        ravenoc_mesh_connection('rave_0_0_south_to_rave_1_0_north', ['rave_0_0', 'south'], ['rave_1_0', 'north']),
+        ravenoc_mesh_connection('rave_0_1_south_to_rave_1_1_north', ['rave_0_1', 'south'], ['rave_1_1', 'north'])
+      ]
     }
+  end
+
+  def ravenoc_wrapper_project(parameters)
+    project = ravenoc_project
+    project['instances'] = [
+      {
+        'id' => 'ravenoc_wrapper_0',
+        'module' => 'RaveNoC',
+        'parameters' => parameters
+      }
+    ]
+    project['connections'] = []
+    project
   end
 
   def ravenoc_tile(id, col, row)
@@ -416,6 +488,17 @@ class IpcraftGeneratorTest < Minitest::Test
       'module' => 'RaveTile',
       'parameters' => { 'external_id' => id, 'mesh_col' => col, 'mesh_row' => row },
       'interfaces' => %w[east west north south local].map { |port| { 'id' => "if_#{port}", 'port' => port } }
+    }
+  end
+
+  def ravenoc_mesh_connection(id, left, right)
+    {
+      'id' => id,
+      'class' => 'ravenoc_router_link',
+      'interfaces' => [
+        { 'instance' => left.fetch(0), 'interface' => "if_#{left.fetch(1)}" },
+        { 'instance' => right.fetch(0), 'interface' => "if_#{right.fetch(1)}" }
+      ]
     }
   end
 
@@ -517,6 +600,29 @@ class IpcraftGeneratorTest < Minitest::Test
         output: File.join(dir, 'out')
       ).generate
     end
+  end
+
+  def generate_ravenoc_project(project, manifest: ravenoc_manifest)
+    Dir.mktmpdir do |dir|
+      manifest_path = File.join(dir, 'ipcraft.json')
+      input_path = File.join(dir, 'input.json')
+      File.write(manifest_path, JSON.pretty_generate(manifest))
+      File.write(input_path, JSON.pretty_generate(project))
+
+      IpcraftGenerator::Generator.new(
+        manifest: manifest_path,
+        input: input_path,
+        output: File.join(dir, 'out')
+      ).generate
+    end
+  end
+
+  def ravenoc_manifest
+    JSON.parse(File.read(File.join(PROJECT_ROOT, 'ipcores/ravenoc/ipcraft.json')))
+  end
+
+  def ravenoc_global_parameters(project)
+    project.fetch('project').fetch('instance').fetch('state').fetch('global_parameters')
   end
 
   def opennoc_manifest

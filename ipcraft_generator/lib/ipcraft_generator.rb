@@ -150,6 +150,7 @@ module IpcraftGenerator
         'rows' => dimensions.fetch(:rows),
         'cols' => dimensions.fetch(:cols)
       )
+      validate_ravenoc_parameters!(parameters)
 
       {
         parameters: parameters,
@@ -194,6 +195,9 @@ module IpcraftGenerator
       end
 
       wrappers = ravenoc_wrapper_instances(manifest, input)
+      if wrappers.empty?
+        raise Error, 'expected RaveTile instances or one RaveNoC wrapper instance'
+      end
       if wrappers.size > 1
         raise Error, "expected at most one RaveNoC wrapper instance, found #{wrappers.size}"
       end
@@ -229,6 +233,48 @@ module IpcraftGenerator
 
     def validate_ravenoc_mesh_size!(rows, cols)
       raise Error, '1x1 is not a legal RaveNoC mesh' if rows == 1 && cols == 1
+    end
+
+    def validate_ravenoc_parameters!(parameters)
+      rows = positive_integer_value!(parameters.fetch('rows'), 'RaveNoC rows')
+      cols = positive_integer_value!(parameters.fetch('cols'), 'RaveNoC cols')
+      validate_ravenoc_mesh_size!(rows, cols)
+
+      buffer_depth = positive_integer_value!(parameters.fetch('flit_buffer_depth'), 'flit_buffer_depth')
+      unless (buffer_depth & (buffer_depth - 1)).zero?
+        raise Error, 'flit_buffer_depth must be a power of two'
+      end
+
+      %w[flit_data_width flit_type_width virtual_channels max_packet_flits axi_addr_width axi_data_width].each do |name|
+        positive_integer_value!(parameters.fetch(name), name)
+      end
+      unless [32, 64].include?(parameters.fetch('flit_data_width'))
+        raise Error, 'flit_data_width must be 32 or 64'
+      end
+      raise Error, 'flit_type_width must be 2' unless parameters.fetch('flit_type_width') == 2
+      unless (1..32).include?(parameters.fetch('virtual_channels'))
+        raise Error, 'virtual_channels must be 1-32'
+      end
+      unless parameters.fetch('axi_data_width') == parameters.fetch('flit_data_width')
+        raise Error, 'axi_data_width must equal flit_data_width'
+      end
+      unless RAVENOC_ROUTING_MAP.key?(parameters.fetch('routing_algorithm'))
+        raise Error, 'routing_algorithm must be xy or yx'
+      end
+      unless RAVENOC_PRIORITY_MAP.key?(parameters.fetch('priority'))
+        raise Error, 'priority must be zero_high or zero_low'
+      end
+
+      validate_ravenoc_axi_cdc_required!(parameters)
+    end
+
+    def validate_ravenoc_axi_cdc_required!(parameters)
+      noc_size = parameters.fetch('rows') * parameters.fetch('cols')
+      value = parameters.fetch('axi_cdc_required', 'all').to_s.strip.downcase.delete('_')
+      return if %w[all none].include?(value)
+      return if value.match?(/\A[01]+\z/) && value.length == noc_size
+
+      raise Error, "axi_cdc_required must be all, none, or a #{noc_size}-bit binary mask"
     end
 
     def ravenoc_define_values(parameters)
