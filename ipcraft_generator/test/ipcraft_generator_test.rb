@@ -164,6 +164,41 @@ class IpcraftGeneratorTest < Minitest::Test
     end
   end
 
+  def test_ravenoc_generation_rejects_missing_tile_mesh_link
+    project = ravenoc_project
+    project.fetch('connections').reject! do |connection|
+      connection.fetch('id') == 'rave_0_0_east_to_rave_0_1_west'
+    end
+
+    error = assert_raises(IpcraftGenerator::Error) do
+      generate_ravenoc_project(project)
+    end
+    assert_includes error.message, 'missing mesh link'
+    assert_includes error.message, 'rave_0_0.east -> rave_0_1.west'
+  end
+
+  def test_ravenoc_filelist_uses_output_local_paths
+    Dir.mktmpdir do |dir|
+      input_path = File.join(dir, 'input.json')
+      output = File.join('out')
+      File.write(input_path, JSON.pretty_generate(ravenoc_project))
+
+      Dir.chdir(dir) do
+        IpcraftGenerator::Generator.new(
+          manifest: File.join(PROJECT_ROOT, 'ipcores/ravenoc/ipcraft.json'),
+          input: input_path,
+          output: output
+        ).generate
+      end
+
+      filelist = File.read(File.join(dir, output, 'ravenoc_filelist.f'))
+      assert_includes filelist, "+incdir+.\n"
+      assert_includes filelist, "\nravenoc_top.sv\n"
+      refute_includes filelist, '+incdir+out'
+      refute_includes filelist, 'out/ravenoc_top.sv'
+    end
+  end
+
   def test_generates_opennoc_mesh_projection_without_vendor
     Dir.mktmpdir do |dir|
       input_path = File.join(dir, 'input.json')

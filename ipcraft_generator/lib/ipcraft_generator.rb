@@ -191,6 +191,7 @@ module IpcraftGenerator
         coordinates = mesh_coordinates(tiles, col_key: 'mesh_col', row_key: 'mesh_row', item_label: 'RaveTile')
         rows, cols = validate_rectangular_mesh!(coordinates, tiles.size, 'RaveTile graph')
         validate_ravenoc_mesh_size!(rows, cols)
+        validate_ravenoc_mesh_links!(input.fetch('connections', []), coordinates)
         return { rows: rows, cols: cols, tiles: tiles.size }
       end
 
@@ -277,6 +278,76 @@ module IpcraftGenerator
       raise Error, "axi_cdc_required must be all, none, or a #{noc_size}-bit binary mask"
     end
 
+    def validate_ravenoc_mesh_links!(connections, coordinates)
+      actual_links = ravenoc_actual_mesh_links(connections, coordinates)
+      missing = ravenoc_expected_mesh_links(coordinates).find { |link| !actual_links.include?(link) }
+      return unless missing
+
+      raise Error, "missing mesh link #{ravenoc_mesh_link_description(missing)}"
+    end
+
+    def ravenoc_expected_mesh_links(coordinates)
+      id_by_coordinate = coordinates.to_h { |id, coordinate| [coordinate, id] }
+      coordinates.flat_map do |id, (col, row)|
+        links = []
+        east_id = id_by_coordinate[[col + 1, row]]
+        links << [id, 'east', east_id, 'west'] if east_id
+        south_id = id_by_coordinate[[col, row + 1]]
+        links << [id, 'south', south_id, 'north'] if south_id
+        links
+      end
+    end
+
+    def ravenoc_actual_mesh_links(connections, coordinates)
+      connections.filter_map do |connection|
+        endpoints = ravenoc_connection_endpoints(connection)
+        next unless endpoints.size == 2
+        next unless endpoints.all? { |endpoint| coordinates.key?(endpoint.fetch(:instance)) }
+
+        ravenoc_canonical_mesh_link(endpoints.fetch(0), endpoints.fetch(1), coordinates)
+      end
+    end
+
+    def ravenoc_connection_endpoints(connection)
+      refs = connection.fetch('interfaces', nil)
+      return [] unless refs.is_a?(Array) && refs.size == 2
+
+      refs.map do |ref|
+        next nil unless ref.is_a?(Hash)
+
+        instance = ref['instance'] || ref['module']
+        interface = ref['interface'] || ref['port']
+        next nil unless instance && interface
+
+        { instance: instance, port: interface.to_s.downcase.delete_prefix('if_') }
+      end.compact
+    end
+
+    def ravenoc_canonical_mesh_link(left, right, coordinates)
+      left_id = left.fetch(:instance)
+      right_id = right.fetch(:instance)
+      left_col, left_row = coordinates.fetch(left_id)
+      right_col, right_row = coordinates.fetch(right_id)
+      left_port = left.fetch(:port)
+      right_port = right.fetch(:port)
+
+      case [right_col - left_col, right_row - left_row, left_port, right_port]
+      when [1, 0, 'east', 'west']
+        [left_id, 'east', right_id, 'west']
+      when [-1, 0, 'west', 'east']
+        [right_id, 'east', left_id, 'west']
+      when [0, 1, 'south', 'north']
+        [left_id, 'south', right_id, 'north']
+      when [0, -1, 'north', 'south']
+        [right_id, 'south', left_id, 'north']
+      end
+    end
+
+    def ravenoc_mesh_link_description(link)
+      from_id, from_port, to_id, to_port = link
+      "#{from_id}.#{from_port} -> #{to_id}.#{to_port}"
+    end
+
     def ravenoc_define_values(parameters)
       RAVENOC_DEFINE_NAMES.to_h do |parameter_name, define_name|
         [define_name, ravenoc_define_value(parameter_name, parameters.fetch(parameter_name))]
@@ -305,9 +376,9 @@ module IpcraftGenerator
     end
 
     def ravenoc_filelist(defines)
-      lines = ["+incdir+#{@output_dir}"]
+      lines = ['+incdir+.']
       lines.concat(defines.map { |name, value| "+define+#{name}=#{value}" })
-      lines << File.join(@output_dir, 'ravenoc_top.sv')
+      lines << 'ravenoc_top.sv'
       "#{lines.join("\n")}\n"
     end
 
