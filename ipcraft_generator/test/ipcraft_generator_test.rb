@@ -1,5 +1,6 @@
 $LOAD_PATH.unshift File.expand_path('../lib', __dir__)
 
+require 'ipcraft_generator'
 require 'json'
 require 'minitest/autorun'
 require 'open3'
@@ -8,6 +9,7 @@ require 'tmpdir'
 
 class IpcraftGeneratorTest < Minitest::Test
   ROOT = File.expand_path('..', __dir__)
+  PROJECT_ROOT = File.expand_path('..', ROOT)
   CLI = File.join(ROOT, 'bin/ipcraft-generate')
 
   def test_cli_requires_manifest
@@ -61,6 +63,28 @@ class IpcraftGeneratorTest < Minitest::Test
     end
   end
 
+  def test_generates_finepaper_noc_structural_outputs
+    Dir.mktmpdir do |dir|
+      input_path = File.join(dir, 'input.json')
+      output = File.join(dir, 'out')
+      File.write(input_path, JSON.pretty_generate(finepaper_noc_project))
+
+      IpcraftGenerator::Generator.new(
+        manifest: File.join(PROJECT_ROOT, 'ipcores/finepaper-noc/ipcraft.json'),
+        input: input_path,
+        output: output
+      ).generate
+
+      assert_path_exists File.join(output, 'manifest.json')
+      assert_path_exists File.join(output, 'filelist.f')
+      assert_path_exists File.join(output, 'rtl/top.v')
+
+      output_manifest = JSON.parse(File.read(File.join(output, 'manifest.json')))
+      assert_equal 'finepaper.noc', output_manifest.fetch('ipcore')
+      assert_equal 4, output_manifest.fetch('routers')
+    end
+  end
+
   private
 
   def assert_cli_error(message, *args)
@@ -105,6 +129,59 @@ class IpcraftGeneratorTest < Minitest::Test
       'schema' => 'ipcraft.noc.project.v1',
       'instance_count' => 2,
       'connection_count' => 1
+    }
+  end
+
+  def finepaper_noc_project
+    {
+      'schema' => 'ipcraft.noc.project.v1',
+      'package' => 'finepaper.noc',
+      'instances' => [
+        {
+          'id' => 'xp_0_0',
+          'module' => 'XP',
+          'parameters' => { 'mesh_col' => 0, 'mesh_row' => 0 }
+        },
+        {
+          'id' => 'xp_0_1',
+          'module' => 'XP',
+          'parameters' => { 'mesh_col' => 1, 'mesh_row' => 0 }
+        },
+        {
+          'id' => 'xp_1_0',
+          'module' => 'XP',
+          'parameters' => { 'mesh_col' => 0, 'mesh_row' => 1 }
+        },
+        {
+          'id' => 'xp_1_1',
+          'module' => 'XP',
+          'parameters' => { 'mesh_col' => 1, 'mesh_row' => 1 }
+        },
+        {
+          'id' => 'endpoint_0',
+          'module' => 'Endpoint',
+          'parameters' => { 'type' => 'master', 'protocol' => 'axi4' }
+        },
+        {
+          'id' => 'endpoint_1',
+          'module' => 'Endpoint',
+          'parameters' => { 'type' => 'slave', 'protocol' => 'axi4' }
+        }
+      ],
+      'connections' => [
+        {
+          'id' => 'endpoint_0_to_xp_0_0',
+          'class' => 'ni_link',
+          'from' => { 'instance' => 'endpoint_0', 'interface' => 'noc' },
+          'to' => { 'instance' => 'xp_0_0', 'interface' => 'local0' }
+        },
+        {
+          'id' => 'endpoint_1_to_xp_1_1',
+          'class' => 'ni_link',
+          'from' => { 'instance' => 'endpoint_1', 'interface' => 'noc' },
+          'to' => { 'instance' => 'xp_1_1', 'interface' => 'local0' }
+        }
+      ]
     }
   end
 end
