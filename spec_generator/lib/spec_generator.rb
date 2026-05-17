@@ -40,8 +40,10 @@ module SpecGenerator
   IPCRAFT_PLUGIN_KEYS = %w[library entry].freeze
   IPCRAFT_IPXACT_KEYS = %w[root generated].freeze
   IPCRAFT_CONNECTION_CLASS_KEYS = %w[id roles symmetric ipxact].freeze
-  IPCRAFT_MODULE_KEYS = %w[id name description graph_role attach parameters interfaces].freeze
-  IPCRAFT_INTERFACE_KEYS = %w[id name label modes accepts multi_connection ipxact parameters].freeze
+  IPCRAFT_MODULE_KEYS = %w[id name description graph_role attach display parameters interfaces].freeze
+  IPCRAFT_MODULE_DISPLAY_KEYS = %w[label_parameter short_label_parameter].freeze
+  IPCRAFT_INTERFACE_KEYS = %w[id name label modes accepts multi_connection ipxact parameters topology].freeze
+  IPCRAFT_INTERFACE_TOPOLOGY_KEYS = %w[side opposite role].freeze
   IPCRAFT_ACCEPT_KEYS = %w[class role].freeze
   IPCRAFT_VIEW_KEYS = %w[module file].freeze
   IPCRAFT_COMMAND_KEYS = %w[executable input_schema args].freeze
@@ -486,6 +488,8 @@ module SpecGenerator
         module_id = required_string(mod, 'id', 'module id')
         remember_unique!(seen_ids, module_id, 'module id')
         validate_keys!(mod, IPCRAFT_MODULE_KEYS, "module #{module_id}")
+        parameters = mod.key?('parameters') ? normalize_module_parameters(module_id, mod['parameters']) : nil
+        display = normalize_module_display(module_id, mod['display'], parameters || {})
         interfaces = normalize_interfaces(module_id, mod.fetch('interfaces', nil))
         @module_interfaces[module_id] = interfaces.map { |interface| interface.fetch('id') }
         compact_hash(
@@ -494,7 +498,8 @@ module SpecGenerator
           'description' => optional_string(mod, 'description', "module #{module_id}.description"),
           'graph_role' => optional_string(mod, 'graph_role', "module #{module_id}.graph_role"),
           'attach' => mod.key?('attach') ? deep_copy(mod['attach']) : nil,
-          'parameters' => mod.key?('parameters') ? normalize_module_parameters(module_id, mod['parameters']) : nil,
+          'display' => display,
+          'parameters' => parameters,
           'interfaces' => interfaces
         )
       end
@@ -506,16 +511,39 @@ module SpecGenerator
       deep_copy(parameters)
     end
 
+    def normalize_module_display(module_id, display, parameters)
+      return nil unless display
+      raise SpecError, "module #{module_id}.display must be a map" unless display.is_a?(Hash)
+
+      validate_keys!(display, IPCRAFT_MODULE_DISPLAY_KEYS, "module #{module_id}.display")
+      normalized = {}
+      %w[label_parameter short_label_parameter].each do |key|
+        next unless display.key?(key)
+
+        value = required_string(display, key, "module #{module_id}.display.#{key}")
+        unless parameters.key?(value)
+          raise SpecError, "module #{module_id} display.#{key} references unknown parameter #{value}"
+        end
+        normalized[key] = value
+      end
+      normalized
+    end
+
     def normalize_interfaces(module_id, interfaces)
       raise SpecError, "module #{module_id}.interfaces must be a list" unless interfaces.is_a?(Array)
 
       seen_ids = {}
-      interfaces.map do |interface|
+      indexed_interfaces = interfaces.map do |interface|
         raise SpecError, "module #{module_id} interface must be a map" unless interface.is_a?(Hash)
 
         interface_id = required_string(interface, 'id', "module #{module_id} interface id")
         remember_unique!(seen_ids, interface_id, "module #{module_id} interface id")
         validate_keys!(interface, IPCRAFT_INTERFACE_KEYS, "#{module_id}.#{interface_id}")
+        [interface, interface_id]
+      end
+      known_interfaces = indexed_interfaces.map { |_, interface_id| interface_id }
+
+      indexed_interfaces.map do |interface, interface_id|
         modes = required_string_list(interface, 'modes', "#{module_id}.#{interface_id} modes")
         ipxact = interface.key?('ipxact') ? normalize_interface_ipxact(module_id, interface_id, interface['ipxact']) : nil
         modes.each { |mode| validate_interface_mode_mapping!(module_id, interface_id, ipxact, mode) }
@@ -528,9 +556,28 @@ module SpecGenerator
           'accepts' => normalize_accepts(module_id, interface_id, interface.fetch('accepts', nil)),
           'multi_connection' => interface.key?('multi_connection') ? required_bool(interface, 'multi_connection', "#{module_id}.#{interface_id}.multi_connection") : nil,
           'ipxact' => ipxact,
-          'parameters' => interface.key?('parameters') ? deep_copy(interface['parameters']) : nil
+          'parameters' => interface.key?('parameters') ? deep_copy(interface['parameters']) : nil,
+          'topology' => normalize_interface_topology(module_id, interface_id, interface['topology'], known_interfaces)
         )
       end
+    end
+
+    def normalize_interface_topology(module_id, interface_id, topology, known_interfaces)
+      return nil unless topology
+      raise SpecError, "#{module_id}.#{interface_id}.topology must be a map" unless topology.is_a?(Hash)
+
+      validate_keys!(topology, IPCRAFT_INTERFACE_TOPOLOGY_KEYS, "#{module_id}.#{interface_id}.topology")
+      normalized = {}
+      normalized['side'] = required_string(topology, 'side', "#{module_id}.#{interface_id}.topology.side") if topology.key?('side')
+      if topology.key?('opposite')
+        opposite = required_string(topology, 'opposite', "#{module_id}.#{interface_id}.topology.opposite")
+        unless known_interfaces.include?(opposite)
+          raise SpecError, "#{module_id}.#{interface_id} topology.opposite references unknown interface #{opposite}"
+        end
+        normalized['opposite'] = opposite
+      end
+      normalized['role'] = required_string(topology, 'role', "#{module_id}.#{interface_id}.topology.role") if topology.key?('role')
+      normalized
     end
 
     def normalize_accepts(module_id, interface_id, accepts)

@@ -290,6 +290,72 @@ class SpecGeneratorTest < Minitest::Test
     end
   end
 
+  def test_emits_display_label_binding
+    Dir.mktmpdir do |dir|
+      package_root = write_ipcraft_package_source(
+        dir,
+        yaml: ipcraft_package_yaml.sub(
+          "parameters:\n      x:",
+          "display:\n      label_parameter: display_name\n    parameters:\n      display_name: { type: string, default: XP }\n      x:"
+        )
+      )
+
+      build_ipcraft_manifest(package_root)
+      manifest = JSON.parse(File.read(File.join(package_root, 'ipcraft.json')))
+      xp = manifest.fetch('modules').find { |mod| mod.fetch('id') == 'xp' }
+
+      assert_equal({ 'label_parameter' => 'display_name' }, xp.fetch('display'))
+    end
+  end
+
+  def test_rejects_display_label_binding_missing_parameter
+    Dir.mktmpdir do |dir|
+      package_root = write_ipcraft_package_source(
+        dir,
+        yaml: ipcraft_package_yaml.sub(
+          "parameters:\n      x:",
+          "display:\n      label_parameter: missing_label\n    parameters:\n      x:"
+        )
+      )
+
+      error = assert_raises(SpecGenerator::SpecError) { build_ipcraft_manifest(package_root) }
+      assert_match(/module xp display.label_parameter references unknown parameter missing_label/, error.message)
+    end
+  end
+
+  def test_emits_topology_side_metadata
+    Dir.mktmpdir do |dir|
+      yaml = ipcraft_package_yaml.sub(
+        "modes: [chi_interconnect]\n        accepts:",
+        "topology:\n          side: east\n          opposite: west\n        modes: [chi_interconnect]\n        accepts:"
+      ).sub(
+        "views:\n",
+        "      - id: west\n        modes: [chi_interconnect]\n        accepts:\n          - class: chi_node_interface\n            role: interconnect\n        multi_connection: false\nviews:\n"
+      )
+      package_root = write_ipcraft_package_source(dir, yaml: yaml)
+
+      build_ipcraft_manifest(package_root)
+      manifest = JSON.parse(File.read(File.join(package_root, 'ipcraft.json')))
+      xp = manifest.fetch('modules').find { |mod| mod.fetch('id') == 'xp' }
+      rnf0 = xp.fetch('interfaces').find { |interface| interface.fetch('id') == 'rnf0' }
+
+      assert_equal({ 'side' => 'east', 'opposite' => 'west' }, rnf0.fetch('topology'))
+    end
+  end
+
+  def test_rejects_topology_opposite_that_is_not_a_module_interface
+    Dir.mktmpdir do |dir|
+      yaml = ipcraft_package_yaml.sub(
+        "modes: [chi_interconnect]\n        accepts:",
+        "topology:\n          side: east\n          opposite: missing_west\n        modes: [chi_interconnect]\n        accepts:"
+      )
+      package_root = write_ipcraft_package_source(dir, yaml: yaml)
+
+      error = assert_raises(SpecGenerator::SpecError) { build_ipcraft_manifest(package_root) }
+      assert_match(/xp.rnf0 topology.opposite references unknown interface missing_west/, error.message)
+    end
+  end
+
   def test_requires_command_input_schema
     Dir.mktmpdir do |dir|
       package_root = write_ipcraft_package_source(
