@@ -128,19 +128,42 @@ const Port* defaultPortForIdOrInterface(const ModuleType& type, const QString& p
     return portIt == type.defaultPorts.cend() ? nullptr : &(*portIt);
 }
 
-const Port* defaultPortForMetadataSide(const ModuleType& type, const QString& side) {
+QString topologyModuleName(const ModuleType& type) {
+    return type.moduleId.isEmpty() ? type.name : type.moduleId;
+}
+
+struct MeshPortLookup {
+    const Port* port = nullptr;
+    QString error;
+};
+
+MeshPortLookup defaultPortForMetadataSide(const ModuleType& type, const QString& side) {
     if (side.trimmed().isEmpty()) {
-        return nullptr;
+        return {};
     }
-    const auto portIt = std::find_if(type.defaultPorts.cbegin(),
-                                     type.defaultPorts.cend(),
-                                     [&](const Port& port) {
-                                         const ModuleInterfaceMetadata* metadata =
-                                             interfaceMetadataForPort(type, port);
-                                         return metadata &&
-                                                metadata->topologySide == side;
-                                     });
-    return portIt == type.defaultPorts.cend() ? nullptr : &(*portIt);
+
+    const Port* match = nullptr;
+    QStringList matchIds;
+    for (const Port& port : type.defaultPorts) {
+        const ModuleInterfaceMetadata* metadata = interfaceMetadataForPort(type, port);
+        if (!metadata || metadata->topologySide != side) {
+            continue;
+        }
+        if (!match) {
+            match = &port;
+        }
+        matchIds.append(interfaceIdForPort(port));
+    }
+
+    if (matchIds.size() > 1) {
+        return MeshPortLookup{
+            nullptr,
+            QStringLiteral("Ambiguous duplicate topology side %1 on module %2: %3")
+                .arg(side, topologyModuleName(type), matchIds.join(QStringLiteral(", ")))
+        };
+    }
+
+    return MeshPortLookup{match, {}};
 }
 
 const Port* defaultPortForLegacySide(const ModuleType& type, const QString& side) {
@@ -156,17 +179,19 @@ const Port* defaultPortForLegacySide(const ModuleType& type, const QString& side
     return portIt == type.defaultPorts.cend() ? nullptr : &(*portIt);
 }
 
-const Port* defaultPortForSide(const ModuleType& type, const QString& side) {
-    if (const Port* metadataPort = defaultPortForMetadataSide(type, side)) {
-        return metadataPort;
+MeshPortLookup defaultPortForSide(const ModuleType& type, const QString& side) {
+    MeshPortLookup metadataLookup = defaultPortForMetadataSide(type, side);
+    if (!metadataLookup.error.isEmpty() || metadataLookup.port) {
+        return metadataLookup;
     }
-    return defaultPortForLegacySide(type, side);
+    return MeshPortLookup{defaultPortForLegacySide(type, side), {}};
 }
 
 struct MeshPortResolution {
     QString portId;
     QString side;
     const ModuleInterfaceMetadata* metadata = nullptr;
+    QString error;
 };
 
 MeshPortResolution meshPortFromPort(const ModuleType& type,
@@ -202,8 +227,12 @@ MeshPortResolution resolveMeshSourcePort(const ModuleType& type,
     if (!mappedPort.isEmpty()) {
         return meshPortFromId(type, mappedPort, direction);
     }
-    if (const Port* port = defaultPortForSide(type, direction)) {
-        return meshPortFromPort(type, *port, direction);
+    const MeshPortLookup lookup = defaultPortForSide(type, direction);
+    if (!lookup.error.isEmpty()) {
+        return MeshPortResolution{{}, direction, nullptr, lookup.error};
+    }
+    if (lookup.port) {
+        return meshPortFromPort(type, *lookup.port, direction);
     }
     return meshPortFromId(type, direction, direction);
 }
@@ -217,21 +246,38 @@ MeshPortResolution resolveMeshTargetPort(const ModuleType& type,
         return meshPortFromId(type, mappedPort, direction);
     }
 
-    const QString opposite = PortLayout::oppositeSide(source.side, source.metadata);
+    const QString opposite = PortLayout::oppositeInterfaceOrRouterSide(source.side, source.metadata);
     if (!opposite.isEmpty()) {
         if (source.metadata && !source.metadata->oppositeInterfaceId.isEmpty()) {
+            if (!defaultPortForIdOrInterface(type, opposite)) {
+                return MeshPortResolution{
+                    {},
+                    direction,
+                    nullptr,
+                    QStringLiteral("Topology opposite interface %1 for side %2 on module %3 is unknown")
+                        .arg(opposite, source.side, topologyModuleName(type))
+                };
+            }
             return meshPortFromId(type, opposite, direction);
         }
-        if (const Port* port = defaultPortForSide(type, opposite)) {
-            return meshPortFromPort(type, *port, direction);
+        const MeshPortLookup oppositeLookup = defaultPortForSide(type, opposite);
+        if (!oppositeLookup.error.isEmpty()) {
+            return MeshPortResolution{{}, direction, nullptr, oppositeLookup.error};
+        }
+        if (oppositeLookup.port) {
+            return meshPortFromPort(type, *oppositeLookup.port, direction);
         }
         if (const Port* port = defaultPortForIdOrInterface(type, opposite)) {
             return meshPortFromPort(type, *port, direction);
         }
     }
 
-    if (const Port* port = defaultPortForSide(type, direction)) {
-        return meshPortFromPort(type, *port, direction);
+    const MeshPortLookup fallbackLookup = defaultPortForSide(type, direction);
+    if (!fallbackLookup.error.isEmpty()) {
+        return MeshPortResolution{{}, direction, nullptr, fallbackLookup.error};
+    }
+    if (fallbackLookup.port) {
+        return meshPortFromPort(type, *fallbackLookup.port, direction);
     }
     return meshPortFromId(type, direction, direction);
 }
@@ -367,14 +413,33 @@ TopologyPresetResult createMesh(Graph* graph,
         }
     }
 
-    const MeshPortResolution eastSource =
-        resolveMeshSourcePort(routerType, request.preset.ports, QStringLiteral("east"));
-    const MeshPortResolution eastTarget =
-        resolveMeshTargetPort(routerType, request.preset.ports, QStringLiteral("west"), eastSource);
-    const MeshPortResolution southSource =
-        resolveMeshSourcePort(routerType, request.preset.ports, QStringLiteral("south"));
-    const MeshPortResolution southTarget =
-        resolveMeshTargetPort(routerType, request.preset.ports, QStringLiteral("north"), southSource);
+    MeshPortResolution eastSource;
+    MeshPortResolution eastTarget;
+    if (cols > 1) {
+        eastSource = resolveMeshSourcePort(routerType, request.preset.ports, QStringLiteral("east"));
+        if (!eastSource.error.isEmpty()) {
+            return failAndRollback(graph, result, eastSource.error);
+        }
+        eastTarget =
+            resolveMeshTargetPort(routerType, request.preset.ports, QStringLiteral("west"), eastSource);
+        if (!eastTarget.error.isEmpty()) {
+            return failAndRollback(graph, result, eastTarget.error);
+        }
+    }
+
+    MeshPortResolution southSource;
+    MeshPortResolution southTarget;
+    if (rows > 1) {
+        southSource = resolveMeshSourcePort(routerType, request.preset.ports, QStringLiteral("south"));
+        if (!southSource.error.isEmpty()) {
+            return failAndRollback(graph, result, southSource.error);
+        }
+        southTarget =
+            resolveMeshTargetPort(routerType, request.preset.ports, QStringLiteral("north"), southSource);
+        if (!southTarget.error.isEmpty()) {
+            return failAndRollback(graph, result, southTarget.error);
+        }
+    }
     const ConnectionRuleService ruleService(graph, {}, std::move(packageManifests));
 
     for (int row = 0; row < rows; ++row) {

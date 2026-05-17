@@ -313,6 +313,29 @@ IpcraftPackageManifest manifestMixedLegacyAndMetadataMeshPackage(const QString& 
     return manifest;
 }
 
+IpcraftPackageManifest manifestDuplicateMetadataSideMeshPackage(const QString& packageId,
+                                                                const QString& moduleId) {
+    IpcraftPackageManifest manifest = manifestTopologyMetadataMeshPackage(packageId, moduleId);
+    require(!manifest.modules.isEmpty(), "duplicate metadata manifest should contain a module");
+    manifest.modules.front().interfaces.prepend(
+        manifestMetadataMeshInterface(QStringLiteral("mesh_out_alt"),
+                                      QStringLiteral("source"),
+                                      QStringLiteral("east"),
+                                      QStringLiteral("mesh_in")));
+    return manifest;
+}
+
+IpcraftPackageManifest manifestMissingOppositeMetadataMeshPackage(const QString& packageId,
+                                                                  const QString& moduleId) {
+    IpcraftPackageManifest manifest = manifestTopologyMetadataMeshPackage(packageId, moduleId);
+    require(!manifest.modules.isEmpty(), "missing-opposite manifest should contain a module");
+    require(!manifest.modules.front().interfaces.isEmpty(),
+            "missing-opposite manifest should contain interfaces");
+    manifest.modules.front().interfaces.front().topology.oppositeInterfaceId =
+        QStringLiteral("missing_mesh_in");
+    return manifest;
+}
+
 TopologyPresetDescriptor meshPreset() {
     TopologyPresetDescriptor preset;
     preset.id = QStringLiteral("mesh");
@@ -552,6 +575,116 @@ void testMeshPresetPrefersTopologyMetadataOverLegacyPortHints() {
             "metadata topology side should win over an earlier legacy east port");
     require(connection->target().portId == QStringLiteral("mesh_in"),
             "metadata topology opposite should still select the paired target port");
+}
+
+void testMeshPresetRejectsDuplicateTopologySideMetadata() {
+    ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
+    const QString packageId = QStringLiteral("finepaper.duplicate_topology_side_mesh");
+    const QString typeName = QStringLiteral("DuplicateTopologySideMeshTile");
+    const IpcraftPackageManifest manifest =
+        manifestDuplicateMetadataSideMeshPackage(packageId, typeName);
+    require(registry.loadIpcraftPackages({manifest}),
+            "duplicate topology side mesh package should load");
+    const ModuleType* loadedType = registry.getType(typeName);
+    require(loadedType != nullptr, "duplicate topology side mesh type should register");
+    ModuleRegistry::instance().registerType(*loadedType);
+
+    Graph graph;
+    TopologyPresetRequest request;
+    request.ipcoreId = packageId;
+    request.instanceId = QStringLiteral("noc_0");
+    request.preset.id = QStringLiteral("mesh");
+    request.preset.label = QStringLiteral("Mesh");
+    request.preset.kind = QStringLiteral("mesh");
+    request.preset.routerModule = typeName;
+    request.preset.idPattern = QStringLiteral("tile_{row}_{col}");
+    request.parameters.insert(QStringLiteral("rows"), 1);
+    request.parameters.insert(QStringLiteral("cols"), 2);
+
+    const TopologyPresetResult result = TopologyPresetBuilder::apply(&graph, registry, request);
+
+    require(!result.success, "duplicate topology side metadata should reject mesh preset");
+    require(result.error.contains(QStringLiteral("duplicate"), Qt::CaseInsensitive) ||
+                result.error.contains(QStringLiteral("ambiguous"), Qt::CaseInsensitive),
+            "duplicate topology side error should mention duplicate or ambiguous metadata");
+    require(result.error.contains(QStringLiteral("east")),
+            "duplicate topology side error should identify the ambiguous side");
+    require(graph.modules().empty(), "duplicate topology side failure should roll back modules");
+    require(graph.connections().empty(), "duplicate topology side failure should not create connections");
+}
+
+void testMeshPresetExplicitPortMappingWinsWithDuplicateTopologySideMetadata() {
+    ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
+    const QString packageId = QStringLiteral("finepaper.explicit_duplicate_topology_side_mesh");
+    const QString typeName = QStringLiteral("ExplicitDuplicateTopologySideMeshTile");
+    const IpcraftPackageManifest manifest =
+        manifestDuplicateMetadataSideMeshPackage(packageId, typeName);
+    require(registry.loadIpcraftPackages({manifest}),
+            "explicit duplicate topology side mesh package should load");
+    const ModuleType* loadedType = registry.getType(typeName);
+    require(loadedType != nullptr,
+            "explicit duplicate topology side mesh type should register");
+    ModuleRegistry::instance().registerType(*loadedType);
+
+    Graph graph;
+    TopologyPresetRequest request;
+    request.ipcoreId = packageId;
+    request.instanceId = QStringLiteral("noc_0");
+    request.preset.id = QStringLiteral("mesh");
+    request.preset.label = QStringLiteral("Mesh");
+    request.preset.kind = QStringLiteral("mesh");
+    request.preset.routerModule = typeName;
+    request.preset.idPattern = QStringLiteral("tile_{row}_{col}");
+    request.preset.ports.insert(QStringLiteral("east"), QStringLiteral("mesh_out"));
+    request.preset.ports.insert(QStringLiteral("west"), QStringLiteral("mesh_in"));
+    request.parameters.insert(QStringLiteral("rows"), 1);
+    request.parameters.insert(QStringLiteral("cols"), 2);
+
+    const TopologyPresetResult result = TopologyPresetBuilder::apply(&graph, registry, request);
+
+    require(result.success, result.error.toLocal8Bit().constData());
+    require(graph.connections().size() == 1,
+            "explicit port mappings should bypass duplicate metadata-side ambiguity");
+    const Connection* connection = graph.connections().front().get();
+    require(connection->source().portId == QStringLiteral("mesh_out"),
+            "explicit source mapping should select mesh_out");
+    require(connection->target().portId == QStringLiteral("mesh_in"),
+            "explicit target mapping should select mesh_in");
+}
+
+void testMeshPresetRejectsMissingTopologyOppositeInterface() {
+    ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
+    const QString packageId = QStringLiteral("finepaper.missing_topology_opposite_mesh");
+    const QString typeName = QStringLiteral("MissingTopologyOppositeMeshTile");
+    const IpcraftPackageManifest manifest =
+        manifestMissingOppositeMetadataMeshPackage(packageId, typeName);
+    require(registry.loadIpcraftPackages({manifest}),
+            "missing topology opposite mesh package should load");
+    const ModuleType* loadedType = registry.getType(typeName);
+    require(loadedType != nullptr, "missing topology opposite mesh type should register");
+    ModuleRegistry::instance().registerType(*loadedType);
+
+    Graph graph;
+    TopologyPresetRequest request;
+    request.ipcoreId = packageId;
+    request.instanceId = QStringLiteral("noc_0");
+    request.preset.id = QStringLiteral("mesh");
+    request.preset.label = QStringLiteral("Mesh");
+    request.preset.kind = QStringLiteral("mesh");
+    request.preset.routerModule = typeName;
+    request.preset.idPattern = QStringLiteral("tile_{row}_{col}");
+    request.parameters.insert(QStringLiteral("rows"), 1);
+    request.parameters.insert(QStringLiteral("cols"), 2);
+
+    const TopologyPresetResult result = TopologyPresetBuilder::apply(&graph, registry, request);
+
+    require(!result.success, "missing topology opposite metadata should reject mesh preset");
+    require(result.error.contains(QStringLiteral("opposite"), Qt::CaseInsensitive),
+            "missing topology opposite error should identify opposite metadata");
+    require(result.error.contains(QStringLiteral("missing_mesh_in")),
+            "missing topology opposite error should name the unknown interface");
+    require(graph.modules().empty(), "missing topology opposite failure should roll back modules");
+    require(graph.connections().empty(), "missing topology opposite failure should not create connections");
 }
 
 void testPackageScopedTopologyPresetUsesActivePackageRouter() {
@@ -969,6 +1102,9 @@ int main(int argc, char** argv) {
         testMeshPresetUsesManifestConnectionClassesNotEastWestNames();
         testMeshPresetUsesManifestTopologyMetadataWithoutPortMappings();
         testMeshPresetPrefersTopologyMetadataOverLegacyPortHints();
+        testMeshPresetRejectsDuplicateTopologySideMetadata();
+        testMeshPresetExplicitPortMappingWinsWithDuplicateTopologySideMetadata();
+        testMeshPresetRejectsMissingTopologyOppositeInterface();
         testPackageScopedTopologyPresetUsesActivePackageRouter();
         testRingPresetCreatesClosedLoop();
         testPresetRejectsConnectionsThatFailRuleService();

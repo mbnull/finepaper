@@ -138,7 +138,7 @@ inline QString oppositeRouterSide(const QString& side) {
 }
 
 template <typename Metadata>
-inline QString oppositeSide(const QString& side, const Metadata* metadata) {
+inline QString oppositeInterfaceOrRouterSide(const QString& side, const Metadata* metadata) {
     if (metadata && !metadata->oppositeInterfaceId.isEmpty()) {
         return metadata->oppositeInterfaceId;
     }
