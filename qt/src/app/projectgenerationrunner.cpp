@@ -26,6 +26,10 @@ QString generationSchemaName() {
     return QStringLiteral("ipcraft.generation.manifest.v1");
 }
 
+QString commandInputFileName() {
+    return QStringLiteral("command-input.json");
+}
+
 QString defaultOutputRootForProject(const QString& projectPath) {
     return QFileInfo(projectPath).absoluteDir().filePath(QStringLiteral("generated"));
 }
@@ -117,6 +121,7 @@ QStringList generatedFiles(const QString& outputDirectory) {
         const QString path = iterator.next();
         const QString relativePath = base.relativeFilePath(path);
         if (relativePath == QStringLiteral("generation-manifest.json")
+            || relativePath == commandInputFileName()
             || relativePath == QStringLiteral("ipcore-graph.json")) {
             continue;
         }
@@ -182,6 +187,7 @@ QJsonDocument manifestDocument(const ProjectGenerationRequest& request,
     process.insert(QStringLiteral("stderr"), result.standardError);
 
     QJsonObject artifacts;
+    artifacts.insert(QStringLiteral("command_input"), result.inputPath);
     artifacts.insert(QStringLiteral("ipcore_graph"), result.inputPath);
     artifacts.insert(QStringLiteral("manifest"), result.manifestPath);
     artifacts.insert(QStringLiteral("files"), stringArray(result.artifactPaths));
@@ -218,7 +224,7 @@ ProjectGenerationInstanceResult generateInstance(const ProjectGenerationRequest&
     result.ipcoreId = instance.ipcoreId;
     result.instanceId = instance.instanceId;
     result.outputDirectory = QDir(outputRoot).filePath(instance.instanceId);
-    result.inputPath = QDir(result.outputDirectory).filePath(QStringLiteral("ipcore-graph.json"));
+    result.inputPath = QDir(result.outputDirectory).filePath(commandInputFileName());
     result.manifestPath = QDir(result.outputDirectory).filePath(QStringLiteral("generation-manifest.json"));
 
     if (!isSafeInstanceOutputKey(instance.instanceId)) {

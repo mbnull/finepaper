@@ -48,6 +48,15 @@ QJsonObject readJsonObject(const QString& path) {
     return document.object();
 }
 
+bool usesCommandInputFileName(const QString& path) {
+    return path.contains(QStringLiteral("command-input")) ||
+           path.contains(QStringLiteral("ipcraft-input"));
+}
+
+QString commandInputPath(const QString& outputDirectory) {
+    return QDir(outputDirectory).filePath(QStringLiteral("command-input.json"));
+}
+
 void makeExecutable(const QString& path) {
     QFile file(path);
     require(file.setPermissions(QFile::ReadOwner |
@@ -237,10 +246,10 @@ void testGeneratesEveryProjectInstanceIntoSeparateOutputDirectories() {
             "alpha artifact should be written under generated/alpha_0");
     require(QFileInfo::exists(QDir(betaOutput).filePath(QStringLiteral("artifact.sv"))),
             "beta artifact should be written under generated/beta_0");
-    require(QFileInfo::exists(QDir(alphaOutput).filePath(QStringLiteral("ipcore-graph.json"))),
-            "alpha IP-core graph JSON should exist");
-    require(QFileInfo::exists(QDir(betaOutput).filePath(QStringLiteral("ipcore-graph.json"))),
-            "beta IP-core graph JSON should exist");
+    require(QFileInfo::exists(commandInputPath(alphaOutput)),
+            "alpha command input JSON should exist");
+    require(QFileInfo::exists(commandInputPath(betaOutput)),
+            "beta command input JSON should exist");
     require(QFileInfo::exists(QDir(alphaOutput).filePath(QStringLiteral("generation-manifest.json"))),
             "alpha generation manifest should exist");
     require(QFileInfo::exists(QDir(betaOutput).filePath(QStringLiteral("generation-manifest.json"))),
@@ -480,9 +489,8 @@ void testGenerateExportsIpcraftSchemaForPackageCommand() {
     const ProjectGenerationResult result = ProjectGenerationRunner().generate(request);
 
     require(result.success, result.error.toLocal8Bit().constData());
-    const QString inputPath =
-        root.filePath(QStringLiteral("project/generated/alpha_0/ipcore-graph.json"));
-    const QJsonObject input = readJsonObject(inputPath);
+    require(result.instances.size() == 1, "one ipcraft package instance should be generated");
+    const QJsonObject input = readJsonObject(result.instances.first().inputPath);
     require(input.value(QStringLiteral("schema")).toString() ==
                 QStringLiteral("ipcraft.noc.project.v1"),
             "ipcraft package generator should receive ipcraft NoC project schema");
@@ -494,6 +502,63 @@ void testGenerateExportsIpcraftSchemaForPackageCommand() {
     require(manifest.value(QStringLiteral("input")).toObject()
                 .value(QStringLiteral("schema")).toString() == QStringLiteral("ipcraft.noc.project.v1"),
             "generation manifest should record the exported ipcraft schema");
+}
+
+void testIpcraftCommandInputPathUsesCommandInputWording() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "temporary directory should be valid");
+    QDir root(tempDir.path());
+    const QString generatorPath = createCopyingGenerator(root);
+    const QString ipcoreId = QStringLiteral("org.example.path");
+    Graph graph;
+    require(graph.addModule(makeModule(QStringLiteral("path_runtime"),
+                                       QStringLiteral("Tile"),
+                                       ipcoreId,
+                                       QStringLiteral("path_0"),
+                                       QStringLiteral("path_tile"))),
+            "ipcraft package module should add");
+
+    const QString projectPath = root.filePath(QStringLiteral("project/design.fpproj"));
+    ProjectGenerationRequest request;
+    request.graph = &graph;
+    request.projectPath = projectPath;
+    request.catalogEntries = {ipcraftCatalogEntry(ipcoreId, generatorPath)};
+    request.instances = {
+        instanceRecord(ipcoreId, QStringLiteral("path_0"), QStringLiteral("path-marker"))
+    };
+
+    const ProjectGenerationResult result = ProjectGenerationRunner().generate(request);
+
+    require(result.success, result.error.toLocal8Bit().constData());
+    require(result.instances.size() == 1, "one ipcraft package instance should be generated");
+    const ProjectGenerationInstanceResult instance = result.instances.first();
+    require(usesCommandInputFileName(instance.inputPath),
+            "generated command input path should contain command-input or ipcraft-input");
+    require(!instance.inputPath.contains(QStringLiteral(".fpproj")),
+            "generated command input path should not look like a saved project file");
+
+    const QJsonObject manifest = readJsonObject(instance.manifestPath);
+    const QString manifestInputPath =
+        manifest.value(QStringLiteral("input")).toObject().value(QStringLiteral("path")).toString();
+    require(usesCommandInputFileName(manifestInputPath),
+            "generation manifest input path should use command input wording");
+    require(!manifestInputPath.contains(QStringLiteral(".fpproj")),
+            "generation manifest input path should not point at a saved project file");
+    const QString artifactInputPath =
+        manifest.value(QStringLiteral("artifacts")).toObject()
+            .value(QStringLiteral("command_input")).toString();
+    require(usesCommandInputFileName(artifactInputPath),
+            "generation manifest artifact path should use command input wording");
+    require(!artifactInputPath.contains(QStringLiteral(".fpproj")),
+            "generation manifest artifact path should not point at a saved project file");
+
+    const QJsonArray arguments =
+        manifest.value(QStringLiteral("process")).toObject().value(QStringLiteral("arguments")).toArray();
+    require(!arguments.isEmpty(), "generation manifest should record command arguments");
+    require(usesCommandInputFileName(arguments.first().toString()),
+            "recorded generator command input argument should use command input wording");
+    require(!arguments.first().toString().contains(QStringLiteral(".fpproj")),
+            "recorded generator command input argument should not look like a saved project file");
 }
 
 void testGenerateExportsIpcraftProjectForEveryInstance() {
@@ -534,10 +599,8 @@ void testGenerateExportsIpcraftProjectForEveryInstance() {
 
     const QString alphaRoot = root.filePath(QStringLiteral("project/generated/alpha_0"));
     const QString betaRoot = root.filePath(QStringLiteral("project/generated/beta_0"));
-    const QJsonObject alphaInput =
-        readJsonObject(QDir(alphaRoot).filePath(QStringLiteral("ipcore-graph.json")));
-    const QJsonObject betaInput =
-        readJsonObject(QDir(betaRoot).filePath(QStringLiteral("ipcore-graph.json")));
+    const QJsonObject alphaInput = readJsonObject(commandInputPath(alphaRoot));
+    const QJsonObject betaInput = readJsonObject(commandInputPath(betaRoot));
     require(alphaInput.value(QStringLiteral("schema")).toString()
                 == QStringLiteral("ipcraft.noc.project.v1"),
             "first package instance should receive the ipcraft NoC project schema");
@@ -624,6 +687,7 @@ int main(int argc, char** argv) {
         testGenerationManifestExcludesStaleArtifacts();
         testGenerationRequiresSavedProjectPath();
         testGenerateExportsIpcraftSchemaForPackageCommand();
+        testIpcraftCommandInputPathUsesCommandInputWording();
         testGenerateExportsIpcraftProjectForEveryInstance();
         testGenerateRunsBuiltInValidationBeforeCommand();
     } catch (const std::exception& error) {

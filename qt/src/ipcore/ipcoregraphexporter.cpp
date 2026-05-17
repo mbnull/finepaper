@@ -342,13 +342,9 @@ IpCoreGraphExportResult IpCoreGraphExporter::exportGraph(const IpCoreGraphExport
         interfaceConnection.insert(QStringLiteral("id"), connectionId);
         interfaceConnection.insert(QStringLiteral("class"), connection->connectionClassId());
         interfaceConnection.insert(QStringLiteral("interfaces"), interfaces);
-        if (!connection->status().isEmpty()) {
-            interfaceConnection.insert(QStringLiteral("status"), connection->status());
-        }
-        if (!connection->alternatives().isEmpty()) {
-            interfaceConnection.insert(QStringLiteral("alternatives"),
-                                       alternativesToJson(connection->alternatives()));
-        }
+        interfaceConnection.insert(QStringLiteral("status"), connection->status());
+        interfaceConnection.insert(QStringLiteral("alternatives"),
+                                   alternativesToJson(connection->alternatives()));
         interfaceConnections.append(interfaceConnection);
     }
 
