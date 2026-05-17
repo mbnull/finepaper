@@ -8,6 +8,7 @@
 #include "modules/moduleregistry.h"
 #include "modules/moduletypemetadata.h"
 
+#include <QMap>
 #include <QSet>
 #include <algorithm>
 #include <memory>
@@ -343,20 +344,8 @@ QString interfaceLabelForPort(const Module* module, const QString& portId) {
         return portId;
     }
 
-    const QString interfaceId = port->interfaceId().isEmpty() ? port->id() : port->interfaceId();
-    const ModuleType* type = ModuleTypeMetadata::type(module);
-    if (type) {
-        const auto metadataIt = type->interfaceMetadata.find(interfaceId);
-        if (metadataIt != type->interfaceMetadata.end()) {
-            const QString label = metadataIt.value().label.trimmed();
-            if (!label.isEmpty()) {
-                return label;
-            }
-        }
-    }
-
-    const QString portName = port->name().trimmed();
-    return portName.isEmpty() ? port->id() : portName;
+    const QString label = ModuleTypeMetadata::interfaceLabel(module, *port);
+    return label.isEmpty() ? port->id() : label;
 }
 
 QString connectionOptionLabel(const Graph* graph, const PortRef& source, const PortRef& target) {
@@ -401,22 +390,15 @@ QString combinedRuntimeDisambiguator(const ConnectionResolvedOption& option) {
 }
 
 template <typename Suffix>
-bool applyUniqueSuffix(QVector<ConnectionResolvedOption>& options,
-                       const QVector<int>& duplicateIndexes,
-                       Suffix suffixForOption) {
-    QSet<QString> labels;
-    QSet<int> duplicateIndexSet;
-    for (int index : duplicateIndexes) {
-        duplicateIndexSet.insert(index);
-    }
-    for (int index = 0; index < options.size(); ++index) {
-        if (!duplicateIndexSet.contains(index)) {
-            labels.insert(options.at(index).label);
-        }
-    }
-
-    QVector<QString> suffixedLabels;
-    suffixedLabels.reserve(duplicateIndexes.size());
+bool buildUniqueSuffixedLabels(const QVector<ConnectionResolvedOption>& options,
+                               const QVector<QString>& originalLabels,
+                               const QSet<QString>& reservedLabels,
+                               const QVector<int>& duplicateIndexes,
+                               Suffix suffixForOption,
+                               QVector<QString>* suffixedLabels) {
+    QSet<QString> labels = reservedLabels;
+    QVector<QString> candidates;
+    candidates.reserve(duplicateIndexes.size());
 
     for (int index : duplicateIndexes) {
         const QString suffix = suffixForOption(options.at(index)).trimmed();
@@ -424,58 +406,90 @@ bool applyUniqueSuffix(QVector<ConnectionResolvedOption>& options,
             return false;
         }
 
-        const QString label = QStringLiteral("%1 [%2]").arg(options.at(index).label, suffix);
+        const QString label = QStringLiteral("%1 [%2]").arg(originalLabels.at(index), suffix);
         if (labels.contains(label)) {
             return false;
         }
         labels.insert(label);
-        suffixedLabels.push_back(label);
+        candidates.push_back(label);
     }
 
-    for (int i = 0; i < duplicateIndexes.size(); ++i) {
-        options[duplicateIndexes.at(i)].label = suffixedLabels.at(i);
+    if (suffixedLabels) {
+        *suffixedLabels = std::move(candidates);
     }
     return true;
 }
 
 void disambiguateDuplicateLabels(QVector<ConnectionResolvedOption>& options, const Graph* graph) {
-    QHash<QString, QVector<int>> indexesByLabel;
+    QVector<QString> originalLabels;
+    originalLabels.reserve(options.size());
+    QMap<QString, QVector<int>> indexesByLabel;
     for (int index = 0; index < options.size(); ++index) {
-        indexesByLabel[options.at(index).label].push_back(index);
+        originalLabels.push_back(options.at(index).label);
+        indexesByLabel[originalLabels.at(index)].push_back(index);
     }
 
-    for (const QVector<int>& duplicateIndexes : indexesByLabel) {
-        if (duplicateIndexes.size() < 2) {
+    QVector<QString> finalLabels = originalLabels;
+    QSet<QString> reservedLabels;
+    QVector<QVector<int>> duplicateGroups;
+    for (auto it = indexesByLabel.cbegin(); it != indexesByLabel.cend(); ++it) {
+        if (it.value().size() < 2) {
+            reservedLabels.insert(it.key());
             continue;
         }
+        duplicateGroups.push_back(it.value());
+    }
 
-        if (applyUniqueSuffix(options, duplicateIndexes,
-                              [graph](const ConnectionResolvedOption& option) {
-                                  return sourceShortDisambiguator(graph, option);
-                              }) ||
-            applyUniqueSuffix(options, duplicateIndexes,
-                              [graph](const ConnectionResolvedOption& option) {
-                                  return targetShortDisambiguator(graph, option);
-                              }) ||
-            applyUniqueSuffix(options, duplicateIndexes,
-                              [graph](const ConnectionResolvedOption& option) {
-                                  return combinedShortDisambiguator(graph, option);
-                              }) ||
-            applyUniqueSuffix(options, duplicateIndexes,
-                              [](const ConnectionResolvedOption& option) {
-                                  return sourceRuntimeDisambiguator(option);
-                              }) ||
-            applyUniqueSuffix(options, duplicateIndexes,
-                              [](const ConnectionResolvedOption& option) {
-                                  return targetRuntimeDisambiguator(option);
-                              })) {
-            continue;
+    const auto applySuffix = [&](const QVector<int>& duplicateIndexes, auto suffixForOption) {
+        QVector<QString> suffixedLabels;
+        if (!buildUniqueSuffixedLabels(options,
+                                       originalLabels,
+                                       reservedLabels,
+                                       duplicateIndexes,
+                                       suffixForOption,
+                                       &suffixedLabels)) {
+            return false;
         }
 
-        applyUniqueSuffix(options, duplicateIndexes,
-                          [](const ConnectionResolvedOption& option) {
-                              return combinedRuntimeDisambiguator(option);
-                          });
+        for (int i = 0; i < duplicateIndexes.size(); ++i) {
+            const QString& label = suffixedLabels.at(i);
+            finalLabels[duplicateIndexes.at(i)] = label;
+            reservedLabels.insert(label);
+        }
+        return true;
+    };
+
+    for (const QVector<int>& duplicateIndexes : duplicateGroups) {
+        if (applySuffix(duplicateIndexes,
+                        [graph](const ConnectionResolvedOption& option) {
+                            return sourceShortDisambiguator(graph, option);
+                        }) ||
+            applySuffix(duplicateIndexes,
+                        [graph](const ConnectionResolvedOption& option) {
+                            return targetShortDisambiguator(graph, option);
+                        }) ||
+            applySuffix(duplicateIndexes,
+                        [graph](const ConnectionResolvedOption& option) {
+                            return combinedShortDisambiguator(graph, option);
+                        }) ||
+            applySuffix(duplicateIndexes,
+                        [](const ConnectionResolvedOption& option) {
+                            return sourceRuntimeDisambiguator(option);
+                        }) ||
+            applySuffix(duplicateIndexes,
+                        [](const ConnectionResolvedOption& option) {
+                            return targetRuntimeDisambiguator(option);
+                        }) ||
+            applySuffix(duplicateIndexes,
+                        [](const ConnectionResolvedOption& option) {
+                            return combinedRuntimeDisambiguator(option);
+                        })) {
+            continue;
+        }
+    }
+
+    for (int index = 0; index < options.size(); ++index) {
+        options[index].label = finalLabels.at(index);
     }
 }
 

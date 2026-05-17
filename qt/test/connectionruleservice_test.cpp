@@ -5,6 +5,7 @@
 #include "modules/moduleregistry.h"
 
 #include <QCoreApplication>
+#include <QSet>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
@@ -336,6 +337,37 @@ std::unique_ptr<Graph> graphWithTwoDisplayIdenticalEndpoints(const QString& pack
     return graph;
 }
 
+void registerAnchorLabeledType(const QString& packageId) {
+    ModuleType type;
+    type.name = ModuleRegistry::scopedTypeName(packageId, QStringLiteral("AnchorNode"));
+    type.packageId = packageId;
+    type.ipcoreId = packageId;
+    type.moduleId = QStringLiteral("AnchorNode");
+    type.displayLabelParameter = QStringLiteral("label");
+    type.defaultPorts.push_back(Port(QStringLiteral("noc"),
+                                     Port::Direction::InOut,
+                                     QStringLiteral("bus"),
+                                     QStringLiteral("Raw Port Label"),
+                                     {},
+                                     {},
+                                     QStringLiteral("anchor_link"),
+                                     QStringLiteral("noc")));
+
+    ModuleInterfaceMetadata metadata;
+    metadata.id = QStringLiteral("noc");
+    metadata.label = QStringLiteral("Metadata Interface Label");
+    metadata.bus = QStringLiteral("anchor_link");
+    metadata.cardinality = QStringLiteral("one");
+    type.interfaceMetadata.insert(metadata.id, metadata);
+
+    ModuleInterfaceAnchor anchor;
+    anchor.interfaceId = QStringLiteral("noc");
+    anchor.label = QStringLiteral("Anchor Interface Label");
+    type.interfaceAnchors.insert(anchor.interfaceId, anchor);
+
+    require(ModuleRegistry::instance().registerType(type), "anchor-labeled type should register");
+}
+
 ConnectionRequest nodeToPortRequest() {
     ConnectionRequest request;
     request.kind = ConnectionRequestKind::NodeToPort;
@@ -511,12 +543,60 @@ void testDuplicateConnectionOptionLabelsUseShortLabelBeforeIds() {
 
     require(result.status == ConnectionCheckStatus::NeedsSelection,
             "duplicate visible options should require selection");
-    require(result.options.at(0).label.contains(QStringLiteral("slot 0")) ||
-            result.options.at(1).label.contains(QStringLiteral("slot 0")),
-            "short label should disambiguate duplicate display names");
-    require(!result.options.at(0).label.contains(QStringLiteral("uuid_ep")) &&
-            !result.options.at(1).label.contains(QStringLiteral("uuid_ep")),
+    require(result.options.size() == 2,
+            "two duplicate visible options should be exposed");
+
+    QSet<QString> finalLabels;
+    bool hasSlot0 = false;
+    bool hasSlot1 = false;
+    bool exposesRuntimeId = false;
+    for (const ConnectionResolvedOption& option : result.options) {
+        finalLabels.insert(option.label);
+        hasSlot0 = hasSlot0 || option.label.contains(QStringLiteral("slot 0"));
+        hasSlot1 = hasSlot1 || option.label.contains(QStringLiteral("slot 1"));
+        exposesRuntimeId = exposesRuntimeId || option.label.contains(QStringLiteral("uuid_ep"));
+    }
+
+    require(finalLabels.size() == result.options.size(),
+            "duplicate option labels should be unique after disambiguation");
+    require(hasSlot0 && hasSlot1,
+            "both short labels should disambiguate duplicate display names");
+    require(!exposesRuntimeId,
             "short labels should be used before runtime IDs");
+}
+
+void testConnectionOptionLabelsUseAnchorInterfaceLabels() {
+    const QString packageId = QStringLiteral("finepaper.display.anchor_labels");
+    registerAnchorLabeledType(packageId);
+
+    Graph graph;
+    auto source = makeDisplayNamedModule(packageId,
+                                         QStringLiteral("anchor_source_uuid"),
+                                         QStringLiteral("AnchorNode"),
+                                         QStringLiteral("Source"));
+    auto target = makeDisplayNamedModule(packageId,
+                                         QStringLiteral("anchor_target_uuid"),
+                                         QStringLiteral("AnchorNode"),
+                                         QStringLiteral("Target"));
+    require(graph.addModule(std::move(source)), "anchor source should add");
+    require(graph.addModule(std::move(target)), "anchor target should add");
+
+    ConnectionRuleService service(&graph, {});
+    const ConnectionCheckResult result = service.check(
+        ConnectionRequest::portToPort(PortRef{QStringLiteral("anchor_source_uuid"), QStringLiteral("noc")},
+                                      PortRef{QStringLiteral("anchor_target_uuid"), QStringLiteral("noc")},
+                                      ConnectionRequestKind::PortToPort));
+
+    require(result.hasSingleOption(), "anchor-label test should have one option");
+    const QString label = result.options.first().label;
+    require(label.contains(QStringLiteral("Source.Anchor Interface Label")),
+            "source endpoint should use anchor interface label");
+    require(label.contains(QStringLiteral("Target.Anchor Interface Label")),
+            "target endpoint should use anchor interface label");
+    require(!label.contains(QStringLiteral("Metadata Interface Label")),
+            "anchor label should take precedence over metadata interface label");
+    require(!label.contains(QStringLiteral("Raw Port Label")),
+            "anchor label should take precedence over raw port label");
 }
 
 ModuleType classValidationType(const QString& typeName,
@@ -1080,6 +1160,7 @@ int main(int argc, char** argv) {
         testAmbiguousClassCreatesWarningResult();
         testConnectionOptionsPreferDisplayNamesAndInterfaceLabels();
         testDuplicateConnectionOptionLabelsUseShortLabelBeforeIds();
+        testConnectionOptionLabelsUseAnchorInterfaceLabels();
         testConnectionRuleServiceUsesInterfaceClassesNotLegacyBusNames();
         testConnectionRuleServiceClassValidationIgnoresLegacyTopologySideNames();
         testConnectionRuleServiceRejectsMissingPackageManifestMetadata();
