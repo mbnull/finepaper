@@ -63,6 +63,39 @@ class IpcraftGeneratorTest < Minitest::Test
     end
   end
 
+  def test_generic_generation_rejects_unknown_connection_instance
+    project = generic_project
+    project.fetch('connections').first.fetch('interfaces').last['instance'] = 'missing_router'
+
+    error = assert_raises(IpcraftGenerator::Error) do
+      generate_generic_project(project)
+    end
+    assert_includes error.message, 'link'
+    assert_includes error.message, 'unknown instance missing_router'
+  end
+
+  def test_generic_generation_rejects_unknown_connection_interface
+    project = generic_project
+    project.fetch('connections').first.fetch('interfaces').first['interface'] = 'missing_interface'
+
+    error = assert_raises(IpcraftGenerator::Error) do
+      generate_generic_project(project)
+    end
+    assert_includes error.message, 'link'
+    assert_includes error.message, 'unknown interface router.missing_interface'
+  end
+
+  def test_generic_generation_rejects_invalid_canonical_source_endpoint_shape
+    project = generic_project
+    project.fetch('connections').first['source'] = { 'module' => 'router', 'port' => 'fabric_out' }
+
+    error = assert_raises(IpcraftGenerator::Error) do
+      generate_generic_project(project)
+    end
+    assert_includes error.message, 'link'
+    assert_includes error.message, 'invalid source endpoint reference'
+  end
+
   def test_generates_finepaper_noc_structural_outputs
     Dir.mktmpdir do |dir|
       input_path = File.join(dir, 'input.json')
@@ -399,9 +432,6 @@ class IpcraftGeneratorTest < Minitest::Test
       'instances' => [
         { 'id' => 'router' },
         { 'id' => 'endpoint' }
-      ],
-      'connections' => [
-        { 'id' => 'link' }
       ]
     }
   end
@@ -411,7 +441,61 @@ class IpcraftGeneratorTest < Minitest::Test
       'ipcore' => 'org.example.noc',
       'schema' => 'ipcraft.noc.project.v1',
       'instance_count' => 2,
-      'connection_count' => 1
+      'connection_count' => 0
+    }
+  end
+
+  def generic_manifest
+    {
+      'schema' => 'ipcraft.manifest.v1',
+      'id' => 'org.example.generic',
+      'name' => 'Generic',
+      'modules' => [
+        {
+          'id' => 'Tile',
+          'interfaces' => [
+            { 'id' => 'fabric_out' },
+            { 'id' => 'fabric_in' }
+          ]
+        }
+      ],
+      'generation' => {
+        'engine' => 'ipcraft.common.v1',
+        'outputs' => [
+          { 'id' => 'manifest', 'kind' => 'json', 'path' => 'manifest.json' }
+        ]
+      }
+    }
+  end
+
+  def generic_project
+    {
+      'schema' => 'ipcraft.noc.project.v1',
+      'package' => 'org.example.generic',
+      'instances' => [
+        {
+          'id' => 'router',
+          'module' => 'Tile',
+          'interfaces' => %w[fabric_out fabric_in]
+        },
+        {
+          'id' => 'endpoint',
+          'module' => 'Tile',
+          'interfaces' => %w[fabric_out fabric_in]
+        }
+      ],
+      'connections' => [
+        {
+          'id' => 'link',
+          'class' => 'fabric_link',
+          'source' => { 'instance' => 'router', 'interface' => 'fabric_out' },
+          'target' => { 'instance' => 'endpoint', 'interface' => 'fabric_in' },
+          'interfaces' => [
+            { 'instance' => 'router', 'interface' => 'fabric_out' },
+            { 'instance' => 'endpoint', 'interface' => 'fabric_in' }
+          ]
+        }
+      ]
     }
   end
 
@@ -628,6 +712,21 @@ class IpcraftGeneratorTest < Minitest::Test
       'module' => ref.fetch('instance'),
       'port' => ref.fetch('interface').delete_prefix('if_')
     }
+  end
+
+  def generate_generic_project(project, manifest: generic_manifest)
+    Dir.mktmpdir do |dir|
+      manifest_path = File.join(dir, 'ipcraft.json')
+      input_path = File.join(dir, 'input.json')
+      File.write(manifest_path, JSON.pretty_generate(manifest))
+      File.write(input_path, JSON.pretty_generate(project))
+
+      IpcraftGenerator::Generator.new(
+        manifest: manifest_path,
+        input: input_path,
+        output: File.join(dir, 'out')
+      ).generate
+    end
   end
 
   def generate_opennoc_project(project, manifest: opennoc_manifest)

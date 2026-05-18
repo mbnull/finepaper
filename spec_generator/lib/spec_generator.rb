@@ -78,8 +78,15 @@ module SpecGenerator
   ParsedSpec = Struct.new(:data, :views, keyword_init: true)
 
   def self.check_ipcraft_package_source(ipcore_path:, package_root: File.dirname(ipcore_path))
-    IpcraftPackageParser.new(ipcore_path, package_root).parse
-    true
+    manifest = IpcraftPackageParser.new(ipcore_path, package_root).parse
+    manifest_path = File.join(package_root, 'ipcraft.json')
+    raise SpecError, "missing runtime manifest: #{manifest_path}" unless File.file?(manifest_path)
+
+    generated = "#{JSON.pretty_generate(manifest)}\n"
+    committed = File.binread(manifest_path)
+    return true if generated == committed
+
+    raise SpecError, "ipcraft.json is out of date: #{manifest_path}"
   end
 
   def self.build_ipcraft_manifest(ipcore_path:, package_root:)

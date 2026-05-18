@@ -99,6 +99,218 @@ module IpcraftGenerator
       raise Error, 'manifest schema must be ipcraft.manifest.v1' unless manifest['schema'] == 'ipcraft.manifest.v1'
       raise Error, 'input schema must be ipcraft.noc.project.v1' unless input['schema'] == 'ipcraft.noc.project.v1'
       raise Error, 'input package does not match manifest id' unless input['package'] == manifest['id']
+      if input.key?('package_id') && input['package_id'] != manifest['id']
+        raise Error, 'input package_id does not match manifest id'
+      end
+
+      validate_command_input_graph!(manifest, input)
+    end
+
+    def validate_command_input_graph!(manifest, input)
+      instances = input.fetch('instances', [])
+      raise Error, 'ipcraft.noc.project.v1 instances must be an array' unless instances.is_a?(Array)
+
+      module_interfaces = manifest_module_interfaces(manifest)
+      instance_interfaces = {}
+      instances.each do |instance|
+        raise Error, 'ipcraft.noc.project.v1 instance must be an object' unless instance.is_a?(Hash)
+
+        instance_id = required_input_string(instance, 'id', 'instance id')
+        raise Error, "duplicate ipcraft.noc.project.v1 instance #{instance_id}" if instance_interfaces.key?(instance_id)
+
+        module_id = instance['module'] || instance['module_id'] || instance['type']
+        if module_id && !module_id.is_a?(String)
+          raise Error, "ipcraft.noc.project.v1 instance #{instance_id} module id must be a string"
+        end
+
+        instance_interfaces[instance_id] =
+          declared_instance_interfaces(instance, module_interfaces.fetch(module_id, []), instance_id)
+      end
+
+      connections = input.fetch('connections', [])
+      raise Error, 'ipcraft.noc.project.v1 connections must be an array' unless connections.is_a?(Array)
+
+      connections.each do |connection|
+        validate_input_connection!(connection, instance_interfaces)
+      end
+    end
+
+    def manifest_module_interfaces(manifest)
+      manifest.fetch('modules', []).each_with_object({}) do |mod, modules|
+        next unless mod.is_a?(Hash)
+
+        module_id = mod['id']
+        next unless module_id.is_a?(String)
+
+        modules[module_id] = mod.fetch('interfaces', []).filter_map do |interface|
+          interface['id'] if interface.is_a?(Hash) && interface['id'].is_a?(String)
+        end
+      end
+    end
+
+    def declared_instance_interfaces(instance, module_interface_ids, instance_id)
+      raw_interfaces = instance['interfaces']
+      if raw_interfaces.nil?
+        return module_interface_ids.to_h { |interface_id| [interface_id, interface_id] }
+      end
+
+      unless raw_interfaces.is_a?(Array)
+        raise Error, "ipcraft.noc.project.v1 instance #{instance_id} interfaces must be an array"
+      end
+
+      raw_interfaces.each_with_object({}) do |interface, interfaces|
+        interface_id, port_id = normalize_instance_interface(interface, instance_id)
+        unless module_interface_ids.empty? ||
+               module_interface_ids.include?(interface_id) ||
+               module_interface_ids.include?(port_id)
+          raise Error, "ipcraft.noc.project.v1 instance #{instance_id} references unknown interface #{interface_id}"
+        end
+
+        interfaces[interface_id] = port_id
+      end
+    end
+
+    def normalize_instance_interface(interface, instance_id)
+      if interface.is_a?(String)
+        return [interface, interface]
+      end
+      unless interface.is_a?(Hash)
+        raise Error, "ipcraft.noc.project.v1 instance #{instance_id} interface entry must be a string or object"
+      end
+
+      interface_id = interface['id'] || interface['interface'] || interface['port']
+      port_id = interface['port'] || interface_id
+      unless interface_id.is_a?(String) && port_id.is_a?(String)
+        raise Error, "ipcraft.noc.project.v1 instance #{instance_id} interface entry has invalid id or port"
+      end
+
+      [interface_id, port_id]
+    end
+
+    def validate_input_connection!(connection, instance_interfaces)
+      raise Error, 'ipcraft.noc.project.v1 connection must be an object' unless connection.is_a?(Hash)
+
+      connection_id = connection.fetch('id', '<unnamed>')
+      interface_refs = if connection.key?('interfaces')
+                         validate_connection_interfaces!(connection, instance_interfaces)
+                       else
+                         []
+                       end
+
+      if connection.key?('source') || connection.key?('target')
+        validate_connection_endpoint_pair!(
+          connection,
+          instance_interfaces,
+          %w[source target],
+          canonical_refs: interface_refs
+        )
+      elsif connection.key?('from') || connection.key?('to')
+        validate_connection_endpoint_pair!(
+          connection,
+          instance_interfaces,
+          %w[from to],
+          canonical_refs: interface_refs
+        )
+      elsif interface_refs.empty?
+        raise Error, "ipcraft.noc.project.v1 connection #{connection_id} must specify interfaces or endpoints"
+      end
+    end
+
+    def validate_connection_interfaces!(connection, instance_interfaces)
+      refs = connection.fetch('interfaces')
+      unless refs.is_a?(Array) && refs.size == 2
+        raise Error, "ipcraft.noc.project.v1 connection #{connection.fetch('id', '<unnamed>')} must have exactly two interfaces"
+      end
+
+      refs.map do |ref|
+        validate_canonical_endpoint_ref!(connection, ref, instance_interfaces, 'interface')
+      end
+    end
+
+    def validate_connection_endpoint_pair!(connection, instance_interfaces, keys, canonical_refs:)
+      connection_id = connection.fetch('id', '<unnamed>')
+      unless keys.all? { |key| connection.key?(key) }
+        raise Error, "ipcraft.noc.project.v1 connection #{connection_id} must include both #{keys.join(' and ')}"
+      end
+
+      keys.each do |key|
+        endpoint = if canonical_refs.empty?
+                     validate_legacy_endpoint_ref!(connection, connection.fetch(key), instance_interfaces, key)
+                   else
+                     validate_canonical_endpoint_ref!(connection, connection.fetch(key), instance_interfaces, key)
+                   end
+        if !canonical_refs.empty? && !canonical_refs.include?(endpoint)
+          raise Error, "ipcraft.noc.project.v1 connection #{connection_id} #{key} endpoint does not match interfaces"
+        end
+      end
+    end
+
+    def validate_canonical_endpoint_ref!(connection, ref, instance_interfaces, endpoint_name)
+      unless ref.is_a?(Hash) && ref['instance'].is_a?(String) && ref['interface'].is_a?(String)
+        raise Error,
+              "ipcraft.noc.project.v1 connection #{connection.fetch('id', '<unnamed>')} has invalid #{endpoint_name} endpoint reference"
+      end
+
+      validate_known_interface_ref!(connection, instance_interfaces, ref.fetch('instance'), ref.fetch('interface'))
+    end
+
+    def validate_legacy_endpoint_ref!(connection, ref, instance_interfaces, endpoint_name)
+      unless ref.is_a?(Hash)
+        raise Error,
+              "ipcraft.noc.project.v1 connection #{connection.fetch('id', '<unnamed>')} has invalid #{endpoint_name} endpoint reference"
+      end
+
+      instance_id = ref['instance'] || ref['module']
+      unless instance_id.is_a?(String)
+        raise Error,
+              "ipcraft.noc.project.v1 connection #{connection.fetch('id', '<unnamed>')} has invalid #{endpoint_name} endpoint reference"
+      end
+
+      interface_id = ref['interface']
+      return validate_known_interface_ref!(connection, instance_interfaces, instance_id, interface_id) if interface_id.is_a?(String)
+
+      port_id = ref['port']
+      unless port_id.is_a?(String)
+        raise Error,
+              "ipcraft.noc.project.v1 connection #{connection.fetch('id', '<unnamed>')} has invalid #{endpoint_name} endpoint reference"
+      end
+
+      validate_known_port_ref!(connection, instance_interfaces, instance_id, port_id)
+    end
+
+    def validate_known_interface_ref!(connection, instance_interfaces, instance_id, interface_id)
+      interfaces = instance_interfaces[instance_id]
+      unless interfaces
+        raise Error,
+              "ipcraft.noc.project.v1 connection #{connection.fetch('id', '<unnamed>')} references unknown instance #{instance_id}"
+      end
+      unless interfaces.key?(interface_id)
+        raise Error,
+              "ipcraft.noc.project.v1 connection #{connection.fetch('id', '<unnamed>')} references unknown interface #{instance_id}.#{interface_id}"
+      end
+
+      [instance_id, interface_id]
+    end
+
+    def validate_known_port_ref!(connection, instance_interfaces, instance_id, port_id)
+      interfaces = instance_interfaces[instance_id]
+      unless interfaces
+        raise Error,
+              "ipcraft.noc.project.v1 connection #{connection.fetch('id', '<unnamed>')} references unknown instance #{instance_id}"
+      end
+      return [instance_id, interfaces.key(port_id)] if interfaces.value?(port_id)
+      return [instance_id, port_id] if interfaces.key?(port_id)
+
+      raise Error,
+            "ipcraft.noc.project.v1 connection #{connection.fetch('id', '<unnamed>')} references unknown interface #{instance_id}.#{port_id}"
+    end
+
+    def required_input_string(hash, key, context)
+      value = hash[key]
+      raise Error, "ipcraft.noc.project.v1 #{context} is required" unless value
+      raise Error, "ipcraft.noc.project.v1 #{context} must be a string" unless value.is_a?(String)
+
+      value
     end
 
     def output_manifest(manifest, input)

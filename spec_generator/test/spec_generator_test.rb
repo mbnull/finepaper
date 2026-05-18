@@ -1096,16 +1096,6 @@ class SpecGeneratorTest < Minitest::Test
       package_root = write_ipcraft_package_source(dir)
       ipcore_path = File.join(package_root, 'ipcore.yml')
 
-      check_stdout, check_stderr, check_status = Open3.capture3(
-        RbConfig.ruby,
-        File.expand_path('../bin/spec-gen', __dir__),
-        'check',
-        '--ipcore',
-        ipcore_path
-      )
-      assert check_status.success?, check_stderr
-      assert_includes check_stdout, "Checked ipcraft package source: #{ipcore_path}"
-
       build_stdout, build_stderr, build_status = Open3.capture3(
         RbConfig.ruby,
         File.expand_path('../bin/spec-gen', __dir__),
@@ -1118,6 +1108,42 @@ class SpecGeneratorTest < Minitest::Test
       assert build_status.success?, build_stderr
       assert_includes build_stdout, "Built ipcraft manifest: #{File.join(package_root, 'ipcraft.json')}"
       assert File.file?(File.join(package_root, 'ipcraft.json'))
+
+      check_stdout, check_stderr, check_status = Open3.capture3(
+        RbConfig.ruby,
+        File.expand_path('../bin/spec-gen', __dir__),
+        'check',
+        '--ipcore',
+        ipcore_path
+      )
+      assert check_status.success?, check_stderr
+      assert_includes check_stdout, "Checked ipcraft package source: #{ipcore_path}"
+    end
+  end
+
+  def test_cli_check_rejects_drifted_ipcraft_manifest
+    Dir.mktmpdir do |dir|
+      package_root = write_ipcraft_package_source(dir)
+      ipcore_path = File.join(package_root, 'ipcore.yml')
+
+      build_ipcraft_manifest(package_root)
+      manifest_path = File.join(package_root, 'ipcraft.json')
+      manifest = JSON.parse(File.read(manifest_path))
+      manifest['drift_probe'] = true
+      File.write(manifest_path, "#{JSON.pretty_generate(manifest)}\n")
+
+      check_stdout, check_stderr, check_status = Open3.capture3(
+        RbConfig.ruby,
+        File.expand_path('../bin/spec-gen', __dir__),
+        'check',
+        '--ipcore',
+        ipcore_path,
+        '--package-root',
+        package_root
+      )
+      refute check_status.success?
+      assert_empty check_stdout
+      assert_match(/ipcraft\.json.*out of date|out of date.*ipcraft\.json|mismatch/i, check_stderr)
     end
   end
 
