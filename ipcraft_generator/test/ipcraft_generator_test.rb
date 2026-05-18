@@ -74,6 +74,28 @@ class IpcraftGeneratorTest < Minitest::Test
     assert_includes error.message, 'unknown instance missing_router'
   end
 
+  def test_generic_generation_rejects_unknown_module_id
+    project = generic_project
+    project.fetch('instances').first['module'] = 'MissingTile'
+
+    error = assert_raises(IpcraftGenerator::Error) do
+      generate_generic_project(project)
+    end
+    assert_includes error.message, 'router'
+    assert_includes error.message, 'unknown module MissingTile'
+  end
+
+  def test_generic_generation_rejects_unknown_connection_class
+    project = generic_project
+    project.fetch('connections').first['class'] = 'ghost_link'
+
+    error = assert_raises(IpcraftGenerator::Error) do
+      generate_generic_project(project)
+    end
+    assert_includes error.message, 'link'
+    assert_includes error.message, 'unknown connection class ghost_link'
+  end
+
   def test_generic_generation_rejects_unknown_connection_interface
     project = generic_project
     project.fetch('connections').first.fetch('interfaces').first['interface'] = 'missing_interface'
@@ -94,6 +116,36 @@ class IpcraftGeneratorTest < Minitest::Test
     end
     assert_includes error.message, 'link'
     assert_includes error.message, 'invalid source endpoint reference'
+  end
+
+  def test_failed_generation_removes_prior_success_manifest
+    Dir.mktmpdir do |dir|
+      manifest_path = File.join(dir, 'ipcraft.json')
+      valid_input_path = File.join(dir, 'valid.json')
+      invalid_input_path = File.join(dir, 'invalid.json')
+      output = File.join(dir, 'out')
+      File.write(manifest_path, JSON.pretty_generate(generic_manifest))
+      File.write(valid_input_path, JSON.pretty_generate(generic_project))
+      invalid_project = generic_project
+      invalid_project['schema'] = 'ipcraft.noc.project.v0'
+      File.write(invalid_input_path, JSON.pretty_generate(invalid_project))
+
+      IpcraftGenerator::Generator.new(
+        manifest: manifest_path,
+        input: valid_input_path,
+        output: output
+      ).generate
+      assert_path_exists File.join(output, 'manifest.json')
+
+      assert_raises(IpcraftGenerator::Error) do
+        IpcraftGenerator::Generator.new(
+          manifest: manifest_path,
+          input: invalid_input_path,
+          output: output
+        ).generate
+      end
+      refute_path_exists File.join(output, 'manifest.json')
+    end
   end
 
   def test_generates_finepaper_noc_structural_outputs
@@ -450,6 +502,9 @@ class IpcraftGeneratorTest < Minitest::Test
       'schema' => 'ipcraft.manifest.v1',
       'id' => 'org.example.generic',
       'name' => 'Generic',
+      'connection_classes' => [
+        { 'id' => 'fabric_link', 'roles' => %w[initiator target], 'symmetric' => false }
+      ],
       'modules' => [
         {
           'id' => 'Tile',

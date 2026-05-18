@@ -1,6 +1,7 @@
 require 'fileutils'
 require 'json'
 require 'optparse'
+require 'tmpdir'
 
 module IpcraftGenerator
   class Error < StandardError; end
@@ -76,6 +77,9 @@ module IpcraftGenerator
       'axi_addr_width' => 'AXI_ADDR_WIDTH',
       'axi_data_width' => 'AXI_DATA_WIDTH'
     }.freeze
+    COMPATIBLE_INPUT_MODULES = {
+      'finepaper.ravenoc' => ['RaveNoC']
+    }.freeze
 
     def initialize(manifest:, input:, output:)
       @manifest_path = manifest
@@ -84,16 +88,50 @@ module IpcraftGenerator
     end
 
     def generate
+      requested_output_dir = @output_dir
+      stage_output_dir = nil
+      remove_success_manifest(requested_output_dir)
+
       manifest = JSON.parse(File.read(@manifest_path))
       input = JSON.parse(File.read(@input_path))
 
       validate!(manifest, input)
 
-      FileUtils.mkdir_p(@output_dir)
+      stage_output_dir = create_stage_output_dir(requested_output_dir)
+      @output_dir = stage_output_dir
       send(PACKAGE_HANDLERS.fetch(manifest.fetch('id'), :generate_generic), manifest, input)
+      @output_dir = requested_output_dir
+      replace_output_dir(stage_output_dir, requested_output_dir)
+      stage_output_dir = nil
+    rescue
+      @output_dir = requested_output_dir if requested_output_dir
+      remove_success_manifest(requested_output_dir) if requested_output_dir
+      raise
+    ensure
+      @output_dir = requested_output_dir if requested_output_dir
+      FileUtils.rm_rf(stage_output_dir) if stage_output_dir && Dir.exist?(stage_output_dir)
     end
 
     private
+
+    def remove_success_manifest(output_dir)
+      return unless output_dir
+
+      FileUtils.rm_f(File.join(output_dir, 'manifest.json'))
+    end
+
+    def create_stage_output_dir(output_dir)
+      expanded_output = File.expand_path(output_dir)
+      parent = File.dirname(expanded_output)
+      FileUtils.mkdir_p(parent)
+      Dir.mktmpdir(".#{File.basename(expanded_output)}.", parent)
+    end
+
+    def replace_output_dir(stage_output_dir, output_dir)
+      expanded_output = File.expand_path(output_dir)
+      FileUtils.rm_rf(expanded_output)
+      FileUtils.mv(stage_output_dir, expanded_output)
+    end
 
     def validate!(manifest, input)
       raise Error, 'manifest schema must be ipcraft.manifest.v1' unless manifest['schema'] == 'ipcraft.manifest.v1'
@@ -111,6 +149,8 @@ module IpcraftGenerator
       raise Error, 'ipcraft.noc.project.v1 instances must be an array' unless instances.is_a?(Array)
 
       module_interfaces = manifest_module_interfaces(manifest)
+      known_module_ids = module_interfaces.keys + COMPATIBLE_INPUT_MODULES.fetch(manifest.fetch('id'), [])
+      connection_class_ids = manifest_connection_class_ids(manifest)
       instance_interfaces = {}
       instances.each do |instance|
         raise Error, 'ipcraft.noc.project.v1 instance must be an object' unless instance.is_a?(Hash)
@@ -122,6 +162,9 @@ module IpcraftGenerator
         if module_id && !module_id.is_a?(String)
           raise Error, "ipcraft.noc.project.v1 instance #{instance_id} module id must be a string"
         end
+        if module_id && !known_module_ids.empty? && !known_module_ids.include?(module_id)
+          raise Error, "ipcraft.noc.project.v1 instance #{instance_id} references unknown module #{module_id}"
+        end
 
         instance_interfaces[instance_id] =
           declared_instance_interfaces(instance, module_interfaces.fetch(module_id, []), instance_id)
@@ -131,7 +174,7 @@ module IpcraftGenerator
       raise Error, 'ipcraft.noc.project.v1 connections must be an array' unless connections.is_a?(Array)
 
       connections.each do |connection|
-        validate_input_connection!(connection, instance_interfaces)
+        validate_input_connection!(connection, instance_interfaces, connection_class_ids)
       end
     end
 
@@ -145,6 +188,12 @@ module IpcraftGenerator
         modules[module_id] = mod.fetch('interfaces', []).filter_map do |interface|
           interface['id'] if interface.is_a?(Hash) && interface['id'].is_a?(String)
         end
+      end
+    end
+
+    def manifest_connection_class_ids(manifest)
+      manifest.fetch('connection_classes', []).filter_map do |connection_class|
+        connection_class['id'] if connection_class.is_a?(Hash) && connection_class['id'].is_a?(String)
       end
     end
 
@@ -187,10 +236,11 @@ module IpcraftGenerator
       [interface_id, port_id]
     end
 
-    def validate_input_connection!(connection, instance_interfaces)
+    def validate_input_connection!(connection, instance_interfaces, connection_class_ids)
       raise Error, 'ipcraft.noc.project.v1 connection must be an object' unless connection.is_a?(Hash)
 
       connection_id = connection.fetch('id', '<unnamed>')
+      validate_connection_class!(connection, connection_class_ids)
       interface_refs = if connection.key?('interfaces')
                          validate_connection_interfaces!(connection, instance_interfaces)
                        else
@@ -214,6 +264,19 @@ module IpcraftGenerator
       elsif interface_refs.empty?
         raise Error, "ipcraft.noc.project.v1 connection #{connection_id} must specify interfaces or endpoints"
       end
+    end
+
+    def validate_connection_class!(connection, connection_class_ids)
+      return unless connection.key?('class')
+
+      connection_id = connection.fetch('id', '<unnamed>')
+      connection_class = connection['class']
+      unless connection_class.is_a?(String)
+        raise Error, "ipcraft.noc.project.v1 connection #{connection_id} class must be a string"
+      end
+      return if connection_class_ids.empty? || connection_class_ids.include?(connection_class)
+
+      raise Error, "ipcraft.noc.project.v1 connection #{connection_id} references unknown connection class #{connection_class}"
     end
 
     def validate_connection_interfaces!(connection, instance_interfaces)
