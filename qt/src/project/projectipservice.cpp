@@ -4,6 +4,7 @@
 #include "project/projectdocument.h"
 #include "project/projectstateservice.h"
 
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QRegularExpression>
@@ -53,6 +54,16 @@ QJsonObject globalParameterDefaults(const IpCatalogEntry& entry) {
     return defaults;
 }
 
+QJsonArray instanceLimitScopesToJson(const QVector<IpCatalogInstanceLimit>& limits) {
+    QJsonArray scopes;
+    for (const IpCatalogInstanceLimit& limit : limits) {
+        if (!limit.scope.trimmed().isEmpty() && limit.max > 0) {
+            scopes.append(limit.scope.trimmed());
+        }
+    }
+    return scopes;
+}
+
 ProjectIpInstanceRecord defaultRecordForEntry(const IpCatalogEntry& entry, const QString& instanceId) {
     ProjectIpInstanceRecord record;
     record.ipcoreId = entry.id;
@@ -61,7 +72,72 @@ ProjectIpInstanceRecord defaultRecordForEntry(const IpCatalogEntry& entry, const
     record.state.insert(QStringLiteral("kind"), entry.kind);
     record.state.insert(QStringLiteral("type"), entry.name);
     record.state.insert(QStringLiteral("global_parameters"), globalParameterDefaults(entry));
+    const QJsonArray limitScopes = instanceLimitScopesToJson(entry.instanceLimits);
+    if (!limitScopes.isEmpty()) {
+        record.state.insert(QStringLiteral("instance_limit_scopes"), limitScopes);
+    }
     return record;
+}
+
+QStringList instanceLimitScopesForRecord(const ProjectIpInstanceRecord& record) {
+    QStringList scopes;
+    const QJsonValue scopesValue = record.state.value(QStringLiteral("instance_limit_scopes"));
+    if (!scopesValue.isArray()) {
+        return scopes;
+    }
+
+    const QJsonArray scopesArray = scopesValue.toArray();
+    for (const QJsonValue& scopeValue : scopesArray) {
+        if (scopeValue.isString() && !scopeValue.toString().trimmed().isEmpty()) {
+            scopes.append(scopeValue.toString().trimmed());
+        }
+    }
+    return scopes;
+}
+
+bool recordMatchesScope(const ProjectIpInstanceRecord& record, const QString& scope) {
+    const QString trimmedScope = scope.trimmed();
+    if (trimmedScope.isEmpty()) {
+        return false;
+    }
+
+    if (instanceLimitScopesForRecord(record).contains(trimmedScope)) {
+        return true;
+    }
+
+    const QString kindPrefix = QStringLiteral("kind:");
+    if (trimmedScope.startsWith(kindPrefix)) {
+        const QString expectedKind = trimmedScope.mid(kindPrefix.size());
+        return record.state.value(QStringLiteral("kind"))
+            .toString()
+            .trimmed()
+            .compare(expectedKind, Qt::CaseInsensitive) == 0;
+    }
+    return false;
+}
+
+int countInstancesForIpcore(const ProjectStateService& stateService, const QString& ipcoreId) {
+    int count = 0;
+    for (const ProjectIpInstanceRecord& record : stateService.ipInstanceRecords()) {
+        if (record.ipcoreId == ipcoreId) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+int countInstancesForScope(const ProjectStateService& stateService, const QString& scope) {
+    int count = 0;
+    for (const ProjectIpInstanceRecord& record : stateService.ipInstanceRecords()) {
+        if (recordMatchesScope(record, scope)) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+QString limitLabel(const IpCatalogInstanceLimit& limit) {
+    return limit.label.trimmed().isEmpty() ? limit.scope : limit.label.trimmed();
 }
 
 } // namespace
@@ -109,6 +185,24 @@ ProjectIpServiceResult ProjectIpService::createInstanceForIpcore(const IpCatalog
     if (entry.id.trimmed().isEmpty()) {
         result.error = QStringLiteral("IP core id is required.");
         return result;
+    }
+    if (entry.maxInstances.has_value() && *entry.maxInstances > 0
+        && countInstancesForIpcore(*m_stateService, entry.id) >= *entry.maxInstances) {
+        result.error = QStringLiteral("IP core %1 is limited to %2 instance(s).")
+            .arg(entry.id)
+            .arg(*entry.maxInstances);
+        return result;
+    }
+    for (const IpCatalogInstanceLimit& limit : entry.instanceLimits) {
+        if (limit.scope.trimmed().isEmpty() || limit.max <= 0) {
+            continue;
+        }
+        if (countInstancesForScope(*m_stateService, limit.scope) >= limit.max) {
+            result.error = QStringLiteral("%1 is limited to %2 instance(s).")
+                .arg(limitLabel(limit))
+                .arg(limit.max);
+            return result;
+        }
     }
 
     ProjectIpInstanceRecord record = defaultRecordForEntry(entry, nextInstanceIdForIpcore(entry.id));

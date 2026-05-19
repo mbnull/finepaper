@@ -27,6 +27,11 @@ IpCatalogEntry ravenocEntry() {
     entry.version = QStringLiteral("0.1");
     entry.kind = QStringLiteral("noc");
     entry.moduleTypes = QStringList{QStringLiteral("RaveTile")};
+    entry.instanceLimits.push_back(IpCatalogInstanceLimit{
+        QStringLiteral("kind:noc"),
+        QStringLiteral("NoC IP instance"),
+        1
+    });
 
     IpCoreInstanceParameterDescriptor width;
     width.name = QStringLiteral("flit_data_width");
@@ -50,6 +55,13 @@ IpCatalogEntry fabricEntry() {
     entry.version = QStringLiteral("1.0");
     entry.kind = QStringLiteral("fabric");
     entry.moduleTypes = QStringList{QStringLiteral("FabricSwitch")};
+    return entry;
+}
+
+IpCatalogEntry fabricVariantEntry() {
+    IpCatalogEntry entry = fabricEntry();
+    entry.id = QStringLiteral("vendor.fabric");
+    entry.name = QStringLiteral("Fabric Variant");
     return entry;
 }
 
@@ -105,59 +117,110 @@ void testProjectIpServiceCreatesDefaultStateAndSelectsIt() {
             "selection should point at new instance");
 }
 
-void testProjectIpServiceCreatesRepeatedInstancesForSameIpcore() {
+void testProjectIpServiceRejectsRepeatedNocInstances() {
     ProjectStateService stateService;
     ProjectIpService service(&stateService);
 
     const ProjectIpServiceResult firstResult = service.createInstanceForIpcore(ravenocEntry());
+    const ProjectIpServiceResult sameNocResult = service.createInstanceForIpcore(ravenocEntry());
+    const ProjectIpServiceResult otherNocResult = service.createInstanceForIpcore(ravenocVariantEntry());
+
+    require(firstResult.success, "IP service should create first NoC instance");
+    require(!sameNocResult.success,
+            "IP service should reject a second instance of the same NoC IP core");
+    require(!otherNocResult.success,
+            "IP service should reject a second NoC IP core even when the catalog id differs");
+    require(sameNocResult.error.contains(QStringLiteral("NoC")),
+            "same-NoC rejection should explain the NoC singleton rule");
+    require(otherNocResult.error.contains(QStringLiteral("NoC")),
+            "other-NoC rejection should explain the NoC singleton rule");
+    require(stateService.ipInstanceRecords().size() == 1,
+            "project state should keep only the first NoC instance");
+    require(stateService.ipInstanceRecords().first().instanceId == QStringLiteral("ravenoc_0"),
+            "first NoC record should remain untouched");
+    require(service.selectedIpInstance().has_value(),
+            "selection should remain on the existing NoC instance");
+    require(service.selectedIpInstance()->instanceId == QStringLiteral("ravenoc_0"),
+            "rejected NoC creation should not move selection");
+}
+
+void testProjectIpServiceCreatesRepeatedNonNocInstancesForSameIpcore() {
+    ProjectStateService stateService;
+    ProjectIpService service(&stateService);
+
+    const ProjectIpServiceResult firstResult = service.createInstanceForIpcore(fabricEntry());
     require(firstResult.success, "IP service should create first instance");
-    const ProjectIpServiceResult secondResult = service.createInstanceForIpcore(ravenocEntry());
-    require(secondResult.success, "IP service should create second instance for the same IP core");
+    const ProjectIpServiceResult secondResult = service.createInstanceForIpcore(fabricEntry());
+    require(secondResult.success, "IP service should create second instance for the same non-NoC IP core");
     require(stateService.ipInstanceRecords().size() == 2,
-            "same IP core should append a second project record");
-    require(firstResult.record.ipcoreId == QStringLiteral("finepaper.ravenoc"),
+            "same non-NoC IP core should append a second project record");
+    require(firstResult.record.ipcoreId == QStringLiteral("finepaper.fabric"),
             "first record should keep the requested IP core id");
-    require(firstResult.record.instanceId == QStringLiteral("ravenoc_0"),
+    require(firstResult.record.instanceId == QStringLiteral("fabric_0"),
             "first record should use the first deterministic instance id");
-    require(secondResult.record.ipcoreId == QStringLiteral("finepaper.ravenoc"),
+    require(secondResult.record.ipcoreId == QStringLiteral("finepaper.fabric"),
             "second record should keep the requested IP core id");
-    require(secondResult.record.instanceId == QStringLiteral("ravenoc_1"),
+    require(secondResult.record.instanceId == QStringLiteral("fabric_1"),
             "second record should use the next deterministic instance id");
     require(service.selectedIpInstance().has_value(),
             "new instance should become the selection");
-    require(service.selectedIpInstance()->ipcoreId == QStringLiteral("finepaper.ravenoc"),
+    require(service.selectedIpInstance()->ipcoreId == QStringLiteral("finepaper.fabric"),
             "selection should stay on the created IP core");
-    require(service.selectedIpInstance()->instanceId == QStringLiteral("ravenoc_1"),
+    require(service.selectedIpInstance()->instanceId == QStringLiteral("fabric_1"),
             "selection should move to the newest instance id");
 
     const ProjectIpInstanceRecord& firstRecord = stateService.ipInstanceRecords().at(0);
     const ProjectIpInstanceRecord& secondRecord = stateService.ipInstanceRecords().at(1);
-    require(firstRecord.ipcoreId == QStringLiteral("finepaper.ravenoc"),
+    require(firstRecord.ipcoreId == QStringLiteral("finepaper.fabric"),
             "first created record should be retained first");
-    require(firstRecord.instanceId == QStringLiteral("ravenoc_0"),
+    require(firstRecord.instanceId == QStringLiteral("fabric_0"),
             "first created record should keep its deterministic id");
-    require(secondRecord.ipcoreId == QStringLiteral("finepaper.ravenoc"),
+    require(secondRecord.ipcoreId == QStringLiteral("finepaper.fabric"),
             "second created record should be appended");
-    require(secondRecord.instanceId == QStringLiteral("ravenoc_1"),
+    require(secondRecord.instanceId == QStringLiteral("fabric_1"),
             "second created record should use the next deterministic id");
+}
+
+void testProjectIpServiceRejectsPackageInstanceMax() {
+    ProjectStateService stateService;
+    ProjectIpService service(&stateService);
+    IpCatalogEntry entry = fabricEntry();
+    entry.maxInstances = 2;
+
+    const ProjectIpServiceResult firstResult = service.createInstanceForIpcore(entry);
+    const ProjectIpServiceResult secondResult = service.createInstanceForIpcore(entry);
+    const ProjectIpServiceResult thirdResult = service.createInstanceForIpcore(entry);
+
+    require(firstResult.success, "first package-limited instance should be created");
+    require(secondResult.success, "second package-limited instance should be created");
+    require(!thirdResult.success,
+            "package maxInstances should reject creation after the declared maximum");
+    require(thirdResult.error.contains(QStringLiteral("finepaper.fabric")),
+            "package maxInstances rejection should name the IP core");
+    require(stateService.ipInstanceRecords().size() == 2,
+            "package maxInstances rejection should not append state");
+    require(service.selectedIpInstance().has_value(),
+            "package maxInstances rejection should preserve selection");
+    require(service.selectedIpInstance()->instanceId == QStringLiteral("fabric_1"),
+            "package maxInstances rejection should keep selection on the newest valid instance");
 }
 
 void testProjectIpServiceCreatesProjectUniqueInstanceIdsAcrossIpcoreTokenCollisions() {
     ProjectStateService stateService;
     ProjectIpService service(&stateService);
 
-    const ProjectIpServiceResult firstResult = service.createInstanceForIpcore(ravenocEntry());
-    const ProjectIpServiceResult secondResult = service.createInstanceForIpcore(ravenocVariantEntry());
+    const ProjectIpServiceResult firstResult = service.createInstanceForIpcore(fabricEntry());
+    const ProjectIpServiceResult secondResult = service.createInstanceForIpcore(fabricVariantEntry());
 
     require(firstResult.success, "first IP core instance should be created");
     require(secondResult.success, "second IP core with colliding token should be created");
-    require(firstResult.record.instanceId == QStringLiteral("ravenoc_0"),
+    require(firstResult.record.instanceId == QStringLiteral("fabric_0"),
             "first token-colliding IP core should receive the first id");
-    require(secondResult.record.instanceId == QStringLiteral("ravenoc_1"),
+    require(secondResult.record.instanceId == QStringLiteral("fabric_1"),
             "second token-colliding IP core should receive a project-unique id");
-    require(stateService.ipInstanceRecords().at(0).ipcoreId == QStringLiteral("finepaper.ravenoc"),
+    require(stateService.ipInstanceRecords().at(0).ipcoreId == QStringLiteral("finepaper.fabric"),
             "first record should keep its IP core id");
-    require(stateService.ipInstanceRecords().at(1).ipcoreId == QStringLiteral("vendor.ravenoc"),
+    require(stateService.ipInstanceRecords().at(1).ipcoreId == QStringLiteral("vendor.fabric"),
             "second record should keep its distinct IP core id");
 }
 
@@ -165,27 +228,27 @@ void testProjectIpServiceAllocatesMonotonicInstanceIdsAcrossStateGaps() {
     ProjectStateService stateService;
     ProjectIpService service(&stateService);
 
-    require(service.createInstanceForIpcore(ravenocEntry()).success,
-            "first NoC instance should be created");
-    require(service.createInstanceForIpcore(ravenocEntry()).success,
-            "second NoC instance should be created");
-    require(stateService.removeIpInstanceRecord(QStringLiteral("finepaper.ravenoc"),
-                                                QStringLiteral("ravenoc_0")),
+    require(service.createInstanceForIpcore(fabricEntry()).success,
+            "first non-NoC instance should be created");
+    require(service.createInstanceForIpcore(fabricEntry()).success,
+            "second non-NoC instance should be created");
+    require(stateService.removeIpInstanceRecord(QStringLiteral("finepaper.fabric"),
+                                                QStringLiteral("fabric_0")),
             "test should be able to simulate an instance-id gap directly in project state");
 
-    const ProjectIpServiceResult thirdResult = service.createInstanceForIpcore(ravenocEntry());
+    const ProjectIpServiceResult thirdResult = service.createInstanceForIpcore(fabricEntry());
 
     require(thirdResult.success, "creating after a gap should still succeed");
-    require(thirdResult.record.instanceId == QStringLiteral("ravenoc_2"),
+    require(thirdResult.record.instanceId == QStringLiteral("fabric_2"),
             "new instance id should advance monotonically instead of reusing the first hole");
     require(stateService.ipInstanceRecords().size() == 2,
             "state should keep the remaining instance and append the new one");
-    require(stateService.ipInstanceRecords().first().instanceId == QStringLiteral("ravenoc_1"),
+    require(stateService.ipInstanceRecords().first().instanceId == QStringLiteral("fabric_1"),
             "existing later instance should remain untouched");
-    require(stateService.ipInstanceRecords().last().instanceId == QStringLiteral("ravenoc_2"),
+    require(stateService.ipInstanceRecords().last().instanceId == QStringLiteral("fabric_2"),
             "new instance should append with the next monotonic id");
     require(service.selectedIpInstance().has_value(), "newly created instance should be selected");
-    require(service.selectedIpInstance()->instanceId == QStringLiteral("ravenoc_2"),
+    require(service.selectedIpInstance()->instanceId == QStringLiteral("fabric_2"),
             "selection should move to the newest monotonic instance");
 }
 
@@ -388,7 +451,9 @@ int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
     try {
         testProjectIpServiceCreatesDefaultStateAndSelectsIt();
-        testProjectIpServiceCreatesRepeatedInstancesForSameIpcore();
+        testProjectIpServiceRejectsRepeatedNocInstances();
+        testProjectIpServiceCreatesRepeatedNonNocInstancesForSameIpcore();
+        testProjectIpServiceRejectsPackageInstanceMax();
         testProjectIpServiceCreatesProjectUniqueInstanceIdsAcrossIpcoreTokenCollisions();
         testProjectIpServiceAllocatesMonotonicInstanceIdsAcrossStateGaps();
         testProjectIpServiceMutationHandlerPreservesCurrentSelectionWithoutPreferredSelection();

@@ -364,6 +364,12 @@ struct TestHarness {
         require(entry.has_value(), "RaveNoC catalog entry should exist");
         return *entry;
     }
+
+    IpCatalogEntry fabricEntry() const {
+        const std::optional<IpCatalogEntry> entry = catalog.entry(QStringLiteral("finepaper.fabric"));
+        require(entry.has_value(), "Fabric catalog entry should exist");
+        return *entry;
+    }
 };
 
 void testSearchFiltersCatalogEntries() {
@@ -633,10 +639,10 @@ void testPanelContextMenuRemoveTargetsClickedItem() {
                          &harness.projectIpService,
                          &harness.workspaceController);
 
-    require(harness.projectIpService.createInstanceForIpcore(harness.ravenocEntry()).success,
-            "first RaveNoC instance should be created");
-    require(harness.projectIpService.createInstanceForIpcore(harness.ravenocEntry()).success,
-            "second RaveNoC instance should be created");
+    require(harness.projectIpService.createInstanceForIpcore(harness.fabricEntry()).success,
+            "first Fabric instance should be created");
+    require(harness.projectIpService.createInstanceForIpcore(harness.fabricEntry()).success,
+            "second Fabric instance should be created");
 
     auto* projectList = panel.findChild<QListWidget*>(QStringLiteral("projectIpList"));
     require(projectList != nullptr, "project list should exist");
@@ -672,9 +678,9 @@ void testPanelContextMenuRemoveTargetsClickedItem() {
     QCoreApplication::processEvents();
 
     require(removeSignals == 1, "context menu remove should emit one remove intent");
-    require(removedIpcore == QStringLiteral("finepaper.ravenoc"),
+    require(removedIpcore == QStringLiteral("finepaper.fabric"),
             "context menu remove should emit the clicked item ipcore");
-    require(removedInstance == QStringLiteral("ravenoc_1"),
+    require(removedInstance == QStringLiteral("fabric_1"),
             "context menu remove should emit the clicked item instead of the current selection");
 }
 
@@ -685,10 +691,10 @@ void testPanelContextMenuRemoveSurvivesListRefreshWhileMenuIsOpen() {
                          &harness.projectIpService,
                          &harness.workspaceController);
 
-    require(harness.projectIpService.createInstanceForIpcore(harness.ravenocEntry()).success,
-            "first RaveNoC instance should be created");
-    require(harness.projectIpService.createInstanceForIpcore(harness.ravenocEntry()).success,
-            "second RaveNoC instance should be created");
+    require(harness.projectIpService.createInstanceForIpcore(harness.fabricEntry()).success,
+            "first Fabric instance should be created");
+    require(harness.projectIpService.createInstanceForIpcore(harness.fabricEntry()).success,
+            "second Fabric instance should be created");
 
     auto* projectList = panel.findChild<QListWidget*>(QStringLiteral("projectIpList"));
     require(projectList != nullptr, "project list should exist");
@@ -716,7 +722,7 @@ void testPanelContextMenuRemoveSurvivesListRefreshWhileMenuIsOpen() {
 
     QTimer::singleShot(0, &panel, [&harness, &mutationSucceeded] {
         const ProjectIpServiceResult result = harness.projectIpService.createInstanceForIpcore(
-            harness.ravenocEntry());
+            harness.fabricEntry());
         if (result.success) {
             mutationSucceeded = true;
         }
@@ -732,9 +738,9 @@ void testPanelContextMenuRemoveSurvivesListRefreshWhileMenuIsOpen() {
     require(mutationSucceeded, "state mutation during open menu should succeed");
     require(removeSignals == 1,
             "context menu remove should still emit after the list refreshes");
-    require(removedIpcore == QStringLiteral("finepaper.ravenoc"),
+    require(removedIpcore == QStringLiteral("finepaper.fabric"),
             "context menu remove should preserve the clicked ipcore across refresh");
-    require(removedInstance == QStringLiteral("ravenoc_1"),
+    require(removedInstance == QStringLiteral("fabric_1"),
             "context menu remove should preserve the clicked instance across refresh");
 }
 
@@ -814,33 +820,29 @@ void testMainWindowIgnoresTopologyToolWhenActiveInstanceChangesDuringPrompt() {
     const std::optional<IpCatalogEntry> entry =
         window.m_ipCatalogService->entry(QStringLiteral("finepaper.ravenoc"));
     require(entry.has_value(), "RaveNoC entry should exist in the runtime catalog");
-    require(window.m_projectIpService->createInstanceForIpcore(*entry).success,
-            "first RaveNoC instance should be created");
-    require(window.m_projectIpService->createInstanceForIpcore(*entry).success,
-            "second RaveNoC instance should be created");
+    const ProjectIpServiceResult created = window.m_projectIpService->createInstanceForIpcore(*entry);
+    require(created.success, "RaveNoC instance should be created");
     require(window.m_activeWorkspaceController->activeContext().has_value(),
             "test should have an active workspace context");
     require(window.m_activeWorkspaceController->activeContext()->record.instanceId
-                == QStringLiteral("ravenoc_1"),
-            "second instance should be active before topology request");
+                == QStringLiteral("ravenoc_0"),
+            "created instance should be active before topology request");
 
     QTimer::singleShot(0, &window, [&window] {
-        window.m_projectIpService->selectInstance(QStringLiteral("finepaper.ravenoc"),
-                                                  QStringLiteral("ravenoc_0"));
+        window.m_projectStateService->removeIpInstanceRecord(QStringLiteral("finepaper.ravenoc"),
+                                                             QStringLiteral("ravenoc_0"));
+        window.m_projectIpService->handleIpInstanceRecordsMutated(std::nullopt);
     });
     scheduleInputDialogAccepts();
     window.createTopologyPresetFor(QStringLiteral("finepaper.ravenoc"),
-                                   QStringLiteral("ravenoc_1"),
+                                   QStringLiteral("ravenoc_0"),
                                    QStringLiteral("mesh"));
     processEventsFor(100);
 
     require(window.m_graph->modules().empty(),
             "topology should not be created after active instance changes during prompts");
-    require(window.m_activeWorkspaceController->activeContext().has_value(),
-            "active context should remain available after prompt reentry");
-    require(window.m_activeWorkspaceController->activeContext()->record.instanceId
-                == QStringLiteral("ravenoc_0"),
-            "prompt reentry should have switched the active instance");
+    require(!window.m_activeWorkspaceController->activeContext().has_value(),
+            "prompt reentry should have cleared the active instance");
 }
 
 void testLoadGraphReportsFailureForInvalidPath() {

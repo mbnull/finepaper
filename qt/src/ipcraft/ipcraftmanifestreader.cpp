@@ -155,6 +155,35 @@ bool jsonBool(const QJsonObject& object,
     return value.toBool();
 }
 
+std::optional<int> optionalPositiveInteger(const QJsonObject& object,
+                                           const QString& key,
+                                           const QString& context,
+                                           const QString& packageRootPath,
+                                           QVector<IpcraftDiagnostic>& diagnostics) {
+    const QJsonValue value = object.value(key);
+    if (value.isUndefined()) {
+        return std::nullopt;
+    }
+    if (!value.isDouble()) {
+        addDiagnostic(diagnostics,
+                      packageRootPath,
+                      fieldPath(context, key),
+                      QStringLiteral("Field '%1' must be a positive integer").arg(key));
+        return std::nullopt;
+    }
+
+    const double doubleValue = value.toDouble();
+    const int intValue = value.toInt();
+    if (intValue <= 0 || static_cast<double>(intValue) != doubleValue) {
+        addDiagnostic(diagnostics,
+                      packageRootPath,
+                      fieldPath(context, key),
+                      QStringLiteral("Field '%1' must be a positive integer").arg(key));
+        return std::nullopt;
+    }
+    return intValue;
+}
+
 bool isHex(char c) {
     return (c >= '0' && c <= '9') ||
            (c >= 'a' && c <= 'f') ||
@@ -1054,6 +1083,37 @@ void parseGeneration(const QJsonObject& manifestObject,
     manifest.generation.metadata.remove(QStringLiteral("engine"));
 }
 
+void parseInstances(const QJsonObject& manifestObject,
+                    IpcraftPackageManifest& manifest,
+                    QVector<IpcraftDiagnostic>& diagnostics) {
+    QJsonObject instances;
+    if (!optionalObject(manifestObject,
+                        QStringLiteral("instances"),
+                        QString(),
+                        manifest.packageRootPath,
+                        diagnostics,
+                        &instances)) {
+        return;
+    }
+
+    const QSet<QString> allowedKeys = {QStringLiteral("max")};
+    for (auto it = instances.constBegin(); it != instances.constEnd(); ++it) {
+        if (allowedKeys.contains(it.key())) {
+            continue;
+        }
+        addDiagnostic(diagnostics,
+                      manifest.packageRootPath,
+                      QStringLiteral("instances.%1").arg(it.key()),
+                      QStringLiteral("Unknown instances field '%1'").arg(it.key()));
+    }
+
+    manifest.instances.max = optionalPositiveInteger(instances,
+                                                     QStringLiteral("max"),
+                                                     QStringLiteral("instances"),
+                                                     manifest.packageRootPath,
+                                                     diagnostics);
+}
+
 void validateReferences(const IpcraftPackageManifest& manifest,
                         QVector<IpcraftDiagnostic>& diagnostics) {
     QSet<QString> classIds;
@@ -1275,6 +1335,8 @@ IpcraftManifestReader::readManifestFile(const QString& manifestPath) const {
                        &parameters)) {
         result.manifest.parameters = parameters;
     }
+
+    parseInstances(object, result.manifest, result.diagnostics);
 
     QJsonObject pluginObject;
     if (optionalObject(object,

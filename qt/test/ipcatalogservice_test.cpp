@@ -400,6 +400,34 @@ void testIpcraftModuleTypesAreScopedByPackage() {
             "NoC catalog entry should expose its package-scoped Tile type");
 }
 
+void testCatalogEntryExposesInstancePolicies() {
+    IpcraftPackageManifest manifest =
+        packageWithSingleModule(QStringLiteral("org.example.noc"),
+                                QStringLiteral("Tile"),
+                                QStringLiteral("Tile"));
+    manifest.instances.max = 4;
+
+    IpcraftExtensionDescriptor nocExtension;
+    nocExtension.id = QStringLiteral("noc.v1");
+    nocExtension.enabled = true;
+    manifest.extensions.insert(nocExtension.id, nocExtension);
+
+    IpCatalogService catalog(QVector<IpcraftPackageManifest>{manifest}, nullptr);
+    const std::optional<IpCatalogEntry> entry = catalog.entry(QStringLiteral("org.example.noc"));
+
+    require(entry.has_value(), "catalog should expose package with instance policies");
+    require(entry->maxInstances.has_value() && *entry->maxInstances == 4,
+            "catalog should expose manifest instances.max");
+    require(entry->kind == QStringLiteral("noc"),
+            "catalog should derive NoC kind from noc extension");
+    require(entry->instanceLimits.size() == 1,
+            "catalog should attach built-in NoC kind instance policy");
+    require(entry->instanceLimits.first().scope == QStringLiteral("kind:noc"),
+            "built-in NoC policy should use a shared kind scope");
+    require(entry->instanceLimits.first().max == 1,
+            "built-in NoC policy should allow one NoC instance");
+}
+
 void testDuplicatePackageIdsAreDiagnosed() {
     QTemporaryDir first;
     QTemporaryDir second;
@@ -486,6 +514,7 @@ int main(int argc, char** argv) {
         testCatalogEntryExposesIpcraftManifestData();
         testDefaultPackageCommandsResolveWithIpcraftProjectSchema();
         testIpcraftModuleTypesAreScopedByPackage();
+        testCatalogEntryExposesInstancePolicies();
         testDuplicatePackageIdsAreDiagnosed();
         testIpcraftIdentityFallbacksDoNotSpecialCaseLegacyEndpointNames();
         testIpcraftSingularAttachHostPropagatesToModuleType();

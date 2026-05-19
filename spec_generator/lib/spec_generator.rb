@@ -35,8 +35,9 @@ module SpecGenerator
   EMIT_MODES = %w[attribute config editor editor_only].freeze
   PORT_DIRECTIONS = %w[input output inout].freeze
   IPCRAFT_PACKAGE_TOP_LEVEL_KEYS = %w[
-    schema id name version plugin extensions ipxact parameters connection_classes modules views topologies generation commands
+    schema id name version instances plugin extensions ipxact parameters connection_classes modules views topologies generation commands
   ].freeze
+  IPCRAFT_INSTANCES_KEYS = %w[max].freeze
   IPCRAFT_PLUGIN_KEYS = %w[library entry].freeze
   IPCRAFT_IPXACT_KEYS = %w[root generated].freeze
   IPCRAFT_CONNECTION_CLASS_KEYS = %w[id roles symmetric ipxact].freeze
@@ -338,6 +339,7 @@ module SpecGenerator
         'id' => required_string(@data, 'id', 'id'),
         'name' => required_string(@data, 'name', 'name'),
         'version' => required_string(@data, 'version', 'version'),
+        'instances' => normalize_instances,
         'plugin' => normalize_plugin,
         'extensions' => @extensions,
         'ipxact' => normalize_ipxact,
@@ -376,6 +378,22 @@ module SpecGenerator
       end
       normalized['entry'] = required_string(plugin, 'entry', 'plugin.entry') if plugin.key?('entry')
       normalized
+    end
+
+    def normalize_instances
+      instances = @data['instances']
+      return nil unless instances
+      raise SpecError, 'instances must be a map' unless instances.is_a?(Hash)
+
+      validate_keys!(instances, IPCRAFT_INSTANCES_KEYS, 'instances')
+      normalized = {}
+      if instances.key?('max')
+        max = required_integer(instances, 'max', 'instances.max')
+        raise SpecError, 'instances.max must be positive' unless max.positive?
+
+        normalized['max'] = max
+      end
+      normalized.empty? ? nil : normalized
     end
 
     def normalize_extensions

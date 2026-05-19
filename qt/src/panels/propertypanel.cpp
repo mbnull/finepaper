@@ -570,7 +570,6 @@ void PropertyPanel::populatePanel() {
                 continue;
             }
             for (const IpInstanceParameterSection& section : adapter->parameterSections()) {
-                bool renderedPersistedState = false;
                 for (const ProjectIpInstanceRecord& record : m_stateService->ipInstanceRecords()) {
                     if (record.ipcoreId != section.ipcoreId) {
                         continue;
@@ -578,10 +577,6 @@ void PropertyPanel::populatePanel() {
                     renderSection(section,
                                   record.instanceId,
                                   record.state.value(section.id).isObject());
-                    renderedPersistedState = true;
-                }
-                if (!renderedPersistedState) {
-                    renderSection(section, section.instanceId, false);
                 }
             }
         }

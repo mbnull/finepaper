@@ -97,12 +97,17 @@ struct IpcraftGenerationDescriptor {
     QJsonObject metadata;
 };
 
+struct IpcraftInstancePolicy {
+    std::optional<int> max;
+};
+
 struct IpcraftPackageManifest {
     QString schema;
     QString id;
     QString name;
     QString version;
     QString packageRootPath;
+    IpcraftInstancePolicy instances;
     std::optional<IpcraftDynamicPluginMetadata> plugin;
     QHash<QString, IpcraftExtensionDescriptor> extensions;
     QVector<IpcraftConnectionClass> connectionClasses;

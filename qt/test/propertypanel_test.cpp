@@ -229,7 +229,7 @@ void testClearingGraphBeforePanelSelectionClearIsSafe() {
     panel.setSelectedModule(QString());
 }
 
-void testDefaultIpInstanceSectionWithoutStateIsReadOnly() {
+void testIpInstanceSectionWithoutProjectInstanceIsHidden() {
     Graph graph;
     ProjectStateService stateService;
 
@@ -249,14 +249,16 @@ void testDefaultIpInstanceSectionWithoutStateIsReadOnly() {
     panel.setSelectedModule(QString());
 
     QSpinBox* spinBox = panel.findChild<QSpinBox*>();
-    require(spinBox != nullptr, "default IP-instance parameter should still be visible");
-    require(spinBox->isReadOnly(),
-            "default IP-instance parameter without writable state should be read-only");
-    spinBox->setValue(64);
+    require(spinBox == nullptr,
+            "IP-instance parameters should stay hidden until that IP exists in the project");
+    require(!hasLabel(panel, QStringLiteral("RaveNoC / ravenoc_0")),
+            "property panel should not synthesize a default IP-instance section");
+    require(!hasLabel(panel, QStringLiteral("Flit data width")),
+            "property panel should not show global parameters before IP instantiation");
     require(commandManager.currentStateId() == 0,
-            "read-only default IP-instance parameter should not enter command history");
+            "hidden IP-instance parameters should not enter command history");
     require(stateService.ipInstanceRecords().isEmpty(),
-            "read-only default IP-instance parameter should not create state implicitly");
+            "hidden IP-instance parameters should not create state implicitly");
 }
 
 void testAmbiguousConnectionAppearsInPropertyPanelAndLog() {
@@ -366,7 +368,7 @@ int main(int argc, char** argv) {
         testIpInstanceParameterSectionCanCollapseAndExpand();
         testUnselectedPanelUsesPersistedCustomIpInstanceId();
         testClearingGraphBeforePanelSelectionClearIsSafe();
-        testDefaultIpInstanceSectionWithoutStateIsReadOnly();
+        testIpInstanceSectionWithoutProjectInstanceIsHidden();
         testAmbiguousConnectionAppearsInPropertyPanelAndLog();
     } catch (const std::exception& error) {
         std::cerr << "propertypanel_test failed: " << error.what() << '\n';

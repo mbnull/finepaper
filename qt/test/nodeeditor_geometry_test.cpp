@@ -318,9 +318,21 @@ struct ScopedNodeEditorHarness {
         return *entry;
     }
 
+    IpCatalogEntry fabricEntry() const {
+        const std::optional<IpCatalogEntry> entry = catalog.entry(QStringLiteral("finepaper.fabric"));
+        require(entry.has_value(), "Fabric entry should exist");
+        return *entry;
+    }
+
     void selectRavenoc() {
         const ProjectIpServiceResult result = projectIpService.createInstanceForIpcore(ravenocEntry());
         require(result.success, "RaveNoC instance should be selected");
+        QCoreApplication::processEvents();
+    }
+
+    void selectFabric() {
+        const ProjectIpServiceResult result = projectIpService.createInstanceForIpcore(fabricEntry());
+        require(result.success, "Fabric instance should be selected");
         QCoreApplication::processEvents();
     }
 };
@@ -1233,23 +1245,23 @@ void testScopedDropCreatesOwnedModule() {
 
 void testActiveWorkspaceShowsOnlyModulesForSelectedInstance() {
     ScopedNodeEditorHarness harness;
-    harness.selectRavenoc();
-    auto firstMime = scopedModuleMime(QStringLiteral("finepaper.ravenoc"),
-                                      QStringLiteral("ravenoc_0"),
-                                      QStringLiteral("RaveTile"));
+    harness.selectFabric();
+    auto firstMime = scopedModuleMime(QStringLiteral("finepaper.fabric"),
+                                      QStringLiteral("fabric_0"),
+                                      QStringLiteral("FabricSwitch"));
     require(sendScopedDrop(harness.editor, firstMime.get()),
-            "first scoped drop should create module for ravenoc_0");
+            "first scoped drop should create module for fabric_0");
     require(harness.graph.modules().size() == 1, "first scoped drop should add one graph module");
     const QString firstModuleId = harness.graph.modules().front()->id();
 
     const ProjectIpServiceResult secondInstance =
-        harness.projectIpService.createInstanceForIpcore(harness.ravenocEntry());
-    require(secondInstance.success, "second RaveNoC instance should be created");
-    auto secondMime = scopedModuleMime(QStringLiteral("finepaper.ravenoc"),
-                                       QStringLiteral("ravenoc_1"),
-                                       QStringLiteral("RaveTile"));
+        harness.projectIpService.createInstanceForIpcore(harness.fabricEntry());
+    require(secondInstance.success, "second Fabric instance should be created");
+    auto secondMime = scopedModuleMime(QStringLiteral("finepaper.fabric"),
+                                       QStringLiteral("fabric_1"),
+                                       QStringLiteral("FabricSwitch"));
     require(sendScopedDrop(harness.editor, secondMime.get()),
-            "second scoped drop should create module for ravenoc_1");
+            "second scoped drop should create module for fabric_1");
     require(harness.graph.modules().size() == 2, "second scoped drop should add another graph module");
     const QString secondModuleId = harness.graph.modules().back()->id();
 
@@ -1257,21 +1269,21 @@ void testActiveWorkspaceShowsOnlyModulesForSelectedInstance() {
     require(visibleIds == QStringList{secondModuleId},
             "active workspace should only show modules for the selected instance");
 
-    require(harness.projectIpService.selectInstance(QStringLiteral("finepaper.ravenoc"),
-                                                    QStringLiteral("ravenoc_0")),
+    require(harness.projectIpService.selectInstance(QStringLiteral("finepaper.fabric"),
+                                                    QStringLiteral("fabric_0")),
             "first instance selection should succeed");
     QCoreApplication::processEvents();
     visibleIds = harness.editor.visibleModuleIds();
     require(visibleIds == QStringList{firstModuleId},
-            "switching back to ravenoc_0 should hide ravenoc_1 modules");
+            "switching back to fabric_0 should hide fabric_1 modules");
 
-    require(harness.projectIpService.selectInstance(QStringLiteral("finepaper.ravenoc"),
-                                                    QStringLiteral("ravenoc_1")),
+    require(harness.projectIpService.selectInstance(QStringLiteral("finepaper.fabric"),
+                                                    QStringLiteral("fabric_1")),
             "second instance selection should succeed");
     QCoreApplication::processEvents();
     visibleIds = harness.editor.visibleModuleIds();
     require(visibleIds == QStringList{secondModuleId},
-            "switching to ravenoc_1 should hide ravenoc_0 modules");
+            "switching to fabric_1 should hide fabric_0 modules");
 }
 
 void testCreateMenuTypesFollowActiveWorkspace() {

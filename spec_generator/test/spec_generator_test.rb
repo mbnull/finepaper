@@ -290,6 +290,38 @@ class SpecGeneratorTest < Minitest::Test
     end
   end
 
+  def test_emits_instance_policy
+    Dir.mktmpdir do |dir|
+      package_root = write_ipcraft_package_source(
+        dir,
+        yaml: ipcraft_package_yaml.sub(
+          "version: '1.0.0'\n",
+          "version: '1.0.0'\ninstances:\n  max: 4\n"
+        )
+      )
+
+      build_ipcraft_manifest(package_root)
+      manifest = JSON.parse(File.read(File.join(package_root, 'ipcraft.json')))
+
+      assert_equal({ 'max' => 4 }, manifest.fetch('instances'))
+    end
+  end
+
+  def test_rejects_invalid_instance_policy
+    Dir.mktmpdir do |dir|
+      package_root = write_ipcraft_package_source(
+        dir,
+        yaml: ipcraft_package_yaml.sub(
+          "version: '1.0.0'\n",
+          "version: '1.0.0'\ninstances:\n  max: 0\n"
+        )
+      )
+
+      error = assert_raises(SpecGenerator::SpecError) { build_ipcraft_manifest(package_root) }
+      assert_match(/instances\.max must be positive/, error.message)
+    end
+  end
+
   def test_emits_display_label_binding
     Dir.mktmpdir do |dir|
       package_root = write_ipcraft_package_source(

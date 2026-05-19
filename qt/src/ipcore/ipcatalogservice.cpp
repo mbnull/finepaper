@@ -15,6 +15,24 @@ QString catalogSortLabel(const IpCatalogEntry& entry) {
     return entry.name.trimmed().isEmpty() ? entry.id : entry.name;
 }
 
+bool isNocKind(const QString& kind) {
+    return kind.trimmed().compare(QStringLiteral("noc"), Qt::CaseInsensitive) == 0;
+}
+
+QVector<IpCatalogInstanceLimit> builtInInstanceLimitsForKind(const QString& kind) {
+    if (!isNocKind(kind)) {
+        return {};
+    }
+
+    return {
+        IpCatalogInstanceLimit{
+            QStringLiteral("kind:noc"),
+            QStringLiteral("NoC IP instance"),
+            1
+        }
+    };
+}
+
 Parameter::Value parameterDefaultValue(const QString& type, const QJsonValue& value) {
     if (type == QStringLiteral("int")) {
         return value.toInt();
@@ -174,6 +192,7 @@ IpCatalogEntry catalogEntryFromDescriptor(const IpCoreRuntimeDescriptor& descrip
     entry.name = descriptor.name;
     entry.version = descriptor.version;
     entry.kind = descriptor.kind;
+    entry.instanceLimits = builtInInstanceLimitsForKind(entry.kind);
     entry.runtimeRootPath = descriptor.runtimeRootPath;
     entry.sourceRootPath = descriptor.sourceRootPath;
     entry.modulesPath = descriptor.modulesPath;
@@ -198,6 +217,8 @@ IpCatalogEntry catalogEntryFromManifest(const IpcraftPackageManifest& manifest,
     entry.kind = manifest.extensions.contains(QStringLiteral("noc.v1"))
         ? QStringLiteral("noc")
         : QStringLiteral("ipcraft");
+    entry.maxInstances = manifest.instances.max;
+    entry.instanceLimits = builtInInstanceLimitsForKind(entry.kind);
     entry.packageManifest = manifest;
     entry.runtimeRootPath = manifest.packageRootPath;
     entry.sourceRootPath = manifest.packageRootPath;

@@ -13,12 +13,20 @@
 
 class ModuleRegistry;
 
+struct IpCatalogInstanceLimit {
+    QString scope;
+    QString label;
+    int max = 0;
+};
+
 struct IpCatalogEntry {
     QString id;
     QString packageId;
     QString name;
     QString version;
     QString kind;
+    std::optional<int> maxInstances;
+    QVector<IpCatalogInstanceLimit> instanceLimits;
     IpcraftPackageManifest packageManifest;
     // Compatibility fields mirror package metadata for descriptor-facing UI and runner paths.
     QString runtimeRootPath;

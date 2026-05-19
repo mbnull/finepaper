@@ -129,6 +129,46 @@ void testLoadsMinimalPackageManifest() {
             "command executable path should be package-root resolved");
 }
 
+void testLoadsInstancePolicy() {
+    QTemporaryDir temp;
+    require(temp.isValid(), "temporary directory should be valid");
+
+    QDir root(temp.path());
+    createView(root);
+    QByteArray manifest = minimalManifest();
+    manifest.replace(QByteArrayLiteral("  \"version\": \"1.0.0\",\n"),
+                     QByteArrayLiteral("  \"version\": \"1.0.0\",\n"
+                                       "  \"instances\": { \"max\": 2 },\n"));
+    writeFile(root.filePath(QStringLiteral("ipcraft.json")), manifest);
+
+    const IpcraftManifestReadResult result = IpcraftManifestReader().readPackage(temp.path());
+
+    require(result.ok, "manifest with instances.max should load");
+    require(result.manifest.instances.max.has_value(),
+            "manifest should expose package instance max");
+    require(*result.manifest.instances.max == 2,
+            "manifest should preserve package instance max");
+}
+
+void testRejectsInvalidInstancePolicyMax() {
+    QTemporaryDir temp;
+    require(temp.isValid(), "temporary directory should be valid");
+
+    QDir root(temp.path());
+    createView(root);
+    QByteArray manifest = minimalManifest();
+    manifest.replace(QByteArrayLiteral("  \"version\": \"1.0.0\",\n"),
+                     QByteArrayLiteral("  \"version\": \"1.0.0\",\n"
+                                       "  \"instances\": { \"max\": 0 },\n"));
+    writeFile(root.filePath(QStringLiteral("ipcraft.json")), manifest);
+
+    const IpcraftManifestReadResult result = IpcraftManifestReader().readPackage(temp.path());
+
+    require(!result.ok, "non-positive instances.max should be rejected");
+    require(diagnosticsContain(result.diagnostics, QStringLiteral("instances.max")),
+            "invalid instances.max diagnostic should name the field");
+}
+
 void testRejectsDuplicateJsonKeys() {
     QTemporaryDir temp;
     require(temp.isValid(), "temporary directory should be valid");
@@ -1029,6 +1069,8 @@ int main(int argc, char** argv) {
 
     try {
         testLoadsMinimalPackageManifest();
+        testLoadsInstancePolicy();
+        testRejectsInvalidInstancePolicyMax();
         testRejectsDuplicateJsonKeys();
         testRejectsDuplicateJsonKeysAfterUnicodeDecoding();
         testRejectsMissingCommandInputSchema();

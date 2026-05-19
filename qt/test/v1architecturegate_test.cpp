@@ -634,11 +634,12 @@ void testRepositoryNoCMainlineFlow() {
         findPreset(workspace.state().topologyPresets, QStringLiteral("mesh"));
     require(mesh != nullptr, "NoC workspace should expose mesh preset");
     const ProjectIpServiceResult secondCreated = projectIpService.createInstanceForIpcore(*nocEntry);
-    require(secondCreated.success, secondCreated.error.toLocal8Bit().constData());
-    require(stateService.ipInstanceRecords().size() == 2,
-            "gate project should contain at least two IP instances");
-    require(workspace.state().instanceId == secondCreated.record.instanceId,
-            "workspace should select the newest NoC instance");
+    require(!secondCreated.success,
+            "gate project should reject a second NoC instance");
+    require(stateService.ipInstanceRecords().size() == 1,
+            "gate project should keep one NoC IP instance");
+    require(workspace.state().instanceId == firstCreated.record.instanceId,
+            "workspace should remain on the first NoC instance");
 
     Graph graph;
     TopologyPresetRequest request;
@@ -651,19 +652,6 @@ void testRepositoryNoCMainlineFlow() {
     require(topology.success, topology.error.toLocal8Bit().constData());
     require(graph.modules().size() == 4, "mesh topology should create four routers");
     require(graph.connections().size() == 4, "mesh topology should create four router links");
-
-    const ModuleType* xpType =
-        registry.getTypeForGraphGroup(secondCreated.record.ipcoreId, QStringLiteral("xps"));
-    require(xpType != nullptr, "second NoC instance should expose a router module type");
-    const QString manualModuleId =
-        secondCreated.record.instanceId + QStringLiteral("_manual_xp");
-    require(graph.addModule(makeManualModule(*xpType,
-                                             manualModuleId,
-                                             QStringLiteral("manual_xp"),
-                                             secondCreated.record.ipcoreId,
-                                             secondCreated.record.instanceId)),
-            "manual module should add for second IP instance");
-    require(graph.modules().size() == 5, "manual second instance module should join the graph");
 
     QTemporaryDir tempDir;
     require(tempDir.isValid(), "temporary gate directory should be created");
@@ -678,7 +666,7 @@ void testRepositoryNoCMainlineFlow() {
             "written project should be readable for connection schema gate");
     const QJsonObject projectJson = QJsonDocument::fromJson(projectFile.readAll()).object();
     const QJsonArray projectIpState = projectJson.value(QStringLiteral("ipcore_state")).toArray();
-    require(projectIpState.size() == 2,
+    require(projectIpState.size() == 1,
             "written project should include saved IP-instance state for schema gate");
     for (const QJsonValue& stateValue : projectIpState) {
         const QString schemaName = stateValue.toObject().value(QStringLiteral("schema")).toString();
@@ -715,10 +703,10 @@ void testRepositoryNoCMainlineFlow() {
         GraphProjectSerializer::loadProject(readResult.document, restored);
     require(loadResult.success, loadResult.error.toLocal8Bit().constData());
     require(restored.modules().size() == graph.modules().size(),
-            "project load should restore topology and manual modules");
+            "project load should restore topology modules");
     require(restored.connections().size() == graph.connections().size(),
             "project load should restore topology connections");
-    require(readResult.document.ipcoreState.size() == 2,
+    require(readResult.document.ipcoreState.size() == 1,
             "project load should preserve all IP-instance state");
     for (qsizetype index = 0; index < readResult.document.ipcoreState.size(); ++index) {
         require(sameIpInstanceRecord(readResult.document.ipcoreState.at(index),
@@ -778,8 +766,8 @@ void testRepositoryNoCMainlineFlow() {
     const ProjectGenerationResult generationResult =
         ProjectGenerationRunner().generate(generationRequest);
     require(generationResult.success, generationResult.error.toLocal8Bit().constData());
-    require(generationResult.instances.size() == 2,
-            "project generation should run for both IP instances");
+    require(generationResult.instances.size() == 1,
+            "project generation should run for the NoC IP instance");
     for (const ProjectGenerationInstanceResult& instanceResult : generationResult.instances) {
         require(instanceResult.success, instanceResult.error.toLocal8Bit().constData());
         require(QFileInfo::exists(instanceResult.inputPath),
@@ -802,7 +790,7 @@ void testRepositoryNoCMainlineFlow() {
             "project generation should write a generated project snapshot");
     const ProjectReadResult snapshotRead = ProjectReader::readFile(generationResult.snapshotPath);
     require(snapshotRead.success, snapshotRead.error.toLocal8Bit().constData());
-    require(snapshotRead.document.ipcoreState.size() == 2,
+    require(snapshotRead.document.ipcoreState.size() == 1,
             "generated project snapshot should preserve every IP-instance state");
 }
 
