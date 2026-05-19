@@ -10,7 +10,7 @@
 enum class IpcraftConnectionStatus {
     Valid,
     Ambiguous,
-    Invalid
+    Invalid,
 };
 
 struct IpcraftConnectionDecision {

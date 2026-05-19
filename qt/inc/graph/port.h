@@ -5,7 +5,7 @@
 
 class Port {
 public:
-    enum class Direction { Input, Output, InOut };
+    enum class Direction { Input, Output, InOut, };
 
     Port(const QString& id,
          Direction direction,

@@ -6,7 +6,7 @@
 
 enum class ValidationSeverity {
     Error,
-    Warning
+    Warning,
 };
 
 class ValidationResult {

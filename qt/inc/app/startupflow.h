@@ -8,7 +8,7 @@
 #include <functional>
 
 struct StartupFlowResult {
-    enum class Action { Exit, ShowMainWindow };
+    enum class Action { Exit, ShowMainWindow, };
 
     Action action = Action::Exit;
     int exitCode = 0;

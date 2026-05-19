@@ -12,7 +12,7 @@ class QListWidgetItem;
 class QWidget;
 
 struct ProjectLauncherResult {
-    enum class Action { Cancel, NewProject, OpenProject };
+    enum class Action { Cancel, NewProject, OpenProject, };
 
     Action action = Action::Cancel;
     QString path;
