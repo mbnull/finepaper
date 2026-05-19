@@ -577,7 +577,7 @@ GraphProjectLoadResult GraphProjectSerializer::loadProject(const ProjectDocument
     Graph candidate;
     // Candidate load catches semantic Graph validation failures while keeping
     // the user's current design intact on error.
-    const GraphProjectLoadResult validationResult =
+    GraphProjectLoadResult validationResult =
         populateGraph(document, moduleTypesById, candidate);
     if (!validationResult.success) {
         return validationResult;
