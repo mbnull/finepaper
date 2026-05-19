@@ -59,11 +59,19 @@ void CollapsibleSection::setContentWidget(QWidget* content) {
     m_layout->addWidget(m_contentWidget);
 }
 
-QWidget* CollapsibleSection::contentWidget() const {
+QWidget* CollapsibleSection::contentWidget() {
     return m_contentWidget;
 }
 
-QToolButton* CollapsibleSection::toggleButton() const {
+const QWidget* CollapsibleSection::contentWidget() const {
+    return m_contentWidget;
+}
+
+QToolButton* CollapsibleSection::toggleButton() {
+    return m_toggleButton;
+}
+
+const QToolButton* CollapsibleSection::toggleButton() const {
     return m_toggleButton;
 }
 

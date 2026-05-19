@@ -12,8 +12,10 @@ public:
     explicit CollapsibleSection(const QString& title, QWidget* parent = nullptr);
 
     void setContentWidget(QWidget* content);
-    QWidget* contentWidget() const;
-    QToolButton* toggleButton() const;
+    QWidget* contentWidget();
+    const QWidget* contentWidget() const;
+    QToolButton* toggleButton();
+    const QToolButton* toggleButton() const;
 
     bool isExpanded() const;
     void setExpanded(bool expanded);

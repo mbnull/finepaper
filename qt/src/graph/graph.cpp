@@ -102,23 +102,35 @@ void Graph::clear() {
     }
 }
 
-Module* Graph::getModule(const QString& moduleId) const {
+Module* Graph::getModule(const QString& moduleId) {
     auto it = std::find_if(m_modules.begin(), m_modules.end(),
         [&moduleId](const std::unique_ptr<Module>& m) { return m->id() == moduleId; });
     return it != m_modules.end() ? it->get() : nullptr;
 }
 
-Connection* Graph::getConnection(const QString& connectionId) const {
+const Module* Graph::getModule(const QString& moduleId) const {
+    auto it = std::find_if(m_modules.cbegin(), m_modules.cend(),
+        [&moduleId](const std::unique_ptr<Module>& m) { return m->id() == moduleId; });
+    return it != m_modules.cend() ? it->get() : nullptr;
+}
+
+Connection* Graph::getConnection(const QString& connectionId) {
     auto it = std::find_if(m_connections.begin(), m_connections.end(),
         [&connectionId](const std::unique_ptr<Connection>& c) { return c->id() == connectionId; });
     return it != m_connections.end() ? it->get() : nullptr;
+}
+
+const Connection* Graph::getConnection(const QString& connectionId) const {
+    auto it = std::find_if(m_connections.cbegin(), m_connections.cend(),
+        [&connectionId](const std::unique_ptr<Connection>& c) { return c->id() == connectionId; });
+    return it != m_connections.cend() ? it->get() : nullptr;
 }
 
 std::unique_ptr<Module> Graph::takeModule(const QString& moduleId) {
     auto it = std::find_if(m_modules.begin(), m_modules.end(),
         [&moduleId](const std::unique_ptr<Module>& m) { return m->id() == moduleId; });
     if (it != m_modules.end()) {
-        disconnect(m_moduleConnections[moduleId]);
+        disconnect(m_moduleConnections.value(moduleId));
         m_moduleConnections.remove(moduleId);
         std::unique_ptr<Module> module = std::move(*it);
         m_modules.erase(it);

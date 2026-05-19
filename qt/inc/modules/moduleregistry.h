@@ -28,8 +28,8 @@ struct ModuleParameterMetadata {
     QString description;
     QString unit;
     QVector<ModuleParameterChoice> choices;
-    std::optional<double> minimumValue;
-    std::optional<double> maximumValue;
+    std::optional<double> minimumValue = std::nullopt;
+    std::optional<double> maximumValue = std::nullopt;
     bool configurable = true;
     bool readOnly = false;
 };
@@ -62,21 +62,21 @@ struct ModuleInterfaceAnchor {
     QString interfaceId;
     double x = 0.0;
     double y = 0.0;
-    std::optional<double> normalX;
-    std::optional<double> normalY;
+    std::optional<double> normalX = std::nullopt;
+    std::optional<double> normalY = std::nullopt;
     QString label;
-    std::optional<double> labelX;
-    std::optional<double> labelY;
+    std::optional<double> labelX = std::nullopt;
+    std::optional<double> labelY = std::nullopt;
 };
 
 struct ModuleAttachmentZone {
     QString id;
     double x = 0.0;
     double y = 0.0;
-    std::optional<double> normalX;
-    std::optional<double> normalY;
+    std::optional<double> normalX = std::nullopt;
+    std::optional<double> normalY = std::nullopt;
     QString label;
-    std::optional<bool> mirrorAttachedNode;
+    std::optional<bool> mirrorAttachedNode = std::nullopt;
 };
 
 struct ModuleType {
@@ -129,7 +129,7 @@ class ModuleRegistry {
 public:
     enum class LoadMode {
         Auto,
-        Empty
+        Empty,
     };
 
     static ModuleRegistry& instance();

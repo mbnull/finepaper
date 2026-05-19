@@ -170,7 +170,7 @@ private:
     CommandManager* m_commandManager;
     std::unique_ptr<ConnectionRuleService> m_connectionRuleService;
     std::shared_ptr<QtNodes::NodeDelegateModelRegistry> m_registry;
-    EditorGraphModel* m_graphModel;
+    std::unique_ptr<EditorGraphModel> m_graphModel;
     QtNodes::DataFlowGraphicsScene* m_scene;
     AnimatedGraphicsView* m_view;
     QMap<QString, QtNodes::NodeId> m_moduleToNodeId;

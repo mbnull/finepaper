@@ -130,6 +130,18 @@ double doubleAttribute(const QXmlStreamAttributes& attributes, QStringView name,
     return ok ? parsed : fallbackValue;
 }
 
+int positiveIntAttribute(const QXmlStreamAttributes& attributes, QStringView name, int fallbackValue) {
+    const int parsed = intAttribute(attributes, name, fallbackValue);
+    return parsed > 0 ? parsed : fallbackValue;
+}
+
+double nonNegativeDoubleAttribute(const QXmlStreamAttributes& attributes,
+                                  QStringView name,
+                                  double fallbackValue) {
+    const double parsed = doubleAttribute(attributes, name, fallbackValue);
+    return parsed >= 0.0 ? parsed : fallbackValue;
+}
+
 std::optional<double> optionalDoubleAttribute(const QXmlStreamAttributes& attributes, QStringView name) {
     const auto value = attributes.value(name);
     if (value.isEmpty()) {
@@ -394,20 +406,16 @@ ModuleParameterMetadata parameterMetadataFromIpcraft(const QString& name,
 
 QStringList prioritizedParameterNames(const QJsonObject& parameters) {
     QStringList names = parameters.keys();
-    std::sort(names.begin(), names.end(), [](const QString& left, const QString& right) {
-        const auto priority = [](const QString& name) {
-            if (name == QStringLiteral("display_name")) return 0;
-            if (name == QStringLiteral("external_id")) return 1;
-            return 2;
-        };
+    names.sort(Qt::CaseInsensitive);
 
-        const int leftPriority = priority(left);
-        const int rightPriority = priority(right);
-        if (leftPriority != rightPriority) {
-            return leftPriority < rightPriority;
+    const auto promote = [&names](const QString& name) {
+        const int index = names.indexOf(name);
+        if (index > 0) {
+            names.move(index, 0);
         }
-        return QString::compare(left, right, Qt::CaseInsensitive) < 0;
-    });
+    };
+    promote(QStringLiteral("external_id"));
+    promote(QStringLiteral("display_name"));
     return names;
 }
 
@@ -606,36 +614,41 @@ void applyGraphicsElement(ModuleType& type, QXmlStreamReader& xml) {
     while (xml.readNextStartElement()) {
         if (xml.name() == u"expanded") {
             const QXmlStreamAttributes expandedAttrs = xml.attributes();
-            type.expandedNodeMinWidth = intAttribute(expandedAttrs, u"min_width", type.expandedNodeMinWidth);
-            type.expandedNodeHeight = intAttribute(expandedAttrs, u"height", type.expandedNodeHeight);
-            type.expandedCaptionLeftInset = doubleAttribute(
+            type.expandedNodeMinWidth = positiveIntAttribute(
+                expandedAttrs, u"min_width", type.expandedNodeMinWidth);
+            type.expandedNodeHeight = positiveIntAttribute(
+                expandedAttrs, u"height", type.expandedNodeHeight);
+            type.expandedCaptionLeftInset = nonNegativeDoubleAttribute(
                 expandedAttrs, u"caption_left", type.expandedCaptionLeftInset);
-            type.expandedCaptionTopInset = doubleAttribute(
+            type.expandedCaptionTopInset = nonNegativeDoubleAttribute(
                 expandedAttrs, u"caption_top", type.expandedCaptionTopInset);
-            type.expandedPortInset = doubleAttribute(expandedAttrs, u"port_inset", type.expandedPortInset);
+            type.expandedPortInset = nonNegativeDoubleAttribute(
+                expandedAttrs, u"port_inset", type.expandedPortInset);
             xml.skipCurrentElement();
         } else if (xml.name() == u"collapsed") {
             const QXmlStreamAttributes collapsedAttrs = xml.attributes();
-            type.collapsedNodeMinWidth = intAttribute(collapsedAttrs, u"min_width", type.collapsedNodeMinWidth);
-            type.collapsedNodeHeight = intAttribute(collapsedAttrs, u"height", type.collapsedNodeHeight);
-            type.collapsedCaptionLeftInset = doubleAttribute(
+            type.collapsedNodeMinWidth = positiveIntAttribute(
+                collapsedAttrs, u"min_width", type.collapsedNodeMinWidth);
+            type.collapsedNodeHeight = positiveIntAttribute(
+                collapsedAttrs, u"height", type.collapsedNodeHeight);
+            type.collapsedCaptionLeftInset = nonNegativeDoubleAttribute(
                 collapsedAttrs, u"caption_left", type.collapsedCaptionLeftInset);
-            type.collapsedCaptionTopInset = doubleAttribute(
+            type.collapsedCaptionTopInset = nonNegativeDoubleAttribute(
                 collapsedAttrs, u"caption_top", type.collapsedCaptionTopInset);
-            type.collapsedEndpointPortInset = doubleAttribute(
+            type.collapsedEndpointPortInset = nonNegativeDoubleAttribute(
                 collapsedAttrs, u"endpoint_inset", type.collapsedEndpointPortInset);
             xml.skipCurrentElement();
         } else if (xml.name() == u"arrangement") {
             const QXmlStreamAttributes arrangementAttrs = xml.attributes();
-            type.linkedEndpointOffsetX = intAttribute(
+            type.linkedEndpointOffsetX = positiveIntAttribute(
                 arrangementAttrs, u"endpoint_offset_x", type.linkedEndpointOffsetX);
-            type.meshSpacingX = intAttribute(arrangementAttrs, u"mesh_spacing_x", type.meshSpacingX);
-            type.meshSpacingY = intAttribute(arrangementAttrs, u"mesh_spacing_y", type.meshSpacingY);
-            type.looseEndpointSpacingX = intAttribute(
+            type.meshSpacingX = positiveIntAttribute(arrangementAttrs, u"mesh_spacing_x", type.meshSpacingX);
+            type.meshSpacingY = positiveIntAttribute(arrangementAttrs, u"mesh_spacing_y", type.meshSpacingY);
+            type.looseEndpointSpacingX = positiveIntAttribute(
                 arrangementAttrs, u"loose_endpoint_spacing_x", type.looseEndpointSpacingX);
-            type.looseEndpointSpacingY = intAttribute(
+            type.looseEndpointSpacingY = positiveIntAttribute(
                 arrangementAttrs, u"loose_endpoint_spacing_y", type.looseEndpointSpacingY);
-            type.looseEndpointMarginY = intAttribute(
+            type.looseEndpointMarginY = positiveIntAttribute(
                 arrangementAttrs, u"loose_endpoint_margin_y", type.looseEndpointMarginY);
             xml.skipCurrentElement();
         } else {
@@ -880,7 +893,7 @@ ParameterLoadResult loadParametersFromXml(ModuleType& type, QXmlStreamReader& xm
         type.defaultParameters[name] = Parameter(name, parameterValue(parameterType, defaultText));
         type.parameterMetadata.insert(name, metadata);
 
-        ModuleConfigField field{
+        ModuleConfigField field = {
             name,
             metadata.label,
             metadata.description

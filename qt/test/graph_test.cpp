@@ -22,8 +22,15 @@
 #include <iostream>
 #include <memory>
 #include <stdexcept>
+#include <type_traits>
+#include <utility>
 
 namespace {
+
+static_assert(std::is_same_v<decltype(std::declval<Graph&>().getModule(QString())), Module*>);
+static_assert(std::is_same_v<decltype(std::declval<const Graph&>().getModule(QString())), const Module*>);
+static_assert(std::is_same_v<decltype(std::declval<Graph&>().getConnection(QString())), Connection*>);
+static_assert(std::is_same_v<decltype(std::declval<const Graph&>().getConnection(QString())), const Connection*>);
 
 std::unique_ptr<Module> makeModule(const QString& id,
                                    const QString& type,
@@ -821,6 +828,54 @@ void testXmlBundleLoadsExtendedParameterMetadataWhenPresent() {
             "external_id read_only flag should load from XML metadata");
 }
 
+void testXmlBundleIgnoresNonPositiveGraphicsMetrics() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "failed to create temporary directory for graphics bounds test");
+
+    const QString bundlePath = QDir(tempDir.path()).filePath("modules.xml");
+    QFile bundleFile(bundlePath);
+    require(bundleFile.open(QIODevice::WriteOnly | QIODevice::Text),
+            "failed to create XML graphics bounds bundle");
+    bundleFile.write(R"XML(<?xml version="1.0" encoding="UTF-8"?>
+<module-bundle>
+  <module name="BoundedRouter" palette_label="Bounded Router">
+    <graphics layout="mesh_router">
+      <expanded min_width="-1" height="0" caption_left="-5" caption_top="-4" port_inset="-3" />
+      <collapsed min_width="0" height="-1" caption_left="-5" caption_top="-4" endpoint_inset="-3" />
+      <arrangement endpoint_offset_x="-20" mesh_spacing_x="0" mesh_spacing_y="-1"
+                   loose_endpoint_spacing_x="0" loose_endpoint_spacing_y="-1"
+                   loose_endpoint_margin_y="-2" />
+    </graphics>
+  </module>
+</module-bundle>)XML");
+    bundleFile.close();
+
+    XmlModuleTypeSource source(bundlePath);
+    const QHash<QString, ModuleType> types = source.loadModuleTypes();
+    auto routerIt = types.find("BoundedRouter");
+    require(routerIt != types.end(), "BoundedRouter type should load from XML bundle");
+
+    require(routerIt->expandedNodeMinWidth > 0 && routerIt->expandedNodeHeight > 0,
+            "expanded geometry should ignore non-positive dimensions");
+    require(routerIt->collapsedNodeMinWidth > 0 && routerIt->collapsedNodeHeight > 0,
+            "collapsed geometry should ignore non-positive dimensions");
+    require(routerIt->expandedCaptionLeftInset >= 0.0 &&
+                routerIt->expandedCaptionTopInset >= 0.0 &&
+                routerIt->expandedPortInset >= 0.0,
+            "expanded insets should ignore negative values");
+    require(routerIt->collapsedCaptionLeftInset >= 0.0 &&
+                routerIt->collapsedCaptionTopInset >= 0.0 &&
+                routerIt->collapsedEndpointPortInset >= 0.0,
+            "collapsed insets should ignore negative values");
+    require(routerIt->linkedEndpointOffsetX > 0 &&
+                routerIt->meshSpacingX > 0 &&
+                routerIt->meshSpacingY > 0 &&
+                routerIt->looseEndpointSpacingX > 0 &&
+                routerIt->looseEndpointSpacingY > 0 &&
+                routerIt->looseEndpointMarginY > 0,
+            "arrangement metrics should ignore non-positive values");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -846,6 +901,7 @@ int main(int argc, char** argv) {
         testBundleMetadataLoadsFromXml();
         testXmlBundleWithoutGraphicsFallsBackToSimpleNode();
         testXmlBundleLoadsExtendedParameterMetadataWhenPresent();
+        testXmlBundleIgnoresNonPositiveGraphicsMetrics();
     } catch (const std::exception& error) {
         std::cerr << "graph_test failed: " << error.what() << '\n';
         return 1;

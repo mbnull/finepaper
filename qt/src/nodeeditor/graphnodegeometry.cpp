@@ -490,7 +490,7 @@ std::optional<QPointF> GraphNodeGeometry::connectedNodeHorizontalDirection(QtNod
 }
 
 int GraphNodeGeometry::fallbackPortCount(const GraphNodeModel& model, const QString& side) const {
-    Module* module = model.module();
+    const Module* module = model.module();
     if (!module) {
         return 0;
     }
@@ -507,7 +507,7 @@ int GraphNodeGeometry::fallbackPortCount(const GraphNodeModel& model, const QStr
 int GraphNodeGeometry::fallbackPortSlot(const GraphNodeModel& model,
                                         const Port& port,
                                         const QString& side) const {
-    Module* module = model.module();
+    const Module* module = model.module();
     if (!module) {
         return 0;
     }

@@ -24,9 +24,11 @@ public:
     // Removes every module and connection from the graph.
     void clear();
     // Returns the module by ID, or nullptr if not found.
-    Module* getModule(const QString& moduleId) const;
+    Module* getModule(const QString& moduleId);
+    const Module* getModule(const QString& moduleId) const;
     // Returns the connection by ID, or nullptr if not found.
-    Connection* getConnection(const QString& connectionId) const;
+    Connection* getConnection(const QString& connectionId);
+    const Connection* getConnection(const QString& connectionId) const;
     // Removes a module from the graph and transfers ownership to the caller.
     std::unique_ptr<Module> takeModule(const QString& moduleId);
     // Inserts a pre-built module without creating it internally (used by undo/redo).

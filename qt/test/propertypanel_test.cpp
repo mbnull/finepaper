@@ -6,6 +6,7 @@
 #include "project/ipinstancestate.h"
 #include "project/projectdocument.h"
 #include "project/projectstateservice.h"
+#include "widgets/collapsiblesection.h"
 
 #include <QApplication>
 #include <QComboBox>
@@ -16,8 +17,15 @@
 #include <iostream>
 #include <memory>
 #include <stdexcept>
+#include <type_traits>
+#include <utility>
 
 namespace {
+
+static_assert(std::is_same_v<decltype(std::declval<CollapsibleSection&>().contentWidget()), QWidget*>);
+static_assert(std::is_same_v<decltype(std::declval<const CollapsibleSection&>().contentWidget()), const QWidget*>);
+static_assert(std::is_same_v<decltype(std::declval<CollapsibleSection&>().toggleButton()), QToolButton*>);
+static_assert(std::is_same_v<decltype(std::declval<const CollapsibleSection&>().toggleButton()), const QToolButton*>);
 
 void require(bool condition, const char* message) {
     if (!condition) {

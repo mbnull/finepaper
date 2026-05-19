@@ -369,7 +369,7 @@ NodeEditorWidget::NodeEditorWidget(Graph* graph,
     m_registry = std::make_shared<QtNodes::NodeDelegateModelRegistry>();
     m_registry->registerModel<GraphNodeModel>("GraphNode");
 
-    m_graphModel = new EditorGraphModel(m_registry);
+    m_graphModel = std::make_unique<EditorGraphModel>(m_registry);
     m_scene = new QtNodes::DataFlowGraphicsScene(*m_graphModel, this);
     m_scene->setSceneRect(m_canvasRect);
     // Geometry/painter are graph-aware customizations; the QtNodes scene still
@@ -401,8 +401,8 @@ NodeEditorWidget::NodeEditorWidget(Graph* graph,
                 [this]() { refreshVisibleGraphState(); });
     }
 
-    connect(m_graphModel, &QtNodes::DataFlowGraphModel::connectionCreated, this, &NodeEditorWidget::onConnectionCreated);
-    connect(m_graphModel, &QtNodes::DataFlowGraphModel::connectionDeleted, this, &NodeEditorWidget::onConnectionDeleted);
+    connect(m_graphModel.get(), &QtNodes::DataFlowGraphModel::connectionCreated, this, &NodeEditorWidget::onConnectionCreated);
+    connect(m_graphModel.get(), &QtNodes::DataFlowGraphModel::connectionDeleted, this, &NodeEditorWidget::onConnectionDeleted);
     connect(m_scene, &QGraphicsScene::selectionChanged, this, &NodeEditorWidget::onSelectionChanged);
     connect(m_scene, &QtNodes::BasicGraphicsScene::nodeMoved, this, &NodeEditorWidget::onNodeMoved);
 
@@ -425,6 +425,11 @@ NodeEditorWidget::~NodeEditorWidget() {
     if (m_view && m_view->viewport()) {
         m_view->viewport()->removeEventFilter(this);
     }
+    delete m_view;
+    m_view = nullptr;
+    delete m_scene;
+    m_scene = nullptr;
+    m_graphModel.reset();
 }
 
 bool NodeEditorWidget::isArrangeEnabled() const {

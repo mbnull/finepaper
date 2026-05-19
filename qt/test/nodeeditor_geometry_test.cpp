@@ -32,8 +32,13 @@
 #include <memory>
 #include <optional>
 #include <stdexcept>
+#include <type_traits>
+#include <utility>
 
 namespace {
+
+static_assert(std::is_same_v<decltype(std::declval<GraphNodeModel&>().module()), Module*>);
+static_assert(std::is_same_v<decltype(std::declval<const GraphNodeModel&>().module()), const Module*>);
 
 void require(bool condition, const char* message) {
     if (!condition) {

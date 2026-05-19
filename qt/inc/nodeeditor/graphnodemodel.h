@@ -25,7 +25,8 @@ public:
     QWidget* embeddedWidget() override { return nullptr; }
 
     void setModule(Module* module);
-    Module* module() const { return m_module; }
+    Module* module() { return m_module; }
+    const Module* module() const { return m_module; }
     bool isCollapsed() const;
     const Port* portAt(QtNodes::PortType portType, QtNodes::PortIndex portIndex) const;
     QtNodes::PortIndex portIndex(const QString& portId, QtNodes::PortType portType) const;
