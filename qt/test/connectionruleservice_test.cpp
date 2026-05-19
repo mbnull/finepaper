@@ -701,6 +701,45 @@ void testDuplicateConnectionOptionLabelsUseShortLabelBeforeIds() {
             "short labels should be used before runtime IDs");
 }
 
+void testConnectionOptionsSortLabelsCaseInsensitively() {
+    Graph graph;
+
+    auto source = std::make_unique<Module>(QStringLiteral("source"), QStringLiteral("Source"));
+    source->addPort(Port(QStringLiteral("upper"),
+                         Port::Direction::Output,
+                         QStringLiteral("bus"),
+                         QStringLiteral("Beta")));
+    source->addPort(Port(QStringLiteral("lower"),
+                         Port::Direction::Output,
+                         QStringLiteral("bus"),
+                         QStringLiteral("alpha")));
+    auto target = std::make_unique<Module>(QStringLiteral("target"), QStringLiteral("Target"));
+    target->addPort(Port(QStringLiteral("in"),
+                         Port::Direction::Input,
+                         QStringLiteral("bus"),
+                         QStringLiteral("In")));
+
+    require(graph.addModule(std::move(source)), "sort source should add");
+    require(graph.addModule(std::move(target)), "sort target should add");
+
+    ConnectionRequest request;
+    request.kind = ConnectionRequestKind::NodeToPort;
+    request.start.moduleId = QStringLiteral("source");
+    request.start.fromNodeBody = true;
+    request.start.hiddenPortsAllowed = true;
+    request.end.moduleId = QStringLiteral("target");
+    request.end.portId = QStringLiteral("in");
+
+    ConnectionRuleService service(&graph, {});
+    const ConnectionCheckResult result = service.check(request);
+
+    require(result.status == ConnectionCheckStatus::NeedsSelection,
+            "two visible source ports should require option selection");
+    require(result.options.size() == 2, "case-sort fixture should produce two options");
+    require(result.options.first().source.portId == QStringLiteral("lower"),
+            "case-insensitive sorting should place alpha before Beta");
+}
+
 void testConnectionOptionLabelsUseAnchorInterfaceLabels() {
     const QString packageId = QStringLiteral("finepaper.display.anchor_labels");
     registerAnchorLabeledType(packageId);
@@ -1490,6 +1529,7 @@ int main(int argc, char** argv) {
         testModuleLabelsUseStaticNameWithoutDisplayBinding();
         testConnectionOptionLabelsIgnoreDisplayNameParameterWithoutBinding();
         testDuplicateConnectionOptionLabelsUseShortLabelBeforeIds();
+        testConnectionOptionsSortLabelsCaseInsensitively();
         testConnectionOptionLabelsUseAnchorInterfaceLabels();
         testConnectionRuleServiceUsesInterfaceClassesNotLegacyBusNames();
         testConnectionRuleServiceClassValidationIgnoresLegacyTopologySideNames();

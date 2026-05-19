@@ -23,18 +23,18 @@ enum class ConnectionRequestKind {
     PortToNode,
     NodeToPort,
     Programmatic,
-    ProjectLoad
+    ProjectLoad,
 };
 
 enum class ConnectionVisualSide {
     None,
     Input,
-    Output
+    Output,
 };
 
 struct ConnectionEndpointRequest {
     QString moduleId;
-    std::optional<QString> portId;
+    std::optional<QString> portId = std::nullopt;
     QPointF scenePos;
     ConnectionVisualSide visualSide = ConnectionVisualSide::None;
     bool fromNodeBody = false;
@@ -91,13 +91,13 @@ enum class ConnectionRuleLayer {
     Structural,
     EditorRule,
     Ipcore,
-    FinalDrc
+    FinalDrc,
 };
 
 enum class ConnectionCheckStatus {
     Allowed,
     NeedsSelection,
-    Rejected
+    Rejected,
 };
 
 struct ConnectionResolvedOption {

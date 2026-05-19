@@ -8,7 +8,7 @@
 #include "modules/moduleregistry.h"
 #include "modules/moduletypemetadata.h"
 
-#include <QMap>
+#include <QHash>
 #include <QSet>
 #include <algorithm>
 #include <memory>
@@ -413,21 +413,21 @@ QString combinedShortDisambiguator(const Graph* graph, const ConnectionResolvedO
     if (source.isEmpty() || target.isEmpty()) {
         return {};
     }
-    return QStringLiteral("%1 -> %2").arg(source, target);
+    return source + QStringLiteral(" -> ") + target;
 }
 
 QString sourceRuntimeDisambiguator(const ConnectionResolvedOption& option) {
-    return QStringLiteral("%1.%2").arg(option.source.moduleId, option.source.portId);
+    return option.source.moduleId + QLatin1Char('.') + option.source.portId;
 }
 
 QString targetRuntimeDisambiguator(const ConnectionResolvedOption& option) {
-    return QStringLiteral("%1.%2").arg(option.target.moduleId, option.target.portId);
+    return option.target.moduleId + QLatin1Char('.') + option.target.portId;
 }
 
 QString combinedRuntimeDisambiguator(const ConnectionResolvedOption& option) {
-    return QStringLiteral("%1 -> %2")
-        .arg(sourceRuntimeDisambiguator(option),
-             targetRuntimeDisambiguator(option));
+    return sourceRuntimeDisambiguator(option) +
+           QStringLiteral(" -> ") +
+           targetRuntimeDisambiguator(option);
 }
 
 template <typename Suffix>
@@ -447,7 +447,7 @@ bool buildUniqueSuffixedLabels(const QVector<ConnectionResolvedOption>& options,
             return false;
         }
 
-        const QString label = QStringLiteral("%1 [%2]").arg(originalLabels.at(index), suffix);
+        const QString label = originalLabels.at(index) + QStringLiteral(" [") + suffix + QLatin1Char(']');
         if (labels.contains(label)) {
             return false;
         }
@@ -464,21 +464,28 @@ bool buildUniqueSuffixedLabels(const QVector<ConnectionResolvedOption>& options,
 void disambiguateDuplicateLabels(QVector<ConnectionResolvedOption>& options, const Graph* graph) {
     QVector<QString> originalLabels;
     originalLabels.reserve(options.size());
-    QMap<QString, QVector<int>> indexesByLabel;
+    QHash<QString, QVector<int>> indexesByLabel;
+    QStringList labelsByFirstUse;
     for (int index = 0; index < options.size(); ++index) {
-        originalLabels.push_back(options.at(index).label);
-        indexesByLabel[originalLabels.at(index)].push_back(index);
+        const QString label = options.at(index).label;
+        originalLabels.push_back(label);
+        if (!indexesByLabel.contains(label)) {
+            labelsByFirstUse.push_back(label);
+        }
+        indexesByLabel[label].push_back(index);
     }
 
     QVector<QString> finalLabels = originalLabels;
     QSet<QString> reservedLabels;
     QVector<QVector<int>> duplicateGroups;
-    for (auto it = indexesByLabel.cbegin(); it != indexesByLabel.cend(); ++it) {
-        if (it.value().size() < 2) {
-            reservedLabels.insert(it.key());
+    for (const QString& label : labelsByFirstUse) {
+        const auto it = indexesByLabel.constFind(label);
+        const QVector<int>& indexes = it.value();
+        if (indexes.size() < 2) {
+            reservedLabels.insert(label);
             continue;
         }
-        duplicateGroups.push_back(it.value());
+        duplicateGroups.push_back(indexes);
     }
 
     const auto applySuffix = [&](const QVector<int>& duplicateIndexes, auto suffixForOption) {
@@ -785,6 +792,8 @@ QVector<ConnectionResolvedOption> ConnectionRuleService::buildOptions(
                        option.target.portId == target.portId;
             });
     };
+    std::optional<QVector<ProjectConnectionRecord>> currentConnections = std::nullopt;
+    std::optional<IpcraftConnectionValidator> validator = std::nullopt;
 
     const auto filterAutocompleteCandidates = [](const QVector<PortSemanticInfo>& fixedPorts,
                                                  const QVector<PortSemanticInfo>& hiddenPorts) {
@@ -823,7 +832,7 @@ QVector<ConnectionResolvedOption> ConnectionRuleService::buildOptions(
             return;
         }
 
-        std::optional<IpcraftConnectionDecision> ipcraftDecision;
+        std::optional<IpcraftConnectionDecision> ipcraftDecision = std::nullopt;
         if (usesIpcraftClassValidation(source, target)) {
             const CandidateEvaluation editorRule =
                 checkEditorDirectionRules(source, target, sourceEndpoint, targetEndpoint);
@@ -842,9 +851,13 @@ QVector<ConnectionResolvedOption> ConnectionRuleService::buildOptions(
                 return;
             }
 
-            IpcraftConnectionValidator validator(m_manifests,
-                                                 currentProjectConnectionRecords(m_graph));
-            const IpcraftConnectionDecision decision = validator.validate(
+            if (!currentConnections.has_value()) {
+                currentConnections = currentProjectConnectionRecords(m_graph);
+            }
+            if (!validator.has_value()) {
+                validator.emplace(m_manifests, *currentConnections);
+            }
+            const IpcraftConnectionDecision decision = validator->validate(
                 {participantForPort(source), participantForPort(target)},
                 request.connectionClassId);
             if (decision.status == IpcraftConnectionStatus::Invalid) {
@@ -941,7 +954,14 @@ ConnectionCheckResult ConnectionRuleService::check(const ConnectionRequest& requ
     }
 
     std::sort(options.begin(), options.end(), [](const auto& lhs, const auto& rhs) {
-        return lhs.priority < rhs.priority || (lhs.priority == rhs.priority && lhs.label < rhs.label);
+        if (lhs.priority != rhs.priority) {
+            return lhs.priority < rhs.priority;
+        }
+        const int labelOrder = QString::compare(lhs.label, rhs.label, Qt::CaseInsensitive);
+        if (labelOrder != 0) {
+            return labelOrder < 0;
+        }
+        return lhs.label < rhs.label;
     });
 
     ConnectionCheckResult result;
