@@ -13,7 +13,7 @@ struct ProjectReadResult {
 
 enum class ProjectFileKind {
     Unknown,
-    Project
+    Project,
 };
 
 class ProjectReader {

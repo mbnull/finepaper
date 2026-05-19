@@ -1062,6 +1062,27 @@ void testPluginAndExtensionsAreDistinct() {
             "plugin and extension descriptors should remain distinct");
 }
 
+void testRejectsOversizedManifestFile() {
+    QTemporaryDir temp;
+    require(temp.isValid(), "temporary directory should be valid");
+
+    QDir root(temp.path());
+    createView(root);
+
+    QFile file(root.filePath(QStringLiteral("ipcraft.json")));
+    require(file.open(QIODevice::WriteOnly | QIODevice::Truncate),
+            "failed to create oversized manifest fixture");
+    require(file.resize(17 * 1024 * 1024),
+            "failed to resize oversized manifest fixture");
+    file.close();
+
+    const IpcraftManifestReadResult result = IpcraftManifestReader().readPackage(temp.path());
+
+    require(!result.ok, "oversized manifest should be rejected");
+    require(diagnosticsContain(result.diagnostics, QStringLiteral("too large")),
+            "oversized manifest diagnostic should explain the size limit");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -1097,6 +1118,7 @@ int main(int argc, char** argv) {
         testRegistryKeepsValidPackagesWhenOtherRootsHaveDiagnostics();
         testRegistrySkipsDuplicatePackageIdsButKeepsUnrelatedPackages();
         testPluginAndExtensionsAreDistinct();
+        testRejectsOversizedManifestFile();
     } catch (const std::exception& error) {
         std::cerr << "ipcraftmanifest_test failed: " << error.what() << '\n';
         return 1;

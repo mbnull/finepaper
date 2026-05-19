@@ -2,12 +2,15 @@
 #include "project/projectreader.h"
 
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
 
 namespace {
+
+constexpr qint64 kMaxProjectFileBytes = 16 * 1024 * 1024;
 
 ProjectReadResult failure(const QString& error) {
     ProjectReadResult result;
@@ -33,6 +36,9 @@ ProjectFileKind ProjectReader::detectKind(const QString& path) {
     if (!file.open(QIODevice::ReadOnly)) {
         return ProjectFileKind::Unknown;
     }
+    if (file.size() > kMaxProjectFileBytes) {
+        return ProjectFileKind::Unknown;
+    }
 
     QJsonParseError parseError;
     const QJsonDocument json = QJsonDocument::fromJson(file.readAll(), &parseError);
@@ -52,6 +58,13 @@ ProjectReadResult ProjectReader::readFile(const QString& path) {
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly)) {
         return failure(QStringLiteral("Could not open project file: %1").arg(path));
+    }
+    if (file.size() > kMaxProjectFileBytes) {
+        return failure(QStringLiteral("Project file is too large: ") +
+                       QFileInfo(path).fileName() +
+                       QStringLiteral(" (max ") +
+                       QString::number(kMaxProjectFileBytes / (1024 * 1024)) +
+                       QStringLiteral(" MiB)"));
     }
 
     QJsonParseError parseError;
@@ -107,6 +120,9 @@ ProjectReadResult ProjectReader::readFile(const QString& path) {
         const QJsonValue stateValue = object.value(QStringLiteral("state"));
         if (!stateValue.isObject()) {
             return failure(QStringLiteral("Project ipcore_state.state must be an object"));
+        }
+        if (!isNonEmptyString(object.value(QStringLiteral("schema")))) {
+            return failure(QStringLiteral("Project ipcore_state.schema is required"));
         }
         ProjectIpInstanceRecord state;
         state.ipcoreId = object.value(QStringLiteral("ipcore")).toString();

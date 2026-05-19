@@ -12,6 +12,7 @@ namespace {
 
 constexpr auto kManifestFileName = "ipcraft.json";
 constexpr auto kManifestSchema = "ipcraft.manifest.v1";
+constexpr qint64 kMaxManifestFileBytes = 16 * 1024 * 1024;
 
 void addDiagnostic(QVector<IpcraftDiagnostic>& diagnostics,
                    const QString& packageRootPath,
@@ -1222,7 +1223,7 @@ void validateReferences(const IpcraftPackageManifest& manifest,
             if (!it.value().isString()) {
                 addDiagnostic(diagnostics,
                               manifest.packageRootPath,
-                              QStringLiteral("%1.ports.%2").arg(topologyContext, it.key()),
+                              topologyContext + QStringLiteral(".ports.") + it.key(),
                               QStringLiteral("Topology port reference must be a string"));
                 continue;
             }
@@ -1264,6 +1265,14 @@ IpcraftManifestReader::readManifestFile(const QString& manifestPath) const {
                       packageRootPath,
                       manifestPath,
                       QStringLiteral("Missing ipcraft.json"));
+        return result;
+    }
+    if (manifestInfo.size() > kMaxManifestFileBytes) {
+        addDiagnostic(result.diagnostics,
+                      packageRootPath,
+                      manifestInfo.absoluteFilePath(),
+                      QStringLiteral("ipcraft.json is too large (max %1 MiB)")
+                          .arg(kMaxManifestFileBytes / (1024 * 1024)));
         return result;
     }
 

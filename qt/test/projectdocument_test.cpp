@@ -15,6 +15,7 @@
 
 #include <QCoreApplication>
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -1695,6 +1696,49 @@ void testReaderRejectsMalformedProjectGraphArrays() {
             "non-object ipcore_state state error should mention ipcore_state and state");
 }
 
+void testProjectReaderRejectsIpcoreStateWithoutSchema() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "failed to create temporary directory");
+
+    QJsonObject project = minimalProjectRoot();
+    project.insert(QStringLiteral("ipcore_state"), QJsonArray{
+        QJsonObject{
+            {QStringLiteral("ipcore"), QStringLiteral("finepaper.ravenoc")},
+            {QStringLiteral("instance"), QStringLiteral("ravenoc_0")},
+            {QStringLiteral("state"), QJsonObject{{QStringLiteral("kind"), QStringLiteral("noc")}}}
+        }
+    });
+
+    const QString path = QDir(tempDir.path()).filePath(QStringLiteral("missing_ipcore_state_schema.fpproj"));
+    writeJsonFile(path, project);
+
+    const ProjectReadResult result = ProjectReader::readFile(path);
+    require(!result.success, "ipcore_state without schema should be rejected");
+    require(result.error.contains(QStringLiteral("ipcore_state")) &&
+                result.error.contains(QStringLiteral("schema")),
+            "missing ipcore_state schema error should mention ipcore_state and schema");
+}
+
+void testProjectReaderRejectsOversizedProjectFiles() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "failed to create temporary directory");
+
+    const QString path = QDir(tempDir.path()).filePath(QStringLiteral("oversized.fpproj"));
+    QFile file(path);
+    require(file.open(QIODevice::WriteOnly | QIODevice::Truncate),
+            "failed to create oversized project fixture");
+    require(file.resize(17 * 1024 * 1024),
+            "failed to resize oversized project fixture");
+    file.close();
+
+    const ProjectReadResult result = ProjectReader::readFile(path);
+    require(!result.success, "oversized project file should be rejected");
+    require(result.error.contains(QStringLiteral("too large")),
+            "oversized project error should explain the size limit");
+    require(ProjectReader::detectKind(path) == ProjectFileKind::Unknown,
+            "oversized project file should not be parsed during kind detection");
+}
+
 void testProjectReaderDetectsOnlyFinepaperProjects() {
     QTemporaryDir tempDir;
     require(tempDir.isValid(), "failed to create temporary directory");
@@ -1871,6 +1915,8 @@ int main(int argc, char** argv) {
         testProjectLoadRejectsCrossInstanceConnectionWithinSameIpcore();
         testLoadRejectsConnectionInvalidatedByEarlierConnectionWithoutChangingGraph();
         testReaderRejectsMalformedProjectGraphArrays();
+        testProjectReaderRejectsIpcoreStateWithoutSchema();
+        testProjectReaderRejectsOversizedProjectFiles();
         testProjectReaderDetectsOnlyFinepaperProjects();
         testGenerationHelpersShapeIpcoreStateForGeneratorBoundary();
         testGenerationWritesProjectSnapshot();
