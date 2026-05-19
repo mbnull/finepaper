@@ -16,10 +16,9 @@ std::unique_ptr<Command> CommandManager::executeCommand(std::unique_ptr<Command>
         entry.beforeStateId = m_currentStateId;
         entry.afterStateId = m_nextStateId++;
         m_currentStateId = entry.afterStateId;
-        m_undoStack.push(std::move(entry));
-        while (!m_redoStack.empty()) {
-            m_redoStack.pop();
-        }
+        m_undoStack.push_back(std::move(entry));
+        trimUndoStack();
+        m_redoStack.clear();
         qDebug() << "Command executed"
                 << "undoDepth" << m_undoStack.size()
                 << "redoDepth" << m_redoStack.size()
@@ -41,8 +40,8 @@ void CommandManager::undo() {
              << "undoDepth" << m_undoStack.size()
              << "redoDepth" << m_redoStack.size()
              << "stateId" << m_currentStateId;
-    auto entry = std::move(m_undoStack.top());
-    m_undoStack.pop();
+    auto entry = std::move(m_undoStack.back());
+    m_undoStack.pop_back();
     if (entry.command->wasExecuted()) {
         entry.command->undo();
     }
@@ -50,7 +49,7 @@ void CommandManager::undo() {
         if (entry.command->undoFailureChangedState()) {
             m_currentStateId = m_nextStateId++;
         }
-        m_undoStack.push(std::move(entry));
+        m_undoStack.push_back(std::move(entry));
         qDebug() << "Undo rejected or failed"
                  << "undoDepth" << m_undoStack.size()
                  << "redoDepth" << m_redoStack.size()
@@ -58,7 +57,7 @@ void CommandManager::undo() {
         return;
     }
     m_currentStateId = entry.beforeStateId;
-    m_redoStack.push(std::move(entry));
+    m_redoStack.push_back(std::move(entry));
     qInfo() << "Undo complete"
             << "undoDepth" << m_undoStack.size()
             << "redoDepth" << m_redoStack.size()
@@ -75,11 +74,11 @@ void CommandManager::redo() {
              << "undoDepth" << m_undoStack.size()
              << "redoDepth" << m_redoStack.size()
              << "stateId" << m_currentStateId;
-    auto entry = std::move(m_redoStack.top());
-    m_redoStack.pop();
+    auto entry = std::move(m_redoStack.back());
+    m_redoStack.pop_back();
     entry.command->execute();
     if (!entry.command->wasExecuted()) {
-        m_redoStack.push(std::move(entry));
+        m_redoStack.push_back(std::move(entry));
         qDebug() << "Redo produced no state change"
                  << "undoDepth" << m_undoStack.size()
                  << "redoDepth" << m_redoStack.size()
@@ -87,7 +86,8 @@ void CommandManager::redo() {
         return;
     }
     m_currentStateId = entry.afterStateId;
-    m_undoStack.push(std::move(entry));
+    m_undoStack.push_back(std::move(entry));
+    trimUndoStack();
     qInfo() << "Redo complete"
             << "undoDepth" << m_undoStack.size()
             << "redoDepth" << m_redoStack.size()
@@ -95,14 +95,16 @@ void CommandManager::redo() {
 }
 
 void CommandManager::clearHistory() {
-    while (!m_undoStack.empty()) {
-        m_undoStack.pop();
-    }
-    while (!m_redoStack.empty()) {
-        m_redoStack.pop();
-    }
+    m_undoStack.clear();
+    m_redoStack.clear();
     m_currentStateId = 0;
     m_nextStateId = 1;
 
     qInfo() << "Cleared command history";
+}
+
+void CommandManager::trimUndoStack() {
+    while (m_undoStack.size() > kMaxUndoDepth) {
+        m_undoStack.pop_front();
+    }
 }

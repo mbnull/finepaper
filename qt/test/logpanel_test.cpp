@@ -147,6 +147,22 @@ void testAppendConnectionAmbiguityWarningSelectsConnectionWhenClicked() {
             "clicking an ambiguity warning should select the connection id");
 }
 
+void testAppendMessageCapsVisibleHistory() {
+    LogPanel panel;
+
+    for (int i = 0; i < 1005; ++i) {
+        panel.appendMessage(QStringLiteral("[Log] message %1").arg(i));
+    }
+
+    auto* list = panel.findChild<QListWidget*>();
+    require(list != nullptr, "log panel list widget should exist");
+    require(list->count() == 1000, "log panel should cap retained visible messages");
+    require(list->item(0)->text() == QStringLiteral("[Log] message 5"),
+            "log panel should discard the oldest messages first");
+    require(list->item(list->count() - 1)->text() == QStringLiteral("[Log] message 1004"),
+            "log panel should keep the newest message after trimming");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -161,6 +177,7 @@ int main(int argc, char** argv) {
         testConnectionAmbiguityResultsSelectConnectionWhenClicked();
         testAppendConnectionAmbiguityWarningFromConnection();
         testAppendConnectionAmbiguityWarningSelectsConnectionWhenClicked();
+        testAppendMessageCapsVisibleHistory();
     } catch (const std::exception& error) {
         std::cerr << "logpanel_test failed: " << error.what() << '\n';
         return 1;

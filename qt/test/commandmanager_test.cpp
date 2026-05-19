@@ -489,6 +489,31 @@ void testCompositeCommandRollsBackExecutedChildrenOnFailure() {
     require(events[2] == "undo:alpha", "first child should roll back");
 }
 
+void testCommandHistoryPrunesOldestUndoEntries() {
+    std::vector<std::string> events;
+    CommandManager manager;
+
+    for (int i = 0; i < 300; ++i) {
+        manager.executeCommand(std::make_unique<RecordingCommand>(
+            events,
+            "cmd" + std::to_string(i)));
+    }
+
+    int undoCount = 0;
+    while (manager.canUndo()) {
+        manager.undo();
+        ++undoCount;
+    }
+
+    require(undoCount == 256, "command history should retain only the newest bounded undo entries");
+    require(manager.currentStateId() == 44,
+            "pruning old undo entries should keep the oldest retained before-state boundary");
+    require(events.size() == 556,
+            "history pruning should not undo commands that fell out of the retained history");
+    require(events[300] == "undo:cmd299", "undo should still begin with the newest command");
+    require(events.back() == "undo:cmd44", "undo should stop at the oldest retained command");
+}
+
 } // namespace
 
 int main() {
@@ -508,6 +533,7 @@ int main() {
         testCompositeUndoRollbackFailureMarksPartialState();
         testCompositeUndoPropagatesChildPartialStateAfterSuccessfulRollback();
         testCompositeCommandRollsBackExecutedChildrenOnFailure();
+        testCommandHistoryPrunesOldestUndoEntries();
     } catch (const std::exception& error) {
         std::cerr << "commandmanager_test failed: " << error.what() << '\n';
         return 1;

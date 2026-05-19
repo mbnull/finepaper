@@ -2,8 +2,9 @@
 #pragma once
 
 #include "commands/command.h"
+#include <cstddef>
+#include <deque>
 #include <memory>
-#include <stack>
 
 class CommandManager {
 public:
@@ -21,14 +22,18 @@ public:
     bool canRedo() const { return !m_redoStack.empty(); }
 
 private:
+    static constexpr std::size_t kMaxUndoDepth = 256;
+
     struct HistoryEntry {
         std::unique_ptr<Command> command;
         int beforeStateId = 0;
         int afterStateId = 0;
     };
 
-    std::stack<HistoryEntry> m_undoStack;
-    std::stack<HistoryEntry> m_redoStack;
+    void trimUndoStack();
+
+    std::deque<HistoryEntry> m_undoStack;
+    std::deque<HistoryEntry> m_redoStack;
     int m_currentStateId = 0;
     int m_nextStateId = 1;
 };
