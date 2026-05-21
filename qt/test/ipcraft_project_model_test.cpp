@@ -56,7 +56,10 @@ QJsonObject contractProjectObject() {
         }},
         {QStringLiteral("composition"), QJsonObject{
             {QStringLiteral("connections"), QJsonArray{}},
-            {QStringLiteral("external_ports"), QJsonArray{}}
+            {QStringLiteral("external_ports"), QJsonArray{}},
+            {QStringLiteral("groups"), QJsonArray{
+                QJsonObject{{QStringLiteral("id"), QStringLiteral("group0")}}
+            }}
         }},
         {QStringLiteral("layout"), QJsonObject{
             {QStringLiteral("views"), QJsonArray{}}
@@ -134,6 +137,8 @@ void testProjectDocumentRoundTripsInstancesCompositionLayoutNative() {
             "composition connections should parse");
     require(readResult.document.composition.externalPorts.isEmpty(),
             "composition external ports should parse");
+    require(readResult.document.composition.groups.size() == 1,
+            "composition groups should parse");
     require(readResult.document.layout.value(QStringLiteral("views")).isArray(),
             "layout should parse");
     require(readResult.document.native.value(QStringLiteral("vendor.example")).toObject()
@@ -157,6 +162,9 @@ void testProjectDocumentRoundTripsInstancesCompositionLayoutNative() {
                 .value(QStringLiteral("vendor.example")).toObject()
                 .value(QStringLiteral("opaque")).toBool(),
             "writer should preserve instance native data");
+    require(written.value(QStringLiteral("composition")).toObject()
+                .value(QStringLiteral("groups")).toArray().size() == 1,
+            "writer should preserve composition groups");
 }
 
 void testProjectReaderRejectsUnsupportedSchema() {
@@ -308,6 +316,60 @@ void testProjectReaderRejectsUnknownEndpointInstance() {
             "unknown endpoint instance should emit a stable diagnostic rule id");
 }
 
+void testProjectReaderRejectsMalformedCompositionGroups() {
+    QJsonObject object = contractProjectObject();
+    QJsonObject composition = object.value(QStringLiteral("composition")).toObject();
+    composition.insert(QStringLiteral("groups"), QJsonArray{QStringLiteral("not-an-object")});
+    object.insert(QStringLiteral("composition"), composition);
+
+    const ProjectReadResult result = ProjectReader::readFile(
+        writeFixture(object, QStringLiteral("malformed-composition-groups.json")));
+    require(!result.success, "composition groups entries should be objects");
+    require(hasDiagnosticRule(result, QStringLiteral("project.type_mismatch")),
+            "malformed composition groups should emit stable diagnostic rule id");
+}
+
+void testProjectReaderRejectsOldGraphConfigShape() {
+    QJsonObject object = contractProjectObject();
+    QJsonArray instances = object.value(QStringLiteral("instances")).toArray();
+    QJsonObject instance = instances.first().toObject();
+    instance.insert(QStringLiteral("graph_config"), QJsonObject{
+        {QStringLiteral("schema"), ipcraft::schemaids::graphConfigV1},
+        {QStringLiteral("objects"), QJsonArray{
+            QJsonObject{{QStringLiteral("id"), QStringLiteral("obj0")}, {QStringLiteral("type"), QStringLiteral("vendor.node")}},
+            QJsonObject{{QStringLiteral("id"), QStringLiteral("obj1")}, {QStringLiteral("type"), QStringLiteral("vendor.node")}}
+        }},
+        {QStringLiteral("relationships"), QJsonArray{
+            QJsonObject{
+                {QStringLiteral("id"), QStringLiteral("rel0")},
+                {QStringLiteral("type"), QStringLiteral("vendor.link")},
+                {QStringLiteral("source"), QJsonObject{{QStringLiteral("object"), QStringLiteral("obj0")}}},
+                {QStringLiteral("target"), QJsonObject{{QStringLiteral("object"), QStringLiteral("obj1")}}}
+            }
+        }}
+    });
+    instances.replace(0, instance);
+    object.insert(QStringLiteral("instances"), instances);
+
+    const ProjectReadResult result = ProjectReader::readFile(
+        writeFixture(object, QStringLiteral("old-graph-config-shape.json")));
+    require(!result.success, "project reader should reject old source/target graph_config shape");
+    require(hasDiagnosticRule(result, QStringLiteral("graph_config.type_mismatch")),
+            "old graph_config shape should emit graph_config type mismatch");
+}
+
+void testProjectWriterRejectsMalformedCompositionGroups() {
+    ProjectDocument document;
+    document.projectId = QStringLiteral("project_0");
+    document.projectName = QStringLiteral("Contract Project");
+    document.composition.groups = QJsonArray{QStringLiteral("not-an-object")};
+
+    const ProjectWriteResult result = ProjectWriter::writeFile(
+        writeFixture(QJsonObject{}, QStringLiteral("writer-malformed-composition-groups.json")),
+        document);
+    require(!result.success, "writer should reject non-object composition group entries");
+}
+
 void testProjectWriterUsesCanonicalSchemaAndRejectsLegacyAliases() {
     ProjectDocument document;
     document.schema = QStringLiteral("legacy");
@@ -374,6 +436,9 @@ int main(int argc, char** argv) {
         testProjectReaderRejectsMalformedDiagnosticRecord();
         testProjectReaderRejectsNonStringOptionalFields();
         testProjectReaderRejectsUnknownEndpointInstance();
+        testProjectReaderRejectsMalformedCompositionGroups();
+        testProjectReaderRejectsOldGraphConfigShape();
+        testProjectWriterRejectsMalformedCompositionGroups();
         testProjectWriterUsesCanonicalSchemaAndRejectsLegacyAliases();
         testProjectWriterRejectsUnknownEndpointInstance();
     } catch (const std::exception& exception) {

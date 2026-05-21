@@ -103,6 +103,11 @@
           "type": "array",
           "items": { "$ref": "#/$defs/external_port" }
         },
+        "groups": {
+          "description": "Optional editor or generator grouping records. Core preserves entries but does not assign hardware semantics.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/named_values" }
+        },
         "properties": { "$ref": "#/$defs/named_values" },
         "native": { "$ref": "#/$defs/native" }
       }

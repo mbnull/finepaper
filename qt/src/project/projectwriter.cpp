@@ -1,6 +1,7 @@
 // ProjectWriter serializes Ipcraft V1 project documents as stable JSON.
 #include "project/projectwriter.h"
 
+#include "ipcraft/compositionmodel.h"
 #include "ipcraft/jsonhelpers.h"
 #include "ipcraft/schemaids.h"
 
@@ -135,6 +136,9 @@ QJsonObject toJson(const ProjectDocument& document) {
         externalPorts.append(externalPortObject(port));
     }
     composition.insert(QStringLiteral("external_ports"), externalPorts);
+    if (!document.composition.groups.isEmpty()) {
+        composition.insert(QStringLiteral("groups"), document.composition.groups);
+    }
     insertObject(composition, QStringLiteral("properties"), document.composition.properties);
     insertObject(composition, QStringLiteral("native"), document.composition.native);
     root.insert(QStringLiteral("composition"), composition);
@@ -192,6 +196,18 @@ ProjectWriteResult validateDocument(const ProjectDocument& document) {
         if (!isNonEmpty(instance.package.version)) {
             return writeFailure(QStringLiteral("Project instance package.version is required"));
         }
+        if (instance.hasGraphConfig && !instance.graphConfigIsNull) {
+            const ipcraft::GraphConfigReadResult graphConfigResult =
+                ipcraft::GraphConfig::fromJson(instance.graphConfig);
+            if (!graphConfigResult.diagnostics.records.isEmpty()) {
+                return writeFailure(QStringLiteral("Project instance graph_config is invalid"));
+            }
+            const ipcraft::DiagnosticStore graphConfigDiagnostics =
+                ipcraft::validateGraphConfig(graphConfigResult.config);
+            if (!graphConfigDiagnostics.records.isEmpty()) {
+                return writeFailure(QStringLiteral("Project instance graph_config is invalid"));
+            }
+        }
     }
     QSet<QString> connectionIds;
     for (const ProjectConnectionRecord& connection : document.composition.connections) {
@@ -238,6 +254,11 @@ ProjectWriteResult validateDocument(const ProjectDocument& document) {
             if (!endpointResult.success) {
                 return endpointResult;
             }
+        }
+    }
+    for (const QJsonValue& group : document.composition.groups) {
+        if (!group.isObject()) {
+            return writeFailure(QStringLiteral("Project composition groups entries must be objects"));
         }
     }
     return {true, {}};

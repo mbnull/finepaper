@@ -1,6 +1,7 @@
 // ProjectReader parses Ipcraft V1 project JSON into ProjectDocument records.
 #include "project/projectreader.h"
 
+#include "ipcraft/compositionmodel.h"
 #include "ipcraft/schemaids.h"
 
 #include <QFile>
@@ -41,6 +42,23 @@ ProjectReadResult failure(const QString& ruleId,
     diagnostic.message = message;
     diagnostic.locations.append(documentPathLocation(path));
     result.diagnostics.records.append(diagnostic);
+    return result;
+}
+
+ProjectReadResult diagnosticsFailure(ipcraft::DiagnosticStore diagnostics,
+                                     const QString& message,
+                                     const QString& pathPrefix) {
+    ProjectReadResult result;
+    result.error = message;
+    for (ipcraft::Diagnostic& diagnostic : diagnostics.records) {
+        for (ipcraft::DiagnosticLocation& location : diagnostic.locations) {
+            if (location.kind == QStringLiteral("document_path") &&
+                location.path.startsWith(QLatin1Char('$'))) {
+                location.path = pathPrefix + location.path.mid(1);
+            }
+        }
+        result.diagnostics.records.append(diagnostic);
+    }
     return result;
 }
 
@@ -727,6 +745,20 @@ ProjectReadResult readInstance(const QJsonObject& object,
     }
     const QJsonValue graphConfig = object.value(QStringLiteral("graph_config"));
     if (graphConfig.isObject()) {
+        const ipcraft::GraphConfigReadResult graphConfigResult =
+            ipcraft::GraphConfig::fromJson(graphConfig.toObject());
+        if (!graphConfigResult.diagnostics.records.isEmpty()) {
+            return diagnosticsFailure(graphConfigResult.diagnostics,
+                                      QStringLiteral("Instance graph_config is invalid"),
+                                      QStringLiteral("$.instances[].graph_config"));
+        }
+        ipcraft::DiagnosticStore graphConfigDiagnostics =
+            ipcraft::validateGraphConfig(graphConfigResult.config);
+        if (!graphConfigDiagnostics.records.isEmpty()) {
+            return diagnosticsFailure(graphConfigDiagnostics,
+                                      QStringLiteral("Instance graph_config is invalid"),
+                                      QStringLiteral("$.instances[].graph_config"));
+        }
         instance.hasGraphConfig = true;
         instance.graphConfig = graphConfig.toObject();
     } else if (graphConfig.isNull()) {
@@ -746,6 +778,7 @@ ProjectReadResult validateCompositionObject(const QJsonObject& composition) {
     static const QSet<QString> allowedKeys = {
         QStringLiteral("connections"),
         QStringLiteral("external_ports"),
+        QStringLiteral("groups"),
         QStringLiteral("properties"),
         QStringLiteral("native")
     };
@@ -766,6 +799,20 @@ ProjectReadResult validateCompositionObject(const QJsonObject& composition) {
         return failure(QStringLiteral("project.type_mismatch"),
                        QStringLiteral("Composition external_ports must be an array"),
                        QStringLiteral("$.composition.external_ports"));
+    }
+    if (!composition.value(QStringLiteral("groups")).isUndefined() &&
+        !composition.value(QStringLiteral("groups")).isArray()) {
+        return failure(QStringLiteral("project.type_mismatch"),
+                       QStringLiteral("Composition groups must be an array"),
+                       QStringLiteral("$.composition.groups"));
+    }
+    const QJsonArray groups = composition.value(QStringLiteral("groups")).toArray();
+    for (qsizetype index = 0; index < groups.size(); ++index) {
+        if (!groups.at(index).isObject()) {
+            return failure(QStringLiteral("project.type_mismatch"),
+                           QStringLiteral("Composition groups entries must be objects"),
+                           QStringLiteral("$.composition.groups[%1]").arg(index));
+        }
     }
     return {};
 }
@@ -985,6 +1032,7 @@ ProjectReadResult ProjectReader::readFile(const QString& path) {
         externalPortIds.insert(port.id);
         document.composition.externalPorts.append(port);
     }
+    document.composition.groups = arrayValue(composition, QStringLiteral("groups"));
     ProjectReadResult compositionPropertiesResult = optionalObjectValue(
         composition,
         QStringLiteral("properties"),

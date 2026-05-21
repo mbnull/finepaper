@@ -5,6 +5,7 @@
 #include "ipcraft/schemaids.h"
 #include "project/ipinstancestate.h"
 
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QString>
 #include <QStringList>
@@ -77,6 +78,7 @@ struct ProjectConnectionRecord {
 struct ProjectComposition {
     QVector<ProjectConnectionRecord> connections;
     QVector<ProjectExternalPortRecord> externalPorts;
+    QJsonArray groups;
     QJsonObject properties;
     QJsonObject native;
 };
