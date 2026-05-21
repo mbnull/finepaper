@@ -1012,8 +1012,15 @@ Behavior:
 - validates project/package references;
 - validates config bundle values against config schema;
 - validates composition shallow rules;
-- runs declared validation flows only when requested by package flow policy;
+- does not execute declared flows, external validators, generators, or
+  process-spawning plugins by default;
 - returns diagnostics with stable locations.
+
+`inspect-project` and default `validate-project` are pure static checks. They
+must not write outputs except requested JSON output and must not start external
+processes. External validation and generation belong to `run-flow`; any future
+explicit validation-exec flag must use the `FlowRunner` security policy and must
+not be enabled by default.
 
 ### emit-inputs
 
@@ -1093,6 +1100,14 @@ Implementation must add:
 docs/architecture/v1-core-architecture.md
 ```
 
+Implementation must also add:
+
+```text
+docs/audit/black-box-audit-guide.md
+docs/audit/coverage-matrix.md
+docs/audit/failure-report-format.md
+```
+
 It must include:
 
 - goals and non-goals;
@@ -1117,10 +1132,21 @@ It must include:
 - migration strategy;
 - security model;
 - public CLI/API contract;
-- testability contract.
+- testability contract;
+- black-box audit protocol.
 
 The architecture doc is the primary source for third-party black-box audit
 agents. It must not rely on internal test names or private fixtures.
+
+Audit documents must be public contract material:
+
+- `black-box-audit-guide.md` explains how an audit agent validates the product
+  using only public materials.
+- `coverage-matrix.md` maps contract sections to CLI/API commands, schemas,
+  examples, expected diagnostic `rule_id`/location fields, and security
+  properties.
+- `failure-report-format.md` defines the redacted summary format used to report
+  hidden audit failures back to implementation agents.
 
 ## Contract Examples
 
@@ -1167,17 +1193,25 @@ Required security rules:
 Third-party audit agents may test only through:
 
 - architecture docs;
+- schemas;
 - JSON schema examples;
 - package specs;
 - project files;
 - `ipcraft-cli`;
 - stable headless API if published.
 
+If no stable headless API is published, the audit surface is the CLI, schemas,
+examples, project/package files, and public documentation.
+
 The implementation must therefore make these behaviors public and deterministic:
 
+- CLI JSON shape;
+- exit code behavior;
 - malformed package spec diagnostics;
 - malformed project diagnostics;
 - duplicate IDs;
+- unsupported schema rejection;
+- explicit extension enforcement;
 - unknown field preservation or rejection according to namespace;
 - explicit migration behavior;
 - path traversal rejection;
@@ -1186,13 +1220,114 @@ The implementation must therefore make these behaviors public and deterministic:
 - diagnostic mapping;
 - artifact glob behavior;
 - composition validation;
+- graph-config validation;
 - schema round-trip;
-- native namespace preservation.
+- native namespace preservation;
+- deterministic writing.
+
+Deterministic writing means public writers use stable formatting, stable array
+ordering where the schema defines ordered records, stable diagnostic record
+ordering, and stable emitted-input manifest file ordering. JSON object member
+ordering is not part of semantic validation, but CLI/file output should still
+use stable key ordering to make black-box diffs practical.
 
 Internal tests may cover smoke and round-trip behavior, but they are not the
 source of truth for correctness. Implementation must not hard-code behavior
 based on hidden test fixture names, internal test names, or example directory
 names.
+
+## Black-box Audit Protocol
+
+Third-party audit agents must be able to validate the public contract without
+access to implementation unit tests.
+
+Public audit inputs:
+
+- `docs/architecture/v1-core-architecture.md`;
+- `schemas/`;
+- `examples/contracts/`;
+- `ipcraft-cli`;
+- public package and project files;
+- public headless API, if published.
+
+Black-box audit workflow:
+
+1. Implementation publishes docs, schemas, examples, and `ipcraft-cli`.
+2. Audit agents read only public materials.
+3. Audit agents write hidden tests from the public contract.
+4. Codex and implementation agents cannot read hidden tests.
+5. Codex receives only failure summaries.
+6. Failure summaries include contract section, expected behavior, actual
+   behavior, and minimal redacted input when necessary.
+7. If a failure reveals ambiguous contract behavior, update the public contract
+   first, then update implementation or hidden tests.
+8. Implementation must not special-case hidden test names, public example names,
+   fixture names, or package IDs except through normal declarative package
+   lookup, extension handling, and plugin binding.
+
+Hidden audit scope is non-exhaustive. It may cover:
+
+- malformed project or package JSON;
+- duplicate IDs;
+- unsupported schema rejection;
+- explicit migration;
+- extension enforcement;
+- native namespace preservation;
+- config, table, document, and file validation;
+- composition validation;
+- graph-config validation;
+- emitter path security;
+- emitted-inputs manifest;
+- flow process failure;
+- missing executable;
+- timeout;
+- artifact glob confinement;
+- diagnostic stability;
+- deterministic writing;
+- old schema rejection;
+- existing package cutover.
+
+Audit checklist:
+
+- CLI JSON shape;
+- exit code behavior;
+- schema validation;
+- deterministic writing;
+- duplicate IDs;
+- extension enforcement;
+- native preservation;
+- config validation;
+- table validation;
+- document validation;
+- composition validation;
+- graph-config validation;
+- path security;
+- flow security;
+- diagnostics stability;
+- artifact collection;
+- migration behavior;
+- old schema rejection;
+- package cutover.
+
+Implementation feedback policy:
+
+- Hidden test source, fuzz corpora, and private fixture names are not shared.
+- Failure summaries identify contract section, expected behavior, actual
+  behavior, and minimal redacted input when necessary.
+- Failure reports must not require implementation agents to know hidden test
+  names, private fixture paths, or private package IDs.
+- If the contract is ambiguous, the public contract is updated before changing
+  hidden tests or implementation behavior.
+
+Required audit deliverables:
+
+- `docs/audit/black-box-audit-guide.md`;
+- `docs/audit/coverage-matrix.md`;
+- `docs/audit/failure-report-format.md`.
+
+Headless model, CLI, schemas, and contract examples are the first audit surface.
+Qt editor integration must conform to that model and must not define a separate
+runtime contract.
 
 ## Migration Strategy
 
@@ -1252,8 +1387,13 @@ cutover. Expected major work packages:
 12. Architecture documentation.
 13. Black-box audit readiness checks.
 
-Each work package must compile and test when landed, but the branch is allowed
-to be breaking until the full cutover closes.
+Each work package must compile and test when landed, but the hard-cutover branch
+is allowed to be internally breaking until the full cutover closes.
+
+No release or main-branch integration is allowed until the full hard-cutover
+acceptance criteria pass, including public CLI behavior, schemas, examples,
+architecture documentation, audit documentation, package cutover, and black-box
+audit readiness.
 
 ## Acceptance Criteria
 
@@ -1265,6 +1405,9 @@ to be breaking until the full cutover closes.
 - `ipcraft-cli` exposes every required command with JSON output.
 - Error paths return structured diagnostics.
 - `docs/architecture/v1-core-architecture.md` documents the public contract.
+- `docs/audit/black-box-audit-guide.md`,
+  `docs/audit/coverage-matrix.md`, and
+  `docs/audit/failure-report-format.md` document the public audit protocol.
 - `examples/contracts/` includes all required examples.
 - Hidden black-box tests can validate behavior without reading internal tests.
 - No implementation branch relies on old `ipcraft.noc.project.v1` as a normal
