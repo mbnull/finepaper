@@ -16,6 +16,8 @@
 - Migration is explicit through `ipcraft-cli migrate-project`; normal project loading rejects old schemas.
 - `inspect-project` and default `validate-project` are static and side-effect free. They must not run external validators, generators, flow steps, or process-spawning plugins.
 - Every command-line failure returns `ipcraft.cli.result.v1` JSON with `ipcraft.diagnostics.v1` records.
+- Public behavior is the implementation target. Local test names, C++ type names, and helper function names in this plan are suggested implementation scaffolding unless a name appears in a public schema, CLI command, diagnostic `rule_id`, file path, or documented API contract.
+- JSON schemas use strict top-level object validation. Forward compatibility is provided through documented `native`, `preserved`, `metadata`, or extension-owned namespaces, not blanket top-level `additionalProperties: true`.
 - Use `xmake -P qt build <target>` and `xmake -P qt run <target>` for Qt targets.
 - Use `ruby -I spec_generator/test spec_generator/test/spec_generator_test.rb` for specgen tests.
 - Commit after every task. Do not touch unrelated untracked files such as `.codex` or `image.png`.
@@ -29,15 +31,17 @@ Public schemas and docs:
 - Create `schemas/ipcraft.diagnostics.v1.schema.json`: diagnostics schema.
 - Create `schemas/ipcraft.graph-config.v1.schema.json`: optional graph-config schema.
 - Create `schemas/ipcraft.emitted-inputs.v1.schema.json`: emitted-inputs manifest schema.
+- Create `schemas/ipcraft.cli.result.v1.schema.json`: CLI result envelope schema.
 - Create `docs/architecture/v1-core-architecture.md`: public architecture contract.
 - Create `docs/audit/black-box-audit-guide.md`: audit workflow.
 - Create `docs/audit/coverage-matrix.md`: contract-to-test matrix.
 - Create `docs/audit/failure-report-format.md`: failure summary format.
+- Create `docs/audit/rule-id-catalog.md`: stable diagnostic `rule_id` catalog.
 
 Qt/headless core:
 
 - Create `qt/inc/ipcraft/schemaids.h`: canonical schema string constants.
-- Create `qt/inc/ipcraft/jsonhelpers.h` and `qt/src/ipcraft/jsonhelpers.cpp`: deterministic JSON helpers, duplicate ID helpers, path confinement helpers, diagnostic JSON helpers.
+- Create `qt/inc/ipcraft/jsonhelpers.h` and `qt/src/ipcraft/jsonhelpers.cpp`: deterministic JSON writer helpers, duplicate ID helpers, realpath-based path confinement helpers, diagnostic JSON helpers.
 - Create `qt/inc/ipcraft/diagnostics.h` and `qt/src/ipcraft/diagnostics.cpp`: `Diagnostic`, `DiagnosticLocation`, `DiagnosticStore`, JSON round-trip.
 - Create `qt/inc/ipcraft/value.h` and `qt/src/ipcraft/value.cpp`: value type checks, parameter type checks, condition expression evaluator.
 - Replace `qt/inc/project/projectdocument.h` and `qt/src/project/projectreader.cpp` / `projectwriter.cpp` with `ipcraft.project.v1` load/write behavior.
@@ -89,7 +93,11 @@ Examples:
 - Create `examples/contracts/clock_fanout_project/`.
 - Create `examples/contracts/failing_validator_project/`.
 - Create `examples/contracts/artifact_collection_project/`.
-- Create `examples/contracts/v1_noc_compat_project/`.
+- Create `examples/contracts/noc_cutover_project/`.
+- Create `examples/contracts/negative_malformed_package/`.
+- Create `examples/contracts/negative_extension_required/`.
+- Create `examples/contracts/negative_path_escape/`.
+- Create `examples/contracts/negative_flow_missing_executable/`.
 
 ## Task 1: Public Schemas And Diagnostic Foundation
 
@@ -99,6 +107,7 @@ Examples:
 - Create: `schemas/ipcraft.package.v1.schema.json`
 - Create: `schemas/ipcraft.graph-config.v1.schema.json`
 - Create: `schemas/ipcraft.emitted-inputs.v1.schema.json`
+- Create: `schemas/ipcraft.cli.result.v1.schema.json`
 - Create: `qt/inc/ipcraft/schemaids.h`
 - Create: `qt/inc/ipcraft/jsonhelpers.h`
 - Create: `qt/src/ipcraft/jsonhelpers.cpp`
@@ -109,7 +118,7 @@ Examples:
 
 - [ ] **Step 1: Write the failing diagnostic JSON round-trip test**
 
-Create `qt/test/ipcraft_diagnostics_test.cpp` with this first test:
+Create `qt/test/ipcraft_diagnostics_test.cpp` with a local smoke test covering this public behavior:
 
 ```cpp
 #include "ipcraft/diagnostics.h"
@@ -177,7 +186,7 @@ xmake -P qt build ipcraft_diagnostics_test
 
 Expected: FAIL because the new headers and implementation do not exist.
 
-- [ ] **Step 3: Implement schema constants and diagnostics**
+- [ ] **Step 3: Implement schema constants, deterministic JSON helpers, and diagnostics**
 
 Implement `qt/inc/ipcraft/schemaids.h`:
 
@@ -196,7 +205,16 @@ inline const QString cliResultV1 = QStringLiteral("ipcraft.cli.result.v1");
 }
 ```
 
-Implement diagnostics structs with these public fields:
+Implement diagnostics model that serializes/deserializes the public schema fields. Internal structs may differ, but public JSON output must conform to `ipcraft.diagnostics.v1`.
+
+Implement deterministic JSON writer helpers with these public-observable rules:
+
+- object keys are emitted in sorted order for CLI and file writer output;
+- schema-defined arrays preserve input/model order unless the contract says to sort;
+- diagnostic records are sorted by `severity`, `source`, `rule_id`, then first location for deterministic CLI output;
+- emitted-input manifest files are sorted by `kind`, `id`, then `path`;
+- output uses UTF-8 and a stable newline policy;
+- JSON semantic validation must not depend on object key order.
 
 ```cpp
 struct DiagnosticLocation {
@@ -242,9 +260,18 @@ struct DiagnosticStore {
 };
 ```
 
-- [ ] **Step 4: Add minimal JSON Schema files**
+- [ ] **Step 4: Add JSON Schema files with strict top-level policy**
 
-Create each schema file with `$schema`, `$id`, `type: "object"`, required `schema`, and `additionalProperties: true` for forward compatibility. `ipcraft.diagnostics.v1.schema.json` must require `records[].severity`, `records[].source`, `records[].rule_id`, `records[].message`, and `records[].locations`.
+Create each schema file with `$schema`, `$id`, `type: "object"`, required `schema`, and strict top-level fields. Do not use blanket top-level `additionalProperties: true`. Forward compatibility is handled only through documented `native`, `preserved`, `metadata`, `details`, extension-owned sections, and package/vendor namespaces.
+
+Required schema policy:
+
+- `ipcraft.project.v1` uses top-level `project`, `instances`, `composition`, `layout`, `diagnostics`, `artifacts`, `migration`, and `native`.
+- `project.id` and `project.name` are the canonical project identity fields; top-level `id` and `name` are not valid V1 project identity fields.
+- `ipcraft.package.v1` allows optional capability sections only when the matching extension is declared.
+- `ipcraft.diagnostics.v1` requires `records[].severity`, `records[].source`, `records[].rule_id`, `records[].message`, and `records[].locations`.
+- `ipcraft.cli.result.v1` requires `ok`, `schema`, `diagnostics`, and either `result` on success or structured diagnostics on failure.
+- Unknown top-level fields produce schema diagnostics unless they are explicitly documented extension/native escape hatches.
 
 - [ ] **Step 5: Verify diagnostics test passes**
 
@@ -260,7 +287,7 @@ Expected: build succeeds and run prints `ipcraft_diagnostics_test passed`.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add schemas qt/inc/ipcraft/schemaids.h qt/inc/ipcraft/jsonhelpers.h qt/src/ipcraft/jsonhelpers.cpp qt/inc/ipcraft/diagnostics.h qt/src/ipcraft/diagnostics.cpp qt/test/ipcraft_diagnostics_test.cpp qt/xmake.lua
+git add schemas/ipcraft.diagnostics.v1.schema.json schemas/ipcraft.project.v1.schema.json schemas/ipcraft.package.v1.schema.json schemas/ipcraft.graph-config.v1.schema.json schemas/ipcraft.emitted-inputs.v1.schema.json schemas/ipcraft.cli.result.v1.schema.json qt/inc/ipcraft/schemaids.h qt/inc/ipcraft/jsonhelpers.h qt/src/ipcraft/jsonhelpers.cpp qt/inc/ipcraft/diagnostics.h qt/src/ipcraft/diagnostics.cpp qt/test/ipcraft_diagnostics_test.cpp qt/xmake.lua
 git commit -m "feat: add ipcraft v1 schema and diagnostics foundation"
 ```
 
@@ -276,7 +303,7 @@ git commit -m "feat: add ipcraft v1 schema and diagnostics foundation"
 
 - [ ] **Step 1: Write failing project round-trip tests**
 
-Create `qt/test/ipcraft_project_model_test.cpp` with tests named:
+Create `qt/test/ipcraft_project_model_test.cpp` with local smoke tests covering:
 
 ```cpp
 void testProjectDocumentRoundTripsInstancesCompositionLayoutNative();
@@ -290,8 +317,10 @@ The first test must build a `QJsonObject` containing:
 ```json
 {
   "schema": "ipcraft.project.v1",
-  "id": "project_0",
-  "name": "Contract Project",
+  "project": {
+    "id": "project_0",
+    "name": "Contract Project"
+  },
   "instances": [
     {
       "id": "ip0",
@@ -307,7 +336,7 @@ The first test must build a `QJsonObject` containing:
 }
 ```
 
-Assert read/write preserves instance IDs, package refs, config parameters, composition, layout, and native objects.
+Assert read/write preserves `project.id`, `project.name`, instance IDs, package refs, config parameters, composition, layout, and native objects.
 
 - [ ] **Step 2: Add the test target and verify it fails**
 
@@ -319,75 +348,44 @@ xmake -P qt build ipcraft_project_model_test
 
 Expected: FAIL because the current `ProjectDocument` still uses the old `.fpproj` graph fields and schema strings.
 
-- [ ] **Step 3: Replace project DTOs with v1 root shape**
+- [ ] **Step 3: Replace project DTOs with public V1 root behavior**
 
-Replace `ProjectDocument` with fields:
+Internal DTO names and container types may differ. The public reader/writer must expose this JSON contract:
 
-```cpp
-struct PackageRef {
-    QString packageId;
-    QString version;
-};
-
-struct ProjectFileRef {
-    QString path;
-    QJsonObject metadata;
-};
-
-struct ConfigDocumentState {
-    QString format;
-    QJsonValue content;
-    QString text;
-    QJsonObject preserved;
-};
-
-struct TableState {
-    QVector<QJsonObject> rows;
-    QJsonObject preserved;
-};
-
-struct ConfigBundle {
-    QJsonObject parameters;
-    QHash<QString, TableState> tables;
-    QHash<QString, ConfigDocumentState> documents;
-    QHash<QString, ProjectFileRef> files;
-    QJsonObject preserved;
-};
-
-struct GraphConfig {
-    QJsonObject object;
-};
-
-struct NativeState {
-    QJsonObject namespaces;
-};
-
-struct IpInstanceState {
-    QString instanceId;
-    QString displayName;
-    PackageRef package;
-    ConfigBundle config;
-    std::optional<GraphConfig> graphConfig;
-    NativeState nativeState;
-    QJsonObject lastRuns;
-    QJsonObject artifacts;
-    DiagnosticStore diagnostics;
-    QJsonObject view;
-};
-
-struct ProjectDocument {
-    QString schema = IpcraftSchemaIds::projectV1;
-    QString projectId;
-    QString name;
-    QVector<IpInstanceState> instances;
-    QJsonObject composition;
-    QJsonObject layout;
-    DiagnosticStore diagnostics;
-    QJsonObject projectArtifacts;
-    QJsonObject migration;
-    NativeState nativeState;
-};
+```json
+{
+  "schema": "ipcraft.project.v1",
+  "project": {
+    "id": "project_0",
+    "name": "Contract Project"
+  },
+  "instances": [],
+  "composition": {
+    "connections": [],
+    "external_ports": []
+  },
+  "layout": {
+    "views": []
+  },
+  "diagnostics": {
+    "schema": "ipcraft.diagnostics.v1",
+    "records": []
+  },
+  "artifacts": {},
+  "migration": {},
+  "native": {}
+}
 ```
+
+Public model behavior:
+
+- `project.id` and `project.name` are required.
+- top-level `id` and `name` are invalid for V1 project identity;
+- `instances[].id` is unique within a project;
+- `instances[].package.id` and `instances[].package.version` are required;
+- each instance owns `config`, optional `graph_config`, `native`, `last_runs`, `artifacts`, `diagnostics`, and `view`;
+- unknown vendor data is preserved only under `native` or documented `preserved` fields;
+- `layout` stores editor state and canvas coordinates; config parameters do not store new `x/y` layout state.
 
 - [ ] **Step 4: Implement strict project reader/writer behavior**
 
@@ -401,7 +399,7 @@ struct ProjectDocument {
 
 `ProjectWriter` must:
 
-- write `schema`, `id`, `name`, `instances`, `composition`, `layout`, `diagnostics`, `artifacts`, `migration`, and `native`;
+- write `schema`, `project`, `instances`, `composition`, `layout`, `diagnostics`, `artifacts`, `migration`, and `native`;
 - produce stable array ordering in existing in-memory order;
 - use stable key ordering helper for generated JSON output.
 
@@ -437,7 +435,7 @@ git commit -m "feat: make project document the ipcraft v1 root model"
 
 - [ ] **Step 1: Write failing package parser tests**
 
-Create tests named:
+Create local smoke tests covering:
 
 ```cpp
 void testRuntimeLoadsPackageV1WithoutIpcoreYml();
@@ -445,6 +443,8 @@ void testOptionalSectionRequiresExplicitExtension();
 void testConnectionRulesParseAliasesAndCompatibility();
 void testPluginMetadataIsSeparateFromExtensions();
 void testPackageParserRejectsPathTraversal();
+void testPackageResolverRequiresExactVersion();
+void testPackageResolverRejectsAmbiguousPackageRoots();
 ```
 
 `testOptionalSectionRequiresExplicitExtension` must parse a package with `config_schema.tables` and no `ipcraft.config.tables` extension, then assert diagnostic:
@@ -468,67 +468,36 @@ xmake -P qt build ipcraft_package_spec_test
 
 Expected: FAIL because `ipcraft.package.v1` parsing and extension enforcement do not exist.
 
-- [ ] **Step 3: Implement `PackageSpec`**
+- [ ] **Step 3: Implement public `PackageSpec` behavior**
 
-Define:
+Internal structs may differ. Public parsing must expose these package sections:
 
-```cpp
-struct ExtensionUse {
-    QString id;
-    bool required = true;
-    QJsonObject config;
-};
-
-struct PluginSpec {
-    QString id;
-    QString library;
-    QString entrypoint;
-    QJsonObject hooks;
-};
-
-struct InterfaceSpec {
-    QString id;
-    QString kind;
-    QString protocol;
-    QString role;
-    QString direction;
-    bool required = false;
-    QString fanout;
-    QJsonObject properties;
-};
-
-struct CompatibilityRule {
-    QString connectionType;
-    QJsonObject from;
-    QJsonObject to;
-    QString arity;
-};
-
-struct ConnectionRuleSpec {
-    QHash<QString, QString> protocolAliases;
-    QHash<QString, QString> kindAliases;
-    QVector<CompatibilityRule> compatibility;
-};
-
-struct PackageSpec {
-    QString schema;
-    QString packageId;
-    QString version;
-    QString name;
-    QString packageRootPath;
-    QVector<ExtensionUse> extensions;
-    QJsonObject configSchema;
-    QVector<InterfaceSpec> interfaces;
-    ConnectionRuleSpec connectionRules;
-    QJsonArray emitters;
-    QJsonArray flows;
-    QJsonArray artifacts;
-    QJsonObject diagnostics;
-    QJsonObject views;
-    std::optional<PluginSpec> plugin;
-    QJsonObject nativeSchema;
-};
+```json
+{
+  "schema": "ipcraft.package.v1",
+  "id": "vendor.example.simple",
+  "version": "1.0.0",
+  "name": "Simple IP",
+  "extensions": [],
+  "config_schema": {},
+  "interfaces": [],
+  "connection_rules": {},
+  "emitters": [],
+  "flows": [],
+  "artifacts": [],
+  "diagnostics": {},
+  "views": {},
+  "plugin": null,
+  "native_schema": {}
+}
 ```
+
+Public parser behavior:
+
+- `extensions` and `plugin` are separate concepts;
+- interface specs expose `id`, `kind`, `protocol`, `role`, `direction`, `required`, `fanout`, and shallow properties;
+- `connection_rules` exposes `protocol_aliases`, optional `kind_aliases`, and compatibility entries;
+- emitters, flows, artifacts, diagnostics, and views are preserved as declared package capability contracts.
 
 - [ ] **Step 4: Enforce runtime authoring boundary**
 
@@ -538,9 +507,22 @@ The loader must:
 - never require `ipcore.yml`;
 - reject `schema != "ipcraft.package.v1"` with `package.unsupported_schema`;
 - reject absolute package-local paths and `..` traversal with `package.path_escape`;
+- resolve every package-local path through canonical realpath checks; symlinks that escape the package root are rejected with `package.path_escape`;
 - keep `extensions` and `plugin` separate.
 
-- [ ] **Step 5: Enforce optional extension mapping**
+- [ ] **Step 5: Define package root and exact version resolution**
+
+Package resolution rules:
+
+- `--packages <package-root>` may point to one package root containing `ipcraft.json` or to a collection root containing package directories.
+- Runtime discovery scans one directory level below a collection root for package-local `ipcraft.json`.
+- A project instance reference `{ "package": { "id": "...", "version": "..." } }` resolves only to an exact `id` and exact `version` match.
+- Multiple package specs with the same `{id, version}` in the same resolution set produce `package.duplicate_version`.
+- Missing exact version produces `package.version_not_found`.
+- Missing package ID produces `package.not_found`.
+- Runtime resolution never falls back to latest, nearest, compatible, or authoring `ipcore.yml`.
+
+- [ ] **Step 6: Enforce optional extension mapping**
 
 Implement the exact section mapping from the spec:
 
@@ -561,7 +543,7 @@ graph_config -> ipcraft.graph_config
 
 Missing extension emits `package.extension_required` and rejects the package.
 
-- [ ] **Step 6: Verify package parser tests pass**
+- [ ] **Step 7: Verify package parser tests pass**
 
 Run:
 
@@ -572,7 +554,7 @@ xmake -P qt run ipcraft_package_spec_test
 
 Expected: run prints `ipcraft_package_spec_test passed`.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add qt/inc/ipcraft/ipcraftmanifest.h qt/src/ipcraft/ipcraftmanifest.cpp qt/inc/ipcraft/ipcraftmanifestreader.h qt/src/ipcraft/ipcraftmanifestreader.cpp qt/inc/ipcraft/packagespec.h qt/src/ipcraft/packagespec.cpp qt/test/ipcraft_package_spec_test.cpp qt/xmake.lua
@@ -591,7 +573,7 @@ git commit -m "feat: parse ipcraft package v1 specs"
 
 - [ ] **Step 1: Write failing config validation tests**
 
-Create tests named:
+Create local smoke tests covering:
 
 ```cpp
 void testParameterTypesMapToJsonValues();
@@ -602,7 +584,7 @@ void testTableAndDocumentUnknownFieldsPreserveWhenDeclared();
 void testPathParametersRejectTraversal();
 ```
 
-The script rejection test must feed expressions containing `exec("ls")`, `env("HOME")`, `read_file("x")`, and `python("1+1")`, and assert diagnostic `config.expression_unsupported`.
+The unsupported expression test must feed JSON AST objects using operations such as `exec`, `env`, `read_file`, and `python`, and assert diagnostic `config.expression_unsupported`.
 
 - [ ] **Step 2: Verify config tests fail**
 
@@ -614,19 +596,28 @@ xmake -P qt build ipcraft_config_validation_test
 
 Expected: FAIL because config schema validation is not implemented.
 
-- [ ] **Step 3: Implement value and expression evaluator**
+- [ ] **Step 3: Implement value and JSON AST expression evaluator**
 
-Support only:
+V1 expression fields use JSON AST objects, not arbitrary script strings. Support only:
 
-```text
-param("id") == literal
-param("id") != literal
-exists("id")
-and(...)
-or(...)
-not(...)
-true
-false
+```json
+{ "op": "eq", "left": { "param": "id" }, "right": { "literal": 1 } }
+{ "op": "ne", "left": { "param": "id" }, "right": { "literal": "x" } }
+{ "op": "exists", "param": "id" }
+{ "op": "and", "args": [ { "literal": true }, { "op": "exists", "param": "id" } ] }
+{ "op": "or", "args": [ { "literal": false }, { "op": "exists", "param": "id" } ] }
+{ "op": "not", "arg": { "op": "exists", "param": "id" } }
+{ "literal": true }
+{ "literal": false }
+```
+
+Rejected forms:
+
+```json
+{ "op": "exec", "args": ["ls"] }
+{ "op": "env", "name": "HOME" }
+{ "op": "read_file", "path": "x" }
+{ "op": "python", "code": "1+1" }
 ```
 
 Implement rejected expression diagnostic:
@@ -691,7 +682,7 @@ git commit -m "feat: validate ipcraft config bundles"
 
 - [ ] **Step 1: Write failing composition tests**
 
-Create tests named:
+Create local smoke tests covering:
 
 ```cpp
 void testCompositionRejectsUnknownInstance();
@@ -726,40 +717,36 @@ xmake -P qt build ipcraft_composition_test
 
 Expected: FAIL because composition and graph-config validators do not exist.
 
-- [ ] **Step 3: Implement composition structs**
+- [ ] **Step 3: Implement composition public JSON behavior**
 
-Define:
+Internal structs may differ. Public composition JSON must expose:
 
-```cpp
-struct EndpointRef {
-    QString instanceId;
-    QString interfaceId;
-    QString portId;
-    QString role;
-};
-
-struct SystemConnection {
-    QString id;
-    QString type;
-    QVector<EndpointRef> endpoints;
-    QJsonObject properties;
-    QString source = QStringLiteral("user");
-};
-
-struct ExternalPort {
-    QString id;
-    QString kind;
-    QString protocol;
-    QString role;
-    QJsonObject properties;
-};
-
-struct CompositionModel {
-    QVector<SystemConnection> connections;
-    QVector<ExternalPort> externalPorts;
-    QJsonArray groups;
-    QJsonObject properties;
-};
+```json
+{
+  "connections": [
+    {
+      "id": "conn0",
+      "type": "interface",
+      "endpoints": [
+        {
+          "instance": "ip0",
+          "interface": "m_axi",
+          "role": "master"
+        },
+        {
+          "instance": "ip1",
+          "interface": "s_axi",
+          "role": "slave"
+        }
+      ],
+      "properties": {},
+      "source": "user"
+    }
+  ],
+  "external_ports": [],
+  "groups": [],
+  "properties": {}
+}
 ```
 
 - [ ] **Step 4: Implement shallow validator**
@@ -824,7 +811,7 @@ git commit -m "feat: add project composition and layout models"
 
 - [ ] **Step 1: Write failing emitter tests**
 
-Create tests named:
+Create local smoke tests covering:
 
 ```cpp
 void testEmitParametersWritesDeterministicJson();
@@ -855,30 +842,27 @@ Expected: FAIL because `PackageInputBuilder` does not exist.
 
 - [ ] **Step 3: Implement emitted inputs manifest**
 
-`PackageInputBuilder::emitInputs` returns:
+`PackageInputBuilder::emitInputs` must return public JSON matching:
 
-```cpp
-struct EmittedInputFile {
-    QString id;
-    QString kind;
-    QString relativePath;
-    QString sha256;
-    qint64 size = 0;
-    QJsonObject source;
-};
-
-struct EmittedInputsManifest {
-    QString projectId;
-    QString instanceId;
-    PackageRef package;
-    QString runId;
-    QVector<EmittedInputFile> files;
-    DiagnosticStore diagnostics;
-    QJsonObject toJson() const;
-};
+```json
+{
+  "schema": "ipcraft.emitted-inputs.v1",
+  "project": "project_0",
+  "instance": "ip0",
+  "package": {
+    "id": "vendor.example.simple",
+    "version": "1.0.0"
+  },
+  "run_id": "run0",
+  "files": [],
+  "diagnostics": {
+    "schema": "ipcraft.diagnostics.v1",
+    "records": []
+  }
+}
 ```
 
-Manifest JSON uses schema `ipcraft.emitted-inputs.v1`, relative paths only, deterministic file ordering by `kind`, `id`, then `path`.
+Manifest file paths are relative only. File records are deterministic by `kind`, `id`, then `path`.
 
 - [ ] **Step 4: Implement emitter actions**
 
@@ -930,7 +914,7 @@ git commit -m "feat: emit package inputs with manifest"
 
 - [ ] **Step 1: Write failing flow tests**
 
-Create tests named:
+Create local smoke tests covering:
 
 ```cpp
 void testExecMissingExecutableReturnsDiagnostic();
@@ -939,6 +923,7 @@ void testExecTimeoutReturnsDiagnosticAndAttemptsCleanup();
 void testExecRejectsNativeCommandPolicyOverride();
 void testRunFlowUsesRunDirectoryCwdByDefault();
 void testValidateProjectDoesNotRunFlow();
+void testStdoutStderrCaptureTruncationReturnsDiagnostic();
 ```
 
 Expected diagnostics:
@@ -948,15 +933,17 @@ flow.executable_missing
 flow.exec_failed
 flow.timeout
 flow.command_policy_violation
+flow.output_truncated
 ```
 
 - [ ] **Step 2: Write failing artifact tests**
 
-Create tests named:
+Create local smoke tests covering:
 
 ```cpp
 void testArtifactGlobCollectsInsideRunRoot();
 void testArtifactGlobRejectsTraversal();
+void testArtifactGlobRejectsSymlinkEscape();
 void testRequiredArtifactMissingReturnsDiagnostic();
 void testArtifactIndexRecordsTypeSizeModifiedTime();
 ```
@@ -985,11 +972,13 @@ Implement process defaults:
 
 - `cwd == run_dir` when omitted;
 - package-local executable paths resolve relative to package root;
+- package-local executable, cwd, stdout/stderr capture files, emitted inputs, and artifact paths are confined by canonical realpath checks after symlink resolution;
 - framework tools come only from application policy allowlist;
 - environment starts from sanitized base plus declared allowlist;
 - `timeout_ms` uses declared value or fixed default `60000`;
 - stdout/stderr capture paths are under run directory;
 - capture limit defaults to `1048576` bytes;
+- stdout/stderr exceeding the capture limit is truncated deterministically and produces `flow.output_truncated` with stream name, limit, and capture file location;
 - nonzero exit, timeout, and missing executable produce structured diagnostics;
 - parallel flow execution is disabled.
 
@@ -998,7 +987,7 @@ Implement process defaults:
 Artifact collector must:
 
 - expand globs under run directory or declared output root only;
-- reject `..` and absolute glob escape;
+- reject `..`, absolute glob escape, and symlink escape after canonical realpath resolution;
 - sort records by `type`, `id`, then relative path;
 - include `path`, `type`, `size`, `modified_time`, `source_instance`, and `flow_run_id`.
 
@@ -1040,8 +1029,10 @@ void testInspectProjectReturnsJsonResult();
 void testValidateProjectIsStaticAndDoesNotCreateRunFiles();
 void testEmitInputsReturnsManifest();
 void testRunFlowReportsMissingExecutable();
+void testRunFlowRequiresInstanceOrAllInstancesForInstanceScopedFlow();
 void testCollectArtifactsReturnsArtifactIndex();
 void testMigrateProjectRequiresExplicitTarget();
+void testMigrateProjectReturnsProjectUnderResultProject();
 ```
 
 Every failure test must assert:
@@ -1067,17 +1058,18 @@ Expected: FAIL because the CLI target and dispatcher do not exist.
 
 - [ ] **Step 3: Implement CLI result helper**
 
-`CliResult` must write compact or indented JSON to stdout and no human text by default:
+`CliResult` must write compact or indented JSON to stdout and no human text by default. Internal C++ shape may differ, but the public JSON envelope is:
 
-```cpp
-struct CliResult {
-    bool ok = false;
-    QJsonObject result;
-    DiagnosticStore diagnostics;
-
-    QJsonObject toJson() const;
-    int exitCode() const;
-};
+```json
+{
+  "ok": true,
+  "schema": "ipcraft.cli.result.v1",
+  "result": {},
+  "diagnostics": {
+    "schema": "ipcraft.diagnostics.v1",
+    "records": []
+  }
+}
 ```
 
 - [ ] **Step 4: Implement command dispatcher**
@@ -1088,12 +1080,27 @@ Support:
 ipcraft-cli inspect-project <project>
 ipcraft-cli validate-project <project> --packages <package-root>
 ipcraft-cli emit-inputs <project> --instance <id> --out <dir> --packages <package-root>
-ipcraft-cli run-flow <project> --flow <flow-id> --out <dir> --packages <package-root>
+ipcraft-cli run-flow <project> --flow <flow-id> --instance <id> --out <dir> --packages <package-root>
+ipcraft-cli run-flow <project> --flow <flow-id> --all-instances --out <dir> --packages <package-root>
 ipcraft-cli migrate-project <project> --to ipcraft.project.v1
 ipcraft-cli collect-artifacts <run-dir> --spec <package-spec>
 ```
 
 Unknown commands return `cli.unknown_command`. Missing required arguments return `cli.missing_argument`. Invalid paths return the underlying `project.*`, `package.*`, `emitter.*`, `flow.*`, or `artifact.*` diagnostic.
+
+Run-flow instance targeting rules:
+
+- instance-scoped flows require exactly one of `--instance <id>` or `--all-instances`;
+- project-scoped flows reject `--instance` and `--all-instances`;
+- providing both `--instance` and `--all-instances` returns `cli.argument_conflict`;
+- omitting both for an instance-scoped flow returns `cli.instance_scope_required`;
+- `--all-instances` runs instances in deterministic order by instance ID and writes deterministic run directory names.
+
+Migration output rule:
+
+- `migrate-project` returns migrated project JSON under `result.project`;
+- diagnostics remain under top-level `diagnostics`;
+- failure results must not emit a partial migrated project except under diagnostic `details` when redacted and explicitly documented.
 
 - [ ] **Step 5: Verify CLI tests pass**
 
@@ -1125,7 +1132,7 @@ git commit -m "feat: expose ipcraft cli contract"
 
 - [ ] **Step 1: Write failing migration tests**
 
-Create tests named:
+Create local smoke tests covering:
 
 ```cpp
 void testNormalProjectLoadRejectsOldFinepaperSchema();
@@ -1155,15 +1162,24 @@ Expected: FAIL because migration helper does not exist.
 
 - [ ] **Step 3: Implement explicit migrator**
 
-Implement:
+Internal migration APIs may differ. Public migration behavior must return the
+standard CLI envelope and place the migrated document under `result.project` on
+success:
 
-```cpp
-struct MigrationResult {
-    std::optional<ProjectDocument> project;
-    DiagnosticStore diagnostics;
-};
-
-MigrationResult migrateProjectToV1(const QJsonObject& oldRoot);
+```json
+{
+  "ok": true,
+  "schema": "ipcraft.cli.result.v1",
+  "result": {
+    "project": {
+      "schema": "ipcraft.project.v1"
+    }
+  },
+  "diagnostics": {
+    "schema": "ipcraft.diagnostics.v1",
+    "records": []
+  }
+}
 ```
 
 Rules:
@@ -1176,9 +1192,9 @@ Rules:
 
 - [ ] **Step 4: Wire CLI migration command**
 
-`ipcraft-cli migrate-project old.fpproj --to ipcraft.project.v1` writes migrated
-JSON to stdout by default and returns diagnostics in the standard CLI result
-object. This task does not add an output-file flag.
+`ipcraft-cli migrate-project old.fpproj --to ipcraft.project.v1` writes the
+standard CLI result JSON to stdout. On success, the migrated project appears at
+`result.project`. This task does not add an output-file flag.
 
 - [ ] **Step 5: Verify migration tests pass**
 
@@ -1205,6 +1221,7 @@ git commit -m "feat: add explicit project migration to ipcraft v1"
 - Create: `docs/audit/black-box-audit-guide.md`
 - Create: `docs/audit/coverage-matrix.md`
 - Create: `docs/audit/failure-report-format.md`
+- Create: `docs/audit/rule-id-catalog.md`
 - Create: `examples/contracts/simple_parameter_ip/README.md`
 - Create: `examples/contracts/simple_parameter_ip/package/ipcraft.json`
 - Create: `examples/contracts/simple_parameter_ip/project.fpproj`
@@ -1225,7 +1242,11 @@ QStringList requiredExamples = {
     "clock_fanout_project",
     "failing_validator_project",
     "artifact_collection_project",
-    "v1_noc_compat_project"
+    "noc_cutover_project",
+    "negative_malformed_package",
+    "negative_extension_required",
+    "negative_path_escape",
+    "negative_flow_missing_executable"
 };
 ```
 
@@ -1270,6 +1291,7 @@ security model
 public CLI/API contract
 testability contract
 black-box audit protocol
+diagnostic rule-id catalog
 ```
 
 - [ ] **Step 4: Write audit docs**
@@ -1310,9 +1332,64 @@ package cutover
 }
 ```
 
+`rule-id-catalog.md` must list every stable rule ID used by public diagnostics,
+including severity, source, category, stable location kinds, and the contract
+section that owns the rule. Hidden tests match `rule_id`, `severity`, `source`,
+and locations; they do not match full message text.
+
+Minimum rule IDs to catalog:
+
+```text
+project.unsupported_schema
+project.duplicate_id
+package.unsupported_schema
+package.extension_required
+package.path_escape
+package.duplicate_version
+package.version_not_found
+package.not_found
+config.required_missing
+config.type_mismatch
+config.enum_invalid
+config.range_invalid
+config.path_escape
+config.expression_unsupported
+composition.unknown_instance
+composition.unknown_interface
+composition.required_interface_unconnected
+composition.multiply_driven_input
+composition.clock_reset_source_count
+composition.incompatible_endpoint
+graph_config.duplicate_object
+graph_config.unknown_endpoint_object
+emitter.path_absolute
+emitter.path_escape
+emitter.write_failed
+flow.executable_missing
+flow.exec_failed
+flow.timeout
+flow.command_policy_violation
+flow.output_truncated
+artifact.glob_escape
+artifact.required_missing
+cli.unknown_command
+cli.missing_argument
+cli.argument_conflict
+cli.instance_scope_required
+migration.target_required
+migration.unsupported_legacy_content
+```
+
 - [ ] **Step 5: Create contract examples**
 
 Each example README must include exact CLI commands and expected high-level JSON result. Each package must be `ipcraft.package.v1`; each project must be `ipcraft.project.v1`. `failing_validator_project` must use `run-flow` to fail, not default `validate-project`.
+
+Negative examples must be public audit fixtures with expected stable diagnostics:
+
+- `negative_malformed_package` demonstrates malformed package JSON and `package.unsupported_schema` or parser diagnostics.
+- `negative_extension_required` demonstrates `package.extension_required`.
+- `negative_path_escape` demonstrates package/emitter path confinement.
+- `negative_flow_missing_executable` demonstrates `flow.executable_missing` through `run-flow`.
 
 - [ ] **Step 6: Verify docs/examples test passes**
 
@@ -1392,7 +1469,7 @@ Run:
 
 ```bash
 xmake -P qt build ipcraft-cli
-xmake -P qt run ipcraft-cli validate-project examples/contracts/v1_noc_compat_project/project.fpproj --packages ipcores
+xmake -P qt run ipcraft-cli validate-project examples/contracts/noc_cutover_project/project.fpproj --packages ipcores
 ruby -I spec_generator/test spec_generator/test/spec_generator_test.rb
 ```
 
@@ -1401,7 +1478,7 @@ Expected: CLI returns JSON with `"ok": true`; specgen tests pass.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add spec_generator ipcores examples/contracts/v1_noc_compat_project
+git add spec_generator ipcores examples/contracts/noc_cutover_project
 git commit -m "feat: cut bundled packages to ipcraft package v1"
 ```
 
@@ -1498,6 +1575,8 @@ void testPackageRuntimeLoadDoesNotRequireIpcoreYml();
 void testDefaultValidateProjectIsSideEffectFree();
 void testCliCommandsReturnMachineReadableJson();
 void testAuditDocsAndSchemasExist();
+void testRuleIdCatalogContainsEveryPublicDiagnostic();
+void testNegativeContractExamplesExist();
 ```
 
 The NoC schema test may allow old schema names only inside migration tests, docs explaining migration, or archived fixtures explicitly under migration directories.
@@ -1597,7 +1676,20 @@ git commit -m "chore: complete ipcraft v1 hard cutover gate"
 ## Self-Review Checklist
 
 - [ ] Every public schema in the spec has a schema file.
+- [ ] `ipcraft.cli.result.v1` has a public schema file.
+- [ ] Schemas are strict at top level and use only documented native/preserved escape hatches.
+- [ ] Project identity is `project.id` and `project.name`.
 - [ ] Every required CLI command has a task and a test.
+- [ ] Instance-scoped `run-flow` requires `--instance` or `--all-instances`.
+- [ ] `migrate-project` returns migrated output under `result.project`.
+- [ ] Package resolution requires exact `{id, version}`.
+- [ ] Deterministic JSON writing is specified and tested.
+- [ ] Public diagnostics are listed in `docs/audit/rule-id-catalog.md`.
+- [ ] Contract examples include negative fixtures.
+- [ ] The NoC contract example is named `noc_cutover_project`.
+- [ ] Expressions use JSON AST, not arbitrary scripts.
+- [ ] Path confinement uses canonical realpath checks after symlink resolution.
+- [ ] Flow stdout/stderr truncation produces stable diagnostics.
 - [ ] Default `validate-project` is static and side-effect free.
 - [ ] Extension enforcement is parser-level and diagnostic-driven.
 - [ ] Flow execution security is implemented only in `FlowRunner`.
