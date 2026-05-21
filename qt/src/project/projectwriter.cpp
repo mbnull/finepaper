@@ -1,134 +1,256 @@
-// ProjectWriter serializes Finepaper project documents as stable JSON.
+// ProjectWriter serializes Ipcraft V1 project documents as stable JSON.
 #include "project/projectwriter.h"
 
+#include "ipcraft/jsonhelpers.h"
+#include "ipcraft/schemaids.h"
+
 #include <QDir>
-#include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
-#include <QJsonDocument>
 #include <QJsonObject>
 #include <QSaveFile>
-#include <algorithm>
+#include <QSet>
 
 namespace {
 
-QJsonObject sortedObject(const QJsonObject& object) {
-    QStringList keys = object.keys();
-    keys.sort();
-
-    QJsonObject sorted;
-    for (const QString& key : keys) {
-        sorted.insert(key, object.value(key));
+void insertObject(QJsonObject& object, const QString& key, const QJsonObject& value) {
+    if (!value.isEmpty()) {
+        object.insert(key, value);
     }
-    return sorted;
 }
 
-QJsonObject interfaceObject(const ProjectConnectionInterfaceRef& interfaceRef) {
+void insertString(QJsonObject& object, const QString& key, const QString& value) {
+    if (!value.isEmpty()) {
+        object.insert(key, value);
+    }
+}
+
+QJsonObject packageRefObject(const ProjectPackageRef& package) {
     QJsonObject object;
-    object.insert(QStringLiteral("instance"), interfaceRef.instanceId);
-    object.insert(QStringLiteral("interface"), interfaceRef.interfaceId);
+    object.insert(QStringLiteral("id"), package.id);
+    object.insert(QStringLiteral("version"), package.version);
     return object;
 }
 
-QVector<ProjectConnectionInterfaceRef> writableInterfaces(const ProjectConnectionRecord& connection) {
-    if (!connection.interfaces.isEmpty()) {
-        return connection.interfaces;
-    }
+QJsonObject endpointObject(const ProjectEndpointRef& endpoint) {
+    QJsonObject object;
+    object.insert(QStringLiteral("instance"), endpoint.instanceId);
+    object.insert(QStringLiteral("interface"), endpoint.interfaceId);
+    insertString(object, QStringLiteral("port"), endpoint.portId);
+    insertString(object, QStringLiteral("role"), endpoint.role);
+    insertObject(object, QStringLiteral("properties"), endpoint.properties);
+    return object;
+}
 
-    QVector<ProjectConnectionInterfaceRef> interfaces;
-    if (!connection.source.moduleId.isEmpty() || !connection.source.portId.isEmpty()) {
-        interfaces.push_back(ProjectConnectionInterfaceRef{
-            connection.source.moduleId,
-            connection.source.portId
-        });
+QJsonObject connectionObject(const ProjectConnectionRecord& connection) {
+    QJsonObject object;
+    object.insert(QStringLiteral("id"), connection.id);
+    insertString(object, QStringLiteral("type"), connection.type);
+
+    QJsonArray endpoints;
+    for (const ProjectEndpointRef& endpoint : connection.endpoints) {
+        endpoints.append(endpointObject(endpoint));
     }
-    if (!connection.target.moduleId.isEmpty() || !connection.target.portId.isEmpty()) {
-        interfaces.push_back(ProjectConnectionInterfaceRef{
-            connection.target.moduleId,
-            connection.target.portId
-        });
+    object.insert(QStringLiteral("endpoints"), endpoints);
+
+    insertString(object, QStringLiteral("source"), connection.sourceKind);
+    insertObject(object, QStringLiteral("properties"), connection.properties);
+    insertObject(object, QStringLiteral("native"), connection.native);
+    return object;
+}
+
+QJsonObject externalPortObject(const ProjectExternalPortRecord& port) {
+    QJsonObject object;
+    object.insert(QStringLiteral("id"), port.id);
+    insertString(object, QStringLiteral("name"), port.name);
+    if (port.hasInterface) {
+        object.insert(QStringLiteral("interface"), endpointObject(port.interfaceRef));
     }
-    return interfaces;
+    insertObject(object, QStringLiteral("properties"), port.properties);
+    insertObject(object, QStringLiteral("native"), port.native);
+    return object;
+}
+
+QJsonObject instanceObject(const ProjectIpInstanceRecord& instance) {
+    QJsonObject object;
+    object.insert(QStringLiteral("id"), instance.id);
+    insertString(object, QStringLiteral("display_name"), instance.displayName);
+
+    object.insert(QStringLiteral("package"), packageRefObject(instance.package));
+
+    insertObject(object, QStringLiteral("config"), instance.config);
+    if (instance.hasGraphConfig) {
+        if (instance.graphConfigIsNull) {
+            object.insert(QStringLiteral("graph_config"), QJsonValue::Null);
+        } else {
+            object.insert(QStringLiteral("graph_config"), instance.graphConfig);
+        }
+    }
+    insertObject(object, QStringLiteral("native"), instance.native);
+    insertObject(object, QStringLiteral("last_runs"), instance.lastRuns);
+    insertObject(object, QStringLiteral("artifacts"), instance.artifacts);
+    insertObject(object, QStringLiteral("diagnostics"), instance.diagnostics);
+    insertObject(object, QStringLiteral("view"), instance.view);
+    return object;
+}
+
+QJsonObject migrationObject(const ProjectMigration& migration) {
+    QJsonObject object;
+    insertString(object, QStringLiteral("from_schema"), migration.fromSchema);
+    insertString(object, QStringLiteral("from_version"), migration.fromVersion);
+    insertObject(object, QStringLiteral("preserved"), migration.preserved);
+    insertObject(object, QStringLiteral("metadata"), migration.metadata);
+    insertObject(object, QStringLiteral("native"), migration.native);
+    return object;
 }
 
 QJsonObject toJson(const ProjectDocument& document) {
     QJsonObject root;
-    root.insert(QStringLiteral("schema"), document.schema);
-    root.insert(QStringLiteral("kind"), document.kind);
+    root.insert(QStringLiteral("schema"), ipcraft::schemaids::projectV1);
 
     QJsonObject project;
-    project.insert(QStringLiteral("name"), document.name);
-    project.insert(QStringLiteral("version"), document.version);
+    project.insert(QStringLiteral("id"), document.projectId);
+    project.insert(QStringLiteral("name"), document.projectName);
+    insertString(project, QStringLiteral("description"), document.projectDescription);
+    insertObject(project, QStringLiteral("display"), document.projectDisplay);
+    insertObject(project, QStringLiteral("metadata"), document.projectMetadata);
+    insertObject(project, QStringLiteral("native"), document.projectNative);
     root.insert(QStringLiteral("project"), project);
 
-    QJsonArray ipcores;
-    QVector<ProjectIpcoreRecord> sortedIpcoreRecords = document.ipcores;
-    std::sort(sortedIpcoreRecords.begin(), sortedIpcoreRecords.end(), [](const ProjectIpcoreRecord& lhs,
-                                                                         const ProjectIpcoreRecord& rhs) {
-        return lhs.id < rhs.id;
-    });
-    for (const ProjectIpcoreRecord& ipcore : sortedIpcoreRecords) {
-        QJsonObject object;
-        object.insert(QStringLiteral("id"), ipcore.id);
-        object.insert(QStringLiteral("version"), ipcore.version);
-        ipcores.append(object);
+    QJsonArray instances;
+    for (const ProjectIpInstanceRecord& instance : document.instances) {
+        instances.append(instanceObject(instance));
     }
-    root.insert(QStringLiteral("ipcores"), ipcores);
+    root.insert(QStringLiteral("instances"), instances);
 
-    QJsonArray ipcoreState;
-    for (const ProjectIpInstanceRecord& state : document.ipcoreState) {
-        QJsonObject object;
-        object.insert(QStringLiteral("ipcore"), state.ipcoreId);
-        object.insert(QStringLiteral("instance"), state.instanceId);
-        object.insert(QStringLiteral("schema"), state.schema);
-        object.insert(QStringLiteral("state"), sortedObject(state.state));
-        ipcoreState.append(object);
-    }
-    root.insert(QStringLiteral("ipcore_state"), ipcoreState);
-
-    QJsonObject graph;
-    QJsonArray modules;
-    for (const ProjectModuleRecord& module : document.modules) {
-        QJsonObject object;
-        object.insert(QStringLiteral("id"), module.id);
-        object.insert(QStringLiteral("ipcore"), module.ipcoreId);
-        object.insert(QStringLiteral("instance"), module.instanceId);
-        object.insert(QStringLiteral("type"), module.type);
-        object.insert(QStringLiteral("parameters"), sortedObject(module.parameters));
-        modules.append(object);
-    }
-    graph.insert(QStringLiteral("modules"), modules);
-
+    QJsonObject composition;
     QJsonArray connections;
-    for (const ProjectConnectionRecord& connection : document.connections) {
-        QJsonObject object;
-        object.insert(QStringLiteral("id"), connection.id);
-        object.insert(QStringLiteral("class"), connection.connectionClassId);
-        QJsonArray interfaces;
-        for (const ProjectConnectionInterfaceRef& interfaceRef : writableInterfaces(connection)) {
-            interfaces.append(interfaceObject(interfaceRef));
-        }
-        object.insert(QStringLiteral("interfaces"), interfaces);
-        object.insert(QStringLiteral("status"),
-                      connection.status.isEmpty() ? QStringLiteral("valid") : connection.status);
-        if (!connection.alternatives.isEmpty()) {
-            QJsonArray alternatives;
-            for (const QString& alternative : connection.alternatives) {
-                alternatives.append(alternative);
-            }
-            object.insert(QStringLiteral("alternatives"), alternatives);
-        }
-        connections.append(object);
+    for (const ProjectConnectionRecord& connection : document.composition.connections) {
+        connections.append(connectionObject(connection));
     }
-    graph.insert(QStringLiteral("connections"), connections);
-    root.insert(QStringLiteral("graph"), graph);
+    composition.insert(QStringLiteral("connections"), connections);
 
+    QJsonArray externalPorts;
+    for (const ProjectExternalPortRecord& port : document.composition.externalPorts) {
+        externalPorts.append(externalPortObject(port));
+    }
+    composition.insert(QStringLiteral("external_ports"), externalPorts);
+    insertObject(composition, QStringLiteral("properties"), document.composition.properties);
+    insertObject(composition, QStringLiteral("native"), document.composition.native);
+    root.insert(QStringLiteral("composition"), composition);
+
+    root.insert(QStringLiteral("layout"), document.layout);
+    root.insert(QStringLiteral("diagnostics"), document.diagnostics.toJson());
+    root.insert(QStringLiteral("artifacts"), document.artifacts);
+    root.insert(QStringLiteral("migration"), migrationObject(document.migration));
+    root.insert(QStringLiteral("native"), document.native);
     return root;
+}
+
+bool isNonEmpty(const QString& value) {
+    return !value.trimmed().isEmpty();
+}
+
+ProjectWriteResult writeFailure(const QString& message) {
+    return {false, message};
+}
+
+ProjectWriteResult validateEndpoint(const ProjectEndpointRef& endpoint,
+                                    const QString& context,
+                                    const QSet<QString>& instanceIds) {
+    if (!isNonEmpty(endpoint.instanceId)) {
+        return writeFailure(QStringLiteral("%1 endpoint instance is required").arg(context));
+    }
+    if (!instanceIds.contains(endpoint.instanceId)) {
+        return writeFailure(QStringLiteral("%1 endpoint instance is not declared").arg(context));
+    }
+    if (!isNonEmpty(endpoint.interfaceId)) {
+        return writeFailure(QStringLiteral("%1 endpoint interface is required").arg(context));
+    }
+    return {true, {}};
+}
+
+ProjectWriteResult validateDocument(const ProjectDocument& document) {
+    if (!isNonEmpty(document.projectId)) {
+        return writeFailure(QStringLiteral("Project project.id is required"));
+    }
+    if (!isNonEmpty(document.projectName)) {
+        return writeFailure(QStringLiteral("Project project.name is required"));
+    }
+    QSet<QString> instanceIds;
+    for (const ProjectIpInstanceRecord& instance : document.instances) {
+        if (!isNonEmpty(instance.id)) {
+            return writeFailure(QStringLiteral("Project instance id is required"));
+        }
+        if (instanceIds.contains(instance.id)) {
+            return writeFailure(QStringLiteral("Duplicate project instance id: %1").arg(instance.id));
+        }
+        instanceIds.insert(instance.id);
+        if (!isNonEmpty(instance.package.id)) {
+            return writeFailure(QStringLiteral("Project instance package.id is required"));
+        }
+        if (!isNonEmpty(instance.package.version)) {
+            return writeFailure(QStringLiteral("Project instance package.version is required"));
+        }
+    }
+    QSet<QString> connectionIds;
+    for (const ProjectConnectionRecord& connection : document.composition.connections) {
+        if (!isNonEmpty(connection.id)) {
+            return writeFailure(QStringLiteral("Project composition connection id is required"));
+        }
+        if (connectionIds.contains(connection.id)) {
+            return writeFailure(QStringLiteral("Duplicate project connection id: %1").arg(connection.id));
+        }
+        connectionIds.insert(connection.id);
+        if (!connection.sourceKind.isEmpty() &&
+            connection.sourceKind != QStringLiteral("user") &&
+            connection.sourceKind != QStringLiteral("generated") &&
+            connection.sourceKind != QStringLiteral("imported")) {
+            return writeFailure(QStringLiteral("Project composition connection source is invalid"));
+        }
+        if (connection.endpoints.size() < 2) {
+            return writeFailure(QStringLiteral("Project composition connection endpoints require at least two entries"));
+        }
+        for (const ProjectEndpointRef& endpoint : connection.endpoints) {
+            ProjectWriteResult endpointResult = validateEndpoint(
+                endpoint,
+                QStringLiteral("Project composition connection"),
+                instanceIds);
+            if (!endpointResult.success) {
+                return endpointResult;
+            }
+        }
+    }
+    QSet<QString> externalPortIds;
+    for (const ProjectExternalPortRecord& port : document.composition.externalPorts) {
+        if (!isNonEmpty(port.id)) {
+            return writeFailure(QStringLiteral("Project external port id is required"));
+        }
+        if (externalPortIds.contains(port.id)) {
+            return writeFailure(QStringLiteral("Duplicate project external port id: %1").arg(port.id));
+        }
+        externalPortIds.insert(port.id);
+        if (port.hasInterface) {
+            ProjectWriteResult endpointResult = validateEndpoint(
+                port.interfaceRef,
+                QStringLiteral("Project external port"),
+                instanceIds);
+            if (!endpointResult.success) {
+                return endpointResult;
+            }
+        }
+    }
+    return {true, {}};
 }
 
 } // namespace
 
 ProjectWriteResult ProjectWriter::writeFile(const QString& path, const ProjectDocument& document) {
+    const ProjectWriteResult validationResult = validateDocument(document);
+    if (!validationResult.success) {
+        return validationResult;
+    }
+
     const QFileInfo fileInfo(path);
     if (!fileInfo.absoluteDir().exists() && !QDir().mkpath(fileInfo.absolutePath())) {
         return {false, QStringLiteral("Could not create project directory: %1").arg(fileInfo.absolutePath())};
@@ -139,8 +261,7 @@ ProjectWriteResult ProjectWriter::writeFile(const QString& path, const ProjectDo
         return {false, QStringLiteral("Could not open project file for writing: %1").arg(path)};
     }
 
-    const QJsonDocument json(toJson(document));
-    const QByteArray content = json.toJson(QJsonDocument::Indented);
+    const QByteArray content = ipcraft::toDeterministicJson(toJson(document));
     if (file.write(content) != content.size()) {
         return {false, QStringLiteral("Could not write project file: %1").arg(path)};
     }
