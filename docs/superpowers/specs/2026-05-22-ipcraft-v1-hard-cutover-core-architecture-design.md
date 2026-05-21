@@ -39,9 +39,26 @@ The target schema names are:
 - `ipcraft.package.v1`
 - `ipcraft.diagnostics.v1`
 - `ipcraft.graph-config.v1`
+- `ipcraft.emitted-inputs.v1`
 
-Any prior mention of `ipcraft.project.v2` is treated as a typo. Public commands
-must use `ipcraft.project.v1` as the target.
+Public commands must use `ipcraft.project.v1` as the project schema target.
+
+## Authoring And Runtime Boundary
+
+Package runtime files must be self-contained after normalization. Runtime code
+must load `ipcraft.package.v1` directly and must not depend on `ipcore.yml`.
+`ipcore.yml` may exist as an authoring/specgen source, but it is outside the
+runtime loading path.
+
+The contract is:
+
+- `ipcore.yml` is authoring/specgen input.
+- `ipcraft.package.v1` is the normalized runtime package spec.
+- Qt editor code, headless API code, and `ipcraft-cli` consume only
+  `ipcraft.package.v1`.
+- Runtime loaders must not require `ipcore.yml` to exist.
+- `specgen` may generate `ipcraft.package.v1` from `ipcore.yml`, but that is an
+  authoring workflow and not part of the runtime loading contract.
 
 ## Goals
 
@@ -127,6 +144,61 @@ Project-level IP-to-IP connections belong in `CompositionModel`, not in the old
 port-level canvas graph. Single-IP internal topology can live in
 `IpInstanceState.graphConfig` only when the package declares the
 `ipcraft.graph_config` extension or equivalent view capability.
+
+### GraphConfig Schema Contract
+
+`ipcraft.graph-config.v1` is package instance configuration, not the project
+root. It is a general graph-shaped config document and must not expose the old
+UI-only `Graph / Module / Connection / PortRef` assumptions as core schema.
+
+Required shape:
+
+```json
+{
+  "schema": "ipcraft.graph-config.v1",
+  "objects": [
+    {
+      "id": "obj0",
+      "type": "vendor.node",
+      "properties": {}
+    }
+  ],
+  "relationships": [
+    {
+      "id": "rel0",
+      "type": "vendor.link",
+      "endpoints": [
+        {
+          "object": "obj0",
+          "role": "source"
+        },
+        {
+          "object": "obj1",
+          "role": "target"
+        }
+      ],
+      "properties": {}
+    }
+  ],
+  "properties": {},
+  "native": {}
+}
+```
+
+Rules:
+
+- `graph_config` belongs under `IpInstanceState`.
+- Relationship endpoints are n-ary; the schema does not force source/target
+  port pairs.
+- UI layout is not stored in graph-config unless a package explicitly documents
+  a view binding for that field.
+- Canvas `x/y` belongs in `LayoutModel`.
+- Graph-config objects and relationships may reference package-declared graph
+  object and relationship types.
+- Graph-config diagnostics use `DiagnosticLocation.kind == "graph_object"`.
+- The old `Graph / Module / Connection` implementation may be adapted into this
+  shape during migration or graph-editor integration, but the public schema
+  remains independent of the old canvas model.
 
 ## Core Data Model
 
@@ -302,6 +374,65 @@ mapping.
 }
 ```
 
+### Value Type System And Expression Boundary
+
+V1 uses a JSON-compatible value model with explicit integer semantics:
+
+- `null`
+- `bool`
+- `int64`
+- `double`
+- `string`
+- `array`
+- `object`
+
+Parameter types map to values as follows:
+
+- `int` maps to `int64`.
+- `bool` maps to `bool`.
+- `double` maps to `double`.
+- `string` maps to `string`.
+- `enum` maps to `string` or `int64`; the enum declaration must state which
+  value type it uses.
+- `path` maps to `string` with path validation.
+- `object` maps to `object`.
+- `array` maps to `array`.
+
+V1 expressions are limited to simple side-effect-free conditions. Allowed
+forms:
+
+- `param("id") == literal`
+- `param("id") != literal`
+- `exists("id")`
+- `and(...)`
+- `or(...)`
+- `not(...)`
+- literal `true` and `false`
+
+Allowed use sites:
+
+- `visible_when`
+- `enabled_when`
+- `required_when`
+- `default_when`, only when the relevant schema object explicitly supports it
+
+Not allowed in V1:
+
+- arbitrary JavaScript, Python, Ruby, or other script execution;
+- file reads;
+- process execution;
+- network access;
+- access to host environment variables;
+- mutation of project state.
+
+Enum provider rules:
+
+- Static enum values are allowed.
+- Plugin-hook enum providers are allowed only when the package declares the
+  plugin and the plugin is available.
+- External command enum providers are not allowed in V1 unless they go through
+  the `FlowRunner` security policy.
+
 ### InterfaceSpec
 
 Package interfaces are shallow composition endpoints:
@@ -323,13 +454,83 @@ Core validation checks only:
 
 - instance exists;
 - interface exists;
-- kind/protocol tags match according to package rules;
-- role/direction are compatible;
 - required interfaces are connected;
-- input endpoints are not multiply driven;
-- clock/reset fanout has a single source.
+- input/sink endpoints are not multiply driven unless fanout rules allow it;
+- clock/reset fanout has exactly one source.
 
-Core does not implement AXI/CHI/APB/DDR/SerDes deep protocol semantics.
+Package and interface rules provide shallow matching fields:
+
+- `kind`
+- `protocol`
+- `role`
+- `direction`
+- `fanout`
+
+Core does not implement AXI/CHI/APB/DDR/SerDes deep protocol semantics. It
+normalizes aliases and applies declared shallow compatibility rules only.
+
+### ConnectionRules
+
+`PackageSpec.connection_rules` owns protocol aliases, optional kind aliases, and
+compatibility tables. Section presence does not implicitly enable composition
+behavior; packages that declare composition or composition validation must also
+declare the `ipcraft.composition` extension.
+
+Example:
+
+```json
+{
+  "connection_rules": {
+    "protocol_aliases": {
+      "AMBA_AXI4": "axi4",
+      "AXI4": "axi4"
+    },
+    "kind_aliases": {
+      "clk": "clock"
+    },
+    "compatibility": [
+      {
+        "connection_type": "interface",
+        "from": {
+          "kind": "bus",
+          "role": "master",
+          "protocol": "axi4"
+        },
+        "to": {
+          "kind": "bus",
+          "role": "slave",
+          "protocol": "axi4"
+        },
+        "arity": "binary"
+      },
+      {
+        "connection_type": "clock",
+        "from": {
+          "kind": "clock",
+          "role": "source"
+        },
+        "to": {
+          "kind": "clock",
+          "role": "sink"
+        },
+        "arity": "fanout"
+      }
+    ]
+  }
+}
+```
+
+Rules:
+
+- `protocol_aliases` normalize protocol tags before compatibility matching.
+- `kind_aliases` may normalize kind tags in the same way.
+- `compatibility` entries describe shallow endpoint compatibility for a
+  connection type.
+- `arity == "binary"` requires exactly two endpoints.
+- `arity == "fanout"` permits one source and one or more sinks.
+- The default core rules still apply even when compatibility tables exist.
+- Deep protocol correctness remains the responsibility of package validators,
+  generators, first-party extensions with explicit scope, or plugins.
 
 ### CompositionModel
 
@@ -421,6 +622,62 @@ Emitters describe how to create package inputs from project state:
 paths, writes declared inputs, and returns a structured manifest of emitted
 files. It replaces the current graph-specific exporter.
 
+### Emitted Inputs Manifest
+
+Every emit operation returns an `ipcraft.emitted-inputs.v1` manifest. This
+manifest is a formal public schema and is usable by `FlowRunner` placeholders
+such as `{inputs.manifest}`.
+
+Required shape:
+
+```json
+{
+  "schema": "ipcraft.emitted-inputs.v1",
+  "project": "project_0",
+  "instance": "ip0",
+  "package": {
+    "id": "vendor.example.simple",
+    "version": "1.0.0"
+  },
+  "run_id": "optional-run-id",
+  "files": [
+    {
+      "id": "system",
+      "kind": "config_document",
+      "path": "input/system.yml",
+      "sha256": "optional",
+      "size": 123,
+      "source": {
+        "document": "system",
+        "path": "$"
+      }
+    },
+    {
+      "id": "composition",
+      "kind": "composition",
+      "path": "input/composition.json",
+      "source": {
+        "composition": true
+      }
+    }
+  ],
+  "diagnostics": {
+    "schema": "ipcraft.diagnostics.v1",
+    "records": []
+  }
+}
+```
+
+Rules:
+
+- `files[].path` is relative to the emit output root.
+- Absolute paths are not allowed in file entries.
+- File entries are written in deterministic order.
+- Generated files must not escape the output root.
+- The manifest path is made available to flow placeholders as
+  `{inputs.manifest}`.
+- The manifest contains diagnostics even on partial emit failure.
+
 ### FlowSpec And FlowRunner
 
 Flows support project-level and instance-level execution:
@@ -439,7 +696,17 @@ Flows support project-level and instance-level execution:
       "kind": "exec",
       "command": {
         "executable": "tools/generate",
-        "args": ["--input", "{inputs.manifest}", "--out", "{out}"]
+        "args": ["--input", "{inputs.manifest}", "--out", "{out}"],
+        "cwd": "run_dir",
+        "timeout_ms": 60000,
+        "env": {
+          "allow": []
+        },
+        "capture": {
+          "stdout": "stdout.log",
+          "stderr": "stderr.log",
+          "max_bytes": 1048576
+        }
       }
     },
     {
@@ -473,6 +740,27 @@ Flow execution must record:
 - diagnostics;
 - artifacts.
 
+### FlowRunner Process Security
+
+Process security policy:
+
+- `exec` step `cwd` defaults to the run directory.
+- Package-local executable paths are resolved relative to the package root.
+- Allowlisted framework tools are configured by application policy, not by
+  package native state.
+- Process environment starts from a sanitized base environment plus explicit
+  package-declared allowlist entries.
+- `timeout_ms` is required or receives a fixed implementation default.
+- Stdout and stderr are captured to files under the run directory.
+- Stdout and stderr capture size limits are enforced.
+- Nonzero exit status produces a structured diagnostic.
+- Timeout produces a structured diagnostic.
+- Missing executable produces a structured diagnostic.
+- Process tree cleanup is attempted on timeout.
+- Native state cannot override command policy.
+- Parallel flow execution is disabled in V1 unless it is explicitly implemented
+  with deterministic run directories.
+
 ### DiagnosticModel
 
 All validation and runtime failures use `ipcraft.diagnostics.v1`:
@@ -485,7 +773,9 @@ All validation and runtime failures use `ipcraft.diagnostics.v1`:
       "severity": "error",
       "source": "core",
       "rule_id": "composition.unknown_interface",
+      "category": "composition",
       "message": "Interface 'm_axi' does not exist on instance 'ip0'.",
+      "details": {},
       "locations": [
         {
           "kind": "interface",
@@ -514,6 +804,26 @@ Location kinds:
 
 External tools that cannot map precisely must at least map to instance, flow
 step, emitted file, or file line.
+
+### Diagnostic Stability Rules
+
+Stability rules for black-box tests:
+
+- `rule_id` is the stable machine-readable code.
+- `severity` is stable.
+- `source` is stable.
+- `locations` are stable enough for tests.
+- `message` is human-readable and is not considered stable.
+- `details` may contain structured data but is not required for user display.
+- Hidden tests should match `rule_id`, `severity`, `source`, and relevant
+  location fields, not the full message text.
+
+Location ordering:
+
+- The most specific location appears first.
+- Fallback locations appear after specific locations.
+- File-line locations may coexist with `table_cell`, `document_path`,
+  `connection`, or other project-object locations.
 
 ### ArtifactSpec And ArtifactIndex
 
@@ -550,6 +860,7 @@ First-party extensions provide declarative capabilities:
 - `ipcraft.config.params`
 - `ipcraft.config.tables`
 - `ipcraft.config.documents`
+- `ipcraft.config.files`
 - `ipcraft.interfaces`
 - `ipcraft.composition`
 - `ipcraft.layout`
@@ -575,6 +886,50 @@ Plugins are optional escape hatches:
 The default path is declarative package spec plus templates and flow runner.
 Plugins must not be required for ordinary parameter/table/document/flow-based
 IP packages.
+
+### Explicit Extension Enablement
+
+Optional capabilities must be explicitly enabled through extensions. Section
+presence never implicitly enables a capability. Core mandatory fields such as
+`schema`, `id`, `version`, and `name` are the only exceptions.
+
+If a package uses an optional section without declaring the corresponding
+extension, package parsing must produce a structured diagnostic and reject the
+package.
+
+Required mappings:
+
+- `config_schema.parameters` requires `ipcraft.config.params`.
+- `config_schema.tables` requires `ipcraft.config.tables`.
+- `config_schema.documents` requires `ipcraft.config.documents`.
+- `config_schema.files` requires `ipcraft.config.files`.
+- `interfaces` requires `ipcraft.interfaces`.
+- `connection_rules` requires `ipcraft.composition`.
+- Composition connection validation requires `ipcraft.composition`.
+- Layout declarations require `ipcraft.layout`.
+- `emitters` requires `ipcraft.emitters`.
+- `flows` requires `ipcraft.flows`.
+- `artifacts` requires `ipcraft.artifacts`.
+- Diagnostics mapping requires `ipcraft.diagnostics`.
+- `views` requires `ipcraft.views`.
+- `graph_config` requires `ipcraft.graph_config`.
+
+Required diagnostic shape:
+
+```json
+{
+  "severity": "error",
+  "source": "package.parser",
+  "rule_id": "package.extension_required",
+  "message": "Section 'config_schema.tables' requires extension 'ipcraft.config.tables'.",
+  "locations": [
+    {
+      "kind": "document_path",
+      "path": "$.config_schema.tables"
+    }
+  ]
+}
+```
 
 ## Native Escape Hatch
 
@@ -742,15 +1097,22 @@ It must include:
 
 - goals and non-goals;
 - V1 hard cutover and legacy policy;
+- authoring/runtime package boundary;
 - ProjectDocument schema;
 - PackageSpec schema;
 - ConfigBundle model;
+- Value type system and expression boundary;
 - CompositionModel model;
 - LayoutModel model;
+- graph-config schema;
+- emitted inputs manifest schema;
 - FlowRunner model;
+- FlowRunner process security;
 - DiagnosticModel model;
+- diagnostic stability rules;
 - ArtifactIndex model;
 - extension vs plugin boundary;
+- explicit extension enablement rules;
 - native escape hatch;
 - migration strategy;
 - security model;
