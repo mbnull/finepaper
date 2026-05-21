@@ -383,8 +383,8 @@ void testMigrateProjectRequiresExplicitTarget() {
     const CliRun run = runCli({QStringLiteral("migrate-project"), projectPath});
     require(run.exitCode != 0, "migrate-project without --to should fail");
     requireCliEnvelope(run.json, false);
-    require(hasRule(run.json, QStringLiteral("cli.missing_argument")),
-            "migrate-project without --to should emit cli.missing_argument");
+    require(hasRule(run.json, QStringLiteral("migration.target_required")),
+            "migrate-project without --to should emit migration.target_required");
 }
 
 void testMigrateProjectReturnsProjectUnderResultProject() {

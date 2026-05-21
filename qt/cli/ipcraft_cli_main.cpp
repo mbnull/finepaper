@@ -6,6 +6,7 @@
 #include "ipcraft/emitter.h"
 #include "ipcraft/flowrunner.h"
 #include "ipcraft/jsonhelpers.h"
+#include "ipcraft/migration.h"
 #include "ipcraft/packagespec.h"
 #include "ipcraft/schemaids.h"
 #include "project/projectreader.h"
@@ -27,6 +28,13 @@ void appendDiagnostics(ipcraft::DiagnosticStore& target,
     for (const ipcraft::Diagnostic& diagnostic : source.records) {
         target.records.append(diagnostic);
     }
+}
+
+bool hasDiagnosticRule(const ipcraft::DiagnosticStore& diagnostics, const QString& ruleId) {
+    return std::any_of(diagnostics.records.cbegin(), diagnostics.records.cend(),
+                       [&](const ipcraft::Diagnostic& diagnostic) {
+                           return diagnostic.ruleId == ruleId;
+                       });
 }
 
 CliResult failure(const QString& ruleId,
@@ -76,6 +84,13 @@ CliResult packageFailure(const ipcraft::DiagnosticStore& diagnostics) {
     CliResult result;
     result.ok = false;
     appendDiagnostics(result.diagnostics, diagnostics);
+    return result;
+}
+
+CliResult diagnosticFailure(const ipcraft::Diagnostic& diagnostic) {
+    CliResult result;
+    result.ok = false;
+    result.diagnostics.records.append(diagnostic);
     return result;
 }
 
@@ -471,22 +486,43 @@ CliResult commandMigrateProject(const QStringList& args) {
     }
     const QString target = optionValue(args, QStringLiteral("--to"));
     if (target.isEmpty()) {
-        return failure(QStringLiteral("cli.missing_argument"),
-                       QStringLiteral("migrate-project requires --to."));
+        return diagnosticFailure(ipcraft::migrationDiagnostic(
+            QStringLiteral("migration.target_required"),
+            QStringLiteral("migrate-project requires --to."),
+            QStringLiteral("$.to")));
     }
     if (target != ipcraft::schemaids::projectV1) {
-        return failure(QStringLiteral("migration.unsupported_target"),
-                       QStringLiteral("Unsupported migration target."));
+        return diagnosticFailure(ipcraft::migrationDiagnostic(
+            QStringLiteral("migration.unsupported_target"),
+            QStringLiteral("Unsupported migration target."),
+            QStringLiteral("$.to")));
     }
     const ProjectReadResult projectResult = readProject(args.at(0));
-    if (!projectResult.success) {
+    if (projectResult.success) {
+        CliResult result;
+        result.ok = true;
+        QJsonObject payload;
+        payload.insert(QStringLiteral("project"),
+                       ProjectWriter::toJsonObject(projectResult.document));
+        result.result = payload;
+        return result;
+    }
+    if (!hasDiagnosticRule(projectResult.diagnostics,
+                           QStringLiteral("project.unsupported_schema"))) {
         return projectReadFailure(projectResult);
     }
+
+    const ipcraft::ProjectMigrationResult migrationResult =
+        ipcraft::ProjectMigrator::migrateFile(args.at(0), target);
+    if (!migrationResult.ok) {
+        return packageFailure(migrationResult.diagnostics);
+    }
+
     CliResult result;
     result.ok = true;
     QJsonObject payload;
     payload.insert(QStringLiteral("project"),
-                   ProjectWriter::toJsonObject(projectResult.document));
+                   ProjectWriter::toJsonObject(migrationResult.document));
     result.result = payload;
     return result;
 }
