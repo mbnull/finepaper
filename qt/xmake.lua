@@ -293,6 +293,21 @@ add_qt_test_target("ipcraftmanifest_test", "test/ipcraftmanifest_test.cpp", {
     "inc/ipcraft/*.h"
 })
 
+add_qt_test_target("ipcraft_phase_review_test", "test/ipcraft_phase_review_test.cpp", {
+    "src/ipcore/ipcatalogservice.cpp",
+    "src/ipcore/ipcorecommandrunner.cpp",
+    "src/modules/moduleregistry.cpp",
+    "src/modules/moduleprovider.cpp",
+    "src/ipcore/ipcoreruntimeregistry.cpp",
+    "src/graph/parameter.cpp",
+    "src/graph/port.cpp",
+    "inc/ipcore/ipcatalogservice.h",
+    "inc/ipcore/ipcorecommandrunner.h",
+    "inc/**/moduleregistry.h",
+    "inc/**/moduleprovider.h",
+    "inc/**/ipcoreruntimedescriptor.h"
+})
+
 add_qt_test_target("ipxactconnectionchecker_test", "test/ipxactconnectionchecker_test.cpp", {
     "src/ipcraft/ipxactconnectionchecker.cpp",
     "inc/ipcraft/ipxactconnectionchecker.h"
