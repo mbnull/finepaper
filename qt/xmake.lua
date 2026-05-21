@@ -293,6 +293,25 @@ add_qt_test_target("ipcraftmanifest_test", "test/ipcraftmanifest_test.cpp", {
     "inc/ipcraft/*.h"
 })
 
+target("ipcraft_diagnostics_test")
+    add_rules("qt.console")
+    set_kind("binary")
+    set_group("test")
+    set_default(false)
+    set_languages("c++23")
+
+    add_includedirs("inc")
+    add_files("test/ipcraft_diagnostics_test.cpp")
+    add_files("src/ipcraft/diagnostics.cpp")
+    add_files("src/ipcraft/jsonhelpers.cpp")
+    add_files("inc/ipcraft/diagnostics.h")
+    add_files("inc/ipcraft/jsonhelpers.h")
+    add_files("inc/ipcraft/schemaids.h")
+    add_tests("default", {
+        trim_output = true,
+        pass_outputs = "ipcraft_diagnostics_test passed"
+    })
+
 add_qt_test_target("ipcraft_phase_review_test", "test/ipcraft_phase_review_test.cpp", {
     "src/ipcore/ipcatalogservice.cpp",
     "src/ipcore/ipcorecommandrunner.cpp",
