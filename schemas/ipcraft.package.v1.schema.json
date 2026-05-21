@@ -1,0 +1,475 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ipcraft.package.v1",
+  "title": "Ipcraft Package V1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "id", "version", "name"],
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "config_schema": { "required": ["parameters"] }
+        },
+        "required": ["config_schema"]
+      },
+      "then": { "$ref": "#/$defs/requires_config_params_extension" }
+    },
+    {
+      "if": {
+        "properties": {
+          "config_schema": { "required": ["tables"] }
+        },
+        "required": ["config_schema"]
+      },
+      "then": { "$ref": "#/$defs/requires_config_tables_extension" }
+    },
+    {
+      "if": {
+        "properties": {
+          "config_schema": { "required": ["documents"] }
+        },
+        "required": ["config_schema"]
+      },
+      "then": { "$ref": "#/$defs/requires_config_documents_extension" }
+    },
+    {
+      "if": {
+        "properties": {
+          "config_schema": { "required": ["files"] }
+        },
+        "required": ["config_schema"]
+      },
+      "then": { "$ref": "#/$defs/requires_config_files_extension" }
+    },
+    {
+      "if": { "required": ["interfaces"] },
+      "then": { "$ref": "#/$defs/requires_interfaces_extension" }
+    },
+    {
+      "if": { "required": ["connection_rules"] },
+      "then": { "$ref": "#/$defs/requires_composition_extension" }
+    },
+    {
+      "if": { "required": ["emitters"] },
+      "then": { "$ref": "#/$defs/requires_emitters_extension" }
+    },
+    {
+      "if": { "required": ["flows"] },
+      "then": { "$ref": "#/$defs/requires_flows_extension" }
+    },
+    {
+      "if": { "required": ["artifacts"] },
+      "then": { "$ref": "#/$defs/requires_artifacts_extension" }
+    },
+    {
+      "if": { "required": ["diagnostics"] },
+      "then": { "$ref": "#/$defs/requires_diagnostics_extension" }
+    },
+    {
+      "if": { "required": ["views"] },
+      "then": { "$ref": "#/$defs/requires_views_extension" }
+    }
+  ],
+  "properties": {
+    "schema": { "const": "ipcraft.package.v1" },
+    "id": { "type": "string", "minLength": 1 },
+    "version": { "type": "string", "minLength": 1 },
+    "name": { "type": "string", "minLength": 1 },
+    "display": {
+      "description": "Package-owned display metadata.",
+      "type": "object",
+      "additionalProperties": true
+    },
+    "extensions": {
+      "description": "Declared extension IDs or extension-owned namespaces.",
+      "oneOf": [
+        {
+          "type": "array",
+          "items": { "$ref": "#/$defs/extension_decl" }
+        },
+        {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/extension_payload" }
+        }
+      ]
+    },
+    "config_schema": { "$ref": "#/$defs/config_schema" },
+    "interfaces": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/interface" }
+    },
+    "connection_rules": {
+      "$ref": "#/$defs/connection_rules"
+    },
+    "emitters": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/package_object" }
+    },
+    "flows": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/package_object" }
+    },
+    "artifacts": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/package_object" }
+    },
+    "diagnostics": {
+      "description": "Package-owned external diagnostic mapping rules.",
+      "type": "object",
+      "additionalProperties": true
+    },
+    "views": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/package_object" }
+    },
+    "plugin": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/package_object" }
+      ]
+    },
+    "native_schema": {
+      "description": "Schema for package-owned native payloads.",
+      "type": "object",
+      "additionalProperties": true
+    },
+    "metadata": { "$ref": "#/$defs/metadata" },
+    "native": { "$ref": "#/$defs/native" }
+  },
+  "$defs": {
+    "config_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "parameters": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/package_object" }
+        },
+        "tables": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/package_object" }
+        },
+        "documents": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/package_object" }
+        },
+        "files": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/package_object" }
+        },
+        "metadata": { "$ref": "#/$defs/metadata" },
+        "native": { "$ref": "#/$defs/native" }
+      }
+    },
+    "interface": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string" },
+        "label": { "type": "string" },
+        "kind": { "type": "string", "minLength": 1 },
+        "protocol": { "type": "string", "minLength": 1 },
+        "role": { "type": "string", "minLength": 1 },
+        "direction": { "type": "string", "minLength": 1 },
+        "required": { "type": "boolean" },
+        "fanout": { "type": "string", "minLength": 1 },
+        "properties": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "metadata": { "$ref": "#/$defs/metadata" },
+        "native": { "$ref": "#/$defs/native" }
+      }
+    },
+    "connection_rules": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "protocol_aliases": {
+          "type": "object",
+          "additionalProperties": { "type": "string", "minLength": 1 }
+        },
+        "kind_aliases": {
+          "type": "object",
+          "additionalProperties": { "type": "string", "minLength": 1 }
+        },
+        "compatibility": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/compatibility_rule" }
+        },
+        "metadata": { "$ref": "#/$defs/metadata" },
+        "native": { "$ref": "#/$defs/native" }
+      }
+    },
+    "compatibility_rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["connection_type", "from", "to", "arity"],
+      "properties": {
+        "connection_type": { "type": "string", "minLength": 1 },
+        "from": { "$ref": "#/$defs/endpoint_match" },
+        "to": { "$ref": "#/$defs/endpoint_match" },
+        "arity": { "type": "string", "enum": ["binary", "fanout"] },
+        "metadata": { "$ref": "#/$defs/metadata" }
+      }
+    },
+    "endpoint_match": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "type": "string", "minLength": 1 },
+        "protocol": { "type": "string", "minLength": 1 },
+        "role": { "type": "string", "minLength": 1 },
+        "direction": { "type": "string", "minLength": 1 }
+      }
+    },
+    "package_object": {
+      "description": "Package-declared capability object.",
+      "type": "object",
+      "additionalProperties": true
+    },
+    "extension_decl": {
+      "oneOf": [
+        { "type": "string", "minLength": 1 },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id"],
+          "properties": {
+            "id": { "type": "string", "minLength": 1 },
+            "version": { "type": "string" },
+            "metadata": { "$ref": "#/$defs/metadata" },
+            "native": { "$ref": "#/$defs/native" }
+          }
+        }
+      ]
+    },
+    "extension_payload": {
+      "description": "Extension-owned namespace.",
+      "type": "object",
+      "additionalProperties": true
+    },
+    "requires_config_params_extension": {
+      "properties": {
+        "extensions": { "$ref": "#/$defs/has_config_params_extension" }
+      },
+      "required": ["extensions"]
+    },
+    "requires_config_tables_extension": {
+      "properties": {
+        "extensions": { "$ref": "#/$defs/has_config_tables_extension" }
+      },
+      "required": ["extensions"]
+    },
+    "requires_config_documents_extension": {
+      "properties": {
+        "extensions": { "$ref": "#/$defs/has_config_documents_extension" }
+      },
+      "required": ["extensions"]
+    },
+    "requires_config_files_extension": {
+      "properties": {
+        "extensions": { "$ref": "#/$defs/has_config_files_extension" }
+      },
+      "required": ["extensions"]
+    },
+    "requires_interfaces_extension": {
+      "properties": {
+        "extensions": { "$ref": "#/$defs/has_interfaces_extension" }
+      },
+      "required": ["extensions"]
+    },
+    "requires_composition_extension": {
+      "properties": {
+        "extensions": { "$ref": "#/$defs/has_composition_extension" }
+      },
+      "required": ["extensions"]
+    },
+    "requires_emitters_extension": {
+      "properties": {
+        "extensions": { "$ref": "#/$defs/has_emitters_extension" }
+      },
+      "required": ["extensions"]
+    },
+    "requires_flows_extension": {
+      "properties": {
+        "extensions": { "$ref": "#/$defs/has_flows_extension" }
+      },
+      "required": ["extensions"]
+    },
+    "requires_artifacts_extension": {
+      "properties": {
+        "extensions": { "$ref": "#/$defs/has_artifacts_extension" }
+      },
+      "required": ["extensions"]
+    },
+    "requires_diagnostics_extension": {
+      "properties": {
+        "extensions": { "$ref": "#/$defs/has_diagnostics_extension" }
+      },
+      "required": ["extensions"]
+    },
+    "requires_views_extension": {
+      "properties": {
+        "extensions": { "$ref": "#/$defs/has_views_extension" }
+      },
+      "required": ["extensions"]
+    },
+    "has_config_params_extension": { "$ref": "#/$defs/has_ipcraft.config.params" },
+    "has_config_tables_extension": { "$ref": "#/$defs/has_ipcraft.config.tables" },
+    "has_config_documents_extension": { "$ref": "#/$defs/has_ipcraft.config.documents" },
+    "has_config_files_extension": { "$ref": "#/$defs/has_ipcraft.config.files" },
+    "has_interfaces_extension": { "$ref": "#/$defs/has_ipcraft.interfaces" },
+    "has_composition_extension": { "$ref": "#/$defs/has_ipcraft.composition" },
+    "has_emitters_extension": { "$ref": "#/$defs/has_ipcraft.emitters" },
+    "has_flows_extension": { "$ref": "#/$defs/has_ipcraft.flows" },
+    "has_artifacts_extension": { "$ref": "#/$defs/has_ipcraft.artifacts" },
+    "has_diagnostics_extension": { "$ref": "#/$defs/has_ipcraft.diagnostics" },
+    "has_views_extension": { "$ref": "#/$defs/has_ipcraft.views" },
+    "has_ipcraft.config.params": {
+      "type": "array",
+      "contains": { "$ref": "#/$defs/ext_ipcraft.config.params" }
+    },
+    "has_ipcraft.config.tables": {
+      "type": "array",
+      "contains": { "$ref": "#/$defs/ext_ipcraft.config.tables" }
+    },
+    "has_ipcraft.config.documents": {
+      "type": "array",
+      "contains": { "$ref": "#/$defs/ext_ipcraft.config.documents" }
+    },
+    "has_ipcraft.config.files": {
+      "type": "array",
+      "contains": { "$ref": "#/$defs/ext_ipcraft.config.files" }
+    },
+    "has_ipcraft.interfaces": {
+      "type": "array",
+      "contains": { "$ref": "#/$defs/ext_ipcraft.interfaces" }
+    },
+    "has_ipcraft.composition": {
+      "type": "array",
+      "contains": { "$ref": "#/$defs/ext_ipcraft.composition" }
+    },
+    "has_ipcraft.emitters": {
+      "type": "array",
+      "contains": { "$ref": "#/$defs/ext_ipcraft.emitters" }
+    },
+    "has_ipcraft.flows": {
+      "type": "array",
+      "contains": { "$ref": "#/$defs/ext_ipcraft.flows" }
+    },
+    "has_ipcraft.artifacts": {
+      "type": "array",
+      "contains": { "$ref": "#/$defs/ext_ipcraft.artifacts" }
+    },
+    "has_ipcraft.diagnostics": {
+      "type": "array",
+      "contains": { "$ref": "#/$defs/ext_ipcraft.diagnostics" }
+    },
+    "has_ipcraft.views": {
+      "type": "array",
+      "contains": { "$ref": "#/$defs/ext_ipcraft.views" }
+    },
+    "ext_ipcraft.config.params": {
+      "oneOf": [{ "const": "ipcraft.config.params" }, { "$ref": "#/$defs/ext_obj_ipcraft.config.params" }]
+    },
+    "ext_ipcraft.config.tables": {
+      "oneOf": [{ "const": "ipcraft.config.tables" }, { "$ref": "#/$defs/ext_obj_ipcraft.config.tables" }]
+    },
+    "ext_ipcraft.config.documents": {
+      "oneOf": [{ "const": "ipcraft.config.documents" }, { "$ref": "#/$defs/ext_obj_ipcraft.config.documents" }]
+    },
+    "ext_ipcraft.config.files": {
+      "oneOf": [{ "const": "ipcraft.config.files" }, { "$ref": "#/$defs/ext_obj_ipcraft.config.files" }]
+    },
+    "ext_ipcraft.interfaces": {
+      "oneOf": [{ "const": "ipcraft.interfaces" }, { "$ref": "#/$defs/ext_obj_ipcraft.interfaces" }]
+    },
+    "ext_ipcraft.composition": {
+      "oneOf": [{ "const": "ipcraft.composition" }, { "$ref": "#/$defs/ext_obj_ipcraft.composition" }]
+    },
+    "ext_ipcraft.emitters": {
+      "oneOf": [{ "const": "ipcraft.emitters" }, { "$ref": "#/$defs/ext_obj_ipcraft.emitters" }]
+    },
+    "ext_ipcraft.flows": {
+      "oneOf": [{ "const": "ipcraft.flows" }, { "$ref": "#/$defs/ext_obj_ipcraft.flows" }]
+    },
+    "ext_ipcraft.artifacts": {
+      "oneOf": [{ "const": "ipcraft.artifacts" }, { "$ref": "#/$defs/ext_obj_ipcraft.artifacts" }]
+    },
+    "ext_ipcraft.diagnostics": {
+      "oneOf": [{ "const": "ipcraft.diagnostics" }, { "$ref": "#/$defs/ext_obj_ipcraft.diagnostics" }]
+    },
+    "ext_ipcraft.views": {
+      "oneOf": [{ "const": "ipcraft.views" }, { "$ref": "#/$defs/ext_obj_ipcraft.views" }]
+    },
+    "ext_obj_ipcraft.config.params": {
+      "type": "object",
+      "required": ["id"],
+      "properties": { "id": { "const": "ipcraft.config.params" } }
+    },
+    "ext_obj_ipcraft.config.tables": {
+      "type": "object",
+      "required": ["id"],
+      "properties": { "id": { "const": "ipcraft.config.tables" } }
+    },
+    "ext_obj_ipcraft.config.documents": {
+      "type": "object",
+      "required": ["id"],
+      "properties": { "id": { "const": "ipcraft.config.documents" } }
+    },
+    "ext_obj_ipcraft.config.files": {
+      "type": "object",
+      "required": ["id"],
+      "properties": { "id": { "const": "ipcraft.config.files" } }
+    },
+    "ext_obj_ipcraft.interfaces": {
+      "type": "object",
+      "required": ["id"],
+      "properties": { "id": { "const": "ipcraft.interfaces" } }
+    },
+    "ext_obj_ipcraft.composition": {
+      "type": "object",
+      "required": ["id"],
+      "properties": { "id": { "const": "ipcraft.composition" } }
+    },
+    "ext_obj_ipcraft.emitters": {
+      "type": "object",
+      "required": ["id"],
+      "properties": { "id": { "const": "ipcraft.emitters" } }
+    },
+    "ext_obj_ipcraft.flows": {
+      "type": "object",
+      "required": ["id"],
+      "properties": { "id": { "const": "ipcraft.flows" } }
+    },
+    "ext_obj_ipcraft.artifacts": {
+      "type": "object",
+      "required": ["id"],
+      "properties": { "id": { "const": "ipcraft.artifacts" } }
+    },
+    "ext_obj_ipcraft.diagnostics": {
+      "type": "object",
+      "required": ["id"],
+      "properties": { "id": { "const": "ipcraft.diagnostics" } }
+    },
+    "ext_obj_ipcraft.views": {
+      "type": "object",
+      "required": ["id"],
+      "properties": { "id": { "const": "ipcraft.views" } }
+    },
+    "metadata": {
+      "description": "Application-owned metadata namespace.",
+      "type": "object",
+      "additionalProperties": true
+    },
+    "native": {
+      "description": "Native tool payload preserved by Ipcraft.",
+      "type": "object",
+      "additionalProperties": true
+    }
+  }
+}
