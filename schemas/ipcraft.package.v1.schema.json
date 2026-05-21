@@ -69,6 +69,10 @@
     {
       "if": { "required": ["views"] },
       "then": { "$ref": "#/$defs/requires_views_extension" }
+    },
+    {
+      "if": { "required": ["graph_config"] },
+      "then": { "$ref": "#/$defs/requires_graph_config_extension" }
     }
   ],
   "properties": {
@@ -122,6 +126,10 @@
     "views": {
       "type": "array",
       "items": { "$ref": "#/$defs/package_object" }
+    },
+    "graph_config": {
+      "description": "Package-declared graph configuration contract.",
+      "$ref": "#/$defs/graph_config"
     },
     "plugin": {
       "oneOf": [
@@ -231,6 +239,71 @@
       "type": "object",
       "additionalProperties": true
     },
+    "graph_config": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "objects", "relationships"],
+      "properties": {
+        "schema": { "const": "ipcraft.graph-config.v1" },
+        "objects": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/graph_config_object" }
+        },
+        "relationships": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/graph_config_relationship" }
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "native": { "$ref": "#/$defs/native" }
+      }
+    },
+    "graph_config_object": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "type": { "type": "string", "minLength": 1 },
+        "properties": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "graph_config_relationship": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "endpoints"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "type": { "type": "string", "minLength": 1 },
+        "endpoints": {
+          "type": "array",
+          "minItems": 2,
+          "items": { "$ref": "#/$defs/graph_config_endpoint" }
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "graph_config_endpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["object", "role"],
+      "properties": {
+        "object": { "type": "string", "minLength": 1 },
+        "role": { "type": "string", "minLength": 1 },
+        "properties": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
     "extension_decl": {
       "oneOf": [
         { "type": "string", "minLength": 1 },
@@ -318,6 +391,12 @@
       },
       "required": ["extensions"]
     },
+    "requires_graph_config_extension": {
+      "properties": {
+        "extensions": { "$ref": "#/$defs/has_graph_config_extension" }
+      },
+      "required": ["extensions"]
+    },
     "has_config_params_extension": { "$ref": "#/$defs/has_ipcraft.config.params" },
     "has_config_tables_extension": { "$ref": "#/$defs/has_ipcraft.config.tables" },
     "has_config_documents_extension": { "$ref": "#/$defs/has_ipcraft.config.documents" },
@@ -329,6 +408,7 @@
     "has_artifacts_extension": { "$ref": "#/$defs/has_ipcraft.artifacts" },
     "has_diagnostics_extension": { "$ref": "#/$defs/has_ipcraft.diagnostics" },
     "has_views_extension": { "$ref": "#/$defs/has_ipcraft.views" },
+    "has_graph_config_extension": { "$ref": "#/$defs/has_ipcraft.graph_config" },
     "has_ipcraft.config.params": {
       "type": "array",
       "contains": { "$ref": "#/$defs/ext_ipcraft.config.params" }
@@ -373,6 +453,10 @@
       "type": "array",
       "contains": { "$ref": "#/$defs/ext_ipcraft.views" }
     },
+    "has_ipcraft.graph_config": {
+      "type": "array",
+      "contains": { "$ref": "#/$defs/ext_ipcraft.graph_config" }
+    },
     "ext_ipcraft.config.params": {
       "oneOf": [{ "const": "ipcraft.config.params" }, { "$ref": "#/$defs/ext_obj_ipcraft.config.params" }]
     },
@@ -405,6 +489,9 @@
     },
     "ext_ipcraft.views": {
       "oneOf": [{ "const": "ipcraft.views" }, { "$ref": "#/$defs/ext_obj_ipcraft.views" }]
+    },
+    "ext_ipcraft.graph_config": {
+      "oneOf": [{ "const": "ipcraft.graph_config" }, { "$ref": "#/$defs/ext_obj_ipcraft.graph_config" }]
     },
     "ext_obj_ipcraft.config.params": {
       "type": "object",
@@ -460,6 +547,11 @@
       "type": "object",
       "required": ["id"],
       "properties": { "id": { "const": "ipcraft.views" } }
+    },
+    "ext_obj_ipcraft.graph_config": {
+      "type": "object",
+      "required": ["id"],
+      "properties": { "id": { "const": "ipcraft.graph_config" } }
     },
     "metadata": {
       "description": "Application-owned metadata namespace.",
