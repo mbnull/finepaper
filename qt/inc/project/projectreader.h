@@ -1,6 +1,7 @@
-// ProjectReader parses Finepaper .fpproj JSON files.
+// ProjectReader parses Ipcraft V1 project JSON files.
 #pragma once
 
+#include "ipcraft/diagnostics.h"
 #include "project/projectdocument.h"
 
 #include <QString>
@@ -9,6 +10,7 @@ struct ProjectReadResult {
     bool success = false;
     ProjectDocument document;
     QString error;
+    ipcraft::DiagnosticStore diagnostics;
 };
 
 enum class ProjectFileKind {
