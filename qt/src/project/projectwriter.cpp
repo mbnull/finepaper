@@ -292,3 +292,7 @@ ProjectWriteResult ProjectWriter::writeFile(const QString& path, const ProjectDo
 
     return {true, {}};
 }
+
+QJsonObject ProjectWriter::toJsonObject(const ProjectDocument& document) {
+    return toJson(document);
+}
