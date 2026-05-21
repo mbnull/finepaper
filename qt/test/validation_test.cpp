@@ -410,7 +410,7 @@ void testValidationManagerHandlesMissingGraphAndLogPanel() {
     manager.runValidation();
 }
 
-void testProjectValidationRunnerWarnsForEachProjectInstanceWithoutDrc() {
+void testProjectValidationRunnerDoesNotWarnForMissingDrc() {
     Graph graph;
     const QList<IpCatalogEntry> entries{
         projectCatalogEntryWithoutDrc(QStringLiteral("finepaper.noc_a")),
@@ -424,11 +424,8 @@ void testProjectValidationRunnerWarnsForEachProjectInstanceWithoutDrc() {
     ProjectValidationRunner runner;
     const QList<ValidationResult> results = runner.validate(&graph, entries, instances);
 
-    require(results.size() == 2, "two IP instances without DRC should produce two findings");
-    require(countResults(results, ValidationSeverity::Warning, QStringLiteral("noc_a_0")) == 1,
-            "first project instance without DRC should produce one warning containing its instance id");
-    require(countResults(results, ValidationSeverity::Warning, QStringLiteral("noc_b_0")) == 1,
-            "second project instance without DRC should produce one warning containing its instance id");
+    require(results.isEmpty(),
+            "static project validation should not warn or execute external DRC when DRC is absent");
 }
 
 void testProjectValidationRunnerErrorsWhenCatalogEntryIsMissing() {
@@ -503,18 +500,14 @@ void testBuiltInValidationRunsBeforePackageValidate() {
     ProjectValidationRunner runner;
     const QList<ValidationResult> results = runner.validate(&graph, entries, instances);
 
-    require(results.size() == 2,
-            "built-in error should block only the bad instance while good instance DRC still runs");
+    require(results.size() == 1,
+            "static validation should report built-in errors without running package DRC");
     require(results.at(0).ruleName().startsWith(QStringLiteral("built_in")),
-            "built-in diagnostics should appear before package DRC diagnostics");
+            "static validation result should be built-in");
     require(results.at(0).message().contains(QStringLiteral("MissingTile")),
             "first result should report the bad module type");
-    require(results.at(1).ruleName() == QStringLiteral("DRC"),
-            "second result should be the package DRC result for the unblocked instance");
-    require(results.at(1).message().contains(QStringLiteral("good_0: scripted DRC violation")),
-            "DRC should run only for the unblocked good instance");
-    require(!hasMessageContaining(results, QStringLiteral("bad_0: scripted DRC violation")),
-            "DRC should not run for the instance with a blocking built-in error");
+    require(!hasMessageContaining(results, QStringLiteral("scripted DRC violation")),
+            "default project validation should not run package DRC");
 }
 
 void testValidateRunsBuiltInThenPackageValidate() {
@@ -556,8 +549,8 @@ void testValidateRunsBuiltInThenPackageValidate() {
         indexOfLogItemContaining(logList, QStringLiteral("good_0: scripted DRC violation"));
     require(builtInIndex >= 0,
             "validation log should include the built-in diagnostic for the invalid instance");
-    require(packageIndex > builtInIndex,
-            "validation log should show built-in diagnostics before package validate diagnostics");
+    require(packageIndex < 0,
+            "default validation log should not include package validate diagnostics");
     require(indexOfLogItemContaining(logList, QStringLiteral("bad_0: scripted DRC violation")) < 0,
             "package validate should not run for the instance with a blocking built-in error");
 }
@@ -934,7 +927,7 @@ void testBuiltInValidationReportsTopologyMetadataReferenceErrors() {
             "invalid topology metadata should use built_in_topology");
 }
 
-void testProjectValidationRunnerRunsDrcForEveryProjectInstance() {
+void testProjectValidationRunnerDoesNotRunDrcForProjectInstances() {
     QTemporaryDir tempDir;
     require(tempDir.isValid(), "failed to create temporary DRC directory");
     const QString scriptPath = writeDrcScript(tempDir);
@@ -952,18 +945,11 @@ void testProjectValidationRunnerRunsDrcForEveryProjectInstance() {
     ProjectValidationRunner runner;
     const QList<ValidationResult> results = runner.validate(&graph, entries, instances);
 
-    require(results.size() == 2, "DRC should run for each project instance");
-    require(countResults(results,
-                         ValidationSeverity::Error,
-                         QStringLiteral("scripted_0: scripted DRC violation")) == 1,
-            "first project instance DRC result should be prefixed with its instance id");
-    require(countResults(results,
-                         ValidationSeverity::Error,
-                         QStringLiteral("scripted_1: scripted DRC violation")) == 1,
-            "second project instance DRC result should be prefixed with its instance id");
+    require(results.isEmpty(),
+            "default project validation should not run external DRC for project instances");
 }
 
-void testProjectValidationRunnerDrcReceivesEachInstanceScopedGraph() {
+void testProjectValidationRunnerDoesNotExportInstanceScopedDrcInput() {
     QTemporaryDir tempDir;
     require(tempDir.isValid(), "failed to create temporary DRC directory");
     const QString scriptPath = writeDrcInputEchoScript(tempDir);
@@ -990,16 +976,8 @@ void testProjectValidationRunnerDrcReceivesEachInstanceScopedGraph() {
     ProjectValidationRunner runner;
     const QList<ValidationResult> results = runner.validate(&graph, entries, instances);
 
-    require(results.size() == 2,
-            "DRC should receive one instance-scoped graph per project instance");
-    require(countResults(results,
-                         ValidationSeverity::Error,
-                         QStringLiteral("scripted_0: scripted_0 modules=only_a")) == 1,
-            "first DRC input should include only the first instance module");
-    require(countResults(results,
-                         ValidationSeverity::Error,
-                         QStringLiteral("scripted_1: scripted_1 modules=only_b")) == 1,
-            "second DRC input should include only the second instance module");
+    require(results.isEmpty(),
+            "default project validation should not export instance-scoped DRC input");
 }
 
 void testBasicValidatorLeavesIpDrcToPluginCommand() {
@@ -1152,7 +1130,7 @@ int main(int argc, char** argv) {
     try {
         testProjectValidationRunnerRejectsNullGraphWithoutCrashing();
         testValidationManagerHandlesMissingGraphAndLogPanel();
-        testProjectValidationRunnerWarnsForEachProjectInstanceWithoutDrc();
+        testProjectValidationRunnerDoesNotWarnForMissingDrc();
         testProjectValidationRunnerErrorsWhenCatalogEntryIsMissing();
         testBuiltInValidationReportsMissingPackage();
         testBuiltInValidationRunsBeforePackageValidate();
@@ -1168,8 +1146,8 @@ int main(int argc, char** argv) {
         testBuiltInValidationReportsViewAttachmentZoneReferenceError();
         testBuiltInValidationAllowsAttachmentZoneRefAlias();
         testBuiltInValidationReportsTopologyMetadataReferenceErrors();
-        testProjectValidationRunnerRunsDrcForEveryProjectInstance();
-        testProjectValidationRunnerDrcReceivesEachInstanceScopedGraph();
+        testProjectValidationRunnerDoesNotRunDrcForProjectInstances();
+        testProjectValidationRunnerDoesNotExportInstanceScopedDrcInput();
         testBasicValidatorLeavesIpDrcToPluginCommand();
         testDrcRunnerUsesIpcoreGraphForRaveNoC();
         testDrcRunnerAcceptsManualRaveTilePlacement();

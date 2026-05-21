@@ -25,6 +25,31 @@ void addIpcoreStateDependencies(ProjectDocument& document,
     }
 }
 
+QVector<ProjectIpInstanceRecord> projectInstancesFromGenerationState(
+    const QVector<ProjectIpInstanceRecord>& records) {
+    QVector<ProjectIpInstanceRecord> instances;
+    instances.reserve(records.size());
+    for (ProjectIpInstanceRecord record : records) {
+        if (record.id.trimmed().isEmpty()) {
+            record.id = record.instanceId;
+        }
+        if (record.package.id.trimmed().isEmpty()) {
+            record.package.id = record.ipcoreId;
+        }
+        if (record.package.version.trimmed().isEmpty()) {
+            record.package.version = QStringLiteral("1.0");
+        }
+        if (record.displayName.trimmed().isEmpty()) {
+            record.displayName = record.id;
+        }
+        if (record.native.isEmpty() && !record.state.isEmpty()) {
+            record.native = QJsonObject{{QStringLiteral("legacy_state"), record.state}};
+        }
+        instances.append(record);
+    }
+    return instances;
+}
+
 } // namespace
 
 QJsonArray ipcoreStateArray(const QVector<ProjectIpInstanceRecord>& records) {
@@ -59,6 +84,7 @@ GeneratedProjectSnapshotResult writeGeneratedProjectSnapshotFile(const Graph& gr
                                                                  const QString& designName,
                                                                  const QVector<ProjectIpInstanceRecord>& ipcoreState) {
     ProjectDocument document = GraphProjectSerializer::toProject(graph, designName);
+    document.instances = projectInstancesFromGenerationState(ipcoreState);
     document.ipcoreState = ipcoreState;
     addIpcoreStateDependencies(document, ipcoreState);
     const ProjectWriteResult writeResult = ProjectWriter::writeFile(projectPath, document);

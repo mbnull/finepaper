@@ -403,7 +403,7 @@ void testGeneratesEveryProjectInstanceIntoSeparateOutputDirectories() {
     const ProjectReadResult snapshot =
         ProjectReader::readFile(generatedDir.filePath(QStringLiteral("project-snapshot.fpproj")));
     require(snapshot.success, snapshot.error.toLocal8Bit().constData());
-    require(snapshot.document.ipcoreState.size() == 2,
+    require(snapshot.document.instances.size() == 2,
             "project snapshot should include all generation-time IP instance state");
 }
 

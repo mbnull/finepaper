@@ -1,4 +1,5 @@
-// ProjectValidationRunner runs structural validation and IP DRC for all project instances.
+// ProjectValidationRunner runs static built-in/editor validation only.
+// External package validation is executed explicitly through FlowRunner.
 #pragma once
 
 #include "ipcore/ipcatalogservice.h"
