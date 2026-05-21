@@ -9,6 +9,9 @@
 
 struct IpcraftDiagnostic {
     QString severity = QStringLiteral("error");
+    QString source;
+    QString ruleId;
+    QString category;
     QString packageRootPath;
     QString path;
     QString message;
@@ -98,7 +101,7 @@ struct IpcraftGenerationDescriptor {
 };
 
 struct IpcraftInstancePolicy {
-    std::optional<int> max;
+    std::optional<int> max = std::nullopt;
 };
 
 struct IpcraftPackageManifest {
@@ -108,13 +111,13 @@ struct IpcraftPackageManifest {
     QString version;
     QString packageRootPath;
     IpcraftInstancePolicy instances;
-    std::optional<IpcraftDynamicPluginMetadata> plugin;
+    std::optional<IpcraftDynamicPluginMetadata> plugin = std::nullopt;
     QHash<QString, IpcraftExtensionDescriptor> extensions;
     QVector<IpcraftConnectionClass> connectionClasses;
     QVector<IpcraftModuleDescriptor> modules;
     QVector<IpcraftViewDescriptor> views;
     QHash<QString, IpcraftCommandDescriptor> commands;
-    std::optional<IpcraftIpxactDescriptor> ipxact;
+    std::optional<IpcraftIpxactDescriptor> ipxact = std::nullopt;
     QJsonObject parameters;
     QVector<QJsonObject> topologies;
     IpcraftGenerationDescriptor generation;

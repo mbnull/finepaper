@@ -22,6 +22,10 @@ void addDiagnostic(QVector<IpcraftDiagnostic>& diagnostics,
     diagnostics.append(diagnostic);
 }
 
+QString packageVersionKey(const IpcraftPackageManifest& manifest) {
+    return manifest.id + QLatin1Char('@') + manifest.version;
+}
+
 void appendCandidate(QVector<QString>& candidates,
                      QSet<QString>& seen,
                      const QString& path) {
@@ -280,9 +284,9 @@ IpcraftRegistryLoadResult loadIpcraftPackageManifestsWithDiagnostics(const QStri
     IpcraftRegistryLoadResult loadResult;
     const QVector<QString> packageRoots = discoverPackageRoots(rootPaths);
     QVector<CandidateManifest> candidates;
-    QHash<QString, QVector<int>> indexesByPackageId;
-    QHash<QString, QStringList> rootsByPackageId;
-    QStringList packageIdOrder;
+    QHash<QString, QVector<int>> indexesByPackageVersion;
+    QHash<QString, QStringList> rootsByPackageVersion;
+    QStringList packageVersionOrder;
 
     for (const QString& packageRoot : packageRoots) {
         const IpcraftManifestReadResult result = IpcraftManifestReader().readPackage(packageRoot);
@@ -297,17 +301,18 @@ IpcraftRegistryLoadResult loadIpcraftPackageManifestsWithDiagnostics(const QStri
             validateViewXmlDescriptor(result.manifest, view, candidate.diagnostics);
         }
 
-        if (!indexesByPackageId.contains(result.manifest.id)) {
-            packageIdOrder.append(result.manifest.id);
+        const QString versionKey = packageVersionKey(result.manifest);
+        if (!indexesByPackageVersion.contains(versionKey)) {
+            packageVersionOrder.append(versionKey);
         }
-        indexesByPackageId[result.manifest.id].append(candidates.size());
-        rootsByPackageId[result.manifest.id].append(result.manifest.packageRootPath);
+        indexesByPackageVersion[versionKey].append(candidates.size());
+        rootsByPackageVersion[versionKey].append(result.manifest.packageRootPath);
         candidates.append(candidate);
     }
 
     QSet<int> duplicateCandidateIndexes;
-    for (const QString& packageId : packageIdOrder) {
-        const QVector<int> duplicateIndexes = indexesByPackageId.value(packageId);
+    for (const QString& versionKey : packageVersionOrder) {
+        const QVector<int> duplicateIndexes = indexesByPackageVersion.value(versionKey);
         if (duplicateIndexes.size() < 2) {
             continue;
         }
@@ -316,12 +321,16 @@ IpcraftRegistryLoadResult loadIpcraftPackageManifestsWithDiagnostics(const QStri
             duplicateCandidateIndexes.insert(index);
         }
 
-        const QStringList duplicateRoots = rootsByPackageId.value(packageId);
+        const QStringList duplicateRoots = rootsByPackageVersion.value(versionKey);
         IpcraftDiagnostic diagnostic;
+        diagnostic.severity = QStringLiteral("error");
+        diagnostic.source = QStringLiteral("package.resolver");
+        diagnostic.ruleId = QStringLiteral("package.duplicate_version");
+        diagnostic.category = QStringLiteral("package");
         diagnostic.packageRootPath = duplicateRoots.isEmpty() ? QString() : duplicateRoots.first();
-        diagnostic.path = QStringLiteral("manifest.id");
-        diagnostic.message = QStringLiteral("Duplicate package id %1 in package roots: %2")
-                                 .arg(packageId, duplicateRoots.join(QStringLiteral(", ")));
+        diagnostic.path = QStringLiteral("$");
+        diagnostic.message = QStringLiteral("Duplicate package version %1 in package roots: %2")
+                                 .arg(versionKey, duplicateRoots.join(QStringLiteral(", ")));
         loadResult.diagnostics.append(diagnostic);
     }
 
