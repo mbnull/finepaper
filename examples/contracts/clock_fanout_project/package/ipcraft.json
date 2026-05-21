@@ -1,0 +1,41 @@
+{
+  "schema": "ipcraft.package.v1",
+  "id": "vendor.example.clocked",
+  "version": "1.0.0",
+  "name": "Clocked Example IP",
+  "extensions": [
+    "ipcraft.interfaces",
+    "ipcraft.composition"
+  ],
+  "interfaces": [
+    {
+      "id": "clk_out",
+      "kind": "clock",
+      "role": "source",
+      "direction": "out",
+      "fanout": "many"
+    },
+    {
+      "id": "clk_in",
+      "kind": "clock",
+      "role": "sink",
+      "direction": "in"
+    }
+  ],
+  "connection_rules": {
+    "compatibility": [
+      {
+        "connection_type": "clock",
+        "from": {
+          "kind": "clock",
+          "role": "source"
+        },
+        "to": {
+          "kind": "clock",
+          "role": "sink"
+        },
+        "arity": "fanout"
+      }
+    ]
+  }
+}

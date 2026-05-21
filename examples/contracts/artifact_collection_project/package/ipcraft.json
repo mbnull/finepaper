@@ -1,0 +1,17 @@
+{
+  "schema": "ipcraft.package.v1",
+  "id": "vendor.example.artifacts",
+  "version": "1.0.0",
+  "name": "Artifact Collection Example",
+  "extensions": [
+    "ipcraft.artifacts"
+  ],
+  "artifacts": [
+    {
+      "id": "log",
+      "type": "log",
+      "glob": "reports/*.log",
+      "primary": false
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "schema": "ipcraft.package.v1",
+  "id": "vendor.example.negative_malformed",
+  "name": "Malformed Package Example",
+  "extensions": []
+}

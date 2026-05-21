@@ -1,0 +1,48 @@
+{
+  "schema": "ipcraft.package.v1",
+  "id": "vendor.example.composition_endpoint",
+  "version": "1.0.0",
+  "name": "Composition Endpoint",
+  "extensions": [
+    "ipcraft.interfaces",
+    "ipcraft.composition"
+  ],
+  "interfaces": [
+    {
+      "id": "m_axi",
+      "kind": "bus",
+      "protocol": "axi4",
+      "role": "master",
+      "direction": "out"
+    },
+    {
+      "id": "s_axi",
+      "kind": "bus",
+      "protocol": "axi4",
+      "role": "slave",
+      "direction": "in"
+    }
+  ],
+  "connection_rules": {
+    "protocol_aliases": {
+      "AXI4": "axi4",
+      "AMBA_AXI4": "axi4"
+    },
+    "compatibility": [
+      {
+        "connection_type": "interface",
+        "from": {
+          "kind": "bus",
+          "protocol": "axi4",
+          "role": "master"
+        },
+        "to": {
+          "kind": "bus",
+          "protocol": "axi4",
+          "role": "slave"
+        },
+        "arity": "binary"
+      }
+    ]
+  }
+}

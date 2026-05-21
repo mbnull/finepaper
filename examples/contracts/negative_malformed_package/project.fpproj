@@ -1,0 +1,29 @@
+{
+  "schema": "ipcraft.project.v1",
+  "project": {
+    "id": "negative_malformed_package",
+    "name": "Negative Malformed Package"
+  },
+  "instances": [
+    {
+      "id": "bad0",
+      "package": {
+        "id": "vendor.example.negative_malformed",
+        "version": "1.0.0"
+      },
+      "config": {}
+    }
+  ],
+  "composition": {
+    "connections": [],
+    "external_ports": []
+  },
+  "layout": {},
+  "diagnostics": {
+    "schema": "ipcraft.diagnostics.v1",
+    "records": []
+  },
+  "artifacts": {},
+  "migration": {},
+  "native": {}
+}

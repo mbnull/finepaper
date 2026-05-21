@@ -601,6 +601,27 @@ target("ipcraft_migration_test")
         pass_outputs = "ipcraft_migration_test passed"
     })
 
+target("ipcraft_contract_examples_test")
+    add_rules("qt.console")
+    set_kind("binary")
+    set_group("test")
+    set_default(false)
+    set_languages("c++23")
+
+    add_includedirs("inc")
+    add_files("test/ipcraft_contract_examples_test.cpp")
+    add_files("src/ipcraft/packagespec.cpp")
+    add_files("src/project/projectreader.cpp")
+    add_files("src/ipcraft/configschema.cpp")
+    add_files("src/ipcraft/value.cpp")
+    add_files("src/ipcraft/compositionmodel.cpp")
+    add_files("src/ipcraft/diagnostics.cpp")
+    add_files("src/ipcraft/jsonhelpers.cpp")
+    add_tests("default", {
+        trim_output = true,
+        pass_outputs = "ipcraft_contract_examples_test passed"
+    })
+
 add_qt_test_target("ipcraft_phase_review_test", "test/ipcraft_phase_review_test.cpp", {
     "src/ipcore/ipcatalogservice.cpp",
     "src/ipcore/ipcorecommandrunner.cpp",

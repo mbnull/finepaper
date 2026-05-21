@@ -1,0 +1,30 @@
+{
+  "schema": "ipcraft.package.v1",
+  "id": "vendor.example.failing_validator",
+  "version": "1.0.0",
+  "name": "Failing Validator Example",
+  "extensions": [
+    "ipcraft.flows"
+  ],
+  "flows": [
+    {
+      "id": "validate",
+      "label": "External validation",
+      "steps": [
+        {
+          "kind": "exec",
+          "command": {
+            "executable": "tools/fail.sh",
+            "args": [],
+            "timeout_ms": 60000,
+            "capture": {
+              "stdout": "stdout.log",
+              "stderr": "stderr.log",
+              "max_bytes": 1048576
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

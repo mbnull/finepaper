@@ -1,0 +1,32 @@
+{
+  "schema": "ipcraft.package.v1",
+  "id": "vendor.example.negative_missing_executable",
+  "version": "1.0.0",
+  "name": "Negative Missing Executable Example",
+  "extensions": [
+    "ipcraft.flows"
+  ],
+  "flows": [
+    {
+      "id": "generate",
+      "steps": [
+        {
+          "kind": "exec",
+          "command": {
+            "executable": "tools/missing-generator",
+            "args": [
+              "--out",
+              "{out}"
+            ],
+            "timeout_ms": 60000,
+            "capture": {
+              "stdout": "stdout.log",
+              "stderr": "stderr.log",
+              "max_bytes": 1048576
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,75 @@
+{
+  "schema": "ipcraft.project.v1",
+  "project": {
+    "id": "composition_two_ip_project",
+    "name": "Composition Two IP Project"
+  },
+  "instances": [
+    {
+      "id": "producer",
+      "package": {
+        "id": "vendor.example.composition_endpoint",
+        "version": "1.0.0"
+      },
+      "config": {}
+    },
+    {
+      "id": "consumer",
+      "package": {
+        "id": "vendor.example.composition_endpoint",
+        "version": "1.0.0"
+      },
+      "config": {}
+    }
+  ],
+  "composition": {
+    "connections": [
+      {
+        "id": "axi_link",
+        "type": "interface",
+        "source": "user",
+        "endpoints": [
+          {
+            "instance": "producer",
+            "interface": "m_axi",
+            "role": "master"
+          },
+          {
+            "instance": "consumer",
+            "interface": "s_axi",
+            "role": "slave"
+          }
+        ]
+      }
+    ],
+    "external_ports": []
+  },
+  "layout": {
+    "views": [
+      {
+        "id": "main",
+        "kind": "canvas",
+        "canvas": {
+          "nodes": {
+            "producer": {
+              "x": 0,
+              "y": 0
+            },
+            "consumer": {
+              "x": 240,
+              "y": 0
+            }
+          },
+          "connections": {}
+        }
+      }
+    ]
+  },
+  "diagnostics": {
+    "schema": "ipcraft.diagnostics.v1",
+    "records": []
+  },
+  "artifacts": {},
+  "migration": {},
+  "native": {}
+}

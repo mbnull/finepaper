@@ -1,0 +1,36 @@
+{
+  "schema": "ipcraft.project.v1",
+  "project": {
+    "id": "raw_document_project",
+    "name": "Raw Document Project"
+  },
+  "instances": [
+    {
+      "id": "doc0",
+      "package": {
+        "id": "vendor.example.raw_document",
+        "version": "1.0.0"
+      },
+      "config": {
+        "documents": {
+          "system": {
+            "format": "text",
+            "content": "mode=demo\n"
+          }
+        }
+      }
+    }
+  ],
+  "composition": {
+    "connections": [],
+    "external_ports": []
+  },
+  "layout": {},
+  "diagnostics": {
+    "schema": "ipcraft.diagnostics.v1",
+    "records": []
+  },
+  "artifacts": {},
+  "migration": {},
+  "native": {}
+}

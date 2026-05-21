@@ -1,0 +1,16 @@
+{
+  "schema": "ipcraft.package.v1",
+  "id": "vendor.example.negative_path",
+  "version": "1.0.0",
+  "name": "Negative Path Example",
+  "extensions": [
+    "ipcraft.emitters"
+  ],
+  "emitters": [
+    {
+      "id": "bad",
+      "kind": "emit_parameters",
+      "path": "../escape.json"
+    }
+  ]
+}
