@@ -585,11 +585,11 @@ void validateCommand(const IpCatalogEntry& entry,
     }
 
     const IpCoreCommandDescriptor& legacyCommand = legacyCommandDescriptor(entry, purpose);
-    if (purpose == IpcraftBuiltInValidator::CommandPurpose::Generate
-        && !legacyCommand.hasCommand()) {
+    if (legacyCommand.hasCommand() && legacyCommand.inputFormat.trimmed().isEmpty()) {
         accumulator.addPackageError(
             entry,
-            QStringLiteral("Package '%1' does not declare a generate command.").arg(entry.id),
+            QStringLiteral("Package '%1' %2 command does not declare an input schema.")
+                .arg(entry.id, name),
             entry.id,
             QStringLiteral("built_in_command"));
     }
