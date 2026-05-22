@@ -33,7 +33,6 @@ struct ProjectGenerationRequest {
     QString projectPath;
     QString designName;
     QString outputRoot;
-    int generatorTimeoutMs = 300000;
     QList<IpCatalogEntry> catalogEntries;
     QVector<ProjectIpInstanceRecord> instances;
 };
