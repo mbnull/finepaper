@@ -182,6 +182,7 @@ CliResult readProjectAndPackages(const QString& projectPath,
 }
 
 CliResult validateStaticProject(const ProjectDocument& project,
+                                const QString& projectRootPath,
                                 const QVector<ipcraft::PackageSpec>& packages) {
     CliResult result;
     result.ok = true;
@@ -201,9 +202,11 @@ CliResult validateStaticProject(const ProjectDocument& project,
             result.ok = false;
             appendDiagnostics(result.diagnostics, schemaResult.diagnostics);
         }
+        const ipcraft::ConfigValidationOptions configOptions{.projectRootPath = projectRootPath};
         const ipcraft::ConfigValidationResult configResult =
             ipcraft::validateConfigBundle(schemaResult.schema,
-                                          ipcraft::ConfigBundle::fromJson(instance.config));
+                                          ipcraft::ConfigBundle::fromJson(instance.config),
+                                          configOptions);
         if (!configResult.ok) {
             result.ok = false;
             appendDiagnostics(result.diagnostics, configResult.diagnostics);
@@ -270,7 +273,7 @@ CliResult commandValidateProject(const QStringList& args) {
     if (!readResult.ok) {
         return readResult;
     }
-    return validateStaticProject(project, packages);
+    return validateStaticProject(project, QFileInfo(args.at(0)).absolutePath(), packages);
 }
 
 CliResult commandEmitInputs(const QStringList& args) {

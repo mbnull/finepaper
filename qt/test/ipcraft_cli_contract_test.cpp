@@ -9,6 +9,7 @@
 #include <QJsonObject>
 #include <QProcess>
 #include <QTemporaryDir>
+#include <filesystem>
 #include <iostream>
 #include <stdexcept>
 
@@ -41,8 +42,11 @@ struct CliRun {
     QJsonObject json;
 };
 
-CliRun runCli(const QStringList& arguments) {
+CliRun runCli(const QStringList& arguments, const QString& workingDirectory = {}) {
     QProcess process;
+    if (!workingDirectory.isEmpty()) {
+        process.setWorkingDirectory(workingDirectory);
+    }
     process.start(findCliBinary(), arguments);
     require(process.waitForStarted(), "ipcraft-cli should start");
     require(process.waitForFinished(10000), "ipcraft-cli should finish");
@@ -239,6 +243,56 @@ void testValidateProjectIsStaticAndDoesNotCreateRunFiles() {
     requireCliEnvelope(run.json, true);
     require(!QFileInfo(QDir(root.path()).filePath(QStringLiteral("run"))).exists(),
             "validate-project should not create run files");
+}
+
+void testValidateProjectUsesProjectDirectoryForPathConfig() {
+    QTemporaryDir root;
+    require(root.isValid(), "temp root should be valid");
+    QTemporaryDir outside;
+    require(outside.isValid(), "outside temp root should be valid");
+    QDir dir(root.path());
+    require(dir.mkpath(QStringLiteral("project/input")), "project input dir should be created");
+    require(dir.mkpath(QStringLiteral("cwd")), "cwd dir should be created");
+    const QString cwdPath = dir.filePath(QStringLiteral("cwd"));
+    const QString linkPath = QDir(cwdPath).filePath(QStringLiteral("input"));
+    std::error_code error;
+    std::filesystem::create_directory_symlink(outside.path().toStdString(),
+                                              linkPath.toStdString(),
+                                              error);
+    if (error) {
+        return;
+    }
+
+    QJsonObject project = projectJson();
+    QJsonArray instances = project.value(QStringLiteral("instances")).toArray();
+    QJsonObject instance = instances.first().toObject();
+    instance.insert(QStringLiteral("config"), QJsonObject{
+        {QStringLiteral("parameters"), QJsonObject{
+            {QStringLiteral("config_path"), QStringLiteral("input/settings.yml")}
+        }}
+    });
+    instances.replace(0, instance);
+    project.insert(QStringLiteral("instances"), instances);
+    const QString projectPath = writeJson(dir.filePath(QStringLiteral("project/project.json")),
+                                          project);
+
+    const QString packageRoot = dir.filePath(QStringLiteral("packages/simple"));
+    QJsonObject package = packageJson();
+    package.insert(QStringLiteral("extensions"), QJsonArray{QStringLiteral("ipcraft.config.params")});
+    package.insert(QStringLiteral("config_schema"), QJsonObject{
+        {QStringLiteral("parameters"), QJsonArray{
+            QJsonObject{{QStringLiteral("id"), QStringLiteral("config_path")},
+                        {QStringLiteral("type"), QStringLiteral("path")}}
+        }}
+    });
+    writeJson(QDir(packageRoot).filePath(QStringLiteral("ipcraft.json")), package);
+
+    const CliRun run = runCli({QStringLiteral("validate-project"), projectPath,
+                               QStringLiteral("--packages"), packageRoot},
+                              cwdPath);
+    require(run.exitCode == 0,
+            "validate-project should validate path parameters relative to the project file");
+    requireCliEnvelope(run.json, true);
 }
 
 void testEmitInputsReturnsManifest() {
@@ -444,6 +498,7 @@ int main(int argc, char** argv) {
     try {
         testInspectProjectReturnsJsonResult();
         testValidateProjectIsStaticAndDoesNotCreateRunFiles();
+        testValidateProjectUsesProjectDirectoryForPathConfig();
         testEmitInputsReturnsManifest();
         testRunFlowReportsMissingExecutable();
         testRunFlowEmitsInstanceGraphConfig();
