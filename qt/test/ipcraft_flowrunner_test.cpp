@@ -267,6 +267,34 @@ void testCaptureMaxBytesRejectsUnboundedValue() {
             "oversized capture max_bytes should emit flow.command_policy_violation");
 }
 
+void testCaptureMaxBytesRejectsInvalidValueBeforeProcessStart() {
+    QTemporaryDir runRoot;
+    QTemporaryDir packageRoot;
+    require(runRoot.isValid(), "run root should be valid");
+    require(packageRoot.isValid(), "package root should be valid");
+    const QString markerPath = QDir(runRoot.path()).filePath(QStringLiteral("capture-started"));
+    writeExecutable(QDir(packageRoot.path()).filePath(QStringLiteral("tools/mark-capture.sh")),
+                    "#!/bin/sh\n"
+                    "printf started > \"$1\"\n");
+
+    QJsonObject capture;
+    capture.insert(QStringLiteral("stdout"), QStringLiteral("stdout.log"));
+    capture.insert(QStringLiteral("stderr"), QStringLiteral("stderr.log"));
+    capture.insert(QStringLiteral("max_bytes"), 0);
+    const ipcraft::FlowRunResult result = ipcraft::FlowRunner::runFlow(
+        requestFor(runRoot,
+                   packageRoot,
+                   execFlow(commandFor(QStringLiteral("tools/mark-capture.sh"),
+                                       QJsonArray{markerPath},
+                                       capture))));
+
+    require(!result.ok, "invalid capture max_bytes should fail flow policy");
+    require(hasRule(result.diagnostics, QStringLiteral("flow.command_policy_violation")),
+            "invalid capture max_bytes should emit flow.command_policy_violation");
+    require(!QFileInfo::exists(markerPath),
+            "invalid capture policy must be rejected before the executable starts");
+}
+
 void testTimeoutPolicyRejectsBeforeProcessStart() {
     QTemporaryDir runRoot;
     QTemporaryDir packageRoot;
@@ -286,6 +314,29 @@ void testTimeoutPolicyRejectsBeforeProcessStart() {
     require(!result.ok, "oversized timeout_ms should fail flow policy");
     require(hasRule(result.diagnostics, QStringLiteral("flow.command_policy_violation")),
             "oversized timeout_ms should emit flow.command_policy_violation");
+    require(!QFileInfo::exists(markerPath),
+            "invalid timeout policy must be rejected before the executable starts");
+}
+
+void testTimeoutPolicyRejectsInvalidValueBeforeProcessStart() {
+    QTemporaryDir runRoot;
+    QTemporaryDir packageRoot;
+    require(runRoot.isValid(), "run root should be valid");
+    require(packageRoot.isValid(), "package root should be valid");
+    const QString markerPath = QDir(runRoot.path()).filePath(QStringLiteral("invalid-timeout"));
+    writeExecutable(QDir(packageRoot.path()).filePath(QStringLiteral("tools/mark-timeout.sh")),
+                    "#!/bin/sh\n"
+                    "printf started > \"$1\"\n");
+
+    QJsonObject command = commandFor(QStringLiteral("tools/mark-timeout.sh"),
+                                     QJsonArray{markerPath});
+    command.insert(QStringLiteral("timeout_ms"), 0);
+    const ipcraft::FlowRunResult result =
+        ipcraft::FlowRunner::runFlow(requestFor(runRoot, packageRoot, execFlow(command)));
+
+    require(!result.ok, "invalid timeout_ms should fail flow policy");
+    require(hasRule(result.diagnostics, QStringLiteral("flow.command_policy_violation")),
+            "invalid timeout_ms should emit flow.command_policy_violation");
     require(!QFileInfo::exists(markerPath),
             "invalid timeout policy must be rejected before the executable starts");
 }
@@ -472,7 +523,9 @@ int main(int argc, char** argv) {
         testExecRejectsNativeCommandPolicyOverride();
         testExecResolvesFrameworkToolFromApplicationPolicy();
         testCaptureMaxBytesRejectsUnboundedValue();
+        testCaptureMaxBytesRejectsInvalidValueBeforeProcessStart();
         testTimeoutPolicyRejectsBeforeProcessStart();
+        testTimeoutPolicyRejectsInvalidValueBeforeProcessStart();
         testDuplicateCapturePathsAreRejected();
         testParseDiagnosticsWithoutParserFailsStructurally();
         testRunFlowUsesRunDirectoryCwdByDefault();

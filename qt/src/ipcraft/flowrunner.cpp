@@ -456,9 +456,18 @@ std::optional<CapturePolicy> capturePolicy(const QJsonObject& command,
     if (!stderrPath.isEmpty()) {
         policy.stderrPath = stderrPath;
     }
-    const std::optional<qint64> requestedMax =
-        strictPositiveIntegerValue(capture, QStringLiteral("max_bytes"));
-    policy.maxBytes = requestedMax.value_or(kDefaultCaptureLimitBytes);
+    if (capture.contains(QStringLiteral("max_bytes"))) {
+        const std::optional<qint64> requestedMax =
+            strictPositiveIntegerValue(capture, QStringLiteral("max_bytes"));
+        if (!requestedMax.has_value()) {
+            addFlowDiagnostic(diagnostics,
+                              QStringLiteral("flow.command_policy_violation"),
+                              QStringLiteral("Flow capture limit must be a positive integer."),
+                              childPath(stepPath, QStringLiteral("command.capture.max_bytes")));
+            return std::nullopt;
+        }
+        policy.maxBytes = *requestedMax;
+    }
     if (policy.maxBytes > kMaxCaptureLimitBytes) {
         addFlowDiagnostic(diagnostics,
                           QStringLiteral("flow.command_policy_violation"),
@@ -474,9 +483,19 @@ std::optional<CapturePolicy> capturePolicy(const QJsonObject& command,
 std::optional<int> timeoutMs(const QJsonObject& command,
                              const QString& stepPath,
                              ipcraft::DiagnosticStore& diagnostics) {
-    const std::optional<qint64> requested =
-        strictPositiveIntegerValue(command, QStringLiteral("timeout_ms"));
-    const qint64 timeout = requested.value_or(kDefaultTimeoutMs);
+    qint64 timeout = kDefaultTimeoutMs;
+    if (command.contains(QStringLiteral("timeout_ms"))) {
+        const std::optional<qint64> requested =
+            strictPositiveIntegerValue(command, QStringLiteral("timeout_ms"));
+        if (!requested.has_value()) {
+            addFlowDiagnostic(diagnostics,
+                              QStringLiteral("flow.command_policy_violation"),
+                              QStringLiteral("Flow timeout must be a positive integer."),
+                              childPath(stepPath, QStringLiteral("command.timeout_ms")));
+            return std::nullopt;
+        }
+        timeout = *requested;
+    }
     if (timeout > kMaxTimeoutMs) {
         addFlowDiagnostic(diagnostics,
                           QStringLiteral("flow.command_policy_violation"),
