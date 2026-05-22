@@ -296,6 +296,47 @@ void testValidateProjectUsesProjectDirectoryForPathConfig() {
     requireCliEnvelope(run.json, true);
 }
 
+void testValidateProjectRejectsFileInputAllowedAliasExtension() {
+    QTemporaryDir root;
+    require(root.isValid(), "temp root should be valid");
+    QDir dir(root.path());
+    require(dir.mkpath(QStringLiteral("input")), "input dir should be created");
+
+    QJsonObject project = projectJson();
+    QJsonArray instances = project.value(QStringLiteral("instances")).toArray();
+    QJsonObject instance = instances.first().toObject();
+    instance.insert(QStringLiteral("config"), QJsonObject{
+        {QStringLiteral("files"), QJsonObject{
+            {QStringLiteral("cfg"), QJsonObject{
+                {QStringLiteral("path"), QStringLiteral("input/config.txt")}
+            }}
+        }}
+    });
+    instances.replace(0, instance);
+    project.insert(QStringLiteral("instances"), instances);
+    const QString projectPath = writeJson(dir.filePath(QStringLiteral("project.json")),
+                                          project);
+
+    const QString packageRoot = dir.filePath(QStringLiteral("packages/simple"));
+    QJsonObject package = packageJson();
+    package.insert(QStringLiteral("extensions"), QJsonArray{QStringLiteral("ipcraft.config.files")});
+    package.insert(QStringLiteral("config_schema"), QJsonObject{
+        {QStringLiteral("files"), QJsonArray{
+            QJsonObject{{QStringLiteral("id"), QStringLiteral("cfg")},
+                        {QStringLiteral("allowed"), QJsonArray{QStringLiteral(".cfg")}}}
+        }}
+    });
+    writeJson(QDir(packageRoot).filePath(QStringLiteral("ipcraft.json")), package);
+
+    const CliRun run = runCli({QStringLiteral("validate-project"), projectPath,
+                               QStringLiteral("--packages"), packageRoot});
+    require(run.exitCode != 0,
+            "validate-project should reject invalid file extension from allowed alias");
+    requireCliEnvelope(run.json, false);
+    require(hasRule(run.json, QStringLiteral("config.file_extension_invalid")),
+            "validate-project should emit config.file_extension_invalid");
+}
+
 void testEmitInputsReturnsManifest() {
     QTemporaryDir root;
     require(root.isValid(), "temp root should be valid");
@@ -504,6 +545,7 @@ int main(int argc, char** argv) {
         testInspectProjectReturnsJsonResult();
         testValidateProjectIsStaticAndDoesNotCreateRunFiles();
         testValidateProjectUsesProjectDirectoryForPathConfig();
+        testValidateProjectRejectsFileInputAllowedAliasExtension();
         testEmitInputsReturnsManifest();
         testRunFlowReportsMissingExecutable();
         testRunFlowEmitsInstanceGraphConfig();
