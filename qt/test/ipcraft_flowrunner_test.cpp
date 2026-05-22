@@ -38,6 +38,14 @@ QByteArray readFile(const QString& path) {
     return file.readAll();
 }
 
+void writeFile(const QString& path, const QByteArray& bytes) {
+    const QFileInfo info(path);
+    require(QDir().mkpath(info.absolutePath()), "file directory should be created");
+    QFile file(path);
+    require(file.open(QIODevice::WriteOnly | QIODevice::Truncate), "file should open for writing");
+    require(file.write(bytes) == bytes.size(), "file should write fully");
+}
+
 void writeExecutable(const QString& path, const QByteArray& script) {
     const QFileInfo info(path);
     require(QDir().mkpath(info.absolutePath()), "script directory should be created");
@@ -353,6 +361,27 @@ void testRunFlowExpandsInputsManifestPlaceholder() {
             "emitted inputs manifest should be written under run root");
 }
 
+void testRunFlowExpandsPackageManifestPlaceholder() {
+    QTemporaryDir runRoot;
+    QTemporaryDir packageRoot;
+    require(runRoot.isValid(), "run root should be valid");
+    require(packageRoot.isValid(), "package root should be valid");
+    const QString manifestPath = QDir(packageRoot.path()).filePath(QStringLiteral("ipcraft.json"));
+    writeFile(manifestPath, QByteArrayLiteral("{\"schema\":\"ipcraft.package.v1\"}\n"));
+    writeExecutable(QDir(packageRoot.path()).filePath(QStringLiteral("tools/check-manifest.sh")),
+                    "#!/bin/sh\n"
+                    "test \"$1\" = \"$2\" || exit 11\n"
+                    "test -f \"$1\" || exit 12\n");
+
+    const QJsonObject flow = execFlow(
+        commandFor(QStringLiteral("tools/check-manifest.sh"),
+                   QJsonArray{QStringLiteral("{package.manifest}"), manifestPath}));
+    const ipcraft::FlowRunResult result =
+        ipcraft::FlowRunner::runFlow(requestFor(runRoot, packageRoot, flow));
+
+    require(result.ok, "exec args should expand {package.manifest}");
+}
+
 void testValidateProjectDoesNotRunFlow() {
     QTemporaryDir root;
     require(root.isValid(), "temporary root should be valid");
@@ -424,6 +453,7 @@ int main(int argc, char** argv) {
         testParseDiagnosticsWithoutParserFailsStructurally();
         testRunFlowUsesRunDirectoryCwdByDefault();
         testRunFlowExpandsInputsManifestPlaceholder();
+        testRunFlowExpandsPackageManifestPlaceholder();
         testValidateProjectDoesNotRunFlow();
         testStdoutStderrCaptureTruncationReturnsDiagnostic();
     } catch (const std::exception& error) {

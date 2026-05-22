@@ -351,7 +351,7 @@ module SpecGenerator
         'views' => views,
         'topologies' => normalize_topologies,
         'generation' => normalize_generation,
-        'commands' => normalize_commands
+        'commands' => normalize_commands.empty? ? nil : normalize_commands
       )
       config_schema = normalize_config_schema
       graph_config = normalize_graph_config_contract
@@ -404,7 +404,9 @@ module SpecGenerator
       %w[id name version].each { |key| required_string(@data, key, key) }
       raise SpecError, 'connection_classes must be a list' unless @data['connection_classes'].is_a?(Array)
       raise SpecError, 'modules must be a list' unless @data['modules'].is_a?(Array)
-      raise SpecError, 'commands must be a map' unless @data['commands'].is_a?(Hash)
+      if @data.key?('commands') && !@data['commands'].is_a?(Hash)
+        raise SpecError, 'commands must be a map'
+      end
     end
 
     def validate_optional_section_extensions!
@@ -1210,7 +1212,7 @@ module SpecGenerator
     end
 
     def normalize_commands
-      @data.fetch('commands').to_h do |name, command|
+      @data.fetch('commands', {}).to_h do |name, command|
         raise SpecError, "commands.#{name} must be a map" unless command.is_a?(Hash)
 
         validate_keys!(command, IPCRAFT_COMMAND_KEYS, "commands.#{name}")

@@ -12,6 +12,12 @@ extensions:
     enabled: true
   ipcraft.views:
     enabled: true
+  ipcraft.emitters:
+    enabled: true
+  ipcraft.flows:
+    enabled: true
+  ipcraft.artifacts:
+    enabled: true
 
 parameters:
   req_flit_width: { type: int, default: 128, min: 1, max: 1024, label: REQ flit width, description: OpenNoC REQ channel flit width used by verification. }
@@ -221,12 +227,37 @@ generation:
       kind: json
       path: opennoc_mesh.json
 
-commands:
-  validate:
-    executable: generator/bin/drc
-    input_schema: ipcraft.noc.project.v1
-    args: [-i, "{input}"]
-  generate:
-    framework_tool: ipcraft-generate
-    input_schema: ipcraft.noc.project.v1
-    args: ["--manifest", "{manifest}", "--input", "{input}", "--output", "{output}"]
+emitters:
+  - id: graph_config
+    kind: emit_graph_config
+    path: graph_config.json
+  - id: parameters
+    kind: emit_parameters
+    path: parameters.json
+
+flows:
+  - id: generate
+    label: Generate
+    steps:
+      - kind: emit_inputs
+      - kind: exec
+        command:
+          framework_tool: ipcraft-generate
+          args: ["--manifest", "{package.manifest}", "--input", "{inputs.manifest}", "--output", "{out}"]
+          cwd: run_dir
+          timeout_ms: 300000
+          env: { allow: [] }
+          capture:
+            stdout: stdout.log
+            stderr: stderr.log
+            max_bytes: 1048576
+      - kind: collect_artifacts
+
+artifacts:
+  - id: mesh_json
+    type: resolved_config
+    glob: opennoc_mesh.json
+    primary: true
+  - id: manifest
+    type: resolved_config
+    glob: manifest.json

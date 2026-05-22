@@ -2,7 +2,6 @@
 #include "app/appsettings.h"
 #include "ipcraft/ipcraftmanifest.h"
 #include "ipcore/ipcatalogservice.h"
-#include "ipcore/ipcorecommandrunner.h"
 #include "modules/moduleregistry.h"
 
 #include <QCoreApplication>
@@ -317,16 +316,15 @@ void testCatalogEntryExposesIpcraftManifestData() {
     require(tileViewIt->resolvedFilePath == repositoryPath(QStringLiteral("ipcores/ravenoc/views/RaveTile.xml")),
             "view should expose resolved source XML path");
 
-    require(entry->packageManifest.commands.contains(QStringLiteral("validate")),
-            "entry should expose validate command");
-    require(entry->packageManifest.commands.contains(QStringLiteral("generate")),
-            "entry should expose generate command");
-    require(entry->packageManifest.commands.value(QStringLiteral("generate")).inputSchema ==
-                QStringLiteral("ipcraft.noc.project.v1"),
-            "entry should expose command input schema");
+    require(entry->packageManifest.commands.isEmpty(),
+            "runtime package manifest should not expose legacy command descriptors");
+    require(!entry->generator.hasCommand(),
+            "catalog entry should not bridge package flows into legacy generator command");
+    require(!entry->drc.hasCommand(),
+            "catalog entry should not bridge package flows into legacy DRC command");
 }
 
-void testDefaultPackageCommandsResolveWithIpcraftProjectSchema() {
+void testDefaultPackageUsesFlowRuntimeInsteadOfLegacyCommands() {
     configureDefaultPackageRootsForTest();
 
     const IpCatalogService service = IpCatalogService::fromRuntimeRegistries();
@@ -334,34 +332,12 @@ void testDefaultPackageCommandsResolveWithIpcraftProjectSchema() {
         service.entry(QStringLiteral("finepaper.ravenoc"));
 
     require(entry.has_value(), "RaveNoC package should be present in catalog");
-    require(entry->generator.hasCommand(), "package catalog entry should expose generator command");
-    require(entry->drc.hasCommand(), "package catalog entry should expose validate command as DRC");
-    require(entry->generator.inputFormat == QStringLiteral("ipcraft.noc.project.v1"),
-            "generator should retain package command input schema");
-    require(entry->drc.inputFormat == QStringLiteral("ipcraft.noc.project.v1"),
-            "DRC should retain package command input schema");
-
-    const QString frameworkToolsPath = repositoryPath(QStringLiteral("ipcraft_generator/bin"));
-    const IpCoreResolvedCommand generator =
-        IpCoreCommandRunner::resolveGenerator(*entry,
-                                              QStringLiteral("/tmp/project.json"),
-                                              QStringLiteral("/tmp/generated"),
-                                              QStringList{frameworkToolsPath});
-    require(generator.valid,
-            "package generator should resolve instead of rejecting ipcraft.noc.project.v1");
-    require(generator.inputFormat == QStringLiteral("ipcraft.noc.project.v1"),
-            "resolved generator should carry package command input schema");
-    require(generator.command == QDir(frameworkToolsPath).filePath(QStringLiteral("ipcraft-generate")),
-            "resolved generator should use the controlled framework tool path");
-
-    const IpCoreResolvedCommand drc =
-        IpCoreCommandRunner::resolveDrc(*entry,
-                                        QStringLiteral("/tmp/project.json"),
-                                        QStringLiteral("/tmp/generated"));
-    require(drc.valid,
-            "package DRC should resolve instead of rejecting ipcraft.noc.project.v1");
-    require(drc.inputFormat == QStringLiteral("ipcraft.noc.project.v1"),
-            "resolved DRC should carry package command input schema");
+    require(entry->packageManifest.commands.isEmpty(),
+            "package catalog entry should not expose legacy commands");
+    require(!entry->generator.hasCommand(),
+            "package catalog entry should not expose a legacy generator command");
+    require(!entry->drc.hasCommand(),
+            "package catalog entry should not expose a legacy validate command as DRC");
 }
 
 void testIpcraftModuleTypesAreScopedByPackage() {
@@ -524,7 +500,7 @@ int main(int argc, char** argv) {
         testCatalogEntriesAreSortedAndSelectableEntriesAreFiltered();
         testDefaultCatalogDiscoversConfiguredIpcraftPackages();
         testCatalogEntryExposesIpcraftManifestData();
-        testDefaultPackageCommandsResolveWithIpcraftProjectSchema();
+        testDefaultPackageUsesFlowRuntimeInsteadOfLegacyCommands();
         testIpcraftModuleTypesAreScopedByPackage();
         testCatalogEntryExposesInstancePolicies();
         testDuplicatePackageIdsAreDiagnosed();

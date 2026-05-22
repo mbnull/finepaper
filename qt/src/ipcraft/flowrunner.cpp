@@ -244,13 +244,22 @@ QStringList stringArray(const QJsonValue& value) {
     return values;
 }
 
+QString resolvePackageRoot(const ipcraft::FlowRunRequest& request) {
+    return request.packageRoot.trimmed().isEmpty()
+        ? request.package.packageRootPath
+        : request.packageRoot;
+}
+
 QString expandPlaceholder(QString value, const ipcraft::FlowRunRequest& request,
                           const ipcraft::FlowRunResult& result) {
     const QString outputRoot = request.outputRoot.trimmed().isEmpty()
         ? QDir(result.runRoot).filePath(QStringLiteral("out"))
         : request.outputRoot;
+    const QString packageManifest =
+        QDir(resolvePackageRoot(request)).filePath(QStringLiteral("ipcraft.json"));
     value.replace(QStringLiteral("{run_dir}"), result.runRoot);
     value.replace(QStringLiteral("{out}"), outputRoot);
+    value.replace(QStringLiteral("{package.manifest}"), packageManifest);
     value.replace(QStringLiteral("{inputs.manifest}"),
                   QDir(result.runRoot).filePath(QStringLiteral("inputs/manifest.json")));
     return value;
@@ -277,12 +286,6 @@ QJsonObject findFlow(const ipcraft::PackageSpec& package, const QString& flowId)
         }
     }
     return {};
-}
-
-QString resolvePackageRoot(const ipcraft::FlowRunRequest& request) {
-    return request.packageRoot.trimmed().isEmpty()
-        ? request.package.packageRootPath
-        : request.packageRoot;
 }
 
 bool resolvePackageExecutable(const ipcraft::FlowRunRequest& request,

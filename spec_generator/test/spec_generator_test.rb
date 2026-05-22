@@ -1604,34 +1604,28 @@ class SpecGeneratorTest < Minitest::Test
     assert_includes manifest.fetch('extensions'), 'ipcraft.config.params'
     assert_includes manifest.fetch('extensions'), 'ipcraft.graph_config'
     assert_includes manifest.fetch('extensions'), 'ipcraft.views'
-    refute_includes manifest.fetch('extensions'), 'ipcraft.emitters'
-    refute_includes manifest.fetch('extensions'), 'ipcraft.flows'
-    refute_includes manifest.fetch('extensions'), 'ipcraft.artifacts'
-    refute manifest.key?('emitters')
-    refute manifest.key?('flows')
-    refute manifest.key?('artifacts')
+    assert_includes manifest.fetch('extensions'), 'ipcraft.emitters'
+    assert_includes manifest.fetch('extensions'), 'ipcraft.flows'
+    assert_includes manifest.fetch('extensions'), 'ipcraft.artifacts'
+    assert_equal(
+      %w[emit_graph_config emit_parameters],
+      manifest.fetch('emitters').map { |emitter| emitter.fetch('kind') }
+    )
+    generate_flow = manifest.fetch('flows').find { |flow| flow.fetch('id') == 'generate' }
+    refute_nil generate_flow
+    assert_equal %w[emit_inputs exec collect_artifacts],
+                 generate_flow.fetch('steps').map { |step| step.fetch('kind') }
+    command = generate_flow.fetch('steps').fetch(1).fetch('command')
+    assert_equal 'ipcraft-generate', command.fetch('framework_tool')
+    assert_includes command.fetch('args'), '{package.manifest}'
+    assert_includes command.fetch('args'), '{inputs.manifest}'
+    refute_empty manifest.fetch('artifacts')
     refute manifest.key?('modules')
     refute manifest.key?('commands')
     refute manifest.key?('connection_classes')
 
     editor = editor_manifest(manifest)
-    commands = editor.fetch('commands')
-    assert_equal(
-      {
-        'executable' => 'generator/bin/drc',
-        'input_schema' => 'ipcraft.noc.project.v1',
-        'args' => ['-i', '{input}']
-      },
-      commands.fetch('validate')
-    )
-    assert_equal(
-      {
-        'framework_tool' => 'ipcraft-generate',
-        'input_schema' => 'ipcraft.noc.project.v1',
-        'args' => common_ipcraft_generate_args
-      },
-      commands.fetch('generate')
-    )
+    refute editor.key?('commands')
 
     module_ids = editor.fetch('modules').map { |mod| mod.fetch('id') }
     manifest.fetch('views').each do |view|
