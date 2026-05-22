@@ -70,120 +70,130 @@ QString writeEndpointView(QDir& root) {
 
 QByteArray syntheticManifest(const QString& packageId = QString::fromUtf8(kPackageId)) {
     return QStringLiteral(R"json({
-  "schema": "ipcraft.manifest.v1",
+  "schema": "ipcraft.package.v1",
   "id": "%1",
   "name": "Phase Synthetic NoC",
-  "version": "1.0",
-  "extensions": {
-    "noc.v1": { "enabled": true }
-  },
-  "connection_classes": [
-    { "id": "fabric_link", "roles": ["initiator", "target"], "symmetric": false },
-    { "id": "endpoint_link", "roles": ["initiator", "target"], "symmetric": false }
-  ],
-  "modules": [
-    {
-      "id": "Tile",
-      "name": "Tile",
-      "graph_role": "host",
-      "display": {
-        "label_parameter": "display_name",
-        "short_label_parameter": "external_id"
-      },
-      "parameters": {
-        "display_name": { "type": "string", "default": "", "emit": "editor", "label": "Display name" },
-        "external_id": { "type": "string", "default": "", "emit": "editor", "label": "External ID" },
-        "mesh_col": { "type": "int", "default": 0, "configurable": false, "emit": "attribute" },
-        "mesh_row": { "type": "int", "default": 0, "configurable": false, "emit": "attribute" }
-      },
-      "interfaces": [
-        {
-          "id": "fabric_tx",
-          "label": "Fabric East TX",
-          "modes": ["initiator"],
-          "accepts": [{ "class": "fabric_link", "role": "initiator" }],
-          "topology": { "side": "east", "opposite": "fabric_rx" }
-        },
-        {
-          "id": "fabric_rx",
-          "label": "Fabric West RX",
-          "modes": ["target"],
-          "accepts": [{ "class": "fabric_link", "role": "target" }],
-          "topology": { "side": "west", "opposite": "fabric_tx" }
-        },
-        {
-          "id": "vertical_tx",
-          "label": "Fabric South TX",
-          "modes": ["initiator"],
-          "accepts": [{ "class": "fabric_link", "role": "initiator" }],
-          "topology": { "side": "south", "opposite": "vertical_rx" }
-        },
-        {
-          "id": "vertical_rx",
-          "label": "Fabric North RX",
-          "modes": ["target"],
-          "accepts": [{ "class": "fabric_link", "role": "target" }],
-          "topology": { "side": "north", "opposite": "vertical_tx" }
-        }
-      ]
-    },
-    {
-      "id": "Endpoint",
-      "name": "Endpoint",
-      "graph_role": "attached",
-      "display": {
-        "label_parameter": "display_name",
-        "short_label_parameter": "external_id"
-      },
-      "parameters": {
-        "display_name": { "type": "string", "default": "", "emit": "editor", "label": "Display name" },
-        "external_id": { "type": "string", "default": "", "emit": "editor", "label": "External ID" }
-      },
-      "interfaces": [
-        {
-          "id": "local_noc",
-          "label": "Local NoC",
-          "modes": ["initiator"],
-          "accepts": [{ "class": "endpoint_link", "role": "initiator" }]
-        }
-      ]
-    }
+  "version": "1.0.0",
+  "extensions": [
+    "noc.v1",
+    "ipcraft.views"
   ],
   "views": [
     { "module": "Tile", "file": "views/Tile.xml" },
     { "module": "Endpoint", "file": "views/Endpoint.xml" }
   ],
-  "topologies": [
-    {
-      "id": "mesh",
-      "label": "Mesh",
-      "kind": "mesh",
-      "module": "Tile",
-      "id_pattern": "tile_{row}_{col}",
-      "parameters": {
-        "rows": { "label": "Rows", "default": 2, "min": 1, "max": 8 },
-        "cols": { "label": "Columns", "default": 2, "min": 1, "max": 8 }
+  "native": {
+    "ipcraft": {
+      "editor": {
+        "extensions": {
+          "noc.v1": { "enabled": true }
+        },
+        "connection_classes": [
+          { "id": "fabric_link", "roles": ["initiator", "target"], "symmetric": false },
+          { "id": "endpoint_link", "roles": ["initiator", "target"], "symmetric": false }
+        ],
+        "modules": [
+          {
+            "id": "Tile",
+            "name": "Tile",
+            "graph_role": "host",
+            "display": {
+              "label_parameter": "display_name",
+              "short_label_parameter": "external_id"
+            },
+            "parameters": {
+              "display_name": { "type": "string", "default": "", "emit": "editor", "label": "Display name" },
+              "external_id": { "type": "string", "default": "", "emit": "editor", "label": "External ID" },
+              "mesh_col": { "type": "int", "default": 0, "configurable": false, "emit": "attribute" },
+              "mesh_row": { "type": "int", "default": 0, "configurable": false, "emit": "attribute" }
+            },
+            "interfaces": [
+              {
+                "id": "fabric_tx",
+                "label": "Fabric East TX",
+                "modes": ["initiator"],
+                "accepts": [{ "class": "fabric_link", "role": "initiator" }],
+                "topology": { "side": "east", "opposite": "fabric_rx" }
+              },
+              {
+                "id": "fabric_rx",
+                "label": "Fabric West RX",
+                "modes": ["target"],
+                "accepts": [{ "class": "fabric_link", "role": "target" }],
+                "topology": { "side": "west", "opposite": "fabric_tx" }
+              },
+              {
+                "id": "vertical_tx",
+                "label": "Fabric South TX",
+                "modes": ["initiator"],
+                "accepts": [{ "class": "fabric_link", "role": "initiator" }],
+                "topology": { "side": "south", "opposite": "vertical_rx" }
+              },
+              {
+                "id": "vertical_rx",
+                "label": "Fabric North RX",
+                "modes": ["target"],
+                "accepts": [{ "class": "fabric_link", "role": "target" }],
+                "topology": { "side": "north", "opposite": "vertical_tx" }
+              }
+            ]
+          },
+          {
+            "id": "Endpoint",
+            "name": "Endpoint",
+            "graph_role": "attached",
+            "display": {
+              "label_parameter": "display_name",
+              "short_label_parameter": "external_id"
+            },
+            "parameters": {
+              "display_name": { "type": "string", "default": "", "emit": "editor", "label": "Display name" },
+              "external_id": { "type": "string", "default": "", "emit": "editor", "label": "External ID" }
+            },
+            "interfaces": [
+              {
+                "id": "local_noc",
+                "label": "Local NoC",
+                "modes": ["initiator"],
+                "accepts": [{ "class": "endpoint_link", "role": "initiator" }]
+              }
+            ]
+          }
+        ],
+        "topologies": [
+          {
+            "id": "mesh",
+            "label": "Mesh",
+            "kind": "mesh",
+            "module": "Tile",
+            "id_pattern": "tile_{row}_{col}",
+            "parameters": {
+              "rows": { "label": "Rows", "default": 2, "min": 1, "max": 8 },
+              "cols": { "label": "Columns", "default": 2, "min": 1, "max": 8 }
+            }
+          }
+        ],
+        "generation": {
+          "engine": "ipcraft.common.v1",
+          "module_mappings": {
+            "Tile": "router",
+            "Endpoint": "endpoint"
+          },
+          "coordinate_bindings": {
+            "Tile": { "col": "mesh_col", "row": "mesh_row" }
+          },
+          "outputs": [
+            { "id": "manifest", "kind": "json", "path": "manifest.json" }
+          ]
+        },
+        "commands": {
+          "generate": {
+            "framework_tool": "ipcraft-generate",
+            "input_schema": "ipcraft.noc.project.v1",
+            "args": ["--manifest", "{manifest}", "--input", "{input}", "--output", "{output}"]
+          }
+        }
       }
-    }
-  ],
-  "generation": {
-    "engine": "ipcraft.common.v1",
-    "module_mappings": {
-      "Tile": "router",
-      "Endpoint": "endpoint"
-    },
-    "coordinate_bindings": {
-      "Tile": { "col": "mesh_col", "row": "mesh_row" }
-    },
-    "outputs": [
-      { "id": "manifest", "kind": "json", "path": "manifest.json" }
-    ]
-  },
-  "commands": {
-    "generate": {
-      "framework_tool": "ipcraft-generate",
-      "input_schema": "ipcraft.noc.project.v1",
-      "args": ["--manifest", "{manifest}", "--input", "{input}", "--output", "{output}"]
     }
   }
 })json").arg(packageId).toUtf8();
