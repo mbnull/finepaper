@@ -427,6 +427,36 @@ void testProtocolAliasesNormalizeBeforeCompatibility() {
     require(result.ok, "protocol aliases should normalize before compatibility checks");
 }
 
+void testCompositionRejectsUnknownConnectionClassBeforeEndpointCompatibility() {
+    const ipcraft::PackageSpec master =
+        packageWith(QStringLiteral("vendor.example.master"),
+                    {iface(QStringLiteral("m_axi"), QStringLiteral("bus"), QStringLiteral("axi4"), QStringLiteral("master"))},
+                    busRules());
+    const ipcraft::PackageSpec slave =
+        packageWith(QStringLiteral("vendor.example.slave"),
+                    {iface(QStringLiteral("s_axi"), QStringLiteral("bus"), QStringLiteral("axi4"), QStringLiteral("slave"))},
+                    busRules());
+
+    ipcraft::CompositionModel model;
+    model.connections.append(connection(
+        QStringLiteral("axi_link"),
+        QStringLiteral("unlisted"),
+        {endpoint(QStringLiteral("ip0"), QStringLiteral("m_axi"), QStringLiteral("master")),
+         endpoint(QStringLiteral("ip1"), QStringLiteral("s_axi"), QStringLiteral("slave"))}));
+
+    const ipcraft::CompositionValidationResult result =
+        ipcraft::validateCompositionModel(model,
+                                          {instance(QStringLiteral("ip0"), master),
+                                           instance(QStringLiteral("ip1"), slave)});
+    require(!result.ok, "unknown connection class should fail composition validation");
+    require(hasRuleAt(result.diagnostics,
+                      QStringLiteral("composition.unknown_connection_class"),
+                      QStringLiteral("$.connections[0].type")),
+            "unknown connection class should be diagnosed at connection type");
+    require(!hasRule(result.diagnostics, QStringLiteral("composition.incompatible_endpoint")),
+            "unknown connection class should stop endpoint compatibility checks");
+}
+
 void testCompositionJsonAlwaysExposesPublicKeys() {
     const QJsonObject json = ipcraft::CompositionModel{}.toJson();
     require(json.contains(QStringLiteral("connections")), "composition JSON should expose connections");
@@ -535,6 +565,58 @@ void testGraphConfigRejectsDuplicateAndUnknownEndpointObjects() {
             "unknown graph endpoint object should be diagnosed at stable path");
 }
 
+void testGraphConfigRejectsDuplicateRelationships() {
+    const QJsonObject graphJson{
+        {QStringLiteral("schema"), ipcraft::schemaids::graphConfigV1},
+        {QStringLiteral("objects"), QJsonArray{
+            QJsonObject{{QStringLiteral("id"), QStringLiteral("obj0")}, {QStringLiteral("type"), QStringLiteral("vendor.node")}},
+            QJsonObject{{QStringLiteral("id"), QStringLiteral("obj1")}, {QStringLiteral("type"), QStringLiteral("vendor.node")}}
+        }},
+        {QStringLiteral("relationships"), QJsonArray{
+            QJsonObject{
+                {QStringLiteral("id"), QStringLiteral("rel0")},
+                {QStringLiteral("type"), QStringLiteral("vendor.link")},
+                {QStringLiteral("endpoints"), QJsonArray{
+                    QJsonObject{{QStringLiteral("object"), QStringLiteral("obj0")}, {QStringLiteral("role"), QStringLiteral("source")}},
+                    QJsonObject{{QStringLiteral("object"), QStringLiteral("obj1")}, {QStringLiteral("role"), QStringLiteral("target")}}
+                }}
+            },
+            QJsonObject{
+                {QStringLiteral("id"), QStringLiteral("rel0")},
+                {QStringLiteral("type"), QStringLiteral("vendor.link")},
+                {QStringLiteral("endpoints"), QJsonArray{
+                    QJsonObject{{QStringLiteral("object"), QStringLiteral("obj1")}, {QStringLiteral("role"), QStringLiteral("source")}},
+                    QJsonObject{{QStringLiteral("object"), QStringLiteral("obj0")}, {QStringLiteral("role"), QStringLiteral("target")}}
+                }}
+            }
+        }}
+    };
+
+    const ipcraft::GraphConfigReadResult readResult = ipcraft::GraphConfig::fromJson(graphJson);
+    require(readResult.ok, "duplicate relationship ids should parse before semantic validation");
+    const ipcraft::DiagnosticStore diagnostics = ipcraft::validateGraphConfig(readResult.config);
+    require(hasRuleAt(diagnostics,
+                      QStringLiteral("graph_config.duplicate_relationship"),
+                      QStringLiteral("$.relationships[1].id")),
+            "duplicate graph relationship should emit graph_config.duplicate_relationship");
+}
+
+void testGraphConfigRejectsUnknownTopLevelFields() {
+    const QJsonObject graphJson{
+        {QStringLiteral("schema"), ipcraft::schemaids::graphConfigV1},
+        {QStringLiteral("objects"), QJsonArray{}},
+        {QStringLiteral("relationships"), QJsonArray{}},
+        {QStringLiteral("unexpected"), true}
+    };
+
+    const ipcraft::GraphConfigReadResult readResult = ipcraft::GraphConfig::fromJson(graphJson);
+    require(!readResult.ok, "graph-config should reject unknown top-level fields");
+    require(hasRuleAt(readResult.diagnostics,
+                      QStringLiteral("graph_config.unknown_top_level_field"),
+                      QStringLiteral("$.unexpected")),
+            "unknown graph-config root field should emit graph_config.unknown_top_level_field");
+}
+
 void testGraphConfigRejectsMalformedObjects() {
     const QJsonObject graphJson{
         {QStringLiteral("schema"), ipcraft::schemaids::graphConfigV1},
@@ -631,10 +713,13 @@ int main(int argc, char** argv) {
         testCompositionRejectsSameConnectionMultiplyDrivenInputOnce();
         testExternalPortsRejectUnknownEndpointReferences();
         testProtocolAliasesNormalizeBeforeCompatibility();
+        testCompositionRejectsUnknownConnectionClassBeforeEndpointCompatibility();
         testCompositionJsonAlwaysExposesPublicKeys();
         testLayoutStoresCanvasCoordinatesOutsideConfig();
         testGraphConfigUsesNaryRelationshipsNotPortRefs();
         testGraphConfigRejectsDuplicateAndUnknownEndpointObjects();
+        testGraphConfigRejectsDuplicateRelationships();
+        testGraphConfigRejectsUnknownTopLevelFields();
         testGraphConfigRejectsMalformedObjects();
         testGraphConfigRejectsOldSourceTargetShape();
     } catch (const std::exception& error) {

@@ -316,6 +316,20 @@ bool hasCompatibilityRule(const AliasContext& aliases,
     return false;
 }
 
+bool hasConnectionClassRule(const AliasContext& aliases,
+                            const QString& connectionType) {
+    if (aliases.compatibility.isEmpty()) {
+        return true;
+    }
+    for (const ipcraft::PackageCompatibilityRule& rule : aliases.compatibility) {
+        if (rule.connectionType.isEmpty() ||
+            rule.connectionType.compare(connectionType, Qt::CaseInsensitive) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool isClockOrReset(const QString& connectionType) {
     const QString type = connectionType.toLower();
     return type == QStringLiteral("clock") || type == QStringLiteral("reset");
@@ -341,6 +355,15 @@ bool validateConnectionCompatibility(ipcraft::DiagnosticStore& diagnostics,
     }
 
     const QString connectionPath = indexPath(QStringLiteral("$.connections"), connectionIndex);
+    if (!hasConnectionClassRule(aliases, connection.type)) {
+        addCompositionDiagnostic(diagnostics,
+                                 QStringLiteral("composition.unknown_connection_class"),
+                                 QStringLiteral("Connection type has no declared compatibility rule."),
+                                 childPath(connectionPath, QStringLiteral("type")),
+                                 connection.id);
+        return false;
+    }
+
     if (isClockOrReset(connection.type) && sources.size() != 1) {
         addCompositionDiagnostic(diagnostics,
                                  QStringLiteral("composition.clock_reset_source_count"),
@@ -851,6 +874,22 @@ QJsonObject GraphConfig::toJson() const {
 
 GraphConfigReadResult GraphConfig::fromJson(const QJsonObject& object) {
     GraphConfigReadResult result;
+    const QSet<QString> allowedTopLevelKeys{
+        QStringLiteral("schema"),
+        QStringLiteral("objects"),
+        QStringLiteral("relationships"),
+        QStringLiteral("properties"),
+        QStringLiteral("native")
+    };
+    for (const QString& key : object.keys()) {
+        if (!allowedTopLevelKeys.contains(key)) {
+            addGraphDiagnostic(result.diagnostics,
+                               QStringLiteral("graph_config.unknown_top_level_field"),
+                               QStringLiteral("Graph config contains an unsupported top-level field."),
+                               childPath(QStringLiteral("$"), key));
+        }
+    }
+
     result.config.schema = object.value(QStringLiteral("schema")).toString();
     if (result.config.schema != schemaids::graphConfigV1) {
         addGraphDiagnostic(result.diagnostics,
@@ -934,11 +973,22 @@ DiagnosticStore validateGraphConfig(const GraphConfig& graphConfig) {
         objectIds.insert(graphObject.id);
     }
 
+    QSet<QString> relationshipIds;
     for (qsizetype relationshipIndex = 0;
          relationshipIndex < graphConfig.relationships.size();
          ++relationshipIndex) {
         const GraphConfigRelationship& relationship =
             graphConfig.relationships.at(relationshipIndex);
+        if (relationshipIds.contains(relationship.id)) {
+            addGraphDiagnostic(diagnostics,
+                               QStringLiteral("graph_config.duplicate_relationship"),
+                               QStringLiteral("Graph relationship id is duplicated."),
+                               childPath(indexPath(QStringLiteral("$.relationships"),
+                                                   relationshipIndex),
+                                         QStringLiteral("id")));
+        } else {
+            relationshipIds.insert(relationship.id);
+        }
         for (qsizetype endpointIndex = 0; endpointIndex < relationship.endpoints.size(); ++endpointIndex) {
             const GraphConfigEndpoint& endpoint = relationship.endpoints.at(endpointIndex);
             if (!objectIds.contains(endpoint.objectId)) {
