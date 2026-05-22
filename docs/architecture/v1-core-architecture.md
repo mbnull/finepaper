@@ -73,6 +73,10 @@ The runtime loader resolves exact `{id, version}` matches. If a package id exist
 
 Clock domains, DTC domains, DDR lanes, SerDes tuning, and IP-specific dataflow rules are config or native data unless an extension/plugin explicitly promotes them.
 
+Validation rejects any `ConfigBundle.parameters` key not declared by `ConfigSchema.parameters` with `config.unknown_parameter`. Validation rejects any `ConfigBundle.documents` key not declared by `ConfigSchema.documents` with `config.unknown_document`. Table rows reject undeclared columns with `config.unknown_table_column` unless the table declares `preserve_unknown_columns: true`; preserved columns remain in normalized config only when that flag is true.
+
+File input declarations may use `allowed_extensions` or the shorthand `allowed`; both are arrays of extension strings such as `.xdc`. Invalid file values emit `config.file_extension_invalid` at the file path value location.
+
 ## Value Type System And Expression Boundary
 
 Value V1 supports null, bool, int64, double, string, array, and object.
@@ -228,6 +232,8 @@ Plugins are used only when declaration is insufficient, for enum providers, cust
 ## Explicit Extension Enablement Rules
 
 Optional capability sections must declare their extension. Section presence never implicitly enables a capability.
+
+Declared extension IDs must be known to this runtime. Unknown extension IDs emit `package.unknown_extension` at the declaration path. V1 known extension IDs are `ipcraft.config.params`, `ipcraft.config.tables`, `ipcraft.config.documents`, `ipcraft.config.files`, `ipcraft.interfaces`, `ipcraft.composition`, `ipcraft.layout`, `ipcraft.emitters`, `ipcraft.flows`, `ipcraft.artifacts`, `ipcraft.diagnostics`, `ipcraft.views`, `ipcraft.graph_config`, and the bundled cutover extension `noc.v1`.
 
 - `config_schema.parameters` requires `ipcraft.config.params`
 - `config_schema.tables` requires `ipcraft.config.tables`

@@ -391,18 +391,36 @@
     },
     "extension_decl": {
       "oneOf": [
-        { "type": "string", "minLength": 1 },
+        { "$ref": "#/$defs/known_extension_id" },
         {
           "type": "object",
           "additionalProperties": false,
           "required": ["id"],
           "properties": {
-            "id": { "type": "string", "minLength": 1 },
+            "id": { "$ref": "#/$defs/known_extension_id" },
             "version": { "type": "string" },
             "metadata": { "$ref": "#/$defs/metadata" },
             "native": { "$ref": "#/$defs/native" }
           }
         }
+      ]
+    },
+    "known_extension_id": {
+      "enum": [
+        "ipcraft.config.params",
+        "ipcraft.config.tables",
+        "ipcraft.config.documents",
+        "ipcraft.config.files",
+        "ipcraft.interfaces",
+        "ipcraft.composition",
+        "ipcraft.layout",
+        "ipcraft.emitters",
+        "ipcraft.flows",
+        "ipcraft.artifacts",
+        "ipcraft.diagnostics",
+        "ipcraft.views",
+        "ipcraft.graph_config",
+        "noc.v1"
       ]
     },
     "extension_payload": {

@@ -555,6 +555,41 @@ void validateFlows(const QJsonArray& flows,
     }
 }
 
+const QSet<QString>& knownExtensionIds() {
+    static const QSet<QString> ids{
+        QStringLiteral("ipcraft.config.params"),
+        QStringLiteral("ipcraft.config.tables"),
+        QStringLiteral("ipcraft.config.documents"),
+        QStringLiteral("ipcraft.config.files"),
+        QStringLiteral("ipcraft.interfaces"),
+        QStringLiteral("ipcraft.composition"),
+        QStringLiteral("ipcraft.layout"),
+        QStringLiteral("ipcraft.emitters"),
+        QStringLiteral("ipcraft.flows"),
+        QStringLiteral("ipcraft.artifacts"),
+        QStringLiteral("ipcraft.diagnostics"),
+        QStringLiteral("ipcraft.views"),
+        QStringLiteral("ipcraft.graph_config"),
+        QStringLiteral("noc.v1")
+    };
+    return ids;
+}
+
+void validateExtensionId(const QString& id,
+                         const QString& path,
+                         ipcraft::DiagnosticStore& diagnostics) {
+    if (id.isEmpty()) {
+        return;
+    }
+    if (knownExtensionIds().contains(id)) {
+        return;
+    }
+    addDiagnostic(diagnostics,
+                  QStringLiteral("package.unknown_extension"),
+                  QStringLiteral("Package extension is not recognized by the V1 runtime."),
+                  path);
+}
+
 void validateConfigSchema(const QJsonObject& configSchema,
                           ipcraft::DiagnosticStore& diagnostics) {
     hasOnlyKeys(configSchema,
@@ -579,6 +614,26 @@ void validateConfigSchema(const QJsonObject& configSchema,
             validateArrayItemsAreObjects(entries,
                                          QStringLiteral("$.config_schema.%1").arg(key),
                                          diagnostics);
+            if (key == QStringLiteral("tables")) {
+                QSet<QString> seenTableIds;
+                for (qsizetype index = 0; index < entries.size(); ++index) {
+                    if (!entries.at(index).isObject()) {
+                        continue;
+                    }
+                    const QString id = entries.at(index).toObject().value(QStringLiteral("id")).toString().trimmed();
+                    if (id.isEmpty()) {
+                        continue;
+                    }
+                    const QString idPath = QStringLiteral("$.config_schema.tables[%1].id").arg(index);
+                    if (seenTableIds.contains(id)) {
+                        addDiagnostic(diagnostics,
+                                      QStringLiteral("package.duplicate_table"),
+                                      QStringLiteral("Duplicate table id."),
+                                      idPath);
+                    }
+                    seenTableIds.insert(id);
+                }
+            }
         }
     }
     QJsonObject ignored;
@@ -940,6 +995,7 @@ void parseExtensions(const QJsonObject& root,
                 }
                 if (!id.isEmpty()) {
                     spec.extensions.append(id);
+                    validateExtensionId(id, itemPath, diagnostics);
                 }
                 continue;
             }
@@ -972,6 +1028,7 @@ void parseExtensions(const QJsonObject& root,
                                diagnostics,
                                &ignored);
                 spec.extensions.append(id);
+                validateExtensionId(id, childPath(itemPath, QStringLiteral("id")), diagnostics);
                 continue;
             }
             addDiagnostic(diagnostics,

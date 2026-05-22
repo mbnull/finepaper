@@ -299,6 +299,12 @@ QJsonValue expressionValue(const QJsonObject& expression,
                            const QString& path,
                            bool* ok);
 
+bool expressionBoolValue(const QJsonValue& value,
+                         const ipcraft::ConfigBundle& bundle,
+                         ipcraft::DiagnosticStore* diagnostics,
+                         const QString& path,
+                         bool* ok);
+
 bool expressionIsObject(const QJsonValue& value,
                         ipcraft::DiagnosticStore* diagnostics,
                         const QString& path,
@@ -399,17 +405,11 @@ bool expressionBool(const QJsonObject& expression,
             for (qsizetype index = 0; index < args.size(); ++index) {
                 bool childOk = true;
                 const QString childExpressionPath = indexPath(childPath(path, QStringLiteral("args")), index);
-                QJsonObject childExpression;
-                if (!expressionIsObject(args.at(index), diagnostics, childExpressionPath, &childExpression)) {
-                    *ok = false;
-                    result = false;
-                    continue;
-                }
-                result = expressionBool(childExpression,
-                                        bundle,
-                                        diagnostics,
-                                        childExpressionPath,
-                                        &childOk) && result;
+                result = expressionBoolValue(args.at(index),
+                                             bundle,
+                                             diagnostics,
+                                             childExpressionPath,
+                                             &childOk) && result;
                 *ok = *ok && childOk;
             }
             return result;
@@ -418,16 +418,11 @@ bool expressionBool(const QJsonObject& expression,
         for (qsizetype index = 0; index < args.size(); ++index) {
             bool childOk = true;
             const QString childExpressionPath = indexPath(childPath(path, QStringLiteral("args")), index);
-            QJsonObject childExpression;
-            if (!expressionIsObject(args.at(index), diagnostics, childExpressionPath, &childExpression)) {
-                *ok = false;
-                continue;
-            }
-            result = expressionBool(childExpression,
-                                    bundle,
-                                    diagnostics,
-                                    childExpressionPath,
-                                    &childOk) || result;
+            result = expressionBoolValue(args.at(index),
+                                         bundle,
+                                         diagnostics,
+                                         childExpressionPath,
+                                         &childOk) || result;
             *ok = *ok && childOk;
         }
         return result;
@@ -439,19 +434,11 @@ bool expressionBool(const QJsonObject& expression,
             return false;
         }
         bool childOk = true;
-        QJsonObject childExpression;
-        if (!expressionIsObject(expression.value(QStringLiteral("arg")),
-                                diagnostics,
-                                childPath(path, QStringLiteral("arg")),
-                                &childExpression)) {
-            *ok = false;
-            return false;
-        }
-        const bool value = expressionBool(childExpression,
-                                         bundle,
-                                         diagnostics,
-                                         childPath(path, QStringLiteral("arg")),
-                                         &childOk);
+        const bool value = expressionBoolValue(expression.value(QStringLiteral("arg")),
+                                               bundle,
+                                               diagnostics,
+                                               childPath(path, QStringLiteral("arg")),
+                                               &childOk);
         *ok = childOk;
         return !value;
     }
@@ -459,6 +446,22 @@ bool expressionBool(const QJsonObject& expression,
     addUnsupportedExpression(*diagnostics, path);
     *ok = false;
     return false;
+}
+
+bool expressionBoolValue(const QJsonValue& value,
+                         const ipcraft::ConfigBundle& bundle,
+                         ipcraft::DiagnosticStore* diagnostics,
+                         const QString& path,
+                         bool* ok) {
+    if (value.isBool()) {
+        return value.toBool();
+    }
+    QJsonObject object;
+    if (!expressionIsObject(value, diagnostics, path, &object)) {
+        *ok = false;
+        return false;
+    }
+    return expressionBool(object, bundle, diagnostics, path, ok);
 }
 
 void validateExpressionUseSite(const QJsonObject& expression,
@@ -474,6 +477,32 @@ void validateExpressionUseSite(const QJsonObject& expression,
     }
     ipcraft::ConfigBundle emptyBundle;
     (void)ipcraft::evaluateConfigExpression(expression, emptyBundle, &diagnostics, path);
+}
+
+bool optionalExpression(const QJsonObject& object,
+                        const QString& key,
+                        const QString& path,
+                        ipcraft::DiagnosticStore& diagnostics,
+                        QJsonObject* output) {
+    const QJsonValue value = object.value(key);
+    if (value.isUndefined()) {
+        *output = {};
+        return false;
+    }
+    if (value.isBool()) {
+        output->insert(QStringLiteral("literal"), value);
+        return true;
+    }
+    if (!value.isObject()) {
+        addDiagnostic(diagnostics,
+                      QStringLiteral("config.type_mismatch"),
+                      QStringLiteral("Field '%1' must be a boolean literal or expression object.").arg(key),
+                      path);
+        *output = {};
+        return false;
+    }
+    *output = value.toObject();
+    return true;
 }
 
 QJsonValue expressionValue(const QJsonObject& expression,
@@ -521,10 +550,10 @@ ipcraft::ParameterDef parseParameter(const QJsonObject& object,
     def.valueType = optionalString(object, QStringLiteral("value_type"), childPath(path, QStringLiteral("value_type")), diagnostics);
     optionalArray(object, QStringLiteral("values"), childPath(path, QStringLiteral("values")), diagnostics, &def.enumValues);
     def.defaultValue = object.value(QStringLiteral("default"));
-    const bool hasDefaultWhen = optionalObject(object, QStringLiteral("default_when"), childPath(path, QStringLiteral("default_when")), diagnostics, &def.defaultWhen);
-    const bool hasVisibleWhen = optionalObject(object, QStringLiteral("visible_when"), childPath(path, QStringLiteral("visible_when")), diagnostics, &def.visibleWhen);
-    const bool hasEnabledWhen = optionalObject(object, QStringLiteral("enabled_when"), childPath(path, QStringLiteral("enabled_when")), diagnostics, &def.enabledWhen);
-    const bool hasRequiredWhen = optionalObject(object, QStringLiteral("required_when"), childPath(path, QStringLiteral("required_when")), diagnostics, &def.requiredWhen);
+    const bool hasDefaultWhen = optionalExpression(object, QStringLiteral("default_when"), childPath(path, QStringLiteral("default_when")), diagnostics, &def.defaultWhen);
+    const bool hasVisibleWhen = optionalExpression(object, QStringLiteral("visible_when"), childPath(path, QStringLiteral("visible_when")), diagnostics, &def.visibleWhen);
+    const bool hasEnabledWhen = optionalExpression(object, QStringLiteral("enabled_when"), childPath(path, QStringLiteral("enabled_when")), diagnostics, &def.enabledWhen);
+    const bool hasRequiredWhen = optionalExpression(object, QStringLiteral("required_when"), childPath(path, QStringLiteral("required_when")), diagnostics, &def.requiredWhen);
     validateExpressionUseSite(def.defaultWhen, hasDefaultWhen, diagnostics, childPath(path, QStringLiteral("default_when")));
     validateExpressionUseSite(def.visibleWhen, hasVisibleWhen, diagnostics, childPath(path, QStringLiteral("visible_when")));
     validateExpressionUseSite(def.enabledWhen, hasEnabledWhen, diagnostics, childPath(path, QStringLiteral("enabled_when")));
@@ -723,6 +752,14 @@ ConfigSchemaReadResult ConfigSchema::fromJson(const QJsonObject& object) {
                     }
                 }
             }
+            QJsonArray allowed;
+            if (optionalArray(fileObject, QStringLiteral("allowed"), childPath(path, QStringLiteral("allowed")), result.diagnostics, &allowed)) {
+                for (const QJsonValue& extension : allowed) {
+                    if (extension.isString()) {
+                        file.allowedExtensions.append(extension.toString());
+                    }
+                }
+            }
             result.schema.files.append(file);
         }
     }
@@ -749,6 +786,19 @@ ConfigValidationResult validateConfigBundle(const ConfigSchema& schema,
                                             const ConfigValidationOptions& options) {
     ConfigValidationResult result;
     result.normalized.preserved = bundle.preserved;
+
+    QSet<QString> parameterIds;
+    for (const ParameterDef& parameter : schema.parameters) {
+        parameterIds.insert(parameter.id);
+    }
+    for (auto it = bundle.parameters.constBegin(); it != bundle.parameters.constEnd(); ++it) {
+        if (!parameterIds.contains(it.key())) {
+            addDiagnostic(result.diagnostics,
+                          QStringLiteral("config.unknown_parameter"),
+                          QStringLiteral("Config parameter is not declared by the package schema."),
+                          keyPath(QStringLiteral("$.parameters"), it.key()));
+        }
+    }
 
     for (const ParameterDef& parameter : schema.parameters) {
         const QString path = keyPath(QStringLiteral("$.parameters"), parameter.id);
@@ -865,6 +915,20 @@ ConfigValidationResult validateConfigBundle(const ConfigSchema& schema,
 
             const QJsonObject row = rows.at(rowIndex).toObject();
             QJsonObject normalizedRow = table.preserveUnknownColumns ? row : QJsonObject{};
+            QSet<QString> columnIds;
+            for (const TableColumnDef& column : table.columns) {
+                columnIds.insert(column.id);
+            }
+            if (!table.preserveUnknownColumns) {
+                for (auto it = row.constBegin(); it != row.constEnd(); ++it) {
+                    if (!columnIds.contains(it.key())) {
+                        addDiagnostic(result.diagnostics,
+                                      QStringLiteral("config.unknown_table_column"),
+                                      QStringLiteral("Table row contains a column that is not declared by the package schema."),
+                                      keyPath(rowPath, it.key()));
+                    }
+                }
+            }
             for (const TableColumnDef& column : table.columns) {
                 const QJsonValue value = row.value(column.id);
                 if (value.isUndefined()) {
@@ -889,6 +953,19 @@ ConfigValidationResult validateConfigBundle(const ConfigSchema& schema,
         QJsonObject normalizedTable;
         normalizedTable.insert(QStringLiteral("rows"), normalizedRows);
         result.normalized.tables.insert(table.id, normalizedTable);
+    }
+
+    QSet<QString> documentIds;
+    for (const ConfigDocumentDef& document : schema.documents) {
+        documentIds.insert(document.id);
+    }
+    for (auto it = bundle.documents.constBegin(); it != bundle.documents.constEnd(); ++it) {
+        if (!documentIds.contains(it.key())) {
+            addDiagnostic(result.diagnostics,
+                          QStringLiteral("config.unknown_document"),
+                          QStringLiteral("Config document is not declared by the package schema."),
+                          keyPath(QStringLiteral("$.documents"), it.key()));
+        }
     }
 
     for (const ConfigDocumentDef& document : schema.documents) {

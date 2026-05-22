@@ -319,6 +319,95 @@ void testExpressionRejectsFileProcessNetworkAndEnvironmentAccess() {
             "empty expression object should be diagnosed at its use site");
 }
 
+void testLiteralBooleanExpressionsAreAccepted() {
+    const ipcraft::ConfigSchemaReadResult schemaResult =
+        ipcraft::ConfigSchema::fromJson(schemaWithParameters(QJsonArray{
+            QJsonObject{{QStringLiteral("id"), QStringLiteral("visible")},
+                        {QStringLiteral("type"), QStringLiteral("bool")},
+                        {QStringLiteral("visible_when"), true}},
+            QJsonObject{{QStringLiteral("id"), QStringLiteral("enabled")},
+                        {QStringLiteral("type"), QStringLiteral("bool")},
+                        {QStringLiteral("enabled_when"), QJsonObject{
+                            {QStringLiteral("op"), QStringLiteral("not")},
+                            {QStringLiteral("arg"), false}
+                        }}},
+            QJsonObject{{QStringLiteral("id"), QStringLiteral("required")},
+                        {QStringLiteral("type"), QStringLiteral("string")},
+                        {QStringLiteral("required_when"), QJsonObject{
+                            {QStringLiteral("op"), QStringLiteral("and")},
+                            {QStringLiteral("args"), QJsonArray{true}}
+                        }}}
+        }));
+    require(schemaResult.ok, "literal boolean expressions should parse");
+
+    const ipcraft::ConfigValidationResult result =
+        ipcraft::validateConfigBundle(schemaResult.schema, ipcraft::ConfigBundle{});
+    require(!result.ok, "true required_when should require a missing parameter");
+    require(hasRuleAt(result.diagnostics,
+                      QStringLiteral("config.required_missing"),
+                      QStringLiteral("$.parameters.required")),
+            "literal true expression should affect validation");
+}
+
+void testUnknownConfigEntriesAreRejected() {
+    const ipcraft::ConfigSchemaReadResult schemaResult =
+        ipcraft::ConfigSchema::fromJson(QJsonObject{
+            {QStringLiteral("parameters"), QJsonArray{
+                QJsonObject{{QStringLiteral("id"), QStringLiteral("width")},
+                            {QStringLiteral("type"), QStringLiteral("int")}}
+            }},
+            {QStringLiteral("tables"), QJsonArray{
+                QJsonObject{
+                    {QStringLiteral("id"), QStringLiteral("regions")},
+                    {QStringLiteral("preserve_unknown_columns"), false},
+                    {QStringLiteral("columns"), QJsonArray{
+                        QJsonObject{{QStringLiteral("id"), QStringLiteral("base")},
+                                    {QStringLiteral("type"), QStringLiteral("int")}}
+                    }}
+                }
+            }},
+            {QStringLiteral("documents"), QJsonArray{
+                QJsonObject{{QStringLiteral("id"), QStringLiteral("system")},
+                            {QStringLiteral("format"), QStringLiteral("json")}}
+            }}
+        });
+    require(schemaResult.ok, "schema fixture should parse");
+
+    const ipcraft::ConfigValidationResult result =
+        ipcraft::validateConfigBundle(schemaResult.schema,
+                                      ipcraft::ConfigBundle::fromJson(QJsonObject{
+                                          {QStringLiteral("parameters"), QJsonObject{
+                                              {QStringLiteral("depth"), 16}
+                                          }},
+                                          {QStringLiteral("tables"), QJsonObject{
+                                              {QStringLiteral("regions"), QJsonObject{
+                                                  {QStringLiteral("rows"), QJsonArray{
+                                                      QJsonObject{{QStringLiteral("base"), 0},
+                                                                  {QStringLiteral("owner"), QStringLiteral("boot")}}
+                                                  }}
+                                              }}
+                                          }},
+                                          {QStringLiteral("documents"), QJsonObject{
+                                              {QStringLiteral("unknown_doc"), QJsonObject{
+                                                  {QStringLiteral("format"), QStringLiteral("json")}
+                                              }}
+                                          }}
+                                      }));
+    require(!result.ok, "unknown config entries should fail validation");
+    require(hasRuleAt(result.diagnostics,
+                      QStringLiteral("config.unknown_parameter"),
+                      QStringLiteral("$.parameters.depth")),
+            "unknown parameter should be diagnosed");
+    require(hasRuleAt(result.diagnostics,
+                      QStringLiteral("config.unknown_table_column"),
+                      QStringLiteral("$.tables.regions.rows[0].owner")),
+            "strict unknown table column should be diagnosed");
+    require(hasRuleAt(result.diagnostics,
+                      QStringLiteral("config.unknown_document"),
+                      QStringLiteral("$.documents.unknown_doc")),
+            "unknown document should be diagnosed");
+}
+
 void testTableAndDocumentUnknownFieldsPreserveWhenDeclared() {
     const ipcraft::ConfigSchemaReadResult schemaResult =
         ipcraft::ConfigSchema::fromJson(QJsonObject{
@@ -404,7 +493,11 @@ void testTableAndDocumentUnknownFieldsPreserveWhenDeclared() {
     require(strictSchema.ok, "strict table/document schema should parse");
     const ipcraft::ConfigValidationResult strictResult =
         ipcraft::validateConfigBundle(strictSchema.schema, bundle);
-    require(strictResult.ok, "strict normalization should not reject unknown table/document fields");
+    require(!strictResult.ok, "strict normalization should reject unknown table columns");
+    require(hasRuleAt(strictResult.diagnostics,
+                      QStringLiteral("config.unknown_table_column"),
+                      QStringLiteral("$.tables.regions.rows[0].owner")),
+            "strict unknown table columns should be diagnosed");
     require(!strictResult.normalized.toJson()
                  .value(QStringLiteral("tables")).toObject()
                  .value(QStringLiteral("regions")).toObject()
@@ -553,6 +646,32 @@ void testDocumentFormatAndFileExtensionValidation() {
             "file extension mismatch should be diagnosed");
 }
 
+void testFileInputAllowedAliasIsValidated() {
+    const ipcraft::ConfigSchemaReadResult schemaResult =
+        ipcraft::ConfigSchema::fromJson(QJsonObject{
+            {QStringLiteral("files"), QJsonArray{
+                QJsonObject{{QStringLiteral("id"), QStringLiteral("constraints")},
+                            {QStringLiteral("allowed"), QJsonArray{QStringLiteral(".xdc")}}}
+            }}
+        });
+    require(schemaResult.ok, "file allowed alias schema should parse");
+
+    const ipcraft::ConfigValidationResult result =
+        ipcraft::validateConfigBundle(schemaResult.schema,
+                                      ipcraft::ConfigBundle::fromJson(QJsonObject{
+                                          {QStringLiteral("files"), QJsonObject{
+                                              {QStringLiteral("constraints"), QJsonObject{
+                                                  {QStringLiteral("path"), QStringLiteral("constraints/top.sdc")}
+                                              }}
+                                          }}
+                                      }));
+    require(!result.ok, "file allowed alias should enforce extension");
+    require(hasRuleAt(result.diagnostics,
+                      QStringLiteral("config.file_extension_invalid"),
+                      QStringLiteral("$.files.constraints.path")),
+            "invalid extension from allowed alias should be diagnosed");
+}
+
 void testFileInputPathsRejectTraversal() {
     QTemporaryDir root;
     require(root.isValid(), "temporary root should be valid");
@@ -629,10 +748,13 @@ int main(int argc, char** argv) {
         testEnumDeclarationMustChooseStringOrInt64();
         testSimpleExpressionsEvaluateWithoutScripts();
         testExpressionRejectsFileProcessNetworkAndEnvironmentAccess();
+        testLiteralBooleanExpressionsAreAccepted();
+        testUnknownConfigEntriesAreRejected();
         testTableAndDocumentUnknownFieldsPreserveWhenDeclared();
         testPathParametersRejectTraversal();
         testDiagnosticPathsUseStableEscapingForArbitraryIds();
         testDocumentFormatAndFileExtensionValidation();
+        testFileInputAllowedAliasIsValidated();
         testFileInputPathsRejectTraversal();
         testFileInputNormalizationDropsUnknownFields();
     } catch (const std::exception& exception) {

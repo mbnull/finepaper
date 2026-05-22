@@ -229,6 +229,7 @@ void testValidateProjectIsStaticAndDoesNotCreateRunFiles() {
     QString packageRoot;
     setupProjectAndPackage(root, &projectPath, &packageRoot, {}, QJsonArray{
         QJsonObject{{QStringLiteral("id"), QStringLiteral("generate")},
+                    {QStringLiteral("scope"), QStringLiteral("instance")},
                     {QStringLiteral("steps"), QJsonArray{
                         QJsonObject{{QStringLiteral("kind"), QStringLiteral("exec")},
                                     {QStringLiteral("command"), QJsonObject{
@@ -326,6 +327,7 @@ void testRunFlowReportsMissingExecutable() {
     QString packageRoot;
     setupProjectAndPackage(root, &projectPath, &packageRoot, {}, QJsonArray{
         QJsonObject{{QStringLiteral("id"), QStringLiteral("generate")},
+                    {QStringLiteral("scope"), QStringLiteral("instance")},
                     {QStringLiteral("steps"), QJsonArray{
                         QJsonObject{{QStringLiteral("kind"), QStringLiteral("exec")},
                                     {QStringLiteral("command"), QJsonObject{
@@ -366,6 +368,7 @@ void testRunFlowEmitsInstanceGraphConfig() {
                               {QStringLiteral("path"), QStringLiteral("graph/config.json")}}
               }, QJsonArray{
                   QJsonObject{{QStringLiteral("id"), QStringLiteral("generate")},
+                              {QStringLiteral("scope"), QStringLiteral("instance")},
                               {QStringLiteral("steps"), QJsonArray{
                                   QJsonObject{{QStringLiteral("kind"), QStringLiteral("emit_inputs")}}
                               }}}
@@ -390,6 +393,7 @@ void testRunFlowRequiresInstanceOrAllInstancesForInstanceScopedFlow() {
     QString packageRoot;
     setupProjectAndPackage(root, &projectPath, &packageRoot, {}, QJsonArray{
         QJsonObject{{QStringLiteral("id"), QStringLiteral("generate")},
+                    {QStringLiteral("scope"), QStringLiteral("instance")},
                     {QStringLiteral("steps"), QJsonArray{}}}
     });
 
@@ -419,6 +423,7 @@ void testRunFlowRejectsUnsafeInstanceOutputPath() {
     writeJson(QDir(packageRoot).filePath(QStringLiteral("ipcraft.json")),
               packageJson({}, QJsonArray{
                   QJsonObject{{QStringLiteral("id"), QStringLiteral("generate")},
+                              {QStringLiteral("scope"), QStringLiteral("instance")},
                               {QStringLiteral("steps"), QJsonArray{}}}
               }));
 

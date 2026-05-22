@@ -280,6 +280,52 @@ void testExtensionDeclarationsMatchSchemaContract() {
             "extension payload value type should be diagnosed");
 }
 
+void testUnknownExtensionIsRejected() {
+    QTemporaryDir temp;
+    require(temp.isValid(), "temporary directory should be valid");
+    QDir root(temp.path());
+
+    QJsonObject spec = minimalPackageSpec();
+    spec.insert(QStringLiteral("extensions"), QJsonArray{
+        QStringLiteral("vendor.example.magic")
+    });
+    writePackage(root, spec);
+
+    const ipcraft::PackageSpecReadResult result =
+        ipcraft::PackageSpecReader().readPackageRoot(root.absolutePath());
+    require(!result.ok, "unknown package extension should fail");
+    require(hasPackageParserDiagnosticAt(result.diagnostics,
+                                         QStringLiteral("package.unknown_extension"),
+                                         QStringLiteral("$.extensions[0]")),
+            "unknown extension should emit package.unknown_extension at declaration path");
+}
+
+void testDuplicateTableIdsAreRejected() {
+    QTemporaryDir temp;
+    require(temp.isValid(), "temporary directory should be valid");
+    QDir root(temp.path());
+
+    QJsonObject spec = minimalPackageSpec();
+    spec.insert(QStringLiteral("extensions"), QJsonArray{
+        QStringLiteral("ipcraft.config.tables")
+    });
+    spec.insert(QStringLiteral("config_schema"), QJsonObject{
+        {QStringLiteral("tables"), QJsonArray{
+            QJsonObject{{QStringLiteral("id"), QStringLiteral("regions")}},
+            QJsonObject{{QStringLiteral("id"), QStringLiteral("regions")}}
+        }}
+    });
+    writePackage(root, spec);
+
+    const ipcraft::PackageSpecReadResult result =
+        ipcraft::PackageSpecReader().readPackageRoot(root.absolutePath());
+    require(!result.ok, "duplicate table ids should fail package parsing");
+    require(hasPackageParserDiagnosticAt(result.diagnostics,
+                                         QStringLiteral("package.duplicate_table"),
+                                         QStringLiteral("$.config_schema.tables[1].id")),
+            "duplicate table id should emit package.duplicate_table");
+}
+
 void testConnectionRulesParseAliasesAndCompatibility() {
     QTemporaryDir temp;
     require(temp.isValid(), "temporary directory should be valid");
@@ -699,6 +745,8 @@ int main(int argc, char** argv) {
         testExtensionArrayObjectDeclarationSatisfiesRequirement();
         testExtensionPayloadObjectDoesNotEnableCapability();
         testExtensionDeclarationsMatchSchemaContract();
+        testUnknownExtensionIsRejected();
+        testDuplicateTableIdsAreRejected();
         testConnectionRulesParseAliasesAndCompatibility();
         testConnectionRulesRejectMalformedCompatibility();
         testFlowRequiresExplicitScope();
