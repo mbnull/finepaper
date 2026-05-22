@@ -73,6 +73,7 @@ The catalog covers diagnostics surfaced through `ipcraft.project.v1`, `ipcraft.p
 | cli.unknown_command | error | cli | cli | document_path | CLI contract |
 | cli.missing_argument | error | cli | cli | document_path | CLI contract |
 | cli.argument_conflict | error | cli | cli | document_path | CLI contract |
+| cli.path_escape | error | cli | cli | document_path | CLI output path security |
 | cli.instance_scope_required | error | cli | cli | document_path | CLI run-flow |
 | cli.instance_not_found | error | cli | cli | document_path | CLI instance targeting |
 | migration.target_required | error | migration | migration | document_path | Migration CLI |

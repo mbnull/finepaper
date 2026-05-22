@@ -192,6 +192,7 @@ Migration maps old IP state to instances, old layout parameters to LayoutModel, 
 ## Security Model
 
 Runtime rejects unsupported schemas, duplicate ids, unknown top-level fields, path traversal, absolute package-local paths, symlink escapes, missing executables, flow policy violations, and artifact escapes. Validation commands are static by default.
+CLI commands that derive output subdirectories from project data must reject path separators, `.` and `..` segments before creating run directories.
 
 ## Public CLI/API Contract
 
@@ -213,6 +214,7 @@ Current command details:
 - `validate-project` requires `--packages`, performs static schema/config/composition validation, and does not spawn external processes.
 - `emit-inputs` requires `--instance`, `--out`, and `--packages`.
 - instance-scoped `run-flow` requires exactly one of `--instance` or `--all-instances`; project-scoped flows omit both.
+- `run-flow` creates per-instance run directories under `--out`; unsafe instance ids that would become path segments are rejected with `cli.path_escape`.
 - `collect-artifacts --spec` takes a package spec file path, not a package root.
 
 ## Testability Contract

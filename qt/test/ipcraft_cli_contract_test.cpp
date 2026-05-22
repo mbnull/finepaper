@@ -349,6 +349,39 @@ void testRunFlowRequiresInstanceOrAllInstancesForInstanceScopedFlow() {
             "missing instance targeting should emit cli.instance_scope_required");
 }
 
+void testRunFlowRejectsUnsafeInstanceOutputPath() {
+    QTemporaryDir root;
+    require(root.isValid(), "temp root should be valid");
+    QDir dir(root.path());
+    QJsonObject project = projectJson();
+    QJsonArray instances = project.value(QStringLiteral("instances")).toArray();
+    QJsonObject instance = instances.first().toObject();
+    instance.insert(QStringLiteral("id"), QStringLiteral("../escaped"));
+    instances.replace(0, instance);
+    project.insert(QStringLiteral("instances"), instances);
+
+    const QString projectPath = writeJson(dir.filePath(QStringLiteral("project.json")), project);
+    const QString packageRoot = dir.filePath(QStringLiteral("packages/simple"));
+    writeJson(QDir(packageRoot).filePath(QStringLiteral("ipcraft.json")),
+              packageJson({}, QJsonArray{
+                  QJsonObject{{QStringLiteral("id"), QStringLiteral("generate")},
+                              {QStringLiteral("steps"), QJsonArray{}}}
+              }));
+
+    const QString outDir = dir.filePath(QStringLiteral("run"));
+    const CliRun run = runCli({QStringLiteral("run-flow"), projectPath,
+                               QStringLiteral("--flow"), QStringLiteral("generate"),
+                               QStringLiteral("--instance"), QStringLiteral("../escaped"),
+                               QStringLiteral("--out"), outDir,
+                               QStringLiteral("--packages"), packageRoot});
+    require(run.exitCode != 0, "unsafe run-flow instance id should fail");
+    requireCliEnvelope(run.json, false);
+    require(hasRule(run.json, QStringLiteral("cli.path_escape")),
+            "unsafe run-flow instance id should emit cli.path_escape");
+    require(!QFileInfo(dir.filePath(QStringLiteral("escaped"))).exists(),
+            "unsafe instance id must not create a run directory outside --out");
+}
+
 void testCollectArtifactsReturnsArtifactIndex() {
     QTemporaryDir root;
     require(root.isValid(), "temp root should be valid");
@@ -415,6 +448,7 @@ int main(int argc, char** argv) {
         testRunFlowReportsMissingExecutable();
         testRunFlowEmitsInstanceGraphConfig();
         testRunFlowRequiresInstanceOrAllInstancesForInstanceScopedFlow();
+        testRunFlowRejectsUnsafeInstanceOutputPath();
         testCollectArtifactsReturnsArtifactIndex();
         testMigrateProjectRequiresExplicitTarget();
         testMigrateProjectReturnsProjectUnderResultProject();

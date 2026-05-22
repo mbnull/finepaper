@@ -59,6 +59,16 @@ bool hasOption(const QStringList& args, const QString& option) {
     return args.contains(option);
 }
 
+bool isSafeRunPathSegment(const QString& segment) {
+    const QString trimmed = segment.trimmed();
+    if (trimmed.isEmpty() ||
+        trimmed == QStringLiteral(".") ||
+        trimmed == QStringLiteral("..")) {
+        return false;
+    }
+    return !trimmed.contains(QLatin1Char('/')) && !trimmed.contains(QLatin1Char('\\'));
+}
+
 ProjectReadResult readProject(const QString& path) {
     return ProjectReader::readFile(path);
 }
@@ -337,6 +347,12 @@ CliResult runFlowForInstance(const ProjectDocument& project,
                              const QString& flowId,
                              const QString& outDir,
                              QJsonObject* payload) {
+    if (!isSafeRunPathSegment(instance.id)) {
+        return failure(QStringLiteral("cli.path_escape"),
+                       QStringLiteral("Instance id cannot be used as a run output path segment."),
+                       QStringLiteral("$.instances[].id"));
+    }
+
     ipcraft::FlowRunRequest request;
     request.projectId = project.projectId;
     request.instanceId = instance.id;
