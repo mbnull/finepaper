@@ -3,6 +3,7 @@
 
 #include "graph/graph.h"
 #include "project/graphprojectserializer.h"
+#include "project/projectstateservice.h"
 #include "project/projectwriter.h"
 
 #include <QDir>
@@ -91,6 +92,9 @@ GeneratedProjectSnapshotResult writeGeneratedProjectSnapshotFile(const Graph& gr
     ProjectDocument document = GraphProjectSerializer::toProject(graph, designName);
     document.instances = projectInstancesFromGenerationState(ipcoreState);
     document.ipcoreState = ipcoreState;
+    ProjectStateService stateService;
+    stateService.loadFromDocument(document);
+    stateService.writeToDocument(document);
     addIpcoreStateDependencies(document, ipcoreState);
     const ProjectWriteResult writeResult = ProjectWriter::writeFile(projectPath, document);
     if (!writeResult.success) {
