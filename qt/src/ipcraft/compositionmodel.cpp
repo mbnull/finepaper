@@ -713,10 +713,73 @@ GraphConfigRelationship GraphConfigRelationship::fromJson(const QJsonObject& obj
     return relationship;
 }
 
-void validateGraphConfigRelationshipShape(const QJsonObject& object,
+bool validateRequiredGraphString(const QJsonObject& object,
+                                 const QString& key,
+                                 const QString& path,
+                                 DiagnosticStore& diagnostics) {
+    const QJsonValue value = object.value(key);
+    if (value.isString() && !value.toString().trimmed().isEmpty()) {
+        return true;
+    }
+    addGraphDiagnostic(diagnostics,
+                       QStringLiteral("graph_config.type_mismatch"),
+                       QStringLiteral("Graph config required string field is missing or invalid."),
+                       childPath(path, key));
+    return false;
+}
+
+bool validateGraphConfigObjectShape(const QJsonObject& object,
+                                    qsizetype objectIndex,
+                                    DiagnosticStore& diagnostics) {
+    const QString objectPath = indexPath(QStringLiteral("$.objects"), objectIndex);
+    bool ok = true;
+    const QSet<QString> allowedKeys = {
+        QStringLiteral("id"),
+        QStringLiteral("type"),
+        QStringLiteral("properties")
+    };
+    for (const QString& key : object.keys()) {
+        if (!allowedKeys.contains(key)) {
+            addGraphDiagnostic(diagnostics,
+                               QStringLiteral("graph_config.type_mismatch"),
+                               QStringLiteral("Graph object contains an unsupported field."),
+                               childPath(objectPath, key));
+            ok = false;
+        }
+    }
+    ok = validateRequiredGraphString(object, QStringLiteral("id"), objectPath, diagnostics) && ok;
+    ok = validateRequiredGraphString(object, QStringLiteral("type"), objectPath, diagnostics) && ok;
+    return ok;
+}
+
+bool validateGraphConfigEndpointShape(const QJsonObject& object,
+                                      const QString& endpointPath,
+                                      DiagnosticStore& diagnostics) {
+    bool ok = true;
+    const QSet<QString> allowedKeys = {
+        QStringLiteral("object"),
+        QStringLiteral("role"),
+        QStringLiteral("properties")
+    };
+    for (const QString& key : object.keys()) {
+        if (!allowedKeys.contains(key)) {
+            addGraphDiagnostic(diagnostics,
+                               QStringLiteral("graph_config.type_mismatch"),
+                               QStringLiteral("Graph relationship endpoint contains an unsupported field."),
+                               childPath(endpointPath, key));
+            ok = false;
+        }
+    }
+    ok = validateRequiredGraphString(object, QStringLiteral("object"), endpointPath, diagnostics) && ok;
+    ok = validateRequiredGraphString(object, QStringLiteral("role"), endpointPath, diagnostics) && ok;
+    return ok;
+}
+
+bool validateGraphConfigRelationshipShape(const QJsonObject& object,
                                           qsizetype relationshipIndex,
                                           DiagnosticStore& diagnostics) {
     const QString relationshipPath = indexPath(QStringLiteral("$.relationships"), relationshipIndex);
+    bool ok = true;
     const QSet<QString> allowedKeys = {
         QStringLiteral("id"),
         QStringLiteral("type"),
@@ -729,14 +792,17 @@ void validateGraphConfigRelationshipShape(const QJsonObject& object,
                                QStringLiteral("graph_config.type_mismatch"),
                                QStringLiteral("Graph relationship contains an unsupported field."),
                                childPath(relationshipPath, key));
+            ok = false;
         }
     }
+    ok = validateRequiredGraphString(object, QStringLiteral("id"), relationshipPath, diagnostics) && ok;
+    ok = validateRequiredGraphString(object, QStringLiteral("type"), relationshipPath, diagnostics) && ok;
     if (!object.value(QStringLiteral("endpoints")).isArray()) {
         addGraphDiagnostic(diagnostics,
                            QStringLiteral("graph_config.type_mismatch"),
                            QStringLiteral("Graph relationship endpoints must be an array."),
                            childPath(relationshipPath, QStringLiteral("endpoints")));
-        return;
+        return false;
     }
 
     const QJsonArray endpoints = object.value(QStringLiteral("endpoints")).toArray();
@@ -745,16 +811,24 @@ void validateGraphConfigRelationshipShape(const QJsonObject& object,
                            QStringLiteral("graph_config.type_mismatch"),
                            QStringLiteral("Graph relationship endpoints must contain at least two entries."),
                            childPath(relationshipPath, QStringLiteral("endpoints")));
+        ok = false;
     }
     for (qsizetype endpointIndex = 0; endpointIndex < endpoints.size(); ++endpointIndex) {
+        const QString endpointPath =
+            indexPath(childPath(relationshipPath, QStringLiteral("endpoints")), endpointIndex);
         if (!endpoints.at(endpointIndex).isObject()) {
             addGraphDiagnostic(diagnostics,
                                QStringLiteral("graph_config.type_mismatch"),
                                QStringLiteral("Graph relationship endpoint must be an object."),
-                               indexPath(childPath(relationshipPath, QStringLiteral("endpoints")),
-                                         endpointIndex));
+                               endpointPath);
+            ok = false;
+            continue;
         }
+        ok = validateGraphConfigEndpointShape(endpoints.at(endpointIndex).toObject(),
+                                              endpointPath,
+                                              diagnostics) && ok;
     }
+    return ok;
 }
 
 QJsonObject GraphConfig::toJson() const {
@@ -793,9 +867,19 @@ GraphConfigReadResult GraphConfig::fromJson(const QJsonObject& object) {
                            QStringLiteral("$.objects"));
     } else {
         const QJsonArray objects = objectsValue.toArray();
-        for (const QJsonValue& graphObject : objects) {
-            if (graphObject.isObject()) {
-                result.config.objects.append(GraphConfigObject::fromJson(graphObject.toObject()));
+        for (qsizetype index = 0; index < objects.size(); ++index) {
+            const QJsonValue graphObject = objects.at(index);
+            const QString objectPath = indexPath(QStringLiteral("$.objects"), index);
+            if (!graphObject.isObject()) {
+                addGraphDiagnostic(result.diagnostics,
+                                   QStringLiteral("graph_config.type_mismatch"),
+                                   QStringLiteral("Graph object must be an object."),
+                                   objectPath);
+                continue;
+            }
+            const QJsonObject graphObjectObject = graphObject.toObject();
+            if (validateGraphConfigObjectShape(graphObjectObject, index, result.diagnostics)) {
+                result.config.objects.append(GraphConfigObject::fromJson(graphObjectObject));
             }
         }
     }
@@ -812,9 +896,12 @@ GraphConfigReadResult GraphConfig::fromJson(const QJsonObject& object) {
             const QJsonValue relationship = relationships.at(index);
             if (relationship.isObject()) {
                 const QJsonObject relationshipObject = relationship.toObject();
-                validateGraphConfigRelationshipShape(relationshipObject, index, result.diagnostics);
-                result.config.relationships.append(
-                    GraphConfigRelationship::fromJson(relationshipObject));
+                if (validateGraphConfigRelationshipShape(relationshipObject,
+                                                         index,
+                                                         result.diagnostics)) {
+                    result.config.relationships.append(
+                        GraphConfigRelationship::fromJson(relationshipObject));
+                }
             } else {
                 addGraphDiagnostic(result.diagnostics,
                                    QStringLiteral("graph_config.type_mismatch"),

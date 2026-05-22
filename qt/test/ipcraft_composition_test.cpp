@@ -535,6 +535,40 @@ void testGraphConfigRejectsDuplicateAndUnknownEndpointObjects() {
             "unknown graph endpoint object should be diagnosed at stable path");
 }
 
+void testGraphConfigRejectsMalformedObjects() {
+    const QJsonObject graphJson{
+        {QStringLiteral("schema"), ipcraft::schemaids::graphConfigV1},
+        {QStringLiteral("objects"), QJsonArray{
+            QJsonObject{{QStringLiteral("type"), QStringLiteral("vendor.node")}},
+            QStringLiteral("not-an-object"),
+            QJsonObject{{QStringLiteral("id"), QStringLiteral("obj1")}}
+        }},
+        {QStringLiteral("relationships"), QJsonArray{
+            QJsonObject{
+                {QStringLiteral("id"), QStringLiteral("rel0")},
+                {QStringLiteral("type"), QStringLiteral("vendor.link")},
+                {QStringLiteral("endpoints"), QJsonArray{
+                    QJsonObject{{QStringLiteral("object"), QStringLiteral("obj1")}, {QStringLiteral("role"), QStringLiteral("source")}},
+                    QJsonObject{{QStringLiteral("object"), QStringLiteral("")}, {QStringLiteral("role"), QStringLiteral("target")}}
+                }}
+            }
+        }}
+    };
+
+    const ipcraft::GraphConfigReadResult readResult = ipcraft::GraphConfig::fromJson(graphJson);
+    require(!readResult.ok, "malformed graph-config objects should fail parsing");
+    require(hasRuleAt(readResult.diagnostics,
+                      QStringLiteral("graph_config.type_mismatch"),
+                      QStringLiteral("$.objects[0].id")),
+            "missing graph object id should be diagnosed at stable path");
+    require(hasRuleAt(readResult.diagnostics,
+                      QStringLiteral("graph_config.type_mismatch"),
+                      QStringLiteral("$.objects[1]")),
+            "non-object graph object entry should be diagnosed at stable path");
+    require(readResult.config.objects.isEmpty(),
+            "malformed graph objects should not be inserted with empty ids");
+}
+
 void testGraphConfigRejectsOldSourceTargetShape() {
     const QJsonObject graphJson{
         {QStringLiteral("schema"), ipcraft::schemaids::graphConfigV1},
@@ -601,6 +635,7 @@ int main(int argc, char** argv) {
         testLayoutStoresCanvasCoordinatesOutsideConfig();
         testGraphConfigUsesNaryRelationshipsNotPortRefs();
         testGraphConfigRejectsDuplicateAndUnknownEndpointObjects();
+        testGraphConfigRejectsMalformedObjects();
         testGraphConfigRejectsOldSourceTargetShape();
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';
