@@ -2,6 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "ipcraft.emitted-inputs.v1",
   "title": "Ipcraft Emitted Inputs V1",
+  "description": "Strict top-level emitted-inputs manifest schema. Unknown top-level fields are rejected; emitter-owned extensibility is limited to file.source payloads and diagnostic details.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema", "project", "instance", "package", "files", "diagnostics"],

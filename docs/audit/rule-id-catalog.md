@@ -1,21 +1,25 @@
 # Diagnostic Rule-ID Catalog
 
 Messages are not stable. Hidden tests should match `rule_id`, `severity`, `source`, and stable locations.
+The catalog covers diagnostics surfaced through `ipcraft.project.v1`, `ipcraft.package.v1`, `ipcraft.emitted-inputs.v1`, and `ipcraft.cli.result.v1`.
 
 | rule_id | severity | source | category | locations | Contract |
 | --- | --- | --- | --- | --- | --- |
 | project.unsupported_schema | error | project.reader | project | document_path | Project schema |
 | project.duplicate_id | error | project.reader | project | document_path | Project ids |
+| project.unknown_package | error | core | project | document_path | Package resolution from project instances |
 | project.unknown_field | error | project.reader | project | document_path | Strict project schema |
 | project.type_mismatch | error | project.reader | project | document_path | Project schema |
 | project.missing_required | error | project.reader | project | document_path | Project schema |
 | project.unknown_instance | error | project.reader | project | document_path | Composition references |
+| project.config_invalid | error | core | project | document_path | Project instance config validation |
 | project.read_failed | error | project.reader | project | file | Project file loading |
 | project.invalid_json | error | project.reader | project | file | Project JSON parser |
 | project.file_too_large | error | project.reader | project | file | Project file loading |
 | project.invalid_value | error | project.reader | project | document_path | Project schema |
 | package.unsupported_schema | error | package.parser | package | document_path | Package schema |
 | package.extension_required | error | package.parser | package | document_path | Extension enablement |
+| package.unknown_extension | error | package.parser | package | document_path | Extension enablement |
 | package.path_escape | error | package.parser | package | document_path | Package path security |
 | package.duplicate_version | error | package.resolver | package | document_path | Package resolution |
 | package.version_not_found | error | package.resolver | package | document_path | Package resolution |
@@ -41,6 +45,8 @@ Messages are not stable. Hidden tests should match `rule_id`, `severity`, `sourc
 | config.table_column_missing | error | core | config | document_path | Table config |
 | composition.unknown_instance | error | core | composition | document_path | Composition validation |
 | composition.unknown_interface | error | core | composition | document_path/interface | Composition validation |
+| composition.unknown_connection_class | error | core | composition | document_path/connection | Composition validation |
+| composition.role_mismatch | error | core | composition | document_path/connection | Composition validation |
 | composition.required_interface_unconnected | error | core | composition | interface | Composition validation |
 | composition.multiply_driven_input | error | core | composition | document_path/connection | Composition validation |
 | composition.clock_reset_source_count | error | core | composition | document_path/connection | Composition validation |

@@ -22,7 +22,7 @@ Vendor or IP-specific semantics belong in package validators, generators, first-
 
 ## V1 Hard Cutover And Legacy Policy
 
-`ipcraft.project.v1` is the project runtime schema. Old `schema: "v1"` Finepaper projects and `ipcraft.noc.instance-state.v1` are not normal runtime formats. Normal project loading rejects old schemas with `project.unsupported_schema`.
+`ipcraft.project.v1` is the project runtime schema. Old `schema: "v1"` Finepaper projects and legacy NoC instance-state documents are not normal runtime formats. Normal project loading rejects old schemas with `project.unsupported_schema`.
 
 Legacy content is accepted only through:
 

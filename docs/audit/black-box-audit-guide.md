@@ -11,6 +11,13 @@ Public audit inputs:
 - public package/project files
 - public headless API, if published
 
+Required public schemas:
+
+- `ipcraft.project.v1`
+- `ipcraft.package.v1`
+- `ipcraft.emitted-inputs.v1`
+- `ipcraft.cli.result.v1`
+
 Workflow:
 
 1. Build or obtain `ipcraft-cli`.

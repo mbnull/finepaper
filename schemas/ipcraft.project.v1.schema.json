@@ -2,6 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "ipcraft.project.v1",
   "title": "Ipcraft Project V1",
+  "description": "Strict top-level project document schema. Unknown top-level fields are rejected; forward-compatible data is limited to documented metadata, native, and preserved escape hatches such as config.preserved and migration.preserved.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema", "project"],

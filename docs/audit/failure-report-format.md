@@ -2,6 +2,10 @@
 
 Audit failures should be reported as structured summaries, not hidden test source.
 
+Reports refer to the public hard-cutover schemas `ipcraft.project.v1`,
+`ipcraft.package.v1`, `ipcraft.emitted-inputs.v1`, and
+`ipcraft.cli.result.v1`.
+
 ```json
 {
   "contract_section": "string",

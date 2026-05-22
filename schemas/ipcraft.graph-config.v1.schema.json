@@ -2,6 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "ipcraft.graph-config.v1",
   "title": "Ipcraft Graph Config V1",
+  "description": "Strict top-level graph-config schema. Unknown top-level fields are rejected; package-declared properties and native payloads are the documented escape hatches.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema", "objects", "relationships"],

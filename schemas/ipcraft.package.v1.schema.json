@@ -2,11 +2,13 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "ipcraft.package.v1",
   "title": "Ipcraft Package V1",
+  "description": "Strict top-level package runtime schema. Unknown top-level fields are rejected; forward-compatible data belongs under metadata, native, native_schema, package-declared objects, or extension-owned payloads. Optional capability sections are extension-gated; missing declarations produce package.extension_required.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema", "id", "version", "name"],
   "allOf": [
     {
+      "$comment": "config_schema.parameters is extension-gated by ipcraft.config.params; missing declaration produces package.extension_required.",
       "if": {
         "properties": {
           "config_schema": { "required": ["parameters"] }
@@ -16,6 +18,7 @@
       "then": { "$ref": "#/$defs/requires_config_params_extension" }
     },
     {
+      "$comment": "config_schema.tables is extension-gated by ipcraft.config.tables; missing declaration produces package.extension_required.",
       "if": {
         "properties": {
           "config_schema": { "required": ["tables"] }
@@ -25,6 +28,7 @@
       "then": { "$ref": "#/$defs/requires_config_tables_extension" }
     },
     {
+      "$comment": "config_schema.documents is extension-gated by ipcraft.config.documents; missing declaration produces package.extension_required.",
       "if": {
         "properties": {
           "config_schema": { "required": ["documents"] }
@@ -34,6 +38,7 @@
       "then": { "$ref": "#/$defs/requires_config_documents_extension" }
     },
     {
+      "$comment": "config_schema.files is extension-gated by ipcraft.config.files; missing declaration produces package.extension_required.",
       "if": {
         "properties": {
           "config_schema": { "required": ["files"] }
@@ -43,34 +48,42 @@
       "then": { "$ref": "#/$defs/requires_config_files_extension" }
     },
     {
+      "$comment": "interfaces is extension-gated by ipcraft.interfaces; missing declaration produces package.extension_required.",
       "if": { "required": ["interfaces"] },
       "then": { "$ref": "#/$defs/requires_interfaces_extension" }
     },
     {
+      "$comment": "connection_rules is extension-gated by ipcraft.composition; missing declaration produces package.extension_required.",
       "if": { "required": ["connection_rules"] },
       "then": { "$ref": "#/$defs/requires_composition_extension" }
     },
     {
+      "$comment": "emitters is extension-gated by ipcraft.emitters; missing declaration produces package.extension_required.",
       "if": { "required": ["emitters"] },
       "then": { "$ref": "#/$defs/requires_emitters_extension" }
     },
     {
+      "$comment": "flows is extension-gated by ipcraft.flows; missing declaration produces package.extension_required.",
       "if": { "required": ["flows"] },
       "then": { "$ref": "#/$defs/requires_flows_extension" }
     },
     {
+      "$comment": "artifacts is extension-gated by ipcraft.artifacts; missing declaration produces package.extension_required.",
       "if": { "required": ["artifacts"] },
       "then": { "$ref": "#/$defs/requires_artifacts_extension" }
     },
     {
+      "$comment": "diagnostics is extension-gated by ipcraft.diagnostics; missing declaration produces package.extension_required.",
       "if": { "required": ["diagnostics"] },
       "then": { "$ref": "#/$defs/requires_diagnostics_extension" }
     },
     {
+      "$comment": "views is extension-gated by ipcraft.views; missing declaration produces package.extension_required.",
       "if": { "required": ["views"] },
       "then": { "$ref": "#/$defs/requires_views_extension" }
     },
     {
+      "$comment": "graph_config is extension-gated by ipcraft.graph_config; missing declaration produces package.extension_required.",
       "if": { "required": ["graph_config"] },
       "then": { "$ref": "#/$defs/requires_graph_config_extension" }
     }
@@ -98,23 +111,31 @@
         }
       ]
     },
-    "config_schema": { "$ref": "#/$defs/config_schema" },
+    "config_schema": {
+      "description": "Extension-gated package configuration schema. parameters, tables, documents, and files require their matching ipcraft.config.* extension or package.extension_required is emitted.",
+      "$ref": "#/$defs/config_schema"
+    },
     "interfaces": {
+      "description": "Extension-gated interface declarations requiring ipcraft.interfaces.",
       "type": "array",
       "items": { "$ref": "#/$defs/interface" }
     },
     "connection_rules": {
+      "description": "Extension-gated shallow composition rules requiring ipcraft.composition.",
       "$ref": "#/$defs/connection_rules"
     },
     "emitters": {
+      "description": "Extension-gated input emitters requiring ipcraft.emitters.",
       "type": "array",
       "items": { "$ref": "#/$defs/package_object" }
     },
     "flows": {
+      "description": "Extension-gated flow declarations requiring ipcraft.flows.",
       "type": "array",
       "items": { "$ref": "#/$defs/package_object" }
     },
     "artifacts": {
+      "description": "Extension-gated artifact declarations requiring ipcraft.artifacts.",
       "type": "array",
       "items": { "$ref": "#/$defs/package_object" }
     },
@@ -124,6 +145,7 @@
       "additionalProperties": true
     },
     "views": {
+      "description": "Extension-gated view declarations requiring ipcraft.views.",
       "type": "array",
       "items": { "$ref": "#/$defs/package_object" }
     },

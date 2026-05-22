@@ -4,6 +4,9 @@
 | --- | --- | --- |
 | CLI JSON shape | `ipcraft-cli` | Every command returns `ipcraft.cli.result.v1`. |
 | exit code behavior | `ipcraft-cli` | `ok: true` exits 0, `ok: false` exits nonzero. |
+| project schema | `ipcraft.project.v1`, schemas, CLI | Project roots are strict and old schemas produce structured diagnostics. |
+| package schema | `ipcraft.package.v1`, schemas, CLI | Runtime packages are strict and self-contained after normalization. |
+| emitted inputs schema | `ipcraft.emitted-inputs.v1`, `emit-inputs`, `run-flow` | Emitted manifests use confined deterministic paths. |
 | schema validation | schemas, CLI | Unsupported schemas produce structured diagnostics. |
 | deterministic writing | CLI, emitted inputs | JSON output is stable for equivalent inputs. |
 | duplicate IDs | project/package parsers | Duplicate ids emit stable duplicate diagnostics. |

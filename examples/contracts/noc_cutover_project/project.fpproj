@@ -8,8 +8,8 @@
     {
       "id": "noc0",
       "package": {
-        "id": "finepaper.noc",
-        "version": "1.0"
+        "id": "vendor.example.noc_cutover",
+        "version": "1.0.0"
       },
       "config": {
         "parameters": {
