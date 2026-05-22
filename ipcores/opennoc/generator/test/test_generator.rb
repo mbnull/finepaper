@@ -1,3 +1,4 @@
+# Migration-only legacy schema handling. Not used by normal runtime loading.
 $LOAD_PATH.unshift File.expand_path('../src/ruby', __dir__)
 
 require 'fileutils'

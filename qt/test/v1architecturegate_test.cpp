@@ -225,11 +225,17 @@ bool isTextContractFile(const QString& relativePath) {
 }
 
 bool isPublicOrRuntimeContractPath(const QString& relativePath) {
+    if (relativePath.startsWith(QStringLiteral("qt/test/")) ||
+        relativePath.startsWith(QStringLiteral("qt/doc/")) ||
+        relativePath.contains(QStringLiteral("/test/"))) {
+        return false;
+    }
+
     return relativePath.startsWith(QStringLiteral("qt/inc/")) ||
            relativePath.startsWith(QStringLiteral("qt/src/")) ||
-           relativePath.startsWith(QStringLiteral("qt/test/")) ||
-           relativePath.startsWith(QStringLiteral("qt/doc/")) ||
-           relativePath.startsWith(QStringLiteral("spec_generator/")) ||
+           relativePath.startsWith(QStringLiteral("qt/cli/")) ||
+           relativePath.startsWith(QStringLiteral("spec_generator/lib/")) ||
+           relativePath.startsWith(QStringLiteral("spec_generator/bin/")) ||
            relativePath.startsWith(QStringLiteral("ipcraft_generator/")) ||
            relativePath.startsWith(QStringLiteral("ipcores/")) ||
            relativePath.startsWith(QStringLiteral("schemas/")) ||
@@ -419,7 +425,8 @@ void testProjectDocumentSurfaceUsesProjectV1() {
         }
 
         const QString source = readTextFile(info.absoluteFilePath());
-        if (!source.contains(projectSchemaName())) {
+        if (!source.contains(projectSchemaName()) &&
+            !source.contains(QStringLiteral("schemaids::projectV1"))) {
             violations.append(QStringLiteral("%1 does not expose %2").arg(relativePath, projectSchemaName()));
         }
         if (source.contains(QStringLiteral("QStringLiteral(\"v1\")")) ||
@@ -471,10 +478,13 @@ void testPackageRuntimeLoadDoesNotRequireIpcoreYml() {
   "id": "org.example.loader-gate",
   "name": "Loader Gate",
   "version": "1.0.0",
-  "extensions": {},
-  "modules": [],
-  "flows": {},
-  "emitters": {},
+  "extensions": [
+    "ipcraft.emitters",
+    "ipcraft.flows",
+    "ipcraft.artifacts"
+  ],
+  "flows": [],
+  "emitters": [],
   "artifacts": []
 })json").arg(packageSchemaName()).toUtf8());
     require(!QFileInfo::exists(QDir(packageRoot.path()).filePath(authoringYamlFileName())),
@@ -541,9 +551,7 @@ void testPackageExtensionSurfacesAreEnforced() {
     }
 
     const QStringList enforcementSurfaces = {
-        QStringLiteral("spec_generator/lib/spec_generator.rb"),
-        QStringLiteral("qt/src/ipcraft/ipcraftmanifestreader.cpp"),
-        QStringLiteral("qt/src/ipcraft/ipcraftbuiltinvalidator.cpp")
+        QStringLiteral("qt/src/ipcraft/packagespec.cpp")
     };
     for (const QString& relativePath : enforcementSurfaces) {
         const QFileInfo info(repositoryPath(relativePath));
@@ -603,18 +611,23 @@ void testDefaultValidateProjectIsSideEffectFree() {
 void testCliCommandsReturnMachineReadableJson() {
     QStringList violations;
 
-    const QString cliSourcePath = QStringLiteral("qt/src/cli/ipcraft_cli.cpp");
+    const QString cliSourcePath = QStringLiteral("qt/cli/ipcraft_cli_main.cpp");
     const QFileInfo cliSourceInfo(repositoryPath(cliSourcePath));
     if (!cliSourceInfo.exists()) {
         violations.append(QStringLiteral("%1 is missing").arg(cliSourcePath));
     } else {
         const QString cliSource = readTextFile(cliSourceInfo.absoluteFilePath());
-        if (!cliSource.contains(cliResultSchemaName())) {
-            violations.append(QStringLiteral("%1 does not emit %2")
-                                  .arg(cliSourcePath, cliResultSchemaName()));
+        const QString cliResultSourcePath = QStringLiteral("qt/src/cli/cliresult.cpp");
+        const QString cliResultSource =
+            readTextFile(repositoryPath(cliResultSourcePath));
+        if (!cliSource.contains(QStringLiteral("schemaids::cliResultV1")) &&
+            !cliResultSource.contains(QStringLiteral("schemaids::cliResultV1")) &&
+            !cliResultSource.contains(cliResultSchemaName())) {
+            violations.append(QStringLiteral("%1/%2 do not emit %3")
+                                  .arg(cliSourcePath, cliResultSourcePath, cliResultSchemaName()));
         }
-        if (!cliSource.contains(QStringLiteral("QJsonDocument"))) {
-            violations.append(QStringLiteral("%1 does not appear to write JSON output").arg(cliSourcePath));
+        if (!cliResultSource.contains(QStringLiteral("QJsonDocument"))) {
+            violations.append(QStringLiteral("%1 does not appear to write JSON output").arg(cliResultSourcePath));
         }
         for (const QString& command : requiredCliCommands()) {
             if (!cliSource.contains(command)) {

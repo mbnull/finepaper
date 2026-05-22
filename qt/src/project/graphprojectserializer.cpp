@@ -5,6 +5,7 @@
 #include "graph/connection.h"
 #include "graph/graph.h"
 #include "graph/module.h"
+#include "ipcraft/schemaids.h"
 #include "modules/moduleregistry.h"
 
 #include <QHash>
@@ -412,6 +413,7 @@ GraphProjectLoadResult populateGraph(const ProjectDocument& document,
 
 ProjectDocument GraphProjectSerializer::toProject(const Graph& graph, const QString& projectName) {
     ProjectDocument document;
+    document.schema = ipcraft::schemaids::projectV1;
     const QString resolvedName = projectName.isEmpty() ? QStringLiteral("Untitled") : projectName;
     document.projectName = resolvedName;
     document.name = resolvedName;

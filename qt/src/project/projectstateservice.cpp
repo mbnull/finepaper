@@ -294,9 +294,6 @@ ProjectIpInstanceRecord withLegacyAliasFields(ProjectIpInstanceRecord record) {
     if (record.ipcoreId.trimmed().isEmpty()) {
         record.ipcoreId = record.package.id;
     }
-    if (record.schema.trimmed().isEmpty()) {
-        record.schema = QStringLiteral("ipcraft.noc.instance-state.v1");
-    }
     if (record.state.isEmpty()) {
         QJsonObject state;
         const QJsonValue parameters = record.config.value(QStringLiteral("parameters"));

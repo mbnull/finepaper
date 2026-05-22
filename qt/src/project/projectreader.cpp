@@ -770,11 +770,10 @@ ProjectReadResult readInstance(const QJsonObject& object,
                        QStringLiteral("$.instances[].graph_config"));
     }
 
-    // Transitional aliases let existing editor/generator adapters keep working
-    // while the persisted project shape remains canonical ProjectDocument V1.
+    // Transitional aliases let existing editor adapters keep working while the
+    // persisted project shape remains canonical ProjectDocument V1.
     instance.instanceId = instance.id;
     instance.ipcoreId = instance.package.id;
-    instance.schema = QStringLiteral("ipcraft.noc.instance-state.v1");
     const QJsonValue parameters = instance.config.value(QStringLiteral("parameters"));
     if (parameters.isObject()) {
         instance.state.insert(QStringLiteral("global_parameters"), parameters.toObject());

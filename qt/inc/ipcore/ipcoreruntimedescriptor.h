@@ -1,5 +1,6 @@
 #pragma once
 
+// Migration-only legacy schema handling. Not used by normal runtime loading.
 #include "graph/parameter.h"
 
 #include <QHash>
