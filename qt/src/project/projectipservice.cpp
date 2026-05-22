@@ -66,15 +66,26 @@ QJsonArray instanceLimitScopesToJson(const QVector<IpCatalogInstanceLimit>& limi
 
 ProjectIpInstanceRecord defaultRecordForEntry(const IpCatalogEntry& entry, const QString& instanceId) {
     ProjectIpInstanceRecord record;
+    record.id = instanceId;
+    record.displayName = instanceId;
+    record.package.id = entry.id;
+    record.package.version = entry.version.trimmed().isEmpty()
+        ? QStringLiteral("1.0")
+        : entry.version.trimmed();
+
     record.ipcoreId = entry.id;
     record.instanceId = instanceId;
     record.schema = QStringLiteral("ipcraft.noc.instance-state.v1");
+    const QJsonObject parameterDefaults = globalParameterDefaults(entry);
     record.state.insert(QStringLiteral("kind"), entry.kind);
     record.state.insert(QStringLiteral("type"), entry.name);
-    record.state.insert(QStringLiteral("global_parameters"), globalParameterDefaults(entry));
+    record.state.insert(QStringLiteral("global_parameters"), parameterDefaults);
+    record.config.insert(QStringLiteral("parameters"), parameterDefaults);
     const QJsonArray limitScopes = instanceLimitScopesToJson(entry.instanceLimits);
     if (!limitScopes.isEmpty()) {
         record.state.insert(QStringLiteral("instance_limit_scopes"), limitScopes);
+        record.native.insert(QStringLiteral("ipcraft"),
+                             QJsonObject{{QStringLiteral("instance_limit_scopes"), limitScopes}});
     }
     return record;
 }

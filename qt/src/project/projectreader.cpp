@@ -770,8 +770,78 @@ ProjectReadResult readInstance(const QJsonObject& object,
                        QStringLiteral("$.instances[].graph_config"));
     }
 
+    // Transitional aliases let existing editor/generator adapters keep working
+    // while the persisted project shape remains canonical ProjectDocument V1.
+    instance.instanceId = instance.id;
+    instance.ipcoreId = instance.package.id;
+    instance.schema = QStringLiteral("ipcraft.noc.instance-state.v1");
+    const QJsonValue parameters = instance.config.value(QStringLiteral("parameters"));
+    if (parameters.isObject()) {
+        instance.state.insert(QStringLiteral("global_parameters"), parameters.toObject());
+    }
+
     *output = instance;
     return {};
+}
+
+void appendGraphConfigProjection(const ProjectIpInstanceRecord& instance,
+                                 ProjectDocument* document) {
+    if (!instance.hasGraphConfig || instance.graphConfigIsNull) {
+        return;
+    }
+
+    const QJsonArray objects = instance.graphConfig.value(QStringLiteral("objects")).toArray();
+    for (const QJsonValue& objectValue : objects) {
+        if (!objectValue.isObject()) {
+            continue;
+        }
+        const QJsonObject object = objectValue.toObject();
+        ProjectModuleRecord module;
+        module.id = object.value(QStringLiteral("id")).toString();
+        module.ipcoreId = instance.package.id;
+        module.instanceId = instance.id;
+        module.type = object.value(QStringLiteral("type")).toString();
+        module.parameters = object.value(QStringLiteral("properties")).toObject();
+        if (!module.id.trimmed().isEmpty() && !module.type.trimmed().isEmpty()) {
+            document->modules.append(module);
+        }
+    }
+
+    const QJsonArray relationships =
+        instance.graphConfig.value(QStringLiteral("relationships")).toArray();
+    for (const QJsonValue& relationshipValue : relationships) {
+        if (!relationshipValue.isObject()) {
+            continue;
+        }
+        const QJsonObject relationship = relationshipValue.toObject();
+        ProjectConnectionRecord connection;
+        connection.id = relationship.value(QStringLiteral("id")).toString();
+        connection.connectionClassId = relationship.value(QStringLiteral("type")).toString();
+        const QJsonObject properties = relationship.value(QStringLiteral("properties")).toObject();
+        connection.status = properties.value(QStringLiteral("status"))
+            .toString(QStringLiteral("valid"));
+        const QJsonArray alternatives = properties.value(QStringLiteral("alternatives")).toArray();
+        for (const QJsonValue& alternative : alternatives) {
+            if (alternative.isString()) {
+                connection.alternatives.append(alternative.toString());
+            }
+        }
+
+        const QJsonArray endpoints = relationship.value(QStringLiteral("endpoints")).toArray();
+        for (const QJsonValue& endpointValue : endpoints) {
+            if (!endpointValue.isObject()) {
+                continue;
+            }
+            const QJsonObject endpoint = endpointValue.toObject();
+            connection.interfaces.append(ProjectConnectionInterfaceRef{
+                endpoint.value(QStringLiteral("object")).toString(),
+                endpoint.value(QStringLiteral("role")).toString()
+            });
+        }
+        if (!connection.id.trimmed().isEmpty() && connection.interfaces.size() >= 2) {
+            document->connections.append(connection);
+        }
+    }
 }
 
 ProjectReadResult validateCompositionObject(const QJsonObject& composition) {
@@ -954,6 +1024,8 @@ ProjectReadResult ProjectReader::readFile(const QString& path) {
             return instanceResult;
         }
         document.instances.append(instance);
+        document.ipcoreState.append(instance);
+        appendGraphConfigProjection(instance, &document);
     }
 
     QJsonObject composition;

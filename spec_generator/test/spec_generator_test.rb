@@ -356,6 +356,62 @@ class SpecGeneratorTest < Minitest::Test
     end
   end
 
+  def test_emits_declared_interfaces_and_connection_rules
+    Dir.mktmpdir do |dir|
+      yaml = ipcraft_package_yaml
+             .sub("  ipcraft.views:\n    enabled: true\n",
+                  "  ipcraft.views:\n    enabled: true\n  ipcraft.interfaces:\n    enabled: true\n  ipcraft.composition:\n    enabled: true\n")
+             .sub("\nipxact:\n", <<~YAML)
+
+                interfaces:
+                  - id: m_axi
+                    kind: bus
+                    protocol: AXI4
+                    role: master
+                connection_rules:
+                  protocol_aliases:
+                    AXI4: axi4
+                  compatibility:
+                    - connection_type: interface
+                      from: { kind: bus, role: master, protocol: axi4 }
+                      to: { kind: bus, role: slave, protocol: axi4 }
+                      arity: binary
+                ipxact:
+             YAML
+      package_root = write_ipcraft_package_source(dir, yaml: yaml)
+
+      manifest = JSON.parse(File.read(build_ipcraft_manifest(package_root)))
+
+      assert_includes manifest.fetch('extensions'), 'ipcraft.interfaces'
+      assert_includes manifest.fetch('extensions'), 'ipcraft.composition'
+      assert_equal 'm_axi', manifest.fetch('interfaces').first.fetch('id')
+      assert_equal 'axi4',
+                   manifest.fetch('connection_rules')
+                           .fetch('protocol_aliases')
+                           .fetch('AXI4')
+    end
+  end
+
+  def test_rejects_author_native_ipcraft_editor_collision
+    Dir.mktmpdir do |dir|
+      yaml = ipcraft_package_yaml.sub("\nipxact:\n", <<~YAML)
+
+        native:
+          ipcraft:
+            editor:
+              owner: author
+        ipxact:
+      YAML
+      package_root = write_ipcraft_package_source(dir, yaml: yaml)
+
+      error = assert_raises(SpecGenerator::SpecError) do
+        build_ipcraft_manifest(package_root)
+      end
+
+      assert_match(/native\.ipcraft\.editor is reserved/, error.message)
+    end
+  end
+
   def test_specgen_does_not_emit_ipcraft_manifest_v1
     Dir.mktmpdir do |dir|
       write_repository_ipcraft_source_repo(dir)

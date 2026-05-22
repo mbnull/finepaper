@@ -355,6 +355,8 @@ module SpecGenerator
       )
       config_schema = normalize_config_schema
       graph_config = normalize_graph_config_contract
+      interfaces = normalize_package_interfaces
+      connection_rules = normalize_connection_rules
       emitters = normalize_emitters
       flows = normalize_flows
       artifacts = normalize_artifacts
@@ -374,9 +376,13 @@ module SpecGenerator
           emitters: emitters,
           flows: flows,
           artifacts: artifacts,
-          diagnostics: diagnostics
+          diagnostics: diagnostics,
+          interfaces: interfaces,
+          connection_rules: connection_rules
         ),
         'config_schema' => config_schema,
+        'interfaces' => interfaces.empty? ? nil : interfaces,
+        'connection_rules' => connection_rules.empty? ? nil : connection_rules,
         'views' => views.empty? ? nil : views,
         'graph_config' => graph_config,
         'emitters' => emitters.empty? ? nil : emitters,
@@ -486,7 +492,7 @@ module SpecGenerator
       extension && extension['enabled'] == true
     end
 
-    def declared_extensions(config_schema:, graph_config:, views:, emitters:, flows:, artifacts:, diagnostics:)
+    def declared_extensions(config_schema:, graph_config:, views:, emitters:, flows:, artifacts:, diagnostics:, interfaces:, connection_rules:)
       ids = []
       @extensions.each do |id, extension|
         ids << id if extension['enabled'] == true
@@ -497,8 +503,8 @@ module SpecGenerator
         ids << 'ipcraft.config.documents' if config_schema.key?('documents')
         ids << 'ipcraft.config.files' if config_schema.key?('files')
       end
-      ids << 'ipcraft.interfaces' if @data.key?('interfaces')
-      ids << 'ipcraft.composition' if @data.key?('connection_rules')
+      ids << 'ipcraft.interfaces' unless interfaces.empty?
+      ids << 'ipcraft.composition' unless connection_rules.empty?
       ids << 'ipcraft.graph_config' if graph_config
       ids << 'ipcraft.views' unless views.empty?
       ids << 'ipcraft.emitters' unless emitters.empty?
@@ -569,6 +575,20 @@ module SpecGenerator
       }
     end
 
+    def normalize_package_interfaces
+      interfaces = deep_copy(@data.fetch('interfaces', []))
+      raise SpecError, 'interfaces must be a list' unless interfaces.is_a?(Array)
+
+      interfaces
+    end
+
+    def normalize_connection_rules
+      connection_rules = deep_copy(@data.fetch('connection_rules', {}))
+      raise SpecError, 'connection_rules must be a map' unless connection_rules.is_a?(Hash)
+
+      connection_rules
+    end
+
     def normalize_emitters
       emitters = deep_copy(@data.fetch('emitters', []))
       raise SpecError, 'emitters must be a list' unless emitters.is_a?(Array)
@@ -605,6 +625,9 @@ module SpecGenerator
 
       ipcraft_native = native.fetch('ipcraft', {})
       raise SpecError, 'native.ipcraft must be a map' unless ipcraft_native.is_a?(Hash)
+      if ipcraft_native.key?('editor')
+        raise SpecError, 'native.ipcraft.editor is reserved for generated editor metadata'
+      end
 
       ipcraft_native['editor'] = editor_metadata
       native['ipcraft'] = ipcraft_native

@@ -297,8 +297,7 @@ bool sameIpInstanceRecord(const ProjectIpInstanceRecord& left,
                           const ProjectIpInstanceRecord& right) {
     return left.ipcoreId == right.ipcoreId &&
            left.instanceId == right.instanceId &&
-           left.schema == right.schema &&
-           left.state == right.state;
+           left.config == right.config;
 }
 
 bool containsRtlArtifact(const QStringList& artifactPaths) {
@@ -681,34 +680,42 @@ void testRepositoryNoCMainlineFlow() {
     require(projectFile.open(QIODevice::ReadOnly),
             "written project should be readable for connection schema gate");
     const QJsonObject projectJson = QJsonDocument::fromJson(projectFile.readAll()).object();
-    const QJsonArray projectIpState = projectJson.value(QStringLiteral("ipcore_state")).toArray();
-    require(projectIpState.size() == 1,
-            "written project should include saved IP-instance state for schema gate");
-    for (const QJsonValue& stateValue : projectIpState) {
-        const QString schemaName = stateValue.toObject().value(QStringLiteral("schema")).toString();
-        require(schemaName == QStringLiteral("ipcraft.noc.instance-state.v1"),
-                "newly saved IP-instance state should use the public ipcraft instance schema");
-        requirePublicSchemaName(schemaName, QStringLiteral("ProjectWriter ipcore_state.schema"));
-    }
-
-    const QJsonArray projectConnections = projectJson.value(QStringLiteral("graph"))
-        .toObject()
-        .value(QStringLiteral("connections"))
-        .toArray();
+    require(!projectJson.contains(QStringLiteral("ipcore_state")),
+            "written V1 project should not persist legacy ipcore_state");
+    require(!projectJson.contains(QStringLiteral("graph")),
+            "written V1 project should not persist the legacy root graph");
+    const QJsonArray projectInstances = projectJson.value(QStringLiteral("instances")).toArray();
+    require(projectInstances.size() == 1,
+            "written project should include saved ProjectDocument instances for schema gate");
+    const QJsonObject savedInstance = projectInstances.first().toObject();
+    require(savedInstance.value(QStringLiteral("id")).toString() == firstCreated.record.instanceId,
+            "written project instance should keep the selected IP instance id");
+    require(savedInstance.value(QStringLiteral("package")).toObject().value(QStringLiteral("id")).toString()
+                == QStringLiteral("finepaper.noc"),
+            "written project instance should keep the package id");
+    const QJsonObject savedGraphConfig =
+        savedInstance.value(QStringLiteral("graph_config")).toObject();
+    require(savedGraphConfig.value(QStringLiteral("schema")).toString()
+                == QStringLiteral("ipcraft.graph-config.v1"),
+            "graph editor state should be persisted as instance graph_config");
+    require(!containsLegacyProductName(savedGraphConfig.value(QStringLiteral("schema")).toString()),
+            "graph_config public schema should not contain finepaper");
+    const QJsonArray projectConnections =
+        savedGraphConfig.value(QStringLiteral("relationships")).toArray();
     require(!projectConnections.isEmpty(),
-            "written project should include connection records for schema gate");
+            "written graph_config should include relationship records for schema gate");
     for (const QJsonValue& connectionValue : projectConnections) {
         const QJsonObject connection = connectionValue.toObject();
-        require(connection.contains(QStringLiteral("interfaces")),
-                "new project connection records should use interfaces");
+        require(connection.contains(QStringLiteral("endpoints")),
+                "new graph_config relationship records should use endpoints");
         require(!connection.contains(QStringLiteral("from")),
-                "new project connection records should not use from");
+                "new graph_config relationship records should not use from");
         require(!connection.contains(QStringLiteral("to")),
-                "new project connection records should not use to");
+                "new graph_config relationship records should not use to");
         require(!connection.contains(QStringLiteral("source")),
-                "new project connection records should not use legacy source endpoint");
+                "new graph_config relationship records should not use legacy source endpoint");
         require(!connection.contains(QStringLiteral("target")),
-                "new project connection records should not use legacy target endpoint");
+                "new graph_config relationship records should not use legacy target endpoint");
     }
 
     const ProjectReadResult readResult = ProjectReader::readFile(projectPath);
@@ -722,12 +729,12 @@ void testRepositoryNoCMainlineFlow() {
             "project load should restore topology modules");
     require(restored.connections().size() == graph.connections().size(),
             "project load should restore topology connections");
-    require(readResult.document.ipcoreState.size() == 1,
-            "project load should preserve all IP-instance state");
-    for (qsizetype index = 0; index < readResult.document.ipcoreState.size(); ++index) {
-        require(sameIpInstanceRecord(readResult.document.ipcoreState.at(index),
+    require(readResult.document.instances.size() == 1,
+            "project load should preserve all ProjectDocument instances");
+    for (qsizetype index = 0; index < readResult.document.instances.size(); ++index) {
+        require(sameIpInstanceRecord(readResult.document.instances.at(index),
                                      stateService.ipInstanceRecords().at(index)),
-                "project load should restore IP-instance state payloads");
+                "project load should restore canonical IP-instance payloads");
     }
 
     const IpCoreGraphExportResult exportResult =
@@ -780,7 +787,7 @@ void testRepositoryNoCMainlineFlow() {
     generationRequest.instances = readResult.document.ipcoreState;
 
     const ProjectGenerationResult generationResult =
-        ProjectGenerationRunner().generate(generationRequest);
+        ProjectGenerationRunner(QStringList{commandDir.path()}).generate(generationRequest);
     require(generationResult.success, generationResult.error.toLocal8Bit().constData());
     require(generationResult.instances.size() == 1,
             "project generation should run for the NoC IP instance");
@@ -806,8 +813,8 @@ void testRepositoryNoCMainlineFlow() {
             "project generation should write a generated project snapshot");
     const ProjectReadResult snapshotRead = ProjectReader::readFile(generationResult.snapshotPath);
     require(snapshotRead.success, snapshotRead.error.toLocal8Bit().constData());
-    require(snapshotRead.document.ipcoreState.size() == 1,
-            "generated project snapshot should preserve every IP-instance state");
+    require(snapshotRead.document.instances.size() == 1,
+            "generated project snapshot should preserve every ProjectDocument instance");
 }
 
 } // namespace
