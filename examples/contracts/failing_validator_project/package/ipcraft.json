@@ -10,6 +10,7 @@
     {
       "id": "validate",
       "label": "External validation",
+      "scope": "instance",
       "steps": [
         {
           "kind": "exec",

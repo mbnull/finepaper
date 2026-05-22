@@ -533,6 +533,28 @@ void validateArrayItemsAreObjects(const QJsonArray& array,
     }
 }
 
+void validateFlows(const QJsonArray& flows,
+                   ipcraft::DiagnosticStore& diagnostics) {
+    const QSet<QString> allowedScopes{
+        QStringLiteral("instance"),
+        QStringLiteral("project")
+    };
+    for (qsizetype index = 0; index < flows.size(); ++index) {
+        if (!flows.at(index).isObject()) {
+            continue;
+        }
+        const QJsonObject flow = flows.at(index).toObject();
+        const QString scopePath = QStringLiteral("$.flows[%1].scope").arg(index);
+        const QJsonValue scopeValue = flow.value(QStringLiteral("scope"));
+        if (!scopeValue.isString() || !allowedScopes.contains(scopeValue.toString())) {
+            addDiagnostic(diagnostics,
+                          QStringLiteral("package.invalid_flow"),
+                          QStringLiteral("Flow scope must be 'instance' or 'project'."),
+                          scopePath);
+        }
+    }
+}
+
 void validateConfigSchema(const QJsonObject& configSchema,
                           ipcraft::DiagnosticStore& diagnostics) {
     hasOnlyKeys(configSchema,
@@ -1371,6 +1393,7 @@ PackageSpecReadResult PackageSpecReader::readSpecFile(const QString& specPath) c
     }
     if (optionalArray(root, QStringLiteral("flows"), QStringLiteral("$.flows"), result.diagnostics, &result.spec.flows)) {
         validateArrayItemsAreObjects(result.spec.flows, QStringLiteral("$.flows"), result.diagnostics);
+        validateFlows(result.spec.flows, result.diagnostics);
     }
     if (optionalArray(root, QStringLiteral("artifacts"), QStringLiteral("$.artifacts"), result.diagnostics, &result.spec.artifacts)) {
         validateArrayItemsAreObjects(result.spec.artifacts, QStringLiteral("$.artifacts"), result.diagnostics);

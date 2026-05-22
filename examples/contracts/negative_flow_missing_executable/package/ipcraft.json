@@ -9,6 +9,7 @@
   "flows": [
     {
       "id": "generate",
+      "scope": "instance",
       "steps": [
         {
           "kind": "exec",

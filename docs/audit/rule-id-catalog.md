@@ -27,6 +27,8 @@ The catalog covers diagnostics surfaced through `ipcraft.project.v1`, `ipcraft.p
 | package.missing_required | error | package.parser | package | document_path | Package schema |
 | package.type_mismatch | error | package.parser | package | document_path | Package schema |
 | package.duplicate_id | error | package.parser | package | document_path | Package ids |
+| package.duplicate_table | error | package.parser | package | document_path | Config table ids |
+| package.invalid_flow | error | package.parser | package | document_path | Flow schema |
 | package.duplicate_key | error | package.parser | package | file | Package JSON parser |
 | package.invalid_json | error | package.parser | package | file | Package JSON parser |
 | package.read_failed | error | package.parser | package | file | Package file loading |
@@ -35,6 +37,9 @@ The catalog covers diagnostics surfaced through `ipcraft.project.v1`, `ipcraft.p
 | package.unknown_field | error | package.parser | package | document_path | Strict package schema |
 | config.required_missing | error | core | config | parameter/table/document_path | Config validation |
 | config.type_mismatch | error | core | config | parameter/table/document_path | Config validation |
+| config.unknown_parameter | error | core | config | parameter/document_path | Config validation |
+| config.unknown_table_column | error | core | config | table_cell/document_path | Table config |
+| config.unknown_document | error | core | config | document_path | Config documents |
 | config.enum_invalid | error | core | config | parameter/document_path | Config validation |
 | config.range_invalid | error | core | config | parameter/document_path | Config validation |
 | config.path_escape | error | core | config | parameter/document_path | Config path security |
@@ -52,7 +57,9 @@ The catalog covers diagnostics surfaced through `ipcraft.project.v1`, `ipcraft.p
 | composition.clock_reset_source_count | error | core | composition | document_path/connection | Composition validation |
 | composition.incompatible_endpoint | error | core | composition | document_path/connection | Composition validation |
 | graph_config.duplicate_object | error | core | graph_config | document_path/graph_object | Graph config |
+| graph_config.duplicate_relationship | error | core | graph_config | document_path | Graph config |
 | graph_config.unknown_endpoint_object | error | core | graph_config | document_path/graph_object | Graph config |
+| graph_config.unknown_top_level_field | error | core | graph_config | document_path | Graph config |
 | graph_config.type_mismatch | error | core | graph_config | document_path | Graph config |
 | graph_config.unsupported_schema | error | core | graph_config | document_path | Graph config |
 | emitter.path_absolute | error | core | emitter | document_path | Emitter path security |
@@ -79,6 +86,10 @@ The catalog covers diagnostics surfaced through `ipcraft.project.v1`, `ipcraft.p
 | migration.target_required | error | migration | migration | document_path | Migration CLI |
 | migration.unsupported_target | error | migration | migration | document_path | Migration CLI |
 | migration.unsupported_legacy_content | error | migration | migration | document_path | Migration |
+| migration.unsupported_schema | error | migration | migration | document_path | Migration input schema |
+| migration.input_missing | error | migration | migration | file | Migration file loading |
+| migration.invalid_input | error | migration | migration | file | Migration JSON parser |
+| migration.already_current | warning | migration | migration | document_path | Migration idempotency |
 | migration.read_failed | error | migration | migration | file | Migration file loading |
 | migration.invalid_json | error | migration | migration | file | Migration JSON parser |
 | migration.file_too_large | error | migration | migration | file | Migration file loading |

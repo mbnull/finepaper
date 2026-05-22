@@ -90,11 +90,54 @@ Parameter mappings:
 
 Expressions are JSON AST only. Allowed forms are `param`, `exists`, `eq`, `ne`, `and`, `or`, `not`, and literal booleans. Arbitrary script, process execution, network access, file reads, environment access, and state mutation are forbidden.
 
+Expression V1 accepts the following concrete JSON forms:
+
+```json
+true
+```
+
+```json
+false
+```
+
+```json
+{ "param": "width" }
+```
+
+```json
+{ "op": "exists", "param": "width" }
+```
+
+```json
+{ "op": "eq", "left": { "param": "mode" }, "right": { "literal": "fast" } }
+```
+
+```json
+{ "op": "ne", "left": { "param": "mode" }, "right": { "literal": "slow" } }
+```
+
+```json
+{ "op": "and", "args": [true, { "op": "exists", "param": "width" }] }
+```
+
+```json
+{ "op": "or", "args": [false, { "op": "exists", "param": "mode" }] }
+```
+
+```json
+{ "op": "not", "arg": { "op": "exists", "param": "disabled" } }
+```
+
+Literal value nodes are `{ "literal": <null|bool|int64|double|string|array|object> }`.
+`param` nodes read from `ConfigBundle.parameters` only. `eq` and `ne` compare JSON values exactly. `and` and `or` require non-empty `args` arrays. Unknown operators or extra fields produce `config.expression_unsupported`.
+
 Allowed expression sites are `visible_when`, `enabled_when`, `required_when`, and `default_when` only when explicitly supported.
 
 ## CompositionModel Model
 
-`CompositionModel` describes project-level IP-to-IP connections. A connection has `id`, `type`, n-ary `endpoints`, `properties`, `source`, and optional native data. Core performs shallow validation: instance existence, interface existence, required interface connection, fanout/source-count rules, role/protocol/kind compatibility, and multiply driven inputs.
+`CompositionModel` describes project-level IP-to-IP connections. A connection has `id`, `type`, n-ary `endpoints`, `properties`, `source`, and optional native data. Core performs shallow validation in this order: instance existence, interface existence, duplicate/multiply driven inputs, clock/reset source-count rules, required interface connection, declared connection type compatibility, then endpoint role/protocol/kind compatibility.
+
+If a connection `type` has no package compatibility rule after alias normalization, validation emits `composition.unknown_connection_class` before endpoint compatibility diagnostics. Core then stops compatibility evaluation for that connection.
 
 Core does not implement deep AXI, CHI, APB, NoC, DDR, SerDes, or CDC semantics.
 
@@ -110,9 +153,31 @@ Layout is editor-owned state. Canvas node positions, zoom, pan, collapsed state,
 
 `ipcraft.emitted-inputs.v1` is returned by `emit-inputs` and flow `emit_inputs` steps. Paths are relative to the emit root, deterministic, and confined. The manifest records project id, instance id, package id/version, optional run id, files, hashes/sizes when available, source mapping, and diagnostics.
 
+Emitter objects in `PackageSpec.emitters[]` are deterministic and ordered by their array order. V1 emitter kinds are:
+
+- `emit_parameters`: `{ "id", "kind": "emit_parameters", "path" }` writes the instance parameter map. Manifest file source is `{ "parameters": true }`.
+- `emit_config_document`: `{ "id", "kind": "emit_config_document", "document", "path" }` writes one `ConfigBundle.documents[document]` entry. Manifest source is `{ "document": "<id>", "path": "$" }`.
+- `emit_table`: `{ "id", "kind": "emit_table", "table", "path" }` writes one `ConfigBundle.tables[table]` entry. Manifest source is `{ "table": "<id>", "path": "$" }`.
+- `copy_file`: `{ "id", "kind": "copy_file", "source", "path" }` copies one package-local source file. `source_path` is an accepted alias for `source`. Manifest source is `{ "file": "<package-relative-source-path>" }`.
+- `emit_composition`: `{ "id", "kind": "emit_composition", "path" }` writes the project `CompositionModel`. Manifest source is `{ "composition": true }`.
+- `emit_graph_config`: `{ "id", "kind": "emit_graph_config", "path" }` writes the instance `graph_config`. Manifest source is `{ "graph_config": true }`.
+
+All emitter `path` values are relative to the emit root. Absolute paths, `..`, symlink escapes, duplicated output paths, and missing declared source objects produce structured `emitter.*` diagnostics.
+
 ## FlowRunner Model
 
-Flows are declared in `PackageSpec.flows`. Step kinds are:
+Flows are declared in `PackageSpec.flows`. Each flow requires:
+
+```json
+{
+  "id": "generate",
+  "scope": "instance",
+  "steps": []
+}
+```
+
+`scope` values are `instance` and `project`. Missing or invalid `scope` emits `package.invalid_flow`.
+Step kinds are:
 
 - `emit_inputs`
 - `exec`
@@ -216,6 +281,7 @@ Current command details:
 - instance-scoped `run-flow` requires exactly one of `--instance` or `--all-instances`; project-scoped flows omit both.
 - `run-flow` creates per-instance run directories under `--out`; unsafe instance ids that would become path segments are rejected with `cli.path_escape`.
 - `collect-artifacts --spec` takes a package spec file path, not a package root.
+- `migrate-project` on an already `ipcraft.project.v1` input is idempotent success. It returns canonicalized `result.project`; implementations may include warning diagnostic `migration.already_current`.
 
 ## Testability Contract
 

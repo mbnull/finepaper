@@ -44,9 +44,7 @@
         },
         "source": {
           "description": "Emitter-owned source mapping payload.",
-          "type": "object",
-          "minProperties": 1,
-          "additionalProperties": true
+          "$ref": "#/$defs/source_mapping"
         },
         "sha256": {
           "type": "string",
@@ -66,6 +64,49 @@
           "items": { "$ref": "#/$defs/diagnostic" }
         }
       }
+    },
+    "source_mapping": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["parameters"],
+          "properties": { "parameters": { "const": true } }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["document", "path"],
+          "properties": {
+            "document": { "type": "string", "minLength": 1 },
+            "path": { "type": "string", "minLength": 1 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["table"],
+          "properties": { "table": { "type": "string", "minLength": 1 } }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["file"],
+          "properties": { "file": { "type": "string", "minLength": 1 } }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["composition"],
+          "properties": { "composition": { "const": true } }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["graph_config"],
+          "properties": { "graph_config": { "const": true } }
+        }
+      ]
     },
     "diagnostic": {
       "type": "object",

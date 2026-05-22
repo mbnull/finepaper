@@ -358,6 +358,51 @@ void testConnectionRulesRejectMalformedCompatibility() {
             "invalid compatibility arity should be diagnosed");
 }
 
+void testFlowRequiresExplicitScope() {
+    QTemporaryDir temp;
+    require(temp.isValid(), "temporary directory should be valid");
+    QDir root(temp.path());
+
+    QJsonObject spec = minimalPackageSpec();
+    spec.insert(QStringLiteral("extensions"), QJsonArray{
+        QStringLiteral("ipcraft.flows")
+    });
+    spec.insert(QStringLiteral("flows"), QJsonArray{
+        QJsonObject{
+            {QStringLiteral("id"), QStringLiteral("generate")},
+            {QStringLiteral("steps"), QJsonArray{}}
+        }
+    });
+    writePackage(root, spec);
+
+    ipcraft::PackageSpecReadResult result =
+        ipcraft::PackageSpecReader().readPackageRoot(root.absolutePath());
+    require(!result.ok, "flow without scope should fail");
+    require(hasPackageParserDiagnosticAt(result.diagnostics,
+                                         QStringLiteral("package.invalid_flow"),
+                                         QStringLiteral("$.flows[0].scope")),
+            "missing flow scope should emit package.invalid_flow");
+
+    QJsonObject flow = spec.value(QStringLiteral("flows")).toArray().first().toObject();
+    flow.insert(QStringLiteral("scope"), QStringLiteral("system"));
+    spec.insert(QStringLiteral("flows"), QJsonArray{flow});
+    writePackage(root, spec);
+
+    result = ipcraft::PackageSpecReader().readPackageRoot(root.absolutePath());
+    require(!result.ok, "flow with invalid scope should fail");
+    require(hasPackageParserDiagnosticAt(result.diagnostics,
+                                         QStringLiteral("package.invalid_flow"),
+                                         QStringLiteral("$.flows[0].scope")),
+            "invalid flow scope should emit package.invalid_flow");
+
+    flow.insert(QStringLiteral("scope"), QStringLiteral("instance"));
+    spec.insert(QStringLiteral("flows"), QJsonArray{flow});
+    writePackage(root, spec);
+
+    result = ipcraft::PackageSpecReader().readPackageRoot(root.absolutePath());
+    require(result.ok, "flow with explicit instance scope should load");
+}
+
 void testPluginMetadataIsSeparateFromExtensions() {
     QTemporaryDir temp;
     require(temp.isValid(), "temporary directory should be valid");
@@ -656,6 +701,7 @@ int main(int argc, char** argv) {
         testExtensionDeclarationsMatchSchemaContract();
         testConnectionRulesParseAliasesAndCompatibility();
         testConnectionRulesRejectMalformedCompatibility();
+        testFlowRequiresExplicitScope();
         testPluginMetadataIsSeparateFromExtensions();
         testGraphConfigRequiresExplicitExtension();
         testGraphConfigRejectsNonContractShape();
