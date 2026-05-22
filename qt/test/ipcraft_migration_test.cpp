@@ -209,9 +209,11 @@ void testMigrateMovesXYCollapsedIntoLayout() {
         ipcraft::ProjectMigrator::migrateJson(legacyProject(), ipcraft::schemaids::projectV1);
     require(result.ok, "legacy project should migrate");
 
-    const QJsonObject node = result.document.layout.value(QStringLiteral("views")).toArray()
-                                 .first().toObject()
-                                 .value(QStringLiteral("canvas")).toObject()
+    const QJsonObject graphView =
+        result.document.layout.value(QStringLiteral("views")).toArray().first().toObject();
+    require(graphView.value(QStringLiteral("id")).toString() == QStringLiteral("graph"),
+            "legacy graph layout should migrate under the graph view id");
+    const QJsonObject node = graphView.value(QStringLiteral("canvas")).toObject()
                                  .value(QStringLiteral("nodes")).toObject()
                                  .value(QStringLiteral("tile_0")).toObject();
     require(node.value(QStringLiteral("x")).toInt() == 11,

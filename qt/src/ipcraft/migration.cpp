@@ -649,7 +649,7 @@ bool migrateLegacyGraph(const QJsonObject& root,
     if (!nodes.isEmpty()) {
         document->layout.insert(QStringLiteral("views"), QJsonArray{
             QJsonObject{
-                {QStringLiteral("id"), QStringLiteral("legacy_graph")},
+                {QStringLiteral("id"), QStringLiteral("graph")},
                 {QStringLiteral("kind"), QStringLiteral("canvas")},
                 {QStringLiteral("canvas"), QJsonObject{
                     {QStringLiteral("nodes"), nodes},
