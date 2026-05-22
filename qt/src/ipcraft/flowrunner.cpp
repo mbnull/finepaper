@@ -596,6 +596,11 @@ bool runExecStep(const ipcraft::FlowRunRequest& request,
         return false;
     }
 
+    const std::optional<int> timeout = timeoutMs(command, stepPath, result.diagnostics);
+    if (!timeout.has_value()) {
+        return false;
+    }
+
     QProcess process;
 #ifdef Q_OS_UNIX
     process.setUnixProcessParameters(
@@ -618,10 +623,6 @@ bool runExecStep(const ipcraft::FlowRunRequest& request,
         return false;
     }
 
-    const std::optional<int> timeout = timeoutMs(command, stepPath, result.diagnostics);
-    if (!timeout.has_value()) {
-        return false;
-    }
     QElapsedTimer timer;
     timer.start();
     QByteArray stdoutBytes;

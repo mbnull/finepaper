@@ -267,6 +267,29 @@ void testCaptureMaxBytesRejectsUnboundedValue() {
             "oversized capture max_bytes should emit flow.command_policy_violation");
 }
 
+void testTimeoutPolicyRejectsBeforeProcessStart() {
+    QTemporaryDir runRoot;
+    QTemporaryDir packageRoot;
+    require(runRoot.isValid(), "run root should be valid");
+    require(packageRoot.isValid(), "package root should be valid");
+    const QString markerPath = QDir(runRoot.path()).filePath(QStringLiteral("process-started"));
+    writeExecutable(QDir(packageRoot.path()).filePath(QStringLiteral("tools/mark-start.sh")),
+                    "#!/bin/sh\n"
+                    "printf started > \"$1\"\n");
+
+    QJsonObject command = commandFor(QStringLiteral("tools/mark-start.sh"),
+                                     QJsonArray{markerPath});
+    command.insert(QStringLiteral("timeout_ms"), 86400001);
+    const ipcraft::FlowRunResult result =
+        ipcraft::FlowRunner::runFlow(requestFor(runRoot, packageRoot, execFlow(command)));
+
+    require(!result.ok, "oversized timeout_ms should fail flow policy");
+    require(hasRule(result.diagnostics, QStringLiteral("flow.command_policy_violation")),
+            "oversized timeout_ms should emit flow.command_policy_violation");
+    require(!QFileInfo::exists(markerPath),
+            "invalid timeout policy must be rejected before the executable starts");
+}
+
 void testDuplicateCapturePathsAreRejected() {
     QTemporaryDir runRoot;
     QTemporaryDir packageRoot;
@@ -449,6 +472,7 @@ int main(int argc, char** argv) {
         testExecRejectsNativeCommandPolicyOverride();
         testExecResolvesFrameworkToolFromApplicationPolicy();
         testCaptureMaxBytesRejectsUnboundedValue();
+        testTimeoutPolicyRejectsBeforeProcessStart();
         testDuplicateCapturePathsAreRejected();
         testParseDiagnosticsWithoutParserFailsStructurally();
         testRunFlowUsesRunDirectoryCwdByDefault();
