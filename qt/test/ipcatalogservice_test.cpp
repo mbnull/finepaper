@@ -102,28 +102,38 @@ void writeMinimalPackage(const QString& packageRootPath, const QString& packageI
 </module-view>)xml"));
     writeFile(root.filePath(QStringLiteral("ipcraft.json")),
               QStringLiteral(R"json({
-  "schema": "ipcraft.manifest.v1",
+  "schema": "ipcraft.package.v1",
   "id": "%1",
   "name": "Duplicate Test",
   "version": "1.0.0",
-  "connection_classes": [
-    { "id": "demo_link", "roles": ["initiator", "target"], "symmetric": false }
-  ],
-  "modules": [
-    {
-      "id": "Module",
-      "interfaces": [
-        {
-          "id": "bus",
-          "modes": ["initiator"],
-          "accepts": [{ "class": "demo_link", "role": "initiator" }]
-        }
-      ]
-    }
-  ],
+  "extensions": ["ipcraft.views"],
   "views": [
     { "module": "Module", "file": "views/Module.xml" }
-  ]
+  ],
+  "native": {
+    "ipcraft": {
+      "editor": {
+        "connection_classes": [
+          { "id": "demo_link", "roles": ["initiator", "target"], "symmetric": false }
+        ],
+        "modules": [
+          {
+            "id": "Module",
+            "interfaces": [
+              {
+                "id": "bus",
+                "modes": ["initiator"],
+                "accepts": [{ "class": "demo_link", "role": "initiator" }]
+              }
+            ]
+          }
+        ],
+        "views": [
+          { "module": "Module", "file": "views/Module.xml" }
+        ]
+      }
+    }
+  }
 })json").arg(packageId).toUtf8());
 }
 
@@ -440,8 +450,10 @@ void testDuplicatePackageIdsAreDiagnosed() {
 
     require(result.manifests.empty(), "duplicate package IDs should not silently select one package");
     require(result.diagnostics.size() == 1, "duplicate package ID should produce one diagnostic");
-    require(result.diagnostics.first().message.contains(QStringLiteral("Duplicate package id org.example.dup")),
-            "diagnostic should name duplicate package id");
+    require(result.diagnostics.first().ruleId == QStringLiteral("package.duplicate_version"),
+            "diagnostic should use the stable duplicate package version rule id");
+    require(result.diagnostics.first().message.contains(QStringLiteral("org.example.dup@1.0.0")),
+            "diagnostic should name duplicate package version");
     require(result.diagnostics.first().message.contains(first.path()) &&
                 result.diagnostics.first().message.contains(second.path()),
             "diagnostic should name involved roots");

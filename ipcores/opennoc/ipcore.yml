@@ -6,6 +6,12 @@ version: '1.0'
 extensions:
   noc.v1:
     enabled: true
+  ipcraft.config.params:
+    enabled: true
+  ipcraft.graph_config:
+    enabled: true
+  ipcraft.views:
+    enabled: true
 
 parameters:
   req_flit_width: { type: int, default: 128, min: 1, max: 1024, label: REQ flit width, description: OpenNoC REQ channel flit width used by verification. }

@@ -6,6 +6,12 @@ version: '1.0'
 extensions:
   noc.v1:
     enabled: true
+  ipcraft.config.params:
+    enabled: true
+  ipcraft.graph_config:
+    enabled: true
+  ipcraft.views:
+    enabled: true
 
 parameters:
   flit_data_width: { type: int, default: 32, min: 8, max: 512, label: Flit data width, description: FLIT_DATA_WIDTH macro value. }

@@ -130,36 +130,52 @@ QString writeGatePackageView(QDir& packageRoot,
 QByteArray gatePackageManifest(const QString& packageId,
                                const QString& viewPath = QStringLiteral("views/Module.xml")) {
     return QStringLiteral(R"json({
-  "schema": "ipcraft.manifest.v1",
+  "schema": "ipcraft.package.v1",
   "id": "%1",
   "name": "Gate Package",
   "version": "1.0.0",
-  "connection_classes": [
-    { "id": "gate_link", "roles": ["initiator", "target"], "symmetric": false }
-  ],
-  "modules": [
-    {
-      "id": "Module",
-      "interfaces": [
-        {
-          "id": "bus",
-          "modes": ["initiator"],
-          "accepts": [
-            { "class": "gate_link", "role": "initiator" }
-          ],
-          "multi_connection": false
-        }
-      ]
-    }
+  "extensions": [
+    "ipcraft.views",
+    "noc.v1"
   ],
   "views": [
     { "module": "Module", "file": "%2" }
   ],
-  "commands": {
-    "validate": {
-      "executable": "tools/validate",
-      "input_schema": "ipcraft.noc.project.v1",
-      "args": ["-i", "{input}"]
+  "native": {
+    "ipcraft": {
+      "editor": {
+        "extensions": {
+          "noc.v1": { "enabled": true }
+        },
+        "connection_classes": [
+          { "id": "gate_link", "roles": ["initiator", "target"], "symmetric": false }
+        ],
+        "modules": [
+          {
+            "id": "Module",
+            "interfaces": [
+              {
+                "id": "bus",
+                "modes": ["initiator"],
+                "accepts": [
+                  { "class": "gate_link", "role": "initiator" }
+                ],
+                "multi_connection": false
+              }
+            ]
+          }
+        ],
+        "views": [
+          { "module": "Module", "file": "%2" }
+        ],
+        "commands": {
+          "validate": {
+            "executable": "tools/validate",
+            "input_schema": "ipcraft.noc.project.v1",
+            "args": ["-i", "{input}"]
+          }
+        }
+      }
     }
   }
 })json").arg(packageId, viewPath).toUtf8();

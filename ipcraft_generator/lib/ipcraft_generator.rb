@@ -94,6 +94,7 @@ module IpcraftGenerator
 
       manifest = JSON.parse(File.read(@manifest_path))
       input = JSON.parse(File.read(@input_path))
+      manifest = normalize_package_manifest(manifest)
 
       validate!(manifest, input)
 
@@ -134,7 +135,7 @@ module IpcraftGenerator
     end
 
     def validate!(manifest, input)
-      raise Error, 'manifest schema must be ipcraft.manifest.v1' unless manifest['schema'] == 'ipcraft.manifest.v1'
+      raise Error, 'manifest schema must be ipcraft.package.v1' unless manifest['schema'] == 'ipcraft.package.v1'
       raise Error, 'input schema must be ipcraft.noc.project.v1' unless input['schema'] == 'ipcraft.noc.project.v1'
       raise Error, 'input package does not match manifest id' unless input['package'] == manifest['id']
       if input.key?('package_id') && input['package_id'] != manifest['id']
@@ -142,6 +143,20 @@ module IpcraftGenerator
       end
 
       validate_command_input_graph!(manifest, input)
+    end
+
+    def normalize_package_manifest(manifest)
+      return manifest unless manifest['schema'] == 'ipcraft.package.v1'
+
+      editor = manifest.dig('native', 'ipcraft', 'editor')
+      raise Error, 'manifest native.ipcraft.editor must be an object' unless editor.is_a?(Hash)
+
+      editor.merge(
+        'schema' => manifest.fetch('schema'),
+        'id' => manifest.fetch('id'),
+        'name' => manifest['name'],
+        'version' => manifest['version']
+      )
     end
 
     def validate_command_input_graph!(manifest, input)

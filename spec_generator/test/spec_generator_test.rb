@@ -264,14 +264,15 @@ class SpecGeneratorTest < Minitest::Test
 
       assert_equal File.join(package_root, 'ipcraft.json'), manifest_path
       manifest = JSON.parse(File.read(manifest_path))
-      assert_equal 'ipcraft.manifest.v1', manifest.fetch('schema')
+      assert_equal 'ipcraft.package.v1', manifest.fetch('schema')
       assert_equal 'org.example.opennoc', manifest.fetch('id')
-      assert_equal({ 'enabled' => true }, manifest.fetch('extensions').fetch('noc.v1').slice('enabled'))
+      editor = editor_manifest(manifest)
+      assert_equal({ 'enabled' => true }, editor.fetch('extensions').fetch('noc.v1').slice('enabled'))
       assert_equal [
         { 'id' => 'chi_node_interface', 'roles' => %w[node interconnect], 'symmetric' => false }
-      ], manifest.fetch('connection_classes').map { |item| item.slice('id', 'roles', 'symmetric') }
+      ], editor.fetch('connection_classes').map { |item| item.slice('id', 'roles', 'symmetric') }
 
-      xp = manifest.fetch('modules').find { |mod| mod.fetch('id') == 'xp' }
+      xp = editor.fetch('modules').find { |mod| mod.fetch('id') == 'xp' }
       refute_nil xp
       assert_equal [
         {
@@ -285,8 +286,86 @@ class SpecGeneratorTest < Minitest::Test
           'validate' => { 'executable' => 'tools/validate', 'input_schema' => 'ipcraft.noc.project.v1' },
           'generate' => { 'executable' => 'tools/generate', 'input_schema' => 'ipcraft.noc.project.v1' }
         },
-        manifest.fetch('commands')
+        editor.fetch('commands')
       )
+    end
+  end
+
+  def test_build_emits_ipcraft_package_v1
+    Dir.mktmpdir do |dir|
+      package_root = write_ipcraft_package_source(dir)
+
+      manifest_path = build_ipcraft_manifest(package_root)
+      manifest = JSON.parse(File.read(manifest_path))
+
+      assert_equal 'ipcraft.package.v1', manifest.fetch('schema')
+      assert_equal 'org.example.opennoc', manifest.fetch('id')
+      assert_equal 'OpenNoC', manifest.fetch('name')
+      assert_equal '1.0.0', manifest.fetch('version')
+      assert_includes manifest.fetch('extensions'), 'ipcraft.views'
+      refute manifest.key?('modules')
+      refute manifest.key?('commands')
+      refute manifest.key?('connection_classes')
+      refute manifest.key?('emitters')
+      refute manifest.key?('flows')
+      refute manifest.key?('artifacts')
+    end
+  end
+
+  def test_runtime_manifest_is_self_contained_without_ipcore_yml
+    Dir.mktmpdir do |dir|
+      package_root = write_ipcraft_package_source(dir)
+
+      manifest_path = build_ipcraft_manifest(package_root)
+      FileUtils.rm_f(File.join(package_root, 'ipcore.yml'))
+      manifest = JSON.parse(File.read(manifest_path))
+
+      assert_equal 'ipcraft.package.v1', manifest.fetch('schema')
+      assert_equal 'org.example.opennoc', manifest.fetch('id')
+      assert_equal '1.0.0', manifest.fetch('version')
+      assert_equal [{ 'module' => 'xp', 'file' => 'views/xp.xml' }],
+                   manifest.fetch('views')
+      refute_includes JSON.generate(manifest), 'ipcore.yml'
+    end
+  end
+
+  def test_optional_sections_require_extensions
+    Dir.mktmpdir do |dir|
+      yaml = ipcraft_package_yaml
+             .sub("    enabled: true\n", "    enabled: true\n")
+             .sub("\nviews:\n", "\nconfig_schema:\n  tables: []\nviews:\n")
+      package_root = write_ipcraft_package_source(dir, yaml: yaml)
+
+      error = assert_raises(SpecGenerator::SpecError) do
+        build_ipcraft_manifest(package_root)
+      end
+
+      assert_match(/config_schema\.tables requires extension ipcraft\.config\.tables/, error.message)
+    end
+
+    Dir.mktmpdir do |dir|
+      yaml = ipcraft_package_yaml
+             .sub("    enabled: true\n", "    enabled: true\n  ipcraft.config.tables:\n    enabled: true\n")
+             .sub("\nviews:\n", "\nconfig_schema:\n  tables: []\nviews:\n")
+      package_root = write_ipcraft_package_source(dir, yaml: yaml)
+
+      manifest_path = build_ipcraft_manifest(package_root)
+      manifest = JSON.parse(File.read(manifest_path))
+
+      assert_includes manifest.fetch('extensions'), 'ipcraft.config.tables'
+    end
+  end
+
+  def test_specgen_does_not_emit_ipcraft_manifest_v1
+    Dir.mktmpdir do |dir|
+      write_repository_ipcraft_source_repo(dir)
+
+      SpecGenerator.build_repository_ipcraft_manifests(root: dir)
+
+      repository_ipcraft_package_dirs.each do |package_dir|
+        manifest = File.read(File.join(dir, 'ipcores', package_dir, 'ipcraft.json'))
+        refute_includes manifest, 'ipcraft.manifest.v1'
+      end
     end
   end
 
@@ -303,7 +382,7 @@ class SpecGeneratorTest < Minitest::Test
       build_ipcraft_manifest(package_root)
       manifest = JSON.parse(File.read(File.join(package_root, 'ipcraft.json')))
 
-      assert_equal({ 'max' => 4 }, manifest.fetch('instances'))
+      assert_equal({ 'max' => 4 }, editor_manifest(manifest).fetch('instances'))
     end
   end
 
@@ -334,7 +413,7 @@ class SpecGeneratorTest < Minitest::Test
 
       build_ipcraft_manifest(package_root)
       manifest = JSON.parse(File.read(File.join(package_root, 'ipcraft.json')))
-      xp = manifest.fetch('modules').find { |mod| mod.fetch('id') == 'xp' }
+      xp = editor_manifest(manifest).fetch('modules').find { |mod| mod.fetch('id') == 'xp' }
 
       assert_equal(
         { 'label_parameter' => 'display_name', 'short_label_parameter' => 'short_name' },
@@ -394,14 +473,14 @@ class SpecGeneratorTest < Minitest::Test
         "modes: [chi_interconnect]\n        accepts:",
         "topology:\n          side: east\n          opposite: west\n          role: router_port\n        modes: [chi_interconnect]\n        accepts:"
       ).sub(
-        "views:\n",
-        "      - id: west\n        modes: [chi_interconnect]\n        accepts:\n          - class: chi_node_interface\n            role: interconnect\n        multi_connection: false\nviews:\n"
+        "\nviews:\n",
+        "\n      - id: west\n        modes: [chi_interconnect]\n        accepts:\n          - class: chi_node_interface\n            role: interconnect\n        multi_connection: false\nviews:\n"
       )
       package_root = write_ipcraft_package_source(dir, yaml: yaml)
 
       build_ipcraft_manifest(package_root)
       manifest = JSON.parse(File.read(File.join(package_root, 'ipcraft.json')))
-      xp = manifest.fetch('modules').find { |mod| mod.fetch('id') == 'xp' }
+      xp = editor_manifest(manifest).fetch('modules').find { |mod| mod.fetch('id') == 'xp' }
       rnf0 = xp.fetch('interfaces').find { |interface| interface.fetch('id') == 'rnf0' }
 
       assert_equal({ 'side' => 'east', 'opposite' => 'west', 'role' => 'router_port' }, rnf0.fetch('topology'))
@@ -458,9 +537,10 @@ class SpecGeneratorTest < Minitest::Test
       build_ipcraft_manifest(package_root)
       manifest = JSON.parse(File.read(File.join(package_root, 'ipcraft.json')))
 
-      assert_equal 'ipcraft.common.v1', manifest.fetch('generation').fetch('engine')
-      assert_equal 'manifest.json', manifest.fetch('generation').fetch('outputs').first.fetch('path')
-      assert_equal({ 'xp' => 'XP' }, manifest.fetch('generation').fetch('module_mappings'))
+      generation = editor_manifest(manifest).fetch('generation')
+      assert_equal 'ipcraft.common.v1', generation.fetch('engine')
+      assert_equal 'manifest.json', generation.fetch('outputs').first.fetch('path')
+      assert_equal({ 'xp' => 'XP' }, generation.fetch('module_mappings'))
     end
   end
 
@@ -593,7 +673,7 @@ class SpecGeneratorTest < Minitest::Test
 
       build_ipcraft_manifest(package_root)
       manifest = JSON.parse(File.read(File.join(package_root, 'ipcraft.json')))
-      command = manifest.fetch('commands').fetch('generate')
+      command = editor_manifest(manifest).fetch('commands').fetch('generate')
 
       assert_equal(
         {
@@ -787,7 +867,7 @@ class SpecGeneratorTest < Minitest::Test
       )
 
       manifest = JSON.parse(File.read(File.join(package_root, 'ipcraft.json')))
-      modes = manifest.fetch('extensions').fetch('noc.v1').fetch('modes')
+      modes = editor_manifest(manifest).fetch('extensions').fetch('noc.v1').fetch('modes')
       assert_equal 'target', modes.fetch('chi_interconnect').fetch('ipxact').fetch('mode')
       assert_equal 'initiator', modes.fetch('chi_requester_node').fetch('ipxact').fetch('mode')
     end
@@ -815,8 +895,9 @@ class SpecGeneratorTest < Minitest::Test
     manifest = build_repository_ipcraft_manifest('opennoc')
 
     assert_repository_ipcraft_manifest_contract(manifest)
-    extension_modes = manifest.fetch('extensions').fetch('noc.v1').fetch('modes')
-    chi_modes = manifest.fetch('modules').flat_map do |mod|
+    editor = editor_manifest(manifest)
+    extension_modes = editor.fetch('extensions').fetch('noc.v1').fetch('modes')
+    chi_modes = editor.fetch('modules').flat_map do |mod|
       mod.fetch('interfaces').flat_map { |interface| interface.fetch('modes') }
     end.select { |mode| mode.start_with?('chi_') }.uniq
     refute_empty chi_modes
@@ -981,8 +1062,8 @@ class SpecGeneratorTest < Minitest::Test
   def test_rejects_duplicate_module_ids
     Dir.mktmpdir do |dir|
       yaml = ipcraft_package_yaml.sub(
-        "views:\n",
-        "  - id: xp\n    name: Duplicate XP\n    interfaces: []\nviews:\n"
+        "\nviews:\n",
+        "\n  - id: xp\n    name: Duplicate XP\n    interfaces: []\nviews:\n"
       )
       package_root = write_ipcraft_package_source(dir, yaml: yaml)
 
@@ -997,8 +1078,8 @@ class SpecGeneratorTest < Minitest::Test
   def test_rejects_duplicate_interface_ids_within_module
     Dir.mktmpdir do |dir|
       yaml = ipcraft_package_yaml.sub(
-        "views:\n",
-        "      - id: rnf0\n        modes: [chi_interconnect]\n        accepts:\n          - class: chi_node_interface\n            role: interconnect\n        multi_connection: false\n        ipxact:\n          bus_interface: rnf0_duplicate\nviews:\n"
+        "\nviews:\n",
+        "\n      - id: rnf0\n        modes: [chi_interconnect]\n        accepts:\n          - class: chi_node_interface\n            role: interconnect\n        multi_connection: false\n        ipxact:\n          bus_interface: rnf0_duplicate\nviews:\n"
       )
       package_root = write_ipcraft_package_source(dir, yaml: yaml)
 
@@ -1463,9 +1544,22 @@ class SpecGeneratorTest < Minitest::Test
   end
 
   def assert_repository_ipcraft_manifest_contract(manifest)
-    assert_equal 'ipcraft.manifest.v1', manifest.fetch('schema')
+    assert_equal 'ipcraft.package.v1', manifest.fetch('schema')
+    assert_includes manifest.fetch('extensions'), 'ipcraft.config.params'
+    assert_includes manifest.fetch('extensions'), 'ipcraft.graph_config'
+    assert_includes manifest.fetch('extensions'), 'ipcraft.views'
+    refute_includes manifest.fetch('extensions'), 'ipcraft.emitters'
+    refute_includes manifest.fetch('extensions'), 'ipcraft.flows'
+    refute_includes manifest.fetch('extensions'), 'ipcraft.artifacts'
+    refute manifest.key?('emitters')
+    refute manifest.key?('flows')
+    refute manifest.key?('artifacts')
+    refute manifest.key?('modules')
+    refute manifest.key?('commands')
+    refute manifest.key?('connection_classes')
 
-    commands = manifest.fetch('commands')
+    editor = editor_manifest(manifest)
+    commands = editor.fetch('commands')
     assert_equal(
       {
         'executable' => 'generator/bin/drc',
@@ -1483,13 +1577,13 @@ class SpecGeneratorTest < Minitest::Test
       commands.fetch('generate')
     )
 
-    module_ids = manifest.fetch('modules').map { |mod| mod.fetch('id') }
+    module_ids = editor.fetch('modules').map { |mod| mod.fetch('id') }
     manifest.fetch('views').each do |view|
       assert_includes module_ids, view.fetch('module')
     end
 
-    connection_class_ids = manifest.fetch('connection_classes').map { |klass| klass.fetch('id') }
-    manifest.fetch('modules').each do |mod|
+    connection_class_ids = editor.fetch('connection_classes').map { |klass| klass.fetch('id') }
+    editor.fetch('modules').each do |mod|
       parameters = mod.fetch('parameters', {})
       if parameters.key?('display_name')
         display = mod.fetch('display')
@@ -1503,6 +1597,10 @@ class SpecGeneratorTest < Minitest::Test
         end
       end
     end
+  end
+
+  def editor_manifest(manifest)
+    manifest.fetch('native').fetch('ipcraft').fetch('editor')
   end
 
   def common_ipcraft_generate_args
@@ -1548,6 +1646,12 @@ class SpecGeneratorTest < Minitest::Test
       version: '1.0.0'
       extensions:
         noc.v1:
+          enabled: true
+        ipcraft.config.params:
+          enabled: true
+        ipcraft.graph_config:
+          enabled: true
+        ipcraft.views:
           enabled: true
       ipxact:
         generated: true

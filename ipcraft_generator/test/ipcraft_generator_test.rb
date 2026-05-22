@@ -166,7 +166,7 @@ class IpcraftGeneratorTest < Minitest::Test
       end
 
       manifest = JSON.parse(File.read(File.join(PROJECT_ROOT, 'ipcores/finepaper-noc/ipcraft.json')))
-      declared_outputs = manifest.fetch('generation').fetch('outputs').map { |entry| entry.fetch('path') }
+      declared_outputs = editor_manifest(manifest).fetch('generation').fetch('outputs').map { |entry| entry.fetch('path') }
       assert_empty expected_common_outputs - declared_outputs
       declared_outputs.each do |path|
         assert_path_exists File.join(output, path)
@@ -445,7 +445,7 @@ class IpcraftGeneratorTest < Minitest::Test
 
   def test_opennoc_projection_reports_missing_xp_mapping
     manifest = opennoc_manifest
-    manifest.fetch('generation').fetch('module_mappings').delete('OpenNoCXP')
+    editor_manifest(manifest).fetch('generation').fetch('module_mappings').delete('OpenNoCXP')
 
     error = assert_raises(IpcraftGenerator::Error) do
       generate_opennoc_project(opennoc_mesh_project, manifest: manifest)
@@ -464,8 +464,7 @@ class IpcraftGeneratorTest < Minitest::Test
   end
 
   def minimal_manifest
-    {
-      'schema' => 'ipcraft.manifest.v1',
+    package_manifest(
       'id' => 'org.example.noc',
       'name' => 'Example',
       'generation' => {
@@ -474,7 +473,7 @@ class IpcraftGeneratorTest < Minitest::Test
           { 'id' => 'manifest', 'kind' => 'json', 'path' => 'manifest.json' }
         ]
       }
-    }
+    )
   end
 
   def minimal_project
@@ -498,8 +497,7 @@ class IpcraftGeneratorTest < Minitest::Test
   end
 
   def generic_manifest
-    {
-      'schema' => 'ipcraft.manifest.v1',
+    package_manifest(
       'id' => 'org.example.generic',
       'name' => 'Generic',
       'connection_classes' => [
@@ -520,7 +518,25 @@ class IpcraftGeneratorTest < Minitest::Test
           { 'id' => 'manifest', 'kind' => 'json', 'path' => 'manifest.json' }
         ]
       }
+    )
+  end
+
+  def package_manifest(editor_fields)
+    {
+      'schema' => 'ipcraft.package.v1',
+      'id' => editor_fields.fetch('id'),
+      'name' => editor_fields.fetch('name'),
+      'version' => editor_fields.fetch('version', '1.0.0'),
+      'native' => {
+        'ipcraft' => {
+          'editor' => editor_fields
+        }
+      }
     }
+  end
+
+  def editor_manifest(manifest)
+    manifest.fetch('native').fetch('ipcraft').fetch('editor')
   end
 
   def generic_project

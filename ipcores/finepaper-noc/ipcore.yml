@@ -6,6 +6,12 @@ version: '1.0'
 extensions:
   noc.v1:
     enabled: true
+  ipcraft.config.params:
+    enabled: true
+  ipcraft.graph_config:
+    enabled: true
+  ipcraft.views:
+    enabled: true
 
 connection_classes:
   - id: ni_link
