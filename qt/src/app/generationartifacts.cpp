@@ -42,6 +42,11 @@ QVector<ProjectIpInstanceRecord> projectInstancesFromGenerationState(
         if (record.displayName.trimmed().isEmpty()) {
             record.displayName = record.id;
         }
+        const QJsonValue globalParameters = record.state.value(QStringLiteral("global_parameters"));
+        if (globalParameters.isObject() &&
+            !record.config.contains(QStringLiteral("parameters"))) {
+            record.config.insert(QStringLiteral("parameters"), globalParameters.toObject());
+        }
         if (record.native.isEmpty() && !record.state.isEmpty()) {
             record.native = QJsonObject{{QStringLiteral("legacy_state"), record.state}};
         }

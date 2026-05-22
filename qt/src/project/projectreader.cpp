@@ -818,6 +818,7 @@ void appendGraphConfigProjection(const ProjectIpInstanceRecord& instance,
         connection.id = relationship.value(QStringLiteral("id")).toString();
         connection.connectionClassId = relationship.value(QStringLiteral("type")).toString();
         const QJsonObject properties = relationship.value(QStringLiteral("properties")).toObject();
+        connection.properties = properties;
         connection.status = properties.value(QStringLiteral("status"))
             .toString(QStringLiteral("valid"));
         const QJsonArray alternatives = properties.value(QStringLiteral("alternatives")).toArray();
@@ -833,13 +834,71 @@ void appendGraphConfigProjection(const ProjectIpInstanceRecord& instance,
                 continue;
             }
             const QJsonObject endpoint = endpointValue.toObject();
-            connection.interfaces.append(ProjectConnectionInterfaceRef{
-                endpoint.value(QStringLiteral("object")).toString(),
-                endpoint.value(QStringLiteral("role")).toString()
-            });
+            ProjectConnectionInterfaceRef interfaceRef;
+            interfaceRef.instanceId = endpoint.value(QStringLiteral("object")).toString();
+            interfaceRef.interfaceId = endpoint.value(QStringLiteral("role")).toString();
+            interfaceRef.properties = endpoint.value(QStringLiteral("properties")).toObject();
+            connection.interfaces.append(interfaceRef);
         }
         if (!connection.id.trimmed().isEmpty() && connection.interfaces.size() >= 2) {
             document->connections.append(connection);
+        }
+    }
+}
+
+bool isLayoutParameter(const QString& key) {
+    return key == QStringLiteral("x") ||
+           key == QStringLiteral("y") ||
+           key == QStringLiteral("collapsed");
+}
+
+bool isValidLayoutParameterValue(const QString& key, const QJsonValue& value) {
+    if (key == QStringLiteral("collapsed")) {
+        return value.isBool();
+    }
+    if (key == QStringLiteral("x") || key == QStringLiteral("y")) {
+        return value.isDouble();
+    }
+    return false;
+}
+
+QHash<QString, QJsonObject> layoutNodesById(const QJsonObject& layout) {
+    QHash<QString, QJsonObject> nodesById;
+    const QJsonArray views = layout.value(QStringLiteral("views")).toArray();
+    for (const QJsonValue& viewValue : views) {
+        if (!viewValue.isObject()) {
+            continue;
+        }
+        const QJsonObject view = viewValue.toObject();
+        if (view.value(QStringLiteral("id")).toString() != QStringLiteral("graph")) {
+            continue;
+        }
+        const QJsonObject nodes = view
+            .value(QStringLiteral("canvas"))
+            .toObject()
+            .value(QStringLiteral("nodes"))
+            .toObject();
+        for (auto it = nodes.constBegin(); it != nodes.constEnd(); ++it) {
+            if (it.value().isObject()) {
+                nodesById.insert(it.key(), it.value().toObject());
+            }
+        }
+    }
+    return nodesById;
+}
+
+void applyLayoutProjection(ProjectDocument* document) {
+    const QHash<QString, QJsonObject> nodes = layoutNodesById(document->layout);
+    if (nodes.isEmpty()) {
+        return;
+    }
+
+    for (ProjectModuleRecord& module : document->modules) {
+        const QJsonObject node = nodes.value(module.id);
+        for (auto it = node.constBegin(); it != node.constEnd(); ++it) {
+            if (isLayoutParameter(it.key()) && isValidLayoutParameterValue(it.key(), it.value())) {
+                module.parameters.insert(it.key(), it.value());
+            }
         }
     }
 }
@@ -1129,6 +1188,7 @@ ProjectReadResult ProjectReader::readFile(const QString& path) {
     if (!layoutResult.diagnostics.records.isEmpty()) {
         return layoutResult;
     }
+    applyLayoutProjection(&document);
     QJsonObject diagnostics;
     ProjectReadResult diagnosticsResult = optionalObjectValue(root,
                                                              QStringLiteral("diagnostics"),

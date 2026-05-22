@@ -412,7 +412,9 @@ GraphProjectLoadResult populateGraph(const ProjectDocument& document,
 
 ProjectDocument GraphProjectSerializer::toProject(const Graph& graph, const QString& projectName) {
     ProjectDocument document;
-    document.name = projectName.isEmpty() ? QStringLiteral("Untitled") : projectName;
+    const QString resolvedName = projectName.isEmpty() ? QStringLiteral("Untitled") : projectName;
+    document.projectName = resolvedName;
+    document.name = resolvedName;
 
     QSet<QString> ipcoreIds;
     for (const auto& module : graph.modules()) {

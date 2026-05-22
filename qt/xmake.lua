@@ -211,6 +211,7 @@ add_qt_test_target("startupflow_test", "test/startupflow_test.cpp", {
 
 add_qt_test_target("projectdocument_test", "test/projectdocument_test.cpp", {
     "src/connection/connectionruleservice.cpp",
+    "src/ipcraft/compositionmodel.cpp",
     "src/ipcore/ipcoregraphexporter.cpp",
     "src/ipcore/ipcatalogservice.cpp",
     "src/**/projectreader.cpp",
@@ -227,6 +228,7 @@ add_qt_test_target("projectdocument_test", "test/projectdocument_test.cpp", {
     "src/**/moduleprovider.cpp",
     "src/**/ipcoreruntimeregistry.cpp",
     "inc/**/connectionruleservice.h",
+    "inc/ipcraft/compositionmodel.h",
     "inc/**/projectdocument.h",
     "inc/**/ipinstancestate.h",
     "inc/**/projectstateservice.h",

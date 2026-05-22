@@ -1,9 +1,12 @@
 // ProjectStateService stores IP-instance project state outside Graph.
 #include "project/projectstateservice.h"
 
+#include "ipcraft/schemaids.h"
+
 #include <algorithm>
 #include <QHash>
 #include <QJsonArray>
+#include <QJsonValue>
 #include <QSet>
 
 namespace {
@@ -33,6 +36,16 @@ bool isLayoutParameter(const QString& key) {
            key == QStringLiteral("collapsed");
 }
 
+bool isValidLayoutParameterValue(const QString& key, const QJsonValue& value) {
+    if (key == QStringLiteral("collapsed")) {
+        return value.isBool();
+    }
+    if (key == QStringLiteral("x") || key == QStringLiteral("y")) {
+        return value.isDouble();
+    }
+    return false;
+}
+
 QJsonObject graphObjectProperties(const QJsonObject& parameters) {
     QJsonObject properties;
     for (auto it = parameters.constBegin(); it != parameters.constEnd(); ++it) {
@@ -46,7 +59,7 @@ QJsonObject graphObjectProperties(const QJsonObject& parameters) {
 QJsonObject layoutNodeProperties(const QJsonObject& parameters) {
     QJsonObject properties;
     for (auto it = parameters.constBegin(); it != parameters.constEnd(); ++it) {
-        if (isLayoutParameter(it.key())) {
+        if (isLayoutParameter(it.key()) && isValidLayoutParameterValue(it.key(), it.value())) {
             properties.insert(it.key(), it.value());
         }
     }
@@ -61,11 +74,85 @@ QJsonArray stringArray(const QStringList& values) {
     return array;
 }
 
-void attachGraphConfigAndLayout(ProjectDocument& document) {
-    if (document.modules.isEmpty()) {
-        return;
+QJsonObject normalizedGraphConfigBase(const ProjectIpInstanceRecord& instance) {
+    QJsonObject graphConfig;
+    if (instance.hasGraphConfig && !instance.graphConfigIsNull) {
+        graphConfig = instance.graphConfig;
+    }
+    graphConfig.insert(QStringLiteral("schema"), ipcraft::schemaids::graphConfigV1);
+    if (!graphConfig.value(QStringLiteral("properties")).isObject()) {
+        graphConfig.insert(QStringLiteral("properties"), QJsonObject{});
+    }
+    if (!graphConfig.value(QStringLiteral("native")).isObject()) {
+        graphConfig.insert(QStringLiteral("native"), QJsonObject{});
+    }
+    return graphConfig;
+}
+
+bool hasGraphView(const QJsonObject& layout) {
+    const QJsonArray views = layout.value(QStringLiteral("views")).toArray();
+    return std::any_of(views.constBegin(), views.constEnd(), [](const QJsonValue& viewValue) {
+        return viewValue.isObject() &&
+               viewValue.toObject().value(QStringLiteral("id")).toString() == QStringLiteral("graph");
+    });
+}
+
+QJsonObject mergeGraphLayoutNode(const QJsonObject& existingNode,
+                                 const QJsonObject& projectedNode) {
+    QJsonObject node = existingNode;
+    for (auto it = projectedNode.constBegin(); it != projectedNode.constEnd(); ++it) {
+        node.insert(it.key(), it.value());
+    }
+    return node;
+}
+
+void mergeGraphLayoutNodes(QJsonObject& layout, const QJsonObject& layoutNodes) {
+    QJsonArray views = layout.value(QStringLiteral("views")).toArray();
+    bool updated = false;
+    for (qsizetype index = 0; index < views.size(); ++index) {
+        if (!views.at(index).isObject()) {
+            continue;
+        }
+        QJsonObject view = views.at(index).toObject();
+        if (view.value(QStringLiteral("id")).toString() != QStringLiteral("graph")) {
+            continue;
+        }
+
+        QJsonObject canvas = view.value(QStringLiteral("canvas")).toObject();
+        const QJsonObject existingNodes = canvas.value(QStringLiteral("nodes")).toObject();
+        QJsonObject mergedNodes;
+        for (auto it = layoutNodes.constBegin(); it != layoutNodes.constEnd(); ++it) {
+            const QJsonObject existingNode = existingNodes.value(it.key()).toObject();
+            mergedNodes.insert(it.key(), mergeGraphLayoutNode(existingNode, it.value().toObject()));
+        }
+        canvas.insert(QStringLiteral("nodes"), mergedNodes);
+        if (!canvas.value(QStringLiteral("connections")).isObject()) {
+            canvas.insert(QStringLiteral("connections"), QJsonObject{});
+        }
+        view.insert(QStringLiteral("canvas"), canvas);
+        views[index] = view;
+        updated = true;
+        break;
     }
 
+    if (!updated && !layoutNodes.isEmpty()) {
+        QJsonObject canvas;
+        canvas.insert(QStringLiteral("nodes"), layoutNodes);
+        canvas.insert(QStringLiteral("connections"), QJsonObject{});
+        QJsonObject view;
+        view.insert(QStringLiteral("id"), QStringLiteral("graph"));
+        view.insert(QStringLiteral("kind"), QStringLiteral("canvas"));
+        view.insert(QStringLiteral("canvas"), canvas);
+        views.append(view);
+        updated = true;
+    }
+
+    if (updated) {
+        layout.insert(QStringLiteral("views"), views);
+    }
+}
+
+void attachGraphConfigAndLayout(ProjectDocument& document) {
     QHash<QString, qsizetype> instanceIndexes;
     for (qsizetype index = 0; index < document.instances.size(); ++index) {
         const ProjectIpInstanceRecord& instance = document.instances.at(index);
@@ -126,6 +213,9 @@ void attachGraphConfigAndLayout(ProjectDocument& document) {
             QJsonObject endpoint;
             endpoint.insert(QStringLiteral("object"), interfaceRef.instanceId);
             endpoint.insert(QStringLiteral("role"), interfaceRef.interfaceId);
+            if (!interfaceRef.properties.isEmpty()) {
+                endpoint.insert(QStringLiteral("properties"), interfaceRef.properties);
+            }
             endpoints.append(endpoint);
         }
 
@@ -140,7 +230,7 @@ void attachGraphConfigAndLayout(ProjectDocument& document) {
                                 ? QStringLiteral("connection")
                                 : connection.connectionClassId);
         relationship.insert(QStringLiteral("endpoints"), endpoints);
-        QJsonObject properties;
+        QJsonObject properties = connection.properties;
         if (!connection.status.trimmed().isEmpty()) {
             properties.insert(QStringLiteral("status"), connection.status);
         }
@@ -153,28 +243,26 @@ void attachGraphConfigAndLayout(ProjectDocument& document) {
         relationshipsByInstance[ownerIndex].append(relationship);
     }
 
-    for (auto it = objectsByInstance.constBegin(); it != objectsByInstance.constEnd(); ++it) {
-        ProjectIpInstanceRecord& instance = document.instances[it.key()];
-        QJsonObject graphConfig;
-        graphConfig.insert(QStringLiteral("schema"), QStringLiteral("ipcraft.graph-config.v1"));
-        graphConfig.insert(QStringLiteral("objects"), it.value());
-        graphConfig.insert(QStringLiteral("relationships"), relationshipsByInstance.value(it.key()));
-        graphConfig.insert(QStringLiteral("properties"), QJsonObject{});
-        graphConfig.insert(QStringLiteral("native"), QJsonObject{});
+    for (qsizetype index = 0; index < document.instances.size(); ++index) {
+        ProjectIpInstanceRecord& instance = document.instances[index];
+        const bool hasEditorProjection = objectsByInstance.contains(index) ||
+                                         relationshipsByInstance.contains(index);
+        const bool hasExistingGraphConfig = instance.hasGraphConfig &&
+                                            !instance.graphConfigIsNull;
+        if (!hasEditorProjection && !hasExistingGraphConfig) {
+            continue;
+        }
+
+        QJsonObject graphConfig = normalizedGraphConfigBase(instance);
+        graphConfig.insert(QStringLiteral("objects"), objectsByInstance.value(index));
+        graphConfig.insert(QStringLiteral("relationships"), relationshipsByInstance.value(index));
         instance.hasGraphConfig = true;
         instance.graphConfigIsNull = false;
         instance.graphConfig = graphConfig;
     }
 
-    if (!layoutNodes.isEmpty()) {
-        QJsonObject canvas;
-        canvas.insert(QStringLiteral("nodes"), layoutNodes);
-        canvas.insert(QStringLiteral("connections"), QJsonObject{});
-        QJsonObject view;
-        view.insert(QStringLiteral("id"), QStringLiteral("graph"));
-        view.insert(QStringLiteral("kind"), QStringLiteral("canvas"));
-        view.insert(QStringLiteral("canvas"), canvas);
-        document.layout.insert(QStringLiteral("views"), QJsonArray{view});
+    if (!layoutNodes.isEmpty() || hasGraphView(document.layout)) {
+        mergeGraphLayoutNodes(document.layout, layoutNodes);
     }
 }
 
