@@ -69,9 +69,42 @@ bool isSafePathKey(const QString& key) {
 }
 
 QString escapedPathKey(const QString& key) {
-    QString escaped = key;
-    escaped.replace(QLatin1Char('\\'), QStringLiteral("\\\\"));
-    escaped.replace(QLatin1Char('"'), QStringLiteral("\\\""));
+    QString escaped;
+    escaped.reserve(key.size());
+    for (const QChar ch : key) {
+        const uint code = ch.unicode();
+        switch (code) {
+        case '\\':
+            escaped += QStringLiteral("\\\\");
+            break;
+        case '"':
+            escaped += QStringLiteral("\\\"");
+            break;
+        case '\b':
+            escaped += QStringLiteral("\\b");
+            break;
+        case '\f':
+            escaped += QStringLiteral("\\f");
+            break;
+        case '\n':
+            escaped += QStringLiteral("\\n");
+            break;
+        case '\r':
+            escaped += QStringLiteral("\\r");
+            break;
+        case '\t':
+            escaped += QStringLiteral("\\t");
+            break;
+        default:
+            if (code < 0x20) {
+                escaped += QStringLiteral("\\u%1")
+                               .arg(code, 4, 16, QLatin1Char('0'));
+            } else {
+                escaped += ch;
+            }
+            break;
+        }
+    }
     return QStringLiteral("[\"%1\"]").arg(escaped);
 }
 
@@ -394,7 +427,7 @@ bool expressionBool(const QJsonObject& expression,
             return false;
         }
         const QJsonValue argsValue = expression.value(QStringLiteral("args"));
-        if (!argsValue.isArray()) {
+        if (!argsValue.isArray() || argsValue.toArray().isEmpty()) {
             addUnsupportedExpression(*diagnostics, path);
             *ok = false;
             return false;
@@ -611,6 +644,23 @@ ipcraft::TableColumnDef parseColumn(const QJsonObject& object,
     return column;
 }
 
+void appendAllowedExtensions(const QJsonArray& values,
+                             const QString& path,
+                             ipcraft::DiagnosticStore& diagnostics,
+                             QStringList* output) {
+    for (qsizetype index = 0; index < values.size(); ++index) {
+        const QJsonValue extension = values.at(index);
+        if (!extension.isString()) {
+            addDiagnostic(diagnostics,
+                          QStringLiteral("config.type_mismatch"),
+                          QStringLiteral("File extension allowlist entries must be strings."),
+                          indexPath(path, index));
+            continue;
+        }
+        output->append(extension.toString());
+    }
+}
+
 } // namespace
 
 namespace ipcraft {
@@ -683,6 +733,7 @@ ConfigSchemaReadResult ConfigSchema::fromJson(const QJsonObject& object) {
 
     QJsonArray tables;
     if (optionalArray(object, QStringLiteral("tables"), QStringLiteral("$.tables"), result.diagnostics, &tables)) {
+        QSet<QString> seen;
         for (qsizetype index = 0; index < tables.size(); ++index) {
             const QString path = indexPath(QStringLiteral("$.tables"), index);
             if (!tables.at(index).isObject()) {
@@ -692,6 +743,13 @@ ConfigSchemaReadResult ConfigSchema::fromJson(const QJsonObject& object) {
             const QJsonObject tableObject = tables.at(index).toObject();
             TableDef table;
             table.id = requiredString(tableObject, QStringLiteral("id"), childPath(path, QStringLiteral("id")), result.diagnostics);
+            if (!table.id.isEmpty() && seen.contains(table.id)) {
+                addDiagnostic(result.diagnostics,
+                              QStringLiteral("config.duplicate_id"),
+                              QStringLiteral("Duplicate table id."),
+                              childPath(path, QStringLiteral("id")));
+            }
+            seen.insert(table.id);
             table.allowAddRemove = optionalBool(tableObject, QStringLiteral("allow_add_remove"), childPath(path, QStringLiteral("allow_add_remove")), result.diagnostics, true);
             table.preserveUnknownColumns = optionalBool(tableObject, QStringLiteral("preserve_unknown_columns"), childPath(path, QStringLiteral("preserve_unknown_columns")), result.diagnostics);
             QJsonArray columns;
@@ -711,6 +769,7 @@ ConfigSchemaReadResult ConfigSchema::fromJson(const QJsonObject& object) {
 
     QJsonArray documents;
     if (optionalArray(object, QStringLiteral("documents"), QStringLiteral("$.documents"), result.diagnostics, &documents)) {
+        QSet<QString> seen;
         for (qsizetype index = 0; index < documents.size(); ++index) {
             const QString path = indexPath(QStringLiteral("$.documents"), index);
             if (!documents.at(index).isObject()) {
@@ -720,6 +779,13 @@ ConfigSchemaReadResult ConfigSchema::fromJson(const QJsonObject& object) {
             const QJsonObject documentObject = documents.at(index).toObject();
             ConfigDocumentDef document;
             document.id = requiredString(documentObject, QStringLiteral("id"), childPath(path, QStringLiteral("id")), result.diagnostics);
+            if (!document.id.isEmpty() && seen.contains(document.id)) {
+                addDiagnostic(result.diagnostics,
+                              QStringLiteral("config.duplicate_id"),
+                              QStringLiteral("Duplicate document id."),
+                              childPath(path, QStringLiteral("id")));
+            }
+            seen.insert(document.id);
             document.format = requiredString(documentObject, QStringLiteral("format"), childPath(path, QStringLiteral("format")), result.diagnostics);
             if (!document.format.isEmpty() && !allowedDocumentFormats().contains(document.format)) {
                 addDiagnostic(result.diagnostics, QStringLiteral("config.document_format_invalid"), QStringLiteral("Unsupported document format."), childPath(path, QStringLiteral("format")));
@@ -733,6 +799,7 @@ ConfigSchemaReadResult ConfigSchema::fromJson(const QJsonObject& object) {
 
     QJsonArray files;
     if (optionalArray(object, QStringLiteral("files"), QStringLiteral("$.files"), result.diagnostics, &files)) {
+        QSet<QString> seen;
         for (qsizetype index = 0; index < files.size(); ++index) {
             const QString path = indexPath(QStringLiteral("$.files"), index);
             if (!files.at(index).isObject()) {
@@ -742,23 +809,28 @@ ConfigSchemaReadResult ConfigSchema::fromJson(const QJsonObject& object) {
             const QJsonObject fileObject = files.at(index).toObject();
             FileInputDef file;
             file.id = requiredString(fileObject, QStringLiteral("id"), childPath(path, QStringLiteral("id")), result.diagnostics);
+            if (!file.id.isEmpty() && seen.contains(file.id)) {
+                addDiagnostic(result.diagnostics,
+                              QStringLiteral("config.duplicate_id"),
+                              QStringLiteral("Duplicate file input id."),
+                              childPath(path, QStringLiteral("id")));
+            }
+            seen.insert(file.id);
             file.kind = optionalString(fileObject, QStringLiteral("kind"), childPath(path, QStringLiteral("kind")), result.diagnostics);
             file.required = optionalBool(fileObject, QStringLiteral("required"), childPath(path, QStringLiteral("required")), result.diagnostics);
             QJsonArray extensions;
             if (optionalArray(fileObject, QStringLiteral("allowed_extensions"), childPath(path, QStringLiteral("allowed_extensions")), result.diagnostics, &extensions)) {
-                for (const QJsonValue& extension : extensions) {
-                    if (extension.isString()) {
-                        file.allowedExtensions.append(extension.toString());
-                    }
-                }
+                appendAllowedExtensions(extensions,
+                                        childPath(path, QStringLiteral("allowed_extensions")),
+                                        result.diagnostics,
+                                        &file.allowedExtensions);
             }
             QJsonArray allowed;
             if (optionalArray(fileObject, QStringLiteral("allowed"), childPath(path, QStringLiteral("allowed")), result.diagnostics, &allowed)) {
-                for (const QJsonValue& extension : allowed) {
-                    if (extension.isString()) {
-                        file.allowedExtensions.append(extension.toString());
-                    }
-                }
+                appendAllowedExtensions(allowed,
+                                        childPath(path, QStringLiteral("allowed")),
+                                        result.diagnostics,
+                                        &file.allowedExtensions);
             }
             result.schema.files.append(file);
         }
@@ -786,6 +858,9 @@ ConfigValidationResult validateConfigBundle(const ConfigSchema& schema,
                                             const ConfigValidationOptions& options) {
     ConfigValidationResult result;
     result.normalized.preserved = bundle.preserved;
+    const QString validationRoot = options.projectRootPath.isEmpty()
+        ? QDir::currentPath()
+        : options.projectRootPath;
 
     QSet<QString> parameterIds;
     for (const ParameterDef& parameter : schema.parameters) {
@@ -852,10 +927,7 @@ ConfigValidationResult validateConfigBundle(const ConfigSchema& schema,
         }
         bool parameterValid = true;
         if (parameter.type == QStringLiteral("path")) {
-            const QString root = options.projectRootPath.isEmpty()
-                ? QDir::currentPath()
-                : options.projectRootPath;
-            if (!isPathConfined(root, value.toString())) {
+            if (!isPathConfined(validationRoot, value.toString())) {
                 addDiagnostic(result.diagnostics,
                               QStringLiteral("config.path_escape"),
                               QStringLiteral("Path parameter must stay inside the project root."),
@@ -903,6 +975,10 @@ ConfigValidationResult validateConfigBundle(const ConfigSchema& schema,
 
         const QJsonArray rows = rowsValue.toArray();
         QJsonArray normalizedRows;
+        QSet<QString> columnIds;
+        for (const TableColumnDef& column : table.columns) {
+            columnIds.insert(column.id);
+        }
         for (qsizetype rowIndex = 0; rowIndex < rows.size(); ++rowIndex) {
             const QString rowPath = indexPath(keyPath(tablePath, QStringLiteral("rows")), rowIndex);
             if (!rows.at(rowIndex).isObject()) {
@@ -915,10 +991,6 @@ ConfigValidationResult validateConfigBundle(const ConfigSchema& schema,
 
             const QJsonObject row = rows.at(rowIndex).toObject();
             QJsonObject normalizedRow = table.preserveUnknownColumns ? row : QJsonObject{};
-            QSet<QString> columnIds;
-            for (const TableColumnDef& column : table.columns) {
-                columnIds.insert(column.id);
-            }
             if (!table.preserveUnknownColumns) {
                 for (auto it = row.constBegin(); it != row.constEnd(); ++it) {
                     if (!columnIds.contains(it.key())) {
@@ -969,15 +1041,23 @@ ConfigValidationResult validateConfigBundle(const ConfigSchema& schema,
     }
 
     for (const ConfigDocumentDef& document : schema.documents) {
-        const QJsonObject documentState = bundle.documents.value(document.id).toObject();
+        const QString documentPath = keyPath(QStringLiteral("$.documents"), document.id);
+        const QJsonValue documentValue = bundle.documents.value(document.id);
+        if (!documentValue.isUndefined() && !documentValue.isObject()) {
+            addDiagnostic(result.diagnostics,
+                          QStringLiteral("config.type_mismatch"),
+                          QStringLiteral("Document state must be an object."),
+                          documentPath);
+            continue;
+        }
+        const QJsonObject documentState = documentValue.toObject();
         QJsonObject normalizedDocument;
         const QString actualFormat = documentState.value(QStringLiteral("format")).toString();
         if (!actualFormat.isEmpty() && actualFormat != document.format) {
             addDiagnostic(result.diagnostics,
                           QStringLiteral("config.document_format_invalid"),
                           QStringLiteral("Document format does not match schema."),
-                          keyPath(keyPath(QStringLiteral("$.documents"), document.id),
-                                  QStringLiteral("format")));
+                          keyPath(documentPath, QStringLiteral("format")));
         } else if (!actualFormat.isEmpty()) {
             normalizedDocument.insert(QStringLiteral("format"), actualFormat);
         }
@@ -992,8 +1072,30 @@ ConfigValidationResult validateConfigBundle(const ConfigSchema& schema,
         result.normalized.documents.insert(document.id, normalizedDocument);
     }
 
+    QSet<QString> fileIds;
     for (const FileInputDef& file : schema.files) {
-        const QJsonObject fileState = bundle.files.value(file.id).toObject();
+        fileIds.insert(file.id);
+    }
+    for (auto it = bundle.files.constBegin(); it != bundle.files.constEnd(); ++it) {
+        if (!fileIds.contains(it.key())) {
+            addDiagnostic(result.diagnostics,
+                          QStringLiteral("config.unknown_file"),
+                          QStringLiteral("File input is not declared by the package schema."),
+                          keyPath(QStringLiteral("$.files"), it.key()));
+        }
+    }
+
+    for (const FileInputDef& file : schema.files) {
+        const QString filePath = keyPath(QStringLiteral("$.files"), file.id);
+        const QJsonValue fileValue = bundle.files.value(file.id);
+        if (!fileValue.isUndefined() && !fileValue.isObject()) {
+            addDiagnostic(result.diagnostics,
+                          QStringLiteral("config.type_mismatch"),
+                          QStringLiteral("File input state must be an object."),
+                          filePath);
+            continue;
+        }
+        const QJsonObject fileState = fileValue.toObject();
         const QString path = fileState.value(QStringLiteral("path")).toString();
         bool fileValid = true;
         if (path.isEmpty()) {
@@ -1001,20 +1103,15 @@ ConfigValidationResult validateConfigBundle(const ConfigSchema& schema,
                 addDiagnostic(result.diagnostics,
                               QStringLiteral("config.required_missing"),
                               QStringLiteral("Required file input is missing."),
-                              keyPath(keyPath(QStringLiteral("$.files"), file.id),
-                                      QStringLiteral("path")));
+                              keyPath(filePath, QStringLiteral("path")));
             }
             continue;
         }
-        const QString root = options.projectRootPath.isEmpty()
-            ? QDir::currentPath()
-            : options.projectRootPath;
-        if (!isPathConfined(root, path)) {
+        if (!isPathConfined(validationRoot, path)) {
             addDiagnostic(result.diagnostics,
                           QStringLiteral("config.path_escape"),
                           QStringLiteral("File input path must stay inside the project root."),
-                          keyPath(keyPath(QStringLiteral("$.files"), file.id),
-                                  QStringLiteral("path")));
+                          keyPath(filePath, QStringLiteral("path")));
             fileValid = false;
         }
         if (!file.allowedExtensions.isEmpty()) {
@@ -1023,8 +1120,7 @@ ConfigValidationResult validateConfigBundle(const ConfigSchema& schema,
                 addDiagnostic(result.diagnostics,
                               QStringLiteral("config.file_extension_invalid"),
                               QStringLiteral("File input extension is not allowed."),
-                              keyPath(keyPath(QStringLiteral("$.files"), file.id),
-                                      QStringLiteral("path")));
+                              keyPath(filePath, QStringLiteral("path")));
                 fileValid = false;
             }
         }

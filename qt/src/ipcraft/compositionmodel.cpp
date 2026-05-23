@@ -159,9 +159,11 @@ QString normalizeAlias(QString value, const QHash<QString, QString>& aliases) {
         }
 
         bool matched = false;
-        for (auto it = aliases.cbegin(); it != aliases.cend(); ++it) {
-            if (QString::compare(it.key(), value, Qt::CaseInsensitive) == 0) {
-                const QString next = it.value().trimmed();
+        QStringList keys = aliases.keys();
+        keys.sort(Qt::CaseInsensitive);
+        for (const QString& key : keys) {
+            if (QString::compare(key, value, Qt::CaseInsensitive) == 0) {
+                const QString next = aliases.value(key).trimmed();
                 if (next != value) {
                     value = next;
                 }
@@ -751,6 +753,24 @@ bool validateRequiredGraphString(const QJsonObject& object,
     return false;
 }
 
+bool validateOptionalGraphObject(const QJsonObject& object,
+                                 const QString& key,
+                                 const QString& path,
+                                 DiagnosticStore& diagnostics) {
+    const QJsonValue value = object.value(key);
+    if (value.isUndefined()) {
+        return true;
+    }
+    if (value.isObject()) {
+        return true;
+    }
+    addGraphDiagnostic(diagnostics,
+                       QStringLiteral("graph_config.type_mismatch"),
+                       QStringLiteral("Graph config field must be an object."),
+                       childPath(path, key));
+    return false;
+}
+
 bool validateGraphConfigObjectShape(const QJsonObject& object,
                                     qsizetype objectIndex,
                                     DiagnosticStore& diagnostics) {
@@ -772,6 +792,7 @@ bool validateGraphConfigObjectShape(const QJsonObject& object,
     }
     ok = validateRequiredGraphString(object, QStringLiteral("id"), objectPath, diagnostics) && ok;
     ok = validateRequiredGraphString(object, QStringLiteral("type"), objectPath, diagnostics) && ok;
+    ok = validateOptionalGraphObject(object, QStringLiteral("properties"), objectPath, diagnostics) && ok;
     return ok;
 }
 
@@ -795,6 +816,7 @@ bool validateGraphConfigEndpointShape(const QJsonObject& object,
     }
     ok = validateRequiredGraphString(object, QStringLiteral("object"), endpointPath, diagnostics) && ok;
     ok = validateRequiredGraphString(object, QStringLiteral("role"), endpointPath, diagnostics) && ok;
+    ok = validateOptionalGraphObject(object, QStringLiteral("properties"), endpointPath, diagnostics) && ok;
     return ok;
 }
 
@@ -820,6 +842,7 @@ bool validateGraphConfigRelationshipShape(const QJsonObject& object,
     }
     ok = validateRequiredGraphString(object, QStringLiteral("id"), relationshipPath, diagnostics) && ok;
     ok = validateRequiredGraphString(object, QStringLiteral("type"), relationshipPath, diagnostics) && ok;
+    ok = validateOptionalGraphObject(object, QStringLiteral("properties"), relationshipPath, diagnostics) && ok;
     if (!object.value(QStringLiteral("endpoints")).isArray()) {
         addGraphDiagnostic(diagnostics,
                            QStringLiteral("graph_config.type_mismatch"),
@@ -897,6 +920,15 @@ GraphConfigReadResult GraphConfig::fromJson(const QJsonObject& object) {
                            QStringLiteral("Graph config schema is not supported."),
                            QStringLiteral("$.schema"));
     }
+
+    validateOptionalGraphObject(object,
+                                QStringLiteral("properties"),
+                                QStringLiteral("$"),
+                                result.diagnostics);
+    validateOptionalGraphObject(object,
+                                QStringLiteral("native"),
+                                QStringLiteral("$"),
+                                result.diagnostics);
 
     const QJsonValue objectsValue = object.value(QStringLiteral("objects"));
     if (!objectsValue.isArray()) {

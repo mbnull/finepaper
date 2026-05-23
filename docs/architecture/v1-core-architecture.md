@@ -73,7 +73,7 @@ The runtime loader resolves exact `{id, version}` matches. If a package id exist
 
 Clock domains, DTC domains, DDR lanes, SerDes tuning, and IP-specific dataflow rules are config or native data unless an extension/plugin explicitly promotes them.
 
-Validation rejects any `ConfigBundle.parameters` key not declared by `ConfigSchema.parameters` with `config.unknown_parameter`. Validation rejects any `ConfigBundle.documents` key not declared by `ConfigSchema.documents` with `config.unknown_document`. Table rows reject undeclared columns with `config.unknown_table_column` unless the table declares `preserve_unknown_columns: true`; preserved columns remain in normalized config only when that flag is true.
+Validation rejects any `ConfigBundle.parameters` key not declared by `ConfigSchema.parameters` with `config.unknown_parameter`. Validation rejects any `ConfigBundle.documents` key not declared by `ConfigSchema.documents` with `config.unknown_document`. Validation rejects any `ConfigBundle.files` key not declared by `ConfigSchema.files` with `config.unknown_file`. Table rows reject undeclared columns with `config.unknown_table_column` unless the table declares `preserve_unknown_columns: true`; preserved columns remain in normalized config only when that flag is true.
 
 File input declarations may use `allowed_extensions` or the shorthand `allowed`; both are arrays of extension strings such as `.xdc`. Invalid file values emit `config.file_extension_invalid` at the file path value location.
 

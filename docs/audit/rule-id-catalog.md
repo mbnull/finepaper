@@ -40,6 +40,7 @@ The catalog covers diagnostics surfaced through `ipcraft.project.v1`, `ipcraft.p
 | config.unknown_parameter | error | core | config | parameter/document_path | Config validation |
 | config.unknown_table_column | error | core | config | table_cell/document_path | Table config |
 | config.unknown_document | error | core | config | document_path | Config documents |
+| config.unknown_file | error | core | config | document_path | File inputs |
 | config.enum_invalid | error | core | config | parameter/document_path | Config validation |
 | config.range_invalid | error | core | config | parameter/document_path | Config validation |
 | config.path_escape | error | core | config | parameter/document_path | Config path security |

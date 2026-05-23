@@ -317,6 +317,21 @@ void testExpressionRejectsFileProcessNetworkAndEnvironmentAccess() {
                       QStringLiteral("config.expression_unsupported"),
                       QStringLiteral("$.parameters[0].visible_when")),
             "empty expression object should be diagnosed at its use site");
+
+    const ipcraft::ConfigSchemaReadResult emptyArgsResult =
+        ipcraft::ConfigSchema::fromJson(schemaWithParameters(QJsonArray{
+            QJsonObject{{QStringLiteral("id"), QStringLiteral("empty_and")},
+                        {QStringLiteral("type"), QStringLiteral("bool")},
+                        {QStringLiteral("visible_when"), QJsonObject{
+                            {QStringLiteral("op"), QStringLiteral("and")},
+                            {QStringLiteral("args"), QJsonArray{}}
+                        }}}
+        }));
+    require(!emptyArgsResult.ok, "and/or expressions require non-empty args");
+    require(hasRuleAt(emptyArgsResult.diagnostics,
+                      QStringLiteral("config.expression_unsupported"),
+                      QStringLiteral("$.parameters[0].visible_when")),
+            "empty and/or args should be diagnosed");
 }
 
 void testLiteralBooleanExpressionsAreAccepted() {
@@ -406,6 +421,85 @@ void testUnknownConfigEntriesAreRejected() {
                       QStringLiteral("config.unknown_document"),
                       QStringLiteral("$.documents.unknown_doc")),
             "unknown document should be diagnosed");
+}
+
+void testMalformedDocumentAndFileStatesAreRejected() {
+    const ipcraft::ConfigSchemaReadResult schemaResult =
+        ipcraft::ConfigSchema::fromJson(QJsonObject{
+            {QStringLiteral("documents"), QJsonArray{
+                QJsonObject{{QStringLiteral("id"), QStringLiteral("system")},
+                            {QStringLiteral("format"), QStringLiteral("json")}}
+            }},
+            {QStringLiteral("files"), QJsonArray{
+                QJsonObject{{QStringLiteral("id"), QStringLiteral("constraints")}}
+            }}
+        });
+    require(schemaResult.ok, "document/file schema should parse");
+
+    const ipcraft::ConfigValidationResult result =
+        ipcraft::validateConfigBundle(schemaResult.schema,
+                                      ipcraft::ConfigBundle::fromJson(QJsonObject{
+                                          {QStringLiteral("documents"), QJsonObject{
+                                              {QStringLiteral("system"), QStringLiteral("bad")}
+                                          }},
+                                          {QStringLiteral("files"), QJsonObject{
+                                              {QStringLiteral("constraints"), true},
+                                              {QStringLiteral("unknown"), QJsonObject{
+                                                  {QStringLiteral("path"), QStringLiteral("input/top.xdc")}
+                                              }}
+                                          }}
+                                      }));
+    require(!result.ok, "malformed document/file states should fail validation");
+    require(hasRuleAt(result.diagnostics,
+                      QStringLiteral("config.type_mismatch"),
+                      QStringLiteral("$.documents.system")),
+            "non-object document state should be diagnosed");
+    require(hasRuleAt(result.diagnostics,
+                      QStringLiteral("config.type_mismatch"),
+                      QStringLiteral("$.files.constraints")),
+            "non-object file state should be diagnosed");
+    require(hasRuleAt(result.diagnostics,
+                      QStringLiteral("config.unknown_file"),
+                      QStringLiteral("$.files.unknown")),
+            "unknown file config entry should be diagnosed");
+}
+
+void testConfigSchemaRejectsDuplicateIdsAndBadFileAllowlistEntries() {
+    const ipcraft::ConfigSchemaReadResult result =
+        ipcraft::ConfigSchema::fromJson(QJsonObject{
+            {QStringLiteral("tables"), QJsonArray{
+                QJsonObject{{QStringLiteral("id"), QStringLiteral("regions")}},
+                QJsonObject{{QStringLiteral("id"), QStringLiteral("regions")}}
+            }},
+            {QStringLiteral("documents"), QJsonArray{
+                QJsonObject{{QStringLiteral("id"), QStringLiteral("system")},
+                            {QStringLiteral("format"), QStringLiteral("json")}},
+                QJsonObject{{QStringLiteral("id"), QStringLiteral("system")},
+                            {QStringLiteral("format"), QStringLiteral("json")}}
+            }},
+            {QStringLiteral("files"), QJsonArray{
+                QJsonObject{{QStringLiteral("id"), QStringLiteral("constraints")},
+                            {QStringLiteral("allowed_extensions"), QJsonArray{QStringLiteral(".xdc"), 123}}},
+                QJsonObject{{QStringLiteral("id"), QStringLiteral("constraints")}}
+            }}
+        });
+    require(!result.ok, "duplicate ids and malformed allowlist entries should fail schema parse");
+    require(hasRuleAt(result.diagnostics,
+                      QStringLiteral("config.duplicate_id"),
+                      QStringLiteral("$.tables[1].id")),
+            "duplicate table id should be diagnosed");
+    require(hasRuleAt(result.diagnostics,
+                      QStringLiteral("config.duplicate_id"),
+                      QStringLiteral("$.documents[1].id")),
+            "duplicate document id should be diagnosed");
+    require(hasRuleAt(result.diagnostics,
+                      QStringLiteral("config.duplicate_id"),
+                      QStringLiteral("$.files[1].id")),
+            "duplicate file id should be diagnosed");
+    require(hasRuleAt(result.diagnostics,
+                      QStringLiteral("config.type_mismatch"),
+                      QStringLiteral("$.files[0].allowed_extensions[1]")),
+            "non-string file allowlist entry should be diagnosed");
 }
 
 void testTableAndDocumentUnknownFieldsPreserveWhenDeclared() {
@@ -750,6 +844,8 @@ int main(int argc, char** argv) {
         testExpressionRejectsFileProcessNetworkAndEnvironmentAccess();
         testLiteralBooleanExpressionsAreAccepted();
         testUnknownConfigEntriesAreRejected();
+        testMalformedDocumentAndFileStatesAreRejected();
+        testConfigSchemaRejectsDuplicateIdsAndBadFileAllowlistEntries();
         testTableAndDocumentUnknownFieldsPreserveWhenDeclared();
         testPathParametersRejectTraversal();
         testDiagnosticPathsUseStableEscapingForArbitraryIds();

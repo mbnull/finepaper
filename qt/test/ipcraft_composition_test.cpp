@@ -617,6 +617,58 @@ void testGraphConfigRejectsUnknownTopLevelFields() {
             "unknown graph-config root field should emit graph_config.unknown_top_level_field");
 }
 
+void testGraphConfigRejectsMalformedPropertiesAndNative() {
+    const QJsonObject graphJson{
+        {QStringLiteral("schema"), ipcraft::schemaids::graphConfigV1},
+        {QStringLiteral("objects"), QJsonArray{
+            QJsonObject{{QStringLiteral("id"), QStringLiteral("obj0")},
+                        {QStringLiteral("type"), QStringLiteral("vendor.node")},
+                        {QStringLiteral("properties"), true}},
+            QJsonObject{{QStringLiteral("id"), QStringLiteral("obj1")},
+                        {QStringLiteral("type"), QStringLiteral("vendor.node")}}
+        }},
+        {QStringLiteral("relationships"), QJsonArray{
+            QJsonObject{
+                {QStringLiteral("id"), QStringLiteral("rel0")},
+                {QStringLiteral("type"), QStringLiteral("vendor.link")},
+                {QStringLiteral("endpoints"), QJsonArray{
+                    QJsonObject{{QStringLiteral("object"), QStringLiteral("obj0")},
+                                {QStringLiteral("role"), QStringLiteral("source")},
+                                {QStringLiteral("properties"), QStringLiteral("bad")}},
+                    QJsonObject{{QStringLiteral("object"), QStringLiteral("obj1")},
+                                {QStringLiteral("role"), QStringLiteral("target")}}
+                }},
+                {QStringLiteral("properties"), 1}
+            }
+        }},
+        {QStringLiteral("properties"), false},
+        {QStringLiteral("native"), QJsonArray{}}
+    };
+
+    const ipcraft::GraphConfigReadResult readResult = ipcraft::GraphConfig::fromJson(graphJson);
+    require(!readResult.ok, "graph-config should reject malformed properties/native values");
+    require(hasRuleAt(readResult.diagnostics,
+                      QStringLiteral("graph_config.type_mismatch"),
+                      QStringLiteral("$.objects[0].properties")),
+            "object properties should be object-valued");
+    require(hasRuleAt(readResult.diagnostics,
+                      QStringLiteral("graph_config.type_mismatch"),
+                      QStringLiteral("$.relationships[0].properties")),
+            "relationship properties should be object-valued");
+    require(hasRuleAt(readResult.diagnostics,
+                      QStringLiteral("graph_config.type_mismatch"),
+                      QStringLiteral("$.relationships[0].endpoints[0].properties")),
+            "endpoint properties should be object-valued");
+    require(hasRuleAt(readResult.diagnostics,
+                      QStringLiteral("graph_config.type_mismatch"),
+                      QStringLiteral("$.properties")),
+            "top-level properties should be object-valued");
+    require(hasRuleAt(readResult.diagnostics,
+                      QStringLiteral("graph_config.type_mismatch"),
+                      QStringLiteral("$.native")),
+            "top-level native should be object-valued");
+}
+
 void testGraphConfigRejectsMalformedObjects() {
     const QJsonObject graphJson{
         {QStringLiteral("schema"), ipcraft::schemaids::graphConfigV1},
@@ -720,6 +772,7 @@ int main(int argc, char** argv) {
         testGraphConfigRejectsDuplicateAndUnknownEndpointObjects();
         testGraphConfigRejectsDuplicateRelationships();
         testGraphConfigRejectsUnknownTopLevelFields();
+        testGraphConfigRejectsMalformedPropertiesAndNative();
         testGraphConfigRejectsMalformedObjects();
         testGraphConfigRejectsOldSourceTargetShape();
     } catch (const std::exception& error) {

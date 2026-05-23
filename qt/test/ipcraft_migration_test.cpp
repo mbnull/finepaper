@@ -260,6 +260,23 @@ void testMigrateProjectRejectsUnsupportedTarget() {
             "unsupported migration target should emit migration.unsupported_target");
 }
 
+void testMigrateProjectRejectsDirectoryInputWithoutOpening() {
+    QTemporaryDir temp;
+    require(temp.isValid(), "temp dir should be valid");
+
+    int exitCode = 0;
+    const QJsonObject result = runCliJson({QStringLiteral("migrate-project"),
+                                           temp.path(),
+                                           QStringLiteral("--to"),
+                                           ipcraft::schemaids::projectV1},
+                                          &exitCode);
+    require(exitCode != 0, "directory migration input should fail");
+    require(hasRule(ipcraft::DiagnosticStore::fromJson(
+                        result.value(QStringLiteral("diagnostics")).toObject()),
+                    QStringLiteral("migration.invalid_input")),
+            "non-file migration input should emit migration.invalid_input");
+}
+
 void testMigratePreservesOpaqueLegacyStateWithoutInstances() {
     QJsonObject legacy{
         {QStringLiteral("schema"), QStringLiteral("v1")},
@@ -390,6 +407,7 @@ int main(int argc, char** argv) {
         testMigrateProjectNormalizesInputDiagnostics();
         testMigrateProjectRejectsUnsupportedSchemaWithMigrationRule();
         testMigrateProjectRejectsUnsupportedTarget();
+        testMigrateProjectRejectsDirectoryInputWithoutOpening();
         testMigratePreservesOpaqueLegacyStateWithoutInstances();
         testMigratePreservesOldIpcoreStateUnderMigrationPreserved();
         testMigrateMovesXYCollapsedIntoLayout();

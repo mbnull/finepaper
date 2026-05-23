@@ -676,13 +676,13 @@ void validateGraphConfigProperties(const QJsonObject& graphConfig,
                       childPath(path, QStringLiteral("schema")));
     }
 
+    QSet<QString> objectIds;
     QJsonArray objects;
     if (optionalArray(graphConfig,
                       QStringLiteral("objects"),
                       childPath(path, QStringLiteral("objects")),
                       diagnostics,
                       &objects)) {
-        QSet<QString> objectIds;
         for (qsizetype index = 0; index < objects.size(); ++index) {
             const QString objectPath = QStringLiteral("%1.objects[%2]").arg(path).arg(index);
             if (!objects.at(index).isObject()) {
@@ -789,10 +789,16 @@ void validateGraphConfigProperties(const QJsonObject& graphConfig,
                                  QStringLiteral("properties")},
                                 endpointPath,
                                 diagnostics);
-                    requiredString(endpoint,
-                                   QStringLiteral("object"),
-                                   childPath(endpointPath, QStringLiteral("object")),
-                                   diagnostics);
+                    const QString objectId = requiredString(endpoint,
+                                                            QStringLiteral("object"),
+                                                            childPath(endpointPath, QStringLiteral("object")),
+                                                            diagnostics);
+                    if (!objectId.isEmpty() && !objectIds.contains(objectId)) {
+                        addDiagnostic(diagnostics,
+                                      QStringLiteral("package.invalid_value"),
+                                      QStringLiteral("Graph relationship endpoint object must reference a declared graph object."),
+                                      childPath(endpointPath, QStringLiteral("object")));
+                    }
                     requiredString(endpoint,
                                    QStringLiteral("role"),
                                    childPath(endpointPath, QStringLiteral("role")),
@@ -1122,6 +1128,7 @@ QHash<QString, QString> stringMap(const QJsonObject& object,
                                   const QString& path,
                                   ipcraft::DiagnosticStore& diagnostics) {
     QHash<QString, QString> result;
+    QHash<QString, QString> normalizedValues;
     for (auto it = object.constBegin(); it != object.constEnd(); ++it) {
         if (!it.value().isString() || it.value().toString().trimmed().isEmpty()) {
             addDiagnostic(diagnostics,
@@ -1130,7 +1137,18 @@ QHash<QString, QString> stringMap(const QJsonObject& object,
                           childPath(path, it.key()));
             continue;
         }
-        result.insert(it.key(), it.value().toString());
+        const QString value = it.value().toString();
+        const QString normalizedKey = it.key().toLower();
+        if (normalizedValues.contains(normalizedKey) &&
+            normalizedValues.value(normalizedKey) != value) {
+            addDiagnostic(diagnostics,
+                          QStringLiteral("package.invalid_value"),
+                          QStringLiteral("Alias keys that differ only by case must map to the same value."),
+                          childPath(path, it.key()));
+            continue;
+        }
+        normalizedValues.insert(normalizedKey, value);
+        result.insert(it.key(), value);
     }
     return result;
 }

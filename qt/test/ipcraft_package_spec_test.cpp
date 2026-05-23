@@ -404,6 +404,56 @@ void testConnectionRulesRejectMalformedCompatibility() {
             "invalid compatibility arity should be diagnosed");
 }
 
+void testConnectionRulesRejectAliasCaseCollisionsAndUnknownGraphEndpoints() {
+    QTemporaryDir temp;
+    require(temp.isValid(), "temporary directory should be valid");
+    QDir root(temp.path());
+
+    QJsonObject spec = minimalPackageSpec();
+    spec.insert(QStringLiteral("extensions"), QJsonArray{
+        QStringLiteral("ipcraft.composition"),
+        QStringLiteral("ipcraft.graph_config")
+    });
+    spec.insert(QStringLiteral("connection_rules"), QJsonObject{
+        {QStringLiteral("protocol_aliases"), QJsonObject{
+            {QStringLiteral("AXI"), QStringLiteral("axi4")},
+            {QStringLiteral("axi"), QStringLiteral("axi3")}
+        }}
+    });
+    spec.insert(QStringLiteral("graph_config"), QJsonObject{
+        {QStringLiteral("schema"), ipcraft::schemaids::graphConfigV1},
+        {QStringLiteral("objects"), QJsonArray{
+            QJsonObject{{QStringLiteral("id"), QStringLiteral("obj0")},
+                        {QStringLiteral("type"), QStringLiteral("vendor.node")}}
+        }},
+        {QStringLiteral("relationships"), QJsonArray{
+            QJsonObject{
+                {QStringLiteral("id"), QStringLiteral("rel0")},
+                {QStringLiteral("type"), QStringLiteral("vendor.link")},
+                {QStringLiteral("endpoints"), QJsonArray{
+                    QJsonObject{{QStringLiteral("object"), QStringLiteral("obj0")},
+                                {QStringLiteral("role"), QStringLiteral("source")}},
+                    QJsonObject{{QStringLiteral("object"), QStringLiteral("missing")},
+                                {QStringLiteral("role"), QStringLiteral("target")}}
+                }}
+            }
+        }}
+    });
+    writePackage(root, spec);
+
+    const ipcraft::PackageSpecReadResult result =
+        ipcraft::PackageSpecReader().readPackageRoot(root.absolutePath());
+    require(!result.ok, "alias collisions and unknown graph endpoint objects should fail");
+    require(hasPackageParserDiagnosticAt(result.diagnostics,
+                                         QStringLiteral("package.invalid_value"),
+                                         QStringLiteral("$.connection_rules.protocol_aliases.axi")),
+            "case-folded alias collision should be diagnosed");
+    require(hasPackageParserDiagnosticAt(result.diagnostics,
+                                         QStringLiteral("package.invalid_value"),
+                                         QStringLiteral("$.graph_config.relationships[0].endpoints[1].object")),
+            "package graph_config endpoint should reference a declared object");
+}
+
 void testFlowRequiresExplicitScope() {
     QTemporaryDir temp;
     require(temp.isValid(), "temporary directory should be valid");
@@ -749,6 +799,7 @@ int main(int argc, char** argv) {
         testDuplicateTableIdsAreRejected();
         testConnectionRulesParseAliasesAndCompatibility();
         testConnectionRulesRejectMalformedCompatibility();
+        testConnectionRulesRejectAliasCaseCollisionsAndUnknownGraphEndpoints();
         testFlowRequiresExplicitScope();
         testPluginMetadataIsSeparateFromExtensions();
         testGraphConfigRequiresExplicitExtension();

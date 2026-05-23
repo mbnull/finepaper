@@ -277,9 +277,7 @@ QHash<QString, int> moduleCountByScope(const QJsonArray& modules) {
 void appendObject(QHash<QString, QJsonArray>* arrays,
                   const QString& key,
                   const QJsonObject& object) {
-    QJsonArray array = arrays->value(key);
-    array.append(object);
-    arrays->insert(key, array);
+    (*arrays)[key].append(object);
 }
 
 QJsonObject graphObjectFromModule(const QJsonObject& module) {
@@ -714,15 +712,22 @@ Diagnostic migrationDiagnostic(const QString& ruleId,
 ProjectMigrationResult ProjectMigrator::migrateFile(const QString& path,
                                                     const QString& targetSchema) {
     ProjectMigrationResult result;
-    QFile file(path);
-    if (!file.open(QIODevice::ReadOnly)) {
+    const QFileInfo fileInfo(path);
+    if (!fileInfo.exists()) {
         appendFileDiagnostic(result.diagnostics,
                              QStringLiteral("migration.input_missing"),
                              QStringLiteral("Could not open project file for migration."),
                              path);
         return result;
     }
-    if (file.size() > kMaxProjectFileBytes) {
+    if (!fileInfo.isFile()) {
+        appendFileDiagnostic(result.diagnostics,
+                             QStringLiteral("migration.invalid_input"),
+                             QStringLiteral("Migration input must be a regular file."),
+                             path);
+        return result;
+    }
+    if (fileInfo.size() > kMaxProjectFileBytes) {
         appendFileDiagnostic(result.diagnostics,
                              QStringLiteral("migration.invalid_input"),
                              QStringLiteral("Project file is too large for migration."),
@@ -730,8 +735,25 @@ ProjectMigrationResult ProjectMigrator::migrateFile(const QString& path,
         return result;
     }
 
+    QFile file(fileInfo.absoluteFilePath());
+    if (!file.open(QIODevice::ReadOnly)) {
+        appendFileDiagnostic(result.diagnostics,
+                             QStringLiteral("migration.input_missing"),
+                             QStringLiteral("Could not open project file for migration."),
+                             path);
+        return result;
+    }
+
+    const QByteArray bytes = file.read(kMaxProjectFileBytes + 1);
+    if (bytes.size() > kMaxProjectFileBytes) {
+        appendFileDiagnostic(result.diagnostics,
+                             QStringLiteral("migration.invalid_input"),
+                             QStringLiteral("Project file is too large for migration."),
+                             path);
+        return result;
+    }
     QJsonParseError parseError;
-    const QJsonDocument json = QJsonDocument::fromJson(file.readAll(), &parseError);
+    const QJsonDocument json = QJsonDocument::fromJson(bytes, &parseError);
     if (parseError.error != QJsonParseError::NoError || !json.isObject()) {
         appendFileDiagnostic(result.diagnostics,
                              QStringLiteral("migration.invalid_input"),
