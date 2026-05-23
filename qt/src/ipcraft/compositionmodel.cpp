@@ -117,7 +117,7 @@ QString indexPath(const QString& base, qsizetype index) {
 }
 
 QString childPath(const QString& base, const QString& child) {
-    return QStringLiteral("%1.%2").arg(base, child);
+    return base + QStringLiteral(".") + child;
 }
 
 QString endpointPath(qsizetype connectionIndex, qsizetype endpointIndex, const QString& field) {

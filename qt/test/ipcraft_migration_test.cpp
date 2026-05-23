@@ -24,8 +24,8 @@ void require(bool condition, const char* message) {
 
 QString writeJson(const QString& path, const QJsonObject& object) {
     QFile file(path);
-    require(file.open(QIODevice::WriteOnly | QIODevice::Truncate),
-            "fixture should open for writing");
+    bool opened = file.open(QIODevice::WriteOnly | QIODevice::Truncate);
+    require(opened, "fixture should open for writing");
     const QByteArray bytes = QJsonDocument(object).toJson(QJsonDocument::Indented);
     require(file.write(bytes) == bytes.size(), "fixture should write");
     return path;
@@ -33,8 +33,8 @@ QString writeJson(const QString& path, const QJsonObject& object) {
 
 QString writeFile(const QString& path, const QByteArray& content) {
     QFile file(path);
-    require(file.open(QIODevice::WriteOnly | QIODevice::Truncate),
-            "fixture should open for writing");
+    bool opened = file.open(QIODevice::WriteOnly | QIODevice::Truncate);
+    require(opened, "fixture should open for writing");
     require(file.write(content) == content.size(), "fixture should write");
     return path;
 }
@@ -278,7 +278,7 @@ void testMigrateProjectRejectsDirectoryInputWithoutOpening() {
 }
 
 void testMigratePreservesOpaqueLegacyStateWithoutInstances() {
-    QJsonObject legacy{
+    QJsonObject legacy = {
         {QStringLiteral("schema"), QStringLiteral("v1")},
         {QStringLiteral("project"), QJsonObject{{QStringLiteral("name"), QStringLiteral("Opaque Legacy")}}},
         {QStringLiteral("ipcore_state"), QJsonArray{

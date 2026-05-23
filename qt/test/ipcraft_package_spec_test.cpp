@@ -24,8 +24,8 @@ void require(bool condition, const char* message) {
 
 void writeFile(const QString& path, const QByteArray& content) {
     QFile file(path);
-    require(file.open(QIODevice::WriteOnly | QIODevice::Truncate),
-            "failed to open fixture for writing");
+    bool opened = file.open(QIODevice::WriteOnly | QIODevice::Truncate);
+    require(opened, "failed to open fixture for writing");
     require(file.write(content) == content.size(), "failed to write fixture");
 }
 

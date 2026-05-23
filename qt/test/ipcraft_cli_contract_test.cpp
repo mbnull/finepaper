@@ -136,14 +136,14 @@ QJsonObject graphConfigJson() {
 }
 
 QJsonObject packageJson(QJsonArray emitters = {}, QJsonArray flows = {}, QJsonArray artifacts = {}) {
-    QJsonArray extensions{
+    QJsonArray extensions = {
         QStringLiteral("ipcraft.config.params"),
         QStringLiteral("ipcraft.emitters"),
         QStringLiteral("ipcraft.flows"),
         QStringLiteral("ipcraft.artifacts"),
         QStringLiteral("ipcraft.graph_config")
     };
-    QJsonObject object{
+    QJsonObject object = {
         {QStringLiteral("schema"), ipcraft::schemaids::packageV1},
         {QStringLiteral("id"), QStringLiteral("vendor.example.simple")},
         {QStringLiteral("version"), QStringLiteral("1.0.0")},
@@ -172,7 +172,8 @@ QString writeJson(const QString& path, const QJsonObject& object) {
     QFileInfo info(path);
     require(QDir().mkpath(info.absolutePath()), "fixture directory should be created");
     QFile file(path);
-    require(file.open(QIODevice::WriteOnly | QIODevice::Truncate), "fixture should open");
+    bool opened = file.open(QIODevice::WriteOnly | QIODevice::Truncate);
+    require(opened, "fixture should open");
     const QByteArray bytes = QJsonDocument(object).toJson(QJsonDocument::Indented);
     require(file.write(bytes) == bytes.size(), "fixture should write");
     return path;
@@ -182,7 +183,8 @@ void writeExecutable(const QString& path, const QByteArray& script) {
     writeJson(QFileInfo(path).absoluteDir().filePath(QStringLiteral(".keep.json")), QJsonObject{});
     QFile::remove(QFileInfo(path).absoluteDir().filePath(QStringLiteral(".keep.json")));
     QFile file(path);
-    require(file.open(QIODevice::WriteOnly | QIODevice::Truncate), "script should open");
+    bool opened = file.open(QIODevice::WriteOnly | QIODevice::Truncate);
+    require(opened, "script should open");
     require(file.write(script) == script.size(), "script should write");
     file.close();
     require(QFile::setPermissions(path,

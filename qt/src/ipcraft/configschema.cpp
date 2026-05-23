@@ -56,11 +56,11 @@ bool isSafePathKey(const QString& key) {
     if (key.isEmpty()) {
         return false;
     }
-    const QChar first = key.front();
+    const auto first = key.front();
     if (!(first.isLetter() || first == QLatin1Char('_'))) {
         return false;
     }
-    for (const QChar ch : key) {
+    for (const auto ch : key) {
         if (!(ch.isLetterOrNumber() || ch == QLatin1Char('_'))) {
             return false;
         }
@@ -71,7 +71,7 @@ bool isSafePathKey(const QString& key) {
 QString escapedPathKey(const QString& key) {
     QString escaped;
     escaped.reserve(key.size());
-    for (const QChar ch : key) {
+    for (const auto ch : key) {
         const uint code = ch.unicode();
         switch (code) {
         case '\\':
