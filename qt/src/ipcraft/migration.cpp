@@ -121,6 +121,9 @@ bool readPackageVersions(const QJsonObject& root,
                          QHash<QString, QString>* versions,
                          ipcraft::DiagnosticStore& diagnostics) {
     const QJsonValue ipcoresValue = root.value(QStringLiteral("ipcores"));
+    if (ipcoresValue.isUndefined()) {
+        return true;
+    }
     if (!ipcoresValue.isArray()) {
         appendDiagnostic(diagnostics,
                          QStringLiteral("migration.unsupported_legacy_content"),
@@ -168,6 +171,9 @@ bool readLegacyInstances(const QJsonObject& root,
                          QHash<QString, qsizetype>* instanceIndexByScope,
                          ipcraft::DiagnosticStore& diagnostics) {
     const QJsonValue stateValue = root.value(QStringLiteral("ipcore_state"));
+    if (stateValue.isUndefined()) {
+        return true;
+    }
     if (!stateValue.isArray()) {
         appendDiagnostic(diagnostics,
                          QStringLiteral("migration.unsupported_legacy_content"),
@@ -187,20 +193,22 @@ bool readLegacyInstances(const QJsonObject& root,
             return false;
         }
         const QJsonObject stateEntry = states.at(index).toObject();
-        if (!isNonEmptyString(stateEntry.value(QStringLiteral("ipcore"))) ||
-            !isNonEmptyString(stateEntry.value(QStringLiteral("instance"))) ||
-            !isNonEmptyString(stateEntry.value(QStringLiteral("schema"))) ||
-            !stateEntry.value(QStringLiteral("state")).isObject()) {
+        if (!isNonEmptyString(stateEntry.value(QStringLiteral("schema")))) {
             appendDiagnostic(diagnostics,
                              QStringLiteral("migration.unsupported_legacy_content"),
-                             QStringLiteral("Legacy ipcore_state requires ipcore, instance, schema, and object state."),
+                             QStringLiteral("Legacy ipcore_state entries require schema."),
                              QStringLiteral("$.ipcore_state[%1]").arg(index));
             return false;
+        }
+        if (!isNonEmptyString(stateEntry.value(QStringLiteral("ipcore"))) ||
+            !isNonEmptyString(stateEntry.value(QStringLiteral("instance"))) ||
+            !stateEntry.value(QStringLiteral("state")).isObject()) {
+            continue;
         }
 
         const QString packageId = stateEntry.value(QStringLiteral("ipcore")).toString();
         const QString instanceId = stateEntry.value(QStringLiteral("instance")).toString();
-        if (!packageVersions.contains(packageId)) {
+        if (!packageVersions.contains(packageId) && !packageVersions.isEmpty()) {
             appendDiagnostic(diagnostics,
                              QStringLiteral("migration.unsupported_legacy_content"),
                              QStringLiteral("Legacy instance package is not declared in ipcores."),
@@ -234,6 +242,12 @@ bool readLegacyInstances(const QJsonObject& root,
         instance.displayName = state.value(QStringLiteral("type")).toString();
         instance.package.id = packageId;
         instance.package.version = packageVersions.value(packageId);
+        if (instance.package.version.isEmpty()) {
+            instance.package.version = stateEntry.value(QStringLiteral("version")).toString().trimmed();
+        }
+        if (instance.package.version.isEmpty()) {
+            instance.package.version = QStringLiteral("unknown");
+        }
         if (!parameters.isEmpty()) {
             instance.config.insert(QStringLiteral("parameters"), parameters);
         }
@@ -494,6 +508,9 @@ bool migrateLegacyGraph(const QJsonObject& root,
                         const QHash<QString, qsizetype>& instanceIndexByScope,
                         ipcraft::DiagnosticStore& diagnostics) {
     const QJsonValue graphValue = root.value(QStringLiteral("graph"));
+    if (graphValue.isUndefined()) {
+        return true;
+    }
     if (!graphValue.isObject()) {
         appendDiagnostic(diagnostics,
                          QStringLiteral("migration.unsupported_legacy_content"),
@@ -700,14 +717,14 @@ ProjectMigrationResult ProjectMigrator::migrateFile(const QString& path,
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly)) {
         appendFileDiagnostic(result.diagnostics,
-                             QStringLiteral("migration.read_failed"),
+                             QStringLiteral("migration.input_missing"),
                              QStringLiteral("Could not open project file for migration."),
                              path);
         return result;
     }
     if (file.size() > kMaxProjectFileBytes) {
         appendFileDiagnostic(result.diagnostics,
-                             QStringLiteral("migration.file_too_large"),
+                             QStringLiteral("migration.invalid_input"),
                              QStringLiteral("Project file is too large for migration."),
                              path);
         return result;
@@ -717,7 +734,7 @@ ProjectMigrationResult ProjectMigrator::migrateFile(const QString& path,
     const QJsonDocument json = QJsonDocument::fromJson(file.readAll(), &parseError);
     if (parseError.error != QJsonParseError::NoError || !json.isObject()) {
         appendFileDiagnostic(result.diagnostics,
-                             QStringLiteral("migration.invalid_json"),
+                             QStringLiteral("migration.invalid_input"),
                              QStringLiteral("Project file is not a JSON object."),
                              path);
         return result;
@@ -743,9 +760,10 @@ ProjectMigrationResult ProjectMigrator::migrateJson(const QJsonObject& root,
         return result;
     }
     if (root.value(QStringLiteral("schema")).toString() != QStringLiteral("v1") ||
-        root.value(QStringLiteral("kind")).toString() != QStringLiteral("finepaper-project")) {
+        (!root.value(QStringLiteral("kind")).isUndefined() &&
+         root.value(QStringLiteral("kind")).toString() != QStringLiteral("finepaper-project"))) {
         appendDiagnostic(result.diagnostics,
-                         QStringLiteral("migration.unsupported_legacy_content"),
+                         QStringLiteral("migration.unsupported_schema"),
                          QStringLiteral("Input is not a supported legacy Finepaper project."),
                          QStringLiteral("$.schema"));
         return result;

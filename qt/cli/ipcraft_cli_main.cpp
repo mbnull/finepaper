@@ -30,13 +30,6 @@ void appendDiagnostics(ipcraft::DiagnosticStore& target,
     }
 }
 
-bool hasDiagnosticRule(const ipcraft::DiagnosticStore& diagnostics, const QString& ruleId) {
-    return std::any_of(diagnostics.records.cbegin(), diagnostics.records.cend(),
-                       [&](const ipcraft::Diagnostic& diagnostic) {
-                           return diagnostic.ruleId == ruleId;
-                       });
-}
-
 CliResult failure(const QString& ruleId,
                   const QString& message,
                   const QString& path = {}) {
@@ -525,10 +518,6 @@ CliResult commandMigrateProject(const QStringList& args) {
                        ProjectWriter::toJsonObject(projectResult.document));
         result.result = payload;
         return result;
-    }
-    if (!hasDiagnosticRule(projectResult.diagnostics,
-                           QStringLiteral("project.unsupported_schema"))) {
-        return projectReadFailure(projectResult);
     }
 
     const ipcraft::ProjectMigrationResult migrationResult =

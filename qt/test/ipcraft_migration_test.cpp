@@ -31,6 +31,14 @@ QString writeJson(const QString& path, const QJsonObject& object) {
     return path;
 }
 
+QString writeFile(const QString& path, const QByteArray& content) {
+    QFile file(path);
+    require(file.open(QIODevice::WriteOnly | QIODevice::Truncate),
+            "fixture should open for writing");
+    require(file.write(content) == content.size(), "fixture should write");
+    return path;
+}
+
 QJsonObject legacyProject() {
     return QJsonObject{
         {QStringLiteral("schema"), QStringLiteral("v1")},
@@ -183,6 +191,102 @@ void testMigrateProjectRequiresToProjectV1() {
             "missing migration target should report migration.target_required");
 }
 
+void testMigrateProjectNormalizesInputDiagnostics() {
+    QTemporaryDir temp;
+    require(temp.isValid(), "temp dir should be valid");
+    QDir dir(temp.path());
+
+    int exitCode = 0;
+    QJsonObject result = runCliJson({QStringLiteral("migrate-project"),
+                                     dir.filePath(QStringLiteral("missing.fpproj")),
+                                     QStringLiteral("--to"),
+                                     ipcraft::schemaids::projectV1},
+                                    &exitCode);
+    require(exitCode != 0, "missing migration input should fail");
+    require(hasRule(ipcraft::DiagnosticStore::fromJson(
+                        result.value(QStringLiteral("diagnostics")).toObject()),
+                    QStringLiteral("migration.input_missing")),
+            "missing migration input should emit migration.input_missing");
+
+    const QString malformedPath = writeFile(dir.filePath(QStringLiteral("malformed.fpproj")),
+                                            QByteArrayLiteral("{ not-json"));
+    result = runCliJson({QStringLiteral("migrate-project"),
+                         malformedPath,
+                         QStringLiteral("--to"),
+                         ipcraft::schemaids::projectV1},
+                        &exitCode);
+    require(exitCode != 0, "malformed migration input should fail");
+    require(hasRule(ipcraft::DiagnosticStore::fromJson(
+                        result.value(QStringLiteral("diagnostics")).toObject()),
+                    QStringLiteral("migration.invalid_input")),
+            "malformed migration input should emit migration.invalid_input");
+}
+
+void testMigrateProjectRejectsUnsupportedSchemaWithMigrationRule() {
+    QTemporaryDir temp;
+    require(temp.isValid(), "temp dir should be valid");
+    const QString path = writeJson(QDir(temp.path()).filePath(QStringLiteral("unsupported.fpproj")),
+                                   QJsonObject{{QStringLiteral("schema"), QStringLiteral("vendor.other")}});
+
+    int exitCode = 0;
+    const QJsonObject result = runCliJson({QStringLiteral("migrate-project"),
+                                           path,
+                                           QStringLiteral("--to"),
+                                           ipcraft::schemaids::projectV1},
+                                          &exitCode);
+    require(exitCode != 0, "unsupported migration schema should fail");
+    require(hasRule(ipcraft::DiagnosticStore::fromJson(
+                        result.value(QStringLiteral("diagnostics")).toObject()),
+                    QStringLiteral("migration.unsupported_schema")),
+            "unsupported migration schema should emit migration.unsupported_schema");
+}
+
+void testMigrateProjectRejectsUnsupportedTarget() {
+    QTemporaryDir temp;
+    require(temp.isValid(), "temp dir should be valid");
+    const QString path = writeJson(QDir(temp.path()).filePath(QStringLiteral("old.fpproj")),
+                                   legacyProject());
+
+    int exitCode = 0;
+    const QJsonObject result = runCliJson({QStringLiteral("migrate-project"),
+                                           path,
+                                           QStringLiteral("--to"),
+                                           QStringLiteral("ipcraft.project.v2")},
+                                          &exitCode);
+    require(exitCode != 0, "unsupported migration target should fail");
+    require(hasRule(ipcraft::DiagnosticStore::fromJson(
+                        result.value(QStringLiteral("diagnostics")).toObject()),
+                    QStringLiteral("migration.unsupported_target")),
+            "unsupported migration target should emit migration.unsupported_target");
+}
+
+void testMigratePreservesOpaqueLegacyStateWithoutInstances() {
+    QJsonObject legacy{
+        {QStringLiteral("schema"), QStringLiteral("v1")},
+        {QStringLiteral("project"), QJsonObject{{QStringLiteral("name"), QStringLiteral("Opaque Legacy")}}},
+        {QStringLiteral("ipcore_state"), QJsonArray{
+            QJsonObject{
+                {QStringLiteral("schema"), QStringLiteral("ipcraft.noc.instance-state.v1")},
+                {QStringLiteral("opaque"), true}
+            }
+        }}
+    };
+
+    const ipcraft::ProjectMigrationResult result =
+        ipcraft::ProjectMigrator::migrateJson(legacy, ipcraft::schemaids::projectV1);
+    require(result.ok, "opaque legacy state should migrate even when no instance can be reconstructed");
+    require(result.document.instances.isEmpty(),
+            "opaque-only legacy state should not synthesize incomplete instances");
+    const QJsonObject preserved =
+        ProjectWriter::toJsonObject(result.document)
+            .value(QStringLiteral("migration")).toObject()
+            .value(QStringLiteral("preserved")).toObject()
+            .value(QStringLiteral("legacy_state")).toObject();
+    require(preserved.value(QStringLiteral("ipcore_state")).toArray().first().toObject()
+                .value(QStringLiteral("opaque")).toBool(),
+            "opaque legacy state should be preserved");
+}
+
 void testMigratePreservesOldIpcoreStateUnderMigrationPreserved() {
     const ipcraft::ProjectMigrationResult result =
         ipcraft::ProjectMigrator::migrateJson(legacyProject(), ipcraft::schemaids::projectV1);
@@ -283,6 +387,10 @@ int main(int argc, char** argv) {
     try {
         testNormalProjectLoadRejectsOldFinepaperSchema();
         testMigrateProjectRequiresToProjectV1();
+        testMigrateProjectNormalizesInputDiagnostics();
+        testMigrateProjectRejectsUnsupportedSchemaWithMigrationRule();
+        testMigrateProjectRejectsUnsupportedTarget();
+        testMigratePreservesOpaqueLegacyStateWithoutInstances();
         testMigratePreservesOldIpcoreStateUnderMigrationPreserved();
         testMigrateMovesXYCollapsedIntoLayout();
         testMigrateSameInstanceGraphConnectionIntoGraphConfig();

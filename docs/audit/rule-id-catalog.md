@@ -90,6 +90,3 @@ The catalog covers diagnostics surfaced through `ipcraft.project.v1`, `ipcraft.p
 | migration.input_missing | error | migration | migration | file | Migration file loading |
 | migration.invalid_input | error | migration | migration | file | Migration JSON parser |
 | migration.already_current | warning | migration | migration | document_path | Migration idempotency |
-| migration.read_failed | error | migration | migration | file | Migration file loading |
-| migration.invalid_json | error | migration | migration | file | Migration JSON parser |
-| migration.file_too_large | error | migration | migration | file | Migration file loading |

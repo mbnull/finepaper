@@ -260,6 +260,8 @@ Migration is explicit and side-effect free. Old project data is read by migrator
 
 Migration maps old IP state to instances, old layout parameters to LayoutModel, unambiguous non-layout parameters to ConfigBundle, same-instance internal graph data to graph-config, and unsupported legacy content to `migration.unsupported_legacy_content`.
 
+Migration input diagnostics are migration-scoped: a missing input file emits `migration.input_missing`, malformed JSON or non-object JSON emits `migration.invalid_input`, an unsupported source schema emits `migration.unsupported_schema`, and a wrong `--to` value emits `migration.unsupported_target`.
+
 ## Security Model
 
 Runtime rejects unsupported schemas, duplicate ids, unknown top-level fields, path traversal, absolute package-local paths, symlink escapes, missing executables, flow policy violations, and artifact escapes. Validation commands are static by default.
