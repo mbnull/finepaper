@@ -187,6 +187,7 @@ QJsonArray packageFlows(const QJsonObject& command) {
         QJsonObject{
             {QStringLiteral("id"), QStringLiteral("generate")},
             {QStringLiteral("label"), QStringLiteral("Generate")},
+            {QStringLiteral("scope"), QStringLiteral("instance")},
             {QStringLiteral("steps"),
              QJsonArray{
                  QJsonObject{{QStringLiteral("kind"), QStringLiteral("emit_inputs")}},

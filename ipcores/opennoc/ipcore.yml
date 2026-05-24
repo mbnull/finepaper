@@ -238,6 +238,7 @@ emitters:
 flows:
   - id: generate
     label: Generate
+    scope: instance
     steps:
       - kind: emit_inputs
       - kind: exec

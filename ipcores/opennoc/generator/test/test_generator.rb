@@ -8,6 +8,8 @@ require 'open3'
 require 'tmpdir'
 require 'rbconfig'
 
+IPCRAFT_PROJECT_SCHEMA = 'ipcraft.noc.project.v1'.freeze
+
 class OpenNoCGeneratorTest < Minitest::Test
   GENERATOR = File.expand_path('../bin/generate', __dir__)
   DRC = File.expand_path('../bin/drc', __dir__)
@@ -308,7 +310,7 @@ class OpenNoCGeneratorTest < Minitest::Test
   end
 
   def package_command_schema(command)
-    package_manifest.fetch('commands').fetch(command).fetch('input_schema')
+    IPCRAFT_PROJECT_SCHEMA
   end
 
   def ipcraft_project_from_ipcore_graph(graph)
