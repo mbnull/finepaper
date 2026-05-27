@@ -1,0 +1,33 @@
+{
+  "schema": "ipcraft.project.v1",
+  "project": {
+    "id": "simple_parameter_project",
+    "name": "Simple Parameter Project"
+  },
+  "instances": [
+    {
+      "id": "simple0",
+      "package": {
+        "id": "vendor.example.simple_parameter",
+        "version": "1.0.0"
+      },
+      "config": {
+        "parameters": {
+          "width": 64
+        }
+      }
+    }
+  ],
+  "composition": {
+    "connections": [],
+    "external_ports": []
+  },
+  "layout": {},
+  "diagnostics": {
+    "schema": "ipcraft.diagnostics.v1",
+    "records": []
+  },
+  "artifacts": {},
+  "migration": {},
+  "native": {}
+}

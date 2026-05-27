@@ -1,0 +1,166 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ipcraft.emitted-inputs.v1",
+  "title": "Ipcraft Emitted Inputs V1",
+  "description": "Strict top-level emitted-inputs manifest schema. Unknown top-level fields are rejected; emitter-owned extensibility is limited to file.source payloads and diagnostic details.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "project", "instance", "package", "files", "diagnostics"],
+  "properties": {
+    "schema": { "const": "ipcraft.emitted-inputs.v1" },
+    "project": { "type": "string", "minLength": 1 },
+    "instance": { "type": "string", "minLength": 1 },
+    "package": { "$ref": "#/$defs/package_ref" },
+    "run_id": { "type": "string", "minLength": 1 },
+    "files": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/file" }
+    },
+    "diagnostics": { "$ref": "#/$defs/diagnostics" }
+  },
+  "$defs": {
+    "package_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 }
+      }
+    },
+    "file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "path", "source"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "kind": { "type": "string", "minLength": 1 },
+        "path": {
+          "description": "Path relative to the emit output root.",
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(?!/)(?![A-Za-z]:[\\\\/]).*$",
+          "not": { "pattern": "(^|/)\\.\\.(/|$)" }
+        },
+        "source": {
+          "description": "Emitter-owned source mapping payload.",
+          "$ref": "#/$defs/source_mapping"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[A-Fa-f0-9]{64}$"
+        },
+        "size": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "diagnostics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "records"],
+      "properties": {
+        "schema": { "const": "ipcraft.diagnostics.v1" },
+        "records": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/diagnostic" }
+        }
+      }
+    },
+    "source_mapping": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["parameters"],
+          "properties": { "parameters": { "const": true } }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["document", "path"],
+          "properties": {
+            "document": { "type": "string", "minLength": 1 },
+            "path": { "type": "string", "minLength": 1 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["table"],
+          "properties": { "table": { "type": "string", "minLength": 1 } }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["file"],
+          "properties": { "file": { "type": "string", "minLength": 1 } }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["composition"],
+          "properties": { "composition": { "const": true } }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["graph_config"],
+          "properties": { "graph_config": { "const": true } }
+        }
+      ]
+    },
+    "diagnostic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["severity", "source", "rule_id", "message", "locations"],
+      "properties": {
+        "severity": {
+          "type": "string",
+          "enum": ["error", "warning", "info"]
+        },
+        "source": { "type": "string", "minLength": 1 },
+        "rule_id": { "type": "string", "minLength": 1 },
+        "category": { "type": "string", "minLength": 1 },
+        "message": { "type": "string" },
+        "details": { "$ref": "#/$defs/details" },
+        "locations": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/location" }
+        }
+      }
+    },
+    "location": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": { "type": "string", "minLength": 1 },
+        "instance_id": { "type": "string", "minLength": 1 },
+        "interface_id": { "type": "string", "minLength": 1 },
+        "connection_id": { "type": "string", "minLength": 1 },
+        "parameter_id": { "type": "string", "minLength": 1 },
+        "table_id": { "type": "string", "minLength": 1 },
+        "row": { "type": "integer", "minimum": 0 },
+        "column": {
+          "description": "Table or document column identifier.",
+          "oneOf": [
+            { "type": "string", "minLength": 1 },
+            { "type": "integer", "minimum": 0 }
+          ]
+        },
+        "document_id": { "type": "string", "minLength": 1 },
+        "path": { "type": "string", "minLength": 1 },
+        "file": { "type": "string", "minLength": 1 },
+        "line": { "type": "integer", "minimum": 1 },
+        "column_number": { "type": "integer", "minimum": 1 },
+        "artifact_id": { "type": "string", "minLength": 1 },
+        "graph_object_id": { "type": "string", "minLength": 1 },
+        "details": { "$ref": "#/$defs/details" }
+      }
+    },
+    "details": {
+      "description": "Rule-owned or location-kind-owned structured payload.",
+      "type": "object",
+      "additionalProperties": true
+    }
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "schema": "ipcraft.package.v1",
+  "id": "vendor.example.table_config",
+  "version": "1.0.0",
+  "name": "Table Config IP",
+  "extensions": [
+    "ipcraft.config.tables",
+    "ipcraft.emitters"
+  ],
+  "config_schema": {
+    "tables": [
+      {
+        "id": "regions",
+        "label": "Address regions",
+        "allow_add_remove": true,
+        "preserve_unknown_columns": true,
+        "columns": [
+          {
+            "id": "base",
+            "type": "int",
+            "required": true
+          },
+          {
+            "id": "size",
+            "type": "int",
+            "required": true
+          }
+        ]
+      }
+    ]
+  },
+  "emitters": [
+    {
+      "id": "regions",
+      "kind": "emit_table",
+      "table": "regions",
+      "path": "input/regions.json"
+    }
+  ]
+}

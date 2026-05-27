@@ -133,29 +133,38 @@ void writeMinimalPackage(const QString& packageRootPath, const QString& packageI
 </module-view>)xml"));
     writeFile(root.filePath(QStringLiteral("ipcraft.json")),
               QStringLiteral(R"json({
-  "schema": "ipcraft.manifest.v1",
+  "schema": "ipcraft.package.v1",
   "id": "%1",
   "name": "Reload Package",
   "version": "1.0.0",
-  "connection_classes": [
-    { "id": "demo_link", "roles": ["initiator", "target"], "symmetric": false }
-  ],
-  "modules": [
-    {
-      "id": "Module",
-      "name": "Reload Module",
-      "interfaces": [
-        {
-          "id": "bus",
-          "modes": ["initiator"],
-          "accepts": [{ "class": "demo_link", "role": "initiator" }]
-        }
-      ]
-    }
+  "extensions": [
+    "ipcraft.views"
   ],
   "views": [
     { "module": "Module", "file": "views/Module.xml" }
-  ]
+  ],
+  "native": {
+    "ipcraft": {
+      "editor": {
+        "connection_classes": [
+          { "id": "demo_link", "roles": ["initiator", "target"], "symmetric": false }
+        ],
+        "modules": [
+          {
+            "id": "Module",
+            "name": "Reload Module",
+            "interfaces": [
+              {
+                "id": "bus",
+                "modes": ["initiator"],
+                "accepts": [{ "class": "demo_link", "role": "initiator" }]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
 })json").arg(packageId).toUtf8());
 }
 
@@ -171,32 +180,41 @@ void writePackageWithParameter(const QString& packageRootPath,
 </module-view>)xml"));
     writeFile(root.filePath(QStringLiteral("ipcraft.json")),
               QStringLiteral(R"json({
-  "schema": "ipcraft.manifest.v1",
+  "schema": "ipcraft.package.v1",
   "id": "%1",
   "name": "Reload Package",
   "version": "1.0.0",
-  "connection_classes": [
-    { "id": "demo_link", "roles": ["initiator", "target"], "symmetric": false }
-  ],
-  "parameters": {
-    "%2": { "type": "int", "default": 7, "label": "%3" }
-  },
-  "modules": [
-    {
-      "id": "Module",
-      "name": "Reload Module",
-      "interfaces": [
-        {
-          "id": "bus",
-          "modes": ["initiator"],
-          "accepts": [{ "class": "demo_link", "role": "initiator" }]
-        }
-      ]
-    }
+  "extensions": [
+    "ipcraft.views"
   ],
   "views": [
     { "module": "Module", "file": "views/Module.xml" }
-  ]
+  ],
+  "native": {
+    "ipcraft": {
+      "editor": {
+        "connection_classes": [
+          { "id": "demo_link", "roles": ["initiator", "target"], "symmetric": false }
+        ],
+        "parameters": {
+          "%2": { "type": "int", "default": 7, "label": "%3" }
+        },
+        "modules": [
+          {
+            "id": "Module",
+            "name": "Reload Module",
+            "interfaces": [
+              {
+                "id": "bus",
+                "modes": ["initiator"],
+                "accepts": [{ "class": "demo_link", "role": "initiator" }]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
 })json").arg(packageId, parameterName, parameterLabel).toUtf8());
 }
 

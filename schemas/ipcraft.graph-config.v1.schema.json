@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ipcraft.graph-config.v1",
+  "title": "Ipcraft Graph Config V1",
+  "description": "Strict top-level graph-config schema. Unknown top-level fields are rejected; package-declared properties and native payloads are the documented escape hatches.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "objects", "relationships"],
+  "properties": {
+    "schema": { "const": "ipcraft.graph-config.v1" },
+    "objects": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/object" }
+    },
+    "relationships": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/relationship" }
+    },
+    "properties": { "$ref": "#/$defs/properties" },
+    "native": { "$ref": "#/$defs/native" }
+  },
+  "$defs": {
+    "object": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "type": { "type": "string", "minLength": 1 },
+        "properties": { "$ref": "#/$defs/properties" }
+      }
+    },
+    "relationship": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "endpoints"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "type": { "type": "string", "minLength": 1 },
+        "endpoints": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/endpoint" },
+          "minItems": 2
+        },
+        "properties": { "$ref": "#/$defs/properties" }
+      }
+    },
+    "endpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["object", "role"],
+      "properties": {
+        "object": { "type": "string", "minLength": 1 },
+        "role": { "type": "string", "minLength": 1 },
+        "properties": { "$ref": "#/$defs/properties" }
+      }
+    },
+    "properties": {
+      "description": "Package-declared graph configuration properties.",
+      "type": "object",
+      "additionalProperties": true
+    },
+    "native": {
+      "description": "Native tool payload preserved by Ipcraft.",
+      "type": "object",
+      "additionalProperties": true
+    }
+  }
+}

@@ -1,0 +1,308 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ipcraft.project.v1",
+  "title": "Ipcraft Project V1",
+  "description": "Strict top-level project document schema. Unknown top-level fields are rejected; forward-compatible data is limited to documented metadata, native, and preserved escape hatches such as config.preserved and migration.preserved.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "project"],
+  "properties": {
+    "schema": { "const": "ipcraft.project.v1" },
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "description": { "type": "string" },
+        "display": { "$ref": "#/$defs/metadata" },
+        "metadata": { "$ref": "#/$defs/metadata" },
+        "native": { "$ref": "#/$defs/native" }
+      }
+    },
+    "instances": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/instance" }
+    },
+    "composition": { "$ref": "#/$defs/composition" },
+    "layout": {
+      "description": "Editor-owned layout data preserved across project edits.",
+      "type": "object",
+      "additionalProperties": true
+    },
+    "diagnostics": { "$ref": "#/$defs/diagnostics" },
+    "artifacts": { "$ref": "#/$defs/artifacts" },
+    "migration": { "$ref": "#/$defs/migration" },
+    "native": { "$ref": "#/$defs/native" }
+  },
+  "$defs": {
+    "instance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "package"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "display_name": { "type": "string" },
+        "package": { "$ref": "#/$defs/package_ref" },
+        "config": { "$ref": "#/$defs/config_bundle" },
+        "graph_config": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/graph_config" }
+          ]
+        },
+        "native": { "$ref": "#/$defs/native" },
+        "last_runs": {
+          "description": "Run-id keyed execution summaries preserved by tools.",
+          "type": "object",
+          "additionalProperties": true
+        },
+        "artifacts": { "$ref": "#/$defs/artifacts" },
+        "diagnostics": { "$ref": "#/$defs/diagnostics" },
+        "view": {
+          "description": "View-owned instance state.",
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "package_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 }
+      }
+    },
+    "config_bundle": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "parameters": { "$ref": "#/$defs/named_values" },
+        "tables": { "$ref": "#/$defs/named_values" },
+        "documents": { "$ref": "#/$defs/named_values" },
+        "files": { "$ref": "#/$defs/named_values" },
+        "preserved": { "$ref": "#/$defs/preserved" }
+      }
+    },
+    "named_values": {
+      "description": "Package-declared key/value namespace.",
+      "type": "object",
+      "additionalProperties": true
+    },
+    "composition": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "connections": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/connection" }
+        },
+        "external_ports": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/external_port" }
+        },
+        "groups": {
+          "description": "Optional editor or generator grouping records. Core preserves entries but does not assign hardware semantics.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/named_values" }
+        },
+        "properties": { "$ref": "#/$defs/named_values" },
+        "native": { "$ref": "#/$defs/native" }
+      }
+    },
+    "connection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "endpoints"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "type": { "type": "string", "minLength": 1 },
+        "endpoints": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/endpoint_ref" },
+          "minItems": 2
+        },
+        "source": { "type": "string", "enum": ["user", "generated", "imported"] },
+        "properties": { "$ref": "#/$defs/named_values" },
+        "native": { "$ref": "#/$defs/native" }
+      }
+    },
+    "endpoint_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["instance", "interface"],
+      "properties": {
+        "instance": { "type": "string", "minLength": 1 },
+        "interface": { "type": "string", "minLength": 1 },
+        "port": { "type": "string", "minLength": 1 },
+        "role": { "type": "string", "minLength": 1 },
+        "properties": { "$ref": "#/$defs/named_values" }
+      }
+    },
+    "external_port": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string" },
+        "interface": { "$ref": "#/$defs/endpoint_ref" },
+        "properties": { "$ref": "#/$defs/named_values" },
+        "native": { "$ref": "#/$defs/native" }
+      }
+    },
+    "graph_config": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "objects", "relationships"],
+      "properties": {
+        "schema": { "const": "ipcraft.graph-config.v1" },
+        "objects": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/graph_object" }
+        },
+        "relationships": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/graph_relationship" }
+        },
+        "properties": { "$ref": "#/$defs/named_values" },
+        "native": { "$ref": "#/$defs/native" }
+      }
+    },
+    "graph_object": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "type": { "type": "string", "minLength": 1 },
+        "properties": { "$ref": "#/$defs/named_values" }
+      }
+    },
+    "graph_relationship": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "endpoints"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "type": { "type": "string", "minLength": 1 },
+        "endpoints": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/graph_endpoint" },
+          "minItems": 2
+        },
+        "properties": { "$ref": "#/$defs/named_values" }
+      }
+    },
+    "graph_endpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["object", "role"],
+      "properties": {
+        "object": { "type": "string", "minLength": 1 },
+        "role": { "type": "string", "minLength": 1 },
+        "properties": { "$ref": "#/$defs/named_values" }
+      }
+    },
+    "artifacts": {
+      "description": "Generated artifact references and tool-owned metadata.",
+      "type": "object",
+      "additionalProperties": true
+    },
+    "migration": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "from_schema": { "type": "string" },
+        "from_version": { "type": "string" },
+        "preserved": { "$ref": "#/$defs/preserved" },
+        "metadata": { "$ref": "#/$defs/metadata" },
+        "native": { "$ref": "#/$defs/native" }
+      }
+    },
+    "diagnostics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "records"],
+      "properties": {
+        "schema": { "const": "ipcraft.diagnostics.v1" },
+        "records": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/diagnostic" }
+        }
+      }
+    },
+    "diagnostic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["severity", "source", "rule_id", "message", "locations"],
+      "properties": {
+        "severity": {
+          "type": "string",
+          "enum": ["error", "warning", "info"]
+        },
+        "source": { "type": "string", "minLength": 1 },
+        "rule_id": { "type": "string", "minLength": 1 },
+        "category": { "type": "string", "minLength": 1 },
+        "message": { "type": "string" },
+        "details": { "$ref": "#/$defs/details" },
+        "locations": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/location" }
+        }
+      }
+    },
+    "location": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": { "type": "string", "minLength": 1 },
+        "instance_id": { "type": "string", "minLength": 1 },
+        "interface_id": { "type": "string", "minLength": 1 },
+        "connection_id": { "type": "string", "minLength": 1 },
+        "parameter_id": { "type": "string", "minLength": 1 },
+        "table_id": { "type": "string", "minLength": 1 },
+        "row": { "type": "integer", "minimum": 0 },
+        "column": {
+          "description": "Table or document column identifier.",
+          "oneOf": [
+            { "type": "string", "minLength": 1 },
+            { "type": "integer", "minimum": 0 }
+          ]
+        },
+        "document_id": { "type": "string", "minLength": 1 },
+        "path": { "type": "string", "minLength": 1 },
+        "file": { "type": "string", "minLength": 1 },
+        "line": { "type": "integer", "minimum": 1 },
+        "column_number": { "type": "integer", "minimum": 1 },
+        "artifact_id": { "type": "string", "minLength": 1 },
+        "graph_object_id": { "type": "string", "minLength": 1 },
+        "details": { "$ref": "#/$defs/details" }
+      }
+    },
+    "details": {
+      "description": "Rule-owned or location-kind-owned structured payload.",
+      "type": "object",
+      "additionalProperties": true
+    },
+    "metadata": {
+      "description": "Application-owned metadata namespace.",
+      "type": "object",
+      "additionalProperties": true
+    },
+    "native": {
+      "description": "Native tool payload preserved by Ipcraft.",
+      "type": "object",
+      "additionalProperties": true
+    },
+    "preserved": {
+      "description": "Legacy or migration-owned data preserved verbatim.",
+      "type": "object",
+      "additionalProperties": true
+    }
+  }
+}

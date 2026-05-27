@@ -1,0 +1,29 @@
+{
+  "schema": "ipcraft.project.v1",
+  "project": {
+    "id": "artifact_collection_project",
+    "name": "Artifact Collection Project"
+  },
+  "instances": [
+    {
+      "id": "art0",
+      "package": {
+        "id": "vendor.example.artifacts",
+        "version": "1.0.0"
+      },
+      "config": {}
+    }
+  ],
+  "composition": {
+    "connections": [],
+    "external_ports": []
+  },
+  "layout": {},
+  "diagnostics": {
+    "schema": "ipcraft.diagnostics.v1",
+    "records": []
+  },
+  "artifacts": {},
+  "migration": {},
+  "native": {}
+}

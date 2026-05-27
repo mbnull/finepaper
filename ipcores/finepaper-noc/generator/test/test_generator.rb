@@ -1,3 +1,4 @@
+# Migration-only legacy schema handling. Not used by normal runtime loading.
 $LOAD_PATH.unshift File.join(__dir__, '..', 'src', 'ruby')
 
 require 'minitest/autorun'

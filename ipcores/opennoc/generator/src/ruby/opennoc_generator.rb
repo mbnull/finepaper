@@ -1,3 +1,4 @@
+# Migration-only legacy schema handling. Not used by normal runtime loading.
 require 'json'
 require 'erb'
 require 'fileutils'

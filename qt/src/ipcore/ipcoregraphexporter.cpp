@@ -1,4 +1,5 @@
 // IpCoreGraphExporter implementation.
+// Migration-only legacy schema handling. Not used by normal runtime loading.
 #include "ipcore/ipcoregraphexporter.h"
 
 #include "graph/graph.h"

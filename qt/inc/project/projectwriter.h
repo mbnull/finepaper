@@ -3,6 +3,7 @@
 
 #include "project/projectdocument.h"
 
+#include <QJsonObject>
 #include <QString>
 
 struct ProjectWriteResult {
@@ -12,5 +13,6 @@ struct ProjectWriteResult {
 
 class ProjectWriter {
 public:
+    static QJsonObject toJsonObject(const ProjectDocument& document);
     static ProjectWriteResult writeFile(const QString& path, const ProjectDocument& document);
 };

@@ -1,521 +1,65 @@
 {
-  "schema": "ipcraft.manifest.v1",
+  "schema": "ipcraft.package.v1",
   "id": "finepaper.opennoc",
   "name": "OpenNoC",
   "version": "1.0",
-  "extensions": {
-    "noc.v1": {
-      "enabled": true,
-      "modes": {
-        "chi_interconnect": {
-          "ipxact": {
-            "mode": "target"
-          }
+  "extensions": [
+    "ipcraft.artifacts",
+    "ipcraft.config.params",
+    "ipcraft.emitters",
+    "ipcraft.flows",
+    "ipcraft.graph_config",
+    "ipcraft.views",
+    "noc.v1"
+  ],
+  "config_schema": {
+    "parameters": [
+      {
+        "id": "req_flit_width",
+        "type": "int",
+        "default": 128,
+        "range": {
+          "min": 1,
+          "max": 1024
         },
-        "chi_requester_node": {
-          "ipxact": {
-            "mode": "initiator"
-          }
+        "label": "REQ flit width",
+        "description": "OpenNoC REQ channel flit width used by verification."
+      },
+      {
+        "id": "rsp_flit_width",
+        "type": "int",
+        "default": 64,
+        "range": {
+          "min": 1,
+          "max": 1024
         },
-        "chi_home_node": {
-          "ipxact": {
-            "mode": "initiator"
-          }
+        "label": "RSP flit width",
+        "description": "OpenNoC RSP channel flit width used by verification."
+      },
+      {
+        "id": "dat_flit_width",
+        "type": "int",
+        "default": 256,
+        "range": {
+          "min": 1,
+          "max": 2048
         },
-        "chi_subordinate_node": {
-          "ipxact": {
-            "mode": "initiator"
-          }
+        "label": "DAT flit width",
+        "description": "OpenNoC DAT channel flit width used by verification."
+      },
+      {
+        "id": "snp_flit_width",
+        "type": "int",
+        "default": 128,
+        "range": {
+          "min": 1,
+          "max": 1024
         },
-        "chi_peer": {
-          "ipxact": {
-            "mode": "system"
-          }
-        }
+        "label": "SNP flit width",
+        "description": "OpenNoC SNP channel flit width used by verification before the router appends target id bits."
       }
-    }
+    ]
   },
-  "parameters": {
-    "req_flit_width": {
-      "type": "int",
-      "default": 128,
-      "min": 1,
-      "max": 1024,
-      "label": "REQ flit width",
-      "description": "OpenNoC REQ channel flit width used by verification."
-    },
-    "rsp_flit_width": {
-      "type": "int",
-      "default": 64,
-      "min": 1,
-      "max": 1024,
-      "label": "RSP flit width",
-      "description": "OpenNoC RSP channel flit width used by verification."
-    },
-    "dat_flit_width": {
-      "type": "int",
-      "default": 256,
-      "min": 1,
-      "max": 2048,
-      "label": "DAT flit width",
-      "description": "OpenNoC DAT channel flit width used by verification."
-    },
-    "snp_flit_width": {
-      "type": "int",
-      "default": 128,
-      "min": 1,
-      "max": 1024,
-      "label": "SNP flit width",
-      "description": "OpenNoC SNP channel flit width used by verification before the router appends target id bits."
-    }
-  },
-  "connection_classes": [
-    {
-      "id": "opennoc_mesh_link",
-      "roles": [
-        "initiator",
-        "target"
-      ],
-      "symmetric": false
-    },
-    {
-      "id": "chi_node_interface",
-      "roles": [
-        "node",
-        "interconnect"
-      ],
-      "symmetric": false
-    }
-  ],
-  "modules": [
-    {
-      "id": "OpenNoCXP",
-      "name": "OpenNoC XP",
-      "description": "OpenNoC crosspoint router tile.",
-      "graph_role": "host",
-      "display": {
-        "label_parameter": "display_name",
-        "short_label_parameter": "external_id"
-      },
-      "parameters": {
-        "display_name": {
-          "type": "string",
-          "default": "OpenNoC XP",
-          "label": "Display name",
-          "description": "Name shown on the canvas."
-        },
-        "external_id": {
-          "type": "string",
-          "default": "xp_00",
-          "label": "External ID",
-          "description": "Stable generated artifact identifier."
-        },
-        "x": {
-          "type": "int",
-          "default": 0,
-          "configurable": false,
-          "description": "Canvas X position."
-        },
-        "y": {
-          "type": "int",
-          "default": 0,
-          "configurable": false,
-          "description": "Canvas Y position."
-        },
-        "mesh_col": {
-          "type": "int",
-          "default": 0,
-          "configurable": false,
-          "description": "Logical OpenNoC mesh column."
-        },
-        "mesh_row": {
-          "type": "int",
-          "default": 0,
-          "configurable": false,
-          "description": "Logical OpenNoC mesh row."
-        }
-      },
-      "interfaces": [
-        {
-          "id": "east",
-          "label": "East",
-          "modes": [
-            "initiator"
-          ],
-          "accepts": [
-            {
-              "class": "opennoc_mesh_link",
-              "role": "initiator"
-            }
-          ],
-          "multi_connection": false,
-          "ipxact": {
-            "bus_interface": "east"
-          }
-        },
-        {
-          "id": "west",
-          "label": "West",
-          "modes": [
-            "target"
-          ],
-          "accepts": [
-            {
-              "class": "opennoc_mesh_link",
-              "role": "target"
-            }
-          ],
-          "multi_connection": false,
-          "ipxact": {
-            "bus_interface": "west"
-          }
-        },
-        {
-          "id": "north",
-          "label": "North",
-          "modes": [
-            "target"
-          ],
-          "accepts": [
-            {
-              "class": "opennoc_mesh_link",
-              "role": "target"
-            }
-          ],
-          "multi_connection": false,
-          "ipxact": {
-            "bus_interface": "north"
-          }
-        },
-        {
-          "id": "south",
-          "label": "South",
-          "modes": [
-            "initiator"
-          ],
-          "accepts": [
-            {
-              "class": "opennoc_mesh_link",
-              "role": "initiator"
-            }
-          ],
-          "multi_connection": false,
-          "ipxact": {
-            "bus_interface": "south"
-          }
-        },
-        {
-          "id": "p0",
-          "label": "P0",
-          "modes": [
-            "chi_interconnect"
-          ],
-          "accepts": [
-            {
-              "class": "chi_node_interface",
-              "role": "interconnect"
-            }
-          ],
-          "multi_connection": false,
-          "ipxact": {
-            "bus_interface": "p0"
-          }
-        },
-        {
-          "id": "p1",
-          "label": "P1",
-          "modes": [
-            "chi_interconnect"
-          ],
-          "accepts": [
-            {
-              "class": "chi_node_interface",
-              "role": "interconnect"
-            }
-          ],
-          "multi_connection": false,
-          "ipxact": {
-            "bus_interface": "p1"
-          }
-        }
-      ]
-    },
-    {
-      "id": "OpenNoCRNF",
-      "name": "RNF",
-      "description": "OpenNoC CHI RNF agent.",
-      "graph_role": "attached",
-      "display": {
-        "label_parameter": "display_name",
-        "short_label_parameter": "external_id"
-      },
-      "parameters": {
-        "display_name": {
-          "type": "string",
-          "default": "RNF",
-          "label": "Display name",
-          "description": "Name shown on the canvas."
-        },
-        "external_id": {
-          "type": "string",
-          "default": "rnf_00",
-          "label": "External ID",
-          "description": "Stable generated artifact identifier."
-        },
-        "x": {
-          "type": "int",
-          "default": 0,
-          "configurable": false,
-          "description": "Canvas X position."
-        },
-        "y": {
-          "type": "int",
-          "default": 0,
-          "configurable": false,
-          "description": "Canvas Y position."
-        }
-      },
-      "interfaces": [
-        {
-          "id": "chi",
-          "label": "CHI",
-          "modes": [
-            "chi_requester_node"
-          ],
-          "accepts": [
-            {
-              "class": "chi_node_interface",
-              "role": "node"
-            }
-          ],
-          "multi_connection": false,
-          "ipxact": {
-            "bus_interface": "chi"
-          }
-        }
-      ]
-    },
-    {
-      "id": "OpenNoCRNI",
-      "name": "RNI",
-      "description": "OpenNoC CHI RNI agent.",
-      "graph_role": "attached",
-      "display": {
-        "label_parameter": "display_name",
-        "short_label_parameter": "external_id"
-      },
-      "parameters": {
-        "display_name": {
-          "type": "string",
-          "default": "RNI",
-          "label": "Display name",
-          "description": "Name shown on the canvas."
-        },
-        "external_id": {
-          "type": "string",
-          "default": "rni_00",
-          "label": "External ID",
-          "description": "Stable generated artifact identifier."
-        },
-        "x": {
-          "type": "int",
-          "default": 0,
-          "configurable": false,
-          "description": "Canvas X position."
-        },
-        "y": {
-          "type": "int",
-          "default": 0,
-          "configurable": false,
-          "description": "Canvas Y position."
-        }
-      },
-      "interfaces": [
-        {
-          "id": "chi",
-          "label": "CHI",
-          "modes": [
-            "chi_requester_node"
-          ],
-          "accepts": [
-            {
-              "class": "chi_node_interface",
-              "role": "node"
-            }
-          ],
-          "multi_connection": false,
-          "ipxact": {
-            "bus_interface": "chi"
-          }
-        }
-      ]
-    },
-    {
-      "id": "OpenNoCHNF",
-      "name": "HNF",
-      "description": "OpenNoC CHI HNF agent.",
-      "graph_role": "attached",
-      "display": {
-        "label_parameter": "display_name",
-        "short_label_parameter": "external_id"
-      },
-      "parameters": {
-        "display_name": {
-          "type": "string",
-          "default": "HNF",
-          "label": "Display name",
-          "description": "Name shown on the canvas."
-        },
-        "external_id": {
-          "type": "string",
-          "default": "hnf_00",
-          "label": "External ID",
-          "description": "Stable generated artifact identifier."
-        },
-        "x": {
-          "type": "int",
-          "default": 0,
-          "configurable": false,
-          "description": "Canvas X position."
-        },
-        "y": {
-          "type": "int",
-          "default": 0,
-          "configurable": false,
-          "description": "Canvas Y position."
-        }
-      },
-      "interfaces": [
-        {
-          "id": "chi",
-          "label": "CHI",
-          "modes": [
-            "chi_home_node"
-          ],
-          "accepts": [
-            {
-              "class": "chi_node_interface",
-              "role": "node"
-            }
-          ],
-          "multi_connection": false,
-          "ipxact": {
-            "bus_interface": "chi"
-          }
-        }
-      ]
-    },
-    {
-      "id": "OpenNoCHNI",
-      "name": "HNI",
-      "description": "OpenNoC CHI HNI agent.",
-      "graph_role": "attached",
-      "display": {
-        "label_parameter": "display_name",
-        "short_label_parameter": "external_id"
-      },
-      "parameters": {
-        "display_name": {
-          "type": "string",
-          "default": "HNI",
-          "label": "Display name",
-          "description": "Name shown on the canvas."
-        },
-        "external_id": {
-          "type": "string",
-          "default": "hni_00",
-          "label": "External ID",
-          "description": "Stable generated artifact identifier."
-        },
-        "x": {
-          "type": "int",
-          "default": 0,
-          "configurable": false,
-          "description": "Canvas X position."
-        },
-        "y": {
-          "type": "int",
-          "default": 0,
-          "configurable": false,
-          "description": "Canvas Y position."
-        }
-      },
-      "interfaces": [
-        {
-          "id": "chi",
-          "label": "CHI",
-          "modes": [
-            "chi_home_node"
-          ],
-          "accepts": [
-            {
-              "class": "chi_node_interface",
-              "role": "node"
-            }
-          ],
-          "multi_connection": false,
-          "ipxact": {
-            "bus_interface": "chi"
-          }
-        }
-      ]
-    },
-    {
-      "id": "OpenNoCSNF",
-      "name": "SNF",
-      "description": "OpenNoC CHI SNF agent.",
-      "graph_role": "attached",
-      "display": {
-        "label_parameter": "display_name",
-        "short_label_parameter": "external_id"
-      },
-      "parameters": {
-        "display_name": {
-          "type": "string",
-          "default": "SNF",
-          "label": "Display name",
-          "description": "Name shown on the canvas."
-        },
-        "external_id": {
-          "type": "string",
-          "default": "snf_00",
-          "label": "External ID",
-          "description": "Stable generated artifact identifier."
-        },
-        "x": {
-          "type": "int",
-          "default": 0,
-          "configurable": false,
-          "description": "Canvas X position."
-        },
-        "y": {
-          "type": "int",
-          "default": 0,
-          "configurable": false,
-          "description": "Canvas Y position."
-        }
-      },
-      "interfaces": [
-        {
-          "id": "chi",
-          "label": "CHI",
-          "modes": [
-            "chi_subordinate_node"
-          ],
-          "accepts": [
-            {
-              "class": "chi_node_interface",
-              "role": "node"
-            }
-          ],
-          "multi_connection": false,
-          "ipxact": {
-            "bus_interface": "chi"
-          }
-        }
-      ]
-    }
-  ],
   "views": [
     {
       "module": "OpenNoCXP",
@@ -542,79 +86,691 @@
       "file": "views/OpenNoCSNF.xml"
     }
   ],
-  "topologies": [
+  "graph_config": {
+    "schema": "ipcraft.graph-config.v1",
+    "objects": [],
+    "relationships": [],
+    "properties": {},
+    "native": {}
+  },
+  "emitters": [
     {
-      "id": "mesh",
-      "label": "Mesh",
-      "kind": "mesh",
-      "module": "OpenNoCXP",
-      "id_pattern": "xp_{row}_{col}",
-      "ports": {
-        "east": "east",
-        "west": "west",
-        "north": "north",
-        "south": "south"
-      },
-      "parameters": {
-        "rows": {
-          "label": "Rows",
-          "default": 2,
-          "min": 1,
-          "max": 8
-        },
-        "cols": {
-          "label": "Columns",
-          "default": 2,
-          "min": 1,
-          "max": 8
-        }
-      }
+      "id": "graph_config",
+      "kind": "emit_graph_config",
+      "path": "graph_config.json"
+    },
+    {
+      "id": "parameters",
+      "kind": "emit_parameters",
+      "path": "parameters.json"
     }
   ],
-  "generation": {
-    "engine": "ipcraft.common.v1",
-    "outputs": [
-      {
-        "id": "mesh_json",
-        "kind": "json",
-        "path": "opennoc_mesh.json"
-      }
-    ],
-    "module_mappings": {
-      "OpenNoCXP": "XP",
-      "OpenNoCRNF": "RNF",
-      "OpenNoCRNI": "RNI",
-      "OpenNoCHNF": "HNF",
-      "OpenNoCHNI": "HNI",
-      "OpenNoCSNF": "SNF"
-    },
-    "coordinate_bindings": {
-      "OpenNoCXP": {
-        "col": "mesh_col",
-        "row": "mesh_row"
-      }
+  "flows": [
+    {
+      "id": "generate",
+      "label": "Generate",
+      "scope": "instance",
+      "steps": [
+        {
+          "kind": "emit_inputs"
+        },
+        {
+          "kind": "exec",
+          "command": {
+            "framework_tool": "ipcraft-generate",
+            "args": [
+              "--manifest",
+              "{package.manifest}",
+              "--input",
+              "{inputs.manifest}",
+              "--output",
+              "{out}"
+            ],
+            "cwd": "run_dir",
+            "timeout_ms": 300000,
+            "env": {
+              "allow": []
+            },
+            "capture": {
+              "stdout": "stdout.log",
+              "stderr": "stderr.log",
+              "max_bytes": 1048576
+            }
+          }
+        },
+        {
+          "kind": "collect_artifacts"
+        }
+      ]
     }
-  },
-  "commands": {
-    "validate": {
-      "executable": "generator/bin/drc",
-      "input_schema": "ipcraft.noc.project.v1",
-      "args": [
-        "-i",
-        "{input}"
-      ]
+  ],
+  "artifacts": [
+    {
+      "id": "mesh_json",
+      "type": "resolved_config",
+      "glob": "opennoc_mesh.json",
+      "primary": true
     },
-    "generate": {
-      "framework_tool": "ipcraft-generate",
-      "input_schema": "ipcraft.noc.project.v1",
-      "args": [
-        "--manifest",
-        "{manifest}",
-        "--input",
-        "{input}",
-        "--output",
-        "{output}"
-      ]
+    {
+      "id": "manifest",
+      "type": "resolved_config",
+      "glob": "manifest.json"
+    }
+  ],
+  "native": {
+    "ipcraft": {
+      "editor": {
+        "extensions": {
+          "noc.v1": {
+            "enabled": true,
+            "modes": {
+              "chi_interconnect": {
+                "ipxact": {
+                  "mode": "target"
+                }
+              },
+              "chi_requester_node": {
+                "ipxact": {
+                  "mode": "initiator"
+                }
+              },
+              "chi_home_node": {
+                "ipxact": {
+                  "mode": "initiator"
+                }
+              },
+              "chi_subordinate_node": {
+                "ipxact": {
+                  "mode": "initiator"
+                }
+              },
+              "chi_peer": {
+                "ipxact": {
+                  "mode": "system"
+                }
+              }
+            }
+          },
+          "ipcraft.config.params": {
+            "enabled": true
+          },
+          "ipcraft.graph_config": {
+            "enabled": true
+          },
+          "ipcraft.views": {
+            "enabled": true
+          },
+          "ipcraft.emitters": {
+            "enabled": true
+          },
+          "ipcraft.flows": {
+            "enabled": true
+          },
+          "ipcraft.artifacts": {
+            "enabled": true
+          }
+        },
+        "parameters": {
+          "req_flit_width": {
+            "type": "int",
+            "default": 128,
+            "min": 1,
+            "max": 1024,
+            "label": "REQ flit width",
+            "description": "OpenNoC REQ channel flit width used by verification."
+          },
+          "rsp_flit_width": {
+            "type": "int",
+            "default": 64,
+            "min": 1,
+            "max": 1024,
+            "label": "RSP flit width",
+            "description": "OpenNoC RSP channel flit width used by verification."
+          },
+          "dat_flit_width": {
+            "type": "int",
+            "default": 256,
+            "min": 1,
+            "max": 2048,
+            "label": "DAT flit width",
+            "description": "OpenNoC DAT channel flit width used by verification."
+          },
+          "snp_flit_width": {
+            "type": "int",
+            "default": 128,
+            "min": 1,
+            "max": 1024,
+            "label": "SNP flit width",
+            "description": "OpenNoC SNP channel flit width used by verification before the router appends target id bits."
+          }
+        },
+        "connection_classes": [
+          {
+            "id": "opennoc_mesh_link",
+            "roles": [
+              "initiator",
+              "target"
+            ],
+            "symmetric": false
+          },
+          {
+            "id": "chi_node_interface",
+            "roles": [
+              "node",
+              "interconnect"
+            ],
+            "symmetric": false
+          }
+        ],
+        "modules": [
+          {
+            "id": "OpenNoCXP",
+            "name": "OpenNoC XP",
+            "description": "OpenNoC crosspoint router tile.",
+            "graph_role": "host",
+            "display": {
+              "label_parameter": "display_name",
+              "short_label_parameter": "external_id"
+            },
+            "parameters": {
+              "display_name": {
+                "type": "string",
+                "default": "OpenNoC XP",
+                "label": "Display name",
+                "description": "Name shown on the canvas."
+              },
+              "external_id": {
+                "type": "string",
+                "default": "xp_00",
+                "label": "External ID",
+                "description": "Stable generated artifact identifier."
+              },
+              "x": {
+                "type": "int",
+                "default": 0,
+                "configurable": false,
+                "description": "Canvas X position."
+              },
+              "y": {
+                "type": "int",
+                "default": 0,
+                "configurable": false,
+                "description": "Canvas Y position."
+              },
+              "mesh_col": {
+                "type": "int",
+                "default": 0,
+                "configurable": false,
+                "description": "Logical OpenNoC mesh column."
+              },
+              "mesh_row": {
+                "type": "int",
+                "default": 0,
+                "configurable": false,
+                "description": "Logical OpenNoC mesh row."
+              }
+            },
+            "interfaces": [
+              {
+                "id": "east",
+                "label": "East",
+                "modes": [
+                  "initiator"
+                ],
+                "accepts": [
+                  {
+                    "class": "opennoc_mesh_link",
+                    "role": "initiator"
+                  }
+                ],
+                "multi_connection": false,
+                "ipxact": {
+                  "bus_interface": "east"
+                }
+              },
+              {
+                "id": "west",
+                "label": "West",
+                "modes": [
+                  "target"
+                ],
+                "accepts": [
+                  {
+                    "class": "opennoc_mesh_link",
+                    "role": "target"
+                  }
+                ],
+                "multi_connection": false,
+                "ipxact": {
+                  "bus_interface": "west"
+                }
+              },
+              {
+                "id": "north",
+                "label": "North",
+                "modes": [
+                  "target"
+                ],
+                "accepts": [
+                  {
+                    "class": "opennoc_mesh_link",
+                    "role": "target"
+                  }
+                ],
+                "multi_connection": false,
+                "ipxact": {
+                  "bus_interface": "north"
+                }
+              },
+              {
+                "id": "south",
+                "label": "South",
+                "modes": [
+                  "initiator"
+                ],
+                "accepts": [
+                  {
+                    "class": "opennoc_mesh_link",
+                    "role": "initiator"
+                  }
+                ],
+                "multi_connection": false,
+                "ipxact": {
+                  "bus_interface": "south"
+                }
+              },
+              {
+                "id": "p0",
+                "label": "P0",
+                "modes": [
+                  "chi_interconnect"
+                ],
+                "accepts": [
+                  {
+                    "class": "chi_node_interface",
+                    "role": "interconnect"
+                  }
+                ],
+                "multi_connection": false,
+                "ipxact": {
+                  "bus_interface": "p0"
+                }
+              },
+              {
+                "id": "p1",
+                "label": "P1",
+                "modes": [
+                  "chi_interconnect"
+                ],
+                "accepts": [
+                  {
+                    "class": "chi_node_interface",
+                    "role": "interconnect"
+                  }
+                ],
+                "multi_connection": false,
+                "ipxact": {
+                  "bus_interface": "p1"
+                }
+              }
+            ]
+          },
+          {
+            "id": "OpenNoCRNF",
+            "name": "RNF",
+            "description": "OpenNoC CHI RNF agent.",
+            "graph_role": "attached",
+            "display": {
+              "label_parameter": "display_name",
+              "short_label_parameter": "external_id"
+            },
+            "parameters": {
+              "display_name": {
+                "type": "string",
+                "default": "RNF",
+                "label": "Display name",
+                "description": "Name shown on the canvas."
+              },
+              "external_id": {
+                "type": "string",
+                "default": "rnf_00",
+                "label": "External ID",
+                "description": "Stable generated artifact identifier."
+              },
+              "x": {
+                "type": "int",
+                "default": 0,
+                "configurable": false,
+                "description": "Canvas X position."
+              },
+              "y": {
+                "type": "int",
+                "default": 0,
+                "configurable": false,
+                "description": "Canvas Y position."
+              }
+            },
+            "interfaces": [
+              {
+                "id": "chi",
+                "label": "CHI",
+                "modes": [
+                  "chi_requester_node"
+                ],
+                "accepts": [
+                  {
+                    "class": "chi_node_interface",
+                    "role": "node"
+                  }
+                ],
+                "multi_connection": false,
+                "ipxact": {
+                  "bus_interface": "chi"
+                }
+              }
+            ]
+          },
+          {
+            "id": "OpenNoCRNI",
+            "name": "RNI",
+            "description": "OpenNoC CHI RNI agent.",
+            "graph_role": "attached",
+            "display": {
+              "label_parameter": "display_name",
+              "short_label_parameter": "external_id"
+            },
+            "parameters": {
+              "display_name": {
+                "type": "string",
+                "default": "RNI",
+                "label": "Display name",
+                "description": "Name shown on the canvas."
+              },
+              "external_id": {
+                "type": "string",
+                "default": "rni_00",
+                "label": "External ID",
+                "description": "Stable generated artifact identifier."
+              },
+              "x": {
+                "type": "int",
+                "default": 0,
+                "configurable": false,
+                "description": "Canvas X position."
+              },
+              "y": {
+                "type": "int",
+                "default": 0,
+                "configurable": false,
+                "description": "Canvas Y position."
+              }
+            },
+            "interfaces": [
+              {
+                "id": "chi",
+                "label": "CHI",
+                "modes": [
+                  "chi_requester_node"
+                ],
+                "accepts": [
+                  {
+                    "class": "chi_node_interface",
+                    "role": "node"
+                  }
+                ],
+                "multi_connection": false,
+                "ipxact": {
+                  "bus_interface": "chi"
+                }
+              }
+            ]
+          },
+          {
+            "id": "OpenNoCHNF",
+            "name": "HNF",
+            "description": "OpenNoC CHI HNF agent.",
+            "graph_role": "attached",
+            "display": {
+              "label_parameter": "display_name",
+              "short_label_parameter": "external_id"
+            },
+            "parameters": {
+              "display_name": {
+                "type": "string",
+                "default": "HNF",
+                "label": "Display name",
+                "description": "Name shown on the canvas."
+              },
+              "external_id": {
+                "type": "string",
+                "default": "hnf_00",
+                "label": "External ID",
+                "description": "Stable generated artifact identifier."
+              },
+              "x": {
+                "type": "int",
+                "default": 0,
+                "configurable": false,
+                "description": "Canvas X position."
+              },
+              "y": {
+                "type": "int",
+                "default": 0,
+                "configurable": false,
+                "description": "Canvas Y position."
+              }
+            },
+            "interfaces": [
+              {
+                "id": "chi",
+                "label": "CHI",
+                "modes": [
+                  "chi_home_node"
+                ],
+                "accepts": [
+                  {
+                    "class": "chi_node_interface",
+                    "role": "node"
+                  }
+                ],
+                "multi_connection": false,
+                "ipxact": {
+                  "bus_interface": "chi"
+                }
+              }
+            ]
+          },
+          {
+            "id": "OpenNoCHNI",
+            "name": "HNI",
+            "description": "OpenNoC CHI HNI agent.",
+            "graph_role": "attached",
+            "display": {
+              "label_parameter": "display_name",
+              "short_label_parameter": "external_id"
+            },
+            "parameters": {
+              "display_name": {
+                "type": "string",
+                "default": "HNI",
+                "label": "Display name",
+                "description": "Name shown on the canvas."
+              },
+              "external_id": {
+                "type": "string",
+                "default": "hni_00",
+                "label": "External ID",
+                "description": "Stable generated artifact identifier."
+              },
+              "x": {
+                "type": "int",
+                "default": 0,
+                "configurable": false,
+                "description": "Canvas X position."
+              },
+              "y": {
+                "type": "int",
+                "default": 0,
+                "configurable": false,
+                "description": "Canvas Y position."
+              }
+            },
+            "interfaces": [
+              {
+                "id": "chi",
+                "label": "CHI",
+                "modes": [
+                  "chi_home_node"
+                ],
+                "accepts": [
+                  {
+                    "class": "chi_node_interface",
+                    "role": "node"
+                  }
+                ],
+                "multi_connection": false,
+                "ipxact": {
+                  "bus_interface": "chi"
+                }
+              }
+            ]
+          },
+          {
+            "id": "OpenNoCSNF",
+            "name": "SNF",
+            "description": "OpenNoC CHI SNF agent.",
+            "graph_role": "attached",
+            "display": {
+              "label_parameter": "display_name",
+              "short_label_parameter": "external_id"
+            },
+            "parameters": {
+              "display_name": {
+                "type": "string",
+                "default": "SNF",
+                "label": "Display name",
+                "description": "Name shown on the canvas."
+              },
+              "external_id": {
+                "type": "string",
+                "default": "snf_00",
+                "label": "External ID",
+                "description": "Stable generated artifact identifier."
+              },
+              "x": {
+                "type": "int",
+                "default": 0,
+                "configurable": false,
+                "description": "Canvas X position."
+              },
+              "y": {
+                "type": "int",
+                "default": 0,
+                "configurable": false,
+                "description": "Canvas Y position."
+              }
+            },
+            "interfaces": [
+              {
+                "id": "chi",
+                "label": "CHI",
+                "modes": [
+                  "chi_subordinate_node"
+                ],
+                "accepts": [
+                  {
+                    "class": "chi_node_interface",
+                    "role": "node"
+                  }
+                ],
+                "multi_connection": false,
+                "ipxact": {
+                  "bus_interface": "chi"
+                }
+              }
+            ]
+          }
+        ],
+        "views": [
+          {
+            "module": "OpenNoCXP",
+            "file": "views/OpenNoCXP.xml"
+          },
+          {
+            "module": "OpenNoCRNF",
+            "file": "views/OpenNoCRNF.xml"
+          },
+          {
+            "module": "OpenNoCRNI",
+            "file": "views/OpenNoCRNI.xml"
+          },
+          {
+            "module": "OpenNoCHNF",
+            "file": "views/OpenNoCHNF.xml"
+          },
+          {
+            "module": "OpenNoCHNI",
+            "file": "views/OpenNoCHNI.xml"
+          },
+          {
+            "module": "OpenNoCSNF",
+            "file": "views/OpenNoCSNF.xml"
+          }
+        ],
+        "topologies": [
+          {
+            "id": "mesh",
+            "label": "Mesh",
+            "kind": "mesh",
+            "module": "OpenNoCXP",
+            "id_pattern": "xp_{row}_{col}",
+            "ports": {
+              "east": "east",
+              "west": "west",
+              "north": "north",
+              "south": "south"
+            },
+            "parameters": {
+              "rows": {
+                "label": "Rows",
+                "default": 2,
+                "min": 1,
+                "max": 8
+              },
+              "cols": {
+                "label": "Columns",
+                "default": 2,
+                "min": 1,
+                "max": 8
+              }
+            }
+          }
+        ],
+        "generation": {
+          "engine": "ipcraft.common.v1",
+          "outputs": [
+            {
+              "id": "mesh_json",
+              "kind": "json",
+              "path": "opennoc_mesh.json"
+            }
+          ],
+          "module_mappings": {
+            "OpenNoCXP": "XP",
+            "OpenNoCRNF": "RNF",
+            "OpenNoCRNI": "RNI",
+            "OpenNoCHNF": "HNF",
+            "OpenNoCHNI": "HNI",
+            "OpenNoCSNF": "SNF"
+          },
+          "coordinate_bindings": {
+            "OpenNoCXP": {
+              "col": "mesh_col",
+              "row": "mesh_row"
+            }
+          }
+        }
+      }
     }
   }
 }

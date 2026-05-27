@@ -1,4 +1,5 @@
 // IpCoreCommandRunner resolves selected IP-core command descriptors.
+// Migration-only legacy schema handling. Not used by normal runtime loading.
 #include "ipcore/ipcorecommandrunner.h"
 
 #include <QDir>

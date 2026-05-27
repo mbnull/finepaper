@@ -46,6 +46,9 @@ local function add_qt_test_target(name, source_files, extra_files, qt_rule)
         add_files("src/ipcraft/ipcraftconnectionvalidator.cpp")
         add_files("src/ipcraft/ipcraftmanifest.cpp")
         add_files("src/ipcraft/ipcraftmanifestreader.cpp")
+        add_files("src/ipcraft/packagespec.cpp")
+        add_files("src/ipcraft/diagnostics.cpp")
+        add_files("src/ipcraft/jsonhelpers.cpp")
         add_files("src/ipcraft/ipcraftregistry.cpp")
         if extra_files then
             add_files(extra_files)
@@ -146,6 +149,7 @@ add_qt_test_target("validation_test", "test/validation_test.cpp", {
     "src/connection/connectionruleservice.cpp",
     "src/ipcraft/ipcraftbuiltinvalidator.cpp",
     "src/ipcraft/ipxactconnectionchecker.cpp",
+    "src/ipcraft/compositionmodel.cpp",
     "src/ipcore/ipcoregraphexporter.cpp",
     "src/ipcore/ipcatalogservice.cpp",
     "src/**/drcrunner.cpp",
@@ -153,6 +157,7 @@ add_qt_test_target("validation_test", "test/validation_test.cpp", {
     "src/**/validationmanager.cpp",
     "src/**/logpanel.cpp",
     "src/app/generationartifacts.cpp",
+    "src/project/projectstateservice.cpp",
     "src/**/ipcorecommandrunner.cpp",
     "src/**/graphprojectserializer.cpp",
     "src/**/projectwriter.cpp",
@@ -176,6 +181,7 @@ add_qt_test_target("validation_test", "test/validation_test.cpp", {
     "inc/ipcore/ipcoregraphexporter.h",
     "inc/ipcore/ipcatalogservice.h",
     "inc/app/generationartifacts.h",
+    "inc/project/projectstateservice.h",
     "inc/**/ipcorecommandrunner.h",
     "inc/**/graphprojectserializer.h",
     "inc/**/projectdocument.h",
@@ -207,6 +213,7 @@ add_qt_test_target("startupflow_test", "test/startupflow_test.cpp", {
 
 add_qt_test_target("projectdocument_test", "test/projectdocument_test.cpp", {
     "src/connection/connectionruleservice.cpp",
+    "src/ipcraft/compositionmodel.cpp",
     "src/ipcore/ipcoregraphexporter.cpp",
     "src/ipcore/ipcatalogservice.cpp",
     "src/**/projectreader.cpp",
@@ -223,6 +230,7 @@ add_qt_test_target("projectdocument_test", "test/projectdocument_test.cpp", {
     "src/**/moduleprovider.cpp",
     "src/**/ipcoreruntimeregistry.cpp",
     "inc/**/connectionruleservice.h",
+    "inc/ipcraft/compositionmodel.h",
     "inc/**/projectdocument.h",
     "inc/**/ipinstancestate.h",
     "inc/**/projectstateservice.h",
@@ -241,6 +249,12 @@ add_qt_test_target("projectdocument_test", "test/projectdocument_test.cpp", {
 add_qt_test_target("projectgenerationrunner_test", "test/projectgenerationrunner_test.cpp", {
     "src/app/projectgenerationrunner.cpp",
     "src/connection/connectionruleservice.cpp",
+    "src/ipcraft/flowrunner.cpp",
+    "src/ipcraft/artifactmodel.cpp",
+    "src/ipcraft/emitter.cpp",
+    "src/ipcraft/configschema.cpp",
+    "src/ipcraft/value.cpp",
+    "src/ipcraft/compositionmodel.cpp",
     "src/ipcraft/ipcraftbuiltinvalidator.cpp",
     "src/ipcraft/ipxactconnectionchecker.cpp",
     "src/ipcore/ipcatalogservice.cpp",
@@ -248,6 +262,7 @@ add_qt_test_target("projectgenerationrunner_test", "test/projectgenerationrunner
     "src/ipcore/ipcoregraphexporter.cpp",
     "src/project/projectreader.cpp",
     "src/project/projectwriter.cpp",
+    "src/project/projectstateservice.cpp",
     "src/project/graphprojectserializer.cpp",
     "src/app/generationartifacts.cpp",
     "src/validation/validationresult.cpp",
@@ -261,12 +276,16 @@ add_qt_test_target("projectgenerationrunner_test", "test/projectgenerationrunner
     "src/**/ipcoreruntimeregistry.cpp",
     "inc/app/projectgenerationrunner.h",
     "inc/app/generationartifacts.h",
+    "inc/ipcraft/flowrunner.h",
+    "inc/ipcraft/artifactmodel.h",
+    "inc/ipcraft/emitter.h",
     "inc/connection/connectionruleservice.h",
     "inc/ipcore/ipcatalogservice.h",
     "inc/ipcore/ipcorecommandrunner.h",
     "inc/ipcore/ipcoregraphexporter.h",
     "inc/project/projectreader.h",
     "inc/project/projectwriter.h",
+    "inc/project/projectstateservice.h",
     "inc/project/graphprojectserializer.h",
     "inc/project/ipinstancestate.h",
     "inc/**/graph.h",
@@ -292,6 +311,322 @@ add_qt_test_target("ipcatalogservice_test", "test/ipcatalogservice_test.cpp", {
 add_qt_test_target("ipcraftmanifest_test", "test/ipcraftmanifest_test.cpp", {
     "inc/ipcraft/*.h"
 })
+
+target("ipcraft_diagnostics_test")
+    add_rules("qt.console")
+    set_kind("binary")
+    set_group("test")
+    set_default(false)
+    set_languages("c++23")
+
+    add_includedirs("inc")
+    add_files("test/ipcraft_diagnostics_test.cpp")
+    add_files("src/ipcraft/diagnostics.cpp")
+    add_files("src/ipcraft/jsonhelpers.cpp")
+    add_files("inc/ipcraft/diagnostics.h")
+    add_files("inc/ipcraft/jsonhelpers.h")
+    add_files("inc/ipcraft/schemaids.h")
+    add_tests("default", {
+        trim_output = true,
+        pass_outputs = "ipcraft_diagnostics_test passed"
+    })
+
+target("ipcraft_project_model_test")
+    add_rules("qt.console")
+    set_kind("binary")
+    set_group("test")
+    set_default(false)
+    set_languages("c++23")
+
+    add_includedirs("inc")
+    add_files("test/ipcraft_project_model_test.cpp")
+    add_files("src/project/projectreader.cpp")
+    add_files("src/project/projectwriter.cpp")
+    add_files("src/ipcraft/compositionmodel.cpp")
+    add_files("src/ipcraft/diagnostics.cpp")
+    add_files("src/ipcraft/jsonhelpers.cpp")
+    add_files("inc/ipcraft/compositionmodel.h")
+    add_files("inc/ipcraft/packagespec.h")
+    add_files("inc/project/projectdocument.h")
+    add_files("inc/project/ipinstancestate.h")
+    add_files("inc/project/projectreader.h")
+    add_files("inc/project/projectwriter.h")
+    add_files("inc/ipcraft/diagnostics.h")
+    add_files("inc/ipcraft/jsonhelpers.h")
+    add_files("inc/ipcraft/schemaids.h")
+    add_tests("default", {
+        trim_output = true,
+        pass_outputs = "ipcraft_project_model_test passed"
+    })
+
+target("ipcraft_package_spec_test")
+    add_rules("qt.console")
+    set_kind("binary")
+    set_group("test")
+    set_default(false)
+    set_languages("c++23")
+
+    add_includedirs("inc")
+    add_files("test/ipcraft_package_spec_test.cpp")
+    add_files("src/ipcraft/packagespec.cpp")
+    add_files("src/ipcraft/diagnostics.cpp")
+    add_files("src/ipcraft/jsonhelpers.cpp")
+    add_files("inc/ipcraft/packagespec.h")
+    add_files("inc/ipcraft/diagnostics.h")
+    add_files("inc/ipcraft/jsonhelpers.h")
+    add_files("inc/ipcraft/schemaids.h")
+    add_tests("default", {
+        trim_output = true,
+        pass_outputs = "ipcraft_package_spec_test passed"
+    })
+
+target("ipcraft_config_validation_test")
+    add_rules("qt.console")
+    set_kind("binary")
+    set_group("test")
+    set_default(false)
+    set_languages("c++23")
+
+    add_includedirs("inc")
+    add_files("test/ipcraft_config_validation_test.cpp")
+    add_files("src/ipcraft/configschema.cpp")
+    add_files("src/ipcraft/value.cpp")
+    add_files("src/ipcraft/diagnostics.cpp")
+    add_files("src/ipcraft/jsonhelpers.cpp")
+    add_files("inc/ipcraft/configschema.h")
+    add_files("inc/ipcraft/value.h")
+    add_files("inc/ipcraft/diagnostics.h")
+    add_files("inc/ipcraft/jsonhelpers.h")
+    add_files("inc/ipcraft/schemaids.h")
+    add_tests("default", {
+        trim_output = true,
+        pass_outputs = "ipcraft_config_validation_test passed"
+    })
+
+target("ipcraft_composition_test")
+    add_rules("qt.console")
+    set_kind("binary")
+    set_group("test")
+    set_default(false)
+    set_languages("c++23")
+
+    add_includedirs("inc")
+    add_files("test/ipcraft_composition_test.cpp")
+    add_files("src/ipcraft/compositionmodel.cpp")
+    add_files("src/ipcraft/layoutmodel.cpp")
+    add_files("src/ipcraft/diagnostics.cpp")
+    add_files("src/ipcraft/jsonhelpers.cpp")
+    add_files("inc/ipcraft/compositionmodel.h")
+    add_files("inc/ipcraft/layoutmodel.h")
+    add_files("inc/ipcraft/packagespec.h")
+    add_files("inc/ipcraft/diagnostics.h")
+    add_files("inc/ipcraft/jsonhelpers.h")
+    add_files("inc/ipcraft/schemaids.h")
+    add_tests("default", {
+        trim_output = true,
+        pass_outputs = "ipcraft_composition_test passed"
+    })
+
+target("ipcraft_emitter_test")
+    add_rules("qt.console")
+    set_kind("binary")
+    set_group("test")
+    set_default(false)
+    set_languages("c++23")
+
+    add_includedirs("inc")
+    add_files("test/ipcraft_emitter_test.cpp")
+    add_files("src/ipcraft/emitter.cpp")
+    add_files("src/ipcraft/configschema.cpp")
+    add_files("src/ipcraft/value.cpp")
+    add_files("src/ipcraft/compositionmodel.cpp")
+    add_files("src/ipcraft/diagnostics.cpp")
+    add_files("src/ipcraft/jsonhelpers.cpp")
+    add_files("inc/ipcraft/emitter.h")
+    add_files("inc/ipcraft/configschema.h")
+    add_files("inc/ipcraft/value.h")
+    add_files("inc/ipcraft/compositionmodel.h")
+    add_files("inc/ipcraft/packagespec.h")
+    add_files("inc/ipcraft/diagnostics.h")
+    add_files("inc/ipcraft/jsonhelpers.h")
+    add_files("inc/ipcraft/schemaids.h")
+    add_tests("default", {
+        trim_output = true,
+        pass_outputs = "ipcraft_emitter_test passed"
+    })
+
+target("ipcraft_artifact_test")
+    add_rules("qt.console")
+    set_kind("binary")
+    set_group("test")
+    set_default(false)
+    set_languages("c++23")
+
+    add_includedirs("inc")
+    add_files("test/ipcraft_artifact_test.cpp")
+    add_files("src/ipcraft/artifactmodel.cpp")
+    add_files("src/ipcraft/diagnostics.cpp")
+    add_files("src/ipcraft/jsonhelpers.cpp")
+    add_files("inc/ipcraft/artifactmodel.h")
+    add_files("inc/ipcraft/packagespec.h")
+    add_files("inc/ipcraft/diagnostics.h")
+    add_files("inc/ipcraft/jsonhelpers.h")
+    add_files("inc/ipcraft/schemaids.h")
+    add_tests("default", {
+        trim_output = true,
+        pass_outputs = "ipcraft_artifact_test passed"
+    })
+
+target("ipcraft_flowrunner_test")
+    add_rules("qt.console")
+    set_kind("binary")
+    set_group("test")
+    set_default(false)
+    set_languages("c++23")
+
+    add_includedirs("inc")
+    add_files("test/ipcraft_flowrunner_test.cpp")
+    add_files("src/ipcraft/flowrunner.cpp")
+    add_files("src/ipcraft/artifactmodel.cpp")
+    add_files("src/ipcraft/emitter.cpp")
+    add_files("src/ipcraft/configschema.cpp")
+    add_files("src/ipcraft/value.cpp")
+    add_files("src/ipcraft/compositionmodel.cpp")
+    add_files("src/ipcraft/diagnostics.cpp")
+    add_files("src/ipcraft/jsonhelpers.cpp")
+    add_files("src/ipcraft/ipcraftmanifest.cpp")
+    add_files("src/ipcraft/ipcraftmanifestreader.cpp")
+    add_files("src/ipcraft/ipcraftregistry.cpp")
+    add_files("src/ipcraft/packagespec.cpp")
+    add_files("src/app/appsettings.cpp")
+    add_files("src/validation/projectvalidationrunner.cpp")
+    add_files("src/validation/validationresult.cpp")
+    add_files("src/ipcraft/ipcraftbuiltinvalidator.cpp")
+    add_files("src/ipcraft/ipcraftconnectionvalidator.cpp")
+    add_files("src/ipcraft/ipxactconnectionchecker.cpp")
+    add_files("src/validation/validator.cpp")
+    add_files("src/modules/moduleregistry.cpp")
+    add_files("src/modules/moduleprovider.cpp")
+    add_files("src/ipcore/ipcoreruntimeregistry.cpp")
+    add_files("src/graph/graph.cpp")
+    add_files("src/graph/module.cpp")
+    add_files("src/graph/connection.cpp")
+    add_files("src/graph/port.cpp")
+    add_files("src/graph/parameter.cpp")
+    add_files("inc/ipcraft/flowrunner.h")
+    add_files("inc/ipcraft/artifactmodel.h")
+    add_files("inc/ipcraft/emitter.h")
+    add_files("inc/ipcraft/configschema.h")
+    add_files("inc/ipcraft/value.h")
+    add_files("inc/ipcraft/compositionmodel.h")
+    add_files("inc/ipcraft/packagespec.h")
+    add_files("inc/ipcraft/diagnostics.h")
+    add_files("inc/ipcraft/jsonhelpers.h")
+    add_files("inc/ipcraft/schemaids.h")
+    add_files("inc/validation/projectvalidationrunner.h")
+    add_files("inc/graph/graph.h")
+    add_files("inc/graph/module.h")
+    add_tests("default", {
+        trim_output = true,
+        pass_outputs = "ipcraft_flowrunner_test passed"
+    })
+
+target("ipcraft-cli")
+    add_rules("qt.console")
+    set_kind("binary")
+    set_default(false)
+    set_languages("c++23")
+
+    add_includedirs("inc")
+    add_files("cli/ipcraft_cli_main.cpp")
+    add_files("src/cli/cliresult.cpp")
+    add_files("src/project/projectreader.cpp")
+    add_files("src/project/projectwriter.cpp")
+    add_files("src/ipcraft/packagespec.cpp")
+    add_files("src/ipcraft/configschema.cpp")
+    add_files("src/ipcraft/value.cpp")
+    add_files("src/ipcraft/compositionmodel.cpp")
+    add_files("src/ipcraft/diagnostics.cpp")
+    add_files("src/ipcraft/jsonhelpers.cpp")
+    add_files("src/ipcraft/migration.cpp")
+    add_files("src/ipcraft/emitter.cpp")
+    add_files("src/ipcraft/artifactmodel.cpp")
+    add_files("src/ipcraft/flowrunner.cpp")
+    add_files("inc/cli/cliresult.h")
+    add_files("inc/project/projectreader.h")
+    add_files("inc/project/projectwriter.h")
+    add_files("inc/project/projectdocument.h")
+    add_files("inc/project/ipinstancestate.h")
+    add_files("inc/ipcraft/packagespec.h")
+    add_files("inc/ipcraft/configschema.h")
+    add_files("inc/ipcraft/value.h")
+    add_files("inc/ipcraft/compositionmodel.h")
+    add_files("inc/ipcraft/diagnostics.h")
+    add_files("inc/ipcraft/jsonhelpers.h")
+    add_files("inc/ipcraft/migration.h")
+    add_files("inc/ipcraft/emitter.h")
+    add_files("inc/ipcraft/artifactmodel.h")
+    add_files("inc/ipcraft/flowrunner.h")
+    add_files("inc/ipcraft/schemaids.h")
+
+target("ipcraft_cli_contract_test")
+    add_rules("qt.console")
+    set_kind("binary")
+    set_group("test")
+    set_default(false)
+    set_languages("c++23")
+
+    add_deps("ipcraft-cli")
+    add_includedirs("inc")
+    add_files("test/ipcraft_cli_contract_test.cpp")
+    add_files("inc/ipcraft/schemaids.h")
+    add_tests("default", {
+        trim_output = true,
+        pass_outputs = "ipcraft_cli_contract_test passed"
+    })
+
+target("ipcraft_migration_test")
+    add_rules("qt.console")
+    set_kind("binary")
+    set_group("test")
+    set_default(false)
+    set_languages("c++23")
+
+    add_deps("ipcraft-cli")
+    add_includedirs("inc")
+    add_files("test/ipcraft_migration_test.cpp")
+    add_files("src/ipcraft/migration.cpp")
+    add_files("src/project/projectreader.cpp")
+    add_files("src/project/projectwriter.cpp")
+    add_files("src/ipcraft/compositionmodel.cpp")
+    add_files("src/ipcraft/diagnostics.cpp")
+    add_files("src/ipcraft/jsonhelpers.cpp")
+    add_files("inc/ipcraft/migration.h")
+    add_tests("default", {
+        trim_output = true,
+        pass_outputs = "ipcraft_migration_test passed"
+    })
+
+target("ipcraft_contract_examples_test")
+    add_rules("qt.console")
+    set_kind("binary")
+    set_group("test")
+    set_default(false)
+    set_languages("c++23")
+
+    add_includedirs("inc")
+    add_files("test/ipcraft_contract_examples_test.cpp")
+    add_files("src/ipcraft/packagespec.cpp")
+    add_files("src/project/projectreader.cpp")
+    add_files("src/ipcraft/configschema.cpp")
+    add_files("src/ipcraft/value.cpp")
+    add_files("src/ipcraft/compositionmodel.cpp")
+    add_files("src/ipcraft/diagnostics.cpp")
+    add_files("src/ipcraft/jsonhelpers.cpp")
+    add_tests("default", {
+        trim_output = true,
+        pass_outputs = "ipcraft_contract_examples_test passed"
+    })
 
 add_qt_test_target("ipcraft_phase_review_test", "test/ipcraft_phase_review_test.cpp", {
     "src/ipcore/ipcatalogservice.cpp",
@@ -410,6 +745,9 @@ target("propertypanel_test")
     add_files("src/ipcraft/ipcraftconnectionvalidator.cpp")
     add_files("src/ipcraft/ipcraftmanifest.cpp")
     add_files("src/ipcraft/ipcraftmanifestreader.cpp")
+    add_files("src/ipcraft/packagespec.cpp")
+    add_files("src/ipcraft/diagnostics.cpp")
+    add_files("src/ipcraft/jsonhelpers.cpp")
     add_files("src/ipcraft/ipcraftregistry.cpp")
     add_files("src/ipcore/ipcoreruntimeregistry.cpp")
     add_files("inc/**/propertypanel.h")
@@ -446,11 +784,20 @@ target("ipcatalogpanel_test")
     add_files("src/app/projectlauncher.cpp")
     add_files("src/panels/*.cpp")
     add_files("src/widgets/*.cpp")
+    add_files("src/ipcraft/artifactmodel.cpp")
+    add_files("src/ipcraft/compositionmodel.cpp")
+    add_files("src/ipcraft/configschema.cpp")
+    add_files("src/ipcraft/emitter.cpp")
+    add_files("src/ipcraft/flowrunner.cpp")
     add_files("src/ipcraft/ipcraftbuiltinvalidator.cpp")
     add_files("src/ipcraft/ipxactconnectionchecker.cpp")
     add_files("src/ipcraft/ipcraftconnectionvalidator.cpp")
     add_files("src/ipcraft/ipcraftmanifest.cpp")
     add_files("src/ipcraft/ipcraftmanifestreader.cpp")
+    add_files("src/ipcraft/packagespec.cpp")
+    add_files("src/ipcraft/value.cpp")
+    add_files("src/ipcraft/diagnostics.cpp")
+    add_files("src/ipcraft/jsonhelpers.cpp")
     add_files("src/ipcraft/ipcraftregistry.cpp")
     add_files("src/ipcore/*.cpp")
     add_files("src/workspace/*.cpp")
@@ -509,6 +856,9 @@ target("nodeeditor_geometry_test")
     add_files("src/ipcraft/ipcraftconnectionvalidator.cpp")
     add_files("src/ipcraft/ipcraftmanifest.cpp")
     add_files("src/ipcraft/ipcraftmanifestreader.cpp")
+    add_files("src/ipcraft/packagespec.cpp")
+    add_files("src/ipcraft/diagnostics.cpp")
+    add_files("src/ipcraft/jsonhelpers.cpp")
     add_files("src/ipcraft/ipcraftregistry.cpp")
     add_files("src/ipcore/ipcatalogservice.cpp")
     add_files("src/project/projectipservice.cpp")
@@ -591,8 +941,14 @@ add_qt_test_target("v1architecturegate_test", "test/v1architecturegate_test.cpp"
     "src/app/generationartifacts.cpp",
     "src/app/projectgenerationrunner.cpp",
     "src/connection/connectionruleservice.cpp",
+    "src/ipcraft/artifactmodel.cpp",
+    "src/ipcraft/compositionmodel.cpp",
+    "src/ipcraft/configschema.cpp",
+    "src/ipcraft/emitter.cpp",
+    "src/ipcraft/flowrunner.cpp",
     "src/ipcraft/ipcraftbuiltinvalidator.cpp",
     "src/ipcraft/ipxactconnectionchecker.cpp",
+    "src/ipcraft/value.cpp",
     "src/ipcore/ipcatalogservice.cpp",
     "src/ipcore/ipcoregraphexporter.cpp",
     "src/ipcore/ipcorecommandrunner.cpp",
@@ -620,6 +976,11 @@ add_qt_test_target("v1architecturegate_test", "test/v1architecturegate_test.cpp"
     "inc/connection/connectionruleservice.h",
     "inc/graph/graph.h",
     "inc/graph/module.h",
+    "inc/ipcraft/artifactmodel.h",
+    "inc/ipcraft/compositionmodel.h",
+    "inc/ipcraft/configschema.h",
+    "inc/ipcraft/emitter.h",
+    "inc/ipcraft/flowrunner.h",
     "inc/ipcore/ipcatalogservice.h",
     "inc/ipcore/ipcoregraphexporter.h",
     "inc/ipcore/ipcorecommandrunner.h",

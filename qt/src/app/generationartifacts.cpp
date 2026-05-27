@@ -3,6 +3,7 @@
 
 #include "graph/graph.h"
 #include "project/graphprojectserializer.h"
+#include "project/projectstateservice.h"
 #include "project/projectwriter.h"
 
 #include <QDir>
@@ -23,6 +24,36 @@ void addIpcoreStateDependencies(ProjectDocument& document,
         document.ipcores.push_back(ProjectIpcoreRecord{state.ipcoreId, QStringLiteral("1.0")});
         ipcoreIds.insert(state.ipcoreId);
     }
+}
+
+QVector<ProjectIpInstanceRecord> projectInstancesFromGenerationState(
+    const QVector<ProjectIpInstanceRecord>& records) {
+    QVector<ProjectIpInstanceRecord> instances;
+    instances.reserve(records.size());
+    for (ProjectIpInstanceRecord record : records) {
+        if (record.id.trimmed().isEmpty()) {
+            record.id = record.instanceId;
+        }
+        if (record.package.id.trimmed().isEmpty()) {
+            record.package.id = record.ipcoreId;
+        }
+        if (record.package.version.trimmed().isEmpty()) {
+            record.package.version = QStringLiteral("1.0");
+        }
+        if (record.displayName.trimmed().isEmpty()) {
+            record.displayName = record.id;
+        }
+        const QJsonValue globalParameters = record.state.value(QStringLiteral("global_parameters"));
+        if (globalParameters.isObject() &&
+            !record.config.contains(QStringLiteral("parameters"))) {
+            record.config.insert(QStringLiteral("parameters"), globalParameters.toObject());
+        }
+        if (record.native.isEmpty() && !record.state.isEmpty()) {
+            record.native = QJsonObject{{QStringLiteral("legacy_state"), record.state}};
+        }
+        instances.append(record);
+    }
+    return instances;
 }
 
 } // namespace
@@ -59,7 +90,11 @@ GeneratedProjectSnapshotResult writeGeneratedProjectSnapshotFile(const Graph& gr
                                                                  const QString& designName,
                                                                  const QVector<ProjectIpInstanceRecord>& ipcoreState) {
     ProjectDocument document = GraphProjectSerializer::toProject(graph, designName);
+    document.instances = projectInstancesFromGenerationState(ipcoreState);
     document.ipcoreState = ipcoreState;
+    ProjectStateService stateService;
+    stateService.loadFromDocument(document);
+    stateService.writeToDocument(document);
     addIpcoreStateDependencies(document, ipcoreState);
     const ProjectWriteResult writeResult = ProjectWriter::writeFile(projectPath, document);
     if (!writeResult.success) {

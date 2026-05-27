@@ -23,6 +23,7 @@
 #include <QSettings>
 #include <QStringList>
 #include <QTemporaryDir>
+#include <algorithm>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
@@ -77,18 +78,24 @@ void configureDefaultPackageRootsForTest() {
 
 QJsonObject minimalProjectRoot() {
     return QJsonObject{
-        {QStringLiteral("schema"), QStringLiteral("v1")},
-        {QStringLiteral("kind"), QStringLiteral("finepaper-project")},
+        {QStringLiteral("schema"), QStringLiteral("ipcraft.project.v1")},
         {QStringLiteral("project"), QJsonObject{
-            {QStringLiteral("name"), QStringLiteral("minimal")},
-            {QStringLiteral("version"), QStringLiteral("1.0")}
+            {QStringLiteral("id"), QStringLiteral("project_0")},
+            {QStringLiteral("name"), QStringLiteral("minimal")}
         }},
-        {QStringLiteral("ipcores"), QJsonArray{}},
-        {QStringLiteral("ipcore_state"), QJsonArray{}},
-        {QStringLiteral("graph"), QJsonObject{
-            {QStringLiteral("modules"), QJsonArray{}},
-            {QStringLiteral("connections"), QJsonArray{}}
-        }}
+        {QStringLiteral("instances"), QJsonArray{}},
+        {QStringLiteral("composition"), QJsonObject{
+            {QStringLiteral("connections"), QJsonArray{}},
+            {QStringLiteral("external_ports"), QJsonArray{}}
+        }},
+        {QStringLiteral("layout"), QJsonObject{{QStringLiteral("views"), QJsonArray{}}}},
+        {QStringLiteral("diagnostics"), QJsonObject{
+            {QStringLiteral("schema"), QStringLiteral("ipcraft.diagnostics.v1")},
+            {QStringLiteral("records"), QJsonArray{}}
+        }},
+        {QStringLiteral("artifacts"), QJsonObject{}},
+        {QStringLiteral("migration"), QJsonObject{}},
+        {QStringLiteral("native"), QJsonObject{}}
     };
 }
 
@@ -311,6 +318,24 @@ void registerScopedProjectType(const QString& packageId, const QString& moduleId
     ModuleRegistry::instance().registerType(type);
 }
 
+ProjectIpInstanceRecord projectInstanceRecord(const QString& ipcoreId,
+                                              const QString& instanceId,
+                                              const QString& schema,
+                                              const QJsonObject& state) {
+    ProjectIpInstanceRecord record;
+    record.id = instanceId;
+    record.package = ProjectPackageRef{ipcoreId, QStringLiteral("1.0")};
+    record.ipcoreId = ipcoreId;
+    record.instanceId = instanceId;
+    record.schema = schema;
+    record.state = state;
+    const QJsonValue globalParameters = state.value(QStringLiteral("global_parameters"));
+    if (globalParameters.isObject()) {
+        record.config.insert(QStringLiteral("parameters"), globalParameters.toObject());
+    }
+    return record;
+}
+
 ProjectDocument validProjectDocument() {
     registerProjectTypes();
 
@@ -318,14 +343,11 @@ ProjectDocument validProjectDocument() {
     document.name = QStringLiteral("validation");
     document.ipcores.push_back(ProjectIpcoreRecord{QStringLiteral("finepaper.test"),
                                                    QStringLiteral("1.0")});
-    document.ipcoreState.push_back(ProjectIpInstanceRecord{
+    document.ipcoreState.push_back(projectInstanceRecord(
         QStringLiteral("finepaper.test"),
         QStringLiteral("test_0"),
         QStringLiteral("finepaper.test-project-state-v1"),
-        QJsonObject{
-            {QStringLiteral("global_parameters"), QJsonObject{}}
-        }
-    });
+        QJsonObject{{QStringLiteral("global_parameters"), QJsonObject{}}}));
 
     ProjectModuleRecord xp;
     xp.id = QStringLiteral("node_1");
@@ -358,11 +380,11 @@ ProjectDocument validProjectDocument() {
     endpoint.parameters.insert(QStringLiteral("buffer_depth"), 16);
     document.modules.push_back(endpoint);
 
-    document.connections.push_back(ProjectConnectionRecord{
-        QStringLiteral("conn_1"),
-        ProjectConnectionEndpoint{QStringLiteral("node_1"), QStringLiteral("ep0")},
-        ProjectConnectionEndpoint{QStringLiteral("node_2"), QStringLiteral("noc")}
-    });
+    ProjectConnectionRecord connection;
+    connection.id = QStringLiteral("conn_1");
+    connection.source = ProjectConnectionEndpoint{QStringLiteral("node_1"), QStringLiteral("ep0")};
+    connection.target = ProjectConnectionEndpoint{QStringLiteral("node_2"), QStringLiteral("noc")};
+    document.connections.push_back(connection);
 
     return document;
 }
@@ -398,12 +420,14 @@ void testProjectWritesInterfaceConnectionsWithoutFromTo() {
     require(graph.connections().size() == 1, "setup connection should be valid");
 
     ProjectDocument document = GraphProjectSerializer::toProject(graph, QStringLiteral("interfaces"));
-    document.ipcoreState.push_back(ProjectIpInstanceRecord{
+    document.ipcoreState.push_back(projectInstanceRecord(
         QStringLiteral("finepaper.chi"),
         QStringLiteral("opennoc_0"),
         QStringLiteral("finepaper.chi-project-state-v1"),
-        QJsonObject{{QStringLiteral("global_parameters"), QJsonObject{}}}
-    });
+        QJsonObject{{QStringLiteral("global_parameters"), QJsonObject{}}}));
+    ProjectStateService stateService;
+    stateService.loadFromDocument(document);
+    stateService.writeToDocument(document);
 
     QTemporaryDir tempDir;
     require(tempDir.isValid(), "failed to create temporary directory");
@@ -412,20 +436,25 @@ void testProjectWritesInterfaceConnectionsWithoutFromTo() {
 
     QFile file(path);
     require(file.open(QIODevice::ReadOnly), "project should reopen");
-    const QJsonObject connection = QJsonDocument::fromJson(file.readAll())
-                                       .object()
-                                       .value(QStringLiteral("graph"))
+    const QJsonObject project = QJsonDocument::fromJson(file.readAll()).object();
+    require(!project.contains(QStringLiteral("graph")),
+            "V1 project should not write legacy root graph");
+    const QJsonObject connection = project.value(QStringLiteral("instances"))
+                                       .toArray()
+                                       .first()
                                        .toObject()
-                                       .value(QStringLiteral("connections"))
+                                       .value(QStringLiteral("graph_config"))
+                                       .toObject()
+                                       .value(QStringLiteral("relationships"))
                                        .toArray()
                                        .first()
                                        .toObject();
 
     require(connection.value(QStringLiteral("id")).toString() == QStringLiteral("conn_0"),
             "connection id should be written");
-    require(connection.value(QStringLiteral("class")).toString() == QStringLiteral("chi_node_interface"),
-            "connection class should be written");
-    require(connection.value(QStringLiteral("status")).toString() == QStringLiteral("valid"),
+    require(connection.value(QStringLiteral("type")).toString() == QStringLiteral("chi_node_interface"),
+            "connection type should be written");
+    require(connection.value(QStringLiteral("properties")).toObject().value(QStringLiteral("status")).toString() == QStringLiteral("valid"),
             "connection status should be written");
     require(!connection.contains(QStringLiteral("source")),
             "new project connection should not write source endpoint");
@@ -436,198 +465,20 @@ void testProjectWritesInterfaceConnectionsWithoutFromTo() {
     require(!connection.contains(QStringLiteral("to")),
             "new project connection should not write to endpoint");
 
-    const QJsonArray interfaces = connection.value(QStringLiteral("interfaces")).toArray();
+    const QJsonArray interfaces = connection.value(QStringLiteral("endpoints")).toArray();
     require(interfaces.size() == 2, "connection should write two interface participants");
-    require(interfaces.at(0).toObject().value(QStringLiteral("instance")).toString() ==
+    require(interfaces.at(0).toObject().value(QStringLiteral("object")).toString() ==
                 QStringLiteral("rnf_0"),
             "first participant instance should be written");
-    require(interfaces.at(0).toObject().value(QStringLiteral("interface")).toString() ==
+    require(interfaces.at(0).toObject().value(QStringLiteral("role")).toString() ==
                 QStringLiteral("chi"),
             "first participant interface should be written");
-    require(interfaces.at(1).toObject().value(QStringLiteral("instance")).toString() ==
+    require(interfaces.at(1).toObject().value(QStringLiteral("object")).toString() ==
                 QStringLiteral("xp_0"),
             "second participant instance should be written");
-    require(interfaces.at(1).toObject().value(QStringLiteral("interface")).toString() ==
+    require(interfaces.at(1).toObject().value(QStringLiteral("role")).toString() ==
                 QStringLiteral("rnf0"),
             "second participant interface should be written");
-}
-
-void testProjectReadsAmbiguousConnectionAlternatives() {
-    QJsonObject root = minimalProjectRoot();
-    QJsonObject graph = root.value(QStringLiteral("graph")).toObject();
-    graph.insert(QStringLiteral("connections"), QJsonArray{
-        QJsonObject{
-            {QStringLiteral("id"), QStringLiteral("conn_1")},
-            {QStringLiteral("class"), QStringLiteral("chi_node_interface")},
-            {QStringLiteral("interfaces"), QJsonArray{
-                QJsonObject{
-                    {QStringLiteral("instance"), QStringLiteral("a")},
-                    {QStringLiteral("interface"), QStringLiteral("x")}
-                },
-                QJsonObject{
-                    {QStringLiteral("instance"), QStringLiteral("b")},
-                    {QStringLiteral("interface"), QStringLiteral("y")}
-                }
-            }},
-            {QStringLiteral("status"), QStringLiteral("ambiguous")},
-            {QStringLiteral("alternatives"), QJsonArray{
-                QStringLiteral("chi_node_interface"),
-                QStringLiteral("monitor_tap")
-            }}
-        }
-    });
-    root.insert(QStringLiteral("graph"), graph);
-
-    QTemporaryDir tempDir;
-    require(tempDir.isValid(), "failed to create temporary directory");
-    const QString inputPath = QDir(tempDir.path()).filePath(QStringLiteral("ambiguous.fpproj"));
-    const QString outputPath = QDir(tempDir.path()).filePath(QStringLiteral("ambiguous_roundtrip.fpproj"));
-    writeJsonFile(inputPath, root);
-
-    const ProjectReadResult readResult = ProjectReader::readFile(inputPath);
-    require(readResult.success, "project with ambiguous interface connection should read");
-    require(ProjectWriter::writeFile(outputPath, readResult.document).success,
-            "ambiguous project should write");
-
-    QFile file(outputPath);
-    require(file.open(QIODevice::ReadOnly), "round-tripped project should reopen");
-    const QJsonObject connection = QJsonDocument::fromJson(file.readAll())
-                                       .object()
-                                       .value(QStringLiteral("graph"))
-                                       .toObject()
-                                       .value(QStringLiteral("connections"))
-                                       .toArray()
-                                       .first()
-                                       .toObject();
-    const QJsonArray alternatives = connection.value(QStringLiteral("alternatives")).toArray();
-
-    require(connection.value(QStringLiteral("class")).toString() == QStringLiteral("chi_node_interface"),
-            "ambiguous connection class should be preserved");
-    require(connection.value(QStringLiteral("status")).toString() == QStringLiteral("ambiguous"),
-            "ambiguous connection status should be preserved");
-    require(alternatives.size() == 2, "ambiguous connection alternatives should be preserved");
-    require(alternatives.at(0).toString() == QStringLiteral("chi_node_interface"),
-            "first ambiguous alternative should be preserved");
-    require(alternatives.at(1).toString() == QStringLiteral("monitor_tap"),
-            "second ambiguous alternative should be preserved");
-}
-
-void testProjectReaderRejectsMalformedInterfaceConnections() {
-    QTemporaryDir tempDir;
-    require(tempDir.isValid(), "failed to create temporary directory");
-
-    auto participant = [](const QString& instanceId, const QString& interfaceId) {
-        return QJsonObject{
-            {QStringLiteral("instance"), instanceId},
-            {QStringLiteral("interface"), interfaceId}
-        };
-    };
-
-    auto connection = [](const QString& id, const QJsonValue& interfaces) {
-        return QJsonObject{
-            {QStringLiteral("id"), id},
-            {QStringLiteral("class"), QStringLiteral("chi_node_interface")},
-            {QStringLiteral("interfaces"), interfaces},
-            {QStringLiteral("status"), QStringLiteral("valid")}
-        };
-    };
-
-    auto expectRejected = [&](const QString& fileName,
-                              QJsonObject connectionObject,
-                              const QString& expectedError) {
-        QJsonObject root = minimalProjectRoot();
-        QJsonObject graph = root.value(QStringLiteral("graph")).toObject();
-        graph.insert(QStringLiteral("connections"), QJsonArray{connectionObject});
-        root.insert(QStringLiteral("graph"), graph);
-
-        const QString path = QDir(tempDir.path()).filePath(fileName);
-        writeJsonFile(path, root);
-
-        const ProjectReadResult result = ProjectReader::readFile(path);
-        require(!result.success, "malformed interface connection should be rejected");
-        require(result.error.contains(expectedError),
-                "malformed interface connection error should mention the malformed field");
-    };
-
-    expectRejected(QStringLiteral("interfaces_non_array.fpproj"),
-                   connection(QStringLiteral("conn_non_array"), QJsonObject{}),
-                   QStringLiteral("interfaces"));
-
-    expectRejected(QStringLiteral("interfaces_participant_non_object.fpproj"),
-                   connection(QStringLiteral("conn_participant_non_object"),
-                              QJsonArray{
-                                  QStringLiteral("not-an-object"),
-                                  participant(QStringLiteral("b"), QStringLiteral("y"))
-                              }),
-                   QStringLiteral("participants"));
-
-    expectRejected(QStringLiteral("interfaces_missing_instance.fpproj"),
-                   connection(QStringLiteral("conn_missing_instance"),
-                              QJsonArray{
-                                  QJsonObject{{QStringLiteral("interface"), QStringLiteral("x")}},
-                                  participant(QStringLiteral("b"), QStringLiteral("y"))
-                              }),
-                   QStringLiteral("instance"));
-
-    expectRejected(QStringLiteral("interfaces_blank_instance.fpproj"),
-                   connection(QStringLiteral("conn_blank_instance"),
-                              QJsonArray{
-                                  participant(QStringLiteral("   "), QStringLiteral("x")),
-                                  participant(QStringLiteral("b"), QStringLiteral("y"))
-                              }),
-                   QStringLiteral("instance"));
-
-    expectRejected(QStringLiteral("interfaces_missing_interface.fpproj"),
-                   connection(QStringLiteral("conn_missing_interface"),
-                              QJsonArray{
-                                  QJsonObject{{QStringLiteral("instance"), QStringLiteral("a")}},
-                                  participant(QStringLiteral("b"), QStringLiteral("y"))
-                              }),
-                   QStringLiteral("interface"));
-
-    expectRejected(QStringLiteral("interfaces_blank_interface.fpproj"),
-                   connection(QStringLiteral("conn_blank_interface"),
-                              QJsonArray{
-                                  participant(QStringLiteral("a"), QStringLiteral("   ")),
-                                  participant(QStringLiteral("b"), QStringLiteral("y"))
-                              }),
-                   QStringLiteral("interface"));
-
-    expectRejected(QStringLiteral("interfaces_one_participant.fpproj"),
-                   connection(QStringLiteral("conn_one_participant"),
-                              QJsonArray{participant(QStringLiteral("a"), QStringLiteral("x"))}),
-                   QStringLiteral("exactly two"));
-
-    expectRejected(QStringLiteral("interfaces_three_participants.fpproj"),
-                   connection(QStringLiteral("conn_three_participants"),
-                              QJsonArray{
-                                  participant(QStringLiteral("a"), QStringLiteral("x")),
-                                  participant(QStringLiteral("b"), QStringLiteral("y")),
-                                  participant(QStringLiteral("c"), QStringLiteral("z"))
-                              }),
-                   QStringLiteral("exactly two"));
-
-    QJsonObject nonArrayAlternatives = connection(
-        QStringLiteral("conn_alternatives_non_array"),
-        QJsonArray{
-            participant(QStringLiteral("a"), QStringLiteral("x")),
-            participant(QStringLiteral("b"), QStringLiteral("y"))
-        });
-    nonArrayAlternatives.insert(QStringLiteral("alternatives"), QJsonObject{});
-    expectRejected(QStringLiteral("alternatives_non_array.fpproj"),
-                   nonArrayAlternatives,
-                   QStringLiteral("alternatives"));
-
-    QJsonObject nonStringAlternative = connection(
-        QStringLiteral("conn_alternatives_non_string"),
-        QJsonArray{
-            participant(QStringLiteral("a"), QStringLiteral("x")),
-            participant(QStringLiteral("b"), QStringLiteral("y"))
-        });
-    nonStringAlternative.insert(QStringLiteral("alternatives"), QJsonArray{42});
-    expectRejected(QStringLiteral("alternatives_non_string.fpproj"),
-                   nonStringAlternative,
-                   QStringLiteral("alternatives"));
 }
 
 void testProjectRoundTripRestoresModulesParametersAndConnections() {
@@ -663,6 +514,9 @@ void testProjectRoundTripRestoresModulesParametersAndConnections() {
 
     ProjectDocument document = GraphProjectSerializer::toProject(graph, QStringLiteral("roundtrip"));
     document.ipcoreState.push_back(state);
+    ProjectStateService stateService;
+    stateService.loadFromDocument(document);
+    stateService.writeToDocument(document);
     const ProjectWriteResult writeResult = ProjectWriter::writeFile(projectPath, document);
     require(writeResult.success, "project write should succeed");
 
@@ -718,12 +572,11 @@ void testProjectLoadUsesLoadedPackageManifestsForInterfaceRules() {
     ProjectDocument document;
     document.name = QStringLiteral("manifest_connection_load");
     document.ipcores.push_back(ProjectIpcoreRecord{manifest.id, QStringLiteral("1.0")});
-    document.ipcoreState.push_back(ProjectIpInstanceRecord{
+    document.ipcoreState.push_back(projectInstanceRecord(
         manifest.id,
         QStringLiteral("manifest_0"),
         manifest.id + QStringLiteral("-project-state-v1"),
-        QJsonObject{{QStringLiteral("global_parameters"), QJsonObject{}}}
-    });
+        QJsonObject{{QStringLiteral("global_parameters"), QJsonObject{}}}));
     document.modules.push_back(ProjectModuleRecord{
         QStringLiteral("endpoint"),
         manifest.id,
@@ -738,11 +591,11 @@ void testProjectLoadUsesLoadedPackageManifestsForInterfaceRules() {
         QStringLiteral("ProjectLoadXp"),
         {}
     });
-    document.connections.push_back(ProjectConnectionRecord{
-        QStringLiteral("conn_manifest"),
-        ProjectConnectionEndpoint{QStringLiteral("endpoint"), QStringLiteral("noc")},
-        ProjectConnectionEndpoint{QStringLiteral("xp"), QStringLiteral("local0")}
-    });
+    ProjectConnectionRecord manifestConnection;
+    manifestConnection.id = QStringLiteral("conn_manifest");
+    manifestConnection.source = ProjectConnectionEndpoint{QStringLiteral("endpoint"), QStringLiteral("noc")};
+    manifestConnection.target = ProjectConnectionEndpoint{QStringLiteral("xp"), QStringLiteral("local0")};
+    document.connections.push_back(manifestConnection);
 
     Graph graph;
     const GraphProjectLoadResult result = GraphProjectSerializer::loadProject(document, graph);
@@ -764,12 +617,11 @@ void testProjectLoadRejectsSavedConnectionClassNotAcceptedByInterfaces() {
     ProjectDocument document;
     document.name = QStringLiteral("manifest_connection_bad_class");
     document.ipcores.push_back(ProjectIpcoreRecord{manifest.id, QStringLiteral("1.0")});
-    document.ipcoreState.push_back(ProjectIpInstanceRecord{
+    document.ipcoreState.push_back(projectInstanceRecord(
         manifest.id,
         QStringLiteral("manifest_bad_class_0"),
         manifest.id + QStringLiteral("-project-state-v1"),
-        QJsonObject{{QStringLiteral("global_parameters"), QJsonObject{}}}
-    });
+        QJsonObject{{QStringLiteral("global_parameters"), QJsonObject{}}}));
     document.modules.push_back(ProjectModuleRecord{
         QStringLiteral("endpoint_bad_class"),
         manifest.id,
@@ -785,11 +637,10 @@ void testProjectLoadRejectsSavedConnectionClassNotAcceptedByInterfaces() {
         {}
     });
 
-    ProjectConnectionRecord connection{
-        QStringLiteral("conn_bad_class"),
-        ProjectConnectionEndpoint{QStringLiteral("endpoint_bad_class"), QStringLiteral("noc")},
-        ProjectConnectionEndpoint{QStringLiteral("xp_bad_class"), QStringLiteral("local0")}
-    };
+    ProjectConnectionRecord connection;
+    connection.id = QStringLiteral("conn_bad_class");
+    connection.source = ProjectConnectionEndpoint{QStringLiteral("endpoint_bad_class"), QStringLiteral("noc")};
+    connection.target = ProjectConnectionEndpoint{QStringLiteral("xp_bad_class"), QStringLiteral("local0")};
     connection.connectionClassId = QStringLiteral("project_load_unaccepted");
     document.connections.push_back(connection);
 
@@ -815,12 +666,11 @@ void testProjectLoadRejectsInterfaceConnectionMissingSavedClass() {
     ProjectDocument document;
     document.name = QStringLiteral("manifest_connection_missing_class");
     document.ipcores.push_back(ProjectIpcoreRecord{manifest.id, QStringLiteral("1.0")});
-    document.ipcoreState.push_back(ProjectIpInstanceRecord{
+    document.ipcoreState.push_back(projectInstanceRecord(
         manifest.id,
         QStringLiteral("manifest_missing_class_0"),
         manifest.id + QStringLiteral("-project-state-v1"),
-        QJsonObject{{QStringLiteral("global_parameters"), QJsonObject{}}}
-    });
+        QJsonObject{{QStringLiteral("global_parameters"), QJsonObject{}}}));
     document.modules.push_back(ProjectModuleRecord{
         QStringLiteral("endpoint_missing_class"),
         manifest.id,
@@ -859,69 +709,33 @@ void testProjectLoadRejectsInterfaceConnectionMissingSavedClass() {
             "failed missing class validation should not restore the bad connection");
 }
 
-void testProjectPreservesOpaqueIpcoreState() {
-    ProjectDocument document = validProjectDocument();
-    ProjectIpInstanceRecord state;
-    state.ipcoreId = QStringLiteral("finepaper.ravenoc");
-    state.instanceId = QStringLiteral("ravenoc_0");
-    state.schema = QStringLiteral("ravenoc-project-state-v1");
-    state.state = QJsonObject{
-        {QStringLiteral("global_parameters"), QJsonObject{
-            {QStringLiteral("flit_data_width"), 64},
-            {QStringLiteral("routing_algorithm"), QStringLiteral("xy")}
-        }}
-    };
-    document.ipcoreState.push_back(state);
-
-    QTemporaryDir tempDir;
-    require(tempDir.isValid(), "failed to create temporary directory");
-    const QString path = QDir(tempDir.path()).filePath(QStringLiteral("ipcore_state.fpproj"));
-    const ProjectWriteResult writeResult = ProjectWriter::writeFile(path, document);
-    require(writeResult.success, "project with IP-core state should write");
-
-    const ProjectReadResult readResult = ProjectReader::readFile(path);
-    require(readResult.success, "project with IP-core state should read");
-    const ProjectIpInstanceRecord& restored = requireStateRecord(readResult.document.ipcoreState,
-                                                                 QStringLiteral("finepaper.ravenoc"),
-                                                                 QStringLiteral("ravenoc_0"));
-    require(restored.ipcoreId == QStringLiteral("finepaper.ravenoc"),
-            "IP-core state owner id should round-trip");
-    require(restored.instanceId == QStringLiteral("ravenoc_0"),
-            "IP-core state instance id should round-trip");
-    require(restored.schema == QStringLiteral("ravenoc-project-state-v1"),
-            "IP-core state schema should round-trip");
-    require(restored.state.value(QStringLiteral("global_parameters"))
-                .toObject()
-                .value(QStringLiteral("flit_data_width"))
-                .toInt() == 64,
-            "opaque IP-core state JSON should round-trip");
-}
-
-void testProjectWriterUsesIpcoreVocabulary() {
+void testProjectWriterUsesCanonicalProjectDocumentVocabulary() {
     QTemporaryDir tempDir;
     require(tempDir.isValid(), "failed to create temporary directory");
 
-    ProjectDocument document;
-    document.name = QStringLiteral("ipcore_schema");
-    document.ipcores.push_back(ProjectIpcoreRecord{QStringLiteral("finepaper.ravenoc"),
-                                                   QStringLiteral("1.0")});
+    Graph graph;
+    auto module = instantiate(makeProjectXpType(), QStringLiteral("tile_0"));
+    module->setIpcoreId(QStringLiteral("finepaper.ravenoc"));
+    module->setInstanceId(QStringLiteral("ravenoc_0"));
+    module->setParameter(QStringLiteral("x"), 12);
+    module->setParameter(QStringLiteral("y"), 34);
+    module->setParameter(QStringLiteral("collapsed"), true);
+    module->setParameter(QStringLiteral("vc_count"), 4);
+    require(graph.addModule(std::move(module)), "canonical writer module should add");
 
-    ProjectIpInstanceRecord state;
-    state.ipcoreId = QStringLiteral("finepaper.ravenoc");
-    state.instanceId = QStringLiteral("ravenoc_0");
-    state.schema = QStringLiteral("finepaper.ravenoc-project-state-v1");
-    state.state.insert(QStringLiteral("kind"), QStringLiteral("noc"));
-    state.state.insert(QStringLiteral("global_parameters"), QJsonObject{
-        {QStringLiteral("flit_data_width"), 32}
-    });
+    ProjectIpInstanceRecord state = projectInstanceRecord(
+        QStringLiteral("finepaper.ravenoc"),
+        QStringLiteral("ravenoc_0"),
+        QStringLiteral("finepaper.ravenoc-project-state-v1"),
+        QJsonObject{{QStringLiteral("global_parameters"), QJsonObject{
+            {QStringLiteral("flit_data_width"), 32}
+        }}});
+
+    ProjectDocument document = GraphProjectSerializer::toProject(graph, QStringLiteral("ipcore_schema"));
     document.ipcoreState.push_back(state);
-
-    ProjectModuleRecord module;
-    module.id = QStringLiteral("tile_0");
-    module.ipcoreId = QStringLiteral("finepaper.ravenoc");
-    module.instanceId = QStringLiteral("ravenoc_0");
-    module.type = QStringLiteral("RaveTile");
-    document.modules.push_back(module);
+    ProjectStateService stateService;
+    stateService.loadFromDocument(document);
+    stateService.writeToDocument(document);
 
     const QString path = QDir(tempDir.path()).filePath(QStringLiteral("schema.fpproj"));
     require(ProjectWriter::writeFile(path, document).success, "project should write");
@@ -929,21 +743,256 @@ void testProjectWriterUsesIpcoreVocabulary() {
     QFile file(path);
     require(file.open(QIODevice::ReadOnly), "project should reopen");
     const QJsonObject root = QJsonDocument::fromJson(file.readAll()).object();
-    require(root.contains(QStringLiteral("ipcores")), "writer should emit ipcores");
-    require(root.contains(QStringLiteral("ipcore_state")), "writer should emit ipcore_state");
+    require(root.value(QStringLiteral("schema")).toString() == QStringLiteral("ipcraft.project.v1"),
+            "writer should emit ProjectDocument schema");
+    require(!root.contains(QStringLiteral("ipcores")), "writer should not emit old ipcores");
+    require(!root.contains(QStringLiteral("ipcore_state")), "writer should not emit old ipcore_state");
+    require(!root.contains(QStringLiteral("graph")), "writer should not emit old root graph");
     require(!root.contains(QStringLiteral("plugins")), "writer should not emit plugins");
     require(!root.contains(QStringLiteral("plugin_state")), "writer should not emit plugin_state");
-    const QJsonObject firstModule = root.value(QStringLiteral("graph"))
-                                        .toObject()
-                                        .value(QStringLiteral("modules"))
-                                        .toArray()
-                                        .first()
-                                        .toObject();
-    require(firstModule.value(QStringLiteral("ipcore")).toString() == QStringLiteral("finepaper.ravenoc"),
-            "module should emit ipcore owner");
-    require(firstModule.value(QStringLiteral("instance")).toString() == QStringLiteral("ravenoc_0"),
-            "module should emit instance owner");
-    require(!firstModule.contains(QStringLiteral("plugin")), "module should not emit plugin owner");
+
+    const QJsonObject instance = root.value(QStringLiteral("instances")).toArray().first().toObject();
+    require(instance.value(QStringLiteral("id")).toString() == QStringLiteral("ravenoc_0"),
+            "writer should emit canonical instance id");
+    require(instance.value(QStringLiteral("package")).toObject().value(QStringLiteral("id")).toString() ==
+                QStringLiteral("finepaper.ravenoc"),
+            "writer should emit canonical package id");
+    require(instance.value(QStringLiteral("config")).toObject()
+                .value(QStringLiteral("parameters")).toObject()
+                .value(QStringLiteral("flit_data_width")).toInt() == 32,
+            "writer should emit config parameters");
+
+    const QJsonObject graphObject = instance.value(QStringLiteral("graph_config")).toObject()
+                                        .value(QStringLiteral("objects")).toArray().first().toObject();
+    require(graphObject.value(QStringLiteral("id")).toString() == QStringLiteral("tile_0"),
+            "writer should emit graph-config object id");
+    const QJsonObject graphProperties = graphObject.value(QStringLiteral("properties")).toObject();
+    require(graphProperties.value(QStringLiteral("vc_count")).toInt() == 4,
+            "writer should keep non-layout graph object properties");
+    require(!graphProperties.contains(QStringLiteral("x")) &&
+                !graphProperties.contains(QStringLiteral("y")) &&
+                !graphProperties.contains(QStringLiteral("collapsed")),
+            "writer should move editor layout out of graph-config object properties");
+
+    const QJsonObject layoutNode = root.value(QStringLiteral("layout")).toObject()
+                                       .value(QStringLiteral("views")).toArray().first().toObject()
+                                       .value(QStringLiteral("canvas")).toObject()
+                                       .value(QStringLiteral("nodes")).toObject()
+                                       .value(QStringLiteral("tile_0")).toObject();
+    require(layoutNode.value(QStringLiteral("x")).toInt() == 12 &&
+                layoutNode.value(QStringLiteral("y")).toInt() == 34 &&
+                layoutNode.value(QStringLiteral("collapsed")).toBool(),
+            "writer should emit editor layout in LayoutModel");
+}
+
+void testProjectGraphConfigLayoutBridgePreservesNativeData() {
+    QJsonObject root = minimalProjectRoot();
+    QJsonObject graphConfig{
+        {QStringLiteral("schema"), QStringLiteral("ipcraft.graph-config.v1")},
+        {QStringLiteral("objects"), QJsonArray{
+            QJsonObject{
+                {QStringLiteral("id"), QStringLiteral("node_1")},
+                {QStringLiteral("type"), QStringLiteral("ProjectDocXP")},
+                {QStringLiteral("properties"), QJsonObject{
+                    {QStringLiteral("vc_count"), 4},
+                    {QStringLiteral("routing_algorithm"), QStringLiteral("xy")}
+                }}
+            },
+            QJsonObject{
+                {QStringLiteral("id"), QStringLiteral("node_2")},
+                {QStringLiteral("type"), QStringLiteral("ProjectDocEndpoint")},
+                {QStringLiteral("properties"), QJsonObject{
+                    {QStringLiteral("data_width"), 128}
+                }}
+            }
+        }},
+        {QStringLiteral("relationships"), QJsonArray{
+            QJsonObject{
+                {QStringLiteral("id"), QStringLiteral("conn_1")},
+                {QStringLiteral("type"), QStringLiteral("chi_node_interface")},
+                {QStringLiteral("endpoints"), QJsonArray{
+                    QJsonObject{
+                        {QStringLiteral("object"), QStringLiteral("node_1")},
+                        {QStringLiteral("role"), QStringLiteral("ep0")},
+                        {QStringLiteral("properties"), QJsonObject{{QStringLiteral("lane"), 0}}}
+                    },
+                    QJsonObject{
+                        {QStringLiteral("object"), QStringLiteral("node_2")},
+                        {QStringLiteral("role"), QStringLiteral("noc")}
+                    }
+                }},
+                {QStringLiteral("properties"), QJsonObject{
+                    {QStringLiteral("status"), QStringLiteral("ambiguous")},
+                    {QStringLiteral("alternatives"), QJsonArray{
+                        QStringLiteral("chi_node_interface"),
+                        QStringLiteral("monitor_tap")
+                    }},
+                    {QStringLiteral("custom_property"), QStringLiteral("keep")}
+                }}
+            }
+        }},
+        {QStringLiteral("properties"), QJsonObject{{QStringLiteral("owner"), QStringLiteral("editor")}}},
+        {QStringLiteral("native"), QJsonObject{{QStringLiteral("vendor.example"), QJsonObject{
+            {QStringLiteral("token"), QStringLiteral("keep")}
+        }}}}
+    };
+    root.insert(QStringLiteral("instances"), QJsonArray{
+        QJsonObject{
+            {QStringLiteral("id"), QStringLiteral("test_0")},
+            {QStringLiteral("package"), QJsonObject{
+                {QStringLiteral("id"), QStringLiteral("finepaper.test")},
+                {QStringLiteral("version"), QStringLiteral("1.0")}
+            }},
+            {QStringLiteral("config"), QJsonObject{
+                {QStringLiteral("parameters"), QJsonObject{{QStringLiteral("flit_data_width"), 64}}}
+            }},
+            {QStringLiteral("graph_config"), graphConfig}
+        }
+    });
+    root.insert(QStringLiteral("layout"), QJsonObject{{QStringLiteral("views"), QJsonArray{
+        QJsonObject{
+            {QStringLiteral("id"), QStringLiteral("graph")},
+            {QStringLiteral("kind"), QStringLiteral("canvas")},
+            {QStringLiteral("native"), QJsonObject{{QStringLiteral("view_token"), QStringLiteral("keep")}}},
+            {QStringLiteral("canvas"), QJsonObject{
+                {QStringLiteral("pan"), QJsonObject{
+                    {QStringLiteral("x"), 1},
+                    {QStringLiteral("y"), 2}
+                }},
+                {QStringLiteral("zoom"), 1.5},
+                {QStringLiteral("connections"), QJsonObject{
+                    {QStringLiteral("conn_1"), QJsonObject{{QStringLiteral("route"), QStringLiteral("keep")}}}
+                }},
+                {QStringLiteral("nodes"), QJsonObject{
+                    {QStringLiteral("node_1"), QJsonObject{
+                        {QStringLiteral("x"), 11},
+                        {QStringLiteral("y"), 22},
+                        {QStringLiteral("collapsed"), true},
+                        {QStringLiteral("note"), QStringLiteral("keep")}
+                    }},
+                    {QStringLiteral("node_2"), QJsonObject{
+                        {QStringLiteral("x"), 33},
+                        {QStringLiteral("y"), 44},
+                        {QStringLiteral("collapsed"), false}
+                    }}
+                }}
+            }}
+        },
+        QJsonObject{
+            {QStringLiteral("id"), QStringLiteral("table_view")},
+            {QStringLiteral("kind"), QStringLiteral("table")},
+            {QStringLiteral("native"), QJsonObject{{QStringLiteral("keep"), true}}}
+        }
+    }}});
+
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "failed to create temporary directory");
+    const QString path = QDir(tempDir.path()).filePath(QStringLiteral("bridge_preserve.fpproj"));
+    writeJsonFile(path, root);
+
+    const ProjectReadResult readResult = ProjectReader::readFile(path);
+    require(readResult.success, "canonical project with graph-config should read");
+    const auto moduleIt = std::find_if(readResult.document.modules.constBegin(),
+                                       readResult.document.modules.constEnd(),
+                                       [](const ProjectModuleRecord& module) {
+                                           return module.id == QStringLiteral("node_1");
+                                       });
+    require(moduleIt != readResult.document.modules.constEnd(), "graph-config object should project to module");
+    require(!moduleIt->parameters.contains(QStringLiteral("note")),
+            "layout-only metadata should not become a module parameter");
+
+    ProjectDocument saved = readResult.document;
+    ProjectStateService service;
+    service.loadFromDocument(readResult.document);
+    service.writeToDocument(saved);
+    const QString outputPath = QDir(tempDir.path()).filePath(QStringLiteral("bridge_preserve_saved.fpproj"));
+    require(ProjectWriter::writeFile(outputPath, saved).success,
+            "bridge-preserved project should write");
+
+    const QJsonObject savedGraphConfig = saved.instances.first().graphConfig;
+    require(savedGraphConfig.value(QStringLiteral("properties")).toObject()
+                .value(QStringLiteral("owner")).toString() == QStringLiteral("editor"),
+            "graph-config root properties should be preserved");
+    require(savedGraphConfig.value(QStringLiteral("native")).toObject()
+                .value(QStringLiteral("vendor.example")).toObject()
+                .value(QStringLiteral("token")).toString() == QStringLiteral("keep"),
+            "graph-config native namespace should be preserved");
+
+    const QJsonObject savedRelationship = savedGraphConfig.value(QStringLiteral("relationships"))
+                                              .toArray().first().toObject();
+    const QJsonObject savedRelationshipProperties =
+        savedRelationship.value(QStringLiteral("properties")).toObject();
+    require(savedRelationshipProperties.value(QStringLiteral("custom_property")).toString() ==
+                QStringLiteral("keep"),
+            "relationship custom properties should be preserved");
+    require(savedRelationshipProperties.value(QStringLiteral("status")).toString() ==
+                QStringLiteral("ambiguous"),
+            "relationship status should be preserved");
+    require(savedRelationship.value(QStringLiteral("endpoints")).toArray().first().toObject()
+                .value(QStringLiteral("properties")).toObject()
+                .value(QStringLiteral("lane")).toInt() == 0,
+            "relationship endpoint properties should be preserved");
+
+    const QJsonObject savedGraphView = saved.layout.value(QStringLiteral("views"))
+                                          .toArray().first().toObject();
+    require(saved.layout.value(QStringLiteral("views")).toArray().size() == 2,
+            "layout bridge should preserve non-graph views");
+    require(savedGraphView.value(QStringLiteral("native")).toObject()
+                .value(QStringLiteral("view_token")).toString() == QStringLiteral("keep"),
+            "layout view native data should be preserved");
+    const QJsonObject savedCanvas = savedGraphView.value(QStringLiteral("canvas")).toObject();
+    require(savedCanvas.value(QStringLiteral("pan")).toObject().value(QStringLiteral("x")).toInt() == 1,
+            "layout canvas pan should be preserved");
+    require(savedCanvas.value(QStringLiteral("connections")).toObject()
+                .value(QStringLiteral("conn_1")).toObject()
+                .value(QStringLiteral("route")).toString() == QStringLiteral("keep"),
+            "layout connection metadata should be preserved");
+    require(savedCanvas.value(QStringLiteral("nodes")).toObject()
+                .value(QStringLiteral("node_1")).toObject()
+                .value(QStringLiteral("note")).toString() == QStringLiteral("keep"),
+            "layout node metadata should be preserved");
+}
+
+void testProjectStateServiceClearsStaleGraphConfigObjects() {
+    ProjectDocument document;
+    document.instances.push_back(projectInstanceRecord(
+        QStringLiteral("finepaper.test"),
+        QStringLiteral("test_0"),
+        QStringLiteral("finepaper.test-project-state-v1"),
+        QJsonObject{{QStringLiteral("global_parameters"), QJsonObject{}}}));
+    ProjectIpInstanceRecord& instance = document.instances.first();
+    instance.hasGraphConfig = true;
+    instance.graphConfig = QJsonObject{
+        {QStringLiteral("schema"), QStringLiteral("ipcraft.graph-config.v1")},
+        {QStringLiteral("objects"), QJsonArray{
+            QJsonObject{
+                {QStringLiteral("id"), QStringLiteral("stale_node")},
+                {QStringLiteral("type"), QStringLiteral("ProjectDocXP")}
+            }
+        }},
+        {QStringLiteral("relationships"), QJsonArray{}},
+        {QStringLiteral("properties"), QJsonObject{{QStringLiteral("owner"), QStringLiteral("editor")}}},
+        {QStringLiteral("native"), QJsonObject{{QStringLiteral("vendor.example"), QJsonObject{
+            {QStringLiteral("token"), QStringLiteral("keep")}
+        }}}}
+    };
+
+    ProjectStateService service;
+    service.loadFromDocument(document);
+    ProjectDocument saved = document;
+    saved.modules.clear();
+    saved.connections.clear();
+    service.writeToDocument(saved);
+
+    const QJsonObject savedGraphConfig = saved.instances.first().graphConfig;
+    require(savedGraphConfig.value(QStringLiteral("objects")).toArray().isEmpty(),
+            "state service should clear stale graph-config objects when editor graph is empty");
+    require(savedGraphConfig.value(QStringLiteral("relationships")).toArray().isEmpty(),
+            "state service should clear stale graph-config relationships when editor graph is empty");
+    require(savedGraphConfig.value(QStringLiteral("native")).toObject()
+                .value(QStringLiteral("vendor.example")).toObject()
+                .value(QStringLiteral("token")).toString() == QStringLiteral("keep"),
+            "state service should preserve graph-config native data while clearing editor arrays");
 }
 
 void testProjectSerializerUsesModuleIpcoreOwnership() {
@@ -1023,80 +1072,6 @@ void testLoadRejectsIpcoreStateMissingOwnerFields() {
         require(result.error.contains(QStringLiteral("instance")),
                 "missing ipcore_state instance error should mention instance");
     }
-}
-
-void testProjectReaderRejectsPreV1IpInstances() {
-    QJsonObject root = minimalProjectRoot();
-    root.insert(QStringLiteral("ip_instances"), QJsonArray{
-        QJsonObject{
-            {QStringLiteral("id"), QStringLiteral("ravenoc_0")},
-            {QStringLiteral("plugin"), QStringLiteral("finepaper.ravenoc")},
-            {QStringLiteral("kind"), QStringLiteral("noc")},
-            {QStringLiteral("type"), QStringLiteral("RaveNoC")},
-            {QStringLiteral("parameters"), QJsonObject{}}
-        }
-    });
-
-    QTemporaryDir tempDir;
-    require(tempDir.isValid(), "failed to create temporary directory");
-    const QString path = QDir(tempDir.path()).filePath(QStringLiteral("pre_v1_ip_instances.fpproj"));
-    writeJsonFile(path, root);
-
-    const ProjectReadResult result = ProjectReader::readFile(path);
-    require(!result.success, "v1 reader should reject pre-v1 ip_instances");
-    require(result.error.contains(QStringLiteral("ip_instances")),
-            "ip_instances rejection should mention ip_instances");
-}
-
-void testProjectReaderRejectsOldPluginRootKeys() {
-    QTemporaryDir tempDir;
-    require(tempDir.isValid(), "failed to create temporary directory");
-    QJsonObject root = minimalProjectRoot();
-    root.insert(QStringLiteral("plugins"), QJsonArray{});
-    const QString path = QDir(tempDir.path()).filePath(QStringLiteral("old_plugins.fpproj"));
-    writeJsonFile(path, root);
-
-    const ProjectReadResult result = ProjectReader::readFile(path);
-    require(!result.success, "v1 reader should reject old plugins key");
-    require(result.error.contains(QStringLiteral("plugins")),
-            "plugins rejection should mention plugins");
-}
-
-void testProjectReaderRejectsOldPluginStateKey() {
-    QTemporaryDir tempDir;
-    require(tempDir.isValid(), "failed to create temporary directory");
-    QJsonObject root = minimalProjectRoot();
-    root.insert(QStringLiteral("plugin_state"), QJsonArray{});
-    const QString path = QDir(tempDir.path()).filePath(QStringLiteral("old_plugin_state.fpproj"));
-    writeJsonFile(path, root);
-
-    const ProjectReadResult result = ProjectReader::readFile(path);
-    require(!result.success, "v1 reader should reject old plugin_state key");
-    require(result.error.contains(QStringLiteral("plugin_state")),
-            "plugin_state rejection should mention plugin_state");
-}
-
-void testProjectReaderRejectsOldModulePluginKey() {
-    QTemporaryDir tempDir;
-    require(tempDir.isValid(), "failed to create temporary directory");
-    QJsonObject root = minimalProjectRoot();
-    QJsonObject graph = root.value(QStringLiteral("graph")).toObject();
-    graph.insert(QStringLiteral("modules"), QJsonArray{
-        QJsonObject{
-            {QStringLiteral("id"), QStringLiteral("tile_0")},
-            {QStringLiteral("plugin"), QStringLiteral("finepaper.ravenoc")},
-            {QStringLiteral("type"), QStringLiteral("RaveTile")},
-            {QStringLiteral("parameters"), QJsonObject{}}
-        }
-    });
-    root.insert(QStringLiteral("graph"), graph);
-    const QString path = QDir(tempDir.path()).filePath(QStringLiteral("old_module_plugin.fpproj"));
-    writeJsonFile(path, root);
-
-    const ProjectReadResult result = ProjectReader::readFile(path);
-    require(!result.success, "v1 reader should reject old module plugin key");
-    require(result.error.contains(QStringLiteral("plugin")),
-            "module plugin rejection should mention plugin");
 }
 
 void testIpcoreStateWriteAddsIpcoreDependency() {
@@ -1286,9 +1261,9 @@ void testReaderRejectsWrongKind() {
     file.close();
 
     const ProjectReadResult result = ProjectReader::readFile(projectPath);
-    require(!result.success, "wrong project kind should be rejected");
-    require(result.error.contains(QStringLiteral("kind")),
-            "wrong-kind error should mention kind");
+    require(!result.success, "old project schema should be rejected");
+    require(result.error.contains(QStringLiteral("schema")),
+            "old project rejection should mention schema");
 }
 
 void testLoadRejectsDuplicateModuleIds() {
@@ -1415,12 +1390,11 @@ void testProjectLoadRejectsConnectionRuleFailure() {
     ProjectDocument document = validProjectDocument();
     document.modules.clear();
     document.connections.clear();
-    document.ipcoreState.push_back(ProjectIpInstanceRecord{
+    document.ipcoreState.push_back(projectInstanceRecord(
         QStringLiteral("finepaper.ravenoc"),
         QStringLiteral("ravenoc_0"),
         QStringLiteral("finepaper.ravenoc-project-state-v1"),
-        QJsonObject{{QStringLiteral("global_parameters"), QJsonObject{}}}
-    });
+        QJsonObject{{QStringLiteral("global_parameters"), QJsonObject{}}}));
 
     ProjectModuleRecord left;
     left.id = QStringLiteral("left");
@@ -1441,11 +1415,11 @@ void testProjectLoadRejectsConnectionRuleFailure() {
     right.parameters.insert(QStringLiteral("mesh_col"), 1);
     document.modules.push_back(right);
 
-    document.connections.push_back(ProjectConnectionRecord{
-        QStringLiteral("bad_same_side"),
-        ProjectConnectionEndpoint{QStringLiteral("left"), QStringLiteral("east")},
-        ProjectConnectionEndpoint{QStringLiteral("right"), QStringLiteral("east")}
-    });
+    ProjectConnectionRecord badSameSide;
+    badSameSide.id = QStringLiteral("bad_same_side");
+    badSameSide.source = ProjectConnectionEndpoint{QStringLiteral("left"), QStringLiteral("east")};
+    badSameSide.target = ProjectConnectionEndpoint{QStringLiteral("right"), QStringLiteral("east")};
+    document.connections.push_back(badSameSide);
 
     Graph graph;
     const GraphProjectLoadResult result = GraphProjectSerializer::loadProject(document, graph);
@@ -1491,12 +1465,11 @@ void testProjectLoadReportsIpcoreConnectionRuleFailure() {
     ProjectDocument document;
     document.name = QStringLiteral("ipcore_rule_failure");
     document.ipcores.push_back(ProjectIpcoreRecord{QStringLiteral("finepaper.test"), QStringLiteral("1.0")});
-    document.ipcoreState.push_back(ProjectIpInstanceRecord{
+    document.ipcoreState.push_back(projectInstanceRecord(
         QStringLiteral("finepaper.test"),
         QStringLiteral("test_0"),
         QStringLiteral("finepaper.test-project-state-v1"),
-        QJsonObject{{QStringLiteral("global_parameters"), QJsonObject{}}}
-    });
+        QJsonObject{{QStringLiteral("global_parameters"), QJsonObject{}}}));
     document.modules.push_back(ProjectModuleRecord{
         QStringLiteral("source"),
         QStringLiteral("finepaper.test"),
@@ -1511,11 +1484,11 @@ void testProjectLoadReportsIpcoreConnectionRuleFailure() {
         targetType.name,
         {}
     });
-    document.connections.push_back(ProjectConnectionRecord{
-        QStringLiteral("bad_connection"),
-        ProjectConnectionEndpoint{QStringLiteral("source"), QStringLiteral("noc")},
-        ProjectConnectionEndpoint{QStringLiteral("target"), QStringLiteral("noc")}
-    });
+    ProjectConnectionRecord badConnection;
+    badConnection.id = QStringLiteral("bad_connection");
+    badConnection.source = ProjectConnectionEndpoint{QStringLiteral("source"), QStringLiteral("noc")};
+    badConnection.target = ProjectConnectionEndpoint{QStringLiteral("target"), QStringLiteral("noc")};
+    document.connections.push_back(badConnection);
 
     Graph graph;
     const GraphProjectLoadResult result = GraphProjectSerializer::loadProject(document, graph);
@@ -1528,12 +1501,11 @@ void testProjectLoadReportsIpcoreConnectionRuleFailure() {
 
 void testProjectLoadRejectsCrossInstanceConnectionWithinSameIpcore() {
     ProjectDocument document = validProjectDocument();
-    document.ipcoreState.push_back(ProjectIpInstanceRecord{
+    document.ipcoreState.push_back(projectInstanceRecord(
         QStringLiteral("finepaper.test"),
         QStringLiteral("test_1"),
         QStringLiteral("finepaper.test-project-state-v1"),
-        QJsonObject{{QStringLiteral("global_parameters"), QJsonObject{}}}
-    });
+        QJsonObject{{QStringLiteral("global_parameters"), QJsonObject{}}}));
     document.modules.last().instanceId = QStringLiteral("test_1");
     document.connections.first().id = QStringLiteral("cross_instance_conn");
 
@@ -1559,11 +1531,11 @@ void testLoadRejectsConnectionInvalidatedByEarlierConnectionWithoutChangingGraph
     ProjectModuleRecord secondEndpoint = document.modules.last();
     secondEndpoint.id = QStringLiteral("node_3");
     document.modules.push_back(secondEndpoint);
-    document.connections.push_back(ProjectConnectionRecord{
-        QStringLiteral("conn_2"),
-        ProjectConnectionEndpoint{QStringLiteral("node_1"), QStringLiteral("ep0")},
-        ProjectConnectionEndpoint{QStringLiteral("node_3"), QStringLiteral("noc")}
-    });
+    ProjectConnectionRecord secondConnection;
+    secondConnection.id = QStringLiteral("conn_2");
+    secondConnection.source = ProjectConnectionEndpoint{QStringLiteral("node_1"), QStringLiteral("ep0")};
+    secondConnection.target = ProjectConnectionEndpoint{QStringLiteral("node_3"), QStringLiteral("noc")};
+    document.connections.push_back(secondConnection);
 
     const GraphProjectLoadResult result = GraphProjectSerializer::loadProject(document, graph);
 
@@ -1576,147 +1548,6 @@ void testLoadRejectsConnectionInvalidatedByEarlierConnectionWithoutChangingGraph
             "failed project load should keep the previous graph");
     require(graph.getModule(QStringLiteral("node_1")) == nullptr,
             "failed project load should not partially install new modules");
-}
-
-void testReaderRejectsMalformedProjectGraphArrays() {
-    QTemporaryDir tempDir;
-    require(tempDir.isValid(), "failed to create temporary directory");
-
-    auto baseProject = [] {
-        return QJsonObject{
-            {QStringLiteral("schema"), QStringLiteral("v1")},
-            {QStringLiteral("kind"), QStringLiteral("finepaper-project")},
-            {QStringLiteral("project"), QJsonObject{
-                {QStringLiteral("name"), QStringLiteral("malformed")},
-                {QStringLiteral("version"), QStringLiteral("1.0")}
-            }},
-            {QStringLiteral("ipcores"), QJsonArray{}}
-        };
-    };
-
-    QJsonObject missingGraph = baseProject();
-    QString path = QDir(tempDir.path()).filePath(QStringLiteral("missing_graph.fpproj"));
-    writeJsonFile(path, missingGraph);
-    ProjectReadResult result = ProjectReader::readFile(path);
-    require(!result.success, "missing graph object should be rejected");
-    require(result.error.contains(QStringLiteral("graph")),
-            "missing graph error should mention graph");
-
-    QJsonObject wrongModules = baseProject();
-    wrongModules.insert(QStringLiteral("graph"), QJsonObject{
-        {QStringLiteral("modules"), QJsonObject{}},
-        {QStringLiteral("connections"), QJsonArray{}}
-    });
-    path = QDir(tempDir.path()).filePath(QStringLiteral("wrong_modules.fpproj"));
-    writeJsonFile(path, wrongModules);
-    result = ProjectReader::readFile(path);
-    require(!result.success, "non-array modules should be rejected");
-    require(result.error.contains(QStringLiteral("graph.modules")),
-            "modules error should mention graph.modules");
-
-    QJsonObject wrongConnections = baseProject();
-    wrongConnections.insert(QStringLiteral("graph"), QJsonObject{
-        {QStringLiteral("modules"), QJsonArray{}},
-        {QStringLiteral("connections"), QJsonObject{}}
-    });
-    path = QDir(tempDir.path()).filePath(QStringLiteral("wrong_connections.fpproj"));
-    writeJsonFile(path, wrongConnections);
-    result = ProjectReader::readFile(path);
-    require(!result.success, "non-array connections should be rejected");
-    require(result.error.contains(QStringLiteral("graph.connections")),
-            "connections error should mention graph.connections");
-
-    QJsonObject wrongIpcoreState = baseProject();
-    wrongIpcoreState.insert(QStringLiteral("ipcore_state"), QJsonObject{});
-    wrongIpcoreState.insert(QStringLiteral("graph"), QJsonObject{
-        {QStringLiteral("modules"), QJsonArray{}},
-        {QStringLiteral("connections"), QJsonArray{}}
-    });
-    path = QDir(tempDir.path()).filePath(QStringLiteral("wrong_ipcore_state.fpproj"));
-    writeJsonFile(path, wrongIpcoreState);
-    result = ProjectReader::readFile(path);
-    require(!result.success, "non-array ipcore_state should be rejected");
-    require(result.error.contains(QStringLiteral("ipcore_state")),
-            "ipcore_state error should mention ipcore_state");
-
-    QJsonObject wrongIpcoreStateItem = baseProject();
-    wrongIpcoreStateItem.insert(QStringLiteral("ipcore_state"), QJsonArray{
-        QStringLiteral("not-an-object")
-    });
-    wrongIpcoreStateItem.insert(QStringLiteral("graph"), QJsonObject{
-        {QStringLiteral("modules"), QJsonArray{}},
-        {QStringLiteral("connections"), QJsonArray{}}
-    });
-    path = QDir(tempDir.path()).filePath(QStringLiteral("wrong_ipcore_state_item.fpproj"));
-    writeJsonFile(path, wrongIpcoreStateItem);
-    result = ProjectReader::readFile(path);
-    require(!result.success, "non-object ipcore_state item should be rejected");
-    require(result.error.contains(QStringLiteral("ipcore_state")),
-            "ipcore_state item error should mention ipcore_state");
-
-    QJsonObject missingIpcoreStateObject = baseProject();
-    missingIpcoreStateObject.insert(QStringLiteral("ipcore_state"), QJsonArray{
-        QJsonObject{
-            {QStringLiteral("ipcore"), QStringLiteral("finepaper.ravenoc")},
-            {QStringLiteral("instance"), QStringLiteral("ravenoc_0")},
-            {QStringLiteral("schema"), QStringLiteral("ravenoc-project-state-v1")}
-        }
-    });
-    missingIpcoreStateObject.insert(QStringLiteral("graph"), QJsonObject{
-        {QStringLiteral("modules"), QJsonArray{}},
-        {QStringLiteral("connections"), QJsonArray{}}
-    });
-    path = QDir(tempDir.path()).filePath(QStringLiteral("missing_ipcore_state_object.fpproj"));
-    writeJsonFile(path, missingIpcoreStateObject);
-    result = ProjectReader::readFile(path);
-    require(!result.success, "missing ipcore_state state should be rejected");
-    require(result.error.contains(QStringLiteral("ipcore_state")) &&
-                result.error.contains(QStringLiteral("state")),
-            "missing ipcore_state state error should mention ipcore_state and state");
-
-    QJsonObject wrongIpcoreStateObject = baseProject();
-    wrongIpcoreStateObject.insert(QStringLiteral("ipcore_state"), QJsonArray{
-        QJsonObject{
-            {QStringLiteral("ipcore"), QStringLiteral("finepaper.ravenoc")},
-            {QStringLiteral("instance"), QStringLiteral("ravenoc_0")},
-            {QStringLiteral("schema"), QStringLiteral("ravenoc-project-state-v1")},
-            {QStringLiteral("state"), QStringLiteral("not-an-object")}
-        }
-    });
-    wrongIpcoreStateObject.insert(QStringLiteral("graph"), QJsonObject{
-        {QStringLiteral("modules"), QJsonArray{}},
-        {QStringLiteral("connections"), QJsonArray{}}
-    });
-    path = QDir(tempDir.path()).filePath(QStringLiteral("wrong_ipcore_state_object.fpproj"));
-    writeJsonFile(path, wrongIpcoreStateObject);
-    result = ProjectReader::readFile(path);
-    require(!result.success, "non-object ipcore_state state should be rejected");
-    require(result.error.contains(QStringLiteral("ipcore_state")) &&
-                result.error.contains(QStringLiteral("state")),
-            "non-object ipcore_state state error should mention ipcore_state and state");
-}
-
-void testProjectReaderRejectsIpcoreStateWithoutSchema() {
-    QTemporaryDir tempDir;
-    require(tempDir.isValid(), "failed to create temporary directory");
-
-    QJsonObject project = minimalProjectRoot();
-    project.insert(QStringLiteral("ipcore_state"), QJsonArray{
-        QJsonObject{
-            {QStringLiteral("ipcore"), QStringLiteral("finepaper.ravenoc")},
-            {QStringLiteral("instance"), QStringLiteral("ravenoc_0")},
-            {QStringLiteral("state"), QJsonObject{{QStringLiteral("kind"), QStringLiteral("noc")}}}
-        }
-    });
-
-    const QString path = QDir(tempDir.path()).filePath(QStringLiteral("missing_ipcore_state_schema.fpproj"));
-    writeJsonFile(path, project);
-
-    const ProjectReadResult result = ProjectReader::readFile(path);
-    require(!result.success, "ipcore_state without schema should be rejected");
-    require(result.error.contains(QStringLiteral("ipcore_state")) &&
-                result.error.contains(QStringLiteral("schema")),
-            "missing ipcore_state schema error should mention ipcore_state and schema");
 }
 
 void testProjectReaderRejectsOversizedProjectFiles() {
@@ -1855,20 +1686,70 @@ void testGenerationWritesProjectSnapshot() {
 
     const ProjectReadResult readResult = ProjectReader::readFile(result.path);
     require(readResult.success, "generation project snapshot should be readable");
-    require(readResult.document.name == QStringLiteral("generated_design"),
+    require(readResult.document.projectName == QStringLiteral("generated_design"),
             "generation project snapshot should use design name as project name");
-    require(readResult.document.ipcoreState.size() == 1,
-            "generation project snapshot should include IP-core state");
-    require(readResult.document.ipcores.size() == 1,
-            "generation project snapshot should include IP-core state dependency");
-    require(readResult.document.ipcores.first().id == QStringLiteral("finepaper.ravenoc"),
-            "generation project snapshot dependency should use IP-core state owner id");
-    require(readResult.document.ipcoreState.first()
-                .state.value(QStringLiteral("global_parameters"))
+    require(readResult.document.instances.size() == 1,
+            "generation project snapshot should include ProjectDocument instances");
+    require(readResult.document.instances.first().package.id == QStringLiteral("finepaper.ravenoc"),
+            "generation project snapshot instance should use package id");
+    require(readResult.document.instances.first()
+                .config.value(QStringLiteral("parameters"))
                 .toObject()
                 .value(QStringLiteral("flit_data_width"))
                 .toInt() == 64,
             "generation project snapshot should preserve IP-core parameters");
+}
+
+void testGenerationProjectSnapshotPreservesGraphBridgeData() {
+    Graph graph;
+    auto module = instantiate(makeProjectXpType(), QStringLiteral("snapshot_node"));
+    module->setParameter(QStringLiteral("x"), 123);
+    module->setParameter(QStringLiteral("y"), 456);
+    module->setParameter(QStringLiteral("collapsed"), false);
+    require(graph.addModule(std::move(module)), "snapshot graph module should add");
+
+    ProjectIpInstanceRecord state;
+    state.ipcoreId = QStringLiteral("finepaper.test");
+    state.instanceId = QStringLiteral("test_0");
+    state.schema = QStringLiteral("finepaper-test-state-v1");
+    state.state = QJsonObject{
+        {QStringLiteral("global_parameters"), QJsonObject{
+            {QStringLiteral("width"), 32}
+        }}
+    };
+
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "failed to create temporary directory");
+
+    const GeneratedProjectSnapshotResult result =
+        writeGeneratedProjectSnapshot(graph,
+                                      tempDir.path(),
+                                      QStringLiteral("snapshot_design"),
+                                      QVector<ProjectIpInstanceRecord>{state});
+    require(result.success, "generation project snapshot with graph should be written");
+
+    const ProjectReadResult readResult = ProjectReader::readFile(result.path);
+    require(readResult.success, "generation project snapshot with graph should be readable");
+    require(readResult.document.instances.size() == 1,
+            "snapshot should include the generation instance");
+    const ProjectIpInstanceRecord& instance = readResult.document.instances.first();
+    require(instance.hasGraphConfig,
+            "snapshot should bridge live graph modules into graph_config");
+    require(instance.graphConfig.value(QStringLiteral("objects")).toArray().size() == 1,
+            "snapshot graph_config should include graph objects");
+    require(instance.graphConfig.value(QStringLiteral("objects")).toArray().first().toObject()
+                .value(QStringLiteral("id")).toString() == QStringLiteral("snapshot_node"),
+            "snapshot graph_config should preserve graph object ids");
+    const QJsonObject graphView =
+        readResult.document.layout.value(QStringLiteral("views")).toArray().first().toObject();
+    require(graphView.value(QStringLiteral("id")).toString() == QStringLiteral("graph"),
+            "snapshot layout should use the graph view id");
+    const QJsonObject layoutNode = graphView.value(QStringLiteral("canvas")).toObject()
+                                       .value(QStringLiteral("nodes")).toObject()
+                                       .value(QStringLiteral("snapshot_node")).toObject();
+    require(layoutNode.value(QStringLiteral("x")).toInt() == 123 &&
+                layoutNode.value(QStringLiteral("y")).toInt() == 456,
+            "snapshot layout should preserve graph node coordinates");
 }
 
 } // namespace
@@ -1880,22 +1761,17 @@ int main(int argc, char** argv) {
         configureDefaultPackageRootsForTest();
 
         testProjectWritesInterfaceConnectionsWithoutFromTo();
-        testProjectReadsAmbiguousConnectionAlternatives();
-        testProjectReaderRejectsMalformedInterfaceConnections();
         testProjectRoundTripRestoresModulesParametersAndConnections();
         testProjectLoadUsesLoadedPackageManifestsForInterfaceRules();
         testProjectLoadRejectsSavedConnectionClassNotAcceptedByInterfaces();
         testProjectLoadRejectsInterfaceConnectionMissingSavedClass();
-        testProjectPreservesOpaqueIpcoreState();
-        testProjectWriterUsesIpcoreVocabulary();
+        testProjectWriterUsesCanonicalProjectDocumentVocabulary();
+        testProjectGraphConfigLayoutBridgePreservesNativeData();
+        testProjectStateServiceClearsStaleGraphConfigObjects();
         testProjectSerializerUsesModuleIpcoreOwnership();
         testLoadRejectsModuleWithoutMatchingIpcoreState();
         testLoadRejectsDuplicateIpcoreStateScope();
         testLoadRejectsIpcoreStateMissingOwnerFields();
-        testProjectReaderRejectsPreV1IpInstances();
-        testProjectReaderRejectsOldPluginRootKeys();
-        testProjectReaderRejectsOldPluginStateKey();
-        testProjectReaderRejectsOldModulePluginKey();
         testIpcoreStateWriteAddsIpcoreDependency();
         testProjectStateServiceUpdatesIpcoreStateWithoutGraph();
         testProjectStateServiceDoesNotCreateMissingSection();
@@ -1914,12 +1790,10 @@ int main(int argc, char** argv) {
         testProjectLoadReportsIpcoreConnectionRuleFailure();
         testProjectLoadRejectsCrossInstanceConnectionWithinSameIpcore();
         testLoadRejectsConnectionInvalidatedByEarlierConnectionWithoutChangingGraph();
-        testReaderRejectsMalformedProjectGraphArrays();
-        testProjectReaderRejectsIpcoreStateWithoutSchema();
         testProjectReaderRejectsOversizedProjectFiles();
-        testProjectReaderDetectsOnlyFinepaperProjects();
         testGenerationHelpersShapeIpcoreStateForGeneratorBoundary();
         testGenerationWritesProjectSnapshot();
+        testGenerationProjectSnapshotPreservesGraphBridgeData();
     } catch (const std::exception& error) {
         std::cerr << "projectdocument_test failed: " << error.what() << '\n';
         return 1;

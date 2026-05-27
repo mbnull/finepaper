@@ -1,0 +1,31 @@
+{
+  "schema": "ipcraft.package.v1",
+  "id": "vendor.example.simple_parameter",
+  "version": "1.0.0",
+  "name": "Simple Parameter IP",
+  "extensions": [
+    "ipcraft.config.params",
+    "ipcraft.emitters"
+  ],
+  "config_schema": {
+    "parameters": [
+      {
+        "id": "width",
+        "type": "int",
+        "default": 32,
+        "required": true,
+        "range": {
+          "min": 1,
+          "max": 1024
+        }
+      }
+    ]
+  },
+  "emitters": [
+    {
+      "id": "params",
+      "kind": "emit_parameters",
+      "path": "input/params.json"
+    }
+  ]
+}

@@ -5,6 +5,7 @@
 #include "graph/module.h"
 #include "graph/port.h"
 #include "ipcore/ipcatalogservice.h"
+#include "ipcraft/schemaids.h"
 #include "project/projectreader.h"
 
 #include <QCoreApplication>
@@ -48,13 +49,13 @@ QJsonObject readJsonObject(const QString& path) {
     return document.object();
 }
 
-bool usesCommandInputFileName(const QString& path) {
-    return path.contains(QStringLiteral("command-input")) ||
-           path.contains(QStringLiteral("ipcraft-input"));
+bool usesEmittedInputsManifestPath(const QString& path) {
+    const QString normalized = QDir::fromNativeSeparators(path);
+    return normalized.endsWith(QStringLiteral("inputs/manifest.json"));
 }
 
-QString commandInputPath(const QString& outputDirectory) {
-    return QDir(outputDirectory).filePath(QStringLiteral("command-input.json"));
+QString emittedInputsManifestPath(const QString& outputDirectory) {
+    return QDir(outputDirectory).filePath(QStringLiteral("inputs/manifest.json"));
 }
 
 void makeExecutable(const QString& path) {
@@ -104,28 +105,160 @@ ProjectIpInstanceRecord instanceRecord(const QString& ipcoreId,
                                        const QString& instanceId,
                                        const QString& marker) {
     ProjectIpInstanceRecord record;
+    record.id = instanceId;
+    record.package = ProjectPackageRef{ipcoreId, QStringLiteral("1.0.0")};
+    record.config = QJsonObject{
+        {QStringLiteral("parameters"),
+         QJsonObject{{QStringLiteral("marker"), marker}}}
+    };
     record.ipcoreId = ipcoreId;
     record.instanceId = instanceId;
-    record.schema = ipcoreId + QStringLiteral("-state-v1");
-    record.state = QJsonObject{
-        {QStringLiteral("marker"), marker}
-    };
     return record;
 }
 
-IpCatalogEntry catalogEntry(const QString& ipcoreId, const QString& generatorPath) {
+QJsonArray jsonStringArray(const QStringList& values) {
+    QJsonArray array;
+    for (const QString& value : values) {
+        array.append(value);
+    }
+    return array;
+}
+
+QJsonArray packageExtensions() {
+    return jsonStringArray({
+        QStringLiteral("ipcraft.config.params"),
+        QStringLiteral("ipcraft.graph_config"),
+        QStringLiteral("ipcraft.emitters"),
+        QStringLiteral("ipcraft.flows"),
+        QStringLiteral("ipcraft.artifacts")
+    });
+}
+
+QJsonObject flowCapture() {
+    return QJsonObject{
+        {QStringLiteral("stdout"), QStringLiteral("stdout.log")},
+        {QStringLiteral("stderr"), QStringLiteral("stderr.log")},
+        {QStringLiteral("max_bytes"), 1048576}
+    };
+}
+
+QJsonObject flowCommand(const QString& executable,
+                        const QStringList& args,
+                        int timeoutMs = 300000) {
+    return QJsonObject{
+        {QStringLiteral("executable"), executable},
+        {QStringLiteral("args"), jsonStringArray(args)},
+        {QStringLiteral("cwd"), QStringLiteral("run_dir")},
+        {QStringLiteral("timeout_ms"), timeoutMs},
+        {QStringLiteral("env"), QJsonObject{{QStringLiteral("allow"), QJsonArray{}}}},
+        {QStringLiteral("capture"), flowCapture()}
+    };
+}
+
+QJsonObject frameworkToolCommand(const QStringList& args,
+                                 int timeoutMs = 300000) {
+    return QJsonObject{
+        {QStringLiteral("framework_tool"), QStringLiteral("ipcraft-generate")},
+        {QStringLiteral("args"), jsonStringArray(args)},
+        {QStringLiteral("cwd"), QStringLiteral("run_dir")},
+        {QStringLiteral("timeout_ms"), timeoutMs},
+        {QStringLiteral("env"), QJsonObject{{QStringLiteral("allow"), QJsonArray{}}}},
+        {QStringLiteral("capture"), flowCapture()}
+    };
+}
+
+QJsonArray packageEmitters() {
+    return QJsonArray{
+        QJsonObject{
+            {QStringLiteral("id"), QStringLiteral("graph_config")},
+            {QStringLiteral("kind"), QStringLiteral("emit_graph_config")},
+            {QStringLiteral("path"), QStringLiteral("graph_config.json")}
+        },
+        QJsonObject{
+            {QStringLiteral("id"), QStringLiteral("parameters")},
+            {QStringLiteral("kind"), QStringLiteral("emit_parameters")},
+            {QStringLiteral("path"), QStringLiteral("parameters.json")}
+        }
+    };
+}
+
+QJsonArray packageFlows(const QJsonObject& command) {
+    return QJsonArray{
+        QJsonObject{
+            {QStringLiteral("id"), QStringLiteral("generate")},
+            {QStringLiteral("label"), QStringLiteral("Generate")},
+            {QStringLiteral("scope"), QStringLiteral("instance")},
+            {QStringLiteral("steps"),
+             QJsonArray{
+                 QJsonObject{{QStringLiteral("kind"), QStringLiteral("emit_inputs")}},
+                 QJsonObject{
+                     {QStringLiteral("kind"), QStringLiteral("exec")},
+                     {QStringLiteral("command"), command}
+                 },
+                 QJsonObject{{QStringLiteral("kind"), QStringLiteral("collect_artifacts")}}
+             }}
+        }
+    };
+}
+
+QJsonArray packageArtifacts(const QString& artifactGlob = QStringLiteral("artifact.sv")) {
+    return QJsonArray{
+        QJsonObject{
+            {QStringLiteral("id"), QStringLiteral("primary")},
+            {QStringLiteral("type"), QStringLiteral("rtl")},
+            {QStringLiteral("glob"), artifactGlob},
+            {QStringLiteral("primary"), true}
+        }
+    };
+}
+
+void writePackageSpec(const QString& packageRoot,
+                      const QString& packageId,
+                      const QJsonObject& command,
+                      const QString& artifactGlob = QStringLiteral("artifact.sv")) {
+    require(QDir().mkpath(packageRoot), "package root should be created");
+    const QJsonObject spec{
+        {QStringLiteral("schema"), ipcraft::schemaids::packageV1},
+        {QStringLiteral("id"), packageId},
+        {QStringLiteral("name"), packageId},
+        {QStringLiteral("version"), QStringLiteral("1.0.0")},
+        {QStringLiteral("extensions"), packageExtensions()},
+        {QStringLiteral("graph_config"),
+         QJsonObject{
+             {QStringLiteral("schema"), ipcraft::schemaids::graphConfigV1},
+             {QStringLiteral("objects"), QJsonArray{}},
+             {QStringLiteral("relationships"), QJsonArray{}},
+             {QStringLiteral("properties"), QJsonObject{}},
+             {QStringLiteral("native"), QJsonObject{}}
+         }},
+        {QStringLiteral("emitters"), packageEmitters()},
+        {QStringLiteral("flows"), packageFlows(command)},
+        {QStringLiteral("artifacts"), packageArtifacts(artifactGlob)}
+    };
+    writeFile(QDir(packageRoot).filePath(QStringLiteral("ipcraft.json")),
+              QJsonDocument(spec).toJson(QJsonDocument::Indented));
+}
+
+IpcraftModuleDescriptor manifestModule(const QString& id);
+
+IpCatalogEntry flowCatalogEntry(const QString& ipcoreId,
+                                const QString& packageRoot,
+                                const QString& moduleType) {
     IpCatalogEntry entry;
     entry.id = ipcoreId;
+    entry.packageId = ipcoreId;
     entry.name = ipcoreId;
-    entry.version = QStringLiteral("1.0");
-    entry.kind = QStringLiteral("noc");
-    entry.sourceRootPath = QFileInfo(generatorPath).absolutePath();
-    entry.generator.command = generatorPath;
-    entry.generator.inputFormat = QStringLiteral("ipcore_graph_v1");
-    entry.generator.args = {
-        QStringLiteral("{input}"),
-        QStringLiteral("{output}")
-    };
+    entry.version = QStringLiteral("1.0.0");
+    entry.kind = QStringLiteral("ipcraft");
+    entry.runtimeRootPath = packageRoot;
+    entry.sourceRootPath = packageRoot;
+    entry.moduleTypes = {moduleType};
+    entry.packageManifest.schema = ipcraft::schemaids::packageV1;
+    entry.packageManifest.id = ipcoreId;
+    entry.packageManifest.name = ipcoreId;
+    entry.packageManifest.version = QStringLiteral("1.0.0");
+    entry.packageManifest.packageRootPath = packageRoot;
+    entry.packageManifest.modules = {manifestModule(moduleType)};
     return entry;
 }
 
@@ -146,84 +279,128 @@ IpcraftModuleDescriptor manifestModule(const QString& id) {
     return descriptor;
 }
 
-IpcraftCommandDescriptor manifestCommand(const QString& name, const QString& executablePath) {
-    IpcraftCommandDescriptor command;
-    command.name = name;
-    command.executablePath = executablePath;
-    command.resolvedExecutablePath = executablePath;
-    command.inputSchema = QStringLiteral("ipcraft.noc.project.v1");
-    command.args = {
-        QStringLiteral("{input}"),
-        QStringLiteral("{output}")
-    };
-    return command;
-}
-
-IpcraftCommandDescriptor manifestFrameworkToolCommand() {
-    IpcraftCommandDescriptor command;
-    command.name = QStringLiteral("generate");
-    command.frameworkTool = QStringLiteral("ipcraft-generate");
-    command.inputSchema = QStringLiteral("ipcraft.noc.project.v1");
-    command.args = {
-        QStringLiteral("--manifest"),
-        QStringLiteral("{manifest}"),
-        QStringLiteral("--input"),
-        QStringLiteral("{input}"),
-        QStringLiteral("--output"),
-        QStringLiteral("{output}")
-    };
-    return command;
-}
-
-IpCatalogEntry ipcraftCatalogEntry(const QString& ipcoreId, const QString& generatorPath) {
-    IpCatalogEntry entry = catalogEntry(ipcoreId, generatorPath);
-    entry.packageId = ipcoreId;
-    entry.moduleTypes = {QStringLiteral("Tile")};
-    entry.packageManifest.schema = QStringLiteral("ipcraft.manifest.v1");
-    entry.packageManifest.id = ipcoreId;
-    entry.packageManifest.name = ipcoreId;
-    entry.packageManifest.version = QStringLiteral("1.0");
-    entry.packageManifest.packageRootPath = QFileInfo(generatorPath).absolutePath();
-    entry.packageManifest.modules = {manifestModule(QStringLiteral("Tile"))};
-    entry.packageManifest.commands.insert(QStringLiteral("generate"),
-                                          manifestCommand(QStringLiteral("generate"), generatorPath));
-    entry.generator.inputFormat = QStringLiteral("ipcraft.noc.project.v1");
-    return entry;
-}
-
-IpCatalogEntry ipcraftFrameworkToolCatalogEntry(const QString& ipcoreId,
-                                                const QString& packageRoot) {
-    IpCatalogEntry entry;
-    entry.id = ipcoreId;
-    entry.packageId = ipcoreId;
-    entry.name = ipcoreId;
-    entry.version = QStringLiteral("1.0");
-    entry.kind = QStringLiteral("ipcraft");
-    entry.sourceRootPath = packageRoot;
-    entry.moduleTypes = {QStringLiteral("Tile")};
-    entry.packageManifest.schema = QStringLiteral("ipcraft.manifest.v1");
-    entry.packageManifest.id = ipcoreId;
-    entry.packageManifest.name = ipcoreId;
-    entry.packageManifest.version = QStringLiteral("1.0");
-    entry.packageManifest.packageRootPath = packageRoot;
-    entry.packageManifest.modules = {manifestModule(QStringLiteral("Tile"))};
-    entry.packageManifest.commands.insert(QStringLiteral("generate"),
-                                          manifestFrameworkToolCommand());
-    return entry;
-}
-
-QString createCopyingGenerator(const QDir& dir) {
-    const QString path = dir.filePath(QStringLiteral("copy-generator.sh"));
-    writeFile(path,
-              QByteArrayLiteral("#!/bin/sh\n"
-                                "set -eu\n"
-                                "input=\"$1\"\n"
-                                "output=\"$2\"\n"
-                                "mkdir -p \"$output\"\n"
-                                "cp \"$input\" \"$output/artifact.sv\"\n"
-                                "printf '\\n// generated by test generator\\n' >> \"$output/artifact.sv\"\n"));
+QString createPackageTool(const QString& packageRoot,
+                          const QString& fileName,
+                          const QByteArray& content) {
+    const QDir packageDir(packageRoot);
+    require(QDir().mkpath(packageDir.filePath(QStringLiteral("tools"))),
+            "package tools directory should be created");
+    const QString path = packageDir.filePath(QStringLiteral("tools/%1").arg(fileName));
+    writeFile(path, content);
     makeExecutable(path);
-    return path;
+    return QStringLiteral("tools/%1").arg(fileName);
+}
+
+QString createCopyingGenerator(const QString& packageRoot) {
+    return createPackageTool(
+        packageRoot,
+        QStringLiteral("copy-generator.sh"),
+        QByteArrayLiteral("#!/bin/sh\n"
+                          "set -eu\n"
+                          "input=''\n"
+                          "output=''\n"
+                          "while [ \"$#\" -gt 0 ]; do\n"
+                          "  case \"$1\" in\n"
+                          "    --input) input=\"$2\"; shift 2 ;;\n"
+                          "    --out) output=\"$2\"; shift 2 ;;\n"
+                          "    *) echo \"unexpected argument: $1\" >&2; exit 2 ;;\n"
+                          "  esac\n"
+                          "done\n"
+                          "test -f \"$input\"\n"
+                          "test -f \"$output/inputs/graph_config.json\"\n"
+                          "test -f \"$output/inputs/parameters.json\"\n"
+                          "mkdir -p \"$output\"\n"
+                          "{\n"
+                          "  printf 'input=%s\\n' \"$input\"\n"
+                          "  cat \"$input\"\n"
+                          "  cat \"$output/inputs/graph_config.json\"\n"
+                          "  cat \"$output/inputs/parameters.json\"\n"
+                          "  printf '\\n// generated by test generator\\n'\n"
+                          "} > \"$output/artifact.sv\"\n"));
+}
+
+QString createFailingGenerator(const QString& packageRoot) {
+    return createPackageTool(packageRoot,
+                             QStringLiteral("failing-generator.sh"),
+                             QByteArrayLiteral("#!/bin/sh\n"
+                                               "echo 'generator failed intentionally' >&2\n"
+                                               "exit 7\n"));
+}
+
+QString createSlowGenerator(const QString& packageRoot) {
+    return createPackageTool(packageRoot,
+                             QStringLiteral("slow-generator.sh"),
+                             QByteArrayLiteral("#!/bin/sh\n"
+                                               "sleep 5\n"
+                                               "exit 0\n"));
+}
+
+IpCatalogEntry createCopyingFlowPackage(const QDir& root,
+                                        const QString& packageId,
+                                        const QString& moduleType) {
+    const QString packageRoot =
+        root.filePath(QStringLiteral("packages/%1").arg(packageId));
+    const QString tool = createCopyingGenerator(packageRoot);
+    writePackageSpec(packageRoot,
+                     packageId,
+                     flowCommand(tool,
+                                 {QStringLiteral("--input"),
+                                  QStringLiteral("{inputs.manifest}"),
+                                  QStringLiteral("--out"),
+                                  QStringLiteral("{out}")}));
+    return flowCatalogEntry(packageId, packageRoot, moduleType);
+}
+
+IpCatalogEntry createFailingFlowPackage(const QDir& root,
+                                        const QString& packageId,
+                                        const QString& moduleType) {
+    const QString packageRoot =
+        root.filePath(QStringLiteral("packages/%1").arg(packageId));
+    const QString tool = createFailingGenerator(packageRoot);
+    writePackageSpec(packageRoot,
+                     packageId,
+                     flowCommand(tool,
+                                 {QStringLiteral("--input"),
+                                  QStringLiteral("{inputs.manifest}"),
+                                  QStringLiteral("--out"),
+                                  QStringLiteral("{out}")}));
+    return flowCatalogEntry(packageId, packageRoot, moduleType);
+}
+
+IpCatalogEntry createSlowFlowPackage(const QDir& root,
+                                     const QString& packageId,
+                                     const QString& moduleType,
+                                     int timeoutMs) {
+    const QString packageRoot =
+        root.filePath(QStringLiteral("packages/%1").arg(packageId));
+    const QString tool = createSlowGenerator(packageRoot);
+    writePackageSpec(packageRoot,
+                     packageId,
+                     flowCommand(tool,
+                                 {QStringLiteral("--input"),
+                                  QStringLiteral("{inputs.manifest}"),
+                                  QStringLiteral("--out"),
+                                  QStringLiteral("{out}")},
+                                 timeoutMs));
+    return flowCatalogEntry(packageId, packageRoot, moduleType);
+}
+
+IpCatalogEntry createFrameworkToolFlowPackage(const QDir& root,
+                                              const QString& packageId,
+                                              const QString& moduleType,
+                                              const QString& artifactGlob) {
+    const QString packageRoot =
+        root.filePath(QStringLiteral("packages/%1").arg(packageId));
+    writePackageSpec(packageRoot,
+                     packageId,
+                     frameworkToolCommand({QStringLiteral("--manifest"),
+                                           QStringLiteral("{package.manifest}"),
+                                           QStringLiteral("--input"),
+                                           QStringLiteral("{inputs.manifest}"),
+                                           QStringLiteral("--output"),
+                                           QStringLiteral("{out}")}),
+                     artifactGlob);
+    return flowCatalogEntry(packageId, packageRoot, moduleType);
 }
 
 QString createFrameworkGenerateTool(const QDir& dir) {
@@ -254,29 +431,19 @@ QString createFrameworkGenerateTool(const QDir& dir) {
     return path;
 }
 
-QString createFailingGenerator(const QDir& dir) {
-    const QString path = dir.filePath(QStringLiteral("failing-generator.sh"));
-    writeFile(path,
-              QByteArrayLiteral("#!/bin/sh\n"
-                                "echo 'generator failed intentionally' >&2\n"
-                                "exit 7\n"));
-    makeExecutable(path);
-    return path;
-}
-
-QString createSlowGenerator(const QDir& dir) {
-    const QString path = dir.filePath(QStringLiteral("slow-generator.sh"));
-    writeFile(path,
-              QByteArrayLiteral("#!/bin/sh\n"
-                                "sleep 5\n"
-                                "exit 0\n"));
-    makeExecutable(path);
-    return path;
-}
-
-bool jsonArrayContainsString(const QJsonArray& array, const QString& text) {
-    for (const QJsonValue& value : array) {
-        if (value.toString() == text) {
+bool hasManifestFile(const QJsonObject& manifest,
+                     const QString& id,
+                     const QString& kind,
+                     const QString& path) {
+    const QJsonArray files = manifest.value(QStringLiteral("files")).toArray();
+    for (const QJsonValue& fileValue : files) {
+        if (!fileValue.isObject()) {
+            continue;
+        }
+        const QJsonObject file = fileValue.toObject();
+        if (file.value(QStringLiteral("id")).toString() == id &&
+            file.value(QStringLiteral("kind")).toString() == kind &&
+            file.value(QStringLiteral("path")).toString() == path) {
             return true;
         }
     }
@@ -324,7 +491,6 @@ void testGeneratesEveryProjectInstanceIntoSeparateOutputDirectories() {
     QTemporaryDir tempDir;
     require(tempDir.isValid(), "temporary directory should be valid");
     QDir root(tempDir.path());
-    const QString generatorPath = createCopyingGenerator(root);
 
     Graph graph;
     require(graph.addModule(makeModule(QStringLiteral("alpha_runtime"),
@@ -355,8 +521,8 @@ void testGeneratesEveryProjectInstanceIntoSeparateOutputDirectories() {
     request.projectPath = projectPath;
     request.designName = QStringLiteral("demo_design");
     request.catalogEntries = {
-        catalogEntry(QStringLiteral("finepaper.alpha"), generatorPath),
-        catalogEntry(QStringLiteral("finepaper.beta"), generatorPath)
+        createCopyingFlowPackage(root, QStringLiteral("finepaper.alpha"), QStringLiteral("AlphaTile")),
+        createCopyingFlowPackage(root, QStringLiteral("finepaper.beta"), QStringLiteral("BetaTile"))
     };
     request.instances = instances;
 
@@ -372,10 +538,10 @@ void testGeneratesEveryProjectInstanceIntoSeparateOutputDirectories() {
             "alpha artifact should be written under generated/alpha_0");
     require(QFileInfo::exists(QDir(betaOutput).filePath(QStringLiteral("artifact.sv"))),
             "beta artifact should be written under generated/beta_0");
-    require(QFileInfo::exists(commandInputPath(alphaOutput)),
-            "alpha command input JSON should exist");
-    require(QFileInfo::exists(commandInputPath(betaOutput)),
-            "beta command input JSON should exist");
+    require(QFileInfo::exists(emittedInputsManifestPath(alphaOutput)),
+            "alpha emitted inputs manifest should exist");
+    require(QFileInfo::exists(emittedInputsManifestPath(betaOutput)),
+            "beta emitted inputs manifest should exist");
     require(QFileInfo::exists(QDir(alphaOutput).filePath(QStringLiteral("generation-manifest.json"))),
             "alpha generation manifest should exist");
     require(QFileInfo::exists(QDir(betaOutput).filePath(QStringLiteral("generation-manifest.json"))),
@@ -403,7 +569,7 @@ void testGeneratesEveryProjectInstanceIntoSeparateOutputDirectories() {
     const ProjectReadResult snapshot =
         ProjectReader::readFile(generatedDir.filePath(QStringLiteral("project-snapshot.fpproj")));
     require(snapshot.success, snapshot.error.toLocal8Bit().constData());
-    require(snapshot.document.ipcoreState.size() == 2,
+    require(snapshot.document.instances.size() == 2,
             "project snapshot should include all generation-time IP instance state");
 }
 
@@ -411,13 +577,14 @@ void testGenerationRejectsUnsafeAndDuplicateInstanceOutputKeys() {
     QTemporaryDir tempDir;
     require(tempDir.isValid(), "temporary directory should be valid");
     QDir root(tempDir.path());
-    const QString generatorPath = createCopyingGenerator(root);
     Graph graph;
 
     ProjectGenerationRequest unsafeRequest;
     unsafeRequest.graph = &graph;
     unsafeRequest.projectPath = root.filePath(QStringLiteral("project/design.fpproj"));
-    unsafeRequest.catalogEntries = {catalogEntry(QStringLiteral("finepaper.alpha"), generatorPath)};
+    unsafeRequest.catalogEntries = {
+        createCopyingFlowPackage(root, QStringLiteral("finepaper.alpha"), QStringLiteral("AlphaTile"))
+    };
     unsafeRequest.instances = {
         instanceRecord(QStringLiteral("finepaper.alpha"),
                        QStringLiteral("../escape"),
@@ -435,8 +602,8 @@ void testGenerationRejectsUnsafeAndDuplicateInstanceOutputKeys() {
     duplicateRequest.graph = &graph;
     duplicateRequest.projectPath = root.filePath(QStringLiteral("project/design.fpproj"));
     duplicateRequest.catalogEntries = {
-        catalogEntry(QStringLiteral("finepaper.alpha"), generatorPath),
-        catalogEntry(QStringLiteral("finepaper.beta"), generatorPath)
+        createCopyingFlowPackage(root, QStringLiteral("finepaper.alpha"), QStringLiteral("AlphaTile")),
+        createCopyingFlowPackage(root, QStringLiteral("finepaper.beta"), QStringLiteral("BetaTile"))
     };
     duplicateRequest.instances = {
         instanceRecord(QStringLiteral("finepaper.alpha"),
@@ -456,8 +623,8 @@ void testGenerationRejectsUnsafeAndDuplicateInstanceOutputKeys() {
     caseFoldedDuplicateRequest.graph = &graph;
     caseFoldedDuplicateRequest.projectPath = root.filePath(QStringLiteral("project/design.fpproj"));
     caseFoldedDuplicateRequest.catalogEntries = {
-        catalogEntry(QStringLiteral("finepaper.alpha"), generatorPath),
-        catalogEntry(QStringLiteral("finepaper.beta"), generatorPath)
+        createCopyingFlowPackage(root, QStringLiteral("finepaper.alpha"), QStringLiteral("AlphaTile")),
+        createCopyingFlowPackage(root, QStringLiteral("finepaper.beta"), QStringLiteral("BetaTile"))
     };
     caseFoldedDuplicateRequest.instances = {
         instanceRecord(QStringLiteral("finepaper.alpha"),
@@ -479,7 +646,7 @@ void testGenerationRejectsUnsafeAndDuplicateInstanceOutputKeys() {
     reservedSnapshotRequest.graph = &graph;
     reservedSnapshotRequest.projectPath = root.filePath(QStringLiteral("project/design.fpproj"));
     reservedSnapshotRequest.catalogEntries = {
-        catalogEntry(QStringLiteral("finepaper.alpha"), generatorPath)
+        createCopyingFlowPackage(root, QStringLiteral("finepaper.alpha"), QStringLiteral("AlphaTile"))
     };
     reservedSnapshotRequest.instances = {
         instanceRecord(QStringLiteral("finepaper.alpha"),
@@ -500,12 +667,18 @@ void testGenerationFailureAndTimeoutFailWholeResult() {
     require(tempDir.isValid(), "temporary directory should be valid");
     QDir root(tempDir.path());
     Graph graph;
+    require(graph.addModule(makeModule(QStringLiteral("fail_runtime"),
+                                       QStringLiteral("FailTile"),
+                                       QStringLiteral("finepaper.fail"),
+                                       QStringLiteral("fail_0"),
+                                       QStringLiteral("fail_tile"))),
+            "failing package module should add");
 
     ProjectGenerationRequest failingRequest;
     failingRequest.graph = &graph;
     failingRequest.projectPath = root.filePath(QStringLiteral("project/design.fpproj"));
     failingRequest.catalogEntries = {
-        catalogEntry(QStringLiteral("finepaper.fail"), createFailingGenerator(root))
+        createFailingFlowPackage(root, QStringLiteral("finepaper.fail"), QStringLiteral("FailTile"))
     };
     failingRequest.instances = {
         instanceRecord(QStringLiteral("finepaper.fail"),
@@ -518,12 +691,21 @@ void testGenerationFailureAndTimeoutFailWholeResult() {
     require(failingResult.error.contains(QStringLiteral("exit code 7")),
             "nonzero generator failure should include exit code");
 
+    Graph timeoutGraph;
     ProjectGenerationRequest timeoutRequest;
-    timeoutRequest.graph = &graph;
+    timeoutRequest.graph = &timeoutGraph;
     timeoutRequest.projectPath = root.filePath(QStringLiteral("project/design.fpproj"));
-    timeoutRequest.generatorTimeoutMs = 50;
+    require(timeoutGraph.addModule(makeModule(QStringLiteral("slow_runtime"),
+                                              QStringLiteral("SlowTile"),
+                                              QStringLiteral("finepaper.slow"),
+                                              QStringLiteral("slow_0"),
+                                              QStringLiteral("slow_tile"))),
+            "slow package module should add");
     timeoutRequest.catalogEntries = {
-        catalogEntry(QStringLiteral("finepaper.slow"), createSlowGenerator(root))
+        createSlowFlowPackage(root,
+                              QStringLiteral("finepaper.slow"),
+                              QStringLiteral("SlowTile"),
+                              50)
     };
     timeoutRequest.instances = {
         instanceRecord(QStringLiteral("finepaper.slow"),
@@ -534,15 +716,20 @@ void testGenerationFailureAndTimeoutFailWholeResult() {
     const ProjectGenerationResult timeoutResult = ProjectGenerationRunner().generate(timeoutRequest);
     require(!timeoutResult.success, "timed-out generator should fail the whole generation result");
     require(timeoutResult.error.contains(QStringLiteral("timed out")),
-            "timed-out generator failure should be explicit");
+            timeoutResult.error.toLocal8Bit().constData());
 }
 
 void testGenerationManifestExcludesStaleArtifacts() {
     QTemporaryDir tempDir;
     require(tempDir.isValid(), "temporary directory should be valid");
     QDir root(tempDir.path());
-    const QString generatorPath = createCopyingGenerator(root);
     Graph graph;
+    require(graph.addModule(makeModule(QStringLiteral("alpha_runtime"),
+                                       QStringLiteral("AlphaTile"),
+                                       QStringLiteral("finepaper.alpha"),
+                                       QStringLiteral("alpha_0"),
+                                       QStringLiteral("alpha_tile"))),
+            "alpha module should add");
     const QString projectPath = root.filePath(QStringLiteral("project/design.fpproj"));
     const QString stalePath =
         root.filePath(QStringLiteral("project/generated/alpha_0/stale.sv"));
@@ -553,7 +740,9 @@ void testGenerationManifestExcludesStaleArtifacts() {
     ProjectGenerationRequest request;
     request.graph = &graph;
     request.projectPath = projectPath;
-    request.catalogEntries = {catalogEntry(QStringLiteral("finepaper.alpha"), generatorPath)};
+    request.catalogEntries = {
+        createCopyingFlowPackage(root, QStringLiteral("finepaper.alpha"), QStringLiteral("AlphaTile"))
+    };
     request.instances = {
         instanceRecord(QStringLiteral("finepaper.alpha"),
                        QStringLiteral("alpha_0"),
@@ -589,11 +778,10 @@ void testGenerationRequiresSavedProjectPath() {
             "generation without project path should ask user to save project first");
 }
 
-void testGenerateExportsIpcraftSchemaForPackageCommand() {
+void testGenerateEmitsPackageInputsForFlow() {
     QTemporaryDir tempDir;
     require(tempDir.isValid(), "temporary directory should be valid");
     QDir root(tempDir.path());
-    const QString generatorPath = createCopyingGenerator(root);
     const QString ipcoreId = QStringLiteral("org.example.alpha");
     Graph graph;
     require(graph.addModule(makeModule(QStringLiteral("alpha_runtime"),
@@ -607,7 +795,7 @@ void testGenerateExportsIpcraftSchemaForPackageCommand() {
     ProjectGenerationRequest request;
     request.graph = &graph;
     request.projectPath = projectPath;
-    request.catalogEntries = {ipcraftCatalogEntry(ipcoreId, generatorPath)};
+    request.catalogEntries = {createCopyingFlowPackage(root, ipcoreId, QStringLiteral("Tile"))};
     request.instances = {
         instanceRecord(ipcoreId, QStringLiteral("alpha_0"), QStringLiteral("alpha-marker"))
     };
@@ -618,23 +806,41 @@ void testGenerateExportsIpcraftSchemaForPackageCommand() {
     require(result.instances.size() == 1, "one ipcraft package instance should be generated");
     const QJsonObject input = readJsonObject(result.instances.first().inputPath);
     require(input.value(QStringLiteral("schema")).toString() ==
-                QStringLiteral("ipcraft.noc.project.v1"),
-            "ipcraft package generator should receive ipcraft NoC project schema");
+                ipcraft::schemaids::emittedInputsV1,
+            "package flow should receive an emitted inputs manifest");
+    require(input.value(QStringLiteral("instance")).toString() == QStringLiteral("alpha_0"),
+            "emitted inputs manifest should identify the generated instance");
+    require(input.value(QStringLiteral("package")).toObject()
+                .value(QStringLiteral("id")).toString() == ipcoreId,
+            "emitted inputs manifest should identify the package");
+    require(input.value(QStringLiteral("diagnostics")).toObject()
+                .value(QStringLiteral("records")).toArray().isEmpty(),
+            "successful emitted inputs manifest should not contain diagnostics");
+    require(hasManifestFile(input,
+                            QStringLiteral("graph_config"),
+                            QStringLiteral("graph_config"),
+                            QStringLiteral("graph_config.json")),
+            "emitted inputs manifest should record graph_config input");
+    require(hasManifestFile(input,
+                            QStringLiteral("parameters"),
+                            QStringLiteral("parameters"),
+                            QStringLiteral("parameters.json")),
+            "emitted inputs manifest should record parameters input");
+
     const QJsonObject manifest =
         readJsonObject(root.filePath(QStringLiteral("project/generated/alpha_0/generation-manifest.json")));
     require(manifest.value(QStringLiteral("schema")).toString()
                 == QStringLiteral("ipcraft.generation.manifest.v1"),
             "generation manifest should use the public ipcraft generation manifest schema");
     require(manifest.value(QStringLiteral("input")).toObject()
-                .value(QStringLiteral("schema")).toString() == QStringLiteral("ipcraft.noc.project.v1"),
-            "generation manifest should record the exported ipcraft schema");
+                .value(QStringLiteral("schema")).toString() == ipcraft::schemaids::emittedInputsV1,
+            "generation manifest should record the emitted inputs schema");
 }
 
-void testIpcraftCommandInputPathUsesCommandInputWording() {
+void testPackageFlowInputPathUsesEmittedInputsManifest() {
     QTemporaryDir tempDir;
     require(tempDir.isValid(), "temporary directory should be valid");
     QDir root(tempDir.path());
-    const QString generatorPath = createCopyingGenerator(root);
     const QString ipcoreId = QStringLiteral("org.example.path");
     Graph graph;
     require(graph.addModule(makeModule(QStringLiteral("path_runtime"),
@@ -648,7 +854,7 @@ void testIpcraftCommandInputPathUsesCommandInputWording() {
     ProjectGenerationRequest request;
     request.graph = &graph;
     request.projectPath = projectPath;
-    request.catalogEntries = {ipcraftCatalogEntry(ipcoreId, generatorPath)};
+    request.catalogEntries = {createCopyingFlowPackage(root, ipcoreId, QStringLiteral("Tile"))};
     request.instances = {
         instanceRecord(ipcoreId, QStringLiteral("path_0"), QStringLiteral("path-marker"))
     };
@@ -658,33 +864,29 @@ void testIpcraftCommandInputPathUsesCommandInputWording() {
     require(result.success, result.error.toLocal8Bit().constData());
     require(result.instances.size() == 1, "one ipcraft package instance should be generated");
     const ProjectGenerationInstanceResult instance = result.instances.first();
-    require(usesCommandInputFileName(instance.inputPath),
-            "generated command input path should contain command-input or ipcraft-input");
+    require(usesEmittedInputsManifestPath(instance.inputPath),
+            "generated package flow input should be inputs/manifest.json");
     require(!instance.inputPath.contains(QStringLiteral(".fpproj")),
-            "generated command input path should not look like a saved project file");
+            "generated flow input path should not look like a saved project file");
 
     const QJsonObject manifest = readJsonObject(instance.manifestPath);
     const QString manifestInputPath =
         manifest.value(QStringLiteral("input")).toObject().value(QStringLiteral("path")).toString();
-    require(usesCommandInputFileName(manifestInputPath),
-            "generation manifest input path should use command input wording");
+    require(usesEmittedInputsManifestPath(manifestInputPath),
+            "generation manifest input path should point to emitted inputs manifest");
     require(!manifestInputPath.contains(QStringLiteral(".fpproj")),
             "generation manifest input path should not point at a saved project file");
     const QString artifactInputPath =
         manifest.value(QStringLiteral("artifacts")).toObject()
-            .value(QStringLiteral("command_input")).toString();
-    require(usesCommandInputFileName(artifactInputPath),
-            "generation manifest artifact path should use command input wording");
+            .value(QStringLiteral("emitted_inputs")).toString();
+    require(usesEmittedInputsManifestPath(artifactInputPath),
+            "generation manifest artifacts should record emitted inputs manifest");
     require(!artifactInputPath.contains(QStringLiteral(".fpproj")),
             "generation manifest artifact path should not point at a saved project file");
 
-    const QJsonArray arguments =
-        manifest.value(QStringLiteral("process")).toObject().value(QStringLiteral("arguments")).toArray();
-    require(!arguments.isEmpty(), "generation manifest should record command arguments");
-    require(usesCommandInputFileName(arguments.first().toString()),
-            "recorded generator command input argument should use command input wording");
-    require(!arguments.first().toString().contains(QStringLiteral(".fpproj")),
-            "recorded generator command input argument should not look like a saved project file");
+    require(manifest.value(QStringLiteral("process")).toObject()
+                .value(QStringLiteral("flow")).toString() == QStringLiteral("generate"),
+            "generation manifest should record the package flow id");
 }
 
 void testGenerateRunsFrameworkToolFromInjectedSearchPath() {
@@ -692,14 +894,18 @@ void testGenerateRunsFrameworkToolFromInjectedSearchPath() {
     require(tempDir.isValid(), "temporary directory should be valid");
     QDir root(tempDir.path());
     require(root.mkpath(QStringLiteral("framework-tools")), "framework tool directory should be created");
-    require(root.mkpath(QStringLiteral("package")), "package directory should be created");
     const QDir toolsDir(root.filePath(QStringLiteral("framework-tools")));
     const QString toolPath = createFrameworkGenerateTool(toolsDir);
-    const QString packageRoot = root.filePath(QStringLiteral("package"));
-    const QString packageManifestPath = QDir(packageRoot).filePath(QStringLiteral("ipcraft.json"));
-    writeFile(packageManifestPath, QByteArrayLiteral("{}\n"));
 
     const QString ipcoreId = QStringLiteral("org.example.framework");
+    const IpCatalogEntry entry =
+        createFrameworkToolFlowPackage(root,
+                                       ipcoreId,
+                                       QStringLiteral("Tile"),
+                                       QStringLiteral("framework-tool-ran.txt"));
+    const QString packageManifestPath =
+        QDir(entry.packageManifest.packageRootPath).filePath(QStringLiteral("ipcraft.json"));
+
     Graph graph;
     require(graph.addModule(makeModule(QStringLiteral("framework_runtime"),
                                        QStringLiteral("Tile"),
@@ -712,7 +918,7 @@ void testGenerateRunsFrameworkToolFromInjectedSearchPath() {
     ProjectGenerationRequest request;
     request.graph = &graph;
     request.projectPath = projectPath;
-    request.catalogEntries = {ipcraftFrameworkToolCatalogEntry(ipcoreId, packageRoot)};
+    request.catalogEntries = {entry};
     request.instances = {
         instanceRecord(ipcoreId, QStringLiteral("framework_0"), QStringLiteral("framework-marker"))
     };
@@ -729,31 +935,24 @@ void testGenerateRunsFrameworkToolFromInjectedSearchPath() {
     require(proof.contains(packageManifestPath),
             "framework tool should receive substituted package manifest path");
     require(proof.contains(instance.inputPath),
-            "framework tool should receive substituted command input path");
+            "framework tool should receive substituted emitted inputs manifest path");
     require(proof.contains(instance.outputDirectory),
             "framework tool should receive substituted output path");
 
     const QJsonObject generationManifest = readJsonObject(instance.manifestPath);
     const QJsonObject process = generationManifest.value(QStringLiteral("process")).toObject();
-    require(process.value(QStringLiteral("command")).toString() == toolPath,
-            "generation manifest should record resolved framework tool command");
-    const QJsonArray arguments = process.value(QStringLiteral("arguments")).toArray();
-    require(jsonArrayContainsString(arguments, QStringLiteral("--manifest")) &&
-                jsonArrayContainsString(arguments, packageManifestPath),
-            "generation manifest should record substituted manifest argument");
-    require(jsonArrayContainsString(arguments, QStringLiteral("--input")) &&
-                jsonArrayContainsString(arguments, instance.inputPath),
-            "generation manifest should record substituted input argument");
-    require(jsonArrayContainsString(arguments, QStringLiteral("--output")) &&
-                jsonArrayContainsString(arguments, instance.outputDirectory),
-            "generation manifest should record substituted output argument");
+    require(process.value(QStringLiteral("flow")).toString() == QStringLiteral("generate"),
+            "generation manifest should record the package flow id");
+    require(process.value(QStringLiteral("stderr")).toString().isEmpty(),
+            "framework tool should not emit stderr on success");
+    require(QFileInfo(toolPath).isExecutable(),
+            "test framework tool should be executable from injected search path");
 }
 
-void testGenerateExportsIpcraftProjectForEveryInstance() {
+void testGenerateEmitsInputsForEveryPackageInstance() {
     QTemporaryDir tempDir;
     require(tempDir.isValid(), "temporary directory should be valid");
     QDir root(tempDir.path());
-    const QString generatorPath = createCopyingGenerator(root);
     const QString ipcoreId = QStringLiteral("org.example.alpha");
     Graph graph;
     require(graph.addModule(makeModule(QStringLiteral("alpha_runtime"),
@@ -773,7 +972,7 @@ void testGenerateExportsIpcraftProjectForEveryInstance() {
     ProjectGenerationRequest request;
     request.graph = &graph;
     request.projectPath = projectPath;
-    request.catalogEntries = {ipcraftCatalogEntry(ipcoreId, generatorPath)};
+    request.catalogEntries = {createCopyingFlowPackage(root, ipcoreId, QStringLiteral("Tile"))};
     request.instances = {
         instanceRecord(ipcoreId, QStringLiteral("alpha_0"), QStringLiteral("alpha-marker")),
         instanceRecord(ipcoreId, QStringLiteral("beta_0"), QStringLiteral("beta-marker"))
@@ -787,33 +986,33 @@ void testGenerateExportsIpcraftProjectForEveryInstance() {
 
     const QString alphaRoot = root.filePath(QStringLiteral("project/generated/alpha_0"));
     const QString betaRoot = root.filePath(QStringLiteral("project/generated/beta_0"));
-    const QJsonObject alphaInput = readJsonObject(commandInputPath(alphaRoot));
-    const QJsonObject betaInput = readJsonObject(commandInputPath(betaRoot));
+    const QJsonObject alphaInput = readJsonObject(emittedInputsManifestPath(alphaRoot));
+    const QJsonObject betaInput = readJsonObject(emittedInputsManifestPath(betaRoot));
     require(alphaInput.value(QStringLiteral("schema")).toString()
-                == QStringLiteral("ipcraft.noc.project.v1"),
-            "first package instance should receive the ipcraft NoC project schema");
+                == ipcraft::schemaids::emittedInputsV1,
+            "first package instance should receive an emitted inputs manifest");
     require(betaInput.value(QStringLiteral("schema")).toString()
-                == QStringLiteral("ipcraft.noc.project.v1"),
-            "second package instance should receive the ipcraft NoC project schema");
-    require(alphaInput.value(QStringLiteral("project")).toObject()
-                .value(QStringLiteral("instance")).toObject()
-                .value(QStringLiteral("id")).toString() == QStringLiteral("alpha_0"),
-            "first package input should identify the first project instance");
-    require(betaInput.value(QStringLiteral("project")).toObject()
-                .value(QStringLiteral("instance")).toObject()
-                .value(QStringLiteral("id")).toString() == QStringLiteral("beta_0"),
-            "second package input should identify the second project instance");
+                == ipcraft::schemaids::emittedInputsV1,
+            "second package instance should receive an emitted inputs manifest");
+    require(alphaInput.value(QStringLiteral("instance")).toString() == QStringLiteral("alpha_0"),
+            "first emitted inputs manifest should identify the first project instance");
+    require(betaInput.value(QStringLiteral("instance")).toString() == QStringLiteral("beta_0"),
+            "second emitted inputs manifest should identify the second project instance");
 
-    const QJsonArray alphaInstances = alphaInput.value(QStringLiteral("instances")).toArray();
-    const QJsonArray betaInstances = betaInput.value(QStringLiteral("instances")).toArray();
-    require(alphaInstances.size() == 1 &&
-                alphaInstances.first().toObject().value(QStringLiteral("id")).toString()
-                    == QStringLiteral("alpha_tile"),
-            "first package input should include only the first instance modules");
-    require(betaInstances.size() == 1 &&
-                betaInstances.first().toObject().value(QStringLiteral("id")).toString()
-                    == QStringLiteral("beta_tile"),
-            "second package input should include only the second instance modules");
+    const QJsonObject alphaGraphConfig =
+        readJsonObject(QDir(alphaRoot).filePath(QStringLiteral("inputs/graph_config.json")));
+    const QJsonObject betaGraphConfig =
+        readJsonObject(QDir(betaRoot).filePath(QStringLiteral("inputs/graph_config.json")));
+    const QJsonArray alphaObjects = alphaGraphConfig.value(QStringLiteral("objects")).toArray();
+    const QJsonArray betaObjects = betaGraphConfig.value(QStringLiteral("objects")).toArray();
+    require(alphaObjects.size() == 1 &&
+                alphaObjects.first().toObject().value(QStringLiteral("id")).toString()
+                    == QStringLiteral("alpha_runtime"),
+            "first graph_config input should include only the first instance modules");
+    require(betaObjects.size() == 1 &&
+                betaObjects.first().toObject().value(QStringLiteral("id")).toString()
+                    == QStringLiteral("beta_runtime"),
+            "second graph_config input should include only the second instance modules");
 
     const QJsonObject alphaManifest =
         readJsonObject(QDir(alphaRoot).filePath(QStringLiteral("generation-manifest.json")));
@@ -821,19 +1020,18 @@ void testGenerateExportsIpcraftProjectForEveryInstance() {
         readJsonObject(QDir(betaRoot).filePath(QStringLiteral("generation-manifest.json")));
     require(alphaManifest.value(QStringLiteral("input")).toObject()
                 .value(QStringLiteral("schema")).toString()
-                    == QStringLiteral("ipcraft.noc.project.v1"),
-            "first generation manifest should record the ipcraft schema");
+                    == ipcraft::schemaids::emittedInputsV1,
+            "first generation manifest should record the emitted inputs schema");
     require(betaManifest.value(QStringLiteral("input")).toObject()
                 .value(QStringLiteral("schema")).toString()
-                    == QStringLiteral("ipcraft.noc.project.v1"),
-            "second generation manifest should record the ipcraft schema");
+                    == ipcraft::schemaids::emittedInputsV1,
+            "second generation manifest should record the emitted inputs schema");
 }
 
 void testGenerateRunsBuiltInValidationBeforeCommand() {
     QTemporaryDir tempDir;
     require(tempDir.isValid(), "temporary directory should be valid");
     QDir root(tempDir.path());
-    const QString generatorPath = createCopyingGenerator(root);
     const QString ipcoreId = QStringLiteral("finepaper.alpha");
     Graph graph;
     require(graph.addModule(makeModule(QStringLiteral("alpha_runtime"),
@@ -847,7 +1045,7 @@ void testGenerateRunsBuiltInValidationBeforeCommand() {
     ProjectGenerationRequest request;
     request.graph = &graph;
     request.projectPath = projectPath;
-    request.catalogEntries = {ipcraftCatalogEntry(ipcoreId, generatorPath)};
+    request.catalogEntries = {createCopyingFlowPackage(root, ipcoreId, QStringLiteral("Tile"))};
     request.instances = {
         instanceRecord(ipcoreId, QStringLiteral("alpha_0"), QStringLiteral("alpha-marker"))
     };
@@ -876,10 +1074,10 @@ int main(int argc, char** argv) {
         testGenerationFailureAndTimeoutFailWholeResult();
         testGenerationManifestExcludesStaleArtifacts();
         testGenerationRequiresSavedProjectPath();
-        testGenerateExportsIpcraftSchemaForPackageCommand();
-        testIpcraftCommandInputPathUsesCommandInputWording();
+        testGenerateEmitsPackageInputsForFlow();
+        testPackageFlowInputPathUsesEmittedInputsManifest();
         testGenerateRunsFrameworkToolFromInjectedSearchPath();
-        testGenerateExportsIpcraftProjectForEveryInstance();
+        testGenerateEmitsInputsForEveryPackageInstance();
         testGenerateRunsBuiltInValidationBeforeCommand();
     } catch (const std::exception& error) {
         std::cerr << "projectgenerationrunner_test failed: " << error.what() << '\n';

@@ -1,0 +1,15 @@
+{
+  "schema": "ipcraft.package.v1",
+  "id": "vendor.example.negative_extension",
+  "version": "1.0.0",
+  "name": "Negative Extension Example",
+  "extensions": [],
+  "config_schema": {
+    "tables": [
+      {
+        "id": "regions",
+        "columns": []
+      }
+    ]
+  }
+}

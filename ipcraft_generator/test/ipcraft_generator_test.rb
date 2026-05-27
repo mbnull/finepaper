@@ -27,10 +27,9 @@ class IpcraftGeneratorTest < Minitest::Test
   def test_cli_rejects_unexpected_positional_argument
     Dir.mktmpdir do |dir|
       manifest_path = File.join(dir, 'ipcraft.json')
-      input_path = File.join(dir, 'input.json')
       output = File.join(dir, 'out')
       File.write(manifest_path, JSON.pretty_generate(minimal_manifest))
-      File.write(input_path, JSON.pretty_generate(minimal_project))
+      input_path = write_emitted_inputs(dir, minimal_project)
 
       assert_cli_error(
         'error: unexpected argument: extra',
@@ -45,10 +44,9 @@ class IpcraftGeneratorTest < Minitest::Test
   def test_loads_manifest_project_and_writes_output_manifest
     Dir.mktmpdir do |dir|
       manifest_path = File.join(dir, 'ipcraft.json')
-      input_path = File.join(dir, 'input.json')
       output = File.join(dir, 'out')
       File.write(manifest_path, JSON.pretty_generate(minimal_manifest))
-      File.write(input_path, JSON.pretty_generate(minimal_project))
+      input_path = write_emitted_inputs(dir, minimal_project)
 
       stdout, stderr, status = Open3.capture3(
         RbConfig.ruby, CLI,
@@ -107,28 +105,29 @@ class IpcraftGeneratorTest < Minitest::Test
     assert_includes error.message, 'unknown interface router.missing_interface'
   end
 
-  def test_generic_generation_rejects_invalid_canonical_source_endpoint_shape
+  def test_generic_generation_rejects_invalid_graph_config_endpoint_shape
     project = generic_project
-    project.fetch('connections').first['source'] = { 'module' => 'router', 'port' => 'fabric_out' }
+    project.fetch('connections').first.fetch('interfaces')[0] = 'router.fabric_out'
 
     error = assert_raises(IpcraftGenerator::Error) do
       generate_generic_project(project)
     end
     assert_includes error.message, 'link'
-    assert_includes error.message, 'invalid source endpoint reference'
+    assert_includes error.message, 'endpoint must be an object'
   end
 
   def test_failed_generation_removes_prior_success_manifest
     Dir.mktmpdir do |dir|
       manifest_path = File.join(dir, 'ipcraft.json')
-      valid_input_path = File.join(dir, 'valid.json')
+      valid_input_path = write_emitted_inputs(dir, generic_project, root_name: 'valid_inputs')
       invalid_input_path = File.join(dir, 'invalid.json')
       output = File.join(dir, 'out')
       File.write(manifest_path, JSON.pretty_generate(generic_manifest))
-      File.write(valid_input_path, JSON.pretty_generate(generic_project))
-      invalid_project = generic_project
-      invalid_project['schema'] = 'ipcraft.noc.project.v0'
-      File.write(invalid_input_path, JSON.pretty_generate(invalid_project))
+      File.write(invalid_input_path, JSON.pretty_generate({
+        'schema' => 'ipcraft.emitted-inputs.v0',
+        'package' => { 'id' => 'org.example.generic', 'version' => '1.0.0' },
+        'files' => []
+      }))
 
       IpcraftGenerator::Generator.new(
         manifest: manifest_path,
@@ -150,9 +149,8 @@ class IpcraftGeneratorTest < Minitest::Test
 
   def test_generates_finepaper_noc_structural_outputs
     Dir.mktmpdir do |dir|
-      input_path = File.join(dir, 'input.json')
       output = File.join(dir, 'out')
-      File.write(input_path, JSON.pretty_generate(finepaper_noc_project))
+      input_path = write_emitted_inputs(dir, finepaper_noc_project)
 
       IpcraftGenerator::Generator.new(
         manifest: File.join(PROJECT_ROOT, 'ipcores/finepaper-noc/ipcraft.json'),
@@ -166,7 +164,7 @@ class IpcraftGeneratorTest < Minitest::Test
       end
 
       manifest = JSON.parse(File.read(File.join(PROJECT_ROOT, 'ipcores/finepaper-noc/ipcraft.json')))
-      declared_outputs = manifest.fetch('generation').fetch('outputs').map { |entry| entry.fetch('path') }
+      declared_outputs = editor_manifest(manifest).fetch('generation').fetch('outputs').map { |entry| entry.fetch('path') }
       assert_empty expected_common_outputs - declared_outputs
       declared_outputs.each do |path|
         assert_path_exists File.join(output, path)
@@ -180,9 +178,8 @@ class IpcraftGeneratorTest < Minitest::Test
 
   def test_generates_ravenoc_config_and_manifest
     Dir.mktmpdir do |dir|
-      input_path = File.join(dir, 'input.json')
       output = File.join(dir, 'out')
-      File.write(input_path, JSON.pretty_generate(ravenoc_project))
+      input_path = write_emitted_inputs(dir, ravenoc_project)
 
       IpcraftGenerator::Generator.new(
         manifest: File.join(PROJECT_ROOT, 'ipcores/ravenoc/ipcraft.json'),
@@ -272,9 +269,8 @@ class IpcraftGeneratorTest < Minitest::Test
 
   def test_ravenoc_filelist_uses_output_local_paths
     Dir.mktmpdir do |dir|
-      input_path = File.join(dir, 'input.json')
       output = File.join('out')
-      File.write(input_path, JSON.pretty_generate(ravenoc_project))
+      input_path = write_emitted_inputs(dir, ravenoc_project)
 
       Dir.chdir(dir) do
         IpcraftGenerator::Generator.new(
@@ -294,9 +290,8 @@ class IpcraftGeneratorTest < Minitest::Test
 
   def test_generates_opennoc_mesh_projection_without_vendor
     Dir.mktmpdir do |dir|
-      input_path = File.join(dir, 'input.json')
       output = File.join(dir, 'out')
-      File.write(input_path, JSON.pretty_generate(opennoc_mesh_project))
+      input_path = write_emitted_inputs(dir, opennoc_mesh_project)
 
       IpcraftGenerator::Generator.new(
         manifest: File.join(PROJECT_ROOT, 'ipcores/opennoc/ipcraft.json'),
@@ -320,13 +315,12 @@ class IpcraftGeneratorTest < Minitest::Test
     end
   end
 
-  def test_opennoc_projection_supports_legacy_source_target_connections
+  def test_opennoc_projection_supports_source_target_endpoint_aliases
     Dir.mktmpdir do |dir|
-      input_path = File.join(dir, 'input.json')
       output = File.join(dir, 'out')
       project = opennoc_mesh_project
-      project['connections'] = project.fetch('connections').map { |connection| legacy_source_target_connection(connection) }
-      File.write(input_path, JSON.pretty_generate(project))
+      project['connections'] = project.fetch('connections').map { |connection| source_target_connection(connection) }
+      input_path = write_emitted_inputs(dir, project)
 
       IpcraftGenerator::Generator.new(
         manifest: File.join(PROJECT_ROOT, 'ipcores/opennoc/ipcraft.json'),
@@ -340,13 +334,12 @@ class IpcraftGeneratorTest < Minitest::Test
     end
   end
 
-  def test_opennoc_projection_supports_legacy_from_to_connections
+  def test_opennoc_projection_supports_from_to_endpoint_aliases
     Dir.mktmpdir do |dir|
-      input_path = File.join(dir, 'input.json')
       output = File.join(dir, 'out')
       project = opennoc_mesh_project
-      project['connections'] = project.fetch('connections').map { |connection| legacy_from_to_connection(connection) }
-      File.write(input_path, JSON.pretty_generate(project))
+      project['connections'] = project.fetch('connections').map { |connection| from_to_connection(connection) }
+      input_path = write_emitted_inputs(dir, project)
 
       IpcraftGenerator::Generator.new(
         manifest: File.join(PROJECT_ROOT, 'ipcores/opennoc/ipcraft.json'),
@@ -386,9 +379,9 @@ class IpcraftGeneratorTest < Minitest::Test
     assert_includes error.message, 'unknown instance missing_agent'
   end
 
-  def test_opennoc_projection_rejects_invalid_legacy_endpoint_shape
+  def test_opennoc_projection_rejects_invalid_endpoint_alias_shape
     project = opennoc_mesh_project
-    project.fetch('connections').map! { |connection| legacy_source_target_connection(connection) }
+    project.fetch('connections').map! { |connection| source_target_connection(connection) }
     project.fetch('connections').find do |connection|
       connection.fetch('id') == 'rnf_0_to_XP0_0_p0'
     end['source'] = 'rnf_0.chi'
@@ -397,7 +390,7 @@ class IpcraftGeneratorTest < Minitest::Test
       generate_opennoc_project(project)
     end
     assert_includes error.message, 'rnf_0_to_XP0_0_p0'
-    assert_includes error.message, 'invalid source endpoint reference'
+    assert_includes error.message, 'endpoint must be an object'
   end
 
   def test_opennoc_projection_rejects_invalid_xp_mesh_connection
@@ -445,7 +438,7 @@ class IpcraftGeneratorTest < Minitest::Test
 
   def test_opennoc_projection_reports_missing_xp_mapping
     manifest = opennoc_manifest
-    manifest.fetch('generation').fetch('module_mappings').delete('OpenNoCXP')
+    editor_manifest(manifest).fetch('generation').fetch('module_mappings').delete('OpenNoCXP')
 
     error = assert_raises(IpcraftGenerator::Error) do
       generate_opennoc_project(opennoc_mesh_project, manifest: manifest)
@@ -463,9 +456,132 @@ class IpcraftGeneratorTest < Minitest::Test
     assert_includes stderr, message
   end
 
-  def minimal_manifest
+  def write_emitted_inputs(dir, project, root_name: 'inputs')
+    input_root = File.join(dir, root_name)
+    FileUtils.mkdir_p(input_root)
+    graph_config_path = File.join(input_root, 'graph_config.json')
+    parameters_path = File.join(input_root, 'parameters.json')
+    manifest_path = File.join(input_root, 'manifest.json')
+
+    File.write(graph_config_path, JSON.pretty_generate(graph_config_for_project(project)))
+    File.write(parameters_path, JSON.pretty_generate(parameters_for_project(project)))
+    File.write(manifest_path, JSON.pretty_generate(emitted_inputs_manifest(project)))
+    manifest_path
+  end
+
+  def emitted_inputs_manifest(project)
+    package_id = project.fetch('package')
     {
-      'schema' => 'ipcraft.manifest.v1',
+      'schema' => 'ipcraft.emitted-inputs.v1',
+      'project' => project.dig('project', 'name') || 'test_project',
+      'instance' => project.dig('project', 'instance', 'id') || 'ip0',
+      'package' => {
+        'id' => package_id,
+        'version' => '1.0'
+      },
+      'files' => [
+        {
+          'id' => 'graph_config',
+          'kind' => 'graph_config',
+          'path' => 'graph_config.json',
+          'source' => { 'graph_config' => true }
+        },
+        {
+          'id' => 'parameters',
+          'kind' => 'parameters',
+          'path' => 'parameters.json',
+          'source' => { 'parameters' => true }
+        }
+      ],
+      'diagnostics' => {
+        'schema' => 'ipcraft.diagnostics.v1',
+        'records' => []
+      }
+    }
+  end
+
+  def parameters_for_project(project)
+    [
+      project.dig('project', 'global_parameters'),
+      project.dig('project', 'instance', 'state', 'global_parameters'),
+      project.dig('project', 'instance', 'parameters'),
+      project['parameters']
+    ].find { |parameters| parameters.is_a?(Hash) } || {}
+  end
+
+  def graph_config_for_project(project)
+    {
+      'schema' => 'ipcraft.graph-config.v1',
+      'objects' => project.fetch('instances', []).map { |instance| graph_config_object(instance) },
+      'relationships' => project.fetch('connections', []).map { |connection| graph_config_relationship(project, connection) },
+      'properties' => {},
+      'native' => {}
+    }
+  end
+
+  def graph_config_object(instance)
+    {
+      'id' => instance.fetch('id'),
+      'type' => instance['module'] || instance['module_id'] || instance['type'],
+      'properties' => instance.fetch('parameters', {})
+    }
+  end
+
+  def graph_config_relationship(project, connection)
+    {
+      'id' => connection.fetch('id'),
+      'type' => connection['class'],
+      'endpoints' => graph_config_relationship_endpoints(project, connection),
+      'properties' => {}
+    }
+  end
+
+  def graph_config_relationship_endpoints(project, connection)
+    if connection.key?('interfaces')
+      return connection.fetch('interfaces').map { |endpoint| graph_config_endpoint(project, endpoint) }
+    end
+    if connection.key?('source') || connection.key?('target')
+      return %w[source target].map { |key| graph_config_endpoint(project, connection.fetch(key)) }
+    end
+    if connection.key?('from') || connection.key?('to')
+      return %w[from to].map { |key| graph_config_endpoint(project, connection.fetch(key)) }
+    end
+    []
+  end
+
+  def graph_config_endpoint(project, endpoint)
+    unless endpoint.is_a?(Hash)
+      return endpoint
+    end
+
+    instance = endpoint['instance'] || endpoint['module']
+    role = endpoint['interface'] || endpoint['port']
+    {
+      'object' => instance,
+      'role' => port_for_project_interface(project, instance, role)
+    }
+  end
+
+  def port_for_project_interface(project, instance_id, interface_id)
+    instance = project.fetch('instances', []).find { |candidate| candidate['id'] == instance_id }
+    return interface_id unless instance
+
+    interfaces = instance.fetch('interfaces', [])
+    return interface_id unless interfaces.is_a?(Array)
+
+    interfaces.each do |interface|
+      return interface if interface.is_a?(String) && interface == interface_id
+      next unless interface.is_a?(Hash)
+
+      id = interface['id'] || interface['interface'] || interface['port']
+      port = interface['port'] || id
+      return port if id == interface_id || port == interface_id
+    end
+    interface_id
+  end
+
+  def minimal_manifest
+    package_manifest(
       'id' => 'org.example.noc',
       'name' => 'Example',
       'generation' => {
@@ -474,16 +590,15 @@ class IpcraftGeneratorTest < Minitest::Test
           { 'id' => 'manifest', 'kind' => 'json', 'path' => 'manifest.json' }
         ]
       }
-    }
+    )
   end
 
   def minimal_project
     {
-      'schema' => 'ipcraft.noc.project.v1',
       'package' => 'org.example.noc',
       'instances' => [
-        { 'id' => 'router' },
-        { 'id' => 'endpoint' }
+        { 'id' => 'router', 'module' => 'Tile' },
+        { 'id' => 'endpoint', 'module' => 'Tile' }
       ]
     }
   end
@@ -491,15 +606,14 @@ class IpcraftGeneratorTest < Minitest::Test
   def expected_output_manifest
     {
       'ipcore' => 'org.example.noc',
-      'schema' => 'ipcraft.noc.project.v1',
+      'schema' => 'ipcraft.emitted-inputs.v1',
       'instance_count' => 2,
       'connection_count' => 0
     }
   end
 
   def generic_manifest
-    {
-      'schema' => 'ipcraft.manifest.v1',
+    package_manifest(
       'id' => 'org.example.generic',
       'name' => 'Generic',
       'connection_classes' => [
@@ -520,12 +634,29 @@ class IpcraftGeneratorTest < Minitest::Test
           { 'id' => 'manifest', 'kind' => 'json', 'path' => 'manifest.json' }
         ]
       }
+    )
+  end
+
+  def package_manifest(editor_fields)
+    {
+      'schema' => 'ipcraft.package.v1',
+      'id' => editor_fields.fetch('id'),
+      'name' => editor_fields.fetch('name'),
+      'version' => editor_fields.fetch('version', '1.0.0'),
+      'native' => {
+        'ipcraft' => {
+          'editor' => editor_fields
+        }
+      }
     }
+  end
+
+  def editor_manifest(manifest)
+    manifest.fetch('native').fetch('ipcraft').fetch('editor')
   end
 
   def generic_project
     {
-      'schema' => 'ipcraft.noc.project.v1',
       'package' => 'org.example.generic',
       'instances' => [
         {
@@ -556,7 +687,6 @@ class IpcraftGeneratorTest < Minitest::Test
 
   def finepaper_noc_project
     {
-      'schema' => 'ipcraft.noc.project.v1',
       'package' => 'finepaper.noc',
       'instances' => [
         {
@@ -609,7 +739,6 @@ class IpcraftGeneratorTest < Minitest::Test
 
   def ravenoc_project
     {
-      'schema' => 'ipcraft.noc.project.v1',
       'package' => 'finepaper.ravenoc',
       'project' => {
         'name' => 'ravenoc_common_2x2',
@@ -686,7 +815,6 @@ class IpcraftGeneratorTest < Minitest::Test
 
   def opennoc_mesh_project
     {
-      'schema' => 'ipcraft.noc.project.v1',
       'package' => 'finepaper.opennoc',
       'instances' => [
         opennoc_xp('XP0_0', 0, 0),
@@ -742,27 +870,27 @@ class IpcraftGeneratorTest < Minitest::Test
     }
   end
 
-  def legacy_source_target_connection(connection)
+  def source_target_connection(connection)
     refs = connection.fetch('interfaces')
     {
       'id' => connection.fetch('id'),
       'class' => connection.fetch('class'),
-      'source' => legacy_endpoint(refs.fetch(0)),
-      'target' => legacy_endpoint(refs.fetch(1))
+      'source' => endpoint_alias(refs.fetch(0)),
+      'target' => endpoint_alias(refs.fetch(1))
     }
   end
 
-  def legacy_from_to_connection(connection)
+  def from_to_connection(connection)
     refs = connection.fetch('interfaces')
     {
       'id' => connection.fetch('id'),
       'class' => connection.fetch('class'),
-      'from' => legacy_endpoint(refs.fetch(0)),
-      'to' => legacy_endpoint(refs.fetch(1))
+      'from' => endpoint_alias(refs.fetch(0)),
+      'to' => endpoint_alias(refs.fetch(1))
     }
   end
 
-  def legacy_endpoint(ref)
+  def endpoint_alias(ref)
     {
       'module' => ref.fetch('instance'),
       'port' => ref.fetch('interface').delete_prefix('if_')
@@ -772,9 +900,8 @@ class IpcraftGeneratorTest < Minitest::Test
   def generate_generic_project(project, manifest: generic_manifest)
     Dir.mktmpdir do |dir|
       manifest_path = File.join(dir, 'ipcraft.json')
-      input_path = File.join(dir, 'input.json')
       File.write(manifest_path, JSON.pretty_generate(manifest))
-      File.write(input_path, JSON.pretty_generate(project))
+      input_path = write_emitted_inputs(dir, project)
 
       IpcraftGenerator::Generator.new(
         manifest: manifest_path,
@@ -787,9 +914,8 @@ class IpcraftGeneratorTest < Minitest::Test
   def generate_opennoc_project(project, manifest: opennoc_manifest)
     Dir.mktmpdir do |dir|
       manifest_path = File.join(dir, 'ipcraft.json')
-      input_path = File.join(dir, 'input.json')
       File.write(manifest_path, JSON.pretty_generate(manifest))
-      File.write(input_path, JSON.pretty_generate(project))
+      input_path = write_emitted_inputs(dir, project)
 
       IpcraftGenerator::Generator.new(
         manifest: manifest_path,
@@ -802,9 +928,8 @@ class IpcraftGeneratorTest < Minitest::Test
   def generate_ravenoc_project(project, manifest: ravenoc_manifest)
     Dir.mktmpdir do |dir|
       manifest_path = File.join(dir, 'ipcraft.json')
-      input_path = File.join(dir, 'input.json')
       File.write(manifest_path, JSON.pretty_generate(manifest))
-      File.write(input_path, JSON.pretty_generate(project))
+      input_path = write_emitted_inputs(dir, project)
 
       IpcraftGenerator::Generator.new(
         manifest: manifest_path,

@@ -35,7 +35,8 @@ module SpecGenerator
   EMIT_MODES = %w[attribute config editor editor_only].freeze
   PORT_DIRECTIONS = %w[input output inout].freeze
   IPCRAFT_PACKAGE_TOP_LEVEL_KEYS = %w[
-    schema id name version instances plugin extensions ipxact parameters connection_classes modules views topologies generation commands
+    schema id name version display instances plugin extensions ipxact parameters connection_classes modules views topologies generation commands
+    config_schema interfaces connection_rules emitters flows artifacts diagnostics graph_config native_schema metadata native
   ].freeze
   IPCRAFT_INSTANCES_KEYS = %w[max].freeze
   IPCRAFT_PLUGIN_KEYS = %w[library entry].freeze
@@ -55,6 +56,7 @@ module SpecGenerator
   IPCRAFT_GENERATION_FILE_COPY_KEYS = %w[from to].freeze
   IPCRAFT_GENERATION_COMMAND_KEYS = %w[id executable args].freeze
   IPCRAFT_COMMAND_KEYS = %w[executable framework_tool input_schema args].freeze
+  IPCRAFT_CONFIG_SCHEMA_KEYS = %w[parameters tables documents files metadata native].freeze
   IPCRAFT_EXTENSION_MODE_KEYS = %w[ipxact].freeze
   IPCRAFT_EXTENSION_MODE_IPXACT_KEYS = %w[mode].freeze
   IPCRAFT_INTERFACE_IPXACT_KEYS = %w[bus_interface mode modes].freeze
@@ -333,23 +335,64 @@ module SpecGenerator
       @connection_class_index = @connection_classes.to_h { |klass| [klass.fetch('id'), klass] }
       @modules = normalize_modules
       validate_accept_rules!
+      validate_optional_section_extensions!
 
-      compact_hash(
-        'schema' => 'ipcraft.manifest.v1',
-        'id' => required_string(@data, 'id', 'id'),
-        'name' => required_string(@data, 'name', 'name'),
-        'version' => required_string(@data, 'version', 'version'),
+      package_id = required_string(@data, 'id', 'id')
+      package_name = required_string(@data, 'name', 'name')
+      package_version = required_string(@data, 'version', 'version')
+      views = normalize_views
+      editor_metadata = compact_hash(
         'instances' => normalize_instances,
-        'plugin' => normalize_plugin,
         'extensions' => @extensions,
         'ipxact' => normalize_ipxact,
         'parameters' => @parameters,
         'connection_classes' => @connection_classes,
         'modules' => @modules,
-        'views' => normalize_views,
+        'views' => views,
         'topologies' => normalize_topologies,
         'generation' => normalize_generation,
-        'commands' => normalize_commands
+        'commands' => normalize_commands.empty? ? nil : normalize_commands
+      )
+      config_schema = normalize_config_schema
+      graph_config = normalize_graph_config_contract
+      interfaces = normalize_package_interfaces
+      connection_rules = normalize_connection_rules
+      emitters = normalize_emitters
+      flows = normalize_flows
+      artifacts = normalize_artifacts
+      diagnostics = normalize_diagnostics
+      native = normalize_native(editor_metadata)
+
+      compact_hash(
+        'schema' => 'ipcraft.package.v1',
+        'id' => package_id,
+        'name' => package_name,
+        'version' => package_version,
+        'display' => @data.key?('display') ? deep_copy(@data['display']) : nil,
+        'extensions' => declared_extensions(
+          config_schema: config_schema,
+          graph_config: graph_config,
+          views: views,
+          emitters: emitters,
+          flows: flows,
+          artifacts: artifacts,
+          diagnostics: diagnostics,
+          interfaces: interfaces,
+          connection_rules: connection_rules
+        ),
+        'config_schema' => config_schema,
+        'interfaces' => interfaces.empty? ? nil : interfaces,
+        'connection_rules' => connection_rules.empty? ? nil : connection_rules,
+        'views' => views.empty? ? nil : views,
+        'graph_config' => graph_config,
+        'emitters' => emitters.empty? ? nil : emitters,
+        'flows' => flows.empty? ? nil : flows,
+        'artifacts' => artifacts.empty? ? nil : artifacts,
+        'diagnostics' => diagnostics,
+        'plugin' => normalize_plugin,
+        'native_schema' => @data.key?('native_schema') ? deep_copy(@data['native_schema']) : nil,
+        'metadata' => @data.key?('metadata') ? deep_copy(@data['metadata']) : nil,
+        'native' => native
       )
     end
 
@@ -361,7 +404,35 @@ module SpecGenerator
       %w[id name version].each { |key| required_string(@data, key, key) }
       raise SpecError, 'connection_classes must be a list' unless @data['connection_classes'].is_a?(Array)
       raise SpecError, 'modules must be a list' unless @data['modules'].is_a?(Array)
-      raise SpecError, 'commands must be a map' unless @data['commands'].is_a?(Hash)
+      if @data.key?('commands') && !@data['commands'].is_a?(Hash)
+        raise SpecError, 'commands must be a map'
+      end
+    end
+
+    def validate_optional_section_extensions!
+      mappings = []
+      config_schema = @data.fetch('config_schema', {})
+      raise SpecError, 'config_schema must be a map' unless config_schema.is_a?(Hash)
+
+      validate_keys!(config_schema, IPCRAFT_CONFIG_SCHEMA_KEYS, 'config_schema')
+      mappings << ['config_schema.parameters', 'ipcraft.config.params'] if config_schema.key?('parameters') || !@parameters.empty?
+      mappings << ['config_schema.tables', 'ipcraft.config.tables'] if config_schema.key?('tables')
+      mappings << ['config_schema.documents', 'ipcraft.config.documents'] if config_schema.key?('documents')
+      mappings << ['config_schema.files', 'ipcraft.config.files'] if config_schema.key?('files')
+      mappings << ['interfaces', 'ipcraft.interfaces'] if @data.key?('interfaces')
+      mappings << ['connection_rules', 'ipcraft.composition'] if @data.key?('connection_rules')
+      mappings << ['emitters', 'ipcraft.emitters'] if @data.key?('emitters')
+      mappings << ['flows', 'ipcraft.flows'] if @data.key?('flows')
+      mappings << ['artifacts', 'ipcraft.artifacts'] if @data.key?('artifacts')
+      mappings << ['diagnostics', 'ipcraft.diagnostics'] if @data.key?('diagnostics')
+      mappings << ['views', 'ipcraft.views'] if @data.key?('views')
+      mappings << ['graph_config', 'ipcraft.graph_config'] if @data.key?('graph_config') || !@modules.empty?
+
+      mappings.each do |section, extension_id|
+        next if extension_declared?(extension_id)
+
+        raise SpecError, "#{section} requires extension #{extension_id}"
+      end
     end
 
     def normalize_plugin
@@ -416,6 +487,153 @@ module SpecGenerator
         validate_extension_modes!(id, normalized)
         [id, normalized]
       end
+    end
+
+    def extension_declared?(extension_id)
+      extension = @extensions[extension_id]
+      extension && extension['enabled'] == true
+    end
+
+    def declared_extensions(config_schema:, graph_config:, views:, emitters:, flows:, artifacts:, diagnostics:, interfaces:, connection_rules:)
+      ids = []
+      @extensions.each do |id, extension|
+        ids << id if extension['enabled'] == true
+      end
+      if config_schema.is_a?(Hash)
+        ids << 'ipcraft.config.params' if config_schema.key?('parameters')
+        ids << 'ipcraft.config.tables' if config_schema.key?('tables')
+        ids << 'ipcraft.config.documents' if config_schema.key?('documents')
+        ids << 'ipcraft.config.files' if config_schema.key?('files')
+      end
+      ids << 'ipcraft.interfaces' unless interfaces.empty?
+      ids << 'ipcraft.composition' unless connection_rules.empty?
+      ids << 'ipcraft.graph_config' if graph_config
+      ids << 'ipcraft.views' unless views.empty?
+      ids << 'ipcraft.emitters' unless emitters.empty?
+      ids << 'ipcraft.flows' unless flows.empty?
+      ids << 'ipcraft.artifacts' unless artifacts.empty?
+      ids << 'ipcraft.diagnostics' if diagnostics
+      ids.uniq.sort
+    end
+
+    def normalize_config_schema
+      raw = deep_copy(@data.fetch('config_schema', {}))
+      raise SpecError, 'config_schema must be a map' unless raw.is_a?(Hash)
+
+      validate_keys!(raw, IPCRAFT_CONFIG_SCHEMA_KEYS, 'config_schema')
+      parameters = raw.fetch('parameters', [])
+      raise SpecError, 'config_schema.parameters must be a list' unless parameters.is_a?(Array)
+
+      generated_parameters = @parameters.map do |id, spec|
+        normalize_config_parameter(id, spec)
+      end
+      raw['parameters'] = parameters + generated_parameters unless generated_parameters.empty?
+      compact_hash(raw).empty? ? nil : raw
+    end
+
+    def normalize_config_parameter(id, spec)
+      raise SpecError, "parameter #{id} must be a map" unless spec.is_a?(Hash)
+
+      type = spec.fetch('type', 'string')
+      if spec.key?('enum')
+        value_type = type == 'int' ? 'int64' : 'string'
+        parameter = {
+          'id' => id,
+          'type' => 'enum',
+          'value_type' => value_type,
+          'values' => deep_copy(spec['enum']),
+          'default' => deep_copy(spec['default'])
+        }
+      else
+        parameter = {
+          'id' => id,
+          'type' => type,
+          'default' => deep_copy(spec['default'])
+        }
+      end
+
+      range = {}
+      range['min'] = spec['min'] if spec.key?('min')
+      range['max'] = spec['max'] if spec.key?('max')
+      parameter['range'] = range unless range.empty?
+      %w[label description group required visible_when enabled_when required_when default_when].each do |key|
+        parameter[key] = deep_copy(spec[key]) if spec.key?(key)
+      end
+      compact_hash(parameter)
+    end
+
+    def normalize_graph_config_contract
+      graph_config = deep_copy(@data.fetch('graph_config', {}))
+      raise SpecError, 'graph_config must be a map' unless graph_config.is_a?(Hash)
+
+      return nil if graph_config.empty? && @modules.empty?
+
+      {
+        'schema' => 'ipcraft.graph-config.v1',
+        'objects' => graph_config.fetch('objects', []),
+        'relationships' => graph_config.fetch('relationships', []),
+        'properties' => graph_config.fetch('properties', {}),
+        'native' => graph_config.fetch('native', {})
+      }
+    end
+
+    def normalize_package_interfaces
+      interfaces = deep_copy(@data.fetch('interfaces', []))
+      raise SpecError, 'interfaces must be a list' unless interfaces.is_a?(Array)
+
+      interfaces
+    end
+
+    def normalize_connection_rules
+      connection_rules = deep_copy(@data.fetch('connection_rules', {}))
+      raise SpecError, 'connection_rules must be a map' unless connection_rules.is_a?(Hash)
+
+      connection_rules
+    end
+
+    def normalize_emitters
+      emitters = deep_copy(@data.fetch('emitters', []))
+      raise SpecError, 'emitters must be a list' unless emitters.is_a?(Array)
+
+      emitters
+    end
+
+    def normalize_flows
+      flows = deep_copy(@data.fetch('flows', []))
+      raise SpecError, 'flows must be a list' unless flows.is_a?(Array)
+
+      flows
+    end
+
+    def normalize_artifacts
+      artifacts = deep_copy(@data.fetch('artifacts', []))
+      raise SpecError, 'artifacts must be a list' unless artifacts.is_a?(Array)
+
+      artifacts
+    end
+
+    def normalize_diagnostics
+      return nil unless @data.key?('diagnostics')
+
+      diagnostics = deep_copy(@data['diagnostics'])
+      raise SpecError, 'diagnostics must be a map' unless diagnostics.is_a?(Hash)
+
+      diagnostics
+    end
+
+    def normalize_native(editor_metadata)
+      native = deep_copy(@data.fetch('native', {}))
+      raise SpecError, 'native must be a map' unless native.is_a?(Hash)
+
+      ipcraft_native = native.fetch('ipcraft', {})
+      raise SpecError, 'native.ipcraft must be a map' unless ipcraft_native.is_a?(Hash)
+      if ipcraft_native.key?('editor')
+        raise SpecError, 'native.ipcraft.editor is reserved for generated editor metadata'
+      end
+
+      ipcraft_native['editor'] = editor_metadata
+      native['ipcraft'] = ipcraft_native
+      native
     end
 
     def validate_extension_modes!(extension_id, extension)
@@ -994,7 +1212,7 @@ module SpecGenerator
     end
 
     def normalize_commands
-      @data.fetch('commands').to_h do |name, command|
+      @data.fetch('commands', {}).to_h do |name, command|
         raise SpecError, "commands.#{name} must be a map" unless command.is_a?(Hash)
 
         validate_keys!(command, IPCRAFT_COMMAND_KEYS, "commands.#{name}")

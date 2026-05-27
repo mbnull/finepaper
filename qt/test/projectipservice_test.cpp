@@ -99,8 +99,14 @@ void testProjectIpServiceCreatesDefaultStateAndSelectsIt() {
             "record should keep ipcore id");
     require(record.instanceId == QStringLiteral("ravenoc_0"),
             "record should use default instance id");
-    require(record.schema == QStringLiteral("ipcraft.noc.instance-state.v1"),
-            "record should use public ipcraft instance state schema");
+    require(record.id == QStringLiteral("ravenoc_0"),
+            "record should expose canonical ProjectDocument instance id");
+    require(record.package.id == QStringLiteral("finepaper.ravenoc"),
+            "record should expose canonical ProjectDocument package id");
+    require(record.package.version == QStringLiteral("0.1"),
+            "record should expose canonical ProjectDocument package version");
+    require(record.schema.isEmpty(),
+            "new V1 instance records should not default to a legacy instance-state schema");
     require(record.state.value(QStringLiteral("kind")).toString() == QStringLiteral("noc"),
             "record should keep kind");
     require(record.state.value(QStringLiteral("type")).toString() == QStringLiteral("RaveNoC"),
@@ -110,11 +116,47 @@ void testProjectIpServiceCreatesDefaultStateAndSelectsIt() {
                 .value(QStringLiteral("flit_data_width"))
                 .toInt() == 32,
             "record should copy default global parameter");
+    require(record.config.value(QStringLiteral("parameters"))
+                .toObject()
+                .value(QStringLiteral("flit_data_width"))
+                .toInt() == 32,
+            "record should mirror defaults into canonical config parameters");
     require(service.selectedIpInstance().has_value(), "new instance should be selected");
     require(service.selectedIpInstance()->ipcoreId == QStringLiteral("finepaper.ravenoc"),
             "selection should point at new ipcore");
     require(service.selectedIpInstance()->instanceId == QStringLiteral("ravenoc_0"),
             "selection should point at new instance");
+}
+
+void testProjectStateServiceWritesCanonicalInstances() {
+    ProjectStateService stateService;
+    ProjectIpService service(&stateService);
+
+    const ProjectIpServiceResult result = service.createInstanceForIpcore(ravenocEntry());
+    require(result.success, "IP service should create state for canonical write test");
+    require(stateService.setParameter(QStringLiteral("finepaper.ravenoc"),
+                                      QStringLiteral("ravenoc_0"),
+                                      QStringLiteral("global_parameters"),
+                                      QStringLiteral("flit_data_width"),
+                                      64),
+            "state parameter update should succeed before writing document");
+
+    ProjectDocument document;
+    document.projectId = QStringLiteral("project_0");
+    document.projectName = QStringLiteral("Project");
+    stateService.writeToDocument(document);
+
+    require(document.instances.size() == 1,
+            "state service should write canonical ProjectDocument instances");
+    require(document.instances.first().id == QStringLiteral("ravenoc_0"),
+            "canonical instance should keep instance id");
+    require(document.instances.first().package.id == QStringLiteral("finepaper.ravenoc"),
+            "canonical instance should keep package id");
+    require(document.instances.first().config.value(QStringLiteral("parameters"))
+                .toObject()
+                .value(QStringLiteral("flit_data_width"))
+                .toInt() == 64,
+            "canonical config parameters should include updated state");
 }
 
 void testProjectIpServiceRejectsRepeatedNocInstances() {
@@ -451,6 +493,7 @@ int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
     try {
         testProjectIpServiceCreatesDefaultStateAndSelectsIt();
+        testProjectStateServiceWritesCanonicalInstances();
         testProjectIpServiceRejectsRepeatedNocInstances();
         testProjectIpServiceCreatesRepeatedNonNocInstancesForSameIpcore();
         testProjectIpServiceRejectsPackageInstanceMax();

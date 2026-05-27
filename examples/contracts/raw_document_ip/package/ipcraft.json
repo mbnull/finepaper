@@ -1,0 +1,29 @@
+{
+  "schema": "ipcraft.package.v1",
+  "id": "vendor.example.raw_document",
+  "version": "1.0.0",
+  "name": "Raw Document IP",
+  "extensions": [
+    "ipcraft.config.documents",
+    "ipcraft.emitters"
+  ],
+  "config_schema": {
+    "documents": [
+      {
+        "id": "system",
+        "format": "text",
+        "output_path": "input/system.txt",
+        "editable": true,
+        "preserve_unknown_fields": true
+      }
+    ]
+  },
+  "emitters": [
+    {
+      "id": "system",
+      "kind": "emit_config_document",
+      "document": "system",
+      "path": "input/system.txt"
+    }
+  ]
+}

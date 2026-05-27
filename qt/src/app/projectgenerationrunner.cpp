@@ -3,9 +3,13 @@
 
 #include "app/generationartifacts.h"
 #include "graph/graph.h"
+#include "ipcraft/flowrunner.h"
 #include "ipcraft/ipcraftbuiltinvalidator.h"
-#include "ipcore/ipcorecommandrunner.h"
-#include "ipcore/ipcoregraphexporter.h"
+#include "ipcraft/packagespec.h"
+#include "ipcraft/schemaids.h"
+#include "project/graphprojectserializer.h"
+#include "project/projectdocument.h"
+#include "project/projectstateservice.h"
 #include "validation/validationresult.h"
 
 #include <QCoreApplication>
@@ -16,7 +20,6 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QProcess>
 #include <QSaveFile>
 #include <QSet>
 #include <algorithm>
@@ -26,10 +29,6 @@ namespace {
 
 QString generationSchemaName() {
     return QStringLiteral("ipcraft.generation.manifest.v1");
-}
-
-QString commandInputFileName() {
-    return QStringLiteral("command-input.json");
 }
 
 QString defaultOutputRootForProject(const QString& projectPath) {
@@ -123,8 +122,9 @@ QStringList generatedFiles(const QString& outputDirectory) {
         const QString path = iterator.next();
         const QString relativePath = base.relativeFilePath(path);
         if (relativePath == QStringLiteral("generation-manifest.json")
-            || relativePath == commandInputFileName()
-            || relativePath == QStringLiteral("ipcore-graph.json")) {
+            || relativePath == QStringLiteral("stdout.log")
+            || relativePath == QStringLiteral("stderr.log")
+            || relativePath.startsWith(QStringLiteral("inputs/"))) {
             continue;
         }
         files.append(relativePath);
@@ -139,10 +139,6 @@ QJsonArray stringArray(const QStringList& values) {
         array.append(value);
     }
     return array;
-}
-
-QJsonArray argumentsArray(const QStringList& arguments) {
-    return stringArray(arguments);
 }
 
 void appendUniquePath(QStringList& paths, const QString& path) {
@@ -174,14 +170,9 @@ void appendSourceTreeFrameworkToolPath(QStringList& paths, const QDir& applicati
     }
 }
 
-QString exitStatusString(QProcess::ExitStatus status) {
-    return status == QProcess::NormalExit ? QStringLiteral("normal") : QStringLiteral("crash");
-}
-
 QJsonDocument manifestDocument(const ProjectGenerationRequest& request,
                                const QString& designName,
                                const IpCatalogEntry& entry,
-                               const IpCoreResolvedCommand& command,
                                const ProjectGenerationInstanceResult& result) {
     QJsonObject project;
     project.insert(QStringLiteral("path"), request.projectPath);
@@ -201,25 +192,20 @@ QJsonDocument manifestDocument(const ProjectGenerationRequest& request,
 
     QJsonObject input;
     input.insert(QStringLiteral("path"), result.inputPath);
-    input.insert(QStringLiteral("schema"), result.inputSchema.isEmpty()
-                                          ? command.inputSchema
-                                          : result.inputSchema);
+    input.insert(QStringLiteral("schema"), result.inputSchema);
 
     QJsonObject output;
     output.insert(QStringLiteral("directory"), result.outputDirectory);
 
     QJsonObject process;
-    process.insert(QStringLiteral("command"), command.command);
-    process.insert(QStringLiteral("arguments"), argumentsArray(command.arguments));
-    process.insert(QStringLiteral("working_directory"), command.workingDirectory);
+    process.insert(QStringLiteral("flow"), QStringLiteral("generate"));
     process.insert(QStringLiteral("exit_code"), result.exitCode);
     process.insert(QStringLiteral("exit_status"), result.exitStatus);
     process.insert(QStringLiteral("stdout"), result.standardOutput);
     process.insert(QStringLiteral("stderr"), result.standardError);
 
     QJsonObject artifacts;
-    artifacts.insert(QStringLiteral("command_input"), result.inputPath);
-    artifacts.insert(QStringLiteral("ipcore_graph"), result.inputPath);
+    artifacts.insert(QStringLiteral("emitted_inputs"), result.inputPath);
     artifacts.insert(QStringLiteral("manifest"), result.manifestPath);
     artifacts.insert(QStringLiteral("files"), stringArray(result.artifactPaths));
 
@@ -240,10 +226,129 @@ QJsonDocument manifestDocument(const ProjectGenerationRequest& request,
 QString writeManifest(const ProjectGenerationRequest& request,
                       const QString& designName,
                       const IpCatalogEntry& entry,
-                      const IpCoreResolvedCommand& command,
                       const ProjectGenerationInstanceResult& result) {
     return writeJsonFile(result.manifestPath,
-                         manifestDocument(request, designName, entry, command, result));
+                         manifestDocument(request, designName, entry, result));
+}
+
+struct PackageFlowContext {
+    bool ok = false;
+    ipcraft::PackageSpec package;
+    QString packageRoot;
+    QString error;
+};
+
+PackageFlowContext packageFlowContextForEntry(const IpCatalogEntry& entry) {
+    PackageFlowContext context;
+    const QString packageRoot = !entry.packageManifest.packageRootPath.trimmed().isEmpty()
+        ? entry.packageManifest.packageRootPath
+        : entry.runtimeRootPath;
+    if (packageRoot.trimmed().isEmpty()) {
+        context.error = QStringLiteral("Package root is not available.");
+        return context;
+    }
+
+    const ipcraft::PackageSpecReadResult specResult =
+        ipcraft::PackageSpecReader().readPackageRoot(packageRoot);
+    if (!specResult.ok) {
+        QStringList messages;
+        for (const ipcraft::Diagnostic& diagnostic : specResult.diagnostics.records) {
+            messages.append(diagnostic.message);
+        }
+        context.error = messages.isEmpty()
+            ? QStringLiteral("Package spec could not be read.")
+            : messages.join(QStringLiteral("\n"));
+        return context;
+    }
+
+    const bool hasGenerateFlow =
+        std::any_of(specResult.spec.flows.constBegin(),
+                    specResult.spec.flows.constEnd(),
+                    [](const QJsonValue& flowValue) {
+                        return flowValue.isObject() &&
+                               flowValue.toObject().value(QStringLiteral("id")).toString()
+                                   == QStringLiteral("generate");
+                    });
+    if (!hasGenerateFlow) {
+        context.error = QStringLiteral("Package does not declare a generate flow.");
+        return context;
+    }
+
+    context.ok = true;
+    context.package = specResult.spec;
+    context.packageRoot = packageRoot;
+    return context;
+}
+
+std::optional<ipcraft::GraphConfig> projectedGraphConfigForInstance(
+    const ProjectGenerationRequest& request,
+    const QString& designName,
+    const ProjectIpInstanceRecord& instance) {
+    if (!request.graph) {
+        return std::nullopt;
+    }
+
+    ProjectDocument document = GraphProjectSerializer::toProject(*request.graph, designName);
+    ProjectStateService stateService;
+    for (const ProjectIpInstanceRecord& record : request.instances) {
+        stateService.ensureIpInstanceRecord(record);
+    }
+    stateService.writeToDocument(document);
+    for (const ProjectIpInstanceRecord& projected : document.instances) {
+        if (projected.id != instance.instanceId && projected.id != instance.id) {
+            continue;
+        }
+        if (!projected.hasGraphConfig || projected.graphConfigIsNull) {
+            return std::nullopt;
+        }
+        const ipcraft::GraphConfigReadResult graphConfig =
+            ipcraft::GraphConfig::fromJson(projected.graphConfig);
+        if (graphConfig.ok) {
+            return graphConfig.config;
+        }
+        return std::nullopt;
+    }
+    return std::nullopt;
+}
+
+QString diagnosticMessageForFlowFailure(const ipcraft::FlowRunResult& flowResult) {
+    for (const ipcraft::Diagnostic& diagnostic : flowResult.diagnostics.records) {
+        if (diagnostic.ruleId == QStringLiteral("flow.timeout")) {
+            const int timeoutMs =
+                diagnostic.details.value(QStringLiteral("timeout_ms")).toInt();
+            return timeoutMs > 0
+                ? QStringLiteral("Generator timed out after %1 ms.").arg(timeoutMs)
+                : QStringLiteral("Generator timed out.");
+        }
+        if (diagnostic.ruleId == QStringLiteral("flow.exec_failed")) {
+            const int exitCode = diagnostic.details.value(QStringLiteral("exit_code")).toInt(-1);
+            return QStringLiteral("Generator failed (exit code %1).").arg(exitCode);
+        }
+        if (diagnostic.ruleId == QStringLiteral("flow.executable_missing")) {
+            return QStringLiteral("Failed to start IP core generator.");
+        }
+    }
+    if (!flowResult.diagnostics.records.isEmpty()) {
+        return flowResult.diagnostics.records.first().message;
+    }
+    return QStringLiteral("Generator flow failed.");
+}
+
+int exitCodeForFlowResult(const ipcraft::FlowRunResult& flowResult) {
+    for (const ipcraft::Diagnostic& diagnostic : flowResult.diagnostics.records) {
+        if (diagnostic.ruleId == QStringLiteral("flow.exec_failed")) {
+            return diagnostic.details.value(QStringLiteral("exit_code")).toInt(-1);
+        }
+    }
+    return flowResult.ok ? 0 : -1;
+}
+
+QString readTextFileIfPresent(const QString& path) {
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly)) {
+        return {};
+    }
+    return QString::fromUtf8(file.readAll());
 }
 
 ProjectGenerationInstanceResult generateInstance(const ProjectGenerationRequest& request,
@@ -256,7 +361,9 @@ ProjectGenerationInstanceResult generateInstance(const ProjectGenerationRequest&
     result.ipcoreId = instance.ipcoreId;
     result.instanceId = instance.instanceId;
     result.outputDirectory = QDir(outputRoot).filePath(instance.instanceId);
-    result.inputPath = QDir(result.outputDirectory).filePath(commandInputFileName());
+    result.inputPath =
+        QDir(result.outputDirectory).filePath(QStringLiteral("inputs/manifest.json"));
+    result.inputSchema = ipcraft::schemaids::emittedInputsV1;
     result.manifestPath = QDir(result.outputDirectory).filePath(QStringLiteral("generation-manifest.json"));
 
     if (!isSafeInstanceOutputKey(instance.instanceId)) {
@@ -294,94 +401,44 @@ ProjectGenerationInstanceResult generateInstance(const ProjectGenerationRequest&
         return result;
     }
 
-    IpCoreResolvedCommand command =
-        IpCoreCommandRunner::resolveGenerator(*entry,
-                                              result.inputPath,
-                                              result.outputDirectory,
-                                              frameworkToolSearchPaths);
-    if (!command.valid) {
-        result.error = withInstanceContext(instance, command.errorMessage);
+    const PackageFlowContext flowContext = packageFlowContextForEntry(*entry);
+    if (!flowContext.ok) {
+        result.error = withInstanceContext(instance, flowContext.error);
         result.artifactPaths = generatedFiles(result.outputDirectory);
-        const QString manifestError = writeManifest(request, designName, *entry, command, result);
+        const QString manifestError = writeManifest(request, designName, *entry, result);
         if (!manifestError.isEmpty()) {
             result.error += QStringLiteral(" Manifest error: %1").arg(manifestError);
         }
         return result;
     }
 
-    IpCoreGraphExportRequest exportRequest{
-        request.graph,
-        *entry,
-        instance,
-        designName,
-        nullptr
-    };
-    exportRequest.inputSchema = command.inputSchema;
-    const IpCoreGraphExportResult exportResult =
-        IpCoreGraphExporter::exportGraph(exportRequest);
-    if (!exportResult.success) {
-        result.error = withInstanceContext(instance, exportResult.error);
-        return result;
-    }
-    result.inputSchema = exportResult.document.object().value(QStringLiteral("schema")).toString();
+    ipcraft::FlowRunRequest flowRequest;
+    flowRequest.projectId = designName;
+    flowRequest.instanceId = instance.instanceId;
+    flowRequest.flowId = QStringLiteral("generate");
+    flowRequest.runId = instance.instanceId;
+    flowRequest.runRoot = result.outputDirectory;
+    flowRequest.outputRoot = result.outputDirectory;
+    flowRequest.packageRoot = flowContext.packageRoot;
+    flowRequest.package = flowContext.package;
+    flowRequest.config = ipcraft::ConfigBundle::fromJson(instance.config);
+    flowRequest.graphConfig = projectedGraphConfigForInstance(request, designName, instance);
+    flowRequest.frameworkToolSearchPaths = frameworkToolSearchPaths;
 
-    const QString writeInputError = writeJsonFile(result.inputPath, exportResult.document);
-    if (!writeInputError.isEmpty()) {
-        result.error = withInstanceContext(instance, writeInputError);
-        return result;
-    }
+    const ipcraft::FlowRunResult flowResult = ipcraft::FlowRunner::runFlow(flowRequest);
+    result.standardOutput = readTextFileIfPresent(QDir(result.outputDirectory).filePath(QStringLiteral("stdout.log")));
+    result.standardError = readTextFileIfPresent(QDir(result.outputDirectory).filePath(QStringLiteral("stderr.log")));
+    result.exitCode = exitCodeForFlowResult(flowResult);
+    result.exitStatus = flowResult.ok ? QStringLiteral("normal") : QStringLiteral("failed");
 
-    command =
-        IpCoreCommandRunner::resolveGenerator(*entry,
-                                              result.inputPath,
-                                              result.outputDirectory,
-                                              frameworkToolSearchPaths);
-    if (!command.valid) {
-        result.error = withInstanceContext(instance, command.errorMessage);
-        result.artifactPaths = generatedFiles(result.outputDirectory);
-        const QString manifestError = writeManifest(request, designName, *entry, command, result);
-        if (!manifestError.isEmpty()) {
-            result.error += QStringLiteral(" Manifest error: %1").arg(manifestError);
-        }
-        return result;
-    }
-
-    QProcess process;
-    process.setWorkingDirectory(command.workingDirectory);
-    process.start(command.command, command.arguments);
-
-    const bool started = process.waitForStarted();
-    const int timeoutMs = request.generatorTimeoutMs > 0 ? request.generatorTimeoutMs : 300000;
-    const bool finished = started && process.waitForFinished(timeoutMs);
-    if (started && !finished) {
-        process.kill();
-        process.waitForFinished(1000);
-    }
-    result.standardOutput = QString::fromUtf8(process.readAllStandardOutput());
-    result.standardError = QString::fromUtf8(process.readAllStandardError());
-    result.exitCode = started ? process.exitCode() : -1;
-    result.exitStatus = started ? exitStatusString(process.exitStatus()) : QStringLiteral("failed_to_start");
-
-    if (!started) {
-        result.error = withInstanceContext(instance,
-                                           QStringLiteral("Failed to start IP core generator: %1")
-                                               .arg(process.errorString()));
-    } else if (!finished) {
-        result.error = withInstanceContext(instance,
-                                           QStringLiteral("Generator timed out after %1 ms.")
-                                               .arg(timeoutMs));
-    } else if (process.exitStatus() != QProcess::NormalExit) {
-        result.error = withInstanceContext(instance, QStringLiteral("Generator crashed."));
-    } else if (process.exitCode() != 0) {
-        result.error = withInstanceContext(instance,
-                                           QStringLiteral("Generator failed (exit code %1).")
-                                               .arg(process.exitCode()));
+    if (!flowResult.ok) {
+        result.error = withInstanceContext(instance, diagnosticMessageForFlowFailure(flowResult));
     } else {
         result.success = true;
     }
 
     result.artifactPaths = generatedFiles(result.outputDirectory);
-    const QString manifestError = writeManifest(request, designName, *entry, command, result);
+    const QString manifestError = writeManifest(request, designName, *entry, result);
     if (!manifestError.isEmpty()) {
         result.success = false;
         const QString contextualManifestError = withInstanceContext(instance, manifestError);
