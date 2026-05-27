@@ -599,6 +599,10 @@ void testGraphConfigRejectsDuplicateRelationships() {
                       QStringLiteral("graph_config.duplicate_relationship"),
                       QStringLiteral("$.relationships[1].id")),
             "duplicate graph relationship should emit graph_config.duplicate_relationship");
+    require(hasRuleAt(diagnostics,
+                      QStringLiteral("graph_config.type_mismatch"),
+                      QStringLiteral("$.relationships[1].id")),
+            "duplicate graph relationship should also emit generic graph_config.type_mismatch");
 }
 
 void testGraphConfigRejectsUnknownTopLevelFields() {
@@ -615,6 +619,10 @@ void testGraphConfigRejectsUnknownTopLevelFields() {
                       QStringLiteral("graph_config.unknown_top_level_field"),
                       QStringLiteral("$.unexpected")),
             "unknown graph-config root field should emit graph_config.unknown_top_level_field");
+    require(hasRuleAt(readResult.diagnostics,
+                      QStringLiteral("graph_config.type_mismatch"),
+                      QStringLiteral("$.unexpected")),
+            "unknown graph-config root field should also emit generic graph_config.type_mismatch");
 }
 
 void testGraphConfigRejectsMalformedPropertiesAndNative() {

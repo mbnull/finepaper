@@ -90,4 +90,6 @@ The catalog covers diagnostics surfaced through `ipcraft.project.v1`, `ipcraft.p
 | migration.unsupported_schema | error | migration | migration | document_path | Migration input schema |
 | migration.input_missing | error | migration | migration | file | Migration file loading |
 | migration.invalid_input | error | migration | migration | file | Migration JSON parser |
+| migration.read_failed | error | migration | migration | file | Migration file loading compatibility alias |
+| migration.invalid_json | error | migration | migration | file | Migration JSON parser compatibility alias |
 | migration.already_current | warning | migration | migration | document_path | Migration idempotency |

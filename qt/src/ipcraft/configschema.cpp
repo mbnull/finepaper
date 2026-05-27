@@ -832,6 +832,13 @@ ConfigSchemaReadResult ConfigSchema::fromJson(const QJsonObject& object) {
                                         result.diagnostics,
                                         &file.allowedExtensions);
             }
+            QJsonArray extensionAliases;
+            if (optionalArray(fileObject, QStringLiteral("extensions"), childPath(path, QStringLiteral("extensions")), result.diagnostics, &extensionAliases)) {
+                appendAllowedExtensions(extensionAliases,
+                                        childPath(path, QStringLiteral("extensions")),
+                                        result.diagnostics,
+                                        &file.allowedExtensions);
+            }
             result.schema.files.append(file);
         }
     }

@@ -533,6 +533,19 @@ void validateArrayItemsAreObjects(const QJsonArray& array,
     }
 }
 
+void normalizeFlowScopes(QJsonArray* flows) {
+    for (qsizetype index = 0; index < flows->size(); ++index) {
+        if (!flows->at(index).isObject()) {
+            continue;
+        }
+        QJsonObject flow = flows->at(index).toObject();
+        if (!flow.contains(QStringLiteral("scope"))) {
+            flow.insert(QStringLiteral("scope"), QStringLiteral("instance"));
+            (*flows)[index] = flow;
+        }
+    }
+}
+
 void validateFlows(const QJsonArray& flows,
                    ipcraft::DiagnosticStore& diagnostics) {
     const QSet<QString> allowedScopes{
@@ -628,6 +641,10 @@ void validateConfigSchema(const QJsonObject& configSchema,
                     if (seenTableIds.contains(id)) {
                         addDiagnostic(diagnostics,
                                       QStringLiteral("package.duplicate_table"),
+                                      QStringLiteral("Duplicate table id."),
+                                      idPath);
+                        addDiagnostic(diagnostics,
+                                      QStringLiteral("package.duplicate_id"),
                                       QStringLiteral("Duplicate table id."),
                                       idPath);
                     }
@@ -1468,6 +1485,7 @@ PackageSpecReadResult PackageSpecReader::readSpecFile(const QString& specPath) c
     }
     if (optionalArray(root, QStringLiteral("flows"), QStringLiteral("$.flows"), result.diagnostics, &result.spec.flows)) {
         validateArrayItemsAreObjects(result.spec.flows, QStringLiteral("$.flows"), result.diagnostics);
+        normalizeFlowScopes(&result.spec.flows);
         validateFlows(result.spec.flows, result.diagnostics);
     }
     if (optionalArray(root, QStringLiteral("artifacts"), QStringLiteral("$.artifacts"), result.diagnostics, &result.spec.artifacts)) {

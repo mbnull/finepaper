@@ -910,6 +910,10 @@ GraphConfigReadResult GraphConfig::fromJson(const QJsonObject& object) {
                                QStringLiteral("graph_config.unknown_top_level_field"),
                                QStringLiteral("Graph config contains an unsupported top-level field."),
                                childPath(QStringLiteral("$"), key));
+            addGraphDiagnostic(result.diagnostics,
+                               QStringLiteral("graph_config.type_mismatch"),
+                               QStringLiteral("Graph config contains an unsupported top-level field."),
+                               childPath(QStringLiteral("$"), key));
         }
     }
 
@@ -1012,12 +1016,17 @@ DiagnosticStore validateGraphConfig(const GraphConfig& graphConfig) {
         const GraphConfigRelationship& relationship =
             graphConfig.relationships.at(relationshipIndex);
         if (relationshipIds.contains(relationship.id)) {
+            const QString idPath = childPath(indexPath(QStringLiteral("$.relationships"),
+                                                       relationshipIndex),
+                                             QStringLiteral("id"));
             addGraphDiagnostic(diagnostics,
                                QStringLiteral("graph_config.duplicate_relationship"),
                                QStringLiteral("Graph relationship id is duplicated."),
-                               childPath(indexPath(QStringLiteral("$.relationships"),
-                                                   relationshipIndex),
-                                         QStringLiteral("id")));
+                               idPath);
+            addGraphDiagnostic(diagnostics,
+                               QStringLiteral("graph_config.type_mismatch"),
+                               QStringLiteral("Graph relationship id is duplicated."),
+                               idPath);
         } else {
             relationshipIds.insert(relationship.id);
         }

@@ -766,6 +766,32 @@ void testFileInputAllowedAliasIsValidated() {
             "invalid extension from allowed alias should be diagnosed");
 }
 
+void testFileInputExtensionsAliasIsValidated() {
+    const ipcraft::ConfigSchemaReadResult schemaResult =
+        ipcraft::ConfigSchema::fromJson(QJsonObject{
+            {QStringLiteral("files"), QJsonArray{
+                QJsonObject{{QStringLiteral("id"), QStringLiteral("constraints")},
+                            {QStringLiteral("extensions"), QJsonArray{QStringLiteral(".xdc")}}}
+            }}
+        });
+    require(schemaResult.ok, "file extensions alias schema should parse");
+
+    const ipcraft::ConfigValidationResult result =
+        ipcraft::validateConfigBundle(schemaResult.schema,
+                                      ipcraft::ConfigBundle::fromJson(QJsonObject{
+                                          {QStringLiteral("files"), QJsonObject{
+                                              {QStringLiteral("constraints"), QJsonObject{
+                                                  {QStringLiteral("path"), QStringLiteral("constraints/top.sdc")}
+                                              }}
+                                          }}
+                                      }));
+    require(!result.ok, "file extensions alias should enforce extension");
+    require(hasRuleAt(result.diagnostics,
+                      QStringLiteral("config.file_extension_invalid"),
+                      QStringLiteral("$.files.constraints.path")),
+            "invalid extension from extensions alias should be diagnosed");
+}
+
 void testFileInputPathsRejectTraversal() {
     QTemporaryDir root;
     require(root.isValid(), "temporary root should be valid");
@@ -851,6 +877,7 @@ int main(int argc, char** argv) {
         testDiagnosticPathsUseStableEscapingForArbitraryIds();
         testDocumentFormatAndFileExtensionValidation();
         testFileInputAllowedAliasIsValidated();
+        testFileInputExtensionsAliasIsValidated();
         testFileInputPathsRejectTraversal();
         testFileInputNormalizationDropsUnknownFields();
     } catch (const std::exception& exception) {

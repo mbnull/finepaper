@@ -324,6 +324,10 @@ void testDuplicateTableIdsAreRejected() {
                                          QStringLiteral("package.duplicate_table"),
                                          QStringLiteral("$.config_schema.tables[1].id")),
             "duplicate table id should emit package.duplicate_table");
+    require(hasPackageParserDiagnosticAt(result.diagnostics,
+                                         QStringLiteral("package.duplicate_id"),
+                                         QStringLiteral("$.config_schema.tables[1].id")),
+            "duplicate table id should also emit generic package.duplicate_id");
 }
 
 void testConnectionRulesParseAliasesAndCompatibility() {
@@ -454,7 +458,7 @@ void testConnectionRulesRejectAliasCaseCollisionsAndUnknownGraphEndpoints() {
             "package graph_config endpoint should reference a declared object");
 }
 
-void testFlowRequiresExplicitScope() {
+void testFlowScopeDefaultsToInstanceAndRejectsInvalidValues() {
     QTemporaryDir temp;
     require(temp.isValid(), "temporary directory should be valid");
     QDir root(temp.path());
@@ -473,11 +477,10 @@ void testFlowRequiresExplicitScope() {
 
     ipcraft::PackageSpecReadResult result =
         ipcraft::PackageSpecReader().readPackageRoot(root.absolutePath());
-    require(!result.ok, "flow without scope should fail");
-    require(hasPackageParserDiagnosticAt(result.diagnostics,
-                                         QStringLiteral("package.invalid_flow"),
-                                         QStringLiteral("$.flows[0].scope")),
-            "missing flow scope should emit package.invalid_flow");
+    require(result.ok, "flow without scope should default to instance scope");
+    const QJsonObject defaultedFlow = result.spec.flows.first().toObject();
+    require(defaultedFlow.value(QStringLiteral("scope")).toString() == QStringLiteral("instance"),
+            "missing flow scope should be normalized to instance");
 
     QJsonObject flow = spec.value(QStringLiteral("flows")).toArray().first().toObject();
     flow.insert(QStringLiteral("scope"), QStringLiteral("system"));
@@ -800,7 +803,7 @@ int main(int argc, char** argv) {
         testConnectionRulesParseAliasesAndCompatibility();
         testConnectionRulesRejectMalformedCompatibility();
         testConnectionRulesRejectAliasCaseCollisionsAndUnknownGraphEndpoints();
-        testFlowRequiresExplicitScope();
+        testFlowScopeDefaultsToInstanceAndRejectsInvalidValues();
         testPluginMetadataIsSeparateFromExtensions();
         testGraphConfigRequiresExplicitExtension();
         testGraphConfigRejectsNonContractShape();

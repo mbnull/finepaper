@@ -339,6 +339,44 @@ void testValidateProjectRejectsFileInputAllowedAliasExtension() {
             "validate-project should emit config.file_extension_invalid");
 }
 
+void testValidateProjectAddsProjectConfigInvalidDiagnostic() {
+    QTemporaryDir root;
+    require(root.isValid(), "temp root should be valid");
+    QDir dir(root.path());
+
+    QJsonObject project = projectJson();
+    QJsonArray instances = project.value(QStringLiteral("instances")).toArray();
+    QJsonObject instance = instances.first().toObject();
+    instance.insert(QStringLiteral("config"), QJsonObject{
+        {QStringLiteral("parameters"), QJsonObject{
+            {QStringLiteral("unknown"), 1}
+        }}
+    });
+    instances.replace(0, instance);
+    project.insert(QStringLiteral("instances"), instances);
+    const QString projectPath = writeJson(dir.filePath(QStringLiteral("project.json")),
+                                          project);
+
+    const QString packageRoot = dir.filePath(QStringLiteral("packages/simple"));
+    QJsonObject package = packageJson();
+    package.insert(QStringLiteral("extensions"), QJsonArray{QStringLiteral("ipcraft.config.params")});
+    package.insert(QStringLiteral("config_schema"), QJsonObject{
+        {QStringLiteral("parameters"), QJsonArray{
+            QJsonObject{{QStringLiteral("id"), QStringLiteral("width")},
+                        {QStringLiteral("type"), QStringLiteral("int")}}
+        }}
+    });
+    writeJson(QDir(packageRoot).filePath(QStringLiteral("ipcraft.json")), package);
+
+    const CliRun run = runCli({QStringLiteral("validate-project"), projectPath,
+                               QStringLiteral("--packages"), packageRoot});
+    require(run.exitCode != 0, "validate-project should reject invalid instance config");
+    require(hasRule(run.json, QStringLiteral("config.unknown_parameter")),
+            "validate-project should keep the specific config diagnostic");
+    require(hasRule(run.json, QStringLiteral("project.config_invalid")),
+            "validate-project should add the project config summary diagnostic");
+}
+
 void testEmitInputsReturnsManifest() {
     QTemporaryDir root;
     require(root.isValid(), "temp root should be valid");
@@ -548,6 +586,7 @@ int main(int argc, char** argv) {
         testValidateProjectIsStaticAndDoesNotCreateRunFiles();
         testValidateProjectUsesProjectDirectoryForPathConfig();
         testValidateProjectRejectsFileInputAllowedAliasExtension();
+        testValidateProjectAddsProjectConfigInvalidDiagnostic();
         testEmitInputsReturnsManifest();
         testRunFlowReportsMissingExecutable();
         testRunFlowEmitsInstanceGraphConfig();

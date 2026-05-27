@@ -178,6 +178,19 @@ void testProjectReaderRejectsUnsupportedSchema() {
             "unsupported schema should emit stable diagnostic rule id");
 }
 
+void testProjectReaderRejectsEmptyProjectIdAsInvalidValue() {
+    QJsonObject object = contractProjectObject();
+    QJsonObject project = object.value(QStringLiteral("project")).toObject();
+    project.insert(QStringLiteral("id"), QString());
+    object.insert(QStringLiteral("project"), project);
+
+    const ProjectReadResult result = ProjectReader::readFile(
+        writeFixture(object, QStringLiteral("empty-project-id.json")));
+    require(!result.success, "empty project id should fail");
+    require(hasDiagnosticRule(result, QStringLiteral("project.invalid_value")),
+            "empty project id should emit project.invalid_value");
+}
+
 void testProjectReaderRejectsDuplicateInstanceIds() {
     QJsonObject object = contractProjectObject();
     QJsonArray instances = object.value(QStringLiteral("instances")).toArray();
@@ -428,6 +441,7 @@ int main(int argc, char** argv) {
     try {
         testProjectDocumentRoundTripsInstancesCompositionLayoutNative();
         testProjectReaderRejectsUnsupportedSchema();
+        testProjectReaderRejectsEmptyProjectIdAsInvalidValue();
         testProjectReaderRejectsDuplicateInstanceIds();
         testProjectWriterUsesDeterministicJson();
         testProjectReaderRejectsUnknownInstanceField();

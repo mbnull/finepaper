@@ -207,6 +207,10 @@ void testMigrateProjectNormalizesInputDiagnostics() {
                         result.value(QStringLiteral("diagnostics")).toObject()),
                     QStringLiteral("migration.input_missing")),
             "missing migration input should emit migration.input_missing");
+    require(hasRule(ipcraft::DiagnosticStore::fromJson(
+                        result.value(QStringLiteral("diagnostics")).toObject()),
+                    QStringLiteral("migration.read_failed")),
+            "missing migration input should also emit migration.read_failed alias");
 
     const QString malformedPath = writeFile(dir.filePath(QStringLiteral("malformed.fpproj")),
                                             QByteArrayLiteral("{ not-json"));
@@ -220,6 +224,10 @@ void testMigrateProjectNormalizesInputDiagnostics() {
                         result.value(QStringLiteral("diagnostics")).toObject()),
                     QStringLiteral("migration.invalid_input")),
             "malformed migration input should emit migration.invalid_input");
+    require(hasRule(ipcraft::DiagnosticStore::fromJson(
+                        result.value(QStringLiteral("diagnostics")).toObject()),
+                    QStringLiteral("migration.invalid_json")),
+            "malformed migration input should also emit migration.invalid_json alias");
 }
 
 void testMigrateProjectRejectsUnsupportedSchemaWithMigrationRule() {
@@ -302,6 +310,26 @@ void testMigratePreservesOpaqueLegacyStateWithoutInstances() {
     require(preserved.value(QStringLiteral("ipcore_state")).toArray().first().toObject()
                 .value(QStringLiteral("opaque")).toBool(),
             "opaque legacy state should be preserved");
+}
+
+void testMigratePreservesTopLevelLegacyState() {
+    QJsonObject legacy = {
+        {QStringLiteral("schema"), QStringLiteral("v1")},
+        {QStringLiteral("project"), QJsonObject{{QStringLiteral("id"), QStringLiteral("legacy")},
+                                                {QStringLiteral("name"), QStringLiteral("Legacy")}}},
+        {QStringLiteral("legacy_state"), QJsonObject{{QStringLiteral("opaque"), true}}}
+    };
+
+    const ipcraft::ProjectMigrationResult result =
+        ipcraft::ProjectMigrator::migrateJson(legacy, ipcraft::schemaids::projectV1);
+    require(result.ok, "top-level opaque legacy state should migrate");
+    const QJsonObject preserved =
+        ProjectWriter::toJsonObject(result.document)
+            .value(QStringLiteral("migration")).toObject()
+            .value(QStringLiteral("preserved")).toObject()
+            .value(QStringLiteral("legacy_state")).toObject();
+    require(preserved.value(QStringLiteral("opaque")).toBool(),
+            "top-level legacy_state object should be preserved under migration.preserved.legacy_state");
 }
 
 void testMigratePreservesOldIpcoreStateUnderMigrationPreserved() {
@@ -397,6 +425,21 @@ void testUnsupportedLegacyContentReportsDiagnostic() {
             "unsupported legacy content should report stable migration diagnostic");
 }
 
+void testUnsupportedLegacyRootFieldReportsDiagnostic() {
+    QJsonObject legacy = {
+        {QStringLiteral("schema"), QStringLiteral("v1")},
+        {QStringLiteral("project"), QJsonObject{{QStringLiteral("id"), QStringLiteral("legacy")},
+                                                {QStringLiteral("name"), QStringLiteral("Legacy")}}},
+        {QStringLiteral("unsupported_legacy_content"), QJsonObject{{QStringLiteral("x"), true}}}
+    };
+
+    const ipcraft::ProjectMigrationResult result =
+        ipcraft::ProjectMigrator::migrateJson(legacy, ipcraft::schemaids::projectV1);
+    require(!result.ok, "unsupported legacy root field should fail migration");
+    require(hasRule(result.diagnostics, QStringLiteral("migration.unsupported_legacy_content")),
+            "unsupported legacy root field should report stable migration diagnostic");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -409,10 +452,12 @@ int main(int argc, char** argv) {
         testMigrateProjectRejectsUnsupportedTarget();
         testMigrateProjectRejectsDirectoryInputWithoutOpening();
         testMigratePreservesOpaqueLegacyStateWithoutInstances();
+        testMigratePreservesTopLevelLegacyState();
         testMigratePreservesOldIpcoreStateUnderMigrationPreserved();
         testMigrateMovesXYCollapsedIntoLayout();
         testMigrateSameInstanceGraphConnectionIntoGraphConfig();
         testUnsupportedLegacyContentReportsDiagnostic();
+        testUnsupportedLegacyRootFieldReportsDiagnostic();
     } catch (const std::exception& error) {
         std::cerr << "ipcraft_migration_test failed: " << error.what() << '\n';
         return 1;

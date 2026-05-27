@@ -97,6 +97,25 @@ CliResult diagnosticFailure(const ipcraft::Diagnostic& diagnostic) {
     return result;
 }
 
+ipcraft::Diagnostic coreDiagnostic(const QString& ruleId,
+                                   const QString& category,
+                                   const QString& message,
+                                   const QString& path,
+                                   const QJsonObject& details = {}) {
+    ipcraft::Diagnostic diagnostic;
+    diagnostic.severity = QStringLiteral("error");
+    diagnostic.source = QStringLiteral("core");
+    diagnostic.category = category;
+    diagnostic.ruleId = ruleId;
+    diagnostic.message = message;
+    diagnostic.details = details;
+    ipcraft::DiagnosticLocation location;
+    location.kind = QStringLiteral("document_path");
+    location.path = path;
+    diagnostic.locations.append(location);
+    return diagnostic;
+}
+
 const ProjectIpInstanceRecord* findInstance(const ProjectDocument& project,
                                             const QString& instanceId) {
     for (const ProjectIpInstanceRecord& instance : project.instances) {
@@ -203,6 +222,12 @@ CliResult validateStaticProject(const ProjectDocument& project,
         if (!configResult.ok) {
             result.ok = false;
             appendDiagnostics(result.diagnostics, configResult.diagnostics);
+            result.diagnostics.records.append(coreDiagnostic(
+                QStringLiteral("project.config_invalid"),
+                QStringLiteral("project"),
+                QStringLiteral("Project instance config is invalid."),
+                QStringLiteral("$.instances[].config"),
+                QJsonObject{{QStringLiteral("instance"), instance.id}}));
         }
 
         ipcraft::CompositionInstance compositionInstance;

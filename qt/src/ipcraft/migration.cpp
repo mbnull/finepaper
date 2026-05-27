@@ -105,6 +105,32 @@ bool insertParameter(QJsonObject* parameters,
     return true;
 }
 
+bool validateSupportedLegacyRootFields(const QJsonObject& root,
+                                       ipcraft::DiagnosticStore& diagnostics) {
+    static const QSet<QString> allowedKeys{
+        QStringLiteral("schema"),
+        QStringLiteral("kind"),
+        QStringLiteral("project"),
+        QStringLiteral("legacy_state"),
+        QStringLiteral("ipcores"),
+        QStringLiteral("ipcore_state"),
+        QStringLiteral("graph")
+    };
+
+    bool ok = true;
+    for (const QString& key : root.keys()) {
+        if (allowedKeys.contains(key)) {
+            continue;
+        }
+        appendDiagnostic(diagnostics,
+                         QStringLiteral("migration.unsupported_legacy_content"),
+                         QStringLiteral("Legacy root field cannot be represented by the V1 migrator."),
+                         QStringLiteral("$.%1").arg(key));
+        ok = false;
+    }
+    return ok;
+}
+
 QString projectNameFromLegacy(const QJsonObject& root) {
     const QJsonObject project = objectValue(root, QStringLiteral("project"));
     const QString name = project.value(QStringLiteral("name")).toString().trimmed();
@@ -718,6 +744,10 @@ ProjectMigrationResult ProjectMigrator::migrateFile(const QString& path,
                              QStringLiteral("migration.input_missing"),
                              QStringLiteral("Could not open project file for migration."),
                              path);
+        appendFileDiagnostic(result.diagnostics,
+                             QStringLiteral("migration.read_failed"),
+                             QStringLiteral("Could not open project file for migration."),
+                             path);
         return result;
     }
     if (!fileInfo.isFile()) {
@@ -741,6 +771,10 @@ ProjectMigrationResult ProjectMigrator::migrateFile(const QString& path,
                              QStringLiteral("migration.input_missing"),
                              QStringLiteral("Could not open project file for migration."),
                              path);
+        appendFileDiagnostic(result.diagnostics,
+                             QStringLiteral("migration.read_failed"),
+                             QStringLiteral("Could not open project file for migration."),
+                             path);
         return result;
     }
 
@@ -757,6 +791,10 @@ ProjectMigrationResult ProjectMigrator::migrateFile(const QString& path,
     if (parseError.error != QJsonParseError::NoError || !json.isObject()) {
         appendFileDiagnostic(result.diagnostics,
                              QStringLiteral("migration.invalid_input"),
+                             QStringLiteral("Project file is not a JSON object."),
+                             path);
+        appendFileDiagnostic(result.diagnostics,
+                             QStringLiteral("migration.invalid_json"),
                              QStringLiteral("Project file is not a JSON object."),
                              path);
         return result;
@@ -790,6 +828,9 @@ ProjectMigrationResult ProjectMigrator::migrateJson(const QJsonObject& root,
                          QStringLiteral("$.schema"));
         return result;
     }
+    if (!validateSupportedLegacyRootFields(root, result.diagnostics)) {
+        return result;
+    }
 
     ProjectDocument document;
     document.projectId = QStringLiteral("project_0");
@@ -798,6 +839,14 @@ ProjectMigrationResult ProjectMigrator::migrateJson(const QJsonObject& root,
     document.migration.fromVersion = projectVersionFromLegacy(root);
 
     QJsonObject preserved;
+    if (root.value(QStringLiteral("legacy_state")).isObject()) {
+        const QJsonObject legacyState = root.value(QStringLiteral("legacy_state")).toObject();
+        for (auto it = legacyState.constBegin(); it != legacyState.constEnd(); ++it) {
+            preserved.insert(it.key(), it.value());
+        }
+    } else if (!root.value(QStringLiteral("legacy_state")).isUndefined()) {
+        preserved.insert(QStringLiteral("legacy_state"), root.value(QStringLiteral("legacy_state")));
+    }
     preserved.insert(QStringLiteral("ipcore_state"),
                      root.value(QStringLiteral("ipcore_state")).isArray()
                          ? root.value(QStringLiteral("ipcore_state")).toArray()

@@ -485,14 +485,26 @@ ProjectReadResult validateProjectObject(const QJsonObject& project) {
                        QStringLiteral("Unknown project metadata field: %1").arg(unknownKey),
                        objectPath(QStringLiteral("$.project"), unknownKey));
     }
-    if (!isNonEmptyString(project.value(QStringLiteral("id")))) {
+    const QJsonValue projectId = project.value(QStringLiteral("id"));
+    if (projectId.isUndefined()) {
         return failure(QStringLiteral("project.missing_required"),
                        QStringLiteral("Project project.id is required"),
                        QStringLiteral("$.project.id"));
     }
-    if (!isNonEmptyString(project.value(QStringLiteral("name")))) {
+    if (!projectId.isString() || projectId.toString().trimmed().isEmpty()) {
+        return failure(QStringLiteral("project.invalid_value"),
+                       QStringLiteral("Project project.id must be a non-empty string"),
+                       QStringLiteral("$.project.id"));
+    }
+    const QJsonValue projectName = project.value(QStringLiteral("name"));
+    if (projectName.isUndefined()) {
         return failure(QStringLiteral("project.missing_required"),
                        QStringLiteral("Project project.name is required"),
+                       QStringLiteral("$.project.name"));
+    }
+    if (!projectName.isString() || projectName.toString().trimmed().isEmpty()) {
+        return failure(QStringLiteral("project.invalid_value"),
+                       QStringLiteral("Project project.name must be a non-empty string"),
                        QStringLiteral("$.project.name"));
     }
     return {};

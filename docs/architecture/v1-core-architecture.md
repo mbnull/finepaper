@@ -75,7 +75,7 @@ Clock domains, DTC domains, DDR lanes, SerDes tuning, and IP-specific dataflow r
 
 Validation rejects any `ConfigBundle.parameters` key not declared by `ConfigSchema.parameters` with `config.unknown_parameter`. Validation rejects any `ConfigBundle.documents` key not declared by `ConfigSchema.documents` with `config.unknown_document`. Validation rejects any `ConfigBundle.files` key not declared by `ConfigSchema.files` with `config.unknown_file`. Table rows reject undeclared columns with `config.unknown_table_column` unless the table declares `preserve_unknown_columns: true`; preserved columns remain in normalized config only when that flag is true.
 
-File input declarations may use `allowed_extensions` or the shorthand `allowed`; both are arrays of extension strings such as `.xdc`. Invalid file values emit `config.file_extension_invalid` at the file path value location.
+File input declarations may use `allowed_extensions`, `allowed`, or `extensions`; all three are arrays of extension strings such as `.xdc`. Invalid file values emit `config.file_extension_invalid` at the file path value location.
 
 ## Value Type System And Expression Boundary
 
@@ -170,7 +170,7 @@ All emitter `path` values are relative to the emit root. Absolute paths, `..`, s
 
 ## FlowRunner Model
 
-Flows are declared in `PackageSpec.flows`. Each flow requires:
+Flows are declared in `PackageSpec.flows`. Each flow declares:
 
 ```json
 {
@@ -180,7 +180,7 @@ Flows are declared in `PackageSpec.flows`. Each flow requires:
 }
 ```
 
-`scope` values are `instance` and `project`. Missing or invalid `scope` emits `package.invalid_flow`.
+`scope` values are `instance` and `project`. Missing `scope` is normalized to `instance`; invalid `scope` emits `package.invalid_flow`.
 Step kinds are:
 
 - `emit_inputs`
@@ -260,7 +260,7 @@ Migration is explicit and side-effect free. Old project data is read by migrator
 
 Migration maps old IP state to instances, old layout parameters to LayoutModel, unambiguous non-layout parameters to ConfigBundle, same-instance internal graph data to graph-config, and unsupported legacy content to `migration.unsupported_legacy_content`.
 
-Migration input diagnostics are migration-scoped: a missing input file emits `migration.input_missing`, malformed JSON or non-object JSON emits `migration.invalid_input`, an unsupported source schema emits `migration.unsupported_schema`, and a wrong `--to` value emits `migration.unsupported_target`.
+Migration input diagnostics are migration-scoped: a missing input file emits `migration.input_missing` and compatibility alias `migration.read_failed`; malformed JSON or non-object JSON emits `migration.invalid_input` and compatibility alias `migration.invalid_json`; an unsupported source schema emits `migration.unsupported_schema`; and a wrong `--to` value emits `migration.unsupported_target`.
 
 ## Security Model
 
