@@ -180,7 +180,26 @@ MainWindow::MainWindow(QWidget *parent)
     scheduleStartupLayoutLog();
 }
 
-MainWindow::~MainWindow() = default;
+MainWindow::~MainWindow() {
+    // UI children hold raw service/adapter pointers; destroy them before member services.
+    delete m_validationManager;
+    m_validationManager = nullptr;
+
+    delete m_propertyDock;
+    m_propertyDock = nullptr;
+    m_propertyPanel = nullptr;
+
+    delete m_ipCatalogDock;
+    m_ipCatalogDock = nullptr;
+    m_ipCatalogPanel = nullptr;
+
+    delete m_logDock;
+    m_logDock = nullptr;
+    m_logPanel = nullptr;
+
+    delete takeCentralWidget();
+    m_nodeEditor = nullptr;
+}
 
 bool MainWindow::loadGraph(const QString& path) {
     return loadDocument(path);

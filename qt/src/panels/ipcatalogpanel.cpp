@@ -12,9 +12,11 @@
 #include <QAbstractItemView>
 #include <QAction>
 #include <QDrag>
+#include <QEvent>
 #include <QHash>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QKeyEvent>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QMenu>
@@ -205,6 +207,7 @@ IpCatalogPanel::IpCatalogPanel(const IpCatalogService* catalogService,
     removeProjectInstanceAction->setShortcut(QKeySequence::Delete);
     removeProjectInstanceAction->setShortcutContext(Qt::WidgetShortcut);
     m_projectIpList->addAction(removeProjectInstanceAction);
+    m_projectIpList->installEventFilter(this);
 
     auto* modulesContent = contentWidget(this);
     auto* modulesLayout = qobject_cast<QVBoxLayout*>(modulesContent->layout());
@@ -302,6 +305,18 @@ IpCatalogPanel::IpCatalogPanel(const IpCatalogService* catalogService,
     refreshProjectInstances();
     refreshActiveWorkspace();
     scheduleProjectSelectionSync();
+}
+
+bool IpCatalogPanel::eventFilter(QObject* watched, QEvent* event) {
+    if (watched == m_projectIpList && event && event->type() == QEvent::KeyPress) {
+        auto* keyEvent = static_cast<QKeyEvent*>(event);
+        if (keyEvent->key() == Qt::Key_Delete && keyEvent->modifiers() == Qt::NoModifier) {
+            emitRemoveRequest(m_projectIpList ? m_projectIpList->currentItem() : nullptr);
+            return true;
+        }
+    }
+
+    return QWidget::eventFilter(watched, event);
 }
 
 void IpCatalogPanel::refreshCatalog() {

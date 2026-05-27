@@ -8,6 +8,7 @@ class ActiveWorkspaceController;
 class IpCatalogService;
 class ProjectIpService;
 class ProjectStateService;
+class QEvent;
 class QLineEdit;
 class QListWidget;
 class QListWidgetItem;
@@ -34,6 +35,8 @@ signals:
     void moduleDragStarted(const QString& moduleType);
 
 private:
+    bool eventFilter(QObject* watched, QEvent* event) override;
+
     void refreshCatalog();
     void refreshProjectInstances();
     void refreshActiveWorkspace();
