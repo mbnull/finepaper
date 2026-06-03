@@ -175,7 +175,9 @@
             "id": true,
             "schema": { "const": "ipcraft.topology.graph.v1" },
             "ownerComponentId": true,
-            "kind": true,
+            "kind": {
+              "enum": ["explicit_graph", "expanded_parametric"]
+            },
             "family": true,
             "providerRef": true,
             "parameters": true,
@@ -201,6 +203,7 @@
         {
           "type": "object",
           "additionalProperties": false,
+          "required": ["family", "parameters"],
           "not": {
             "anyOf": [
               { "required": ["nodes"] },
@@ -211,7 +214,7 @@
             "id": true,
             "schema": { "const": "ipcraft.topology.parametric.v1" },
             "ownerComponentId": true,
-            "kind": true,
+            "kind": { "const": "parametric" },
             "family": true,
             "providerRef": true,
             "parameters": true,

@@ -200,6 +200,40 @@ void testProjectSchemaMatchesFoundationProjectDesignContract() {
             QStringLiteral("project schema must not use the old composition root"));
     require(!properties.contains(QStringLiteral("layout")),
             QStringLiteral("project schema must keep layout under views"));
+
+    const QJsonObject definitions = schema.value(QStringLiteral("$defs")).toObject();
+    const QJsonObject graphTopology =
+        definitions.value(QStringLiteral("topologyGraph")).toObject()
+            .value(QStringLiteral("allOf")).toArray().at(1).toObject();
+    const QJsonObject graphTopologyProperties =
+        graphTopology.value(QStringLiteral("properties")).toObject();
+    const QJsonArray graphKindEnum =
+        graphTopologyProperties.value(QStringLiteral("kind")).toObject()
+            .value(QStringLiteral("enum")).toArray();
+    requireArrayContains(graphKindEnum,
+                         QStringLiteral("explicit_graph"),
+                         QStringLiteral("graph topology kind enum"));
+    requireArrayContains(graphKindEnum,
+                         QStringLiteral("expanded_parametric"),
+                         QStringLiteral("graph topology kind enum"));
+
+    const QJsonObject parametricTopology =
+        definitions.value(QStringLiteral("topologyParametric")).toObject()
+            .value(QStringLiteral("allOf")).toArray().at(1).toObject();
+    const QJsonArray parametricRequired =
+        parametricTopology.value(QStringLiteral("required")).toArray();
+    requireArrayContains(parametricRequired,
+                         QStringLiteral("family"),
+                         QStringLiteral("parametric topology required fields"));
+    requireArrayContains(parametricRequired,
+                         QStringLiteral("parameters"),
+                         QStringLiteral("parametric topology required fields"));
+    const QString parametricKind =
+        parametricTopology.value(QStringLiteral("properties")).toObject()
+            .value(QStringLiteral("kind")).toObject()
+            .value(QStringLiteral("const")).toString();
+    require(parametricKind == QStringLiteral("parametric"),
+            QStringLiteral("parametric topology kind must be const parametric"));
 }
 
 void testCoreSourceExcludesUiGraphAndLegacySymbols() {
