@@ -40,20 +40,26 @@ Qt editor, headless API, and `ipcraft-cli` consume normalized `ipcraft.package.v
 
 ## ProjectDocument Schema
 
-`ipcraft.project.v1` uses:
+`ipcraft.project.v1` is the persistent `ProjectDesign` root. It uses:
 
 - `schema`
-- `project.id`
-- `project.name`
-- `instances[]`
-- `composition`
-- `layout`
-- `diagnostics`
-- `artifacts`
-- `migration`
-- `native`
+- `id`
+- `name`
+- `packages[]`
+- `components[]`
+- optional `interfaces[]`
+- optional `connections[]`
+- optional `topologies[]`
+- optional `constraints`
+- optional `views[]`
+- optional `diagnostics[]`
+- optional `artifacts[]`
+- optional `extensions[]`
+- optional `metadata`
 
-Unknown top-level fields are rejected. Forward compatibility uses `metadata`, `native`, `preserved`, or extension-owned sections.
+Unknown top-level fields are rejected. Forward compatibility uses `metadata`
+or package-owned `extensions[]`; view-local layout lives under `views[].layout`,
+not as a root semantic field.
 
 ## PackageSpec Schema
 

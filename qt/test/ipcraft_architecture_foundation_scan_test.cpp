@@ -4,6 +4,10 @@
 #include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonValue>
 #include <QString>
 #include <QStringList>
 #include <iostream>
@@ -45,8 +49,33 @@ QString readText(const QString& path) {
     return readFileText(resolveRepositoryPath(path), path);
 }
 
+QJsonObject readJsonObject(const QString& path) {
+    const QByteArray bytes = readFileText(resolveRepositoryPath(path), path).toUtf8();
+    const QJsonDocument document = QJsonDocument::fromJson(bytes);
+    require(document.isObject(), path + QStringLiteral(" must parse as a JSON object"));
+    return document.object();
+}
+
 void requireContains(const QString& text, const QString& needle, const QString& context) {
     require(text.contains(needle), context + QStringLiteral(" must contain ") + needle);
+}
+
+void requireArrayContains(const QJsonArray& array,
+                          const QString& expected,
+                          const QString& context) {
+    for (const QJsonValue& item : array) {
+        if (item.toString() == expected) {
+            return;
+        }
+    }
+
+    require(false, context + QStringLiteral(" must contain ") + expected);
+}
+
+void requireObjectContainsKey(const QJsonObject& object,
+                              const QString& key,
+                              const QString& context) {
+    require(object.contains(key), context + QStringLiteral(" must contain ") + key);
 }
 
 bool isGeneratedOrBuildPath(const QString& path) {
@@ -124,6 +153,55 @@ void testSchemaMatrixListsAllPublicContracts() {
     }
 }
 
+void testProjectSchemaMatchesFoundationProjectDesignContract() {
+    const QJsonObject schema =
+        readJsonObject(QStringLiteral("schemas/ipcraft.project.v1.schema.json"));
+    const QJsonArray required = schema.value(QStringLiteral("required")).toArray();
+    requireArrayContains(required,
+                         QStringLiteral("schema"),
+                         QStringLiteral("project schema required fields"));
+    requireArrayContains(required,
+                         QStringLiteral("id"),
+                         QStringLiteral("project schema required fields"));
+    requireArrayContains(required,
+                         QStringLiteral("name"),
+                         QStringLiteral("project schema required fields"));
+    requireArrayContains(required,
+                         QStringLiteral("packages"),
+                         QStringLiteral("project schema required fields"));
+    requireArrayContains(required,
+                         QStringLiteral("components"),
+                         QStringLiteral("project schema required fields"));
+
+    const QJsonObject properties =
+        schema.value(QStringLiteral("properties")).toObject();
+    for (const QString& key : {QStringLiteral("id"),
+                               QStringLiteral("name"),
+                               QStringLiteral("packages"),
+                               QStringLiteral("components"),
+                               QStringLiteral("interfaces"),
+                               QStringLiteral("connections"),
+                               QStringLiteral("topologies"),
+                               QStringLiteral("views"),
+                               QStringLiteral("diagnostics"),
+                               QStringLiteral("artifacts"),
+                               QStringLiteral("extensions"),
+                               QStringLiteral("metadata")}) {
+        requireObjectContainsKey(properties,
+                                 key,
+                                 QStringLiteral("project schema top-level properties"));
+    }
+
+    require(!properties.contains(QStringLiteral("project")),
+            QStringLiteral("project schema must not use the old project wrapper"));
+    require(!properties.contains(QStringLiteral("instances")),
+            QStringLiteral("project schema must not use the old instances root"));
+    require(!properties.contains(QStringLiteral("composition")),
+            QStringLiteral("project schema must not use the old composition root"));
+    require(!properties.contains(QStringLiteral("layout")),
+            QStringLiteral("project schema must keep layout under views"));
+}
+
 void testCoreSourceExcludesUiGraphAndLegacySymbols() {
     const QStringList roots = {
         QStringLiteral("qt/inc/ipcraft/core"),
@@ -188,6 +266,7 @@ int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
     testDeletionMapCoversHardCutoverTargets();
     testSchemaMatrixListsAllPublicContracts();
+    testProjectSchemaMatchesFoundationProjectDesignContract();
     testCoreSourceExcludesUiGraphAndLegacySymbols();
     std::cout << "ipcraft_architecture_foundation_scan_test passed\n";
     return 0;
