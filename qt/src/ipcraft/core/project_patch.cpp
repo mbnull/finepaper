@@ -155,6 +155,7 @@ ProjectPatchReadResult ProjectPatchCodec::readObject(const QJsonObject& object) 
     patch.schema = object.value(QStringLiteral("schema")).toString();
     patch.id = object.value(QStringLiteral("id")).toString();
     patch.description = object.value(QStringLiteral("description")).toString();
+    patch.author = object.value(QStringLiteral("author")).toString();
     if (object.value(QStringLiteral("metadata")).isObject()) {
         patch.metadata = object.value(QStringLiteral("metadata")).toObject();
     }
@@ -198,6 +199,7 @@ QJsonObject ProjectPatchCodec::writeObject(const ProjectPatch& patch) {
     object.insert(QStringLiteral("schema"), schemaids::patchV1);
     insertStringIfNonEmpty(object, QStringLiteral("id"), patch.id);
     insertStringIfNonEmpty(object, QStringLiteral("description"), patch.description);
+    insertStringIfNonEmpty(object, QStringLiteral("author"), patch.author);
     if (!patch.metadata.isEmpty()) {
         object.insert(QStringLiteral("metadata"), patch.metadata);
     }

@@ -21,6 +21,7 @@ struct ProjectPatch {
     QString schema;
     QString id;
     QString description;
+    QString author;
     QVector<PatchOperation> ops;
     QJsonObject metadata;
 };

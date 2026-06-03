@@ -257,6 +257,8 @@ void testPatchApplyRejectsUnsupportedOperationForms() {
 
 void testPatchSerializationPreservesMetadataAndUnknownPayload() {
     QJsonObject patchJson = setBaudPatchJson();
+    patchJson.insert(QStringLiteral("author"), QStringLiteral("foundation_author"));
+
     const QJsonObject metadata{
         {QStringLiteral("author"), QStringLiteral("foundation_test")},
         {QStringLiteral("ticket"), QStringLiteral("TASK-4")}
@@ -273,7 +275,13 @@ void testPatchSerializationPreservesMetadataAndUnknownPayload() {
     const ipcraft::core::ProjectPatch patch = readPatchOrThrow(
         patchJson,
         "metadata patch should parse");
+    require(patch.author == QStringLiteral("foundation_author"),
+            "top-level patch author should parse");
+
     const QJsonObject written = ipcraft::core::ProjectPatchApi::writeObject(patch);
+    require(written.value(QStringLiteral("author")).toString() ==
+                QStringLiteral("foundation_author"),
+            "top-level patch author should round-trip through read/write");
     require(written.value(QStringLiteral("metadata")).toObject() == metadata,
             "patch metadata should round-trip through read/write");
 
