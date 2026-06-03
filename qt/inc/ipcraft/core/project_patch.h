@@ -13,7 +13,7 @@ struct PatchOperation {
     QString op;
     QString target;
     QString path;
-    QJsonValue value;
+    QJsonValue value = QJsonValue(QJsonValue::Undefined);
     QJsonObject payload;
 };
 

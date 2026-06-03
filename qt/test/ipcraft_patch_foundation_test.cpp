@@ -180,6 +180,29 @@ void testPatchApplyRejectsDirectEmptyOpsWithoutMutation() {
             "direct empty ops rejection should return the original project");
 }
 
+void testPatchApplyRejectsDirectSetConfigMissingValueWithoutMutation() {
+    ipcraft::core::ProjectDesign project = minimalProject();
+    ipcraft::core::ProjectPatch patch;
+    patch.schema = ipcraft::schemaids::patchV1;
+
+    ipcraft::core::PatchOperation operation;
+    operation.op = QStringLiteral("set_config");
+    operation.target = QStringLiteral("component:uart0");
+    operation.path = QStringLiteral("/baud");
+    patch.ops.append(operation);
+
+    const ipcraft::core::PatchApplyResult result =
+        ipcraft::core::applyPatch(project, patch);
+    require(!result.success, "direct set_config without value should be rejected");
+    requireIssueCode(result.issues,
+                     QStringLiteral("patch.invalid_op"),
+                     "direct set_config without value should report stable issue code");
+    require(project.components.first().config[QStringLiteral("baud")] == 115200,
+            "direct set_config missing-value rejection should not mutate original project");
+    require(result.project.components.first().config == project.components.first().config,
+            "direct set_config missing-value rejection should return the original project");
+}
+
 void testPatchApplyRejectsUnsupportedOperationForms() {
     QJsonObject unsupportedOpPatch = setBaudPatchJson();
     QJsonArray ops = unsupportedOpPatch.value(QStringLiteral("ops")).toArray();
@@ -510,6 +533,7 @@ int main() {
     testPatchReadRejectsInvalidFoundationJson();
     testPatchApplyRejectsDirectUnsupportedSchemaWithoutMutation();
     testPatchApplyRejectsDirectEmptyOpsWithoutMutation();
+    testPatchApplyRejectsDirectSetConfigMissingValueWithoutMutation();
     testPatchApplyRejectsUnsupportedOperationForms();
     testPatchSerializationPreservesMetadataAndUnknownPayload();
     testPatchSerializationDropsStaleKnownPayloadFields();
