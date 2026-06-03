@@ -62,6 +62,26 @@ bool containsLayoutConfigKey(const QJsonValue& value) {
     return false;
 }
 
+bool isAllowedTopLevelKey(const QString& key) {
+    return key == QStringLiteral("schema") ||
+           key == QStringLiteral("id") ||
+           key == QStringLiteral("description") ||
+           key == QStringLiteral("author") ||
+           key == QStringLiteral("metadata") ||
+           key == QStringLiteral("ops");
+}
+
+void appendUnknownTopLevelFieldIssues(QVector<ValidationIssue>& issues,
+                                      const QJsonObject& object) {
+    for (auto it = object.constBegin(); it != object.constEnd(); ++it) {
+        if (!isAllowedTopLevelKey(it.key())) {
+            issues.append(issue(QStringLiteral("patch.unknown_field"),
+                                QStringLiteral("Top-level patch field is not supported."),
+                                QStringLiteral("/%1").arg(it.key())));
+        }
+    }
+}
+
 bool componentIdFromTarget(const QString& target, QString& componentId) {
     const QString prefix = QStringLiteral("component:");
     if (!target.startsWith(prefix)) {
@@ -159,6 +179,8 @@ ProjectPatchReadResult ProjectPatchCodec::readObject(const QJsonObject& object) 
     if (object.value(QStringLiteral("metadata")).isObject()) {
         patch.metadata = object.value(QStringLiteral("metadata")).toObject();
     }
+
+    appendUnknownTopLevelFieldIssues(result.issues, object);
 
     if (patch.schema != schemaids::patchV1) {
         result.patch = patch;

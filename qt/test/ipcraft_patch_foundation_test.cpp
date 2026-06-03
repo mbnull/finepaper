@@ -25,6 +25,17 @@ bool hasCode(const QVector<ipcraft::core::ValidationIssue>& issues, const QStrin
     return false;
 }
 
+bool hasIssue(const QVector<ipcraft::core::ValidationIssue>& issues,
+              const QString& code,
+              const QString& path) {
+    for (const ipcraft::core::ValidationIssue& issue : issues) {
+        if (issue.code == code && issue.path == path) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void requireIssueCode(const QVector<ipcraft::core::ValidationIssue>& issues,
                       const QString& code,
                       const char* message) {
@@ -143,6 +154,19 @@ void testPatchReadRejectsInvalidFoundationJson() {
     expectReadFailsWith(malformedOpPatch,
                         QStringLiteral("patch.invalid_op"),
                         "non-object ops should be rejected");
+}
+
+void testPatchReadRejectsUnknownTopLevelField() {
+    QJsonObject patchJson = setBaudPatchJson();
+    patchJson.insert(QStringLiteral("legacyCommand"), QJsonObject{});
+
+    const ipcraft::core::ProjectPatchReadResult result =
+        ipcraft::core::ProjectPatchApi::readObject(patchJson);
+    require(!result.success, "unknown top-level patch field should be rejected");
+    require(hasIssue(result.issues,
+                     QStringLiteral("patch.unknown_field"),
+                     QStringLiteral("/legacyCommand")),
+            "unknown top-level patch field should report stable issue code and path");
 }
 
 void testPatchApplyRejectsDirectUnsupportedSchemaWithoutMutation() {
@@ -539,6 +563,7 @@ void testPatchRejectsInsertedValueContainingLayoutField() {
 int main() {
     testPatchParsesAndSerializes();
     testPatchReadRejectsInvalidFoundationJson();
+    testPatchReadRejectsUnknownTopLevelField();
     testPatchApplyRejectsDirectUnsupportedSchemaWithoutMutation();
     testPatchApplyRejectsDirectEmptyOpsWithoutMutation();
     testPatchApplyRejectsDirectSetConfigMissingValueWithoutMutation();
