@@ -276,11 +276,67 @@ void testUnsupportedViewSchemaRejected() {
             "unsupported view schema should be rejected");
 }
 
+void testMalformedTopologyEnvelopeRejected() {
+    ipcraft::core::ProjectDesign project = minimalProject();
+    ipcraft::core::TopologyGraph topology;
+    topology.schema = ipcraft::schemaids::topologyParametricV1;
+    project.topologies.append(topology);
+
+    const QVector<ipcraft::core::ValidationIssue> issues =
+        ipcraft::core::validateProjectDesign(project);
+    require(hasIssue(issues,
+                     QStringLiteral("topology.missing_id"),
+                     QStringLiteral("/topologies/0/id")),
+            "topology id should be required");
+    require(hasIssue(issues,
+                     QStringLiteral("topology.missing_kind"),
+                     QStringLiteral("/topologies/0/kind")),
+            "topology kind should be required");
+    require(hasIssue(issues,
+                     QStringLiteral("topology.missing_family"),
+                     QStringLiteral("/topologies/0/family")),
+            "parametric topology family should be required");
+}
+
+void testInvalidTopologyKindRejected() {
+    ipcraft::core::ProjectDesign project = minimalProject();
+    ipcraft::core::TopologyGraph topology;
+    topology.id = QStringLiteral("topo0");
+    topology.schema = ipcraft::schemaids::topologyGraphV1;
+    topology.kind = QStringLiteral("parametric");
+    project.topologies.append(topology);
+
+    const QVector<ipcraft::core::ValidationIssue> issues =
+        ipcraft::core::validateProjectDesign(project);
+    require(hasIssue(issues,
+                     QStringLiteral("topology.invalid_kind"),
+                     QStringLiteral("/topologies/0/kind")),
+            "topology kind should match its schema");
+}
+
+void testMissingTopologyAttachmentIdRejected() {
+    ipcraft::core::ProjectDesign project = minimalProject();
+    ipcraft::core::TopologyGraph topology;
+    topology.id = QStringLiteral("topo0");
+    topology.schema = ipcraft::schemaids::topologyGraphV1;
+    topology.kind = QStringLiteral("explicit_graph");
+    topology.attachments.append(ipcraft::core::TopologyAttachment{});
+    project.topologies.append(topology);
+
+    const QVector<ipcraft::core::ValidationIssue> issues =
+        ipcraft::core::validateProjectDesign(project);
+    require(hasIssue(issues,
+                     QStringLiteral("topology.missing_attachment_id"),
+                     QStringLiteral("/topologies/0/attachments/0/id")),
+            "topology attachment id should be required");
+}
+
 void testDuplicateTopologyNodeIdsRejected() {
     ipcraft::core::ProjectDesign project = minimalProject();
     ipcraft::core::TopologyGraph topology;
     topology.id = QStringLiteral("topo0");
     topology.schema = ipcraft::schemaids::topologyGraphV1;
+    topology.kind = QStringLiteral("explicit_graph");
     topology.nodes.append(QJsonObject{{QStringLiteral("id"), QStringLiteral("node0")}});
     topology.nodes.append(QJsonObject{{QStringLiteral("id"), QStringLiteral("node0")}});
     project.topologies.append(topology);
@@ -298,6 +354,7 @@ void testDuplicateTopologyLinkIdsRejected() {
     ipcraft::core::TopologyGraph topology;
     topology.id = QStringLiteral("topo0");
     topology.schema = ipcraft::schemaids::topologyGraphV1;
+    topology.kind = QStringLiteral("explicit_graph");
     topology.links.append(QJsonObject{{QStringLiteral("id"), QStringLiteral("link0")}});
     topology.links.append(QJsonObject{{QStringLiteral("id"), QStringLiteral("link0")}});
     project.topologies.append(topology);
@@ -315,6 +372,7 @@ void testDuplicateTopologyAttachmentIdsStillRejected() {
     ipcraft::core::TopologyGraph topology;
     topology.id = QStringLiteral("topo0");
     topology.schema = ipcraft::schemaids::topologyGraphV1;
+    topology.kind = QStringLiteral("explicit_graph");
     topology.attachments.append({QStringLiteral("attach0")});
     topology.attachments.append({QStringLiteral("attach0")});
     project.topologies.append(topology);
@@ -368,6 +426,9 @@ int main() {
     testExplicitConnectionInterfaceRefsMustExist();
     testMalformedViewDocumentRejected();
     testUnsupportedViewSchemaRejected();
+    testMalformedTopologyEnvelopeRejected();
+    testInvalidTopologyKindRejected();
+    testMissingTopologyAttachmentIdRejected();
     testDuplicateTopologyNodeIdsRejected();
     testDuplicateTopologyLinkIdsRejected();
     testDuplicateTopologyAttachmentIdsStillRejected();

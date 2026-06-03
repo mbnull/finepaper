@@ -70,6 +70,19 @@ bool isSupportedTopologySchema(const QString& schema) {
            schema == schemaids::topologyParametricV1;
 }
 
+bool isSupportedTopologyKind(const QString& schema, const QString& kind) {
+    if (schema == schemaids::topologyGraphV1) {
+        return kind == QStringLiteral("explicit_graph") ||
+               kind == QStringLiteral("expanded_parametric");
+    }
+
+    if (schema == schemaids::topologyParametricV1) {
+        return kind == QStringLiteral("parametric");
+    }
+
+    return true;
+}
+
 bool isSupportedViewSchema(const QString& schema) {
     return schema == schemaids::viewV1;
 }
@@ -343,11 +356,38 @@ QVector<ValidationIssue> validateProjectDesign(const ProjectDesign& project) {
     for (qsizetype index = 0; index < project.topologies.size(); ++index) {
         const TopologyGraph& topology = project.topologies.at(index);
 
+        if (isBlank(topology.id)) {
+            appendIssue(issues,
+                        QStringLiteral("topology.missing_id"),
+                        QStringLiteral("Topology id is required."),
+                        QStringLiteral("/topologies/%1/id").arg(index));
+        }
+
         if (!isSupportedTopologySchema(topology.schema)) {
             appendIssue(issues,
                         QStringLiteral("topology.unsupported_schema"),
                         QStringLiteral("Topology schema is not supported."),
                         QStringLiteral("/topologies/%1/schema").arg(index));
+        }
+
+        if (isBlank(topology.kind)) {
+            appendIssue(issues,
+                        QStringLiteral("topology.missing_kind"),
+                        QStringLiteral("Topology kind is required."),
+                        QStringLiteral("/topologies/%1/kind").arg(index));
+        } else if (!isSupportedTopologyKind(topology.schema, topology.kind)) {
+            appendIssue(issues,
+                        QStringLiteral("topology.invalid_kind"),
+                        QStringLiteral("Topology kind must match its schema."),
+                        QStringLiteral("/topologies/%1/kind").arg(index));
+        }
+
+        if (topology.schema == schemaids::topologyParametricV1 &&
+            isBlank(topology.family)) {
+            appendIssue(issues,
+                        QStringLiteral("topology.missing_family"),
+                        QStringLiteral("Parametric topology family is required."),
+                        QStringLiteral("/topologies/%1/family").arg(index));
         }
 
         appendDuplicateTopologyObjectIdIssues(issues,
@@ -368,6 +408,12 @@ QVector<ValidationIssue> validateProjectDesign(const ProjectDesign& project) {
              ++attachmentIndex) {
             const TopologyAttachment& attachment = topology.attachments.at(attachmentIndex);
             if (isBlank(attachment.id)) {
+                appendIssue(issues,
+                            QStringLiteral("topology.missing_attachment_id"),
+                            QStringLiteral("Topology attachment id is required."),
+                            QStringLiteral("/topologies/%1/attachments/%2/id")
+                                .arg(index)
+                                .arg(attachmentIndex));
                 continue;
             }
 

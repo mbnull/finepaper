@@ -240,6 +240,12 @@ void appendTopologyShapeIssues(QVector<ValidationIssue>& issues,
         const QString path = QStringLiteral("/topologies/%1").arg(index);
         if (topology.value(QStringLiteral("schema")).toString() ==
             schemaids::topologyParametricV1) {
+            if (!topology.contains(QStringLiteral("parameters"))) {
+                issues.append(issue(QStringLiteral("topology.missing_parameters"),
+                                    QStringLiteral("Parametric topology parameters are required."),
+                                    childPath(path, QStringLiteral("parameters"))));
+            }
+
             if (topology.contains(QStringLiteral("nodes"))) {
                 issues.append(issue(QStringLiteral("project.parametric_topology_nodes_forbidden"),
                                     QStringLiteral("Parametric topology must not contain graph nodes."),
@@ -249,6 +255,21 @@ void appendTopologyShapeIssues(QVector<ValidationIssue>& issues,
             if (topology.contains(QStringLiteral("links"))) {
                 issues.append(issue(QStringLiteral("project.parametric_topology_links_forbidden"),
                                     QStringLiteral("Parametric topology must not contain graph links."),
+                                    childPath(path, QStringLiteral("links"))));
+            }
+        }
+
+        if (topology.value(QStringLiteral("schema")).toString() ==
+            schemaids::topologyGraphV1) {
+            if (!topology.contains(QStringLiteral("nodes"))) {
+                issues.append(issue(QStringLiteral("topology.missing_nodes"),
+                                    QStringLiteral("Graph topology nodes are required."),
+                                    childPath(path, QStringLiteral("nodes"))));
+            }
+
+            if (!topology.contains(QStringLiteral("links"))) {
+                issues.append(issue(QStringLiteral("topology.missing_links"),
+                                    QStringLiteral("Graph topology links are required."),
                                     childPath(path, QStringLiteral("links"))));
             }
         }
@@ -700,7 +721,11 @@ QJsonObject topologyToJson(const TopologyGraph& topology) {
     insertStringIfNonEmpty(object, QStringLiteral("kind"), topology.kind);
     insertStringIfNonEmpty(object, QStringLiteral("family"), topology.family);
     insertStringIfNonEmpty(object, QStringLiteral("providerRef"), topology.providerRef);
-    insertObjectIfNonEmpty(object, QStringLiteral("parameters"), topology.parameters);
+    if (topology.schema == schemaids::topologyParametricV1) {
+        object.insert(QStringLiteral("parameters"), topology.parameters);
+    } else {
+        insertObjectIfNonEmpty(object, QStringLiteral("parameters"), topology.parameters);
+    }
     insertObjectIfNonEmpty(object, QStringLiteral("constraints"), topology.constraints);
     if (topology.schema != schemaids::topologyParametricV1) {
         object.insert(QStringLiteral("nodes"), objectVectorToJson(topology.nodes));

@@ -547,6 +547,65 @@ void testReaderRejectsGraphFieldsOnParametricTopology() {
             "parametric topology links should report stable issue code and path");
 }
 
+void testReaderRejectsMissingGraphTopologyArrays() {
+    QJsonObject project = minimalUartProject();
+    project.insert(QStringLiteral("topologies"), QJsonArray{
+        QJsonObject{{QStringLiteral("id"), QStringLiteral("fabric.graph")},
+                    {QStringLiteral("schema"), ipcraft::schemaids::topologyGraphV1},
+                    {QStringLiteral("kind"), QStringLiteral("explicit_graph")}}
+    });
+
+    const ipcraft::core::ProjectDocumentReadResult result =
+        ipcraft::core::ProjectDocumentV1::readObject(project);
+    require(!result.success, "graph topology missing nodes and links should be rejected");
+    require(hasIssue(result.issues,
+                     QStringLiteral("topology.missing_nodes"),
+                     QStringLiteral("/topologies/0/nodes")),
+            "graph topology missing nodes should report stable issue code and path");
+    require(hasIssue(result.issues,
+                     QStringLiteral("topology.missing_links"),
+                     QStringLiteral("/topologies/0/links")),
+            "graph topology missing links should report stable issue code and path");
+}
+
+void testReaderRejectsMissingParametricTopologyParameters() {
+    QJsonObject project = cpuNicNocProject();
+    QJsonArray topologies = project.value(QStringLiteral("topologies")).toArray();
+    QJsonObject topology = topologies.at(0).toObject();
+    topology.remove(QStringLiteral("parameters"));
+    topologies.replace(0, topology);
+    project.insert(QStringLiteral("topologies"), topologies);
+
+    const ipcraft::core::ProjectDocumentReadResult result =
+        ipcraft::core::ProjectDocumentV1::readObject(project);
+    require(!result.success, "parametric topology missing parameters should be rejected");
+    require(hasIssue(result.issues,
+                     QStringLiteral("topology.missing_parameters"),
+                     QStringLiteral("/topologies/0/parameters")),
+            "parametric topology missing parameters should report stable issue code and path");
+}
+
+void testWriterPreservesEmptyParametricTopologyParameters() {
+    QJsonObject project = cpuNicNocProject();
+    QJsonArray topologies = project.value(QStringLiteral("topologies")).toArray();
+    QJsonObject topology = topologies.at(0).toObject();
+    topology.insert(QStringLiteral("parameters"), QJsonObject{});
+    topologies.replace(0, topology);
+    project.insert(QStringLiteral("topologies"), topologies);
+
+    const ipcraft::core::ProjectDocumentReadResult result =
+        ipcraft::core::ProjectDocumentV1::readObject(project);
+    require(result.success, "empty parametric topology parameters object should parse");
+
+    const QJsonObject written = ipcraft::core::ProjectDocumentV1::writeObject(result.project);
+    const QJsonObject writtenTopology =
+        written.value(QStringLiteral("topologies")).toArray().first().toObject();
+    require(writtenTopology.contains(QStringLiteral("parameters")),
+            "writer should emit required empty parametric topology parameters object");
+    require(writtenTopology.value(QStringLiteral("parameters")).isObject(),
+            "writer should emit parametric topology parameters as an object");
+}
+
 void testReaderRejectsNonObjectConnectionEndpoint() {
     QJsonObject project = minimalUartProject();
     project.insert(QStringLiteral("connections"), QJsonArray{
@@ -643,6 +702,9 @@ int main() {
     testReaderRejectsNonObjectTopologyNodeEntry();
     testReaderRejectsNonObjectTopologyLinkEntry();
     testReaderRejectsGraphFieldsOnParametricTopology();
+    testReaderRejectsMissingGraphTopologyArrays();
+    testReaderRejectsMissingParametricTopologyParameters();
+    testWriterPreservesEmptyParametricTopologyParameters();
     testReaderRejectsNonObjectConnectionEndpoint();
     testReaderRejectsNonObjectViewTemplates();
     testReaderRejectsMalformedViewRecord();
