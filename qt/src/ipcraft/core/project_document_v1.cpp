@@ -492,6 +492,10 @@ ProjectDocumentReadResult ProjectDocumentV1::readObject(const QJsonObject& objec
                                     QStringLiteral("project.invalid_component_shape"),
                                     QStringLiteral("/components"));
     appendNonObjectArrayEntryIssues(readIssues,
+                                    object.value(QStringLiteral("interfaces")),
+                                    QStringLiteral("project.invalid_interface_shape"),
+                                    QStringLiteral("/interfaces"));
+    appendNonObjectArrayEntryIssues(readIssues,
                                     object.value(QStringLiteral("connections")),
                                     QStringLiteral("project.invalid_connection_shape"),
                                     QStringLiteral("/connections"));

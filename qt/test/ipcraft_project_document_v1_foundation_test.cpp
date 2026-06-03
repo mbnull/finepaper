@@ -293,6 +293,17 @@ void testReaderRejectsNonObjectPackageEntry() {
             "non-object package entry should report stable issue code");
 }
 
+void testReaderRejectsNonObjectInterfaceEntry() {
+    QJsonObject malformedInterface = minimalUartProject();
+    malformedInterface.insert(QStringLiteral("interfaces"), QJsonArray{QStringLiteral("not_object")});
+
+    const ipcraft::core::ProjectDocumentReadResult result =
+        ipcraft::core::ProjectDocumentV1::readObject(malformedInterface);
+    require(!result.success, "non-object interface entry should be rejected");
+    require(hasCode(result.issues, QStringLiteral("project.invalid_interface_shape")),
+            "non-object interface entry should report stable issue code");
+}
+
 void testWriterIsDeterministic() {
     const ipcraft::core::ProjectDocumentReadResult result =
         ipcraft::core::ProjectDocumentV1::readObject(cpuNicNocProject());
@@ -315,6 +326,7 @@ int main() {
     testReaderRejectsMalformedPackageShape();
     testReaderRejectsExtensionMissingVersion();
     testReaderRejectsNonObjectPackageEntry();
+    testReaderRejectsNonObjectInterfaceEntry();
     testWriterIsDeterministic();
     std::cout << "ipcraft_project_document_v1_foundation_test passed\n";
     return 0;
