@@ -70,6 +70,37 @@ bool isSupportedTopologySchema(const QString& schema) {
            schema == schemaids::topologyParametricV1;
 }
 
+QString packageRefKey(const PackageRef& package) {
+    return package.id + QLatin1Char('@') + package.version;
+}
+
+void appendDuplicateTopologyObjectIdIssues(QVector<ValidationIssue>& issues,
+                                           const QVector<QJsonObject>& objects,
+                                           const QString& collection,
+                                           const QString& code,
+                                           const QString& message,
+                                           qsizetype topologyIndex) {
+    QSet<QString> ids;
+    for (qsizetype objectIndex = 0; objectIndex < objects.size(); ++objectIndex) {
+        const QString id = objects.at(objectIndex).value(QStringLiteral("id")).toString();
+        if (isBlank(id)) {
+            continue;
+        }
+
+        if (ids.contains(id)) {
+            appendIssue(issues,
+                        code,
+                        message,
+                        QStringLiteral("/topologies/%1/%2/%3/id")
+                            .arg(topologyIndex)
+                            .arg(collection)
+                            .arg(objectIndex));
+        } else {
+            ids.insert(id);
+        }
+    }
+}
+
 } // namespace
 
 QVector<ValidationIssue> validateProjectDesign(const ProjectDesign& project) {
@@ -114,6 +145,13 @@ QVector<ValidationIssue> validateProjectDesign(const ProjectDesign& project) {
         }
     }
 
+    QSet<QString> packageRefs;
+    for (const PackageRef& package : project.packages) {
+        if (!isBlank(package.id) && !isBlank(package.version)) {
+            packageRefs.insert(packageRefKey(package));
+        }
+    }
+
     QSet<QString> componentIds;
     for (qsizetype index = 0; index < project.components.size(); ++index) {
         const ComponentInstance& component = project.components.at(index);
@@ -144,6 +182,11 @@ QVector<ValidationIssue> validateProjectDesign(const ProjectDesign& project) {
             appendIssue(issues,
                         QStringLiteral("component.missing_package_ref"),
                         QStringLiteral("Component packageRef is required."),
+                        QStringLiteral("/components/%1/packageRef").arg(index));
+        } else if (!packageRefs.contains(component.packageRef)) {
+            appendIssue(issues,
+                        QStringLiteral("component.unknown_package_ref"),
+                        QStringLiteral("Component packageRef must reference a declared package."),
                         QStringLiteral("/components/%1/packageRef").arg(index));
         }
 
@@ -190,6 +233,22 @@ QVector<ValidationIssue> validateProjectDesign(const ProjectDesign& project) {
                         QStringLiteral("Connection endpoints must include component and interface."),
                         QStringLiteral("/connections/%1").arg(index));
         }
+
+        if (!isBlank(connection.from.component) &&
+            !componentIds.contains(connection.from.component)) {
+            appendIssue(issues,
+                        QStringLiteral("connection.unknown_component_ref"),
+                        QStringLiteral("Connection endpoint component must reference a component id."),
+                        QStringLiteral("/connections/%1/from/component").arg(index));
+        }
+
+        if (!isBlank(connection.to.component) &&
+            !componentIds.contains(connection.to.component)) {
+            appendIssue(issues,
+                        QStringLiteral("connection.unknown_component_ref"),
+                        QStringLiteral("Connection endpoint component must reference a component id."),
+                        QStringLiteral("/connections/%1/to/component").arg(index));
+        }
     }
 
     for (qsizetype index = 0; index < project.topologies.size(); ++index) {
@@ -201,6 +260,19 @@ QVector<ValidationIssue> validateProjectDesign(const ProjectDesign& project) {
                         QStringLiteral("Topology schema is not supported."),
                         QStringLiteral("/topologies/%1/schema").arg(index));
         }
+
+        appendDuplicateTopologyObjectIdIssues(issues,
+                                              topology.nodes,
+                                              QStringLiteral("nodes"),
+                                              QStringLiteral("topology.duplicate_node_id"),
+                                              QStringLiteral("Topology node id is duplicated."),
+                                              index);
+        appendDuplicateTopologyObjectIdIssues(issues,
+                                              topology.links,
+                                              QStringLiteral("links"),
+                                              QStringLiteral("topology.duplicate_link_id"),
+                                              QStringLiteral("Topology link id is duplicated."),
+                                              index);
 
         QSet<QString> attachmentIds;
         for (qsizetype attachmentIndex = 0; attachmentIndex < topology.attachments.size();

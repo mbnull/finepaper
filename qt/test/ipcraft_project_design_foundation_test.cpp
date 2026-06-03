@@ -26,6 +26,18 @@ bool hasCode(const QVector<ipcraft::core::ValidationIssue>& issues, const QStrin
     return false;
 }
 
+bool hasIssue(const QVector<ipcraft::core::ValidationIssue>& issues,
+              const QString& code,
+              const QString& path) {
+    for (const ipcraft::core::ValidationIssue& issue : issues) {
+        if (issue.code == code && issue.path == path) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 ipcraft::core::ProjectDesign minimalProject() {
     ipcraft::core::ProjectDesign project;
     project.id = QStringLiteral("proj_uart_min");
@@ -72,6 +84,30 @@ void testDuplicateComponentIdsRejected() {
             "duplicate component ids should be rejected");
 }
 
+void testUnknownComponentPackageRefRejected() {
+    ipcraft::core::ProjectDesign project = minimalProject();
+    project.components.first().packageRef = QStringLiteral("vendor.timer@1.0.0");
+
+    const QVector<ipcraft::core::ValidationIssue> issues =
+        ipcraft::core::validateProjectDesign(project);
+    require(hasIssue(issues,
+                     QStringLiteral("component.unknown_package_ref"),
+                     QStringLiteral("/components/0/packageRef")),
+            "unknown component packageRef should be rejected");
+}
+
+void testMalformedComponentPackageRefRejected() {
+    ipcraft::core::ProjectDesign project = minimalProject();
+    project.components.first().packageRef = QStringLiteral("vendor.uart16550");
+
+    const QVector<ipcraft::core::ValidationIssue> issues =
+        ipcraft::core::validateProjectDesign(project);
+    require(hasIssue(issues,
+                     QStringLiteral("component.unknown_package_ref"),
+                     QStringLiteral("/components/0/packageRef")),
+            "malformed component packageRef should be rejected");
+}
+
 void testLayoutFieldsRejectedFromComponentConfig() {
     ipcraft::core::ProjectDesign project = minimalProject();
     project.components.first().config.insert(QStringLiteral("x"), 24);
@@ -98,6 +134,73 @@ void testAttachmentConnectionKindRejected() {
         ipcraft::core::validateProjectDesign(project);
     require(hasCode(issues, QStringLiteral("project.attachment_connection_forbidden")),
             "attachment connection kind should be rejected");
+}
+
+void testConnectionEndpointUnknownComponentRejected() {
+    ipcraft::core::ProjectDesign project = minimalProject();
+    ipcraft::core::Connection connection;
+    connection.id = QStringLiteral("conn0");
+    connection.from = {QStringLiteral("missing0"), QStringLiteral("serial")};
+    connection.to = {QStringLiteral("uart0"), QStringLiteral("axi_s")};
+    project.connections.append(connection);
+
+    const QVector<ipcraft::core::ValidationIssue> issues =
+        ipcraft::core::validateProjectDesign(project);
+    require(hasIssue(issues,
+                     QStringLiteral("connection.unknown_component_ref"),
+                     QStringLiteral("/connections/0/from/component")),
+            "connection endpoint component refs should reference component ids");
+}
+
+void testDuplicateTopologyNodeIdsRejected() {
+    ipcraft::core::ProjectDesign project = minimalProject();
+    ipcraft::core::TopologyGraph topology;
+    topology.id = QStringLiteral("topo0");
+    topology.schema = ipcraft::schemaids::topologyGraphV1;
+    topology.nodes.append(QJsonObject{{QStringLiteral("id"), QStringLiteral("node0")}});
+    topology.nodes.append(QJsonObject{{QStringLiteral("id"), QStringLiteral("node0")}});
+    project.topologies.append(topology);
+
+    const QVector<ipcraft::core::ValidationIssue> issues =
+        ipcraft::core::validateProjectDesign(project);
+    require(hasIssue(issues,
+                     QStringLiteral("topology.duplicate_node_id"),
+                     QStringLiteral("/topologies/0/nodes/1/id")),
+            "duplicate topology node ids should be rejected");
+}
+
+void testDuplicateTopologyLinkIdsRejected() {
+    ipcraft::core::ProjectDesign project = minimalProject();
+    ipcraft::core::TopologyGraph topology;
+    topology.id = QStringLiteral("topo0");
+    topology.schema = ipcraft::schemaids::topologyGraphV1;
+    topology.links.append(QJsonObject{{QStringLiteral("id"), QStringLiteral("link0")}});
+    topology.links.append(QJsonObject{{QStringLiteral("id"), QStringLiteral("link0")}});
+    project.topologies.append(topology);
+
+    const QVector<ipcraft::core::ValidationIssue> issues =
+        ipcraft::core::validateProjectDesign(project);
+    require(hasIssue(issues,
+                     QStringLiteral("topology.duplicate_link_id"),
+                     QStringLiteral("/topologies/0/links/1/id")),
+            "duplicate topology link ids should be rejected");
+}
+
+void testDuplicateTopologyAttachmentIdsStillRejected() {
+    ipcraft::core::ProjectDesign project = minimalProject();
+    ipcraft::core::TopologyGraph topology;
+    topology.id = QStringLiteral("topo0");
+    topology.schema = ipcraft::schemaids::topologyGraphV1;
+    topology.attachments.append({QStringLiteral("attach0")});
+    topology.attachments.append({QStringLiteral("attach0")});
+    project.topologies.append(topology);
+
+    const QVector<ipcraft::core::ValidationIssue> issues =
+        ipcraft::core::validateProjectDesign(project);
+    require(hasIssue(issues,
+                     QStringLiteral("topology.duplicate_attachment_id"),
+                     QStringLiteral("/topologies/0/attachments/1/id")),
+            "duplicate topology attachment ids should remain rejected");
 }
 
 void testExtensionBlockEnvelopeIsPreserved() {
@@ -131,8 +234,14 @@ int main() {
     testSchemaConstantsCoverFoundationAndFollowupContracts();
     testMinimalProjectDesignValidates();
     testDuplicateComponentIdsRejected();
+    testUnknownComponentPackageRefRejected();
+    testMalformedComponentPackageRefRejected();
     testLayoutFieldsRejectedFromComponentConfig();
     testAttachmentConnectionKindRejected();
+    testConnectionEndpointUnknownComponentRejected();
+    testDuplicateTopologyNodeIdsRejected();
+    testDuplicateTopologyLinkIdsRejected();
+    testDuplicateTopologyAttachmentIdsStillRejected();
     testExtensionBlockEnvelopeIsPreserved();
 
     std::cout << "ipcraft_project_design_foundation_test passed\n";
