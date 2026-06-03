@@ -88,6 +88,15 @@ struct ViewDocument {
     QString targetRef;
     QString providerRef;
     QString sourceRef;
+    QJsonObject templates;
+    QJsonObject portGrouping;
+    QJsonObject labels;
+    QJsonObject badges;
+    QJsonObject propertyGroups;
+    QJsonObject layoutPreference;
+    QJsonObject interactionAffordances;
+    QJsonObject diagnosticsOverlay;
+    QJsonObject icons;
     QJsonObject layout;
     QJsonObject presentationState;
     QJsonObject metadata;

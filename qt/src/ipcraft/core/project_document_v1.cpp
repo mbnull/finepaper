@@ -366,7 +366,21 @@ void appendReadShapeIssues(QVector<ValidationIssue>& issues,
         issues,
         object,
         QStringLiteral("views"),
-        {{QStringLiteral("layout"), QStringLiteral("project.invalid_view_layout_shape")},
+        {{QStringLiteral("templates"), QStringLiteral("project.invalid_view_templates_shape")},
+         {QStringLiteral("portGrouping"),
+          QStringLiteral("project.invalid_view_port_grouping_shape")},
+         {QStringLiteral("labels"), QStringLiteral("project.invalid_view_labels_shape")},
+         {QStringLiteral("badges"), QStringLiteral("project.invalid_view_badges_shape")},
+         {QStringLiteral("propertyGroups"),
+          QStringLiteral("project.invalid_view_property_groups_shape")},
+         {QStringLiteral("layoutPreference"),
+          QStringLiteral("project.invalid_view_layout_preference_shape")},
+         {QStringLiteral("interactionAffordances"),
+          QStringLiteral("project.invalid_view_interaction_affordances_shape")},
+         {QStringLiteral("diagnosticsOverlay"),
+          QStringLiteral("project.invalid_view_diagnostics_overlay_shape")},
+         {QStringLiteral("icons"), QStringLiteral("project.invalid_view_icons_shape")},
+         {QStringLiteral("layout"), QStringLiteral("project.invalid_view_layout_shape")},
          {QStringLiteral("presentationState"),
           QStringLiteral("project.invalid_view_presentation_state_shape")},
          {QStringLiteral("metadata"), QStringLiteral("project.invalid_view_metadata_shape")}});
@@ -693,6 +707,16 @@ ViewDocument viewFromJson(const QJsonObject& object) {
     view.targetRef = object.value(QStringLiteral("targetRef")).toString();
     view.providerRef = object.value(QStringLiteral("providerRef")).toString();
     view.sourceRef = object.value(QStringLiteral("sourceRef")).toString();
+    view.templates = objectValue(object, QStringLiteral("templates"));
+    view.portGrouping = objectValue(object, QStringLiteral("portGrouping"));
+    view.labels = objectValue(object, QStringLiteral("labels"));
+    view.badges = objectValue(object, QStringLiteral("badges"));
+    view.propertyGroups = objectValue(object, QStringLiteral("propertyGroups"));
+    view.layoutPreference = objectValue(object, QStringLiteral("layoutPreference"));
+    view.interactionAffordances =
+        objectValue(object, QStringLiteral("interactionAffordances"));
+    view.diagnosticsOverlay = objectValue(object, QStringLiteral("diagnosticsOverlay"));
+    view.icons = objectValue(object, QStringLiteral("icons"));
     view.layout = objectValue(object, QStringLiteral("layout"));
     view.presentationState = objectValue(object, QStringLiteral("presentationState"));
     view.metadata = objectValue(object, QStringLiteral("metadata"));
@@ -707,6 +731,19 @@ QJsonObject viewToJson(const ViewDocument& view) {
     insertStringIfNonEmpty(object, QStringLiteral("targetRef"), view.targetRef);
     insertStringIfNonEmpty(object, QStringLiteral("providerRef"), view.providerRef);
     insertStringIfNonEmpty(object, QStringLiteral("sourceRef"), view.sourceRef);
+    insertObjectIfNonEmpty(object, QStringLiteral("templates"), view.templates);
+    insertObjectIfNonEmpty(object, QStringLiteral("portGrouping"), view.portGrouping);
+    insertObjectIfNonEmpty(object, QStringLiteral("labels"), view.labels);
+    insertObjectIfNonEmpty(object, QStringLiteral("badges"), view.badges);
+    insertObjectIfNonEmpty(object, QStringLiteral("propertyGroups"), view.propertyGroups);
+    insertObjectIfNonEmpty(object, QStringLiteral("layoutPreference"), view.layoutPreference);
+    insertObjectIfNonEmpty(object,
+                           QStringLiteral("interactionAffordances"),
+                           view.interactionAffordances);
+    insertObjectIfNonEmpty(object,
+                           QStringLiteral("diagnosticsOverlay"),
+                           view.diagnosticsOverlay);
+    insertObjectIfNonEmpty(object, QStringLiteral("icons"), view.icons);
     insertObjectIfNonEmpty(object, QStringLiteral("layout"), view.layout);
     insertObjectIfNonEmpty(object, QStringLiteral("presentationState"), view.presentationState);
     insertObjectIfNonEmpty(object, QStringLiteral("metadata"), view.metadata);

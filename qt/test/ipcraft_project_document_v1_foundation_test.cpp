@@ -156,6 +156,82 @@ void testMinimalProjectRoundTripsStructurally() {
             "writer should preserve authored config");
 }
 
+void testViewOptionalObjectsRoundTripWithoutDataLoss() {
+    const QJsonObject templates{
+        {QStringLiteral("node"), QJsonObject{{QStringLiteral("component"), QStringLiteral("compact")}}}
+    };
+    const QJsonObject portGrouping{
+        {QStringLiteral("uart0"), QJsonObject{{QStringLiteral("mode"), QStringLiteral("by_direction")}}}
+    };
+    const QJsonObject labels{
+        {QStringLiteral("uart0"), QJsonObject{{QStringLiteral("text"), QStringLiteral("UART Core")}}}
+    };
+    const QJsonObject badges{
+        {QStringLiteral("uart0"), QJsonObject{{QStringLiteral("severity"), QStringLiteral("info")}}}
+    };
+    const QJsonObject propertyGroups{
+        {QStringLiteral("timing"), QJsonObject{{QStringLiteral("collapsed"), false}}}
+    };
+    const QJsonObject layoutPreference{
+        {QStringLiteral("engine"), QStringLiteral("elk")},
+        {QStringLiteral("rankDirection"), QStringLiteral("LR")}
+    };
+    const QJsonObject interactionAffordances{
+        {QStringLiteral("canDragNodes"), true},
+        {QStringLiteral("canEditLabels"), false}
+    };
+    const QJsonObject diagnosticsOverlay{
+        {QStringLiteral("visible"), true},
+        {QStringLiteral("levels"), QJsonArray{QStringLiteral("warning"), QStringLiteral("error")}}
+    };
+    const QJsonObject icons{
+        {QStringLiteral("uart0"), QJsonObject{{QStringLiteral("name"), QStringLiteral("serial-port")}}}
+    };
+
+    QJsonObject project = minimalUartProject();
+    QJsonArray views = project.value(QStringLiteral("views")).toArray();
+    QJsonObject view = views.at(0).toObject();
+    view.insert(QStringLiteral("templates"), templates);
+    view.insert(QStringLiteral("portGrouping"), portGrouping);
+    view.insert(QStringLiteral("labels"), labels);
+    view.insert(QStringLiteral("badges"), badges);
+    view.insert(QStringLiteral("propertyGroups"), propertyGroups);
+    view.insert(QStringLiteral("layoutPreference"), layoutPreference);
+    view.insert(QStringLiteral("interactionAffordances"), interactionAffordances);
+    view.insert(QStringLiteral("diagnosticsOverlay"), diagnosticsOverlay);
+    view.insert(QStringLiteral("icons"), icons);
+    views.replace(0, view);
+    project.insert(QStringLiteral("views"), views);
+
+    const ipcraft::core::ProjectDocumentReadResult result =
+        ipcraft::core::ProjectDocumentV1::readObject(project);
+    require(result.success, "project with optional view objects should parse");
+
+    const QJsonObject written = ipcraft::core::ProjectDocumentV1::writeObject(result.project);
+    const QJsonObject writtenView =
+        written.value(QStringLiteral("views")).toArray().first().toObject();
+    require(writtenView.value(QStringLiteral("templates")).toObject() == templates,
+            "writer should preserve view templates");
+    require(writtenView.value(QStringLiteral("portGrouping")).toObject() == portGrouping,
+            "writer should preserve view port grouping");
+    require(writtenView.value(QStringLiteral("labels")).toObject() == labels,
+            "writer should preserve view labels");
+    require(writtenView.value(QStringLiteral("badges")).toObject() == badges,
+            "writer should preserve view badges");
+    require(writtenView.value(QStringLiteral("propertyGroups")).toObject() == propertyGroups,
+            "writer should preserve view property groups");
+    require(writtenView.value(QStringLiteral("layoutPreference")).toObject() == layoutPreference,
+            "writer should preserve view layout preference");
+    require(writtenView.value(QStringLiteral("interactionAffordances")).toObject() ==
+                interactionAffordances,
+            "writer should preserve view interaction affordances");
+    require(writtenView.value(QStringLiteral("diagnosticsOverlay")).toObject() ==
+                diagnosticsOverlay,
+            "writer should preserve view diagnostics overlay");
+    require(writtenView.value(QStringLiteral("icons")).toObject() == icons,
+            "writer should preserve view icons");
+}
+
 void testCpuNicNocRoundTripsWithExtensionsAndAttachments() {
     const ipcraft::core::ProjectDocumentReadResult result =
         ipcraft::core::ProjectDocumentV1::readObject(cpuNicNocProject());
@@ -410,6 +486,23 @@ void testReaderRejectsNonObjectConnectionEndpoint() {
             "non-object connection endpoint should report stable issue code and path");
 }
 
+void testReaderRejectsNonObjectViewTemplates() {
+    QJsonObject project = minimalUartProject();
+    QJsonArray views = project.value(QStringLiteral("views")).toArray();
+    QJsonObject view = views.at(0).toObject();
+    view.insert(QStringLiteral("templates"), QStringLiteral("bad"));
+    views.replace(0, view);
+    project.insert(QStringLiteral("views"), views);
+
+    const ipcraft::core::ProjectDocumentReadResult result =
+        ipcraft::core::ProjectDocumentV1::readObject(project);
+    require(!result.success, "non-object view templates should be rejected");
+    require(hasIssue(result.issues,
+                     QStringLiteral("project.invalid_view_templates_shape"),
+                     QStringLiteral("/views/0/templates")),
+            "non-object view templates should report stable issue code and path");
+}
+
 void testWriterIsDeterministic() {
     const ipcraft::core::ProjectDocumentReadResult result =
         ipcraft::core::ProjectDocumentV1::readObject(cpuNicNocProject());
@@ -426,6 +519,7 @@ void testWriterIsDeterministic() {
 
 int main() {
     testMinimalProjectRoundTripsStructurally();
+    testViewOptionalObjectsRoundTripWithoutDataLoss();
     testCpuNicNocRoundTripsWithExtensionsAndAttachments();
     testInterfacesRoundTripAtTopLevel();
     testReaderRejectsOldSchemaAndAttachmentConnections();
@@ -439,6 +533,7 @@ int main() {
     testReaderRejectsNonObjectTopologyNodeEntry();
     testReaderRejectsNonObjectTopologyLinkEntry();
     testReaderRejectsNonObjectConnectionEndpoint();
+    testReaderRejectsNonObjectViewTemplates();
     testWriterIsDeterministic();
     std::cout << "ipcraft_project_document_v1_foundation_test passed\n";
     return 0;
