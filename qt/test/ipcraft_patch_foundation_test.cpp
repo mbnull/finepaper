@@ -154,6 +154,12 @@ void testPatchReadRejectsInvalidFoundationJson() {
     expectReadFailsWith(malformedOpPatch,
                         QStringLiteral("patch.invalid_op"),
                         "non-object ops should be rejected");
+
+    QJsonObject malformedMetadataPatch = setBaudPatchJson();
+    malformedMetadataPatch.insert(QStringLiteral("metadata"), QStringLiteral("not_object"));
+    expectReadFailsWith(malformedMetadataPatch,
+                        QStringLiteral("patch.invalid_metadata_shape"),
+                        "non-object metadata should be rejected");
 }
 
 void testPatchReadRejectsUnknownTopLevelField() {

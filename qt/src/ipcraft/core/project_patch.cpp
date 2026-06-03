@@ -178,6 +178,10 @@ ProjectPatchReadResult ProjectPatchCodec::readObject(const QJsonObject& object) 
     patch.author = object.value(QStringLiteral("author")).toString();
     if (object.value(QStringLiteral("metadata")).isObject()) {
         patch.metadata = object.value(QStringLiteral("metadata")).toObject();
+    } else if (object.contains(QStringLiteral("metadata"))) {
+        result.issues.append(issue(QStringLiteral("patch.invalid_metadata_shape"),
+                                   QStringLiteral("Patch metadata must be an object."),
+                                   QStringLiteral("/metadata")));
     }
 
     appendUnknownTopLevelFieldIssues(result.issues, object);
