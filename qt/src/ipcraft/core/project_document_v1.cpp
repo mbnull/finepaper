@@ -95,6 +95,17 @@ void appendUnknownTopLevelFieldIssues(QVector<ValidationIssue>& issues,
     }
 }
 
+void appendRequiredTopLevelFieldIssue(QVector<ValidationIssue>& issues,
+                                      const QJsonObject& object,
+                                      const QString& key,
+                                      const QString& code) {
+    if (!object.contains(key)) {
+        issues.append(issue(code,
+                            QStringLiteral("Required project field is missing."),
+                            childPath(QStringLiteral(""), key)));
+    }
+}
+
 void appendObjectFieldShapeIssue(QVector<ValidationIssue>& issues,
                                  const QJsonObject& object,
                                  const QString& key,
@@ -281,6 +292,14 @@ void appendTopologyShapeIssues(QVector<ValidationIssue>& issues,
 void appendReadShapeIssues(QVector<ValidationIssue>& issues,
                            const QJsonObject& object) {
     appendUnknownTopLevelFieldIssues(issues, object);
+    appendRequiredTopLevelFieldIssue(issues,
+                                     object,
+                                     QStringLiteral("packages"),
+                                     QStringLiteral("project.missing_packages"));
+    appendRequiredTopLevelFieldIssue(issues,
+                                     object,
+                                     QStringLiteral("components"),
+                                     QStringLiteral("project.missing_components"));
     appendObjectFieldShapeIssue(issues,
                                 object,
                                 QStringLiteral("constraints"),
@@ -668,8 +687,10 @@ QJsonObject topologyToJson(const TopologyGraph& topology) {
     insertStringIfNonEmpty(object, QStringLiteral("providerRef"), topology.providerRef);
     insertObjectIfNonEmpty(object, QStringLiteral("parameters"), topology.parameters);
     insertObjectIfNonEmpty(object, QStringLiteral("constraints"), topology.constraints);
-    object.insert(QStringLiteral("nodes"), objectVectorToJson(topology.nodes));
-    object.insert(QStringLiteral("links"), objectVectorToJson(topology.links));
+    if (topology.schema != schemaids::topologyParametricV1) {
+        object.insert(QStringLiteral("nodes"), objectVectorToJson(topology.nodes));
+        object.insert(QStringLiteral("links"), objectVectorToJson(topology.links));
+    }
     object.insert(QStringLiteral("attachments"), attachmentsToJson(topology.attachments));
     insertObjectIfNonEmpty(object, QStringLiteral("routing"), topology.routing);
     insertObjectIfNonEmpty(object, QStringLiteral("metadata"), topology.metadata);

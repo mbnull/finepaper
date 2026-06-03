@@ -264,6 +264,10 @@ void testCpuNicNocRoundTripsWithExtensionsAndAttachments() {
     require(writtenTopology.value(QStringLiteral("constraints")).toObject()
                 .value(QStringLiteral("max_hops")).toInt() == 4,
             "writer should preserve parametric topology constraints");
+    require(!writtenTopology.contains(QStringLiteral("nodes")),
+            "writer should not emit graph nodes for parametric topology requests");
+    require(!writtenTopology.contains(QStringLiteral("links")),
+            "writer should not emit graph links for parametric topology requests");
     require(writtenTopology.value(QStringLiteral("attachments")).toArray().size() == 1,
             "writer should preserve topology attachments");
 
@@ -352,6 +356,24 @@ void testReaderRejectsMalformedPackageShape() {
     require(!result.success, "package missing version should be rejected");
     require(hasCode(result.issues, QStringLiteral("package.missing_version")),
             "package missing version should report stable issue code");
+}
+
+void testReaderRejectsMissingRequiredProjectArrays() {
+    QJsonObject missingArrays = minimalUartProject();
+    missingArrays.remove(QStringLiteral("packages"));
+    missingArrays.remove(QStringLiteral("components"));
+
+    const ipcraft::core::ProjectDocumentReadResult result =
+        ipcraft::core::ProjectDocumentV1::readObject(missingArrays);
+    require(!result.success, "missing required project arrays should be rejected");
+    require(hasIssue(result.issues,
+                     QStringLiteral("project.missing_packages"),
+                     QStringLiteral("/packages")),
+            "missing packages should report stable issue code and path");
+    require(hasIssue(result.issues,
+                     QStringLiteral("project.missing_components"),
+                     QStringLiteral("/components")),
+            "missing components should report stable issue code and path");
 }
 
 void testReaderRejectsExtensionMissingVersion() {
@@ -524,6 +546,7 @@ int main() {
     testInterfacesRoundTripAtTopLevel();
     testReaderRejectsOldSchemaAndAttachmentConnections();
     testReaderRejectsMalformedPackageShape();
+    testReaderRejectsMissingRequiredProjectArrays();
     testReaderRejectsExtensionMissingVersion();
     testReaderRejectsNonObjectPackageEntry();
     testReaderRejectsNonObjectInterfaceEntry();
