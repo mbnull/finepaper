@@ -376,6 +376,25 @@ target("ipcraft_project_design_foundation_test")
         pass_outputs = "ipcraft_project_design_foundation_test passed"
     })
 
+target("ipcraft_project_document_v1_foundation_test")
+    add_rules("qt.console")
+    set_kind("binary")
+    set_group("test")
+    set_default(false)
+    set_languages("c++23")
+
+    add_includedirs("inc")
+    add_files("test/ipcraft_project_document_v1_foundation_test.cpp")
+    add_files("src/ipcraft/core/project_document_v1.cpp")
+    add_files("src/ipcraft/core/project_design.cpp")
+    add_files("inc/ipcraft/core/project_document_v1.h")
+    add_files("inc/ipcraft/core/project_design.h")
+    add_files("inc/ipcraft/schemaids.h")
+    add_tests("default", {
+        trim_output = true,
+        pass_outputs = "ipcraft_project_document_v1_foundation_test passed"
+    })
+
 target("ipcraft_package_spec_test")
     add_rules("qt.console")
     set_kind("binary")
