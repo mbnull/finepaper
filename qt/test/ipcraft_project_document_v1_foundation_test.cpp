@@ -490,6 +490,30 @@ void testReaderRejectsNonObjectTopologyLinkEntry() {
             "non-object topology link entry should report stable issue code and path");
 }
 
+void testReaderRejectsGraphFieldsOnParametricTopology() {
+    QJsonObject project = cpuNicNocProject();
+    QJsonArray topologies = project.value(QStringLiteral("topologies")).toArray();
+    QJsonObject topology = topologies.at(0).toObject();
+    topology.insert(QStringLiteral("nodes"),
+                    QJsonArray{QJsonObject{{QStringLiteral("id"), QStringLiteral("n0")}}});
+    topology.insert(QStringLiteral("links"),
+                    QJsonArray{QJsonObject{{QStringLiteral("id"), QStringLiteral("l0")}}});
+    topologies.replace(0, topology);
+    project.insert(QStringLiteral("topologies"), topologies);
+
+    const ipcraft::core::ProjectDocumentReadResult result =
+        ipcraft::core::ProjectDocumentV1::readObject(project);
+    require(!result.success, "parametric topology graph fields should be rejected");
+    require(hasIssue(result.issues,
+                     QStringLiteral("project.parametric_topology_nodes_forbidden"),
+                     QStringLiteral("/topologies/0/nodes")),
+            "parametric topology nodes should report stable issue code and path");
+    require(hasIssue(result.issues,
+                     QStringLiteral("project.parametric_topology_links_forbidden"),
+                     QStringLiteral("/topologies/0/links")),
+            "parametric topology links should report stable issue code and path");
+}
+
 void testReaderRejectsNonObjectConnectionEndpoint() {
     QJsonObject project = minimalUartProject();
     project.insert(QStringLiteral("connections"), QJsonArray{
@@ -555,6 +579,7 @@ int main() {
     testReaderRejectsNonObjectComponentConfig();
     testReaderRejectsNonObjectTopologyNodeEntry();
     testReaderRejectsNonObjectTopologyLinkEntry();
+    testReaderRejectsGraphFieldsOnParametricTopology();
     testReaderRejectsNonObjectConnectionEndpoint();
     testReaderRejectsNonObjectViewTemplates();
     testWriterIsDeterministic();

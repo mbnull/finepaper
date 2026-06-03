@@ -238,6 +238,21 @@ void appendTopologyShapeIssues(QVector<ValidationIssue>& issues,
 
         const QJsonObject topology = topologies.at(index).toObject();
         const QString path = QStringLiteral("/topologies/%1").arg(index);
+        if (topology.value(QStringLiteral("schema")).toString() ==
+            schemaids::topologyParametricV1) {
+            if (topology.contains(QStringLiteral("nodes"))) {
+                issues.append(issue(QStringLiteral("project.parametric_topology_nodes_forbidden"),
+                                    QStringLiteral("Parametric topology must not contain graph nodes."),
+                                    childPath(path, QStringLiteral("nodes"))));
+            }
+
+            if (topology.contains(QStringLiteral("links"))) {
+                issues.append(issue(QStringLiteral("project.parametric_topology_links_forbidden"),
+                                    QStringLiteral("Parametric topology must not contain graph links."),
+                                    childPath(path, QStringLiteral("links"))));
+            }
+        }
+
         appendObjectFieldShapeIssues(issues,
                                      topology,
                                      path,
