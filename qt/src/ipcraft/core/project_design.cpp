@@ -65,6 +65,11 @@ void appendIssue(QVector<ValidationIssue>& issues,
     issues.append(ValidationIssue{code, message, path});
 }
 
+bool isSupportedTopologySchema(const QString& schema) {
+    return schema == schemaids::topologyGraphV1 ||
+           schema == schemaids::topologyParametricV1;
+}
+
 } // namespace
 
 QVector<ValidationIssue> validateProjectDesign(const ProjectDesign& project) {
@@ -91,6 +96,24 @@ QVector<ValidationIssue> validateProjectDesign(const ProjectDesign& project) {
                     QStringLiteral("/name"));
     }
 
+    for (qsizetype index = 0; index < project.packages.size(); ++index) {
+        const PackageRef& package = project.packages.at(index);
+
+        if (isBlank(package.id)) {
+            appendIssue(issues,
+                        QStringLiteral("package.missing_id"),
+                        QStringLiteral("Package id is required."),
+                        QStringLiteral("/packages/%1/id").arg(index));
+        }
+
+        if (isBlank(package.version)) {
+            appendIssue(issues,
+                        QStringLiteral("package.missing_version"),
+                        QStringLiteral("Package version is required."),
+                        QStringLiteral("/packages/%1/version").arg(index));
+        }
+    }
+
     QSet<QString> componentIds;
     for (qsizetype index = 0; index < project.components.size(); ++index) {
         const ComponentInstance& component = project.components.at(index);
@@ -108,6 +131,20 @@ QVector<ValidationIssue> validateProjectDesign(const ProjectDesign& project) {
                         idPath);
         } else {
             componentIds.insert(component.id);
+        }
+
+        if (isBlank(component.type)) {
+            appendIssue(issues,
+                        QStringLiteral("component.missing_type"),
+                        QStringLiteral("Component type is required."),
+                        QStringLiteral("/components/%1/type").arg(index));
+        }
+
+        if (isBlank(component.packageRef)) {
+            appendIssue(issues,
+                        QStringLiteral("component.missing_package_ref"),
+                        QStringLiteral("Component packageRef is required."),
+                        QStringLiteral("/components/%1/packageRef").arg(index));
         }
 
         if (containsForbiddenLayoutKey(component.config)) {
@@ -142,6 +179,79 @@ QVector<ValidationIssue> validateProjectDesign(const ProjectDesign& project) {
                         QStringLiteral("project.attachment_connection_forbidden"),
                         QStringLiteral("Attachment connections must use topology attachments."),
                         QStringLiteral("/connections/%1/kind").arg(index));
+        }
+
+        if (isBlank(connection.from.component) ||
+            isBlank(connection.from.interface) ||
+            isBlank(connection.to.component) ||
+            isBlank(connection.to.interface)) {
+            appendIssue(issues,
+                        QStringLiteral("connection.missing_endpoint"),
+                        QStringLiteral("Connection endpoints must include component and interface."),
+                        QStringLiteral("/connections/%1").arg(index));
+        }
+    }
+
+    for (qsizetype index = 0; index < project.topologies.size(); ++index) {
+        const TopologyGraph& topology = project.topologies.at(index);
+
+        if (!isSupportedTopologySchema(topology.schema)) {
+            appendIssue(issues,
+                        QStringLiteral("topology.unsupported_schema"),
+                        QStringLiteral("Topology schema is not supported."),
+                        QStringLiteral("/topologies/%1/schema").arg(index));
+        }
+
+        QSet<QString> attachmentIds;
+        for (qsizetype attachmentIndex = 0; attachmentIndex < topology.attachments.size();
+             ++attachmentIndex) {
+            const TopologyAttachment& attachment = topology.attachments.at(attachmentIndex);
+            if (isBlank(attachment.id)) {
+                continue;
+            }
+
+            if (attachmentIds.contains(attachment.id)) {
+                appendIssue(issues,
+                            QStringLiteral("topology.duplicate_attachment_id"),
+                            QStringLiteral("Topology attachment id is duplicated."),
+                            QStringLiteral("/topologies/%1/attachments/%2/id")
+                                .arg(index)
+                                .arg(attachmentIndex));
+            } else {
+                attachmentIds.insert(attachment.id);
+            }
+        }
+    }
+
+    for (qsizetype index = 0; index < project.extensions.size(); ++index) {
+        const ExtensionBlock& extension = project.extensions.at(index);
+
+        if (isBlank(extension.ownerPackageId)) {
+            appendIssue(issues,
+                        QStringLiteral("extension.missing_owner"),
+                        QStringLiteral("Extension ownerPackageId is required."),
+                        QStringLiteral("/extensions/%1/ownerPackageId").arg(index));
+        }
+
+        if (isBlank(extension.schemaId)) {
+            appendIssue(issues,
+                        QStringLiteral("extension.missing_schema"),
+                        QStringLiteral("Extension schemaId is required."),
+                        QStringLiteral("/extensions/%1/schemaId").arg(index));
+        }
+
+        if (extension.version <= 0) {
+            appendIssue(issues,
+                        QStringLiteral("extension.missing_version"),
+                        QStringLiteral("Extension version is required."),
+                        QStringLiteral("/extensions/%1/version").arg(index));
+        }
+
+        if (extension.data.isEmpty()) {
+            appendIssue(issues,
+                        QStringLiteral("extension.missing_data"),
+                        QStringLiteral("Extension data is required."),
+                        QStringLiteral("/extensions/%1/data").arg(index));
         }
     }
 

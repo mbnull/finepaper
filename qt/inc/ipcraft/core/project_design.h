@@ -70,6 +70,10 @@ struct TopologyGraph {
     QString schema;
     QString ownerComponentId;
     QString kind;
+    QString family;
+    QString providerRef;
+    QJsonObject parameters;
+    QJsonObject constraints;
     QVector<QJsonObject> nodes;
     QVector<QJsonObject> links;
     QVector<TopologyAttachment> attachments;
