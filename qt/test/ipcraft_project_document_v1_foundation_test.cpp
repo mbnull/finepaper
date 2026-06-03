@@ -459,6 +459,150 @@ void testReaderRejectsUnknownTopLevelField() {
             "unknown top-level field should report stable issue code and path");
 }
 
+void testReaderRejectsUnknownPackageField() {
+    QJsonObject project = minimalUartProject();
+    QJsonArray packages = project.value(QStringLiteral("packages")).toArray();
+    QJsonObject package = packages.at(0).toObject();
+    package.insert(QStringLiteral("legacy"), true);
+    packages.replace(0, package);
+    project.insert(QStringLiteral("packages"), packages);
+
+    const ipcraft::core::ProjectDocumentReadResult result =
+        ipcraft::core::ProjectDocumentV1::readObject(project);
+    require(!result.success, "unknown package field should be rejected");
+    require(hasIssue(result.issues,
+                     QStringLiteral("project.unknown_field"),
+                     QStringLiteral("/packages/0/legacy")),
+            "unknown package field should report stable issue code and path");
+}
+
+void testReaderRejectsUnknownComponentField() {
+    QJsonObject project = minimalUartProject();
+    QJsonArray components = project.value(QStringLiteral("components")).toArray();
+    QJsonObject component = components.at(0).toObject();
+    component.insert(QStringLiteral("interfaces"), QJsonArray{});
+    components.replace(0, component);
+    project.insert(QStringLiteral("components"), components);
+
+    const ipcraft::core::ProjectDocumentReadResult result =
+        ipcraft::core::ProjectDocumentV1::readObject(project);
+    require(!result.success, "unknown component field should be rejected");
+    require(hasIssue(result.issues,
+                     QStringLiteral("project.unknown_field"),
+                     QStringLiteral("/components/0/interfaces")),
+            "unknown component field should report stable issue code and path");
+}
+
+void testReaderRejectsUnknownInterfaceField() {
+    QJsonObject project = minimalUartProject();
+    project.insert(QStringLiteral("interfaces"), QJsonArray{
+        QJsonObject{{QStringLiteral("id"), QStringLiteral("serial")},
+                    {QStringLiteral("ownerComponentId"), QStringLiteral("uart0")},
+                    {QStringLiteral("type"), QStringLiteral("vendor.serial")},
+                    {QStringLiteral("role"), QStringLiteral("device")},
+                    {QStringLiteral("direction"), QStringLiteral("bidirectional")},
+                    {QStringLiteral("protocol"), QStringLiteral("serial")},
+                    {QStringLiteral("legacy"), true}}
+    });
+
+    const ipcraft::core::ProjectDocumentReadResult result =
+        ipcraft::core::ProjectDocumentV1::readObject(project);
+    require(!result.success, "unknown interface field should be rejected");
+    require(hasIssue(result.issues,
+                     QStringLiteral("project.unknown_field"),
+                     QStringLiteral("/interfaces/0/legacy")),
+            "unknown interface field should report stable issue code and path");
+}
+
+void testReaderRejectsUnknownConnectionAndEndpointFields() {
+    QJsonObject project = minimalUartProject();
+    project.insert(QStringLiteral("connections"), QJsonArray{
+        QJsonObject{{QStringLiteral("id"), QStringLiteral("c_bad")},
+                    {QStringLiteral("from"), QJsonObject{{QStringLiteral("component"), QStringLiteral("uart0")},
+                                                         {QStringLiteral("interface"), QStringLiteral("serial")},
+                                                         {QStringLiteral("port"), QStringLiteral("p0")}}},
+                    {QStringLiteral("to"), QJsonObject{{QStringLiteral("component"), QStringLiteral("uart0")},
+                                                       {QStringLiteral("interface"), QStringLiteral("axi_s")}}},
+                    {QStringLiteral("legacy"), true}}
+    });
+
+    const ipcraft::core::ProjectDocumentReadResult result =
+        ipcraft::core::ProjectDocumentV1::readObject(project);
+    require(!result.success, "unknown connection and endpoint fields should be rejected");
+    require(hasIssue(result.issues,
+                     QStringLiteral("project.unknown_field"),
+                     QStringLiteral("/connections/0/legacy")),
+            "unknown connection field should report stable issue code and path");
+    require(hasIssue(result.issues,
+                     QStringLiteral("project.unknown_field"),
+                     QStringLiteral("/connections/0/from/port")),
+            "unknown endpoint field should report stable issue code and path");
+}
+
+void testReaderRejectsUnknownTopologyAndAttachmentFields() {
+    QJsonObject project = minimalUartProject();
+    project.insert(QStringLiteral("topologies"), QJsonArray{
+        QJsonObject{{QStringLiteral("id"), QStringLiteral("fabric.graph")},
+                    {QStringLiteral("schema"), ipcraft::schemaids::topologyGraphV1},
+                    {QStringLiteral("kind"), QStringLiteral("explicit_graph")},
+                    {QStringLiteral("nodes"), QJsonArray{}},
+                    {QStringLiteral("links"), QJsonArray{}},
+                    {QStringLiteral("attachments"), QJsonArray{
+                        QJsonObject{{QStringLiteral("id"), QStringLiteral("a0")},
+                                    {QStringLiteral("legacy"), true}}
+                    }},
+                    {QStringLiteral("legacy"), true}}
+    });
+
+    const ipcraft::core::ProjectDocumentReadResult result =
+        ipcraft::core::ProjectDocumentV1::readObject(project);
+    require(!result.success, "unknown topology and attachment fields should be rejected");
+    require(hasIssue(result.issues,
+                     QStringLiteral("project.unknown_field"),
+                     QStringLiteral("/topologies/0/legacy")),
+            "unknown topology field should report stable issue code and path");
+    require(hasIssue(result.issues,
+                     QStringLiteral("project.unknown_field"),
+                     QStringLiteral("/topologies/0/attachments/0/legacy")),
+            "unknown topology attachment field should report stable issue code and path");
+}
+
+void testReaderRejectsUnknownViewField() {
+    QJsonObject project = minimalUartProject();
+    QJsonArray views = project.value(QStringLiteral("views")).toArray();
+    QJsonObject view = views.at(0).toObject();
+    view.insert(QStringLiteral("legacy"), true);
+    views.replace(0, view);
+    project.insert(QStringLiteral("views"), views);
+
+    const ipcraft::core::ProjectDocumentReadResult result =
+        ipcraft::core::ProjectDocumentV1::readObject(project);
+    require(!result.success, "unknown view field should be rejected");
+    require(hasIssue(result.issues,
+                     QStringLiteral("project.unknown_field"),
+                     QStringLiteral("/views/0/legacy")),
+            "unknown view field should report stable issue code and path");
+}
+
+void testReaderRejectsUnknownExtensionField() {
+    QJsonObject project = minimalUartProject();
+    project.insert(QStringLiteral("extensions"), QJsonArray{
+        QJsonObject{{QStringLiteral("ownerPackageId"), QStringLiteral("vendor.uart16550")},
+                    {QStringLiteral("schemaId"), QStringLiteral("vendor.uart16550.project.v1")},
+                    {QStringLiteral("version"), 1},
+                    {QStringLiteral("data"), QJsonObject{{QStringLiteral("schema"), QStringLiteral("vendor.uart16550.project.v1")}}},
+                    {QStringLiteral("legacy"), true}}
+    });
+
+    const ipcraft::core::ProjectDocumentReadResult result =
+        ipcraft::core::ProjectDocumentV1::readObject(project);
+    require(!result.success, "unknown extension field should be rejected");
+    require(hasIssue(result.issues,
+                     QStringLiteral("project.unknown_field"),
+                     QStringLiteral("/extensions/0/legacy")),
+            "unknown extension field should report stable issue code and path");
+}
+
 void testReaderRejectsNonArrayComponentsField() {
     QJsonObject project = minimalUartProject();
     project.insert(QStringLiteral("components"), QStringLiteral("not_array"));
@@ -697,6 +841,13 @@ int main() {
     testReaderRejectsNonObjectInterfaceEntry();
     testReaderRejectsMalformedInterfaceRecord();
     testReaderRejectsUnknownTopLevelField();
+    testReaderRejectsUnknownPackageField();
+    testReaderRejectsUnknownComponentField();
+    testReaderRejectsUnknownInterfaceField();
+    testReaderRejectsUnknownConnectionAndEndpointFields();
+    testReaderRejectsUnknownTopologyAndAttachmentFields();
+    testReaderRejectsUnknownViewField();
+    testReaderRejectsUnknownExtensionField();
     testReaderRejectsNonArrayComponentsField();
     testReaderRejectsNonObjectComponentConfig();
     testReaderRejectsNonObjectTopologyNodeEntry();

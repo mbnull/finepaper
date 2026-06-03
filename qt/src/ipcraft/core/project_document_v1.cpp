@@ -84,6 +84,29 @@ QString childPath(const QString& path, const QString& key) {
     return path + QStringLiteral("/") + key;
 }
 
+bool isAllowedKey(const QString& key, std::initializer_list<QString> allowedKeys) {
+    for (const QString& allowedKey : allowedKeys) {
+        if (key == allowedKey) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void appendUnknownFieldIssues(QVector<ValidationIssue>& issues,
+                              const QJsonObject& object,
+                              const QString& path,
+                              std::initializer_list<QString> allowedKeys) {
+    for (auto it = object.constBegin(); it != object.constEnd(); ++it) {
+        if (!isAllowedKey(it.key(), allowedKeys)) {
+            issues.append(issue(QStringLiteral("project.unknown_field"),
+                                QStringLiteral("Project field is not supported."),
+                                childPath(path, it.key())));
+        }
+    }
+}
+
 void appendUnknownTopLevelFieldIssues(QVector<ValidationIssue>& issues,
                                       const QJsonObject& object) {
     for (auto it = object.constBegin(); it != object.constEnd(); ++it) {
@@ -92,6 +115,23 @@ void appendUnknownTopLevelFieldIssues(QVector<ValidationIssue>& issues,
                                 QStringLiteral("Top-level project field is not supported."),
                                 QStringLiteral("/%1").arg(it.key())));
         }
+    }
+}
+
+void appendCollectionUnknownFieldIssues(QVector<ValidationIssue>& issues,
+                                        const QJsonObject& project,
+                                        const QString& collection,
+                                        std::initializer_list<QString> allowedKeys) {
+    const QJsonArray items = project.value(collection).toArray();
+    for (qsizetype index = 0; index < items.size(); ++index) {
+        if (!items.at(index).isObject()) {
+            continue;
+        }
+
+        appendUnknownFieldIssues(issues,
+                                 items.at(index).toObject(),
+                                 QStringLiteral("/%1/%2").arg(collection).arg(index),
+                                 allowedKeys);
     }
 }
 
@@ -238,6 +278,22 @@ void appendTopologyShapeIssues(QVector<ValidationIssue>& issues,
 
         const QJsonObject topology = topologies.at(index).toObject();
         const QString path = QStringLiteral("/topologies/%1").arg(index);
+        appendUnknownFieldIssues(issues,
+                                 topology,
+                                 path,
+                                 {QStringLiteral("id"),
+                                  QStringLiteral("schema"),
+                                  QStringLiteral("ownerComponentId"),
+                                  QStringLiteral("kind"),
+                                  QStringLiteral("family"),
+                                  QStringLiteral("providerRef"),
+                                  QStringLiteral("parameters"),
+                                  QStringLiteral("constraints"),
+                                  QStringLiteral("nodes"),
+                                  QStringLiteral("links"),
+                                  QStringLiteral("attachments"),
+                                  QStringLiteral("routing"),
+                                  QStringLiteral("metadata")});
         if (topology.value(QStringLiteral("schema")).toString() ==
             schemaids::topologyParametricV1) {
             if (!topology.contains(QStringLiteral("parameters"))) {
@@ -313,6 +369,16 @@ void appendTopologyShapeIssues(QVector<ValidationIssue>& issues,
             const QJsonObject attachment = attachments.at(attachmentIndex).toObject();
             const QString attachmentPath =
                 QStringLiteral("%1/attachments/%2").arg(path).arg(attachmentIndex);
+            appendUnknownFieldIssues(issues,
+                                     attachment,
+                                     attachmentPath,
+                                     {QStringLiteral("id"),
+                                      QStringLiteral("topologyId"),
+                                      QStringLiteral("attachmentPoint"),
+                                      QStringLiteral("componentRef"),
+                                      QStringLiteral("interfaceRef"),
+                                      QStringLiteral("adapterRef"),
+                                      QStringLiteral("config")});
             appendObjectFieldShapeIssues(
                 issues,
                 attachment,
@@ -391,6 +457,22 @@ void appendReadShapeIssues(QVector<ValidationIssue>& issues,
                                QStringLiteral("extensions"),
                                QStringLiteral("project.invalid_extensions_shape"),
                                QStringLiteral(""));
+    appendCollectionUnknownFieldIssues(
+        issues,
+        object,
+        QStringLiteral("packages"),
+        {QStringLiteral("id"), QStringLiteral("version")});
+    appendCollectionUnknownFieldIssues(
+        issues,
+        object,
+        QStringLiteral("components"),
+        {QStringLiteral("id"),
+         QStringLiteral("type"),
+         QStringLiteral("packageRef"),
+         QStringLiteral("identity"),
+         QStringLiteral("config"),
+         QStringLiteral("metadata"),
+         QStringLiteral("extensionData")});
     appendCollectionObjectFieldShapeIssues(
         issues,
         object,
@@ -400,12 +482,37 @@ void appendReadShapeIssues(QVector<ValidationIssue>& issues,
          {QStringLiteral("metadata"), QStringLiteral("project.invalid_component_metadata_shape")},
          {QStringLiteral("extensionData"),
           QStringLiteral("project.invalid_component_extension_data_shape")}});
+    appendCollectionUnknownFieldIssues(
+        issues,
+        object,
+        QStringLiteral("interfaces"),
+        {QStringLiteral("id"),
+         QStringLiteral("ownerComponentId"),
+         QStringLiteral("type"),
+         QStringLiteral("role"),
+         QStringLiteral("direction"),
+         QStringLiteral("protocol"),
+         QStringLiteral("clockRef"),
+         QStringLiteral("resetRef"),
+         QStringLiteral("config"),
+         QStringLiteral("metadata")});
     appendCollectionObjectFieldShapeIssues(
         issues,
         object,
         QStringLiteral("interfaces"),
         {{QStringLiteral("config"), QStringLiteral("project.invalid_interface_config_shape")},
          {QStringLiteral("metadata"), QStringLiteral("project.invalid_interface_metadata_shape")}});
+    appendCollectionUnknownFieldIssues(
+        issues,
+        object,
+        QStringLiteral("connections"),
+        {QStringLiteral("id"),
+         QStringLiteral("from"),
+         QStringLiteral("to"),
+         QStringLiteral("kind"),
+         QStringLiteral("config"),
+         QStringLiteral("constraints"),
+         QStringLiteral("metadata")});
     appendCollectionObjectFieldShapeIssues(
         issues,
         object,
@@ -416,7 +523,47 @@ void appendReadShapeIssues(QVector<ValidationIssue>& issues,
          {QStringLiteral("constraints"),
           QStringLiteral("project.invalid_connection_constraints_shape")},
          {QStringLiteral("metadata"), QStringLiteral("project.invalid_connection_metadata_shape")}});
+    const QJsonArray connections = object.value(QStringLiteral("connections")).toArray();
+    for (qsizetype index = 0; index < connections.size(); ++index) {
+        if (!connections.at(index).isObject()) {
+            continue;
+        }
+
+        const QJsonObject connection = connections.at(index).toObject();
+        const QString path = QStringLiteral("/connections/%1").arg(index);
+        for (const QString& endpointKey : {QStringLiteral("from"), QStringLiteral("to")}) {
+            if (connection.value(endpointKey).isObject()) {
+                appendUnknownFieldIssues(issues,
+                                         connection.value(endpointKey).toObject(),
+                                         childPath(path, endpointKey),
+                                         {QStringLiteral("component"),
+                                          QStringLiteral("interface")});
+            }
+        }
+    }
     appendTopologyShapeIssues(issues, object);
+    appendCollectionUnknownFieldIssues(
+        issues,
+        object,
+        QStringLiteral("views"),
+        {QStringLiteral("id"),
+         QStringLiteral("schema"),
+         QStringLiteral("kind"),
+         QStringLiteral("targetRef"),
+         QStringLiteral("providerRef"),
+         QStringLiteral("sourceRef"),
+         QStringLiteral("templates"),
+         QStringLiteral("portGrouping"),
+         QStringLiteral("labels"),
+         QStringLiteral("badges"),
+         QStringLiteral("propertyGroups"),
+         QStringLiteral("layoutPreference"),
+         QStringLiteral("interactionAffordances"),
+         QStringLiteral("diagnosticsOverlay"),
+         QStringLiteral("icons"),
+         QStringLiteral("layout"),
+         QStringLiteral("presentationState"),
+         QStringLiteral("metadata")});
     appendCollectionObjectFieldShapeIssues(
         issues,
         object,
@@ -439,6 +586,15 @@ void appendReadShapeIssues(QVector<ValidationIssue>& issues,
          {QStringLiteral("presentationState"),
           QStringLiteral("project.invalid_view_presentation_state_shape")},
          {QStringLiteral("metadata"), QStringLiteral("project.invalid_view_metadata_shape")}});
+    appendCollectionUnknownFieldIssues(
+        issues,
+        object,
+        QStringLiteral("extensions"),
+        {QStringLiteral("ownerPackageId"),
+         QStringLiteral("schemaId"),
+         QStringLiteral("version"),
+         QStringLiteral("data"),
+         QStringLiteral("validationState")});
     appendCollectionObjectFieldShapeIssues(
         issues,
         object,
