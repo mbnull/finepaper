@@ -24,6 +24,17 @@ bool hasCode(const QVector<ipcraft::core::ValidationIssue>& issues, const QStrin
     return false;
 }
 
+bool hasIssue(const QVector<ipcraft::core::ValidationIssue>& issues,
+              const QString& code,
+              const QString& path) {
+    for (const ipcraft::core::ValidationIssue& issue : issues) {
+        if (issue.code == code && issue.path == path) {
+            return true;
+        }
+    }
+    return false;
+}
+
 QJsonObject minimalUartProject() {
     return QJsonObject{
         {QStringLiteral("schema"), ipcraft::schemaids::projectV1},
@@ -304,6 +315,101 @@ void testReaderRejectsNonObjectInterfaceEntry() {
             "non-object interface entry should report stable issue code");
 }
 
+void testReaderRejectsUnknownTopLevelField() {
+    QJsonObject project = minimalUartProject();
+    project.insert(QStringLiteral("legacyGraph"), QJsonObject{});
+
+    const ipcraft::core::ProjectDocumentReadResult result =
+        ipcraft::core::ProjectDocumentV1::readObject(project);
+    require(!result.success, "unknown top-level field should be rejected");
+    require(hasIssue(result.issues,
+                     QStringLiteral("project.unknown_field"),
+                     QStringLiteral("/legacyGraph")),
+            "unknown top-level field should report stable issue code and path");
+}
+
+void testReaderRejectsNonArrayComponentsField() {
+    QJsonObject project = minimalUartProject();
+    project.insert(QStringLiteral("components"), QStringLiteral("not_array"));
+
+    const ipcraft::core::ProjectDocumentReadResult result =
+        ipcraft::core::ProjectDocumentV1::readObject(project);
+    require(!result.success, "non-array components field should be rejected");
+    require(hasIssue(result.issues,
+                     QStringLiteral("project.invalid_components_shape"),
+                     QStringLiteral("/components")),
+            "non-array components field should report stable issue code and path");
+}
+
+void testReaderRejectsNonObjectComponentConfig() {
+    QJsonObject project = minimalUartProject();
+    QJsonArray components = project.value(QStringLiteral("components")).toArray();
+    QJsonObject component = components.at(0).toObject();
+    component.insert(QStringLiteral("config"), QStringLiteral("not_object"));
+    components.replace(0, component);
+    project.insert(QStringLiteral("components"), components);
+
+    const ipcraft::core::ProjectDocumentReadResult result =
+        ipcraft::core::ProjectDocumentV1::readObject(project);
+    require(!result.success, "non-object component config should be rejected");
+    require(hasIssue(result.issues,
+                     QStringLiteral("project.invalid_component_config_shape"),
+                     QStringLiteral("/components/0/config")),
+            "non-object component config should report stable issue code and path");
+}
+
+void testReaderRejectsNonObjectTopologyNodeEntry() {
+    QJsonObject project = cpuNicNocProject();
+    QJsonArray topologies = project.value(QStringLiteral("topologies")).toArray();
+    QJsonObject topology = topologies.at(0).toObject();
+    topology.insert(QStringLiteral("nodes"), QJsonArray{QStringLiteral("not_object")});
+    topologies.replace(0, topology);
+    project.insert(QStringLiteral("topologies"), topologies);
+
+    const ipcraft::core::ProjectDocumentReadResult result =
+        ipcraft::core::ProjectDocumentV1::readObject(project);
+    require(!result.success, "non-object topology node entry should be rejected");
+    require(hasIssue(result.issues,
+                     QStringLiteral("project.invalid_topology_node_shape"),
+                     QStringLiteral("/topologies/0/nodes/0")),
+            "non-object topology node entry should report stable issue code and path");
+}
+
+void testReaderRejectsNonObjectTopologyLinkEntry() {
+    QJsonObject project = cpuNicNocProject();
+    QJsonArray topologies = project.value(QStringLiteral("topologies")).toArray();
+    QJsonObject topology = topologies.at(0).toObject();
+    topology.insert(QStringLiteral("links"), QJsonArray{QStringLiteral("not_object")});
+    topologies.replace(0, topology);
+    project.insert(QStringLiteral("topologies"), topologies);
+
+    const ipcraft::core::ProjectDocumentReadResult result =
+        ipcraft::core::ProjectDocumentV1::readObject(project);
+    require(!result.success, "non-object topology link entry should be rejected");
+    require(hasIssue(result.issues,
+                     QStringLiteral("project.invalid_topology_link_shape"),
+                     QStringLiteral("/topologies/0/links/0")),
+            "non-object topology link entry should report stable issue code and path");
+}
+
+void testReaderRejectsNonObjectConnectionEndpoint() {
+    QJsonObject project = minimalUartProject();
+    project.insert(QStringLiteral("connections"), QJsonArray{
+        QJsonObject{{QStringLiteral("id"), QStringLiteral("c_bad")},
+                    {QStringLiteral("from"), QStringLiteral("not_object")},
+                    {QStringLiteral("to"), QJsonObject{{QStringLiteral("component"), QStringLiteral("uart0")},
+                                                       {QStringLiteral("interface"), QStringLiteral("serial")}}}}
+    });
+
+    const ipcraft::core::ProjectDocumentReadResult result =
+        ipcraft::core::ProjectDocumentV1::readObject(project);
+    require(!result.success, "non-object connection endpoint should be rejected");
+    require(hasIssue(result.issues,
+                     QStringLiteral("project.invalid_connection_endpoint_shape"),
+                     QStringLiteral("/connections/0/from")),
+            "non-object connection endpoint should report stable issue code and path");
+}
+
 void testWriterIsDeterministic() {
     const ipcraft::core::ProjectDocumentReadResult result =
         ipcraft::core::ProjectDocumentV1::readObject(cpuNicNocProject());
@@ -327,6 +433,12 @@ int main() {
     testReaderRejectsExtensionMissingVersion();
     testReaderRejectsNonObjectPackageEntry();
     testReaderRejectsNonObjectInterfaceEntry();
+    testReaderRejectsUnknownTopLevelField();
+    testReaderRejectsNonArrayComponentsField();
+    testReaderRejectsNonObjectComponentConfig();
+    testReaderRejectsNonObjectTopologyNodeEntry();
+    testReaderRejectsNonObjectTopologyLinkEntry();
+    testReaderRejectsNonObjectConnectionEndpoint();
     testWriterIsDeterministic();
     std::cout << "ipcraft_project_document_v1_foundation_test passed\n";
     return 0;

@@ -4,6 +4,9 @@
 
 #include <QJsonArray>
 #include <QJsonValue>
+#include <QSet>
+
+#include <initializer_list>
 
 namespace ipcraft::core {
 namespace {
@@ -56,6 +59,146 @@ ValidationIssue issue(const QString& code, const QString& message, const QString
     return ValidationIssue{code, message, path};
 }
 
+bool isAllowedTopLevelKey(const QString& key) {
+    static const QSet<QString> allowedKeys{
+        QStringLiteral("schema"),
+        QStringLiteral("id"),
+        QStringLiteral("name"),
+        QStringLiteral("packages"),
+        QStringLiteral("components"),
+        QStringLiteral("interfaces"),
+        QStringLiteral("connections"),
+        QStringLiteral("topologies"),
+        QStringLiteral("constraints"),
+        QStringLiteral("views"),
+        QStringLiteral("diagnostics"),
+        QStringLiteral("artifacts"),
+        QStringLiteral("extensions"),
+        QStringLiteral("metadata")
+    };
+
+    return allowedKeys.contains(key);
+}
+
+QString childPath(const QString& path, const QString& key) {
+    return path + QStringLiteral("/") + key;
+}
+
+void appendUnknownTopLevelFieldIssues(QVector<ValidationIssue>& issues,
+                                      const QJsonObject& object) {
+    for (auto it = object.constBegin(); it != object.constEnd(); ++it) {
+        if (!isAllowedTopLevelKey(it.key())) {
+            issues.append(issue(QStringLiteral("project.unknown_field"),
+                                QStringLiteral("Top-level project field is not supported."),
+                                QStringLiteral("/%1").arg(it.key())));
+        }
+    }
+}
+
+void appendObjectFieldShapeIssue(QVector<ValidationIssue>& issues,
+                                 const QJsonObject& object,
+                                 const QString& key,
+                                 const QString& code,
+                                 const QString& path) {
+    if (object.contains(key) && !object.value(key).isObject()) {
+        issues.append(issue(code,
+                            QStringLiteral("Field must be an object."),
+                            childPath(path, key)));
+    }
+}
+
+void appendArrayFieldShapeIssue(QVector<ValidationIssue>& issues,
+                                const QJsonObject& object,
+                                const QString& key,
+                                const QString& code,
+                                const QString& path) {
+    if (object.contains(key) && !object.value(key).isArray()) {
+        issues.append(issue(code,
+                            QStringLiteral("Field must be an array."),
+                            childPath(path, key)));
+    }
+}
+
+struct ObjectFieldShapeRule {
+    QString key;
+    QString code;
+};
+
+struct ObjectArrayFieldShapeRule {
+    QString key;
+    QString arrayCode;
+    QString entryCode;
+};
+
+void appendObjectFieldShapeIssues(QVector<ValidationIssue>& issues,
+                                  const QJsonObject& object,
+                                  const QString& path,
+                                  std::initializer_list<ObjectFieldShapeRule> rules) {
+    for (const ObjectFieldShapeRule& rule : rules) {
+        appendObjectFieldShapeIssue(issues, object, rule.key, rule.code, path);
+    }
+}
+
+void appendCollectionObjectFieldShapeIssues(QVector<ValidationIssue>& issues,
+                                            const QJsonObject& project,
+                                            const QString& collection,
+                                            std::initializer_list<ObjectFieldShapeRule> rules) {
+    const QJsonArray items = project.value(collection).toArray();
+    for (qsizetype index = 0; index < items.size(); ++index) {
+        if (!items.at(index).isObject()) {
+            continue;
+        }
+
+        appendObjectFieldShapeIssues(issues,
+                                     items.at(index).toObject(),
+                                     QStringLiteral("/%1/%2").arg(collection).arg(index),
+                                     rules);
+    }
+}
+
+void appendObjectArrayFieldShapeIssue(QVector<ValidationIssue>& issues,
+                                      const QJsonObject& object,
+                                      const QString& key,
+                                      const QString& arrayCode,
+                                      const QString& entryCode,
+                                      const QString& path) {
+    if (!object.contains(key)) {
+        return;
+    }
+
+    const QString fieldPath = childPath(path, key);
+    const QJsonValue value = object.value(key);
+    if (!value.isArray()) {
+        issues.append(issue(arrayCode,
+                            QStringLiteral("Field must be an array."),
+                            fieldPath));
+        return;
+    }
+
+    const QJsonArray array = value.toArray();
+    for (qsizetype index = 0; index < array.size(); ++index) {
+        if (!array.at(index).isObject()) {
+            issues.append(issue(entryCode,
+                                QStringLiteral("Array entries must be objects."),
+                                QStringLiteral("%1/%2").arg(fieldPath).arg(index)));
+        }
+    }
+}
+
+void appendObjectArrayFieldShapeIssues(QVector<ValidationIssue>& issues,
+                                       const QJsonObject& object,
+                                       const QString& path,
+                                       std::initializer_list<ObjectArrayFieldShapeRule> rules) {
+    for (const ObjectArrayFieldShapeRule& rule : rules) {
+        appendObjectArrayFieldShapeIssue(issues,
+                                         object,
+                                         rule.key,
+                                         rule.arrayCode,
+                                         rule.entryCode,
+                                         path);
+    }
+}
+
 void appendNonObjectArrayEntryIssues(QVector<ValidationIssue>& issues,
                                      const QJsonValue& value,
                                      const QString& code,
@@ -72,6 +215,168 @@ void appendNonObjectArrayEntryIssues(QVector<ValidationIssue>& issues,
                                 QStringLiteral("%1/%2").arg(pathPrefix).arg(index)));
         }
     }
+}
+
+void appendTopologyShapeIssues(QVector<ValidationIssue>& issues,
+                               const QJsonObject& project) {
+    const QJsonArray topologies = project.value(QStringLiteral("topologies")).toArray();
+    for (qsizetype index = 0; index < topologies.size(); ++index) {
+        if (!topologies.at(index).isObject()) {
+            continue;
+        }
+
+        const QJsonObject topology = topologies.at(index).toObject();
+        const QString path = QStringLiteral("/topologies/%1").arg(index);
+        appendObjectFieldShapeIssues(issues,
+                                     topology,
+                                     path,
+                                     {{QStringLiteral("parameters"),
+                                       QStringLiteral("project.invalid_topology_parameters_shape")},
+                                      {QStringLiteral("constraints"),
+                                       QStringLiteral("project.invalid_topology_constraints_shape")},
+                                      {QStringLiteral("routing"),
+                                       QStringLiteral("project.invalid_topology_routing_shape")},
+                                      {QStringLiteral("metadata"),
+                                       QStringLiteral("project.invalid_topology_metadata_shape")}});
+        appendObjectArrayFieldShapeIssues(issues,
+                                          topology,
+                                          path,
+                                          {{QStringLiteral("nodes"),
+                                            QStringLiteral("project.invalid_topology_nodes_shape"),
+                                            QStringLiteral("project.invalid_topology_node_shape")},
+                                           {QStringLiteral("links"),
+                                            QStringLiteral("project.invalid_topology_links_shape"),
+                                            QStringLiteral("project.invalid_topology_link_shape")},
+                                           {QStringLiteral("attachments"),
+                                            QStringLiteral("project.invalid_topology_attachments_shape"),
+                                            QStringLiteral("project.invalid_topology_attachment_shape")}});
+
+        const QJsonValue attachmentsValue = topology.value(QStringLiteral("attachments"));
+        if (!attachmentsValue.isArray()) {
+            continue;
+        }
+
+        const QJsonArray attachments = attachmentsValue.toArray();
+        for (qsizetype attachmentIndex = 0; attachmentIndex < attachments.size();
+             ++attachmentIndex) {
+            if (!attachments.at(attachmentIndex).isObject()) {
+                continue;
+            }
+
+            const QJsonObject attachment = attachments.at(attachmentIndex).toObject();
+            const QString attachmentPath =
+                QStringLiteral("%1/attachments/%2").arg(path).arg(attachmentIndex);
+            appendObjectFieldShapeIssues(
+                issues,
+                attachment,
+                attachmentPath,
+                {{QStringLiteral("attachmentPoint"),
+                  QStringLiteral("project.invalid_topology_attachment_point_shape")},
+                 {QStringLiteral("config"),
+                  QStringLiteral("project.invalid_topology_attachment_config_shape")}});
+        }
+    }
+}
+
+void appendReadShapeIssues(QVector<ValidationIssue>& issues,
+                           const QJsonObject& object) {
+    appendUnknownTopLevelFieldIssues(issues, object);
+    appendObjectFieldShapeIssue(issues,
+                                object,
+                                QStringLiteral("constraints"),
+                                QStringLiteral("project.invalid_constraints_shape"),
+                                QStringLiteral(""));
+    appendObjectFieldShapeIssue(issues,
+                                object,
+                                QStringLiteral("metadata"),
+                                QStringLiteral("project.invalid_metadata_shape"),
+                                QStringLiteral(""));
+    appendArrayFieldShapeIssue(issues,
+                               object,
+                               QStringLiteral("packages"),
+                               QStringLiteral("project.invalid_packages_shape"),
+                               QStringLiteral(""));
+    appendArrayFieldShapeIssue(issues,
+                               object,
+                               QStringLiteral("components"),
+                               QStringLiteral("project.invalid_components_shape"),
+                               QStringLiteral(""));
+    appendArrayFieldShapeIssue(issues,
+                               object,
+                               QStringLiteral("interfaces"),
+                               QStringLiteral("project.invalid_interfaces_shape"),
+                               QStringLiteral(""));
+    appendArrayFieldShapeIssue(issues,
+                               object,
+                               QStringLiteral("connections"),
+                               QStringLiteral("project.invalid_connections_shape"),
+                               QStringLiteral(""));
+    appendArrayFieldShapeIssue(issues,
+                               object,
+                               QStringLiteral("topologies"),
+                               QStringLiteral("project.invalid_topologies_shape"),
+                               QStringLiteral(""));
+    appendArrayFieldShapeIssue(issues,
+                               object,
+                               QStringLiteral("views"),
+                               QStringLiteral("project.invalid_views_shape"),
+                               QStringLiteral(""));
+    appendArrayFieldShapeIssue(issues,
+                               object,
+                               QStringLiteral("diagnostics"),
+                               QStringLiteral("project.invalid_diagnostics_shape"),
+                               QStringLiteral(""));
+    appendArrayFieldShapeIssue(issues,
+                               object,
+                               QStringLiteral("artifacts"),
+                               QStringLiteral("project.invalid_artifacts_shape"),
+                               QStringLiteral(""));
+    appendArrayFieldShapeIssue(issues,
+                               object,
+                               QStringLiteral("extensions"),
+                               QStringLiteral("project.invalid_extensions_shape"),
+                               QStringLiteral(""));
+    appendCollectionObjectFieldShapeIssues(
+        issues,
+        object,
+        QStringLiteral("components"),
+        {{QStringLiteral("identity"), QStringLiteral("project.invalid_component_identity_shape")},
+         {QStringLiteral("config"), QStringLiteral("project.invalid_component_config_shape")},
+         {QStringLiteral("metadata"), QStringLiteral("project.invalid_component_metadata_shape")},
+         {QStringLiteral("extensionData"),
+          QStringLiteral("project.invalid_component_extension_data_shape")}});
+    appendCollectionObjectFieldShapeIssues(
+        issues,
+        object,
+        QStringLiteral("interfaces"),
+        {{QStringLiteral("config"), QStringLiteral("project.invalid_interface_config_shape")},
+         {QStringLiteral("metadata"), QStringLiteral("project.invalid_interface_metadata_shape")}});
+    appendCollectionObjectFieldShapeIssues(
+        issues,
+        object,
+        QStringLiteral("connections"),
+        {{QStringLiteral("from"), QStringLiteral("project.invalid_connection_endpoint_shape")},
+         {QStringLiteral("to"), QStringLiteral("project.invalid_connection_endpoint_shape")},
+         {QStringLiteral("config"), QStringLiteral("project.invalid_connection_config_shape")},
+         {QStringLiteral("constraints"),
+          QStringLiteral("project.invalid_connection_constraints_shape")},
+         {QStringLiteral("metadata"), QStringLiteral("project.invalid_connection_metadata_shape")}});
+    appendTopologyShapeIssues(issues, object);
+    appendCollectionObjectFieldShapeIssues(
+        issues,
+        object,
+        QStringLiteral("views"),
+        {{QStringLiteral("layout"), QStringLiteral("project.invalid_view_layout_shape")},
+         {QStringLiteral("presentationState"),
+          QStringLiteral("project.invalid_view_presentation_state_shape")},
+         {QStringLiteral("metadata"), QStringLiteral("project.invalid_view_metadata_shape")}});
+    appendCollectionObjectFieldShapeIssues(
+        issues,
+        object,
+        QStringLiteral("extensions"),
+        {{QStringLiteral("data"), QStringLiteral("project.invalid_extension_data_shape")},
+         {QStringLiteral("validationState"),
+          QStringLiteral("project.invalid_extension_validation_state_shape")}});
 }
 
 EndpointRef endpointFromJson(const QJsonObject& object) {
@@ -483,6 +788,7 @@ ProjectDocumentReadResult ProjectDocumentV1::readObject(const QJsonObject& objec
     project.extensions = extensionsFromJson(object.value(QStringLiteral("extensions")));
 
     QVector<ValidationIssue> readIssues;
+    appendReadShapeIssues(readIssues, object);
     appendNonObjectArrayEntryIssues(readIssues,
                                     object.value(QStringLiteral("packages")),
                                     QStringLiteral("project.invalid_package_shape"),
