@@ -628,6 +628,20 @@ target("ipcraft_contract_examples_test")
         pass_outputs = "ipcraft_contract_examples_test passed"
     })
 
+target("ipcraft_architecture_foundation_scan_test")
+    add_rules("qt.console")
+    set_kind("binary")
+    set_group("test")
+    set_default(false)
+    set_languages("c++23")
+    set_rundir("$(projectdir)/..")
+    add_includedirs("inc")
+    add_files("test/ipcraft_architecture_foundation_scan_test.cpp")
+    add_tests("default", {
+        trim_output = true,
+        pass_outputs = "ipcraft_architecture_foundation_scan_test passed"
+    })
+
 add_qt_test_target("ipcraft_phase_review_test", "test/ipcraft_phase_review_test.cpp", {
     "src/ipcore/ipcatalogservice.cpp",
     "src/ipcore/ipcorecommandrunner.cpp",
