@@ -152,6 +152,130 @@ void testConnectionEndpointUnknownComponentRejected() {
             "connection endpoint component refs should reference component ids");
 }
 
+void testMalformedInterfaceInstanceRejected() {
+    ipcraft::core::ProjectDesign project = minimalProject();
+    ipcraft::core::InterfaceInstance interface;
+    project.interfaces.append(interface);
+
+    const QVector<ipcraft::core::ValidationIssue> issues =
+        ipcraft::core::validateProjectDesign(project);
+    require(hasIssue(issues,
+                     QStringLiteral("interface.missing_id"),
+                     QStringLiteral("/interfaces/0/id")),
+            "interface id should be required");
+    require(hasIssue(issues,
+                     QStringLiteral("interface.missing_owner_component_id"),
+                     QStringLiteral("/interfaces/0/ownerComponentId")),
+            "interface owner component id should be required");
+    require(hasIssue(issues,
+                     QStringLiteral("interface.missing_type"),
+                     QStringLiteral("/interfaces/0/type")),
+            "interface type should be required");
+    require(hasIssue(issues,
+                     QStringLiteral("interface.missing_role"),
+                     QStringLiteral("/interfaces/0/role")),
+            "interface role should be required");
+    require(hasIssue(issues,
+                     QStringLiteral("interface.missing_direction"),
+                     QStringLiteral("/interfaces/0/direction")),
+            "interface direction should be required");
+    require(hasIssue(issues,
+                     QStringLiteral("interface.missing_protocol"),
+                     QStringLiteral("/interfaces/0/protocol")),
+            "interface protocol should be required");
+}
+
+void testInterfaceOwnerComponentMustExist() {
+    ipcraft::core::ProjectDesign project = minimalProject();
+    ipcraft::core::InterfaceInstance interface;
+    interface.id = QStringLiteral("axi_s");
+    interface.ownerComponentId = QStringLiteral("missing0");
+    interface.type = QStringLiteral("vendor.axi4lite");
+    interface.role = QStringLiteral("slave");
+    interface.direction = QStringLiteral("target");
+    interface.protocol = QStringLiteral("axi4lite");
+    project.interfaces.append(interface);
+
+    const QVector<ipcraft::core::ValidationIssue> issues =
+        ipcraft::core::validateProjectDesign(project);
+    require(hasIssue(issues,
+                     QStringLiteral("interface.unknown_owner_component_id"),
+                     QStringLiteral("/interfaces/0/ownerComponentId")),
+            "interface owner component id should reference a declared component");
+}
+
+void testExplicitConnectionInterfaceRefsMustExist() {
+    ipcraft::core::ProjectDesign project = minimalProject();
+    ipcraft::core::InterfaceInstance interface;
+    interface.id = QStringLiteral("serial");
+    interface.ownerComponentId = QStringLiteral("uart0");
+    interface.type = QStringLiteral("vendor.serial");
+    interface.role = QStringLiteral("device");
+    interface.direction = QStringLiteral("bidirectional");
+    interface.protocol = QStringLiteral("serial");
+    project.interfaces.append(interface);
+
+    ipcraft::core::Connection connection;
+    connection.id = QStringLiteral("conn0");
+    connection.from = {QStringLiteral("uart0"), QStringLiteral("missing")};
+    connection.to = {QStringLiteral("uart0"), QStringLiteral("serial")};
+    project.connections.append(connection);
+
+    const QVector<ipcraft::core::ValidationIssue> issues =
+        ipcraft::core::validateProjectDesign(project);
+    require(hasIssue(issues,
+                     QStringLiteral("connection.unknown_interface_ref"),
+                     QStringLiteral("/connections/0/from/interface")),
+            "explicit connection endpoint interface refs should reference declared interfaces");
+}
+
+void testMalformedViewDocumentRejected() {
+    ipcraft::core::ProjectDesign project = minimalProject();
+    ipcraft::core::ViewDocument view;
+    project.views.append(view);
+
+    const QVector<ipcraft::core::ValidationIssue> issues =
+        ipcraft::core::validateProjectDesign(project);
+    require(hasIssue(issues,
+                     QStringLiteral("view.missing_id"),
+                     QStringLiteral("/views/0/id")),
+            "view id should be required");
+    require(hasIssue(issues,
+                     QStringLiteral("view.missing_schema"),
+                     QStringLiteral("/views/0/schema")),
+            "view schema should be required");
+    require(hasIssue(issues,
+                     QStringLiteral("view.missing_kind"),
+                     QStringLiteral("/views/0/kind")),
+            "view kind should be required");
+    require(hasIssue(issues,
+                     QStringLiteral("view.missing_target_ref"),
+                     QStringLiteral("/views/0/targetRef")),
+            "view targetRef should be required");
+    require(hasIssue(issues,
+                     QStringLiteral("view.missing_provider_ref"),
+                     QStringLiteral("/views/0/providerRef")),
+            "view providerRef should be required");
+}
+
+void testUnsupportedViewSchemaRejected() {
+    ipcraft::core::ProjectDesign project = minimalProject();
+    ipcraft::core::ViewDocument view;
+    view.id = QStringLiteral("block.main");
+    view.schema = QStringLiteral("vendor.view.v1");
+    view.kind = QStringLiteral("block_diagram");
+    view.targetRef = QStringLiteral("project:proj_uart_min");
+    view.providerRef = QStringLiteral("ipcraft.ui.block_diagram");
+    project.views.append(view);
+
+    const QVector<ipcraft::core::ValidationIssue> issues =
+        ipcraft::core::validateProjectDesign(project);
+    require(hasIssue(issues,
+                     QStringLiteral("view.unsupported_schema"),
+                     QStringLiteral("/views/0/schema")),
+            "unsupported view schema should be rejected");
+}
+
 void testDuplicateTopologyNodeIdsRejected() {
     ipcraft::core::ProjectDesign project = minimalProject();
     ipcraft::core::TopologyGraph topology;
@@ -239,6 +363,11 @@ int main() {
     testLayoutFieldsRejectedFromComponentConfig();
     testAttachmentConnectionKindRejected();
     testConnectionEndpointUnknownComponentRejected();
+    testMalformedInterfaceInstanceRejected();
+    testInterfaceOwnerComponentMustExist();
+    testExplicitConnectionInterfaceRefsMustExist();
+    testMalformedViewDocumentRejected();
+    testUnsupportedViewSchemaRejected();
     testDuplicateTopologyNodeIdsRejected();
     testDuplicateTopologyLinkIdsRejected();
     testDuplicateTopologyAttachmentIdsStillRejected();

@@ -413,6 +413,39 @@ void testReaderRejectsNonObjectInterfaceEntry() {
             "non-object interface entry should report stable issue code");
 }
 
+void testReaderRejectsMalformedInterfaceRecord() {
+    QJsonObject malformedInterface = minimalUartProject();
+    malformedInterface.insert(QStringLiteral("interfaces"), QJsonArray{QJsonObject{}});
+
+    const ipcraft::core::ProjectDocumentReadResult result =
+        ipcraft::core::ProjectDocumentV1::readObject(malformedInterface);
+    require(!result.success, "empty interface record should be rejected");
+    require(hasIssue(result.issues,
+                     QStringLiteral("interface.missing_id"),
+                     QStringLiteral("/interfaces/0/id")),
+            "empty interface should report missing id");
+    require(hasIssue(result.issues,
+                     QStringLiteral("interface.missing_owner_component_id"),
+                     QStringLiteral("/interfaces/0/ownerComponentId")),
+            "empty interface should report missing owner component id");
+    require(hasIssue(result.issues,
+                     QStringLiteral("interface.missing_type"),
+                     QStringLiteral("/interfaces/0/type")),
+            "empty interface should report missing type");
+    require(hasIssue(result.issues,
+                     QStringLiteral("interface.missing_role"),
+                     QStringLiteral("/interfaces/0/role")),
+            "empty interface should report missing role");
+    require(hasIssue(result.issues,
+                     QStringLiteral("interface.missing_direction"),
+                     QStringLiteral("/interfaces/0/direction")),
+            "empty interface should report missing direction");
+    require(hasIssue(result.issues,
+                     QStringLiteral("interface.missing_protocol"),
+                     QStringLiteral("/interfaces/0/protocol")),
+            "empty interface should report missing protocol");
+}
+
 void testReaderRejectsUnknownTopLevelField() {
     QJsonObject project = minimalUartProject();
     project.insert(QStringLiteral("legacyGraph"), QJsonObject{});
@@ -549,6 +582,35 @@ void testReaderRejectsNonObjectViewTemplates() {
             "non-object view templates should report stable issue code and path");
 }
 
+void testReaderRejectsMalformedViewRecord() {
+    QJsonObject malformedView = minimalUartProject();
+    malformedView.insert(QStringLiteral("views"), QJsonArray{QJsonObject{}});
+
+    const ipcraft::core::ProjectDocumentReadResult result =
+        ipcraft::core::ProjectDocumentV1::readObject(malformedView);
+    require(!result.success, "empty view record should be rejected");
+    require(hasIssue(result.issues,
+                     QStringLiteral("view.missing_id"),
+                     QStringLiteral("/views/0/id")),
+            "empty view should report missing id");
+    require(hasIssue(result.issues,
+                     QStringLiteral("view.missing_schema"),
+                     QStringLiteral("/views/0/schema")),
+            "empty view should report missing schema");
+    require(hasIssue(result.issues,
+                     QStringLiteral("view.missing_kind"),
+                     QStringLiteral("/views/0/kind")),
+            "empty view should report missing kind");
+    require(hasIssue(result.issues,
+                     QStringLiteral("view.missing_target_ref"),
+                     QStringLiteral("/views/0/targetRef")),
+            "empty view should report missing targetRef");
+    require(hasIssue(result.issues,
+                     QStringLiteral("view.missing_provider_ref"),
+                     QStringLiteral("/views/0/providerRef")),
+            "empty view should report missing providerRef");
+}
+
 void testWriterIsDeterministic() {
     const ipcraft::core::ProjectDocumentReadResult result =
         ipcraft::core::ProjectDocumentV1::readObject(cpuNicNocProject());
@@ -574,6 +636,7 @@ int main() {
     testReaderRejectsExtensionMissingVersion();
     testReaderRejectsNonObjectPackageEntry();
     testReaderRejectsNonObjectInterfaceEntry();
+    testReaderRejectsMalformedInterfaceRecord();
     testReaderRejectsUnknownTopLevelField();
     testReaderRejectsNonArrayComponentsField();
     testReaderRejectsNonObjectComponentConfig();
@@ -582,6 +645,7 @@ int main() {
     testReaderRejectsGraphFieldsOnParametricTopology();
     testReaderRejectsNonObjectConnectionEndpoint();
     testReaderRejectsNonObjectViewTemplates();
+    testReaderRejectsMalformedViewRecord();
     testWriterIsDeterministic();
     std::cout << "ipcraft_project_document_v1_foundation_test passed\n";
     return 0;

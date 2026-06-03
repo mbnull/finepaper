@@ -70,8 +70,16 @@ bool isSupportedTopologySchema(const QString& schema) {
            schema == schemaids::topologyParametricV1;
 }
 
+bool isSupportedViewSchema(const QString& schema) {
+    return schema == schemaids::viewV1;
+}
+
 QString packageRefKey(const PackageRef& package) {
     return package.id + QLatin1Char('@') + package.version;
+}
+
+QString interfaceRefKey(const QString& componentId, const QString& interfaceId) {
+    return componentId + QLatin1Char('/') + interfaceId;
 }
 
 void appendDuplicateTopologyObjectIdIssues(QVector<ValidationIssue>& issues,
@@ -198,6 +206,63 @@ QVector<ValidationIssue> validateProjectDesign(const ProjectDesign& project) {
         }
     }
 
+    QSet<QString> declaredInterfaceRefs;
+    for (qsizetype index = 0; index < project.interfaces.size(); ++index) {
+        const InterfaceInstance& interface = project.interfaces.at(index);
+
+        if (isBlank(interface.id)) {
+            appendIssue(issues,
+                        QStringLiteral("interface.missing_id"),
+                        QStringLiteral("Interface id is required."),
+                        QStringLiteral("/interfaces/%1/id").arg(index));
+        }
+
+        if (isBlank(interface.ownerComponentId)) {
+            appendIssue(issues,
+                        QStringLiteral("interface.missing_owner_component_id"),
+                        QStringLiteral("Interface ownerComponentId is required."),
+                        QStringLiteral("/interfaces/%1/ownerComponentId").arg(index));
+        } else if (!componentIds.contains(interface.ownerComponentId)) {
+            appendIssue(issues,
+                        QStringLiteral("interface.unknown_owner_component_id"),
+                        QStringLiteral("Interface ownerComponentId must reference a component id."),
+                        QStringLiteral("/interfaces/%1/ownerComponentId").arg(index));
+        }
+
+        if (isBlank(interface.type)) {
+            appendIssue(issues,
+                        QStringLiteral("interface.missing_type"),
+                        QStringLiteral("Interface type is required."),
+                        QStringLiteral("/interfaces/%1/type").arg(index));
+        }
+
+        if (isBlank(interface.role)) {
+            appendIssue(issues,
+                        QStringLiteral("interface.missing_role"),
+                        QStringLiteral("Interface role is required."),
+                        QStringLiteral("/interfaces/%1/role").arg(index));
+        }
+
+        if (isBlank(interface.direction)) {
+            appendIssue(issues,
+                        QStringLiteral("interface.missing_direction"),
+                        QStringLiteral("Interface direction is required."),
+                        QStringLiteral("/interfaces/%1/direction").arg(index));
+        }
+
+        if (isBlank(interface.protocol)) {
+            appendIssue(issues,
+                        QStringLiteral("interface.missing_protocol"),
+                        QStringLiteral("Interface protocol is required."),
+                        QStringLiteral("/interfaces/%1/protocol").arg(index));
+        }
+
+        if (!isBlank(interface.ownerComponentId) && !isBlank(interface.id)) {
+            declaredInterfaceRefs.insert(interfaceRefKey(interface.ownerComponentId,
+                                                        interface.id));
+        }
+    }
+
     QSet<QString> connectionIds;
     for (qsizetype index = 0; index < project.connections.size(); ++index) {
         const Connection& connection = project.connections.at(index);
@@ -249,6 +314,30 @@ QVector<ValidationIssue> validateProjectDesign(const ProjectDesign& project) {
                         QStringLiteral("Connection endpoint component must reference a component id."),
                         QStringLiteral("/connections/%1/to/component").arg(index));
         }
+
+        if (!declaredInterfaceRefs.isEmpty() &&
+            !isBlank(connection.from.component) &&
+            componentIds.contains(connection.from.component) &&
+            !isBlank(connection.from.interface) &&
+            !declaredInterfaceRefs.contains(interfaceRefKey(connection.from.component,
+                                                            connection.from.interface))) {
+            appendIssue(issues,
+                        QStringLiteral("connection.unknown_interface_ref"),
+                        QStringLiteral("Connection endpoint interface must reference a declared interface."),
+                        QStringLiteral("/connections/%1/from/interface").arg(index));
+        }
+
+        if (!declaredInterfaceRefs.isEmpty() &&
+            !isBlank(connection.to.component) &&
+            componentIds.contains(connection.to.component) &&
+            !isBlank(connection.to.interface) &&
+            !declaredInterfaceRefs.contains(interfaceRefKey(connection.to.component,
+                                                            connection.to.interface))) {
+            appendIssue(issues,
+                        QStringLiteral("connection.unknown_interface_ref"),
+                        QStringLiteral("Connection endpoint interface must reference a declared interface."),
+                        QStringLiteral("/connections/%1/to/interface").arg(index));
+        }
     }
 
     for (qsizetype index = 0; index < project.topologies.size(); ++index) {
@@ -292,6 +381,50 @@ QVector<ValidationIssue> validateProjectDesign(const ProjectDesign& project) {
             } else {
                 attachmentIds.insert(attachment.id);
             }
+        }
+    }
+
+    for (qsizetype index = 0; index < project.views.size(); ++index) {
+        const ViewDocument& view = project.views.at(index);
+
+        if (isBlank(view.id)) {
+            appendIssue(issues,
+                        QStringLiteral("view.missing_id"),
+                        QStringLiteral("View id is required."),
+                        QStringLiteral("/views/%1/id").arg(index));
+        }
+
+        if (isBlank(view.schema)) {
+            appendIssue(issues,
+                        QStringLiteral("view.missing_schema"),
+                        QStringLiteral("View schema is required."),
+                        QStringLiteral("/views/%1/schema").arg(index));
+        } else if (!isSupportedViewSchema(view.schema)) {
+            appendIssue(issues,
+                        QStringLiteral("view.unsupported_schema"),
+                        QStringLiteral("View schema is not supported."),
+                        QStringLiteral("/views/%1/schema").arg(index));
+        }
+
+        if (isBlank(view.kind)) {
+            appendIssue(issues,
+                        QStringLiteral("view.missing_kind"),
+                        QStringLiteral("View kind is required."),
+                        QStringLiteral("/views/%1/kind").arg(index));
+        }
+
+        if (isBlank(view.targetRef)) {
+            appendIssue(issues,
+                        QStringLiteral("view.missing_target_ref"),
+                        QStringLiteral("View targetRef is required."),
+                        QStringLiteral("/views/%1/targetRef").arg(index));
+        }
+
+        if (isBlank(view.providerRef)) {
+            appendIssue(issues,
+                        QStringLiteral("view.missing_provider_ref"),
+                        QStringLiteral("View providerRef is required."),
+                        QStringLiteral("/views/%1/providerRef").arg(index));
         }
     }
 
