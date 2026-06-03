@@ -61,6 +61,13 @@ Unknown top-level fields are rejected. Forward compatibility uses `metadata`
 or package-owned `extensions[]`; view-local layout lives under `views[].layout`,
 not as a root semantic field.
 
+For the foundation contract, `schemas/ipcraft.project.v1.schema.json` and
+`qt/src/ipcraft/core/project_document_v1.cpp` are authoritative for project
+schema shape. The older Qt `ProjectReader`/`ProjectWriter` path under
+`qt/src/project` and current `examples/contracts/*/project.fpproj` files are
+legacy adapter fixtures pending migration; they must not be used to redefine
+the new `ipcraft-core` `ProjectDesign` document root.
+
 ## PackageSpec Schema
 
 `ipcraft.package.v1` describes package capabilities, not internal resolved hardware state. It includes package identity, extensions, config schema, interfaces, connection rules, emitters, flows, artifacts, diagnostics mapping, views, plugin metadata, native schema, metadata, and native data.
