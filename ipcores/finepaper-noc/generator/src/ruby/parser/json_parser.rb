@@ -1,4 +1,5 @@
 # Migration-only legacy schema handling. Not used by normal runtime loading.
+# ProjectDesign input plus migration-only legacy schema handling.
 require 'json'
 require_relative '../model/noc_config'
 require_relative '../model/xp'
@@ -6,9 +7,13 @@ require_relative '../model/connection'
 require_relative '../model/endpoint'
 
 class JsonParser
-  IPCRAFT_PROJECT_SCHEMA = 'ipcraft.noc.project.v1'.freeze
+  IPCRAFT_PROJECT_SCHEMA = 'ipcraft.project.v1'.freeze
+  LEGACY_IPCRAFT_PROJECT_SCHEMA = 'ipcraft.noc.project.v1'.freeze
   IPCORE_GRAPH_SCHEMA = 'finepaper-ipcore-graph-v1'.freeze
-  SUPPORTED_SCHEMAS = [IPCRAFT_PROJECT_SCHEMA, IPCORE_GRAPH_SCHEMA].freeze
+  SUPPORTED_SCHEMAS = [IPCRAFT_PROJECT_SCHEMA, LEGACY_IPCRAFT_PROJECT_SCHEMA, IPCORE_GRAPH_SCHEMA].freeze
+  FINEPAPER_NOC_PACKAGE = 'finepaper.noc'.freeze
+  TOPOLOGY_PARAMETRIC_SCHEMA = 'ipcraft.topology.parametric.v1'.freeze
+  CONFIG_BUNDLE_KEYS = ['parameters', 'tables', 'documents', 'files', 'preserved'].freeze
   DEFAULTS = {
     'data_width' => 64,
     'flit_width' => 128,
@@ -22,33 +27,330 @@ class JsonParser
   def self.parse(path)
     data = JSON.parse(File.read(path))
     unless SUPPORTED_SCHEMAS.include?(data['schema'])
-      raise "expected schema #{IPCRAFT_PROJECT_SCHEMA} (or #{IPCORE_GRAPH_SCHEMA} for legacy compatibility)"
+      raise "expected schema #{IPCRAFT_PROJECT_SCHEMA} (or #{LEGACY_IPCRAFT_PROJECT_SCHEMA}/#{IPCORE_GRAPH_SCHEMA} for legacy compatibility)"
     end
-    data = normalize_ipcraft_project(data, path) if data['schema'] == IPCRAFT_PROJECT_SCHEMA
+    data = normalize_project_design(data, path) if data['schema'] == IPCRAFT_PROJECT_SCHEMA
+    data = normalize_legacy_ipcraft_project(data, path) if data['schema'] == LEGACY_IPCRAFT_PROJECT_SCHEMA
 
     parse_ipcore_graph(data, path)
   end
 
   private
 
-  def self.normalize_ipcraft_project(data, path)
-    package = required_string(data, 'package', path)
-    project = required_hash(data, 'project', path)
-    project_instance = required_hash(project, 'instance', path)
-    instances = required_array(data, 'instances', path)
+  def self.normalize_project_design(data, path)
+    packages = required_array(data, 'packages', path, IPCRAFT_PROJECT_SCHEMA)
+    components = required_array(data, 'components', path, IPCRAFT_PROJECT_SCHEMA)
+    interfaces = optional_array(data, 'interfaces', path, IPCRAFT_PROJECT_SCHEMA)
+    connections = optional_array(data, 'connections', path, IPCRAFT_PROJECT_SCHEMA)
+    topologies = optional_array(data, 'topologies', path, IPCRAFT_PROJECT_SCHEMA)
+    instance_id = required_string(data, 'id', path, IPCRAFT_PROJECT_SCHEMA)
+
+    {
+      'schema' => IPCORE_GRAPH_SCHEMA,
+      'name' => required_string(data, 'name', path, IPCRAFT_PROJECT_SCHEMA),
+      'ipcore' => FINEPAPER_NOC_PACKAGE,
+      'instance' => instance_id,
+      'version' => project_design_package_version(packages) || '1.0',
+      'ipcore_state' => [
+        {
+          'ipcore' => FINEPAPER_NOC_PACKAGE,
+          'instance' => instance_id,
+          'state' => {
+            'global_parameters' => project_design_global_parameters(data, components, topologies)
+          }
+        }
+      ],
+      'modules' => normalize_project_design_components(components, instance_id),
+      'connections' => normalize_project_design_connections(connections, interfaces, topologies, path)
+    }
+  end
+
+  def self.normalize_project_design_components(components, instance_id)
+    components.map do |component|
+      {
+        'id' => component.fetch('id'),
+        'ipcore' => package_id_from_ref(component.fetch('packageRef', '')),
+        'instance' => instance_id,
+        'type' => project_design_component_type(component),
+        'parameters' => project_design_component_parameters(component)
+      }
+    end
+  end
+
+  def self.project_design_component_type(component)
+    project_design_extension_value(component, 'module') ||
+      project_design_extension_value(component, 'module_type') ||
+      component.fetch('type')
+  end
+
+  def self.project_design_component_parameters(component)
+    params = {}
+    merge_hash!(params, project_design_extension_parameters(component.fetch('metadata', nil)))
+    merge_hash!(params, project_design_extension_parameters(component.fetch('extensionData', nil)))
+    merge_hash!(params, project_design_config_parameters(component.fetch('config', nil)))
+
+    identity = component.fetch('identity', nil)
+    params['display_name'] ||= identity['label'] if identity.is_a?(Hash) && identity['label'].is_a?(String)
+    params
+  end
+
+  def self.project_design_global_parameters(data, components, topologies)
+    params = {}
+    merge_hash!(params, project_design_extension_parameters(data.fetch('metadata', nil)))
+
+    optional_array(data, 'extensions', '<project>', IPCRAFT_PROJECT_SCHEMA).each do |extension|
+      next unless extension.is_a?(Hash)
+
+      owner = extension['ownerPackageId']
+      schema = extension['schemaId']
+      next unless owner == FINEPAPER_NOC_PACKAGE || schema.to_s.include?(FINEPAPER_NOC_PACKAGE)
+
+      merge_hash!(params, project_design_extension_parameters(extension.fetch('data', nil)))
+    end
+
+    components.each do |component|
+      next unless package_id_from_ref(component.fetch('packageRef', '')) == FINEPAPER_NOC_PACKAGE
+      next if ['XP', 'Endpoint'].include?(project_design_component_type(component))
+
+      merge_hash!(params, project_design_component_parameters(component))
+    end
+
+    mesh = project_design_mesh_parameters(topologies)
+    params['mesh'] ||= mesh if mesh
+    params
+  end
+
+  def self.project_design_mesh_parameters(topologies)
+    topology = topologies.find do |entry|
+      entry.is_a?(Hash) &&
+        entry['schema'] == TOPOLOGY_PARAMETRIC_SCHEMA &&
+        entry['family'] == 'mesh'
+    end
+    return nil unless topology
+
+    parameters = topology.fetch('parameters', {})
+    return nil unless parameters.is_a?(Hash)
+
+    width, height = project_design_mesh_dimensions(parameters)
+    return nil unless width && height
+
+    mesh = { 'width' => width, 'height' => height }
+    endpoint_map = project_design_mesh_endpoint_map(topology.fetch('attachments', []))
+    mesh['endpoint_map'] = endpoint_map unless endpoint_map.empty?
+    mesh
+  end
+
+  def self.project_design_mesh_dimensions(parameters)
+    dimensions = parameters['dimensions']
+    width = parameters['width'] || parameters['cols'] || (dimensions[0] if dimensions.is_a?(Array))
+    height = parameters['height'] || parameters['rows'] || (dimensions[1] if dimensions.is_a?(Array))
+    [integer_or_nil(width), integer_or_nil(height)]
+  end
+
+  def self.project_design_mesh_endpoint_map(attachments)
+    return {} unless attachments.is_a?(Array)
+
+    attachments.each_with_object({}) do |attachment, map|
+      next unless attachment.is_a?(Hash)
+
+      xp_id = project_design_attachment_xp_id(attachment)
+      component_id = attachment['componentRef']
+      next unless xp_id && component_id
+
+      map[xp_id] ||= []
+      map[xp_id] << component_id
+    end
+  end
+
+  def self.normalize_project_design_connections(connections, interfaces, topologies, path)
+    interface_ports = project_design_interface_ports(interfaces)
+    graph_connections = connections.map do |connection|
+      {
+        'id' => connection.fetch('id', '<unnamed>'),
+        'source' => project_design_connection_endpoint(connection.fetch('from', nil),
+                                                       interface_ports,
+                                                       connection,
+                                                       'from',
+                                                       path),
+        'target' => project_design_connection_endpoint(connection.fetch('to', nil),
+                                                       interface_ports,
+                                                       connection,
+                                                       'to',
+                                                       path)
+      }
+    end
+
+    graph_connections + normalize_project_design_topology_attachments(topologies, interface_ports)
+  end
+
+  def self.project_design_interface_ports(interfaces)
+    interfaces.each_with_object({}) do |interface, ports|
+      next unless interface.is_a?(Hash)
+
+      owner = interface.fetch('ownerComponentId', nil)
+      id = interface.fetch('id', nil)
+      next unless owner && id
+
+      ports[[owner, id]] = project_design_interface_port(interface)
+    end
+  end
+
+  def self.project_design_interface_port(interface)
+    metadata = interface.fetch('metadata', nil)
+    config = interface.fetch('config', nil)
+    project_design_extension_value(interface, 'port') ||
+      project_design_extension_value(interface, 'ipcore_port') ||
+      (metadata['port'] if metadata.is_a?(Hash)) ||
+      (config['port'] if config.is_a?(Hash)) ||
+      interface.fetch('id')
+  end
+
+  def self.project_design_connection_endpoint(ref, interface_ports, connection, endpoint_key, path)
+    unless ref.is_a?(Hash)
+      raise "ipcraft.project.v1 connection #{connection.fetch('id', '<unnamed>')} #{endpoint_key} must be an object in #{path}"
+    end
+
+    component_id = ref.fetch('component', nil)
+    interface_id = ref.fetch('interface', nil)
+    unless component_id && interface_id
+      raise "ipcraft.project.v1 connection #{connection.fetch('id', '<unnamed>')} #{endpoint_key} must reference component and interface"
+    end
+
+    { 'module' => component_id, 'port' => interface_ports.fetch([component_id, interface_id], interface_id) }
+  end
+
+  def self.normalize_project_design_topology_attachments(topologies, interface_ports)
+    topologies.flat_map do |topology|
+      attachments = topology.is_a?(Hash) ? topology.fetch('attachments', []) : []
+      next [] unless attachments.is_a?(Array)
+
+      attachments.filter_map do |attachment|
+        next unless attachment.is_a?(Hash)
+
+        xp_id = project_design_attachment_xp_id(attachment)
+        component_id = attachment['componentRef']
+        next unless xp_id && component_id
+
+        interface_id = attachment.fetch('interfaceRef', 'noc')
+        {
+          'id' => attachment.fetch('id', "#{component_id}_to_#{xp_id}"),
+          'source' => {
+            'module' => component_id,
+            'port' => interface_ports.fetch([component_id, interface_id], interface_id)
+          },
+          'target' => {
+            'module' => xp_id,
+            'port' => project_design_attachment_port(attachment)
+          }
+        }
+      end
+    end
+  end
+
+  def self.project_design_attachment_xp_id(attachment)
+    point = attachment.fetch('attachmentPoint', {})
+    return point['component'] if point.is_a?(Hash) && point['component']
+    return point['node'] if point.is_a?(Hash) && point['node']
+    return point['xp'] if point.is_a?(Hash) && point['xp']
+
+    col, row = project_design_attachment_coordinates(point)
+    return nil unless col && row
+
+    "xp_#{col}_#{row}"
+  end
+
+  def self.project_design_attachment_coordinates(point)
+    return [nil, nil] unless point.is_a?(Hash)
+
+    tile = point['tile']
+    return [integer_or_nil(tile[0]), integer_or_nil(tile[1])] if tile.is_a?(Array)
+
+    col = point['mesh_col'] || point['col'] || point['x']
+    row = point['mesh_row'] || point['row'] || point['y']
+    [integer_or_nil(col), integer_or_nil(row)]
+  end
+
+  def self.project_design_attachment_port(attachment)
+    point = attachment.fetch('attachmentPoint', {})
+    return point['slot'] if point.is_a?(Hash) && point['slot']
+    return point['port'] if point.is_a?(Hash) && point['port']
+
+    'local0'
+  end
+
+  def self.project_design_package_version(packages)
+    package = packages.find { |entry| entry.is_a?(Hash) && entry['id'] == FINEPAPER_NOC_PACKAGE }
+    package && package['version']
+  end
+
+  def self.package_id_from_ref(ref)
+    ref.to_s.split('@', 2).first
+  end
+
+  def self.project_design_config_parameters(config)
+    return {} unless config.is_a?(Hash)
+
+    if config['parameters'].is_a?(Hash)
+      config['parameters']
+    elsif CONFIG_BUNDLE_KEYS.any? { |key| config.key?(key) }
+      {}
+    else
+      config
+    end
+  end
+
+  def self.project_design_extension_parameters(value)
+    return {} unless value.is_a?(Hash)
+
+    specific = value[FINEPAPER_NOC_PACKAGE]
+    if specific.is_a?(Hash)
+      return project_design_extension_parameters(specific)
+    end
+
+    return value['global_parameters'] if value['global_parameters'].is_a?(Hash)
+    return value['parameters'] if value['parameters'].is_a?(Hash)
+
+    {}
+  end
+
+  def self.project_design_extension_value(object, key)
+    [object.fetch('metadata', nil), object.fetch('extensionData', nil)].each do |container|
+      next unless container.is_a?(Hash)
+
+      return container[key] if container.key?(key)
+
+      package_data = container[FINEPAPER_NOC_PACKAGE]
+      return package_data[key] if package_data.is_a?(Hash) && package_data.key?(key)
+    end
+    nil
+  end
+
+  def self.merge_hash!(target, value)
+    target.merge!(value) if value.is_a?(Hash)
+  end
+
+  def self.integer_or_nil(value)
+    value.is_a?(Integer) ? value : nil
+  end
+
+  def self.normalize_legacy_ipcraft_project(data, path)
+    package = required_string(data, 'package', path, LEGACY_IPCRAFT_PROJECT_SCHEMA)
+    project = required_hash(data, 'project', path, LEGACY_IPCRAFT_PROJECT_SCHEMA)
+    project_instance = required_hash(project, 'instance', path, LEGACY_IPCRAFT_PROJECT_SCHEMA)
+    instances = required_array(data, 'instances', path, LEGACY_IPCRAFT_PROJECT_SCHEMA)
 
     {
       'schema' => IPCORE_GRAPH_SCHEMA,
       'name' => project_name(data, project, path),
       'ipcore' => package,
-      'instance' => required_string(project_instance, 'id', path),
-      'ipcore_state' => [ipcraft_project_state(package, project_instance, path)],
-      'modules' => normalize_ipcraft_instances(instances, package, project_instance.fetch('id')),
-      'connections' => normalize_ipcraft_connections(data.fetch('connections', []), instances, path)
+      'instance' => required_string(project_instance, 'id', path, LEGACY_IPCRAFT_PROJECT_SCHEMA),
+      'ipcore_state' => [legacy_ipcraft_project_state(package, project_instance, path)],
+      'modules' => normalize_legacy_ipcraft_instances(instances, package, project_instance.fetch('id')),
+      'connections' => normalize_legacy_ipcraft_connections(data.fetch('connections', []), instances, path)
     }
   end
 
-  def self.ipcraft_project_state(package, project_instance, path)
+  def self.legacy_ipcraft_project_state(package, project_instance, path)
     state = project_instance.fetch('state', {})
     raise "ipcraft.noc.project.v1 project.instance.state must be an object in #{path}" unless state.is_a?(Hash)
 
@@ -60,7 +362,7 @@ class JsonParser
     }
   end
 
-  def self.normalize_ipcraft_instances(instances, package, instance_id)
+  def self.normalize_legacy_ipcraft_instances(instances, package, instance_id)
     instances.map do |instance|
       {
         'id' => instance.fetch('id'),
@@ -73,11 +375,11 @@ class JsonParser
     end
   end
 
-  def self.normalize_ipcraft_connections(connections, instances, path)
+  def self.normalize_legacy_ipcraft_connections(connections, instances, path)
     return [] unless connections
     raise "ipcraft.noc.project.v1 connections must be an array in #{path}" unless connections.is_a?(Array)
 
-    interface_port_by_instance = ipcraft_interface_ports(instances)
+    interface_port_by_instance = legacy_ipcraft_interface_ports(instances)
     connections.map do |connection|
       refs = connection.fetch('interfaces', nil)
       unless refs.is_a?(Array) && refs.size == 2
@@ -86,13 +388,13 @@ class JsonParser
 
       {
         'id' => connection.fetch('id', '<unnamed>'),
-        'source' => ipcraft_connection_endpoint(refs[0], interface_port_by_instance, connection),
-        'target' => ipcraft_connection_endpoint(refs[1], interface_port_by_instance, connection)
+        'source' => legacy_ipcraft_connection_endpoint(refs[0], interface_port_by_instance, connection),
+        'target' => legacy_ipcraft_connection_endpoint(refs[1], interface_port_by_instance, connection)
       }
     end
   end
 
-  def self.ipcraft_interface_ports(instances)
+  def self.legacy_ipcraft_interface_ports(instances)
     instances.to_h do |instance|
       interfaces = instance.fetch('interfaces', [])
       unless interfaces.is_a?(Array)
@@ -108,7 +410,7 @@ class JsonParser
     end
   end
 
-  def self.ipcraft_connection_endpoint(ref, interface_port_by_instance, connection)
+  def self.legacy_ipcraft_connection_endpoint(ref, interface_port_by_instance, connection)
     instance_id = ref.fetch('instance', nil)
     interface_id = ref.fetch('interface', nil)
     port = interface_port_by_instance.fetch(instance_id, {})[interface_id]
@@ -126,23 +428,30 @@ class JsonParser
     name
   end
 
-  def self.required_hash(data, key, path)
+  def self.required_hash(data, key, path, schema = LEGACY_IPCRAFT_PROJECT_SCHEMA)
     value = data[key]
-    raise "ipcraft.noc.project.v1 #{key} must be an object in #{path}" unless value.is_a?(Hash)
+    raise "#{schema} #{key} must be an object in #{path}" unless value.is_a?(Hash)
 
     value
   end
 
-  def self.required_array(data, key, path)
+  def self.required_array(data, key, path, schema = LEGACY_IPCRAFT_PROJECT_SCHEMA)
     value = data[key]
-    raise "ipcraft.noc.project.v1 #{key} must be an array in #{path}" unless value.is_a?(Array)
+    raise "#{schema} #{key} must be an array in #{path}" unless value.is_a?(Array)
 
     value
   end
 
-  def self.required_string(data, key, path)
+  def self.optional_array(data, key, path, schema)
+    value = data.fetch(key, [])
+    raise "#{schema} #{key} must be an array in #{path}" unless value.is_a?(Array)
+
+    value
+  end
+
+  def self.required_string(data, key, path, schema = LEGACY_IPCRAFT_PROJECT_SCHEMA)
     value = data[key]
-    raise "ipcraft.noc.project.v1 #{key} must be a string in #{path}" unless value.is_a?(String) && !value.empty?
+    raise "#{schema} #{key} must be a string in #{path}" unless value.is_a?(String) && !value.empty?
 
     value
   end
@@ -243,13 +552,18 @@ class JsonParser
       if noc_module_type?(source_module, 'XP') && noc_module_type?(target_module, 'XP')
         ipcore_router_connection(source, target)
       elsif noc_module_type?(source_module, 'Endpoint') && noc_module_type?(target_module, 'XP')
-        endpoint_ids_by_xp[target_module['id']] << source_module['id']
+        add_endpoint_xp(endpoint_ids_by_xp, target_module['id'], source_module['id'])
         nil
       elsif noc_module_type?(source_module, 'XP') && noc_module_type?(target_module, 'Endpoint')
-        endpoint_ids_by_xp[source_module['id']] << target_module['id']
+        add_endpoint_xp(endpoint_ids_by_xp, source_module['id'], target_module['id'])
         nil
       end
     end
+  end
+
+  def self.add_endpoint_xp(endpoint_ids_by_xp, xp_id, endpoint_id)
+    endpoints = endpoint_ids_by_xp[xp_id]
+    endpoints << endpoint_id unless endpoints.include?(endpoint_id)
   end
 
   def self.ipcore_router_connection(source, target)

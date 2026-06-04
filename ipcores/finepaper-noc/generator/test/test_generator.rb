@@ -1,4 +1,4 @@
-# Migration-only legacy schema handling. Not used by normal runtime loading.
+# ProjectDesign input plus migration-only legacy schema handling.
 $LOAD_PATH.unshift File.join(__dir__, '..', 'src', 'ruby')
 
 require 'minitest/autorun'
@@ -173,6 +173,173 @@ def ipcraft_project_from_ipcore_graph(graph)
   }
 end
 
+def project_design_from_ipcore_graph(graph)
+  legacy = JSON.parse(JSON.generate(graph))
+  package = legacy.fetch('ipcore', 'finepaper.noc')
+  state = legacy.fetch('ipcore_state', []).find { |record| record['ipcore'] == package } || {}
+  global_parameters = state.fetch('state', {}).fetch('global_parameters', {})
+  port_ids_by_module = Hash.new { |hash, key| hash[key] = [] }
+
+  legacy.fetch('connections', []).each do |connection|
+    %w[source target].each do |endpoint|
+      ref = connection.fetch(endpoint)
+      port_ids_by_module[ref.fetch('module')] << ref.fetch('port')
+    end
+  end
+
+  {
+    'schema' => 'ipcraft.project.v1',
+    'id' => legacy.fetch('instance', 'noc_0'),
+    'name' => legacy.fetch('name'),
+    'packages' => [
+      { 'id' => package, 'version' => legacy.fetch('version', '1.0') }
+    ],
+    'metadata' => {
+      package => {
+        'parameters' => global_parameters
+      }
+    },
+    'components' => legacy.fetch('modules', []).map do |mod|
+      parameters = mod.fetch('parameters', {}).dup
+      component = {
+        'id' => mod.fetch('id'),
+        'type' => mod.fetch('type'),
+        'packageRef' => "#{package}@#{legacy.fetch('version', '1.0')}",
+        'identity' => { 'label' => mod.fetch('id') }
+      }
+      if mod.fetch('type') == 'Endpoint'
+        parameters['buffer_depth'] = 32
+        component['extensionData'] = { package => { 'parameters' => parameters } }
+      else
+        component['config'] = { 'parameters' => parameters }
+      end
+      component
+    end,
+    'interfaces' => port_ids_by_module.flat_map do |module_id, ports|
+      ports.uniq.map do |port|
+        {
+          'id' => "if_#{port}",
+          'ownerComponentId' => module_id,
+          'type' => 'finepaper.noc.port',
+          'role' => 'peer',
+          'direction' => 'bidirectional',
+          'protocol' => 'finepaper.noc',
+          'metadata' => { package => { 'port' => port } }
+        }
+      end
+    end,
+    'connections' => legacy.fetch('connections', []).map do |connection|
+      {
+        'id' => connection.fetch('id'),
+        'kind' => 'interface',
+        'from' => {
+          'component' => connection.fetch('source').fetch('module'),
+          'interface' => "if_#{connection.fetch('source').fetch('port')}"
+        },
+        'to' => {
+          'component' => connection.fetch('target').fetch('module'),
+          'interface' => "if_#{connection.fetch('target').fetch('port')}"
+        },
+        'metadata' => { 'class' => connection.fetch('id').include?('_local') ? 'ni_link' : 'router_link' }
+      }
+    end,
+    'topologies' => [
+      {
+        'id' => 'fabric.explicit',
+        'schema' => 'ipcraft.topology.graph.v1',
+        'kind' => 'explicit_graph',
+        'family' => 'mesh',
+        'nodes' => legacy.fetch('modules', []).select { |mod| mod.fetch('type') == 'XP' }.map do |mod|
+          { 'id' => mod.fetch('id'), 'componentRef' => mod.fetch('id') }
+        end,
+        'links' => legacy.fetch('connections', []).select { |conn| conn.fetch('source').fetch('port') != 'noc' }.map do |conn|
+          {
+            'id' => conn.fetch('id'),
+            'from' => conn.fetch('source').fetch('module'),
+            'to' => conn.fetch('target').fetch('module')
+          }
+        end,
+        'metadata' => { package => { 'source' => 'test_fixture' } }
+      }
+    ],
+    'extensions' => [
+      {
+        'ownerPackageId' => package,
+        'schemaId' => "#{package}.project.v1",
+        'version' => 1,
+        'data' => { 'parameters' => {} }
+      }
+    ]
+  }
+end
+
+def project_design_parametric_mesh
+  {
+    'schema' => 'ipcraft.project.v1',
+    'id' => 'mesh_project',
+    'name' => 'mesh_project',
+    'packages' => [
+      { 'id' => 'finepaper.noc', 'version' => '1.0' }
+    ],
+    'components' => [
+      {
+        'id' => 'ep_cpu0',
+        'type' => 'Endpoint',
+        'packageRef' => 'finepaper.noc@1.0',
+        'config' => {
+          'parameters' => {
+            'type' => 'master',
+            'protocol' => 'axi4',
+            'data_width' => 64
+          }
+        }
+      }
+    ],
+    'interfaces' => [
+      {
+        'id' => 'noc',
+        'ownerComponentId' => 'ep_cpu0',
+        'type' => 'finepaper.noc.endpoint',
+        'role' => 'initiator',
+        'direction' => 'bidirectional',
+        'protocol' => 'finepaper.noc'
+      }
+    ],
+    'connections' => [],
+    'topologies' => [
+      {
+        'id' => 'fabric.mesh',
+        'schema' => 'ipcraft.topology.parametric.v1',
+        'kind' => 'parametric',
+        'family' => 'mesh',
+        'parameters' => {
+          'dimensions' => [2, 1]
+        },
+        'attachments' => [
+          {
+            'id' => 'attach_cpu0',
+            'componentRef' => 'ep_cpu0',
+            'interfaceRef' => 'noc',
+            'attachmentPoint' => {
+              'tile' => [0, 0],
+              'slot' => 'local0'
+            }
+          }
+        ]
+      }
+    ],
+    'metadata' => {
+      'finepaper.noc' => {
+        'parameters' => {
+          'data_width' => 64,
+          'flit_width' => 128,
+          'addr_width' => 32
+        }
+      }
+    }
+  }
+end
+
 class TestJsonParser < Minitest::Test
   def test_parses_noc
     noc = JsonParser.parse(EXAMPLE)
@@ -198,7 +365,42 @@ class TestJsonParser < Minitest::Test
     f&.unlink
   end
 
-  def test_parses_ipcraft_project_schema
+  def test_parses_project_design_schema
+    f = Tempfile.new(['project_design', '.json'])
+    f.write(JSON.generate(project_design_from_ipcore_graph(IPCORE_GRAPH)))
+    f.close
+
+    noc = JsonParser.parse(f.path)
+
+    assert_equal 'ipcore_noc', noc.name
+    assert_equal 2, noc.xps.size
+    assert_equal 1, noc.connections.size
+    assert_equal 1, noc.endpoints.size
+    assert_equal 128, noc.parameters['flit_width']
+    assert_equal 'east', noc.connections.first.dir
+    assert_equal ['ep_cpu0'], noc.xps.find { |xp| xp.id == 'xp_0_0' }.endpoints
+    assert_equal 32, noc.endpoints.find { |ep| ep.id == 'ep_cpu0' }.config[:buffer_depth]
+  ensure
+    f&.unlink
+  end
+
+  def test_parses_project_design_parametric_mesh_topology
+    f = Tempfile.new(['project_design_mesh', '.json'])
+    f.write(JSON.generate(project_design_parametric_mesh))
+    f.close
+
+    noc = JsonParser.parse(f.path)
+    expanded = TopologyExpander.expand(noc)
+
+    assert_equal 'mesh_project', noc.name
+    assert_equal 2, expanded.xps.size
+    assert_equal 1, expanded.connections.size
+    assert_equal ['ep_cpu0'], expanded.xps.find { |xp| xp.id == 'xp_0_0' }.endpoints
+  ensure
+    f&.unlink
+  end
+
+  def test_parses_legacy_ipcraft_project_schema
     f = Tempfile.new(['ipcraft_project', '.json'])
     f.write(JSON.generate(ipcraft_project_from_ipcore_graph(IPCORE_GRAPH)))
     f.close
@@ -243,7 +445,7 @@ class TestJsonParser < Minitest::Test
     f.close
 
     error = assert_raises(RuntimeError) { JsonParser.parse(f.path) }
-    assert_match(/expected schema ipcraft\.noc\.project\.v1.*finepaper-ipcore-graph-v1/m, error.message)
+    assert_match(/expected schema ipcraft\.project\.v1.*ipcraft\.noc\.project\.v1.*finepaper-ipcore-graph-v1/m, error.message)
   ensure
     f&.unlink
   end
@@ -254,7 +456,7 @@ class TestJsonParser < Minitest::Test
     f.close
 
     error = assert_raises(RuntimeError) { JsonParser.parse(f.path) }
-    assert_match(/expected schema ipcraft\.noc\.project\.v1.*finepaper-ipcore-graph-v1/m, error.message)
+    assert_match(/expected schema ipcraft\.project\.v1.*ipcraft\.noc\.project\.v1.*finepaper-ipcore-graph-v1/m, error.message)
   ensure
     f&.unlink
   end
@@ -354,7 +556,20 @@ class TestDrcRunner < Minitest::Test
     f&.unlink
   end
 
-  def test_drc_script_accepts_ipcraft_project_schema
+  def test_drc_script_accepts_project_design_schema
+    f = Tempfile.new(['project_design', '.json'])
+    f.write(JSON.generate(project_design_from_ipcore_graph(IPCORE_GRAPH)))
+    f.close
+
+    stdout, stderr, status = Open3.capture3(RbConfig.ruby, DRC_BIN, '-i', f.path)
+
+    assert status.success?, stderr
+    assert_includes stdout, 'DRC passed for ipcore_noc'
+  ensure
+    f&.unlink
+  end
+
+  def test_drc_script_accepts_legacy_ipcraft_project_schema
     f = Tempfile.new(['ipcraft_project', '.json'])
     f.write(JSON.generate(ipcraft_project_from_ipcore_graph(IPCORE_GRAPH)))
     f.close
@@ -367,7 +582,27 @@ class TestDrcRunner < Minitest::Test
     f&.unlink
   end
 
-  def test_generator_accepts_ipcraft_project_schema
+  def test_generator_accepts_project_design_schema
+    f = Tempfile.new(['project_design', '.json'])
+    f.write(JSON.generate(project_design_from_ipcore_graph(IPCORE_GRAPH)))
+    f.close
+    out = Dir.mktmpdir
+
+    stdout, stderr, status = Open3.capture3(RbConfig.ruby,
+                                            GEN_BIN,
+                                            '-i', f.path,
+                                            '-o', out,
+                                            '-t', File.join(__dir__, '..', 'template'))
+
+    assert status.success?, stderr
+    assert_includes stdout, 'Generated'
+    assert File.exist?(File.join(out, 'ipcore_noc_top.v'))
+  ensure
+    f&.unlink
+    FileUtils.rm_rf(out)
+  end
+
+  def test_generator_accepts_legacy_ipcraft_project_schema
     f = Tempfile.new(['ipcraft_project', '.json'])
     f.write(JSON.generate(ipcraft_project_from_ipcore_graph(IPCORE_GRAPH)))
     f.close
