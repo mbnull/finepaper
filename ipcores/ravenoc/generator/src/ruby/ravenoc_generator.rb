@@ -8,9 +8,13 @@ class RaveNoCGenerator
   class GenerationError < StandardError; end
 
   GRAPH_SCHEMA = 'finepaper-ipcore-graph-v1'.freeze
-  IPCRAFT_PROJECT_SCHEMA = 'ipcraft.noc.project.v1'.freeze
-  SUPPORTED_SCHEMAS = [IPCRAFT_PROJECT_SCHEMA, GRAPH_SCHEMA].freeze
+  PROJECT_DESIGN_SCHEMA = 'ipcraft.project.v1'.freeze
+  LEGACY_IPCRAFT_PROJECT_SCHEMA = 'ipcraft.noc.project.v1'.freeze
+  SUPPORTED_SCHEMAS = [PROJECT_DESIGN_SCHEMA, LEGACY_IPCRAFT_PROJECT_SCHEMA, GRAPH_SCHEMA].freeze
   IPCORE_ID = 'finepaper.ravenoc'.freeze
+  PROJECT_STATE_SCHEMA = 'finepaper.ravenoc-project-state-v1'.freeze
+  RAVENOC_COMPONENT_TYPES = %w[RaveNoC RaveTile RaveEndpoint].freeze
+  RAVENOC_PORTS = %w[north east south west local noc].freeze
 
   REQUIRED_VENDOR_FILES = [
     'bus_arch_sv_pkg/amba_axi_pkg.sv',
@@ -142,17 +146,241 @@ class RaveNoCGenerator
     data = JSON.parse(File.read(input_path))
     unless SUPPORTED_SCHEMAS.include?(data['schema'])
       raise GenerationError,
-            "expected schema #{IPCRAFT_PROJECT_SCHEMA} (or #{GRAPH_SCHEMA} for legacy compatibility)"
+            "expected schema #{PROJECT_DESIGN_SCHEMA} (or #{LEGACY_IPCRAFT_PROJECT_SCHEMA}/#{GRAPH_SCHEMA} for legacy compatibility)"
     end
 
-    data['schema'] == IPCRAFT_PROJECT_SCHEMA ? normalize_ipcraft_project(data) : data
+    case data['schema']
+    when PROJECT_DESIGN_SCHEMA
+      normalize_project_design(data)
+    when LEGACY_IPCRAFT_PROJECT_SCHEMA
+      normalize_legacy_ipcraft_project(data)
+    else
+      data
+    end
   rescue Errno::ENOENT
     raise GenerationError, "input graph not found: #{input_path}"
   rescue JSON::ParserError => error
     raise GenerationError, "invalid JSON input: #{error.message}"
   end
 
-  def normalize_ipcraft_project(data)
+  def normalize_project_design(data)
+    components = required_array_for(data, 'components', PROJECT_DESIGN_SCHEMA)
+    components.each_with_index do |component, index|
+      unless component.is_a?(Hash)
+        raise GenerationError, "#{PROJECT_DESIGN_SCHEMA} components[#{index}] must be an object"
+      end
+    end
+
+    ravenoc_components = components.select { |component| ravenoc_project_design_component?(component) }
+    raise GenerationError, "#{PROJECT_DESIGN_SCHEMA} project contains no #{IPCORE_ID} components" if ravenoc_components.empty?
+
+    layout_by_component = project_design_layout_nodes(data)
+    tile_components = ravenoc_components.select { |component| component['type'] == 'RaveTile' }
+    modules = project_design_component_modules(ravenoc_components, layout_by_component, tile_components.empty?)
+    component_ids = modules.map { |mod| mod.fetch('id') }
+
+    {
+      'schema' => GRAPH_SCHEMA,
+      'name' => required_string_for(data, 'name', PROJECT_DESIGN_SCHEMA),
+      'ipcore' => IPCORE_ID,
+      'instance' => project_design_state_instance(ravenoc_components, data),
+      'ipcore_state' => [project_design_ipcore_state(data, ravenoc_components)],
+      'modules' => modules,
+      'connections' => normalize_project_design_connections(data, component_ids)
+    }
+  end
+
+  def ravenoc_project_design_component?(component)
+    return true if project_design_component_package_id(component) == IPCORE_ID
+
+    project_design_component_package_id(component).nil? && RAVENOC_COMPONENT_TYPES.include?(component['type'])
+  end
+
+  def project_design_component_package_id(component)
+    package_ref = component['packageRef']
+    return nil unless package_ref.is_a?(String) && !package_ref.empty?
+
+    package_ref.split('@', 2).first
+  end
+
+  def project_design_component_modules(components, layout_by_component, include_ravenoc)
+    components.filter_map do |component|
+      type = required_string_for(component, 'type', PROJECT_DESIGN_SCHEMA)
+      next unless RAVENOC_COMPONENT_TYPES.include?(type)
+      next if type == 'RaveNoC' && !include_ravenoc
+
+      id = required_string_for(component, 'id', PROJECT_DESIGN_SCHEMA)
+      parameters = project_design_component_parameters(component, layout_by_component.fetch(id, {}))
+
+      {
+        'id' => id,
+        'ipcore' => IPCORE_ID,
+        'instance' => project_design_state_instance(components, nil),
+        'type' => type,
+        'parameters' => parameters,
+        'ports' => []
+      }
+    end
+  end
+
+  def project_design_component_parameters(component, layout)
+    config = hash_or_empty(component['config'])
+    parameters = config['parameters'].is_a?(Hash) ? config.fetch('parameters').dup : config.dup
+    %w[rows cols].each do |name|
+      parameters[name] = config.fetch(name) if config.key?(name) && !parameters.key?(name)
+    end
+
+    identity = hash_or_empty(component['identity'])
+    parameters['display_name'] = identity.fetch('label') if identity.key?('label') && !parameters.key?('display_name')
+
+    layout.each do |name, value|
+      parameters[name] = value unless parameters.key?(name)
+    end
+    parameters
+  end
+
+  def project_design_ipcore_state(data, components)
+    {
+      'ipcore' => IPCORE_ID,
+      'instance' => project_design_state_instance(components, data),
+      'schema' => PROJECT_STATE_SCHEMA,
+      'state' => {
+        'kind' => 'noc',
+        'type' => 'RaveNoC',
+        'global_parameters' => project_design_global_parameters(components)
+      }
+    }
+  end
+
+  def project_design_state_instance(components, data)
+    component = components.find { |candidate| candidate['type'] == 'RaveNoC' } || components.first
+    return component.fetch('id') if component
+
+    data.fetch('id', 'ravenoc_0')
+  end
+
+  def project_design_global_parameters(components)
+    state_component = components.find { |component| component['type'] == 'RaveNoC' } || components.first
+    config = hash_or_empty(state_component && state_component['config'])
+    state = config['state']
+    return state.fetch('global_parameters') if state.is_a?(Hash) && state['global_parameters'].is_a?(Hash)
+
+    parameters = config['global_parameters']
+    parameters = config['parameters'] unless parameters.is_a?(Hash)
+    if !parameters.is_a?(Hash) && (DEFAULTS.keys - %w[rows cols]).any? { |key| config.key?(key) }
+      parameters = config
+    end
+
+    parameters.is_a?(Hash) ? parameters : {}
+  end
+
+  def project_design_layout_nodes(data)
+    view_layout_nodes(data.fetch('views', []))
+  end
+
+  def view_layout_nodes(views)
+    return {} unless views.is_a?(Array)
+
+    views.each_with_object({}) do |view, result|
+      next unless view.is_a?(Hash)
+
+      nodes = hash_or_empty(view.dig('layout', 'nodes'))
+      nodes = hash_or_empty(view.dig('canvas', 'nodes')) if nodes.empty?
+      nodes.each do |id, layout|
+        next unless layout.is_a?(Hash)
+
+        result[id] = layout.slice('x', 'y', 'collapsed')
+      end
+    end
+  end
+
+  def normalize_project_design_connections(data, component_ids)
+    connections = data.fetch('connections', [])
+    return [] unless connections
+    raise GenerationError, "#{PROJECT_DESIGN_SCHEMA} connections must be an array" unless connections.is_a?(Array)
+
+    interface_ports = project_design_interface_ports(data)
+    connections.filter_map do |connection|
+      next unless connection.is_a?(Hash)
+
+      refs = [connection.fetch('from', nil), connection.fetch('to', nil)]
+      unless refs.all? { |ref| ref.is_a?(Hash) }
+        raise GenerationError,
+              "#{PROJECT_DESIGN_SCHEMA} connection #{connection.fetch('id', '<unnamed>')} must have from/to endpoints"
+      end
+      next unless refs.all? { |ref| component_ids.include?(ref['component']) }
+
+      {
+        'id' => connection.fetch('id', '<unnamed>'),
+        'source' => project_design_connection_endpoint(refs[0], interface_ports, connection),
+        'target' => project_design_connection_endpoint(refs[1], interface_ports, connection)
+      }
+    end
+  end
+
+  def project_design_interface_ports(data)
+    interfaces = data.fetch('interfaces', [])
+    return {} unless interfaces.is_a?(Array)
+
+    ports = Hash.new { |hash, key| hash[key] = {} }
+    interfaces.each do |interface|
+      next unless interface.is_a?(Hash)
+
+      owner = interface['ownerComponentId']
+      id = interface['id']
+      next unless owner.is_a?(String) && id.is_a?(String)
+
+      ports[owner][id] = project_design_interface_port(interface)
+    end
+    ports
+  end
+
+  def project_design_interface_port(interface)
+    config = hash_or_empty(interface['config'])
+    metadata = hash_or_empty(interface['metadata'])
+    infer_project_design_port(config['port'] || config['busInterface'] || metadata['port'] ||
+                              metadata['busInterface'] || interface.fetch('id', nil))
+  end
+
+  def project_design_connection_endpoint(ref, interface_ports, connection)
+    component_id = required_string_for(ref, 'component', PROJECT_DESIGN_SCHEMA)
+    interface_id = required_string_for(ref, 'interface', PROJECT_DESIGN_SCHEMA)
+    port = interface_ports.fetch(component_id, {})[interface_id] || infer_project_design_port(interface_id)
+    unless port
+      raise GenerationError,
+            "#{PROJECT_DESIGN_SCHEMA} connection #{connection.fetch('id', '<unnamed>')} references unknown interface #{component_id}.#{interface_id}"
+    end
+
+    { 'module' => component_id, 'port' => port }
+  end
+
+  def infer_project_design_port(value)
+    return nil unless value.is_a?(String) && !value.empty?
+    return value if RAVENOC_PORTS.include?(value)
+
+    candidate = value.split(/[.:\/]/).last.sub(/\Aif_/, '')
+    RAVENOC_PORTS.include?(candidate) ? candidate : value
+  end
+
+  def hash_or_empty(value)
+    value.is_a?(Hash) ? value : {}
+  end
+
+  def required_array_for(data, key, schema)
+    value = data[key]
+    raise GenerationError, "#{schema} #{key} must be an array" unless value.is_a?(Array)
+
+    value
+  end
+
+  def required_string_for(data, key, schema)
+    value = data[key]
+    raise GenerationError, "#{schema} #{key} must be a string" unless value.is_a?(String) && !value.empty?
+
+    value
+  end
+
+  def normalize_legacy_ipcraft_project(data)
     package = required_string(data, 'package')
     project = required_hash(data, 'project')
     project_instance = required_hash(project, 'instance')

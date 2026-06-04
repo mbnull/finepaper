@@ -8,7 +8,8 @@ require 'open3'
 require 'rbconfig'
 require 'tmpdir'
 
-IPCRAFT_PROJECT_SCHEMA = 'ipcraft.noc.project.v1'.freeze
+PROJECT_DESIGN_SCHEMA = 'ipcraft.project.v1'.freeze
+LEGACY_IPCRAFT_PROJECT_SCHEMA = 'ipcraft.noc.project.v1'.freeze
 
 class RaveNoCGeneratorTest < Minitest::Test
   GENERATOR = File.expand_path('../bin/generate', __dir__)
@@ -116,10 +117,10 @@ class RaveNoCGeneratorTest < Minitest::Test
     end
   end
 
-  def test_generates_from_ipcraft_project_schema
+  def test_generates_from_project_design_schema
     Dir.mktmpdir do |dir|
-      graph = ipcraft_project_from_ipcore_graph(internal_graph_with_endpoint)
-      assert_equal package_command_schema('generate'), graph.fetch('schema')
+      graph = project_design_from_ipcore_graph(internal_graph_with_endpoint)
+      assert_equal PROJECT_DESIGN_SCHEMA, graph.fetch('schema')
       input = write_json(dir, 'ipcraft_project.json', graph)
       vendor = File.join(dir, 'vendor/ravenoc')
       make_fake_vendor(vendor)
@@ -131,6 +132,7 @@ class RaveNoCGeneratorTest < Minitest::Test
       assert_includes stdout, 'Generated RaveNoC integration'
       manifest = JSON.parse(File.read(File.join(out, 'manifest.json')))
       assert_equal 'internal_graph', manifest.fetch('module').fetch('type')
+      assert_equal 32, manifest.fetch('parameters').fetch('flit_data_width')
       endpoint = manifest.fetch('module').fetch('endpoints').first
       assert_equal 'host_0', endpoint.fetch('id')
       assert_equal 'rave_00', endpoint.fetch('tile')
@@ -159,11 +161,24 @@ class RaveNoCGeneratorTest < Minitest::Test
     end
   end
 
-  def test_drc_accepts_ipcraft_project_schema
+  def test_drc_accepts_project_design_schema
     Dir.mktmpdir do |dir|
-      graph = ipcraft_project_from_ipcore_graph(internal_graph_with_endpoint)
-      assert_equal package_command_schema('validate'), graph.fetch('schema')
+      graph = project_design_from_ipcore_graph(internal_graph_with_endpoint)
+      assert_equal PROJECT_DESIGN_SCHEMA, graph.fetch('schema')
       input = write_json(dir, 'ipcraft_project.json', graph)
+
+      stdout, stderr, status = run_drc(input)
+
+      assert status.success?, stderr
+      assert_includes stdout, 'RaveNoC DRC passed'
+    end
+  end
+
+  def test_drc_accepts_legacy_ipcraft_project_schema
+    Dir.mktmpdir do |dir|
+      graph = legacy_ipcraft_project_from_ipcore_graph(internal_graph_with_endpoint)
+      assert_equal LEGACY_IPCRAFT_PROJECT_SCHEMA, graph.fetch('schema')
+      input = write_json(dir, 'legacy_ipcraft_project.json', graph)
 
       stdout, stderr, status = run_drc(input)
 
@@ -310,7 +325,7 @@ class RaveNoCGeneratorTest < Minitest::Test
       _stdout, stderr, status = run_drc(input)
 
       refute status.success?
-      assert_includes stderr, 'ipcraft.noc.project.v1'
+      assert_includes stderr, PROJECT_DESIGN_SCHEMA
     end
   end
 
@@ -350,11 +365,108 @@ class RaveNoCGeneratorTest < Minitest::Test
     package_manifest.fetch('id')
   end
 
-  def package_command_schema(command)
-    IPCRAFT_PROJECT_SCHEMA
+  def package_ref
+    "#{package_id}@#{package_manifest.fetch('version', '1.0')}"
   end
 
-  def ipcraft_project_from_ipcore_graph(graph)
+  def project_design_from_ipcore_graph(graph)
+    legacy = JSON.parse(JSON.generate(graph))
+    state = legacy.fetch('ipcore_state', []).find { |record| record['ipcore'] == package_id } || {}
+    layout_nodes = {}
+    port_ids_by_module = Hash.new { |hash, key| hash[key] = [] }
+
+    legacy.fetch('modules', []).each do |mod|
+      params = mod.fetch('parameters', {})
+      layout_nodes[mod.fetch('id')] = params.slice('x', 'y') if params.key?('x') || params.key?('y')
+    end
+
+    legacy.fetch('connections', []).each do |connection|
+      %w[source target].each do |endpoint|
+        ref = connection.fetch(endpoint)
+        port_ids_by_module[ref.fetch('module')] << ref.fetch('port')
+      end
+    end
+
+    components = [{
+      'id' => state.fetch('instance', 'ravenoc_0'),
+      'type' => 'RaveNoC',
+      'packageRef' => package_ref,
+      'config' => {
+        'parameters' => state.fetch('state', {}).fetch('global_parameters', {})
+      }
+    }]
+    components.concat(legacy.fetch('modules', []).map do |mod|
+      {
+        'id' => mod.fetch('id'),
+        'type' => mod.fetch('type'),
+        'packageRef' => package_ref,
+        'config' => mod.fetch('parameters', {}).reject { |key, _| %w[x y collapsed].include?(key) }
+      }
+    end)
+
+    {
+      'schema' => PROJECT_DESIGN_SCHEMA,
+      'id' => legacy.fetch('name'),
+      'name' => legacy.fetch('name'),
+      'packages' => [
+        {
+          'id' => package_id,
+          'version' => package_manifest.fetch('version', '1.0')
+        }
+      ],
+      'components' => components,
+      'interfaces' => project_design_interfaces(port_ids_by_module),
+      'connections' => legacy.fetch('connections', []).map do |connection|
+        {
+          'id' => connection.fetch('id'),
+          'kind' => 'interface',
+          'from' => project_design_endpoint_ref(connection.fetch('source')),
+          'to' => project_design_endpoint_ref(connection.fetch('target'))
+        }
+      end,
+      'views' => [
+        {
+          'id' => 'graph',
+          'schema' => 'ipcraft.view.v1',
+          'kind' => 'canvas',
+          'targetRef' => "project:#{legacy.fetch('name')}",
+          'providerRef' => 'ipcraft.ui.canvas',
+          'layout' => {
+            'nodes' => layout_nodes,
+            'edges' => {}
+          }
+        }
+      ],
+      'extensions' => []
+    }
+  end
+
+  def project_design_interfaces(port_ids_by_module)
+    port_ids_by_module.flat_map do |module_id, ports|
+      ports.uniq.map do |port|
+        {
+          'id' => "if_#{port}",
+          'ownerComponentId' => module_id,
+          'type' => 'finepaper.ravenoc.interface',
+          'role' => %w[east south noc].include?(port) ? 'initiator' : 'target',
+          'direction' => %w[east south noc].include?(port) ? 'output' : 'input',
+          'protocol' => 'ravenoc',
+          'config' => {
+            'port' => port
+          }
+        }
+      end
+    end
+  end
+
+  def project_design_endpoint_ref(ref)
+    {
+      'component' => ref.fetch('module'),
+      'interface' => "if_#{ref.fetch('port')}"
+    }
+  end
+
+  def legacy_ipcraft_project_from_ipcore_graph(graph)
     legacy = JSON.parse(JSON.generate(graph))
     state = legacy.fetch('ipcore_state', []).find { |record| record['ipcore'] == package_id } || {}
     port_ids_by_module = Hash.new { |hash, key| hash[key] = [] }
@@ -367,7 +479,7 @@ class RaveNoCGeneratorTest < Minitest::Test
     end
 
     {
-      'schema' => package_command_schema('generate'),
+      'schema' => LEGACY_IPCRAFT_PROJECT_SCHEMA,
       'package' => package_id,
       'graph' => { 'name' => legacy.fetch('name') },
       'project' => {
