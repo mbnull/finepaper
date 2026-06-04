@@ -9,10 +9,13 @@ class OpenNoCGenerator
   class GenerationError < StandardError; end
 
   GRAPH_SCHEMA = 'finepaper-ipcore-graph-v1'.freeze
-  IPCRAFT_PROJECT_SCHEMA = 'ipcraft.noc.project.v1'.freeze
-  SUPPORTED_SCHEMAS = [IPCRAFT_PROJECT_SCHEMA, GRAPH_SCHEMA].freeze
+  IPCRAFT_PROJECT_SCHEMA = 'ipcraft.project.v1'.freeze
+  LEGACY_IPCRAFT_PROJECT_SCHEMA = 'ipcraft.noc.project.v1'.freeze
+  SUPPORTED_SCHEMAS = [IPCRAFT_PROJECT_SCHEMA, LEGACY_IPCRAFT_PROJECT_SCHEMA, GRAPH_SCHEMA].freeze
   IPCORE_ID = 'finepaper.opennoc'.freeze
+  PROJECT_STATE_SCHEMA = 'finepaper.opennoc-project-state-v1'.freeze
   XP_TYPE = 'OpenNoCXP'.freeze
+  FABRIC_TYPE = 'OpenNoC'.freeze
 
   AGENT_TYPE_TO_ENUM = {
     'OpenNoCRNF' => 'RNF',
@@ -89,9 +92,11 @@ class OpenNoCGenerator
     data = JSON.parse(File.read(input_path))
     unless SUPPORTED_SCHEMAS.include?(data['schema'])
       raise GenerationError,
-            "expected schema #{IPCRAFT_PROJECT_SCHEMA} (or #{GRAPH_SCHEMA} for legacy compatibility)"
+            "expected schema #{IPCRAFT_PROJECT_SCHEMA} " \
+            "(or #{LEGACY_IPCRAFT_PROJECT_SCHEMA}/#{GRAPH_SCHEMA} for legacy compatibility)"
     end
-    data = normalize_ipcraft_project(data) if data['schema'] == IPCRAFT_PROJECT_SCHEMA
+    data = normalize_project_design(data) if data['schema'] == IPCRAFT_PROJECT_SCHEMA
+    data = normalize_legacy_ipcraft_project(data) if data['schema'] == LEGACY_IPCRAFT_PROJECT_SCHEMA
     raise GenerationError, "expected ipcore #{IPCORE_ID}" unless data['ipcore'] == IPCORE_ID
 
     data.delete('errors')
@@ -102,7 +107,217 @@ class OpenNoCGenerator
     raise GenerationError, "invalid JSON input: #{error.message}"
   end
 
-  def normalize_ipcraft_project(data)
+  def normalize_project_design(data)
+    packages = project_design_required_array(data, 'packages')
+    components = project_design_required_array(data, 'components')
+    interfaces = project_design_optional_array(data, 'interfaces')
+    connections = project_design_optional_array(data, 'connections')
+    package_ref = project_design_package_ref(packages)
+    owner = project_design_owner_component(components)
+    instance_id = owner ? required_project_design_string(owner, 'id') : required_project_design_string(data, 'id')
+    opennoc_components = project_design_opennoc_components(components)
+    modules = normalize_project_design_components(opennoc_components, instance_id)
+
+    {
+      'schema' => GRAPH_SCHEMA,
+      'name' => required_project_design_string(data, 'name'),
+      'ipcore' => IPCORE_ID,
+      'instance' => instance_id,
+      'ipcore_state' => [project_design_state(package_ref, owner, instance_id)],
+      'modules' => modules,
+      'connections' => normalize_project_design_connections(connections, interfaces, modules)
+    }
+  end
+
+  def project_design_package_ref(packages)
+    package = packages.find do |item|
+      item.is_a?(Hash) && item.fetch('id', nil) == IPCORE_ID
+    end
+    raise GenerationError, "ipcraft.project.v1 packages must include #{IPCORE_ID}" unless package
+
+    "#{IPCORE_ID}@#{required_project_design_string(package, 'version')}"
+  end
+
+  def project_design_owner_component(components)
+    project_design_opennoc_components(components).find do |component|
+      project_design_component_type(component) == FABRIC_TYPE
+    end
+  end
+
+  def project_design_opennoc_components(components)
+    components.select do |component|
+      next false unless component.is_a?(Hash)
+
+      package_ref = component.fetch('packageRef', nil).to_s
+      type = project_design_component_type(component)
+      package_ref == IPCORE_ID || package_ref.start_with?("#{IPCORE_ID}@") ||
+        [FABRIC_TYPE, XP_TYPE, *AGENT_TYPE_TO_ENUM.keys].include?(type)
+    end
+  end
+
+  def normalize_project_design_components(components, instance_id)
+    components.map do |component|
+      {
+        'id' => required_project_design_string(component, 'id'),
+        'ipcore' => IPCORE_ID,
+        'instance' => instance_id,
+        'type' => project_design_component_type(component),
+        'parameters' => project_design_component_parameters(component),
+        'ports' => []
+      }
+    end
+  end
+
+  def project_design_state(package_ref, owner, instance_id)
+    {
+      'ipcore' => IPCORE_ID,
+      'instance' => instance_id,
+      'schema' => PROJECT_STATE_SCHEMA,
+      'state' => project_design_state_payload(owner),
+      'package_ref' => package_ref
+    }
+  end
+
+  def project_design_state_payload(owner)
+    return default_project_design_state unless owner
+
+    config = project_design_hash_field(owner, 'config')
+    extension_data = project_design_hash_field(owner, 'extensionData')
+    extension_state = extension_data.fetch('state', nil)
+    return extension_state if extension_state.is_a?(Hash)
+
+    config_state = config.fetch('state', nil)
+    return config_state if config_state.is_a?(Hash)
+
+    if config.fetch('global_parameters', nil).is_a?(Hash)
+      return default_project_design_state.merge('global_parameters' => config.fetch('global_parameters'))
+    end
+
+    if config.fetch('parameters', nil).is_a?(Hash)
+      return default_project_design_state.merge('global_parameters' => config.fetch('parameters'))
+    end
+
+    flat_parameters = config.select { |key, _value| DEFAULTS.key?(key) }
+    default_project_design_state.merge('global_parameters' => flat_parameters)
+  end
+
+  def default_project_design_state
+    {
+      'kind' => 'noc',
+      'type' => FABRIC_TYPE,
+      'global_parameters' => {}
+    }
+  end
+
+  def project_design_component_parameters(component)
+    config = project_design_hash_field(component, 'config')
+    parameters = if config.key?('parameters')
+                   config.fetch('parameters')
+                 else
+                   config.reject { |key, _value| %w[state global_parameters tables documents files].include?(key) }
+                 end
+    unless parameters.is_a?(Hash)
+      raise GenerationError,
+            "ipcraft.project.v1 component #{component.fetch('id', '<unnamed>')} config.parameters must be an object"
+    end
+
+    parameters = parameters.dup
+    identity = project_design_hash_field(component, 'identity')
+    external_id = identity['external_id'] || identity['externalId']
+    parameters['external_id'] ||= external_id if external_id
+    parameters
+  end
+
+  def normalize_project_design_connections(connections, interfaces, modules)
+    module_ids = modules.map { |mod| mod.fetch('id') }
+    interface_port_by_component = project_design_interface_ports(interfaces)
+
+    connections.filter_map do |connection|
+      from = project_design_connection_ref(connection, 'from')
+      to = project_design_connection_ref(connection, 'to')
+      next unless module_ids.include?(from.fetch('component')) || module_ids.include?(to.fetch('component'))
+
+      {
+        'id' => connection.fetch('id', '<unnamed>'),
+        'source' => project_design_connection_endpoint(from, interface_port_by_component, connection),
+        'target' => project_design_connection_endpoint(to, interface_port_by_component, connection)
+      }
+    end
+  end
+
+  def project_design_connection_ref(connection, key)
+    ref = connection.fetch(key, nil)
+    unless ref.is_a?(Hash)
+      raise GenerationError,
+            "ipcraft.project.v1 connection #{connection.fetch('id', '<unnamed>')} #{key} must be an endpoint object"
+    end
+
+    {
+      'component' => required_project_design_string(ref, 'component'),
+      'interface' => required_project_design_string(ref, 'interface')
+    }
+  end
+
+  def project_design_interface_ports(interfaces)
+    ports = Hash.new { |hash, key| hash[key] = {} }
+    interfaces.each do |interface|
+      owner = required_project_design_string(interface, 'ownerComponentId')
+      id = required_project_design_string(interface, 'id')
+      config = project_design_hash_field(interface, 'config')
+      metadata = project_design_hash_field(interface, 'metadata')
+      port = config['port'] || metadata['port'] || id
+      ports[owner][id] = port
+    end
+    ports
+  end
+
+  def project_design_connection_endpoint(ref, interface_port_by_component, connection)
+    component = ref.fetch('component')
+    interface = ref.fetch('interface')
+    ports = interface_port_by_component.fetch(component, nil)
+    port = ports && !ports.empty? ? ports[interface] : interface
+    unless port
+      raise GenerationError,
+            "ipcraft.project.v1 connection #{connection.fetch('id', '<unnamed>')} " \
+            "references unknown interface #{component}.#{interface}"
+    end
+
+    { 'module' => component, 'port' => port }
+  end
+
+  def project_design_component_type(component)
+    required_project_design_string(component, 'type').split('::').last
+  end
+
+  def project_design_hash_field(data, key)
+    value = data.fetch(key, {})
+    raise GenerationError, "ipcraft.project.v1 #{key} must be an object" unless value.is_a?(Hash)
+
+    value
+  end
+
+  def project_design_optional_array(data, key)
+    value = data.fetch(key, [])
+    raise GenerationError, "ipcraft.project.v1 #{key} must be an array" unless value.is_a?(Array)
+
+    value
+  end
+
+  def project_design_required_array(data, key)
+    value = data[key]
+    raise GenerationError, "ipcraft.project.v1 #{key} must be an array" unless value.is_a?(Array)
+
+    value
+  end
+
+  def required_project_design_string(data, key)
+    value = data[key]
+    raise GenerationError, "ipcraft.project.v1 #{key} must be a string" unless value.is_a?(String) && !value.empty?
+
+    value
+  end
+
+  def normalize_legacy_ipcraft_project(data)
     package = required_string(data, 'package')
     project = required_hash(data, 'project')
     project_instance = required_hash(project, 'instance')

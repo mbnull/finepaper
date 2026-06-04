@@ -1,4 +1,3 @@
-# Migration-only legacy schema handling. Not used by normal runtime loading.
 $LOAD_PATH.unshift File.expand_path('../src/ruby', __dir__)
 
 require 'fileutils'
@@ -8,7 +7,8 @@ require 'open3'
 require 'tmpdir'
 require 'rbconfig'
 
-IPCRAFT_PROJECT_SCHEMA = 'ipcraft.noc.project.v1'.freeze
+IPCRAFT_PROJECT_SCHEMA = 'ipcraft.project.v1'.freeze
+LEGACY_IPCRAFT_PROJECT_SCHEMA = 'ipcraft.noc.project.v1'.freeze
 
 class OpenNoCGeneratorTest < Minitest::Test
   GENERATOR = File.expand_path('../bin/generate', __dir__)
@@ -66,11 +66,13 @@ class OpenNoCGeneratorTest < Minitest::Test
     end
   end
 
-  def test_generator_accepts_ipcraft_project_schema
+  def test_generator_accepts_project_design_schema
     Dir.mktmpdir do |dir|
-      graph = ipcraft_project_from_ipcore_graph(valid_graph)
-      assert_equal package_command_schema('generate'), graph.fetch('schema')
-      input = write_json(dir, 'ipcraft_project.json', graph)
+      graph = valid_graph
+      graph.fetch('ipcore_state').first.fetch('state').fetch('global_parameters')['req_flit_width'] = 192
+      project = ipcraft_project_from_ipcore_graph(graph)
+      assert_equal package_command_schema('generate'), project.fetch('schema')
+      input = write_json(dir, 'ipcraft_project.json', project)
       vendor = File.join(dir, 'vendor/OpenNoC')
       make_fake_vendor(vendor)
       output = File.join(dir, 'out')
@@ -83,16 +85,32 @@ class OpenNoCGeneratorTest < Minitest::Test
       assert_equal({ 'X' => 0, 'Y' => 0, 'P0' => 'RNF', 'P1' => 'RNI' }, mesh.fetch('XP0_0'))
       manifest = JSON.parse(File.read(File.join(output, 'manifest.json')))
       assert_equal 'finepaper.opennoc', manifest.fetch('ipcore')
+      assert_equal 192, manifest.fetch('parameters').fetch('req_flit_width')
       assert_equal 2, manifest.fetch('rows')
       assert_equal 2, manifest.fetch('cols')
+      verify = File.read(File.join(output, 'verify.sh'))
+      assert_includes verify, '-GREQ_FLIT_WIDTH=192'
     end
   end
 
-  def test_drc_accepts_ipcraft_project_schema
+  def test_drc_accepts_project_design_schema
     Dir.mktmpdir do |dir|
-      graph = ipcraft_project_from_ipcore_graph(valid_graph)
-      assert_equal package_command_schema('validate'), graph.fetch('schema')
-      input = write_json(dir, 'ipcraft_project.json', graph)
+      project = ipcraft_project_from_ipcore_graph(valid_graph)
+      assert_equal package_command_schema('validate'), project.fetch('schema')
+      input = write_json(dir, 'ipcraft_project.json', project)
+
+      stdout, stderr, status = run_drc(input)
+
+      assert status.success?, stderr
+      assert_includes stdout, 'OpenNoC DRC passed'
+    end
+  end
+
+  def test_drc_accepts_legacy_ipcraft_noc_project_schema
+    Dir.mktmpdir do |dir|
+      project = legacy_ipcraft_project_from_ipcore_graph(valid_graph)
+      assert_equal LEGACY_IPCRAFT_PROJECT_SCHEMA, project.fetch('schema')
+      input = write_json(dir, 'legacy_ipcraft_project.json', project)
 
       stdout, stderr, status = run_drc(input)
 
@@ -275,7 +293,7 @@ class OpenNoCGeneratorTest < Minitest::Test
       _stdout, stderr, status = run_drc(input)
 
       refute status.success?
-      assert_includes stderr, 'ipcraft.noc.project.v1'
+      assert_includes stderr, 'ipcraft.project.v1'
     end
   end
 
@@ -309,6 +327,14 @@ class OpenNoCGeneratorTest < Minitest::Test
     package_manifest.fetch('id')
   end
 
+  def package_version
+    package_manifest.fetch('version')
+  end
+
+  def package_ref
+    "#{package_id}@#{package_version}"
+  end
+
   def package_command_schema(command)
     IPCRAFT_PROJECT_SCHEMA
   end
@@ -316,17 +342,75 @@ class OpenNoCGeneratorTest < Minitest::Test
   def ipcraft_project_from_ipcore_graph(graph)
     legacy = JSON.parse(JSON.generate(graph))
     state = legacy.fetch('ipcore_state', []).find { |record| record['ipcore'] == package_id } || {}
-    port_ids_by_module = Hash.new { |hash, key| hash[key] = [] }
-
-    legacy.fetch('connections', []).each do |connection|
-      %w[source target].each do |endpoint|
-        ref = connection.fetch(endpoint)
-        port_ids_by_module[ref.fetch('module')] << ref.fetch('port')
-      end
-    end
+    state_payload = state.fetch('state', {})
+    owner_id = state.fetch('instance', legacy.fetch('instance', 'opennoc_0'))
+    port_ids_by_module = port_ids_by_module(legacy)
 
     {
       'schema' => package_command_schema('generate'),
+      'id' => legacy.fetch('name'),
+      'name' => legacy.fetch('name'),
+      'packages' => [
+        {
+          'id' => package_id,
+          'version' => package_version
+        }
+      ],
+      'components' => [
+        {
+          'id' => owner_id,
+          'type' => 'OpenNoC',
+          'packageRef' => package_ref,
+          'config' => {
+            'parameters' => state_payload.fetch('global_parameters', {})
+          }
+        }
+      ] + legacy.fetch('modules', []).map do |mod|
+        {
+          'id' => mod.fetch('id'),
+          'type' => mod.fetch('type'),
+          'packageRef' => package_ref,
+          'config' => {
+            'parameters' => semantic_component_parameters(mod.fetch('parameters', {}))
+          }
+        }
+      end,
+      'interfaces' => port_ids_by_module.flat_map do |module_id, ports|
+        ports.uniq.map do |port|
+          {
+            'id' => project_design_interface_id(module_id, port),
+            'ownerComponentId' => module_id,
+            'type' => 'opennoc_port',
+            'role' => 'peer',
+            'direction' => 'inout',
+            'protocol' => project_design_protocol(port),
+            'config' => {
+              'port' => port
+            }
+          }
+        end
+      end,
+      'connections' => legacy.fetch('connections', []).map do |connection|
+        {
+          'id' => connection.fetch('id'),
+          'kind' => 'interface',
+          'from' => project_design_endpoint(connection.fetch('source')),
+          'to' => project_design_endpoint(connection.fetch('target'))
+        }
+      end,
+      'topologies' => [],
+      'views' => [],
+      'extensions' => []
+    }
+  end
+
+  def legacy_ipcraft_project_from_ipcore_graph(graph)
+    legacy = JSON.parse(JSON.generate(graph))
+    state = legacy.fetch('ipcore_state', []).find { |record| record['ipcore'] == package_id } || {}
+    port_ids_by_module = port_ids_by_module(legacy)
+
+    {
+      'schema' => LEGACY_IPCRAFT_PROJECT_SCHEMA,
       'package' => package_id,
       'graph' => { 'name' => legacy.fetch('name') },
       'project' => {
@@ -360,6 +444,38 @@ class OpenNoCGeneratorTest < Minitest::Test
         }
       end
     }
+  end
+
+  def port_ids_by_module(graph)
+    port_ids = Hash.new { |hash, key| hash[key] = [] }
+
+    graph.fetch('connections', []).each do |connection|
+      %w[source target].each do |endpoint|
+        ref = connection.fetch(endpoint)
+        port_ids[ref.fetch('module')] << ref.fetch('port')
+      end
+    end
+
+    port_ids
+  end
+
+  def semantic_component_parameters(parameters)
+    parameters.reject { |key, _value| %w[x y].include?(key) }
+  end
+
+  def project_design_endpoint(ref)
+    {
+      'component' => ref.fetch('module'),
+      'interface' => project_design_interface_id(ref.fetch('module'), ref.fetch('port'))
+    }
+  end
+
+  def project_design_interface_id(module_id, port)
+    "if_#{module_id}_#{port}"
+  end
+
+  def project_design_protocol(port)
+    %w[east west north south].include?(port) ? 'opennoc_mesh_link' : 'opennoc_chi_attachment'
   end
 
   def make_fake_vendor(root)
