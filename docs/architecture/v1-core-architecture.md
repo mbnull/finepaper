@@ -1,46 +1,61 @@
 # Ipcraft V1 Core Architecture Contract
 
-This document is the public contract for the V1 hard cutover. Runtime behavior is defined by schemas, CLI JSON envelopes, public examples, and this document.
+Migration-only legacy schema handling. Not used by normal runtime loading.
 
-## Goals / Non-Goals
+This document is the public V1 architecture contract for the current Finepaper
+/ Ipcraft runtime. It is intentionally contract-oriented: schemas, CLI JSON
+envelopes, diagnostics, examples, and this file define the externally auditable
+behavior.
+
+本文按当前版本重写。核心口径是：Finepaper 已从以 Qt `Graph` 为根的
+NoC 编辑器，切换为以 `ipcraft.project.v1` 项目文档和
+`ipcraft.package.v1` package 契约为根的 IP 制作与组合平台。
+
+## Goals And Non-Goals
 
 Goals:
 
 - project-level IP composition
-- IP generator frontend and input emission
 - declarative package capability contracts
-- static validation, flow orchestration, artifacts, and diagnostics
-- stable black-box audit through CLI and public examples
+- package-driven configuration, interfaces, connection rules, emitters, flows,
+  artifacts, and views
+- static validation by default
+- explicit input emission and flow execution
+- structured diagnostics and black-box audit through public contracts
 
 Non-goals:
 
-- modeling every IP's internal hardware semantics in core
-- embedding NoC, DDR, SerDes, clock-domain, or accelerator-specific correctness rules in core
-- requiring every package to ship a Qt plugin
+- embedding every IP domain rule in core
+- hardcoding NoC, AXI, CHI, DDR, SerDes, CDC, or accelerator semantics in core
+- requiring every package to ship a Qt/C++ plugin
+- treating Qt canvas `Graph` as the durable project aggregate
+- allowing generators or validators to read `.fpproj` directly as their normal
+  input
 
-Vendor or IP-specific semantics belong in package validators, generators, first-party extensions, or optional plugins.
+Deep IP semantics belong in package validators, generator tools, first-party
+extensions, or optional plugins.
 
-## V1 Hard Cutover And Legacy Policy
+## Runtime Source Of Truth
 
-`ipcraft.project.v1` is the project runtime schema. Old `schema: "v1"` Finepaper projects and legacy NoC instance-state documents are not normal runtime formats. Normal project loading rejects old schemas with `project.unsupported_schema`.
+| Boundary | Current contract |
+| --- | --- |
+| Project file | `ipcraft.project.v1` |
+| Package runtime file | `ipcraft.package.v1` in package-local `ipcraft.json` |
+| CLI result envelope | `ipcraft.cli.result.v1` |
+| Diagnostics | `ipcraft.diagnostics.v1` / `ipcraft.diagnostic.v1` |
+| Generator emitted inputs | `ipcraft.emitted-inputs.v1` |
+| Instance-local graph config | `ipcraft.graph-config.v1` |
 
-Legacy content is accepted only through:
+`ProjectDocument` is the current in-memory project root used by the Qt/runtime
+path. The newer foundation API under `ipcraft::core` exposes `ProjectDesign`
+and `ProjectPatch` as the cleaner target IR. Both describe the same direction:
+project semantics are document/component/interface/connection based, not
+Qt-graph based.
 
-```bash
-ipcraft-cli migrate-project old.fpproj --to ipcraft.project.v1
-```
+## Project Model
 
-Successful migration returns the migrated document under `result.project`. Opaque legacy state is preserved under `migration.preserved.legacy_state`.
-
-## Authoring/Runtime Package Boundary
-
-Package runtime files must be self-contained after normalization. Runtime code must load `ipcraft.package.v1` directly and must not depend on `ipcore.yml`. `ipcore.yml` may exist as an authoring/specgen source, but it is outside the runtime loading path.
-
-Qt editor, headless API, and `ipcraft-cli` consume normalized `ipcraft.package.v1` only.
-
-## ProjectDocument Schema
-
-`ipcraft.project.v1` is the persistent `ProjectDesign` root. It uses:
+`ipcraft.project.v1` is the public project schema. The foundation schema shape
+uses the following root fields:
 
 - `schema`
 - `id`
@@ -57,26 +72,68 @@ Qt editor, headless API, and `ipcraft-cli` consume normalized `ipcraft.package.v
 - optional `extensions[]`
 - optional `metadata`
 
-Unknown top-level fields are rejected. Forward compatibility uses `metadata`
-or package-owned `extensions[]`; view-local layout lives under `views[].layout`,
-not as a root semantic field.
+Current Qt runtime also has `ProjectDocument` fields named `instances`,
+`composition`, `layout`, `diagnostics`, `artifacts`, `migration`, and `native`.
+Those fields represent the adapter/runtime project document used while the UI
+continues to project through `Graph`. The architecture direction is that
+semantic data lives in project/component/config/composition structures, while
+visual state lives in `views[].layout` or runtime layout state.
 
-For the foundation contract, `schemas/ipcraft.project.v1.schema.json` and
-`qt/src/ipcraft/core/project_document_v1.cpp` are authoritative for project
-schema shape. The older Qt `ProjectReader`/`ProjectWriter` path under
-`qt/src/project` and current `examples/contracts/*/project.fpproj` files are
-legacy adapter fixtures pending migration; they must not be used to redefine
-the new `ipcraft-core` `ProjectDesign` document root.
+Unknown top-level fields are rejected. Forward compatibility must use
+`metadata`, package-owned `extensions[]`, `native`, or explicitly versioned
+schema fields.
 
-## PackageSpec Schema
+## Package Model
 
-`ipcraft.package.v1` describes package capabilities, not internal resolved hardware state. It includes package identity, extensions, config schema, interfaces, connection rules, emitters, flows, artifacts, diagnostics mapping, views, plugin metadata, native schema, metadata, and native data.
+`ipcraft.package.v1` describes package capability, not resolved hardware state.
+Runtime package loading consumes package-local `ipcraft.json` after
+normalization. `ipcore.yml` may exist as authoring/specgen input, but it is not
+the runtime loading contract.
 
-The runtime loader resolves exact `{id, version}` matches. If a package id exists but the requested version does not, resolution emits `package.version_not_found`. If the id is unknown, it emits `package.not_found`.
+`PackageSpec` contains:
 
-## ConfigBundle Model
+- identity: `id`, `version`, `name`
+- `extensions`
+- `config_schema`
+- `interfaces`
+- `connection_rules`
+- `emitters`
+- `flows`
+- `artifacts`
+- `diagnostics`
+- `views`
+- optional `plugin`
+- `native_schema`, `metadata`, `native`
 
-`ConfigSchema` declares parameters, tables, documents, and files. `ConfigBundle` stores instance values:
+Optional capability sections must be explicitly enabled by extension. Section
+presence never implicitly enables a capability.
+
+Known V1 extension IDs include:
+
+- `ipcraft.config.params`
+- `ipcraft.config.tables`
+- `ipcraft.config.documents`
+- `ipcraft.config.files`
+- `ipcraft.interfaces`
+- `ipcraft.composition`
+- `ipcraft.layout`
+- `ipcraft.emitters`
+- `ipcraft.flows`
+- `ipcraft.artifacts`
+- `ipcraft.diagnostics`
+- `ipcraft.views`
+- `ipcraft.graph_config`
+- `noc.v1`
+
+Violations emit `package.extension_required`; unknown extensions emit
+`package.unknown_extension`.
+
+## Configuration Model
+
+`ConfigSchema` declares what a package accepts. `ConfigBundle` stores instance
+values.
+
+`ConfigBundle` sections:
 
 - `parameters`
 - `tables`
@@ -84,117 +141,86 @@ The runtime loader resolves exact `{id, version}` matches. If a package id exist
 - `files`
 - `preserved`
 
-Clock domains, DTC domains, DDR lanes, SerDes tuning, and IP-specific dataflow rules are config or native data unless an extension/plugin explicitly promotes them.
-
-Validation rejects any `ConfigBundle.parameters` key not declared by `ConfigSchema.parameters` with `config.unknown_parameter`. Validation rejects any `ConfigBundle.documents` key not declared by `ConfigSchema.documents` with `config.unknown_document`. Validation rejects any `ConfigBundle.files` key not declared by `ConfigSchema.files` with `config.unknown_file`. Table rows reject undeclared columns with `config.unknown_table_column` unless the table declares `preserve_unknown_columns: true`; preserved columns remain in normalized config only when that flag is true.
-
-File input declarations may use `allowed_extensions`, `allowed`, or `extensions`; all three are arrays of extension strings such as `.xdc`. Invalid file values emit `config.file_extension_invalid` at the file path value location.
-
-## Value Type System And Expression Boundary
+Validation rejects undeclared parameters, documents, files, table columns, and
+invalid file/path values with stable `config.*` diagnostics. Core validation is
+structural and shallow. It does not implement protocol-specific correctness
+such as AXI burst legality, CHI cache-state behavior, or NoC routing safety.
 
 Value V1 supports null, bool, int64, double, string, array, and object.
+Expression support is JSON AST only and limited to deterministic forms such as
+`param`, `exists`, `eq`, `ne`, `and`, `or`, `not`, and literals. Expressions
+cannot execute scripts, spawn processes, read files, access network state, or
+mutate project data.
 
-Parameter mappings:
+## Composition Model
 
-- `int` -> int64
-- `bool` -> bool
-- `double` -> double
-- `string` -> string
-- `enum` -> string or int64, declared by `value_type`
-- `path` -> string with path confinement validation
-- `object` -> object
-- `array` -> array
+`CompositionModel` describes project-level IP-to-IP connections.
 
-Expressions are JSON AST only. Allowed forms are `param`, `exists`, `eq`, `ne`, `and`, `or`, `not`, and literal booleans. Arbitrary script, process execution, network access, file reads, environment access, and state mutation are forbidden.
+Core records:
 
-Expression V1 accepts the following concrete JSON forms:
+- `CompositionEndpointRef`: instance/interface/port/role reference
+- `SystemConnection`: `id`, `type`, `endpoints[]`, `source`, `properties`,
+  optional `native`
+- `ExternalPort`: project-facing exposed interface
+- `CompositionModel`: connections, external ports, groups, properties, native
 
-```json
-true
-```
+Validation order:
 
-```json
-false
-```
+1. referenced instance exists
+2. referenced interface exists
+3. duplicate/multiply driven inputs are rejected
+4. clock/reset source-count rules are checked
+5. connection type is resolved through package connection rules
+6. endpoint role/protocol/kind/direction compatibility is checked
 
-```json
-{ "param": "width" }
-```
+If a connection type has no declared compatibility rule after alias
+normalization, validation emits `composition.unknown_connection_class` and stops
+deeper compatibility evaluation for that connection.
 
-```json
-{ "op": "exists", "param": "width" }
-```
+## GraphConfig And Layout
 
-```json
-{ "op": "eq", "left": { "param": "mode" }, "right": { "literal": "fast" } }
-```
+`ipcraft.graph-config.v1` is instance-local internal graph configuration. It is
+not the project root. It contains:
 
-```json
-{ "op": "ne", "left": { "param": "mode" }, "right": { "literal": "slow" } }
-```
+- `objects[]`
+- n-ary `relationships[]`
+- `properties`
+- `native`
 
-```json
-{ "op": "and", "args": [true, { "op": "exists", "param": "width" }] }
-```
+Visual editor state is separate. Canvas coordinates, node size, collapsed
+state, zoom, pan, edge waypoints, and presentation state belong to layout/view
+state, not generator parameters.
 
-```json
-{ "op": "or", "args": [false, { "op": "exists", "param": "mode" }] }
-```
+Qt still uses `Graph` as the live canvas projection. That projection is an
+adapter and UI implementation detail; it cannot redefine the V1 project
+contract.
 
-```json
-{ "op": "not", "arg": { "op": "exists", "param": "disabled" } }
-```
+## Emitters And Tool Inputs
 
-Literal value nodes are `{ "literal": <null|bool|int64|double|string|array|object> }`.
-`param` nodes read from `ConfigBundle.parameters` only. `eq` and `ne` compare JSON values exactly. `and` and `or` require non-empty `args` arrays. Unknown operators or extra fields produce `config.expression_unsupported`.
+Package emitters are deterministic and ordered by declaration order.
 
-Allowed expression sites are `visible_when`, `enabled_when`, `required_when`, and `default_when` only when explicitly supported.
+V1 emitter kinds:
 
-## CompositionModel Model
+- `emit_parameters`
+- `emit_config_document`
+- `emit_table`
+- `copy_file`
+- `emit_composition`
+- `emit_graph_config`
 
-`CompositionModel` describes project-level IP-to-IP connections. A connection has `id`, `type`, n-ary `endpoints`, `properties`, `source`, and optional native data. Core performs shallow validation in this order: instance existence, interface existence, duplicate/multiply driven inputs, clock/reset source-count rules, required interface connection, declared connection type compatibility, then endpoint role/protocol/kind compatibility.
+Emitter output paths are relative to the emit root. Absolute paths, `..`,
+symlink escapes, duplicate output paths, and missing declared source objects
+produce structured `emitter.*` diagnostics.
 
-If a connection `type` has no package compatibility rule after alias normalization, validation emits `composition.unknown_connection_class` before endpoint compatibility diagnostics. Core then stops compatibility evaluation for that connection.
-
-Core does not implement deep AXI, CHI, APB, NoC, DDR, SerDes, or CDC semantics.
-
-## LayoutModel Model
-
-Layout is editor-owned state. Canvas node positions, zoom, pan, collapsed state, and view state belong in `layout`, not in generator parameters. Values that affect generated hardware, such as lane index or channel index, belong in `ConfigBundle` or `CompositionModel.properties`.
-
-## Graph-Config Schema
-
-`ipcraft.graph-config.v1` is package instance configuration, not the project root. It contains `objects[]`, n-ary `relationships[]`, `properties`, and `native`. It must not expose old source/target PortRef-only assumptions. Canvas x/y remains in `LayoutModel`.
-
-## Emitted Inputs Manifest Schema
-
-`ipcraft.emitted-inputs.v1` is returned by `emit-inputs` and flow `emit_inputs` steps. Paths are relative to the emit root, deterministic, and confined. The manifest records project id, instance id, package id/version, optional run id, files, hashes/sizes when available, source mapping, and diagnostics.
-
-Emitter objects in `PackageSpec.emitters[]` are deterministic and ordered by their array order. V1 emitter kinds are:
-
-- `emit_parameters`: `{ "id", "kind": "emit_parameters", "path" }` writes the instance parameter map. Manifest file source is `{ "parameters": true }`.
-- `emit_config_document`: `{ "id", "kind": "emit_config_document", "document", "path" }` writes one `ConfigBundle.documents[document]` entry. Manifest source is `{ "document": "<id>", "path": "$" }`.
-- `emit_table`: `{ "id", "kind": "emit_table", "table", "path" }` writes one `ConfigBundle.tables[table]` entry. Manifest source is `{ "table": "<id>", "path": "$" }`.
-- `copy_file`: `{ "id", "kind": "copy_file", "source", "path" }` copies one package-local source file. `source_path` is an accepted alias for `source`. Manifest source is `{ "file": "<package-relative-source-path>" }`.
-- `emit_composition`: `{ "id", "kind": "emit_composition", "path" }` writes the project `CompositionModel`. Manifest source is `{ "composition": true }`.
-- `emit_graph_config`: `{ "id", "kind": "emit_graph_config", "path" }` writes the instance `graph_config`. Manifest source is `{ "graph_config": true }`.
-
-All emitter `path` values are relative to the emit root. Absolute paths, `..`, symlink escapes, duplicated output paths, and missing declared source objects produce structured `emitter.*` diagnostics.
+`ipcraft.emitted-inputs.v1` records project id, instance id, package id/version,
+run id, emitted files, hashes/sizes when available, source mapping, and
+diagnostics.
 
 ## FlowRunner Model
 
-Flows are declared in `PackageSpec.flows`. Each flow declares:
+Flows are declared in `PackageSpec.flows`.
 
-```json
-{
-  "id": "generate",
-  "scope": "instance",
-  "steps": []
-}
-```
-
-`scope` values are `instance` and `project`. Missing `scope` is normalized to `instance`; invalid `scope` emits `package.invalid_flow`.
-Step kinds are:
+Step kinds:
 
 - `emit_inputs`
 - `exec`
@@ -202,87 +228,73 @@ Step kinds are:
 - `collect_artifacts`
 - `plugin_hook`
 
-Default `validate-project` is static and does not run flows or external processes. External validation, generation, tests, and packaging run only through `run-flow`.
+Current runtime supports static validation separately from flow execution.
+`validate-project` does not run external processes. External generation,
+validation, tests, and packaging run through `run-flow` or the Qt Generate
+path.
 
-Instance-scoped flows require `--instance <id>` or `--all-instances`. Project-scoped flows do not accept instance targeting.
+Instance-scoped flows require exactly one of `--instance <id>` or
+`--all-instances`. Project-scoped flows reject instance targeting.
 
-## FlowRunner Process Security
+## Process And Artifact Security
 
-Defaults:
+Runtime must reject:
 
-- cwd is the run directory unless declared otherwise
+- unsupported schemas
+- duplicate ids
+- unknown top-level fields
+- package-local path traversal
+- absolute package-local paths
+- symlink escapes
+- missing executables
+- flow policy violations
+- unsafe output subdirectories
+- artifact glob escapes
+
+Flow process defaults:
+
+- cwd is a confined run directory unless policy declares otherwise
 - package-local executables resolve relative to package root
-- framework tools come from application policy, not package native data
-- environment is sanitized plus explicitly allowed variables
-- timeout defaults to a fixed value and is bounded
-- stdout/stderr are captured under the run directory with byte limits
-- nonzero exit, timeout, missing executable, policy violation, and truncation produce structured diagnostics
+- framework tools come from host policy
+- environment is sanitized and allowlisted
+- timeout and stdout/stderr capture have upper bounds
 - process-tree cleanup is attempted on timeout
-- parallel flow execution is disabled in V1 unless explicitly implemented with deterministic run directories
 
-## DiagnosticModel Model
+## Diagnostics
 
-Diagnostics use `ipcraft.diagnostics.v1`. A diagnostic has stable `severity`, `source`, `rule_id`, optional `category`, human-readable `message`, `details`, and ordered `locations`.
+Diagnostics are structured and stable for audit.
 
-Location kinds include project, ip instance, interface, connection, parameter, table cell, document path, file, artifact, and graph object.
+Stable fields:
 
-## Diagnostic Stability Rules
+- `severity`
+- `source`
+- `rule_id`
+- ordered `locations[]`
 
-Black-box tests match `rule_id`, `severity`, `source`, and locations. Messages are human-readable and not stable. Most specific locations appear first; fallback locations may follow.
+Messages are human-readable and not a stable test API. The authoritative
+rule-id catalog is `docs/audit/rule-id-catalog.md`.
 
-## ArtifactIndex Model
+Location kinds include project, instance, interface, connection, parameter,
+table cell, document path, file, artifact, and graph object.
 
-`ArtifactSpec` declares expected outputs by id, type, glob, primary flag, and metadata. `ArtifactIndex` records collected artifacts by flow run, path, type, size, modified time, source instance, and spec id. Globs are confined to the run/output root after realpath resolution.
+## Migration Policy
 
-## Extension Vs Plugin Boundary
+Normal project loading accepts the current V1 project contract. Old schemas may
+exist only through explicit migration/import commands.
 
-First-party extensions are declarative capability descriptors. Plugins are optional dynamic escape hatches.
+`migrate-project <project> --to ipcraft.project.v1` is side-effect free. It
+returns migrated output under `result.project`; unsupported or opaque legacy
+state is preserved under migration-specific preserved data and diagnostics.
 
-Default path: first-party extensions + `ipcraft.package.v1` + templates + FlowRunner.
+Old NoC project inputs such as `ipcraft.noc.project.v1` are not the normal
+runtime project format. They may remain only in explicit migration paths,
+readiness comparison fixtures, or isolated generator compatibility adapters.
 
-Plugins are used only when declaration is insufficient, for enum providers, custom validation, custom emission, diagnostic parsing, custom project views, instance migration, artifact post-processing, wrapper generation, or custom layout.
+## Public CLI Contract
 
-## Explicit Extension Enablement Rules
+All public commands emit `ipcraft.cli.result.v1` JSON to stdout.
 
-Optional capability sections must declare their extension. Section presence never implicitly enables a capability.
-
-Declared extension IDs must be known to this runtime. Unknown extension IDs emit `package.unknown_extension` at the declaration path. V1 known extension IDs are `ipcraft.config.params`, `ipcraft.config.tables`, `ipcraft.config.documents`, `ipcraft.config.files`, `ipcraft.interfaces`, `ipcraft.composition`, `ipcraft.layout`, `ipcraft.emitters`, `ipcraft.flows`, `ipcraft.artifacts`, `ipcraft.diagnostics`, `ipcraft.views`, `ipcraft.graph_config`, and the bundled cutover extension `noc.v1`.
-
-- `config_schema.parameters` requires `ipcraft.config.params`
-- `config_schema.tables` requires `ipcraft.config.tables`
-- `config_schema.documents` requires `ipcraft.config.documents`
-- `config_schema.files` requires `ipcraft.config.files`
-- `interfaces` requires `ipcraft.interfaces`
-- `connection_rules` requires `ipcraft.composition`
-- `emitters` requires `ipcraft.emitters`
-- `flows` requires `ipcraft.flows`
-- `artifacts` requires `ipcraft.artifacts`
-- `diagnostics` requires `ipcraft.diagnostics`
-- `views` requires `ipcraft.views`
-- `graph_config` requires `ipcraft.graph_config`
-
-Violations emit `package.extension_required`.
-
-## Native Escape Hatch
-
-`native` and `preserved` store namespaced opaque data. Core must preserve these fields but must not derive hidden hardware semantics from them. Native data cannot override process security policy.
-
-## Migration Strategy
-
-Migration is explicit and side-effect free. Old project data is read by migrator code, not by the normal project reader. Migrated output is canonical `ipcraft.project.v1`.
-
-Migration maps old IP state to instances, old layout parameters to LayoutModel, unambiguous non-layout parameters to ConfigBundle, same-instance internal graph data to graph-config, and unsupported legacy content to `migration.unsupported_legacy_content`.
-
-Migration input diagnostics are migration-scoped: a missing input file emits `migration.input_missing` and compatibility alias `migration.read_failed`; malformed JSON or non-object JSON emits `migration.invalid_input` and compatibility alias `migration.invalid_json`; an unsupported source schema emits `migration.unsupported_schema`; and a wrong `--to` value emits `migration.unsupported_target`.
-
-## Security Model
-
-Runtime rejects unsupported schemas, duplicate ids, unknown top-level fields, path traversal, absolute package-local paths, symlink escapes, missing executables, flow policy violations, and artifact escapes. Validation commands are static by default.
-CLI commands that derive output subdirectories from project data must reject path separators, `.` and `..` segments before creating run directories.
-
-## Public CLI/API Contract
-
-All commands emit `ipcraft.cli.result.v1` JSON to stdout:
+Required commands:
 
 - `inspect-project <project>`
 - `validate-project <project> --packages <package-root>`
@@ -292,35 +304,36 @@ All commands emit `ipcraft.cli.result.v1` JSON to stdout:
 - `migrate-project <project> --to ipcraft.project.v1`
 - `collect-artifacts <run-dir> --spec <package-spec>`
 
-Errors also use the CLI result envelope with structured diagnostics.
+Important behavior:
 
-Current command details:
-
-- `inspect-project` reads only the project file and returns `result.project.{id,name}` plus `result.instances`.
-- `validate-project` requires `--packages`, performs static schema/config/composition validation, and does not spawn external processes.
-- `emit-inputs` requires `--instance`, `--out`, and `--packages`.
-- instance-scoped `run-flow` requires exactly one of `--instance` or `--all-instances`; project-scoped flows omit both.
-- `run-flow` creates per-instance run directories under `--out`; unsafe instance ids that would become path segments are rejected with `cli.path_escape`.
-- `collect-artifacts --spec` takes a package spec file path, not a package root.
-- `migrate-project` on an already `ipcraft.project.v1` input is idempotent success. It returns canonicalized `result.project`; implementations may include warning diagnostic `migration.already_current`.
-
-## Testability Contract
-
-Third-party audit agents use only public docs, schemas, examples, CLI, and public APIs. They do not need internal unit tests. The implementation must not branch on hidden test names, fixture names, package ids, or example names.
+- `validate-project` is static and does not spawn external processes.
+- `emit-inputs` requires explicit instance and output root.
+- `run-flow` creates confined run directories.
+- unsafe instance ids used as path segments are rejected with `cli.path_escape`.
+- errors use the same CLI result envelope with structured diagnostics.
 
 ## Black-Box Audit Protocol
 
-Workflow:
+Audit agents use only public docs, schemas, examples, CLI, and public APIs.
+They do not need internal unit tests.
 
-1. Implementation publishes docs, schemas, examples, and `ipcraft-cli`.
-2. Audit agent reads only public materials.
-3. Audit agent writes independent hidden tests.
-4. Codex cannot read hidden tests.
-5. Codex receives only failure summaries.
-6. Failure summaries include contract section, expected behavior, actual behavior, and minimal redacted input.
-7. Ambiguous contracts are fixed publicly before changing tests or implementation.
-8. Implementation never branches on hidden test names, example names, or package ids.
+Rules:
 
-## Diagnostic Rule-ID Catalog
+1. Public contract ambiguities are fixed publicly before implementation changes.
+2. Hidden tests must match stable schema, CLI, and diagnostic fields.
+3. Implementation must not branch on hidden test names, fixture names, or
+   example names.
+4. Implementation must not hardcode test package ids or example project ids.
 
-The authoritative rule-id catalog is `docs/audit/rule-id-catalog.md`.
+## Current Transition State
+
+Current runtime is in a V1 cutover transition:
+
+- `ProjectDocument` / `PackageSpec` / `ConfigSchema` / `CompositionModel` are
+  the runtime contract direction.
+- Qt editor still uses `Graph` for live interaction and projects it back to V1
+  state during save/generation.
+- `ProjectDesign` / `ProjectPatch` foundation APIs exist and represent the
+  cleaner long-term core IR.
+- first-party generators are being moved toward standard projected tool inputs;
+  legacy graph-shaped adapters are temporary.
