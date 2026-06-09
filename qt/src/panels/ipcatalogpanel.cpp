@@ -4,6 +4,7 @@
 #include "ipcore/internalmodulelibrarymodel.h"
 #include "ipcore/ipcatalogservice.h"
 #include "ipcore/iptoolsmodel.h"
+#include "modules/modulelabels.h"
 #include "project/projectipservice.h"
 #include "project/projectstateservice.h"
 #include "widgets/collapsiblesection.h"
@@ -71,22 +72,7 @@ QString humanizeCategory(const QString& category) {
         return QStringLiteral("NoC");
     }
 
-    QString text = trimmed;
-    text.replace('-', ' ');
-    text.replace('_', ' ');
-
-    bool capitalizeNext = true;
-    for (int index = 0; index < text.size(); ++index) {
-        if (text[index].isSpace()) {
-            capitalizeNext = true;
-            continue;
-        }
-        if (capitalizeNext) {
-            text[index] = text[index].toUpper();
-            capitalizeNext = false;
-        }
-    }
-    return text;
+    return ModuleLabels::humanizeIdentifier(trimmed);
 }
 
 QWidget* contentWidget(QWidget* parent) {
@@ -331,7 +317,10 @@ void IpCatalogPanel::refreshCatalog() {
 
     const QString filter = m_search ? m_search->text() : QString();
     QMap<QString, QTreeWidgetItem*> categories;
-    for (const IpCatalogEntry& entry : m_catalogService->selectableEntries()) {
+    for (const IpCatalogEntry& entry : m_catalogService->entries()) {
+        if (!entry.isSelectable()) {
+            continue;
+        }
         if (!catalogMatchesFilter(entry, filter)) {
             continue;
         }

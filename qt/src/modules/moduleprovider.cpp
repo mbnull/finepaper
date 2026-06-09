@@ -2,6 +2,7 @@
 #include "modules/moduleprovider.h"
 #include "app/appsettings.h"
 #include "ipcraft/ipcraftregistry.h"
+#include "modules/modulelabels.h"
 #include <QDebug>
 #include <QDir>
 #include <QFile>
@@ -31,31 +32,6 @@ bool parseBoolString(QStringView value, bool fallbackValue = false) {
         return false;
     }
     return fallbackValue;
-}
-
-QString humanizeIdentifier(const QString& identifier) {
-    if (identifier.isEmpty()) {
-        return {};
-    }
-
-    QString text = identifier;
-    text.replace('-', ' ');
-    text.replace('_', ' ');
-
-    bool capitalizeNext = true;
-    for (int index = 0; index < text.size(); ++index) {
-        if (text[index].isSpace()) {
-            capitalizeNext = true;
-            continue;
-        }
-
-        if (capitalizeNext) {
-            text[index] = text[index].toUpper();
-            capitalizeNext = false;
-        }
-    }
-
-    return text;
 }
 
 void appendUniquePath(QStringList& paths, const QString& path) {
@@ -399,7 +375,7 @@ ModuleParameterMetadata parameterMetadataFromIpcraft(const QString& name,
     }
 
     if (metadata.label.isEmpty()) {
-        metadata.label = humanizeIdentifier(name);
+        metadata.label = ModuleLabels::humanizeIdentifier(name);
     }
     return metadata;
 }
@@ -485,7 +461,7 @@ ModuleInterfaceMetadata interfaceMetadataFromIpcraft(const IpcraftPackageManifes
     ModuleInterfaceMetadata metadata;
     metadata.id = interfaceDescriptor.id;
     metadata.label = interfaceDescriptor.label.isEmpty()
-        ? humanizeIdentifier(interfaceDescriptor.id)
+        ? ModuleLabels::humanizeIdentifier(interfaceDescriptor.id)
         : interfaceDescriptor.label;
     metadata.bus = firstAcceptConnectionClass(interfaceDescriptor);
     metadata.role = firstAcceptRole(interfaceDescriptor);
@@ -589,7 +565,7 @@ ModuleType moduleTypeFromIpcraft(const IpcraftPackageManifest& manifest,
     loadIpcraftParameters(type, module.parameters);
 
     if (type.paletteLabel.isEmpty()) {
-        type.paletteLabel = humanizeIdentifier(type.name);
+        type.paletteLabel = ModuleLabels::humanizeIdentifier(type.name);
     }
     if (type.editorLayout.isEmpty()) {
         type.editorLayout = defaultEditorLayout(type);
@@ -752,7 +728,7 @@ void fillConfigFieldDefaults(QVector<ModuleConfigField>& fields,
         }
 
         if (field.label.isEmpty()) {
-            field.label = humanizeIdentifier(field.parameterName);
+            field.label = ModuleLabels::humanizeIdentifier(field.parameterName);
         }
     }
 }
@@ -887,7 +863,7 @@ ParameterLoadResult loadParametersFromXml(ModuleType& type, QXmlStreamReader& xm
         }
 
         if (metadata.label.isEmpty()) {
-            metadata.label = humanizeIdentifier(name);
+            metadata.label = ModuleLabels::humanizeIdentifier(name);
         }
 
         type.defaultParameters[name] = Parameter(name, parameterValue(parameterType, defaultText));
@@ -962,7 +938,7 @@ ModuleType loadModuleTypeFromXml(QXmlStreamReader& xml) {
     }
 
     if (type.paletteLabel.isEmpty()) {
-        type.paletteLabel = humanizeIdentifier(type.name);
+        type.paletteLabel = ModuleLabels::humanizeIdentifier(type.name);
     }
     if (type.editorLayout.isEmpty()) {
         type.editorLayout = defaultEditorLayout(type);
@@ -1008,10 +984,11 @@ XmlModuleTypeSource::XmlModuleTypeSource(const QString& bundlePath)
 
 QHash<QString, ModuleType> XmlModuleTypeSource::loadModuleTypes() {
     QHash<QString, ModuleType> types;
-    m_orderedTypeNames.clear();
+    QStringList orderedTypeNames;
 
     QFile file(m_bundlePath);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        m_orderedTypeNames.clear();
         return {};
     }
 
@@ -1030,12 +1007,17 @@ QHash<QString, ModuleType> XmlModuleTypeSource::loadModuleTypes() {
 
             const ModuleType type = loadModuleTypeFromXml(xml);
             if (!type.name.isEmpty()) {
-                m_orderedTypeNames.push_back(type.name);
+                orderedTypeNames.push_back(type.name);
                 types.insert(type.name, type);
             }
         }
     }
 
+    if (xml.hasError()) {
+        m_orderedTypeNames.clear();
+        return {};
+    }
+    m_orderedTypeNames = std::move(orderedTypeNames);
     return types;
 }
 
@@ -1078,6 +1060,7 @@ void XmlModuleGraphicsOverlay::apply(QHash<QString, ModuleType>& types) {
     const QDir directory(m_graphicsDirectory);
     const QStringList entries = directory.entryList({QStringLiteral("*.xml")}, QDir::Files, QDir::Name);
     for (const QString& entry : entries) {
+        QHash<QString, ModuleType> updatedTypes;
         QFile file(directory.filePath(entry));
         if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
             continue;
@@ -1091,10 +1074,14 @@ void XmlModuleGraphicsOverlay::apply(QHash<QString, ModuleType>& types) {
             }
 
             const QString moduleTypeName = attributeValue(xml.attributes(), u"type");
-            auto typeIt = types.find(moduleTypeName);
-            if (typeIt == types.end()) {
+            const auto sourceTypeIt = types.constFind(moduleTypeName);
+            if (sourceTypeIt == types.cend()) {
                 xml.skipCurrentElement();
                 continue;
+            }
+            auto typeIt = updatedTypes.find(moduleTypeName);
+            if (typeIt == updatedTypes.end()) {
+                typeIt = updatedTypes.insert(moduleTypeName, sourceTypeIt.value());
             }
 
             while (xml.readNextStartElement()) {
@@ -1109,6 +1096,11 @@ void XmlModuleGraphicsOverlay::apply(QHash<QString, ModuleType>& types) {
                 } else {
                     xml.skipCurrentElement();
                 }
+            }
+        }
+        if (!xml.hasError()) {
+            for (auto typeIt = updatedTypes.cbegin(); typeIt != updatedTypes.cend(); ++typeIt) {
+                types.insert(typeIt.key(), typeIt.value());
             }
         }
     }

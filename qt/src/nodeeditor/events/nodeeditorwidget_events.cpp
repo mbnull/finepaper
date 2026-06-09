@@ -249,8 +249,8 @@ void NodeEditorWidget::dropEvent(QDropEvent* event) {
 }
 
 QSize NodeEditorWidget::minimumNodeSize(QtNodes::NodeId nodeId) const {
-    auto* model = graphNodeModel(nodeId);
-    Module* module = model ? model->module() : nullptr;
+    const auto* model = graphNodeModel(nodeId);
+    const Module* module = model ? model->module() : nullptr;
     if (!module) {
         return QSize(80, 54);
     }

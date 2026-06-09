@@ -339,6 +339,24 @@ QByteArray documentContentBytes(const QJsonObject& documentState) {
     return jsonBytes(documentState);
 }
 
+bool readAllChecked(QFile& file,
+                    QByteArray* bytes,
+                    const QString& message,
+                    const QString& pathLocation,
+                    const QString& displayPath,
+                    ipcraft::DiagnosticStore& diagnostics) {
+    *bytes = file.readAll();
+    if (file.error() == QFileDevice::NoError) {
+        return true;
+    }
+    addFileDiagnostic(diagnostics,
+                      QStringLiteral("emitter.write_failed"),
+                      message,
+                      pathLocation,
+                      displayPath);
+    return false;
+}
+
 bool copyFile(const QString& outputRoot,
               const QString& sourcePath,
               const QString& destinationPath,
@@ -354,7 +372,15 @@ bool copyFile(const QString& outputRoot,
                           sourcePath);
         return false;
     }
-    const QByteArray bytes = source.readAll();
+    QByteArray bytes;
+    if (!readAllChecked(source,
+                        &bytes,
+                        QStringLiteral("Could not read emitter source file."),
+                        pathLocation,
+                        sourcePath,
+                        diagnostics)) {
+        return false;
+    }
     if (!writeBytes(outputRoot, destinationPath, bytes, pathLocation, diagnostics)) {
         return false;
     }
@@ -545,7 +571,14 @@ PackageInputBuildResult PackageInputBuilder::emitInputs(const PackageInputBuildR
                                       templatePath);
                     continue;
                 }
-                bytes = templateFile.readAll();
+                if (!readAllChecked(templateFile,
+                                    &bytes,
+                                    QStringLiteral("Could not read emitter template file."),
+                                    childPath(emitterPath, QStringLiteral("template")),
+                                    templatePath,
+                                    result.manifest.diagnostics)) {
+                    continue;
+                }
             }
             fileKind = QStringLiteral("template");
             source.insert(QStringLiteral("template"), true);

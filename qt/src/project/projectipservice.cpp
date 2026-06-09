@@ -196,12 +196,18 @@ ProjectIpServiceResult ProjectIpService::createInstanceForIpcore(const IpCatalog
         result.error = QStringLiteral("IP core id is required.");
         return result;
     }
-    if (entry.maxInstances.has_value() && *entry.maxInstances > 0
-        && countInstancesForIpcore(*m_stateService, entry.id) >= *entry.maxInstances) {
-        result.error = QStringLiteral("IP core %1 is limited to %2 instance(s).")
-            .arg(entry.id)
-            .arg(*entry.maxInstances);
-        return result;
+    if (entry.maxInstances.has_value()) {
+        if (*entry.maxInstances <= 0) {
+            result.error = QStringLiteral("IP core %1 declares an invalid instance limit.")
+                .arg(entry.id);
+            return result;
+        }
+        if (countInstancesForIpcore(*m_stateService, entry.id) >= *entry.maxInstances) {
+            result.error = QStringLiteral("IP core %1 is limited to %2 instance(s).")
+                .arg(entry.id)
+                .arg(*entry.maxInstances);
+            return result;
+        }
     }
     for (const IpCatalogInstanceLimit& limit : entry.instanceLimits) {
         if (limit.scope.trimmed().isEmpty() || limit.max <= 0) {

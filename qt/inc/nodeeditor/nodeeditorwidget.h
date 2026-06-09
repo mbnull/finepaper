@@ -112,11 +112,12 @@ private:
     void removeModuleFromView(const QString& moduleId);
     bool ensureConnectionInView(Connection* connection);
     void removeConnectionFromView(const QString& connectionId);
-    GraphNodeModel* graphNodeModel(QtNodes::NodeId nodeId) const;
+    GraphNodeModel* graphNodeModel(QtNodes::NodeId nodeId);
+    const GraphNodeModel* graphNodeModel(QtNodes::NodeId nodeId) const;
     void refreshNodeGraphics(QtNodes::NodeId nodeId, bool moveConnections);
-    QString getPortId(QtNodes::NodeId nodeId, QtNodes::PortType portType, QtNodes::PortIndex portIndex) const;
+    QString portIdFor(QtNodes::NodeId nodeId, QtNodes::PortType portType, QtNodes::PortIndex portIndex) const;
     bool resolveConnectionPorts(QtNodes::ConnectionId connectionId, PortRef& source, PortRef& target) const;
-    QtNodes::ConnectionGraphicsObject* findDraftConnection() const;
+    QtNodes::ConnectionGraphicsObject* findDraftConnection();
     void refreshConnectionRuleService();
     void setConnectionHighlighted(QtNodes::ConnectionId connectionId, bool highlighted);
     void updateConnectedConnectionHighlights(QtNodes::NodeId selectedNodeId);

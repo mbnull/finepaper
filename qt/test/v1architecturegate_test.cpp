@@ -398,7 +398,9 @@ void testNoNormalRuntimePathUsesNocProjectV1() {
 
         for (const QString& token : forbiddenTokens) {
             if (source.contains(token)) {
-                violations.append(QStringLiteral("%1 contains %2").arg(relativePath, token));
+                violations.append(QStringLiteral("%1 contains %2")
+                                      .arg(relativePath)
+                                      .arg(token));
             }
         }
     }
@@ -427,7 +429,9 @@ void testProjectDocumentSurfaceUsesProjectV1() {
         const QString source = readTextFile(info.absoluteFilePath());
         if (!source.contains(projectSchemaName()) &&
             !source.contains(QStringLiteral("schemaids::projectV1"))) {
-            violations.append(QStringLiteral("%1 does not expose %2").arg(relativePath, projectSchemaName()));
+            violations.append(QStringLiteral("%1 does not expose %2")
+                                  .arg(relativePath)
+                                  .arg(projectSchemaName()));
         }
         if (source.contains(QStringLiteral("QStringLiteral(\"v1\")")) ||
             source.contains(QStringLiteral("\"schema\": \"v1\"")) ||
@@ -675,7 +679,9 @@ void testAuditDocsAndSchemasExist() {
         const QString source = readTextFile(info.absoluteFilePath());
         const QString schemaName = schemaNamesByPath.value(relativePath);
         if (!source.contains(schemaName)) {
-            violations.append(QStringLiteral("%1 does not name %2").arg(relativePath, schemaName));
+            violations.append(QStringLiteral("%1 does not name %2")
+                                  .arg(relativePath)
+                                  .arg(schemaName));
         }
         if (!source.contains(QStringLiteral("additionalProperties")) ||
             !source.contains(QStringLiteral("false"))) {
@@ -720,7 +726,9 @@ void testRuleIdCatalogContainsEveryPublicDiagnostic() {
     QStringList violations;
     for (const QString& ruleId : requiredPublicRuleIds()) {
         if (!catalog.contains(ruleId)) {
-            violations.append(QStringLiteral("%1 missing %2").arg(catalogPath, ruleId));
+            violations.append(QStringLiteral("%1 missing %2")
+                                  .arg(catalogPath)
+                                  .arg(ruleId));
         }
     }
 

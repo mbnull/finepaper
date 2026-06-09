@@ -7,6 +7,31 @@
 
 namespace ModuleLabels {
 
+inline QString humanizeIdentifier(const QString& identifier) {
+    if (identifier.isEmpty()) {
+        return {};
+    }
+
+    QString text = identifier;
+    text.replace('-', ' ');
+    text.replace('_', ' ');
+
+    bool capitalizeNext = true;
+    for (int index = 0; index < text.size(); ++index) {
+        if (text[index].isSpace()) {
+            capitalizeNext = true;
+            continue;
+        }
+
+        if (capitalizeNext) {
+            text[index] = text[index].toUpper();
+            capitalizeNext = false;
+        }
+    }
+
+    return text;
+}
+
 inline QString stringParameter(const Module* module, const QString& name, const QString& fallback = {}) {
     if (!module) return fallback;
 
@@ -90,7 +115,10 @@ inline QString humanizeExternalId(const QString& moduleType, const QString& rawI
                                        QRegularExpression::CaseInsensitiveOption);
         auto meshMatch = meshPattern.match(rawId);
         if (meshMatch.hasMatch()) {
-            return QString("%1_%2%3").arg(displayPrefix, meshMatch.captured(1), meshMatch.captured(2));
+            return QString("%1_%2%3")
+                .arg(displayPrefix)
+                .arg(meshMatch.captured(1))
+                .arg(meshMatch.captured(2));
         }
     }
 

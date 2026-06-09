@@ -13,7 +13,7 @@ enum class ValueKind {
     String,
     Array,
     Object,
-    Invalid
+    Invalid,
 };
 
 ValueKind valueKind(const QJsonValue& value);

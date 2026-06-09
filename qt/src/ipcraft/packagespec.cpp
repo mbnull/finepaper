@@ -568,6 +568,30 @@ void validateFlows(const QJsonArray& flows,
     }
 }
 
+void validateNativeEditorMetadata(const QJsonObject& native,
+                                  ipcraft::DiagnosticStore& diagnostics) {
+    const QJsonObject ipcraftObject = native.value(QStringLiteral("ipcraft")).toObject();
+    const QJsonObject editor = ipcraftObject.value(QStringLiteral("editor")).toObject();
+    const QJsonObject instances = editor.value(QStringLiteral("instances")).toObject();
+    const QJsonValue maxValue = instances.value(QStringLiteral("max"));
+    if (maxValue.isUndefined()) {
+        return;
+    }
+
+    bool valid = false;
+    if (maxValue.isDouble()) {
+        const double numericMax = maxValue.toDouble();
+        const int integerMax = maxValue.toInt();
+        valid = integerMax > 0 && numericMax == static_cast<double>(integerMax);
+    }
+    if (!valid) {
+        addDiagnostic(diagnostics,
+                      QStringLiteral("package.invalid_instance_policy"),
+                      QStringLiteral("Editor instances.max must be a positive integer."),
+                      QStringLiteral("$.native.ipcraft.editor.instances.max"));
+    }
+}
+
 const QSet<QString>& knownExtensionIds() {
     static const QSet<QString> ids{
         QStringLiteral("ipcraft.config.params"),
@@ -1500,7 +1524,9 @@ PackageSpecReadResult PackageSpecReader::readSpecFile(const QString& specPath) c
     }
     optionalObject(root, QStringLiteral("native_schema"), QStringLiteral("$.native_schema"), result.diagnostics, &result.spec.nativeSchema);
     optionalObject(root, QStringLiteral("metadata"), QStringLiteral("$.metadata"), result.diagnostics, &result.spec.metadata);
-    optionalObject(root, QStringLiteral("native"), QStringLiteral("$.native"), result.diagnostics, &result.spec.native);
+    if (optionalObject(root, QStringLiteral("native"), QStringLiteral("$.native"), result.diagnostics, &result.spec.native)) {
+        validateNativeEditorMetadata(result.spec.native, result.diagnostics);
+    }
 
     const QJsonValue pluginValue = root.value(QStringLiteral("plugin"));
     if (pluginValue.isObject()) {

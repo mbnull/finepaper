@@ -2,9 +2,19 @@
 #include "project/ipinstanceparameteradapter.h"
 
 #include <QStringList>
+#include <algorithm>
 #include <utility>
 
 namespace {
+
+struct OrderedParameter {
+    QString name;
+    QString label;
+};
+
+QString parameterLabel(const IpCoreInstanceParameterDescriptor& descriptor) {
+    return descriptor.label.isEmpty() ? descriptor.name : descriptor.label;
+}
 
 QVector<IpInstanceParameterSection>
 parameterSectionsFor(const QString& ipcoreId,
@@ -17,13 +27,30 @@ parameterSectionsFor(const QString& ipcoreId,
     section.label = displayName.isEmpty() ? ipcoreId : displayName;
     section.expandedByDefault = true;
 
-    QStringList names = instanceParameters.keys();
-    names.sort();
-    for (const QString& name : names) {
-        const IpCoreInstanceParameterDescriptor& descriptor = instanceParameters.value(name);
+    QVector<OrderedParameter> orderedParameters;
+    orderedParameters.reserve(instanceParameters.size());
+    for (auto parameterIt = instanceParameters.cbegin(); parameterIt != instanceParameters.cend(); ++parameterIt) {
+        OrderedParameter parameter;
+        parameter.name = parameterIt.key();
+        parameter.label = parameterLabel(parameterIt.value());
+        orderedParameters.push_back(parameter);
+    }
+
+    std::sort(orderedParameters.begin(), orderedParameters.end(), [](const auto& left, const auto& right) {
+        const int labelOrder = QString::compare(left.label,
+                                                right.label,
+                                                Qt::CaseInsensitive);
+        if (labelOrder != 0) {
+            return labelOrder < 0;
+        }
+        return left.name < right.name;
+    });
+    for (const OrderedParameter& orderedParameter : orderedParameters) {
+        const auto descriptorIt = instanceParameters.constFind(orderedParameter.name);
+        const IpCoreInstanceParameterDescriptor& descriptor = descriptorIt.value();
         IpInstanceParameterField field;
         field.name = descriptor.name;
-        field.label = descriptor.label.isEmpty() ? descriptor.name : descriptor.label;
+        field.label = parameterLabel(descriptor);
         field.description = descriptor.description;
         field.type = descriptor.type;
         field.defaultValue = descriptor.defaultValue;

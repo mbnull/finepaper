@@ -291,7 +291,7 @@ IpCatalogService IpCatalogService::fromRuntimeRegistries() {
                             &ModuleRegistry::instance());
 }
 
-QList<IpCatalogEntry> IpCatalogService::entries() const {
+const QList<IpCatalogEntry>& IpCatalogService::entries() const {
     return m_entries;
 }
 

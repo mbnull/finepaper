@@ -267,7 +267,7 @@ ProjectWriteResult validateDocument(const ProjectDocument& document) {
 } // namespace
 
 ProjectWriteResult ProjectWriter::writeFile(const QString& path, const ProjectDocument& document) {
-    const ProjectWriteResult validationResult = validateDocument(document);
+    ProjectWriteResult validationResult = validateDocument(document);
     if (!validationResult.success) {
         return validationResult;
     }

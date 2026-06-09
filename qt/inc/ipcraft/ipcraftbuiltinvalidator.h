@@ -15,7 +15,7 @@ class IpcraftBuiltInValidator {
 public:
     enum class CommandPurpose {
         Validate,
-        Generate
+        Generate,
     };
 
     struct Result {

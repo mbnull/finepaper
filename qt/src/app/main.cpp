@@ -11,6 +11,7 @@
 #include <QMutex>
 #include <QMutexLocker>
 #include <QStandardPaths>
+#include <memory>
 
 namespace {
 
@@ -21,8 +22,8 @@ QMutex& logMutex() {
     return mutex;
 }
 
-QFile*& logFileHandle() {
-    static QFile* file = nullptr;
+std::unique_ptr<QFile>& logFileHandle() {
+    static std::unique_ptr<QFile> file;
     return file;
 }
 
@@ -45,7 +46,7 @@ void logToFile(QtMsgType type, const QMessageLogContext& context, const QString&
 
     // Keep line writes atomic so multi-threaded logs do not interleave.
     QMutexLocker locker(&logMutex());
-    QFile* logFile = logFileHandle();
+    QFile* logFile = logFileHandle().get();
     if (logFile && logFile->isOpen()) {
         logFile->write(formatted.toUtf8());
         logFile->write("\n");
@@ -60,18 +61,24 @@ void logToFile(QtMsgType type, const QMessageLogContext& context, const QString&
     }
 }
 
+void cleanupFileLogger() {
+    qInstallMessageHandler(nullptr);
+    QMutexLocker locker(&logMutex());
+    logFileHandle().reset();
+}
+
 void installFileLogger() {
-    QFile* logFile = new QFile(resolveLogFilePath());
+    auto logFile = std::make_unique<QFile>(resolveLogFilePath());
     if (!logFile->open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text)) {
         fprintf(stderr, "Failed to open log file: %s\n", logFile->fileName().toLocal8Bit().constData());
-        delete logFile;
         return;
     }
 
     // Redirect all qDebug/qInfo/qWarning/etc. messages through logToFile().
-    logFileHandle() = logFile;
+    logFileHandle() = std::move(logFile);
     qInstallMessageHandler(logToFile);
-    qInfo().noquote() << "Writing logs to" << logFile->fileName();
+    qAddPostRoutine(cleanupFileLogger);
+    qInfo().noquote() << "Writing logs to" << logFileHandle()->fileName();
 }
 
 } // namespace

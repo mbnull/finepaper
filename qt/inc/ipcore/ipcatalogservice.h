@@ -52,7 +52,7 @@ public:
 
     static IpCatalogService fromRuntimeRegistries();
 
-    QList<IpCatalogEntry> entries() const;
+    const QList<IpCatalogEntry>& entries() const;
     QList<IpCatalogEntry> selectableEntries() const;
     std::optional<IpCatalogEntry> entry(const QString& id) const;
 

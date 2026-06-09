@@ -247,6 +247,21 @@ void testProjectIpServiceRejectsPackageInstanceMax() {
             "package maxInstances rejection should keep selection on the newest valid instance");
 }
 
+void testProjectIpServiceRejectsInvalidPackageInstanceMax() {
+    ProjectStateService stateService;
+    ProjectIpService service(&stateService);
+    IpCatalogEntry entry = fabricEntry();
+    entry.maxInstances = 0;
+
+    const ProjectIpServiceResult result = service.createInstanceForIpcore(entry);
+
+    require(!result.success, "non-positive package maxInstances should be rejected");
+    require(result.error.contains(QStringLiteral("invalid instance limit")),
+            "non-positive package maxInstances rejection should explain the invalid policy");
+    require(stateService.ipInstanceRecords().isEmpty(),
+            "invalid package maxInstances should not append state");
+}
+
 void testProjectIpServiceCreatesProjectUniqueInstanceIdsAcrossIpcoreTokenCollisions() {
     ProjectStateService stateService;
     ProjectIpService service(&stateService);
@@ -497,6 +512,7 @@ int main(int argc, char** argv) {
         testProjectIpServiceRejectsRepeatedNocInstances();
         testProjectIpServiceCreatesRepeatedNonNocInstancesForSameIpcore();
         testProjectIpServiceRejectsPackageInstanceMax();
+        testProjectIpServiceRejectsInvalidPackageInstanceMax();
         testProjectIpServiceCreatesProjectUniqueInstanceIdsAcrossIpcoreTokenCollisions();
         testProjectIpServiceAllocatesMonotonicInstanceIdsAcrossStateGaps();
         testProjectIpServiceMutationHandlerPreservesCurrentSelectionWithoutPreferredSelection();

@@ -502,6 +502,32 @@ void testFlowScopeDefaultsToInstanceAndRejectsInvalidValues() {
     require(result.ok, "flow with explicit instance scope should load");
 }
 
+void testEditorInstanceMaxRejectsNonPositiveValues() {
+    QTemporaryDir temp;
+    require(temp.isValid(), "temporary directory should be valid");
+    QDir root(temp.path());
+
+    QJsonObject spec = minimalPackageSpec();
+    spec.insert(QStringLiteral("native"), QJsonObject{
+        {QStringLiteral("ipcraft"), QJsonObject{
+            {QStringLiteral("editor"), QJsonObject{
+                {QStringLiteral("instances"), QJsonObject{
+                    {QStringLiteral("max"), -1}
+                }}
+            }}
+        }}
+    });
+    writePackage(root, spec);
+
+    const ipcraft::PackageSpecReadResult result =
+        ipcraft::PackageSpecReader().readPackageRoot(root.absolutePath());
+    require(!result.ok, "non-positive editor instances.max should fail package parsing");
+    require(hasPackageParserDiagnosticAt(result.diagnostics,
+                                         QStringLiteral("package.invalid_instance_policy"),
+                                         QStringLiteral("$.native.ipcraft.editor.instances.max")),
+            "non-positive editor instances.max should emit a stable diagnostic path");
+}
+
 void testPluginMetadataIsSeparateFromExtensions() {
     QTemporaryDir temp;
     require(temp.isValid(), "temporary directory should be valid");
@@ -804,6 +830,7 @@ int main(int argc, char** argv) {
         testConnectionRulesRejectMalformedCompatibility();
         testConnectionRulesRejectAliasCaseCollisionsAndUnknownGraphEndpoints();
         testFlowScopeDefaultsToInstanceAndRejectsInvalidValues();
+        testEditorInstanceMaxRejectsNonPositiveValues();
         testPluginMetadataIsSeparateFromExtensions();
         testGraphConfigRequiresExplicitExtension();
         testGraphConfigRejectsNonContractShape();

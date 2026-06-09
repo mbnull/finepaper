@@ -61,8 +61,9 @@ inline bool isRouterPort(const Port& port) {
 }
 
 inline QStringList hintTokens(const Port& port) {
+    static const QRegularExpression separator(QStringLiteral("[^a-z0-9]+"));
     const QString combined = (port.id() + " " + port.name() + " " + port.description()).toLower();
-    return combined.split(QRegularExpression(QStringLiteral("[^a-z0-9]+")), Qt::SkipEmptyParts);
+    return combined.split(separator, Qt::SkipEmptyParts);
 }
 
 inline bool containsHintToken(const QStringList& tokens,

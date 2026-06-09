@@ -124,6 +124,13 @@ QList<ValidationResult> DRCRunner::parseErrors(const QString& stderr) {
         results.append(ValidationResult(severity, match.captured(3), elementId, "DRC"));
     }
 
+    static const QRegularExpression fallbackLinePattern(
+        QStringLiteral("^(Duplicate .+|Invalid .+|Missing .+|.+ not found|XP .+:|Endpoint .+:)"));
+    static const QRegularExpression xpPattern(QStringLiteral("^XP\\s+([^:]+):"));
+    static const QRegularExpression epPattern(QStringLiteral("^Endpoint\\s+([^:]+):"));
+    static const QRegularExpression dupXpPattern(QStringLiteral("^Duplicate XP id:\\s*(\\S+)"));
+    static const QRegularExpression dupEpPattern(QStringLiteral("^Duplicate endpoint id:\\s*(\\S+)"));
+
     for (const auto& line : stderr.split('\n')) {
         if (line.trimmed().isEmpty() || line.contains("DRC violations:")) continue;
 
@@ -135,13 +142,8 @@ QList<ValidationResult> DRCRunner::parseErrors(const QString& stderr) {
         }
         if (found) continue;
 
-        if (line.contains(QRegularExpression("^(Duplicate .+|Invalid .+|Missing .+|.+ not found|XP .+:|Endpoint .+:)"))) {
+        if (line.contains(fallbackLinePattern)) {
             QString elementId;
-            QRegularExpression xpPattern("^XP\\s+([^:]+):");
-            QRegularExpression epPattern("^Endpoint\\s+([^:]+):");
-            QRegularExpression dupXpPattern("^Duplicate XP id:\\s*(\\S+)");
-            QRegularExpression dupEpPattern("^Duplicate endpoint id:\\s*(\\S+)");
-
             auto match = xpPattern.match(line);
             if (!match.hasMatch()) match = epPattern.match(line);
             if (!match.hasMatch()) match = dupXpPattern.match(line);

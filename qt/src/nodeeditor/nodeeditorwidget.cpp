@@ -668,8 +668,12 @@ void NodeEditorWidget::removeConnectionFromView(const QString& connectionId) {
     m_graphModel->deleteConnection(qtConnectionId);
 }
 
-GraphNodeModel* NodeEditorWidget::graphNodeModel(QtNodes::NodeId nodeId) const {
+GraphNodeModel* NodeEditorWidget::graphNodeModel(QtNodes::NodeId nodeId) {
     return dynamic_cast<GraphNodeModel*>(m_graphModel->delegateModel<GraphNodeModel>(nodeId));
+}
+
+const GraphNodeModel* NodeEditorWidget::graphNodeModel(QtNodes::NodeId nodeId) const {
+    return dynamic_cast<const GraphNodeModel*>(m_graphModel->delegateModel<GraphNodeModel>(nodeId));
 }
 
 void NodeEditorWidget::refreshNodeGraphics(QtNodes::NodeId nodeId, bool moveConnections) {
@@ -773,8 +777,8 @@ void NodeEditorWidget::onSelectionChanged() {
     emit moduleSelected(QString());
 }
 
-QString NodeEditorWidget::getPortId(QtNodes::NodeId nodeId, QtNodes::PortType portType, QtNodes::PortIndex portIndex) const {
-    auto* model = graphNodeModel(nodeId);
+QString NodeEditorWidget::portIdFor(QtNodes::NodeId nodeId, QtNodes::PortType portType, QtNodes::PortIndex portIndex) const {
+    const auto* model = graphNodeModel(nodeId);
     if (!model || !model->module()) return "";
 
     const Port* port = model->portAt(portType, portIndex);
@@ -788,8 +792,8 @@ bool NodeEditorWidget::resolveConnectionPorts(QtNodes::ConnectionId connectionId
         return false;
     }
 
-    source.portId = getPortId(connectionId.outNodeId, QtNodes::PortType::Out, connectionId.outPortIndex);
-    target.portId = getPortId(connectionId.inNodeId, QtNodes::PortType::In, connectionId.inPortIndex);
+    source.portId = portIdFor(connectionId.outNodeId, QtNodes::PortType::Out, connectionId.outPortIndex);
+    target.portId = portIdFor(connectionId.inNodeId, QtNodes::PortType::In, connectionId.inPortIndex);
     if (source.portId.isEmpty() || target.portId.isEmpty()) {
         return false;
     }
@@ -797,7 +801,7 @@ bool NodeEditorWidget::resolveConnectionPorts(QtNodes::ConnectionId connectionId
     return true;
 }
 
-QtNodes::ConnectionGraphicsObject* NodeEditorWidget::findDraftConnection() const {
+QtNodes::ConnectionGraphicsObject* NodeEditorWidget::findDraftConnection() {
     const auto items = m_scene->items();
     for (QGraphicsItem* item : items) {
         auto* connection = qgraphicsitem_cast<QtNodes::ConnectionGraphicsObject*>(item);
@@ -881,7 +885,7 @@ ConnectionRequest NodeEditorWidget::draftConnectionRequest(
     }
 
     request.start.moduleId = m_nodeToModuleId.value(start->nodeId);
-    request.start.portId = getPortId(start->nodeId, start->portType, start->portIndex);
+    request.start.portId = portIdFor(start->nodeId, start->portType, start->portIndex);
     request.start.visualSide = start->startFromOutput ? ConnectionVisualSide::Output
                                                        : ConnectionVisualSide::Input;
     request.start.scenePos =

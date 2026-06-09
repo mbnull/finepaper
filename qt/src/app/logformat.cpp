@@ -40,7 +40,9 @@ QString formatMessage(QtMsgType type,
 
     if (context.file && context.line > 0) {
         const QString fileName = QFileInfo(QString::fromUtf8(context.file)).fileName();
-        parts << QStringLiteral("%1:%2").arg(fileName, QString::number(context.line));
+        parts << QStringLiteral("%1:%2")
+                     .arg(fileName)
+                     .arg(context.line);
     }
 
     parts << message;

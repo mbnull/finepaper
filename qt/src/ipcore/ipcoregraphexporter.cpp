@@ -182,10 +182,12 @@ QJsonArray alternativesToJson(const QStringList& alternatives) {
 }
 
 QString safeArtifactToken(QString token, const QString& defaultToken) {
+    static const QRegularExpression invalidTokenCharacters(QStringLiteral("[^A-Za-z0-9_$]+"));
+    static const QRegularExpression repeatedUnderscores(QStringLiteral("_+"));
     token = token.trimmed();
     if (token.isEmpty()) token = defaultToken.trimmed();
-    token.replace(QRegularExpression(QStringLiteral("[^A-Za-z0-9_$]+")), QStringLiteral("_"));
-    token.replace(QRegularExpression(QStringLiteral("_+")), QStringLiteral("_"));
+    token.replace(invalidTokenCharacters, QStringLiteral("_"));
+    token.replace(repeatedUnderscores, QStringLiteral("_"));
     token = token.trimmed();
     while (token.startsWith(QStringLiteral("_"))) token.remove(0, 1);
     while (token.endsWith(QStringLiteral("_"))) token.chop(1);

@@ -476,12 +476,33 @@ void MainWindow::createTopologyPresetFor(const QString& ipcoreId,
     request.instanceId = instanceId;
     request.preset = *presetIt;
 
-    QStringList parameterNames = presetIt->parameters.keys();
-    parameterNames.sort();
-    for (const QString& name : parameterNames) {
+    struct OrderedPresetParameter {
+        QString name;
+        QString label;
+    };
+    QVector<OrderedPresetParameter> orderedParameters;
+    orderedParameters.reserve(presetIt->parameters.size());
+    for (auto parameterIt = presetIt->parameters.cbegin(); parameterIt != presetIt->parameters.cend(); ++parameterIt) {
+        OrderedPresetParameter parameter;
+        parameter.name = parameterIt.key();
+        parameter.label = parameterIt.value().label.trimmed().isEmpty()
+            ? parameterIt.key()
+            : parameterIt.value().label;
+        orderedParameters.push_back(parameter);
+    }
+
+    std::sort(orderedParameters.begin(), orderedParameters.end(), [](const auto& left, const auto& right) {
+        const int labelOrder = QString::compare(left.label, right.label, Qt::CaseInsensitive);
+        if (labelOrder != 0) {
+            return labelOrder < 0;
+        }
+        return left.name < right.name;
+    });
+    for (const OrderedPresetParameter& orderedParameter : orderedParameters) {
         // Deterministic prompt ordering makes repeated preset creation and UI
         // tests stable even though descriptor parameters are stored in a hash.
-        const TopologyPresetParameterDescriptor parameter = presetIt->parameters.value(name);
+        const auto parameterIt = presetIt->parameters.constFind(orderedParameter.name);
+        const TopologyPresetParameterDescriptor& parameter = parameterIt.value();
         bool ok = false;
         const int value = QInputDialog::getInt(this,
                                                presetIt->label,
@@ -494,7 +515,7 @@ void MainWindow::createTopologyPresetFor(const QString& ipcoreId,
         if (!ok) {
             return;
         }
-        request.parameters.insert(name, value);
+        request.parameters.insert(orderedParameter.name, value);
     }
 
     const std::optional<ActiveWorkspaceContext> contextBeforeExecute =

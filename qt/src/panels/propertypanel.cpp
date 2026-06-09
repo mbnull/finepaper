@@ -5,6 +5,7 @@
 #include "panels/propertypanel.h"
 #include "graph/graph.h"
 #include "graph/module.h"
+#include "modules/modulelabels.h"
 #include "modules/moduletypemetadata.h"
 #include "project/ipinstanceparameteradapter.h"
 #include "project/projectstateservice.h"
@@ -34,27 +35,6 @@
 namespace {
 
 constexpr const char* kSelectedConnectionIdProperty = "_finepaperSelectedConnectionId";
-
-QString humanizeIdentifier(const QString& identifier) {
-    QString text = identifier;
-    text.replace('-', ' ');
-    text.replace('_', ' ');
-
-    bool capitalizeNext = true;
-    for (int index = 0; index < text.size(); ++index) {
-        if (text[index].isSpace()) {
-            capitalizeNext = true;
-            continue;
-        }
-
-        if (capitalizeNext) {
-            text[index] = text[index].toUpper();
-            capitalizeNext = false;
-        }
-    }
-
-    return text;
-}
 
 const ModuleParameterMetadata* metadataForParameter(const Module* module, const QString& name) {
     return ModuleTypeMetadata::parameterMetadata(module, name);
@@ -478,7 +458,9 @@ void PropertyPanel::populatePanel() {
             const QString baseLabel = section.label.isEmpty() ? section.ipcoreId : section.label;
             const QString title = instanceId.isEmpty()
                 ? baseLabel
-                : QStringLiteral("%1 / %2").arg(baseLabel, instanceId);
+                : QStringLiteral("%1 / %2")
+                      .arg(baseLabel)
+                      .arg(instanceId);
             const QString sectionName = QStringLiteral("ipInstanceSection_%1")
                 .arg(stableObjectSuffix(section.ipcoreId + QStringLiteral("_") +
                                         instanceId + QStringLiteral("_") + section.id));
@@ -500,7 +482,7 @@ void PropertyPanel::populatePanel() {
                 if (!widget) {
                     continue;
                 }
-                const QString label = field.label.isEmpty() ? humanizeIdentifier(field.name) : field.label;
+                const QString label = field.label.isEmpty() ? ModuleLabels::humanizeIdentifier(field.name) : field.label;
                 QLabel* rowLabel = new QLabel(label, content);
                 if (!field.description.isEmpty()) {
                     rowLabel->setToolTip(field.description);
@@ -694,7 +676,7 @@ void PropertyPanel::populatePanel() {
         if (name == "x" || name == "y") continue;
         const ModuleParameterMetadata* metadata = metadataForParameter(m_selectedModule, name);
         addParameterRow(name,
-                        metadata && !metadata->label.isEmpty() ? metadata->label : humanizeIdentifier(name),
+                        metadata && !metadata->label.isEmpty() ? metadata->label : ModuleLabels::humanizeIdentifier(name),
                         metadata ? metadata->description : QString());
     }
 }

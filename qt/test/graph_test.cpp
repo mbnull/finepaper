@@ -10,6 +10,7 @@
 #include "modules/moduleprovider.h"
 #include "common/portlayout.h"
 
+#include <QByteArray>
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
@@ -876,6 +877,66 @@ void testXmlBundleIgnoresNonPositiveGraphicsMetrics() {
             "arrangement metrics should ignore non-positive values");
 }
 
+void testMalformedXmlBundleDoesNotRegisterPartialTypes() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "failed to create temporary directory for malformed bundle test");
+
+    const QString bundlePath = QDir(tempDir.path()).filePath("modules.xml");
+    QFile bundleFile(bundlePath);
+    const bool bundleOpened = bundleFile.open(QIODevice::WriteOnly | QIODevice::Text);
+    require(bundleOpened, "failed to create malformed XML bundle");
+    const QByteArray bundleXml = R"XML(<?xml version="1.0" encoding="UTF-8"?>
+<module-bundle>
+  <module name="Broken" palette_label="Broken">
+    <ports>
+      <port id="cfg" direction="input" type="config" name="CFG" />
+    </ports>
+</module-bundle>)XML";
+    require(bundleFile.write(bundleXml) == bundleXml.size(),
+            "failed to write malformed XML bundle");
+    bundleFile.close();
+
+    XmlModuleTypeSource source(bundlePath);
+    const QHash<QString, ModuleType> types = source.loadModuleTypes();
+    require(types.isEmpty(), "malformed XML bundles should not register partial module types");
+    require(source.orderedTypeNames().isEmpty(),
+            "malformed XML bundles should not expose partial ordered names");
+}
+
+void testMalformedXmlGraphicsOverlayDoesNotApplyPartialChanges() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "failed to create temporary directory for malformed overlay test");
+
+    QHash<QString, ModuleType> types;
+    ModuleType router;
+    router.name = QStringLiteral("Router");
+    router.editorLayout = QStringLiteral("fallback");
+    router.nodeColor = QStringLiteral("#111111");
+    types.insert(router.name, router);
+
+    const QString overlayPath = QDir(tempDir.path()).filePath("router.xml");
+    QFile overlayFile(overlayPath);
+    const bool overlayOpened = overlayFile.open(QIODevice::WriteOnly | QIODevice::Text);
+    require(overlayOpened, "failed to create malformed XML overlay");
+    const QByteArray overlayXml = R"XML(<?xml version="1.0" encoding="UTF-8"?>
+<module-graphics type="Router">
+  <graphics layout="mesh_router" node_color="#abcdef">
+    <expanded min_width="240" height="120" />
+</module-graphics>)XML";
+    require(overlayFile.write(overlayXml) == overlayXml.size(),
+            "failed to write malformed XML overlay");
+    overlayFile.close();
+
+    XmlModuleGraphicsOverlay overlay(tempDir.path());
+    overlay.apply(types);
+
+    const ModuleType restored = types.value(QStringLiteral("Router"));
+    require(restored.editorLayout == QStringLiteral("fallback"),
+            "malformed graphics overlay should not change layout");
+    require(restored.nodeColor == QStringLiteral("#111111"),
+            "malformed graphics overlay should not change node color");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -902,6 +963,8 @@ int main(int argc, char** argv) {
         testXmlBundleWithoutGraphicsFallsBackToSimpleNode();
         testXmlBundleLoadsExtendedParameterMetadataWhenPresent();
         testXmlBundleIgnoresNonPositiveGraphicsMetrics();
+        testMalformedXmlBundleDoesNotRegisterPartialTypes();
+        testMalformedXmlGraphicsOverlayDoesNotApplyPartialChanges();
     } catch (const std::exception& error) {
         std::cerr << "graph_test failed: " << error.what() << '\n';
         return 1;
