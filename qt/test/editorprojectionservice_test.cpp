@@ -1,0 +1,181 @@
+// EditorProjectionService tests.
+#include "graph/graph.h"
+#include "graph/module.h"
+#include "graph/parameter.h"
+#include "modules/moduleregistry.h"
+#include "project/editorprojectionservice.h"
+#include "project/projectipservice.h"
+#include "project/projectservice.h"
+#include "project/projectstateservice.h"
+
+#include <QCoreApplication>
+#include <QFileInfo>
+#include <QJsonObject>
+#include <QTemporaryDir>
+#include <iostream>
+#include <memory>
+#include <stdexcept>
+
+namespace {
+
+void require(bool condition, const char* message) {
+    if (!condition) {
+        throw std::runtime_error(message);
+    }
+}
+
+void resetRegistry() {
+    ModuleRegistry::instance() = ModuleRegistry(ModuleRegistry::LoadMode::Empty);
+}
+
+ModuleType editorTileType() {
+    ModuleType type;
+    type.name = ModuleRegistry::scopedTypeName(QStringLiteral("finepaper.editor"),
+                                               QStringLiteral("Tile"));
+    type.packageId = QStringLiteral("finepaper.editor");
+    type.moduleId = QStringLiteral("Tile");
+    type.ipcoreId = QStringLiteral("finepaper.editor");
+    type.defaultParameters.insert(QStringLiteral("x"), Parameter(QStringLiteral("x"), 0));
+    type.defaultParameters.insert(QStringLiteral("y"), Parameter(QStringLiteral("y"), 0));
+    type.defaultParameters.insert(QStringLiteral("label"),
+                                  Parameter(QStringLiteral("label"), QStringLiteral("Tile")));
+    return type;
+}
+
+void registerEditorTileType() {
+    resetRegistry();
+    require(ModuleRegistry::instance().registerType(editorTileType()),
+            "editor tile type should register");
+}
+
+ProjectIpInstanceRecord editorInstanceRecord() {
+    ProjectIpInstanceRecord record;
+    record.id = QStringLiteral("editor_0");
+    record.package = ProjectPackageRef{QStringLiteral("finepaper.editor"), QStringLiteral("1.0")};
+    record.ipcoreId = QStringLiteral("finepaper.editor");
+    record.instanceId = QStringLiteral("editor_0");
+    record.schema = QStringLiteral("finepaper.editor-state-v1");
+    record.state = QJsonObject{{QStringLiteral("global_parameters"), QJsonObject{}}};
+    return record;
+}
+
+ProjectDocument editorDocument() {
+    ProjectDocument document;
+    document.projectName = QStringLiteral("Editor Projection");
+    document.name = document.projectName;
+    document.ipcores.push_back(ProjectIpcoreRecord{QStringLiteral("finepaper.editor"),
+                                                   QStringLiteral("1.0")});
+    document.ipcoreState.push_back(editorInstanceRecord());
+
+    ProjectModuleRecord tile;
+    tile.id = QStringLiteral("tile_0");
+    tile.ipcoreId = QStringLiteral("finepaper.editor");
+    tile.instanceId = QStringLiteral("editor_0");
+    tile.type = QStringLiteral("Tile");
+    tile.parameters.insert(QStringLiteral("x"), 24);
+    tile.parameters.insert(QStringLiteral("y"), 48);
+    tile.parameters.insert(QStringLiteral("label"), QStringLiteral("Loaded Tile"));
+    document.modules.push_back(tile);
+    return document;
+}
+
+std::unique_ptr<Module> editorTileModule(const QString& id) {
+    const ModuleType type = editorTileType();
+    auto module = std::make_unique<Module>(id, type.name);
+    module->setIpcoreId(type.ipcoreId);
+    module->setInstanceId(QStringLiteral("editor_0"));
+    for (auto it = type.defaultParameters.constBegin(); it != type.defaultParameters.constEnd(); ++it) {
+        module->setParameter(it.key(), it.value().value());
+    }
+    return module;
+}
+
+void testRebuildProjectionFromDocumentUpdatesGraphAndServices() {
+    registerEditorTileType();
+    Graph graph;
+    ProjectStateService stateService;
+    ProjectIpService ipService(&stateService);
+    ProjectService projectService;
+    EditorProjectionService projectionService(&graph, &stateService, &ipService, &projectService);
+    const ProjectDocument document = editorDocument();
+
+    const EditorProjectionResult result =
+        projectionService.rebuildProjectionFromDocument(document, QStringLiteral("/tmp/editor.fpproj"));
+
+    require(result.success, "document rebuild should succeed");
+    require(graph.modules().size() == 1, "graph projection should contain loaded module");
+    require(graph.getModule(QStringLiteral("tile_0")) != nullptr,
+            "loaded module should be available in graph");
+    require(stateService.ipInstanceRecords().size() == 1,
+            "project IP state should load from document");
+    require(ipService.selectedIpInstance().has_value(),
+            "project IP service should select the loaded instance");
+    require(projectService.hasDocument(), "project service should adopt loaded document");
+    require(projectService.document().projectName == QStringLiteral("Editor Projection"),
+            "project service should keep loaded project name");
+    require(projectService.currentPath() == QFileInfo(QStringLiteral("/tmp/editor.fpproj")).absoluteFilePath(),
+            "project service should keep loaded path");
+}
+
+void testSyncProjectFromProjectionUpdatesProjectService() {
+    registerEditorTileType();
+    Graph graph;
+    require(graph.addModule(editorTileModule(QStringLiteral("tile_1"))),
+            "test module should be added");
+    ProjectStateService stateService;
+    ProjectIpService ipService(&stateService);
+    stateService.ensureIpInstanceRecord(editorInstanceRecord());
+    ProjectService projectService;
+    EditorProjectionService projectionService(&graph, &stateService, &ipService, &projectService);
+
+    const EditorProjectionResult result =
+        projectionService.syncProjectFromProjection(QStringLiteral("Projected"));
+
+    require(result.success, "projection sync should succeed");
+    require(projectService.hasDocument(), "project service should have synced document");
+    require(projectService.document().projectName == QStringLiteral("Projected"),
+            "synced document should use requested project name");
+    require(projectService.document().modules.size() == 1,
+            "synced document should include graph modules");
+    require(projectService.document().instances.size() == 1,
+            "synced document should include project IP instances");
+    require(projectService.currentPath().isEmpty(),
+            "projection sync should not invent a file path");
+}
+
+void testClearProjectionClearsGraphStateAndProjectService() {
+    registerEditorTileType();
+    Graph graph;
+    require(graph.addModule(editorTileModule(QStringLiteral("tile_2"))),
+            "test module should be added");
+    ProjectStateService stateService;
+    ProjectIpService ipService(&stateService);
+    stateService.ensureIpInstanceRecord(editorInstanceRecord());
+    ProjectService projectService;
+    require(projectService.replaceDocument(editorDocument()).success,
+            "project service fixture should have a document");
+    EditorProjectionService projectionService(&graph, &stateService, &ipService, &projectService);
+
+    projectionService.clearProjection();
+
+    require(graph.modules().empty(), "clear should remove graph modules");
+    require(stateService.ipInstanceRecords().isEmpty(), "clear should remove project IP state");
+    require(!ipService.selectedIpInstance().has_value(), "clear should remove selected IP instance");
+    require(!projectService.hasDocument(), "clear should clear durable project service");
+}
+
+} // namespace
+
+int main(int argc, char** argv) {
+    QCoreApplication app(argc, argv);
+    try {
+        testRebuildProjectionFromDocumentUpdatesGraphAndServices();
+        testSyncProjectFromProjectionUpdatesProjectService();
+        testClearProjectionClearsGraphStateAndProjectService();
+    } catch (const std::exception& exception) {
+        qCritical("%s", exception.what());
+        return 1;
+    }
+    std::cout << "editorprojectionservice_test passed\n";
+    return 0;
+}

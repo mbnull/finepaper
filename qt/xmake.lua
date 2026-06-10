@@ -262,6 +262,37 @@ add_qt_test_target("projectservice_test", "test/projectservice_test.cpp", {
     "inc/ipcraft/core/project_patch.h"
 })
 
+add_qt_test_target("editorprojectionservice_test", "test/editorprojectionservice_test.cpp", {
+    "src/project/editorprojectionservice.cpp",
+    "src/project/graphprojectserializer.cpp",
+    "src/project/projectipservice.cpp",
+    "src/project/projectservice.cpp",
+    "src/project/projectstateservice.cpp",
+    "src/project/projectreader.cpp",
+    "src/project/projectwriter.cpp",
+    "src/connection/connectionruleservice.cpp",
+    "src/graph/graph.cpp",
+    "src/graph/module.cpp",
+    "src/graph/connection.cpp",
+    "src/graph/port.cpp",
+    "src/graph/parameter.cpp",
+    "src/modules/moduleregistry.cpp",
+    "src/modules/moduleprovider.cpp",
+    "src/ipcore/ipcoreruntimeregistry.cpp",
+    "src/ipcore/ipcatalogservice.cpp",
+    "src/ipcraft/compositionmodel.cpp",
+    "src/ipcraft/core/project_design.cpp",
+    "src/ipcraft/core/project_patch.cpp",
+    "inc/project/editorprojectionservice.h",
+    "inc/project/graphprojectserializer.h",
+    "inc/project/projectipservice.h",
+    "inc/project/projectservice.h",
+    "inc/project/projectstateservice.h",
+    "inc/project/projectdocument.h",
+    "inc/graph/graph.h",
+    "inc/graph/module.h"
+})
+
 add_qt_test_target("projectgenerationrunner_test", "test/projectgenerationrunner_test.cpp", {
     "src/app/projectgenerationrunner.cpp",
     "src/connection/connectionruleservice.cpp",
