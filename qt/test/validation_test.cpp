@@ -2,10 +2,12 @@
 #include "app/appsettings.h"
 #include "graph/graph.h"
 #include "ipcraft/ipcraftbuiltinvalidator.h"
+#include "ipcraft/schemaids.h"
 #include "modules/moduleregistry.h"
 #include "ipcore/ipcorecommandrunner.h"
 #include "panels/logpanel.h"
 #include "project/ipinstancestate.h"
+#include "project/projectstateservice.h"
 #include "validation/drcrunner.h"
 #include "validation/projectvalidationrunner.h"
 #include "validation/validationmanager.h"
@@ -307,7 +309,7 @@ IpcraftCommandDescriptor manifestCommand(const QString& name, const QString& exe
 
 IpcraftPackageManifest packageManifest(const QString& ipcoreId) {
     IpcraftPackageManifest manifest;
-    manifest.schema = QStringLiteral("ipcraft.manifest.v1");
+    manifest.schema = ipcraft::schemaids::packageV1;
     manifest.id = ipcoreId;
     manifest.name = ipcoreId;
     manifest.version = QStringLiteral("1.0");
@@ -338,15 +340,119 @@ IpCatalogEntry ipcraftCatalogEntryWithValidate(const QString& ipcoreId,
     return entry;
 }
 
+QJsonArray stringArray(QStringList values) {
+    QJsonArray array;
+    for (const QString& value : values) {
+        array.append(value);
+    }
+    return array;
+}
+
+QJsonObject flowCapture() {
+    return QJsonObject{
+        {QStringLiteral("stdout"), QStringLiteral("stdout.log")},
+        {QStringLiteral("stderr"), QStringLiteral("stderr.log")},
+        {QStringLiteral("max_bytes"), 1048576}
+    };
+}
+
+QJsonObject validateCommand(const QString& executable) {
+    return QJsonObject{
+        {QStringLiteral("executable"), executable},
+        {QStringLiteral("args"), stringArray({QStringLiteral("{inputs.manifest}")})},
+        {QStringLiteral("cwd"), QStringLiteral("run_dir")},
+        {QStringLiteral("env"), QJsonObject{{QStringLiteral("allow"), QJsonArray{}}}},
+        {QStringLiteral("capture"), flowCapture()}
+    };
+}
+
+QJsonArray validateFlows(const QString& executable) {
+    return QJsonArray{
+        QJsonObject{
+            {QStringLiteral("id"), QStringLiteral("validate")},
+            {QStringLiteral("label"), QStringLiteral("Validate")},
+            {QStringLiteral("scope"), QStringLiteral("instance")},
+            {QStringLiteral("steps"),
+             QJsonArray{
+                 QJsonObject{{QStringLiteral("kind"), QStringLiteral("emit_inputs")}},
+                 QJsonObject{
+                     {QStringLiteral("kind"), QStringLiteral("exec")},
+                     {QStringLiteral("command"), validateCommand(executable)}
+                 }
+             }}
+        }
+    };
+}
+
+void writeJsonFile(const QString& path, const QJsonObject& object) {
+    QFile file(path);
+    const bool opened = file.open(QIODevice::WriteOnly | QIODevice::Truncate);
+    require(opened, "failed to create JSON file");
+    const QByteArray bytes = QJsonDocument(object).toJson(QJsonDocument::Indented);
+    require(file.write(bytes) == bytes.size(), "failed to write JSON file");
+}
+
+void writeFile(const QString& path, const QByteArray& content) {
+    QFile file(path);
+    const bool opened = file.open(QIODevice::WriteOnly | QIODevice::Truncate);
+    require(opened, "failed to create test file");
+    require(file.write(content) == content.size(), "failed to write test file");
+}
+
+void makeExecutable(const QString& path) {
+    QFile file(path);
+    require(file.setPermissions(QFile::ReadOwner |
+                                QFile::WriteOwner |
+                                QFile::ExeOwner |
+                                QFile::ReadGroup |
+                                QFile::ExeGroup |
+                                QFile::ReadOther |
+                                QFile::ExeOther),
+            "failed to mark test file executable");
+}
+
+void writePackageSpec(const QString& packageRoot,
+                      const QString& packageId,
+                      const QJsonArray& flows) {
+    require(QDir().mkpath(packageRoot), "package root should be created");
+    QJsonObject spec = {
+        {QStringLiteral("schema"), ipcraft::schemaids::packageV1},
+        {QStringLiteral("id"), packageId},
+        {QStringLiteral("name"), packageId},
+        {QStringLiteral("version"), QStringLiteral("1.0.0")},
+        {QStringLiteral("extensions"), stringArray({QStringLiteral("ipcraft.flows")})}
+    };
+    if (!flows.isEmpty()) {
+        spec.insert(QStringLiteral("flows"), flows);
+    }
+
+    writeJsonFile(QDir(packageRoot).filePath(QStringLiteral("ipcraft.json")), spec);
+}
+
+QString writeValidateFlowScript(QTemporaryDir& tempDir) {
+    const QString packageToolsPath =
+        QDir(tempDir.path()).filePath(QStringLiteral("tools"));
+    require(QDir().mkpath(packageToolsPath), "failed to create package tools directory");
+    const QString path = QDir(packageToolsPath).filePath(QStringLiteral("validate.sh"));
+    writeFile(path,
+              QByteArrayLiteral("#!/bin/sh\n"
+                                "test -f \"${1:?inputs manifest}\"\n"
+                                "echo \"ERROR design: scripted validate DRC output\"\n"
+                                "exit 0\n"));
+    makeExecutable(path);
+    return QStringLiteral("tools/validate.sh");
+}
+
 std::unique_ptr<Module> makeManifestOwnedModule(const QString& id,
                                                 const QString& ipcoreId,
                                                 const QString& instanceId,
-                                                const QString& type = QStringLiteral("Tile")) {
+                                                const QString& type = QStringLiteral("Tile"),
+                                                Port::Direction linkDirection = Port::Direction::InOut) {
     auto module = std::make_unique<Module>(id, type);
     module->setIpcoreId(ipcoreId);
     module->setInstanceId(instanceId);
     module->addPort(Port(QStringLiteral("link"),
-                         Port::Direction::InOut,
+                         linkDirection,
                          QStringLiteral("bus"),
                          QStringLiteral("Link"),
                          {},
@@ -359,8 +465,8 @@ std::unique_ptr<Module> makeManifestOwnedModule(const QString& id,
 QString writeDrcScript(QTemporaryDir& tempDir) {
     const QString path = tempDir.filePath(QStringLiteral("drc.sh"));
     QFile file(path);
-    require(file.open(QIODevice::WriteOnly | QIODevice::Truncate),
-            "failed to create temporary DRC script");
+    const bool opened = file.open(QIODevice::WriteOnly | QIODevice::Truncate);
+    require(opened, "failed to create temporary DRC script");
     file.write("#!/bin/sh\n");
     file.write("echo \"ERROR design: scripted DRC violation\" >&2\n");
     file.write("exit 0\n");
@@ -373,8 +479,8 @@ QString writeDrcScript(QTemporaryDir& tempDir) {
 QString writeDrcInputEchoScript(QTemporaryDir& tempDir) {
     const QString path = tempDir.filePath(QStringLiteral("drc_input_echo.rb"));
     QFile file(path);
-    require(file.open(QIODevice::WriteOnly | QIODevice::Truncate),
-            "failed to create temporary input echo DRC script");
+    const bool opened = file.open(QIODevice::WriteOnly | QIODevice::Truncate);
+    require(opened, "failed to create temporary input echo DRC script");
     file.write("#!/usr/bin/env ruby\n");
     file.write("require 'json'\n");
     file.write("input = JSON.parse(File.read(ARGV.fetch(0)))\n");
@@ -513,8 +619,10 @@ void testBuiltInValidationRunsBeforePackageValidate() {
 void testValidateRunsBuiltInThenPackageValidate() {
     QTemporaryDir tempDir;
     require(tempDir.isValid(), "failed to create temporary DRC directory");
-    const QString scriptPath = writeDrcScript(tempDir);
+    const QString scriptPath = writeValidateFlowScript(tempDir);
     const QString ipcoreId = QStringLiteral("finepaper.scripted");
+    writePackageSpec(tempDir.path(), ipcoreId, validateFlows(scriptPath));
+
     Graph graph;
     require(graph.addModule(makeManifestOwnedModule(QStringLiteral("bad_module"),
                                                     ipcoreId,
@@ -528,31 +636,91 @@ void testValidateRunsBuiltInThenPackageValidate() {
 
     IpcraftPackageManifest manifest = packageManifest(ipcoreId);
     manifest.packageRootPath = tempDir.path();
-    manifest.commands.insert(QStringLiteral("validate"),
-                             manifestCommand(QStringLiteral("validate"), scriptPath));
     IpCatalogService catalog(QVector<IpcraftPackageManifest>{manifest}, nullptr);
 
     const QVector<ProjectIpInstanceRecord> instances{
         projectInstanceRecord(ipcoreId, QStringLiteral("bad_0")),
         projectInstanceRecord(ipcoreId, QStringLiteral("good_0"))
     };
+    ProjectStateService projectStateService;
+    for (const ProjectIpInstanceRecord& instance : instances) {
+        projectStateService.ensureIpInstanceRecord(instance);
+    }
 
-    ProjectValidationRunner runner;
-    const QList<ValidationResult> results =
-        runner.validate(&graph, catalog.entries(), instances);
     LogPanel logPanel;
-    logPanel.setResults(results);
+    ValidationManager manager(&graph, &projectStateService, &catalog, nullptr, &logPanel);
+    manager.runValidation(QStringLiteral("/tmp/default-validation.fpproj"),
+                          QStringLiteral("default_validation"));
 
     auto* logList = logPanel.findChild<QListWidget*>();
     const int builtInIndex = indexOfLogItemContaining(logList, QStringLiteral("MissingTile"));
     const int packageIndex =
-        indexOfLogItemContaining(logList, QStringLiteral("good_0: scripted DRC violation"));
+        indexOfLogItemContaining(logList,
+                                 QStringLiteral("Instance 'good_0': scripted validate DRC output"));
     require(builtInIndex >= 0,
             "validation log should include the built-in diagnostic for the invalid instance");
-    require(packageIndex < 0,
-            "default validation log should not include package validate diagnostics");
-    require(indexOfLogItemContaining(logList, QStringLiteral("bad_0: scripted DRC violation")) < 0,
+    require(packageIndex >= 0,
+            "default validation log should include package validate diagnostics for the valid instance");
+    require(indexOfLogItemContaining(logList,
+                                     QStringLiteral("Instance 'bad_0': scripted validate DRC output")) < 0,
             "package validate should not run for the instance with a blocking built-in error");
+}
+
+void testValidateSkipsOnlyInstanceTouchedByBasicValidationError() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "failed to create temporary DRC directory");
+    const QString scriptPath = writeValidateFlowScript(tempDir);
+    const QString ipcoreId = QStringLiteral("finepaper.basic_scoped");
+    writePackageSpec(tempDir.path(), ipcoreId, validateFlows(scriptPath));
+
+    Graph graph;
+    require(graph.addModule(makeManifestOwnedModule(QStringLiteral("bad_source"),
+                                                    ipcoreId,
+                                                    QStringLiteral("bad_basic_0"),
+                                                    QStringLiteral("Tile"),
+                                                    Port::Direction::Input)),
+            "bad source module should add");
+    require(graph.addModule(makeManifestOwnedModule(QStringLiteral("bad_target"),
+                                                    ipcoreId,
+                                                    QStringLiteral("bad_basic_0"))),
+            "bad target module should add");
+    require(graph.addModule(makeManifestOwnedModule(QStringLiteral("good_module"),
+                                                    ipcoreId,
+                                                    QStringLiteral("good_basic_0"))),
+            "good module should add");
+    graph.addConnection(std::make_unique<Connection>(
+        QStringLiteral("bad_basic_link"),
+        PortRef{QStringLiteral("bad_source"), QStringLiteral("link")},
+        PortRef{QStringLiteral("bad_target"), QStringLiteral("link")}));
+
+    IpcraftPackageManifest manifest = packageManifest(ipcoreId);
+    manifest.packageRootPath = tempDir.path();
+    IpCatalogService catalog(QVector<IpcraftPackageManifest>{manifest}, nullptr);
+
+    const QVector<ProjectIpInstanceRecord> instances{
+        projectInstanceRecord(ipcoreId, QStringLiteral("bad_basic_0")),
+        projectInstanceRecord(ipcoreId, QStringLiteral("good_basic_0"))
+    };
+    ProjectStateService projectStateService;
+    for (const ProjectIpInstanceRecord& instance : instances) {
+        projectStateService.ensureIpInstanceRecord(instance);
+    }
+
+    LogPanel logPanel;
+    ValidationManager manager(&graph, &projectStateService, &catalog, nullptr, &logPanel);
+    manager.runValidation(QStringLiteral("/tmp/basic-scoped-validation.fpproj"),
+                          QStringLiteral("basic_scoped_validation"));
+
+    auto* logList = logPanel.findChild<QListWidget*>();
+    require(indexOfLogItemContaining(logList,
+                                     QStringLiteral("Connection source must be an output or inout port")) >= 0,
+            "validation log should include the BasicValidator connection diagnostic");
+    require(indexOfLogItemContaining(logList,
+                                     QStringLiteral("Instance 'bad_basic_0': scripted validate DRC output")) < 0,
+            "package validate should not run for the instance touched by a BasicValidator error");
+    require(indexOfLogItemContaining(logList,
+                                     QStringLiteral("Instance 'good_basic_0': scripted validate DRC output")) >= 0,
+            "package validate should still run for an instance untouched by the BasicValidator error");
 }
 
 void testCommandRunnerRejectsSchemaMismatch() {
@@ -561,8 +729,8 @@ void testCommandRunnerRejectsSchemaMismatch() {
     const QString scriptPath = writeDrcScript(tempDir);
     const QString inputPath = tempDir.filePath(QStringLiteral("input.json"));
     QFile inputFile(inputPath);
-    require(inputFile.open(QIODevice::WriteOnly | QIODevice::Truncate),
-            "failed to create command input JSON");
+    const bool inputOpened = inputFile.open(QIODevice::WriteOnly | QIODevice::Truncate);
+    require(inputOpened, "failed to create command input JSON");
     inputFile.write(QJsonDocument(QJsonObject{
         {QStringLiteral("schema"), QStringLiteral("finepaper-ipcore-graph-v1")}
     }).toJson(QJsonDocument::Compact));
@@ -727,8 +895,8 @@ void testBuiltInValidationReportsViewReferenceError() {
     require(root.mkpath(QStringLiteral("views")), "failed to create views directory");
     const QString viewPath = root.filePath(QStringLiteral("views/Tile.xml"));
     QFile viewFile(viewPath);
-    require(viewFile.open(QIODevice::WriteOnly | QIODevice::Truncate),
-            "failed to create test view XML");
+    const bool viewOpened = viewFile.open(QIODevice::WriteOnly | QIODevice::Truncate);
+    require(viewOpened, "failed to create test view XML");
     viewFile.write(QByteArrayLiteral(R"xml(<module-view schema="v1" module="Tile">
   <anchors><anchor ref="missing" x="0.5" y="0.5"/></anchors>
 </module-view>)xml"));
@@ -765,8 +933,8 @@ void testBuiltInValidationReportsViewInterfaceAttributeReferenceError() {
     require(root.mkpath(QStringLiteral("views")), "failed to create views directory");
     const QString viewPath = root.filePath(QStringLiteral("views/Tile.xml"));
     QFile viewFile(viewPath);
-    require(viewFile.open(QIODevice::WriteOnly | QIODevice::Truncate),
-            "failed to create test view XML");
+    const bool viewOpened = viewFile.open(QIODevice::WriteOnly | QIODevice::Truncate);
+    require(viewOpened, "failed to create test view XML");
     viewFile.write(QByteArrayLiteral(R"xml(<module-view schema="v1" module="Tile">
   <decorations><marker interface="missing" /></decorations>
 </module-view>)xml"));
@@ -805,8 +973,8 @@ void testBuiltInValidationReportsViewAttachmentZoneReferenceError() {
     require(root.mkpath(QStringLiteral("views")), "failed to create views directory");
     const QString viewPath = root.filePath(QStringLiteral("views/Tile.xml"));
     QFile viewFile(viewPath);
-    require(viewFile.open(QIODevice::WriteOnly | QIODevice::Truncate),
-            "failed to create test view XML");
+    const bool viewOpened = viewFile.open(QIODevice::WriteOnly | QIODevice::Truncate);
+    require(viewOpened, "failed to create test view XML");
     viewFile.write(QByteArrayLiteral(R"xml(<module-view schema="v1" module="Tile">
   <attachment-zone zone="missing_zone" />
 </module-view>)xml"));
@@ -851,8 +1019,8 @@ void testBuiltInValidationAllowsAttachmentZoneRefAlias() {
     require(root.mkpath(QStringLiteral("views")), "failed to create views directory");
     const QString viewPath = root.filePath(QStringLiteral("views/Tile.xml"));
     QFile viewFile(viewPath);
-    require(viewFile.open(QIODevice::WriteOnly | QIODevice::Truncate),
-            "failed to create test view XML");
+    const bool viewOpened = viewFile.open(QIODevice::WriteOnly | QIODevice::Truncate);
+    require(viewOpened, "failed to create test view XML");
     viewFile.write(QByteArrayLiteral(R"xml(<module-view schema="v1" module="Tile">
   <anchors><anchor ref="link" x="0.5" y="0.5"/></anchors>
   <attachment-zones><zone ref="valid_zone" x="0.25" y="0.25"/></attachment-zones>
@@ -1135,6 +1303,7 @@ int main(int argc, char** argv) {
         testBuiltInValidationReportsMissingPackage();
         testBuiltInValidationRunsBeforePackageValidate();
         testValidateRunsBuiltInThenPackageValidate();
+        testValidateSkipsOnlyInstanceTouchedByBasicValidationError();
         testCommandRunnerRejectsSchemaMismatch();
         testBuiltInValidationReportsMissingInterface();
         testBuiltInValidationReportsUnmappableInterfaceMode();

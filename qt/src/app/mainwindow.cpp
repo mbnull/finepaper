@@ -432,7 +432,8 @@ void MainWindow::runValidation() {
     }
 
     qInfo() << "Validation requested by user";
-    m_validationManager->runValidation();
+    m_validationManager->runValidation(m_currentDocumentPath,
+                                       QFileInfo(m_currentDocumentPath).completeBaseName());
 }
 
 void MainWindow::undo() {

@@ -3,12 +3,14 @@
 #define VALIDATIONMANAGER_H
 
 #include <QObject>
+#include <QString>
 
 class Graph;
 class LogPanel;
 class IpCatalogService;
 class ProjectStateService;
 class ActiveWorkspaceController;
+class ProjectExternalValidationRunner;
 class ProjectValidationRunner;
 
 class ValidationManager : public QObject {
@@ -26,7 +28,7 @@ public:
 
 public slots:
     // Runs structural checks and IP-provided DRC, then publishes merged results to the log panel.
-    void runValidation();
+    void runValidation(const QString& projectPath = QString(), const QString& designName = QString());
 
 private:
     Graph* m_graph;
@@ -34,6 +36,7 @@ private:
     const IpCatalogService* m_catalogService;
     LogPanel* m_logPanel;
     ProjectValidationRunner* m_projectValidationRunner;
+    ProjectExternalValidationRunner* m_projectExternalValidationRunner;
 };
 
 #endif

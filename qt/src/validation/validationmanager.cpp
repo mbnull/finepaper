@@ -4,6 +4,7 @@
 #include "ipcore/ipcatalogservice.h"
 #include "panels/logpanel.h"
 #include "project/projectstateservice.h"
+#include "validation/projectexternalvalidationrunner.h"
 #include "validation/projectvalidationrunner.h"
 #include <QDebug>
 
@@ -19,16 +20,18 @@ ValidationManager::ValidationManager(Graph* graph,
       m_projectStateService(projectStateService),
       m_catalogService(catalogService),
       m_logPanel(logPanel),
-      m_projectValidationRunner(new ProjectValidationRunner()) {
+      m_projectValidationRunner(new ProjectValidationRunner()),
+      m_projectExternalValidationRunner(new ProjectExternalValidationRunner()) {
     (void)activeWorkspaceController;
 }
 
 ValidationManager::~ValidationManager() {
     delete m_projectValidationRunner;
+    delete m_projectExternalValidationRunner;
 }
 
 // Run all validators and update log panel with results
-void ValidationManager::runValidation() {
+void ValidationManager::runValidation(const QString& projectPath, const QString& designName) {
     qInfo() << "Running validation"
             << "modules" << (m_graph ? m_graph->modules().size() : 0)
             << "connections" << (m_graph ? m_graph->connections().size() : 0)
@@ -37,7 +40,24 @@ void ValidationManager::runValidation() {
         m_catalogService ? m_catalogService->entries() : QList<IpCatalogEntry>{};
     const QVector<ProjectIpInstanceRecord> instances =
         m_projectStateService ? m_projectStateService->ipInstanceRecords() : QVector<ProjectIpInstanceRecord>{};
-    QList<ValidationResult> results = m_projectValidationRunner->validate(m_graph, entries, instances);
+    const ProjectValidationReport staticReport =
+        m_projectValidationRunner->validateDetailed(m_graph, entries, instances);
+
+    ProjectExternalValidationRequest externalRequest;
+    externalRequest.graph = m_graph;
+    externalRequest.projectPath = projectPath;
+    externalRequest.designName = designName;
+    externalRequest.catalogEntries = entries;
+    externalRequest.instances = instances;
+    externalRequest.staticResults = staticReport.diagnostics;
+    externalRequest.blockingInstanceIds = staticReport.blockingInstanceIds;
+    externalRequest.blockAllExternalValidation =
+        staticReport.blockAllExternalValidation || !m_graph;
+
+    const QList<ValidationResult> externalResults =
+        m_projectExternalValidationRunner->validate(externalRequest);
+    QList<ValidationResult> results = staticReport.diagnostics;
+    results += externalResults;
     if (m_logPanel) {
         m_logPanel->setResults(results);
     }
@@ -66,6 +86,10 @@ void ValidationManager::runValidation() {
 
     qInfo() << "Validation complete"
             << "results" << results.size()
+            << "staticResults" << staticReport.diagnostics.size()
+            << "externalResults" << externalResults.size()
+            << "blockedExternalInstances" << staticReport.blockingInstanceIds.size()
+            << "externalBlockedAll" << externalRequest.blockAllExternalValidation
             << "errors" << errorCount
             << "warnings" << warningCount;
 }
