@@ -324,6 +324,20 @@ add_qt_test_target("ipcatalogservice_test", "test/ipcatalogservice_test.cpp", {
     "inc/**/ipcoreruntimedescriptor.h"
 })
 
+add_qt_test_target("packageservice_test", "test/packageservice_test.cpp", {
+    "src/package/packageservice.cpp",
+    "src/ipcore/ipcatalogservice.cpp",
+    "src/modules/moduleregistry.cpp",
+    "src/modules/moduleprovider.cpp",
+    "src/ipcore/ipcoreruntimeregistry.cpp",
+    "src/graph/parameter.cpp",
+    "src/graph/port.cpp",
+    "inc/package/packageservice.h",
+    "inc/ipcore/ipcatalogservice.h",
+    "inc/**/moduleregistry.h",
+    "inc/**/ipcoreruntimedescriptor.h"
+})
+
 add_qt_test_target("ipcraftmanifest_test", "test/ipcraftmanifest_test.cpp", {
     "inc/ipcraft/*.h"
 })

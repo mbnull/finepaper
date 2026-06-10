@@ -45,6 +45,7 @@ struct IpCatalogEntry {
 
 class IpCatalogService {
 public:
+    IpCatalogService() = default;
     IpCatalogService(QList<IpCoreRuntimeDescriptor> descriptors,
                      const ModuleRegistry* moduleRegistry);
     IpCatalogService(QVector<IpcraftPackageManifest> manifests,
