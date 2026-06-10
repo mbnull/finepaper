@@ -969,7 +969,7 @@ with:
 Run:
 
 ```bash
-xmake -P qt build qt
+xmake build -P qt qt
 ```
 
 Expected: build succeeds.
@@ -1121,7 +1121,7 @@ Run:
 xmake -P qt run workbenchservice_test
 xmake -P qt run pluginhost_foundation_test
 xmake -P qt run plugin_architecture_phase1_scan_test
-xmake -P qt build qt
+xmake build -P qt qt
 ```
 
 Expected:
