@@ -255,6 +255,33 @@ void testStructuredOutputBecomesValidationResult() {
             "structured output should include instance context");
 }
 
+void testStructuredOutputInstanceIdTargetsGraphModule() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "failed to create package root");
+    const QString packageId = QStringLiteral("finepaper.scripted");
+    const QString scriptPath =
+        writeValidateScript(tempDir,
+                            QByteArrayLiteral("test -f \"${1:?inputs manifest}\"\n"
+                                              "echo \"ERROR ip0: external DRC failed\"\n"
+                                              "exit 0\n"));
+    writePackageSpec(tempDir.path(), packageId, validateFlows(scriptPath));
+
+    Graph graph;
+    require(graph.addModule(moduleForInstance(QStringLiteral("tile_0"), packageId, QStringLiteral("ip0"))),
+            "module should add");
+    const QVector<ProjectIpInstanceRecord> instances{instanceRecord(packageId, QStringLiteral("ip0"))};
+
+    ProjectExternalValidationRequest request =
+        requestFor(graph, {catalogEntry(tempDir.path(), packageId)}, instances);
+    const QList<ValidationResult> results = ProjectExternalValidationRunner().validate(request);
+
+    require(results.size() == 1, "structured error should produce one result");
+    require(results.first().elementId() == QStringLiteral("tile_0"),
+            "structured output instance id should resolve to the graph module id");
+    require(hasMessage(results, QStringLiteral("Instance 'ip0': external DRC failed")),
+            "structured output should keep instance context in the message");
+}
+
 void testBlockingIdsSkipOnlyMatchingInstances() {
     QTemporaryDir tempDir;
     require(tempDir.isValid(), "failed to create package root");
@@ -318,6 +345,7 @@ int main(int argc, char** argv) {
     try {
         testMissingValidateFlowWarns();
         testStructuredOutputBecomesValidationResult();
+        testStructuredOutputInstanceIdTargetsGraphModule();
         testBlockingIdsSkipOnlyMatchingInstances();
         testBlockAllSuppressesExternalValidation();
     } catch (const std::exception& error) {

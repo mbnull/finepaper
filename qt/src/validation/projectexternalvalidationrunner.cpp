@@ -1,6 +1,7 @@
 #include "validation/projectexternalvalidationrunner.h"
 
 #include "app/projectflowsupport.h"
+#include "graph/graph.h"
 #include "ipcraft/flowrunner.h"
 
 #include <QDir>
@@ -40,7 +41,48 @@ void appendUniqueResult(QList<ValidationResult>& results,
     results.append(ValidationResult(severity, message, elementId, ruleName));
 }
 
+QString resolveGraphElementId(const Graph* graph, const QString& rawElementId) {
+    const QString elementId = rawElementId.trimmed();
+    if (elementId.isEmpty() || !graph) {
+        return elementId;
+    }
+    if (graph->getModule(elementId) || graph->getConnection(elementId)) {
+        return elementId;
+    }
+
+    for (const std::unique_ptr<Module>& module : graph->modules()) {
+        if (module && module->instanceId() == elementId) {
+            return module->id();
+        }
+    }
+    return elementId;
+}
+
+QString elementIdForLocation(const Graph* graph, const ipcraft::DiagnosticLocation& location) {
+    if (!location.graphObjectId.trimmed().isEmpty()) {
+        return resolveGraphElementId(graph, location.graphObjectId);
+    }
+    if (!location.connectionId.trimmed().isEmpty()) {
+        return resolveGraphElementId(graph, location.connectionId);
+    }
+    if (!location.instanceId.trimmed().isEmpty()) {
+        return resolveGraphElementId(graph, location.instanceId);
+    }
+    return {};
+}
+
+QString elementIdForDiagnostic(const Graph* graph, const ipcraft::Diagnostic& diagnostic) {
+    for (const ipcraft::DiagnosticLocation& location : diagnostic.locations) {
+        const QString elementId = elementIdForLocation(graph, location);
+        if (!elementId.isEmpty()) {
+            return elementId;
+        }
+    }
+    return {};
+}
+
 void parseCapturedText(const ProjectIpInstanceRecord& instance,
+                       const Graph* graph,
                        const QString& text,
                        bool includeStructuredErrors,
                        bool includeStructuredWarnings,
@@ -67,7 +109,7 @@ void parseCapturedText(const ProjectIpInstanceRecord& instance,
 
             const ValidationSeverity severity =
                 isWarning ? ValidationSeverity::Warning : ValidationSeverity::Error;
-            const QString elementId = match.captured(2).trimmed();
+            const QString elementId = resolveGraphElementId(graph, match.captured(2));
             const QString message =
                 withValidationInstanceContext(instance, match.captured(3).trimmed());
             appendUniqueResult(results, severity, message, elementId, QStringLiteral("DRC"));
@@ -85,18 +127,21 @@ void parseCapturedText(const ProjectIpInstanceRecord& instance,
 }
 
 QList<ValidationResult> capturedDiagnostics(const ProjectIpInstanceRecord& instance,
+                                            const Graph* graph,
                                             const QString& standardOutput,
                                             const QString& standardError,
                                             bool flowSucceeded) {
     QList<ValidationResult> results;
     if (flowSucceeded) {
         parseCapturedText(instance,
+                          graph,
                           standardOutput,
                           true,
                           true,
                           false,
                           results);
         parseCapturedText(instance,
+                          graph,
                           standardError,
                           true,
                           true,
@@ -106,12 +151,14 @@ QList<ValidationResult> capturedDiagnostics(const ProjectIpInstanceRecord& insta
     }
 
     parseCapturedText(instance,
+                      graph,
                       standardOutput,
                       true,
                       true,
                       true,
                       results);
     parseCapturedText(instance,
+                      graph,
                       standardError,
                       true,
                       true,
@@ -133,6 +180,7 @@ QString ruleNameForFlowDiagnostic(const ipcraft::Diagnostic& diagnostic) {
 }
 
 void appendFlowDiagnostics(const ProjectIpInstanceRecord& instance,
+                           const Graph* graph,
                            const ipcraft::FlowRunResult& flowResult,
                            QList<ValidationResult>& results) {
     for (const ipcraft::Diagnostic& diagnostic : flowResult.diagnostics.records) {
@@ -142,7 +190,7 @@ void appendFlowDiagnostics(const ProjectIpInstanceRecord& instance,
         appendUniqueResult(results,
                            severityForFlowDiagnostic(diagnostic),
                            withValidationInstanceContext(instance, message),
-                           QString(),
+                           elementIdForDiagnostic(graph, diagnostic),
                            ruleNameForFlowDiagnostic(diagnostic));
     }
 }
@@ -302,8 +350,8 @@ QList<ValidationResult> ProjectExternalValidationRunner::validate(
             runDir.filePath(QStringLiteral("stderr.log")));
 
         QList<ValidationResult> instanceResults =
-            capturedDiagnostics(instance, standardOutput, standardError, flowResult.ok);
-        appendFlowDiagnostics(instance, flowResult, instanceResults);
+            capturedDiagnostics(instance, request.graph, standardOutput, standardError, flowResult.ok);
+        appendFlowDiagnostics(instance, request.graph, flowResult, instanceResults);
         if (flowResult.ok) {
             results.append(instanceResults);
             continue;

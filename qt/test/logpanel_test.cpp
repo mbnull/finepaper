@@ -82,6 +82,32 @@ void testConnectionAmbiguityResultsSelectConnectionWhenClicked() {
             "clicking an ambiguity validation result should select the connection id");
 }
 
+void testValidationResultsSelectElementWhenDoubleClicked() {
+    LogPanel panel;
+    QString selectedElement;
+    QObject::connect(&panel, &LogPanel::elementSelected, &panel, [&](const QString& elementId) {
+        selectedElement = elementId;
+    });
+
+    panel.setResults({ValidationResult(
+        ValidationSeverity::Error,
+        QStringLiteral("Connection conn_1 failed validation"),
+        QStringLiteral("conn_1"),
+        QStringLiteral("DRC"))});
+
+    auto* list = panel.findChild<QListWidget*>();
+    require(list != nullptr, "log panel list widget should exist");
+    require(list->count() == 2, "validation error should append summary and detail lines");
+    require(QMetaObject::invokeMethod(list,
+                                      "itemDoubleClicked",
+                                      Qt::DirectConnection,
+                                      Q_ARG(QListWidgetItem*, list->item(1))),
+            "test should invoke the log item double-click signal");
+
+    require(selectedElement == QStringLiteral("conn_1"),
+            "double-clicking a validation result should select the element id");
+}
+
 void testAppendConnectionAmbiguityWarningFromConnection() {
     LogPanel panel;
     Connection connection(
@@ -175,6 +201,7 @@ int main(int argc, char** argv) {
         testAppendMessageKeepsTimestampOutOfVisibleText();
         testConnectionAmbiguityWarningUsesSingleVisibleLine();
         testConnectionAmbiguityResultsSelectConnectionWhenClicked();
+        testValidationResultsSelectElementWhenDoubleClicked();
         testAppendConnectionAmbiguityWarningFromConnection();
         testAppendConnectionAmbiguityWarningSelectsConnectionWhenClicked();
         testAppendMessageCapsVisibleHistory();

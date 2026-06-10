@@ -19,6 +19,7 @@ LogPanel::LogPanel(QWidget* parent) : QWidget(parent) {
     layout->addWidget(m_listWidget);
 
     connect(m_listWidget, &QListWidget::itemClicked, this, &LogPanel::onItemClicked);
+    connect(m_listWidget, &QListWidget::itemDoubleClicked, this, &LogPanel::onItemClicked);
 }
 
 // Append validation results with color-coded severity.
