@@ -53,7 +53,7 @@ PluginActivationResult PluginHost::activatePlugins() {
 
     if (m_activated) {
         result.success = true;
-        result.activatedPluginIds = pluginIds();
+        result.activatedPluginIds = m_activatedPluginIds;
         return result;
     }
 

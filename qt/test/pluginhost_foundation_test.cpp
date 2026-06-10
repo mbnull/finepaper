@@ -79,6 +79,27 @@ private:
     QString m_id;
 };
 
+class RenamingPlugin final : public IAppPlugin {
+public:
+    RenamingPlugin(QString id, QString activatedId)
+        : m_id(std::move(id)), m_activatedId(std::move(activatedId)) {}
+
+    QString id() const override {
+        return m_id;
+    }
+
+    void activate(AppContext&) override {
+        ++activateCount;
+        m_id = m_activatedId;
+    }
+
+    int activateCount = 0;
+
+private:
+    QString m_id;
+    QString m_activatedId;
+};
+
 void testActivatesPluginsWithAppContext() {
     WorkbenchService workbench;
     AppContext context;
@@ -98,6 +119,34 @@ void testActivatesPluginsWithAppContext() {
     require(pluginPtr->activateCount == 1, "plugin should activate once");
     require(workbench.actions().size() == 1, "plugin should contribute one action");
     require(workbench.panels().size() == 1, "plugin should contribute one panel");
+}
+
+void testSuccessfulActivationDoesNotRetryPlugins() {
+    WorkbenchService workbench;
+    AppContext context;
+    context.workbench = &workbench;
+    PluginHost host(context);
+
+    auto plugin = std::make_unique<RenamingPlugin>(QStringLiteral("project"),
+                                                   QStringLiteral("project.activated"));
+    RenamingPlugin* pluginPtr = plugin.get();
+
+    require(host.registerPlugin(std::move(plugin)), "plugin should register");
+
+    const PluginActivationResult firstResult = host.activatePlugins();
+    const QStringList expectedIds{QStringLiteral("project")};
+
+    require(firstResult.success, "first activation should succeed");
+    require(firstResult.activatedPluginIds == expectedIds,
+            "first activation should report initial plugin id");
+    require(pluginPtr->activateCount == 1, "plugin should activate once");
+
+    const PluginActivationResult secondResult = host.activatePlugins();
+
+    require(secondResult.success, "second activation should succeed");
+    require(secondResult.activatedPluginIds == firstResult.activatedPluginIds,
+            "second activation should preserve first activated ids snapshot");
+    require(pluginPtr->activateCount == 1, "second activation should not reactivate plugin");
 }
 
 void testRejectsDuplicatePluginIds() {
@@ -167,9 +216,11 @@ void testActivationFailureDoesNotRetryPlugins() {
     const QStringList expectedActivatedIds{QStringLiteral("project")};
 
     require(!firstResult.success, "activation should fail when a plugin throws");
-    require(firstResult.error.contains(QStringLiteral("broken")) ||
+    require(firstResult.error.contains(QStringLiteral("broken")),
+            "activation failure error should identify failed plugin id");
+    require(firstResult.error.contains(QStringLiteral("activation exploded")) ||
                 firstResult.error.contains(QStringLiteral("activation failed")),
-            "activation failure error should identify plugin failure");
+            "activation failure error should include exception text or fixed failure semantics");
     require(firstResult.activatedPluginIds == expectedActivatedIds,
             "failed activation should report previously activated plugin ids");
     require(contributingPluginPtr->activateCount == 1, "preceding plugin should activate once");
@@ -195,6 +246,7 @@ int main(int argc, char** argv) {
 
     try {
         testActivatesPluginsWithAppContext();
+        testSuccessfulActivationDoesNotRetryPlugins();
         testRejectsDuplicatePluginIds();
         testRejectsNonCanonicalPluginIds();
         testRejectsActivationWhenRequiredServicesAreMissing();
