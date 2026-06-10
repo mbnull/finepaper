@@ -110,6 +110,16 @@ ProjectServiceResult ProjectService::replaceDocument(ProjectDocument document) {
     return successResult();
 }
 
+ProjectServiceResult ProjectService::replaceDocumentFromLoadedFile(ProjectDocument document,
+                                                                   const QString& path) {
+    m_document = std::move(document);
+    normalizeDocument(m_document);
+    m_currentPath = QFileInfo(path).absoluteFilePath();
+    m_hasDocument = true;
+    emit currentDocumentChanged();
+    return successResult();
+}
+
 ProjectServiceResult ProjectService::replaceDocumentFromProjection(ProjectDocument document) {
     m_document = std::move(document);
     normalizeDocument(m_document);

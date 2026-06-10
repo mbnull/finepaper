@@ -89,6 +89,24 @@ void testReplaceDocumentFromProjection() {
             "projection replacement should preserve the current path");
 }
 
+void testReplaceDocumentFromLoadedFileStoresAbsolutePath() {
+    ProjectService service;
+    ProjectDocument document;
+    document.projectName = QStringLiteral("Loaded");
+    document.projectId = QStringLiteral("loaded_0");
+    const QString path = QStringLiteral("relative-loaded.fpproj");
+
+    const ProjectServiceResult result =
+        service.replaceDocumentFromLoadedFile(document, path);
+
+    require(result.success, "replaceDocumentFromLoadedFile should accept a loaded document");
+    require(service.hasDocument(), "loaded-file replacement should establish a document");
+    require(service.document().projectName == QStringLiteral("Loaded"),
+            "loaded-file replacement should preserve the document");
+    require(service.currentPath() == QFileInfo(path).absoluteFilePath(),
+            "loaded-file replacement should store the absolute current path");
+}
+
 void testCreateNewClearsSavedPath() {
     QTemporaryDir tempDir;
     require(tempDir.isValid(), "temporary directory should be valid");
@@ -176,6 +194,7 @@ int main(int argc, char** argv) {
     try {
         testCreateSaveLoadRoundtrip();
         testReplaceDocumentFromProjection();
+        testReplaceDocumentFromLoadedFileStoresAbsolutePath();
         testCreateNewClearsSavedPath();
         testReplaceDocumentClearsSavedPath();
         testApplyDesignPatch();

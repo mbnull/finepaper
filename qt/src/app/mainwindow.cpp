@@ -221,20 +221,29 @@ bool MainWindow::createProjectAt(const QString& path) {
         return false;
     }
 
-    clearDocument();
-
+    ProjectService stagedProject;
     const ProjectServiceResult createResult =
-        m_projectService->createNew(QFileInfo(projectPath).completeBaseName());
+        stagedProject.createNew(QFileInfo(projectPath).completeBaseName());
     if (!createResult.success) {
         qWarning() << "Failed to create project document" << createResult.error;
         QMessageBox::warning(this, "Create Project Failed", createResult.error);
         return false;
     }
 
-    const ProjectServiceResult saveResult = m_projectService->saveFile(projectPath);
+    const ProjectServiceResult saveResult = stagedProject.saveFile(projectPath);
     if (!saveResult.success) {
         qWarning() << "Failed to create project at" << projectPath << saveResult.error;
         QMessageBox::warning(this, "Create Project Failed", saveResult.error);
+        return false;
+    }
+
+    clearDocument();
+    const ProjectServiceResult adoptResult =
+        m_projectService->replaceDocumentFromLoadedFile(stagedProject.document(),
+                                                        stagedProject.currentPath());
+    if (!adoptResult.success) {
+        qWarning() << "Failed to adopt created project" << adoptResult.error;
+        QMessageBox::warning(this, "Create Project Failed", adoptResult.error);
         return false;
     }
 
@@ -1188,14 +1197,15 @@ bool MainWindow::loadDocument(const QString& path) {
     const QString absolutePath = QFileInfo(path).absoluteFilePath();
     qInfo() << "Loading document from" << absolutePath;
 
-    const ProjectServiceResult serviceLoadResult = m_projectService->loadFile(absolutePath);
+    ProjectService stagedProject;
+    const ProjectServiceResult serviceLoadResult = stagedProject.loadFile(absolutePath);
     if (!serviceLoadResult.success) {
         qWarning() << "Failed to read project" << absolutePath << serviceLoadResult.error;
         QMessageBox::warning(this, "Open Failed", serviceLoadResult.error);
         return false;
     }
 
-    const ProjectDocument& document = m_projectService->document();
+    const ProjectDocument& document = stagedProject.document();
 
     // Suppress document tracking while Graph emits module/connection signals
     // for the newly loaded state.
@@ -1209,6 +1219,14 @@ bool MainWindow::loadDocument(const QString& path) {
         return false;
     }
     m_projectIpService->loadFromDocument(document);
+    const ProjectServiceResult adoptResult =
+        m_projectService->replaceDocumentFromLoadedFile(document, stagedProject.currentPath());
+    if (!adoptResult.success) {
+        m_suppressDocumentTracking = false;
+        qWarning() << "Failed to adopt loaded project" << absolutePath << adoptResult.error;
+        QMessageBox::warning(this, "Open Failed", adoptResult.error);
+        return false;
+    }
     m_suppressDocumentTracking = false;
     if (m_propertyPanel) {
         m_propertyPanel->setSelectedModule(QString());

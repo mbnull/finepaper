@@ -29,6 +29,7 @@ public:
     ProjectServiceResult loadFile(const QString& path);
     ProjectServiceResult saveFile(const QString& path);
     ProjectServiceResult replaceDocument(ProjectDocument document);
+    ProjectServiceResult replaceDocumentFromLoadedFile(ProjectDocument document, const QString& path);
     ProjectServiceResult replaceDocumentFromProjection(ProjectDocument document);
     ipcraft::core::PatchApplyResult applyDesignPatch(
         const ipcraft::core::ProjectDesign& project,
