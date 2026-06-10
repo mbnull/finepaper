@@ -10,6 +10,7 @@
 | `internal-architecture-report.zh.md` | 实现型说明：代码目录、模块职责、内部依赖方向和开发判断准则。 |
 | `v1-core-architecture.md` | 公开架构契约：schema、CLI、diagnostics、security、migration 和 audit contract。 |
 | `ip-package-authoring-flow.md` | IP package/extension 接入流程：从现有 IP 代码库进入 Qt 前端、V1 schema、连接检查和生成流。 |
+| `plugin-architecture-hardening-report.md` | 插件式 IP 平台阶段硬化报告：阶段矩阵、anchor IP、V1 schema、旧路径隔离和 Phase 10 输入。 |
 | `v1-refactor-overview.zh.md` | 重构总览：为什么从 Graph-centric 架构切换到 project/package contract 架构。 |
 | `ipcraft-architecture-deletion-map.md` | 删除与适配边界：哪些旧概念要 delete、replace 或 adapter only。 |
 
