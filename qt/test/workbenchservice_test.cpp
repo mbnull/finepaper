@@ -55,41 +55,88 @@ WorkbenchEditorContribution makeEditor(const QString& id) {
 void testRegistrationOrderAndFieldsRoundtrip() {
     WorkbenchService service;
 
-    require(service.addAction(makeAction(QStringLiteral("action.open"))),
-            "action contribution should register");
-    require(service.addPanel(makePanel(QStringLiteral("panel.project"))),
-            "panel contribution should register");
-    require(service.addEditor(makeEditor(QStringLiteral("editor.graph"))),
-            "editor contribution should register");
+    WorkbenchActionContribution openAction = makeAction(QStringLiteral("action.open"));
+    WorkbenchActionContribution saveAction = makeAction(QStringLiteral("action.save"));
+    saveAction.text = QStringLiteral("Save");
+    saveAction.menuPath = QStringLiteral("File/Save");
+    saveAction.toolBar = QStringLiteral("Project");
+    saveAction.objectName = QStringLiteral("saveAction");
+    saveAction.factory = [](QObject* parent) {
+        return new QAction(QStringLiteral("Save"), parent);
+    };
+
+    WorkbenchPanelContribution projectPanel = makePanel(QStringLiteral("panel.project"));
+    WorkbenchPanelContribution logPanel = makePanel(QStringLiteral("panel.log"));
+    logPanel.title = QStringLiteral("Log");
+    logPanel.objectName = QStringLiteral("logPanel");
+    logPanel.area = WorkbenchPanelArea::Bottom;
+    logPanel.factory = [](QWidget* parent) {
+        return new QLabel(QStringLiteral("Log"), parent);
+    };
+
+    WorkbenchEditorContribution graphEditor = makeEditor(QStringLiteral("editor.graph"));
+    WorkbenchEditorContribution textEditor = makeEditor(QStringLiteral("editor.text"));
+    textEditor.title = QStringLiteral("Text");
+    textEditor.objectName = QStringLiteral("textEditor");
+    textEditor.factory = [](QWidget* parent) {
+        return new QLabel(QStringLiteral("Text"), parent);
+    };
+
+    require(service.addAction(openAction), "first action contribution should register");
+    require(service.addAction(saveAction), "second action contribution should register");
+    require(service.addPanel(projectPanel), "first panel contribution should register");
+    require(service.addPanel(logPanel), "second panel contribution should register");
+    require(service.addEditor(graphEditor), "first editor contribution should register");
+    require(service.addEditor(textEditor), "second editor contribution should register");
 
     const QList<WorkbenchActionContribution> actions = service.actions();
     const QList<WorkbenchPanelContribution> panels = service.panels();
     const QList<WorkbenchEditorContribution> editors = service.editors();
 
-    require(actions.size() == 1, "one action should be registered");
-    require(panels.size() == 1, "one panel should be registered");
-    require(editors.size() == 1, "one editor should be registered");
+    require(actions.size() == 2, "two actions should be registered");
+    require(panels.size() == 2, "two panels should be registered");
+    require(editors.size() == 2, "two editors should be registered");
 
-    require(actions.at(0).id == QStringLiteral("action.open"), "action id should roundtrip");
-    require(actions.at(0).text == QStringLiteral("Open"), "action text should roundtrip");
-    require(actions.at(0).menuPath == QStringLiteral("File"), "action menu path should roundtrip");
-    require(actions.at(0).toolBar == QStringLiteral("Main"), "action toolbar should roundtrip");
+    require(actions.at(0).id == QStringLiteral("action.open"), "first action id should roundtrip");
+    require(actions.at(0).text == QStringLiteral("Open"), "first action text should roundtrip");
+    require(actions.at(0).menuPath == QStringLiteral("File"), "first action menu path should roundtrip");
+    require(actions.at(0).toolBar == QStringLiteral("Main"), "first action toolbar should roundtrip");
     require(actions.at(0).objectName == QStringLiteral("openAction"),
-            "action object name should roundtrip");
-    require(actions.at(0).factory != nullptr, "action factory should roundtrip");
+            "first action object name should roundtrip");
+    require(actions.at(0).factory != nullptr, "first action factory should roundtrip");
+    require(actions.at(1).id == QStringLiteral("action.save"), "second action id should preserve order");
+    require(actions.at(1).text == QStringLiteral("Save"), "second action text should roundtrip");
+    require(actions.at(1).menuPath == QStringLiteral("File/Save"),
+            "second action menu path should roundtrip");
+    require(actions.at(1).toolBar == QStringLiteral("Project"),
+            "second action toolbar should roundtrip");
+    require(actions.at(1).objectName == QStringLiteral("saveAction"),
+            "second action object name should roundtrip");
+    require(actions.at(1).factory != nullptr, "second action factory should roundtrip");
 
-    require(panels.at(0).id == QStringLiteral("panel.project"), "panel id should roundtrip");
-    require(panels.at(0).title == QStringLiteral("Project"), "panel title should roundtrip");
+    require(panels.at(0).id == QStringLiteral("panel.project"), "first panel id should roundtrip");
+    require(panels.at(0).title == QStringLiteral("Project"), "first panel title should roundtrip");
     require(panels.at(0).objectName == QStringLiteral("projectPanel"),
-            "panel object name should roundtrip");
-    require(panels.at(0).area == WorkbenchPanelArea::Right, "panel area should roundtrip");
-    require(panels.at(0).factory != nullptr, "panel factory should roundtrip");
+            "first panel object name should roundtrip");
+    require(panels.at(0).area == WorkbenchPanelArea::Right, "first panel area should roundtrip");
+    require(panels.at(0).factory != nullptr, "first panel factory should roundtrip");
+    require(panels.at(1).id == QStringLiteral("panel.log"), "second panel id should preserve order");
+    require(panels.at(1).title == QStringLiteral("Log"), "second panel title should roundtrip");
+    require(panels.at(1).objectName == QStringLiteral("logPanel"),
+            "second panel object name should roundtrip");
+    require(panels.at(1).area == WorkbenchPanelArea::Bottom, "second panel area should roundtrip");
+    require(panels.at(1).factory != nullptr, "second panel factory should roundtrip");
 
-    require(editors.at(0).id == QStringLiteral("editor.graph"), "editor id should roundtrip");
-    require(editors.at(0).title == QStringLiteral("Graph"), "editor title should roundtrip");
+    require(editors.at(0).id == QStringLiteral("editor.graph"), "first editor id should roundtrip");
+    require(editors.at(0).title == QStringLiteral("Graph"), "first editor title should roundtrip");
     require(editors.at(0).objectName == QStringLiteral("graphEditor"),
-            "editor object name should roundtrip");
-    require(editors.at(0).factory != nullptr, "editor factory should roundtrip");
+            "first editor object name should roundtrip");
+    require(editors.at(0).factory != nullptr, "first editor factory should roundtrip");
+    require(editors.at(1).id == QStringLiteral("editor.text"), "second editor id should preserve order");
+    require(editors.at(1).title == QStringLiteral("Text"), "second editor title should roundtrip");
+    require(editors.at(1).objectName == QStringLiteral("textEditor"),
+            "second editor object name should roundtrip");
+    require(editors.at(1).factory != nullptr, "second editor factory should roundtrip");
 }
 
 void testDuplicateIdsAreRejectedPerContributionType() {
