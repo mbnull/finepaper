@@ -66,7 +66,7 @@ Architecture scans for Phases 1 through 10 pass at Phase 10 review time. Phase 1
 
 ## Verification Command Evidence
 
-The following commands were run on this branch before writing the report:
+The following commands were run on this branch during Phase 10 review:
 
 | Command | Result |
 |---------|--------|
@@ -85,7 +85,7 @@ The following commands were run on this branch before writing the report:
 
 ## qt-cpp-review Summary
 
-`qt-cpp-review` was run against the changed Qt/C++ files in this branch. The final deterministic linter pass is clean at commit `e208f88`.
+`qt-cpp-review` was run against the changed Qt/C++ files in this branch. The deterministic linter was rerun after the final scan refresh and returned exit 0 with no findings.
 
 Deep review found these high-confidence blockers, all fixed before this report:
 
