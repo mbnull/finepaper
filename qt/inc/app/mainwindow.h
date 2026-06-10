@@ -21,6 +21,7 @@ class NodeEditorWidget;
 class PropertyPanel;
 class IpCatalogPanel;
 class IpCatalogService;
+class PackageService;
 class ProjectIpService;
 class ProjectService;
 class ProjectStateService;
@@ -108,6 +109,7 @@ private slots:
     std::unique_ptr<WorkbenchService> m_workbenchService;
     std::unique_ptr<CommandManager> m_commandManager;
     std::unique_ptr<AppSettings> m_appSettings;
+    std::unique_ptr<PackageService> m_packageService;
     std::unique_ptr<IpCatalogService> m_ipCatalogService;
     std::unique_ptr<ProjectService> m_projectService;
     std::unique_ptr<ProjectStateService> m_projectStateService;

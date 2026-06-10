@@ -14,6 +14,7 @@
 #include "ipcore/ipcatalogservice.h"
 #include "ipcore/ipcoreruntimediagnostics.h"
 #include "nodeeditor/nodeeditorwidget.h"
+#include "package/packageservice.h"
 #include "panels/ipcorepathsdialog.h"
 #include "panels/ipcatalogpanel.h"
 #include "panels/propertypanel.h"
@@ -136,7 +137,8 @@ MainWindow::MainWindow(QWidget *parent)
       m_workbenchService(std::make_unique<WorkbenchService>()),
       m_commandManager(std::make_unique<CommandManager>()),
       m_appSettings(std::make_unique<AppSettings>()),
-      m_ipCatalogService(std::make_unique<IpCatalogService>(IpCatalogService::fromRuntimeRegistries())),
+      m_packageService(std::make_unique<PackageService>(&ModuleRegistry::instance())),
+      m_ipCatalogService(std::make_unique<IpCatalogService>()),
       m_projectService(std::make_unique<ProjectService>()),
       m_projectStateService(std::make_unique<ProjectStateService>()),
       m_projectIpService(std::make_unique<ProjectIpService>(m_projectStateService.get())),
@@ -163,6 +165,7 @@ MainWindow::MainWindow(QWidget *parent)
       m_topologyMenu(nullptr) {
     // Build the window in dependency order: widgets first, then signal wiring,
     // then actions/menus that depend on those widgets.
+    reloadIpcoreCatalog();
     setupPanels();
     registerBuiltinWorkbenchContributions();
     setupConnections();
@@ -1087,9 +1090,12 @@ QVector<IIpInstanceParameterAdapter*> MainWindow::rebuildIpInstanceParameterAdap
 void MainWindow::manageIpcorePackageRoots() {
     IpcorePathsDialog dialog(this);
     const QStringList currentPaths = m_appSettings ? m_appSettings->ipcorePaths() : QStringList{};
+    ModuleRegistry diagnosticsRegistry(ModuleRegistry::LoadMode::Empty);
+    PackageService diagnosticsService(&diagnosticsRegistry);
+    const PackageServiceLoadResult diagnosticsResult =
+        diagnosticsService.reloadPackageRoots(currentPaths);
     dialog.setPaths(currentPaths);
-    dialog.setDiagnostics(ipcraftDiagnosticLines(
-        loadIpcraftPackageManifestsWithDiagnostics(currentPaths).diagnostics));
+    dialog.setDiagnostics(ipcraftDiagnosticLines(diagnosticsResult.diagnostics));
 
     if (dialog.exec() != QDialog::Accepted) {
         return;
@@ -1102,17 +1108,15 @@ void MainWindow::manageIpcorePackageRoots() {
 }
 
 void MainWindow::reloadIpcoreCatalog() {
-    if (!m_ipCatalogService) {
+    if (!m_ipCatalogService || !m_packageService) {
         return;
     }
 
     const QStringList rootPaths = m_appSettings ? m_appSettings->ipcorePaths() : QStringList{};
-    const IpcraftRegistryLoadResult loadResult =
-        loadIpcraftPackageManifestsWithDiagnostics(rootPaths);
-    ModuleRegistry& moduleRegistry = ModuleRegistry::instance();
-    moduleRegistry = ModuleRegistry(ModuleRegistry::LoadMode::Empty);
-    moduleRegistry.loadIpcraftPackages(loadResult.manifests);
-    *m_ipCatalogService = IpCatalogService(loadResult.manifests, &moduleRegistry);
+    const PackageServiceLoadResult loadResult =
+        m_packageService->reloadPackageRoots(rootPaths);
+    const ModuleRegistry* moduleRegistry = m_packageService->moduleRegistry();
+    *m_ipCatalogService = m_packageService->catalog();
     if (m_propertyPanel) {
         m_propertyPanel->setIpInstanceParameterAdapters(rebuildIpInstanceParameterAdapters());
     }
@@ -1120,15 +1124,16 @@ void MainWindow::reloadIpcoreCatalog() {
     if (m_logPanel) {
         m_logPanel->appendMessage(
             QStringLiteral("[IP Catalog] Reloaded %1 package root(s), %2 package(s).")
-                .arg(rootPaths.size())
-                .arg(loadResult.manifests.size()),
+                .arg(loadResult.packageRootCount)
+                .arg(loadResult.packageCount),
             QColor(70, 110, 190));
         for (const QString& line : ipcraftDiagnosticLines(loadResult.diagnostics)) {
             m_logPanel->appendMessage(QStringLiteral("[IP Catalog] %1").arg(line),
                                       QColor(220, 50, 50));
         }
-        const QStringList lines =
-            IpCoreRuntimeDiagnostics::logLines(m_ipCatalogService->entries(), moduleRegistry);
+        const QStringList lines = moduleRegistry
+            ? IpCoreRuntimeDiagnostics::logLines(m_ipCatalogService->entries(), *moduleRegistry)
+            : QStringList{};
         for (const QString& line : lines) {
             m_logPanel->appendMessage(line, QColor(70, 110, 190));
         }
