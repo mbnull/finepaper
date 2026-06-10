@@ -20,7 +20,7 @@
 #include "panels/propertypanel.h"
 #include "panels/logpanel.h"
 #include "project/ipinstanceparameteradapter.h"
-#include "project/graphprojectserializer.h"
+#include "project/editorprojectionservice.h"
 #include "project/projectipservice.h"
 #include "project/projectservice.h"
 #include "project/projectstateservice.h"
@@ -142,6 +142,11 @@ MainWindow::MainWindow(QWidget *parent)
       m_projectService(std::make_unique<ProjectService>()),
       m_projectStateService(std::make_unique<ProjectStateService>()),
       m_projectIpService(std::make_unique<ProjectIpService>(m_projectStateService.get())),
+      m_editorProjectionService(std::make_unique<EditorProjectionService>(
+          m_graph,
+          m_projectStateService.get(),
+          m_projectIpService.get(),
+          m_projectService.get())),
       m_activeWorkspaceController(std::make_unique<ActiveWorkspaceController>(
           m_projectIpService.get(),
           m_ipCatalogService.get())),
@@ -1210,26 +1215,16 @@ bool MainWindow::loadDocument(const QString& path) {
         return false;
     }
 
-    const ProjectDocument& document = stagedProject.document();
-
     // Suppress document tracking while Graph emits module/connection signals
     // for the newly loaded state.
     m_suppressDocumentTracking = true;
-    const GraphProjectLoadResult graphLoadResult =
-        GraphProjectSerializer::loadProject(document, *m_graph);
-    if (!graphLoadResult.success) {
+    const EditorProjectionResult projectionResult =
+        m_editorProjectionService->rebuildProjectionFromDocument(stagedProject.document(),
+                                                                 stagedProject.currentPath());
+    if (!projectionResult.success) {
         m_suppressDocumentTracking = false;
-        qWarning() << "Failed to load project graph" << absolutePath << graphLoadResult.error;
-        QMessageBox::warning(this, "Open Failed", graphLoadResult.error);
-        return false;
-    }
-    m_projectIpService->loadFromDocument(document);
-    const ProjectServiceResult adoptResult =
-        m_projectService->replaceDocumentFromLoadedFile(document, stagedProject.currentPath());
-    if (!adoptResult.success) {
-        m_suppressDocumentTracking = false;
-        qWarning() << "Failed to adopt loaded project" << absolutePath << adoptResult.error;
-        QMessageBox::warning(this, "Open Failed", adoptResult.error);
+        qWarning() << "Failed to rebuild editor projection" << absolutePath << projectionResult.error;
+        QMessageBox::warning(this, "Open Failed", projectionResult.error);
         return false;
     }
     m_suppressDocumentTracking = false;
@@ -1255,14 +1250,11 @@ bool MainWindow::loadDocument(const QString& path) {
 bool MainWindow::saveDocument(const QString& path) {
     const QString absolutePath = QFileInfo(pathWithProjectExtension(path)).absoluteFilePath();
     qInfo() << "Saving project to" << absolutePath;
-    ProjectDocument document =
-        GraphProjectSerializer::toProject(*m_graph, QFileInfo(absolutePath).completeBaseName());
-    m_projectStateService->writeToDocument(document);
-    const ProjectServiceResult replaceResult =
-        m_projectService->replaceDocumentFromProjection(std::move(document));
-    if (!replaceResult.success) {
-        qWarning() << "Failed to update project document before save" << replaceResult.error;
-        QMessageBox::warning(this, "Save Failed", replaceResult.error);
+    const EditorProjectionResult projectionResult =
+        m_editorProjectionService->syncProjectFromProjection(QFileInfo(absolutePath).completeBaseName());
+    if (!projectionResult.success) {
+        qWarning() << "Failed to update project document before save" << projectionResult.error;
+        QMessageBox::warning(this, "Save Failed", projectionResult.error);
         return false;
     }
 
@@ -1305,17 +1297,13 @@ QString MainWindow::defaultProjectDirectoryPath() const {
 
 void MainWindow::clearDocument() {
     m_suppressDocumentTracking = true;
-    m_graph->clear();
-    m_projectIpService->clear();
+    m_editorProjectionService->clearProjection();
     m_suppressDocumentTracking = false;
     if (m_propertyPanel) {
         m_propertyPanel->setSelectedModule(QString());
     }
     m_commandManager->clearHistory();
     m_cleanStateId = m_commandManager->currentStateId();
-    if (m_projectService) {
-        m_projectService->clear();
-    }
     setCurrentDocumentPath(QString());
     setProjectOpen(false);
     syncDocumentStateFromHistory();

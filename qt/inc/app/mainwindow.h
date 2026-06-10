@@ -16,6 +16,7 @@
 class Graph;
 class AppSettings;
 class CommandManager;
+class EditorProjectionService;
 class IIpInstanceParameterAdapter;
 class NodeEditorWidget;
 class PropertyPanel;
@@ -114,6 +115,7 @@ private slots:
     std::unique_ptr<ProjectService> m_projectService;
     std::unique_ptr<ProjectStateService> m_projectStateService;
     std::unique_ptr<ProjectIpService> m_projectIpService;
+    std::unique_ptr<EditorProjectionService> m_editorProjectionService;
     std::unique_ptr<ActiveWorkspaceController> m_activeWorkspaceController;
     std::vector<std::unique_ptr<IIpInstanceParameterAdapter>> m_ipInstanceParameterAdapters;
     NodeEditorWidget* m_nodeEditor;
