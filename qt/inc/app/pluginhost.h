@@ -33,5 +33,8 @@ private:
 
     AppContext m_context;
     std::vector<std::unique_ptr<IAppPlugin>> m_plugins;
+    QStringList m_activatedPluginIds;
+    QString m_activationError;
+    bool m_activationFailed = false;
     bool m_activated = false;
 };

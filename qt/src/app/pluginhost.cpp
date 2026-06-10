@@ -1,11 +1,20 @@
 #include "app/pluginhost.h"
 
+#include <exception>
 #include <utility>
 
 namespace {
 
-bool isValidPluginId(const QString& id) {
-    return !id.trimmed().isEmpty();
+bool isCanonicalPluginId(const QString& id) {
+    return !id.isEmpty() && id == id.trimmed();
+}
+
+QString activationFailedError(const QString& pluginId, const QString& reason) {
+    if (reason.trimmed().isEmpty()) {
+        return QStringLiteral("Plugin activation failed for %1.").arg(pluginId);
+    }
+
+    return QStringLiteral("Plugin activation failed for %1: %2").arg(pluginId, reason);
 }
 
 } // namespace
@@ -18,7 +27,7 @@ bool PluginHost::registerPlugin(std::unique_ptr<IAppPlugin> plugin) {
     }
 
     const QString id = plugin->id();
-    if (!isValidPluginId(id) || hasPluginId(id) || m_activated) {
+    if (!isCanonicalPluginId(id) || hasPluginId(id) || m_activated || m_activationFailed) {
         return false;
     }
 
@@ -28,6 +37,13 @@ bool PluginHost::registerPlugin(std::unique_ptr<IAppPlugin> plugin) {
 
 PluginActivationResult PluginHost::activatePlugins() {
     PluginActivationResult result;
+
+    if (m_activationFailed) {
+        result.success = false;
+        result.error = m_activationError;
+        result.activatedPluginIds = m_activatedPluginIds;
+        return result;
+    }
 
     if (!m_context.workbench) {
         result.success = false;
@@ -42,8 +58,27 @@ PluginActivationResult PluginHost::activatePlugins() {
     }
 
     for (const std::unique_ptr<IAppPlugin>& plugin : m_plugins) {
-        plugin->activate(m_context);
-        result.activatedPluginIds.append(plugin->id());
+        const QString pluginId = plugin->id();
+        try {
+            plugin->activate(m_context);
+        } catch (const std::exception& exception) {
+            m_activationFailed = true;
+            m_activationError = activationFailedError(pluginId, QString::fromUtf8(exception.what()));
+            result.success = false;
+            result.error = m_activationError;
+            result.activatedPluginIds = m_activatedPluginIds;
+            return result;
+        } catch (...) {
+            m_activationFailed = true;
+            m_activationError = activationFailedError(pluginId, QStringLiteral("unknown exception"));
+            result.success = false;
+            result.error = m_activationError;
+            result.activatedPluginIds = m_activatedPluginIds;
+            return result;
+        }
+
+        m_activatedPluginIds.append(pluginId);
+        result.activatedPluginIds = m_activatedPluginIds;
     }
 
     m_activated = true;
