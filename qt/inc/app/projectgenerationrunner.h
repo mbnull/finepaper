@@ -1,6 +1,7 @@
 // ProjectGenerationRunner drives project-level generation for every IP instance.
 #pragma once
 
+#include "app/generationflowprovider.h"
 #include "ipcore/ipcatalogservice.h"
 #include "project/ipinstancestate.h"
 
@@ -8,6 +9,8 @@
 #include <QString>
 #include <QStringList>
 #include <QVector>
+#include <memory>
+#include <vector>
 
 class Graph;
 
@@ -50,14 +53,20 @@ class ProjectGenerationRunner {
 public:
     ProjectGenerationRunner();
     explicit ProjectGenerationRunner(QStringList frameworkToolSearchPaths);
+    ~ProjectGenerationRunner();
+
+    ProjectGenerationRunner(const ProjectGenerationRunner&) = delete;
+    ProjectGenerationRunner& operator=(const ProjectGenerationRunner&) = delete;
 
     static QStringList defaultFrameworkToolSearchPaths();
 
     QStringList frameworkToolSearchPaths() const;
     void setFrameworkToolSearchPaths(QStringList searchPaths);
+    void addGenerationFlowProvider(std::unique_ptr<GenerationFlowProvider> provider);
 
     ProjectGenerationResult generate(const ProjectGenerationRequest& request) const;
 
 private:
     QStringList m_frameworkToolSearchPaths;
+    std::vector<std::unique_ptr<GenerationFlowProvider>> m_generationFlowProviders;
 };

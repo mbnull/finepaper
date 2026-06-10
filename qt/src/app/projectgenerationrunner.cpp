@@ -3,7 +3,6 @@
 
 #include "app/generationartifacts.h"
 #include "graph/graph.h"
-#include "ipcraft/flowrunner.h"
 #include "ipcraft/ipcraftbuiltinvalidator.h"
 #include "ipcraft/packagespec.h"
 #include "ipcraft/schemaids.h"
@@ -24,6 +23,7 @@
 #include <QSet>
 #include <algorithm>
 #include <utility>
+#include <vector>
 
 namespace {
 
@@ -351,11 +351,24 @@ QString readTextFileIfPresent(const QString& path) {
     return QString::fromUtf8(file.readAll());
 }
 
+const GenerationFlowProvider* generationFlowProviderFor(
+    const std::vector<std::unique_ptr<GenerationFlowProvider>>& providers,
+    const GenerationFlowRequest& request) {
+    for (auto it = providers.crbegin(); it != providers.crend(); ++it) {
+        if (*it && (*it)->canRun(request)) {
+            return it->get();
+        }
+    }
+    return nullptr;
+}
+
 ProjectGenerationInstanceResult generateInstance(const ProjectGenerationRequest& request,
                                                  const QString& outputRoot,
                                                  const QString& designName,
                                                  const ProjectIpInstanceRecord& instance,
-                                                 const QStringList& frameworkToolSearchPaths) {
+                                                 const QStringList& frameworkToolSearchPaths,
+                                                 const std::vector<std::unique_ptr<GenerationFlowProvider>>&
+                                                     generationFlowProviders) {
     ProjectGenerationInstanceResult result;
     result.instance = instance;
     result.ipcoreId = instance.ipcoreId;
@@ -425,7 +438,21 @@ ProjectGenerationInstanceResult generateInstance(const ProjectGenerationRequest&
     flowRequest.graphConfig = projectedGraphConfigForInstance(request, designName, instance);
     flowRequest.frameworkToolSearchPaths = frameworkToolSearchPaths;
 
-    const ipcraft::FlowRunResult flowResult = ipcraft::FlowRunner::runFlow(flowRequest);
+    const GenerationFlowRequest generationFlowRequest{flowRequest, result.outputDirectory};
+    const GenerationFlowProvider* flowProvider =
+        generationFlowProviderFor(generationFlowProviders, generationFlowRequest);
+    if (!flowProvider) {
+        result.error = withInstanceContext(instance,
+                                           QStringLiteral("No generation flow provider is available."));
+        result.artifactPaths = generatedFiles(result.outputDirectory);
+        const QString manifestError = writeManifest(request, designName, *entry, result);
+        if (!manifestError.isEmpty()) {
+            result.error += QStringLiteral(" Manifest error: %1").arg(manifestError);
+        }
+        return result;
+    }
+
+    const ipcraft::FlowRunResult flowResult = flowProvider->run(generationFlowRequest);
     result.standardOutput = readTextFileIfPresent(QDir(result.outputDirectory).filePath(QStringLiteral("stdout.log")));
     result.standardError = readTextFileIfPresent(QDir(result.outputDirectory).filePath(QStringLiteral("stderr.log")));
     result.exitCode = exitCodeForFlowResult(flowResult);
@@ -453,10 +480,16 @@ ProjectGenerationInstanceResult generateInstance(const ProjectGenerationRequest&
 } // namespace
 
 ProjectGenerationRunner::ProjectGenerationRunner()
-    : m_frameworkToolSearchPaths(defaultFrameworkToolSearchPaths()) {}
+    : m_frameworkToolSearchPaths(defaultFrameworkToolSearchPaths()) {
+    addGenerationFlowProvider(std::make_unique<PackageGenerationFlowProvider>());
+}
 
 ProjectGenerationRunner::ProjectGenerationRunner(QStringList frameworkToolSearchPaths)
-    : m_frameworkToolSearchPaths(std::move(frameworkToolSearchPaths)) {}
+    : m_frameworkToolSearchPaths(std::move(frameworkToolSearchPaths)) {
+    addGenerationFlowProvider(std::make_unique<PackageGenerationFlowProvider>());
+}
+
+ProjectGenerationRunner::~ProjectGenerationRunner() = default;
 
 QStringList ProjectGenerationRunner::defaultFrameworkToolSearchPaths() {
     QStringList paths;
@@ -478,6 +511,13 @@ QStringList ProjectGenerationRunner::frameworkToolSearchPaths() const {
 
 void ProjectGenerationRunner::setFrameworkToolSearchPaths(QStringList searchPaths) {
     m_frameworkToolSearchPaths = std::move(searchPaths);
+}
+
+void ProjectGenerationRunner::addGenerationFlowProvider(
+    std::unique_ptr<GenerationFlowProvider> provider) {
+    if (provider) {
+        m_generationFlowProviders.push_back(std::move(provider));
+    }
 }
 
 ProjectGenerationResult ProjectGenerationRunner::generate(const ProjectGenerationRequest& request) const {
@@ -536,7 +576,8 @@ ProjectGenerationResult ProjectGenerationRunner::generate(const ProjectGeneratio
                              result.outputRoot,
                              designName,
                              instance,
-                             m_frameworkToolSearchPaths);
+                             m_frameworkToolSearchPaths,
+                             m_generationFlowProviders);
         if (!instanceResult.success) {
             allInstancesSucceeded = false;
             result.errors.append(instanceResult.error);

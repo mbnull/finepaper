@@ -295,6 +295,7 @@ add_qt_test_target("editorprojectionservice_test", "test/editorprojectionservice
 })
 
 add_qt_test_target("projectgenerationrunner_test", "test/projectgenerationrunner_test.cpp", {
+    "src/app/generationflowprovider.cpp",
     "src/app/projectgenerationrunner.cpp",
     "src/connection/connectionruleservice.cpp",
     "src/ipcraft/flowrunner.cpp",
@@ -323,6 +324,7 @@ add_qt_test_target("projectgenerationrunner_test", "test/projectgenerationrunner
     "src/**/moduleprovider.cpp",
     "src/**/ipcoreruntimeregistry.cpp",
     "inc/app/projectgenerationrunner.h",
+    "inc/app/generationflowprovider.h",
     "inc/app/generationartifacts.h",
     "inc/ipcraft/flowrunner.h",
     "inc/ipcraft/artifactmodel.h",
