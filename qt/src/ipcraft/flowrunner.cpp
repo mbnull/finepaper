@@ -761,6 +761,7 @@ FlowRunResult FlowRunner::runFlow(const FlowRunRequest& request) {
     }
 
     bool hardFailure = false;
+    bool emittedInputs = false;
     const QJsonArray steps = flow.value(QStringLiteral("steps")).toArray();
     for (qsizetype index = 0; index < steps.size(); ++index) {
         const QString stepPath = indexPath(index);
@@ -794,6 +795,7 @@ FlowRunResult FlowRunner::runFlow(const FlowRunRequest& request) {
             const PackageInputBuildResult emitResult =
                 PackageInputBuilder::emitInputs(emitRequest);
             result.inputsManifest = emitResult.manifest;
+            emittedInputs = true;
             appendDiagnostics(result.diagnostics, emitResult.manifest.diagnostics);
             if (!emitResult.ok) {
                 hardFailure = true;
@@ -838,6 +840,15 @@ FlowRunResult FlowRunner::runFlow(const FlowRunRequest& request) {
                               childPath(stepPath, QStringLiteral("kind")));
             hardFailure = true;
         }
+    }
+
+    if (emittedInputs &&
+        !writeBytes(result.runRoot,
+                    QStringLiteral("inputs/manifest.json"),
+                    toDeterministicJson(result.inputsManifest.toJson()),
+                    QStringLiteral("$.inputs.manifest"),
+                    result.diagnostics)) {
+        hardFailure = true;
     }
 
     result.state.insert(QStringLiteral("schema"), QStringLiteral("ipcraft.flow-run-state.v1"));
