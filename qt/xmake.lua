@@ -954,6 +954,52 @@ target("packageplugin_test")
         pass_outputs = "packageplugin_test passed"
     })
 
+add_qt_test_target("toolpipelineplugin_test", "test/toolpipelineplugin_test.cpp", {
+    "src/app/generationartifacts.cpp",
+    "src/app/generationflowprovider.cpp",
+    "src/app/pluginhost.cpp",
+    "src/app/projectgenerationrunner.cpp",
+    "src/app/toolpipelineplugin.cpp",
+    "src/app/toolpipelineservice.cpp",
+    "src/app/workbenchservice.cpp",
+    "src/connection/connectionruleservice.cpp",
+    "src/ipcraft/artifactmodel.cpp",
+    "src/ipcraft/emitter.cpp",
+    "src/ipcraft/configschema.cpp",
+    "src/ipcraft/value.cpp",
+    "src/ipcraft/compositionmodel.cpp",
+    "src/ipcraft/flowrunner.cpp",
+    "src/ipcraft/ipcraftbuiltinvalidator.cpp",
+    "src/ipcraft/ipxactconnectionchecker.cpp",
+    "src/ipcore/ipcatalogservice.cpp",
+    "src/ipcore/ipcorecommandrunner.cpp",
+    "src/ipcore/ipcoregraphexporter.cpp",
+    "src/project/projectreader.cpp",
+    "src/project/projectwriter.cpp",
+    "src/project/projectstateservice.cpp",
+    "src/project/graphprojectserializer.cpp",
+    "src/validation/validationresult.cpp",
+    "src/**/graph.cpp",
+    "src/**/module.cpp",
+    "src/**/connection.cpp",
+    "src/**/port.cpp",
+    "src/**/parameter.cpp",
+    "src/**/moduleregistry.cpp",
+    "src/**/moduleprovider.cpp",
+    "src/**/ipcoreruntimeregistry.cpp",
+    "inc/app/toolpipelineplugin.h",
+    "inc/app/toolpipelineservice.h",
+    "inc/app/generationflowprovider.h",
+    "inc/app/projectgenerationrunner.h",
+    "inc/app/workbenchservice.h",
+    "inc/app/pluginhost.h",
+    "inc/project/projectstateservice.h",
+    "inc/**/graph.h",
+    "inc/**/module.h",
+    "inc/**/ipcoreruntimeregistry.h",
+    "inc/**/ipcoreruntimedescriptor.h"
+}, "qt.widgetapp")
+
 target("plugin_architecture_phase1_scan_test")
     add_rules("qt.console")
     set_kind("binary")
@@ -1093,9 +1139,11 @@ target("ipcatalogpanel_test")
     add_files("src/app/mainwindow.cpp")
     add_files("src/app/workbenchservice.cpp")
     add_files("src/app/generationartifacts.cpp")
+    add_files("src/app/generationflowprovider.cpp")
     add_files("src/app/logformat.cpp")
     add_files("src/app/projectgenerationrunner.cpp")
     add_files("src/app/projectlauncher.cpp")
+    add_files("src/app/toolpipelineservice.cpp")
     add_files("src/panels/*.cpp")
     add_files("src/widgets/*.cpp")
     add_files("src/ipcraft/artifactmodel.cpp")
@@ -1259,6 +1307,7 @@ add_qt_test_target("topology_preset_test", "test/topology_preset_test.cpp", {
 
 add_qt_test_target("v1architecturegate_test", "test/v1architecturegate_test.cpp", {
     "src/app/generationartifacts.cpp",
+    "src/app/generationflowprovider.cpp",
     "src/app/projectgenerationrunner.cpp",
     "src/connection/connectionruleservice.cpp",
     "src/ipcraft/artifactmodel.cpp",

@@ -3,7 +3,7 @@
 // inside a vertical splitter with the log panel below.
 #include "app/appsettings.h"
 #include "app/mainwindow.h"
-#include "app/projectgenerationrunner.h"
+#include "app/toolpipelineservice.h"
 #include "app/workbenchservice.h"
 #include "commands/addipinstancecommand.h"
 #include "commands/removeipinstancecommand.h"
@@ -147,6 +147,7 @@ MainWindow::MainWindow(QWidget *parent)
           m_projectStateService.get(),
           m_projectIpService.get(),
           m_projectService.get())),
+      m_toolPipelineService(std::make_unique<ToolPipelineService>()),
       m_activeWorkspaceController(std::make_unique<ActiveWorkspaceController>(
           m_projectIpService.get(),
           m_ipCatalogService.get())),
@@ -365,8 +366,7 @@ void MainWindow::generateVerilog() {
     statusBar()->showMessage("Generating project IP instances...");
     QApplication::setOverrideCursor(Qt::WaitCursor);
 
-    ProjectGenerationRunner runner;
-    const ProjectGenerationResult result = runner.generate(request);
+    const ProjectGenerationResult result = m_toolPipelineService->generateProject(request);
     QApplication::restoreOverrideCursor();
 
     for (const ProjectGenerationInstanceResult& instance : result.instances) {
