@@ -366,7 +366,6 @@ WorkflowContext loadWorkflowContext(const QString& packageRoot, const QString& p
     context.manifests = loadSinglePackageManifest(packageRoot, packageId);
     require(context.registry.loadIpcraftPackages(context.manifests),
             "package module types should load");
-    ModuleRegistry::instance().loadIpcraftPackages(context.manifests);
     context.catalog = IpCatalogService(context.manifests, &context.registry);
     context.entry = onlyCatalogEntry(context.catalog);
     require(context.entry.id == packageId, "catalog entry should match package id");
@@ -405,7 +404,8 @@ ProjectGenerationResult runGeneration(const QDir& root,
 }
 
 void requireArtifact(const QString& outputDirectory, const QString& relativePath) {
-    requireMessage(QFileInfo::exists(QDir(outputDirectory).filePath(relativePath)),
+    const QFileInfo artifact(QDir(outputDirectory).filePath(relativePath));
+    requireMessage(artifact.isFile() && artifact.size() > 0,
                    QStringLiteral("Expected artifact %1 under %2")
                        .arg(relativePath, outputDirectory));
 }
@@ -477,6 +477,9 @@ void testFinepaperNoCWorkflowGeneratesPublicArtifacts() {
     require(readText(QDir(generated.outputDirectory).filePath(QStringLiteral("rtl/top.v")))
                 .contains(QStringLiteral("module top")),
             "finepaper.noc generated top should contain top module");
+    require(readText(QDir(generated.outputDirectory).filePath(QStringLiteral("filelist.f")))
+                .contains(QStringLiteral("rtl/top.v")),
+            "finepaper.noc filelist should reference generated top");
     const QJsonObject manifest =
         readJsonObject(QDir(generated.outputDirectory).filePath(QStringLiteral("manifest.json")));
     require(manifest.value(QStringLiteral("ipcore")).toString() == QStringLiteral("finepaper.noc"),
@@ -520,6 +523,9 @@ void testRaveNoCWorkflowGeneratesPublicArtifacts() {
     require(readText(QDir(generated.outputDirectory).filePath(QStringLiteral("ravenoc_config.svh")))
                 .contains(QStringLiteral("`define NOC_CFG_SZ_ROWS 2")),
             "RaveNoC config should preserve mesh rows");
+    require(readText(QDir(generated.outputDirectory).filePath(QStringLiteral("ravenoc_filelist.f")))
+                .contains(QStringLiteral("ravenoc_top.sv")),
+            "RaveNoC filelist should reference generated top");
     const QJsonObject manifest =
         readJsonObject(QDir(generated.outputDirectory).filePath(QStringLiteral("manifest.json")));
     require(manifest.value(QStringLiteral("ipcore")).toString() == QStringLiteral("finepaper.ravenoc"),

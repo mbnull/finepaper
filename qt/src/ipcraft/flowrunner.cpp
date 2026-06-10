@@ -69,6 +69,17 @@ void addFlowDiagnostic(ipcraft::DiagnosticStore& diagnostics,
         diagnostic(ruleId, message, {documentLocation(path)}, std::move(details)));
 }
 
+void addFlowFileDiagnostic(ipcraft::DiagnosticStore& diagnostics,
+                           const QString& ruleId,
+                           const QString& message,
+                           const QString& documentPath,
+                           const QString& filePath) {
+    diagnostics.records.append(
+        diagnostic(ruleId,
+                   message,
+                   {documentLocation(documentPath), fileLocation(filePath)}));
+}
+
 void appendDiagnostics(ipcraft::DiagnosticStore& target,
                        const ipcraft::DiagnosticStore& source) {
     for (const ipcraft::Diagnostic& diagnostic : source.records) {
@@ -726,6 +737,32 @@ bool runExecStep(const ipcraft::FlowRunRequest& request,
     return true;
 }
 
+bool emittedInputsManifestUnchanged(const QString& runRoot,
+                                    const QByteArray& expectedBytes,
+                                    ipcraft::DiagnosticStore& diagnostics) {
+    const QString manifestPath = QDir(runRoot).filePath(QStringLiteral("inputs/manifest.json"));
+    QFile manifest(manifestPath);
+    if (!manifest.open(QIODevice::ReadOnly)) {
+        addFlowFileDiagnostic(diagnostics,
+                              QStringLiteral("flow.inputs_manifest_missing"),
+                              QStringLiteral("Emitted inputs manifest was removed after emit_inputs."),
+                              QStringLiteral("$.inputs.manifest"),
+                              manifestPath);
+        return false;
+    }
+
+    const QByteArray actualBytes = manifest.readAll();
+    if (actualBytes != expectedBytes) {
+        addFlowFileDiagnostic(diagnostics,
+                              QStringLiteral("flow.inputs_manifest_modified"),
+                              QStringLiteral("Emitted inputs manifest was modified after emit_inputs."),
+                              QStringLiteral("$.inputs.manifest"),
+                              manifestPath);
+        return false;
+    }
+    return true;
+}
+
 } // namespace
 
 namespace ipcraft {
@@ -842,13 +879,14 @@ FlowRunResult FlowRunner::runFlow(const FlowRunRequest& request) {
         }
     }
 
-    if (emittedInputs &&
-        !writeBytes(result.runRoot,
-                    QStringLiteral("inputs/manifest.json"),
-                    toDeterministicJson(result.inputsManifest.toJson()),
-                    QStringLiteral("$.inputs.manifest"),
-                    result.diagnostics)) {
-        hardFailure = true;
+    if (emittedInputs) {
+        const QByteArray expectedInputs =
+            toDeterministicJson(result.inputsManifest.toJson());
+        if (!emittedInputsManifestUnchanged(result.runRoot,
+                                            expectedInputs,
+                                            result.diagnostics)) {
+            hardFailure = true;
+        }
     }
 
     result.state.insert(QStringLiteral("schema"), QStringLiteral("ipcraft.flow-run-state.v1"));

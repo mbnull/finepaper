@@ -38,6 +38,45 @@ const Port* findPort(const Module* module, const QString& portId) {
     return nullptr;
 }
 
+QString unscopedModuleType(const QString& packageId, const QString& moduleType) {
+    const QString prefix = packageId + QStringLiteral("::");
+    return moduleType.startsWith(prefix) ? moduleType.mid(prefix.size()) : moduleType;
+}
+
+const IpcraftPackageManifest* manifestForPackage(
+    const QVector<IpcraftPackageManifest>& manifests,
+    const QString& packageId) {
+    for (const IpcraftPackageManifest& manifest : manifests) {
+        if (manifest.id == packageId) {
+            return &manifest;
+        }
+    }
+    return nullptr;
+}
+
+QString manifestModuleIdForType(const IpcraftPackageManifest* manifest,
+                                const QString& moduleType) {
+    if (!manifest) {
+        return moduleType;
+    }
+    if (manifest->module(moduleType) != nullptr) {
+        return moduleType;
+    }
+    const QString unscoped = unscopedModuleType(manifest->id, moduleType);
+    return manifest->module(unscoped) != nullptr ? unscoped : moduleType;
+}
+
+const IpcraftInterfaceDescriptor* manifestInterfaceForPort(
+    const IpcraftPackageManifest* manifest,
+    const QString& manifestModuleId,
+    const Port& port) {
+    if (!manifest) {
+        return nullptr;
+    }
+    const QString interfaceId = port.interfaceId().isEmpty() ? port.id() : port.interfaceId();
+    return manifest->interfaceDescriptor(manifestModuleId, interfaceId);
+}
+
 bool connectionExists(const Graph* graph, const PortRef& source, const PortRef& target) {
     if (!graph) {
         return false;
@@ -123,6 +162,47 @@ bool hasExplicitOrDirectionalTopologySide(const PortSemanticInfo& port) {
 
 QString effectiveInterfaceId(const PortSemanticInfo& port) {
     return port.interfaceId.isEmpty() ? port.ref.portId : port.interfaceId;
+}
+
+QStringList compatibleRolesForManifestInterface(const IpcraftPackageManifest* manifest,
+                                                const IpcraftInterfaceDescriptor& descriptor) {
+    QStringList roles;
+    if (!manifest) {
+        return roles;
+    }
+    for (const IpcraftInterfaceAcceptRule& rule : descriptor.accepts) {
+        const IpcraftConnectionClass* connectionClass =
+            manifest->connectionClass(rule.connectionClassId);
+        if (!connectionClass) {
+            continue;
+        }
+        for (const QString& role : connectionClass->roles) {
+            if (role != rule.role && !roles.contains(role)) {
+                roles.append(role);
+            }
+        }
+    }
+    return roles;
+}
+
+void applyManifestInterfaceMetadata(const IpcraftPackageManifest* manifest,
+                                    const IpcraftInterfaceDescriptor* descriptor,
+                                    PortSemanticInfo& info) {
+    if (!manifest || !descriptor) {
+        return;
+    }
+    if (!descriptor->accepts.isEmpty()) {
+        const IpcraftInterfaceAcceptRule firstRule = descriptor->accepts.first();
+        info.interfaceBus = firstRule.connectionClassId;
+        info.interfaceRole = firstRule.role;
+        info.compatibleRoles = compatibleRolesForManifestInterface(manifest, *descriptor);
+    }
+    info.cardinality = descriptor->multiConnection ? QStringLiteral("many")
+                                                   : QStringLiteral("one");
+    info.topologySide = descriptor->topology.side;
+    info.oppositeInterfaceId = descriptor->topology.oppositeInterfaceId;
+    info.topologyRole = descriptor->topology.role;
+    info.acceptRules = descriptor->accepts;
 }
 
 bool topologyOppositeInterfacesMatch(const PortSemanticInfo& source,
@@ -711,14 +791,20 @@ std::optional<PortSemanticInfo> ConnectionRuleService::resolvePort(const QString
     }
 
     const ModuleType* moduleType = ModuleTypeMetadata::type(module);
+    const QString packageId = !module->ipcoreId().isEmpty()
+        ? module->ipcoreId()
+        : (moduleType ? ModuleTypeMetadata::packageId(moduleType) : QString());
+    const IpcraftPackageManifest* manifest =
+        manifestForPackage(m_manifests, packageId);
+    const QString manifestModuleId = moduleType
+        ? ModuleTypeMetadata::moduleId(moduleType)
+        : manifestModuleIdForType(manifest, module->type());
     PortSemanticInfo info;
     info.ref = PortRef{moduleId, portId};
     info.moduleType = module->type();
-    info.ipcoreId = !module->ipcoreId().isEmpty()
-        ? module->ipcoreId()
-        : (moduleType ? moduleType->ipcoreId : QString());
-    info.packageId = moduleType ? ModuleTypeMetadata::packageId(moduleType) : info.ipcoreId;
-    info.manifestModuleId = moduleType ? ModuleTypeMetadata::moduleId(moduleType) : module->type();
+    info.ipcoreId = packageId;
+    info.packageId = moduleType ? ModuleTypeMetadata::packageId(moduleType) : packageId;
+    info.manifestModuleId = manifestModuleId;
     info.instanceId = module->instanceId();
     info.graphGroup = moduleType ? moduleType->graphGroup : QString();
     info.editorLayout = ModuleTypeMetadata::editorLayout(module);
@@ -754,6 +840,11 @@ std::optional<PortSemanticInfo> ConnectionRuleService::resolvePort(const QString
                 info.matchFieldValues.insert(field, interfaceFieldValues(metadata, module, field));
             }
         }
+    } else {
+        applyManifestInterfaceMetadata(
+            manifest,
+            manifestInterfaceForPort(manifest, manifestModuleId, *port),
+            info);
     }
     return info;
 }

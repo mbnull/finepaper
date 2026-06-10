@@ -62,6 +62,10 @@ QString normalizedInstanceOutputKey(const QString& instanceId) {
     return instanceId.toCaseFolded();
 }
 
+QString flowRunRootForInstance(const QString& outputRoot, const QString& instanceId) {
+    return QDir(outputRoot).filePath(QStringLiteral(".runs/%1").arg(instanceId));
+}
+
 bool isReservedInstanceOutputKey(const QString& instanceId) {
     return normalizedInstanceOutputKey(instanceId)
         == QStringLiteral("project-snapshot.fpproj");
@@ -351,6 +355,87 @@ QString readTextFileIfPresent(const QString& path) {
     return QString::fromUtf8(file.readAll());
 }
 
+QString copyFileReplacing(const QString& sourcePath, const QString& destinationPath) {
+    const QFileInfo sourceInfo(sourcePath);
+    if (!sourceInfo.isFile()) {
+        return QStringLiteral("Source file is missing: %1").arg(sourcePath);
+    }
+
+    const QFileInfo destinationInfo(destinationPath);
+    if (!destinationInfo.absoluteDir().exists() &&
+        !QDir().mkpath(destinationInfo.absolutePath())) {
+        return QStringLiteral("Could not create directory: %1")
+            .arg(destinationInfo.absolutePath());
+    }
+
+    const QString sourceAbsolute = sourceInfo.absoluteFilePath();
+    const QString destinationAbsolute = destinationInfo.absoluteFilePath();
+    if (sourceAbsolute == destinationAbsolute) {
+        return {};
+    }
+
+    if (destinationInfo.exists()) {
+        if (!destinationInfo.isFile()) {
+            return QStringLiteral("Destination is not a file: %1").arg(destinationPath);
+        }
+        if (!QFile::remove(destinationPath)) {
+            return QStringLiteral("Could not replace file: %1").arg(destinationPath);
+        }
+    }
+    if (!QFile::copy(sourcePath, destinationPath)) {
+        return QStringLiteral("Could not copy file from %1 to %2")
+            .arg(sourcePath, destinationPath);
+    }
+    return {};
+}
+
+QString copyDirectoryReplacing(const QString& sourceDirectoryPath,
+                               const QString& destinationDirectoryPath) {
+    const QFileInfo sourceInfo(sourceDirectoryPath);
+    if (!sourceInfo.isDir()) {
+        return QStringLiteral("Source directory is missing: %1").arg(sourceDirectoryPath);
+    }
+
+    QDir destinationDirectory(destinationDirectoryPath);
+    if (destinationDirectory.exists() && !destinationDirectory.removeRecursively()) {
+        return QStringLiteral("Could not replace directory: %1")
+            .arg(destinationDirectoryPath);
+    }
+    if (!QDir().mkpath(destinationDirectoryPath)) {
+        return QStringLiteral("Could not create directory: %1").arg(destinationDirectoryPath);
+    }
+
+    const QDir sourceDirectory(sourceDirectoryPath);
+    QDirIterator iterator(sourceDirectoryPath, QDir::Files, QDirIterator::Subdirectories);
+    while (iterator.hasNext()) {
+        const QString sourceFilePath = iterator.next();
+        const QString relativePath = sourceDirectory.relativeFilePath(sourceFilePath);
+        const QString destinationFilePath =
+            QDir(destinationDirectoryPath).filePath(relativePath);
+        const QString copyError = copyFileReplacing(sourceFilePath, destinationFilePath);
+        if (!copyError.isEmpty()) {
+            return copyError;
+        }
+    }
+    return {};
+}
+
+QString materializeEmittedInputs(const QString& flowRunRoot,
+                                 const QString& publicInputPath) {
+    const QString runInputDirectory = QDir(flowRunRoot).filePath(QStringLiteral("inputs"));
+    const QString runInputPath = QDir(runInputDirectory).filePath(QStringLiteral("manifest.json"));
+    if (QFileInfo(runInputDirectory).isDir()) {
+        if (!QFileInfo(runInputPath).isFile()) {
+            return QStringLiteral("Emitted inputs manifest was not produced.");
+        }
+        return copyDirectoryReplacing(runInputDirectory, QFileInfo(publicInputPath).absolutePath());
+    }
+    if (QFileInfo(publicInputPath).isFile()) {
+        return {};
+    }
+    return QStringLiteral("Emitted inputs manifest was not produced.");
+}
+
 const GenerationFlowProvider* generationFlowProviderFor(
     const std::vector<std::unique_ptr<GenerationFlowProvider>>& providers,
     const GenerationFlowRequest& request) {
@@ -406,6 +491,21 @@ ProjectGenerationInstanceResult generateInstance(const ProjectGenerationRequest&
         return result;
     }
 
+    const QString flowRunRoot = flowRunRootForInstance(outputRoot, instance.instanceId);
+    QDir flowRunDirectory(flowRunRoot);
+    if (flowRunDirectory.exists() && !flowRunDirectory.removeRecursively()) {
+        result.error = withInstanceContext(instance,
+                                           QStringLiteral("Could not clear flow run directory: %1")
+                                               .arg(flowRunRoot));
+        return result;
+    }
+    if (!QDir().mkpath(flowRunRoot)) {
+        result.error = withInstanceContext(instance,
+                                           QStringLiteral("Could not create flow run directory: %1")
+                                               .arg(flowRunRoot));
+        return result;
+    }
+
     const IpCatalogEntry* entry = findCatalogEntry(request.catalogEntries, instance.ipcoreId);
     if (!entry) {
         result.error = withInstanceContext(instance,
@@ -430,7 +530,7 @@ ProjectGenerationInstanceResult generateInstance(const ProjectGenerationRequest&
     flowRequest.instanceId = instance.instanceId;
     flowRequest.flowId = QStringLiteral("generate");
     flowRequest.runId = instance.instanceId;
-    flowRequest.runRoot = result.outputDirectory;
+    flowRequest.runRoot = flowRunRoot;
     flowRequest.outputRoot = result.outputDirectory;
     flowRequest.packageRoot = flowContext.packageRoot;
     flowRequest.package = flowContext.package;
@@ -453,8 +553,8 @@ ProjectGenerationInstanceResult generateInstance(const ProjectGenerationRequest&
     }
 
     const ipcraft::FlowRunResult flowResult = flowProvider->run(generationFlowRequest);
-    result.standardOutput = readTextFileIfPresent(QDir(result.outputDirectory).filePath(QStringLiteral("stdout.log")));
-    result.standardError = readTextFileIfPresent(QDir(result.outputDirectory).filePath(QStringLiteral("stderr.log")));
+    result.standardOutput = readTextFileIfPresent(QDir(flowResult.runRoot).filePath(QStringLiteral("stdout.log")));
+    result.standardError = readTextFileIfPresent(QDir(flowResult.runRoot).filePath(QStringLiteral("stderr.log")));
     result.exitCode = exitCodeForFlowResult(flowResult);
     result.exitStatus = flowResult.ok ? QStringLiteral("normal") : QStringLiteral("failed");
 
@@ -462,6 +562,17 @@ ProjectGenerationInstanceResult generateInstance(const ProjectGenerationRequest&
         result.error = withInstanceContext(instance, diagnosticMessageForFlowFailure(flowResult));
     } else {
         result.success = true;
+    }
+
+    const QString inputManifestError =
+        materializeEmittedInputs(flowResult.runRoot, result.inputPath);
+    if (!inputManifestError.isEmpty()) {
+        result.success = false;
+        const QString contextualInputError =
+            withInstanceContext(instance, inputManifestError);
+        result.error = result.error.isEmpty()
+            ? contextualInputError
+            : result.error + QStringLiteral(" ") + contextualInputError;
     }
 
     result.artifactPaths = generatedFiles(result.outputDirectory);

@@ -102,6 +102,12 @@ QString manifestPackageId(const IpCatalogEntry& entry) {
     return entry.id;
 }
 
+QString unscopedModuleType(const IpCatalogEntry& entry, const QString& moduleType) {
+    const QString packageId = manifestPackageId(entry);
+    const QString prefix = packageId + QStringLiteral("::");
+    return moduleType.startsWith(prefix) ? moduleType.mid(prefix.size()) : moduleType;
+}
+
 QString moduleManifestId(const IpCatalogEntry& entry, const Module& module) {
     const QString metadataModuleId = ModuleTypeMetadata::moduleId(&module);
     if (entry.packageManifest.module(metadataModuleId) != nullptr) {
@@ -109,6 +115,10 @@ QString moduleManifestId(const IpCatalogEntry& entry, const Module& module) {
     }
     if (entry.packageManifest.module(module.type()) != nullptr) {
         return module.type();
+    }
+    const QString unscopedType = unscopedModuleType(entry, module.type());
+    if (entry.packageManifest.module(unscopedType) != nullptr) {
+        return unscopedType;
     }
     return {};
 }

@@ -435,6 +435,39 @@ void testRunFlowExpandsInputsManifestPlaceholder() {
             "emitted inputs manifest should be written under run root");
 }
 
+void testRunFlowFailsWhenExecModifiesEmittedInputsManifest() {
+    QTemporaryDir runRoot;
+    QTemporaryDir packageRoot;
+    require(runRoot.isValid(), "run root should be valid");
+    require(packageRoot.isValid(), "package root should be valid");
+    writeExecutable(QDir(packageRoot.path()).filePath(QStringLiteral("tools/corrupt-input.sh")),
+                    "#!/bin/sh\n"
+                    "printf corrupted > \"$1\"\n"
+                    "exit 0\n");
+
+    QJsonObject flow{
+        {QStringLiteral("id"), QStringLiteral("generate")},
+        {QStringLiteral("steps"),
+         QJsonArray{
+             QJsonObject{{QStringLiteral("kind"), QStringLiteral("emit_inputs")}},
+             QJsonObject{{QStringLiteral("kind"), QStringLiteral("exec")},
+                         {QStringLiteral("command"),
+                          commandFor(QStringLiteral("tools/corrupt-input.sh"),
+                                     QJsonArray{QStringLiteral("{inputs.manifest}")})}}}}};
+    ipcraft::FlowRunRequest request = requestFor(runRoot, packageRoot, flow);
+    request.package.emitters = QJsonArray{
+        QJsonObject{{QStringLiteral("id"), QStringLiteral("params")},
+                    {QStringLiteral("kind"), QStringLiteral("emit_parameters")},
+                    {QStringLiteral("path"), QStringLiteral("params.json")}}};
+    request.config.parameters.insert(QStringLiteral("width"), 64);
+
+    const ipcraft::FlowRunResult result = ipcraft::FlowRunner::runFlow(request);
+
+    require(!result.ok, "exec must not be allowed to corrupt emitted inputs manifest");
+    require(hasRule(result.diagnostics, QStringLiteral("flow.inputs_manifest_modified")),
+            "modified emitted inputs manifest should emit flow.inputs_manifest_modified");
+}
+
 void testRunFlowExpandsPackageManifestPlaceholder() {
     QTemporaryDir runRoot;
     QTemporaryDir packageRoot;
@@ -530,6 +563,7 @@ int main(int argc, char** argv) {
         testParseDiagnosticsWithoutParserFailsStructurally();
         testRunFlowUsesRunDirectoryCwdByDefault();
         testRunFlowExpandsInputsManifestPlaceholder();
+        testRunFlowFailsWhenExecModifiesEmittedInputsManifest();
         testRunFlowExpandsPackageManifestPlaceholder();
         testValidateProjectDoesNotRunFlow();
         testStdoutStderrCaptureTruncationReturnsDiagnostic();
