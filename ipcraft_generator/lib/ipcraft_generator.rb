@@ -1,5 +1,6 @@
 require 'fileutils'
 require 'json'
+require 'open3'
 require 'optparse'
 require 'tmpdir'
 
@@ -41,6 +42,66 @@ module IpcraftGenerator
       'finepaper.opennoc' => :generate_opennoc
     }.freeze
     OPENNOC_AGENT_TYPES = %w[RNF RNI HNF HNI SNF].freeze
+    RAVENOC_VENDOR_FILES = [
+      'bus_arch_sv_pkg/amba_axi_pkg.sv',
+      'src/include/ravenoc_axi_fnc.svh',
+      'src/include/ravenoc_defines.svh',
+      'src/include/ravenoc_structs.svh',
+      'src/include/ravenoc_pkg.sv',
+      'src/ni/axi_csr.sv',
+      'src/ni/axi_slave_if.sv',
+      'src/ni/router_wrapper.sv',
+      'src/ni/async_gp_fifo.sv',
+      'src/ni/cdc_pkt.sv',
+      'src/ni/pkt_proc.sv',
+      'src/router/fifo.sv',
+      'src/router/output_module.sv',
+      'src/router/router_if.sv',
+      'src/router/router_ravenoc.sv',
+      'src/router/rr_arbiter.sv',
+      'src/router/vc_buffer.sv',
+      'src/router/input_router.sv',
+      'src/router/input_module.sv',
+      'src/router/input_datapath.sv',
+      'src/ravenoc.sv'
+    ].freeze
+    RAVENOC_VENDOR_SOURCE_FILES = [
+      'bus_arch_sv_pkg/amba_axi_pkg.sv',
+      'src/include/ravenoc_pkg.sv',
+      'src/ni/axi_csr.sv',
+      'src/ni/axi_slave_if.sv',
+      'src/ni/router_wrapper.sv',
+      'src/ni/async_gp_fifo.sv',
+      'src/ni/cdc_pkt.sv',
+      'src/ni/pkt_proc.sv',
+      'src/router/fifo.sv',
+      'src/router/output_module.sv',
+      'src/router/router_if.sv',
+      'src/router/router_ravenoc.sv',
+      'src/router/rr_arbiter.sv',
+      'src/router/vc_buffer.sv',
+      'src/router/input_router.sv',
+      'src/router/input_module.sv',
+      'src/router/input_datapath.sv',
+      'src/ravenoc.sv'
+    ].freeze
+    OPENNOC_VENDOR_FILES = [
+      'LICENSE',
+      'tools/mesh_generator/mesh_gen.py',
+      'tools/mesh_generator/template/mesh_wrapper.j2',
+      'tools/mesh_generator/chi_xp_node.sv',
+      'rtl/misc/chi_xp_channel.v',
+      'rtl/misc/sync_fifo.v',
+      'rtl/include/chie_defines.v',
+      'rtl/include/rni_param.v',
+      'rtl/include/hnf_param.v',
+      'rtl/include/hni_param.v',
+      'rtl/include/snf_param.v',
+      'rtl/src/rni/rni.v',
+      'rtl/src/hnf/hnf.v',
+      'rtl/src/hni/hni.v',
+      'rtl/src/snf/snf.v'
+    ].freeze
     RAVENOC_DEFAULTS = {
       'rows' => 2,
       'cols' => 2,
@@ -568,10 +629,11 @@ module IpcraftGenerator
 
     def generate_ravenoc(manifest, input)
       projection = ravenoc_projection(manifest, input)
+      vendor_sources = copy_ravenoc_vendor_files
 
       File.write(File.join(@output_dir, 'ravenoc_config.svh'), ravenoc_config_header(projection.fetch(:defines)))
       File.write(File.join(@output_dir, 'ravenoc_top.sv'), ravenoc_top)
-      File.write(File.join(@output_dir, 'ravenoc_filelist.f'), ravenoc_filelist(projection.fetch(:defines)))
+      File.write(File.join(@output_dir, 'ravenoc_filelist.f'), ravenoc_filelist(projection.fetch(:defines), vendor_sources))
       write_json(File.join(@output_dir, 'manifest.json'), ravenoc_output_manifest(manifest, input, projection))
     end
 
@@ -579,6 +641,9 @@ module IpcraftGenerator
       projection = opennoc_projection(manifest, input)
 
       write_json(File.join(@output_dir, 'opennoc_mesh.json'), projection.fetch(:mesh))
+      wrapper = run_opennoc_mesh_generator(projection)
+      vendor_sources = copy_opennoc_vendor_files
+      File.write(File.join(@output_dir, 'opennoc_filelist.f'), opennoc_filelist(wrapper, vendor_sources))
       write_json(File.join(@output_dir, 'manifest.json'), opennoc_output_manifest(manifest, input, projection))
     end
 
@@ -814,9 +879,11 @@ module IpcraftGenerator
       "#{lines.join("\n")}\n"
     end
 
-    def ravenoc_filelist(defines)
+    def ravenoc_filelist(defines, vendor_sources)
       lines = ['+incdir+.']
+      lines << '+incdir+vendor/ravenoc/src/include'
       lines.concat(defines.map { |name, value| "+define+#{name}=#{value}" })
+      lines.concat(vendor_sources)
       lines << 'ravenoc_top.sv'
       "#{lines.join("\n")}\n"
     end
@@ -1183,6 +1250,78 @@ module IpcraftGenerator
       parameters = instance.fetch('parameters', {})
       parameter_text = parameters.map { |key, value| "#{key}=#{value}" }.join(', ')
       [instance.fetch('id'), parameter_text].reject(&:empty?).join(' ')
+    end
+
+    def copy_ravenoc_vendor_files
+      RAVENOC_VENDOR_FILES.each do |relative|
+        copy_package_file("vendor/ravenoc/#{relative}", "vendor/ravenoc/#{relative}")
+      end
+      RAVENOC_VENDOR_SOURCE_FILES.map { |relative| "vendor/ravenoc/#{relative}" }
+    end
+
+    def run_opennoc_mesh_generator(projection)
+      wrapper = "mesh_wrapper_#{projection.fetch(:cols)}x#{projection.fetch(:rows)}.sv"
+      mesh_generator_root = package_path('vendor/OpenNoC/tools/mesh_generator')
+      raise Error, 'OpenNoC vendor mesh generator is missing.' unless File.directory?(mesh_generator_root)
+
+      Dir.mktmpdir('ipcraft-opennoc-mesh') do |dir|
+        FileUtils.cp_r(mesh_generator_root, dir)
+        working_dir = File.join(dir, 'mesh_generator')
+        stdout, stderr, status = Open3.capture3(
+          'python3',
+          'mesh_gen.py',
+          '-f',
+          File.expand_path(File.join(@output_dir, 'opennoc_mesh.json')),
+          chdir: working_dir
+        )
+        unless status.success?
+          message = stderr.empty? ? stdout : stderr
+          raise Error, "OpenNoC mesh generator failed: #{message.strip}"
+        end
+
+        generated_wrapper = File.join(working_dir, wrapper)
+        raise Error, "OpenNoC mesh generator did not create #{wrapper}" unless File.file?(generated_wrapper)
+
+        output_relative = "rtl/#{wrapper}"
+        output_path = File.join(@output_dir, output_relative)
+        FileUtils.mkdir_p(File.dirname(output_path))
+        FileUtils.cp(generated_wrapper, output_path)
+        output_relative
+      end
+    end
+
+    def copy_opennoc_vendor_files
+      copied = OPENNOC_VENDOR_FILES.map do |relative|
+        copy_package_file("vendor/OpenNoC/#{relative}", "vendor/OpenNoC/#{relative}")
+      end
+      copied.select { |relative| relative.end_with?('.v', '.sv') }
+    end
+
+    def opennoc_filelist(wrapper, vendor_sources)
+      "#{([wrapper] + vendor_sources).uniq.join("\n")}\n"
+    end
+
+    def package_root
+      File.dirname(File.expand_path(@manifest_path))
+    end
+
+    def package_path(relative)
+      root = package_root
+      expanded = File.expand_path(relative, root)
+      unless expanded == root || expanded.start_with?("#{root}#{File::SEPARATOR}")
+        raise Error, "package path escapes package root: #{relative}"
+      end
+      expanded
+    end
+
+    def copy_package_file(source_relative, output_relative)
+      source = package_path(source_relative)
+      raise Error, "package file is missing: #{source_relative}" unless File.file?(source)
+
+      destination = File.join(@output_dir, output_relative)
+      FileUtils.mkdir_p(File.dirname(destination))
+      FileUtils.cp(source, destination)
+      output_relative
     end
 
     def artifact_id(instance)

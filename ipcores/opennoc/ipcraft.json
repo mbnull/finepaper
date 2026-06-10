@@ -152,6 +152,21 @@
       "primary": true
     },
     {
+      "id": "filelist",
+      "type": "filelist",
+      "glob": "opennoc_filelist.f"
+    },
+    {
+      "id": "mesh_wrapper",
+      "type": "rtl",
+      "glob": "rtl/mesh_wrapper_*.sv"
+    },
+    {
+      "id": "vendor_rtl",
+      "type": "rtl",
+      "glob": "vendor/OpenNoC/rtl/src/rni/rni.v"
+    },
+    {
       "id": "manifest",
       "type": "resolved_config",
       "glob": "manifest.json"

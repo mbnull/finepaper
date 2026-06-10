@@ -180,9 +180,10 @@ class IpcraftGeneratorTest < Minitest::Test
     Dir.mktmpdir do |dir|
       output = File.join(dir, 'out')
       input_path = write_emitted_inputs(dir, ravenoc_project)
+      manifest_path = ravenoc_manifest_path_with_vendor(dir)
 
       IpcraftGenerator::Generator.new(
-        manifest: File.join(PROJECT_ROOT, 'ipcores/ravenoc/ipcraft.json'),
+        manifest: manifest_path,
         input: input_path,
         output: output
       ).generate
@@ -193,6 +194,9 @@ class IpcraftGeneratorTest < Minitest::Test
 
       filelist = File.read(File.join(output, 'ravenoc_filelist.f'))
       assert_includes filelist, 'ravenoc_top.sv'
+      assert_includes filelist, 'vendor/ravenoc/src/ravenoc.sv'
+      assert_includes File.read(File.join(output, 'vendor/ravenoc/src/ravenoc.sv')),
+                      'fake RaveNoC vendor fixture: src/ravenoc.sv'
 
       output_manifest = JSON.parse(File.read(File.join(output, 'manifest.json')))
       assert_equal 'finepaper.ravenoc', output_manifest.fetch('ipcore')
@@ -271,10 +275,11 @@ class IpcraftGeneratorTest < Minitest::Test
     Dir.mktmpdir do |dir|
       output = File.join('out')
       input_path = write_emitted_inputs(dir, ravenoc_project)
+      manifest_path = ravenoc_manifest_path_with_vendor(dir)
 
       Dir.chdir(dir) do
         IpcraftGenerator::Generator.new(
-          manifest: File.join(PROJECT_ROOT, 'ipcores/ravenoc/ipcraft.json'),
+          manifest: manifest_path,
           input: input_path,
           output: output
         ).generate
@@ -283,18 +288,20 @@ class IpcraftGeneratorTest < Minitest::Test
       filelist = File.read(File.join(dir, output, 'ravenoc_filelist.f'))
       assert_includes filelist, "+incdir+.\n"
       assert_includes filelist, "\nravenoc_top.sv\n"
+      assert_includes filelist, 'vendor/ravenoc/src/ravenoc.sv'
       refute_includes filelist, '+incdir+out'
       refute_includes filelist, 'out/ravenoc_top.sv'
     end
   end
 
-  def test_generates_opennoc_mesh_projection_without_vendor
+  def test_generates_opennoc_mesh_projection_with_vendor_outputs
     Dir.mktmpdir do |dir|
       output = File.join(dir, 'out')
       input_path = write_emitted_inputs(dir, opennoc_mesh_project)
+      manifest_path = opennoc_manifest_path_with_vendor(dir)
 
       IpcraftGenerator::Generator.new(
-        manifest: File.join(PROJECT_ROOT, 'ipcores/opennoc/ipcraft.json'),
+        manifest: manifest_path,
         input: input_path,
         output: output
       ).generate
@@ -307,6 +314,13 @@ class IpcraftGeneratorTest < Minitest::Test
       assert_equal({ 'X' => 1, 'Y' => 0, 'P0' => 'HNF', 'P1' => 'NONE' }, mesh.fetch('XP1_0'))
       assert_equal({ 'X' => 0, 'Y' => 1, 'P0' => 'HNI', 'P1' => 'NONE' }, mesh.fetch('XP0_1'))
       assert_equal({ 'X' => 1, 'Y' => 1, 'P0' => 'SNF', 'P1' => 'NONE' }, mesh.fetch('XP1_1'))
+      assert_includes File.read(File.join(output, 'rtl/mesh_wrapper_2x2.sv')),
+                      'fake mesh wrapper'
+      assert_includes File.read(File.join(output, 'vendor/OpenNoC/rtl/src/rni/rni.v')),
+                      'fake OpenNoC vendor fixture: rtl/src/rni/rni.v'
+      filelist = File.read(File.join(output, 'opennoc_filelist.f'))
+      assert_includes filelist, 'rtl/mesh_wrapper_2x2.sv'
+      assert_includes filelist, 'vendor/OpenNoC/rtl/src/rni/rni.v'
 
       output_manifest = JSON.parse(File.read(File.join(output, 'manifest.json')))
       assert_equal 'finepaper.opennoc', output_manifest.fetch('ipcore')
@@ -321,9 +335,10 @@ class IpcraftGeneratorTest < Minitest::Test
       project = opennoc_mesh_project
       project['connections'] = project.fetch('connections').map { |connection| source_target_connection(connection) }
       input_path = write_emitted_inputs(dir, project)
+      manifest_path = opennoc_manifest_path_with_vendor(dir)
 
       IpcraftGenerator::Generator.new(
-        manifest: File.join(PROJECT_ROOT, 'ipcores/opennoc/ipcraft.json'),
+        manifest: manifest_path,
         input: input_path,
         output: output
       ).generate
@@ -340,9 +355,10 @@ class IpcraftGeneratorTest < Minitest::Test
       project = opennoc_mesh_project
       project['connections'] = project.fetch('connections').map { |connection| from_to_connection(connection) }
       input_path = write_emitted_inputs(dir, project)
+      manifest_path = opennoc_manifest_path_with_vendor(dir)
 
       IpcraftGenerator::Generator.new(
-        manifest: File.join(PROJECT_ROOT, 'ipcores/opennoc/ipcraft.json'),
+        manifest: manifest_path,
         input: input_path,
         output: output
       ).generate
@@ -913,8 +929,7 @@ class IpcraftGeneratorTest < Minitest::Test
 
   def generate_opennoc_project(project, manifest: opennoc_manifest)
     Dir.mktmpdir do |dir|
-      manifest_path = File.join(dir, 'ipcraft.json')
-      File.write(manifest_path, JSON.pretty_generate(manifest))
+      manifest_path = opennoc_manifest_path_with_vendor(dir, manifest)
       input_path = write_emitted_inputs(dir, project)
 
       IpcraftGenerator::Generator.new(
@@ -927,8 +942,7 @@ class IpcraftGeneratorTest < Minitest::Test
 
   def generate_ravenoc_project(project, manifest: ravenoc_manifest)
     Dir.mktmpdir do |dir|
-      manifest_path = File.join(dir, 'ipcraft.json')
-      File.write(manifest_path, JSON.pretty_generate(manifest))
+      manifest_path = ravenoc_manifest_path_with_vendor(dir, manifest)
       input_path = write_emitted_inputs(dir, project)
 
       IpcraftGenerator::Generator.new(
@@ -943,11 +957,54 @@ class IpcraftGeneratorTest < Minitest::Test
     JSON.parse(File.read(File.join(PROJECT_ROOT, 'ipcores/ravenoc/ipcraft.json')))
   end
 
+  def ravenoc_manifest_path_with_vendor(dir, manifest = ravenoc_manifest)
+    package_root = File.join(dir, 'ravenoc-package')
+    FileUtils.mkdir_p(package_root)
+    File.write(File.join(package_root, 'ipcraft.json'), JSON.pretty_generate(manifest))
+    IpcraftGenerator::Generator::RAVENOC_VENDOR_FILES.each do |relative|
+      path = File.join(package_root, 'vendor/ravenoc', relative)
+      FileUtils.mkdir_p(File.dirname(path))
+      File.write(path, "// fake RaveNoC vendor fixture: #{relative}\n")
+    end
+    File.join(package_root, 'ipcraft.json')
+  end
+
   def ravenoc_global_parameters(project)
     project.fetch('project').fetch('instance').fetch('state').fetch('global_parameters')
   end
 
   def opennoc_manifest
     JSON.parse(File.read(File.join(PROJECT_ROOT, 'ipcores/opennoc/ipcraft.json')))
+  end
+
+  def opennoc_manifest_path_with_vendor(dir, manifest = opennoc_manifest)
+    package_root = File.join(dir, 'opennoc-package')
+    FileUtils.mkdir_p(package_root)
+    File.write(File.join(package_root, 'ipcraft.json'), JSON.pretty_generate(manifest))
+    IpcraftGenerator::Generator::OPENNOC_VENDOR_FILES.each do |relative|
+      path = File.join(package_root, 'vendor/OpenNoC', relative)
+      FileUtils.mkdir_p(File.dirname(path))
+      if relative == 'tools/mesh_generator/mesh_gen.py'
+        File.write(path, opennoc_mesh_generator_fixture)
+        FileUtils.chmod(0o755, path)
+      else
+        File.write(path, "// fake OpenNoC vendor fixture: #{relative}\n")
+      end
+    end
+    File.join(package_root, 'ipcraft.json')
+  end
+
+  def opennoc_mesh_generator_fixture
+    <<~PY
+      from pathlib import Path
+      import sys
+
+      out = Path('.')
+      args = sys.argv[1:]
+      if '-o' in args:
+          out = Path(args[args.index('-o') + 1])
+      out.mkdir(parents=True, exist_ok=True)
+      (out / 'mesh_wrapper_2x2.sv').write_text('// fake mesh wrapper\\n')
+    PY
   end
 end

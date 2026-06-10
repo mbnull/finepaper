@@ -526,6 +526,15 @@ void testRaveNoCWorkflowGeneratesPublicArtifacts() {
     require(readText(QDir(generated.outputDirectory).filePath(QStringLiteral("ravenoc_filelist.f")))
                 .contains(QStringLiteral("ravenoc_top.sv")),
             "RaveNoC filelist should reference generated top");
+    requireArtifact(generated.outputDirectory,
+                    QStringLiteral("vendor/ravenoc/src/ravenoc.sv"));
+    require(readText(QDir(generated.outputDirectory)
+                         .filePath(QStringLiteral("vendor/ravenoc/src/ravenoc.sv")))
+                .contains(QStringLiteral("fake RaveNoC vendor fixture: src/ravenoc.sv")),
+            "RaveNoC generation should copy package vendor RTL");
+    require(readText(QDir(generated.outputDirectory).filePath(QStringLiteral("ravenoc_filelist.f")))
+                .contains(QStringLiteral("vendor/ravenoc/src/ravenoc.sv")),
+            "RaveNoC filelist should reference copied vendor RTL");
     const QJsonObject manifest =
         readJsonObject(QDir(generated.outputDirectory).filePath(QStringLiteral("manifest.json")));
     require(manifest.value(QStringLiteral("ipcore")).toString() == QStringLiteral("finepaper.ravenoc"),
@@ -635,7 +644,24 @@ void testOpenNoCWorkflowGeneratesPublicArtifacts() {
     const ProjectGenerationInstanceResult generated = result.instances.first();
     requireGeneratedInstance(generated, QStringLiteral("finepaper.opennoc"), QStringLiteral("opennoc_0"));
     requireArtifact(generated.outputDirectory, QStringLiteral("opennoc_mesh.json"));
+    requireArtifact(generated.outputDirectory, QStringLiteral("opennoc_filelist.f"));
+    requireArtifact(generated.outputDirectory, QStringLiteral("rtl/mesh_wrapper_2x2.sv"));
+    requireArtifact(generated.outputDirectory, QStringLiteral("vendor/OpenNoC/rtl/src/rni/rni.v"));
     requireArtifact(generated.outputDirectory, QStringLiteral("manifest.json"));
+    require(readText(QDir(generated.outputDirectory)
+                         .filePath(QStringLiteral("rtl/mesh_wrapper_2x2.sv")))
+                .contains(QStringLiteral("fake mesh wrapper")),
+            "OpenNoC generation should run package vendor mesh generator");
+    require(readText(QDir(generated.outputDirectory)
+                         .filePath(QStringLiteral("vendor/OpenNoC/rtl/src/rni/rni.v")))
+                .contains(QStringLiteral("fake OpenNoC vendor fixture: rtl/src/rni/rni.v")),
+            "OpenNoC generation should copy package vendor RTL");
+    const QString opennocFilelist =
+        readText(QDir(generated.outputDirectory).filePath(QStringLiteral("opennoc_filelist.f")));
+    require(opennocFilelist.contains(QStringLiteral("rtl/mesh_wrapper_2x2.sv")),
+            "OpenNoC filelist should reference generated mesh wrapper");
+    require(opennocFilelist.contains(QStringLiteral("vendor/OpenNoC/rtl/src/rni/rni.v")),
+            "OpenNoC filelist should reference copied vendor RTL");
     const QJsonObject mesh =
         readJsonObject(QDir(generated.outputDirectory).filePath(QStringLiteral("opennoc_mesh.json")));
     require(mesh.value(QStringLiteral("xp_0_0")).toObject()
