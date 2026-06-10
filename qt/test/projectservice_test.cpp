@@ -65,7 +65,17 @@ void testCreateSaveLoadRoundtrip() {
 }
 
 void testReplaceDocumentFromProjection() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "temporary directory should be valid");
+    const QString path = QDir(tempDir.path()).filePath(QStringLiteral("projection.fpproj"));
+
     ProjectService service;
+    ProjectServiceResult createResult = service.createNew(QStringLiteral("Original"));
+    require(createResult.success, "createNew should succeed before projection replace");
+    ProjectServiceResult saveResult = service.saveFile(path);
+    require(saveResult.success, "saveFile should succeed before projection replace");
+    const QString savedPath = service.currentPath();
+
     ProjectDocument document;
     document.projectName = QStringLiteral("Projection");
     document.projectId = QStringLiteral("projection_0");
@@ -75,6 +85,52 @@ void testReplaceDocumentFromProjection() {
     require(service.hasDocument(), "service should have a document after projection replace");
     require(service.document().projectName == QStringLiteral("Projection"),
             "projection replacement should update durable document");
+    require(service.currentPath() == savedPath,
+            "projection replacement should preserve the current path");
+}
+
+void testCreateNewClearsSavedPath() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "temporary directory should be valid");
+    const QString path = QDir(tempDir.path()).filePath(QStringLiteral("saved.fpproj"));
+
+    ProjectService service;
+    ProjectServiceResult createResult = service.createNew(QStringLiteral("Saved"));
+    require(createResult.success, "createNew should succeed before save");
+    ProjectServiceResult saveResult = service.saveFile(path);
+    require(saveResult.success, "saveFile should succeed before creating another document");
+    require(!service.currentPath().isEmpty(), "saveFile should establish a current path");
+
+    ProjectServiceResult newResult = service.createNew(QStringLiteral("Other"));
+    require(newResult.success, "createNew should succeed after save");
+    require(service.document().projectName == QStringLiteral("Other"),
+            "createNew should replace the durable document");
+    require(service.currentPath().isEmpty(),
+            "createNew should clear the previous saved path");
+}
+
+void testReplaceDocumentClearsSavedPath() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "temporary directory should be valid");
+    const QString path = QDir(tempDir.path()).filePath(QStringLiteral("saved.fpproj"));
+
+    ProjectService service;
+    ProjectServiceResult createResult = service.createNew(QStringLiteral("Saved"));
+    require(createResult.success, "createNew should succeed before replaceDocument path test");
+    ProjectServiceResult saveResult = service.saveFile(path);
+    require(saveResult.success, "saveFile should succeed before replaceDocument");
+    require(!service.currentPath().isEmpty(), "saveFile should establish a current path");
+
+    ProjectDocument replacement;
+    replacement.projectName = QStringLiteral("Replacement");
+    replacement.projectId = QStringLiteral("replacement_0");
+
+    const ProjectServiceResult result = service.replaceDocument(replacement);
+    require(result.success, "replaceDocument should accept a valid replacement");
+    require(service.document().projectName == QStringLiteral("Replacement"),
+            "replaceDocument should update the durable document");
+    require(service.currentPath().isEmpty(),
+            "replaceDocument should clear the previous saved path");
 }
 
 void testApplyDesignPatch() {
@@ -120,6 +176,8 @@ int main(int argc, char** argv) {
     try {
         testCreateSaveLoadRoundtrip();
         testReplaceDocumentFromProjection();
+        testCreateNewClearsSavedPath();
+        testReplaceDocumentClearsSavedPath();
         testApplyDesignPatch();
         testRejectsUnsupportedDocumentKind();
     } catch (const std::exception& exception) {

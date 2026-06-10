@@ -27,6 +27,15 @@ QString cleanProjectName(const QString& projectName) {
     return trimmed.isEmpty() ? QStringLiteral("Untitled") : trimmed;
 }
 
+void normalizeDocument(ProjectDocument& document) {
+    if (document.schema.isEmpty()) {
+        document.schema = ipcraft::schemaids::projectV1;
+    }
+    if (document.projectName.trimmed().isEmpty()) {
+        document.projectName = QStringLiteral("Untitled");
+    }
+}
+
 } // namespace
 
 ProjectService::ProjectService(QObject* parent) : QObject(parent) {}
@@ -94,19 +103,19 @@ ProjectServiceResult ProjectService::saveFile(const QString& path) {
 
 ProjectServiceResult ProjectService::replaceDocument(ProjectDocument document) {
     m_document = std::move(document);
-    if (m_document.schema.isEmpty()) {
-        m_document.schema = ipcraft::schemaids::projectV1;
-    }
-    if (m_document.projectName.trimmed().isEmpty()) {
-        m_document.projectName = QStringLiteral("Untitled");
-    }
+    normalizeDocument(m_document);
+    m_currentPath.clear();
     m_hasDocument = true;
     emit currentDocumentChanged();
     return successResult();
 }
 
 ProjectServiceResult ProjectService::replaceDocumentFromProjection(ProjectDocument document) {
-    return replaceDocument(std::move(document));
+    m_document = std::move(document);
+    normalizeDocument(m_document);
+    m_hasDocument = true;
+    emit currentDocumentChanged();
+    return successResult();
 }
 
 ipcraft::core::PatchApplyResult ProjectService::applyDesignPatch(
