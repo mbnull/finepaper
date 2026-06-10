@@ -820,6 +820,21 @@ target("pluginhost_foundation_test")
         pass_outputs = "pluginhost_foundation_test passed"
     })
 
+target("plugin_architecture_phase1_scan_test")
+    add_rules("qt.console")
+    set_kind("binary")
+    set_group("test")
+    set_default(false)
+    set_languages("c++23")
+    set_rundir("$(projectdir)/..")
+
+    add_includedirs("inc")
+    add_files("test/plugin_architecture_phase1_scan_test.cpp")
+    add_tests("default", {
+        trim_output = true,
+        pass_outputs = "plugin_architecture_phase1_scan_test passed"
+    })
+
 target("propertypanel_test")
     add_rules("qt.widgetapp")
     set_kind("binary")
