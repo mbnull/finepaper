@@ -62,7 +62,7 @@ Internal C++ architecture modules are plugins. Public or third-party deliverable
 
 ## Architecture Scan Status
 
-Architecture scans for Phases 7, 8, and 9 pass at Phase 10 review time. Phase 10 adds a completion scan to verify this report names Phases 2-10, the three anchor package ids, V1 schemas, `qt-cpp-review`, scan status, and deletion-gate status.
+Architecture scans for Phases 1 through 10 pass at Phase 10 review time. Phase 10 adds a completion scan to verify this report names Phases 2-10, the three anchor package ids, V1 schemas, `qt-cpp-review`, scan status, and deletion-gate status.
 
 ## Verification Command Evidence
 
@@ -74,6 +74,8 @@ The following commands were run on this branch before writing the report:
 | `ruby spec_generator/test/spec_generator_test.rb` | passed, 89 runs, 494 assertions |
 | `ruby -I ipcraft_generator/lib ipcraft_generator/test/ipcraft_generator_test.rb` | passed, 29 runs, 186 assertions |
 | `xmake run -P qt commercial_noc_mvp_test` | passed |
+| `xmake run -P qt plugin_architecture_phase2_scan_test` | passed after final review scan refresh |
+| `xmake run -P qt plugin_architecture_phase5_scan_test` | passed after final review scan refresh |
 | `xmake run -P qt plugin_architecture_phase9_scan_test` | passed |
 | `xmake run -P qt plugin_architecture_phase8_scan_test` | passed |
 | `xmake run -P qt plugin_architecture_phase7_scan_test` | passed |

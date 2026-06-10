@@ -71,6 +71,7 @@ void testCompletionReportCoversReviewAndDebt() {
 
     requireContains(report, QStringLiteral("qt-cpp-review"), QStringLiteral("completion report"));
     requireContains(report, QStringLiteral("Architecture Scan Status"), QStringLiteral("completion report"));
+    requireContains(report, QStringLiteral("Phases 1 through 10 pass"), QStringLiteral("completion report"));
     requireContains(report, QStringLiteral("Legacy Path And Deletion Gate Status"), QStringLiteral("completion report"));
     requireContains(report, QStringLiteral("accepted debt"), QStringLiteral("completion report"));
     requireContains(report, QStringLiteral("ProjectGenerationRequest::graph"), QStringLiteral("completion report"));

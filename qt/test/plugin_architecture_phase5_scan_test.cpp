@@ -40,7 +40,7 @@ void testConnectionProviderFilesExist() {
     }
 }
 
-void testPackageProviderOwnsManifestValidator() {
+void testPackageProviderEvaluatesPackageManifestRules() {
     const QString providerHeader =
         readText(QStringLiteral("qt/inc/connection/connectionruleprovider.h"));
     const QString providerSource =
@@ -56,11 +56,17 @@ void testPackageProviderOwnsManifestValidator() {
                     QStringLiteral("ipcraft/ipcraftconnectionvalidator.h"),
                     QStringLiteral("connection provider source"));
     requireContains(providerSource,
-                    QStringLiteral("IpcraftConnectionValidator validator"),
+                    QStringLiteral("request.validator"),
                     QStringLiteral("connection provider source"));
+    requireContains(providerSource,
+                    QStringLiteral("IpcraftConnectionValidator(request.manifests"),
+                    QStringLiteral("connection provider source"));
+    requireContains(providerHeader,
+                    QStringLiteral("const IpcraftConnectionValidator* validator"),
+                    QStringLiteral("connection provider header"));
 }
 
-void testConnectionRuleServiceCallsProviders() {
+void testConnectionRuleServiceCallsProvidersWithReusableValidator() {
     const QString header = readText(QStringLiteral("qt/inc/connection/connectionruleservice.h"));
     const QString source = readText(QStringLiteral("qt/src/connection/connectionruleservice.cpp"));
 
@@ -85,12 +91,15 @@ void testConnectionRuleServiceCallsProviders() {
     requireContains(source,
                     QStringLiteral("ConnectionRuleProviderStatus::Warning"),
                     QStringLiteral("connection rule service source"));
-    requireNotContains(source,
-                       QStringLiteral("ipcraft/ipcraftconnectionvalidator.h"),
-                       QStringLiteral("connection rule service source"));
-    requireNotContains(source,
-                       QStringLiteral("IpcraftConnectionValidator validator"),
-                       QStringLiteral("connection rule service source"));
+    requireContains(source,
+                    QStringLiteral("std::optional<IpcraftConnectionValidator> connectionValidator"),
+                    QStringLiteral("connection rule service source"));
+    requireContains(source,
+                    QStringLiteral("connectionValidator.emplace(m_manifests"),
+                    QStringLiteral("connection rule service source"));
+    requireContains(source,
+                    QStringLiteral("&*connectionValidator"),
+                    QStringLiteral("connection rule service source"));
 }
 
 void testWarningStatusRemainsConnectable() {
@@ -109,8 +118,8 @@ void testWarningStatusRemainsConnectable() {
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
     testConnectionProviderFilesExist();
-    testPackageProviderOwnsManifestValidator();
-    testConnectionRuleServiceCallsProviders();
+    testPackageProviderEvaluatesPackageManifestRules();
+    testConnectionRuleServiceCallsProvidersWithReusableValidator();
     testWarningStatusRemainsConnectable();
     std::cout << "plugin_architecture_phase5_scan_test passed\n";
     return 0;

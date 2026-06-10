@@ -42,21 +42,39 @@ void testProjectPluginFilesExist() {
     }
 }
 
-void testMainWindowUsesProjectServiceForDurableIo() {
-    const QString source = readText(QStringLiteral("qt/src/app/mainwindow.cpp"));
+void testMainWindowUsesProjectServiceForDurableIoAndProjectionSync() {
+    const QString mainWindow = readText(QStringLiteral("qt/src/app/mainwindow.cpp"));
+    const QString projectionService =
+        readText(QStringLiteral("qt/src/project/editorprojectionservice.cpp"));
 
-    requireContains(source, QStringLiteral("ProjectService stagedProject"), QStringLiteral("mainwindow source"));
-    requireContains(source, QStringLiteral("stagedProject.createNew"), QStringLiteral("mainwindow source"));
-    requireContains(source, QStringLiteral("stagedProject.loadFile"), QStringLiteral("mainwindow source"));
-    requireContains(source,
+    requireContains(mainWindow, QStringLiteral("ProjectService stagedProject"), QStringLiteral("mainwindow source"));
+    requireContains(mainWindow, QStringLiteral("stagedProject.createNew"), QStringLiteral("mainwindow source"));
+    requireContains(mainWindow, QStringLiteral("stagedProject.loadFile"), QStringLiteral("mainwindow source"));
+    requireContains(mainWindow,
                     QStringLiteral("m_projectService->replaceDocumentFromLoadedFile"),
                     QStringLiteral("mainwindow source"));
-    requireContains(source,
-                    QStringLiteral("m_projectService->replaceDocumentFromProjection"),
+    requireContains(mainWindow,
+                    QStringLiteral("m_editorProjectionService->rebuildProjectionFromDocument"),
                     QStringLiteral("mainwindow source"));
-    requireContains(source, QStringLiteral("m_projectService->saveFile"), QStringLiteral("mainwindow source"));
-    requireNotContains(source, QStringLiteral("ProjectReader::readFile"), QStringLiteral("mainwindow source"));
-    requireNotContains(source, QStringLiteral("ProjectWriter::writeFile"), QStringLiteral("mainwindow source"));
+    requireContains(mainWindow,
+                    QStringLiteral("m_editorProjectionService->syncProjectFromProjection"),
+                    QStringLiteral("mainwindow source"));
+    requireContains(mainWindow, QStringLiteral("m_projectService->saveFile"), QStringLiteral("mainwindow source"));
+    requireNotContains(mainWindow, QStringLiteral("ProjectReader::readFile"), QStringLiteral("mainwindow source"));
+    requireNotContains(mainWindow, QStringLiteral("ProjectWriter::writeFile"), QStringLiteral("mainwindow source"));
+
+    requireContains(projectionService,
+                    QStringLiteral("GraphProjectSerializer::loadProject"),
+                    QStringLiteral("editor projection service source"));
+    requireContains(projectionService,
+                    QStringLiteral("GraphProjectSerializer::toProject"),
+                    QStringLiteral("editor projection service source"));
+    requireContains(projectionService,
+                    QStringLiteral("m_projectService->replaceDocumentFromLoadedFile"),
+                    QStringLiteral("editor projection service source"));
+    requireContains(projectionService,
+                    QStringLiteral("m_projectService->replaceDocumentFromProjection"),
+                    QStringLiteral("editor projection service source"));
 }
 
 void testProjectServiceKeepsV1AndPatchBoundary() {
@@ -74,7 +92,7 @@ void testProjectServiceKeepsV1AndPatchBoundary() {
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
     testProjectPluginFilesExist();
-    testMainWindowUsesProjectServiceForDurableIo();
+    testMainWindowUsesProjectServiceForDurableIoAndProjectionSync();
     testProjectServiceKeepsV1AndPatchBoundary();
     std::cout << "plugin_architecture_phase2_scan_test passed\n";
     return 0;
