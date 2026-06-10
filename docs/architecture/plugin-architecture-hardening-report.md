@@ -20,9 +20,9 @@ This report records the state before the final Phase 10 architecture review. It 
 
 | Boundary | Current state | Hardening gate |
 |----------|---------------|----------------|
-| Project | `ProjectDocument`, `ProjectService`, and V1 project schema remain the durable source of truth. | New normal paths must not treat `Graph` as durable project state. |
+| Project | `ProjectDocument`, `ProjectService`, and V1 project schema remain the target durable source of truth. | New normal paths must not add more `Graph`-rooted project state. Existing `ProjectGenerationRequest` graph adapters are deletion debt. |
 | Package | Extension/package discovery and catalog construction are behind package services. | External/public IP deliverables must be called extensions or packages, not plugins. |
-| Editor | The node editor remains as a projection shell. | Editor code may use projection `Graph` objects for interaction, but save/generate/validate must come from project/package state. |
+| Editor | The node editor remains as a projection shell, with current adapters still syncing through `GraphProjectSerializer`. | Editor code may use projection `Graph` objects for interaction. Save/generate/validate must continue moving toward project/package state and must not add new Graph source-of-truth paths. |
 | Connection | Connection checks are routed through providers and package declarations. | Core/UI must not hardcode concrete connection type behavior. |
 | Tool | Validate/generate flow uses package-declared flows and `FlowRunner`. | UI code must not directly invoke package generators. |
 | Commercial NoC | `finepaper.noc`, `finepaper.ravenoc`, and `finepaper.opennoc` pass the commercial workflow gate. | Vendor fixtures remain a known test debt; the Qt-to-generator contract is covered. |
@@ -55,12 +55,22 @@ The architecture does not introduce replacement schemas for project, package, gr
 
 | Gate | Required state | Phase 9 classification |
 |------|----------------|------------------------|
-| Graph source-of-truth | `Graph` may remain as projection/test data, not durable normal-path project state. | Isolate and scan. |
+| Graph source-of-truth | `Graph` may remain as projection/test data. Current normal generation still passes `m_graph` through `ProjectGenerationRequest` and `GraphProjectSerializer::toProject`, so this is explicit adapter/deletion debt rather than completed deletion. | Isolate, scan, and delete after generation consumes `ProjectDocument` directly. |
 | `MainWindow` assembly | `MainWindow` should render workbench/service contributions instead of growing direct business wiring. | Continue reducing direct assembly; block new hardcoded package paths. |
 | UI JSON parsing | UI and panels should not directly parse package capability JSON. | JSON field access belongs in package/descriptor readers. |
 | Direct generator calls | UI and domain plugins should not shell out to generators directly. | Generation must use `ProjectGenerationRunner`, `GenerationFlowProvider`, and `FlowRunner`. |
 | Connection hardcoding | Core/UI should not embed concrete NoC/AXI/CHI compatibility tables. | Package-declared connection rules and providers are the normal path. |
 | Legacy compatibility paths | Old generator input compatibility must not become a new normal path. | No legacy generator dependency for new package onboarding. |
+
+## Known Adapter And Deletion Debt
+
+- `MainWindow::generateVerilog` still fills `ProjectGenerationRequest::graph` from `m_graph`.
+- `ProjectGenerationRequest` still exposes `const Graph* graph`.
+- `ProjectGenerationRunner` still uses `GraphProjectSerializer::toProject` to build project/generator inputs.
+- `EditorProjectionService` intentionally uses `GraphProjectSerializer` as the current projection adapter.
+- `GenerationArtifacts` still writes snapshots through the graph serializer.
+
+These adapters are allowed only as current bridge points. They are not permission for new business logic to use `Graph` as the durable source of truth.
 
 ## Phase 10 Review Inputs
 

@@ -1,6 +1,9 @@
 #include <QCoreApplication>
+#include <QDir>
+#include <QDirIterator>
 #include <QFile>
 #include <QString>
+#include <QStringList>
 #include <iostream>
 #include <stdexcept>
 
@@ -30,6 +33,31 @@ void requireNotContains(const QString& text,
                         const QString& needle,
                         const QString& context) {
     require(!text.contains(needle), context + QStringLiteral(" should not contain ") + needle);
+}
+
+QStringList scannedSourceFiles() {
+    QStringList files;
+    const QStringList roots{
+        QStringLiteral("qt/src/app"),
+        QStringLiteral("qt/src/panels"),
+        QStringLiteral("qt/src/connection"),
+        QStringLiteral("qt/src/project")
+    };
+    for (const QString& root : roots) {
+        QDirIterator iterator(root,
+                              QStringList{QStringLiteral("*.cpp"), QStringLiteral("*.h")},
+                              QDir::Files,
+                              QDirIterator::Subdirectories);
+        while (iterator.hasNext()) {
+            files.append(QDir::cleanPath(iterator.next()));
+        }
+    }
+    files.sort();
+    return files;
+}
+
+bool isOneOf(const QString& value, const QStringList& allowed) {
+    return allowed.contains(QDir::cleanPath(value));
 }
 
 void testHardeningReportCoversPhasesAndAnchors() {
@@ -68,6 +96,10 @@ void testHardeningReportCoversDeletionGates() {
     requireContains(report, QStringLiteral("Direct generator calls"), QStringLiteral("hardening report"));
     requireContains(report, QStringLiteral("Connection hardcoding"), QStringLiteral("hardening report"));
     requireContains(report, QStringLiteral("Legacy compatibility paths"), QStringLiteral("hardening report"));
+    requireContains(report, QStringLiteral("ProjectGenerationRequest"), QStringLiteral("hardening report"));
+    requireContains(report, QStringLiteral("GraphProjectSerializer"), QStringLiteral("hardening report"));
+    requireContains(report, QStringLiteral("adapter/deletion debt"), QStringLiteral("hardening report"));
+    requireContains(report, QStringLiteral("m_graph"), QStringLiteral("hardening report"));
 }
 
 void testAuthoringAndOnboardingKeepExtensionPackageTerms() {
@@ -95,6 +127,59 @@ void testCommercialGateStillUsesUnifiedGenerationAndArtifactChecks() {
     requireContains(commercialGate,
                     QStringLiteral("artifact.isFile() && artifact.size() > 0"),
                     QStringLiteral("commercial NoC MVP gate"));
+}
+
+void testSourceScanRejectsConcretePackageHardcoding() {
+    for (const QString& path : scannedSourceFiles()) {
+        const QString source = readText(path);
+        requireNotContains(source, QStringLiteral("finepaper.noc"), path);
+        requireNotContains(source, QStringLiteral("finepaper.ravenoc"), path);
+        requireNotContains(source, QStringLiteral("finepaper.opennoc"), path);
+    }
+}
+
+void testSourceScanRejectsDirectGeneratorOrProcessCallsOutsidePipeline() {
+    const QStringList generatorStringAllowed{
+        QStringLiteral("qt/src/app/projectgenerationrunner.cpp")
+    };
+    const QStringList qprocessAllowed{
+        QStringLiteral("qt/src/app/uiscale.cpp")
+    };
+    for (const QString& path : scannedSourceFiles()) {
+        const QString source = readText(path);
+        if (!isOneOf(path, generatorStringAllowed)) {
+            requireNotContains(source, QStringLiteral("ipcraft-generate"), path);
+            requireNotContains(source, QStringLiteral("framework_tool"), path);
+        }
+        if (!isOneOf(path, qprocessAllowed)) {
+            requireNotContains(source, QStringLiteral("QProcess"), path);
+        }
+        requireNotContains(source, QStringLiteral("system("), path);
+        requireNotContains(source, QStringLiteral("popen("), path);
+    }
+}
+
+void testSourceScanRejectsManifestLoadingOutsidePackageServices() {
+    for (const QString& path : scannedSourceFiles()) {
+        const QString source = readText(path);
+        requireNotContains(source, QStringLiteral("loadIpcraftPackageManifests"), path);
+        requireNotContains(source, QStringLiteral("ipcraft.json"), path);
+    }
+}
+
+void testSourceScanAllowsOnlyDocumentedGraphSerializerAdapters() {
+    const QStringList serializerAllowed{
+        QStringLiteral("qt/src/app/generationartifacts.cpp"),
+        QStringLiteral("qt/src/app/projectgenerationrunner.cpp"),
+        QStringLiteral("qt/src/project/editorprojectionservice.cpp"),
+        QStringLiteral("qt/src/project/graphprojectserializer.cpp")
+    };
+    for (const QString& path : scannedSourceFiles()) {
+        const QString source = readText(path);
+        if (!isOneOf(path, serializerAllowed)) {
+            requireNotContains(source, QStringLiteral("GraphProjectSerializer"), path);
+        }
+    }
 }
 
 void testPhase8AndPhase9ScansAreRegistered() {
@@ -125,6 +210,10 @@ int main(int argc, char** argv) {
     testHardeningReportCoversDeletionGates();
     testAuthoringAndOnboardingKeepExtensionPackageTerms();
     testCommercialGateStillUsesUnifiedGenerationAndArtifactChecks();
+    testSourceScanRejectsConcretePackageHardcoding();
+    testSourceScanRejectsDirectGeneratorOrProcessCallsOutsidePipeline();
+    testSourceScanRejectsManifestLoadingOutsidePackageServices();
+    testSourceScanAllowsOnlyDocumentedGraphSerializerAdapters();
     testPhase8AndPhase9ScansAreRegistered();
     std::cout << "plugin_architecture_phase9_scan_test passed\n";
     return 0;
