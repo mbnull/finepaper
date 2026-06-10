@@ -27,6 +27,7 @@ target("qt")
     add_files("inc/**/ipcorepathsdialog.h")
     add_files("inc/**/projectstateservice.h")
     add_files("inc/**/projectipservice.h")
+    add_files("inc/**/projectservice.h")
     add_files("inc/**/activeworkspacecontroller.h")
     add_files("inc/**/validationmanager.h")
 
@@ -244,6 +245,21 @@ add_qt_test_target("projectdocument_test", "test/projectdocument_test.cpp", {
     "inc/**/module.h",
     "inc/**/ipcoreruntimeregistry.h",
     "inc/**/ipcoreruntimedescriptor.h"
+})
+
+add_qt_test_target("projectservice_test", "test/projectservice_test.cpp", {
+    "src/project/projectservice.cpp",
+    "src/project/projectreader.cpp",
+    "src/project/projectwriter.cpp",
+    "src/ipcraft/compositionmodel.cpp",
+    "src/ipcraft/core/project_design.cpp",
+    "src/ipcraft/core/project_patch.cpp",
+    "inc/project/projectservice.h",
+    "inc/project/projectreader.h",
+    "inc/project/projectwriter.h",
+    "inc/project/projectdocument.h",
+    "inc/ipcraft/core/project_design.h",
+    "inc/ipcraft/core/project_patch.h"
 })
 
 add_qt_test_target("projectgenerationrunner_test", "test/projectgenerationrunner_test.cpp", {
