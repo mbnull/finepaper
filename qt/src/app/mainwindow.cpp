@@ -21,9 +21,8 @@
 #include "project/ipinstanceparameteradapter.h"
 #include "project/graphprojectserializer.h"
 #include "project/projectipservice.h"
-#include "project/projectreader.h"
+#include "project/projectservice.h"
 #include "project/projectstateservice.h"
-#include "project/projectwriter.h"
 #include "topology/topologypresetbuilder.h"
 #include "validation/validationmanager.h"
 #include "workspace/activeworkspacecontroller.h"
@@ -54,6 +53,7 @@
 #include <QtGlobal>
 #include <QVBoxLayout>
 #include <optional>
+#include <utility>
 
 namespace {
 
@@ -137,6 +137,7 @@ MainWindow::MainWindow(QWidget *parent)
       m_commandManager(std::make_unique<CommandManager>()),
       m_appSettings(std::make_unique<AppSettings>()),
       m_ipCatalogService(std::make_unique<IpCatalogService>(IpCatalogService::fromRuntimeRegistries())),
+      m_projectService(std::make_unique<ProjectService>()),
       m_projectStateService(std::make_unique<ProjectStateService>()),
       m_projectIpService(std::make_unique<ProjectIpService>(m_projectStateService.get())),
       m_activeWorkspaceController(std::make_unique<ActiveWorkspaceController>(
@@ -220,17 +221,23 @@ bool MainWindow::createProjectAt(const QString& path) {
         return false;
     }
 
-    Graph emptyGraph;
-    ProjectDocument document =
-        GraphProjectSerializer::toProject(emptyGraph, QFileInfo(projectPath).completeBaseName());
-    const ProjectWriteResult result = ProjectWriter::writeFile(projectPath, document);
-    if (!result.success) {
-        qWarning() << "Failed to create project at" << projectPath << result.error;
-        QMessageBox::warning(this, "Create Project Failed", result.error);
+    clearDocument();
+
+    const ProjectServiceResult createResult =
+        m_projectService->createNew(QFileInfo(projectPath).completeBaseName());
+    if (!createResult.success) {
+        qWarning() << "Failed to create project document" << createResult.error;
+        QMessageBox::warning(this, "Create Project Failed", createResult.error);
         return false;
     }
 
-    clearDocument();
+    const ProjectServiceResult saveResult = m_projectService->saveFile(projectPath);
+    if (!saveResult.success) {
+        qWarning() << "Failed to create project at" << projectPath << saveResult.error;
+        QMessageBox::warning(this, "Create Project Failed", saveResult.error);
+        return false;
+    }
+
     setCurrentDocumentPath(projectPath);
     m_cleanStateId = m_commandManager->currentStateId();
     setProjectOpen(true);
@@ -1181,55 +1188,45 @@ bool MainWindow::loadDocument(const QString& path) {
     const QString absolutePath = QFileInfo(path).absoluteFilePath();
     qInfo() << "Loading document from" << absolutePath;
 
-    // Format detection is content-based instead of extension-based so renamed
-    // project files still load through the correct path.
-    const ProjectFileKind kind = ProjectReader::detectKind(absolutePath);
-    if (kind == ProjectFileKind::Project) {
-        // Project files carry IP-core ownership and typed parameters, so load
-        // through the serializer.
-        const ProjectReadResult readResult = ProjectReader::readFile(absolutePath);
-        if (!readResult.success) {
-            qWarning() << "Failed to read project" << absolutePath << readResult.error;
-            QMessageBox::warning(this, "Open Failed", readResult.error);
-            return false;
-        }
-
-        // Suppress document tracking while Graph emits module/connection signals
-        // for the newly loaded state.
-        m_suppressDocumentTracking = true;
-        const GraphProjectLoadResult loadResult =
-            GraphProjectSerializer::loadProject(readResult.document, *m_graph);
-        if (!loadResult.success) {
-            m_suppressDocumentTracking = false;
-            qWarning() << "Failed to load project graph" << absolutePath << loadResult.error;
-            QMessageBox::warning(this, "Open Failed", loadResult.error);
-            return false;
-        }
-        m_projectIpService->loadFromDocument(readResult.document);
-        m_suppressDocumentTracking = false;
-        if (m_propertyPanel) {
-            m_propertyPanel->setSelectedModule(QString());
-        }
-
-        m_commandManager->clearHistory();
-        // After a successful project load, the current command state becomes
-        // the clean baseline for window title and save action enablement.
-        m_cleanStateId = m_commandManager->currentStateId();
-        setCurrentDocumentPath(absolutePath);
-        setProjectOpen(true);
-        syncDocumentStateFromHistory();
-        updateRecentProjectState(m_appSettings.get(), absolutePath);
-        statusBar()->showMessage("Opened " + QFileInfo(absolutePath).fileName(), 5000);
-        qInfo() << "Project load finished for" << absolutePath
-                << "modules" << m_graph->modules().size()
-                << "connections" << m_graph->connections().size();
-        return true;
+    const ProjectServiceResult serviceLoadResult = m_projectService->loadFile(absolutePath);
+    if (!serviceLoadResult.success) {
+        qWarning() << "Failed to read project" << absolutePath << serviceLoadResult.error;
+        QMessageBox::warning(this, "Open Failed", serviceLoadResult.error);
+        return false;
     }
 
-    qWarning() << "Unsupported document format" << absolutePath;
-    // Unknown files leave the existing design untouched.
-    QMessageBox::warning(this, "Open Failed", "Unsupported document format: " + absolutePath);
-    return false;
+    const ProjectDocument& document = m_projectService->document();
+
+    // Suppress document tracking while Graph emits module/connection signals
+    // for the newly loaded state.
+    m_suppressDocumentTracking = true;
+    const GraphProjectLoadResult graphLoadResult =
+        GraphProjectSerializer::loadProject(document, *m_graph);
+    if (!graphLoadResult.success) {
+        m_suppressDocumentTracking = false;
+        qWarning() << "Failed to load project graph" << absolutePath << graphLoadResult.error;
+        QMessageBox::warning(this, "Open Failed", graphLoadResult.error);
+        return false;
+    }
+    m_projectIpService->loadFromDocument(document);
+    m_suppressDocumentTracking = false;
+    if (m_propertyPanel) {
+        m_propertyPanel->setSelectedModule(QString());
+    }
+
+    m_commandManager->clearHistory();
+    // After a successful project load, the current command state becomes
+    // the clean baseline for window title and save action enablement.
+    m_cleanStateId = m_commandManager->currentStateId();
+    setCurrentDocumentPath(absolutePath);
+    setProjectOpen(true);
+    syncDocumentStateFromHistory();
+    updateRecentProjectState(m_appSettings.get(), absolutePath);
+    statusBar()->showMessage("Opened " + QFileInfo(absolutePath).fileName(), 5000);
+    qInfo() << "Project load finished for" << absolutePath
+            << "modules" << m_graph->modules().size()
+            << "connections" << m_graph->connections().size();
+    return true;
 }
 
 bool MainWindow::saveDocument(const QString& path) {
@@ -1238,10 +1235,18 @@ bool MainWindow::saveDocument(const QString& path) {
     ProjectDocument document =
         GraphProjectSerializer::toProject(*m_graph, QFileInfo(absolutePath).completeBaseName());
     m_projectStateService->writeToDocument(document);
-    const ProjectWriteResult result = ProjectWriter::writeFile(absolutePath, document);
-    if (!result.success) {
-        qWarning() << "Failed to save project to" << absolutePath << result.error;
-        QMessageBox::warning(this, "Save Failed", result.error);
+    const ProjectServiceResult replaceResult =
+        m_projectService->replaceDocumentFromProjection(std::move(document));
+    if (!replaceResult.success) {
+        qWarning() << "Failed to update project document before save" << replaceResult.error;
+        QMessageBox::warning(this, "Save Failed", replaceResult.error);
+        return false;
+    }
+
+    const ProjectServiceResult saveResult = m_projectService->saveFile(absolutePath);
+    if (!saveResult.success) {
+        qWarning() << "Failed to save project to" << absolutePath << saveResult.error;
+        QMessageBox::warning(this, "Save Failed", saveResult.error);
         return false;
     }
 
@@ -1285,6 +1290,9 @@ void MainWindow::clearDocument() {
     }
     m_commandManager->clearHistory();
     m_cleanStateId = m_commandManager->currentStateId();
+    if (m_projectService) {
+        m_projectService->clear();
+    }
     setCurrentDocumentPath(QString());
     setProjectOpen(false);
     syncDocumentStateFromHistory();
