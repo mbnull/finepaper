@@ -1619,6 +1619,17 @@ class SpecGeneratorTest < Minitest::Test
     assert_equal 'ipcraft-generate', command.fetch('framework_tool')
     assert_includes command.fetch('args'), '{package.manifest}'
     assert_includes command.fetch('args'), '{inputs.manifest}'
+    validate_flow = manifest.fetch('flows').find { |flow| flow.fetch('id') == 'validate' }
+    refute_nil validate_flow
+    assert_equal %w[emit_inputs exec],
+                 validate_flow.fetch('steps').map { |step| step.fetch('kind') }
+    validate_command = validate_flow.fetch('steps').fetch(1).fetch('command')
+    assert_equal 'ipcraft-generate', validate_command.fetch('framework_tool')
+    assert_equal ['--manifest', '{package.manifest}', '--input', '{inputs.manifest}', '--validate'],
+                 validate_command.fetch('args')
+    assert_equal({ 'stdout' => 'stdout.log', 'stderr' => 'stderr.log', 'max_bytes' => 1048576 },
+                 validate_command.fetch('capture'))
+    refute_includes validate_flow.fetch('steps').map { |step| step.fetch('kind') }, 'collect_artifacts'
     refute_empty manifest.fetch('artifacts')
     refute manifest.key?('modules')
     refute manifest.key?('commands')

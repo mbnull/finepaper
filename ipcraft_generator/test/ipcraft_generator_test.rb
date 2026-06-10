@@ -61,6 +61,49 @@ class IpcraftGeneratorTest < Minitest::Test
     end
   end
 
+  def test_cli_validate_runs_checks_without_output_directory
+    Dir.mktmpdir do |dir|
+      manifest_path = File.join(dir, 'ipcraft.json')
+      File.write(manifest_path, JSON.pretty_generate(minimal_manifest))
+      input_path = write_emitted_inputs(dir, minimal_project)
+      output = File.join(dir, 'out')
+
+      stdout, stderr, status = Open3.capture3(
+        RbConfig.ruby, CLI,
+        '--manifest', manifest_path,
+        '--input', input_path,
+        '--validate'
+      )
+
+      assert status.success?, stderr
+      assert_includes stdout, "Validated ipcraft input #{input_path}"
+      refute_path_exists output
+    end
+  end
+
+  def test_cli_validate_reports_ravenoc_missing_mesh_link_without_artifacts
+    Dir.mktmpdir do |dir|
+      project = ravenoc_project
+      project.fetch('connections').reject! do |connection|
+        connection.fetch('id') == 'rave_0_0_east_to_rave_0_1_west'
+      end
+      input_path = write_emitted_inputs(dir, project)
+      output = File.join(dir, 'out')
+
+      stdout, stderr, status = Open3.capture3(
+        RbConfig.ruby, CLI,
+        '--manifest', File.join(PROJECT_ROOT, 'ipcores/ravenoc/ipcraft.json'),
+        '--input', input_path,
+        '--validate'
+      )
+
+      refute status.success?
+      assert_empty stdout
+      assert_includes stderr, 'missing mesh link'
+      refute_path_exists output
+    end
+  end
+
   def test_generic_generation_rejects_unknown_connection_instance
     project = generic_project
     project.fetch('connections').first.fetch('interfaces').last['instance'] = 'missing_router'

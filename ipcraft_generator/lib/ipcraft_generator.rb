@@ -15,6 +15,7 @@ module IpcraftGenerator
         parser.on('--manifest PATH', 'Ipcraft manifest JSON path') { |value| options[:manifest] = value }
         parser.on('--input PATH', 'Ipcraft project input JSON path') { |value| options[:input] = value }
         parser.on('--output DIR', 'Generated output directory') { |value| options[:output] = value }
+        parser.on('--validate', 'Validate input without generating artifacts') { options[:validate] = true }
       end.parse!(argv)
     rescue OptionParser::ParseError => error
       raise Error, error.message
@@ -23,15 +24,21 @@ module IpcraftGenerator
 
       raise Error, '--manifest is required' unless options[:manifest]
       raise Error, '--input is required' unless options[:input]
-      raise Error, '--output is required' unless options[:output]
+      raise Error, '--output is required' unless options[:output] || options[:validate]
 
-      Generator.new(
+      generator = Generator.new(
         manifest: options.fetch(:manifest),
         input: options.fetch(:input),
-        output: options.fetch(:output)
-      ).generate
+        output: options[:output]
+      )
 
-      puts "Generated ipcraft output in #{options.fetch(:output)}"
+      if options[:validate]
+        generator.validate
+        puts "Validated ipcraft input #{options.fetch(:input)}"
+      else
+        generator.generate
+        puts "Generated ipcraft output in #{options.fetch(:output)}"
+      end
     end
   end
 
@@ -148,6 +155,15 @@ module IpcraftGenerator
       @output_dir = output
     end
 
+    def validate
+      manifest = JSON.parse(File.read(@manifest_path))
+      manifest = normalize_package_manifest(manifest)
+      input = normalize_emitted_inputs(manifest, JSON.parse(File.read(@input_path)))
+
+      validate!(manifest, input)
+      validate_package!(manifest, input)
+    end
+
     def generate
       requested_output_dir = @output_dir
       stage_output_dir = nil
@@ -204,6 +220,15 @@ module IpcraftGenerator
       end
 
       validate_command_input_graph!(manifest, input)
+    end
+
+    def validate_package!(manifest, input)
+      case PACKAGE_HANDLERS.fetch(manifest.fetch('id'), :generate_generic)
+      when :generate_ravenoc
+        ravenoc_projection(manifest, input)
+      when :generate_opennoc
+        opennoc_projection(manifest, input)
+      end
     end
 
     def normalize_emitted_inputs(manifest, emitted)

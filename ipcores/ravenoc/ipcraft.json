@@ -197,6 +197,39 @@
           "kind": "collect_artifacts"
         }
       ]
+    },
+    {
+      "id": "validate",
+      "label": "Validate",
+      "scope": "instance",
+      "steps": [
+        {
+          "kind": "emit_inputs"
+        },
+        {
+          "kind": "exec",
+          "command": {
+            "framework_tool": "ipcraft-generate",
+            "args": [
+              "--manifest",
+              "{package.manifest}",
+              "--input",
+              "{inputs.manifest}",
+              "--validate"
+            ],
+            "cwd": "run_dir",
+            "timeout_ms": 300000,
+            "env": {
+              "allow": []
+            },
+            "capture": {
+              "stdout": "stdout.log",
+              "stderr": "stderr.log",
+              "max_bytes": 1048576
+            }
+          }
+        }
+      ]
     }
   ],
   "artifacts": [
