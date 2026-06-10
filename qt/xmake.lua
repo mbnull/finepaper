@@ -785,6 +785,22 @@ target("logpanel_test")
         pass_outputs = "logpanel_test passed"
     })
 
+target("workbenchservice_test")
+    add_rules("qt.widgetapp")
+    set_kind("binary")
+    set_group("test")
+    set_default(false)
+    set_languages("c++23")
+
+    add_includedirs("inc")
+    add_files("test/workbenchservice_test.cpp")
+    add_files("src/app/workbenchservice.cpp")
+    add_files("inc/app/workbenchservice.h")
+    add_tests("default", {
+        trim_output = true,
+        pass_outputs = "workbenchservice_test passed"
+    })
+
 target("propertypanel_test")
     add_rules("qt.widgetapp")
     set_kind("binary")
