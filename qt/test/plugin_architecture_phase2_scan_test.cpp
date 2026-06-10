@@ -49,6 +49,9 @@ void testMainWindowUsesProjectServiceForDurableIo() {
     requireContains(source, QStringLiteral("stagedProject.createNew"), QStringLiteral("mainwindow source"));
     requireContains(source, QStringLiteral("stagedProject.loadFile"), QStringLiteral("mainwindow source"));
     requireContains(source,
+                    QStringLiteral("m_projectService->replaceDocumentFromLoadedFile"),
+                    QStringLiteral("mainwindow source"));
+    requireContains(source,
                     QStringLiteral("m_projectService->replaceDocumentFromProjection"),
                     QStringLiteral("mainwindow source"));
     requireContains(source, QStringLiteral("m_projectService->saveFile"), QStringLiteral("mainwindow source"));
