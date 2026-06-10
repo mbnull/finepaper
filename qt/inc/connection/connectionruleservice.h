@@ -112,6 +112,8 @@ struct ConnectionResolvedOption {
     QString connectionStatus = QStringLiteral("valid");
     QStringList alternatives;
     QVector<ProjectConnectionInterfaceRef> normalizedInterfaces;
+    bool warning = false;
+    QString warningMessage;
     int priority = 0;
 };
 

@@ -575,6 +575,44 @@ QVector<ProjectConnectionRecord> currentProjectConnectionRecords(const Graph* gr
     return records;
 }
 
+void mergeProviderDecision(ConnectionRuleProviderResult* aggregate,
+                           const ConnectionRuleProviderResult& decision) {
+    if (!aggregate) {
+        return;
+    }
+
+    if (decision.status == ConnectionRuleProviderStatus::Warning) {
+        aggregate->status = ConnectionRuleProviderStatus::Warning;
+        if (!decision.message.isEmpty()) {
+            if (aggregate->message.isEmpty()) {
+                aggregate->message = decision.message;
+            } else if (!aggregate->message.contains(decision.message)) {
+                aggregate->message += QStringLiteral("; ") + decision.message;
+            }
+        }
+    }
+    if (aggregate->reasonCode.isEmpty()) {
+        aggregate->reasonCode = decision.reasonCode;
+    }
+    if (aggregate->connectionClassId.isEmpty() && !decision.connectionClassId.isEmpty()) {
+        aggregate->connectionClassId = decision.connectionClassId;
+    }
+    if (!decision.connectionStatus.isEmpty() &&
+        (aggregate->connectionStatus.isEmpty() ||
+         (aggregate->connectionStatus == QStringLiteral("valid") &&
+          decision.connectionStatus != QStringLiteral("valid")))) {
+        aggregate->connectionStatus = decision.connectionStatus;
+    }
+    for (const QString& alternative : decision.alternatives) {
+        if (!aggregate->alternatives.contains(alternative)) {
+            aggregate->alternatives.push_back(alternative);
+        }
+    }
+    if (aggregate->normalizedInterfaces.isEmpty() && !decision.normalizedInterfaces.isEmpty()) {
+        aggregate->normalizedInterfaces = decision.normalizedInterfaces;
+    }
+}
+
 } // namespace
 
 ConnectionRequest ConnectionRequest::portToPort(const PortRef& start,
@@ -848,9 +886,10 @@ QVector<ConnectionResolvedOption> ConnectionRuleService::buildOptions(
                     if (rejectionMessage) *rejectionMessage = decision.message;
                     return;
                 }
-                if (!providerDecision.has_value() ||
-                    decision.status == ConnectionRuleProviderStatus::Warning) {
+                if (!providerDecision.has_value()) {
                     providerDecision = decision;
+                } else {
+                    mergeProviderDecision(&*providerDecision, decision);
                 }
             }
         } else {
@@ -885,6 +924,8 @@ QVector<ConnectionResolvedOption> ConnectionRuleService::buildOptions(
             option.connectionStatus = providerDecision->connectionStatus;
             option.alternatives = providerDecision->alternatives;
             option.normalizedInterfaces = providerDecision->normalizedInterfaces;
+            option.warning = providerDecision->status == ConnectionRuleProviderStatus::Warning;
+            option.warningMessage = providerDecision->message;
         }
         options.push_back(std::move(option));
     };
@@ -948,7 +989,12 @@ ConnectionCheckResult ConnectionRuleService::check(const ConnectionRequest& requ
 
     const bool hasWarningOption = std::any_of(options.cbegin(), options.cend(),
         [](const ConnectionResolvedOption& option) {
-            return option.connectionStatus != QStringLiteral("valid");
+            return option.warning || option.connectionStatus != QStringLiteral("valid");
+        });
+    const auto warningIt = std::find_if(options.cbegin(), options.cend(),
+        [](const ConnectionResolvedOption& option) {
+            return (option.warning || option.connectionStatus != QStringLiteral("valid")) &&
+                   !option.warningMessage.isEmpty();
         });
 
     ConnectionCheckResult result;
@@ -957,6 +1003,9 @@ ConnectionCheckResult ConnectionRuleService::check(const ConnectionRequest& requ
                             : ConnectionCheckStatus::Allowed)
         : ConnectionCheckStatus::NeedsSelection;
     result.layer = ConnectionRuleLayer::Ipcore;
+    if (options.size() == 1 && warningIt != options.cend()) {
+        result.message = warningIt->warningMessage;
+    }
     result.options = std::move(options);
     return result;
 }

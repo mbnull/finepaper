@@ -281,6 +281,20 @@ IpcraftPackageManifest validatorManifest(bool ambiguous = false) {
     return manifest;
 }
 
+class WarningOnlyProvider final : public ConnectionRuleProvider {
+public:
+    bool canEvaluate(const PortSemanticInfo&, const PortSemanticInfo&) const override {
+        return true;
+    }
+
+    ConnectionRuleProviderResult evaluate(const ConnectionRuleProviderRequest&) const override {
+        ConnectionRuleProviderResult result;
+        result.status = ConnectionRuleProviderStatus::Warning;
+        result.message = QStringLiteral("provider warning");
+        return result;
+    }
+};
+
 IpcraftPackageManifest validatorManifestForEndpointXpInterfaces(const QString& endpointInterfaceId,
                                                                 const QString& xpInterfaceId) {
     IpcraftPackageManifest manifest;
@@ -856,6 +870,73 @@ void testConnectionRuleServiceUsesInterfaceClassesNotLegacyBusNames() {
             "ambiguous option should expose class alternatives");
     require(result.options.first().normalizedInterfaces.size() == 2,
             "connection option should carry normalized interface participants");
+}
+
+void testWarningProviderStatusRemainsConnectableWithValidConnectionStatus() {
+    Graph graph;
+    require(graph.addModule(makeProducer(QStringLiteral("warning_source"))),
+            "warning source should add");
+    require(graph.addModule(makeConsumer(QStringLiteral("warning_target"))),
+            "warning target should add");
+
+    ConnectionRuleService service(&graph, {});
+    service.addRuleProvider(std::make_unique<WarningOnlyProvider>());
+    const ConnectionCheckResult result = service.check(
+        ConnectionRequest::portToPort(PortRef{QStringLiteral("warning_source"), QStringLiteral("out")},
+                                      PortRef{QStringLiteral("warning_target"), QStringLiteral("in")},
+                                      ConnectionRequestKind::Programmatic));
+
+    require(result.status == ConnectionCheckStatus::Warning,
+            "provider warning status should surface even when connection status metadata is valid");
+    require(result.hasSingleOption(),
+            "provider warning should remain connectable");
+    require(result.options.first().connectionStatus == QStringLiteral("valid"),
+            "warning-only provider should not need to mutate connection metadata status");
+}
+
+void testWarningProviderDoesNotReplacePackageClassMetadata() {
+    const ModuleType endpointType = classValidationType(
+        QStringLiteral("ClassEndpointWithExtraWarning"),
+        QStringLiteral("Endpoint"),
+        QStringLiteral("noc"),
+        QStringLiteral("legacy_source_bus"),
+        {acceptRule(QStringLiteral("chi_node_interface"), QStringLiteral("node"))});
+    const ModuleType xpType = classValidationType(
+        QStringLiteral("ClassXpWithExtraWarning"),
+        QStringLiteral("XP"),
+        QStringLiteral("local0"),
+        QStringLiteral("legacy_target_bus"),
+        {acceptRule(QStringLiteral("chi_node_interface"), QStringLiteral("interconnect"))});
+    ModuleRegistry::instance().registerType(endpointType);
+    ModuleRegistry::instance().registerType(xpType);
+
+    Graph graph;
+    auto endpoint = makeOwnedModule(QStringLiteral("endpoint_extra_warning"),
+                                    endpointType.name,
+                                    QStringLiteral("finepaper.test"));
+    endpoint->addPort(endpointType.defaultPorts.front());
+    auto xp = makeOwnedModule(QStringLiteral("xp_extra_warning"),
+                              xpType.name,
+                              QStringLiteral("finepaper.test"));
+    xp->addPort(xpType.defaultPorts.front());
+    require(graph.addModule(std::move(endpoint)), "extra-warning endpoint should add");
+    require(graph.addModule(std::move(xp)), "extra-warning XP should add");
+
+    ConnectionRuleService service(&graph, {}, {validatorManifest()});
+    service.addRuleProvider(std::make_unique<WarningOnlyProvider>());
+    const ConnectionCheckResult result = service.check(
+        ConnectionRequest::portToPort(PortRef{QStringLiteral("endpoint_extra_warning"), QStringLiteral("noc")},
+                                      PortRef{QStringLiteral("xp_extra_warning"), QStringLiteral("local0")},
+                                      ConnectionRequestKind::Programmatic));
+
+    require(result.status == ConnectionCheckStatus::Warning,
+            "additional provider warning should surface on package-validated connection");
+    require(result.hasSingleOption(),
+            "additional provider warning should keep package-validated connection connectable");
+    require(result.options.first().connectionClassId == QStringLiteral("chi_node_interface"),
+            "warning-only provider must not replace package provider connection class metadata");
+    require(result.options.first().normalizedInterfaces.size() == 2,
+            "warning-only provider must not replace package provider normalized interfaces");
 }
 
 void testConnectionRuleServiceClassValidationIgnoresLegacyTopologySideNames() {
@@ -1534,6 +1615,8 @@ int main(int argc, char** argv) {
         testConnectionOptionsSortLabelsCaseInsensitively();
         testConnectionOptionLabelsUseAnchorInterfaceLabels();
         testConnectionRuleServiceUsesInterfaceClassesNotLegacyBusNames();
+        testWarningProviderStatusRemainsConnectableWithValidConnectionStatus();
+        testWarningProviderDoesNotReplacePackageClassMetadata();
         testConnectionRuleServiceClassValidationIgnoresLegacyTopologySideNames();
         testConnectionRuleServiceClassValidationRejectsWrongOppositeInterfaceWithoutPeerSide();
         testConnectionRuleServiceClassValidationRejectsNonOppositeTopologyMetadata();
