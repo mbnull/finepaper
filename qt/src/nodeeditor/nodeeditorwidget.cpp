@@ -606,7 +606,7 @@ bool NodeEditorWidget::ensureConnectionInView(Connection* connection) {
         return false;
     }
 
-    QtNodes::ConnectionId connId{srcNodeId, srcPortIdx, tgtNodeId, tgtPortIdx};
+    QtNodes::ConnectionId connId = {srcNodeId, srcPortIdx, tgtNodeId, tgtPortIdx};
     m_pendingRemovals.remove(connId);
 
     // Reuse an existing visual edge when undo/redo or graph refresh replays a

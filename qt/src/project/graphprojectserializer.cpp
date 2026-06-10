@@ -28,22 +28,22 @@ QJsonValue parameterToJson(const Parameter::Value& value) {
 }
 
 Parameter::Value valueFromJson(const QJsonValue& value, const Parameter::Value& defaultValue) {
-    if (std::holds_alternative<QString>(defaultValue)) return value.toString();
-    if (std::holds_alternative<int>(defaultValue)) return value.toInt();
-    if (std::holds_alternative<double>(defaultValue)) return value.toDouble();
-    if (std::holds_alternative<bool>(defaultValue)) return value.toBool();
+    if (std::get_if<QString>(&defaultValue)) return value.toString();
+    if (std::get_if<int>(&defaultValue)) return value.toInt();
+    if (std::get_if<double>(&defaultValue)) return value.toDouble();
+    if (std::get_if<bool>(&defaultValue)) return value.toBool();
     return value.toString();
 }
 
 bool jsonValueMatchesParameterType(const QJsonValue& value, const Parameter::Value& defaultValue) {
-    if (std::holds_alternative<QString>(defaultValue)) return value.isString();
-    if (std::holds_alternative<int>(defaultValue)) {
+    if (std::get_if<QString>(&defaultValue)) return value.isString();
+    if (std::get_if<int>(&defaultValue)) {
         if (!value.isDouble()) return false;
         const double number = value.toDouble();
         return std::floor(number) == number;
     }
-    if (std::holds_alternative<double>(defaultValue)) return value.isDouble();
-    if (std::holds_alternative<bool>(defaultValue)) return value.isBool();
+    if (std::get_if<double>(&defaultValue)) return value.isDouble();
+    if (std::get_if<bool>(&defaultValue)) return value.isBool();
     return false;
 }
 

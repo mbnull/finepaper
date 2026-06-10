@@ -753,8 +753,9 @@ void testXmlBundleWithoutGraphicsFallsBackToSimpleNode() {
 
     const QString bundlePath = QDir(tempDir.path()).filePath("modules.xml");
     QFile bundleFile(bundlePath);
-    require(bundleFile.open(QIODevice::WriteOnly | QIODevice::Text),
-            "failed to create XML fallback bundle");
+    if (!bundleFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        require(false, "failed to create XML fallback bundle");
+    }
     bundleFile.write(R"XML(<?xml version="1.0" encoding="UTF-8"?>
 <module-bundle>
   <module name="DMA" palette_label="DMA" description="Generic DMA block.">
@@ -790,8 +791,9 @@ void testXmlBundleLoadsExtendedParameterMetadataWhenPresent() {
 
     const QString bundlePath = QDir(tempDir.path()).filePath("modules.xml");
     QFile bundleFile(bundlePath);
-    require(bundleFile.open(QIODevice::WriteOnly | QIODevice::Text),
-            "failed to create XML metadata bundle");
+    if (!bundleFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        require(false, "failed to create XML metadata bundle");
+    }
     bundleFile.write(R"XML(<?xml version="1.0" encoding="UTF-8"?>
 <module-bundle>
   <module name="Router" palette_label="Router" graph_group="xps" description="Router test bundle.">
@@ -835,8 +837,9 @@ void testXmlBundleIgnoresNonPositiveGraphicsMetrics() {
 
     const QString bundlePath = QDir(tempDir.path()).filePath("modules.xml");
     QFile bundleFile(bundlePath);
-    require(bundleFile.open(QIODevice::WriteOnly | QIODevice::Text),
-            "failed to create XML graphics bounds bundle");
+    if (!bundleFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        require(false, "failed to create XML graphics bounds bundle");
+    }
     bundleFile.write(R"XML(<?xml version="1.0" encoding="UTF-8"?>
 <module-bundle>
   <module name="BoundedRouter" palette_label="Bounded Router">
