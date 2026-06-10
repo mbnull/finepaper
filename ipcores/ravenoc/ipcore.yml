@@ -171,6 +171,9 @@ artifacts:
   - id: rtl
     type: rtl
     glob: ravenoc_top.sv
+  - id: vendor_rtl
+    type: rtl
+    glob: vendor/ravenoc/src/ravenoc.sv
   - id: filelist
     type: filelist
     glob: ravenoc_filelist.f
