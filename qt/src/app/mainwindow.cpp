@@ -4,6 +4,7 @@
 #include "app/appsettings.h"
 #include "app/mainwindow.h"
 #include "app/projectgenerationrunner.h"
+#include "app/workbenchservice.h"
 #include "commands/addipinstancecommand.h"
 #include "commands/removeipinstancecommand.h"
 #include "commands/topologypresetcommand.h"
@@ -132,6 +133,7 @@ QStringList ipcraftDiagnosticLines(const QVector<IpcraftDiagnostic>& diagnostics
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent),
       m_graph(new Graph(this)),
+      m_workbenchService(std::make_unique<WorkbenchService>()),
       m_commandManager(std::make_unique<CommandManager>()),
       m_appSettings(std::make_unique<AppSettings>()),
       m_ipCatalogService(std::make_unique<IpCatalogService>(IpCatalogService::fromRuntimeRegistries())),
@@ -161,6 +163,7 @@ MainWindow::MainWindow(QWidget *parent)
     // Build the window in dependency order: widgets first, then signal wiring,
     // then actions/menus that depend on those widgets.
     setupPanels();
+    registerBuiltinWorkbenchContributions();
     setupConnections();
     setupActions();
     setCentralWidget(createCentralContent());
@@ -584,6 +587,43 @@ void MainWindow::setupPanels() {
     m_logPanel->setObjectName("logPanel");
 }
 
+void MainWindow::registerBuiltinWorkbenchContributions() {
+    if (!m_workbenchService) {
+        return;
+    }
+
+    WorkbenchEditorContribution editor;
+    editor.id = QStringLiteral("builtin.node-editor");
+    editor.title = QStringLiteral("Node Editor");
+    editor.objectName = QStringLiteral("nodeEditorPanel");
+    editor.factory = [this](QWidget*) { return m_nodeEditor; };
+    m_workbenchService->addEditor(editor);
+
+    WorkbenchPanelContribution catalog;
+    catalog.id = QStringLiteral("builtin.ip-catalog");
+    catalog.title = QStringLiteral("IP Catalog");
+    catalog.objectName = QStringLiteral("ipCatalogDock");
+    catalog.area = WorkbenchPanelArea::Left;
+    catalog.factory = [this](QWidget*) { return m_ipCatalogPanel; };
+    m_workbenchService->addPanel(catalog);
+
+    WorkbenchPanelContribution properties;
+    properties.id = QStringLiteral("builtin.properties");
+    properties.title = QStringLiteral("Properties");
+    properties.objectName = QStringLiteral("propertyDock");
+    properties.area = WorkbenchPanelArea::Right;
+    properties.factory = [this](QWidget*) { return m_propertyPanel; };
+    m_workbenchService->addPanel(properties);
+
+    WorkbenchPanelContribution log;
+    log.id = QStringLiteral("builtin.activity-log");
+    log.title = QStringLiteral("Activity Log");
+    log.objectName = QStringLiteral("logDock");
+    log.area = WorkbenchPanelArea::Bottom;
+    log.factory = [this](QWidget*) { return m_logPanel; };
+    m_workbenchService->addPanel(log);
+}
+
 void MainWindow::setupConnections() {
     // Keep validation-entry selection synchronized between the log, canvas, and property panel.
     connect(m_logPanel, &LogPanel::elementSelected, m_nodeEditor, &NodeEditorWidget::highlightElement);
@@ -839,12 +879,22 @@ void MainWindow::setupActions() {
 }
 
 QWidget* MainWindow::createCentralContent() {
-    // Main editing surface stays in the center; auxiliary tools are docked.
     auto* central = new QWidget(this);
     auto* layout = new QVBoxLayout(central);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(0);
-    layout->addWidget(m_nodeEditor);
+
+    QWidget* editorWidget = m_nodeEditor;
+    if (m_workbenchService && !m_workbenchService->editors().isEmpty()) {
+        const WorkbenchEditorContribution editor = m_workbenchService->editors().first();
+        if (editor.factory) {
+            if (QWidget* contributedEditor = editor.factory(central)) {
+                editorWidget = contributedEditor;
+            }
+        }
+    }
+
+    layout->addWidget(editorWidget);
     return central;
 }
 
@@ -859,14 +909,35 @@ void MainWindow::setupDocks() {
     setDockNestingEnabled(true);
     setTabPosition(Qt::AllDockWidgetAreas, QTabWidget::North);
 
-    m_ipCatalogDock = createDock("IP Catalog", m_ipCatalogPanel, Qt::LeftDockWidgetArea, "ipCatalogDock");
-    m_propertyDock = createDock("Properties", m_propertyPanel, Qt::RightDockWidgetArea, "propertyDock");
-    m_logDock = createDock("Activity Log", m_logPanel, Qt::BottomDockWidgetArea, "logDock");
+    if (m_workbenchService) {
+        for (const WorkbenchPanelContribution& panel : m_workbenchService->panels()) {
+            QWidget* content = panel.factory ? panel.factory(this) : nullptr;
+            if (!content) {
+                continue;
+            }
+
+            QDockWidget* dock = createDock(panel.title,
+                                           content,
+                                           dockAreaForWorkbenchPanel(panel.area),
+                                           panel.objectName);
+            if (panel.id == QStringLiteral("builtin.ip-catalog")) {
+                m_ipCatalogDock = dock;
+            } else if (panel.id == QStringLiteral("builtin.properties")) {
+                m_propertyDock = dock;
+            } else if (panel.id == QStringLiteral("builtin.activity-log")) {
+                m_logDock = dock;
+            }
+        }
+    }
 
     setCorner(Qt::BottomLeftCorner, Qt::LeftDockWidgetArea);
     setCorner(Qt::BottomRightCorner, Qt::RightDockWidgetArea);
-    resizeDocks({m_ipCatalogDock, m_propertyDock}, {280, 320}, Qt::Horizontal);
-    resizeDocks({m_logDock}, {180}, Qt::Vertical);
+    if (m_ipCatalogDock && m_propertyDock) {
+        resizeDocks({m_ipCatalogDock, m_propertyDock}, {280, 320}, Qt::Horizontal);
+    }
+    if (m_logDock) {
+        resizeDocks({m_logDock}, {180}, Qt::Vertical);
+    }
 
     // Register dock toggle actions under View so users can restore hidden panels.
     QMenu* viewMenu = nullptr;
@@ -877,10 +948,28 @@ void MainWindow::setupDocks() {
         }
     }
     if (viewMenu) {
-        viewMenu->addAction(m_ipCatalogDock->toggleViewAction());
-        viewMenu->addAction(m_propertyDock->toggleViewAction());
-        viewMenu->addAction(m_logDock->toggleViewAction());
+        if (m_ipCatalogDock) {
+            viewMenu->addAction(m_ipCatalogDock->toggleViewAction());
+        }
+        if (m_propertyDock) {
+            viewMenu->addAction(m_propertyDock->toggleViewAction());
+        }
+        if (m_logDock) {
+            viewMenu->addAction(m_logDock->toggleViewAction());
+        }
     }
+}
+
+Qt::DockWidgetArea MainWindow::dockAreaForWorkbenchPanel(WorkbenchPanelArea area) const {
+    switch (area) {
+    case WorkbenchPanelArea::Left:
+        return Qt::LeftDockWidgetArea;
+    case WorkbenchPanelArea::Right:
+        return Qt::RightDockWidgetArea;
+    case WorkbenchPanelArea::Bottom:
+        return Qt::BottomDockWidgetArea;
+    }
+    return Qt::LeftDockWidgetArea;
 }
 
 QDockWidget* MainWindow::createDock(const QString& title,

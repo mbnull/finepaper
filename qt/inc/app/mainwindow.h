@@ -5,6 +5,8 @@
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 
+#include "app/workbenchservice.h"
+
 #include <QMainWindow>
 #include <QString>
 #include <QVector>
@@ -70,6 +72,8 @@ private slots:
     void setupActions();
     QWidget* createCentralContent();
     void setupDocks();
+    void registerBuiltinWorkbenchContributions();
+    Qt::DockWidgetArea dockAreaForWorkbenchPanel(WorkbenchPanelArea area) const;
     QDockWidget* createDock(const QString& title,
                             QWidget* content,
                             Qt::DockWidgetArea area,
@@ -100,6 +104,7 @@ private slots:
                                  const QString& presetId);
 
     Graph* m_graph;
+    std::unique_ptr<WorkbenchService> m_workbenchService;
     std::unique_ptr<CommandManager> m_commandManager;
     std::unique_ptr<AppSettings> m_appSettings;
     std::unique_ptr<IpCatalogService> m_ipCatalogService;
