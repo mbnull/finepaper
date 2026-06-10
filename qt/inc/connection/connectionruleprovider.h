@@ -9,6 +9,7 @@
 #include <QVector>
 
 struct PortSemanticInfo;
+class IpcraftConnectionValidator;
 
 enum class ConnectionRuleProviderStatus {
     Allowed,
@@ -22,6 +23,7 @@ struct ConnectionRuleProviderRequest {
     QString selectedConnectionClassId;
     const QVector<IpcraftPackageManifest>& manifests;
     const QVector<ProjectConnectionRecord>& currentConnections;
+    const IpcraftConnectionValidator* validator = nullptr;
 };
 
 struct ConnectionRuleProviderResult {
@@ -41,7 +43,13 @@ struct ConnectionRuleProviderResult {
 
 class ConnectionRuleProvider {
 public:
+    ConnectionRuleProvider() = default;
     virtual ~ConnectionRuleProvider() = default;
+
+    ConnectionRuleProvider(const ConnectionRuleProvider&) = delete;
+    ConnectionRuleProvider& operator=(const ConnectionRuleProvider&) = delete;
+    ConnectionRuleProvider(ConnectionRuleProvider&&) = delete;
+    ConnectionRuleProvider& operator=(ConnectionRuleProvider&&) = delete;
 
     virtual bool canEvaluate(const PortSemanticInfo& source,
                              const PortSemanticInfo& target) const = 0;

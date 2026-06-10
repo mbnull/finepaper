@@ -3,6 +3,7 @@
 #include "common/portlayout.h"
 #include "graph/graph.h"
 #include "graph/module.h"
+#include "ipcraft/ipcraftconnectionvalidator.h"
 #include "modules/modulelabels.h"
 #include "modules/moduleregistry.h"
 #include "modules/moduletypemetadata.h"
@@ -10,6 +11,7 @@
 #include <QHash>
 #include <QSet>
 #include <algorithm>
+#include <cstddef>
 #include <memory>
 #include <utility>
 #include <variant>
@@ -708,17 +710,12 @@ ConnectionRequest ConnectionRequest::portToPort(const PortRef& start,
     return request;
 }
 
-ConnectionRuleService::ConnectionRuleService(const Graph* graph,
-                                             QVector<ProjectIpInstanceRecord> ipInstanceRecords)
-    : ConnectionRuleService(graph,
-                            std::move(ipInstanceRecords),
-                            ModuleRegistry::instance().packageManifests()) {}
+ConnectionRuleService::ConnectionRuleService(const Graph* graph)
+    : ConnectionRuleService(graph, ModuleRegistry::instance().packageManifests()) {}
 
 ConnectionRuleService::ConnectionRuleService(const Graph* graph,
-                                             QVector<ProjectIpInstanceRecord> ipInstanceRecords,
                                              QVector<IpcraftPackageManifest> manifests)
     : m_graph(graph),
-      m_ipInstanceRecords(std::move(ipInstanceRecords)),
       m_manifests(std::move(manifests)) {
     addRuleProvider(std::make_unique<PackageConnectionRuleProvider>());
 }
@@ -726,7 +723,8 @@ ConnectionRuleService::ConnectionRuleService(const Graph* graph,
 ConnectionRuleService::~ConnectionRuleService() = default;
 
 void ConnectionRuleService::addRuleProvider(std::unique_ptr<ConnectionRuleProvider> provider) {
-    if (provider) {
+    constexpr std::size_t kMaxConnectionRuleProviders = 1024;
+    if (provider && m_ruleProviders.size() < kMaxConnectionRuleProviders) {
         m_ruleProviders.push_back(std::move(provider));
     }
 }
@@ -897,6 +895,7 @@ QVector<ConnectionResolvedOption> ConnectionRuleService::buildOptions(
             });
     };
     std::optional<QVector<ProjectConnectionRecord>> currentConnections = std::nullopt;
+    std::optional<IpcraftConnectionValidator> connectionValidator = std::nullopt;
 
     const auto filterAutocompleteCandidates = [](const QVector<PortSemanticInfo>& fixedPorts,
                                                  const QVector<PortSemanticInfo>& hiddenPorts) {
@@ -964,13 +963,17 @@ QVector<ConnectionResolvedOption> ConnectionRuleService::buildOptions(
             if (!currentConnections.has_value()) {
                 currentConnections = currentProjectConnectionRecords(m_graph);
             }
+            if (!connectionValidator.has_value()) {
+                connectionValidator.emplace(m_manifests, *currentConnections);
+            }
             for (const ConnectionRuleProvider* provider : matchingProviders) {
                 const ConnectionRuleProviderResult decision = provider->evaluate(
                     ConnectionRuleProviderRequest{source,
                                                   target,
                                                   request.connectionClassId,
                                                   m_manifests,
-                                                  *currentConnections});
+                                                  *currentConnections,
+                                                  &*connectionValidator});
                 if (!decision.accepted()) {
                     if (rejectionLayer) *rejectionLayer = ConnectionRuleLayer::EditorRule;
                     if (rejectionReason) *rejectionReason = decision.reasonCode;

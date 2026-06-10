@@ -816,8 +816,6 @@ QtNodes::ConnectionGraphicsObject* NodeEditorWidget::findDraftConnection() {
 void NodeEditorWidget::refreshConnectionRuleService() {
     m_connectionRuleService = std::make_unique<ConnectionRuleService>(
         m_graph,
-        m_projectStateService ? m_projectStateService->ipInstanceRecords()
-                              : QVector<ProjectIpInstanceRecord>{},
         activePackageManifests(m_workspaceController));
 }
 
@@ -982,15 +980,10 @@ void NodeEditorWidget::executeAddConnection(const PortRef& source, const PortRef
         connection = std::make_unique<Connection>(NodeEditorEntityFactory::generateEntityId(), source, target);
     }
 
-    auto ipInstanceRecordsProvider = [projectStateService = m_projectStateService]() {
-        return projectStateService ? projectStateService->ipInstanceRecords()
-                                   : QVector<ProjectIpInstanceRecord>{};
-    };
     auto packageManifestsProvider = [workspaceController = m_workspaceController]() {
         return activePackageManifests(workspaceController);
     };
     auto command = std::make_unique<AddConnectionCommand>(m_graph,
-                                                          std::move(ipInstanceRecordsProvider),
                                                           std::move(connection),
                                                           std::move(packageManifestsProvider));
     m_commandManager->executeCommand(std::move(command));

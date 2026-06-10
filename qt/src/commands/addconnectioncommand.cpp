@@ -2,11 +2,9 @@
 #include "commands/addconnectioncommand.h"
 
 AddConnectionCommand::AddConnectionCommand(Graph* graph,
-                                           IpInstanceRecordsProvider ipInstanceRecordsProvider,
                                            std::unique_ptr<Connection> connection,
                                            PackageManifestsProvider packageManifestsProvider)
     : m_graph(graph),
-      m_ipInstanceRecordsProvider(std::move(ipInstanceRecordsProvider)),
       m_packageManifestsProvider(std::move(packageManifestsProvider)),
       m_connection(std::move(connection)) {
     m_connectionId = m_connection->id();
@@ -22,8 +20,6 @@ void AddConnectionCommand::execute() {
 
     ConnectionRuleService ruleService(
         m_graph,
-        m_ipInstanceRecordsProvider ? m_ipInstanceRecordsProvider()
-                                    : QVector<ProjectIpInstanceRecord>{},
         m_packageManifestsProvider ? m_packageManifestsProvider()
                                    : QVector<IpcraftPackageManifest>{});
     ConnectionRequest request = ConnectionRequest::portToPort(m_connection->source(),

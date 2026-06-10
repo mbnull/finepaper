@@ -34,7 +34,9 @@ bool hasRule(const ipcraft::DiagnosticStore& diagnostics, const QString& ruleId)
 
 QByteArray readFile(const QString& path) {
     QFile file(path);
-    require(file.open(QIODevice::ReadOnly), "file should open for reading");
+    if (!file.open(QIODevice::ReadOnly)) {
+        require(false, "file should open for reading");
+    }
     return file.readAll();
 }
 
@@ -42,7 +44,9 @@ void writeFile(const QString& path, const QByteArray& bytes) {
     const QFileInfo info(path);
     require(QDir().mkpath(info.absolutePath()), "file directory should be created");
     QFile file(path);
-    require(file.open(QIODevice::WriteOnly | QIODevice::Truncate), "file should open for writing");
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        require(false, "file should open for writing");
+    }
     require(file.write(bytes) == bytes.size(), "file should write fully");
 }
 
@@ -50,7 +54,9 @@ void writeExecutable(const QString& path, const QByteArray& script) {
     const QFileInfo info(path);
     require(QDir().mkpath(info.absolutePath()), "script directory should be created");
     QFile file(path);
-    require(file.open(QIODevice::WriteOnly | QIODevice::Truncate), "script should open");
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        require(false, "script should open");
+    }
     require(file.write(script) == script.size(), "script should write fully");
     file.close();
     require(QFile::setPermissions(path,
@@ -367,7 +373,7 @@ void testParseDiagnosticsWithoutParserFailsStructurally() {
     QTemporaryDir packageRoot;
     require(runRoot.isValid(), "run root should be valid");
     require(packageRoot.isValid(), "package root should be valid");
-    QJsonObject flow{
+    QJsonObject flow = {
         {QStringLiteral("id"), QStringLiteral("generate")},
         {QStringLiteral("steps"),
          QJsonArray{QJsonObject{{QStringLiteral("kind"), QStringLiteral("parse_diagnostics")}}}}};
@@ -378,6 +384,23 @@ void testParseDiagnosticsWithoutParserFailsStructurally() {
     require(!result.ok, "parse_diagnostics without a parser should fail structurally");
     require(hasRule(result.diagnostics, QStringLiteral("flow.command_policy_violation")),
             "parse_diagnostics without a parser should emit flow.command_policy_violation");
+}
+
+void testRunFlowRejectsMissingSteps() {
+    QTemporaryDir runRoot;
+    QTemporaryDir packageRoot;
+    require(runRoot.isValid(), "run root should be valid");
+    require(packageRoot.isValid(), "package root should be valid");
+    const QJsonObject flow{
+        {QStringLiteral("id"), QStringLiteral("generate")}
+    };
+
+    const ipcraft::FlowRunResult result =
+        ipcraft::FlowRunner::runFlow(requestFor(runRoot, packageRoot, flow));
+
+    require(!result.ok, "flow without explicit steps array should fail structurally");
+    require(hasRule(result.diagnostics, QStringLiteral("flow.command_policy_violation")),
+            "missing flow steps should emit flow.command_policy_violation");
 }
 
 void testRunFlowUsesRunDirectoryCwdByDefault() {
@@ -412,7 +435,7 @@ void testRunFlowExpandsInputsManifestPlaceholder() {
                     "test -f \"$1\" || exit 9\n"
                     "grep -q 'ipcraft.emitted-inputs.v1' \"$1\" || exit 10\n");
 
-    QJsonObject flow{
+    QJsonObject flow = {
         {QStringLiteral("id"), QStringLiteral("generate")},
         {QStringLiteral("steps"),
          QJsonArray{
@@ -445,7 +468,7 @@ void testRunFlowFailsWhenExecModifiesEmittedInputsManifest() {
                     "printf corrupted > \"$1\"\n"
                     "exit 0\n");
 
-    QJsonObject flow{
+    QJsonObject flow = {
         {QStringLiteral("id"), QStringLiteral("generate")},
         {QStringLiteral("steps"),
          QJsonArray{
@@ -561,6 +584,7 @@ int main(int argc, char** argv) {
         testTimeoutPolicyRejectsInvalidValueBeforeProcessStart();
         testDuplicateCapturePathsAreRejected();
         testParseDiagnosticsWithoutParserFailsStructurally();
+        testRunFlowRejectsMissingSteps();
         testRunFlowUsesRunDirectoryCwdByDefault();
         testRunFlowExpandsInputsManifestPlaceholder();
         testRunFlowFailsWhenExecModifiesEmittedInputsManifest();

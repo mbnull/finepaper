@@ -330,7 +330,6 @@ GraphProjectLoadResult populateGraph(const ProjectDocument& document,
     }
 
     const ConnectionRuleService ruleService(&graph,
-                                            document.ipcoreState,
                                             ModuleRegistry::instance().packageManifests());
     for (const ProjectConnectionRecord& record : document.connections) {
         QString connectionError;

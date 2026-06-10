@@ -178,18 +178,18 @@ void testAddConnectionCommandRedoBuildsFreshRuleService() {
         "failed to add target module");
 
     int providerCalls = 0;
-    auto ipInstanceRecordsProvider = [&providerCalls]() {
+    auto packageManifestsProvider = [&providerCalls]() {
         ++providerCalls;
-        return QVector<ProjectIpInstanceRecord>{};
+        return QVector<IpcraftPackageManifest>{};
     };
 
     CommandManager commandManager;
     auto command = std::make_unique<AddConnectionCommand>(
         &graph,
-        ipInstanceRecordsProvider,
         std::make_unique<Connection>("command_link",
                                      PortRef{"source", "out"},
-                                     PortRef{"target", "in"}));
+                                     PortRef{"target", "in"}),
+        packageManifestsProvider);
 
     commandManager.executeCommand(std::move(command));
     require(providerCalls == 1, "initial execute should build a rule service from provider state");
@@ -349,7 +349,7 @@ void testInoutPortsCannotBeReusedAcrossConnectionSides() {
     graph.addConnection(std::make_unique<Connection>("bus_link_ab", source, middle));
 
     require(graph.connections().size() == 1, "expected initial inout connection to be stored");
-    ConnectionRuleService service(&graph, {});
+    ConnectionRuleService service(&graph);
     const ConnectionCheckResult sourceReuse = service.check(
         ConnectionRequest::portToPort(middle, target, ConnectionRequestKind::Programmatic));
     const ConnectionCheckResult targetReuse = service.check(
@@ -413,7 +413,7 @@ void testInterfaceCompatibilityRejectsMismatchedConfiguredFields() {
     require(graph.addModule(std::move(endpoint)), "failed to add interface endpoint");
     require(graph.addModule(std::move(xp)), "failed to add interface XP");
 
-    ConnectionRuleService service(&graph, {});
+    ConnectionRuleService service(&graph);
     const ConnectionCheckResult result = service.check(
         ConnectionRequest::portToPort(PortRef{"endpoint", "noc"},
                                       PortRef{"xp", "local0"},
@@ -533,7 +533,7 @@ void testInterfaceCompatibilityAcceptsMatchingConfiguredFields() {
     require(graph.addModule(std::move(endpoint)), "failed to add matching interface endpoint");
     require(graph.addModule(std::move(xp)), "failed to add matching interface XP");
 
-    ConnectionRuleService service(&graph, {});
+    ConnectionRuleService service(&graph);
     const ConnectionCheckResult result = service.check(
         ConnectionRequest::portToPort(PortRef{"endpoint", "noc"},
                                       PortRef{"xp", "local0"},
@@ -563,7 +563,7 @@ void testRouterLinksRequireOppositeSides() {
     require(graph.addModule(std::move(source)), "failed to add source router");
     require(graph.addModule(std::move(target)), "failed to add target router");
 
-    ConnectionRuleService service(&graph, {});
+    ConnectionRuleService service(&graph);
     const ConnectionCheckResult opposite = service.check(
         ConnectionRequest::portToPort(PortRef{"router_a", "east"},
                                       PortRef{"router_b", "west"},

@@ -28,7 +28,6 @@
 #include "validation/validationmanager.h"
 #include "workspace/activeworkspacecontroller.h"
 #include "modules/moduleregistry.h"
-#include <algorithm>
 #include <QAction>
 #include <QApplication>
 #include <QCloseEvent>
@@ -53,6 +52,7 @@
 #include <QToolButton>
 #include <QtGlobal>
 #include <QVBoxLayout>
+#include <algorithm>
 #include <optional>
 #include <utility>
 

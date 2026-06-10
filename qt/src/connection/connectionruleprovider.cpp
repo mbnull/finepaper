@@ -48,10 +48,14 @@ bool PackageConnectionRuleProvider::canEvaluate(const PortSemanticInfo& source,
 
 ConnectionRuleProviderResult PackageConnectionRuleProvider::evaluate(
     const ConnectionRuleProviderRequest& request) const {
-    IpcraftConnectionValidator validator(request.manifests, request.currentConnections);
-    const IpcraftConnectionDecision decision = validator.validate(
-        {participantForPort(request.source), participantForPort(request.target)},
-        request.selectedConnectionClassId);
+    const QVector<IpcraftConnectionParticipant> participants{
+        participantForPort(request.source),
+        participantForPort(request.target)
+    };
+    const IpcraftConnectionDecision decision = request.validator
+        ? request.validator->validate(participants, request.selectedConnectionClassId)
+        : IpcraftConnectionValidator(request.manifests, request.currentConnections)
+              .validate(participants, request.selectedConnectionClassId);
 
     ConnectionRuleProviderResult result;
     if (decision.status == IpcraftConnectionStatus::Invalid) {

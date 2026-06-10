@@ -11,7 +11,7 @@ class QWidget;
 enum class WorkbenchPanelArea {
     Left,
     Right,
-    Bottom
+    Bottom,
 };
 
 struct WorkbenchActionContribution {

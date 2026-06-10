@@ -9,7 +9,14 @@
 
 class IAppPlugin {
 public:
+    IAppPlugin() = default;
     virtual ~IAppPlugin() = default;
+
+    IAppPlugin(const IAppPlugin&) = delete;
+    IAppPlugin& operator=(const IAppPlugin&) = delete;
+    IAppPlugin(IAppPlugin&&) = delete;
+    IAppPlugin& operator=(IAppPlugin&&) = delete;
+
     virtual QString id() const = 0;
     virtual void activate(AppContext& context) = 0;
 };

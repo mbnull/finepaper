@@ -613,7 +613,7 @@ void testConnectionOptionsPreferDisplayNamesAndInterfaceLabels() {
     require(graph.addModule(std::move(xp)), "display router should add");
     require(graph.addModule(std::move(ep)), "display endpoint should add");
 
-    ConnectionRuleService service(&graph, {}, {manifest});
+    ConnectionRuleService service(&graph, {manifest});
     const ConnectionCheckResult result = service.check(
         ConnectionRequest::portToPort(PortRef{QStringLiteral("uuid_ep"), QStringLiteral("noc")},
                                       PortRef{QStringLiteral("uuid_xp"), QStringLiteral("local")},
@@ -664,7 +664,7 @@ void testConnectionOptionLabelsIgnoreDisplayNameParameterWithoutBinding() {
     require(graph.addModule(std::move(xp)), "static-label router should add");
     require(graph.addModule(std::move(ep)), "static-label endpoint should add");
 
-    ConnectionRuleService service(&graph, {}, {manifest});
+    ConnectionRuleService service(&graph, {manifest});
     const ConnectionCheckResult result = service.check(
         ConnectionRequest::portToPort(PortRef{QStringLiteral("uuid_ep_static"), QStringLiteral("noc")},
                                       PortRef{QStringLiteral("uuid_xp_static"), QStringLiteral("local")},
@@ -688,7 +688,7 @@ void testDuplicateConnectionOptionLabelsUseShortLabelBeforeIds() {
     loadDisplayNamedManifest(manifest);
 
     std::unique_ptr<Graph> graph = graphWithTwoDisplayIdenticalEndpoints(packageId);
-    ConnectionRuleService service(graph.get(), {}, {manifest});
+    ConnectionRuleService service(graph.get(), {manifest});
     const ConnectionCheckResult result = service.check(nodeToPortRequest());
 
     require(result.status == ConnectionCheckStatus::NeedsSelection,
@@ -744,7 +744,7 @@ void testConnectionOptionsSortLabelsCaseInsensitively() {
     request.end.moduleId = QStringLiteral("target");
     request.end.portId = QStringLiteral("in");
 
-    ConnectionRuleService service(&graph, {});
+    ConnectionRuleService service(&graph);
     const ConnectionCheckResult result = service.check(request);
 
     require(result.status == ConnectionCheckStatus::NeedsSelection,
@@ -770,7 +770,7 @@ void testConnectionOptionLabelsUseAnchorInterfaceLabels() {
     require(graph.addModule(std::move(source)), "anchor source should add");
     require(graph.addModule(std::move(target)), "anchor target should add");
 
-    ConnectionRuleService service(&graph, {});
+    ConnectionRuleService service(&graph);
     const ConnectionCheckResult result = service.check(
         ConnectionRequest::portToPort(PortRef{QStringLiteral("anchor_source_uuid"), QStringLiteral("noc")},
                                       PortRef{QStringLiteral("anchor_target_uuid"), QStringLiteral("noc")},
@@ -849,7 +849,7 @@ void testConnectionRuleServiceUsesInterfaceClassesNotLegacyBusNames() {
     require(graph.addModule(std::move(endpoint)), "class endpoint should add");
     require(graph.addModule(std::move(xp)), "class XP should add");
 
-    ConnectionRuleService service(&graph, {}, {validatorManifest(true)});
+    ConnectionRuleService service(&graph, {validatorManifest(true)});
     const ConnectionCheckResult result = service.check(
         ConnectionRequest::portToPort(PortRef{QStringLiteral("endpoint"), QStringLiteral("noc")},
                                       PortRef{QStringLiteral("xp"), QStringLiteral("local0")},
@@ -879,7 +879,7 @@ void testWarningProviderStatusRemainsConnectableWithValidConnectionStatus() {
     require(graph.addModule(makeConsumer(QStringLiteral("warning_target"))),
             "warning target should add");
 
-    ConnectionRuleService service(&graph, {});
+    ConnectionRuleService service(&graph);
     service.addRuleProvider(std::make_unique<WarningOnlyProvider>());
     const ConnectionCheckResult result = service.check(
         ConnectionRequest::portToPort(PortRef{QStringLiteral("warning_source"), QStringLiteral("out")},
@@ -922,7 +922,7 @@ void testWarningProviderDoesNotReplacePackageClassMetadata() {
     require(graph.addModule(std::move(endpoint)), "extra-warning endpoint should add");
     require(graph.addModule(std::move(xp)), "extra-warning XP should add");
 
-    ConnectionRuleService service(&graph, {}, {validatorManifest()});
+    ConnectionRuleService service(&graph, {validatorManifest()});
     service.addRuleProvider(std::make_unique<WarningOnlyProvider>());
     const ConnectionCheckResult result = service.check(
         ConnectionRequest::portToPort(PortRef{QStringLiteral("endpoint_extra_warning"), QStringLiteral("noc")},
@@ -969,7 +969,7 @@ void testConnectionRuleServiceClassValidationIgnoresLegacyTopologySideNames() {
     require(graph.addModule(std::move(endpoint)), "class topology endpoint should add");
     require(graph.addModule(std::move(xp)), "class topology XP should add");
 
-    ConnectionRuleService service(&graph, {}, {validatorManifest()});
+    ConnectionRuleService service(&graph, {validatorManifest()});
     const ConnectionCheckResult result = service.check(
         ConnectionRequest::portToPort(PortRef{QStringLiteral("endpoint_topology"), QStringLiteral("noc")},
                                       PortRef{QStringLiteral("xp_topology"), QStringLiteral("local0")},
@@ -1017,7 +1017,6 @@ void testConnectionRuleServiceClassValidationRejectsWrongOppositeInterfaceWithou
 
     ConnectionRuleService service(
         &graph,
-        {},
         {validatorManifestForEndpointXpInterfaces(QStringLiteral("link_out"),
                                                   QStringLiteral("link_other"))});
     const ConnectionCheckResult result = service.check(
@@ -1070,7 +1069,7 @@ void testConnectionRuleServiceClassValidationRejectsNonOppositeTopologyMetadata(
     require(graph.addModule(std::move(endpoint)), "same-side class endpoint should add");
     require(graph.addModule(std::move(xp)), "same-side class XP should add");
 
-    ConnectionRuleService service(&graph, {}, {validatorManifest()});
+    ConnectionRuleService service(&graph, {validatorManifest()});
     const ConnectionCheckResult result = service.check(
         ConnectionRequest::portToPort(
             PortRef{QStringLiteral("endpoint_same_topology_side"), QStringLiteral("link_out")},
@@ -1113,7 +1112,7 @@ void testConnectionRuleServiceRejectsMissingPackageManifestMetadata() {
     require(graph.addModule(std::move(endpoint)), "missing manifest endpoint should add");
     require(graph.addModule(std::move(xp)), "missing manifest XP should add");
 
-    ConnectionRuleService service(&graph, {}, {});
+    ConnectionRuleService service(&graph, {});
     const ConnectionCheckResult result = service.check(
         ConnectionRequest::portToPort(PortRef{QStringLiteral("endpoint_missing_manifest"),
                                               QStringLiteral("noc")},
@@ -1134,7 +1133,7 @@ void testAllowsSimplePortToPortConnection() {
     require(graph.addModule(makeProducer(QStringLiteral("producer"))), "failed to add producer");
     require(graph.addModule(makeConsumer(QStringLiteral("consumer"))), "failed to add consumer");
 
-    ConnectionRuleService service(&graph, {});
+    ConnectionRuleService service(&graph);
     const ConnectionCheckResult result = service.check(
         ConnectionRequest::portToPort(PortRef{QStringLiteral("producer"), QStringLiteral("out")},
                                       PortRef{QStringLiteral("consumer"), QStringLiteral("in")},
@@ -1156,7 +1155,7 @@ void testRejectsMissingPortWithReason() {
     require(graph.addModule(makeProducer(QStringLiteral("producer"))), "failed to add producer");
     require(graph.addModule(makeConsumer(QStringLiteral("consumer"))), "failed to add consumer");
 
-    ConnectionRuleService service(&graph, {});
+    ConnectionRuleService service(&graph);
     const ConnectionCheckResult result = service.check(
         ConnectionRequest::portToPort(PortRef{QStringLiteral("producer"), QStringLiteral("missing")},
                                       PortRef{QStringLiteral("consumer"), QStringLiteral("in")},
@@ -1173,7 +1172,7 @@ void testStructuralLayerRunsBeforeSemanticLayers() {
     require(graph.addModule(makeProducer(QStringLiteral("producer"))), "failed to add producer");
     require(graph.addModule(makeConsumer(QStringLiteral("consumer"))), "failed to add consumer");
 
-    ConnectionRuleService service(&graph, {});
+    ConnectionRuleService service(&graph);
     const ConnectionCheckResult result = service.check(
         ConnectionRequest::portToPort(PortRef{QStringLiteral("producer"), QStringLiteral("missing")},
                                       PortRef{QStringLiteral("consumer"), QStringLiteral("in")},
@@ -1196,7 +1195,7 @@ void testDuplicateConnectionIsStructuralRejection() {
         PortRef{QStringLiteral("producer"), QStringLiteral("out")},
         PortRef{QStringLiteral("consumer"), QStringLiteral("in")}));
 
-    ConnectionRuleService service(&graph, {});
+    ConnectionRuleService service(&graph);
     const ConnectionCheckResult result = service.check(
         ConnectionRequest::portToPort(PortRef{QStringLiteral("producer"), QStringLiteral("out")},
                                       PortRef{QStringLiteral("consumer"), QStringLiteral("in")},
@@ -1215,7 +1214,7 @@ void testSelfLoopIsStructuralRejection() {
     Graph graph;
     require(graph.addModule(makeRouter(QStringLiteral("router"))), "failed to add router");
 
-    ConnectionRuleService service(&graph, {});
+    ConnectionRuleService service(&graph);
     const ConnectionCheckResult result = service.check(
         ConnectionRequest::portToPort(PortRef{QStringLiteral("router"), QStringLiteral("east")},
                                       PortRef{QStringLiteral("router"), QStringLiteral("west")},
@@ -1235,7 +1234,7 @@ void testRejectsSameSideTopologyRule() {
     require(graph.addModule(makeRouter(QStringLiteral("left"))), "failed to add left router");
     require(graph.addModule(makeRouter(QStringLiteral("right"))), "failed to add right router");
 
-    ConnectionRuleService service(&graph, {});
+    ConnectionRuleService service(&graph);
     const ConnectionCheckResult result = service.check(
         ConnectionRequest::portToPort(PortRef{QStringLiteral("left"), QStringLiteral("east")},
                                       PortRef{QStringLiteral("right"), QStringLiteral("east")},
@@ -1277,7 +1276,7 @@ void testAllowsNonCardinalRouterPortsWithOppositeTopologySides() {
     require(graph.addModule(std::move(source)), "source metadata-side router should add");
     require(graph.addModule(std::move(target)), "target metadata-side router should add");
 
-    ConnectionRuleService service(&graph, {});
+    ConnectionRuleService service(&graph);
     const ConnectionCheckResult result = service.check(
         ConnectionRequest::portToPort(PortRef{QStringLiteral("source_router"), QStringLiteral("link_out")},
                                       PortRef{QStringLiteral("target_router"), QStringLiteral("link_in")},
@@ -1322,7 +1321,7 @@ void testRejectsNonCardinalRouterPortWithWrongOppositeInterfaceId() {
     require(graph.addModule(std::move(source)), "source wrong-opposite router should add");
     require(graph.addModule(std::move(target)), "target wrong-opposite router should add");
 
-    ConnectionRuleService service(&graph, {});
+    ConnectionRuleService service(&graph);
     const ConnectionCheckResult result = service.check(
         ConnectionRequest::portToPort(
             PortRef{QStringLiteral("source_router_wrong_opposite"), QStringLiteral("link_out")},
@@ -1343,7 +1342,7 @@ void testAllowsBidirectionalRouterLinkFromTargetRoleToInitiatorRole() {
     require(graph.addModule(makeRouter(QStringLiteral("top"))), "failed to add top router");
     require(graph.addModule(makeRouter(QStringLiteral("bottom"))), "failed to add bottom router");
 
-    ConnectionRuleService service(&graph, {});
+    ConnectionRuleService service(&graph);
     const ConnectionCheckResult result = service.check(
         ConnectionRequest::portToPort(PortRef{QStringLiteral("bottom"), QStringLiteral("north")},
                                       PortRef{QStringLiteral("top"), QStringLiteral("south")},
@@ -1372,7 +1371,7 @@ void testRejectsOccupiedCardinalityOnePort() {
         PortRef{QStringLiteral("left"), QStringLiteral("east")},
         PortRef{QStringLiteral("right"), QStringLiteral("west")}));
 
-    ConnectionRuleService service(&graph, {});
+    ConnectionRuleService service(&graph);
     const ConnectionCheckResult result = service.check(
         ConnectionRequest::portToPort(PortRef{QStringLiteral("left"), QStringLiteral("east")},
                                       PortRef{QStringLiteral("extra"), QStringLiteral("west")},
@@ -1404,7 +1403,7 @@ void testVisualSideOrientsInOutPortToNodeCompletion() {
     request.end.hiddenPortsAllowed = true;
     request.end.visualSide = ConnectionVisualSide::Output;
 
-    ConnectionRuleService service(&graph, {});
+    ConnectionRuleService service(&graph);
     const ConnectionCheckResult result = service.check(request);
 
     require(result.status == ConnectionCheckStatus::Allowed,
@@ -1486,7 +1485,7 @@ void testNodeBodyAutocompleteUsesMatchingGroup() {
     request.end.fromNodeBody = true;
     request.end.hiddenPortsAllowed = true;
 
-    ConnectionRuleService service(&graph, {});
+    ConnectionRuleService service(&graph);
     const ConnectionCheckResult result = service.check(request);
 
     require(result.status == ConnectionCheckStatus::Allowed,
@@ -1506,7 +1505,7 @@ void testRejectsCrossIpcoreConnectionAtIpcoreLayer() {
     require(graph.addModule(std::move(producer)), "producer should add");
     require(graph.addModule(std::move(consumer)), "consumer should add");
 
-    ConnectionRuleService service(&graph, {});
+    ConnectionRuleService service(&graph);
     const ConnectionCheckResult result = service.check(
         ConnectionRequest::portToPort(PortRef{QStringLiteral("producer"), QStringLiteral("out")},
                                       PortRef{QStringLiteral("consumer"), QStringLiteral("in")},
@@ -1529,7 +1528,7 @@ void testRejectsCrossInstanceConnectionAtIpcoreLayer() {
     require(graph.addModule(std::move(producer)), "producer should add");
     require(graph.addModule(std::move(consumer)), "consumer should add");
 
-    ConnectionRuleService service(&graph, {});
+    ConnectionRuleService service(&graph);
     const ConnectionCheckResult result = service.check(
         ConnectionRequest::portToPort(PortRef{QStringLiteral("producer"), QStringLiteral("out")},
                                       PortRef{QStringLiteral("consumer"), QStringLiteral("in")},
@@ -1567,7 +1566,7 @@ void testRejectsInterfaceFieldMismatchAtIpcoreLayer() {
     require(graph.addModule(std::move(source)), "source should add");
     require(graph.addModule(std::move(target)), "target should add");
 
-    ConnectionRuleService service(&graph, {});
+    ConnectionRuleService service(&graph);
     const ConnectionCheckResult result = service.check(
         ConnectionRequest::portToPort(PortRef{QStringLiteral("source"), QStringLiteral("noc")},
                                       PortRef{QStringLiteral("target"), QStringLiteral("noc")},

@@ -5,7 +5,6 @@
 #include "graph/connection.h"
 #include "graph/parameter.h"
 #include "ipcraft/ipcraftmanifest.h"
-#include "project/ipinstancestate.h"
 #include "project/projectdocument.h"
 
 #include <QHash>
@@ -133,11 +132,8 @@ struct ConnectionCheckResult {
 
 class ConnectionRuleService {
 public:
-    ConnectionRuleService(const Graph* graph,
-                          QVector<ProjectIpInstanceRecord> ipInstanceRecords);
-    ConnectionRuleService(const Graph* graph,
-                          QVector<ProjectIpInstanceRecord> ipInstanceRecords,
-                          QVector<IpcraftPackageManifest> manifests);
+    explicit ConnectionRuleService(const Graph* graph);
+    ConnectionRuleService(const Graph* graph, QVector<IpcraftPackageManifest> manifests);
     ~ConnectionRuleService();
 
     ConnectionRuleService(const ConnectionRuleService&) = delete;
@@ -161,7 +157,6 @@ private:
                                                    QString* rejectionMessage) const;
 
     const Graph* m_graph = nullptr;
-    QVector<ProjectIpInstanceRecord> m_ipInstanceRecords;
     QVector<IpcraftPackageManifest> m_manifests;
     std::vector<std::unique_ptr<ConnectionRuleProvider>> m_ruleProviders;
 };

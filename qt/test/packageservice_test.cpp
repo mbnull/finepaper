@@ -103,8 +103,9 @@ void testDiagnosticsAreStoredForInvalidRoots() {
     require(root.mkpath(QStringLiteral("broken")), "broken package directory should be created");
 
     QFile manifest(root.filePath(QStringLiteral("broken/ipcraft.json")));
-    require(manifest.open(QIODevice::WriteOnly | QIODevice::Truncate),
-            "broken manifest should open");
+    if (!manifest.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        require(false, "broken manifest should open");
+    }
     manifest.write("{\"schema\":\"ipcraft.package.v1\",\"id\":\"broken.pkg\"}");
     manifest.close();
 

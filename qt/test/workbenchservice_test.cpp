@@ -174,6 +174,31 @@ void testIncompleteContributionsAreRejected() {
     require(!service.addEditor(editor), "editor with empty object name should be rejected");
 }
 
+void testContributionIdsAndObjectNamesMustBeCanonical() {
+    WorkbenchService service;
+
+    WorkbenchActionContribution action = makeAction(QStringLiteral(" action.open "));
+    require(!service.addAction(action), "action id with surrounding whitespace should be rejected");
+    action = makeAction(QStringLiteral("action.open"));
+    action.objectName = QStringLiteral(" openAction ");
+    require(!service.addAction(action),
+            "action object name with surrounding whitespace should be rejected");
+
+    WorkbenchPanelContribution panel = makePanel(QStringLiteral(" panel.project "));
+    require(!service.addPanel(panel), "panel id with surrounding whitespace should be rejected");
+    panel = makePanel(QStringLiteral("panel.project"));
+    panel.objectName = QStringLiteral(" projectPanel ");
+    require(!service.addPanel(panel),
+            "panel object name with surrounding whitespace should be rejected");
+
+    WorkbenchEditorContribution editor = makeEditor(QStringLiteral(" editor.graph "));
+    require(!service.addEditor(editor), "editor id with surrounding whitespace should be rejected");
+    editor = makeEditor(QStringLiteral("editor.graph"));
+    editor.objectName = QStringLiteral(" graphEditor ");
+    require(!service.addEditor(editor),
+            "editor object name with surrounding whitespace should be rejected");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -186,6 +211,7 @@ int main(int argc, char** argv) {
         testRegistrationOrderAndFieldsRoundtrip();
         testDuplicateIdsAreRejectedPerContributionType();
         testIncompleteContributionsAreRejected();
+        testContributionIdsAndObjectNamesMustBeCanonical();
     } catch (const std::exception& exception) {
         qCritical("%s", exception.what());
         return 1;

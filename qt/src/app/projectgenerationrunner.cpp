@@ -22,6 +22,7 @@
 #include <QSaveFile>
 #include <QSet>
 #include <algorithm>
+#include <cstddef>
 #include <utility>
 #include <vector>
 
@@ -64,6 +65,16 @@ QString normalizedInstanceOutputKey(const QString& instanceId) {
 
 QString flowRunRootForInstance(const QString& outputRoot, const QString& instanceId) {
     return QDir(outputRoot).filePath(QStringLiteral(".runs/%1").arg(instanceId));
+}
+
+QString canonicalOrAbsolutePath(const QString& path) {
+    const QFileInfo info(path);
+    const QString canonical = info.canonicalFilePath();
+    return QDir::cleanPath(canonical.isEmpty() ? info.absoluteFilePath() : canonical);
+}
+
+bool sameDirectoryPath(const QString& lhs, const QString& rhs) {
+    return canonicalOrAbsolutePath(lhs) == canonicalOrAbsolutePath(rhs);
 }
 
 bool isReservedInstanceOutputKey(const QString& instanceId) {
@@ -318,10 +329,10 @@ std::optional<ipcraft::GraphConfig> projectedGraphConfigForInstance(
 QString diagnosticMessageForFlowFailure(const ipcraft::FlowRunResult& flowResult) {
     for (const ipcraft::Diagnostic& diagnostic : flowResult.diagnostics.records) {
         if (diagnostic.ruleId == QStringLiteral("flow.timeout")) {
-            const int timeoutMs =
+            const int elapsedMilliseconds =
                 diagnostic.details.value(QStringLiteral("timeout_ms")).toInt();
-            return timeoutMs > 0
-                ? QStringLiteral("Generator timed out after %1 ms.").arg(timeoutMs)
+            return elapsedMilliseconds > 0
+                ? QStringLiteral("Generator timed out after %1 ms.").arg(elapsedMilliseconds)
                 : QStringLiteral("Generator timed out.");
         }
         if (diagnostic.ruleId == QStringLiteral("flow.exec_failed")) {
@@ -434,6 +445,30 @@ QString materializeEmittedInputs(const QString& flowRunRoot,
         return {};
     }
     return QStringLiteral("Emitted inputs manifest was not produced.");
+}
+
+QString validateEmittedInputsManifest(const QString& manifestPath) {
+    QFile file(manifestPath);
+    if (!file.open(QIODevice::ReadOnly)) {
+        return QStringLiteral("Emitted inputs manifest could not be opened: %1")
+            .arg(manifestPath);
+    }
+
+    QJsonParseError parseError;
+    const QJsonDocument document = QJsonDocument::fromJson(file.readAll(), &parseError);
+    if (parseError.error != QJsonParseError::NoError) {
+        return QStringLiteral("Emitted inputs manifest is not valid JSON: %1")
+            .arg(parseError.errorString());
+    }
+    if (!document.isObject()) {
+        return QStringLiteral("Emitted inputs manifest root must be an object.");
+    }
+    const QJsonObject root = document.object();
+    if (root.value(QStringLiteral("schema")).toString() != ipcraft::schemaids::emittedInputsV1) {
+        return QStringLiteral("Emitted inputs manifest schema must be %1.")
+            .arg(ipcraft::schemaids::emittedInputsV1);
+    }
+    return {};
 }
 
 const GenerationFlowProvider* generationFlowProviderFor(
@@ -553,6 +588,19 @@ ProjectGenerationInstanceResult generateInstance(const ProjectGenerationRequest&
     }
 
     const ipcraft::FlowRunResult flowResult = flowProvider->run(generationFlowRequest);
+    if (!sameDirectoryPath(flowResult.runRoot, flowRunRoot)) {
+        result.exitCode = exitCodeForFlowResult(flowResult);
+        result.exitStatus = QStringLiteral("failed");
+        result.error = withInstanceContext(
+            instance,
+            QStringLiteral("Generation flow returned an unexpected run root."));
+        result.artifactPaths = generatedFiles(result.outputDirectory);
+        const QString manifestError = writeManifest(request, designName, *entry, result);
+        if (!manifestError.isEmpty()) {
+            result.error += QStringLiteral(" Manifest error: %1").arg(manifestError);
+        }
+        return result;
+    }
     result.standardOutput = readTextFileIfPresent(QDir(flowResult.runRoot).filePath(QStringLiteral("stdout.log")));
     result.standardError = readTextFileIfPresent(QDir(flowResult.runRoot).filePath(QStringLiteral("stderr.log")));
     result.exitCode = exitCodeForFlowResult(flowResult);
@@ -573,6 +621,16 @@ ProjectGenerationInstanceResult generateInstance(const ProjectGenerationRequest&
         result.error = result.error.isEmpty()
             ? contextualInputError
             : result.error + QStringLiteral(" ") + contextualInputError;
+    } else {
+        const QString validationError = validateEmittedInputsManifest(result.inputPath);
+        if (!validationError.isEmpty()) {
+            result.success = false;
+            const QString contextualInputError =
+                withInstanceContext(instance, validationError);
+            result.error = result.error.isEmpty()
+                ? contextualInputError
+                : result.error + QStringLiteral(" ") + contextualInputError;
+        }
     }
 
     result.artifactPaths = generatedFiles(result.outputDirectory);
@@ -626,7 +684,8 @@ void ProjectGenerationRunner::setFrameworkToolSearchPaths(QStringList searchPath
 
 void ProjectGenerationRunner::addGenerationFlowProvider(
     std::unique_ptr<GenerationFlowProvider> provider) {
-    if (provider) {
+    constexpr std::size_t kMaxGenerationFlowProviders = 1024;
+    if (provider && m_generationFlowProviders.size() < kMaxGenerationFlowProviders) {
         m_generationFlowProviders.push_back(std::move(provider));
     }
 }

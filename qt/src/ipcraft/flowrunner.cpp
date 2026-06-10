@@ -13,16 +13,21 @@
 #include <QSaveFile>
 #include <QSet>
 #include <algorithm>
+#include <chrono>
 #ifdef Q_OS_UNIX
 #include <signal.h>
 #endif
 
 namespace {
 
-constexpr int kDefaultTimeoutMs = 60000;
-constexpr int kMaxTimeoutMs = 24 * 60 * 60 * 1000;
+constexpr std::chrono::milliseconds kDefaultCommandDeadline{60000};
+constexpr std::chrono::milliseconds kMaxCommandDeadline = std::chrono::hours{24};
 constexpr qint64 kDefaultCaptureLimitBytes = 1048576;
 constexpr qint64 kMaxCaptureLimitBytes = 16 * 1024 * 1024;
+
+qint64 toMilliseconds(std::chrono::milliseconds duration) {
+    return static_cast<qint64>(duration / std::chrono::milliseconds{1});
+}
 
 void insertString(QJsonObject& object, const QString& key, const QString& value) {
     if (!value.isEmpty()) {
@@ -491,10 +496,11 @@ std::optional<CapturePolicy> capturePolicy(const QJsonObject& command,
     return policy;
 }
 
-std::optional<int> timeoutMs(const QJsonObject& command,
-                             const QString& stepPath,
-                             ipcraft::DiagnosticStore& diagnostics) {
-    qint64 timeout = kDefaultTimeoutMs;
+std::optional<std::chrono::milliseconds> commandDeadline(
+    const QJsonObject& command,
+    const QString& stepPath,
+    ipcraft::DiagnosticStore& diagnostics) {
+    qint64 milliseconds = toMilliseconds(kDefaultCommandDeadline);
     if (command.contains(QStringLiteral("timeout_ms"))) {
         const std::optional<qint64> requested =
             strictPositiveIntegerValue(command, QStringLiteral("timeout_ms"));
@@ -505,18 +511,19 @@ std::optional<int> timeoutMs(const QJsonObject& command,
                               childPath(stepPath, QStringLiteral("command.timeout_ms")));
             return std::nullopt;
         }
-        timeout = *requested;
+        milliseconds = *requested;
     }
-    if (timeout > kMaxTimeoutMs) {
+    if (milliseconds > toMilliseconds(kMaxCommandDeadline)) {
         addFlowDiagnostic(diagnostics,
                           QStringLiteral("flow.command_policy_violation"),
                           QStringLiteral("Flow timeout exceeds the application maximum."),
                           childPath(stepPath, QStringLiteral("command.timeout_ms")),
-                          QJsonObject{{QStringLiteral("timeout_ms"), timeout},
-                                      {QStringLiteral("max_allowed"), kMaxTimeoutMs}});
+                          QJsonObject{{QStringLiteral("timeout_ms"), milliseconds},
+                                      {QStringLiteral("max_allowed"),
+                                       toMilliseconds(kMaxCommandDeadline)}});
         return std::nullopt;
     }
-    return static_cast<int>(timeout);
+    return std::chrono::milliseconds(milliseconds);
 }
 
 void appendLimited(QByteArray& target,
@@ -626,8 +633,9 @@ bool runExecStep(const ipcraft::FlowRunRequest& request,
         return false;
     }
 
-    const std::optional<int> timeout = timeoutMs(command, stepPath, result.diagnostics);
-    if (!timeout.has_value()) {
+    const std::optional<std::chrono::milliseconds> deadline =
+        commandDeadline(command, stepPath, result.diagnostics);
+    if (!deadline.has_value()) {
         return false;
     }
 
@@ -661,7 +669,7 @@ bool runExecStep(const ipcraft::FlowRunRequest& request,
     bool stderrTruncated = false;
     bool timedOut = false;
     while (process.state() != QProcess::NotRunning) {
-        const qint64 remaining = *timeout - timer.elapsed();
+        const qint64 remaining = toMilliseconds(*deadline) - timer.elapsed();
         if (remaining <= 0) {
             timedOut = true;
             break;
@@ -717,7 +725,8 @@ bool runExecStep(const ipcraft::FlowRunRequest& request,
                           QStringLiteral("flow.timeout"),
                           QStringLiteral("Flow process timed out."),
                           childPath(stepPath, QStringLiteral("command.timeout_ms")),
-                          QJsonObject{{QStringLiteral("timeout_ms"), *timeout}});
+                          QJsonObject{{QStringLiteral("timeout_ms"),
+                                       toMilliseconds(*deadline)}});
         return false;
     }
 
@@ -799,7 +808,16 @@ FlowRunResult FlowRunner::runFlow(const FlowRunRequest& request) {
 
     bool hardFailure = false;
     bool emittedInputs = false;
-    const QJsonArray steps = flow.value(QStringLiteral("steps")).toArray();
+    const QJsonValue stepsValue = flow.value(QStringLiteral("steps"));
+    if (!stepsValue.isArray()) {
+        addFlowDiagnostic(result.diagnostics,
+                          QStringLiteral("flow.command_policy_violation"),
+                          QStringLiteral("Flow steps must be an array."),
+                          QStringLiteral("$.flow.steps"));
+        result.ok = false;
+        return result;
+    }
+    const QJsonArray steps = stepsValue.toArray();
     for (qsizetype index = 0; index < steps.size(); ++index) {
         const QString stepPath = indexPath(index);
         const QJsonValue stepValue = steps.at(index);

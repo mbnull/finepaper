@@ -12,7 +12,13 @@ struct GenerationFlowRequest {
 
 class GenerationFlowProvider {
 public:
+    GenerationFlowProvider() = default;
     virtual ~GenerationFlowProvider() = default;
+
+    GenerationFlowProvider(const GenerationFlowProvider&) = delete;
+    GenerationFlowProvider& operator=(const GenerationFlowProvider&) = delete;
+    GenerationFlowProvider(GenerationFlowProvider&&) = delete;
+    GenerationFlowProvider& operator=(GenerationFlowProvider&&) = delete;
 
     virtual bool canRun(const GenerationFlowRequest& request) const = 0;
     virtual ipcraft::FlowRunResult run(const GenerationFlowRequest& request) const = 0;

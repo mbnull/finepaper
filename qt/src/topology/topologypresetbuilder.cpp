@@ -440,7 +440,7 @@ TopologyPresetResult createMesh(Graph* graph,
             return failAndRollback(graph, result, southTarget.error);
         }
     }
-    const ConnectionRuleService ruleService(graph, {}, std::move(packageManifests));
+    const ConnectionRuleService ruleService(graph, std::move(packageManifests));
 
     for (int row = 0; row < rows; ++row) {
         for (int col = 0; col < cols; ++col) {
@@ -513,7 +513,7 @@ TopologyPresetResult createRing(Graph* graph,
 
     const QString east = request.preset.ports.value(QStringLiteral("east"));
     const QString west = request.preset.ports.value(QStringLiteral("west"));
-    const ConnectionRuleService ruleService(graph, {}, std::move(packageManifests));
+    const ConnectionRuleService ruleService(graph, std::move(packageManifests));
     for (int index = 0; index < nodes; ++index) {
         const QString current = scopedGraphId(request.instanceId,
                                               ringNodeId(request.preset.idPattern, index));

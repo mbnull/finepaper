@@ -17,6 +17,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QTemporaryDir>
+#include <chrono>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
@@ -32,19 +33,25 @@ void require(bool condition, const char* message) {
 
 void writeFile(const QString& path, const QByteArray& content) {
     QFile file(path);
-    require(file.open(QIODevice::WriteOnly | QIODevice::Truncate), "failed to open test file");
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        require(false, "failed to open test file");
+    }
     require(file.write(content) == content.size(), "failed to write test file");
 }
 
 QString readText(const QString& path) {
     QFile file(path);
-    require(file.open(QIODevice::ReadOnly), "failed to read test file");
+    if (!file.open(QIODevice::ReadOnly)) {
+        require(false, "failed to read test file");
+    }
     return QString::fromUtf8(file.readAll());
 }
 
 QJsonObject readJsonObject(const QString& path) {
     QFile file(path);
-    require(file.open(QIODevice::ReadOnly), "failed to read JSON file");
+    if (!file.open(QIODevice::ReadOnly)) {
+        require(false, "failed to read JSON file");
+    }
     const QJsonDocument document = QJsonDocument::fromJson(file.readAll());
     require(document.isObject(), "JSON file should contain an object");
     return document.object();
@@ -145,24 +152,24 @@ QJsonObject flowCapture() {
 
 QJsonObject flowCommand(const QString& executable,
                         const QStringList& args,
-                        int timeoutMs = 300000) {
+                        std::chrono::milliseconds deadline = std::chrono::minutes(5)) {
     return QJsonObject{
         {QStringLiteral("executable"), executable},
         {QStringLiteral("args"), jsonStringArray(args)},
         {QStringLiteral("cwd"), QStringLiteral("run_dir")},
-        {QStringLiteral("timeout_ms"), timeoutMs},
+        {QStringLiteral("timeout_ms"), static_cast<qint64>(deadline.count())},
         {QStringLiteral("env"), QJsonObject{{QStringLiteral("allow"), QJsonArray{}}}},
         {QStringLiteral("capture"), flowCapture()}
     };
 }
 
 QJsonObject frameworkToolCommand(const QStringList& args,
-                                 int timeoutMs = 300000) {
+                                 std::chrono::milliseconds deadline = std::chrono::minutes(5)) {
     return QJsonObject{
         {QStringLiteral("framework_tool"), QStringLiteral("ipcraft-generate")},
         {QStringLiteral("args"), jsonStringArray(args)},
         {QStringLiteral("cwd"), QStringLiteral("run_dir")},
-        {QStringLiteral("timeout_ms"), timeoutMs},
+        {QStringLiteral("timeout_ms"), static_cast<qint64>(deadline.count())},
         {QStringLiteral("env"), QJsonObject{{QStringLiteral("allow"), QJsonArray{}}}},
         {QStringLiteral("capture"), flowCapture()}
     };
@@ -318,6 +325,56 @@ private:
     CapturedGenerationFlow* m_capture = nullptr;
 };
 
+class MalformedInputsGenerationFlowProvider final : public GenerationFlowProvider {
+public:
+    bool canRun(const GenerationFlowRequest& request) const override {
+        return request.flowRequest.flowId == QStringLiteral("generate");
+    }
+
+    ipcraft::FlowRunResult run(const GenerationFlowRequest& request) const override {
+        require(QDir().mkpath(QDir(request.outputDirectory).filePath(QStringLiteral("inputs"))),
+                "malformed provider should create inputs directory");
+        writeFile(QDir(request.outputDirectory).filePath(QStringLiteral("inputs/manifest.json")),
+                  QByteArrayLiteral("{not-json"));
+
+        ipcraft::FlowRunResult result;
+        result.ok = true;
+        result.flowId = request.flowRequest.flowId;
+        result.runId = request.flowRequest.runId;
+        result.runRoot = request.flowRequest.runRoot;
+        return result;
+    }
+};
+
+class EscapingRunRootGenerationFlowProvider final : public GenerationFlowProvider {
+public:
+    explicit EscapingRunRootGenerationFlowProvider(QString runRoot)
+        : m_runRoot(std::move(runRoot)) {}
+
+    bool canRun(const GenerationFlowRequest& request) const override {
+        return request.flowRequest.flowId == QStringLiteral("generate");
+    }
+
+    ipcraft::FlowRunResult run(const GenerationFlowRequest& request) const override {
+        require(QDir().mkpath(QDir(request.outputDirectory).filePath(QStringLiteral("inputs"))),
+                "escaping provider should create public inputs directory");
+        writeFile(QDir(request.outputDirectory).filePath(QStringLiteral("inputs/manifest.json")),
+                  QJsonDocument(QJsonObject{{QStringLiteral("schema"),
+                                             ipcraft::schemaids::emittedInputsV1}})
+                      .toJson(QJsonDocument::Indented));
+
+        ipcraft::FlowRunResult result;
+        result.ok = true;
+        result.flowId = request.flowRequest.flowId;
+        result.runId = request.flowRequest.runId;
+        result.runRoot = m_runRoot;
+        return result;
+    }
+
+private:
+    QString m_runRoot;
+};
+
 IpcraftInterfaceDescriptor manifestInterface(const QString& id) {
     IpcraftInterfaceDescriptor descriptor;
     descriptor.id = id;
@@ -427,7 +484,7 @@ IpCatalogEntry createFailingFlowPackage(const QDir& root,
 IpCatalogEntry createSlowFlowPackage(const QDir& root,
                                      const QString& packageId,
                                      const QString& moduleType,
-                                     int timeoutMs) {
+                                     std::chrono::milliseconds deadline) {
     const QString packageRoot =
         root.filePath(QStringLiteral("packages/%1").arg(packageId));
     const QString tool = createSlowGenerator(packageRoot);
@@ -438,7 +495,7 @@ IpCatalogEntry createSlowFlowPackage(const QDir& root,
                                   QStringLiteral("{inputs.manifest}"),
                                   QStringLiteral("--out"),
                                   QStringLiteral("{out}")},
-                                 timeoutMs));
+                                 deadline));
     return flowCatalogEntry(packageId, packageRoot, moduleType);
 }
 
@@ -762,7 +819,7 @@ void testGenerationFailureAndTimeoutFailWholeResult() {
         createSlowFlowPackage(root,
                               QStringLiteral("finepaper.slow"),
                               QStringLiteral("SlowTile"),
-                              50)
+                              std::chrono::milliseconds(50))
     };
     timeoutRequest.instances = {
         instanceRecord(QStringLiteral("finepaper.slow"),
@@ -1159,6 +1216,85 @@ void testInjectedGenerationFlowProviderOverridesDefaultRunner() {
             "provider artifact should be collected");
 }
 
+void testInjectedGenerationFlowProviderMustProduceValidEmittedInputsManifest() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "temporary directory should be valid");
+    QDir root(tempDir.path());
+    const QString ipcoreId = QStringLiteral("org.example.provider.bad_inputs");
+
+    Graph graph;
+    require(graph.addModule(makeModule(QStringLiteral("provider_bad_inputs_runtime"),
+                                       QStringLiteral("Tile"),
+                                       ipcoreId,
+                                       QStringLiteral("provider_bad_inputs_0"),
+                                       QStringLiteral("provider_bad_inputs_tile"))),
+            "provider malformed-input package module should add");
+
+    ProjectGenerationRequest request;
+    request.graph = &graph;
+    request.projectPath = root.filePath(QStringLiteral("project/design.fpproj"));
+    request.catalogEntries = {createFailingFlowPackage(root, ipcoreId, QStringLiteral("Tile"))};
+    request.instances = {
+        instanceRecord(ipcoreId,
+                       QStringLiteral("provider_bad_inputs_0"),
+                       QStringLiteral("bad-inputs-marker"))
+    };
+
+    ProjectGenerationRunner runner;
+    runner.addGenerationFlowProvider(std::make_unique<MalformedInputsGenerationFlowProvider>());
+
+    const ProjectGenerationResult result = runner.generate(request);
+
+    require(!result.success,
+            "provider-backed generation should fail when emitted inputs manifest is malformed");
+    require(result.instances.size() == 1,
+            "malformed provider should still report one instance result");
+    require(!result.instances.first().success,
+            "malformed emitted inputs should fail the instance result");
+    require(result.instances.first().error.contains(QStringLiteral("Emitted inputs manifest")),
+            "malformed emitted inputs error should name the manifest contract");
+}
+
+void testInjectedGenerationFlowProviderCannotReturnUnexpectedRunRoot() {
+    QTemporaryDir tempDir;
+    QTemporaryDir outsideRoot;
+    require(tempDir.isValid(), "temporary directory should be valid");
+    require(outsideRoot.isValid(), "outside run root should be valid");
+    QDir root(tempDir.path());
+    const QString ipcoreId = QStringLiteral("org.example.provider.escaped_run_root");
+
+    Graph graph;
+    require(graph.addModule(makeModule(QStringLiteral("provider_escaped_runtime"),
+                                       QStringLiteral("Tile"),
+                                       ipcoreId,
+                                       QStringLiteral("provider_escaped_0"),
+                                       QStringLiteral("provider_escaped_tile"))),
+            "provider escaped-run-root package module should add");
+
+    ProjectGenerationRequest request;
+    request.graph = &graph;
+    request.projectPath = root.filePath(QStringLiteral("project/design.fpproj"));
+    request.catalogEntries = {createFailingFlowPackage(root, ipcoreId, QStringLiteral("Tile"))};
+    request.instances = {
+        instanceRecord(ipcoreId,
+                       QStringLiteral("provider_escaped_0"),
+                       QStringLiteral("escaped-root-marker"))
+    };
+
+    ProjectGenerationRunner runner;
+    runner.addGenerationFlowProvider(
+        std::make_unique<EscapingRunRootGenerationFlowProvider>(outsideRoot.path()));
+
+    const ProjectGenerationResult result = runner.generate(request);
+
+    require(!result.success,
+            "provider-backed generation should fail when run root escapes the requested root");
+    require(result.instances.size() == 1,
+            "escaped run root provider should still report one instance result");
+    require(result.instances.first().error.contains(QStringLiteral("unexpected run root")),
+            "unexpected run root error should name the trust boundary");
+}
+
 void testInjectedGenerationFlowProviderReceivesFlowContext() {
     QTemporaryDir tempDir;
     require(tempDir.isValid(), "temporary directory should be valid");
@@ -1230,6 +1366,8 @@ int main(int argc, char** argv) {
         testGenerateEmitsInputsForEveryPackageInstance();
         testGenerateRunsBuiltInValidationBeforeCommand();
         testInjectedGenerationFlowProviderOverridesDefaultRunner();
+        testInjectedGenerationFlowProviderMustProduceValidEmittedInputsManifest();
+        testInjectedGenerationFlowProviderCannotReturnUnexpectedRunRoot();
         testInjectedGenerationFlowProviderReceivesFlowContext();
     } catch (const std::exception& error) {
         std::cerr << "projectgenerationrunner_test failed: " << error.what() << '\n';

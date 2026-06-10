@@ -1,9 +1,12 @@
 #include "app/pluginhost.h"
 
+#include <cstddef>
 #include <exception>
 #include <utility>
 
 namespace {
+
+constexpr std::size_t kMaxRegisteredPlugins = 1024;
 
 bool isCanonicalPluginId(const QString& id) {
     return !id.isEmpty() && id == id.trimmed();
@@ -27,7 +30,11 @@ bool PluginHost::registerPlugin(std::unique_ptr<IAppPlugin> plugin) {
     }
 
     const QString id = plugin->id();
-    if (!isCanonicalPluginId(id) || hasPluginId(id) || m_activated || m_activationFailed) {
+    if (!isCanonicalPluginId(id) ||
+        hasPluginId(id) ||
+        m_activated ||
+        m_activationFailed ||
+        m_plugins.size() >= kMaxRegisteredPlugins) {
         return false;
     }
 
@@ -57,6 +64,8 @@ PluginActivationResult PluginHost::activatePlugins() {
         return result;
     }
 
+    m_activatedPluginIds.clear();
+    m_activatedPluginIds.reserve(static_cast<qsizetype>(m_plugins.size()));
     for (const std::unique_ptr<IAppPlugin>& plugin : m_plugins) {
         const QString pluginId = plugin->id();
         try {

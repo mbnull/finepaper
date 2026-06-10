@@ -3,12 +3,14 @@
 namespace {
 
 bool isValidId(const QString& id) {
-    return !id.trimmed().isEmpty();
+    return !id.isEmpty() && id == id.trimmed();
 }
 
 bool isValidObjectName(const QString& objectName) {
-    return !objectName.trimmed().isEmpty();
+    return !objectName.isEmpty() && objectName == objectName.trimmed();
 }
+
+constexpr qsizetype kMaxWorkbenchContributions = 1024;
 
 } // namespace
 
@@ -17,6 +19,7 @@ bool WorkbenchService::addAction(const WorkbenchActionContribution& contribution
         contribution.text.trimmed().isEmpty() ||
         !isValidObjectName(contribution.objectName) ||
         !contribution.factory ||
+        m_actions.size() >= kMaxWorkbenchContributions ||
         hasActionId(contribution.id)) {
         return false;
     }
@@ -30,6 +33,7 @@ bool WorkbenchService::addPanel(const WorkbenchPanelContribution& contribution) 
         contribution.title.trimmed().isEmpty() ||
         !isValidObjectName(contribution.objectName) ||
         !contribution.factory ||
+        m_panels.size() >= kMaxWorkbenchContributions ||
         hasPanelId(contribution.id)) {
         return false;
     }
@@ -43,6 +47,7 @@ bool WorkbenchService::addEditor(const WorkbenchEditorContribution& contribution
         contribution.title.trimmed().isEmpty() ||
         !isValidObjectName(contribution.objectName) ||
         !contribution.factory ||
+        m_editors.size() >= kMaxWorkbenchContributions ||
         hasEditorId(contribution.id)) {
         return false;
     }

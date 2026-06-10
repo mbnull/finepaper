@@ -69,10 +69,6 @@ ProjectServiceResult ProjectService::createNew(const QString& projectName) {
 
 ProjectServiceResult ProjectService::loadFile(const QString& path) {
     const QString absolutePath = QFileInfo(path).absoluteFilePath();
-    if (ProjectReader::detectKind(absolutePath) != ProjectFileKind::Project) {
-        return failureResult(QStringLiteral("Unsupported document format: ") + absolutePath);
-    }
-
     const ProjectReadResult readResult = ProjectReader::readFile(absolutePath);
     if (!readResult.success) {
         return failureResult(readResult.error, readResult.diagnostics);

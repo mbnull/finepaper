@@ -20,6 +20,15 @@ void require(bool condition, const char* message) {
     }
 }
 
+bool hasDiagnosticRule(const ProjectServiceResult& result, const QString& ruleId) {
+    for (const ipcraft::Diagnostic& diagnostic : result.diagnostics.records) {
+        if (diagnostic.ruleId == ruleId) {
+            return true;
+        }
+    }
+    return false;
+}
+
 ipcraft::core::ProjectDesign patchableDesign() {
     ipcraft::core::ProjectDesign design;
     design.schema = ipcraft::schemaids::projectV1;
@@ -177,14 +186,42 @@ void testRejectsUnsupportedDocumentKind() {
     require(tempDir.isValid(), "temporary directory should be valid");
     const QString path = QDir(tempDir.path()).filePath(QStringLiteral("not-a-project.json"));
     QFile file(path);
-    require(file.open(QIODevice::WriteOnly | QIODevice::Truncate), "fixture should open");
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        require(false, "fixture should open");
+    }
     file.write("{\"schema\":\"unknown\"}");
     file.close();
 
     ProjectService service;
     const ProjectServiceResult result = service.loadFile(path);
     require(!result.success, "loadFile should reject unsupported project kind");
+    require(result.error.contains(QStringLiteral("Unsupported project schema")),
+            "unsupported project schema error should come from ProjectReader");
+    require(hasDiagnosticRule(result, QStringLiteral("project.unsupported_schema")),
+            "unsupported project schema should expose structured diagnostics");
     require(!service.hasDocument(), "failed load should not replace current document");
+}
+
+void testLoadFileReportsInvalidJsonDiagnostics() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "temporary directory should be valid");
+    const QString path = QDir(tempDir.path()).filePath(QStringLiteral("broken.fpproj"));
+    QFile file(path);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        require(false, "invalid JSON fixture should open");
+    }
+    file.write("{not-json");
+    file.close();
+
+    ProjectService service;
+    const ProjectServiceResult result = service.loadFile(path);
+
+    require(!result.success, "loadFile should reject invalid JSON");
+    require(result.error.contains(QStringLiteral("Invalid project JSON")),
+            "invalid JSON error should come from ProjectReader");
+    require(hasDiagnosticRule(result, QStringLiteral("project.invalid_json")),
+            "invalid JSON should expose structured diagnostics");
+    require(!service.hasDocument(), "failed invalid JSON load should not replace current document");
 }
 
 } // namespace
@@ -199,6 +236,7 @@ int main(int argc, char** argv) {
         testReplaceDocumentClearsSavedPath();
         testApplyDesignPatch();
         testRejectsUnsupportedDocumentKind();
+        testLoadFileReportsInvalidJsonDiagnostics();
     } catch (const std::exception& exception) {
         qCritical("%s", exception.what());
         return 1;

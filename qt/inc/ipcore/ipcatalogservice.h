@@ -25,7 +25,7 @@ struct IpCatalogEntry {
     QString name;
     QString version;
     QString kind;
-    std::optional<int> maxInstances;
+    std::optional<int> maxInstances = std::nullopt;
     QVector<IpCatalogInstanceLimit> instanceLimits;
     IpcraftPackageManifest packageManifest;
     // Compatibility fields mirror package metadata for descriptor-facing UI and runner paths.

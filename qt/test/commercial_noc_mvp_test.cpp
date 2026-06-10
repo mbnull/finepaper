@@ -83,21 +83,25 @@ void writeFile(const QString& path, const QByteArray& content) {
     const QFileInfo info(path);
     require(QDir().mkpath(info.absolutePath()), "test output directory should be created");
     QFile file(path);
-    require(file.open(QIODevice::WriteOnly | QIODevice::Truncate), "test file should open");
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        require(false, "test file should open");
+    }
     require(file.write(content) == content.size(), "test file should write");
 }
 
 QString readText(const QString& path) {
     QFile file(path);
-    requireMessage(file.open(QIODevice::ReadOnly),
-                   QStringLiteral("Text file should open: %1").arg(path));
+    if (!file.open(QIODevice::ReadOnly)) {
+        requireMessage(false, QStringLiteral("Text file should open: %1").arg(path));
+    }
     return QString::fromUtf8(file.readAll());
 }
 
 QJsonObject readJsonObject(const QString& path) {
     QFile file(path);
-    requireMessage(file.open(QIODevice::ReadOnly),
-                   QStringLiteral("JSON file should open: %1").arg(path));
+    if (!file.open(QIODevice::ReadOnly)) {
+        requireMessage(false, QStringLiteral("JSON file should open: %1").arg(path));
+    }
     const QJsonDocument document = QJsonDocument::fromJson(file.readAll());
     requireMessage(document.isObject(),
                    QStringLiteral("JSON file should contain object: %1").arg(path));
@@ -312,12 +316,11 @@ QVector<ConnectionInterfaceRef> graphInterfaces(
 }
 
 void addResolvedConnection(Graph& graph,
-                           const QVector<ProjectIpInstanceRecord>& instances,
                            const QVector<IpcraftPackageManifest>& manifests,
                            const QString& id,
                            const PortRef& source,
                            const PortRef& target) {
-    ConnectionRuleService rules(&graph, instances, manifests);
+    ConnectionRuleService rules(&graph, manifests);
     const ConnectionCheckResult result =
         rules.check(ConnectionRequest::portToPort(source,
                                                   target,
@@ -353,9 +356,11 @@ ProjectIpInstanceRecord instanceRecord(const IpCatalogEntry& entry,
 }
 
 struct WorkflowContext {
+    WorkflowContext() : registry(ModuleRegistry::LoadMode::Empty) {}
+
     QString packageRoot;
     QVector<IpcraftPackageManifest> manifests;
-    ModuleRegistry registry{ModuleRegistry::LoadMode::Empty};
+    ModuleRegistry registry;
     IpCatalogService catalog;
     IpCatalogEntry entry;
 };
@@ -564,7 +569,6 @@ void attachOpenNoCAgent(Graph& graph,
                       x,
                       y);
     addResolvedConnection(graph,
-                          instances,
                           context.manifests,
                           agentId + QStringLiteral("_to_") + xpLogicalId + QLatin1Char('_') + xpPort,
                           PortRef{agentId, QStringLiteral("chi")},
