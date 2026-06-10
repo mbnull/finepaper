@@ -836,6 +836,32 @@ target("pluginhost_foundation_test")
         pass_outputs = "pluginhost_foundation_test passed"
     })
 
+target("projectplugin_test")
+    add_rules("qt.widgetapp")
+    set_kind("binary")
+    set_group("test")
+    set_default(false)
+    set_languages("c++23")
+
+    add_includedirs("inc")
+    add_files("test/projectplugin_test.cpp")
+    add_files("src/app/workbenchservice.cpp")
+    add_files("src/app/pluginhost.cpp")
+    add_files("src/project/projectservice.cpp")
+    add_files("src/project/projectplugin.cpp")
+    add_files("src/project/projectreader.cpp")
+    add_files("src/project/projectwriter.cpp")
+    add_files("src/ipcraft/compositionmodel.cpp")
+    add_files("src/ipcraft/core/project_design.cpp")
+    add_files("src/ipcraft/core/project_patch.cpp")
+    add_files("src/ipcraft/diagnostics.cpp")
+    add_files("src/ipcraft/jsonhelpers.cpp")
+    add_files("inc/project/projectservice.h")
+    add_tests("default", {
+        trim_output = true,
+        pass_outputs = "projectplugin_test passed"
+    })
+
 target("plugin_architecture_phase1_scan_test")
     add_rules("qt.console")
     set_kind("binary")
