@@ -25,7 +25,7 @@ public:
     const QVector<IpcraftPackageManifest>& manifests() const;
     const QVector<IpcraftDiagnostic>& diagnostics() const;
     const IpCatalogService& catalog() const;
-    ModuleRegistry* moduleRegistry() const;
+    const ModuleRegistry* moduleRegistry() const;
 
 private:
     ModuleRegistry* m_moduleRegistry = nullptr;

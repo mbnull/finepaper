@@ -49,6 +49,6 @@ const IpCatalogService& PackageService::catalog() const {
     return m_catalog;
 }
 
-ModuleRegistry* PackageService::moduleRegistry() const {
+const ModuleRegistry* PackageService::moduleRegistry() const {
     return m_moduleRegistry;
 }
