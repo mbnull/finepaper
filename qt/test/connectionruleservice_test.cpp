@@ -841,8 +841,10 @@ void testConnectionRuleServiceUsesInterfaceClassesNotLegacyBusNames() {
                                       PortRef{QStringLiteral("xp"), QStringLiteral("local0")},
                                       ConnectionRequestKind::Programmatic));
 
-    require(result.status == ConnectionCheckStatus::Allowed,
-            result.message.toLocal8Bit().constData());
+    require(result.status == ConnectionCheckStatus::Warning,
+            "ambiguous package class validation should surface as a warning");
+    require(result.hasSingleOption(),
+            "warning connection result should remain auto-connectable");
     require(result.options.size() == 1,
             "interface class validation should produce one port option");
     require(result.options.first().connectionStatus == QStringLiteral("ambiguous"),

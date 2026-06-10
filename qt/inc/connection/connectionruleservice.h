@@ -1,6 +1,7 @@
 // ConnectionRuleService resolves v1 editor-time connection requests.
 #pragma once
 
+#include "connection/connectionruleprovider.h"
 #include "graph/connection.h"
 #include "graph/parameter.h"
 #include "ipcraft/ipcraftmanifest.h"
@@ -12,7 +13,9 @@
 #include <QString>
 #include <QStringList>
 #include <QVector>
+#include <memory>
 #include <optional>
+#include <vector>
 
 class Graph;
 class Module;
@@ -96,6 +99,7 @@ enum class ConnectionRuleLayer {
 
 enum class ConnectionCheckStatus {
     Allowed,
+    Warning,
     NeedsSelection,
     Rejected,
 };
@@ -119,7 +123,9 @@ struct ConnectionCheckResult {
     QString message;
 
     bool hasSingleOption() const {
-        return status == ConnectionCheckStatus::Allowed && options.size() == 1;
+        return options.size() == 1 &&
+               (status == ConnectionCheckStatus::Allowed ||
+                status == ConnectionCheckStatus::Warning);
     }
 };
 
@@ -130,8 +136,13 @@ public:
     ConnectionRuleService(const Graph* graph,
                           QVector<ProjectIpInstanceRecord> ipInstanceRecords,
                           QVector<IpcraftPackageManifest> manifests);
+    ~ConnectionRuleService();
+
+    ConnectionRuleService(const ConnectionRuleService&) = delete;
+    ConnectionRuleService& operator=(const ConnectionRuleService&) = delete;
 
     ConnectionCheckResult check(const ConnectionRequest& request) const;
+    void addRuleProvider(std::unique_ptr<ConnectionRuleProvider> provider);
 
 private:
     ConnectionCheckResult reject(ConnectionRuleLayer layer, QString reasonCode, QString message) const;
@@ -150,4 +161,5 @@ private:
     const Graph* m_graph = nullptr;
     QVector<ProjectIpInstanceRecord> m_ipInstanceRecords;
     QVector<IpcraftPackageManifest> m_manifests;
+    std::vector<std::unique_ptr<ConnectionRuleProvider>> m_ruleProviders;
 };

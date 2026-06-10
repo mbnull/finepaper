@@ -3,7 +3,6 @@
 #include "common/portlayout.h"
 #include "graph/graph.h"
 #include "graph/module.h"
-#include "ipcraft/ipcraftconnectionvalidator.h"
 #include "modules/modulelabels.h"
 #include "modules/moduleregistry.h"
 #include "modules/moduletypemetadata.h"
@@ -156,11 +155,7 @@ bool endpointAllowsAsTarget(const ConnectionEndpointRequest& endpoint);
 bool roleAllowsAsSource(const QString& role);
 bool roleAllowsAsTarget(const QString& role);
 bool endpointsAreBidirectionalPeerLink(const PortSemanticInfo& source, const PortSemanticInfo& target);
-ProjectConnectionInterfaceRef interfaceRefForPort(const PortSemanticInfo& port);
 QVector<ProjectConnectionRecord> currentProjectConnectionRecords(const Graph* graph);
-bool usesIpcraftClassValidation(const PortSemanticInfo& source, const PortSemanticInfo& target);
-IpcraftConnectionParticipant participantForPort(const PortSemanticInfo& port);
-QString statusString(IpcraftConnectionStatus status);
 
 struct CandidateEvaluation {
     bool accepted = false;
@@ -541,13 +536,6 @@ void disambiguateDuplicateLabels(QVector<ConnectionResolvedOption>& options, con
     }
 }
 
-ProjectConnectionInterfaceRef interfaceRefForPort(const PortSemanticInfo& port) {
-    return ProjectConnectionInterfaceRef{
-        port.ref.moduleId,
-        port.interfaceId.isEmpty() ? port.ref.portId : port.interfaceId
-    };
-}
-
 QVector<ProjectConnectionRecord> currentProjectConnectionRecords(const Graph* graph) {
     QVector<ProjectConnectionRecord> records;
     if (!graph) {
@@ -587,29 +575,6 @@ QVector<ProjectConnectionRecord> currentProjectConnectionRecords(const Graph* gr
     return records;
 }
 
-bool usesIpcraftClassValidation(const PortSemanticInfo& source,
-                                const PortSemanticInfo& target) {
-    return !source.acceptRules.isEmpty() && !target.acceptRules.isEmpty();
-}
-
-IpcraftConnectionParticipant participantForPort(const PortSemanticInfo& port) {
-    IpcraftConnectionParticipant participant;
-    participant.packageId = port.packageId.isEmpty() ? port.ipcoreId : port.packageId;
-    participant.moduleId = port.manifestModuleId.isEmpty() ? port.moduleType : port.manifestModuleId;
-    participant.interfaceRef = interfaceRefForPort(port);
-    return participant;
-}
-
-QString statusString(IpcraftConnectionStatus status) {
-    if (status == IpcraftConnectionStatus::Valid) {
-        return QStringLiteral("valid");
-    }
-    if (status == IpcraftConnectionStatus::Ambiguous) {
-        return QStringLiteral("ambiguous");
-    }
-    return QStringLiteral("invalid");
-}
-
 } // namespace
 
 ConnectionRequest ConnectionRequest::portToPort(const PortRef& start,
@@ -636,7 +601,17 @@ ConnectionRuleService::ConnectionRuleService(const Graph* graph,
                                              QVector<IpcraftPackageManifest> manifests)
     : m_graph(graph),
       m_ipInstanceRecords(std::move(ipInstanceRecords)),
-      m_manifests(std::move(manifests)) {}
+      m_manifests(std::move(manifests)) {
+    addRuleProvider(std::make_unique<PackageConnectionRuleProvider>());
+}
+
+ConnectionRuleService::~ConnectionRuleService() = default;
+
+void ConnectionRuleService::addRuleProvider(std::unique_ptr<ConnectionRuleProvider> provider) {
+    if (provider) {
+        m_ruleProviders.push_back(std::move(provider));
+    }
+}
 
 ConnectionCheckResult ConnectionRuleService::reject(ConnectionRuleLayer layer,
                                                     QString reasonCode,
@@ -793,7 +768,6 @@ QVector<ConnectionResolvedOption> ConnectionRuleService::buildOptions(
             });
     };
     std::optional<QVector<ProjectConnectionRecord>> currentConnections = std::nullopt;
-    std::optional<IpcraftConnectionValidator> validator = std::nullopt;
 
     const auto filterAutocompleteCandidates = [](const QVector<PortSemanticInfo>& fixedPorts,
                                                  const QVector<PortSemanticInfo>& hiddenPorts) {
@@ -832,8 +806,15 @@ QVector<ConnectionResolvedOption> ConnectionRuleService::buildOptions(
             return;
         }
 
-        std::optional<IpcraftConnectionDecision> ipcraftDecision = std::nullopt;
-        if (usesIpcraftClassValidation(source, target)) {
+        QVector<const ConnectionRuleProvider*> matchingProviders;
+        for (const std::unique_ptr<ConnectionRuleProvider>& provider : m_ruleProviders) {
+            if (provider && provider->canEvaluate(source, target)) {
+                matchingProviders.push_back(provider.get());
+            }
+        }
+
+        std::optional<ConnectionRuleProviderResult> providerDecision = std::nullopt;
+        if (!matchingProviders.isEmpty()) {
             const CandidateEvaluation editorRule =
                 checkEditorDirectionRules(source, target, sourceEndpoint, targetEndpoint);
             if (!editorRule.accepted) {
@@ -854,23 +835,24 @@ QVector<ConnectionResolvedOption> ConnectionRuleService::buildOptions(
             if (!currentConnections.has_value()) {
                 currentConnections = currentProjectConnectionRecords(m_graph);
             }
-            if (!validator.has_value()) {
-                validator.emplace(m_manifests, *currentConnections);
-            }
-            const IpcraftConnectionDecision decision = validator->validate(
-                {participantForPort(source), participantForPort(target)},
-                request.connectionClassId);
-            if (decision.status == IpcraftConnectionStatus::Invalid) {
-                if (rejectionLayer) *rejectionLayer = ConnectionRuleLayer::EditorRule;
-                if (rejectionReason) {
-                    *rejectionReason = decision.message.contains(QStringLiteral("already used"))
-                        ? QStringLiteral("interface_occupied")
-                        : QStringLiteral("interface_class_mismatch");
+            for (const ConnectionRuleProvider* provider : matchingProviders) {
+                const ConnectionRuleProviderResult decision = provider->evaluate(
+                    ConnectionRuleProviderRequest{source,
+                                                  target,
+                                                  request.connectionClassId,
+                                                  m_manifests,
+                                                  *currentConnections});
+                if (!decision.accepted()) {
+                    if (rejectionLayer) *rejectionLayer = ConnectionRuleLayer::EditorRule;
+                    if (rejectionReason) *rejectionReason = decision.reasonCode;
+                    if (rejectionMessage) *rejectionMessage = decision.message;
+                    return;
                 }
-                if (rejectionMessage) *rejectionMessage = decision.message;
-                return;
+                if (!providerDecision.has_value() ||
+                    decision.status == ConnectionRuleProviderStatus::Warning) {
+                    providerDecision = decision;
+                }
             }
-            ipcraftDecision = decision;
         } else {
             const CandidateEvaluation editorRule =
                 checkEditorDeclarativeRules(m_graph, source, target, sourceEndpoint, targetEndpoint);
@@ -898,11 +880,11 @@ QVector<ConnectionResolvedOption> ConnectionRuleService::buildOptions(
         option.source = source.ref;
         option.target = target.ref;
         option.label = connectionOptionLabel(m_graph, source.ref, target.ref);
-        if (ipcraftDecision.has_value()) {
-            option.connectionClassId = ipcraftDecision->selectedClassId;
-            option.connectionStatus = statusString(ipcraftDecision->status);
-            option.alternatives = ipcraftDecision->alternatives;
-            option.normalizedInterfaces = ipcraftDecision->normalizedInterfaces;
+        if (providerDecision.has_value()) {
+            option.connectionClassId = providerDecision->connectionClassId;
+            option.connectionStatus = providerDecision->connectionStatus;
+            option.alternatives = providerDecision->alternatives;
+            option.normalizedInterfaces = providerDecision->normalizedInterfaces;
         }
         options.push_back(std::move(option));
     };
@@ -964,9 +946,16 @@ ConnectionCheckResult ConnectionRuleService::check(const ConnectionRequest& requ
         return lhs.label < rhs.label;
     });
 
+    const bool hasWarningOption = std::any_of(options.cbegin(), options.cend(),
+        [](const ConnectionResolvedOption& option) {
+            return option.connectionStatus != QStringLiteral("valid");
+        });
+
     ConnectionCheckResult result;
-    result.status = options.size() == 1 ? ConnectionCheckStatus::Allowed
-                                        : ConnectionCheckStatus::NeedsSelection;
+    result.status = options.size() == 1
+        ? (hasWarningOption ? ConnectionCheckStatus::Warning
+                            : ConnectionCheckStatus::Allowed)
+        : ConnectionCheckStatus::NeedsSelection;
     result.layer = ConnectionRuleLayer::Ipcore;
     result.options = std::move(options);
     return result;
