@@ -2,8 +2,10 @@
 #include "app/appsettings.h"
 #include "app/servicekey.h"
 #include "app/serviceregistry.h"
+#include "commands/addipinstancecommand.h"
 #include "commands/addmodulecommand.h"
 #include "commands/commandmanager.h"
+#include "commands/setipinstanceparametercommand.h"
 #include "ipcraft/schemaids.h"
 #include "ipcore/ipcatalogservice.h"
 #include "graph/graph.h"
@@ -183,7 +185,8 @@ ipcraft::core::ProjectPatch setComponentConfigPatch(const QString& componentId,
     return patch;
 }
 
-ipcraft::core::ProjectPatch addDesignComponentPatch(const QString& componentId) {
+ipcraft::core::ProjectPatch addDesignComponentPatch(const QString& componentId,
+                                                    const QString& packageRef) {
     ipcraft::core::ProjectPatch patch;
     patch.schema = ipcraft::schemaids::patchV1;
     patch.id = QStringLiteral("add-design-component");
@@ -195,11 +198,15 @@ ipcraft::core::ProjectPatch addDesignComponentPatch(const QString& componentId) 
         QJsonObject{
             {QStringLiteral("id"), componentId},
             {QStringLiteral("type"), QStringLiteral("DesignComponent")},
-            {QStringLiteral("packageRef"), QStringLiteral("vendor.designpkg")},
+            {QStringLiteral("packageRef"), packageRef},
             {QStringLiteral("config"), QJsonObject{{QStringLiteral("width"), 8}}}
         }
     });
     return patch;
+}
+
+ipcraft::core::ProjectPatch addDesignComponentPatch(const QString& componentId) {
+    return addDesignComponentPatch(componentId, QStringLiteral("vendor.designpkg"));
 }
 
 QString repositoryPath(const QString& relativePath) {
@@ -431,6 +438,63 @@ bool graphConfigHasObject(const ProjectDocument& document,
         }
     }
     return false;
+}
+
+ProjectIpInstanceRecord addCatalogInstanceViaCommand(MainWindow& window,
+                                                     const QString& ipcoreId) {
+    const std::optional<IpCatalogEntry> entry = window.m_ipCatalogService->entry(ipcoreId);
+    require(entry.has_value(), "catalog entry should exist before adding an instance");
+    std::unique_ptr<Command> rejected = window.m_commandManager->executeCommand(
+        std::make_unique<AddIpInstanceCommand>(window.m_projectStateService.get(),
+                                               window.m_projectIpService.get(),
+                                               *entry));
+    require(rejected == nullptr, "catalog instance command should execute");
+    require(window.m_projectIpService->selectedIpInstanceRecord().has_value(),
+            "new catalog instance should become selected");
+    processEventsFor(0);
+    return *window.m_projectIpService->selectedIpInstanceRecord();
+}
+
+void setIpInstanceParameterViaCommand(MainWindow& window,
+                                      const QString& ipcoreId,
+                                      const QString& instanceId,
+                                      const QString& name,
+                                      const QJsonValue& value) {
+    std::unique_ptr<Command> rejected = window.m_commandManager->executeCommand(
+        std::make_unique<SetIpInstanceParameterCommand>(
+            window.m_projectStateService.get(),
+            ipcoreId,
+            instanceId,
+            QStringLiteral("global_parameters"),
+            name,
+            value));
+    require(rejected == nullptr, "IP instance parameter command should execute");
+    processEventsFor(0);
+}
+
+const ProjectIpInstanceRecord* findInstanceRecord(const ProjectDocument& document,
+                                                  const QString& instanceId) {
+    for (const ProjectIpInstanceRecord& instance : document.instances) {
+        if (instance.id == instanceId) {
+            return &instance;
+        }
+    }
+    return nullptr;
+}
+
+bool documentHasInstance(const ProjectDocument& document, const QString& instanceId) {
+    return findInstanceRecord(document, instanceId) != nullptr;
+}
+
+int savedParameterValue(const ProjectDocument& document,
+                        const QString& instanceId,
+                        const QString& parameterName) {
+    const ProjectIpInstanceRecord* instance = findInstanceRecord(document, instanceId);
+    require(instance != nullptr, "saved document should contain the requested instance");
+    return instance->config.value(QStringLiteral("parameters"))
+        .toObject()
+        .value(parameterName)
+        .toInt();
 }
 
 QListWidgetItem* firstListItemContaining(QListWidget* list, const QString& text) {
@@ -1270,9 +1334,185 @@ void testMainWindowSavePersistsMixedGraphAndDesignEdits() {
             "mixed save should persist the design-added component");
 }
 
+void testProjectStateInstanceAddedAfterDesignCacheSurvivesProjectionSave() {
+    ModuleRegistryRestore restoreRegistry;
+    QTemporaryDir settingsRoot;
+    QTemporaryDir packageRoot;
+    QTemporaryDir tempDir;
+    require(settingsRoot.isValid() && packageRoot.isValid() && tempDir.isValid(),
+            "temporary directories should be valid");
+
+    const QString packageId = QStringLiteral("org.example.ownership");
+    writePackageWithParameter(packageRoot.path(),
+                              packageId,
+                              QStringLiteral("lane_width"),
+                              QStringLiteral("Lane Width"));
+    configureSettingsRoot(settingsRoot.path(), QStringLiteral("ownership_instance_save_app"));
+    AppSettings().setIpcorePaths({packageRoot.path()});
+
+    const QString projectPath = tempDir.filePath(QStringLiteral("ownership_instances.fpproj"));
+    {
+        MainWindow window;
+        require(window.createProjectAt(projectPath),
+                "project should be created before the first catalog instance");
+        const ProjectIpInstanceRecord first = addCatalogInstanceViaCommand(window, packageId);
+        require(first.instanceId == QStringLiteral("ownership_0"),
+                "first package instance should use a stable id");
+        require(window.saveDocument(projectPath),
+                "first save should persist the initial project-state instance");
+    }
+    {
+        ProjectService setupReload;
+        const ProjectServiceResult setupLoad = setupReload.loadFile(projectPath);
+        require(setupLoad.success, "first ownership save should reload as valid project");
+        require(documentHasInstance(setupReload.document(), QStringLiteral("ownership_0")),
+                "first ownership save should contain the initial project-state instance");
+    }
+
+    {
+        MainWindow window;
+        require(window.loadGraph(projectPath),
+                "saved catalog instance project should reload before second edit");
+        require(!designEditingServiceFromRegistry(window)->design().components.isEmpty(),
+                "reload should seed a non-empty design-editing cache");
+        const ProjectIpInstanceRecord second = addCatalogInstanceViaCommand(window, packageId);
+        require(second.instanceId == QStringLiteral("ownership_1"),
+                "second package instance should use the next stable id");
+        require(window.saveDocument(projectPath),
+                "projection save should preserve project-state instances despite design cache");
+    }
+
+    ProjectService reloaded;
+    const ProjectServiceResult loadResult = reloaded.loadFile(projectPath);
+    require(loadResult.success, "ownership instance project should reload after projection save");
+    require(documentHasInstance(reloaded.document(), QStringLiteral("ownership_0")),
+            "projection save should keep the cached design instance");
+    require(documentHasInstance(reloaded.document(), QStringLiteral("ownership_1")),
+            "projection save should not drop the newly added project-state instance");
+}
+
+void testProjectStateParameterWinsOverStaleDesignCacheOnProjectionSave() {
+    ModuleRegistryRestore restoreRegistry;
+    QTemporaryDir settingsRoot;
+    QTemporaryDir packageRoot;
+    QTemporaryDir tempDir;
+    require(settingsRoot.isValid() && packageRoot.isValid() && tempDir.isValid(),
+            "temporary directories should be valid");
+
+    const QString packageId = QStringLiteral("org.example.parameterownership");
+    writePackageWithParameter(packageRoot.path(),
+                              packageId,
+                              QStringLiteral("lane_width"),
+                              QStringLiteral("Lane Width"));
+    configureSettingsRoot(settingsRoot.path(), QStringLiteral("ownership_parameter_save_app"));
+    AppSettings().setIpcorePaths({packageRoot.path()});
+
+    const QString projectPath = tempDir.filePath(QStringLiteral("ownership_parameter.fpproj"));
+    {
+        MainWindow window;
+        require(window.createProjectAt(projectPath),
+                "project should be created before parameter ownership setup");
+        const ProjectIpInstanceRecord first = addCatalogInstanceViaCommand(window, packageId);
+        require(first.instanceId == QStringLiteral("parameterownership_0"),
+                "first parameter package instance should use a stable id");
+        require(window.saveDocument(projectPath),
+                "first save should persist the default parameter");
+    }
+
+    {
+        MainWindow window;
+        require(window.loadGraph(projectPath),
+                "parameter project should reload before editing project-state config");
+        require(savedParameterValue(window.m_projectService->document(),
+                                    QStringLiteral("parameterownership_0"),
+                                    QStringLiteral("lane_width")) == 7,
+                "loaded design cache should start with the default parameter");
+        setIpInstanceParameterViaCommand(window,
+                                         packageId,
+                                         QStringLiteral("parameterownership_0"),
+                                         QStringLiteral("lane_width"),
+                                         13);
+        require(window.saveDocument(projectPath),
+                "projection save should persist edited project-state parameters");
+    }
+
+    ProjectService reloaded;
+    const ProjectServiceResult loadResult = reloaded.loadFile(projectPath);
+    require(loadResult.success, "parameter ownership project should reload after save");
+    require(savedParameterValue(reloaded.document(),
+                                QStringLiteral("parameterownership_0"),
+                                QStringLiteral("lane_width")) == 13,
+            "project-state parameter should win over stale design cache for matching instance");
+}
+
+void testMixedDesignOnlyAndProjectStateEditsSurviveOwnershipMerge() {
+    ModuleRegistryRestore restoreRegistry;
+    QTemporaryDir settingsRoot;
+    QTemporaryDir packageRoot;
+    QTemporaryDir tempDir;
+    require(settingsRoot.isValid() && packageRoot.isValid() && tempDir.isValid(),
+            "temporary directories should be valid");
+
+    const QString packageId = QStringLiteral("org.example.mixedownership");
+    writePackageWithParameter(packageRoot.path(),
+                              packageId,
+                              QStringLiteral("lane_width"),
+                              QStringLiteral("Lane Width"));
+    configureSettingsRoot(settingsRoot.path(), QStringLiteral("ownership_mixed_save_app"));
+    AppSettings().setIpcorePaths({packageRoot.path()});
+
+    const QString projectPath = tempDir.filePath(QStringLiteral("mixed_ownership.fpproj"));
+    {
+        MainWindow window;
+        require(window.createProjectAt(projectPath),
+                "project should be created before mixed ownership setup");
+        const ProjectIpInstanceRecord first = addCatalogInstanceViaCommand(window, packageId);
+        require(first.instanceId == QStringLiteral("mixedownership_0"),
+                "first mixed package instance should use a stable id");
+        require(window.saveDocument(projectPath),
+                "first save should seed the design cache with a project-state instance");
+    }
+
+    {
+        MainWindow window;
+        require(window.loadGraph(projectPath),
+                "mixed ownership project should reload before mixed edits");
+        DesignEditingService* editing = designEditingServiceFromRegistry(window);
+        ipcraft::core::ProjectDesign designWithDesignOnlyComponent = editing->design();
+        ipcraft::core::ComponentInstance designOnlyComponent;
+        designOnlyComponent.id = QStringLiteral("design_only_component");
+        designOnlyComponent.type = QStringLiteral("DesignComponent");
+        designOnlyComponent.packageRef = packageId + QStringLiteral("@1.0.0");
+        designOnlyComponent.config.insert(QStringLiteral("width"), 8);
+        designWithDesignOnlyComponent.components.append(designOnlyComponent);
+        editing->replaceDesign(designWithDesignOnlyComponent);
+        require(window.m_designEditingDirty,
+                "design-only component edit should mark design editing dirty before mixed save");
+        const ProjectIpInstanceRecord second = addCatalogInstanceViaCommand(window, packageId);
+        require(second.instanceId == QStringLiteral("mixedownership_1"),
+                "second mixed package instance should use the next stable id");
+        require(window.saveDocument(projectPath),
+                "mixed design and project-state save should preserve both ownership domains");
+    }
+
+    ProjectService reloaded;
+    const ProjectServiceResult loadResult = reloaded.loadFile(projectPath);
+    require(loadResult.success, "mixed ownership project should reload after save");
+    require(designHasComponentWithWidth(reloaded.design(),
+                                        QStringLiteral("design_only_component"),
+                                        8),
+            "mixed ownership save should preserve the design-only component");
+    require(documentHasInstance(reloaded.document(), QStringLiteral("mixedownership_1")),
+            "mixed ownership save should preserve the project-state catalog instance");
+}
+
 void testNewProjectAddsIpcraftPackageInstanceFromCatalog() {
     QTemporaryDir tempDir;
-    require(tempDir.isValid(), "temporary directory should be valid");
+    QTemporaryDir settingsRoot;
+    require(tempDir.isValid() && settingsRoot.isValid(), "temporary directory should be valid");
+    configureSettingsRoot(settingsRoot.path(),
+                          QStringLiteral("ipcatalogpanel_new_project_catalog_app"));
+    AppSettings().setIpcorePaths(QStringList{repositoryPath(QStringLiteral("ipcores"))});
 
     MainWindow window;
     const QString projectPath = tempDir.filePath(QStringLiteral("catalog_add_package.fpproj"));
@@ -1538,6 +1778,9 @@ int main(int argc, char** argv) {
         testDesignEditingServiceAddComponentPersistsThroughMainWindowSave();
         testSavedDesignEditSurvivesLaterGraphProjectionSave();
         testMainWindowSavePersistsMixedGraphAndDesignEdits();
+        testProjectStateInstanceAddedAfterDesignCacheSurvivesProjectionSave();
+        testProjectStateParameterWinsOverStaleDesignCacheOnProjectionSave();
+        testMixedDesignOnlyAndProjectStateEditsSurviveOwnershipMerge();
         testNewProjectAddsIpcraftPackageInstanceFromCatalog();
         testAmbiguousConnectionAppearsInPropertyPanelAndLog();
         testCatalogReloadUsesConfiguredPackageRoots();

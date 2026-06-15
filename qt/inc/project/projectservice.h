@@ -33,6 +33,7 @@ public:
     ProjectServiceResult replaceDocumentFromLoadedFile(ProjectDocument document, const QString& path);
     ProjectServiceResult replaceDocumentFromProjection(ProjectDocument document);
     void replaceDesign(ipcraft::core::ProjectDesign design);
+    void mergeDesignOnlyComponents(const ipcraft::core::ProjectDesign& design);
     ipcraft::core::PatchApplyResult applyDesignPatch(
         const ipcraft::core::ProjectDesign& project,
         const ipcraft::core::ProjectPatch& patch) const;

@@ -312,6 +312,24 @@ void mergeDesignIntoDocument(ProjectDocument& document,
     document.ipcoreState = document.instances;
 }
 
+void mergeDesignOnlyComponentsIntoDocument(ProjectDocument& document,
+                                           const ipcraft::core::ProjectDesign& design) {
+    const ProjectDocument designDocument = documentFromDesign(design);
+    QSet<QString> existingInstanceIds;
+    for (const ProjectIpInstanceRecord& instance : document.instances) {
+        existingInstanceIds.insert(instance.id);
+    }
+
+    for (const ProjectIpInstanceRecord& designInstance : designDocument.instances) {
+        if (existingInstanceIds.contains(designInstance.id)) {
+            continue;
+        }
+        document.instances.append(mergeDesignOwnedInstance(nullptr, designInstance));
+        existingInstanceIds.insert(designInstance.id);
+    }
+    document.ipcoreState = document.instances;
+}
+
 } // namespace
 
 ProjectService::ProjectService(QObject* parent) : QObject(parent) {}
@@ -418,6 +436,18 @@ void ProjectService::replaceDesign(ipcraft::core::ProjectDesign design) {
     mergeDesignIntoDocument(m_document, m_design);
     normalizeDocument(m_document);
     m_hasDocument = true;
+    emit currentDocumentChanged();
+}
+
+void ProjectService::mergeDesignOnlyComponents(const ipcraft::core::ProjectDesign& design) {
+    if (!m_hasDocument) {
+        replaceDesign(design);
+        return;
+    }
+
+    mergeDesignOnlyComponentsIntoDocument(m_document, design);
+    normalizeDocument(m_document);
+    m_design = designFromDocument(m_document);
     emit currentDocumentChanged();
 }
 

@@ -1343,7 +1343,11 @@ bool MainWindow::saveDocument(const QString& path) {
         }
     }
     if (designBeforeProjection.has_value()) {
-        m_projectService->replaceDesign(*designBeforeProjection);
+        if (syncingProjection) {
+            m_projectService->mergeDesignOnlyComponents(*designBeforeProjection);
+        } else {
+            m_projectService->replaceDesign(*designBeforeProjection);
+        }
     }
 
     const ProjectServiceResult saveResult = m_projectService->saveFile(absolutePath);
