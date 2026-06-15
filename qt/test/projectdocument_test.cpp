@@ -9,6 +9,7 @@
 #include "ipcore/ipcoregraphexporter.h"
 #include "modules/moduleregistry.h"
 #include "project/graphprojectserializer.h"
+#include "project/projectdesignserializer.h"
 #include "project/projectreader.h"
 #include "project/projectstateservice.h"
 #include "project/projectwriter.h"
@@ -1016,6 +1017,99 @@ void testProjectSerializerUsesModuleIpcoreOwnership() {
             "serializer should preserve module instance ownership");
 }
 
+void testProjectDesignSerializerRoundTripsDesignWithoutGraphProjection() {
+    ipcraft::core::ProjectDesign design;
+    design.schema = QStringLiteral("ipcraft.project.v1");
+    design.id = QStringLiteral("serializer_project");
+    design.name = QStringLiteral("Serializer Project");
+    design.packages.append(ipcraft::core::PackageRef{QStringLiteral("vendor.serializer"),
+                                                     QStringLiteral("2.1.0")});
+
+    ipcraft::core::ComponentInstance component;
+    component.id = QStringLiteral("serializer_component");
+    component.type = QStringLiteral("SerializerBlock");
+    component.packageRef = QStringLiteral("vendor.serializer@2.1.0");
+    component.config = QJsonObject{
+        {QStringLiteral("width"), 64},
+        {QStringLiteral("mode"), QStringLiteral("fast")},
+        {QStringLiteral("tables"), QJsonObject{
+            {QStringLiteral("address_map"), QJsonObject{{QStringLiteral("base"), 4096}}}
+        }}
+    };
+    design.components.append(component);
+
+    const ProjectDocument document = ProjectDesignSerializer::toDocument(design);
+
+    require(document.schema == QStringLiteral("ipcraft.project.v1"),
+            "design serializer should preserve schema");
+    require(document.projectId == QStringLiteral("serializer_project"),
+            "design serializer should preserve project id");
+    require(document.projectName == QStringLiteral("Serializer Project") &&
+                document.name == QStringLiteral("Serializer Project"),
+            "design serializer should preserve project name");
+    require(document.ipcores.size() == 1 &&
+                document.ipcores.first().id == QStringLiteral("vendor.serializer") &&
+                document.ipcores.first().version == QStringLiteral("2.1.0"),
+            "design serializer should preserve package refs");
+    require(document.instances.size() == 1,
+            "design serializer should write one project instance");
+    require(document.modules.isEmpty() && document.connections.isEmpty(),
+            "design serializer should not project components into graph records");
+
+    const ProjectIpInstanceRecord& instance = document.instances.first();
+    require(instance.id == QStringLiteral("serializer_component") &&
+                instance.instanceId == QStringLiteral("serializer_component"),
+            "design serializer should preserve component id");
+    require(instance.native.value(QStringLiteral("componentType")).toString() ==
+                QStringLiteral("SerializerBlock"),
+            "design serializer should preserve component type");
+    require(instance.package.id == QStringLiteral("vendor.serializer") &&
+                instance.package.version == QStringLiteral("2.1.0"),
+            "design serializer should preserve component package ref");
+    require(instance.config.value(QStringLiteral("parameters")).toObject()
+                .value(QStringLiteral("width")).toInt() == 64,
+            "design serializer should store flat config under parameters");
+    require(instance.config.value(QStringLiteral("parameters")).toObject()
+                .value(QStringLiteral("mode")).toString() == QStringLiteral("fast"),
+            "design serializer should keep all flat parameter keys");
+    require(instance.config.value(QStringLiteral("tables")).toObject()
+                .value(QStringLiteral("address_map")).toObject()
+                .value(QStringLiteral("base")).toInt() == 4096,
+            "design serializer should keep object config sections outside parameters");
+
+    const ipcraft::core::ProjectDesign restored =
+        ProjectDesignSerializer::fromDocument(document);
+
+    require(restored.schema == QStringLiteral("ipcraft.project.v1"),
+            "design serializer should reload schema");
+    require(restored.id == QStringLiteral("serializer_project"),
+            "design serializer should reload project id");
+    require(restored.name == QStringLiteral("Serializer Project"),
+            "design serializer should reload project name");
+    require(restored.packages.size() == 1 &&
+                restored.packages.first().id == QStringLiteral("vendor.serializer") &&
+                restored.packages.first().version == QStringLiteral("2.1.0"),
+            "design serializer should reload package refs");
+    require(restored.components.size() == 1,
+            "design serializer should reload one component");
+    const ipcraft::core::ComponentInstance& restoredComponent = restored.components.first();
+    require(restoredComponent.id == QStringLiteral("serializer_component"),
+            "design serializer should reload component id");
+    require(restoredComponent.type == QStringLiteral("SerializerBlock"),
+            "design serializer should reload component type");
+    require(restoredComponent.packageRef == QStringLiteral("vendor.serializer@2.1.0"),
+            "design serializer should reload component package ref");
+    require(restoredComponent.config.value(QStringLiteral("width")).toInt() == 64,
+            "design serializer should reload flat parameter keys");
+    require(restoredComponent.config.value(QStringLiteral("mode")).toString() ==
+                QStringLiteral("fast"),
+            "design serializer should reload every flat parameter key");
+    require(restoredComponent.config.value(QStringLiteral("tables")).toObject()
+                .value(QStringLiteral("address_map")).toObject()
+                .value(QStringLiteral("base")).toInt() == 4096,
+            "design serializer should reload object config sections");
+}
+
 void testLoadRejectsModuleWithoutMatchingIpcoreState() {
     ProjectDocument document = validProjectDocument();
     document.modules.first().instanceId = QStringLiteral("missing_0");
@@ -1769,6 +1863,7 @@ int main(int argc, char** argv) {
         testProjectGraphConfigLayoutBridgePreservesNativeData();
         testProjectStateServiceClearsStaleGraphConfigObjects();
         testProjectSerializerUsesModuleIpcoreOwnership();
+        testProjectDesignSerializerRoundTripsDesignWithoutGraphProjection();
         testLoadRejectsModuleWithoutMatchingIpcoreState();
         testLoadRejectsDuplicateIpcoreStateScope();
         testLoadRejectsIpcoreStateMissingOwnerFields();

@@ -305,6 +305,7 @@ add_qt_test_target("projectdocument_test", "test/projectdocument_test.cpp", {
     "src/**/projectwriter.cpp",
     "src/**/projectstateservice.cpp",
     "src/**/graphprojectserializer.cpp",
+    "src/**/projectdesignserializer.cpp",
     "src/app/generationartifacts.cpp",
     "src/**/graph.cpp",
     "src/**/module.cpp",
@@ -333,6 +334,7 @@ add_qt_test_target("projectdocument_test", "test/projectdocument_test.cpp", {
 
 add_qt_test_target("projectservice_test", "test/projectservice_test.cpp", {
     "src/project/projectservice.cpp",
+    "src/project/projectdesignserializer.cpp",
     "src/project/projectreader.cpp",
     "src/project/projectwriter.cpp",
     "src/ipcraft/compositionmodel.cpp",
@@ -349,6 +351,7 @@ add_qt_test_target("projectservice_test", "test/projectservice_test.cpp", {
 add_qt_test_target("designeditingservice_test", "test/designeditingservice_test.cpp", {
     "src/project/designeditingservice.cpp",
     "src/project/projectservice.cpp",
+    "src/project/projectdesignserializer.cpp",
     "src/project/projectreader.cpp",
     "src/project/projectwriter.cpp",
     "src/ipcraft/compositionmodel.cpp",
@@ -368,6 +371,7 @@ add_qt_test_target("editorprojectionservice_test", "test/editorprojectionservice
     "src/project/graphprojectserializer.cpp",
     "src/project/projectipservice.cpp",
     "src/project/projectservice.cpp",
+    "src/project/projectdesignserializer.cpp",
     "src/project/projectstateservice.cpp",
     "src/project/projectreader.cpp",
     "src/project/projectwriter.cpp",
@@ -1105,6 +1109,7 @@ target("projectplugin_test")
     add_files("src/app/workbenchservice.cpp")
     add_files("src/app/pluginhost.cpp")
     add_files("src/project/projectservice.cpp")
+    add_files("src/project/projectdesignserializer.cpp")
     add_files("src/project/projectplugin.cpp")
     add_files("src/project/projectreader.cpp")
     add_files("src/project/projectwriter.cpp")
@@ -1135,6 +1140,7 @@ target("packageplugin_test")
     add_files("src/app/workbenchservice.cpp")
     add_files("src/app/pluginhost.cpp")
     add_files("src/project/projectservice.cpp")
+    add_files("src/project/projectdesignserializer.cpp")
     add_files("src/project/projectreader.cpp")
     add_files("src/project/projectwriter.cpp")
     add_files("src/package/packagecoverage.cpp")
@@ -1250,6 +1256,7 @@ add_qt_test_target("staticplugincatalog_test", "test/staticplugincatalog_test.cp
     "src/package/packageplugin.cpp",
     "src/package/packageservice.cpp",
     "src/project/graphprojectserializer.cpp",
+    "src/project/projectdesignserializer.cpp",
     "src/project/projectplugin.cpp",
     "src/project/projectreader.cpp",
     "src/project/projectservice.cpp",
