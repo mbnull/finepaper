@@ -1226,6 +1226,8 @@ add_qt_test_target("staticplugincatalog_test", "test/staticplugincatalog_test.cp
     "src/ipcore/ipcoregraphexporter.cpp",
     "src/modules/moduleregistry.cpp",
     "src/modules/moduleprovider.cpp",
+    "src/noc/nocplugin.cpp",
+    "src/noc/nocsemanticmodel.cpp",
     "src/package/packagecoverage.cpp",
     "src/package/packageplugin.cpp",
     "src/package/packageservice.cpp",
@@ -1248,6 +1250,8 @@ add_qt_test_target("staticplugincatalog_test", "test/staticplugincatalog_test.cp
     "inc/app/generationflowprovider.h",
     "inc/app/projectgenerationrunner.h",
     "inc/app/workbenchservice.h",
+    "inc/noc/nocplugin.h",
+    "inc/noc/nocsemanticmodel.h",
     "inc/app/pluginhost.h",
     "inc/package/packageplugin.h",
     "inc/package/packageservice.h",
@@ -1259,6 +1263,21 @@ add_qt_test_target("staticplugincatalog_test", "test/staticplugincatalog_test.cp
     "inc/**/ipcoreruntimeregistry.h",
     "inc/**/ipcoreruntimedescriptor.h"
 }, "qt.widgetapp")
+
+add_qt_test_target("nocplugin_test", "test/nocplugin_test.cpp", {
+    "src/app/serviceregistry.cpp",
+    "src/app/extensionpointregistry.cpp",
+    "src/app/capabilityregistry.cpp",
+    "src/app/pluginhost.cpp",
+    "src/app/workbenchservice.cpp",
+    "src/noc/nocplugin.cpp",
+    "src/noc/nocsemanticmodel.cpp",
+    "inc/app/appcontext.h",
+    "inc/app/pluginhost.h",
+    "inc/app/workbenchservice.h",
+    "inc/noc/nocplugin.h",
+    "inc/noc/nocsemanticmodel.h"
+})
 
 target("plugin_architecture_phase1_scan_test")
     add_rules("qt.console")
@@ -1478,6 +1497,8 @@ target("ipcatalogpanel_test")
     add_files("src/app/capabilityregistry.cpp")
     add_files("src/app/pluginhost.cpp")
     add_files("src/app/staticplugincatalog.cpp")
+    add_files("src/noc/nocplugin.cpp")
+    add_files("src/noc/nocsemanticmodel.cpp")
     add_files("src/app/generationartifacts.cpp")
     add_files("src/app/generationflowprovider.cpp")
     add_files("src/app/logformat.cpp")

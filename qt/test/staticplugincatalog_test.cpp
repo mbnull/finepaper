@@ -52,11 +52,25 @@ void testStaticCatalogRegistersCorePlugins() {
             "static catalog should include project plugin");
     require(ids.contains(QStringLiteral("finepaper.package")),
             "static catalog should include package plugin");
+    require(ids.contains(QStringLiteral("finepaper.noc")),
+            "static catalog should include NoC plugin");
     require(ids.contains(QStringLiteral("finepaper.tool-pipeline")),
             "static catalog should include tool pipeline plugin");
+    require(ids.indexOf(QStringLiteral("finepaper.package")) <
+                ids.indexOf(QStringLiteral("finepaper.noc")),
+            "NoC plugin should be registered after package plugin");
+    require(ids.indexOf(QStringLiteral("finepaper.noc")) <
+                ids.indexOf(QStringLiteral("finepaper.tool-pipeline")),
+            "NoC plugin should be registered before tool pipeline plugin");
 
     const PluginActivationResult result = host.activatePlugins();
     require(result.success, "static plugins should activate");
+
+    bool sawNocHandler = false;
+    for (const CapabilityHandlerDescriptor& handler : capabilities.handlers()) {
+        sawNocHandler = sawNocHandler || handler.capabilityId == QStringLiteral("noc.v1");
+    }
+    require(sawNocHandler, "static plugin activation should register noc.v1 handler");
 }
 
 } // namespace
