@@ -129,6 +129,24 @@ void testExtensionPointRegistryRejectsInvalidContributionsAndPreservesOrder() {
     require(all.at(2).id == panel.id, "third contribution should preserve global insertion order");
 }
 
+void testExtensionPointRegistryRejectsContributionsAtCapacity() {
+    ExtensionPointRegistry registry;
+    for (int index = 0; index < ExtensionPointRegistry::kMaxContributions; ++index) {
+        require(registry.registerContribution(
+                    contribution(QStringLiteral("finepaper.action.%1").arg(index),
+                                 QStringLiteral("ui.action"),
+                                 QStringLiteral("finepaper.test"))),
+                "contribution below capacity should register");
+    }
+
+    require(!registry.registerContribution(contribution(QStringLiteral("finepaper.action.overflow"),
+                                                        QStringLiteral("ui.action"),
+                                                        QStringLiteral("finepaper.test"))),
+            "contribution beyond capacity should be rejected");
+    require(registry.allContributions().size() == ExtensionPointRegistry::kMaxContributions,
+            "rejected overflow contribution should not be stored");
+}
+
 void testCapabilityRegistryReportsRequiredMissingHandler() {
     CapabilityRegistry registry;
     PackageCapabilityDescriptor capability;
@@ -136,7 +154,8 @@ void testCapabilityRegistryReportsRequiredMissingHandler() {
     capability.required = true;
     capability.packageId = QStringLiteral("vendor.meshnoc");
 
-    registry.recordPackageCapability(capability);
+    require(registry.recordPackageCapability(capability),
+            "valid package capability should be recorded");
     const QVector<CapabilityCoverageRecord> coverage =
         registry.coverageForPackage(QStringLiteral("vendor.meshnoc"));
     require(coverage.size() == 1, "one package capability coverage record should exist");
@@ -157,7 +176,8 @@ void testCapabilityRegistryReportsHandledCapability() {
     capability.id = QStringLiteral("noc.v1");
     capability.required = true;
     capability.packageId = QStringLiteral("vendor.meshnoc");
-    registry.recordPackageCapability(capability);
+    require(registry.recordPackageCapability(capability),
+            "valid handled capability should be recorded");
 
     const QVector<CapabilityCoverageRecord> coverage =
         registry.coverageForPackage(QStringLiteral("vendor.meshnoc"));
@@ -199,7 +219,8 @@ void testCapabilityRegistryRejectsInvalidHandlersAndCapabilities() {
     invalidPackage.packageId = QStringLiteral(" vendor.meshnoc");
     invalidPackage.id = QStringLiteral("noc.v1");
     invalidPackage.required = true;
-    registry.recordPackageCapability(invalidPackage);
+    require(!registry.recordPackageCapability(invalidPackage),
+            "invalid package id should be rejected");
     require(registry.coverageForPackage(QStringLiteral(" vendor.meshnoc")).isEmpty(),
             "capability with invalid package id should be ignored");
 
@@ -207,7 +228,8 @@ void testCapabilityRegistryRejectsInvalidHandlersAndCapabilities() {
     invalidCapabilityId.packageId = QStringLiteral("vendor.meshnoc");
     invalidCapabilityId.id = QStringLiteral(" noc.v1");
     invalidCapabilityId.required = true;
-    registry.recordPackageCapability(invalidCapabilityId);
+    require(!registry.recordPackageCapability(invalidCapabilityId),
+            "invalid capability id should be rejected");
     require(registry.coverageForPackage(QStringLiteral("vendor.meshnoc")).isEmpty(),
             "capability with invalid capability id should be ignored");
 
@@ -216,9 +238,51 @@ void testCapabilityRegistryRejectsInvalidHandlersAndCapabilities() {
     whitespaceCapabilityId.capabilityId = QStringLiteral(" ");
     whitespaceCapabilityId.id = QStringLiteral("noc.v1");
     whitespaceCapabilityId.required = true;
-    registry.recordPackageCapability(whitespaceCapabilityId);
+    require(!registry.recordPackageCapability(whitespaceCapabilityId),
+            "whitespace capability id should be rejected");
     require(registry.coverageForPackage(QStringLiteral("vendor.meshnoc")).isEmpty(),
             "capability with whitespace capability id should be ignored");
+}
+
+void testCapabilityRegistryRejectsHandlersAtCapacity() {
+    CapabilityRegistry registry;
+    for (int index = 0; index < CapabilityRegistry::kMaxHandlers; ++index) {
+        CapabilityHandlerDescriptor handler;
+        handler.capabilityId = QStringLiteral("capability.%1").arg(index);
+        handler.ownerPluginId = QStringLiteral("finepaper.test");
+        handler.extensionPoints = {QStringLiteral("ui.panel")};
+        require(registry.registerHandler(handler), "handler below capacity should register");
+    }
+
+    CapabilityHandlerDescriptor overflow;
+    overflow.capabilityId = QStringLiteral("capability.overflow");
+    overflow.ownerPluginId = QStringLiteral("finepaper.test");
+    overflow.extensionPoints = {QStringLiteral("ui.panel")};
+    require(!registry.registerHandler(overflow), "handler beyond capacity should be rejected");
+    require(registry.handlers().size() == CapabilityRegistry::kMaxHandlers,
+            "rejected overflow handler should not be stored");
+}
+
+void testCapabilityRegistryRejectsPackageCapabilitiesAtCapacity() {
+    CapabilityRegistry registry;
+    for (int index = 0; index < CapabilityRegistry::kMaxPackageCapabilities; ++index) {
+        PackageCapabilityDescriptor capability;
+        capability.packageId = QStringLiteral("vendor.meshnoc");
+        capability.id = QStringLiteral("capability.%1").arg(index);
+        capability.required = false;
+        require(registry.recordPackageCapability(capability),
+                "package capability below capacity should be recorded");
+    }
+
+    PackageCapabilityDescriptor overflow;
+    overflow.packageId = QStringLiteral("vendor.meshnoc");
+    overflow.id = QStringLiteral("capability.overflow");
+    overflow.required = false;
+    require(!registry.recordPackageCapability(overflow),
+            "package capability beyond capacity should be rejected");
+    require(registry.coverageForPackage(QStringLiteral("vendor.meshnoc")).size() ==
+                CapabilityRegistry::kMaxPackageCapabilities,
+            "rejected overflow package capability should not be stored");
 }
 
 void testCapabilityRegistryPreservesHandlerAndCoverageOrder() {
@@ -254,8 +318,10 @@ void testCapabilityRegistryPreservesHandlerAndCoverageOrder() {
     secondCapability.capabilityId = QStringLiteral("diagnostics.v1");
     secondCapability.required = false;
 
-    registry.recordPackageCapability(firstCapability);
-    registry.recordPackageCapability(secondCapability);
+    require(registry.recordPackageCapability(firstCapability),
+            "first ordered package capability should be recorded");
+    require(registry.recordPackageCapability(secondCapability),
+            "second ordered package capability should be recorded");
 
     const QVector<CapabilityCoverageRecord> coverage =
         registry.coverageForPackage(QStringLiteral("vendor.meshnoc"));
@@ -288,9 +354,12 @@ int main(int argc, char** argv) {
         testServiceRegistryRejectsInvalidServicesAndTypeMismatches();
         testExtensionPointRegistryStoresContributions();
         testExtensionPointRegistryRejectsInvalidContributionsAndPreservesOrder();
+        testExtensionPointRegistryRejectsContributionsAtCapacity();
         testCapabilityRegistryReportsRequiredMissingHandler();
         testCapabilityRegistryReportsHandledCapability();
         testCapabilityRegistryRejectsInvalidHandlersAndCapabilities();
+        testCapabilityRegistryRejectsHandlersAtCapacity();
+        testCapabilityRegistryRejectsPackageCapabilitiesAtCapacity();
         testCapabilityRegistryPreservesHandlerAndCoverageOrder();
         testAppContextUsesRegistries();
     } catch (const std::exception& error) {

@@ -16,6 +16,8 @@ struct ExtensionContribution {
 
 class ExtensionPointRegistry {
 public:
+    static constexpr int kMaxContributions = 1024;
+
     bool registerContribution(const ExtensionContribution& contribution);
     QVector<ExtensionContribution> contributions(const QString& extensionPoint) const;
     QVector<ExtensionContribution> allContributions() const;

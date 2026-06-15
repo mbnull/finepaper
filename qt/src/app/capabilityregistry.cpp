@@ -25,7 +25,8 @@ bool CapabilityRegistry::registerHandler(const CapabilityHandlerDescriptor& hand
     if (!canonical(handler.capabilityId) ||
         !canonical(handler.ownerPluginId) ||
         !canonicalList(handler.extensionPoints) ||
-        m_handlersByCapability.contains(handler.capabilityId)) {
+        m_handlersByCapability.contains(handler.capabilityId) ||
+        m_handlerOrder.size() >= kMaxHandlers) {
         return false;
     }
     m_handlersByCapability.insert(handler.capabilityId, handler);
@@ -33,16 +34,20 @@ bool CapabilityRegistry::registerHandler(const CapabilityHandlerDescriptor& hand
     return true;
 }
 
-void CapabilityRegistry::recordPackageCapability(const PackageCapabilityDescriptor& capability) {
+bool CapabilityRegistry::recordPackageCapability(const PackageCapabilityDescriptor& capability) {
     if (!canonical(capability.packageId)) {
-        return;
+        return false;
     }
     PackageCapabilityDescriptor stored = capability;
     stored.capabilityId = capabilityKey(capability);
     if (!canonical(stored.capabilityId)) {
-        return;
+        return false;
+    }
+    if (m_capabilities.size() >= kMaxPackageCapabilities) {
+        return false;
     }
     m_capabilities.append(stored);
+    return true;
 }
 
 QVector<CapabilityCoverageRecord> CapabilityRegistry::coverageForPackage(

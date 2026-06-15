@@ -36,8 +36,11 @@ struct CapabilityCoverageRecord {
 
 class CapabilityRegistry {
 public:
+    static constexpr int kMaxHandlers = 1024;
+    static constexpr int kMaxPackageCapabilities = 1024;
+
     bool registerHandler(const CapabilityHandlerDescriptor& handler);
-    void recordPackageCapability(const PackageCapabilityDescriptor& capability);
+    bool recordPackageCapability(const PackageCapabilityDescriptor& capability);
     QVector<CapabilityCoverageRecord> coverageForPackage(const QString& packageId) const;
     QVector<CapabilityHandlerDescriptor> handlers() const;
 

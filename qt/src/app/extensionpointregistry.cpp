@@ -12,7 +12,8 @@ bool ExtensionPointRegistry::registerContribution(const ExtensionContribution& c
     if (!canonical(contribution.id) ||
         !canonical(contribution.extensionPoint) ||
         !canonical(contribution.ownerPluginId) ||
-        m_byId.contains(contribution.id)) {
+        m_byId.contains(contribution.id) ||
+        m_contributionOrder.size() >= kMaxContributions) {
         return false;
     }
     m_byId.insert(contribution.id, contribution);
