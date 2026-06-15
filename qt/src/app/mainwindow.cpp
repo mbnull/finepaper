@@ -52,6 +52,7 @@
 #include <QKeySequence>
 #include <QLineEdit>
 #include <QList>
+#include <QScopedValueRollback>
 #include <QStatusBar>
 #include <QStringList>
 #include <QTimer>
@@ -190,6 +191,13 @@ MainWindow::MainWindow(QWidget *parent)
     m_serviceRegistry->registerService(ServiceKey::fromLiteral("finepaper.tool-pipeline"),
                                        m_toolPipelineService.get());
 
+    connect(m_designEditingService.get(),
+            &DesignEditingService::designChanged,
+            this,
+            [this]() {
+                syncProjectServiceFromDesignEditingService();
+            });
+
     AppContext context;
     context.services = m_serviceRegistry.get();
     context.extensionPoints = m_extensionPointRegistry.get();
@@ -292,6 +300,7 @@ bool MainWindow::createProjectAt(const QString& path) {
         QMessageBox::warning(this, "Create Project Failed", adoptResult.error);
         return false;
     }
+    seedDesignEditingServiceFromProjectService();
 
     setCurrentDocumentPath(projectPath);
     m_cleanStateId = m_commandManager->currentStateId();
@@ -1270,6 +1279,7 @@ bool MainWindow::loadDocument(const QString& path) {
     if (m_propertyPanel) {
         m_propertyPanel->setSelectedModule(QString());
     }
+    seedDesignEditingServiceFromProjectService();
 
     m_commandManager->clearHistory();
     // After a successful project load, the current command state becomes
@@ -1334,10 +1344,33 @@ QString MainWindow::defaultProjectDirectoryPath() const {
     return QDir::currentPath();
 }
 
+void MainWindow::seedDesignEditingServiceFromProjectService() {
+    if (!m_designEditingService || !m_projectService) {
+        return;
+    }
+
+    QScopedValueRollback<bool> rollback(m_syncingDesignEditingService, true);
+    if (m_projectService->hasDocument()) {
+        m_designEditingService->replaceDesign(m_projectService->design());
+        return;
+    }
+
+    m_designEditingService->replaceDesign(ipcraft::core::ProjectDesign{});
+}
+
+void MainWindow::syncProjectServiceFromDesignEditingService() {
+    if (m_syncingDesignEditingService || !m_designEditingService || !m_projectService) {
+        return;
+    }
+
+    m_projectService->replaceDesign(m_designEditingService->design());
+}
+
 void MainWindow::clearDocument() {
     m_suppressDocumentTracking = true;
     m_editorProjectionService->clearProjection();
     m_suppressDocumentTracking = false;
+    seedDesignEditingServiceFromProjectService();
     if (m_propertyPanel) {
         m_propertyPanel->setSelectedModule(QString());
     }

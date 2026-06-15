@@ -1,12 +1,17 @@
 // IP catalog panel widget tests.
 #include "app/appsettings.h"
+#include "app/servicekey.h"
+#include "app/serviceregistry.h"
+#include "ipcraft/schemaids.h"
 #include "ipcore/ipcatalogservice.h"
 #include "graph/graph.h"
 #include "modules/moduleregistry.h"
 #include "panels/ipcatalogpanel.h"
 #include "panels/logpanel.h"
 #include "panels/propertypanel.h"
+#include "project/designeditingservice.h"
 #include "project/projectipservice.h"
+#include "project/projectservice.h"
 #include "project/projectstateservice.h"
 #include "workspace/activeworkspacecontroller.h"
 
@@ -122,6 +127,58 @@ void processEventsFor(int milliseconds) {
     QEventLoop loop;
     QTimer::singleShot(milliseconds, &loop, &QEventLoop::quit);
     loop.exec();
+}
+
+DesignEditingService* designEditingServiceFromRegistry(MainWindow& window) {
+    require(window.m_serviceRegistry != nullptr,
+            "MainWindow should own a service registry");
+    DesignEditingService* service = window.m_serviceRegistry->service<DesignEditingService>(
+        ServiceKey::fromLiteral("finepaper.design-editing"));
+    require(service != nullptr,
+            "finepaper.design-editing should resolve to DesignEditingService");
+    return service;
+}
+
+ipcraft::core::ProjectDesign loadedDesignFixture(const QString& name) {
+    ipcraft::core::ProjectDesign design;
+    design.schema = ipcraft::schemaids::projectV1;
+    design.id = QStringLiteral("project_sync_0");
+    design.name = name;
+    design.packages.append(ipcraft::core::PackageRef{QStringLiteral("vendor.designpkg"),
+                                                     QStringLiteral("1.0.0")});
+
+    ipcraft::core::ComponentInstance component;
+    component.id = QStringLiteral("component0");
+    component.type = QStringLiteral("DesignComponent");
+    component.packageRef = QStringLiteral("vendor.designpkg@1.0.0");
+    component.config.insert(QStringLiteral("parameters"),
+                            QJsonObject{{QStringLiteral("width"), 4}});
+    design.components.append(component);
+    return design;
+}
+
+void writeDesignFixtureProject(const QString& path,
+                               const ipcraft::core::ProjectDesign& design) {
+    ProjectService writer;
+    writer.replaceDesign(design);
+    const ProjectServiceResult save = writer.saveFile(path);
+    require(save.success, "design fixture project should save");
+}
+
+ipcraft::core::ProjectPatch setComponentConfigPatch(const QString& componentId,
+                                                    const QString& key,
+                                                    const QJsonValue& value) {
+    ipcraft::core::ProjectPatch patch;
+    patch.schema = ipcraft::schemaids::patchV1;
+    patch.id = QStringLiteral("set-component-config");
+    patch.ops.append(ipcraft::core::PatchOperation{
+        QStringLiteral("set_config"),
+        QStringLiteral("component:%1").arg(componentId),
+        QStringLiteral("/%1").arg(key),
+        value,
+        {}
+    });
+    return patch;
 }
 
 QString repositoryPath(const QString& relativePath) {
@@ -922,6 +979,101 @@ void testLoadGraphReportsFailureForInvalidPath() {
             "failed loadGraph should leave MainWindow without an open project");
 }
 
+void testMainWindowSeedsDesignEditingServiceWhenProjectIsCreated() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "temporary directory should be valid");
+
+    MainWindow window;
+    const QString projectPath = tempDir.filePath(QStringLiteral("created_design_sync.fpproj"));
+    require(window.createProjectAt(projectPath),
+            "project should be created before checking design editing seed");
+
+    DesignEditingService* editing = designEditingServiceFromRegistry(window);
+    require(editing->design().name == window.m_projectService->design().name,
+            "created project should seed design editing service from ProjectService design");
+    require(editing->design().schema == window.m_projectService->design().schema,
+            "created project should seed the project schema");
+}
+
+void testMainWindowSeedsDesignEditingServiceWhenProjectIsLoaded() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "temporary directory should be valid");
+    const QString projectPath = tempDir.filePath(QStringLiteral("loaded_design_sync.fpproj"));
+    writeDesignFixtureProject(projectPath,
+                              loadedDesignFixture(QStringLiteral("Loaded Design Sync")));
+
+    MainWindow window;
+    require(window.loadGraph(projectPath),
+            "project should load before checking design editing seed");
+
+    DesignEditingService* editing = designEditingServiceFromRegistry(window);
+    require(editing->design().name == QStringLiteral("Loaded Design Sync"),
+            "loaded project should seed design editing service name");
+    require(editing->design().components.size() == 1,
+            "loaded project should seed design editing components");
+    require(editing->design().components.first().id == QStringLiteral("component0"),
+            "loaded project should seed the component id");
+    require(editing->design().components.first()
+                .config.value(QStringLiteral("parameters")).toObject()
+                .value(QStringLiteral("width")).toInt() == 4,
+            "loaded project should seed component config from ProjectService design");
+}
+
+void testMainWindowClearAndNewProjectResetDesignEditingService() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "temporary directory should be valid");
+
+    MainWindow window;
+    require(window.createProjectAt(tempDir.filePath(QStringLiteral("first_sync.fpproj"))),
+            "first project should be created before clear");
+    DesignEditingService* editing = designEditingServiceFromRegistry(window);
+    require(!editing->design().name.isEmpty(),
+            "created project should seed a non-empty editing design");
+
+    window.clearDocument();
+    require(!window.m_projectService->hasDocument(),
+            "clearDocument should clear ProjectService");
+    require(editing->design().name.isEmpty(),
+            "clearDocument should reset the design editing service");
+    require(editing->design().components.isEmpty(),
+            "clearDocument should clear editing service components");
+
+    require(window.createProjectAt(tempDir.filePath(QStringLiteral("second_sync.fpproj"))),
+            "second project should be created after clear");
+    require(editing->design().name == window.m_projectService->design().name,
+            "new project after clear should reseed design editing service");
+}
+
+void testDesignEditingServiceEditSynchronizesProjectServiceDocument() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "temporary directory should be valid");
+    const QString projectPath = tempDir.filePath(QStringLiteral("edit_sync.fpproj"));
+    writeDesignFixtureProject(projectPath,
+                              loadedDesignFixture(QStringLiteral("Editable Design Sync")));
+
+    MainWindow window;
+    require(window.loadGraph(projectPath),
+            "project should load before applying design edit");
+
+    DesignEditingService* editing = designEditingServiceFromRegistry(window);
+    const DesignEditResult edit =
+        editing->applyPatch(setComponentConfigPatch(QStringLiteral("component0"),
+                                                    QStringLiteral("parameters"),
+                                                    QJsonObject{
+                                                        {QStringLiteral("width"), 4},
+                                                        {QStringLiteral("frequency_mhz"), 900}
+                                                    }));
+    require(edit.success, "design editing patch should apply");
+    require(window.m_projectService->design().components.first()
+                .config.value(QStringLiteral("parameters")).toObject()
+                .value(QStringLiteral("frequency_mhz")).toInt() == 900,
+            "ProjectService runtime design should reflect DesignEditingService edits");
+    require(window.m_projectService->document().instances.first()
+                .config.value(QStringLiteral("parameters")).toObject()
+                .value(QStringLiteral("frequency_mhz")).toInt() == 900,
+            "ProjectService document should reflect DesignEditingService edits");
+}
+
 void testNewProjectAddsIpcraftPackageInstanceFromCatalog() {
     QTemporaryDir tempDir;
     require(tempDir.isValid(), "temporary directory should be valid");
@@ -1183,6 +1335,10 @@ int main(int argc, char** argv) {
         testMainWindowIgnoresStaleWorkspaceTopologyToolInstance();
         testMainWindowIgnoresTopologyToolWhenActiveInstanceChangesDuringPrompt();
         testLoadGraphReportsFailureForInvalidPath();
+        testMainWindowSeedsDesignEditingServiceWhenProjectIsCreated();
+        testMainWindowSeedsDesignEditingServiceWhenProjectIsLoaded();
+        testMainWindowClearAndNewProjectResetDesignEditingService();
+        testDesignEditingServiceEditSynchronizesProjectServiceDocument();
         testNewProjectAddsIpcraftPackageInstanceFromCatalog();
         testAmbiguousConnectionAppearsInPropertyPanelAndLog();
         testCatalogReloadUsesConfiguredPackageRoots();

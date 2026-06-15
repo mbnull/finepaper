@@ -99,6 +99,8 @@ private slots:
     bool saveDocument(const QString& path);
     QString defaultDocumentPath() const;
     QString defaultProjectDirectoryPath() const;
+    void seedDesignEditingServiceFromProjectService();
+    void syncProjectServiceFromDesignEditingService();
     void clearDocument();
     void scheduleDocumentStateRefresh();
     void syncDocumentStateFromHistory();
@@ -154,6 +156,7 @@ private slots:
     bool m_documentStateRefreshPending = false;
     bool m_projectOpen = false;
     bool m_suppressDocumentTracking = false;
+    bool m_syncingDesignEditingService = false;
 };
 
 #endif // MAINWINDOW_H
