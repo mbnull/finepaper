@@ -27,7 +27,10 @@ bool ServiceRegistry::registerService(const ServiceKey& key, void* service) {
 bool ServiceRegistry::registerService(const ServiceKey& key,
                                       void* service,
                                       const std::type_info* type) {
-    if (!key.isValid() || !service || m_services.contains(key.value())) {
+    if (!key.isValid() ||
+        !service ||
+        m_services.contains(key.value()) ||
+        m_services.size() >= kMaxServices) {
         return false;
     }
     m_services.insert(key.value(), ServiceEntry{service, type});

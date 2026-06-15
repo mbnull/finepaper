@@ -4,6 +4,7 @@
 #include "app/serviceregistry.h"
 
 #include <QCoreApplication>
+#include <QVector>
 #include <iostream>
 #include <stdexcept>
 #include <utility>
@@ -57,6 +58,26 @@ void testServiceRegistryRejectsInvalidServicesAndTypeMismatches() {
             "typed lookup with mismatched type should return null");
     require(registry.service<FakeService>(ServiceKey::fromLiteral("test.fake")) == &service,
             "typed lookup with matching type should return the service");
+}
+
+void testServiceRegistryRejectsServicesAtCapacity() {
+    ServiceRegistry registry;
+    QVector<FakeService> services;
+    services.resize(ServiceRegistry::kMaxServices + 1);
+
+    for (int index = 0; index < ServiceRegistry::kMaxServices; ++index) {
+        require(registry.registerService(ServiceKey(QStringLiteral("test.service.%1").arg(index)),
+                                         &services[index]),
+                "service below capacity should register");
+    }
+
+    require(!registry.registerService(ServiceKey::fromLiteral("test.service.overflow"),
+                                      &services[ServiceRegistry::kMaxServices]),
+            "service beyond capacity should be rejected");
+    require(registry.service<FakeService>(ServiceKey::fromLiteral("test.service.0")) == &services[0],
+            "existing service should remain registered after overflow rejection");
+    require(!registry.contains(ServiceKey::fromLiteral("test.service.overflow")),
+            "rejected overflow service should not be stored");
 }
 
 ExtensionContribution contribution(QString id,
@@ -352,6 +373,7 @@ int main(int argc, char** argv) {
     try {
         testServiceRegistryStoresTypedServices();
         testServiceRegistryRejectsInvalidServicesAndTypeMismatches();
+        testServiceRegistryRejectsServicesAtCapacity();
         testExtensionPointRegistryStoresContributions();
         testExtensionPointRegistryRejectsInvalidContributionsAndPreservesOrder();
         testExtensionPointRegistryRejectsContributionsAtCapacity();

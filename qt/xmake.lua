@@ -1000,8 +1000,13 @@ target("workbenchservice_test")
     })
 
 target("plugin_registry_test")
-    set_kind("binary")
     add_rules("qt.console")
+    set_kind("binary")
+    set_group("test")
+    set_default(false)
+    set_languages("c++23")
+
+    add_includedirs("inc")
     add_files("test/plugin_registry_test.cpp")
     add_files("src/app/serviceregistry.cpp")
     add_files("src/app/extensionpointregistry.cpp")
@@ -1010,14 +1015,12 @@ target("plugin_registry_test")
     add_headerfiles("inc/app/serviceregistry.h")
     add_headerfiles("inc/app/extensionpointregistry.h")
     add_headerfiles("inc/app/capabilityregistry.h")
-    add_includedirs("inc")
     add_packages("qt6core")
     set_policy("build.warning", true)
-    on_run(function (target)
-        os.execv(target:targetfile(), {}, {
-            pass_outputs = "plugin_registry_test passed"
-        })
-    end)
+    add_tests("default", {
+        trim_output = true,
+        pass_outputs = "plugin_registry_test passed"
+    })
 
 target("pluginhost_foundation_test")
     add_rules("qt.widgetapp")

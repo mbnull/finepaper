@@ -8,6 +8,8 @@
 
 class ServiceRegistry {
 public:
+    static constexpr int kMaxServices = 1024;
+
     bool registerService(const ServiceKey& key, void* service);
     void* service(const ServiceKey& key) const;
     bool contains(const ServiceKey& key) const;
