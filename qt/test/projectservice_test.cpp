@@ -7,6 +7,9 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QJsonValue>
 #include <QTemporaryDir>
 #include <iostream>
@@ -27,6 +30,14 @@ bool hasDiagnosticRule(const ProjectServiceResult& result, const QString& ruleId
         }
     }
     return false;
+}
+
+QJsonObject readJsonObject(const QString& path) {
+    QFile file(path);
+    require(file.open(QIODevice::ReadOnly), "project JSON fixture should open");
+    const QJsonDocument json = QJsonDocument::fromJson(file.readAll());
+    require(json.isObject(), "project JSON fixture should be an object");
+    return json.object();
 }
 
 ipcraft::core::ProjectDesign patchableDesign() {
@@ -181,6 +192,41 @@ void testApplyDesignPatch() {
             "patch should update component config");
 }
 
+void testFlatDesignConfigSavesAsV1BundleAndReloadsAsRuntimeConfig() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "temporary directory should be valid");
+    const QString path = QDir(tempDir.path()).filePath(QStringLiteral("flat_config.fpproj"));
+
+    ipcraft::core::ProjectDesign design = patchableDesign();
+    design.components.first().config.insert(QStringLiteral("width"), 4);
+
+    ProjectService service;
+    service.replaceDesign(design);
+    const ProjectServiceResult saveResult = service.saveFile(path);
+    require(saveResult.success, "saveFile should accept flat runtime design config");
+
+    const QJsonObject root = readJsonObject(path);
+    const QJsonObject savedConfig = root.value(QStringLiteral("instances"))
+                                        .toArray()
+                                        .first()
+                                        .toObject()
+                                        .value(QStringLiteral("config"))
+                                        .toObject();
+    require(savedConfig.value(QStringLiteral("parameters")).toObject()
+                .value(QStringLiteral("width")).toInt() == 4,
+            "saved project config should use the V1 parameters bundle");
+    require(!savedConfig.contains(QStringLiteral("width")),
+            "saved project config should not write flat keys at bundle top level");
+
+    ProjectService loaded;
+    const ProjectServiceResult loadResult = loaded.loadFile(path);
+    require(loadResult.success, "fresh ProjectService should load the saved V1 document");
+    require(loaded.design().components.size() == 1,
+            "loaded runtime design should preserve the component");
+    require(loaded.design().components.first().config.value(QStringLiteral("width")).toInt() == 4,
+            "loaded runtime design should restore flat component config");
+}
+
 void testRejectsUnsupportedDocumentKind() {
     QTemporaryDir tempDir;
     require(tempDir.isValid(), "temporary directory should be valid");
@@ -235,6 +281,7 @@ int main(int argc, char** argv) {
         testCreateNewClearsSavedPath();
         testReplaceDocumentClearsSavedPath();
         testApplyDesignPatch();
+        testFlatDesignConfigSavesAsV1BundleAndReloadsAsRuntimeConfig();
         testRejectsUnsupportedDocumentKind();
         testLoadFileReportsInvalidJsonDiagnostics();
     } catch (const std::exception& exception) {

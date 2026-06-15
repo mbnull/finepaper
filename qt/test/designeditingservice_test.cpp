@@ -200,8 +200,10 @@ void testProjectServiceOwnsAndReplacesRuntimeDesign() {
             "replaceDesign should split component package id");
     require(service.document().instances.first().package.version == QStringLiteral("1.0.0"),
             "replaceDesign should split component package version");
-    require(service.document().instances.first().config.value(QStringLiteral("width")).toInt() == 8,
-            "replaceDesign should preserve component config");
+    require(service.document().instances.first()
+                .config.value(QStringLiteral("parameters")).toObject()
+                .value(QStringLiteral("width")).toInt() == 8,
+            "replaceDesign should persist component config in the V1 parameters bundle");
 }
 
 void testProjectDocumentToProjectDesignConversionPreservesCoreFields() {

@@ -80,6 +80,91 @@ void appendPackageRefIfNew(QVector<ipcraft::core::PackageRef>& packages,
     packages.append(ipcraft::core::PackageRef{id, version});
 }
 
+bool isConfigBundleKey(const QString& key) {
+    return key == QStringLiteral("parameters") ||
+           key == QStringLiteral("tables") ||
+           key == QStringLiteral("documents") ||
+           key == QStringLiteral("files") ||
+           key == QStringLiteral("preserved");
+}
+
+bool isConfigBundleSection(const QString& key, const QJsonValue& value) {
+    return isConfigBundleKey(key) && value.isObject();
+}
+
+QJsonObject runtimeConfigFromDocumentConfig(const QJsonObject& config) {
+    bool hasBundleSection = false;
+    for (auto it = config.constBegin(); it != config.constEnd(); ++it) {
+        hasBundleSection = hasBundleSection || isConfigBundleSection(it.key(), it.value());
+    }
+    if (!hasBundleSection) {
+        return config;
+    }
+
+    QJsonObject runtimeConfig;
+    const QJsonValue parameters = config.value(QStringLiteral("parameters"));
+    if (parameters.isObject()) {
+        const QJsonObject parameterObject = parameters.toObject();
+        for (auto it = parameterObject.constBegin(); it != parameterObject.constEnd(); ++it) {
+            runtimeConfig.insert(it.key(), it.value());
+        }
+    }
+
+    for (auto it = config.constBegin(); it != config.constEnd(); ++it) {
+        if (it.key() == QStringLiteral("parameters")) {
+            continue;
+        }
+        if (isConfigBundleSection(it.key(), it.value())) {
+            runtimeConfig.insert(it.key(), it.value().toObject());
+            continue;
+        }
+        if (!isConfigBundleKey(it.key())) {
+            runtimeConfig.insert(it.key(), it.value());
+        }
+    }
+    return runtimeConfig;
+}
+
+QJsonObject documentConfigFromRuntimeConfig(const QJsonObject& config) {
+    if (config.isEmpty()) {
+        return {};
+    }
+
+    bool allKeysAreBundleSections = true;
+    for (auto it = config.constBegin(); it != config.constEnd(); ++it) {
+        allKeysAreBundleSections =
+            allKeysAreBundleSections && isConfigBundleSection(it.key(), it.value());
+    }
+    if (allKeysAreBundleSections) {
+        return config;
+    }
+
+    QJsonObject bundleConfig;
+    QJsonObject parameters;
+    for (auto it = config.constBegin(); it != config.constEnd(); ++it) {
+        if (isConfigBundleSection(it.key(), it.value())) {
+            if (it.key() == QStringLiteral("parameters")) {
+                const QJsonObject existingParameters = it.value().toObject();
+                for (auto param = existingParameters.constBegin();
+                     param != existingParameters.constEnd();
+                     ++param) {
+                    parameters.insert(param.key(), param.value());
+                }
+            } else {
+                bundleConfig.insert(it.key(), it.value().toObject());
+            }
+            continue;
+        }
+
+        parameters.insert(it.key(), it.value());
+    }
+
+    if (!parameters.isEmpty()) {
+        bundleConfig.insert(QStringLiteral("parameters"), parameters);
+    }
+    return bundleConfig;
+}
+
 ipcraft::core::ProjectDesign designFromDocument(const ProjectDocument& document) {
     ipcraft::core::ProjectDesign design;
     design.schema = document.schema.isEmpty() ? ipcraft::schemaids::projectV1 : document.schema;
@@ -104,7 +189,7 @@ ipcraft::core::ProjectDesign designFromDocument(const ProjectDocument& document)
             component.type = instance.native.value(QStringLiteral("type")).toString();
         }
         component.packageRef = packageRefKey(instance.package.id, instance.package.version);
-        component.config = instance.config;
+        component.config = runtimeConfigFromDocumentConfig(instance.config);
         if (instance.native.value(QStringLiteral("identity")).isObject()) {
             component.identity = instance.native.value(QStringLiteral("identity")).toObject();
         }
@@ -139,7 +224,7 @@ ProjectDocument documentFromDesign(const ipcraft::core::ProjectDesign& design) {
         instance.instanceId = component.id;
         instance.package = packageRefFromComponentRef(component.packageRef, design.packages);
         instance.ipcoreId = instance.package.id;
-        instance.config = component.config;
+        instance.config = documentConfigFromRuntimeConfig(component.config);
         if (!component.type.isEmpty()) {
             instance.native.insert(QStringLiteral("componentType"), component.type);
         }

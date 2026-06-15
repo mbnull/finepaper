@@ -157,6 +157,7 @@ private slots:
     bool m_projectOpen = false;
     bool m_suppressDocumentTracking = false;
     bool m_syncingDesignEditingService = false;
+    bool m_designEditingDirty = false;
 };
 
 #endif // MAINWINDOW_H

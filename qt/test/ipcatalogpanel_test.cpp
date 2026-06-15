@@ -181,6 +181,25 @@ ipcraft::core::ProjectPatch setComponentConfigPatch(const QString& componentId,
     return patch;
 }
 
+ipcraft::core::ProjectPatch addDesignComponentPatch(const QString& componentId) {
+    ipcraft::core::ProjectPatch patch;
+    patch.schema = ipcraft::schemaids::patchV1;
+    patch.id = QStringLiteral("add-design-component");
+    patch.ops.append(ipcraft::core::PatchOperation{
+        QStringLiteral("add"),
+        QStringLiteral("component"),
+        QStringLiteral("/components/-"),
+        QJsonValue(QJsonValue::Undefined),
+        QJsonObject{
+            {QStringLiteral("id"), componentId},
+            {QStringLiteral("type"), QStringLiteral("DesignComponent")},
+            {QStringLiteral("packageRef"), QStringLiteral("vendor.designpkg")},
+            {QStringLiteral("config"), QJsonObject{{QStringLiteral("width"), 8}}}
+        }
+    });
+    return patch;
+}
+
 QString repositoryPath(const QString& relativePath) {
     const QStringList startPaths = {
         QDir::currentPath(),
@@ -1013,10 +1032,8 @@ void testMainWindowSeedsDesignEditingServiceWhenProjectIsLoaded() {
             "loaded project should seed design editing components");
     require(editing->design().components.first().id == QStringLiteral("component0"),
             "loaded project should seed the component id");
-    require(editing->design().components.first()
-                .config.value(QStringLiteral("parameters")).toObject()
-                .value(QStringLiteral("width")).toInt() == 4,
-            "loaded project should seed component config from ProjectService design");
+    require(editing->design().components.first().config.value(QStringLiteral("width")).toInt() == 4,
+            "loaded project should seed flat runtime component config from ProjectService design");
 }
 
 void testMainWindowClearAndNewProjectResetDesignEditingService() {
@@ -1072,6 +1089,52 @@ void testDesignEditingServiceEditSynchronizesProjectServiceDocument() {
                 .config.value(QStringLiteral("parameters")).toObject()
                 .value(QStringLiteral("frequency_mhz")).toInt() == 900,
             "ProjectService document should reflect DesignEditingService edits");
+}
+
+void testDesignEditingServiceAddComponentPersistsThroughMainWindowSave() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "temporary directory should be valid");
+    const QString projectPath = tempDir.filePath(QStringLiteral("design_edit_save.fpproj"));
+    writeDesignFixtureProject(projectPath,
+                              loadedDesignFixture(QStringLiteral("Design Edit Save")));
+
+    MainWindow window;
+    require(window.loadGraph(projectPath),
+            "project should load before applying design edit");
+
+    DesignEditingService* editing = designEditingServiceFromRegistry(window);
+    const DesignEditResult edit =
+        editing->applyPatch(addDesignComponentPatch(QStringLiteral("component1")));
+    require(edit.success, "design add-component patch should apply");
+    const bool dirtyAfterEdit = window.m_documentDirty && window.isWindowModified();
+
+    require(window.saveDocument(projectPath),
+            "MainWindow should save after a design editing patch");
+    const auto requireSavedComponent = [&projectPath](const char* context) {
+        ProjectService reloaded;
+        const ProjectServiceResult loadResult = reloaded.loadFile(projectPath);
+        require(loadResult.success, "saved design-edit project should reload as valid V1");
+
+        bool foundComponent = false;
+        for (const ipcraft::core::ComponentInstance& component : reloaded.design().components) {
+            if (component.id != QStringLiteral("component1")) {
+                continue;
+            }
+            foundComponent = true;
+            require(component.config.value(QStringLiteral("width")).toInt() == 8,
+                    "saved design-edit component should reload flat config");
+        }
+        require(foundComponent, context);
+    };
+
+    requireSavedComponent("saved design-edit component should survive MainWindow save and reload");
+    require(dirtyAfterEdit,
+            "design editing patch should mark MainWindow dirty before save");
+    require(!window.m_documentDirty && !window.isWindowModified(),
+            "successful save should clear MainWindow dirty state");
+    require(window.saveDocument(projectPath),
+            "clean follow-up save should succeed after a design editing save");
+    requireSavedComponent("clean follow-up save should preserve the design-edit component");
 }
 
 void testNewProjectAddsIpcraftPackageInstanceFromCatalog() {
@@ -1339,6 +1402,7 @@ int main(int argc, char** argv) {
         testMainWindowSeedsDesignEditingServiceWhenProjectIsLoaded();
         testMainWindowClearAndNewProjectResetDesignEditingService();
         testDesignEditingServiceEditSynchronizesProjectServiceDocument();
+        testDesignEditingServiceAddComponentPersistsThroughMainWindowSave();
         testNewProjectAddsIpcraftPackageInstanceFromCatalog();
         testAmbiguousConnectionAppearsInPropertyPanelAndLog();
         testCatalogReloadUsesConfiguredPackageRoots();

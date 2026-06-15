@@ -1299,12 +1299,18 @@ bool MainWindow::loadDocument(const QString& path) {
 bool MainWindow::saveDocument(const QString& path) {
     const QString absolutePath = QFileInfo(pathWithProjectExtension(path)).absoluteFilePath();
     qInfo() << "Saving project to" << absolutePath;
-    const EditorProjectionResult projectionResult =
-        m_editorProjectionService->syncProjectFromProjection(QFileInfo(absolutePath).completeBaseName());
-    if (!projectionResult.success) {
-        qWarning() << "Failed to update project document before save" << projectionResult.error;
-        QMessageBox::warning(this, "Save Failed", projectionResult.error);
-        return false;
+    const bool graphHistoryDirty = m_commandManager->currentStateId() != m_cleanStateId;
+    const bool savingToDifferentPath = m_currentDocumentPath.isEmpty() ||
+        QFileInfo(m_currentDocumentPath).absoluteFilePath() != absolutePath;
+    if (!m_designEditingDirty && (graphHistoryDirty || savingToDifferentPath)) {
+        const EditorProjectionResult projectionResult =
+            m_editorProjectionService->syncProjectFromProjection(
+                QFileInfo(absolutePath).completeBaseName());
+        if (!projectionResult.success) {
+            qWarning() << "Failed to update project document before save" << projectionResult.error;
+            QMessageBox::warning(this, "Save Failed", projectionResult.error);
+            return false;
+        }
     }
 
     const ProjectServiceResult saveResult = m_projectService->saveFile(absolutePath);
@@ -1316,6 +1322,7 @@ bool MainWindow::saveDocument(const QString& path) {
 
     setCurrentDocumentPath(absolutePath);
     m_cleanStateId = m_commandManager->currentStateId();
+    m_designEditingDirty = false;
     setProjectOpen(true);
     syncDocumentStateFromHistory();
     updateRecentProjectState(m_appSettings.get(), absolutePath);
@@ -1352,10 +1359,12 @@ void MainWindow::seedDesignEditingServiceFromProjectService() {
     QScopedValueRollback<bool> rollback(m_syncingDesignEditingService, true);
     if (m_projectService->hasDocument()) {
         m_designEditingService->replaceDesign(m_projectService->design());
+        m_designEditingDirty = false;
         return;
     }
 
     m_designEditingService->replaceDesign(ipcraft::core::ProjectDesign{});
+    m_designEditingDirty = false;
 }
 
 void MainWindow::syncProjectServiceFromDesignEditingService() {
@@ -1364,6 +1373,8 @@ void MainWindow::syncProjectServiceFromDesignEditingService() {
     }
 
     m_projectService->replaceDesign(m_designEditingService->design());
+    m_designEditingDirty = true;
+    syncDocumentStateFromHistory();
 }
 
 void MainWindow::clearDocument() {
@@ -1396,7 +1407,9 @@ void MainWindow::scheduleDocumentStateRefresh() {
 }
 
 void MainWindow::syncDocumentStateFromHistory() {
-    setDocumentDirty(m_projectOpen && m_commandManager->currentStateId() != m_cleanStateId);
+    setDocumentDirty(m_projectOpen &&
+                     (m_designEditingDirty ||
+                      m_commandManager->currentStateId() != m_cleanStateId));
     updateCommandActions();
 }
 
@@ -1411,6 +1424,7 @@ void MainWindow::setDocumentDirty(bool dirty) {
     }
 
     m_documentDirty = dirty;
+    setWindowModified(dirty);
     updateWindowTitle();
 }
 
