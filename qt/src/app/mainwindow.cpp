@@ -1,8 +1,14 @@
 // MainWindow — constructs and connects all top-level UI components.
 // Layout: horizontal splitter (IP catalog | node editor | property panel)
 // inside a vertical splitter with the log panel below.
+#include "app/appcontext.h"
 #include "app/appsettings.h"
+#include "app/capabilityregistry.h"
+#include "app/extensionpointregistry.h"
 #include "app/mainwindow.h"
+#include "app/pluginhost.h"
+#include "app/serviceregistry.h"
+#include "app/staticplugincatalog.h"
 #include "app/toolpipelineservice.h"
 #include "app/workbenchservice.h"
 #include "commands/addipinstancecommand.h"
@@ -148,6 +154,10 @@ MainWindow::MainWindow(QWidget *parent)
           m_projectIpService.get(),
           m_projectService.get())),
       m_toolPipelineService(std::make_unique<ToolPipelineService>()),
+      m_serviceRegistry(std::make_unique<ServiceRegistry>()),
+      m_extensionPointRegistry(std::make_unique<ExtensionPointRegistry>()),
+      m_capabilityRegistry(std::make_unique<CapabilityRegistry>()),
+      m_pluginHost(nullptr),
       m_activeWorkspaceController(std::make_unique<ActiveWorkspaceController>(
           m_projectIpService.get(),
           m_ipCatalogService.get())),
@@ -169,6 +179,29 @@ MainWindow::MainWindow(QWidget *parent)
       m_validateAction(nullptr),
       m_arrangeAction(nullptr),
       m_topologyMenu(nullptr) {
+    m_serviceRegistry->registerService(ServiceKey::fromLiteral("finepaper.project"),
+                                       m_projectService.get());
+    m_serviceRegistry->registerService(ServiceKey::fromLiteral("finepaper.package"),
+                                       m_packageService.get());
+    m_serviceRegistry->registerService(ServiceKey::fromLiteral("finepaper.tool-pipeline"),
+                                       m_toolPipelineService.get());
+
+    AppContext context;
+    context.services = m_serviceRegistry.get();
+    context.extensionPoints = m_extensionPointRegistry.get();
+    context.capabilities = m_capabilityRegistry.get();
+    context.workbench = m_workbenchService.get();
+    context.projectService = m_projectService.get();
+    context.packageService = m_packageService.get();
+    context.toolPipelineService = m_toolPipelineService.get();
+
+    m_pluginHost = std::make_unique<PluginHost>(context);
+    registerStaticPlugins(*m_pluginHost);
+    const PluginActivationResult activationResult = m_pluginHost->activatePlugins();
+    if (!activationResult.success) {
+        qCritical().noquote() << "Plugin activation failed:" << activationResult.error;
+    }
+
     // Build the window in dependency order: widgets first, then signal wiring,
     // then actions/menus that depend on those widgets.
     reloadIpcoreCatalog();

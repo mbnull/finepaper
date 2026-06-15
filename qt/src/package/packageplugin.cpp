@@ -1,10 +1,20 @@
 #include "package/packageplugin.h"
 
 #include "app/appcontext.h"
+#include "app/serviceregistry.h"
+#include "package/packageservice.h"
 
 #include <stdexcept>
 
 namespace {
+
+bool hasPackageService(AppContext& context) {
+    if (context.services &&
+        context.services->service<PackageService>(ServiceKey::fromLiteral("finepaper.package"))) {
+        return true;
+    }
+    return context.packageService != nullptr;
+}
 
 class PackagePlugin final : public IAppPlugin {
 public:
@@ -13,7 +23,7 @@ public:
     }
 
     void activate(AppContext& context) override {
-        if (!context.packageService) {
+        if (!hasPackageService(context)) {
             throw std::runtime_error("PackageService is required before activating PackagePlugin.");
         }
     }

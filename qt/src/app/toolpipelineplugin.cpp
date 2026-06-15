@@ -1,10 +1,21 @@
 #include "app/toolpipelineplugin.h"
 
 #include "app/appcontext.h"
+#include "app/serviceregistry.h"
+#include "app/toolpipelineservice.h"
 
 #include <stdexcept>
 
 namespace {
+
+bool hasToolPipelineService(AppContext& context) {
+    if (context.services &&
+        context.services->service<ToolPipelineService>(
+            ServiceKey::fromLiteral("finepaper.tool-pipeline"))) {
+        return true;
+    }
+    return context.toolPipelineService != nullptr;
+}
 
 class ToolPipelinePlugin final : public IAppPlugin {
 public:
@@ -13,7 +24,7 @@ public:
     }
 
     void activate(AppContext& context) override {
-        if (!context.toolPipelineService) {
+        if (!hasToolPipelineService(context)) {
             throw std::runtime_error(
                 "ToolPipelineService is required before activating ToolPipelinePlugin.");
         }

@@ -1,10 +1,20 @@
 #include "project/projectplugin.h"
 
 #include "app/appcontext.h"
+#include "app/serviceregistry.h"
+#include "project/projectservice.h"
 
 #include <stdexcept>
 
 namespace {
+
+bool hasProjectService(AppContext& context) {
+    if (context.services &&
+        context.services->service<ProjectService>(ServiceKey::fromLiteral("finepaper.project"))) {
+        return true;
+    }
+    return context.projectService != nullptr;
+}
 
 class ProjectPlugin final : public IAppPlugin {
 public:
@@ -13,7 +23,7 @@ public:
     }
 
     void activate(AppContext& context) override {
-        if (!context.projectService) {
+        if (!hasProjectService(context)) {
             throw std::runtime_error("ProjectService is required before activating ProjectPlugin.");
         }
     }
