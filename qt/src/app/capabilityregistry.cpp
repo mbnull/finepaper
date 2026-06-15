@@ -7,7 +7,16 @@ bool canonical(const QString& value) {
 }
 
 QString capabilityKey(const PackageCapabilityDescriptor& capability) {
-    return capability.capabilityId.trimmed().isEmpty() ? capability.id : capability.capabilityId;
+    return capability.capabilityId.isEmpty() ? capability.id : capability.capabilityId;
+}
+
+bool canonicalList(const QStringList& values) {
+    for (const QString& value : values) {
+        if (!canonical(value)) {
+            return false;
+        }
+    }
+    return true;
 }
 
 } // namespace
@@ -15,10 +24,12 @@ QString capabilityKey(const PackageCapabilityDescriptor& capability) {
 bool CapabilityRegistry::registerHandler(const CapabilityHandlerDescriptor& handler) {
     if (!canonical(handler.capabilityId) ||
         !canonical(handler.ownerPluginId) ||
+        !canonicalList(handler.extensionPoints) ||
         m_handlersByCapability.contains(handler.capabilityId)) {
         return false;
     }
     m_handlersByCapability.insert(handler.capabilityId, handler);
+    m_handlerOrder.append(handler.capabilityId);
     return true;
 }
 
@@ -31,17 +42,16 @@ void CapabilityRegistry::recordPackageCapability(const PackageCapabilityDescript
     if (!canonical(stored.capabilityId)) {
         return;
     }
-    m_capabilitiesByPackage.insert(stored.packageId, stored);
+    m_capabilities.append(stored);
 }
 
 QVector<CapabilityCoverageRecord> CapabilityRegistry::coverageForPackage(
     const QString& packageId) const {
     QVector<CapabilityCoverageRecord> result;
-    const QList<PackageCapabilityDescriptor> capabilities =
-        m_capabilitiesByPackage.values(packageId);
-    result.reserve(capabilities.size());
-    for (const PackageCapabilityDescriptor& capability : capabilities) {
-        result.append(coverageFor(capability));
+    for (const PackageCapabilityDescriptor& capability : m_capabilities) {
+        if (capability.packageId == packageId) {
+            result.append(coverageFor(capability));
+        }
     }
     return result;
 }
@@ -49,8 +59,8 @@ QVector<CapabilityCoverageRecord> CapabilityRegistry::coverageForPackage(
 QVector<CapabilityHandlerDescriptor> CapabilityRegistry::handlers() const {
     QVector<CapabilityHandlerDescriptor> result;
     result.reserve(m_handlersByCapability.size());
-    for (auto it = m_handlersByCapability.cbegin(); it != m_handlersByCapability.cend(); ++it) {
-        result.append(it.value());
+    for (const QString& capabilityId : m_handlerOrder) {
+        result.append(m_handlersByCapability.value(capabilityId));
     }
     return result;
 }

@@ -3,6 +3,7 @@
 #include <QHash>
 #include <QJsonObject>
 #include <QString>
+#include <QStringList>
 #include <QVector>
 
 struct ExtensionContribution {
@@ -21,5 +22,5 @@ public:
 
 private:
     QHash<QString, ExtensionContribution> m_byId;
-    QMultiHash<QString, QString> m_idsByExtensionPoint;
+    QStringList m_contributionOrder;
 };

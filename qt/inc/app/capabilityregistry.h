@@ -45,5 +45,6 @@ private:
     CapabilityCoverageRecord coverageFor(const PackageCapabilityDescriptor& capability) const;
 
     QHash<QString, CapabilityHandlerDescriptor> m_handlersByCapability;
-    QMultiHash<QString, PackageCapabilityDescriptor> m_capabilitiesByPackage;
+    QStringList m_handlerOrder;
+    QVector<PackageCapabilityDescriptor> m_capabilities;
 };
