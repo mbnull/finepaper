@@ -73,6 +73,7 @@ struct PackageSpec {
     QJsonObject nativeSchema;
     QJsonObject metadata;
     QJsonObject native;
+    QJsonObject unknownSections;
 
     bool hasExtension(const QString& extensionId) const;
 };

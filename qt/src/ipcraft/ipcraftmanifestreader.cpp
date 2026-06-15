@@ -316,6 +316,7 @@ IpcraftManifestReader::readManifestFile(const QString& manifestPath) const {
     const ipcraft::PackageSpecReadResult packageResult =
         ipcraft::PackageSpecReader().readSpecFile(manifestPath);
 
+    result.spec = packageResult.spec;
     result.manifest = manifestFromPackageSpec(packageResult.spec);
     result.diagnostics = toLegacyDiagnostics(packageResult.diagnostics,
                                              packageResult.spec.packageRootPath);

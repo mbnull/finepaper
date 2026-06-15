@@ -1,5 +1,7 @@
 #pragma once
 
+#include "ipcraft/packagespec.h"
+
 #include <QHash>
 #include <QJsonObject>
 #include <QString>
@@ -131,6 +133,7 @@ struct IpcraftPackageManifest {
 
 struct IpcraftRegistryLoadResult {
     QVector<IpcraftPackageManifest> manifests;
+    QVector<ipcraft::PackageSpec> packageSpecs;
     QVector<IpcraftDiagnostic> diagnostics;
 };
 

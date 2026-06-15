@@ -612,6 +612,40 @@ const QSet<QString>& knownExtensionIds() {
     return ids;
 }
 
+const QSet<QString>& knownRootKeys() {
+    static const QSet<QString> keys{
+        QStringLiteral("schema"),
+        QStringLiteral("id"),
+        QStringLiteral("version"),
+        QStringLiteral("name"),
+        QStringLiteral("display"),
+        QStringLiteral("extensions"),
+        QStringLiteral("config_schema"),
+        QStringLiteral("interfaces"),
+        QStringLiteral("connection_rules"),
+        QStringLiteral("emitters"),
+        QStringLiteral("flows"),
+        QStringLiteral("artifacts"),
+        QStringLiteral("diagnostics"),
+        QStringLiteral("views"),
+        QStringLiteral("plugin"),
+        QStringLiteral("native_schema"),
+        QStringLiteral("metadata"),
+        QStringLiteral("native"),
+        QStringLiteral("graph_config"),
+    };
+    return keys;
+}
+
+void collectUnknownRootSections(const QJsonObject& root, ipcraft::PackageSpec& spec) {
+    const QSet<QString>& knownKeys = knownRootKeys();
+    for (auto it = root.constBegin(); it != root.constEnd(); ++it) {
+        if (!knownKeys.contains(it.key())) {
+            spec.unknownSections.insert(it.key(), it.value());
+        }
+    }
+}
+
 void validateExtensionId(const QString& id,
                          const QString& path,
                          ipcraft::DiagnosticStore& diagnostics) {
@@ -1463,28 +1497,7 @@ PackageSpecReadResult PackageSpecReader::readSpecFile(const QString& specPath) c
     }
 
     const QJsonObject root = document.object();
-    hasOnlyKeys(root,
-                {QStringLiteral("schema"),
-                 QStringLiteral("id"),
-                 QStringLiteral("version"),
-                 QStringLiteral("name"),
-                 QStringLiteral("display"),
-                 QStringLiteral("extensions"),
-                 QStringLiteral("config_schema"),
-                 QStringLiteral("interfaces"),
-                 QStringLiteral("connection_rules"),
-                 QStringLiteral("emitters"),
-                 QStringLiteral("flows"),
-                 QStringLiteral("artifacts"),
-                 QStringLiteral("diagnostics"),
-                 QStringLiteral("views"),
-                 QStringLiteral("plugin"),
-                 QStringLiteral("native_schema"),
-                 QStringLiteral("metadata"),
-                 QStringLiteral("native"),
-                 QStringLiteral("graph_config")},
-                QStringLiteral("$"),
-                result.diagnostics);
+    collectUnknownRootSections(root, result.spec);
 
     result.spec.schema = requiredString(root, QStringLiteral("schema"), QStringLiteral("$.schema"), result.diagnostics);
     if (!result.spec.schema.isEmpty() && result.spec.schema != schemaids::packageV1) {

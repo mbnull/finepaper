@@ -13,6 +13,10 @@ PackageService::PackageService(ModuleRegistry* moduleRegistry)
     }
 }
 
+void PackageService::setCapabilityRegistry(const CapabilityRegistry* registry) {
+    m_capabilityRegistry = registry;
+}
+
 PackageServiceLoadResult PackageService::reloadPackageRoots(const QStringList& rootPaths) {
     const IpcraftRegistryLoadResult loadResult =
         loadIpcraftPackageManifestsWithDiagnostics(rootPaths);
@@ -24,6 +28,14 @@ PackageServiceLoadResult PackageService::reloadPackageRoots(const QStringList& r
     m_manifests = loadResult.manifests;
     m_diagnostics = loadResult.diagnostics;
     m_catalog = IpCatalogService(m_manifests, m_moduleRegistry);
+    m_coverageReports.clear();
+    m_coverageReports.reserve(loadResult.packageSpecs.size());
+    CapabilityRegistry emptyCapabilities;
+    const CapabilityRegistry& capabilities =
+        m_capabilityRegistry ? *m_capabilityRegistry : emptyCapabilities;
+    for (const ipcraft::PackageSpec& spec : loadResult.packageSpecs) {
+        m_coverageReports.append(buildPackageCoverageReport(spec, capabilities));
+    }
 
     PackageServiceLoadResult result;
     result.success = m_diagnostics.isEmpty();
@@ -43,6 +55,19 @@ const QVector<IpcraftPackageManifest>& PackageService::manifests() const {
 
 const QVector<IpcraftDiagnostic>& PackageService::diagnostics() const {
     return m_diagnostics;
+}
+
+const QVector<PackageCoverageReport>& PackageService::coverageReports() const {
+    return m_coverageReports;
+}
+
+const PackageCoverageReport* PackageService::coverageReport(const QString& packageId) const {
+    for (const PackageCoverageReport& report : m_coverageReports) {
+        if (report.packageId == packageId) {
+            return &report;
+        }
+    }
+    return nullptr;
 }
 
 const IpCatalogService& PackageService::catalog() const {

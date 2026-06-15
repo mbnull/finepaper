@@ -8,6 +8,7 @@
 struct IpcraftManifestReadResult {
     bool ok = false;
     IpcraftPackageManifest manifest;
+    ipcraft::PackageSpec spec;
     QVector<IpcraftDiagnostic> diagnostics;
 };
 

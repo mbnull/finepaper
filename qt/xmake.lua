@@ -493,6 +493,8 @@ add_qt_test_target("ipcatalogservice_test", "test/ipcatalogservice_test.cpp", {
 })
 
 add_qt_test_target("packageservice_test", "test/packageservice_test.cpp", {
+    "src/app/capabilityregistry.cpp",
+    "src/package/packagecoverage.cpp",
     "src/package/packageservice.cpp",
     "src/ipcore/ipcatalogservice.cpp",
     "src/modules/moduleregistry.cpp",
@@ -500,6 +502,32 @@ add_qt_test_target("packageservice_test", "test/packageservice_test.cpp", {
     "src/ipcore/ipcoreruntimeregistry.cpp",
     "src/graph/parameter.cpp",
     "src/graph/port.cpp",
+    "inc/package/packageservice.h",
+    "inc/ipcore/ipcatalogservice.h",
+    "inc/**/moduleregistry.h",
+    "inc/**/ipcoreruntimedescriptor.h"
+})
+
+add_qt_test_target("packagecoverage_test", "test/packagecoverage_test.cpp", {
+    "src/app/serviceregistry.cpp",
+    "src/app/extensionpointregistry.cpp",
+    "src/app/capabilityregistry.cpp",
+    "src/app/workbenchservice.cpp",
+    "src/app/pluginhost.cpp",
+    "src/package/packagecoverage.cpp",
+    "src/package/packageplugin.cpp",
+    "src/package/packageservice.cpp",
+    "src/ipcore/ipcatalogservice.cpp",
+    "src/modules/moduleregistry.cpp",
+    "src/modules/moduleprovider.cpp",
+    "src/ipcore/ipcoreruntimeregistry.cpp",
+    "src/graph/parameter.cpp",
+    "src/graph/port.cpp",
+    "inc/app/appcontext.h",
+    "inc/app/pluginhost.h",
+    "inc/app/workbenchservice.h",
+    "inc/package/packagecoverage.h",
+    "inc/package/packageplugin.h",
     "inc/package/packageservice.h",
     "inc/ipcore/ipcatalogservice.h",
     "inc/**/moduleregistry.h",
@@ -1091,6 +1119,7 @@ target("packageplugin_test")
     add_files("src/project/projectservice.cpp")
     add_files("src/project/projectreader.cpp")
     add_files("src/project/projectwriter.cpp")
+    add_files("src/package/packagecoverage.cpp")
     add_files("src/package/packageservice.cpp")
     add_files("src/package/packageplugin.cpp")
     add_files("src/ipcore/ipcatalogservice.cpp")
@@ -1197,6 +1226,7 @@ add_qt_test_target("staticplugincatalog_test", "test/staticplugincatalog_test.cp
     "src/ipcore/ipcoregraphexporter.cpp",
     "src/modules/moduleregistry.cpp",
     "src/modules/moduleprovider.cpp",
+    "src/package/packagecoverage.cpp",
     "src/package/packageplugin.cpp",
     "src/package/packageservice.cpp",
     "src/project/graphprojectserializer.cpp",
@@ -1443,11 +1473,18 @@ target("ipcatalogpanel_test")
     add_files("src/app/appsettings.cpp")
     add_files("src/app/mainwindow.cpp")
     add_files("src/app/workbenchservice.cpp")
+    add_files("src/app/serviceregistry.cpp")
+    add_files("src/app/extensionpointregistry.cpp")
+    add_files("src/app/capabilityregistry.cpp")
+    add_files("src/app/pluginhost.cpp")
+    add_files("src/app/staticplugincatalog.cpp")
     add_files("src/app/generationartifacts.cpp")
     add_files("src/app/generationflowprovider.cpp")
     add_files("src/app/logformat.cpp")
+    add_files("src/app/projectflowsupport.cpp")
     add_files("src/app/projectgenerationrunner.cpp")
     add_files("src/app/projectlauncher.cpp")
+    add_files("src/app/toolpipelineplugin.cpp")
     add_files("src/app/toolpipelineservice.cpp")
     add_files("src/panels/*.cpp")
     add_files("src/widgets/*.cpp")

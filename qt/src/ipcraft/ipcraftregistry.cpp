@@ -278,6 +278,7 @@ bool validateViewXmlDescriptor(const IpcraftPackageManifest& manifest,
 IpcraftRegistryLoadResult loadIpcraftPackageManifestsWithDiagnostics(const QStringList& rootPaths) {
     struct CandidateManifest {
         IpcraftPackageManifest manifest;
+        ipcraft::PackageSpec packageSpec;
         QVector<IpcraftDiagnostic> diagnostics;
     };
 
@@ -297,6 +298,7 @@ IpcraftRegistryLoadResult loadIpcraftPackageManifestsWithDiagnostics(const QStri
 
         CandidateManifest candidate;
         candidate.manifest = result.manifest;
+        candidate.packageSpec = result.spec;
         for (const IpcraftViewDescriptor& view : result.manifest.views) {
             validateViewXmlDescriptor(result.manifest, view, candidate.diagnostics);
         }
@@ -345,6 +347,7 @@ IpcraftRegistryLoadResult loadIpcraftPackageManifestsWithDiagnostics(const QStri
         }
 
         loadResult.manifests.append(candidates.at(i).manifest);
+        loadResult.packageSpecs.append(candidates.at(i).packageSpec);
     }
 
     return loadResult;
