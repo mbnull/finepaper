@@ -25,6 +25,7 @@
 #include "panels/ipcatalogpanel.h"
 #include "panels/propertypanel.h"
 #include "panels/logpanel.h"
+#include "project/designeditingservice.h"
 #include "project/ipinstanceparameteradapter.h"
 #include "project/editorprojectionservice.h"
 #include "project/projectipservice.h"
@@ -146,6 +147,7 @@ MainWindow::MainWindow(QWidget *parent)
       m_packageService(std::make_unique<PackageService>(&ModuleRegistry::instance())),
       m_ipCatalogService(std::make_unique<IpCatalogService>()),
       m_projectService(std::make_unique<ProjectService>()),
+      m_designEditingService(std::make_unique<DesignEditingService>()),
       m_projectStateService(std::make_unique<ProjectStateService>()),
       m_projectIpService(std::make_unique<ProjectIpService>(m_projectStateService.get())),
       m_editorProjectionService(std::make_unique<EditorProjectionService>(
@@ -181,6 +183,8 @@ MainWindow::MainWindow(QWidget *parent)
       m_topologyMenu(nullptr) {
     m_serviceRegistry->registerService(ServiceKey::fromLiteral("finepaper.project"),
                                        m_projectService.get());
+    m_serviceRegistry->registerService(ServiceKey::fromLiteral("finepaper.design-editing"),
+                                       m_designEditingService.get());
     m_serviceRegistry->registerService(ServiceKey::fromLiteral("finepaper.package"),
                                        m_packageService.get());
     m_serviceRegistry->registerService(ServiceKey::fromLiteral("finepaper.tool-pipeline"),

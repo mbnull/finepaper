@@ -22,6 +22,7 @@ public:
 
     bool hasDocument() const;
     const ProjectDocument& document() const;
+    const ipcraft::core::ProjectDesign& design() const;
     QString currentPath() const;
 
     void clear();
@@ -31,6 +32,7 @@ public:
     ProjectServiceResult replaceDocument(ProjectDocument document);
     ProjectServiceResult replaceDocumentFromLoadedFile(ProjectDocument document, const QString& path);
     ProjectServiceResult replaceDocumentFromProjection(ProjectDocument document);
+    void replaceDesign(ipcraft::core::ProjectDesign design);
     ipcraft::core::PatchApplyResult applyDesignPatch(
         const ipcraft::core::ProjectDesign& project,
         const ipcraft::core::ProjectPatch& patch) const;
@@ -40,6 +42,7 @@ signals:
 
 private:
     ProjectDocument m_document;
+    ipcraft::core::ProjectDesign m_design;
     QString m_currentPath;
     bool m_hasDocument = false;
 };

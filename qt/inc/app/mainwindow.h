@@ -16,6 +16,7 @@
 class Graph;
 class AppSettings;
 class CommandManager;
+class DesignEditingService;
 class EditorProjectionService;
 class IIpInstanceParameterAdapter;
 class NodeEditorWidget;
@@ -118,6 +119,7 @@ private slots:
     std::unique_ptr<PackageService> m_packageService;
     std::unique_ptr<IpCatalogService> m_ipCatalogService;
     std::unique_ptr<ProjectService> m_projectService;
+    std::unique_ptr<DesignEditingService> m_designEditingService;
     std::unique_ptr<ProjectStateService> m_projectStateService;
     std::unique_ptr<ProjectIpService> m_projectIpService;
     std::unique_ptr<EditorProjectionService> m_editorProjectionService;

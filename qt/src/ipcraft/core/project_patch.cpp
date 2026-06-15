@@ -139,6 +139,165 @@ qsizetype componentIndexById(const ProjectDesign& project, const QString& compon
     return -1;
 }
 
+bool isNonEmptyString(const QJsonValue& value) {
+    return value.isString() && !value.toString().trimmed().isEmpty();
+}
+
+QString packageRefKey(const PackageRef& package) {
+    return package.id + QLatin1Char('@') + package.version;
+}
+
+QString resolveComponentPackageRef(const ProjectDesign& project, const QString& requestedRef) {
+    if (requestedRef.contains(QLatin1Char('@'))) {
+        return requestedRef;
+    }
+
+    QString resolved;
+    for (const PackageRef& package : project.packages) {
+        if (package.id != requestedRef || package.version.trimmed().isEmpty()) {
+            continue;
+        }
+
+        if (!resolved.isEmpty()) {
+            return requestedRef;
+        }
+        resolved = packageRefKey(package);
+    }
+
+    return resolved.isEmpty() ? requestedRef : resolved;
+}
+
+QJsonObject addComponentPayload(const PatchOperation& operation) {
+    if (operation.payload.value(QStringLiteral("payload")).isObject()) {
+        return operation.payload.value(QStringLiteral("payload")).toObject();
+    }
+
+    if (operation.value.isObject()) {
+        return operation.value.toObject();
+    }
+
+    return operation.payload;
+}
+
+bool optionalObjectField(const QJsonObject& payload,
+                         const QString& key,
+                         const QString& code,
+                         const QString& path,
+                         QVector<ValidationIssue>& issues,
+                         QJsonObject& output) {
+    if (!payload.contains(key)) {
+        output = {};
+        return true;
+    }
+
+    if (!payload.value(key).isObject()) {
+        issues.append(issue(code, QStringLiteral("Component field must be an object."), path));
+        return false;
+    }
+
+    output = payload.value(key).toObject();
+    return true;
+}
+
+bool applyAddComponentOperation(ProjectDesign& candidate,
+                                const PatchOperation& operation,
+                                qsizetype opIndex,
+                                QVector<ValidationIssue>& issues) {
+    if (operation.target != QStringLiteral("component")) {
+        issues.append(issue(QStringLiteral("patch.invalid_target"),
+                            QStringLiteral("Patch target is not supported."),
+                            QStringLiteral("/ops/%1/target").arg(opIndex)));
+        return false;
+    }
+
+    if (operation.path != QStringLiteral("/components/-")) {
+        issues.append(issue(QStringLiteral("patch.unsupported_path"),
+                            QStringLiteral("Patch path is not supported."),
+                            QStringLiteral("/ops/%1/path").arg(opIndex)));
+        return false;
+    }
+
+    const QJsonObject payload = addComponentPayload(operation);
+    if (payload.isEmpty()) {
+        issues.append(issue(QStringLiteral("patch.invalid_component_payload"),
+                            QStringLiteral("add component requires a payload object."),
+                            QStringLiteral("/ops/%1/payload").arg(opIndex)));
+        return false;
+    }
+
+    if (!isNonEmptyString(payload.value(QStringLiteral("id")))) {
+        issues.append(issue(QStringLiteral("patch.component_missing_id"),
+                            QStringLiteral("Component id is required."),
+                            QStringLiteral("/ops/%1/payload/id").arg(opIndex)));
+        return false;
+    }
+
+    if (!isNonEmptyString(payload.value(QStringLiteral("type")))) {
+        issues.append(issue(QStringLiteral("patch.component_missing_type"),
+                            QStringLiteral("Component type is required."),
+                            QStringLiteral("/ops/%1/payload/type").arg(opIndex)));
+        return false;
+    }
+
+    if (!isNonEmptyString(payload.value(QStringLiteral("packageRef")))) {
+        issues.append(issue(QStringLiteral("patch.component_missing_package_ref"),
+                            QStringLiteral("Component packageRef is required."),
+                            QStringLiteral("/ops/%1/payload/packageRef").arg(opIndex)));
+        return false;
+    }
+
+    const QString componentId = payload.value(QStringLiteral("id")).toString();
+    if (componentIndexById(candidate, componentId) >= 0) {
+        issues.append(issue(QStringLiteral("patch.duplicate_component_id"),
+                            QStringLiteral("Component id is duplicated."),
+                            QStringLiteral("/ops/%1/payload/id").arg(opIndex)));
+        return false;
+    }
+
+    ComponentInstance component;
+    component.id = componentId;
+    component.type = payload.value(QStringLiteral("type")).toString();
+    component.packageRef = resolveComponentPackageRef(
+        candidate,
+        payload.value(QStringLiteral("packageRef")).toString());
+
+    if (!optionalObjectField(payload,
+                             QStringLiteral("config"),
+                             QStringLiteral("patch.invalid_component_config_shape"),
+                             QStringLiteral("/ops/%1/payload/config").arg(opIndex),
+                             issues,
+                             component.config)) {
+        return false;
+    }
+    if (!optionalObjectField(payload,
+                             QStringLiteral("identity"),
+                             QStringLiteral("patch.invalid_component_identity_shape"),
+                             QStringLiteral("/ops/%1/payload/identity").arg(opIndex),
+                             issues,
+                             component.identity)) {
+        return false;
+    }
+    if (!optionalObjectField(payload,
+                             QStringLiteral("metadata"),
+                             QStringLiteral("patch.invalid_component_metadata_shape"),
+                             QStringLiteral("/ops/%1/payload/metadata").arg(opIndex),
+                             issues,
+                             component.metadata)) {
+        return false;
+    }
+    if (!optionalObjectField(payload,
+                             QStringLiteral("extensionData"),
+                             QStringLiteral("patch.invalid_component_extension_data_shape"),
+                             QStringLiteral("/ops/%1/payload/extensionData").arg(opIndex),
+                             issues,
+                             component.extensionData)) {
+        return false;
+    }
+
+    candidate.components.append(component);
+    return true;
+}
+
 QJsonObject operationToJson(const PatchOperation& operation) {
     QJsonObject object = operation.payload;
     object.remove(QStringLiteral("op"));
@@ -274,6 +433,13 @@ PatchApplyResult applyPatch(const ProjectDesign& project, const ProjectPatch& pa
                                        QStringLiteral("Patch operation op is required."),
                                        QStringLiteral("/ops/%1/op").arg(opIndex)));
             return result;
+        }
+
+        if (operation.op == QStringLiteral("add")) {
+            if (!applyAddComponentOperation(candidate, operation, opIndex, result.issues)) {
+                return result;
+            }
+            continue;
         }
 
         if (operation.op != QStringLiteral("set_config")) {
