@@ -1169,6 +1169,59 @@ void testDesignEditingServiceAddComponentPersistsThroughMainWindowSave() {
     requireSavedComponent("clean follow-up save should preserve the design-edit component");
 }
 
+void testSavedDesignEditSurvivesLaterGraphProjectionSave() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "temporary directory should be valid");
+    const QString projectPath =
+        tempDir.filePath(QStringLiteral("saved_design_later_projection.fpproj"));
+    writeDesignFixtureProject(projectPath,
+                              loadedDesignFixture(QStringLiteral("Saved Design Projection Save")));
+
+    MainWindow window;
+    require(window.loadGraph(projectPath),
+            "project should load before saved-design projection-save regression");
+
+    DesignEditingService* editing = designEditingServiceFromRegistry(window);
+    const DesignEditResult edit =
+        editing->applyPatch(addDesignComponentPatch(QStringLiteral("component1")));
+    require(edit.success, "design add-component patch should apply before first save");
+    require(window.saveDocument(projectPath),
+            "first save should persist design edit and clear design dirty state");
+    require(!window.m_designEditingDirty,
+            "first save should clear design editing dirty state");
+
+    auto module = std::make_unique<Module>(QStringLiteral("later_graph_node"),
+                                           QStringLiteral("LaterGraphModule"));
+    module->setIpcoreId(QStringLiteral("vendor.designpkg"));
+    module->setInstanceId(QStringLiteral("component0"));
+    std::unique_ptr<Command> rejected = window.m_commandManager->executeCommand(
+        std::make_unique<AddModuleCommand>(window.m_graph,
+                                           std::move(module),
+                                           QStringLiteral("vendor.designpkg"),
+                                           QStringLiteral("component0")));
+    require(rejected == nullptr,
+            "graph add-module command should execute after design-only save");
+    require(window.m_commandManager->currentStateId() != window.m_cleanStateId,
+            "graph edit should leave graph history dirty before second save");
+    require(!window.m_designEditingDirty,
+            "graph-only edit should not re-mark design editing dirty before second save");
+
+    require(window.saveDocument(projectPath),
+            "second save should persist graph edit without dropping saved design state");
+
+    ProjectService reloaded;
+    const ProjectServiceResult loadResult = reloaded.loadFile(projectPath);
+    require(loadResult.success, "second-save project should reload as valid V1");
+    require(designHasComponentWithWidth(reloaded.design(),
+                                        QStringLiteral("component1"),
+                                        8),
+            "later graph projection save should preserve the already-saved design component");
+    require(graphConfigHasObject(reloaded.document(),
+                                 QStringLiteral("component0"),
+                                 QStringLiteral("later_graph_node")),
+            "later graph projection save should persist the graph-projected module");
+}
+
 void testMainWindowSavePersistsMixedGraphAndDesignEdits() {
     QTemporaryDir tempDir;
     require(tempDir.isValid(), "temporary directory should be valid");
@@ -1483,6 +1536,7 @@ int main(int argc, char** argv) {
         testMainWindowClearAndNewProjectResetDesignEditingService();
         testDesignEditingServiceEditSynchronizesProjectServiceDocument();
         testDesignEditingServiceAddComponentPersistsThroughMainWindowSave();
+        testSavedDesignEditSurvivesLaterGraphProjectionSave();
         testMainWindowSavePersistsMixedGraphAndDesignEdits();
         testNewProjectAddsIpcraftPackageInstanceFromCatalog();
         testAmbiguousConnectionAppearsInPropertyPanelAndLog();

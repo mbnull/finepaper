@@ -74,6 +74,23 @@ QString projectFileDialogOpenFilter() {
     return QStringLiteral("Finepaper Project (*.fpproj);;All Files (*)");
 }
 
+bool hasMeaningfulProjectDesign(const ipcraft::core::ProjectDesign& design) {
+    return !design.schema.isEmpty() ||
+           !design.id.isEmpty() ||
+           !design.name.isEmpty() ||
+           !design.packages.isEmpty() ||
+           !design.components.isEmpty() ||
+           !design.interfaces.isEmpty() ||
+           !design.connections.isEmpty() ||
+           !design.topologies.isEmpty() ||
+           !design.constraints.isEmpty() ||
+           !design.views.isEmpty() ||
+           !design.diagnostics.isEmpty() ||
+           !design.artifacts.isEmpty() ||
+           !design.extensions.isEmpty() ||
+           !design.metadata.isEmpty();
+}
+
 QString pathWithProjectExtension(QString path) {
     return QFileInfo(path).suffix().isEmpty() ? path + QStringLiteral(".fpproj") : path;
 }
@@ -1303,11 +1320,19 @@ bool MainWindow::saveDocument(const QString& path) {
     const bool savingToDifferentPath = m_currentDocumentPath.isEmpty() ||
         QFileInfo(m_currentDocumentPath).absoluteFilePath() != absolutePath;
     const bool designEditingDirty = m_designEditingDirty;
-    const ipcraft::core::ProjectDesign designBeforeProjection =
-        designEditingDirty && m_designEditingService
-            ? m_designEditingService->design()
-            : ipcraft::core::ProjectDesign{};
-    if (graphHistoryDirty || savingToDifferentPath) {
+    const bool syncingProjection = graphHistoryDirty || savingToDifferentPath;
+    std::optional<ipcraft::core::ProjectDesign> designBeforeProjection;
+    if ((designEditingDirty || syncingProjection) &&
+        m_projectOpen &&
+        m_designEditingService &&
+        m_projectService &&
+        m_projectService->hasDocument()) {
+        const ipcraft::core::ProjectDesign currentDesign = m_designEditingService->design();
+        if (designEditingDirty || hasMeaningfulProjectDesign(currentDesign)) {
+            designBeforeProjection = currentDesign;
+        }
+    }
+    if (syncingProjection) {
         const EditorProjectionResult projectionResult =
             m_editorProjectionService->syncProjectFromProjection(
                 QFileInfo(absolutePath).completeBaseName());
@@ -1317,8 +1342,8 @@ bool MainWindow::saveDocument(const QString& path) {
             return false;
         }
     }
-    if (designEditingDirty) {
-        m_projectService->replaceDesign(designBeforeProjection);
+    if (designBeforeProjection.has_value()) {
+        m_projectService->replaceDesign(*designBeforeProjection);
     }
 
     const ProjectServiceResult saveResult = m_projectService->saveFile(absolutePath);
