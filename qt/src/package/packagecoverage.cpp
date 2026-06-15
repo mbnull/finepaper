@@ -143,19 +143,6 @@ QVector<DeclaredCapability> capabilitiesFromDescriptor(const QJsonObject& descri
         return capabilities;
     }
 
-    if (extensions.isObject()) {
-        const QJsonObject object = extensions.toObject();
-        for (auto it = object.constBegin(); it != object.constEnd(); ++it) {
-            DeclaredCapability capability;
-            capability.id = it.key();
-            capability.descriptor = objectDescriptor(it.value());
-            capability.descriptor.insert(QStringLiteral("id"), capability.id);
-            capability.required = capability.descriptor.value(QStringLiteral("required")).isBool()
-                ? capability.descriptor.value(QStringLiteral("required")).toBool()
-                : true;
-            capabilities.append(capability);
-        }
-    }
     return capabilities;
 }
 
@@ -181,6 +168,15 @@ QVector<DeclaredCapability> capabilitiesFromSpec(const ipcraft::PackageSpec& spe
         capabilities.append(capability);
     }
     return capabilities;
+}
+
+QJsonObject endpointMatchDescriptor(const ipcraft::PackageEndpointMatch& endpoint) {
+    QJsonObject object;
+    object.insert(QStringLiteral("kind"), endpoint.kind);
+    object.insert(QStringLiteral("protocol"), endpoint.protocol);
+    object.insert(QStringLiteral("role"), endpoint.role);
+    object.insert(QStringLiteral("direction"), endpoint.direction);
+    return object;
 }
 
 const CapabilityHandlerDescriptor* handlerForCapability(
@@ -391,6 +387,8 @@ QJsonObject specDescriptor(const ipcraft::PackageSpec& spec) {
              spec.connectionRules.compatibility) {
             QJsonObject object;
             object.insert(QStringLiteral("connection_type"), rule.connectionType);
+            object.insert(QStringLiteral("from"), endpointMatchDescriptor(rule.from));
+            object.insert(QStringLiteral("to"), endpointMatchDescriptor(rule.to));
             object.insert(QStringLiteral("arity"), rule.arity);
             object.insert(QStringLiteral("metadata"), rule.metadata);
             compatibility.append(object);

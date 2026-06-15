@@ -14,6 +14,7 @@
 #include <QApplication>
 #include <QComboBox>
 #include <QCoreApplication>
+#include <QDialog>
 #include <QDockWidget>
 #include <QDir>
 #include <QEventLoop>
@@ -35,6 +36,7 @@
 #include <QToolButton>
 #include <QTreeWidget>
 #include <iostream>
+#include <memory>
 #include <stdexcept>
 
 #define private public
@@ -81,6 +83,38 @@ void acceptOpenInputDialogs() {
 void scheduleInputDialogAccepts() {
     for (int index = 0; index < 8; ++index) {
         QTimer::singleShot(index * 10, &acceptOpenInputDialogs);
+    }
+}
+
+void captureAndRejectPackageRootsDialog(const std::shared_ptr<QStringList>& diagnostics) {
+    for (QWidget* widget : QApplication::topLevelWidgets()) {
+        if (!widget || widget->objectName() != QStringLiteral("ipcorePathsDialog")) {
+            continue;
+        }
+        if (auto* list = widget->findChild<QListWidget*>(
+                QStringLiteral("ipcorePathsDiagnostics"))) {
+            diagnostics->clear();
+            for (int row = 0; row < list->count(); ++row) {
+                const QListWidgetItem* item = list->item(row);
+                if (item) {
+                    diagnostics->append(item->text());
+                }
+            }
+        }
+        if (auto* dialog = qobject_cast<QDialog*>(widget)) {
+            dialog->reject();
+        } else {
+            widget->close();
+        }
+        return;
+    }
+}
+
+void schedulePackageRootsDialogCapture(const std::shared_ptr<QStringList>& diagnostics) {
+    for (int index = 0; index < 20; ++index) {
+        QTimer::singleShot(index * 10, [diagnostics] {
+            captureAndRejectPackageRootsDialog(diagnostics);
+        });
     }
 }
 
@@ -166,6 +200,22 @@ void writeMinimalPackage(const QString& packageRootPath, const QString& packageI
     }
   }
 })json").arg(packageId).toUtf8());
+}
+
+void writePackageRequiringCapability(const QString& packageRootPath,
+                                     const QString& packageId,
+                                     const QString& capabilityId) {
+    QDir root(packageRootPath);
+    writeFile(root.filePath(QStringLiteral("ipcraft.json")),
+              QStringLiteral(R"json({
+  "schema": "ipcraft.package.v1",
+  "id": "%1",
+  "name": "Capability Diagnostics Package",
+  "version": "1.0.0",
+  "extensions": [
+    { "id": "%2", "required": true }
+  ]
+})json").arg(packageId, capabilityId).toUtf8());
 }
 
 void writePackageWithParameter(const QString& packageRootPath,
@@ -1055,6 +1105,37 @@ void testCatalogReloadRefreshesPropertyPanelParameters() {
             "property panel should drop stale package parameters after reload");
 }
 
+void testPackageRootsDialogReportsMissingCapabilityDiagnostics() {
+    ModuleRegistryRestore restoreRegistry;
+    QTemporaryDir settingsRoot;
+    QTemporaryDir packageRoot;
+    require(settingsRoot.isValid() && packageRoot.isValid(),
+            "temporary directories should be valid");
+
+    configureSettingsRoot(settingsRoot.path(),
+                          QStringLiteral("ipcatalogpanel_package_roots_diagnostics_test_app"));
+    const QString capabilityId = QStringLiteral("vendor.dialog.required.v1");
+    writePackageRequiringCapability(packageRoot.path(),
+                                    QStringLiteral("org.example.dialogdiagnostics"),
+                                    capabilityId);
+    AppSettings().setIpcorePaths({packageRoot.path()});
+
+    MainWindow window;
+    const std::shared_ptr<QStringList> diagnostics = std::make_shared<QStringList>();
+    schedulePackageRootsDialogCapture(diagnostics);
+    window.manageIpcorePackageRoots();
+
+    bool sawMissingCapabilityDiagnostic = false;
+    for (const QString& diagnostic : *diagnostics) {
+        sawMissingCapabilityDiagnostic =
+            sawMissingCapabilityDiagnostic ||
+            (diagnostic.contains(capabilityId) &&
+             diagnostic.contains(QStringLiteral("Required capability has no registered handler.")));
+    }
+    require(sawMissingCapabilityDiagnostic,
+            "package roots dialog should report missing required capability handlers");
+}
+
 void testDefaultRegistrySurvivesCatalogReloadTests() {
     QTemporaryDir settingsRoot;
     require(settingsRoot.isValid(), "temporary settings directory should be valid");
@@ -1106,6 +1187,7 @@ int main(int argc, char** argv) {
         testAmbiguousConnectionAppearsInPropertyPanelAndLog();
         testCatalogReloadUsesConfiguredPackageRoots();
         testCatalogReloadRefreshesPropertyPanelParameters();
+        testPackageRootsDialogReportsMissingCapabilityDiagnostics();
         testDefaultRegistrySurvivesCatalogReloadTests();
     } catch (const std::exception& error) {
         std::cerr << "ipcatalogpanel_test failed: " << error.what() << '\n';

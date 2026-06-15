@@ -1131,6 +1131,7 @@ void MainWindow::manageIpcorePackageRoots() {
     const QStringList currentPaths = m_appSettings ? m_appSettings->ipcorePaths() : QStringList{};
     ModuleRegistry diagnosticsRegistry(ModuleRegistry::LoadMode::Empty);
     PackageService diagnosticsService(&diagnosticsRegistry);
+    diagnosticsService.setCapabilityRegistry(m_capabilityRegistry.get());
     const PackageServiceLoadResult diagnosticsResult =
         diagnosticsService.reloadPackageRoots(currentPaths);
     dialog.setPaths(currentPaths);

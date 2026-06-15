@@ -177,6 +177,75 @@ void testDescriptorSectionsAreVisible() {
             "unknown descriptor item should preserve raw data");
 }
 
+void testSpecConnectionRuleCompatibilityCoveragePreservesEndpointMatches() {
+    ipcraft::PackageSpec spec;
+    spec.id = QStringLiteral("vendor.compatibilitycoverage");
+
+    ipcraft::PackageCompatibilityRule rule;
+    rule.connectionType = QStringLiteral("mesh-link");
+    rule.arity = QStringLiteral("one-to-one");
+    rule.from.kind = QStringLiteral("initiator");
+    rule.from.protocol = QStringLiteral("axi4");
+    rule.from.role = QStringLiteral("master");
+    rule.from.direction = QStringLiteral("out");
+    rule.to.kind = QStringLiteral("target");
+    rule.to.protocol = QStringLiteral("axi4");
+    rule.to.role = QStringLiteral("slave");
+    rule.to.direction = QStringLiteral("in");
+    rule.metadata.insert(QStringLiteral("latency"), QStringLiteral("bounded"));
+    spec.connectionRules.compatibility.append(rule);
+
+    CapabilityRegistry capabilities;
+    const PackageCoverageReport report = buildPackageCoverageReport(spec, capabilities);
+    const PackageFeatureCoverageItem item =
+        requireItem(report,
+                    QStringLiteral("connection_rules"),
+                    "connection rules coverage item should exist");
+    const QJsonArray compatibility =
+        item.descriptor.value(QStringLiteral("compatibility")).toArray();
+    require(compatibility.size() == 1,
+            "connection rule compatibility declaration should be visible");
+
+    const QJsonObject compatibilityRule = compatibility.at(0).toObject();
+    const QJsonObject from = compatibilityRule.value(QStringLiteral("from")).toObject();
+    const QJsonObject to = compatibilityRule.value(QStringLiteral("to")).toObject();
+    require(from.value(QStringLiteral("kind")).toString() == QStringLiteral("initiator"),
+            "compatibility from.kind should be preserved");
+    require(from.value(QStringLiteral("protocol")).toString() == QStringLiteral("axi4"),
+            "compatibility from.protocol should be preserved");
+    require(from.value(QStringLiteral("role")).toString() == QStringLiteral("master"),
+            "compatibility from.role should be preserved");
+    require(from.value(QStringLiteral("direction")).toString() == QStringLiteral("out"),
+            "compatibility from.direction should be preserved");
+    require(to.value(QStringLiteral("kind")).toString() == QStringLiteral("target"),
+            "compatibility to.kind should be preserved");
+    require(to.value(QStringLiteral("protocol")).toString() == QStringLiteral("axi4"),
+            "compatibility to.protocol should be preserved");
+    require(to.value(QStringLiteral("role")).toString() == QStringLiteral("slave"),
+            "compatibility to.role should be preserved");
+    require(to.value(QStringLiteral("direction")).toString() == QStringLiteral("in"),
+            "compatibility to.direction should be preserved");
+}
+
+void testDirectDescriptorObjectFormExtensionsArePayloadsNotCapabilities() {
+    QJsonObject descriptor;
+    descriptor.insert(QStringLiteral("id"), QStringLiteral("vendor.payloadcoverage"));
+    descriptor.insert(QStringLiteral("extensions"),
+                      QJsonObject{
+                          {QStringLiteral("vendor.payload.v1"),
+                           QJsonObject{{QStringLiteral("enabled"), true}}}
+                      });
+
+    CapabilityRegistry capabilities;
+    const PackageCoverageReport report = buildPackageCoverageReport(descriptor, capabilities);
+
+    require(!report.hasBlockingItems(),
+            "object-form extension payloads should not create blocking capabilities");
+    require(report.item(QStringLiteral("capability:vendor.payload.v1")).status ==
+                PackageFeatureCoverageStatus::Invalid,
+            "object-form extension payload keys should not be reported as capability ids");
+}
+
 void testPackageServiceStoresCoverageFromFullPackageSpecs() {
     QTemporaryDir temp;
     require(temp.isValid(), "temporary package root should be valid");
@@ -257,6 +326,8 @@ int main(int argc, char** argv) {
         testOptionalUnknownCapabilityIsUnsupported();
         testRegisteredHandlerMakesRequiredCapabilityHandled();
         testDescriptorSectionsAreVisible();
+        testSpecConnectionRuleCompatibilityCoveragePreservesEndpointMatches();
+        testDirectDescriptorObjectFormExtensionsArePayloadsNotCapabilities();
         testPackageServiceStoresCoverageFromFullPackageSpecs();
         testPackagePluginRegistersCoverageInspectorContribution();
     } catch (const std::exception& error) {
