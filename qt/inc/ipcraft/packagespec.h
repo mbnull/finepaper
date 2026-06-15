@@ -35,6 +35,12 @@ struct PackageConnectionRules {
     QJsonObject native;
 };
 
+struct PackageExtensionDeclaration {
+    QString id;
+    bool required = true;
+    QJsonObject descriptor;
+};
+
 struct PackageInterfaceSpec {
     QString id;
     QString name;
@@ -58,6 +64,7 @@ struct PackageSpec {
     QString packageRootPath;
     QJsonObject display;
     QStringList extensions;
+    QVector<PackageExtensionDeclaration> extensionDeclarations;
     QJsonObject extensionPayloads;
     QJsonObject configSchema;
     QVector<PackageInterfaceSpec> interfaces;

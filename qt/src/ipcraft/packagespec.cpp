@@ -592,26 +592,6 @@ void validateNativeEditorMetadata(const QJsonObject& native,
     }
 }
 
-const QSet<QString>& knownExtensionIds() {
-    static const QSet<QString> ids{
-        QStringLiteral("ipcraft.config.params"),
-        QStringLiteral("ipcraft.config.tables"),
-        QStringLiteral("ipcraft.config.documents"),
-        QStringLiteral("ipcraft.config.files"),
-        QStringLiteral("ipcraft.interfaces"),
-        QStringLiteral("ipcraft.composition"),
-        QStringLiteral("ipcraft.layout"),
-        QStringLiteral("ipcraft.emitters"),
-        QStringLiteral("ipcraft.flows"),
-        QStringLiteral("ipcraft.artifacts"),
-        QStringLiteral("ipcraft.diagnostics"),
-        QStringLiteral("ipcraft.views"),
-        QStringLiteral("ipcraft.graph_config"),
-        QStringLiteral("noc.v1")
-    };
-    return ids;
-}
-
 const QSet<QString>& knownRootKeys() {
     static const QSet<QString> keys{
         QStringLiteral("schema"),
@@ -644,21 +624,6 @@ void collectUnknownRootSections(const QJsonObject& root, ipcraft::PackageSpec& s
             spec.unknownSections.insert(it.key(), it.value());
         }
     }
-}
-
-void validateExtensionId(const QString& id,
-                         const QString& path,
-                         ipcraft::DiagnosticStore& diagnostics) {
-    if (id.isEmpty()) {
-        return;
-    }
-    if (knownExtensionIds().contains(id)) {
-        return;
-    }
-    addDiagnostic(diagnostics,
-                  QStringLiteral("package.unknown_extension"),
-                  QStringLiteral("Package extension is not recognized by the V1 runtime."),
-                  path);
 }
 
 void validateConfigSchema(const QJsonObject& configSchema,
@@ -1062,6 +1027,7 @@ void parseExtensions(const QJsonObject& root,
     }
     if (value.isArray()) {
         const QJsonArray array = value.toArray();
+        QSet<QString> declaredIds;
         for (qsizetype index = 0; index < array.size(); ++index) {
             const QJsonValue item = array.at(index);
             const QString itemPath = QStringLiteral("$.extensions[%1]").arg(index);
@@ -1075,8 +1041,15 @@ void parseExtensions(const QJsonObject& root,
                     continue;
                 }
                 if (!id.isEmpty()) {
-                    spec.extensions.append(id);
-                    validateExtensionId(id, itemPath, diagnostics);
+                    if (!declaredIds.contains(id)) {
+                        ipcraft::PackageExtensionDeclaration declaration;
+                        declaration.id = id;
+                        declaration.required = true;
+                        declaration.descriptor.insert(QStringLiteral("id"), id);
+                        spec.extensions.append(id);
+                        spec.extensionDeclarations.append(declaration);
+                        declaredIds.insert(id);
+                    }
                 }
                 continue;
             }
@@ -1084,6 +1057,7 @@ void parseExtensions(const QJsonObject& root,
                 const QJsonObject extensionObject = item.toObject();
                 hasOnlyKeys(extensionObject,
                             {QStringLiteral("id"),
+                             QStringLiteral("required"),
                              QStringLiteral("version"),
                              QStringLiteral("metadata"),
                              QStringLiteral("native")},
@@ -1093,6 +1067,11 @@ void parseExtensions(const QJsonObject& root,
                                                   QStringLiteral("id"),
                                                   childPath(itemPath, QStringLiteral("id")),
                                                   diagnostics);
+                const bool required = optionalBool(extensionObject,
+                                                   QStringLiteral("required"),
+                                                   childPath(itemPath, QStringLiteral("required")),
+                                                   diagnostics,
+                                                   true);
                 optionalString(extensionObject,
                                QStringLiteral("version"),
                                childPath(itemPath, QStringLiteral("version")),
@@ -1108,8 +1087,15 @@ void parseExtensions(const QJsonObject& root,
                                childPath(itemPath, QStringLiteral("native")),
                                diagnostics,
                                &ignored);
-                spec.extensions.append(id);
-                validateExtensionId(id, childPath(itemPath, QStringLiteral("id")), diagnostics);
+                if (!id.isEmpty() && !declaredIds.contains(id)) {
+                    ipcraft::PackageExtensionDeclaration declaration;
+                    declaration.id = id;
+                    declaration.required = required;
+                    declaration.descriptor = extensionObject;
+                    spec.extensions.append(id);
+                    spec.extensionDeclarations.append(declaration);
+                    declaredIds.insert(id);
+                }
                 continue;
             }
             addDiagnostic(diagnostics,
@@ -1117,7 +1103,6 @@ void parseExtensions(const QJsonObject& root,
                           QStringLiteral("Extension declaration must be a string or object."),
                           itemPath);
         }
-        spec.extensions.removeDuplicates();
         return;
     }
     if (value.isObject()) {

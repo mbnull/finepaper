@@ -6,6 +6,28 @@
 
 #include <stdexcept>
 
+namespace {
+
+IpcraftDiagnostic missingCapabilityHandlerDiagnostic(const ipcraft::PackageSpec& spec,
+                                                    const PackageFeatureCoverageItem& item) {
+    IpcraftDiagnostic diagnostic;
+    diagnostic.severity = QStringLiteral("error");
+    diagnostic.source = QStringLiteral("package.coverage");
+    diagnostic.ruleId = QStringLiteral("package.capability_missing_handler");
+    diagnostic.category = QStringLiteral("package");
+    diagnostic.packageRootPath = spec.packageRootPath;
+    diagnostic.path = item.id;
+    diagnostic.message = item.message;
+    return diagnostic;
+}
+
+bool isBlockingCapability(const PackageFeatureCoverageItem& item) {
+    return item.status == PackageFeatureCoverageStatus::Blocking &&
+           item.id.startsWith(QStringLiteral("capability:"));
+}
+
+} // namespace
+
 PackageService::PackageService(ModuleRegistry* moduleRegistry)
     : m_moduleRegistry(moduleRegistry) {
     if (!m_moduleRegistry) {
@@ -34,7 +56,15 @@ PackageServiceLoadResult PackageService::reloadPackageRoots(const QStringList& r
     const CapabilityRegistry& capabilities =
         m_capabilityRegistry ? *m_capabilityRegistry : emptyCapabilities;
     for (const ipcraft::PackageSpec& spec : loadResult.packageSpecs) {
-        m_coverageReports.append(buildPackageCoverageReport(spec, capabilities));
+        PackageCoverageReport report = buildPackageCoverageReport(spec, capabilities);
+        if (m_capabilityRegistry) {
+            for (const PackageFeatureCoverageItem& item : report.items) {
+                if (isBlockingCapability(item)) {
+                    m_diagnostics.append(missingCapabilityHandlerDiagnostic(spec, item));
+                }
+            }
+        }
+        m_coverageReports.append(report);
     }
 
     PackageServiceLoadResult result;

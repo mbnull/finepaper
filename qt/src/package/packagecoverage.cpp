@@ -161,22 +161,23 @@ QVector<DeclaredCapability> capabilitiesFromDescriptor(const QJsonObject& descri
 
 QVector<DeclaredCapability> capabilitiesFromSpec(const ipcraft::PackageSpec& spec) {
     QVector<DeclaredCapability> capabilities;
+    if (!spec.extensionDeclarations.isEmpty()) {
+        for (const ipcraft::PackageExtensionDeclaration& declaration : spec.extensionDeclarations) {
+            DeclaredCapability capability;
+            capability.id = declaration.id;
+            capability.required = declaration.required;
+            capability.descriptor = declaration.descriptor;
+            capability.descriptor.insert(QStringLiteral("id"), declaration.id);
+            capabilities.append(capability);
+        }
+        return capabilities;
+    }
+
     for (const QString& extensionId : spec.extensions) {
         DeclaredCapability capability;
         capability.id = extensionId;
         capability.required = true;
         capability.descriptor.insert(QStringLiteral("id"), extensionId);
-        capabilities.append(capability);
-    }
-
-    for (auto it = spec.extensionPayloads.constBegin(); it != spec.extensionPayloads.constEnd(); ++it) {
-        DeclaredCapability capability;
-        capability.id = it.key();
-        capability.descriptor = objectDescriptor(it.value());
-        capability.descriptor.insert(QStringLiteral("id"), capability.id);
-        capability.required = capability.descriptor.value(QStringLiteral("required")).isBool()
-            ? capability.descriptor.value(QStringLiteral("required")).toBool()
-            : true;
         capabilities.append(capability);
     }
     return capabilities;

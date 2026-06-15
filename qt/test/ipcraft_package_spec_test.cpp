@@ -280,24 +280,34 @@ void testExtensionDeclarationsMatchSchemaContract() {
             "extension payload value type should be diagnosed");
 }
 
-void testUnknownExtensionIsRejected() {
+void testUnknownExtensionDeclarationIsAcceptedAsPackageCapability() {
     QTemporaryDir temp;
     require(temp.isValid(), "temporary directory should be valid");
     QDir root(temp.path());
 
     QJsonObject spec = minimalPackageSpec();
     spec.insert(QStringLiteral("extensions"), QJsonArray{
-        QStringLiteral("vendor.example.magic")
+        QStringLiteral("vendor.example.magic"),
+        QJsonObject{
+            {QStringLiteral("id"), QStringLiteral("vendor.example.optional")},
+            {QStringLiteral("required"), false},
+            {QStringLiteral("metadata"),
+             QJsonObject{{QStringLiteral("surface"), QStringLiteral("inspector")}}},
+            {QStringLiteral("native"),
+             QJsonObject{{QStringLiteral("vendor_blob"), true}}}
+        }
     });
     writePackage(root, spec);
 
     const ipcraft::PackageSpecReadResult result =
         ipcraft::PackageSpecReader().readPackageRoot(root.absolutePath());
-    require(!result.ok, "unknown package extension should fail");
-    require(hasPackageParserDiagnosticAt(result.diagnostics,
-                                         QStringLiteral("package.unknown_extension"),
-                                         QStringLiteral("$.extensions[0]")),
-            "unknown extension should emit package.unknown_extension at declaration path");
+    require(result.ok, "unknown package extension declarations should load");
+    require(result.spec.hasExtension(QStringLiteral("vendor.example.magic")),
+            "unknown string extension should be a declared package capability");
+    require(result.spec.hasExtension(QStringLiteral("vendor.example.optional")),
+            "unknown object extension should be a declared package capability");
+    require(!hasDiagnosticRule(result.diagnostics, QStringLiteral("package.unknown_extension")),
+            "unknown extension declarations should not emit parser rejection diagnostics");
 }
 
 void testDuplicateTableIdsAreRejected() {
@@ -824,7 +834,7 @@ int main(int argc, char** argv) {
         testExtensionArrayObjectDeclarationSatisfiesRequirement();
         testExtensionPayloadObjectDoesNotEnableCapability();
         testExtensionDeclarationsMatchSchemaContract();
-        testUnknownExtensionIsRejected();
+        testUnknownExtensionDeclarationIsAcceptedAsPackageCapability();
         testDuplicateTableIdsAreRejected();
         testConnectionRulesParseAliasesAndCompatibility();
         testConnectionRulesRejectMalformedCompatibility();

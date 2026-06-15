@@ -1,4 +1,5 @@
 // PackageService tests.
+#include "app/capabilityregistry.h"
 #include "modules/moduleregistry.h"
 #include "package/packageservice.h"
 
@@ -6,6 +7,9 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QTemporaryDir>
 #include <algorithm>
 #include <iostream>
@@ -45,6 +49,38 @@ bool hasManifest(const QVector<IpcraftPackageManifest>& manifests, const QString
     return std::any_of(manifests.cbegin(), manifests.cend(), [&](const IpcraftPackageManifest& manifest) {
         return manifest.id == packageId;
     });
+}
+
+bool hasDiagnosticRule(const QVector<IpcraftDiagnostic>& diagnostics, const QString& ruleId) {
+    return std::any_of(diagnostics.cbegin(), diagnostics.cend(), [&](const IpcraftDiagnostic& diagnostic) {
+        return diagnostic.ruleId == ruleId;
+    });
+}
+
+void writeJsonFile(const QString& path, const QJsonObject& object) {
+    QFile file(path);
+    require(file.open(QIODevice::WriteOnly | QIODevice::Truncate),
+            "package fixture should open for writing");
+    const QByteArray bytes = QJsonDocument(object).toJson(QJsonDocument::Indented);
+    require(file.write(bytes) == bytes.size(), "package fixture should write");
+}
+
+QJsonObject packageWithExtensions(const QString& packageId, const QJsonArray& extensions) {
+    return QJsonObject{
+        {QStringLiteral("schema"), QStringLiteral("ipcraft.package.v1")},
+        {QStringLiteral("id"), packageId},
+        {QStringLiteral("name"), QStringLiteral("Capability Fixture")},
+        {QStringLiteral("version"), QStringLiteral("1.0.0")},
+        {QStringLiteral("extensions"), extensions}
+    };
+}
+
+PackageFeatureCoverageItem requireCoverageItem(const PackageCoverageReport& report,
+                                               const QString& id,
+                                               const char* message) {
+    const PackageFeatureCoverageItem item = report.item(id);
+    require(item.id == id, message);
+    return item;
 }
 
 void testEmptyCatalogDefaultConstructs() {
@@ -122,6 +158,104 @@ void testDiagnosticsAreStoredForInvalidRoots() {
     require(registry.availableTypes().isEmpty(), "invalid package should not register modules");
 }
 
+void testOptionalUnknownCapabilitySurvivesReloadAsUnsupportedCoverage() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "temporary directory should be valid");
+    QDir root(tempDir.path());
+
+    writeJsonFile(root.filePath(QStringLiteral("ipcraft.json")),
+                  packageWithExtensions(
+                      QStringLiteral("vendor.optionalcoverage"),
+                      QJsonArray{
+                          QJsonObject{
+                              {QStringLiteral("id"), QStringLiteral("vendor.extra.v1")},
+                              {QStringLiteral("required"), false},
+                              {QStringLiteral("version"), QStringLiteral("2.3.4")},
+                              {QStringLiteral("metadata"),
+                               QJsonObject{{QStringLiteral("lane"), QStringLiteral("sideband")}}},
+                              {QStringLiteral("native"),
+                               QJsonObject{{QStringLiteral("adapter"), QStringLiteral("vendor-native")}}}
+                          }
+                      }));
+
+    CapabilityRegistry capabilities;
+    ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
+    PackageService service(&registry);
+    service.setCapabilityRegistry(&capabilities);
+
+    const PackageServiceLoadResult result =
+        service.reloadPackageRoots(QStringList{root.absolutePath()});
+
+    require(result.success, "optional unknown capability package should load");
+    require(result.packageCount == 1, "optional unknown capability package should be counted");
+    require(service.diagnostics().isEmpty(),
+            "optional unknown capability should not create package diagnostics");
+
+    const PackageCoverageReport* report =
+        service.coverageReport(QStringLiteral("vendor.optionalcoverage"));
+    require(report != nullptr, "optional package coverage report should exist");
+    const PackageFeatureCoverageItem item =
+        requireCoverageItem(*report,
+                            QStringLiteral("capability:vendor.extra.v1"),
+                            "optional unknown capability coverage item should exist");
+    require(item.status == PackageFeatureCoverageStatus::Unsupported,
+            "optional unknown capability should be unsupported");
+    require(item.descriptor.value(QStringLiteral("required")).toBool(true) == false,
+            "optional unknown capability should preserve required:false");
+    require(item.descriptor.value(QStringLiteral("version")).toString() == QStringLiteral("2.3.4"),
+            "optional unknown capability should preserve version");
+    require(item.descriptor.value(QStringLiteral("metadata")).toObject()
+                .value(QStringLiteral("lane")).toString() == QStringLiteral("sideband"),
+            "optional unknown capability should preserve metadata");
+    require(item.descriptor.value(QStringLiteral("native")).toObject()
+                .value(QStringLiteral("adapter")).toString() == QStringLiteral("vendor-native"),
+            "optional unknown capability should preserve native descriptor data");
+}
+
+void testRequiredUnknownCapabilityReportsBlockingCoverageAndDiagnostic() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "temporary directory should be valid");
+    QDir root(tempDir.path());
+
+    writeJsonFile(root.filePath(QStringLiteral("ipcraft.json")),
+                  packageWithExtensions(
+                      QStringLiteral("vendor.requiredcoverage"),
+                      QJsonArray{
+                          QJsonObject{
+                              {QStringLiteral("id"), QStringLiteral("vendor.required.v1")},
+                              {QStringLiteral("required"), true}
+                          }
+                      }));
+
+    CapabilityRegistry capabilities;
+    ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
+    PackageService service(&registry);
+    service.setCapabilityRegistry(&capabilities);
+
+    const PackageServiceLoadResult result =
+        service.reloadPackageRoots(QStringList{root.absolutePath()});
+
+    require(!result.success,
+            "required unknown capability should make package service load result unsuccessful");
+    require(result.packageCount == 1,
+            "required unknown capability package should still be parsed and counted");
+
+    const PackageCoverageReport* report =
+        service.coverageReport(QStringLiteral("vendor.requiredcoverage"));
+    require(report != nullptr, "required package coverage report should exist");
+    require(requireCoverageItem(*report,
+                                QStringLiteral("capability:vendor.required.v1"),
+                                "required unknown capability coverage item should exist").status ==
+                PackageFeatureCoverageStatus::Blocking,
+            "required unknown capability should be blocking");
+    require(hasDiagnosticRule(result.diagnostics,
+                              QStringLiteral("package.capability_missing_handler")),
+            "load result should include stable missing capability handler diagnostic");
+    require(hasDiagnosticRule(service.diagnostics(),
+                              QStringLiteral("package.capability_missing_handler")),
+            "service diagnostics should store stable missing capability handler diagnostic");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -130,6 +264,8 @@ int main(int argc, char** argv) {
         testEmptyCatalogDefaultConstructs();
         testLoadsAnchorPackagesAndCatalogEntries();
         testDiagnosticsAreStoredForInvalidRoots();
+        testOptionalUnknownCapabilitySurvivesReloadAsUnsupportedCoverage();
+        testRequiredUnknownCapabilityReportsBlockingCoverageAndDiagnostic();
     } catch (const std::exception& exception) {
         qCritical("%s", exception.what());
         return 1;
