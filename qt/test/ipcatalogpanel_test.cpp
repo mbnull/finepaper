@@ -1506,6 +1506,84 @@ void testMixedDesignOnlyAndProjectStateEditsSurviveOwnershipMerge() {
             "mixed ownership save should preserve the project-state catalog instance");
 }
 
+void testDesignEditAfterProjectionMergeKeepsProjectionOwnedState() {
+    ModuleRegistryRestore restoreRegistry;
+    QTemporaryDir settingsRoot;
+    QTemporaryDir packageRoot;
+    QTemporaryDir tempDir;
+    require(settingsRoot.isValid() && packageRoot.isValid() && tempDir.isValid(),
+            "temporary directories should be valid");
+
+    const QString packageId = QStringLiteral("org.example.reseedcache");
+    writePackageWithParameter(packageRoot.path(),
+                              packageId,
+                              QStringLiteral("lane_width"),
+                              QStringLiteral("Lane Width"));
+    configureSettingsRoot(settingsRoot.path(), QStringLiteral("projection_reseed_save_app"));
+    AppSettings().setIpcorePaths({packageRoot.path()});
+
+    const QString projectPath = tempDir.filePath(QStringLiteral("projection_reseed.fpproj"));
+    {
+        MainWindow window;
+        require(window.createProjectAt(projectPath),
+                "project should be created before reseed regression setup");
+        const ProjectIpInstanceRecord first = addCatalogInstanceViaCommand(window, packageId);
+        require(first.instanceId == QStringLiteral("reseedcache_0"),
+                "first reseed package instance should use a stable id");
+        require(window.saveDocument(projectPath),
+                "initial save should persist the starting catalog instance");
+    }
+
+    MainWindow window;
+    require(window.loadGraph(projectPath),
+            "project should load before projection merge reseed regression");
+    DesignEditingService* editing = designEditingServiceFromRegistry(window);
+    require(!editing->design().components.isEmpty(),
+            "loaded project should seed a stale-able design-editing cache");
+
+    setIpInstanceParameterViaCommand(window,
+                                     packageId,
+                                     QStringLiteral("reseedcache_0"),
+                                     QStringLiteral("lane_width"),
+                                     13);
+    const ProjectIpInstanceRecord second = addCatalogInstanceViaCommand(window, packageId);
+    require(second.instanceId == QStringLiteral("reseedcache_1"),
+            "second reseed package instance should use the next stable id");
+    require(!window.m_designEditingDirty,
+            "project-state-only edits should not mark design editing dirty before projection save");
+    require(window.saveDocument(projectPath),
+            "projection save should persist project-state edits before later design edit");
+    require(!window.m_designEditingDirty,
+            "projection save should leave design editing dirty false before later design edit");
+
+    ipcraft::core::ProjectDesign designWithLaterDesignOnlyComponent = editing->design();
+    ipcraft::core::ComponentInstance designOnlyComponent;
+    designOnlyComponent.id = QStringLiteral("design_only_after_projection");
+    designOnlyComponent.type = QStringLiteral("DesignComponent");
+    designOnlyComponent.packageRef = packageId + QStringLiteral("@1.0.0");
+    designOnlyComponent.config.insert(QStringLiteral("width"), 8);
+    designWithLaterDesignOnlyComponent.components.append(designOnlyComponent);
+    editing->replaceDesign(designWithLaterDesignOnlyComponent);
+    require(window.m_designEditingDirty,
+            "later design-only edit should mark design editing dirty before final save");
+    require(window.saveDocument(projectPath),
+            "later design-only save should not drop projection-owned project state");
+
+    ProjectService reloaded;
+    const ProjectServiceResult loadResult = reloaded.loadFile(projectPath);
+    require(loadResult.success, "projection reseed project should reload after final save");
+    require(savedParameterValue(reloaded.document(),
+                                QStringLiteral("reseedcache_0"),
+                                QStringLiteral("lane_width")) == 13,
+            "later design-only save should keep projection-updated catalog config");
+    require(documentHasInstance(reloaded.document(), QStringLiteral("reseedcache_1")),
+            "later design-only save should keep projection-added catalog instance");
+    require(designHasComponentWithWidth(reloaded.design(),
+                                        QStringLiteral("design_only_after_projection"),
+                                        8),
+            "later design-only save should persist the new design-only component");
+}
+
 void testNewProjectAddsIpcraftPackageInstanceFromCatalog() {
     QTemporaryDir tempDir;
     QTemporaryDir settingsRoot;
@@ -1781,6 +1859,7 @@ int main(int argc, char** argv) {
         testProjectStateInstanceAddedAfterDesignCacheSurvivesProjectionSave();
         testProjectStateParameterWinsOverStaleDesignCacheOnProjectionSave();
         testMixedDesignOnlyAndProjectStateEditsSurviveOwnershipMerge();
+        testDesignEditAfterProjectionMergeKeepsProjectionOwnedState();
         testNewProjectAddsIpcraftPackageInstanceFromCatalog();
         testAmbiguousConnectionAppearsInPropertyPanelAndLog();
         testCatalogReloadUsesConfiguredPackageRoots();

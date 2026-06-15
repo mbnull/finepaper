@@ -1322,6 +1322,7 @@ bool MainWindow::saveDocument(const QString& path) {
     const bool designEditingDirty = m_designEditingDirty;
     const bool syncingProjection = graphHistoryDirty || savingToDifferentPath;
     std::optional<ipcraft::core::ProjectDesign> designBeforeProjection;
+    bool mergedDesignOnlyComponents = false;
     if ((designEditingDirty || syncingProjection) &&
         m_projectOpen &&
         m_designEditingService &&
@@ -1345,6 +1346,7 @@ bool MainWindow::saveDocument(const QString& path) {
     if (designBeforeProjection.has_value()) {
         if (syncingProjection) {
             m_projectService->mergeDesignOnlyComponents(*designBeforeProjection);
+            mergedDesignOnlyComponents = true;
         } else {
             m_projectService->replaceDesign(*designBeforeProjection);
         }
@@ -1357,6 +1359,9 @@ bool MainWindow::saveDocument(const QString& path) {
         return false;
     }
 
+    if (mergedDesignOnlyComponents) {
+        seedDesignEditingServiceFromProjectService();
+    }
     setCurrentDocumentPath(absolutePath);
     m_cleanStateId = m_commandManager->currentStateId();
     m_designEditingDirty = false;
