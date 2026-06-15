@@ -52,6 +52,12 @@ PluginActivationResult PluginHost::activatePlugins() {
         return result;
     }
 
+    if (!m_context.services || !m_context.extensionPoints || !m_context.capabilities) {
+        result.success = false;
+        result.error = QStringLiteral("Plugin registries are required before activating plugins.");
+        return result;
+    }
+
     if (!m_context.workbench) {
         result.success = false;
         result.error = QStringLiteral("WorkbenchService is required before activating plugins.");

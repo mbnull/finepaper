@@ -1,5 +1,8 @@
 #include "app/appcontext.h"
+#include "app/capabilityregistry.h"
+#include "app/extensionpointregistry.h"
 #include "app/pluginhost.h"
+#include "app/serviceregistry.h"
 #include "app/workbenchservice.h"
 #include "project/projectplugin.h"
 #include "project/projectservice.h"
@@ -17,10 +20,24 @@ void require(bool condition, const char* message) {
     }
 }
 
+struct RegistrySet {
+    ServiceRegistry services;
+    ExtensionPointRegistry extensionPoints;
+    CapabilityRegistry capabilities;
+
+    void attachTo(AppContext& context) {
+        context.services = &services;
+        context.extensionPoints = &extensionPoints;
+        context.capabilities = &capabilities;
+    }
+};
+
 void testProjectPluginActivatesWithProjectService() {
     WorkbenchService workbench;
     ProjectService projectService;
+    RegistrySet registries;
     AppContext context;
+    registries.attachTo(context);
     context.workbench = &workbench;
     context.projectService = &projectService;
 
@@ -35,7 +52,9 @@ void testProjectPluginActivatesWithProjectService() {
 
 void testProjectPluginRequiresProjectService() {
     WorkbenchService workbench;
+    RegistrySet registries;
     AppContext context;
+    registries.attachTo(context);
     context.workbench = &workbench;
 
     PluginHost host(context);

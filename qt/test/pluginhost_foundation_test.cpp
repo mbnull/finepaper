@@ -1,6 +1,9 @@
 // Plugin host foundation tests.
 #include "app/appcontext.h"
+#include "app/capabilityregistry.h"
+#include "app/extensionpointregistry.h"
 #include "app/pluginhost.h"
+#include "app/serviceregistry.h"
 #include "app/workbenchservice.h"
 
 #include <QAction>
@@ -20,6 +23,18 @@ void require(bool condition, const char* message) {
         throw std::runtime_error(message);
     }
 }
+
+struct RegistrySet {
+    ServiceRegistry services;
+    ExtensionPointRegistry extensionPoints;
+    CapabilityRegistry capabilities;
+
+    void attachTo(AppContext& context) {
+        context.services = &services;
+        context.extensionPoints = &extensionPoints;
+        context.capabilities = &capabilities;
+    }
+};
 
 class ContributingPlugin final : public IAppPlugin {
 public:
@@ -102,7 +117,9 @@ private:
 
 void testActivatesPluginsWithAppContext() {
     WorkbenchService workbench;
+    RegistrySet registries;
     AppContext context;
+    registries.attachTo(context);
     context.workbench = &workbench;
     PluginHost host(context);
 
@@ -123,7 +140,9 @@ void testActivatesPluginsWithAppContext() {
 
 void testSuccessfulActivationDoesNotRetryPlugins() {
     WorkbenchService workbench;
+    RegistrySet registries;
     AppContext context;
+    registries.attachTo(context);
     context.workbench = &workbench;
     PluginHost host(context);
 
@@ -151,7 +170,9 @@ void testSuccessfulActivationDoesNotRetryPlugins() {
 
 void testRejectsDuplicatePluginIds() {
     WorkbenchService workbench;
+    RegistrySet registries;
     AppContext context;
+    registries.attachTo(context);
     context.workbench = &workbench;
     PluginHost host(context);
 
@@ -166,7 +187,9 @@ void testRejectsDuplicatePluginIds() {
 
 void testRejectsNonCanonicalPluginIds() {
     WorkbenchService workbench;
+    RegistrySet registries;
     AppContext context;
+    registries.attachTo(context);
     context.workbench = &workbench;
     PluginHost host(context);
 
@@ -181,7 +204,7 @@ void testRejectsNonCanonicalPluginIds() {
     require(host.pluginIds() == expectedIds, "non-canonical ids should not change plugin ids");
 }
 
-void testRejectsActivationWhenRequiredServicesAreMissing() {
+void testRejectsActivationWhenRegistriesAreMissing() {
     AppContext context;
     PluginHost host(context);
 
@@ -189,6 +212,25 @@ void testRejectsActivationWhenRequiredServicesAreMissing() {
     ContributingPlugin* pluginPtr = plugin.get();
 
     require(host.registerPlugin(std::move(plugin)), "plugin should register without services");
+
+    const PluginActivationResult result = host.activatePlugins();
+
+    require(!result.success, "activation should fail without plugin registries");
+    require(result.error.contains(QStringLiteral("Plugin registries")),
+            "missing registry error should mention plugin registries");
+    require(pluginPtr->activateCount == 0, "plugin should not activate without plugin registries");
+}
+
+void testRejectsActivationWhenWorkbenchServiceIsMissing() {
+    RegistrySet registries;
+    AppContext context;
+    registries.attachTo(context);
+    PluginHost host(context);
+
+    auto plugin = std::make_unique<ContributingPlugin>(QStringLiteral("project"));
+    ContributingPlugin* pluginPtr = plugin.get();
+
+    require(host.registerPlugin(std::move(plugin)), "plugin should register without workbench");
 
     const PluginActivationResult result = host.activatePlugins();
 
@@ -200,7 +242,9 @@ void testRejectsActivationWhenRequiredServicesAreMissing() {
 
 void testActivationFailureDoesNotRetryPlugins() {
     WorkbenchService workbench;
+    RegistrySet registries;
     AppContext context;
+    registries.attachTo(context);
     context.workbench = &workbench;
     PluginHost host(context);
 
@@ -249,7 +293,8 @@ int main(int argc, char** argv) {
         testSuccessfulActivationDoesNotRetryPlugins();
         testRejectsDuplicatePluginIds();
         testRejectsNonCanonicalPluginIds();
-        testRejectsActivationWhenRequiredServicesAreMissing();
+        testRejectsActivationWhenRegistriesAreMissing();
+        testRejectsActivationWhenWorkbenchServiceIsMissing();
         testActivationFailureDoesNotRetryPlugins();
     } catch (const std::exception& exception) {
         qCritical("%s", exception.what());

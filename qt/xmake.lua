@@ -999,6 +999,26 @@ target("workbenchservice_test")
         pass_outputs = "workbenchservice_test passed"
     })
 
+target("plugin_registry_test")
+    set_kind("binary")
+    add_rules("qt.console")
+    add_files("test/plugin_registry_test.cpp")
+    add_files("src/app/serviceregistry.cpp")
+    add_files("src/app/extensionpointregistry.cpp")
+    add_files("src/app/capabilityregistry.cpp")
+    add_headerfiles("inc/app/servicekey.h")
+    add_headerfiles("inc/app/serviceregistry.h")
+    add_headerfiles("inc/app/extensionpointregistry.h")
+    add_headerfiles("inc/app/capabilityregistry.h")
+    add_includedirs("inc")
+    add_packages("qt6core")
+    set_policy("build.warning", true)
+    on_run(function (target)
+        os.execv(target:targetfile(), {}, {
+            pass_outputs = "plugin_registry_test passed"
+        })
+    end)
+
 target("pluginhost_foundation_test")
     add_rules("qt.widgetapp")
     set_kind("binary")
@@ -1008,6 +1028,9 @@ target("pluginhost_foundation_test")
 
     add_includedirs("inc")
     add_files("test/pluginhost_foundation_test.cpp")
+    add_files("src/app/serviceregistry.cpp")
+    add_files("src/app/extensionpointregistry.cpp")
+    add_files("src/app/capabilityregistry.cpp")
     add_files("src/app/workbenchservice.cpp")
     add_files("src/app/pluginhost.cpp")
     add_files("inc/app/appcontext.h")
@@ -1027,6 +1050,9 @@ target("projectplugin_test")
 
     add_includedirs("inc")
     add_files("test/projectplugin_test.cpp")
+    add_files("src/app/serviceregistry.cpp")
+    add_files("src/app/extensionpointregistry.cpp")
+    add_files("src/app/capabilityregistry.cpp")
     add_files("src/app/workbenchservice.cpp")
     add_files("src/app/pluginhost.cpp")
     add_files("src/project/projectservice.cpp")
@@ -1054,6 +1080,9 @@ target("packageplugin_test")
     add_includedirs("inc")
     add_files("test/packageplugin_test.cpp")
     add_files("src/app/appsettings.cpp")
+    add_files("src/app/serviceregistry.cpp")
+    add_files("src/app/extensionpointregistry.cpp")
+    add_files("src/app/capabilityregistry.cpp")
     add_files("src/app/workbenchservice.cpp")
     add_files("src/app/pluginhost.cpp")
     add_files("src/project/projectservice.cpp")
@@ -1089,6 +1118,9 @@ target("packageplugin_test")
     })
 
 add_qt_test_target("toolpipelineplugin_test", "test/toolpipelineplugin_test.cpp", {
+    "src/app/serviceregistry.cpp",
+    "src/app/extensionpointregistry.cpp",
+    "src/app/capabilityregistry.cpp",
     "src/app/generationartifacts.cpp",
     "src/app/generationflowprovider.cpp",
     "src/app/pluginhost.cpp",

@@ -1,11 +1,18 @@
 #pragma once
 
-class ProjectService;
+class CapabilityRegistry;
+class ExtensionPointRegistry;
 class PackageService;
+class ProjectService;
+class ServiceRegistry;
 class ToolPipelineService;
 class WorkbenchService;
 
 struct AppContext {
+    ServiceRegistry* services = nullptr;
+    ExtensionPointRegistry* extensionPoints = nullptr;
+    CapabilityRegistry* capabilities = nullptr;
+
     WorkbenchService* workbench = nullptr;
     ProjectService* projectService = nullptr;
     PackageService* packageService = nullptr;
