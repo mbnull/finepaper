@@ -47,6 +47,10 @@
 - Modify: `qt/inc/app/pluginhost.h`
 - Modify: `qt/src/app/pluginhost.cpp`
 - Create: `qt/test/plugin_registry_test.cpp`
+- Modify: `qt/test/pluginhost_foundation_test.cpp`
+- Modify: `qt/test/projectplugin_test.cpp`
+- Modify: `qt/test/packageplugin_test.cpp`
+- Modify: `qt/test/toolpipelineplugin_test.cpp`
 - Modify: `qt/xmake.lua`
 
 - [ ] **Step 1: Add failing registry tests**
@@ -560,6 +564,14 @@ Keep the existing `WorkbenchService` guard in place for this task.
 
 - [ ] **Step 8: Run tests**
 
+Update existing plugin tests to construct `ServiceRegistry`,
+`ExtensionPointRegistry`, and `CapabilityRegistry` and assign them into
+`AppContext` before `PluginHost` activation. Existing tests that intentionally
+verify missing services should still provide the three registries and omit only
+the specific legacy service under test. Update the corresponding `qt/xmake.lua`
+targets to link `src/app/serviceregistry.cpp`,
+`src/app/extensionpointregistry.cpp`, and `src/app/capabilityregistry.cpp`.
+
 Run:
 
 ```bash
@@ -575,7 +587,7 @@ Expected: all pass.
 - [ ] **Step 9: Commit**
 
 ```bash
-git add qt/inc/app qt/src/app qt/test/plugin_registry_test.cpp qt/xmake.lua
+git add qt/inc/app qt/src/app qt/test/plugin_registry_test.cpp qt/test/pluginhost_foundation_test.cpp qt/test/projectplugin_test.cpp qt/test/packageplugin_test.cpp qt/test/toolpipelineplugin_test.cpp qt/xmake.lua
 git commit -m "feat: add plugin registries"
 ```
 
