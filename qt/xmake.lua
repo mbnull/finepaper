@@ -1279,6 +1279,23 @@ add_qt_test_target("nocplugin_test", "test/nocplugin_test.cpp", {
     "inc/noc/nocsemanticmodel.h"
 })
 
+target("nocplugin_header_test")
+    add_rules("qt.console")
+    set_kind("binary")
+    set_group("test")
+    set_default(false)
+    set_languages("c++23")
+
+    add_includedirs("inc")
+    add_files("test/nocplugin_header_test.cpp")
+    add_files("src/app/extensionpointregistry.cpp")
+    add_files("src/app/capabilityregistry.cpp")
+    add_files("src/noc/nocplugin.cpp")
+    add_tests("default", {
+        trim_output = true,
+        pass_outputs = "nocplugin_header_test passed"
+    })
+
 target("plugin_architecture_phase1_scan_test")
     add_rules("qt.console")
     set_kind("binary")

@@ -1,7 +1,7 @@
 #pragma once
 
-#include <memory>
+#include "app/pluginhost.h"
 
-class IAppPlugin;
+#include <memory>
 
 std::unique_ptr<IAppPlugin> createNoCPlugin();

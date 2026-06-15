@@ -11,6 +11,7 @@
 #include <QJsonObject>
 #include <QStringList>
 
+#include <array>
 #include <iostream>
 #include <stdexcept>
 
@@ -22,14 +23,27 @@ void require(bool condition, const char* message) {
     }
 }
 
+struct ExpectedNoCContribution {
+    const char* extensionPoint;
+    const char* id;
+    const char* contributionKind;
+};
+
+constexpr std::array<ExpectedNoCContribution, 5> kExpectedNoCContributions{{
+    {"ui.inspectorSection", "finepaper.noc.inspector-section", "inspectorSection"},
+    {"editor.tool", "finepaper.noc.editor-tool", "editorTool"},
+    {"connection.ruleProvider", "finepaper.noc.connection-rule-provider", "ruleProvider"},
+    {"tool.flowInputProjector", "finepaper.noc.flow-input-projector", "flowInputProjector"},
+    {"artifact.presenter", "finepaper.noc.artifact-presenter", "artifactPresenter"},
+}};
+
 QStringList nocExtensionPoints() {
-    return {
-        QStringLiteral("ui.inspectorSection"),
-        QStringLiteral("editor.tool"),
-        QStringLiteral("connection.ruleProvider"),
-        QStringLiteral("tool.flowInputProjector"),
-        QStringLiteral("artifact.presenter"),
-    };
+    QStringList result;
+    result.reserve(static_cast<qsizetype>(kExpectedNoCContributions.size()));
+    for (const ExpectedNoCContribution& contribution : kExpectedNoCContributions) {
+        result.append(QString::fromLatin1(contribution.extensionPoint));
+    }
+    return result;
 }
 
 CapabilityHandlerDescriptor requireNocHandler(const CapabilityRegistry& capabilities) {
@@ -76,21 +90,39 @@ void testNoCPluginRegistersNocCapabilityAndDescriptorContributions() {
     require(handler.extensionPoints == nocExtensionPoints(),
             "NoC handler should declare all semantic extension points");
 
-    for (const QString& extensionPoint : nocExtensionPoints()) {
+    const QVector<ExtensionContribution> allContributions = extensionPoints.allContributions();
+    require(allContributions.size() == static_cast<qsizetype>(kExpectedNoCContributions.size()),
+            "NoC plugin should register exactly five contributions");
+
+    for (qsizetype index = 0; index < allContributions.size(); ++index) {
+        const ExpectedNoCContribution& expected =
+            kExpectedNoCContributions.at(static_cast<std::size_t>(index));
+        const QString extensionPoint = QString::fromLatin1(expected.extensionPoint);
+        const QString id = QString::fromLatin1(expected.id);
+        const QString contributionKind = QString::fromLatin1(expected.contributionKind);
         const ExtensionContribution contribution =
             requireSingleContribution(extensionPoints, extensionPoint);
+        require(allContributions.at(index).id == id,
+                "NoC contribution id order should be externally stable");
+        require(contribution.id == id, "NoC contribution id should be externally stable");
+        require(contribution.extensionPoint == extensionPoint,
+                "NoC contribution extension point should be externally stable");
         require(contribution.ownerPluginId == QStringLiteral("finepaper.noc"),
                 "NoC contribution owner plugin id should be stable");
         require(contribution.descriptor.value(QStringLiteral("capabilityId")).toString() ==
                     QStringLiteral("noc.v1"),
                 "NoC contribution descriptor should name the handled capability");
-        require(!contribution.descriptor.value(QStringLiteral("contributionKind")).toString().isEmpty(),
-                "NoC contribution descriptor should name the contribution kind");
+        require(contribution.descriptor.value(QStringLiteral("extensionPoint")).toString() ==
+                    extensionPoint,
+                "NoC contribution descriptor should name the extension point");
+        require(contribution.descriptor.value(QStringLiteral("contributionKind")).toString() ==
+                    contributionKind,
+                "NoC contribution descriptor should map to the expected kind");
     }
 }
 
 void testNoCSemanticModelReadsRolesWithoutConcreteNames() {
-    QJsonObject descriptor{
+    const QJsonObject descriptor = {
         {QStringLiteral("roles"), QJsonArray{
              QJsonObject{{QStringLiteral("module"), QStringLiteral("VendorSwitch")},
                          {QStringLiteral("semantic"), QStringLiteral("router")}},
