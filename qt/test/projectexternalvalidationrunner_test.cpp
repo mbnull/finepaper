@@ -3,6 +3,7 @@
 #include "graph/graph.h"
 #include "graph/module.h"
 #include "graph/port.h"
+#include "ipcraft/core/project_design.h"
 #include "ipcraft/schemaids.h"
 #include "validation/projectexternalvalidationrunner.h"
 
@@ -154,6 +155,31 @@ ProjectIpInstanceRecord instanceRecord(const QString& packageId, const QString& 
     return record;
 }
 
+ipcraft::core::ProjectDesign projectDesignFor(const QString& designName,
+                                              const QVector<ProjectIpInstanceRecord>& instances) {
+    ipcraft::core::ProjectDesign design;
+    design.schema = ipcraft::schemaids::projectV1;
+    design.id = designName + QStringLiteral("_id");
+    design.name = designName;
+
+    QStringList packageKeys;
+    for (const ProjectIpInstanceRecord& instance : instances) {
+        const QString packageKey = instance.ipcoreId + QStringLiteral("@1.0.0");
+        if (!packageKeys.contains(packageKey)) {
+            packageKeys.append(packageKey);
+            design.packages.append(ipcraft::core::PackageRef{instance.ipcoreId,
+                                                             QStringLiteral("1.0.0")});
+        }
+        ipcraft::core::ComponentInstance component;
+        component.id = instance.instanceId;
+        component.packageRef = packageKey;
+        component.config = instance.config;
+        design.components.append(component);
+    }
+
+    return design;
+}
+
 std::unique_ptr<Module> moduleForInstance(const QString& moduleId,
                                           const QString& packageId,
                                           const QString& instanceId) {
@@ -282,6 +308,40 @@ void testStructuredOutputInstanceIdTargetsGraphModule() {
             "structured output should keep instance context in the message");
 }
 
+void testPackageValidateRunsWithProjectDesignAndNoGraph() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "failed to create package root");
+    const QString packageId = QStringLiteral("finepaper.graph_free_validate");
+    const QString scriptPath =
+        writeValidateScript(tempDir,
+                            QByteArrayLiteral("test -f \"${1:?inputs manifest}\"\n"
+                                              "echo \"ERROR graph_free_0: graph-free DRC failed\"\n"
+                                              "exit 0\n"));
+    writePackageSpec(tempDir.path(), packageId, validateFlows(scriptPath));
+    const QVector<ProjectIpInstanceRecord> instances{
+        instanceRecord(packageId, QStringLiteral("graph_free_0"))
+    };
+    const ipcraft::core::ProjectDesign design =
+        projectDesignFor(QStringLiteral("graph_free_validate"), instances);
+
+    ProjectExternalValidationRequest request;
+    request.projectDesign = &design;
+    request.projectPath = QStringLiteral("/tmp/projectexternalvalidationrunner.fpproj");
+    request.designName = QStringLiteral("graph_free_validate");
+    request.catalogEntries = {catalogEntry(tempDir.path(), packageId)};
+    request.instances = instances;
+    const QList<ValidationResult> results = ProjectExternalValidationRunner().validate(request);
+
+    require(results.size() == 1,
+            "project-design validate flow should run without a graph");
+    require(results.first().severity() == ValidationSeverity::Error,
+            "scripted ERROR should remain an error without graph diagnostics");
+    require(results.first().elementId() == QStringLiteral("graph_free_0"),
+            "without graph, diagnostics should keep the package instance id");
+    require(hasMessage(results, QStringLiteral("graph-free DRC failed")),
+            "graph-free package validate output should be captured");
+}
+
 void testBlockingIdsSkipOnlyMatchingInstances() {
     QTemporaryDir tempDir;
     require(tempDir.isValid(), "failed to create package root");
@@ -346,6 +406,7 @@ int main(int argc, char** argv) {
         testMissingValidateFlowWarns();
         testStructuredOutputBecomesValidationResult();
         testStructuredOutputInstanceIdTargetsGraphModule();
+        testPackageValidateRunsWithProjectDesignAndNoGraph();
         testBlockingIdsSkipOnlyMatchingInstances();
         testBlockAllSuppressesExternalValidation();
     } catch (const std::exception& error) {

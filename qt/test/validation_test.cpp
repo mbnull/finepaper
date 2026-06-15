@@ -1,6 +1,7 @@
 // BasicValidator and plugin DRC integration tests.
 #include "app/appsettings.h"
 #include "graph/graph.h"
+#include "ipcraft/core/project_design.h"
 #include "ipcraft/ipcraftbuiltinvalidator.h"
 #include "ipcraft/schemaids.h"
 #include "modules/moduleregistry.h"
@@ -244,6 +245,31 @@ ProjectIpInstanceRecord projectInstanceRecord(const QString& ipcoreId,
     state.schema = ipcoreId + QStringLiteral("-project-state-v1");
     state.state = QJsonObject{{QStringLiteral("kind"), QStringLiteral("noc")}};
     return state;
+}
+
+ipcraft::core::ProjectDesign projectDesignFor(const QString& designName,
+                                              const QVector<ProjectIpInstanceRecord>& instances) {
+    ipcraft::core::ProjectDesign design;
+    design.schema = ipcraft::schemaids::projectV1;
+    design.id = designName + QStringLiteral("_id");
+    design.name = designName;
+
+    QStringList packageKeys;
+    for (const ProjectIpInstanceRecord& instance : instances) {
+        const QString packageKey = instance.ipcoreId + QStringLiteral("@1.0");
+        if (!packageKeys.contains(packageKey)) {
+            packageKeys.append(packageKey);
+            design.packages.append(ipcraft::core::PackageRef{instance.ipcoreId,
+                                                             QStringLiteral("1.0")});
+        }
+        ipcraft::core::ComponentInstance component;
+        component.id = instance.instanceId;
+        component.packageRef = packageKey;
+        component.config = instance.config;
+        design.components.append(component);
+    }
+
+    return design;
 }
 
 IpCatalogEntry projectCatalogEntryWithDrc(const QString& ipcoreId,
@@ -493,7 +519,7 @@ QString writeDrcInputEchoScript(QTemporaryDir& tempDir) {
     return path;
 }
 
-void testProjectValidationRunnerRejectsNullGraphWithoutCrashing() {
+void testProjectValidationRunnerRunsInstancePackageChecksWithoutGraph() {
     const QList<IpCatalogEntry> entries{
         projectCatalogEntryWithoutDrc(QStringLiteral("finepaper.noc_a"))
     };
@@ -502,13 +528,24 @@ void testProjectValidationRunnerRejectsNullGraphWithoutCrashing() {
     };
 
     ProjectValidationRunner runner;
-    const QList<ValidationResult> results = runner.validate(nullptr, entries, instances);
+    const ProjectValidationReport report = runner.validateDetailed(nullptr, entries, instances);
 
-    require(results.size() == 1, "null graph should produce one validation error");
-    require(results.first().severity() == ValidationSeverity::Error,
-            "null graph validation result should be an error");
-    require(results.first().message().contains(QStringLiteral("Graph")),
-            "null graph validation result should explain that the graph is missing");
+    require(report.diagnostics.isEmpty(),
+            "null graph should not be a global validation error when project instances are available");
+    require(!report.blockAllExternalValidation,
+            "null graph should not block all external validation for graph-free package checks");
+
+    const ProjectValidationReport missingReport =
+        runner.validateDetailed(nullptr,
+                                {},
+                                {projectInstanceRecord(QStringLiteral("finepaper.missing"),
+                                                       QStringLiteral("missing_0"))});
+    require(missingReport.diagnostics.size() == 1,
+            "graph-free built-in validation should still report missing packages");
+    require(missingReport.diagnostics.first().message().contains(QStringLiteral("finepaper.missing")),
+            "graph-free missing package diagnostic should include the package id");
+    require(!missingReport.diagnostics.first().message().contains(QStringLiteral("Graph")),
+            "graph-free package diagnostics should not be replaced by graph availability errors");
 }
 
 void testValidationManagerHandlesMissingGraphAndLogPanel() {
@@ -664,6 +701,44 @@ void testValidateRunsBuiltInThenPackageValidate() {
     require(indexOfLogItemContaining(logList,
                                      QStringLiteral("Instance 'bad_0': scripted validate DRC output")) < 0,
             "package validate should not run for the instance with a blocking built-in error");
+}
+
+void testValidationManagerRunsPackageValidateWithoutGraphWhenProjectDesignExists() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "failed to create temporary DRC directory");
+    const QString scriptPath = writeValidateFlowScript(tempDir);
+    const QString ipcoreId = QStringLiteral("finepaper.graph_free_manager");
+    writePackageSpec(tempDir.path(), ipcoreId, validateFlows(scriptPath));
+
+    IpcraftPackageManifest manifest = packageManifest(ipcoreId);
+    manifest.packageRootPath = tempDir.path();
+    IpCatalogService catalog(QVector<IpcraftPackageManifest>{manifest}, nullptr);
+    const QVector<ProjectIpInstanceRecord> instances{
+        projectInstanceRecord(ipcoreId, QStringLiteral("graph_free_manager_0"))
+    };
+    ProjectStateService projectStateService;
+    for (const ProjectIpInstanceRecord& instance : instances) {
+        projectStateService.ensureIpInstanceRecord(instance);
+    }
+    const ipcraft::core::ProjectDesign design =
+        projectDesignFor(QStringLiteral("graph_free_manager"), instances);
+
+    LogPanel logPanel;
+    ValidationManager manager(nullptr,
+                              &projectStateService,
+                              &catalog,
+                              nullptr,
+                              &logPanel,
+                              &design);
+    manager.runValidation(QStringLiteral("/tmp/graph-free-manager.fpproj"),
+                          QStringLiteral("graph_free_manager"));
+
+    auto* logList = logPanel.findChild<QListWidget*>();
+    require(indexOfLogItemContaining(logList,
+                                     QStringLiteral("Instance 'graph_free_manager_0': scripted validate DRC output")) >= 0,
+            "validation manager should run package validate when graph is null but project design exists");
+    require(indexOfLogItemContaining(logList, QStringLiteral("Graph is not available")) < 0,
+            "validation manager should not publish graph availability as a global blocker");
 }
 
 void testValidateSkipsOnlyInstanceTouchedByBasicValidationError() {
@@ -1296,13 +1371,14 @@ int main(int argc, char** argv) {
     configureDefaultPackageRootsForTest();
 
     try {
-        testProjectValidationRunnerRejectsNullGraphWithoutCrashing();
+        testProjectValidationRunnerRunsInstancePackageChecksWithoutGraph();
         testValidationManagerHandlesMissingGraphAndLogPanel();
         testProjectValidationRunnerDoesNotWarnForMissingDrc();
         testProjectValidationRunnerErrorsWhenCatalogEntryIsMissing();
         testBuiltInValidationReportsMissingPackage();
         testBuiltInValidationRunsBeforePackageValidate();
         testValidateRunsBuiltInThenPackageValidate();
+        testValidationManagerRunsPackageValidateWithoutGraphWhenProjectDesignExists();
         testValidateSkipsOnlyInstanceTouchedByBasicValidationError();
         testCommandRunnerRejectsSchemaMismatch();
         testBuiltInValidationReportsMissingInterface();

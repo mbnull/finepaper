@@ -6,6 +6,9 @@
 #include "ipcraft/schemaids.h"
 #include "modules/moduleregistry.h"
 #include "modules/moduleprovider.h"
+#include "project/graphprojectserializer.h"
+#include "project/projectdesignserializer.h"
+#include "project/projectstateservice.h"
 #include "topology/topologypresetbuilder.h"
 
 #include <QCoreApplication>
@@ -398,12 +401,20 @@ ProjectGenerationResult runGeneration(const QDir& root,
                                       const WorkflowContext& context,
                                       const Graph& graph,
                                       QVector<ProjectIpInstanceRecord> instances) {
+    ProjectDocument document = GraphProjectSerializer::toProject(graph, QStringLiteral("commercial_mvp"));
+    ProjectStateService stateService;
+    for (const ProjectIpInstanceRecord& instance : instances) {
+        stateService.ensureIpInstanceRecord(instance);
+    }
+    stateService.writeToDocument(document);
+    const ipcraft::core::ProjectDesign design = ProjectDesignSerializer::fromDocument(document);
+
     ProjectGenerationRequest request;
-    request.graph = &graph;
+    request.projectDesign = &design;
     request.projectPath = root.filePath(QStringLiteral("project/design.fpproj"));
     request.designName = QStringLiteral("commercial_mvp");
     request.catalogEntries = context.catalog.entries();
-    request.instances = std::move(instances);
+    request.instances = std::move(document.instances);
     ProjectGenerationRunner runner({repositoryPath(QStringLiteral("ipcraft_generator/bin"))});
     return runner.generate(request);
 }

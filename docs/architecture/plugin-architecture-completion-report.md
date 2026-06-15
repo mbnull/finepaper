@@ -53,7 +53,7 @@ Internal C++ architecture modules are plugins. Public or third-party deliverable
 
 | Gate | Status | Required follow-up |
 |------|--------|--------------------|
-| Graph source of truth | Adapter/deletion debt remains | Delete `ProjectGenerationRequest::graph` and normal generation's `GraphProjectSerializer` bridge after generation consumes `ProjectDocument` directly |
+| Graph source of truth | accepted debt remains only in editor projection | Normal generation uses `ProjectGenerationRequest::projectDesign` and instance-owned `graphConfig`; keep `GraphProjectSerializer` isolated to `EditorProjectionService` until the editor projection shell is replaced |
 | `MainWindow` direct assembly | Partially isolated | Move remaining static service assembly behind internal plugin activation when app startup is ready |
 | UI JSON parsing | Guarded | Keep package JSON parsing inside package/descriptor readers |
 | Direct generator calls | Guarded | UI and domain code must continue using `ProjectGenerationRunner`, providers, and `FlowRunner` |

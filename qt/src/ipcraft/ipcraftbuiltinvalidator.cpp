@@ -1598,13 +1598,6 @@ IpcraftBuiltInValidator::Result IpcraftBuiltInValidator::validate(
     ValidationAccumulator accumulator;
     accumulator.instances = instances;
 
-    if (!graph) {
-        accumulator.addGlobalError(QStringLiteral("Graph is not available."),
-                                   QString(),
-                                   QStringLiteral("built_in_graph"));
-        return accumulator.result;
-    }
-
     validateInstancesReferenceCatalogEntries(entries, instances, accumulator);
     validatePackageMetadata(entries, commandPurpose, accumulator);
     validateModuleOwnershipAndTypes(graph,

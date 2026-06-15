@@ -1,10 +1,5 @@
 #include "app/projectflowsupport.h"
 
-#include "graph/graph.h"
-#include "project/graphprojectserializer.h"
-#include "project/projectdocument.h"
-#include "project/projectstateservice.h"
-
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
@@ -142,34 +137,16 @@ PackageFlowContext packageFlowContextForEntry(const IpCatalogEntry& entry,
     return context;
 }
 
-std::optional<ipcraft::GraphConfig> projectedGraphConfigForInstance(
-    const Graph* graph,
-    const QVector<ProjectIpInstanceRecord>& instances,
-    const QString& designName,
+std::optional<ipcraft::GraphConfig> graphConfigForInstance(
     const ProjectIpInstanceRecord& instance) {
-    if (!graph) {
+    if (!instance.hasGraphConfig || instance.graphConfigIsNull) {
         return std::nullopt;
     }
 
-    ProjectDocument document = GraphProjectSerializer::toProject(*graph, designName);
-    ProjectStateService stateService;
-    for (const ProjectIpInstanceRecord& record : instances) {
-        stateService.ensureIpInstanceRecord(record);
-    }
-    stateService.writeToDocument(document);
-    for (const ProjectIpInstanceRecord& projected : document.instances) {
-        if (projected.id != instance.instanceId && projected.id != instance.id) {
-            continue;
-        }
-        if (!projected.hasGraphConfig || projected.graphConfigIsNull) {
-            return std::nullopt;
-        }
-        const ipcraft::GraphConfigReadResult graphConfig =
-            ipcraft::GraphConfig::fromJson(projected.graphConfig);
-        if (graphConfig.ok) {
-            return graphConfig.config;
-        }
-        return std::nullopt;
+    const ipcraft::GraphConfigReadResult graphConfig =
+        ipcraft::GraphConfig::fromJson(instance.graphConfig);
+    if (graphConfig.ok) {
+        return graphConfig.config;
     }
     return std::nullopt;
 }

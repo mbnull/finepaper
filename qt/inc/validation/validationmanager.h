@@ -12,6 +12,9 @@ class ProjectStateService;
 class ActiveWorkspaceController;
 class ProjectExternalValidationRunner;
 class ProjectValidationRunner;
+namespace ipcraft::core {
+struct ProjectDesign;
+}
 
 class ValidationManager : public QObject {
     Q_OBJECT
@@ -23,6 +26,7 @@ public:
                       const IpCatalogService* catalogService,
                       const ActiveWorkspaceController* activeWorkspaceController,
                       LogPanel* logPanel,
+                      const ipcraft::core::ProjectDesign* projectDesign = nullptr,
                       QObject* parent = nullptr);
     ~ValidationManager();
 
@@ -35,6 +39,7 @@ private:
     ProjectStateService* m_projectStateService;
     const IpCatalogService* m_catalogService;
     LogPanel* m_logPanel;
+    const ipcraft::core::ProjectDesign* m_projectDesign;
     ProjectValidationRunner* m_projectValidationRunner;
     ProjectExternalValidationRunner* m_projectExternalValidationRunner;
 };

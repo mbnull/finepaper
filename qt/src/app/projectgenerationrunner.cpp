@@ -2,13 +2,10 @@
 #include "app/projectgenerationrunner.h"
 
 #include "app/generationartifacts.h"
-#include "graph/graph.h"
+#include "app/projectflowsupport.h"
 #include "ipcraft/ipcraftbuiltinvalidator.h"
 #include "ipcraft/packagespec.h"
 #include "ipcraft/schemaids.h"
-#include "project/graphprojectserializer.h"
-#include "project/projectdocument.h"
-#include "project/projectstateservice.h"
 #include "validation/validationresult.h"
 
 #include <QCoreApplication>
@@ -295,37 +292,6 @@ PackageFlowContext packageFlowContextForEntry(const IpCatalogEntry& entry) {
     return context;
 }
 
-std::optional<ipcraft::GraphConfig> projectedGraphConfigForInstance(
-    const ProjectGenerationRequest& request,
-    const QString& designName,
-    const ProjectIpInstanceRecord& instance) {
-    if (!request.graph) {
-        return std::nullopt;
-    }
-
-    ProjectDocument document = GraphProjectSerializer::toProject(*request.graph, designName);
-    ProjectStateService stateService;
-    for (const ProjectIpInstanceRecord& record : request.instances) {
-        stateService.ensureIpInstanceRecord(record);
-    }
-    stateService.writeToDocument(document);
-    for (const ProjectIpInstanceRecord& projected : document.instances) {
-        if (projected.id != instance.instanceId && projected.id != instance.id) {
-            continue;
-        }
-        if (!projected.hasGraphConfig || projected.graphConfigIsNull) {
-            return std::nullopt;
-        }
-        const ipcraft::GraphConfigReadResult graphConfig =
-            ipcraft::GraphConfig::fromJson(projected.graphConfig);
-        if (graphConfig.ok) {
-            return graphConfig.config;
-        }
-        return std::nullopt;
-    }
-    return std::nullopt;
-}
-
 QString diagnosticMessageForFlowFailure(const ipcraft::FlowRunResult& flowResult) {
     for (const ipcraft::Diagnostic& diagnostic : flowResult.diagnostics.records) {
         if (diagnostic.ruleId == QStringLiteral("flow.timeout")) {
@@ -570,7 +536,7 @@ ProjectGenerationInstanceResult generateInstance(const ProjectGenerationRequest&
     flowRequest.packageRoot = flowContext.packageRoot;
     flowRequest.package = flowContext.package;
     flowRequest.config = ipcraft::ConfigBundle::fromJson(instance.config);
-    flowRequest.graphConfig = projectedGraphConfigForInstance(request, designName, instance);
+    flowRequest.graphConfig = ProjectFlowSupport::graphConfigForInstance(instance);
     flowRequest.frameworkToolSearchPaths = frameworkToolSearchPaths;
 
     const GenerationFlowRequest generationFlowRequest{flowRequest, result.outputDirectory};
@@ -693,7 +659,7 @@ void ProjectGenerationRunner::addGenerationFlowProvider(
 ProjectGenerationResult ProjectGenerationRunner::generate(const ProjectGenerationRequest& request) const {
     IpcraftBuiltInValidator builtInValidator;
     const IpcraftBuiltInValidator::Result builtInResult =
-        builtInValidator.validate(request.graph,
+        builtInValidator.validate(nullptr,
                                   request.catalogEntries,
                                   request.instances,
                                   IpcraftBuiltInValidator::CommandPurpose::Generate);
@@ -701,9 +667,6 @@ ProjectGenerationResult ProjectGenerationRunner::generate(const ProjectGeneratio
         return builtInValidationFailure(builtInResult);
     }
 
-    if (!request.graph) {
-        return requestFailure(QStringLiteral("Project graph is not available."));
-    }
     if (request.projectPath.trimmed().isEmpty()) {
         return requestFailure(QStringLiteral("Save the project before generation."));
     }
@@ -756,7 +719,7 @@ ProjectGenerationResult ProjectGenerationRunner::generate(const ProjectGeneratio
     }
 
     const GeneratedProjectSnapshotResult snapshot =
-        writeGeneratedProjectSnapshotInOutputRoot(*request.graph,
+        writeGeneratedProjectSnapshotInOutputRoot(request.projectDesign,
                                                   result.outputRoot,
                                                   designName,
                                                   request.instances);

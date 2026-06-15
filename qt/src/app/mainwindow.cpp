@@ -412,7 +412,9 @@ void MainWindow::generateVerilog() {
     }
 
     ProjectGenerationRequest request;
-    request.graph = m_graph;
+    request.projectDesign = m_designEditingService
+        ? &m_designEditingService->design()
+        : (m_projectService ? &m_projectService->design() : nullptr);
     request.projectPath = m_currentDocumentPath;
     request.designName = QFileInfo(m_currentDocumentPath).completeBaseName();
     request.catalogEntries = m_ipCatalogService ? m_ipCatalogService->entries() : QList<IpCatalogEntry>{};
@@ -668,6 +670,7 @@ void MainWindow::setupPanels() {
                                                 m_ipCatalogService.get(),
                                                 m_activeWorkspaceController.get(),
                                                 m_logPanel,
+                                                m_projectService ? &m_projectService->design() : nullptr,
                                                 this);
 
     m_nodeEditor->setObjectName("nodeEditorPanel");

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ipcore/ipcatalogservice.h"
+#include "ipcraft/core/project_design.h"
 #include "project/ipinstancestate.h"
 #include "validation/validationresult.h"
 
@@ -13,6 +14,8 @@
 class Graph;
 
 struct ProjectExternalValidationRequest {
+    const ipcraft::core::ProjectDesign* projectDesign = nullptr;
+    // Optional UI projection used only to resolve/highlight diagnostic targets.
     const Graph* graph = nullptr;
     QString projectPath;
     QString designName;

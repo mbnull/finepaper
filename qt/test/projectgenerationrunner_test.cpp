@@ -6,6 +6,7 @@
 #include "graph/module.h"
 #include "graph/port.h"
 #include "ipcore/ipcatalogservice.h"
+#include "ipcraft/core/project_design.h"
 #include "ipcraft/schemaids.h"
 #include "project/projectreader.h"
 
@@ -16,6 +17,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QJsonValue>
 #include <QTemporaryDir>
 #include <chrono>
 #include <iostream>
@@ -109,9 +111,29 @@ std::unique_ptr<Module> makeModule(const QString& id,
     return module;
 }
 
+QJsonObject graphConfigForObject(const QString& objectId,
+                                 const QString& objectType = QString()) {
+    QJsonObject object{
+        {QStringLiteral("id"), objectId},
+        {QStringLiteral("type"), objectType.trimmed().isEmpty()
+             ? QStringLiteral("component")
+             : objectType},
+        {QStringLiteral("properties"), QJsonObject{}}
+    };
+    return QJsonObject{
+        {QStringLiteral("schema"), ipcraft::schemaids::graphConfigV1},
+        {QStringLiteral("objects"), QJsonArray{object}},
+        {QStringLiteral("relationships"), QJsonArray{}},
+        {QStringLiteral("properties"), QJsonObject{}},
+        {QStringLiteral("native"), QJsonObject{}}
+    };
+}
+
 ProjectIpInstanceRecord instanceRecord(const QString& ipcoreId,
                                        const QString& instanceId,
-                                       const QString& marker) {
+                                       const QString& marker,
+                                       const QString& graphObjectId = QString(),
+                                       const QString& graphObjectType = QString()) {
     ProjectIpInstanceRecord record;
     record.id = instanceId;
     record.package = ProjectPackageRef{ipcoreId, QStringLiteral("1.0.0")};
@@ -121,7 +143,49 @@ ProjectIpInstanceRecord instanceRecord(const QString& ipcoreId,
     };
     record.ipcoreId = ipcoreId;
     record.instanceId = instanceId;
+    record.hasGraphConfig = true;
+    record.graphConfig = graphConfigForObject(
+        graphObjectId.trimmed().isEmpty() ? instanceId : graphObjectId,
+        graphObjectType);
     return record;
+}
+
+QString packageRefKey(const ProjectPackageRef& package) {
+    return package.version.trimmed().isEmpty()
+        ? package.id
+        : package.id + QLatin1Char('@') + package.version;
+}
+
+ipcraft::core::ProjectDesign projectDesignFor(const QString& designName,
+                                              const QVector<ProjectIpInstanceRecord>& instances) {
+    ipcraft::core::ProjectDesign design;
+    design.schema = ipcraft::schemaids::projectV1;
+    design.id = designName + QStringLiteral("_id");
+    design.name = designName;
+
+    QStringList packageKeys;
+    for (const ProjectIpInstanceRecord& instance : instances) {
+        const QString packageId = instance.package.id.trimmed().isEmpty()
+            ? instance.ipcoreId
+            : instance.package.id;
+        const QString packageVersion = instance.package.version;
+        const QString packageKey = packageVersion.trimmed().isEmpty()
+            ? packageId
+            : packageId + QLatin1Char('@') + packageVersion;
+        if (!packageId.trimmed().isEmpty() && !packageKeys.contains(packageKey)) {
+            packageKeys.append(packageKey);
+            design.packages.append(ipcraft::core::PackageRef{packageId, packageVersion});
+        }
+
+        ipcraft::core::ComponentInstance component;
+        component.id = instance.id.trimmed().isEmpty() ? instance.instanceId : instance.id;
+        component.packageRef = packageKey;
+        component.config = instance.config;
+        component.type = instance.native.value(QStringLiteral("componentType")).toString();
+        design.components.append(component);
+    }
+
+    return design;
 }
 
 QJsonArray jsonStringArray(const QStringList& values) {
@@ -623,15 +687,21 @@ void testGeneratesEveryProjectInstanceIntoSeparateOutputDirectories() {
     const QVector<ProjectIpInstanceRecord> instances{
         instanceRecord(QStringLiteral("finepaper.alpha"),
                        QStringLiteral("alpha_0"),
-                       QStringLiteral("alpha-marker")),
+                       QStringLiteral("alpha-marker"),
+                       QStringLiteral("alpha_runtime"),
+                       QStringLiteral("AlphaTile")),
         instanceRecord(QStringLiteral("finepaper.beta"),
                        QStringLiteral("beta_0"),
-                       QStringLiteral("beta-marker"))
+                       QStringLiteral("beta-marker"),
+                       QStringLiteral("beta_runtime"),
+                       QStringLiteral("BetaTile"))
     };
+    const ipcraft::core::ProjectDesign design =
+        projectDesignFor(QStringLiteral("demo_design"), instances);
 
     const QString projectPath = root.filePath(QStringLiteral("project/demo_design.fpproj"));
     ProjectGenerationRequest request;
-    request.graph = &graph;
+    request.projectDesign = &design;
     request.projectPath = projectPath;
     request.designName = QStringLiteral("demo_design");
     request.catalogEntries = {
@@ -694,7 +764,6 @@ void testGenerationRejectsUnsafeAndDuplicateInstanceOutputKeys() {
     Graph graph;
 
     ProjectGenerationRequest unsafeRequest;
-    unsafeRequest.graph = &graph;
     unsafeRequest.projectPath = root.filePath(QStringLiteral("project/design.fpproj"));
     unsafeRequest.catalogEntries = {
         createCopyingFlowPackage(root, QStringLiteral("finepaper.alpha"), QStringLiteral("AlphaTile"))
@@ -713,7 +782,6 @@ void testGenerationRejectsUnsafeAndDuplicateInstanceOutputKeys() {
             "unsafe instance id should not create output outside generated root");
 
     ProjectGenerationRequest duplicateRequest;
-    duplicateRequest.graph = &graph;
     duplicateRequest.projectPath = root.filePath(QStringLiteral("project/design.fpproj"));
     duplicateRequest.catalogEntries = {
         createCopyingFlowPackage(root, QStringLiteral("finepaper.alpha"), QStringLiteral("AlphaTile")),
@@ -734,7 +802,6 @@ void testGenerationRejectsUnsafeAndDuplicateInstanceOutputKeys() {
             "duplicate instance output key error should be explicit");
 
     ProjectGenerationRequest caseFoldedDuplicateRequest;
-    caseFoldedDuplicateRequest.graph = &graph;
     caseFoldedDuplicateRequest.projectPath = root.filePath(QStringLiteral("project/design.fpproj"));
     caseFoldedDuplicateRequest.catalogEntries = {
         createCopyingFlowPackage(root, QStringLiteral("finepaper.alpha"), QStringLiteral("AlphaTile")),
@@ -757,7 +824,6 @@ void testGenerationRejectsUnsafeAndDuplicateInstanceOutputKeys() {
             "case-folded duplicate output key error should be explicit");
 
     ProjectGenerationRequest reservedSnapshotRequest;
-    reservedSnapshotRequest.graph = &graph;
     reservedSnapshotRequest.projectPath = root.filePath(QStringLiteral("project/design.fpproj"));
     reservedSnapshotRequest.catalogEntries = {
         createCopyingFlowPackage(root, QStringLiteral("finepaper.alpha"), QStringLiteral("AlphaTile"))
@@ -789,7 +855,6 @@ void testGenerationFailureAndTimeoutFailWholeResult() {
             "failing package module should add");
 
     ProjectGenerationRequest failingRequest;
-    failingRequest.graph = &graph;
     failingRequest.projectPath = root.filePath(QStringLiteral("project/design.fpproj"));
     failingRequest.catalogEntries = {
         createFailingFlowPackage(root, QStringLiteral("finepaper.fail"), QStringLiteral("FailTile"))
@@ -807,7 +872,6 @@ void testGenerationFailureAndTimeoutFailWholeResult() {
 
     Graph timeoutGraph;
     ProjectGenerationRequest timeoutRequest;
-    timeoutRequest.graph = &timeoutGraph;
     timeoutRequest.projectPath = root.filePath(QStringLiteral("project/design.fpproj"));
     require(timeoutGraph.addModule(makeModule(QStringLiteral("slow_runtime"),
                                               QStringLiteral("SlowTile"),
@@ -852,7 +916,6 @@ void testGenerationManifestExcludesStaleArtifacts() {
     writeFile(stalePath, QByteArrayLiteral("stale"));
 
     ProjectGenerationRequest request;
-    request.graph = &graph;
     request.projectPath = projectPath;
     request.catalogEntries = {
         createCopyingFlowPackage(root, QStringLiteral("finepaper.alpha"), QStringLiteral("AlphaTile"))
@@ -882,7 +945,6 @@ void testGenerationManifestExcludesStaleArtifacts() {
 void testGenerationRequiresSavedProjectPath() {
     Graph graph;
     ProjectGenerationRequest request;
-    request.graph = &graph;
     request.projectPath = QString();
 
     ProjectGenerationRunner runner;
@@ -907,7 +969,6 @@ void testGenerateEmitsPackageInputsForFlow() {
 
     const QString projectPath = root.filePath(QStringLiteral("project/design.fpproj"));
     ProjectGenerationRequest request;
-    request.graph = &graph;
     request.projectPath = projectPath;
     request.catalogEntries = {createCopyingFlowPackage(root, ipcoreId, QStringLiteral("Tile"))};
     request.instances = {
@@ -966,7 +1027,6 @@ void testPackageFlowInputPathUsesEmittedInputsManifest() {
 
     const QString projectPath = root.filePath(QStringLiteral("project/design.fpproj"));
     ProjectGenerationRequest request;
-    request.graph = &graph;
     request.projectPath = projectPath;
     request.catalogEntries = {createCopyingFlowPackage(root, ipcoreId, QStringLiteral("Tile"))};
     request.instances = {
@@ -1030,7 +1090,6 @@ void testGenerateRunsFrameworkToolFromInjectedSearchPath() {
 
     const QString projectPath = root.filePath(QStringLiteral("project/design.fpproj"));
     ProjectGenerationRequest request;
-    request.graph = &graph;
     request.projectPath = projectPath;
     request.catalogEntries = {entry};
     request.instances = {
@@ -1086,12 +1145,17 @@ void testGenerateEmitsInputsForEveryPackageInstance() {
 
     const QString projectPath = root.filePath(QStringLiteral("project/design.fpproj"));
     ProjectGenerationRequest request;
-    request.graph = &graph;
     request.projectPath = projectPath;
     request.catalogEntries = {createCopyingFlowPackage(root, ipcoreId, QStringLiteral("Tile"))};
     request.instances = {
-        instanceRecord(ipcoreId, QStringLiteral("alpha_0"), QStringLiteral("alpha-marker")),
-        instanceRecord(ipcoreId, QStringLiteral("beta_0"), QStringLiteral("beta-marker"))
+        instanceRecord(ipcoreId,
+                       QStringLiteral("alpha_0"),
+                       QStringLiteral("alpha-marker"),
+                       QStringLiteral("alpha_runtime")),
+        instanceRecord(ipcoreId,
+                       QStringLiteral("beta_0"),
+                       QStringLiteral("beta-marker"),
+                       QStringLiteral("beta_runtime"))
     };
 
     const ProjectGenerationResult result = ProjectGenerationRunner().generate(request);
@@ -1144,24 +1208,102 @@ void testGenerateEmitsInputsForEveryPackageInstance() {
             "second generation manifest should record the emitted inputs schema");
 }
 
+void testGenerateUsesProjectDesignWithoutGraphAndInstanceGraphConfig() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "temporary directory should be valid");
+    QDir root(tempDir.path());
+    const QString ipcoreId = QStringLiteral("org.example.graph_free");
+    const QVector<ProjectIpInstanceRecord> instances{
+        instanceRecord(ipcoreId,
+                       QStringLiteral("graph_free_0"),
+                       QStringLiteral("graph-free-marker"),
+                       QStringLiteral("owned_graph_config_object"),
+                       QStringLiteral("Tile"))
+    };
+    const ipcraft::core::ProjectDesign design =
+        projectDesignFor(QStringLiteral("graph_free_design"), instances);
+
+    ProjectGenerationRequest request;
+    request.projectDesign = &design;
+    request.projectPath = root.filePath(QStringLiteral("project/graph_free_design.fpproj"));
+    request.designName = QStringLiteral("graph_free_design");
+    request.catalogEntries = {createCopyingFlowPackage(root, ipcoreId, QStringLiteral("Tile"))};
+    request.instances = instances;
+
+    const ProjectGenerationResult result = ProjectGenerationRunner().generate(request);
+
+    require(result.success, result.error.toLocal8Bit().constData());
+    require(result.instances.size() == 1,
+            "graph-free generation should run the package flow");
+    const QJsonObject graphConfig = readJsonObject(
+        QDir(result.instances.first().outputDirectory).filePath(QStringLiteral("inputs/graph_config.json")));
+    const QJsonArray objects = graphConfig.value(QStringLiteral("objects")).toArray();
+    require(objects.size() == 1,
+            "graph-free emitted inputs should include instance-owned graph_config");
+    require(objects.first().toObject().value(QStringLiteral("id")).toString()
+                == QStringLiteral("owned_graph_config_object"),
+            "graph-free generation should use ProjectIpInstanceRecord graph_config");
+}
+
+void testGenerateWritesProjectDesignSnapshotWithoutGraph() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "temporary directory should be valid");
+    QDir root(tempDir.path());
+    const QString ipcoreId = QStringLiteral("org.example.snapshot_graph_free");
+    QVector<ProjectIpInstanceRecord> instances{
+        instanceRecord(ipcoreId,
+                       QStringLiteral("snapshot_0"),
+                       QStringLiteral("snapshot-marker"),
+                       QStringLiteral("snapshot_object"),
+                       QStringLiteral("Tile"))
+    };
+    ipcraft::core::ProjectDesign design =
+        projectDesignFor(QStringLiteral("snapshot_graph_free_design"), instances);
+    design.components.append(ipcraft::core::ComponentInstance{
+        QStringLiteral("design_only_component"),
+        QStringLiteral("DesignOnly"),
+        packageRefKey(instances.first().package),
+        QJsonObject{{QStringLiteral("width"), 64}},
+        {},
+        {},
+        {}
+    });
+
+    ProjectGenerationRequest request;
+    request.projectDesign = &design;
+    request.projectPath = root.filePath(QStringLiteral("project/snapshot_graph_free_design.fpproj"));
+    request.designName = QStringLiteral("snapshot_graph_free_design");
+    request.catalogEntries = {createCopyingFlowPackage(root, ipcoreId, QStringLiteral("Tile"))};
+    request.instances = instances;
+
+    const ProjectGenerationResult result = ProjectGenerationRunner().generate(request);
+
+    require(result.success, result.error.toLocal8Bit().constData());
+    const ProjectReadResult snapshot = ProjectReader::readFile(result.snapshotPath);
+    require(snapshot.success, snapshot.error.toLocal8Bit().constData());
+    require(snapshot.document.projectId == QStringLiteral("snapshot_graph_free_design_id"),
+            "graph-free snapshot should preserve the ProjectDesign project id");
+    require(snapshot.document.instances.size() == 2,
+            "graph-free snapshot should preserve design-only and generated instances");
+    bool sawGenerated = false;
+    bool sawDesignOnly = false;
+    for (const ProjectIpInstanceRecord& instance : snapshot.document.instances) {
+        sawGenerated = sawGenerated || instance.id == QStringLiteral("snapshot_0");
+        sawDesignOnly = sawDesignOnly || instance.id == QStringLiteral("design_only_component");
+    }
+    require(sawGenerated, "graph-free snapshot should include the generated instance");
+    require(sawDesignOnly, "graph-free snapshot should preserve design-only components");
+}
+
 void testGenerateRunsBuiltInValidationBeforeCommand() {
     QTemporaryDir tempDir;
     require(tempDir.isValid(), "temporary directory should be valid");
     QDir root(tempDir.path());
     const QString ipcoreId = QStringLiteral("finepaper.alpha");
-    Graph graph;
-    require(graph.addModule(makeModule(QStringLiteral("alpha_runtime"),
-                                       QStringLiteral("MissingTile"),
-                                       ipcoreId,
-                                       QStringLiteral("alpha_0"),
-                                       QStringLiteral("alpha_tile"))),
-            "invalid package-owned module should add");
 
     const QString projectPath = root.filePath(QStringLiteral("project/design.fpproj"));
     ProjectGenerationRequest request;
-    request.graph = &graph;
     request.projectPath = projectPath;
-    request.catalogEntries = {createCopyingFlowPackage(root, ipcoreId, QStringLiteral("Tile"))};
     request.instances = {
         instanceRecord(ipcoreId, QStringLiteral("alpha_0"), QStringLiteral("alpha-marker"))
     };
@@ -1171,8 +1313,8 @@ void testGenerateRunsBuiltInValidationBeforeCommand() {
     require(!result.success, "built-in validation error should stop generation");
     require(result.error.contains(QStringLiteral("Built-in validation failed")),
             "generation error should report built-in validation failure");
-    require(result.error.contains(QStringLiteral("MissingTile")),
-            "generation error should include the built-in validation diagnostic");
+    require(result.error.contains(QStringLiteral("missing package/catalog entry")),
+            "generation error should include the graph-free built-in validation diagnostic");
     require(!QFileInfo::exists(root.filePath(QStringLiteral("project/generated/alpha_0/artifact.sv"))),
             "generator should not run after a built-in validation error");
 }
@@ -1193,7 +1335,6 @@ void testInjectedGenerationFlowProviderOverridesDefaultRunner() {
 
     const QString projectPath = root.filePath(QStringLiteral("project/design.fpproj"));
     ProjectGenerationRequest request;
-    request.graph = &graph;
     request.projectPath = projectPath;
     request.catalogEntries = {createFailingFlowPackage(root, ipcoreId, QStringLiteral("Tile"))};
     request.instances = {
@@ -1231,7 +1372,6 @@ void testInjectedGenerationFlowProviderMustProduceValidEmittedInputsManifest() {
             "provider malformed-input package module should add");
 
     ProjectGenerationRequest request;
-    request.graph = &graph;
     request.projectPath = root.filePath(QStringLiteral("project/design.fpproj"));
     request.catalogEntries = {createFailingFlowPackage(root, ipcoreId, QStringLiteral("Tile"))};
     request.instances = {
@@ -1272,7 +1412,6 @@ void testInjectedGenerationFlowProviderCannotReturnUnexpectedRunRoot() {
             "provider escaped-run-root package module should add");
 
     ProjectGenerationRequest request;
-    request.graph = &graph;
     request.projectPath = root.filePath(QStringLiteral("project/design.fpproj"));
     request.catalogEntries = {createFailingFlowPackage(root, ipcoreId, QStringLiteral("Tile"))};
     request.instances = {
@@ -1311,7 +1450,6 @@ void testInjectedGenerationFlowProviderReceivesFlowContext() {
 
     const QString projectPath = root.filePath(QStringLiteral("project/design.fpproj"));
     ProjectGenerationRequest request;
-    request.graph = &graph;
     request.projectPath = projectPath;
     request.catalogEntries = {createFailingFlowPackage(root, ipcoreId, QStringLiteral("Tile"))};
     request.instances = {
@@ -1364,6 +1502,8 @@ int main(int argc, char** argv) {
         testPackageFlowInputPathUsesEmittedInputsManifest();
         testGenerateRunsFrameworkToolFromInjectedSearchPath();
         testGenerateEmitsInputsForEveryPackageInstance();
+        testGenerateUsesProjectDesignWithoutGraphAndInstanceGraphConfig();
+        testGenerateWritesProjectDesignSnapshotWithoutGraph();
         testGenerateRunsBuiltInValidationBeforeCommand();
         testInjectedGenerationFlowProviderOverridesDefaultRunner();
         testInjectedGenerationFlowProviderMustProduceValidEmittedInputsManifest();

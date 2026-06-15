@@ -97,8 +97,8 @@ void testHardeningReportCoversDeletionGates() {
     requireContains(report, QStringLiteral("Connection hardcoding"), QStringLiteral("hardening report"));
     requireContains(report, QStringLiteral("Legacy compatibility paths"), QStringLiteral("hardening report"));
     requireContains(report, QStringLiteral("ProjectGenerationRequest"), QStringLiteral("hardening report"));
+    requireContains(report, QStringLiteral("projectDesign"), QStringLiteral("hardening report"));
     requireContains(report, QStringLiteral("GraphProjectSerializer"), QStringLiteral("hardening report"));
-    requireContains(report, QStringLiteral("adapter/deletion debt"), QStringLiteral("hardening report"));
     requireContains(report, QStringLiteral("m_graph"), QStringLiteral("hardening report"));
 }
 
@@ -140,6 +140,7 @@ void testSourceScanRejectsConcretePackageHardcoding() {
 
 void testSourceScanRejectsDirectGeneratorOrProcessCallsOutsidePipeline() {
     const QStringList generatorStringAllowed{
+        QStringLiteral("qt/src/app/projectflowsupport.cpp"),
         QStringLiteral("qt/src/app/projectgenerationrunner.cpp")
     };
     const QStringList qprocessAllowed{
@@ -169,8 +170,6 @@ void testSourceScanRejectsManifestLoadingOutsidePackageServices() {
 
 void testSourceScanAllowsOnlyDocumentedGraphSerializerAdapters() {
     const QStringList serializerAllowed{
-        QStringLiteral("qt/src/app/generationartifacts.cpp"),
-        QStringLiteral("qt/src/app/projectgenerationrunner.cpp"),
         QStringLiteral("qt/src/project/editorprojectionservice.cpp"),
         QStringLiteral("qt/src/project/graphprojectserializer.cpp")
     };

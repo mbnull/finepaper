@@ -14,12 +14,14 @@ ValidationManager::ValidationManager(Graph* graph,
                                      const IpCatalogService* catalogService,
                                      const ActiveWorkspaceController* activeWorkspaceController,
                                      LogPanel* logPanel,
+                                     const ipcraft::core::ProjectDesign* projectDesign,
                                      QObject* parent)
     : QObject(parent),
       m_graph(graph),
       m_projectStateService(projectStateService),
       m_catalogService(catalogService),
       m_logPanel(logPanel),
+      m_projectDesign(projectDesign),
       m_projectValidationRunner(new ProjectValidationRunner()),
       m_projectExternalValidationRunner(new ProjectExternalValidationRunner()) {
     (void)activeWorkspaceController;
@@ -44,6 +46,7 @@ void ValidationManager::runValidation(const QString& projectPath, const QString&
         m_projectValidationRunner->validateDetailed(m_graph, entries, instances);
 
     ProjectExternalValidationRequest externalRequest;
+    externalRequest.projectDesign = m_projectDesign;
     externalRequest.graph = m_graph;
     externalRequest.projectPath = projectPath;
     externalRequest.designName = designName;
@@ -51,8 +54,7 @@ void ValidationManager::runValidation(const QString& projectPath, const QString&
     externalRequest.instances = instances;
     externalRequest.staticResults = staticReport.diagnostics;
     externalRequest.blockingInstanceIds = staticReport.blockingInstanceIds;
-    externalRequest.blockAllExternalValidation =
-        staticReport.blockAllExternalValidation || !m_graph;
+    externalRequest.blockAllExternalValidation = staticReport.blockAllExternalValidation;
 
     const QList<ValidationResult> externalResults =
         m_projectExternalValidationRunner->validate(externalRequest);

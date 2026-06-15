@@ -11,8 +11,6 @@
 #include <QVector>
 #include <optional>
 
-class Graph;
-
 namespace ProjectFlowSupport {
 
 struct PackageFlowContext {
@@ -35,10 +33,7 @@ QString designNameForProject(const QString& projectPath, const QString& explicit
 QString withInstanceContext(const ProjectIpInstanceRecord& instance, const QString& message);
 const IpCatalogEntry* findCatalogEntry(const QList<IpCatalogEntry>& entries, const QString& ipcoreId);
 PackageFlowContext packageFlowContextForEntry(const IpCatalogEntry& entry, const QString& flowId);
-std::optional<ipcraft::GraphConfig> projectedGraphConfigForInstance(
-    const Graph* graph,
-    const QVector<ProjectIpInstanceRecord>& instances,
-    const QString& designName,
+std::optional<ipcraft::GraphConfig> graphConfigForInstance(
     const ProjectIpInstanceRecord& instance);
 QString readTextFileIfPresent(const QString& path);
 bool isSafeInstanceOutputKey(const QString& instanceId);

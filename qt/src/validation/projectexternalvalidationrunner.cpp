@@ -242,7 +242,7 @@ void ProjectExternalValidationRunner::setFrameworkToolSearchPaths(QStringList se
 QList<ValidationResult> ProjectExternalValidationRunner::validate(
     const ProjectExternalValidationRequest& request) const {
     QList<ValidationResult> results;
-    if (!request.graph || request.instances.isEmpty()) {
+    if (request.instances.isEmpty()) {
         return results;
     }
     if (request.blockAllExternalValidation) {
@@ -335,11 +335,7 @@ QList<ValidationResult> ProjectExternalValidationRunner::validate(
         flowRequest.packageRoot = flowContext.packageRoot;
         flowRequest.package = flowContext.package;
         flowRequest.config = ipcraft::ConfigBundle::fromJson(instance.config);
-        flowRequest.graphConfig = ProjectFlowSupport::projectedGraphConfigForInstance(
-            request.graph,
-            request.instances,
-            designName,
-            instance);
+        flowRequest.graphConfig = ProjectFlowSupport::graphConfigForInstance(instance);
         flowRequest.frameworkToolSearchPaths = frameworkToolSearchPaths;
 
         const ipcraft::FlowRunResult flowResult = ipcraft::FlowRunner::runFlow(flowRequest);

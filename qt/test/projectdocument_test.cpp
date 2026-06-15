@@ -1769,7 +1769,7 @@ void testGenerationWritesProjectSnapshot() {
     require(tempDir.isValid(), "failed to create temporary directory");
 
     const GeneratedProjectSnapshotResult result =
-        writeGeneratedProjectSnapshot(graph,
+        writeGeneratedProjectSnapshot(nullptr,
                                       tempDir.path(),
                                       QStringLiteral("generated_design"),
                                       QVector<ProjectIpInstanceRecord>{state});
@@ -1794,56 +1794,61 @@ void testGenerationWritesProjectSnapshot() {
             "generation project snapshot should preserve IP-core parameters");
 }
 
-void testGenerationProjectSnapshotPreservesGraphBridgeData() {
-    Graph graph;
-    auto module = instantiate(makeProjectXpType(), QStringLiteral("snapshot_node"));
-    module->setParameter(QStringLiteral("x"), 123);
-    module->setParameter(QStringLiteral("y"), 456);
-    module->setParameter(QStringLiteral("collapsed"), false);
-    require(graph.addModule(std::move(module)), "snapshot graph module should add");
-
+void testGenerationProjectSnapshotPreservesInstanceGraphConfigWithoutGraph() {
     ProjectIpInstanceRecord state;
     state.ipcoreId = QStringLiteral("finepaper.test");
     state.instanceId = QStringLiteral("test_0");
+    state.id = state.instanceId;
+    state.package = ProjectPackageRef{state.ipcoreId, QStringLiteral("1.0")};
     state.schema = QStringLiteral("finepaper-test-state-v1");
     state.state = QJsonObject{
         {QStringLiteral("global_parameters"), QJsonObject{
             {QStringLiteral("width"), 32}
         }}
     };
+    state.hasGraphConfig = true;
+    state.graphConfig = QJsonObject{
+        {QStringLiteral("schema"), ipcraft::schemaids::graphConfigV1},
+        {QStringLiteral("objects"), QJsonArray{
+            QJsonObject{
+                {QStringLiteral("id"), QStringLiteral("snapshot_node")},
+                {QStringLiteral("type"), QStringLiteral("ProjectXp")}
+            }
+        }},
+        {QStringLiteral("relationships"), QJsonArray{}},
+        {QStringLiteral("properties"), QJsonObject{}},
+        {QStringLiteral("native"), QJsonObject{}}
+    };
+
+    ipcraft::core::ProjectDesign design;
+    design.schema = ipcraft::schemaids::projectV1;
+    design.id = QStringLiteral("snapshot_design_id");
+    design.name = QStringLiteral("snapshot_design");
 
     QTemporaryDir tempDir;
     require(tempDir.isValid(), "failed to create temporary directory");
 
     const GeneratedProjectSnapshotResult result =
-        writeGeneratedProjectSnapshot(graph,
+        writeGeneratedProjectSnapshot(&design,
                                       tempDir.path(),
                                       QStringLiteral("snapshot_design"),
                                       QVector<ProjectIpInstanceRecord>{state});
-    require(result.success, "generation project snapshot with graph should be written");
+    require(result.success, "generation project snapshot without graph should be written");
 
     const ProjectReadResult readResult = ProjectReader::readFile(result.path);
-    require(readResult.success, "generation project snapshot with graph should be readable");
+    require(readResult.success, "generation project snapshot without graph should be readable");
+    require(readResult.document.projectId == QStringLiteral("snapshot_design_id"),
+            "snapshot should preserve ProjectDesign project id");
     require(readResult.document.instances.size() == 1,
             "snapshot should include the generation instance");
     const ProjectIpInstanceRecord& instance = readResult.document.instances.first();
     require(instance.hasGraphConfig,
-            "snapshot should bridge live graph modules into graph_config");
+            "snapshot should preserve instance-owned graph_config");
     require(instance.graphConfig.value(QStringLiteral("objects")).toArray().size() == 1,
-            "snapshot graph_config should include graph objects");
+            "snapshot graph_config should include instance graph objects");
     require(instance.graphConfig.value(QStringLiteral("objects")).toArray().first().toObject()
                 .value(QStringLiteral("id")).toString() == QStringLiteral("snapshot_node"),
             "snapshot graph_config should preserve graph object ids");
-    const QJsonObject graphView =
-        readResult.document.layout.value(QStringLiteral("views")).toArray().first().toObject();
-    require(graphView.value(QStringLiteral("id")).toString() == QStringLiteral("graph"),
-            "snapshot layout should use the graph view id");
-    const QJsonObject layoutNode = graphView.value(QStringLiteral("canvas")).toObject()
-                                       .value(QStringLiteral("nodes")).toObject()
-                                       .value(QStringLiteral("snapshot_node")).toObject();
-    require(layoutNode.value(QStringLiteral("x")).toInt() == 123 &&
-                layoutNode.value(QStringLiteral("y")).toInt() == 456,
-            "snapshot layout should preserve graph node coordinates");
 }
 
 } // namespace
@@ -1888,7 +1893,7 @@ int main(int argc, char** argv) {
         testProjectReaderRejectsOversizedProjectFiles();
         testGenerationHelpersShapeIpcoreStateForGeneratorBoundary();
         testGenerationWritesProjectSnapshot();
-        testGenerationProjectSnapshotPreservesGraphBridgeData();
+        testGenerationProjectSnapshotPreservesInstanceGraphConfigWithoutGraph();
     } catch (const std::exception& error) {
         std::cerr << "projectdocument_test failed: " << error.what() << '\n';
         return 1;

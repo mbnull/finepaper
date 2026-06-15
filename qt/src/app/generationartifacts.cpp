@@ -1,12 +1,11 @@
 // Writes project snapshots that make generated output directories reproducible.
 #include "app/generationartifacts.h"
 
-#include "graph/graph.h"
-#include "project/graphprojectserializer.h"
-#include "project/projectstateservice.h"
+#include "project/projectdesignserializer.h"
 #include "project/projectwriter.h"
 
 #include <QDir>
+#include <QHash>
 #include <QSet>
 
 namespace {
@@ -56,6 +55,49 @@ QVector<ProjectIpInstanceRecord> projectInstancesFromGenerationState(
     return instances;
 }
 
+ProjectDocument documentFromDesign(const ipcraft::core::ProjectDesign* projectDesign,
+                                   const QString& designName) {
+    ProjectDocument document = projectDesign
+        ? ProjectDesignSerializer::toDocument(*projectDesign)
+        : ProjectDocument{};
+    if (!projectDesign || document.projectName.trimmed().isEmpty()) {
+        document.projectName = designName;
+        document.name = designName;
+    }
+    if (!projectDesign || document.projectId.trimmed().isEmpty()) {
+        document.projectId = designName;
+    }
+    return document;
+}
+
+QString instanceDocumentKey(const ProjectIpInstanceRecord& record) {
+    const QString id = record.id.trimmed();
+    return id.isEmpty() ? record.instanceId.trimmed() : id;
+}
+
+void mergeGenerationInstances(ProjectDocument& document,
+                              const QVector<ProjectIpInstanceRecord>& generationRecords) {
+    QHash<QString, qsizetype> instanceIndexes;
+    for (qsizetype index = 0; index < document.instances.size(); ++index) {
+        const QString key = instanceDocumentKey(document.instances.at(index));
+        if (!key.isEmpty() && !instanceIndexes.contains(key)) {
+            instanceIndexes.insert(key, index);
+        }
+    }
+
+    for (const ProjectIpInstanceRecord& record : generationRecords) {
+        const QString key = instanceDocumentKey(record);
+        if (!key.isEmpty() && instanceIndexes.contains(key)) {
+            document.instances[instanceIndexes.value(key)] = record;
+            continue;
+        }
+        if (!key.isEmpty()) {
+            instanceIndexes.insert(key, document.instances.size());
+        }
+        document.instances.append(record);
+    }
+}
+
 } // namespace
 
 QJsonArray ipcoreStateArray(const QVector<ProjectIpInstanceRecord>& records) {
@@ -76,25 +118,24 @@ void attachIpcoreState(QJsonObject& root,
     root.insert(QStringLiteral("ipcore_state"), ipcoreStateArray(records));
 }
 
-GeneratedProjectSnapshotResult writeGeneratedProjectSnapshot(const Graph& graph,
+GeneratedProjectSnapshotResult writeGeneratedProjectSnapshot(const ipcraft::core::ProjectDesign* projectDesign,
                                                              const QString& outputDirectory,
                                                              const QString& designName,
                                                              const QVector<ProjectIpInstanceRecord>& ipcoreState) {
     QDir outputDir(outputDirectory);
     const QString projectPath = outputDir.filePath(designName + QStringLiteral(".fpproj"));
-    return writeGeneratedProjectSnapshotFile(graph, projectPath, designName, ipcoreState);
+    return writeGeneratedProjectSnapshotFile(projectDesign, projectPath, designName, ipcoreState);
 }
 
-GeneratedProjectSnapshotResult writeGeneratedProjectSnapshotFile(const Graph& graph,
+GeneratedProjectSnapshotResult writeGeneratedProjectSnapshotFile(const ipcraft::core::ProjectDesign* projectDesign,
                                                                  const QString& projectPath,
                                                                  const QString& designName,
                                                                  const QVector<ProjectIpInstanceRecord>& ipcoreState) {
-    ProjectDocument document = GraphProjectSerializer::toProject(graph, designName);
-    document.instances = projectInstancesFromGenerationState(ipcoreState);
-    document.ipcoreState = ipcoreState;
-    ProjectStateService stateService;
-    stateService.loadFromDocument(document);
-    stateService.writeToDocument(document);
+    ProjectDocument document = documentFromDesign(projectDesign, designName);
+    const QVector<ProjectIpInstanceRecord> projectInstances =
+        projectInstancesFromGenerationState(ipcoreState);
+    mergeGenerationInstances(document, projectInstances);
+    document.ipcoreState = projectInstances;
     addIpcoreStateDependencies(document, ipcoreState);
     const ProjectWriteResult writeResult = ProjectWriter::writeFile(projectPath, document);
     if (!writeResult.success) {
@@ -104,10 +145,10 @@ GeneratedProjectSnapshotResult writeGeneratedProjectSnapshotFile(const Graph& gr
     return {true, projectPath, {}};
 }
 
-GeneratedProjectSnapshotResult writeGeneratedProjectSnapshotInOutputRoot(const Graph& graph,
+GeneratedProjectSnapshotResult writeGeneratedProjectSnapshotInOutputRoot(const ipcraft::core::ProjectDesign* projectDesign,
                                                                          const QString& outputRoot,
                                                                          const QString& designName,
                                                                          const QVector<ProjectIpInstanceRecord>& ipcoreState) {
     const QString projectPath = QDir(outputRoot).filePath(QStringLiteral("project-snapshot.fpproj"));
-    return writeGeneratedProjectSnapshotFile(graph, projectPath, designName, ipcoreState);
+    return writeGeneratedProjectSnapshotFile(projectDesign, projectPath, designName, ipcoreState);
 }

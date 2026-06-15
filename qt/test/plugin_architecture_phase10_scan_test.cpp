@@ -74,7 +74,7 @@ void testCompletionReportCoversReviewAndDebt() {
     requireContains(report, QStringLiteral("Phases 1 through 10 pass"), QStringLiteral("completion report"));
     requireContains(report, QStringLiteral("Legacy Path And Deletion Gate Status"), QStringLiteral("completion report"));
     requireContains(report, QStringLiteral("accepted debt"), QStringLiteral("completion report"));
-    requireContains(report, QStringLiteral("ProjectGenerationRequest::graph"), QStringLiteral("completion report"));
+    requireContains(report, QStringLiteral("ProjectGenerationRequest::projectDesign"), QStringLiteral("completion report"));
     requireContains(report, QStringLiteral("GraphProjectSerializer"), QStringLiteral("completion report"));
     requireContains(report, QStringLiteral("MainWindow"), QStringLiteral("completion report"));
     requireContains(report, QStringLiteral("PluginHost"), QStringLiteral("completion report"));
@@ -89,7 +89,7 @@ void testReadmeAndHardeningReportReferencePhase10() {
                     QStringLiteral("plugin-architecture-completion-report.md"),
                     QStringLiteral("architecture README"));
     requireContains(hardening, QStringLiteral("Phase 10"), QStringLiteral("hardening report"));
-    requireContains(hardening, QStringLiteral("adapter/deletion debt"), QStringLiteral("hardening report"));
+    requireContains(hardening, QStringLiteral("editor projection debt"), QStringLiteral("hardening report"));
     requireContains(hardening, QStringLiteral("qt-cpp-review"), QStringLiteral("hardening report"));
 }
 

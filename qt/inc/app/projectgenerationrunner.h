@@ -2,6 +2,7 @@
 #pragma once
 
 #include "app/generationflowprovider.h"
+#include "ipcraft/core/project_design.h"
 #include "ipcore/ipcatalogservice.h"
 #include "project/ipinstancestate.h"
 
@@ -11,8 +12,6 @@
 #include <QVector>
 #include <memory>
 #include <vector>
-
-class Graph;
 
 struct ProjectGenerationInstanceResult {
     bool success = false;
@@ -32,7 +31,7 @@ struct ProjectGenerationInstanceResult {
 };
 
 struct ProjectGenerationRequest {
-    const Graph* graph = nullptr;
+    const ipcraft::core::ProjectDesign* projectDesign = nullptr;
     QString projectPath;
     QString designName;
     QString outputRoot;

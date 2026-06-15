@@ -66,24 +66,21 @@ ProjectValidationReport ProjectValidationRunner::validateDetailed(
     report.diagnostics = builtInResult.diagnostics;
     report.blockingInstanceIds = builtInResult.blockingInstanceIds;
 
-    if (!graph) {
-        report.blockAllExternalValidation = true;
-        return report;
-    }
-
-    BasicValidator basicValidator;
-    const QList<ValidationResult> basicResults = basicValidator.validate(graph);
-    for (const ValidationResult& result : basicResults) {
-        if (result.severity() != ValidationSeverity::Error) {
-            continue;
+    if (graph) {
+        BasicValidator basicValidator;
+        const QList<ValidationResult> basicResults = basicValidator.validate(graph);
+        for (const ValidationResult& result : basicResults) {
+            if (result.severity() != ValidationSeverity::Error) {
+                continue;
+            }
+            if (!appendConnectionScopedBlockers(graph,
+                                                result.elementId(),
+                                                report.blockingInstanceIds)) {
+                report.blockAllExternalValidation = true;
+            }
         }
-        if (!appendConnectionScopedBlockers(graph,
-                                            result.elementId(),
-                                            report.blockingInstanceIds)) {
-            report.blockAllExternalValidation = true;
-        }
+        report.diagnostics += basicResults;
     }
-    report.diagnostics += basicResults;
 
     if (report.hasErrors() && report.blockingInstanceIds.isEmpty()) {
         report.blockAllExternalValidation = true;
