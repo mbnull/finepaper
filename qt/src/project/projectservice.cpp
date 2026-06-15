@@ -6,6 +6,7 @@
 
 #include <QFileInfo>
 #include <QSet>
+#include <QStringList>
 #include <utility>
 
 namespace {
@@ -243,6 +244,74 @@ ProjectDocument documentFromDesign(const ipcraft::core::ProjectDesign& design) {
     return document;
 }
 
+QJsonObject mergeDesignOwnedNative(const QJsonObject& existingNative,
+                                   const QJsonObject& designNative) {
+    static const QStringList designOwnedKeys = {
+        QStringLiteral("componentType"),
+        QStringLiteral("identity"),
+        QStringLiteral("metadata"),
+        QStringLiteral("extensionData")
+    };
+
+    QJsonObject merged = existingNative;
+    for (const QString& key : designOwnedKeys) {
+        if (designNative.contains(key)) {
+            merged.insert(key, designNative.value(key));
+        } else {
+            merged.remove(key);
+        }
+    }
+    return merged;
+}
+
+const ProjectIpInstanceRecord* findInstanceById(
+    const QVector<ProjectIpInstanceRecord>& instances,
+    const QString& id) {
+    for (const ProjectIpInstanceRecord& instance : instances) {
+        if (instance.id == id) {
+            return &instance;
+        }
+    }
+    return nullptr;
+}
+
+ProjectIpInstanceRecord mergeDesignOwnedInstance(
+    const ProjectIpInstanceRecord* existingInstance,
+    const ProjectIpInstanceRecord& designInstance) {
+    ProjectIpInstanceRecord merged = existingInstance ? *existingInstance
+                                                      : ProjectIpInstanceRecord{};
+    merged.id = designInstance.id;
+    merged.instanceId = designInstance.instanceId.isEmpty() ? designInstance.id
+                                                            : designInstance.instanceId;
+    merged.package = designInstance.package;
+    merged.ipcoreId = designInstance.ipcoreId.isEmpty() ? designInstance.package.id
+                                                        : designInstance.ipcoreId;
+    merged.config = designInstance.config;
+    merged.native = mergeDesignOwnedNative(merged.native, designInstance.native);
+    return merged;
+}
+
+void mergeDesignIntoDocument(ProjectDocument& document,
+                             const ipcraft::core::ProjectDesign& design) {
+    const ProjectDocument designDocument = documentFromDesign(design);
+    const QVector<ProjectIpInstanceRecord> existingInstances = document.instances;
+
+    document.schema = designDocument.schema;
+    document.projectId = designDocument.projectId;
+    document.projectName = designDocument.projectName;
+    document.name = designDocument.name;
+    document.projectMetadata = designDocument.projectMetadata;
+    document.ipcores = designDocument.ipcores;
+    document.instances.clear();
+    document.instances.reserve(designDocument.instances.size());
+    for (const ProjectIpInstanceRecord& designInstance : designDocument.instances) {
+        document.instances.append(mergeDesignOwnedInstance(
+            findInstanceById(existingInstances, designInstance.id),
+            designInstance));
+    }
+    document.ipcoreState = document.instances;
+}
+
 } // namespace
 
 ProjectService::ProjectService(QObject* parent) : QObject(parent) {}
@@ -343,7 +412,10 @@ ProjectServiceResult ProjectService::replaceDocumentFromProjection(ProjectDocume
 
 void ProjectService::replaceDesign(ipcraft::core::ProjectDesign design) {
     m_design = std::move(design);
-    m_document = documentFromDesign(m_design);
+    if (!m_hasDocument) {
+        m_document = ProjectDocument{};
+    }
+    mergeDesignIntoDocument(m_document, m_design);
     normalizeDocument(m_document);
     m_hasDocument = true;
     emit currentDocumentChanged();

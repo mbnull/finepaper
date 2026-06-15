@@ -2,6 +2,8 @@
 #include "app/appsettings.h"
 #include "app/servicekey.h"
 #include "app/serviceregistry.h"
+#include "commands/addmodulecommand.h"
+#include "commands/commandmanager.h"
 #include "ipcraft/schemaids.h"
 #include "ipcore/ipcatalogservice.h"
 #include "graph/graph.h"
@@ -396,6 +398,36 @@ bool listContainsText(QListWidget* list, const QString& text) {
         const QListWidgetItem* item = list->item(row);
         if (item && item->text().contains(text)) {
             return true;
+        }
+    }
+    return false;
+}
+
+bool designHasComponentWithWidth(const ipcraft::core::ProjectDesign& design,
+                                 const QString& componentId,
+                                 int width) {
+    for (const ipcraft::core::ComponentInstance& component : design.components) {
+        if (component.id == componentId &&
+            component.config.value(QStringLiteral("width")).toInt() == width) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool graphConfigHasObject(const ProjectDocument& document,
+                          const QString& instanceId,
+                          const QString& objectId) {
+    for (const ProjectIpInstanceRecord& instance : document.instances) {
+        if (instance.id != instanceId || !instance.hasGraphConfig) {
+            continue;
+        }
+        const QJsonArray objects = instance.graphConfig.value(QStringLiteral("objects")).toArray();
+        for (const QJsonValue& objectValue : objects) {
+            if (objectValue.isObject() &&
+                objectValue.toObject().value(QStringLiteral("id")).toString() == objectId) {
+                return true;
+            }
         }
     }
     return false;
@@ -1137,6 +1169,54 @@ void testDesignEditingServiceAddComponentPersistsThroughMainWindowSave() {
     requireSavedComponent("clean follow-up save should preserve the design-edit component");
 }
 
+void testMainWindowSavePersistsMixedGraphAndDesignEdits() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "temporary directory should be valid");
+    const QString projectPath = tempDir.filePath(QStringLiteral("mixed_graph_design_save.fpproj"));
+    writeDesignFixtureProject(projectPath,
+                              loadedDesignFixture(QStringLiteral("Mixed Graph Design Save")));
+
+    MainWindow window;
+    require(window.loadGraph(projectPath),
+            "project should load before mixed graph and design save test");
+
+    auto module = std::make_unique<Module>(QStringLiteral("mixed_graph_node"),
+                                           QStringLiteral("MixedGraphModule"));
+    module->setIpcoreId(QStringLiteral("vendor.designpkg"));
+    module->setInstanceId(QStringLiteral("component0"));
+    std::unique_ptr<Command> rejected = window.m_commandManager->executeCommand(
+        std::make_unique<AddModuleCommand>(window.m_graph,
+                                           std::move(module),
+                                           QStringLiteral("vendor.designpkg"),
+                                           QStringLiteral("component0")));
+    require(rejected == nullptr,
+            "graph add-module command should execute before mixed save");
+
+    DesignEditingService* editing = designEditingServiceFromRegistry(window);
+    const DesignEditResult edit =
+        editing->applyPatch(addDesignComponentPatch(QStringLiteral("component1")));
+    require(edit.success, "design add-component patch should apply before mixed save");
+    require(window.m_commandManager->currentStateId() != window.m_cleanStateId,
+            "graph command should leave graph history dirty before mixed save");
+    require(window.m_designEditingDirty,
+            "design edit should leave design editing state dirty before mixed save");
+
+    require(window.saveDocument(projectPath),
+            "MainWindow should save mixed graph and design edits");
+
+    ProjectService reloaded;
+    const ProjectServiceResult loadResult = reloaded.loadFile(projectPath);
+    require(loadResult.success, "mixed-save project should reload as valid V1");
+    require(graphConfigHasObject(reloaded.document(),
+                                 QStringLiteral("component0"),
+                                 QStringLiteral("mixed_graph_node")),
+            "mixed save should persist the graph-projected module");
+    require(designHasComponentWithWidth(reloaded.design(),
+                                        QStringLiteral("component1"),
+                                        8),
+            "mixed save should persist the design-added component");
+}
+
 void testNewProjectAddsIpcraftPackageInstanceFromCatalog() {
     QTemporaryDir tempDir;
     require(tempDir.isValid(), "temporary directory should be valid");
@@ -1403,6 +1483,7 @@ int main(int argc, char** argv) {
         testMainWindowClearAndNewProjectResetDesignEditingService();
         testDesignEditingServiceEditSynchronizesProjectServiceDocument();
         testDesignEditingServiceAddComponentPersistsThroughMainWindowSave();
+        testMainWindowSavePersistsMixedGraphAndDesignEdits();
         testNewProjectAddsIpcraftPackageInstanceFromCatalog();
         testAmbiguousConnectionAppearsInPropertyPanelAndLog();
         testCatalogReloadUsesConfiguredPackageRoots();

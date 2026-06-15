@@ -32,12 +32,39 @@ bool hasDiagnosticRule(const ProjectServiceResult& result, const QString& ruleId
     return false;
 }
 
+bool hasDiagnosticRule(const ipcraft::DiagnosticStore& diagnostics, const QString& ruleId) {
+    for (const ipcraft::Diagnostic& diagnostic : diagnostics.records) {
+        if (diagnostic.ruleId == ruleId) {
+            return true;
+        }
+    }
+    return false;
+}
+
 QJsonObject readJsonObject(const QString& path) {
     QFile file(path);
     require(file.open(QIODevice::ReadOnly), "project JSON fixture should open");
     const QJsonDocument json = QJsonDocument::fromJson(file.readAll());
     require(json.isObject(), "project JSON fixture should be an object");
     return json.object();
+}
+
+ipcraft::DiagnosticStore diagnosticsFixture(const QString& ruleId) {
+    ipcraft::Diagnostic diagnostic;
+    diagnostic.severity = QStringLiteral("warning");
+    diagnostic.source = QStringLiteral("projectservice_test");
+    diagnostic.ruleId = ruleId;
+    diagnostic.category = QStringLiteral("project");
+    diagnostic.message = QStringLiteral("preserved diagnostic");
+
+    ipcraft::DiagnosticLocation location;
+    location.kind = QStringLiteral("document_path");
+    location.path = QStringLiteral("$.instances[0]");
+    diagnostic.locations.append(location);
+
+    ipcraft::DiagnosticStore store;
+    store.records.append(diagnostic);
+    return store;
 }
 
 ipcraft::core::ProjectDesign patchableDesign() {
@@ -52,6 +79,105 @@ ipcraft::core::ProjectDesign patchableDesign() {
     component.packageRef = QStringLiteral("pkg@1.0");
     design.components.append(component);
     return design;
+}
+
+ProjectDocument preservableDocumentFixture() {
+    ProjectDocument document;
+    document.schema = ipcraft::schemaids::projectV1;
+    document.projectId = QStringLiteral("original_project");
+    document.projectName = QStringLiteral("Original Project");
+    document.name = document.projectName;
+    document.projectDescription = QStringLiteral("description to preserve");
+    document.projectDisplay = QJsonObject{{QStringLiteral("title"), QStringLiteral("Displayed")}};
+    document.projectMetadata = QJsonObject{{QStringLiteral("old_metadata"), true}};
+    document.projectNative = QJsonObject{{QStringLiteral("project_native"), QStringLiteral("keep")}};
+    document.ipcores.append(ProjectIpcoreRecord{QStringLiteral("vendor.original"),
+                                                QStringLiteral("1.0.0")});
+
+    ProjectIpInstanceRecord instance;
+    instance.id = QStringLiteral("component0");
+    instance.instanceId = instance.id;
+    instance.ipcoreId = QStringLiteral("vendor.original");
+    instance.displayName = QStringLiteral("Preserved Display Name");
+    instance.package = ProjectPackageRef{QStringLiteral("vendor.original"),
+                                         QStringLiteral("1.0.0")};
+    instance.config = QJsonObject{
+        {QStringLiteral("parameters"), QJsonObject{{QStringLiteral("width"), 4}}}
+    };
+    instance.hasGraphConfig = true;
+    instance.graphConfig = QJsonObject{
+        {QStringLiteral("schema"), ipcraft::schemaids::graphConfigV1},
+        {QStringLiteral("objects"), QJsonArray{
+            QJsonObject{
+                {QStringLiteral("id"), QStringLiteral("graph_node_0")},
+                {QStringLiteral("type"), QStringLiteral("GraphNode")},
+                {QStringLiteral("properties"), QJsonObject{{QStringLiteral("latency"), 2}}}
+            }
+        }},
+        {QStringLiteral("relationships"), QJsonArray{}},
+        {QStringLiteral("properties"), QJsonObject{{QStringLiteral("owner"), QStringLiteral("editor")}}},
+        {QStringLiteral("native"), QJsonObject{{QStringLiteral("graph_native"), true}}}
+    };
+    instance.view = QJsonObject{{QStringLiteral("x"), 10}, {QStringLiteral("y"), 20}};
+    instance.lastRuns = QJsonObject{{QStringLiteral("drc"), QStringLiteral("passed")}};
+    instance.artifacts = QJsonObject{{QStringLiteral("report"), QStringLiteral("artifact.json")}};
+    instance.diagnostics = diagnosticsFixture(QStringLiteral("instance.keep")).toJson();
+    instance.native = QJsonObject{
+        {QStringLiteral("componentType"), QStringLiteral("OldType")},
+        {QStringLiteral("identity"), QJsonObject{{QStringLiteral("label"), QStringLiteral("Old")}}},
+        {QStringLiteral("metadata"), QJsonObject{{QStringLiteral("role"), QStringLiteral("old")}}},
+        {QStringLiteral("extensionData"), QJsonObject{{QStringLiteral("old_ext"), true}}},
+        {QStringLiteral("vendor.keep"), QJsonObject{{QStringLiteral("token"), QStringLiteral("keep")}}}
+    };
+    document.instances.append(instance);
+
+    ProjectConnectionRecord connection;
+    connection.id = QStringLiteral("conn0");
+    connection.type = QStringLiteral("interface");
+    connection.sourceKind = QStringLiteral("user");
+    connection.endpoints.append(ProjectEndpointRef{QStringLiteral("component0"),
+                                                   QStringLiteral("out"),
+                                                   {},
+                                                   QStringLiteral("initiator"),
+                                                   QJsonObject{{QStringLiteral("lane"), 0}}});
+    connection.endpoints.append(ProjectEndpointRef{QStringLiteral("component0"),
+                                                   QStringLiteral("in"),
+                                                   {},
+                                                   QStringLiteral("target"),
+                                                   QJsonObject{{QStringLiteral("lane"), 1}}});
+    connection.properties = QJsonObject{{QStringLiteral("keep"), QStringLiteral("connection")}};
+    connection.native = QJsonObject{{QStringLiteral("native_conn"), true}};
+    document.composition.connections.append(connection);
+
+    ProjectExternalPortRecord externalPort;
+    externalPort.id = QStringLiteral("ext0");
+    externalPort.name = QStringLiteral("External");
+    externalPort.hasInterface = true;
+    externalPort.interfaceRef = ProjectEndpointRef{QStringLiteral("component0"),
+                                                   QStringLiteral("out"),
+                                                   QStringLiteral("port0"),
+                                                   QStringLiteral("initiator"),
+                                                   QJsonObject{}};
+    externalPort.properties = QJsonObject{{QStringLiteral("side"), QStringLiteral("north")}};
+    externalPort.native = QJsonObject{{QStringLiteral("native_port"), true}};
+    document.composition.externalPorts.append(externalPort);
+    document.composition.groups.append(QJsonObject{{QStringLiteral("id"), QStringLiteral("group0")}});
+    document.composition.properties = QJsonObject{{QStringLiteral("composition"), QStringLiteral("keep")}};
+    document.composition.native = QJsonObject{{QStringLiteral("native_composition"), true}};
+
+    document.layout = QJsonObject{{QStringLiteral("views"), QJsonArray{
+        QJsonObject{{QStringLiteral("id"), QStringLiteral("graph")},
+                    {QStringLiteral("kind"), QStringLiteral("canvas")}}
+    }}};
+    document.diagnostics = diagnosticsFixture(QStringLiteral("root.keep"));
+    document.artifacts = QJsonObject{{QStringLiteral("build"), QStringLiteral("artifact.zip")}};
+    document.migration.fromSchema = QStringLiteral("legacy.schema");
+    document.migration.fromVersion = QStringLiteral("0.9");
+    document.migration.preserved = QJsonObject{{QStringLiteral("legacy"), true}};
+    document.migration.metadata = QJsonObject{{QStringLiteral("migration"), QStringLiteral("keep")}};
+    document.migration.native = QJsonObject{{QStringLiteral("native_migration"), true}};
+    document.native = QJsonObject{{QStringLiteral("root_native"), QStringLiteral("keep")}};
+    return document;
 }
 
 void testCreateSaveLoadRoundtrip() {
@@ -227,6 +353,136 @@ void testFlatDesignConfigSavesAsV1BundleAndReloadsAsRuntimeConfig() {
             "loaded runtime design should restore flat component config");
 }
 
+void testReplaceDesignPreservesNonDesignProjectFields() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "temporary directory should be valid");
+    const QString path = QDir(tempDir.path()).filePath(QStringLiteral("preserved_fields.fpproj"));
+
+    ProjectService service;
+    const ProjectServiceResult replaceResult = service.replaceDocument(preservableDocumentFixture());
+    require(replaceResult.success, "replaceDocument should accept preservable fixture");
+
+    ipcraft::core::ProjectDesign design = service.design();
+    design.id = QStringLiteral("edited_project");
+    design.name = QStringLiteral("Edited Project");
+    design.metadata = QJsonObject{{QStringLiteral("design_metadata"), QStringLiteral("updated")}};
+    design.packages = {ipcraft::core::PackageRef{QStringLiteral("vendor.updated"),
+                                                 QStringLiteral("2.0.0")}};
+    require(design.components.size() == 1,
+            "preservable fixture should expose one design component");
+    ipcraft::core::ComponentInstance& component = design.components.first();
+    component.type = QStringLiteral("UpdatedType");
+    component.packageRef = QStringLiteral("vendor.updated@2.0.0");
+    component.config = QJsonObject{{QStringLiteral("width"), 8},
+                                   {QStringLiteral("mode"), QStringLiteral("fast")}};
+    component.identity = QJsonObject{{QStringLiteral("label"), QStringLiteral("Updated")}};
+    component.metadata = QJsonObject{{QStringLiteral("role"), QStringLiteral("design")}};
+    component.extensionData = QJsonObject{{QStringLiteral("updated_ext"), true}};
+
+    service.replaceDesign(design);
+    const ProjectDocument& merged = service.document();
+    require(merged.projectId == QStringLiteral("edited_project"),
+            "replaceDesign should update project id");
+    require(merged.projectName == QStringLiteral("Edited Project"),
+            "replaceDesign should update project name");
+    require(merged.name == QStringLiteral("Edited Project"),
+            "replaceDesign should update the transitional project name alias");
+    require(merged.projectMetadata.value(QStringLiteral("design_metadata")).toString() ==
+                QStringLiteral("updated"),
+            "replaceDesign should update design-owned project metadata");
+    require(merged.ipcores.size() == 1 &&
+                merged.ipcores.first().id == QStringLiteral("vendor.updated") &&
+                merged.ipcores.first().version == QStringLiteral("2.0.0"),
+            "replaceDesign should replace package refs from the runtime design");
+    require(merged.instances.size() == 1,
+            "replaceDesign should keep the design component as a project instance");
+    const ProjectIpInstanceRecord& mergedInstance = merged.instances.first();
+    require(mergedInstance.package.id == QStringLiteral("vendor.updated") &&
+                mergedInstance.package.version == QStringLiteral("2.0.0"),
+            "replaceDesign should update design-owned instance package");
+    require(mergedInstance.config.value(QStringLiteral("parameters")).toObject()
+                .value(QStringLiteral("width")).toInt() == 8,
+            "replaceDesign should update design-owned instance config");
+    require(mergedInstance.native.value(QStringLiteral("componentType")).toString() ==
+                QStringLiteral("UpdatedType"),
+            "replaceDesign should update design-owned component type");
+    require(mergedInstance.native.value(QStringLiteral("identity")).toObject()
+                .value(QStringLiteral("label")).toString() == QStringLiteral("Updated"),
+            "replaceDesign should update design-owned identity");
+    require(mergedInstance.native.value(QStringLiteral("metadata")).toObject()
+                .value(QStringLiteral("role")).toString() == QStringLiteral("design"),
+            "replaceDesign should update design-owned metadata");
+    require(mergedInstance.native.value(QStringLiteral("extensionData")).toObject()
+                .value(QStringLiteral("updated_ext")).toBool(),
+            "replaceDesign should update design-owned extension data");
+
+    require(merged.projectDescription == QStringLiteral("description to preserve"),
+            "replaceDesign should preserve project description");
+    require(merged.projectDisplay.value(QStringLiteral("title")).toString() == QStringLiteral("Displayed"),
+            "replaceDesign should preserve project display");
+    require(merged.projectNative.value(QStringLiteral("project_native")).toString() ==
+                QStringLiteral("keep"),
+            "replaceDesign should preserve project native data");
+    require(merged.layout.value(QStringLiteral("views")).toArray().size() == 1,
+            "replaceDesign should preserve layout");
+    require(hasDiagnosticRule(merged.diagnostics, QStringLiteral("root.keep")),
+            "replaceDesign should preserve root diagnostics");
+    require(merged.artifacts.value(QStringLiteral("build")).toString() == QStringLiteral("artifact.zip"),
+            "replaceDesign should preserve root artifacts");
+    require(merged.migration.fromSchema == QStringLiteral("legacy.schema") &&
+                merged.migration.preserved.value(QStringLiteral("legacy")).toBool(),
+            "replaceDesign should preserve migration fields");
+    require(merged.native.value(QStringLiteral("root_native")).toString() == QStringLiteral("keep"),
+            "replaceDesign should preserve root native data");
+    require(merged.composition.connections.size() == 1 &&
+                merged.composition.externalPorts.size() == 1 &&
+                merged.composition.groups.size() == 1,
+            "replaceDesign should preserve composition records");
+    require(mergedInstance.displayName == QStringLiteral("Preserved Display Name"),
+            "replaceDesign should preserve instance display name");
+    require(mergedInstance.hasGraphConfig &&
+                mergedInstance.graphConfig.value(QStringLiteral("objects")).toArray().size() == 1,
+            "replaceDesign should preserve instance graph_config");
+    require(mergedInstance.view.value(QStringLiteral("x")).toInt() == 10,
+            "replaceDesign should preserve instance view");
+    require(mergedInstance.lastRuns.value(QStringLiteral("drc")).toString() == QStringLiteral("passed"),
+            "replaceDesign should preserve instance last_runs");
+    require(mergedInstance.artifacts.value(QStringLiteral("report")).toString() ==
+                QStringLiteral("artifact.json"),
+            "replaceDesign should preserve instance artifacts");
+    require(mergedInstance.diagnostics.value(QStringLiteral("records")).toArray().size() == 1,
+            "replaceDesign should preserve instance diagnostics");
+    require(mergedInstance.native.value(QStringLiteral("vendor.keep")).toObject()
+                .value(QStringLiteral("token")).toString() == QStringLiteral("keep"),
+            "replaceDesign should preserve unrelated instance native keys");
+
+    const ProjectServiceResult saveResult = service.saveFile(path);
+    require(saveResult.success, "merged design document should save");
+    ProjectService loaded;
+    const ProjectServiceResult loadResult = loaded.loadFile(path);
+    require(loadResult.success, "merged design document should reload");
+    require(loaded.document().projectDisplay.value(QStringLiteral("title")).toString() ==
+                QStringLiteral("Displayed"),
+            "saved merged document should preserve project display after reload");
+    require(loaded.document().composition.connections.size() == 1 &&
+                loaded.document().composition.externalPorts.size() == 1,
+            "saved merged document should preserve composition after reload");
+    require(hasDiagnosticRule(loaded.document().diagnostics, QStringLiteral("root.keep")),
+            "saved merged document should preserve root diagnostics after reload");
+    require(loaded.document().migration.fromSchema == QStringLiteral("legacy.schema"),
+            "saved merged document should preserve migration after reload");
+    require(loaded.document().instances.first().hasGraphConfig,
+            "saved merged document should preserve instance graph_config after reload");
+    require(loaded.document().instances.first().view.value(QStringLiteral("x")).toInt() == 10,
+            "saved merged document should preserve instance view after reload");
+    require(loaded.document().instances.first().lastRuns.value(QStringLiteral("drc")).toString() ==
+                QStringLiteral("passed"),
+            "saved merged document should preserve instance last_runs after reload");
+    require(loaded.document().instances.first().native.value(QStringLiteral("vendor.keep")).toObject()
+                .value(QStringLiteral("token")).toString() == QStringLiteral("keep"),
+            "saved merged document should preserve unrelated native keys after reload");
+}
+
 void testRejectsUnsupportedDocumentKind() {
     QTemporaryDir tempDir;
     require(tempDir.isValid(), "temporary directory should be valid");
@@ -282,6 +538,7 @@ int main(int argc, char** argv) {
         testReplaceDocumentClearsSavedPath();
         testApplyDesignPatch();
         testFlatDesignConfigSavesAsV1BundleAndReloadsAsRuntimeConfig();
+        testReplaceDesignPreservesNonDesignProjectFields();
         testRejectsUnsupportedDocumentKind();
         testLoadFileReportsInvalidJsonDiagnostics();
     } catch (const std::exception& exception) {

@@ -1302,7 +1302,12 @@ bool MainWindow::saveDocument(const QString& path) {
     const bool graphHistoryDirty = m_commandManager->currentStateId() != m_cleanStateId;
     const bool savingToDifferentPath = m_currentDocumentPath.isEmpty() ||
         QFileInfo(m_currentDocumentPath).absoluteFilePath() != absolutePath;
-    if (!m_designEditingDirty && (graphHistoryDirty || savingToDifferentPath)) {
+    const bool designEditingDirty = m_designEditingDirty;
+    const ipcraft::core::ProjectDesign designBeforeProjection =
+        designEditingDirty && m_designEditingService
+            ? m_designEditingService->design()
+            : ipcraft::core::ProjectDesign{};
+    if (graphHistoryDirty || savingToDifferentPath) {
         const EditorProjectionResult projectionResult =
             m_editorProjectionService->syncProjectFromProjection(
                 QFileInfo(absolutePath).completeBaseName());
@@ -1311,6 +1316,9 @@ bool MainWindow::saveDocument(const QString& path) {
             QMessageBox::warning(this, "Save Failed", projectionResult.error);
             return false;
         }
+    }
+    if (designEditingDirty) {
+        m_projectService->replaceDesign(designBeforeProjection);
     }
 
     const ProjectServiceResult saveResult = m_projectService->saveFile(absolutePath);
