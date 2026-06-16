@@ -45,7 +45,9 @@
 #include <QFileDialog>
 #include <QFile>
 #include <QFileInfo>
+#include <QHash>
 #include <QInputDialog>
+#include <QJsonValue>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
@@ -53,6 +55,7 @@
 #include <QLineEdit>
 #include <QList>
 #include <QScopedValueRollback>
+#include <QSet>
 #include <QStatusBar>
 #include <QStringList>
 #include <QTimer>
@@ -63,6 +66,7 @@
 #include <algorithm>
 #include <optional>
 #include <utility>
+#include <variant>
 
 namespace {
 
@@ -89,6 +93,210 @@ bool hasMeaningfulProjectDesign(const ipcraft::core::ProjectDesign& design) {
            !design.artifacts.isEmpty() ||
            !design.extensions.isEmpty() ||
            !design.metadata.isEmpty();
+}
+
+QJsonValue parameterValueToJson(const Parameter::Value& value) {
+    if (const auto* stringValue = std::get_if<QString>(&value)) {
+        return *stringValue;
+    }
+    if (const auto* intValue = std::get_if<int>(&value)) {
+        return *intValue;
+    }
+    if (const auto* doubleValue = std::get_if<double>(&value)) {
+        return *doubleValue;
+    }
+    if (const auto* boolValue = std::get_if<bool>(&value)) {
+        return *boolValue;
+    }
+    return {};
+}
+
+QString instanceScopeKey(const QString& ipcoreId, const QString& instanceId) {
+    return ipcoreId + QLatin1Char('\n') + instanceId;
+}
+
+QSet<QString> activeInstanceScopes(const ProjectDocument& document) {
+    QSet<QString> scopes;
+    for (const ProjectIpInstanceRecord& instance : document.instances) {
+        scopes.insert(instanceScopeKey(instance.package.id, instance.id));
+        scopes.insert(instanceScopeKey(instance.ipcoreId, instance.instanceId));
+    }
+    return scopes;
+}
+
+QHash<QString, ProjectModuleRecord> activeModuleRecords(const ProjectDocument& document,
+                                                        const QSet<QString>& activeScopes) {
+    QHash<QString, ProjectModuleRecord> records;
+    for (const ProjectModuleRecord& record : document.modules) {
+        if (activeScopes.contains(instanceScopeKey(record.ipcoreId, record.instanceId))) {
+            records.insert(record.id, record);
+        }
+    }
+    return records;
+}
+
+bool connectionRecordBelongsToActiveProjection(const ProjectConnectionRecord& record,
+                                               const QHash<QString, ProjectModuleRecord>& modules) {
+    if (record.interfaces.isEmpty()) {
+        return modules.contains(record.source.moduleId) && modules.contains(record.target.moduleId);
+    }
+    return std::all_of(record.interfaces.cbegin(), record.interfaces.cend(),
+                       [&modules](const ProjectConnectionInterfaceRef& interfaceRef) {
+                           return modules.contains(interfaceRef.instanceId);
+                       });
+}
+
+QHash<QString, ProjectConnectionRecord> activeConnectionRecords(
+    const ProjectDocument& document,
+    const QHash<QString, ProjectModuleRecord>& modules) {
+    QHash<QString, ProjectConnectionRecord> records;
+    for (const ProjectConnectionRecord& record : document.connections) {
+        if (connectionRecordBelongsToActiveProjection(record, modules)) {
+            records.insert(record.id, record);
+        }
+    }
+    return records;
+}
+
+bool moduleParameterMatchesDocumentRecord(const Module& module,
+                                          const QString& parameterName,
+                                          const Parameter::Value& runtimeValue,
+                                          const ProjectModuleRecord& record) {
+    if (record.parameters.contains(parameterName)) {
+        return parameterValueToJson(runtimeValue) == record.parameters.value(parameterName);
+    }
+
+    const ModuleType* type = ModuleRegistry::instance().getType(module.type());
+    if (!type) {
+        return false;
+    }
+    const auto defaultIt = type->defaultParameters.constFind(parameterName);
+    if (defaultIt == type->defaultParameters.constEnd()) {
+        return false;
+    }
+    return parameterValueToJson(runtimeValue) == parameterValueToJson(defaultIt.value().value());
+}
+
+bool moduleMatchesDocumentRecord(const Module& module, const ProjectModuleRecord& record) {
+    if (module.type() != record.type ||
+        module.ipcoreId() != record.ipcoreId ||
+        module.instanceId() != record.instanceId) {
+        return false;
+    }
+
+    for (auto it = module.parameters().constBegin(); it != module.parameters().constEnd(); ++it) {
+        if (!moduleParameterMatchesDocumentRecord(module, it.key(), it.value().value(), record)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool stringListsMatch(const QStringList& left, const QStringList& right) {
+    QStringList normalizedLeft = left;
+    QStringList normalizedRight = right;
+    normalizedLeft.sort();
+    normalizedRight.sort();
+    return normalizedLeft == normalizedRight;
+}
+
+bool connectionMatchesDocumentRecord(const Connection& connection,
+                                     const ProjectConnectionRecord& record) {
+    if (connection.connectionClassId() != record.connectionClassId ||
+        connection.status() != record.status ||
+        !stringListsMatch(connection.alternatives(), record.alternatives)) {
+        return false;
+    }
+
+    if (record.interfaces.isEmpty()) {
+        return connection.source().moduleId == record.source.moduleId &&
+               connection.source().portId == record.source.portId &&
+               connection.target().moduleId == record.target.moduleId &&
+               connection.target().portId == record.target.portId;
+    }
+
+    const QVector<ConnectionInterfaceRef> runtimeInterfaces = connection.interfaces();
+    if (runtimeInterfaces.size() != record.interfaces.size()) {
+        return false;
+    }
+    for (qsizetype index = 0; index < runtimeInterfaces.size(); ++index) {
+        if (runtimeInterfaces.at(index).instanceId != record.interfaces.at(index).instanceId ||
+            runtimeInterfaces.at(index).interfaceId != record.interfaces.at(index).interfaceId) {
+            return false;
+        }
+    }
+    return true;
+}
+
+QStringList unmigratedGraphProjectionOwners(const Graph& graph,
+                                            const ProjectDocument& stagedDocument) {
+    QStringList owners;
+    const auto addOwner = [&owners](const QString& owner) {
+        if (!owners.contains(owner)) {
+            owners.append(owner);
+        }
+    };
+
+    const QSet<QString> activeScopes = activeInstanceScopes(stagedDocument);
+    const QHash<QString, ProjectModuleRecord> moduleRecords =
+        activeModuleRecords(stagedDocument, activeScopes);
+    QSet<QString> liveModuleIds;
+    for (const std::unique_ptr<Module>& module : graph.modules()) {
+        if (!module) {
+            continue;
+        }
+        const QString scope = instanceScopeKey(module->ipcoreId(), module->instanceId());
+        if (!activeScopes.contains(scope)) {
+            addOwner(QStringLiteral("NodeEditor module graph commands (unowned module projection)"));
+            continue;
+        }
+        liveModuleIds.insert(module->id());
+        const auto recordIt = moduleRecords.constFind(module->id());
+        if (recordIt == moduleRecords.constEnd()) {
+            addOwner(QStringLiteral("NodeEditor module graph commands (AddModuleCommand/TopologyPresetCommand)"));
+            continue;
+        }
+        if (!moduleMatchesDocumentRecord(*module, recordIt.value())) {
+            addOwner(QStringLiteral("NodeEditor graph parameter/layout commands (SetParameterCommand/ArrangeCommand)"));
+        }
+    }
+    for (auto it = moduleRecords.constBegin(); it != moduleRecords.constEnd(); ++it) {
+        if (!liveModuleIds.contains(it.key())) {
+            addOwner(QStringLiteral("NodeEditor module graph commands (RemoveModuleCommand)"));
+        }
+    }
+
+    const QHash<QString, ProjectConnectionRecord> connectionRecords =
+        activeConnectionRecords(stagedDocument, moduleRecords);
+    QSet<QString> liveConnectionIds;
+    for (const std::unique_ptr<Connection>& connection : graph.connections()) {
+        if (!connection) {
+            continue;
+        }
+        const bool sourceActive = liveModuleIds.contains(connection->source().moduleId);
+        const bool targetActive = liveModuleIds.contains(connection->target().moduleId);
+        if (!sourceActive || !targetActive) {
+            addOwner(QStringLiteral("NodeEditor connection graph commands (unowned connection projection)"));
+            continue;
+        }
+        liveConnectionIds.insert(connection->id());
+        const auto recordIt = connectionRecords.constFind(connection->id());
+        if (recordIt == connectionRecords.constEnd()) {
+            addOwner(QStringLiteral("NodeEditor connection graph commands (AddConnectionCommand)"));
+            continue;
+        }
+        if (!connectionMatchesDocumentRecord(*connection, recordIt.value())) {
+            addOwner(QStringLiteral("NodeEditor connection graph commands (SetConnectionClassCommand)"));
+        }
+    }
+    for (auto it = connectionRecords.constBegin(); it != connectionRecords.constEnd(); ++it) {
+        if (!liveConnectionIds.contains(it.key())) {
+            addOwner(QStringLiteral("NodeEditor connection graph commands (RemoveConnectionCommand)"));
+        }
+    }
+
+    owners.sort();
+    return owners;
 }
 
 QString pathWithProjectExtension(QString path) {
@@ -320,6 +528,7 @@ bool MainWindow::createProjectAt(const QString& path) {
     seedDesignEditingServiceFromProjectService();
 
     setCurrentDocumentPath(projectPath);
+    m_projectStateDirty = false;
     m_cleanStateId = m_commandManager->currentStateId();
     setProjectOpen(true);
     syncDocumentStateFromHistory();
@@ -762,13 +971,15 @@ void MainWindow::setupConnections() {
     connect(m_projectStateService.get(),
             &ProjectStateService::parameterChanged,
             this,
-            [trackGraphChange](const QString&, const QString&, const QString&, const QString&) {
+            [this, trackGraphChange](const QString&, const QString&, const QString&, const QString&) {
+                m_projectStateDirty = true;
                 trackGraphChange();
             });
     connect(m_projectIpService.get(),
             &ProjectIpService::ipInstancesChanged,
             this,
-            [trackGraphChange]() {
+            [this, trackGraphChange]() {
+                m_projectStateDirty = true;
                 trackGraphChange();
             });
     connect(m_activeWorkspaceController.get(),
@@ -1302,6 +1513,7 @@ bool MainWindow::loadDocument(const QString& path) {
     seedDesignEditingServiceFromProjectService();
 
     m_commandManager->clearHistory();
+    m_projectStateDirty = false;
     // After a successful project load, the current command state becomes
     // the clean baseline for window title and save action enablement.
     m_cleanStateId = m_commandManager->currentStateId();
@@ -1319,37 +1531,57 @@ bool MainWindow::loadDocument(const QString& path) {
 bool MainWindow::saveDocument(const QString& path) {
     const QString absolutePath = QFileInfo(pathWithProjectExtension(path)).absoluteFilePath();
     qInfo() << "Saving project to" << absolutePath;
-    const bool graphHistoryDirty = m_commandManager->currentStateId() != m_cleanStateId;
-    const bool savingToDifferentPath = m_currentDocumentPath.isEmpty() ||
-        QFileInfo(m_currentDocumentPath).absoluteFilePath() != absolutePath;
     const bool designEditingDirty = m_designEditingDirty;
-    const bool syncingProjection = graphHistoryDirty || savingToDifferentPath;
     std::optional<ipcraft::core::ProjectDesign> designBeforeProjection;
-    bool mergedDesignOnlyComponents = false;
-    if ((designEditingDirty || syncingProjection) &&
+    bool reseedDesignEditingService = false;
+    if ((designEditingDirty || m_projectStateDirty) &&
         m_projectOpen &&
         m_designEditingService &&
         m_projectService &&
         m_projectService->hasDocument()) {
         const ipcraft::core::ProjectDesign currentDesign = m_designEditingService->design();
-        if (designEditingDirty || hasMeaningfulProjectDesign(currentDesign)) {
+        if (designEditingDirty || (m_projectStateDirty && hasMeaningfulProjectDesign(currentDesign))) {
             designBeforeProjection = currentDesign;
         }
     }
-    if (syncingProjection) {
-        const EditorProjectionResult projectionResult =
-            m_editorProjectionService->syncProjectFromProjection(
-                QFileInfo(absolutePath).completeBaseName());
-        if (!projectionResult.success) {
-            qWarning() << "Failed to update project document before save" << projectionResult.error;
-            QMessageBox::warning(this, "Save Failed", projectionResult.error);
+
+    if (!m_projectService || !m_projectService->hasDocument()) {
+        const QString error = QStringLiteral("No project document is open.");
+        qWarning() << "Failed to save project to" << absolutePath << error;
+        QMessageBox::warning(this, "Save Failed", error);
+        return false;
+    }
+
+    ProjectDocument stagedDocument = m_projectService->document();
+    if (m_projectStateDirty && m_projectStateService) {
+        m_projectStateService->writeToDocument(stagedDocument);
+    }
+
+    const QStringList unmigratedOwners = unmigratedGraphProjectionOwners(*m_graph, stagedDocument);
+    if (!unmigratedOwners.isEmpty()) {
+        const QString error =
+            QStringLiteral("Save is blocked because NodeEditor graph-command edits are not "
+                           "migrated to ProjectDesign ownership yet. Unmigrated mutation owners: %1")
+                .arg(unmigratedOwners.join(QStringLiteral("; ")));
+        qWarning().noquote() << error;
+        QMessageBox::warning(this, "Save Blocked", error);
+        return false;
+    }
+
+    if (m_projectStateDirty) {
+        const ProjectServiceResult replaceResult =
+            m_projectService->replaceDocumentPreservingPath(std::move(stagedDocument));
+        if (!replaceResult.success) {
+            qWarning() << "Failed to update project document before save" << replaceResult.error;
+            QMessageBox::warning(this, "Save Failed", replaceResult.error);
             return false;
         }
+        reseedDesignEditingService = true;
     }
     if (designBeforeProjection.has_value()) {
-        if (syncingProjection) {
+        if (m_projectStateDirty) {
             m_projectService->mergeDesignOnlyComponents(*designBeforeProjection);
-            mergedDesignOnlyComponents = true;
+            reseedDesignEditingService = true;
         } else {
             m_projectService->replaceDesign(*designBeforeProjection);
         }
@@ -1362,12 +1594,13 @@ bool MainWindow::saveDocument(const QString& path) {
         return false;
     }
 
-    if (mergedDesignOnlyComponents) {
+    if (reseedDesignEditingService) {
         seedDesignEditingServiceFromProjectService();
     }
     setCurrentDocumentPath(absolutePath);
     m_cleanStateId = m_commandManager->currentStateId();
     m_designEditingDirty = false;
+    m_projectStateDirty = false;
     setProjectOpen(true);
     syncDocumentStateFromHistory();
     updateRecentProjectState(m_appSettings.get(), absolutePath);
@@ -1432,6 +1665,7 @@ void MainWindow::clearDocument() {
     }
     m_commandManager->clearHistory();
     m_cleanStateId = m_commandManager->currentStateId();
+    m_projectStateDirty = false;
     setCurrentDocumentPath(QString());
     setProjectOpen(false);
     syncDocumentStateFromHistory();
@@ -1454,6 +1688,7 @@ void MainWindow::scheduleDocumentStateRefresh() {
 void MainWindow::syncDocumentStateFromHistory() {
     setDocumentDirty(m_projectOpen &&
                      (m_designEditingDirty ||
+                      m_projectStateDirty ||
                       m_commandManager->currentStateId() != m_cleanStateId));
     updateCommandActions();
 }

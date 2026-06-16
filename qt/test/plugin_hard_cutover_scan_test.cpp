@@ -142,6 +142,30 @@ QString structBody(const QString& source, const QString& structName, const QStri
     return source.mid(start, end - start);
 }
 
+QString functionBody(const QString& source, const QString& signature, const QString& context) {
+    const int signatureStart = source.indexOf(signature);
+    require(signatureStart >= 0, context + QStringLiteral(" should define ") + signature);
+
+    const int bodyStart = source.indexOf(QLatin1Char('{'), signatureStart);
+    require(bodyStart >= 0, context + QStringLiteral(" should open a function body"));
+
+    int depth = 0;
+    for (int index = bodyStart; index < source.size(); ++index) {
+        const QChar ch = source.at(index);
+        if (ch == QLatin1Char('{')) {
+            ++depth;
+        } else if (ch == QLatin1Char('}')) {
+            --depth;
+            if (depth == 0) {
+                return source.mid(bodyStart, index - bodyStart + 1);
+            }
+        }
+    }
+
+    require(false, context + QStringLiteral(" should close a function body"));
+    return {};
+}
+
 QStringList runtimeSourceFiles(const QStringList& roots) {
     QStringList files;
     const QStringList patterns{
@@ -276,6 +300,32 @@ void testFinalReportsAndReadmeRegisterHardCutoverGate() {
                     QStringLiteral("architecture README"));
 }
 
+void testNormalSaveDoesNotSyncDurableProjectFromGraphProjection() {
+    const QString mainWindow = readText(QStringLiteral("qt/src/app/mainwindow.cpp"));
+    const QString saveDocument = functionBody(mainWindow,
+                                              QStringLiteral("bool MainWindow::saveDocument"),
+                                              QStringLiteral("MainWindow::saveDocument"));
+    requireNotContains(saveDocument,
+                       QStringLiteral("syncProjectFromProjection"),
+                       QStringLiteral("MainWindow::saveDocument"));
+    requireNotContains(saveDocument,
+                       QStringLiteral("GraphProjectSerializer::toProject"),
+                       QStringLiteral("MainWindow::saveDocument"));
+    requireNotContains(saveDocument,
+                       QStringLiteral("replaceDocumentFromProjection"),
+                       QStringLiteral("MainWindow::saveDocument"));
+
+    const QString projectionService =
+        readText(QStringLiteral("qt/src/project/editorprojectionservice.cpp"));
+    const QString projectionSync = functionBody(
+        projectionService,
+        QStringLiteral("EditorProjectionResult EditorProjectionService::syncProjectFromProjection"),
+        QStringLiteral("EditorProjectionService::syncProjectFromProjection"));
+    requireContains(projectionSync,
+                    QStringLiteral("legacy"),
+                    QStringLiteral("EditorProjectionService::syncProjectFromProjection"));
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -287,6 +337,7 @@ int main(int argc, char** argv) {
     testRuntimeHasNoConcreteVendorModuleHardcoding();
     testCompletionReportUsesHardCutoverVerdict();
     testFinalReportsAndReadmeRegisterHardCutoverGate();
+    testNormalSaveDoesNotSyncDurableProjectFromGraphProjection();
     std::cout << "plugin_hard_cutover_scan_test passed\n";
     return 0;
 }

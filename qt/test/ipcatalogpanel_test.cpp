@@ -68,6 +68,13 @@ void closeOpenMessageBoxes() {
     }
 }
 
+bool saveDocumentWithAutoClosedMessageBoxes(MainWindow& window, const QString& path) {
+    for (int index = 0; index < 20; ++index) {
+        QTimer::singleShot(index * 10, &closeOpenMessageBoxes);
+    }
+    return window.saveDocument(path);
+}
+
 void triggerFirstOpenMenuAction() {
     for (QWidget* widget : QApplication::topLevelWidgets()) {
         if (auto* menu = qobject_cast<QMenu*>(widget)) {
@@ -1233,7 +1240,7 @@ void testDesignEditingServiceAddComponentPersistsThroughMainWindowSave() {
     requireSavedComponent("clean follow-up save should preserve the design-edit component");
 }
 
-void testSavedDesignEditSurvivesLaterGraphProjectionSave() {
+void testSavedDesignEditBlocksLaterUnmigratedGraphProjectionSave() {
     QTemporaryDir tempDir;
     require(tempDir.isValid(), "temporary directory should be valid");
     const QString projectPath =
@@ -1243,7 +1250,7 @@ void testSavedDesignEditSurvivesLaterGraphProjectionSave() {
 
     MainWindow window;
     require(window.loadGraph(projectPath),
-            "project should load before saved-design projection-save regression");
+            "project should load before graph-projection hard-cutover regression");
 
     DesignEditingService* editing = designEditingServiceFromRegistry(window);
     const DesignEditResult edit =
@@ -1270,23 +1277,23 @@ void testSavedDesignEditSurvivesLaterGraphProjectionSave() {
     require(!window.m_designEditingDirty,
             "graph-only edit should not re-mark design editing dirty before second save");
 
-    require(window.saveDocument(projectPath),
-            "second save should persist graph edit without dropping saved design state");
+    require(!saveDocumentWithAutoClosedMessageBoxes(window, projectPath),
+            "second save should block unmigrated graph-only edits instead of projecting them");
 
     ProjectService reloaded;
     const ProjectServiceResult loadResult = reloaded.loadFile(projectPath);
-    require(loadResult.success, "second-save project should reload as valid V1");
+    require(loadResult.success, "blocked-save project should reload as valid V1");
     require(designHasComponentWithWidth(reloaded.design(),
                                         QStringLiteral("component1"),
                                         8),
-            "later graph projection save should preserve the already-saved design component");
-    require(graphConfigHasObject(reloaded.document(),
-                                 QStringLiteral("component0"),
-                                 QStringLiteral("later_graph_node")),
-            "later graph projection save should persist the graph-projected module");
+            "blocked graph save should leave the already-saved design component durable");
+    require(!graphConfigHasObject(reloaded.document(),
+                                  QStringLiteral("component0"),
+                                  QStringLiteral("later_graph_node")),
+            "blocked graph save should not persist the unmigrated graph-projected module");
 }
 
-void testMainWindowSavePersistsMixedGraphAndDesignEdits() {
+void testMainWindowSaveBlocksMixedGraphAndDesignEdits() {
     QTemporaryDir tempDir;
     require(tempDir.isValid(), "temporary directory should be valid");
     const QString projectPath = tempDir.filePath(QStringLiteral("mixed_graph_design_save.fpproj"));
@@ -1295,7 +1302,7 @@ void testMainWindowSavePersistsMixedGraphAndDesignEdits() {
 
     MainWindow window;
     require(window.loadGraph(projectPath),
-            "project should load before mixed graph and design save test");
+            "project should load before mixed graph and design save block test");
 
     auto module = std::make_unique<Module>(QStringLiteral("mixed_graph_node"),
                                            QStringLiteral("MixedGraphModule"));
@@ -1318,20 +1325,20 @@ void testMainWindowSavePersistsMixedGraphAndDesignEdits() {
     require(window.m_designEditingDirty,
             "design edit should leave design editing state dirty before mixed save");
 
-    require(window.saveDocument(projectPath),
-            "MainWindow should save mixed graph and design edits");
+    require(!saveDocumentWithAutoClosedMessageBoxes(window, projectPath),
+            "MainWindow should block mixed saves when graph edits are not migrated");
 
     ProjectService reloaded;
     const ProjectServiceResult loadResult = reloaded.loadFile(projectPath);
-    require(loadResult.success, "mixed-save project should reload as valid V1");
-    require(graphConfigHasObject(reloaded.document(),
-                                 QStringLiteral("component0"),
-                                 QStringLiteral("mixed_graph_node")),
-            "mixed save should persist the graph-projected module");
-    require(designHasComponentWithWidth(reloaded.design(),
-                                        QStringLiteral("component1"),
-                                        8),
-            "mixed save should persist the design-added component");
+    require(loadResult.success, "blocked mixed-save project should reload as valid V1");
+    require(!graphConfigHasObject(reloaded.document(),
+                                  QStringLiteral("component0"),
+                                  QStringLiteral("mixed_graph_node")),
+            "blocked mixed save should not persist the unmigrated graph-projected module");
+    require(!designHasComponentWithWidth(reloaded.design(),
+                                         QStringLiteral("component1"),
+                                         8),
+            "blocked mixed save should not partially persist design edits");
 }
 
 void testProjectStateInstanceAddedAfterDesignCacheSurvivesProjectionSave() {
@@ -1854,8 +1861,8 @@ int main(int argc, char** argv) {
         testMainWindowClearAndNewProjectResetDesignEditingService();
         testDesignEditingServiceEditSynchronizesProjectServiceDocument();
         testDesignEditingServiceAddComponentPersistsThroughMainWindowSave();
-        testSavedDesignEditSurvivesLaterGraphProjectionSave();
-        testMainWindowSavePersistsMixedGraphAndDesignEdits();
+        testSavedDesignEditBlocksLaterUnmigratedGraphProjectionSave();
+        testMainWindowSaveBlocksMixedGraphAndDesignEdits();
         testProjectStateInstanceAddedAfterDesignCacheSurvivesProjectionSave();
         testProjectStateParameterWinsOverStaleDesignCacheOnProjectionSave();
         testMixedDesignOnlyAndProjectStateEditsSurviveOwnershipMerge();

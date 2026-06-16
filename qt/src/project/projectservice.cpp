@@ -239,6 +239,15 @@ ProjectServiceResult ProjectService::replaceDocumentFromProjection(ProjectDocume
     return successResult();
 }
 
+ProjectServiceResult ProjectService::replaceDocumentPreservingPath(ProjectDocument document) {
+    m_document = std::move(document);
+    normalizeDocument(m_document);
+    m_design = ProjectDesignSerializer::fromDocument(m_document);
+    m_hasDocument = true;
+    emit currentDocumentChanged();
+    return successResult();
+}
+
 void ProjectService::replaceDesign(ipcraft::core::ProjectDesign design) {
     m_design = std::move(design);
     if (!m_hasDocument) {

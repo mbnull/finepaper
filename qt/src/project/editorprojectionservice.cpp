@@ -44,6 +44,9 @@ EditorProjectionResult EditorProjectionService::rebuildProjectionFromDocument(
 
 EditorProjectionResult EditorProjectionService::syncProjectFromProjection(
     const QString& projectName) {
+    // legacy import/migration compatibility only. Normal MainWindow save must
+    // persist ProjectService/ProjectDesign-owned documents without promoting
+    // the Graph projection back to durable source of truth.
     ProjectDocument document = GraphProjectSerializer::toProject(*m_graph, projectName);
     m_projectStateService->writeToDocument(document);
 
