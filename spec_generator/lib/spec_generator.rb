@@ -38,6 +38,7 @@ module SpecGenerator
     schema id name version display instances plugin extensions ipxact parameters connection_classes modules views topologies generation commands
     config_schema interfaces connection_rules emitters flows artifacts diagnostics graph_config native_schema metadata native
   ].freeze
+  IPCRAFT_EXTENSION_KEYS = %w[enabled required version metadata native modes].freeze
   IPCRAFT_INSTANCES_KEYS = %w[max].freeze
   IPCRAFT_PLUGIN_KEYS = %w[library entry].freeze
   IPCRAFT_IPXACT_KEYS = %w[root generated].freeze
@@ -475,11 +476,24 @@ module SpecGenerator
         raise SpecError, "extension #{id} must be a map" unless extension.is_a?(Hash)
 
         normalized = deep_copy(extension)
+        validate_keys!(normalized, IPCRAFT_EXTENSION_KEYS, "extension #{id}")
         enabled = normalized.fetch('enabled', false)
         unless enabled == true || enabled == false
           raise SpecError, "extension #{id}.enabled must be a bool"
         end
         normalized['enabled'] = enabled
+        if normalized.key?('required') && normalized['required'] != true && normalized['required'] != false
+          raise SpecError, "extension #{id}.required must be a bool"
+        end
+        if normalized.key?('version')
+          required_string(normalized, 'version', "extension #{id}.version")
+        end
+        if normalized.key?('metadata') && !normalized['metadata'].is_a?(Hash)
+          raise SpecError, "extension #{id}.metadata must be a map"
+        end
+        if normalized.key?('native') && !normalized['native'].is_a?(Hash)
+          raise SpecError, "extension #{id}.native must be a map"
+        end
         if id == NOC_EXTENSION_ID && enabled
           validate_extension_modes!(id, normalized) if normalized.key?('modes')
           normalized['modes'] = deep_copy(NOC_CHI_MODE_MAPPINGS).merge(deep_copy(normalized.fetch('modes', {})))
@@ -494,26 +508,41 @@ module SpecGenerator
       extension && extension['enabled'] == true
     end
 
+    def extension_declaration(id, extension)
+      descriptor = { 'id' => id }
+      descriptor['required'] = extension['required'] if extension.key?('required')
+      descriptor['version'] = deep_copy(extension['version']) if extension.key?('version')
+      descriptor['metadata'] = deep_copy(extension['metadata']) if extension.key?('metadata')
+      descriptor['native'] = deep_copy(extension['native']) if extension.key?('native')
+      return id if descriptor.keys == ['id']
+
+      descriptor
+    end
+
+    def extension_declaration_id(declaration)
+      declaration.is_a?(Hash) ? declaration.fetch('id') : declaration
+    end
+
     def declared_extensions(config_schema:, graph_config:, views:, emitters:, flows:, artifacts:, diagnostics:, interfaces:, connection_rules:)
-      ids = []
+      declarations = {}
       @extensions.each do |id, extension|
-        ids << id if extension['enabled'] == true
+        declarations[id] = extension_declaration(id, extension) if extension['enabled'] == true
       end
       if config_schema.is_a?(Hash)
-        ids << 'ipcraft.config.params' if config_schema.key?('parameters')
-        ids << 'ipcraft.config.tables' if config_schema.key?('tables')
-        ids << 'ipcraft.config.documents' if config_schema.key?('documents')
-        ids << 'ipcraft.config.files' if config_schema.key?('files')
+        declarations['ipcraft.config.params'] ||= 'ipcraft.config.params' if config_schema.key?('parameters')
+        declarations['ipcraft.config.tables'] ||= 'ipcraft.config.tables' if config_schema.key?('tables')
+        declarations['ipcraft.config.documents'] ||= 'ipcraft.config.documents' if config_schema.key?('documents')
+        declarations['ipcraft.config.files'] ||= 'ipcraft.config.files' if config_schema.key?('files')
       end
-      ids << 'ipcraft.interfaces' unless interfaces.empty?
-      ids << 'ipcraft.composition' unless connection_rules.empty?
-      ids << 'ipcraft.graph_config' if graph_config
-      ids << 'ipcraft.views' unless views.empty?
-      ids << 'ipcraft.emitters' unless emitters.empty?
-      ids << 'ipcraft.flows' unless flows.empty?
-      ids << 'ipcraft.artifacts' unless artifacts.empty?
-      ids << 'ipcraft.diagnostics' if diagnostics
-      ids.uniq.sort
+      declarations['ipcraft.interfaces'] ||= 'ipcraft.interfaces' unless interfaces.empty?
+      declarations['ipcraft.composition'] ||= 'ipcraft.composition' unless connection_rules.empty?
+      declarations['ipcraft.graph_config'] ||= 'ipcraft.graph_config' if graph_config
+      declarations['ipcraft.views'] ||= 'ipcraft.views' unless views.empty?
+      declarations['ipcraft.emitters'] ||= 'ipcraft.emitters' unless emitters.empty?
+      declarations['ipcraft.flows'] ||= 'ipcraft.flows' unless flows.empty?
+      declarations['ipcraft.artifacts'] ||= 'ipcraft.artifacts' unless artifacts.empty?
+      declarations['ipcraft.diagnostics'] ||= 'ipcraft.diagnostics' if diagnostics
+      declarations.values.sort_by { |declaration| extension_declaration_id(declaration) }
     end
 
     def normalize_config_schema

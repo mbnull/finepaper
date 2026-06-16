@@ -1,0 +1,444 @@
+{
+  "schema": "ipcraft.package.v1",
+  "id": "vendor.meshnoc",
+  "name": "Vendor MeshNoC",
+  "version": "1.0.0",
+  "extensions": [
+    "ipcraft.artifacts",
+    "ipcraft.emitters",
+    "ipcraft.flows",
+    "ipcraft.graph_config",
+    "ipcraft.views",
+    "noc.v1",
+    {
+      "id": "vendor.experimental.v1",
+      "required": false,
+      "version": "0.1.0",
+      "metadata": {
+        "purpose": "sideband telemetry fixture"
+      }
+    }
+  ],
+  "views": [
+    {
+      "module": "VendorSwitch",
+      "file": "views/VendorSwitch.xml"
+    },
+    {
+      "module": "VendorHost",
+      "file": "views/VendorHost.xml"
+    }
+  ],
+  "graph_config": {
+    "schema": "ipcraft.graph-config.v1",
+    "objects": [],
+    "relationships": [],
+    "properties": {},
+    "native": {}
+  },
+  "emitters": [
+    {
+      "id": "graph_config",
+      "kind": "emit_graph_config",
+      "path": "graph_config.json"
+    },
+    {
+      "id": "parameters",
+      "kind": "emit_parameters",
+      "path": "parameters.json"
+    }
+  ],
+  "flows": [
+    {
+      "id": "generate",
+      "label": "Generate",
+      "scope": "instance",
+      "steps": [
+        {
+          "kind": "emit_inputs"
+        },
+        {
+          "kind": "exec",
+          "command": {
+            "executable": "generator/bin/generate",
+            "args": [
+              "--input",
+              "{inputs.manifest}",
+              "--output",
+              "{out}"
+            ],
+            "cwd": "run_dir",
+            "timeout_ms": 60000,
+            "env": {
+              "allow": []
+            },
+            "capture": {
+              "stdout": "stdout.log",
+              "stderr": "stderr.log",
+              "max_bytes": 1048576
+            }
+          }
+        },
+        {
+          "kind": "collect_artifacts"
+        }
+      ]
+    },
+    {
+      "id": "validate",
+      "label": "Validate",
+      "scope": "instance",
+      "steps": [
+        {
+          "kind": "emit_inputs"
+        },
+        {
+          "kind": "exec",
+          "command": {
+            "executable": "generator/bin/validate",
+            "args": [
+              "--input",
+              "{inputs.manifest}"
+            ],
+            "cwd": "run_dir",
+            "timeout_ms": 60000,
+            "env": {
+              "allow": []
+            },
+            "capture": {
+              "stdout": "stdout.log",
+              "stderr": "stderr.log",
+              "max_bytes": 1048576
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "artifacts": [
+    {
+      "id": "vendor_mesh_manifest",
+      "type": "resolved_config",
+      "glob": "vendor_mesh_manifest.json",
+      "primary": true
+    }
+  ],
+  "native": {
+    "ipcraft": {
+      "editor": {
+        "extensions": {
+          "noc.v1": {
+            "enabled": true,
+            "modes": {
+              "chi_interconnect": {
+                "ipxact": {
+                  "mode": "target"
+                }
+              },
+              "chi_requester_node": {
+                "ipxact": {
+                  "mode": "initiator"
+                }
+              },
+              "chi_home_node": {
+                "ipxact": {
+                  "mode": "initiator"
+                }
+              },
+              "chi_subordinate_node": {
+                "ipxact": {
+                  "mode": "initiator"
+                }
+              },
+              "chi_peer": {
+                "ipxact": {
+                  "mode": "system"
+                }
+              }
+            }
+          },
+          "vendor.experimental.v1": {
+            "enabled": true,
+            "required": false,
+            "version": "0.1.0",
+            "metadata": {
+              "purpose": "sideband telemetry fixture"
+            }
+          },
+          "ipcraft.graph_config": {
+            "enabled": true
+          },
+          "ipcraft.views": {
+            "enabled": true
+          },
+          "ipcraft.emitters": {
+            "enabled": true
+          },
+          "ipcraft.flows": {
+            "enabled": true
+          },
+          "ipcraft.artifacts": {
+            "enabled": true
+          }
+        },
+        "parameters": {},
+        "connection_classes": [
+          {
+            "id": "mesh_link",
+            "roles": [
+              "initiator",
+              "target"
+            ],
+            "symmetric": false
+          },
+          {
+            "id": "host_link",
+            "roles": [
+              "initiator",
+              "target"
+            ],
+            "symmetric": false
+          }
+        ],
+        "modules": [
+          {
+            "id": "VendorSwitch",
+            "name": "Vendor Switch",
+            "description": "Vendor mesh switch declared entirely by package data.",
+            "graph_role": "host",
+            "display": {
+              "label_parameter": "display_name",
+              "short_label_parameter": "external_id"
+            },
+            "parameters": {
+              "external_id": {
+                "type": "string",
+                "default": "sw_00",
+                "label": "External ID"
+              },
+              "display_name": {
+                "type": "string",
+                "default": "Vendor Switch",
+                "label": "Display name"
+              },
+              "mesh_col": {
+                "type": "int",
+                "default": 0,
+                "configurable": false,
+                "label": "Mesh column"
+              },
+              "mesh_row": {
+                "type": "int",
+                "default": 0,
+                "configurable": false,
+                "label": "Mesh row"
+              },
+              "fabric_width": {
+                "type": "int",
+                "default": 128,
+                "min": 32,
+                "max": 1024,
+                "label": "Fabric width"
+              }
+            },
+            "interfaces": [
+              {
+                "id": "north",
+                "label": "North",
+                "modes": [
+                  "target"
+                ],
+                "accepts": [
+                  {
+                    "class": "mesh_link",
+                    "role": "target"
+                  }
+                ],
+                "ipxact": {
+                  "bus_interface": "north"
+                },
+                "topology": {
+                  "side": "north",
+                  "opposite": "south",
+                  "role": "router"
+                }
+              },
+              {
+                "id": "east",
+                "label": "East",
+                "modes": [
+                  "initiator"
+                ],
+                "accepts": [
+                  {
+                    "class": "mesh_link",
+                    "role": "initiator"
+                  }
+                ],
+                "ipxact": {
+                  "bus_interface": "east"
+                },
+                "topology": {
+                  "side": "east",
+                  "opposite": "west",
+                  "role": "router"
+                }
+              },
+              {
+                "id": "south",
+                "label": "South",
+                "modes": [
+                  "initiator"
+                ],
+                "accepts": [
+                  {
+                    "class": "mesh_link",
+                    "role": "initiator"
+                  }
+                ],
+                "ipxact": {
+                  "bus_interface": "south"
+                },
+                "topology": {
+                  "side": "south",
+                  "opposite": "north",
+                  "role": "router"
+                }
+              },
+              {
+                "id": "west",
+                "label": "West",
+                "modes": [
+                  "target"
+                ],
+                "accepts": [
+                  {
+                    "class": "mesh_link",
+                    "role": "target"
+                  }
+                ],
+                "ipxact": {
+                  "bus_interface": "west"
+                },
+                "topology": {
+                  "side": "west",
+                  "opposite": "east",
+                  "role": "router"
+                }
+              },
+              {
+                "id": "local",
+                "label": "Local",
+                "modes": [
+                  "target"
+                ],
+                "accepts": [
+                  {
+                    "class": "host_link",
+                    "role": "target"
+                  }
+                ],
+                "multi_connection": true,
+                "ipxact": {
+                  "bus_interface": "local"
+                }
+              }
+            ]
+          },
+          {
+            "id": "VendorHost",
+            "name": "Vendor Host",
+            "description": "Vendor endpoint host declared entirely by package data.",
+            "graph_role": "attached",
+            "attach": {
+              "hosts": [
+                "VendorSwitch"
+              ],
+              "zone": "local"
+            },
+            "display": {
+              "label_parameter": "display_name",
+              "short_label_parameter": "external_id"
+            },
+            "parameters": {
+              "external_id": {
+                "type": "string",
+                "default": "host_00",
+                "label": "External ID"
+              },
+              "display_name": {
+                "type": "string",
+                "default": "Vendor Host",
+                "label": "Display name"
+              },
+              "endpoint_id": {
+                "type": "int",
+                "default": 0,
+                "min": 0,
+                "max": 1023,
+                "label": "Endpoint ID"
+              }
+            },
+            "interfaces": [
+              {
+                "id": "noc",
+                "label": "NoC",
+                "modes": [
+                  "initiator"
+                ],
+                "accepts": [
+                  {
+                    "class": "host_link",
+                    "role": "initiator"
+                  }
+                ],
+                "ipxact": {
+                  "bus_interface": "noc"
+                }
+              }
+            ]
+          }
+        ],
+        "views": [
+          {
+            "module": "VendorSwitch",
+            "file": "views/VendorSwitch.xml"
+          },
+          {
+            "module": "VendorHost",
+            "file": "views/VendorHost.xml"
+          }
+        ],
+        "topologies": [
+          {
+            "id": "mesh",
+            "label": "Mesh",
+            "kind": "mesh",
+            "module": "VendorSwitch",
+            "id_pattern": "sw_{row}_{col}",
+            "ports": {
+              "north": "north",
+              "east": "east",
+              "south": "south",
+              "west": "west"
+            },
+            "parameters": {
+              "rows": {
+                "label": "Rows",
+                "default": 2,
+                "min": 1,
+                "max": 8
+              },
+              "cols": {
+                "label": "Columns",
+                "default": 2,
+                "min": 1,
+                "max": 8
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

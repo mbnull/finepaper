@@ -965,6 +965,41 @@ class SpecGeneratorTest < Minitest::Test
     assert_equal 'initiator', extension_modes.fetch('chi_requester_node').fetch('ipxact').fetch('mode')
   end
 
+  def test_repository_vendor_meshnoc_builds_optional_vendor_capability_manifest
+    assert_repository_package_source_schema('vendor-meshnoc')
+
+    manifest = build_repository_ipcraft_manifest('vendor-meshnoc')
+
+    assert_equal 'vendor.meshnoc', manifest.fetch('id')
+    assert_includes manifest.fetch('extensions'), 'noc.v1'
+    vendor_extension = manifest.fetch('extensions').find do |extension|
+      extension.is_a?(Hash) && extension.fetch('id') == 'vendor.experimental.v1'
+    end
+    refute_nil vendor_extension
+    assert_equal false, vendor_extension.fetch('required')
+    assert_equal '0.1.0', vendor_extension.fetch('version')
+
+    editor = editor_manifest(manifest)
+    assert_equal %w[VendorSwitch VendorHost],
+                 editor.fetch('modules').map { |mod| mod.fetch('id') }
+
+    generate_flow = manifest.fetch('flows').find { |flow| flow.fetch('id') == 'generate' }
+    refute_nil generate_flow
+    generate_command = generate_flow.fetch('steps').fetch(1).fetch('command')
+    assert_equal 'generator/bin/generate', generate_command.fetch('executable')
+    assert_equal ['--input', '{inputs.manifest}', '--output', '{out}'],
+                 generate_command.fetch('args')
+
+    validate_flow = manifest.fetch('flows').find { |flow| flow.fetch('id') == 'validate' }
+    refute_nil validate_flow
+    validate_command = validate_flow.fetch('steps').fetch(1).fetch('command')
+    assert_equal 'generator/bin/validate', validate_command.fetch('executable')
+    assert_equal ['--input', '{inputs.manifest}'], validate_command.fetch('args')
+
+    assert_equal ['vendor_mesh_manifest'],
+                 manifest.fetch('artifacts').map { |artifact| artifact.fetch('id') }
+  end
+
   def test_rejects_view_path_outside_package_root
     Dir.mktmpdir do |dir|
       write_file(dir, 'ipcores/outside.xml', ipcraft_xp_view_xml)
