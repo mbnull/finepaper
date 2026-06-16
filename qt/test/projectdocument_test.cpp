@@ -1024,6 +1024,9 @@ void testProjectDesignSerializerRoundTripsDesignWithoutGraphProjection() {
     design.name = QStringLiteral("Serializer Project");
     design.packages.append(ipcraft::core::PackageRef{QStringLiteral("vendor.serializer"),
                                                      QStringLiteral("2.1.0")});
+    design.packages.append(ipcraft::core::PackageRef{QStringLiteral("vendor.semantic"),
+                                                     QStringLiteral("3.0.0")});
+    design.metadata = QJsonObject{{QStringLiteral("owner"), QStringLiteral("serializer-test")}};
 
     ipcraft::core::ComponentInstance component;
     component.id = QStringLiteral("serializer_component");
@@ -1038,7 +1041,109 @@ void testProjectDesignSerializerRoundTripsDesignWithoutGraphProjection() {
     };
     design.components.append(component);
 
+    ipcraft::core::ComponentInstance semanticComponent;
+    semanticComponent.id = QStringLiteral("semantic_component");
+    semanticComponent.type = QStringLiteral("SemanticBlock");
+    semanticComponent.packageRef = QStringLiteral("vendor.semantic@3.0.0");
+    semanticComponent.config = QJsonObject{{QStringLiteral("channels"), 2}};
+    design.components.append(semanticComponent);
+
+    ipcraft::core::InterfaceInstance sourceInterface;
+    sourceInterface.id = QStringLiteral("out");
+    sourceInterface.ownerComponentId = QStringLiteral("serializer_component");
+    sourceInterface.type = QStringLiteral("stream");
+    sourceInterface.role = QStringLiteral("producer");
+    sourceInterface.direction = QStringLiteral("source");
+    sourceInterface.protocol = QStringLiteral("axis");
+    sourceInterface.clockRef = QStringLiteral("clk");
+    sourceInterface.resetRef = QStringLiteral("rst_n");
+    sourceInterface.config = QJsonObject{{QStringLiteral("data_width"), 64}};
+    sourceInterface.metadata = QJsonObject{{QStringLiteral("label"), QStringLiteral("Output")}};
+    design.interfaces.append(sourceInterface);
+
+    ipcraft::core::InterfaceInstance sinkInterface;
+    sinkInterface.id = QStringLiteral("in");
+    sinkInterface.ownerComponentId = QStringLiteral("semantic_component");
+    sinkInterface.type = QStringLiteral("stream");
+    sinkInterface.role = QStringLiteral("consumer");
+    sinkInterface.direction = QStringLiteral("sink");
+    sinkInterface.protocol = QStringLiteral("axis");
+    sinkInterface.clockRef = QStringLiteral("clk");
+    sinkInterface.resetRef = QStringLiteral("rst_n");
+    sinkInterface.config = QJsonObject{{QStringLiteral("data_width"), 64}};
+    sinkInterface.metadata = QJsonObject{{QStringLiteral("label"), QStringLiteral("Input")}};
+    design.interfaces.append(sinkInterface);
+
+    ipcraft::core::Connection connection;
+    connection.id = QStringLiteral("serializer_link");
+    connection.from = ipcraft::core::EndpointRef{QStringLiteral("serializer_component"),
+                                                 QStringLiteral("out")};
+    connection.to = ipcraft::core::EndpointRef{QStringLiteral("semantic_component"),
+                                               QStringLiteral("in")};
+    connection.config = QJsonObject{{QStringLiteral("latency"), 1}};
+    connection.constraints = QJsonObject{{QStringLiteral("maxSkewPs"), 250}};
+    connection.metadata = QJsonObject{{QStringLiteral("purpose"), QStringLiteral("semantic")}};
+    design.connections.append(connection);
+
+    ipcraft::core::TopologyGraph topology;
+    topology.id = QStringLiteral("serializer_topology");
+    topology.schema = QStringLiteral("ipcraft.topology.graph.v1");
+    topology.ownerComponentId = QStringLiteral("serializer_component");
+    topology.kind = QStringLiteral("explicit_graph");
+    topology.providerRef = QStringLiteral("vendor.semantic");
+    topology.parameters = QJsonObject{{QStringLiteral("lanes"), 2}};
+    topology.constraints = QJsonObject{{QStringLiteral("acyclic"), true}};
+    topology.nodes.append(QJsonObject{{QStringLiteral("id"), QStringLiteral("node_0")},
+                                      {QStringLiteral("componentRef"),
+                                       QStringLiteral("serializer_component")}});
+    topology.links.append(QJsonObject{{QStringLiteral("id"), QStringLiteral("link_0")},
+                                      {QStringLiteral("from"), QStringLiteral("node_0")},
+                                      {QStringLiteral("to"), QStringLiteral("node_1")}});
+    ipcraft::core::TopologyAttachment attachment;
+    attachment.id = QStringLiteral("attach_0");
+    attachment.topologyId = QStringLiteral("serializer_topology");
+    attachment.attachmentPoint = QJsonObject{{QStringLiteral("node"), QStringLiteral("node_0")}};
+    attachment.componentRef = QStringLiteral("semantic_component");
+    attachment.interfaceRef = QStringLiteral("in");
+    attachment.config = QJsonObject{{QStringLiteral("lane"), 0}};
+    topology.attachments.append(attachment);
+    topology.routing = QJsonObject{{QStringLiteral("algorithm"), QStringLiteral("xy")}};
+    topology.metadata = QJsonObject{{QStringLiteral("view"), QStringLiteral("logical")}};
+    design.topologies.append(topology);
+
+    design.constraints = QJsonObject{
+        {QStringLiteral("timing"), QJsonObject{{QStringLiteral("clockMHz"), 500}}}
+    };
+
+    ipcraft::core::ViewDocument view;
+    view.id = QStringLiteral("serializer_view");
+    view.schema = QStringLiteral("ipcraft.view.v1");
+    view.kind = QStringLiteral("schematic");
+    view.targetRef = QStringLiteral("serializer_topology");
+    view.providerRef = QStringLiteral("qt.test");
+    view.sourceRef = QStringLiteral("serializer_project");
+    view.labels = QJsonObject{{QStringLiteral("serializer_component"), QStringLiteral("CPU")}};
+    view.layout = QJsonObject{{QStringLiteral("rankdir"), QStringLiteral("LR")}};
+    view.metadata = QJsonObject{{QStringLiteral("audience"), QStringLiteral("test")}};
+    design.views.append(view);
+
+    design.diagnostics.append(QJsonObject{{QStringLiteral("code"), QStringLiteral("semantic.keep")},
+                                          {QStringLiteral("severity"), QStringLiteral("info")}});
+    design.artifacts.append(QJsonObject{{QStringLiteral("id"), QStringLiteral("artifact_0")},
+                                        {QStringLiteral("path"),
+                                         QStringLiteral("reports/semantic.json")}});
+    ipcraft::core::ExtensionBlock extension;
+    extension.ownerPackageId = QStringLiteral("vendor.semantic");
+    extension.schemaId = QStringLiteral("vendor.semantic.extension.v1");
+    extension.version = 1;
+    extension.data = QJsonObject{{QStringLiteral("enabled"), true}};
+    extension.validationState = QJsonObject{{QStringLiteral("status"), QStringLiteral("valid")}};
+    design.extensions.append(extension);
+
     const ProjectDocument document = ProjectDesignSerializer::toDocument(design);
+    const QJsonObject supplement = document.native
+        .value(QStringLiteral("ipcraft.projectDesignSupplement.v1"))
+        .toObject();
 
     require(document.schema == QStringLiteral("ipcraft.project.v1"),
             "design serializer should preserve schema");
@@ -1047,14 +1152,37 @@ void testProjectDesignSerializerRoundTripsDesignWithoutGraphProjection() {
     require(document.projectName == QStringLiteral("Serializer Project") &&
                 document.name == QStringLiteral("Serializer Project"),
             "design serializer should preserve project name");
-    require(document.ipcores.size() == 1 &&
+    require(document.projectMetadata.value(QStringLiteral("owner")).toString() ==
+                QStringLiteral("serializer-test"),
+            "design serializer should preserve projected project metadata");
+    require(document.ipcores.size() == 2 &&
                 document.ipcores.first().id == QStringLiteral("vendor.serializer") &&
                 document.ipcores.first().version == QStringLiteral("2.1.0"),
             "design serializer should preserve package refs");
-    require(document.instances.size() == 1,
-            "design serializer should write one project instance");
+    require(document.instances.size() == 2,
+            "design serializer should write project instances for every component");
     require(document.modules.isEmpty() && document.connections.isEmpty(),
             "design serializer should not project components into graph records");
+    require(supplement.contains(QStringLiteral("interfaces")),
+            "design serializer should store interfaces in the design supplement");
+    require(supplement.contains(QStringLiteral("connections")),
+            "design serializer should store connections in the design supplement");
+    require(supplement.contains(QStringLiteral("topologies")),
+            "design serializer should store topologies in the design supplement");
+    require(supplement.contains(QStringLiteral("constraints")),
+            "design serializer should store constraints in the design supplement");
+    require(supplement.contains(QStringLiteral("views")),
+            "design serializer should store views in the design supplement");
+    require(supplement.contains(QStringLiteral("diagnostics")),
+            "design serializer should store diagnostics in the design supplement");
+    require(supplement.contains(QStringLiteral("artifacts")),
+            "design serializer should store artifacts in the design supplement");
+    require(supplement.contains(QStringLiteral("extensions")),
+            "design serializer should store extensions in the design supplement");
+    require(!supplement.contains(QStringLiteral("packages")) &&
+                !supplement.contains(QStringLiteral("components")) &&
+                !supplement.contains(QStringLiteral("metadata")),
+            "design supplement should not store projection-owned package, component, or metadata fields");
 
     const ProjectIpInstanceRecord& instance = document.instances.first();
     require(instance.id == QStringLiteral("serializer_component") &&
@@ -1077,8 +1205,24 @@ void testProjectDesignSerializerRoundTripsDesignWithoutGraphProjection() {
                 .value(QStringLiteral("base")).toInt() == 4096,
             "design serializer should keep object config sections outside parameters");
 
+    ProjectDocument authoritativeDocument = document;
+    authoritativeDocument.instances[0].package = ProjectPackageRef{QStringLiteral("vendor.serializer"),
+                                                                   QStringLiteral("2.2.0")};
+    authoritativeDocument.instances[0].ipcoreId = QStringLiteral("vendor.serializer");
+    authoritativeDocument.instances[0].native.insert(QStringLiteral("componentType"),
+                                                     QStringLiteral("ProjectedBlock"));
+    authoritativeDocument.instances[0].config = QJsonObject{
+        {QStringLiteral("parameters"), QJsonObject{
+            {QStringLiteral("width"), 128},
+            {QStringLiteral("mode"), QStringLiteral("projected")}
+        }},
+        {QStringLiteral("tables"), QJsonObject{
+            {QStringLiteral("address_map"), QJsonObject{{QStringLiteral("base"), 8192}}}
+        }}
+    };
+
     const ipcraft::core::ProjectDesign restored =
-        ProjectDesignSerializer::fromDocument(document);
+        ProjectDesignSerializer::fromDocument(authoritativeDocument);
 
     require(restored.schema == QStringLiteral("ipcraft.project.v1"),
             "design serializer should reload schema");
@@ -1086,28 +1230,83 @@ void testProjectDesignSerializerRoundTripsDesignWithoutGraphProjection() {
             "design serializer should reload project id");
     require(restored.name == QStringLiteral("Serializer Project"),
             "design serializer should reload project name");
-    require(restored.packages.size() == 1 &&
+    require(restored.metadata.value(QStringLiteral("owner")).toString() ==
+                QStringLiteral("serializer-test"),
+            "design serializer should reload projected project metadata");
+    require(restored.packages.size() == 3 &&
                 restored.packages.first().id == QStringLiteral("vendor.serializer") &&
                 restored.packages.first().version == QStringLiteral("2.1.0"),
             "design serializer should reload package refs");
-    require(restored.components.size() == 1,
-            "design serializer should reload one component");
+    require(restored.components.size() == 2,
+            "design serializer should reload every component from project instances");
     const ipcraft::core::ComponentInstance& restoredComponent = restored.components.first();
     require(restoredComponent.id == QStringLiteral("serializer_component"),
             "design serializer should reload component id");
-    require(restoredComponent.type == QStringLiteral("SerializerBlock"),
-            "design serializer should reload component type");
-    require(restoredComponent.packageRef == QStringLiteral("vendor.serializer@2.1.0"),
-            "design serializer should reload component package ref");
-    require(restoredComponent.config.value(QStringLiteral("width")).toInt() == 64,
-            "design serializer should reload flat parameter keys");
+    require(restoredComponent.type == QStringLiteral("ProjectedBlock"),
+            "design serializer should reload component type from project instances");
+    require(restoredComponent.packageRef == QStringLiteral("vendor.serializer@2.2.0"),
+            "design serializer should reload component package ref from project instances");
+    require(restoredComponent.config.value(QStringLiteral("width")).toInt() == 128,
+            "design serializer should reload flat parameter keys from project instances");
     require(restoredComponent.config.value(QStringLiteral("mode")).toString() ==
-                QStringLiteral("fast"),
-            "design serializer should reload every flat parameter key");
+                QStringLiteral("projected"),
+            "design serializer should reload every flat parameter key from project instances");
     require(restoredComponent.config.value(QStringLiteral("tables")).toObject()
                 .value(QStringLiteral("address_map")).toObject()
-                .value(QStringLiteral("base")).toInt() == 4096,
-            "design serializer should reload object config sections");
+                .value(QStringLiteral("base")).toInt() == 8192,
+            "design serializer should reload object config sections from project instances");
+    require(restored.interfaces.size() == 2 &&
+                restored.interfaces.first().id == QStringLiteral("out") &&
+                restored.interfaces.first().metadata.value(QStringLiteral("label")).toString() ==
+                    QStringLiteral("Output"),
+            "design serializer should reload interfaces from the design supplement");
+    require(restored.connections.size() == 1 &&
+                restored.connections.first().from.component ==
+                    QStringLiteral("serializer_component") &&
+                restored.connections.first().to.interface == QStringLiteral("in") &&
+                restored.connections.first().constraints.value(QStringLiteral("maxSkewPs")).toInt() ==
+                    250,
+            "design serializer should reload connections from the design supplement");
+    require(restored.topologies.size() == 1 &&
+                restored.topologies.first().attachments.size() == 1 &&
+                restored.topologies.first().nodes.first().value(QStringLiteral("id")).toString() ==
+                    QStringLiteral("node_0"),
+            "design serializer should reload topologies from the design supplement");
+    require(restored.constraints.value(QStringLiteral("timing")).toObject()
+                .value(QStringLiteral("clockMHz")).toInt() == 500,
+            "design serializer should reload project constraints from the design supplement");
+    require(restored.views.size() == 1 &&
+                restored.views.first().labels.value(QStringLiteral("serializer_component")).toString() ==
+                    QStringLiteral("CPU"),
+            "design serializer should reload views from the design supplement");
+    require(restored.diagnostics.size() == 1 &&
+                restored.diagnostics.first().value(QStringLiteral("code")).toString() ==
+                    QStringLiteral("semantic.keep"),
+            "design serializer should reload diagnostics from the design supplement");
+    require(restored.artifacts.size() == 1 &&
+                restored.artifacts.first().value(QStringLiteral("path")).toString() ==
+                    QStringLiteral("reports/semantic.json"),
+            "design serializer should reload artifacts from the design supplement");
+    require(restored.extensions.size() == 1 &&
+                restored.extensions.first().data.value(QStringLiteral("enabled")).toBool(),
+            "design serializer should reload extensions from the design supplement");
+
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "temporary directory should be valid");
+    const QString path = QDir(tempDir.path()).filePath(QStringLiteral("serializer.fpproj"));
+    const ProjectWriteResult writeResult = ProjectWriter::writeFile(path, document);
+    require(writeResult.success, "serializer document with design supplement should write");
+    const ProjectReadResult readResult = ProjectReader::readFile(path);
+    require(readResult.success, "serializer document with design supplement should reload");
+    const ipcraft::core::ProjectDesign persisted =
+        ProjectDesignSerializer::fromDocument(readResult.document);
+    require(persisted.connections.size() == 1 &&
+                persisted.connections.first().id == QStringLiteral("serializer_link"),
+            "persisted design supplement should reload connections");
+    require(persisted.extensions.size() == 1 &&
+                persisted.extensions.first().schemaId ==
+                    QStringLiteral("vendor.semantic.extension.v1"),
+            "persisted design supplement should reload extensions");
 }
 
 void testLoadRejectsModuleWithoutMatchingIpcoreState() {

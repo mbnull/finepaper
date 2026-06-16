@@ -59,6 +59,20 @@ QJsonObject mergeDesignOwnedNative(const QJsonObject& existingNative,
     return merged;
 }
 
+QJsonObject mergeDesignSupplementNative(const QJsonObject& existingNative,
+                                        const QJsonObject& designDocumentNative) {
+    static const QString supplementKey =
+        QStringLiteral("ipcraft.projectDesignSupplement.v1");
+
+    QJsonObject merged = existingNative;
+    if (designDocumentNative.contains(supplementKey)) {
+        merged.insert(supplementKey, designDocumentNative.value(supplementKey));
+    } else {
+        merged.remove(supplementKey);
+    }
+    return merged;
+}
+
 const ProjectIpInstanceRecord* findInstanceById(
     const QVector<ProjectIpInstanceRecord>& instances,
     const QString& id) {
@@ -96,6 +110,7 @@ void mergeDesignIntoDocument(ProjectDocument& document,
     document.projectName = designDocument.projectName;
     document.name = designDocument.name;
     document.projectMetadata = designDocument.projectMetadata;
+    document.native = mergeDesignSupplementNative(document.native, designDocument.native);
     document.ipcores = designDocument.ipcores;
     document.instances.clear();
     document.instances.reserve(designDocument.instances.size());
@@ -122,6 +137,7 @@ void mergeDesignOnlyComponentsIntoDocument(ProjectDocument& document,
         document.instances.append(mergeDesignOwnedInstance(nullptr, designInstance));
         existingInstanceIds.insert(designInstance.id);
     }
+    document.native = mergeDesignSupplementNative(document.native, designDocument.native);
     document.ipcoreState = document.instances;
 }
 

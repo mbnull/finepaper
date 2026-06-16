@@ -1,8 +1,10 @@
 // ProjectDesignSerializer converts runtime ProjectDesign records to/from ProjectDocument V1.
 #include "project/projectdesignserializer.h"
 
+#include "ipcraft/core/project_document_v1.h"
 #include "ipcraft/schemaids.h"
 
+#include <QJsonArray>
 #include <QSet>
 
 namespace {
@@ -135,6 +137,110 @@ QJsonObject documentConfigFromRuntimeConfig(const QJsonObject& config) {
     return bundleConfig;
 }
 
+QString designSupplementKey() {
+    return QStringLiteral("ipcraft.projectDesignSupplement.v1");
+}
+
+bool isSupplementField(const QString& key) {
+    return key == QStringLiteral("interfaces") ||
+           key == QStringLiteral("connections") ||
+           key == QStringLiteral("topologies") ||
+           key == QStringLiteral("constraints") ||
+           key == QStringLiteral("views") ||
+           key == QStringLiteral("diagnostics") ||
+           key == QStringLiteral("artifacts") ||
+           key == QStringLiteral("extensions");
+}
+
+bool shouldStoreSupplementValue(const QJsonValue& value) {
+    if (value.isArray()) {
+        return !value.toArray().isEmpty();
+    }
+    if (value.isObject()) {
+        return !value.toObject().isEmpty();
+    }
+    return !value.isUndefined() && !value.isNull();
+}
+
+QJsonObject designSupplementFromSerializedProject(const QJsonObject& serializedProject) {
+    QJsonObject supplement;
+    for (auto it = serializedProject.constBegin(); it != serializedProject.constEnd(); ++it) {
+        if (isSupplementField(it.key()) && shouldStoreSupplementValue(it.value())) {
+            supplement.insert(it.key(), it.value());
+        }
+    }
+    return supplement;
+}
+
+QJsonObject filteredDesignSupplement(const QJsonObject& object) {
+    QJsonObject supplement;
+    for (auto it = object.constBegin(); it != object.constEnd(); ++it) {
+        if (isSupplementField(it.key())) {
+            supplement.insert(it.key(), it.value());
+        }
+    }
+    return supplement;
+}
+
+void applySupplementField(QJsonObject& serializedProject,
+                          const QJsonObject& supplement,
+                          const QString& key) {
+    if (supplement.contains(key)) {
+        serializedProject.insert(key, supplement.value(key));
+    }
+}
+
+void mergeDesignSupplement(ipcraft::core::ProjectDesign& design,
+                           const QJsonObject& documentNative) {
+    const QJsonValue supplementValue = documentNative.value(designSupplementKey());
+    if (!supplementValue.isObject()) {
+        return;
+    }
+
+    const QJsonObject supplement = filteredDesignSupplement(supplementValue.toObject());
+    if (supplement.isEmpty()) {
+        return;
+    }
+
+    QJsonObject serializedProject = ipcraft::core::ProjectDocumentV1::writeObject(design);
+    applySupplementField(serializedProject, supplement, QStringLiteral("interfaces"));
+    applySupplementField(serializedProject, supplement, QStringLiteral("connections"));
+    applySupplementField(serializedProject, supplement, QStringLiteral("topologies"));
+    applySupplementField(serializedProject, supplement, QStringLiteral("constraints"));
+    applySupplementField(serializedProject, supplement, QStringLiteral("views"));
+    applySupplementField(serializedProject, supplement, QStringLiteral("diagnostics"));
+    applySupplementField(serializedProject, supplement, QStringLiteral("artifacts"));
+    applySupplementField(serializedProject, supplement, QStringLiteral("extensions"));
+
+    const ipcraft::core::ProjectDocumentReadResult readResult =
+        ipcraft::core::ProjectDocumentV1::readObject(serializedProject);
+    const ipcraft::core::ProjectDesign& supplemented = readResult.project;
+    if (supplement.contains(QStringLiteral("interfaces"))) {
+        design.interfaces = supplemented.interfaces;
+    }
+    if (supplement.contains(QStringLiteral("connections"))) {
+        design.connections = supplemented.connections;
+    }
+    if (supplement.contains(QStringLiteral("topologies"))) {
+        design.topologies = supplemented.topologies;
+    }
+    if (supplement.contains(QStringLiteral("constraints"))) {
+        design.constraints = supplemented.constraints;
+    }
+    if (supplement.contains(QStringLiteral("views"))) {
+        design.views = supplemented.views;
+    }
+    if (supplement.contains(QStringLiteral("diagnostics"))) {
+        design.diagnostics = supplemented.diagnostics;
+    }
+    if (supplement.contains(QStringLiteral("artifacts"))) {
+        design.artifacts = supplemented.artifacts;
+    }
+    if (supplement.contains(QStringLiteral("extensions"))) {
+        design.extensions = supplemented.extensions;
+    }
+}
+
 } // namespace
 
 ProjectDocument ProjectDesignSerializer::toDocument(const ipcraft::core::ProjectDesign& design) {
@@ -169,6 +275,12 @@ ProjectDocument ProjectDesignSerializer::toDocument(const ipcraft::core::Project
             instance.native.insert(QStringLiteral("extensionData"), component.extensionData);
         }
         document.instances.append(instance);
+    }
+
+    const QJsonObject supplement = designSupplementFromSerializedProject(
+        ipcraft::core::ProjectDocumentV1::writeObject(design));
+    if (!supplement.isEmpty()) {
+        document.native.insert(designSupplementKey(), supplement);
     }
 
     return document;
@@ -212,5 +324,6 @@ ipcraft::core::ProjectDesign ProjectDesignSerializer::fromDocument(const Project
     }
 
     design.metadata = document.projectMetadata;
+    mergeDesignSupplement(design, document.native);
     return design;
 }

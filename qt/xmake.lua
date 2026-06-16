@@ -173,6 +173,8 @@ add_qt_test_target("validation_test", "test/validation_test.cpp", {
     "src/**/validationmanager.cpp",
     "src/**/logpanel.cpp",
     "src/app/generationartifacts.cpp",
+    "src/ipcraft/core/project_document_v1.cpp",
+    "src/ipcraft/core/project_design.cpp",
     "src/project/projectdesignserializer.cpp",
     "src/project/projectstateservice.cpp",
     "src/**/ipcorecommandrunner.cpp",
@@ -307,6 +309,8 @@ add_qt_test_target("projectdocument_test", "test/projectdocument_test.cpp", {
     "src/**/projectstateservice.cpp",
     "src/**/graphprojectserializer.cpp",
     "src/**/projectdesignserializer.cpp",
+    "src/ipcraft/core/project_document_v1.cpp",
+    "src/ipcraft/core/project_design.cpp",
     "src/app/generationartifacts.cpp",
     "src/**/graph.cpp",
     "src/**/module.cpp",
@@ -339,6 +343,7 @@ add_qt_test_target("projectservice_test", "test/projectservice_test.cpp", {
     "src/project/projectreader.cpp",
     "src/project/projectwriter.cpp",
     "src/ipcraft/compositionmodel.cpp",
+    "src/ipcraft/core/project_document_v1.cpp",
     "src/ipcraft/core/project_design.cpp",
     "src/ipcraft/core/project_patch.cpp",
     "inc/project/projectservice.h",
@@ -356,6 +361,7 @@ add_qt_test_target("designeditingservice_test", "test/designeditingservice_test.
     "src/project/projectreader.cpp",
     "src/project/projectwriter.cpp",
     "src/ipcraft/compositionmodel.cpp",
+    "src/ipcraft/core/project_document_v1.cpp",
     "src/ipcraft/core/project_design.cpp",
     "src/ipcraft/core/project_patch.cpp",
     "inc/project/projectservice.h",
@@ -387,6 +393,7 @@ add_qt_test_target("editorprojectionservice_test", "test/editorprojectionservice
     "src/ipcore/ipcoreruntimeregistry.cpp",
     "src/ipcore/ipcatalogservice.cpp",
     "src/ipcraft/compositionmodel.cpp",
+    "src/ipcraft/core/project_document_v1.cpp",
     "src/ipcraft/core/project_design.cpp",
     "src/ipcraft/core/project_patch.cpp",
     "inc/project/editorprojectionservice.h",
@@ -419,6 +426,8 @@ add_qt_test_target("projectgenerationrunner_test", "test/projectgenerationrunner
     "src/project/projectwriter.cpp",
     "src/project/projectstateservice.cpp",
     "src/project/projectdesignserializer.cpp",
+    "src/ipcraft/core/project_document_v1.cpp",
+    "src/ipcraft/core/project_design.cpp",
     "src/project/graphprojectserializer.cpp",
     "src/app/generationartifacts.cpp",
     "src/validation/validationresult.cpp",
@@ -471,6 +480,8 @@ add_qt_test_target("commercial_noc_mvp_test", "test/commercial_noc_mvp_test.cpp"
     "src/project/projectwriter.cpp",
     "src/project/projectstateservice.cpp",
     "src/project/projectdesignserializer.cpp",
+    "src/ipcraft/core/project_document_v1.cpp",
+    "src/ipcraft/core/project_design.cpp",
     "src/project/graphprojectserializer.cpp",
     "src/app/generationartifacts.cpp",
     "src/topology/topologypresetbuilder.cpp",
@@ -521,6 +532,7 @@ add_qt_test_target("vendor_meshnoc_onboarding_test", "test/vendor_meshnoc_onboar
     "src/ipcraft/compositionmodel.cpp",
     "src/ipcraft/ipcraftbuiltinvalidator.cpp",
     "src/ipcraft/ipxactconnectionchecker.cpp",
+    "src/ipcraft/core/project_document_v1.cpp",
     "src/ipcraft/core/project_design.cpp",
     "src/ipcore/ipcatalogservice.cpp",
     "src/ipcore/ipcorecommandrunner.cpp",
@@ -1183,6 +1195,7 @@ target("projectplugin_test")
     add_files("src/project/projectreader.cpp")
     add_files("src/project/projectwriter.cpp")
     add_files("src/ipcraft/compositionmodel.cpp")
+    add_files("src/ipcraft/core/project_document_v1.cpp")
     add_files("src/ipcraft/core/project_design.cpp")
     add_files("src/ipcraft/core/project_patch.cpp")
     add_files("src/ipcraft/diagnostics.cpp")
@@ -1220,6 +1233,7 @@ target("packageplugin_test")
     add_files("src/modules/moduleprovider.cpp")
     add_files("src/ipcore/ipcoreruntimeregistry.cpp")
     add_files("src/ipcraft/compositionmodel.cpp")
+    add_files("src/ipcraft/core/project_document_v1.cpp")
     add_files("src/ipcraft/core/project_design.cpp")
     add_files("src/ipcraft/core/project_patch.cpp")
     add_files("src/ipcraft/ipcraftconnectionvalidator.cpp")
@@ -1268,6 +1282,8 @@ add_qt_test_target("toolpipelineplugin_test", "test/toolpipelineplugin_test.cpp"
     "src/ipcore/ipcoregraphexporter.cpp",
     "src/project/projectreader.cpp",
     "src/project/projectdesignserializer.cpp",
+    "src/ipcraft/core/project_document_v1.cpp",
+    "src/ipcraft/core/project_design.cpp",
     "src/project/projectwriter.cpp",
     "src/project/projectstateservice.cpp",
     "src/project/graphprojectserializer.cpp",
@@ -1329,6 +1345,7 @@ add_qt_test_target("staticplugincatalog_test", "test/staticplugincatalog_test.cp
     "src/package/packageservice.cpp",
     "src/project/graphprojectserializer.cpp",
     "src/project/projectdesignserializer.cpp",
+    "src/ipcraft/core/project_document_v1.cpp",
     "src/project/projectplugin.cpp",
     "src/project/projectreader.cpp",
     "src/project/projectservice.cpp",
@@ -1658,6 +1675,7 @@ target("ipcatalogpanel_test")
     add_files("src/ipcore/*.cpp")
     add_files("src/workspace/*.cpp")
     add_files("src/project/*.cpp")
+    add_files("src/ipcraft/core/project_document_v1.cpp")
     add_files("src/package/*.cpp")
     add_files("src/validation/*.cpp")
     add_files("src/topology/*.cpp")
@@ -1818,6 +1836,8 @@ add_qt_test_target("v1architecturegate_test", "test/v1architecturegate_test.cpp"
     "src/ipcore/ipcoreruntimeregistry.cpp",
     "src/project/graphprojectserializer.cpp",
     "src/project/projectdesignserializer.cpp",
+    "src/ipcraft/core/project_document_v1.cpp",
+    "src/ipcraft/core/project_design.cpp",
     "src/project/projectipservice.cpp",
     "src/project/projectreader.cpp",
     "src/project/projectstateservice.cpp",

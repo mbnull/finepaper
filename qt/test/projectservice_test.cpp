@@ -353,6 +353,193 @@ void testFlatDesignConfigSavesAsV1BundleAndReloadsAsRuntimeConfig() {
             "loaded runtime design should restore flat component config");
 }
 
+void testReplaceDesignSaveLoadPreservesSemanticDesignFields() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "temporary directory should be valid");
+    const QString path = QDir(tempDir.path()).filePath(QStringLiteral("semantic_design.fpproj"));
+
+    ipcraft::core::ProjectDesign design = patchableDesign();
+    design.packages.append(ipcraft::core::PackageRef{QStringLiteral("pkg.semantic"),
+                                                     QStringLiteral("2.0")});
+
+    ipcraft::core::ComponentInstance endpoint;
+    endpoint.id = QStringLiteral("endpoint0");
+    endpoint.type = QStringLiteral("endpoint");
+    endpoint.packageRef = QStringLiteral("pkg.semantic@2.0");
+    endpoint.config = QJsonObject{{QStringLiteral("role"), QStringLiteral("sink")}};
+    design.components.append(endpoint);
+
+    ipcraft::core::InterfaceInstance source;
+    source.id = QStringLiteral("out");
+    source.ownerComponentId = QStringLiteral("cpu0");
+    source.type = QStringLiteral("stream");
+    source.role = QStringLiteral("producer");
+    source.direction = QStringLiteral("source");
+    source.protocol = QStringLiteral("axis");
+    design.interfaces.append(source);
+
+    ipcraft::core::InterfaceInstance sink;
+    sink.id = QStringLiteral("in");
+    sink.ownerComponentId = QStringLiteral("endpoint0");
+    sink.type = QStringLiteral("stream");
+    sink.role = QStringLiteral("consumer");
+    sink.direction = QStringLiteral("sink");
+    sink.protocol = QStringLiteral("axis");
+    design.interfaces.append(sink);
+
+    ipcraft::core::Connection connection;
+    connection.id = QStringLiteral("semantic_link");
+    connection.from = ipcraft::core::EndpointRef{QStringLiteral("cpu0"), QStringLiteral("out")};
+    connection.to = ipcraft::core::EndpointRef{QStringLiteral("endpoint0"), QStringLiteral("in")};
+    connection.constraints = QJsonObject{{QStringLiteral("latency"), 1}};
+    design.connections.append(connection);
+
+    ipcraft::core::TopologyGraph topology;
+    topology.id = QStringLiteral("semantic_topology");
+    topology.schema = ipcraft::schemaids::topologyGraphV1;
+    topology.kind = QStringLiteral("explicit_graph");
+    topology.nodes.append(QJsonObject{{QStringLiteral("id"), QStringLiteral("node0")}});
+    design.topologies.append(topology);
+
+    design.constraints = QJsonObject{{QStringLiteral("clock"), QStringLiteral("core_clk")}};
+    ipcraft::core::ViewDocument view;
+    view.id = QStringLiteral("semantic_view");
+    view.schema = ipcraft::schemaids::viewV1;
+    view.kind = QStringLiteral("schematic");
+    view.targetRef = QStringLiteral("semantic_topology");
+    view.providerRef = QStringLiteral("qt.test");
+    design.views.append(view);
+    design.diagnostics.append(QJsonObject{{QStringLiteral("code"), QStringLiteral("semantic.keep")}});
+    design.artifacts.append(QJsonObject{{QStringLiteral("path"), QStringLiteral("semantic.json")}});
+
+    ipcraft::core::ExtensionBlock extension;
+    extension.ownerPackageId = QStringLiteral("pkg.semantic");
+    extension.schemaId = QStringLiteral("pkg.semantic.extension.v1");
+    extension.version = 1;
+    extension.data = QJsonObject{{QStringLiteral("enabled"), true}};
+    design.extensions.append(extension);
+
+    ProjectService service;
+    service.replaceDesign(design);
+    require(service.document()
+                .native.value(QStringLiteral("ipcraft.projectDesignSupplement.v1"))
+                .isObject(),
+            "replaceDesign should persist semantic design fields in document native");
+    const ProjectServiceResult saveResult = service.saveFile(path);
+    require(saveResult.success, "semantic design document should save");
+
+    ProjectService loaded;
+    const ProjectServiceResult loadResult = loaded.loadFile(path);
+    require(loadResult.success, "semantic design document should reload");
+    require(loaded.design().components.size() == 2,
+            "loaded semantic design should preserve projected components");
+    require(loaded.design().interfaces.size() == 2,
+            "loaded semantic design should preserve interfaces");
+    require(loaded.design().connections.size() == 1 &&
+                loaded.design().connections.first().id == QStringLiteral("semantic_link"),
+            "loaded semantic design should preserve connections");
+    require(loaded.design().topologies.size() == 1 &&
+                loaded.design().topologies.first().id == QStringLiteral("semantic_topology"),
+            "loaded semantic design should preserve topologies");
+    require(loaded.design().constraints.value(QStringLiteral("clock")).toString() ==
+                QStringLiteral("core_clk"),
+            "loaded semantic design should preserve constraints");
+    require(loaded.design().views.size() == 1 &&
+                loaded.design().views.first().id == QStringLiteral("semantic_view"),
+            "loaded semantic design should preserve views");
+    require(loaded.design().diagnostics.size() == 1 &&
+                loaded.design().diagnostics.first().value(QStringLiteral("code")).toString() ==
+                    QStringLiteral("semantic.keep"),
+            "loaded semantic design should preserve diagnostics");
+    require(loaded.design().artifacts.size() == 1 &&
+                loaded.design().artifacts.first().value(QStringLiteral("path")).toString() ==
+                    QStringLiteral("semantic.json"),
+            "loaded semantic design should preserve artifacts");
+    require(loaded.design().extensions.size() == 1 &&
+                loaded.design().extensions.first().schemaId ==
+                    QStringLiteral("pkg.semantic.extension.v1"),
+            "loaded semantic design should preserve extensions");
+}
+
+void testMergeDesignOnlyComponentsPreservesProjectedInstancesAndSemanticSupplement() {
+    ProjectDocument document;
+    document.schema = ipcraft::schemaids::projectV1;
+    document.projectId = QStringLiteral("projection_project");
+    document.projectName = QStringLiteral("Projection Project");
+    document.ipcores.append(ProjectIpcoreRecord{QStringLiteral("pkg"), QStringLiteral("1.0")});
+    document.native = QJsonObject{{QStringLiteral("root_native"), QStringLiteral("keep")}};
+
+    ProjectIpInstanceRecord projected;
+    projected.id = QStringLiteral("cpu0");
+    projected.instanceId = QStringLiteral("cpu0");
+    projected.ipcoreId = QStringLiteral("pkg");
+    projected.package = ProjectPackageRef{QStringLiteral("pkg"), QStringLiteral("1.0")};
+    projected.config = QJsonObject{
+        {QStringLiteral("parameters"), QJsonObject{{QStringLiteral("width"), 99}}}
+    };
+    projected.native = QJsonObject{{QStringLiteral("componentType"), QStringLiteral("projected_core")}};
+    document.instances.append(projected);
+
+    ProjectService service;
+    const ProjectServiceResult replaceResult = service.replaceDocument(document);
+    require(replaceResult.success, "projection document should load into service");
+
+    ipcraft::core::ProjectDesign design = patchableDesign();
+    design.components.first().type = QStringLiteral("stale_core");
+    design.components.first().config = QJsonObject{{QStringLiteral("width"), 4}};
+
+    ipcraft::core::ComponentInstance endpoint;
+    endpoint.id = QStringLiteral("endpoint0");
+    endpoint.type = QStringLiteral("endpoint");
+    endpoint.packageRef = QStringLiteral("pkg@1.0");
+    endpoint.config = QJsonObject{{QStringLiteral("role"), QStringLiteral("sink")}};
+    design.components.append(endpoint);
+
+    ipcraft::core::InterfaceInstance source;
+    source.id = QStringLiteral("out");
+    source.ownerComponentId = QStringLiteral("cpu0");
+    source.type = QStringLiteral("stream");
+    source.role = QStringLiteral("producer");
+    source.direction = QStringLiteral("source");
+    source.protocol = QStringLiteral("axis");
+    design.interfaces.append(source);
+
+    ipcraft::core::InterfaceInstance sink;
+    sink.id = QStringLiteral("in");
+    sink.ownerComponentId = QStringLiteral("endpoint0");
+    sink.type = QStringLiteral("stream");
+    sink.role = QStringLiteral("consumer");
+    sink.direction = QStringLiteral("sink");
+    sink.protocol = QStringLiteral("axis");
+    design.interfaces.append(sink);
+
+    ipcraft::core::Connection connection;
+    connection.id = QStringLiteral("merge_semantic_link");
+    connection.from = ipcraft::core::EndpointRef{QStringLiteral("cpu0"), QStringLiteral("out")};
+    connection.to = ipcraft::core::EndpointRef{QStringLiteral("endpoint0"), QStringLiteral("in")};
+    design.connections.append(connection);
+
+    service.mergeDesignOnlyComponents(design);
+
+    const ProjectDocument& merged = service.document();
+    require(merged.instances.size() == 2,
+            "mergeDesignOnlyComponents should append design-only instances");
+    require(merged.instances.first().native.value(QStringLiteral("componentType")).toString() ==
+                QStringLiteral("projected_core"),
+            "mergeDesignOnlyComponents should not overwrite projected component type");
+    require(merged.instances.first().config.value(QStringLiteral("parameters")).toObject()
+                .value(QStringLiteral("width")).toInt() == 99,
+            "mergeDesignOnlyComponents should not overwrite projected config");
+    require(merged.native.value(QStringLiteral("root_native")).toString() == QStringLiteral("keep"),
+            "mergeDesignOnlyComponents should preserve unrelated root native data");
+    require(merged.native.value(QStringLiteral("ipcraft.projectDesignSupplement.v1")).isObject(),
+            "mergeDesignOnlyComponents should persist semantic design fields in document native");
+    require(service.design().connections.size() == 1 &&
+                service.design().connections.first().id ==
+                    QStringLiteral("merge_semantic_link"),
+            "mergeDesignOnlyComponents should reload semantic fields from the supplement");
+}
+
 void testReplaceDesignPreservesNonDesignProjectFields() {
     QTemporaryDir tempDir;
     require(tempDir.isValid(), "temporary directory should be valid");
@@ -538,6 +725,8 @@ int main(int argc, char** argv) {
         testReplaceDocumentClearsSavedPath();
         testApplyDesignPatch();
         testFlatDesignConfigSavesAsV1BundleAndReloadsAsRuntimeConfig();
+        testReplaceDesignSaveLoadPreservesSemanticDesignFields();
+        testMergeDesignOnlyComponentsPreservesProjectedInstancesAndSemanticSupplement();
         testReplaceDesignPreservesNonDesignProjectFields();
         testRejectsUnsupportedDocumentKind();
         testLoadFileReportsInvalidJsonDiagnostics();
