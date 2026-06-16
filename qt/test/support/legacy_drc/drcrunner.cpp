@@ -1,5 +1,5 @@
 // DRCRunner serializes one IP instance graph, invokes external DRC, and maps findings back to editor IDs.
-#include "validation/drcrunner.h"
+#include "drcrunner.h"
 #include "graph/graph.h"
 #include "ipcore/ipcorecommandrunner.h"
 #include "ipcore/ipcoregraphexporter.h"

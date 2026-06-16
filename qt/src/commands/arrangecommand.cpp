@@ -357,8 +357,7 @@ void ArrangeCommand::execute() {
         initializeSnapshots();
     }
 
-    applyState(m_after);
-    m_executed = true;
+    m_executed = applyState(m_after);
 }
 
 void ArrangeCommand::undo() {
@@ -367,8 +366,7 @@ void ArrangeCommand::undo() {
         return;
     }
 
-    applyState(m_before);
-    m_undone = true;
+    m_undone = applyState(m_before);
 }
 
 void ArrangeCommand::initializeSnapshots() {
@@ -418,39 +416,66 @@ void ArrangeCommand::captureCurrentState(QHash<QString, ModuleSnapshot>& snapsho
     }
 }
 
-void ArrangeCommand::applyState(const QHash<QString, ModuleSnapshot>& snapshots) const {
+void ArrangeCommand::applySnapshot(Module* module, const ModuleSnapshot& snapshot) const {
+    if (!module) {
+        return;
+    }
+
+    // Each field tracks existence explicitly so undo can remove parameters
+    // that were absent before arrange.
+    if (snapshot.x.existed) {
+        module->setParameter("x", snapshot.x.value);
+    } else {
+        module->removeParameter("x");
+    }
+
+    if (snapshot.y.existed) {
+        module->setParameter("y", snapshot.y.value);
+    } else {
+        module->removeParameter("y");
+    }
+
+    if (snapshot.collapsed.existed) {
+        module->setParameter("collapsed", snapshot.collapsed.value);
+    } else {
+        module->removeParameter("collapsed");
+    }
+}
+
+bool ArrangeCommand::applyState(const QHash<QString, ModuleSnapshot>& snapshots) const {
+    if (m_editorMutationTarget) {
+        std::vector<QString> persistedModuleIds;
+        for (auto it = snapshots.begin(); it != snapshots.end(); ++it) {
+            const Module* module = m_graph->getModule(it.key());
+            if (!module) {
+                continue;
+            }
+
+            std::unique_ptr<Module> durableModule = module->clone();
+            applySnapshot(durableModule.get(), it.value());
+            if (!m_editorMutationTarget->upsertEditorModuleRecord(*durableModule)) {
+                for (const QString& moduleId : persistedModuleIds) {
+                    if (const Module* currentModule = m_graph->getModule(moduleId)) {
+                        const bool restored = m_editorMutationTarget->upsertEditorModuleRecord(*currentModule);
+                        Q_UNUSED(restored);
+                    }
+                }
+                return false;
+            }
+            persistedModuleIds.push_back(it.key());
+        }
+    }
+
     for (auto it = snapshots.begin(); it != snapshots.end(); ++it) {
         Module* module = m_graph->getModule(it.key());
         if (!module) {
             continue;
         }
 
-        const ModuleSnapshot& snapshot = it.value();
-
-        // Each field tracks existence explicitly so undo can remove parameters
-        // that were absent before arrange.
-        if (snapshot.x.existed) {
-            module->setParameter("x", snapshot.x.value);
-        } else {
-            module->removeParameter("x");
-        }
-
-        if (snapshot.y.existed) {
-            module->setParameter("y", snapshot.y.value);
-        } else {
-            module->removeParameter("y");
-        }
-
-        if (snapshot.collapsed.existed) {
-            module->setParameter("collapsed", snapshot.collapsed.value);
-        } else {
-            module->removeParameter("collapsed");
-        }
-
-        if (m_editorMutationTarget) {
-            m_editorMutationTarget->upsertEditorModuleRecord(*module);
-        }
+        applySnapshot(module, it.value());
     }
+
+    return true;
 }
 
 QHash<QString, ArrangeCommand::ModulePlacement> ArrangeCommand::buildPlacements() const {

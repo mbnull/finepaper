@@ -41,20 +41,23 @@ void SetConnectionClassCommand::execute() {
         return;
     }
 
+    if (m_editorMutationTarget) {
+        std::unique_ptr<Connection> durableConnection = connection->clone();
+        durableConnection->setConnectionMetadata(m_newConnectionClassId,
+                                                 QStringLiteral("valid"),
+                                                 {});
+        if (!m_editorMutationTarget->upsertEditorConnectionRecord(*durableConnection)) {
+            return;
+        }
+    }
+
     m_executed = m_graph->setConnectionMetadata(m_connectionId,
                                                 m_newConnectionClassId,
                                                 QStringLiteral("valid"),
                                                 {});
-    if (m_executed && m_editorMutationTarget) {
-        if (const Connection* updated = m_graph->getConnection(m_connectionId)) {
-            m_executed = m_editorMutationTarget->upsertEditorConnectionRecord(*updated);
-        }
-        if (!m_executed) {
-            m_graph->setConnectionMetadata(m_connectionId,
-                                           m_oldConnectionClassId,
-                                           m_oldStatus,
-                                           m_oldAlternatives);
-        }
+    if (!m_executed && m_editorMutationTarget) {
+        const bool restored = m_editorMutationTarget->upsertEditorConnectionRecord(*connection);
+        Q_UNUSED(restored);
     }
 }
 
@@ -64,13 +67,26 @@ void SetConnectionClassCommand::undo() {
         return;
     }
 
+    Connection* connection = m_graph->getConnection(m_connectionId);
+    if (!connection) {
+        return;
+    }
+    if (m_editorMutationTarget) {
+        std::unique_ptr<Connection> durableConnection = connection->clone();
+        durableConnection->setConnectionMetadata(m_oldConnectionClassId,
+                                                 m_oldStatus,
+                                                 m_oldAlternatives);
+        if (!m_editorMutationTarget->upsertEditorConnectionRecord(*durableConnection)) {
+            return;
+        }
+    }
+
     m_undone = m_graph->setConnectionMetadata(m_connectionId,
                                               m_oldConnectionClassId,
                                               m_oldStatus,
                                               m_oldAlternatives);
-    if (m_undone && m_editorMutationTarget) {
-        if (const Connection* restored = m_graph->getConnection(m_connectionId)) {
-            m_editorMutationTarget->upsertEditorConnectionRecord(*restored);
-        }
+    if (!m_undone && m_editorMutationTarget) {
+        const bool restored = m_editorMutationTarget->upsertEditorConnectionRecord(*connection);
+        Q_UNUSED(restored);
     }
 }

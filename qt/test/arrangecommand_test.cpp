@@ -2,6 +2,7 @@
 #include "commands/arrangecommand.h"
 #include "graph/graph.h"
 #include "modules/moduleregistry.h"
+#include "project/editormutationtarget.h"
 
 #include <QCoreApplication>
 #include <iostream>
@@ -15,6 +16,16 @@ void require(bool condition, const char* message) {
         throw std::runtime_error(message);
     }
 }
+
+class FailingEditorMutationTarget final : public EditorMutationTarget {
+public:
+    bool failModuleUpsert = false;
+
+    bool upsertEditorModuleRecord(const Module&) override { return !failModuleUpsert; }
+    bool removeEditorModuleRecord(const QString&) override { return true; }
+    bool upsertEditorConnectionRecord(const Connection&) override { return true; }
+    bool removeEditorConnectionRecord(const QString&) override { return true; }
+};
 
 int intParameter(const Module* module, const QString& name) {
     require(module != nullptr, "module should exist");
@@ -104,6 +115,38 @@ void testArrangeUsesRouterConnectionsInsteadOfExternalIdCoordinates() {
             "east/west connection should place the target router to the right even when external ids disagree");
 }
 
+void testArrangeRejectsDurableUpsertFailureWithoutGraphDivergence() {
+    registerArrangeRouterType();
+
+    Graph graph;
+    require(graph.addModule(makeRouter(QStringLiteral("left_runtime"),
+                                       QStringLiteral("xp_0_1"),
+                                       220,
+                                       0)),
+            "failed to add left router");
+    require(graph.addModule(makeRouter(QStringLiteral("right_runtime"),
+                                       QStringLiteral("xp_0_0"),
+                                       0,
+                                       0)),
+            "failed to add right router");
+    graph.addConnection(std::make_unique<Connection>(
+        QStringLiteral("left_to_right"),
+        PortRef{QStringLiteral("left_runtime"), QStringLiteral("east")},
+        PortRef{QStringLiteral("right_runtime"), QStringLiteral("west")}));
+
+    FailingEditorMutationTarget target;
+    target.failModuleUpsert = true;
+    ArrangeCommand command(&graph, &target);
+    command.execute();
+
+    require(!command.wasExecuted(),
+            "durable module upsert failure should reject arrange command");
+    require(intParameter(graph.getModule(QStringLiteral("left_runtime")), QStringLiteral("x")) == 220,
+            "durable module upsert failure should keep left router x unchanged");
+    require(intParameter(graph.getModule(QStringLiteral("right_runtime")), QStringLiteral("x")) == 0,
+            "durable module upsert failure should keep right router x unchanged");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -111,6 +154,7 @@ int main(int argc, char** argv) {
 
     try {
         testArrangeUsesRouterConnectionsInsteadOfExternalIdCoordinates();
+        testArrangeRejectsDurableUpsertFailureWithoutGraphDivergence();
     } catch (const std::exception& error) {
         std::cerr << "arrangecommand_test failed: " << error.what() << '\n';
         return 1;

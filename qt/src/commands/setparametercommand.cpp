@@ -3,6 +3,21 @@
 
 #include "project/editormutationtarget.h"
 
+namespace {
+
+void applyParameterState(Module* module,
+                         const QString& paramName,
+                         bool parameterExisted,
+                         const Parameter::Value& value) {
+    if (parameterExisted) {
+        module->setParameter(paramName, value);
+    } else {
+        module->removeParameter(paramName);
+    }
+}
+
+} // namespace
+
 SetParameterCommand::SetParameterCommand(Graph* graph, const QString& moduleId,
                                          const QString& paramName,
                                          Parameter::Value newValue,
@@ -17,6 +32,9 @@ SetParameterCommand::SetParameterCommand(Graph* graph, const QString& moduleId,
 void SetParameterCommand::execute() {
     m_executed = false;
     m_undone = false;
+    if (!m_graph) {
+        return;
+    }
     Module* module = m_graph->getModule(m_moduleId);
     if (!module) return;
     const auto& params = module->parameters();
@@ -28,30 +46,35 @@ void SetParameterCommand::execute() {
             return;
         }
     }
-    module->setParameter(m_paramName, m_newValue);
-    if (m_editorMutationTarget && !m_editorMutationTarget->upsertEditorModuleRecord(*module)) {
-        if (m_parameterExisted) {
-            module->setParameter(m_paramName, m_oldValue);
-        } else {
-            module->removeParameter(m_paramName);
+    if (m_editorMutationTarget) {
+        std::unique_ptr<Module> durableModule = module->clone();
+        durableModule->setParameter(m_paramName, m_newValue);
+        if (!m_editorMutationTarget->upsertEditorModuleRecord(*durableModule)) {
+            return;
         }
-        return;
     }
+
+    module->setParameter(m_paramName, m_newValue);
     m_executed = true;
 }
 
 // Restore old parameter value or remove if it didn't exist
 void SetParameterCommand::undo() {
     m_undone = false;
+    if (!m_graph) {
+        return;
+    }
     Module* module = m_graph->getModule(m_moduleId);
     if (!module) return;
-    if (m_parameterExisted) {
-        module->setParameter(m_paramName, m_oldValue);
-    } else {
-        module->removeParameter(m_paramName);
-    }
+
     if (m_editorMutationTarget) {
-        m_editorMutationTarget->upsertEditorModuleRecord(*module);
+        std::unique_ptr<Module> durableModule = module->clone();
+        applyParameterState(durableModule.get(), m_paramName, m_parameterExisted, m_oldValue);
+        if (!m_editorMutationTarget->upsertEditorModuleRecord(*durableModule)) {
+            return;
+        }
     }
+
+    applyParameterState(module, m_paramName, m_parameterExisted, m_oldValue);
     m_undone = true;
 }

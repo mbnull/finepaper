@@ -42,7 +42,8 @@ private:
 
     void initializeSnapshots();
     void captureCurrentState(QHash<QString, ModuleSnapshot>& snapshots) const;
-    void applyState(const QHash<QString, ModuleSnapshot>& snapshots) const;
+    void applySnapshot(Module* module, const ModuleSnapshot& snapshot) const;
+    bool applyState(const QHash<QString, ModuleSnapshot>& snapshots) const;
     QHash<QString, ModulePlacement> buildPlacements() const;
 
     Graph* m_graph;

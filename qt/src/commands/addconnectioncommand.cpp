@@ -56,14 +56,16 @@ void AddConnectionCommand::execute() {
 // Remove connection and restore ownership
 void AddConnectionCommand::undo() {
     m_undone = false;
-    if (!m_graph) {
+    if (!m_graph || m_connectionId.isEmpty() || !m_graph->getConnection(m_connectionId)) {
         return;
     }
+    if (m_editorMutationTarget &&
+        !m_editorMutationTarget->removeEditorConnectionRecord(m_connectionId)) {
+        return;
+    }
+
     m_connection = m_graph->takeConnection(m_connectionId);
     if (m_connection) {
-        if (m_editorMutationTarget) {
-            m_editorMutationTarget->removeEditorConnectionRecord(m_connectionId);
-        }
         m_undone = true;
     }
 }

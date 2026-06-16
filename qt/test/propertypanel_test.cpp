@@ -5,6 +5,7 @@
 #include "project/ipinstanceparameteradapter.h"
 #include "project/ipinstancestate.h"
 #include "project/projectdocument.h"
+#include "project/editormutationtarget.h"
 #include "project/projectstateservice.h"
 #include "widgets/collapsiblesection.h"
 
@@ -49,6 +50,19 @@ bool hasLabel(PropertyPanel& panel, const QString& text) {
     return false;
 }
 
+class FailingEditorMutationTarget final : public EditorMutationTarget {
+public:
+    bool failModuleUpsert = false;
+    bool failModuleRemove = false;
+    bool failConnectionUpsert = false;
+    bool failConnectionRemove = false;
+
+    bool upsertEditorModuleRecord(const Module&) override { return !failModuleUpsert; }
+    bool removeEditorModuleRecord(const QString&) override { return !failModuleRemove; }
+    bool upsertEditorConnectionRecord(const Connection&) override { return !failConnectionUpsert; }
+    bool removeEditorConnectionRecord(const QString&) override { return !failConnectionRemove; }
+};
+
 const Connection* findConnection(const Graph& graph, const QString& connectionId) {
     for (const std::unique_ptr<Connection>& connection : graph.connections()) {
         if (connection->id() == connectionId) {
@@ -56,6 +70,17 @@ const Connection* findConnection(const Graph& graph, const QString& connectionId
         }
     }
     return nullptr;
+}
+
+int intParameter(const Graph& graph, const QString& moduleId, const QString& name) {
+    const Module* module = graph.getModule(moduleId);
+    require(module != nullptr, "module should exist");
+    const auto it = module->parameters().find(name);
+    require(it != module->parameters().end(), "int parameter should exist");
+    const Parameter::Value parameterValue = it.value().value();
+    const auto* value = std::get_if<int>(&parameterValue);
+    require(value != nullptr, "parameter should be an int");
+    return *value;
 }
 
 QString ambiguityLogMessage(const Connection& connection) {
@@ -269,6 +294,38 @@ void testIpInstanceSectionWithoutProjectInstanceIsHidden() {
             "hidden IP-instance parameters should not create state implicitly");
 }
 
+void testModuleParameterUndoRejectsDurableUpsertFailureWithoutGraphDivergence() {
+    Graph graph;
+    auto module = std::make_unique<Module>(QStringLiteral("module_0"), QStringLiteral("Demo"));
+    module->setParameter(QStringLiteral("width"), 32);
+    graph.addModule(std::move(module));
+
+    CommandManager commandManager;
+    FailingEditorMutationTarget target;
+    PropertyPanel panel(&graph, nullptr, {}, &commandManager, nullptr, &target);
+    panel.setSelectedModule(QStringLiteral("module_0"));
+
+    QSpinBox* spinBox = panel.findChild<QSpinBox*>();
+    require(spinBox != nullptr, "integer module parameter should use spin box");
+    spinBox->setValue(64);
+    require(intParameter(graph, QStringLiteral("module_0"), QStringLiteral("width")) == 64,
+            "parameter edit should update graph before undo failure setup");
+    const int executedStateId = commandManager.currentStateId();
+
+    target.failModuleUpsert = true;
+    commandManager.undo();
+    QApplication::processEvents();
+
+    require(intParameter(graph, QStringLiteral("module_0"), QStringLiteral("width")) == 64,
+            "failed durable module upsert during undo should leave graph parameter unchanged");
+    require(commandManager.currentStateId() == executedStateId,
+            "failed durable module upsert during undo should not rewind command state");
+    require(commandManager.canUndo(),
+            "failed durable module upsert during undo should keep command available for retry");
+    require(!commandManager.canRedo(),
+            "failed durable module upsert during undo should not populate redo history");
+}
+
 void testAmbiguousConnectionAppearsInPropertyPanelAndLog() {
     Graph graph;
     auto source = std::make_unique<Module>(QStringLiteral("source"), QStringLiteral("Source"));
@@ -363,6 +420,66 @@ void testAmbiguousConnectionAppearsInPropertyPanelAndLog() {
             "redo should clear the selector instead of leaving the undo state visible");
 }
 
+void testConnectionClassUndoRejectsDurableUpsertFailureWithoutGraphDivergence() {
+    Graph graph;
+    auto source = std::make_unique<Module>(QStringLiteral("source"), QStringLiteral("Source"));
+    source->addPort(Port(QStringLiteral("out"), Port::Direction::Output, QStringLiteral("bus"),
+                         QStringLiteral("Out")));
+    auto targetModule = std::make_unique<Module>(QStringLiteral("target"), QStringLiteral("Target"));
+    targetModule->addPort(Port(QStringLiteral("in"), Port::Direction::Input, QStringLiteral("bus"),
+                               QStringLiteral("In")));
+    require(graph.addModule(std::move(source)), "source module should add");
+    require(graph.addModule(std::move(targetModule)), "target module should add");
+    graph.addConnection(std::make_unique<Connection>(
+        QStringLiteral("conn_1"),
+        PortRef{QStringLiteral("source"), QStringLiteral("out")},
+        PortRef{QStringLiteral("target"), QStringLiteral("in")},
+        QStringLiteral("chi_node_interface"),
+        QVector<ConnectionInterfaceRef>{
+            ConnectionInterfaceRef{QStringLiteral("source"), QStringLiteral("out")},
+            ConnectionInterfaceRef{QStringLiteral("target"), QStringLiteral("in")}
+        },
+        QStringLiteral("ambiguous"),
+        QStringList{QStringLiteral("chi_node_interface"), QStringLiteral("monitor_tap")}));
+
+    CommandManager commandManager;
+    FailingEditorMutationTarget target;
+    PropertyPanel panel(&graph, nullptr, {}, &commandManager, nullptr, &target);
+    panel.setSelectedModule(QStringLiteral("conn_1"));
+
+    QComboBox* comboBox = panel.findChild<QComboBox*>(QStringLiteral("connectionClassCombo"));
+    require(comboBox != nullptr, "ambiguous connection class should use a combo box");
+    const int monitorTapIndex = comboBox->findText(QStringLiteral("monitor_tap"));
+    require(monitorTapIndex >= 0,
+            "connection class combo box should include class alternatives");
+    comboBox->setCurrentIndex(monitorTapIndex);
+
+    const Connection* changedConnection = findConnection(graph, QStringLiteral("conn_1"));
+    require(changedConnection != nullptr,
+            "connection class selection should keep the connection in the graph");
+    require(changedConnection->connectionClassId() == QStringLiteral("monitor_tap"),
+            "connection class selection should update the selected connection class");
+    const int executedStateId = commandManager.currentStateId();
+
+    target.failConnectionUpsert = true;
+    commandManager.undo();
+    QApplication::processEvents();
+
+    const Connection* stillChangedConnection = findConnection(graph, QStringLiteral("conn_1"));
+    require(stillChangedConnection != nullptr,
+            "failed durable connection upsert during undo should keep connection in graph");
+    require(stillChangedConnection->connectionClassId() == QStringLiteral("monitor_tap"),
+            "failed durable connection upsert during undo should leave graph connection class unchanged");
+    require(stillChangedConnection->status() == QStringLiteral("valid"),
+            "failed durable connection upsert during undo should leave graph connection status unchanged");
+    require(commandManager.currentStateId() == executedStateId,
+            "failed durable connection upsert during undo should not rewind command state");
+    require(commandManager.canUndo(),
+            "failed durable connection upsert during undo should keep command available for retry");
+    require(!commandManager.canRedo(),
+            "failed durable connection upsert during undo should not populate redo history");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -377,7 +494,9 @@ int main(int argc, char** argv) {
         testUnselectedPanelUsesPersistedCustomIpInstanceId();
         testClearingGraphBeforePanelSelectionClearIsSafe();
         testIpInstanceSectionWithoutProjectInstanceIsHidden();
+        testModuleParameterUndoRejectsDurableUpsertFailureWithoutGraphDivergence();
         testAmbiguousConnectionAppearsInPropertyPanelAndLog();
+        testConnectionClassUndoRejectsDurableUpsertFailureWithoutGraphDivergence();
     } catch (const std::exception& error) {
         std::cerr << "propertypanel_test failed: " << error.what() << '\n';
         return 1;

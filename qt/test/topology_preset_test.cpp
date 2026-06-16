@@ -3,6 +3,7 @@
 #include "graph/graph.h"
 #include "modules/moduleregistry.h"
 #include "modules/moduleprovider.h"
+#include "project/editormutationtarget.h"
 #include "topology/topologypresetbuilder.h"
 
 #include <QDir>
@@ -21,6 +22,19 @@ void require(bool condition, const char* message) {
         throw std::runtime_error(message);
     }
 }
+
+class FailingEditorMutationTarget final : public EditorMutationTarget {
+public:
+    bool failModuleUpsert = false;
+    bool failModuleRemove = false;
+    bool failConnectionUpsert = false;
+    bool failConnectionRemove = false;
+
+    bool upsertEditorModuleRecord(const Module&) override { return !failModuleUpsert; }
+    bool removeEditorModuleRecord(const QString&) override { return !failModuleRemove; }
+    bool upsertEditorConnectionRecord(const Connection&) override { return !failConnectionUpsert; }
+    bool removeEditorConnectionRecord(const QString&) override { return !failConnectionRemove; }
+};
 
 int intParameter(const Module* module, const QString& name) {
     require(module != nullptr, "module should exist");
@@ -1049,6 +1063,42 @@ void testTopologyPresetCommandIsUndoableAndRedoable() {
     require(manager.currentStateId() == dirtyState, "redo should restore dirty command state");
 }
 
+void testTopologyPresetUndoRejectsDurableRemoveFailureWithoutGraphDivergence() {
+    ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
+    require(registry.registerType(routerType(QStringLiteral("XP"), QStringLiteral("finepaper.noc"))),
+            "router type should register");
+
+    Graph graph;
+    CommandManager manager;
+    FailingEditorMutationTarget target;
+    TopologyPresetRequest request;
+    request.ipcoreId = QStringLiteral("finepaper.noc");
+    request.instanceId = QStringLiteral("noc_0");
+    request.preset = meshPreset();
+    request.parameters.insert(QStringLiteral("rows"), 2);
+    request.parameters.insert(QStringLiteral("cols"), 2);
+
+    manager.executeCommand(std::make_unique<TopologyPresetCommand>(&graph, &registry, request, &target));
+
+    require(graph.modules().size() == 4, "command should create mesh modules before undo failure setup");
+    require(graph.connections().size() == 4, "command should create mesh connections before undo failure setup");
+    const int executedStateId = manager.currentStateId();
+
+    target.failConnectionRemove = true;
+    manager.undo();
+
+    require(graph.modules().size() == 4,
+            "failed durable topology connection remove should leave graph modules in place");
+    require(graph.connections().size() == 4,
+            "failed durable topology connection remove should leave graph connections in place");
+    require(manager.currentStateId() == executedStateId,
+            "failed durable topology remove should not rewind command state");
+    require(manager.canUndo(),
+            "failed durable topology remove should keep command available for retry");
+    require(!manager.canRedo(),
+            "failed durable topology remove should not populate redo history");
+}
+
 void testTopologyPresetCommandStampsModuleOwnership() {
     ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
     require(registry.registerType(routerType(QStringLiteral("XP"), QStringLiteral("finepaper.noc"))),
@@ -1114,6 +1164,7 @@ int main(int argc, char** argv) {
         testMeshPresetCanRepeatAcrossSameIpcoreInstances();
         testRepositoryRaveNoCMeshPresetCreatesInternalTiles();
         testTopologyPresetCommandIsUndoableAndRedoable();
+        testTopologyPresetUndoRejectsDurableRemoveFailureWithoutGraphDivergence();
         testTopologyPresetCommandStampsModuleOwnership();
         testPresetRejectsMissingInstanceId();
     } catch (const std::exception& error) {

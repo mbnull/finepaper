@@ -48,11 +48,16 @@ void AddModuleCommand::execute() {
 // Remove module from graph and restore ownership
 void AddModuleCommand::undo() {
     m_undone = false;
+    if (!m_graph || m_moduleId.isEmpty() || !m_graph->getModule(m_moduleId)) {
+        return;
+    }
+    if (m_editorMutationTarget &&
+        !m_editorMutationTarget->removeEditorModuleRecord(m_moduleId)) {
+        return;
+    }
+
     m_module = m_graph->takeModule(m_moduleId);
     if (m_module) {
-        if (m_editorMutationTarget) {
-            m_editorMutationTarget->removeEditorModuleRecord(m_moduleId);
-        }
         m_undone = true;
     }
 }

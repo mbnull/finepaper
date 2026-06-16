@@ -9,7 +9,7 @@
 #include "panels/logpanel.h"
 #include "project/ipinstancestate.h"
 #include "project/projectstateservice.h"
-#include "validation/drcrunner.h"
+#include "support/legacy_drc/drcrunner.h"
 #include "validation/projectvalidationrunner.h"
 #include "validation/validationmanager.h"
 #include "validation/validator.h"

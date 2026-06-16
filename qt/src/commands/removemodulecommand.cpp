@@ -84,6 +84,31 @@ std::unique_ptr<Connection> cloneConnection(const Connection& connection) {
     return connection.clone();
 }
 
+void restoreConnectionRecords(EditorMutationTarget* target,
+                              const Graph* graph,
+                              const std::vector<QString>& connectionIds) {
+    if (!target || !graph) {
+        return;
+    }
+    for (const QString& connectionId : connectionIds) {
+        if (const Connection* connection = graph->getConnection(connectionId)) {
+            const bool restored = target->upsertEditorConnectionRecord(*connection);
+            Q_UNUSED(restored);
+        }
+    }
+}
+
+void removeConnectionRecords(EditorMutationTarget* target,
+                             const std::vector<QString>& connectionIds) {
+    if (!target) {
+        return;
+    }
+    for (const QString& connectionId : connectionIds) {
+        const bool removed = target->removeEditorConnectionRecord(connectionId);
+        Q_UNUSED(removed);
+    }
+}
+
 } // namespace
 
 RemoveModuleCommand::RemoveModuleCommand(Graph* graph,
@@ -97,7 +122,7 @@ RemoveModuleCommand::RemoveModuleCommand(Graph* graph,
 void RemoveModuleCommand::execute() {
     m_executed = false;
     m_undone = false;
-    if (!m_graph->getModule(m_moduleId)) return;
+    if (!m_graph || !m_graph->getModule(m_moduleId)) return;
 
     std::vector<QString> connIds;
     for (const auto& conn : m_graph->connections()) {
@@ -105,16 +130,28 @@ void RemoveModuleCommand::execute() {
             connIds.push_back(conn->id());
         }
     }
+    if (m_editorMutationTarget) {
+        std::vector<QString> removedConnectionRecords;
+        for (const QString& id : connIds) {
+            if (!m_editorMutationTarget->removeEditorConnectionRecord(id)) {
+                restoreConnectionRecords(m_editorMutationTarget, m_graph, removedConnectionRecords);
+                return;
+            }
+            removedConnectionRecords.push_back(id);
+        }
+        if (!m_editorMutationTarget->removeEditorModuleRecord(m_moduleId)) {
+            restoreConnectionRecords(m_editorMutationTarget, m_graph, removedConnectionRecords);
+            return;
+        }
+    }
+
     for (const auto& id : connIds) {
         if (auto conn = m_graph->takeConnection(id)) {
             m_connections.push_back(std::move(conn));
         }
     }
     m_module = m_graph->takeModule(m_moduleId);
-    if (m_editorMutationTarget && m_module) {
-        m_editorMutationTarget->removeEditorModuleRecord(m_moduleId);
-    }
-    m_executed = true;
+    m_executed = (m_module != nullptr);
 }
 
 // Restore module and its connections
@@ -128,13 +165,39 @@ void RemoveModuleCommand::undo() {
     }
 
     const QString moduleId = m_module->id();
+    std::vector<QString> persistedConnectionIds;
+    if (m_editorMutationTarget) {
+        if (!m_editorMutationTarget->upsertEditorModuleRecord(*m_module)) {
+            return;
+        }
+        for (const auto& conn : m_connections) {
+            if (!conn || !m_editorMutationTarget->upsertEditorConnectionRecord(*conn)) {
+                removeConnectionRecords(m_editorMutationTarget, persistedConnectionIds);
+                const bool removed = m_editorMutationTarget->removeEditorModuleRecord(moduleId);
+                Q_UNUSED(removed);
+                return;
+            }
+            persistedConnectionIds.push_back(conn->id());
+        }
+    }
+
     if (!m_graph->insertModule(m_module->clone())) {
+        if (m_editorMutationTarget) {
+            removeConnectionRecords(m_editorMutationTarget, persistedConnectionIds);
+            const bool removed = m_editorMutationTarget->removeEditorModuleRecord(moduleId);
+            Q_UNUSED(removed);
+        }
         return;
     }
 
     for (const auto& conn : m_connections) {
         if (!conn) {
             m_graph->removeModule(moduleId);
+            if (m_editorMutationTarget) {
+                removeConnectionRecords(m_editorMutationTarget, persistedConnectionIds);
+                const bool removed = m_editorMutationTarget->removeEditorModuleRecord(moduleId);
+                Q_UNUSED(removed);
+            }
             return;
         }
 
@@ -143,23 +206,16 @@ void RemoveModuleCommand::undo() {
         const qsizetype after = static_cast<qsizetype>(m_graph->connections().size());
         if (after != before + 1) {
             m_graph->removeModule(moduleId);
+            if (m_editorMutationTarget) {
+                removeConnectionRecords(m_editorMutationTarget, persistedConnectionIds);
+                const bool removed = m_editorMutationTarget->removeEditorModuleRecord(moduleId);
+                Q_UNUSED(removed);
+            }
             return;
         }
     }
 
     m_module.reset();
     m_connections.clear();
-    if (m_editorMutationTarget) {
-        if (const Module* module = m_graph->getModule(moduleId)) {
-            m_editorMutationTarget->upsertEditorModuleRecord(*module);
-        }
-        for (const auto& connection : m_graph->connections()) {
-            if (connection &&
-                (connection->source().moduleId == moduleId ||
-                 connection->target().moduleId == moduleId)) {
-                m_editorMutationTarget->upsertEditorConnectionRecord(*connection);
-            }
-        }
-    }
     m_undone = true;
 }

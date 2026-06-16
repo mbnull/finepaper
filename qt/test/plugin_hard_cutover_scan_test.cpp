@@ -166,6 +166,19 @@ QString functionBody(const QString& source, const QString& signature, const QStr
     return {};
 }
 
+QString sectionBetween(const QString& source,
+                       const QString& startNeedle,
+                       const QString& endNeedle,
+                       const QString& context) {
+    const int start = source.indexOf(startNeedle);
+    require(start >= 0, context + QStringLiteral(" should contain ") + startNeedle);
+
+    const int end = source.indexOf(endNeedle, start + startNeedle.size());
+    require(end > start, context + QStringLiteral(" should contain ") + endNeedle);
+
+    return source.mid(start, end - start);
+}
+
 QStringList runtimeSourceFiles(const QStringList& roots) {
     QStringList files;
     const QStringList patterns{
@@ -321,6 +334,68 @@ void testProjectValidationRunnerUsesProjectDesignNotGraphOrBasicValidator() {
     }
 }
 
+void testLegacyGraphDrcRunnerIsNotInProductValidationRuntime() {
+    const QString xmake = readText(QStringLiteral("qt/xmake.lua"));
+    const QString qtTarget = sectionBetween(xmake,
+                                            QStringLiteral("target(\"qt\")"),
+                                            QStringLiteral("local function add_qt_test_target"),
+                                            QStringLiteral("qt product target"));
+    requireNotContains(qtTarget,
+                       QStringLiteral("drcrunner"),
+                       QStringLiteral("qt product target"));
+
+    const QStringList legacyDrcTokens{
+        QStringLiteral("DRCRunner"),
+        QStringLiteral("IpCoreGraphExporter"),
+        QStringLiteral("IpCoreGraphExportRequest"),
+        QStringLiteral("Duplicate XP"),
+        QStringLiteral("Duplicate endpoint"),
+        QStringLiteral("XP\\\\s+"),
+        QStringLiteral("Endpoint\\\\s+"),
+        QStringLiteral("XP .+:"),
+        QStringLiteral("Endpoint .+:")
+    };
+
+    const QStringList roots{
+        QStringLiteral("qt/inc/validation"),
+        QStringLiteral("qt/src/validation")
+    };
+    for (const QString& path : runtimeSourceFiles(roots)) {
+        requireFileDoesNotContain(path, legacyDrcTokens);
+    }
+}
+
+void testEditorMutationTargetCommandResultsAreChecked() {
+    const QStringList commandFiles{
+        QStringLiteral("qt/src/commands/addconnectioncommand.cpp"),
+        QStringLiteral("qt/src/commands/addmodulecommand.cpp"),
+        QStringLiteral("qt/src/commands/arrangecommand.cpp"),
+        QStringLiteral("qt/src/commands/removeconnectioncommand.cpp"),
+        QStringLiteral("qt/src/commands/removemodulecommand.cpp"),
+        QStringLiteral("qt/src/commands/setconnectionclasscommand.cpp"),
+        QStringLiteral("qt/src/commands/setparametercommand.cpp"),
+        QStringLiteral("qt/src/commands/topologypresetcommand.cpp")
+    };
+    const QStringList ignoredPrefixes{
+        QStringLiteral("m_editorMutationTarget->"),
+        QStringLiteral("editorMutationTarget->"),
+        QStringLiteral("target->")
+    };
+
+    for (const QString& path : commandFiles) {
+        const QStringList lines = readText(path).split(QLatin1Char('\n'));
+        for (int index = 0; index < lines.size(); ++index) {
+            const QString trimmed = lines.at(index).trimmed();
+            for (const QString& prefix : ignoredPrefixes) {
+                require(!trimmed.startsWith(prefix),
+                        QStringLiteral("%1:%2 must branch on EditorMutationTarget result")
+                            .arg(path)
+                            .arg(index + 1));
+            }
+        }
+    }
+}
+
 void testRuntimeHasNoConcreteVendorModuleHardcoding() {
     const QStringList forbiddenTokens{
         QStringLiteral("vendor.meshnoc"),
@@ -449,6 +524,8 @@ int main(int argc, char** argv) {
     testProjectGenerationRunnerDoesNotReadRequestInstancesSideChannel();
     testMainWindowDispatchesTopologyInteractionsWithoutPresetSemantics();
     testProjectValidationRunnerUsesProjectDesignNotGraphOrBasicValidator();
+    testLegacyGraphDrcRunnerIsNotInProductValidationRuntime();
+    testEditorMutationTargetCommandResultsAreChecked();
     testRuntimeHasNoConcreteVendorModuleHardcoding();
     testCompletionReportUsesHardCutoverVerdict();
     testFinalReportsAndReadmeRegisterHardCutoverGate();

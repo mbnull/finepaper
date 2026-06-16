@@ -1,6 +1,7 @@
 // Graph integration-style tests for topology and structural behavior.
 #include "app/appsettings.h"
 #include "commands/addconnectioncommand.h"
+#include "commands/addmodulecommand.h"
 #include "commands/commandmanager.h"
 #include "commands/removeconnectioncommand.h"
 #include "commands/removemodulecommand.h"
@@ -9,6 +10,7 @@
 #include "modules/moduleregistry.h"
 #include "modules/moduleprovider.h"
 #include "common/portlayout.h"
+#include "project/editormutationtarget.h"
 
 #include <QByteArray>
 #include <QCoreApplication>
@@ -32,6 +34,19 @@ static_assert(std::is_same_v<decltype(std::declval<Graph&>().getModule(QString()
 static_assert(std::is_same_v<decltype(std::declval<const Graph&>().getModule(QString())), const Module*>);
 static_assert(std::is_same_v<decltype(std::declval<Graph&>().getConnection(QString())), Connection*>);
 static_assert(std::is_same_v<decltype(std::declval<const Graph&>().getConnection(QString())), const Connection*>);
+
+class FailingEditorMutationTarget final : public EditorMutationTarget {
+public:
+    bool failModuleUpsert = false;
+    bool failModuleRemove = false;
+    bool failConnectionUpsert = false;
+    bool failConnectionRemove = false;
+
+    bool upsertEditorModuleRecord(const Module&) override { return !failModuleUpsert; }
+    bool removeEditorModuleRecord(const QString&) override { return !failModuleRemove; }
+    bool upsertEditorConnectionRecord(const Connection&) override { return !failConnectionUpsert; }
+    bool removeEditorConnectionRecord(const QString&) override { return !failConnectionRemove; }
+};
 
 std::unique_ptr<Module> makeModule(const QString& id,
                                    const QString& type,
@@ -201,6 +216,145 @@ void testAddConnectionCommandRedoBuildsFreshRuleService() {
     commandManager.redo();
     require(providerCalls == 2, "redo should build a fresh rule service instead of reusing a stale pointer");
     require(graph.connections().size() == 1, "redo should restore the connection");
+}
+
+void testAddModuleCommandUndoRejectsDurableRemoveFailureWithoutGraphDivergence() {
+    Graph graph;
+    CommandManager commandManager;
+    FailingEditorMutationTarget target;
+    auto module = makeModule("source",
+                             "Endpoint",
+                             {Port("out", Port::Direction::Output, "endpoint", "out")});
+    module->setInstanceId(QStringLiteral("source_0"));
+
+    auto command = std::make_unique<AddModuleCommand>(
+        &graph,
+        std::move(module),
+        QString(),
+        QString(),
+        &target);
+
+    std::unique_ptr<Command> rejected = commandManager.executeCommand(std::move(command));
+    require(rejected == nullptr, "add module command should execute before undo failure setup");
+    require(graph.getModule("source") != nullptr, "execute should add the module");
+    const int executedStateId = commandManager.currentStateId();
+
+    target.failModuleRemove = true;
+    commandManager.undo();
+
+    require(graph.getModule("source") != nullptr,
+            "failed durable module remove during undo should leave graph module in place");
+    require(commandManager.currentStateId() == executedStateId,
+            "failed durable module remove during undo should not rewind command state");
+    require(commandManager.canUndo(),
+            "failed durable module remove during undo should keep command available for retry");
+    require(!commandManager.canRedo(),
+            "failed durable module remove during undo should not populate redo history");
+}
+
+void testRemoveConnectionCommandExecuteRejectsDurableRemoveFailureWithoutGraphDivergence() {
+    Graph graph;
+    require(graph.addModule(makeModule(
+        "source",
+        "Endpoint",
+        {Port("out", Port::Direction::Output, "endpoint", "out")})),
+        "failed to add source module");
+    require(graph.addModule(makeModule(
+        "target",
+        "Endpoint",
+        {Port("in", Port::Direction::Input, "endpoint", "in")})),
+        "failed to add target module");
+    graph.addConnection(std::make_unique<Connection>(
+        QStringLiteral("link"),
+        PortRef{"source", "out"},
+        PortRef{"target", "in"}));
+
+    CommandManager commandManager;
+    FailingEditorMutationTarget target;
+    target.failConnectionRemove = true;
+
+    std::unique_ptr<Command> rejected = commandManager.executeCommand(
+        std::make_unique<RemoveConnectionCommand>(&graph, QStringLiteral("link"), &target));
+
+    require(rejected != nullptr,
+            "durable connection remove failure should reject remove connection command");
+    require(graph.getConnection(QStringLiteral("link")) != nullptr,
+            "durable connection remove failure should leave graph connection in place");
+    require(!commandManager.canUndo(),
+            "rejected remove connection command should not enter undo history");
+}
+
+void testRemoveConnectionCommandUndoRejectsDurableUpsertFailureWithoutGraphDivergence() {
+    Graph graph;
+    require(graph.addModule(makeModule(
+        "source",
+        "Endpoint",
+        {Port("out", Port::Direction::Output, "endpoint", "out")})),
+        "failed to add source module");
+    require(graph.addModule(makeModule(
+        "target",
+        "Endpoint",
+        {Port("in", Port::Direction::Input, "endpoint", "in")})),
+        "failed to add target module");
+    graph.addConnection(std::make_unique<Connection>(
+        QStringLiteral("link"),
+        PortRef{"source", "out"},
+        PortRef{"target", "in"}));
+
+    CommandManager commandManager;
+    FailingEditorMutationTarget target;
+    std::unique_ptr<Command> rejected = commandManager.executeCommand(
+        std::make_unique<RemoveConnectionCommand>(&graph, QStringLiteral("link"), &target));
+    require(rejected == nullptr, "remove connection command should execute before undo failure setup");
+    require(graph.getConnection(QStringLiteral("link")) == nullptr,
+            "execute should remove the connection");
+    const int executedStateId = commandManager.currentStateId();
+
+    target.failConnectionUpsert = true;
+    commandManager.undo();
+
+    require(graph.getConnection(QStringLiteral("link")) == nullptr,
+            "failed durable connection upsert during undo should leave graph connection removed");
+    require(commandManager.currentStateId() == executedStateId,
+            "failed durable connection upsert during undo should not rewind command state");
+    require(commandManager.canUndo(),
+            "failed durable connection upsert during undo should keep command available for retry");
+    require(!commandManager.canRedo(),
+            "failed durable connection upsert during undo should not populate redo history");
+}
+
+void testRemoveModuleCommandExecuteRejectsDurableRemoveFailureWithoutGraphDivergence() {
+    Graph graph;
+    require(graph.addModule(makeModule(
+        "source",
+        "Endpoint",
+        {Port("out", Port::Direction::Output, "endpoint", "out")})),
+        "failed to add source module");
+    require(graph.addModule(makeModule(
+        "target",
+        "Endpoint",
+        {Port("in", Port::Direction::Input, "endpoint", "in")})),
+        "failed to add target module");
+    graph.addConnection(std::make_unique<Connection>(
+        QStringLiteral("link"),
+        PortRef{"source", "out"},
+        PortRef{"target", "in"}));
+
+    CommandManager commandManager;
+    FailingEditorMutationTarget target;
+    target.failModuleRemove = true;
+
+    std::unique_ptr<Command> rejected = commandManager.executeCommand(
+        std::make_unique<RemoveModuleCommand>(&graph, QStringLiteral("source"), &target));
+
+    require(rejected != nullptr,
+            "durable module remove failure should reject remove module command");
+    require(graph.getModule(QStringLiteral("source")) != nullptr,
+            "durable module remove failure should leave graph module in place");
+    require(graph.getConnection(QStringLiteral("link")) != nullptr,
+            "durable module remove failure should leave incident graph connection in place");
+    require(!commandManager.canUndo(),
+            "rejected remove module command should not enter undo history");
 }
 
 void testRemoveConnectionCommandUndoRetainsSavedConnectionForRetry() {
@@ -950,6 +1104,10 @@ int main(int argc, char** argv) {
         testGraphConnectionValidationRejectsOnlyExactDuplicates();
         testInoutBusConnectionsAreValid();
         testAddConnectionCommandRedoBuildsFreshRuleService();
+        testAddModuleCommandUndoRejectsDurableRemoveFailureWithoutGraphDivergence();
+        testRemoveConnectionCommandExecuteRejectsDurableRemoveFailureWithoutGraphDivergence();
+        testRemoveConnectionCommandUndoRejectsDurableUpsertFailureWithoutGraphDivergence();
+        testRemoveModuleCommandExecuteRejectsDurableRemoveFailureWithoutGraphDivergence();
         testRemoveConnectionCommandUndoRetainsSavedConnectionForRetry();
         testRemoveModuleCommandUndoRetainsSavedStateForRetryAfterRestoreConflict();
         testInoutPortsCannotBeReusedAcrossConnectionSides();
