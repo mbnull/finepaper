@@ -1,5 +1,5 @@
 // Ipcraft V1 FlowRunner process security contract tests.
-#include "graph/graph.h"
+#include "ipcraft/core/project_design.h"
 #include "ipcraft/flowrunner.h"
 #include "project/ipinstancestate.h"
 #include "validation/projectvalidationrunner.h"
@@ -522,16 +522,24 @@ void testValidateProjectDoesNotRunFlow() {
                         .arg(markerPath)
                         .toUtf8());
 
-    Graph graph;
     IpCatalogEntry entry;
     entry.id = QStringLiteral("vendor.example.flow");
     entry.drc.command = scriptPath;
     ProjectIpInstanceRecord instance;
     instance.ipcoreId = entry.id;
     instance.instanceId = QStringLiteral("ip0");
+    ipcraft::core::ProjectDesign design;
+    design.id = QStringLiteral("project_0");
+    design.name = QStringLiteral("Project 0");
+    design.packages.append(ipcraft::core::PackageRef{entry.id, QStringLiteral("1.0")});
+    ipcraft::core::ComponentInstance component;
+    component.id = instance.instanceId;
+    component.type = QStringLiteral("Tile");
+    component.packageRef = QStringLiteral("vendor.example.flow@1.0");
+    design.components.append(component);
 
     const QList<ValidationResult> ignored =
-        ProjectValidationRunner().validate(&graph, QList<IpCatalogEntry>{entry}, {instance});
+        ProjectValidationRunner().validate(&design, QList<IpCatalogEntry>{entry}, {instance});
 
     require(!QFileInfo::exists(markerPath),
             "default project validation must not execute external DRC/flow commands");

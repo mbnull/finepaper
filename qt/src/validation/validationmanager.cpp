@@ -43,7 +43,7 @@ void ValidationManager::runValidation(const QString& projectPath, const QString&
     const QVector<ProjectIpInstanceRecord> instances =
         m_projectStateService ? m_projectStateService->ipInstanceRecords() : QVector<ProjectIpInstanceRecord>{};
     const ProjectValidationReport staticReport =
-        m_projectValidationRunner->validateDetailed(m_graph, entries, instances);
+        m_projectValidationRunner->validateDetailed(m_projectDesign, entries, instances);
 
     ProjectExternalValidationRequest externalRequest;
     externalRequest.projectDesign = m_projectDesign;

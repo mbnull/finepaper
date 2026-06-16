@@ -244,6 +244,31 @@ void testProjectGenerationRequestHasNoGraphPointer() {
     }
 }
 
+void testProjectValidationRunnerUsesProjectDesignNotGraphOrBasicValidator() {
+    const QString header = readText(QStringLiteral("qt/inc/validation/projectvalidationrunner.h"));
+    const QString source = readText(QStringLiteral("qt/src/validation/projectvalidationrunner.cpp"));
+    const QString combined = header + source;
+
+    requireContains(combined,
+                    QStringLiteral("ProjectDesign"),
+                    QStringLiteral("ProjectValidationRunner"));
+    requireContains(source,
+                    QStringLiteral("validateProjectDesign"),
+                    QStringLiteral("ProjectValidationRunner"));
+
+    const QStringList forbiddenTokens{
+        QStringLiteral("Graph*"),
+        QStringLiteral("Graph *"),
+        QStringLiteral("const Graph"),
+        QStringLiteral("BasicValidator"),
+        QStringLiteral("\"graph/graph.h\""),
+        QStringLiteral("\"validation/validator.h\"")
+    };
+    for (const QString& token : forbiddenTokens) {
+        requireNotContains(combined, token, QStringLiteral("ProjectValidationRunner"));
+    }
+}
+
 void testRuntimeHasNoConcreteVendorModuleHardcoding() {
     const QStringList forbiddenTokens{
         QStringLiteral("vendor.meshnoc"),
@@ -369,6 +394,7 @@ int main(int argc, char** argv) {
     testPackagePluginDoesNotKnowNoCPluginOrNoCSchema();
     testNoCPluginDoesNotKnowConcreteIpPackagesOrModules();
     testProjectGenerationRequestHasNoGraphPointer();
+    testProjectValidationRunnerUsesProjectDesignNotGraphOrBasicValidator();
     testRuntimeHasNoConcreteVendorModuleHardcoding();
     testCompletionReportUsesHardCutoverVerdict();
     testFinalReportsAndReadmeRegisterHardCutoverGate();

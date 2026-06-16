@@ -10,7 +10,9 @@
 #include <QSet>
 #include <QVector>
 
-class Graph;
+namespace ipcraft::core {
+struct ProjectDesign;
+}
 
 struct ProjectValidationReport {
     QList<ValidationResult> diagnostics;
@@ -22,10 +24,10 @@ struct ProjectValidationReport {
 
 class ProjectValidationRunner {
 public:
-    QList<ValidationResult> validate(const Graph* graph,
+    QList<ValidationResult> validate(const ipcraft::core::ProjectDesign* projectDesign,
                                      const QList<IpCatalogEntry>& entries,
                                      const QVector<ProjectIpInstanceRecord>& instances) const;
-    ProjectValidationReport validateDetailed(const Graph* graph,
+    ProjectValidationReport validateDetailed(const ipcraft::core::ProjectDesign* projectDesign,
                                              const QList<IpCatalogEntry>& entries,
                                              const QVector<ProjectIpInstanceRecord>& instances) const;
 };
