@@ -657,6 +657,10 @@ void ProjectGenerationRunner::addGenerationFlowProvider(
 }
 
 ProjectGenerationResult ProjectGenerationRunner::generate(const ProjectGenerationRequest& request) const {
+    if (!request.projectDesign) {
+        return requestFailure(QStringLiteral("Project design is required for generation."));
+    }
+
     IpcraftBuiltInValidator builtInValidator;
     const IpcraftBuiltInValidator::Result builtInResult =
         builtInValidator.validate(nullptr,

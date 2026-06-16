@@ -757,6 +757,36 @@ void testGeneratesEveryProjectInstanceIntoSeparateOutputDirectories() {
             "project snapshot should include all generation-time IP instance state");
 }
 
+void testGenerationRequiresProjectDesignSource() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "temporary directory should be valid");
+    QDir root(tempDir.path());
+
+    const QString ipcoreId = QStringLiteral("finepaper.requires_design");
+    const QVector<ProjectIpInstanceRecord> instances{
+        instanceRecord(ipcoreId,
+                       QStringLiteral("requires_design_0"),
+                       QStringLiteral("requires-design-marker"))
+    };
+
+    ProjectGenerationRequest request;
+    request.projectPath = root.filePath(QStringLiteral("project/requires_design.fpproj"));
+    request.designName = QStringLiteral("requires_design");
+    request.catalogEntries = {
+        createCopyingFlowPackage(root, ipcoreId, QStringLiteral("Tile"))
+    };
+    request.instances = instances;
+
+    const ProjectGenerationResult result = ProjectGenerationRunner().generate(request);
+
+    require(!result.success, "missing ProjectDesign should fail generation");
+    require(result.error.contains(QStringLiteral("project design"), Qt::CaseInsensitive) ||
+                result.error.contains(QStringLiteral("source design"), Qt::CaseInsensitive),
+            "missing ProjectDesign error should name the project/source design");
+    require(!QFileInfo::exists(root.filePath(QStringLiteral("project/generated/project-snapshot.fpproj"))),
+            "generation should not synthesize a snapshot when ProjectDesign is missing");
+}
+
 void testGenerationRejectsUnsafeAndDuplicateInstanceOutputKeys() {
     QTemporaryDir tempDir;
     require(tempDir.isValid(), "temporary directory should be valid");
@@ -773,6 +803,9 @@ void testGenerationRejectsUnsafeAndDuplicateInstanceOutputKeys() {
                        QStringLiteral("../escape"),
                        QStringLiteral("unsafe-marker"))
     };
+    const ipcraft::core::ProjectDesign unsafeDesign =
+        projectDesignFor(QStringLiteral("unsafe_design"), unsafeRequest.instances);
+    unsafeRequest.projectDesign = &unsafeDesign;
 
     const ProjectGenerationResult unsafeResult = ProjectGenerationRunner().generate(unsafeRequest);
     require(!unsafeResult.success, "unsafe instance id should fail generation");
@@ -795,6 +828,9 @@ void testGenerationRejectsUnsafeAndDuplicateInstanceOutputKeys() {
                        QStringLiteral("shared_0"),
                        QStringLiteral("beta-marker"))
     };
+    const ipcraft::core::ProjectDesign duplicateDesign =
+        projectDesignFor(QStringLiteral("duplicate_design"), duplicateRequest.instances);
+    duplicateRequest.projectDesign = &duplicateDesign;
 
     const ProjectGenerationResult duplicateResult = ProjectGenerationRunner().generate(duplicateRequest);
     require(!duplicateResult.success, "duplicate instance output keys should fail generation");
@@ -815,6 +851,10 @@ void testGenerationRejectsUnsafeAndDuplicateInstanceOutputKeys() {
                        QStringLiteral("SHARED_1"),
                        QStringLiteral("beta-marker"))
     };
+    const ipcraft::core::ProjectDesign caseFoldedDuplicateDesign =
+        projectDesignFor(QStringLiteral("case_folded_duplicate_design"),
+                         caseFoldedDuplicateRequest.instances);
+    caseFoldedDuplicateRequest.projectDesign = &caseFoldedDuplicateDesign;
 
     const ProjectGenerationResult caseFoldedDuplicateResult =
         ProjectGenerationRunner().generate(caseFoldedDuplicateRequest);
@@ -833,6 +873,10 @@ void testGenerationRejectsUnsafeAndDuplicateInstanceOutputKeys() {
                        QStringLiteral("project-snapshot.fpproj"),
                        QStringLiteral("snapshot-marker"))
     };
+    const ipcraft::core::ProjectDesign reservedSnapshotDesign =
+        projectDesignFor(QStringLiteral("reserved_snapshot_design"),
+                         reservedSnapshotRequest.instances);
+    reservedSnapshotRequest.projectDesign = &reservedSnapshotDesign;
 
     const ProjectGenerationResult reservedSnapshotResult =
         ProjectGenerationRunner().generate(reservedSnapshotRequest);
@@ -864,6 +908,9 @@ void testGenerationFailureAndTimeoutFailWholeResult() {
                        QStringLiteral("fail_0"),
                        QStringLiteral("fail-marker"))
     };
+    const ipcraft::core::ProjectDesign failingDesign =
+        projectDesignFor(QStringLiteral("failing_design"), failingRequest.instances);
+    failingRequest.projectDesign = &failingDesign;
 
     const ProjectGenerationResult failingResult = ProjectGenerationRunner().generate(failingRequest);
     require(!failingResult.success, "nonzero generator should fail the whole generation result");
@@ -890,6 +937,9 @@ void testGenerationFailureAndTimeoutFailWholeResult() {
                        QStringLiteral("slow_0"),
                        QStringLiteral("slow-marker"))
     };
+    const ipcraft::core::ProjectDesign timeoutDesign =
+        projectDesignFor(QStringLiteral("timeout_design"), timeoutRequest.instances);
+    timeoutRequest.projectDesign = &timeoutDesign;
 
     const ProjectGenerationResult timeoutResult = ProjectGenerationRunner().generate(timeoutRequest);
     require(!timeoutResult.success, "timed-out generator should fail the whole generation result");
@@ -925,6 +975,9 @@ void testGenerationManifestExcludesStaleArtifacts() {
                        QStringLiteral("alpha_0"),
                        QStringLiteral("alpha-marker"))
     };
+    const ipcraft::core::ProjectDesign design =
+        projectDesignFor(QStringLiteral("stale_artifacts_design"), request.instances);
+    request.projectDesign = &design;
 
     const ProjectGenerationResult result = ProjectGenerationRunner().generate(request);
     require(result.success, result.error.toLocal8Bit().constData());
@@ -944,7 +997,10 @@ void testGenerationManifestExcludesStaleArtifacts() {
 
 void testGenerationRequiresSavedProjectPath() {
     Graph graph;
+    const ipcraft::core::ProjectDesign design =
+        projectDesignFor(QStringLiteral("unsaved_design"), {});
     ProjectGenerationRequest request;
+    request.projectDesign = &design;
     request.projectPath = QString();
 
     ProjectGenerationRunner runner;
@@ -974,6 +1030,9 @@ void testGenerateEmitsPackageInputsForFlow() {
     request.instances = {
         instanceRecord(ipcoreId, QStringLiteral("alpha_0"), QStringLiteral("alpha-marker"))
     };
+    const ipcraft::core::ProjectDesign design =
+        projectDesignFor(QStringLiteral("package_inputs_design"), request.instances);
+    request.projectDesign = &design;
 
     const ProjectGenerationResult result = ProjectGenerationRunner().generate(request);
 
@@ -1032,6 +1091,9 @@ void testPackageFlowInputPathUsesEmittedInputsManifest() {
     request.instances = {
         instanceRecord(ipcoreId, QStringLiteral("path_0"), QStringLiteral("path-marker"))
     };
+    const ipcraft::core::ProjectDesign design =
+        projectDesignFor(QStringLiteral("flow_input_path_design"), request.instances);
+    request.projectDesign = &design;
 
     const ProjectGenerationResult result = ProjectGenerationRunner().generate(request);
 
@@ -1095,6 +1157,9 @@ void testGenerateRunsFrameworkToolFromInjectedSearchPath() {
     request.instances = {
         instanceRecord(ipcoreId, QStringLiteral("framework_0"), QStringLiteral("framework-marker"))
     };
+    const ipcraft::core::ProjectDesign design =
+        projectDesignFor(QStringLiteral("framework_tool_design"), request.instances);
+    request.projectDesign = &design;
 
     ProjectGenerationRunner runner(QStringList{toolsDir.absolutePath()});
     const ProjectGenerationResult result = runner.generate(request);
@@ -1157,6 +1222,9 @@ void testGenerateEmitsInputsForEveryPackageInstance() {
                        QStringLiteral("beta-marker"),
                        QStringLiteral("beta_runtime"))
     };
+    const ipcraft::core::ProjectDesign design =
+        projectDesignFor(QStringLiteral("multiple_inputs_design"), request.instances);
+    request.projectDesign = &design;
 
     const ProjectGenerationResult result = ProjectGenerationRunner().generate(request);
 
@@ -1307,6 +1375,9 @@ void testGenerateRunsBuiltInValidationBeforeCommand() {
     request.instances = {
         instanceRecord(ipcoreId, QStringLiteral("alpha_0"), QStringLiteral("alpha-marker"))
     };
+    const ipcraft::core::ProjectDesign design =
+        projectDesignFor(QStringLiteral("built_in_validation_design"), request.instances);
+    request.projectDesign = &design;
 
     const ProjectGenerationResult result = ProjectGenerationRunner().generate(request);
 
@@ -1340,6 +1411,9 @@ void testInjectedGenerationFlowProviderOverridesDefaultRunner() {
     request.instances = {
         instanceRecord(ipcoreId, QStringLiteral("provider_0"), QStringLiteral("provider-marker"))
     };
+    const ipcraft::core::ProjectDesign design =
+        projectDesignFor(QStringLiteral("provider_design"), request.instances);
+    request.projectDesign = &design;
 
     CapturedGenerationFlow capture;
     ProjectGenerationRunner runner(QStringList{QStringLiteral("/custom/tools")});
@@ -1379,6 +1453,9 @@ void testInjectedGenerationFlowProviderMustProduceValidEmittedInputsManifest() {
                        QStringLiteral("provider_bad_inputs_0"),
                        QStringLiteral("bad-inputs-marker"))
     };
+    const ipcraft::core::ProjectDesign design =
+        projectDesignFor(QStringLiteral("provider_bad_inputs_design"), request.instances);
+    request.projectDesign = &design;
 
     ProjectGenerationRunner runner;
     runner.addGenerationFlowProvider(std::make_unique<MalformedInputsGenerationFlowProvider>());
@@ -1419,6 +1496,9 @@ void testInjectedGenerationFlowProviderCannotReturnUnexpectedRunRoot() {
                        QStringLiteral("provider_escaped_0"),
                        QStringLiteral("escaped-root-marker"))
     };
+    const ipcraft::core::ProjectDesign design =
+        projectDesignFor(QStringLiteral("provider_escaped_design"), request.instances);
+    request.projectDesign = &design;
 
     ProjectGenerationRunner runner;
     runner.addGenerationFlowProvider(
@@ -1457,6 +1537,9 @@ void testInjectedGenerationFlowProviderReceivesFlowContext() {
                        QStringLiteral("provider_context_0"),
                        QStringLiteral("context-marker"))
     };
+    const ipcraft::core::ProjectDesign design =
+        projectDesignFor(QStringLiteral("provider_context_design"), request.instances);
+    request.projectDesign = &design;
 
     CapturedGenerationFlow capture;
     ProjectGenerationRunner runner(QStringList{QStringLiteral("/context/tools")});
@@ -1494,6 +1577,7 @@ int main(int argc, char** argv) {
         testDefaultFrameworkToolSearchPathsIgnoreCurrentWorkingDirectory();
         testDefaultFrameworkToolSearchPathsFindRepositoryToolFromApplicationDir();
         testGeneratesEveryProjectInstanceIntoSeparateOutputDirectories();
+        testGenerationRequiresProjectDesignSource();
         testGenerationRejectsUnsafeAndDuplicateInstanceOutputKeys();
         testGenerationFailureAndTimeoutFailWholeResult();
         testGenerationManifestExcludesStaleArtifacts();

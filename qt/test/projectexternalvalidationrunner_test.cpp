@@ -97,6 +97,21 @@ QJsonArray validateFlows(const QString& executable) {
     };
 }
 
+QJsonArray inputCaptureEmitters() {
+    return QJsonArray{
+        QJsonObject{
+            {QStringLiteral("id"), QStringLiteral("parameters")},
+            {QStringLiteral("kind"), QStringLiteral("emit_parameters")},
+            {QStringLiteral("path"), QStringLiteral("parameters.json")}
+        },
+        QJsonObject{
+            {QStringLiteral("id"), QStringLiteral("graph_config")},
+            {QStringLiteral("kind"), QStringLiteral("emit_graph_config")},
+            {QStringLiteral("path"), QStringLiteral("graph_config.json")}
+        }
+    };
+}
+
 QString writeValidateScript(QTemporaryDir& tempDir, const QByteArray& body) {
     const QString toolsPath = QDir(tempDir.path()).filePath(QStringLiteral("tools"));
     require(QDir().mkpath(toolsPath), "failed to create tools directory");
@@ -108,16 +123,25 @@ QString writeValidateScript(QTemporaryDir& tempDir, const QByteArray& body) {
 
 void writePackageSpec(const QString& packageRoot,
                       const QString& packageId,
-                      const QJsonArray& flows) {
+                      const QJsonArray& flows,
+                      const QJsonArray& emitters = QJsonArray{}) {
+    QStringList extensions{QStringLiteral("ipcraft.flows")};
+    if (!emitters.isEmpty()) {
+        extensions.append(QStringLiteral("ipcraft.emitters"));
+    }
+
     QJsonObject spec = {
         {QStringLiteral("schema"), ipcraft::schemaids::packageV1},
         {QStringLiteral("id"), packageId},
         {QStringLiteral("name"), packageId},
         {QStringLiteral("version"), QStringLiteral("1.0.0")},
-        {QStringLiteral("extensions"), stringArray({QStringLiteral("ipcraft.flows")})}
+        {QStringLiteral("extensions"), stringArray(extensions)}
     };
     if (!flows.isEmpty()) {
         spec.insert(QStringLiteral("flows"), flows);
+    }
+    if (!emitters.isEmpty()) {
+        spec.insert(QStringLiteral("emitters"), emitters);
     }
     writeJsonFile(QDir(packageRoot).filePath(QStringLiteral("ipcraft.json")), spec);
 }
@@ -153,6 +177,23 @@ ProjectIpInstanceRecord instanceRecord(const QString& packageId, const QString& 
     record.schema = packageId + QStringLiteral("-project-state-v1");
     record.state = QJsonObject{{QStringLiteral("kind"), QStringLiteral("noc")}};
     return record;
+}
+
+QJsonObject graphConfigForObject(const QString& objectId) {
+    return QJsonObject{
+        {QStringLiteral("schema"), ipcraft::schemaids::graphConfigV1},
+        {QStringLiteral("objects"),
+         QJsonArray{
+             QJsonObject{
+                 {QStringLiteral("id"), objectId},
+                 {QStringLiteral("type"), QStringLiteral("component")},
+                 {QStringLiteral("properties"), QJsonObject{}}
+             }
+         }},
+        {QStringLiteral("relationships"), QJsonArray{}},
+        {QStringLiteral("properties"), QJsonObject{}},
+        {QStringLiteral("native"), QJsonObject{}}
+    };
 }
 
 ipcraft::core::ProjectDesign projectDesignFor(const QString& designName,
@@ -342,6 +383,107 @@ void testPackageValidateRunsWithProjectDesignAndNoGraph() {
             "graph-free package validate output should be captured");
 }
 
+void testProjectDesignComponentRunsValidationWhenInstancesAreEmpty() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "failed to create package root");
+    const QString packageId = QStringLiteral("finepaper.design_only_validate");
+    const QString scriptPath =
+        writeValidateScript(tempDir,
+                            QByteArrayLiteral("inputs_dir=$(dirname \"$1\")\n"
+                                              "if ! grep -q 'derived-marker' \"$inputs_dir/parameters.json\"; then\n"
+                                              "  echo \"ERROR design_only_0: derived config missing\"\n"
+                                              "  exit 0\n"
+                                              "fi\n"
+                                              "echo \"ERROR design_only_0: design-only validate ran\"\n"
+                                              "exit 0\n"));
+    writePackageSpec(tempDir.path(), packageId, validateFlows(scriptPath), inputCaptureEmitters());
+
+    ProjectIpInstanceRecord designOnly = instanceRecord(packageId, QStringLiteral("design_only_0"));
+    designOnly.config = QJsonObject{
+        {QStringLiteral("parameters"),
+         QJsonObject{{QStringLiteral("marker"), QStringLiteral("derived-marker")}}}
+    };
+    const ipcraft::core::ProjectDesign design =
+        projectDesignFor(QStringLiteral("design_only_validate"), {designOnly});
+
+    ProjectExternalValidationRequest request;
+    request.projectDesign = &design;
+    request.projectPath = QStringLiteral("/tmp/projectexternalvalidationrunner.fpproj");
+    request.designName = QStringLiteral("design_only_validate");
+    request.catalogEntries = {catalogEntry(tempDir.path(), packageId)};
+
+    const QList<ValidationResult> results = ProjectExternalValidationRunner().validate(request);
+
+    require(hasMessage(results, QStringLiteral("design-only validate ran")),
+            "project design component should run validate flow when instance records are empty");
+}
+
+void testExplicitInstanceRecordWinsOverProjectDesignFallback() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "failed to create package root");
+    const QString packageId = QStringLiteral("finepaper.explicit_validate");
+    const QString scriptPath =
+        writeValidateScript(tempDir,
+                            QByteArrayLiteral("inputs_dir=$(dirname \"$1\")\n"
+                                              "if grep -q 'design-marker' \"$inputs_dir/parameters.json\"; then\n"
+                                              "  echo \"ERROR explicit_0: explicit config was replaced\"\n"
+                                              "  exit 0\n"
+                                              "fi\n"
+                                              "if grep -q 'explicit-marker' \"$inputs_dir/parameters.json\" && grep -q 'explicit_graph_object' \"$inputs_dir/graph_config.json\"; then\n"
+                                              "  echo \"ERROR explicit_0: explicit record preserved\"\n"
+                                              "  exit 0\n"
+                                              "fi\n"
+                                              "if grep -q 'derived-marker' \"$inputs_dir/parameters.json\"; then\n"
+                                              "  echo \"ERROR design_only_0: design-only validate ran\"\n"
+                                              "  exit 0\n"
+                                              "fi\n"
+                                              "echo \"ERROR design: unrecognized validation inputs\"\n"
+                                              "exit 0\n"));
+    writePackageSpec(tempDir.path(), packageId, validateFlows(scriptPath), inputCaptureEmitters());
+
+    ProjectIpInstanceRecord designOnly = instanceRecord(packageId, QStringLiteral("design_only_0"));
+    designOnly.config = QJsonObject{
+        {QStringLiteral("parameters"),
+         QJsonObject{{QStringLiteral("marker"), QStringLiteral("derived-marker")}}}
+    };
+
+    ProjectIpInstanceRecord designSideExplicit =
+        instanceRecord(packageId, QStringLiteral("explicit_0"));
+    designSideExplicit.config = QJsonObject{
+        {QStringLiteral("parameters"),
+         QJsonObject{{QStringLiteral("marker"), QStringLiteral("design-marker")}}}
+    };
+
+    ProjectIpInstanceRecord explicitRecord = instanceRecord(packageId, QStringLiteral("explicit_0"));
+    explicitRecord.config = QJsonObject{
+        {QStringLiteral("parameters"),
+         QJsonObject{{QStringLiteral("marker"), QStringLiteral("explicit-marker")}}}
+    };
+    explicitRecord.hasGraphConfig = true;
+    explicitRecord.graphConfig = graphConfigForObject(QStringLiteral("explicit_graph_object"));
+
+    const ipcraft::core::ProjectDesign design =
+        projectDesignFor(QStringLiteral("explicit_validate"), {designOnly, designSideExplicit});
+
+    ProjectExternalValidationRequest request;
+    request.projectDesign = &design;
+    request.projectPath = QStringLiteral("/tmp/projectexternalvalidationrunner.fpproj");
+    request.designName = QStringLiteral("explicit_validate");
+    request.catalogEntries = {catalogEntry(tempDir.path(), packageId)};
+    request.instances = {explicitRecord};
+
+    const QList<ValidationResult> results = ProjectExternalValidationRunner().validate(request);
+
+    require(hasMessage(results, QStringLiteral("explicit record preserved")),
+            "explicit ProjectIpInstanceRecord config and graph_config should win");
+    require(hasMessage(results, QStringLiteral("design-only validate ran")),
+            "missing project design component should be derived and validated");
+    require(!hasMessage(results, QStringLiteral("explicit config was replaced")),
+            "project design fallback should not replace explicit instance config");
+    require(!hasMessage(results, QStringLiteral("unrecognized validation inputs")),
+            "validate flow should receive either explicit or derived inputs");
+}
+
 void testBlockingIdsSkipOnlyMatchingInstances() {
     QTemporaryDir tempDir;
     require(tempDir.isValid(), "failed to create package root");
@@ -407,6 +549,8 @@ int main(int argc, char** argv) {
         testStructuredOutputBecomesValidationResult();
         testStructuredOutputInstanceIdTargetsGraphModule();
         testPackageValidateRunsWithProjectDesignAndNoGraph();
+        testProjectDesignComponentRunsValidationWhenInstancesAreEmpty();
+        testExplicitInstanceRecordWinsOverProjectDesignFallback();
         testBlockingIdsSkipOnlyMatchingInstances();
         testBlockAllSuppressesExternalValidation();
     } catch (const std::exception& error) {

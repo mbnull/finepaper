@@ -223,6 +223,183 @@ QStringList frameworkToolSearchPathsForRequest(
         : request.frameworkToolSearchPaths;
 }
 
+QString packageRefKey(const QString& id, const QString& version) {
+    return version.isEmpty() ? id : id + QLatin1Char('@') + version;
+}
+
+QString packageRefKey(const ipcraft::core::PackageRef& package) {
+    return packageRefKey(package.id, package.version);
+}
+
+ProjectPackageRef packageRefFromComponentRef(
+    const QString& componentPackageRef,
+    const QVector<ipcraft::core::PackageRef>& packages) {
+    for (const ipcraft::core::PackageRef& package : packages) {
+        if (componentPackageRef == packageRefKey(package) ||
+            componentPackageRef == package.id) {
+            return ProjectPackageRef{package.id, package.version};
+        }
+    }
+
+    const qsizetype separator = componentPackageRef.lastIndexOf(QLatin1Char('@'));
+    if (separator > 0 && separator + 1 < componentPackageRef.size()) {
+        return ProjectPackageRef{componentPackageRef.left(separator),
+                                 componentPackageRef.mid(separator + 1)};
+    }
+
+    return ProjectPackageRef{componentPackageRef, {}};
+}
+
+bool isConfigBundleKey(const QString& key) {
+    return key == QStringLiteral("parameters") ||
+           key == QStringLiteral("tables") ||
+           key == QStringLiteral("documents") ||
+           key == QStringLiteral("files") ||
+           key == QStringLiteral("preserved");
+}
+
+bool isConfigBundleSection(const QString& key, const QJsonValue& value) {
+    return isConfigBundleKey(key) && value.isObject();
+}
+
+QJsonObject documentConfigFromRuntimeConfig(const QJsonObject& config) {
+    if (config.isEmpty()) {
+        return {};
+    }
+
+    bool allKeysAreBundleSections = true;
+    for (auto it = config.constBegin(); it != config.constEnd(); ++it) {
+        allKeysAreBundleSections =
+            allKeysAreBundleSections && isConfigBundleSection(it.key(), it.value());
+    }
+    if (allKeysAreBundleSections) {
+        return config;
+    }
+
+    QJsonObject bundleConfig;
+    QJsonObject parameters;
+    for (auto it = config.constBegin(); it != config.constEnd(); ++it) {
+        if (isConfigBundleSection(it.key(), it.value())) {
+            if (it.key() == QStringLiteral("parameters")) {
+                const QJsonObject existingParameters = it.value().toObject();
+                for (auto param = existingParameters.constBegin();
+                     param != existingParameters.constEnd();
+                     ++param) {
+                    parameters.insert(param.key(), param.value());
+                }
+            } else {
+                bundleConfig.insert(it.key(), it.value().toObject());
+            }
+            continue;
+        }
+
+        parameters.insert(it.key(), it.value());
+    }
+
+    if (!parameters.isEmpty()) {
+        bundleConfig.insert(QStringLiteral("parameters"), parameters);
+    }
+    return bundleConfig;
+}
+
+ProjectIpInstanceRecord instanceRecordFromDesignComponent(
+    const ipcraft::core::ComponentInstance& component,
+    const QVector<ipcraft::core::PackageRef>& packages) {
+    ProjectIpInstanceRecord instance;
+    instance.id = component.id;
+    instance.instanceId = component.id;
+    instance.package = packageRefFromComponentRef(component.packageRef, packages);
+    instance.ipcoreId = instance.package.id;
+    instance.config = documentConfigFromRuntimeConfig(component.config);
+    if (!component.type.isEmpty()) {
+        instance.native.insert(QStringLiteral("componentType"), component.type);
+    }
+    if (!component.identity.isEmpty()) {
+        instance.native.insert(QStringLiteral("identity"), component.identity);
+    }
+    if (!component.metadata.isEmpty()) {
+        instance.native.insert(QStringLiteral("metadata"), component.metadata);
+    }
+    if (!component.extensionData.isEmpty()) {
+        instance.native.insert(QStringLiteral("extensionData"), component.extensionData);
+    }
+    return instance;
+}
+
+ProjectIpInstanceRecord normalizedValidationRecord(ProjectIpInstanceRecord record) {
+    if (record.instanceId.trimmed().isEmpty()) {
+        record.instanceId = record.id.trimmed();
+    }
+    if (record.id.trimmed().isEmpty()) {
+        record.id = record.instanceId.trimmed();
+    }
+    if (record.ipcoreId.trimmed().isEmpty()) {
+        record.ipcoreId = record.package.id.trimmed();
+    }
+    if (record.package.id.trimmed().isEmpty()) {
+        record.package.id = record.ipcoreId.trimmed();
+    }
+    return record;
+}
+
+struct EffectiveValidationInstances {
+    QVector<ProjectIpInstanceRecord> instances;
+    QList<ValidationResult> diagnostics;
+};
+
+EffectiveValidationInstances effectiveValidationInstances(
+    const ProjectExternalValidationRequest& request) {
+    EffectiveValidationInstances effective;
+    QSet<QString> instanceIds;
+    effective.instances.reserve(request.instances.size());
+
+    for (const ProjectIpInstanceRecord& requestInstance : request.instances) {
+        ProjectIpInstanceRecord instance = normalizedValidationRecord(requestInstance);
+        const QString instanceId = instanceIdFor(instance);
+        if (!instanceId.isEmpty()) {
+            instanceIds.insert(instanceId);
+        }
+        effective.instances.append(std::move(instance));
+    }
+
+    if (!request.projectDesign) {
+        return effective;
+    }
+
+    for (const ipcraft::core::ComponentInstance& component : request.projectDesign->components) {
+        ProjectIpInstanceRecord instance = normalizedValidationRecord(
+            instanceRecordFromDesignComponent(component, request.projectDesign->packages));
+        const QString instanceId = instanceIdFor(instance);
+        if (instanceId.isEmpty()) {
+            appendUniqueResult(
+                effective.diagnostics,
+                ValidationSeverity::Error,
+                QStringLiteral("Project design component is missing an id for external validation."),
+                QString(),
+                QStringLiteral("DRC"));
+            continue;
+        }
+        if (instanceIds.contains(instanceId)) {
+            continue;
+        }
+        if (instance.ipcoreId.trimmed().isEmpty()) {
+            appendUniqueResult(
+                effective.diagnostics,
+                ValidationSeverity::Error,
+                QStringLiteral("Project design component '%1' is missing a package reference for external validation.")
+                    .arg(instanceId),
+                instanceId,
+                QStringLiteral("DRC"));
+            continue;
+        }
+
+        instanceIds.insert(instanceId);
+        effective.instances.append(std::move(instance));
+    }
+
+    return effective;
+}
+
 } // namespace
 
 ProjectExternalValidationRunner::ProjectExternalValidationRunner()
@@ -242,16 +419,18 @@ void ProjectExternalValidationRunner::setFrameworkToolSearchPaths(QStringList se
 QList<ValidationResult> ProjectExternalValidationRunner::validate(
     const ProjectExternalValidationRequest& request) const {
     QList<ValidationResult> results;
-    if (request.instances.isEmpty()) {
+    const EffectiveValidationInstances effective = effectiveValidationInstances(request);
+    results.append(effective.diagnostics);
+    if (request.blockAllExternalValidation) {
         return results;
     }
-    if (request.blockAllExternalValidation) {
+    if (effective.instances.isEmpty()) {
         return results;
     }
 
     QTemporaryDir validationRoot;
     if (!validationRoot.isValid()) {
-        for (const ProjectIpInstanceRecord& instance : request.instances) {
+        for (const ProjectIpInstanceRecord& instance : effective.instances) {
             const QString instanceId = instanceIdFor(instance);
             if (!request.blockingInstanceIds.contains(instanceId)) {
                 results.append(ValidationResult(
@@ -271,8 +450,8 @@ QList<ValidationResult> ProjectExternalValidationRunner::validate(
     const QStringList frameworkToolSearchPaths =
         frameworkToolSearchPathsForRequest(request, m_frameworkToolSearchPaths);
 
-    for (qsizetype index = 0; index < request.instances.size(); ++index) {
-        const ProjectIpInstanceRecord& instance = request.instances.at(index);
+    for (qsizetype index = 0; index < effective.instances.size(); ++index) {
+        const ProjectIpInstanceRecord& instance = effective.instances.at(index);
         const QString instanceId = instanceIdFor(instance);
         if (request.blockingInstanceIds.contains(instanceId)) {
             continue;
@@ -281,6 +460,14 @@ QList<ValidationResult> ProjectExternalValidationRunner::validate(
         const IpCatalogEntry* entry =
             ProjectFlowSupport::findCatalogEntry(request.catalogEntries, instance.ipcoreId);
         if (!entry) {
+            results.append(ValidationResult(
+                ValidationSeverity::Error,
+                withValidationInstanceContext(
+                    instance,
+                    QStringLiteral("Package '%1' referenced by the project design is not available in the catalog.")
+                        .arg(instance.ipcoreId)),
+                QString(),
+                QStringLiteral("DRC")));
             continue;
         }
 
