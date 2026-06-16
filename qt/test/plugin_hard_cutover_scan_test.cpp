@@ -1,0 +1,233 @@
+#include <QCoreApplication>
+#include <QDir>
+#include <QDirIterator>
+#include <QFile>
+#include <QFileInfo>
+#include <QString>
+#include <QStringList>
+#include <iostream>
+#include <stdexcept>
+
+namespace {
+
+void require(bool condition, const QString& message) {
+    if (!condition) {
+        throw std::runtime_error(message.toStdString());
+    }
+}
+
+QString resolveRepositoryPath(const QString& path) {
+    const QStringList candidates{
+        QDir(QCoreApplication::applicationDirPath()).absoluteFilePath(QStringLiteral("../../") + path),
+        QDir::current().absoluteFilePath(path),
+        path
+    };
+
+    for (const QString& candidate : candidates) {
+        const QFileInfo info(candidate);
+        if (info.exists()) {
+            return info.absoluteFilePath();
+        }
+    }
+
+    throw std::runtime_error(("missing path: " + path).toStdString());
+}
+
+QString readText(const QString& path) {
+    QFile source(resolveRepositoryPath(path));
+    if (!source.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        throw std::runtime_error(("cannot read " + path).toStdString());
+    }
+    return QString::fromUtf8(source.readAll());
+}
+
+void requireContains(const QString& text,
+                     const QString& needle,
+                     const QString& context) {
+    require(text.contains(needle), context + QStringLiteral(" should contain ") + needle);
+}
+
+void requireContainsOneOf(const QString& text,
+                          const QStringList& needles,
+                          const QString& context) {
+    for (const QString& needle : needles) {
+        if (text.contains(needle)) {
+            return;
+        }
+    }
+    require(false,
+            context + QStringLiteral(" should contain one of: ") +
+                needles.join(QStringLiteral(", ")));
+}
+
+void requireNotContains(const QString& text,
+                        const QString& needle,
+                        const QString& context) {
+    require(!text.contains(needle), context + QStringLiteral(" should not contain ") + needle);
+}
+
+void requireFileDoesNotContain(const QString& path, const QStringList& tokens) {
+    const QString source = readText(path);
+    for (const QString& token : tokens) {
+        requireNotContains(source, token, path);
+    }
+}
+
+QString structBody(const QString& source, const QString& structName, const QString& context) {
+    const int start = source.indexOf(QStringLiteral("struct ") + structName);
+    require(start >= 0, context + QStringLiteral(" should define ") + structName);
+
+    const int end = source.indexOf(QStringLiteral("};"), start);
+    require(end > start, context + QStringLiteral(" should close ") + structName);
+
+    return source.mid(start, end - start);
+}
+
+QStringList runtimeSourceFiles(const QStringList& roots) {
+    QStringList files;
+    const QStringList patterns{
+        QStringLiteral("*.cpp"),
+        QStringLiteral("*.h")
+    };
+
+    for (const QString& root : roots) {
+        QDirIterator iterator(resolveRepositoryPath(root),
+                              patterns,
+                              QDir::Files,
+                              QDirIterator::Subdirectories);
+        while (iterator.hasNext()) {
+            const QString absolutePath = iterator.next();
+            files.append(QDir(QDir::currentPath()).relativeFilePath(absolutePath));
+        }
+    }
+
+    files.sort();
+    return files;
+}
+
+void testMainWindowHasNoConcreteIpBehaviorTokens() {
+    const QStringList concreteIpTokens{
+        QStringLiteral("finepaper.ravenoc"),
+        QStringLiteral("finepaper.opennoc"),
+        QStringLiteral("finepaper.noc"),
+        QStringLiteral("RaveTile"),
+        QStringLiteral("OpenNoCXP")
+    };
+
+    requireFileDoesNotContain(QStringLiteral("qt/inc/app/mainwindow.h"), concreteIpTokens);
+    requireFileDoesNotContain(QStringLiteral("qt/src/app/mainwindow.cpp"), concreteIpTokens);
+    requireFileDoesNotContain(QStringLiteral("qt/src/app/mainwindow.ui"), concreteIpTokens);
+}
+
+void testPackagePluginDoesNotKnowNoCPluginOrNoCSchema() {
+    const QStringList forbiddenTokens{
+        QStringLiteral("nocplugin"),
+        QStringLiteral("NoCPlugin"),
+        QStringLiteral("noc.v1")
+    };
+
+    requireFileDoesNotContain(QStringLiteral("qt/inc/package/packageplugin.h"), forbiddenTokens);
+    requireFileDoesNotContain(QStringLiteral("qt/src/package/packageplugin.cpp"), forbiddenTokens);
+}
+
+void testNoCPluginDoesNotKnowConcreteIpPackagesOrModules() {
+    const QStringList concreteIpTokens{
+        QStringLiteral("finepaper.ravenoc"),
+        QStringLiteral("finepaper.opennoc"),
+        QStringLiteral("finepaper.noc"),
+        QStringLiteral("vendor.meshnoc"),
+        QStringLiteral("RaveTile"),
+        QStringLiteral("OpenNoCXP"),
+        QStringLiteral("VendorSwitch")
+    };
+
+    requireFileDoesNotContain(QStringLiteral("qt/inc/noc/nocplugin.h"), concreteIpTokens);
+    requireFileDoesNotContain(QStringLiteral("qt/src/noc/nocplugin.cpp"), concreteIpTokens);
+}
+
+void testProjectGenerationRequestHasNoGraphPointer() {
+    const QString header = readText(QStringLiteral("qt/inc/app/projectgenerationrunner.h"));
+    const QString request =
+        structBody(header, QStringLiteral("ProjectGenerationRequest"), QStringLiteral("ProjectGenerationRequest"));
+
+    const QStringList graphPointerTokens{
+        QStringLiteral("const Graph* graph"),
+        QStringLiteral("const Graph *graph"),
+        QStringLiteral("Graph* graph"),
+        QStringLiteral("Graph *graph")
+    };
+    for (const QString& token : graphPointerTokens) {
+        requireNotContains(request, token, QStringLiteral("ProjectGenerationRequest"));
+    }
+}
+
+void testRuntimeHasNoConcreteVendorModuleHardcoding() {
+    const QStringList forbiddenTokens{
+        QStringLiteral("vendor.meshnoc"),
+        QStringLiteral("RaveTile"),
+        QStringLiteral("OpenNoCXP"),
+        QStringLiteral("VendorSwitch")
+    };
+    const QStringList roots{
+        QStringLiteral("qt/inc/app"),
+        QStringLiteral("qt/src/app"),
+        QStringLiteral("qt/inc/package"),
+        QStringLiteral("qt/src/package"),
+        QStringLiteral("qt/inc/project"),
+        QStringLiteral("qt/src/project"),
+        QStringLiteral("qt/inc/validation"),
+        QStringLiteral("qt/src/validation")
+    };
+
+    for (const QString& path : runtimeSourceFiles(roots)) {
+        requireFileDoesNotContain(path, forbiddenTokens);
+    }
+}
+
+void testCompletionReportUsesHardCutoverVerdict() {
+    const QString completion =
+        readText(QStringLiteral("docs/architecture/plugin-architecture-completion-report.md"));
+
+    requireNotContains(completion,
+                       QStringLiteral("go-with-debt"),
+                       QStringLiteral("completion report"));
+    requireContainsOneOf(completion,
+                         QStringList{
+                             QStringLiteral("Final verdict: hard pass"),
+                             QStringLiteral("Final verdict: blocked")
+                         },
+                         QStringLiteral("completion report"));
+}
+
+void testFinalReportsAndReadmeRegisterHardCutoverGate() {
+    const QString completion =
+        readText(QStringLiteral("docs/architecture/plugin-architecture-completion-report.md"));
+    const QString hardening =
+        readText(QStringLiteral("docs/architecture/plugin-architecture-hardening-report.md"));
+    const QString readme = readText(QStringLiteral("docs/architecture/README.md"));
+
+    requireContains(completion,
+                    QStringLiteral("plugin_hard_cutover_scan_test"),
+                    QStringLiteral("completion report"));
+    requireContains(hardening,
+                    QStringLiteral("plugin_hard_cutover_scan_test"),
+                    QStringLiteral("hardening report"));
+    requireContains(readme,
+                    QStringLiteral("plugin_hard_cutover_scan_test"),
+                    QStringLiteral("architecture README"));
+}
+
+} // namespace
+
+int main(int argc, char** argv) {
+    QCoreApplication app(argc, argv);
+    testMainWindowHasNoConcreteIpBehaviorTokens();
+    testPackagePluginDoesNotKnowNoCPluginOrNoCSchema();
+    testNoCPluginDoesNotKnowConcreteIpPackagesOrModules();
+    testProjectGenerationRequestHasNoGraphPointer();
+    testRuntimeHasNoConcreteVendorModuleHardcoding();
+    testCompletionReportUsesHardCutoverVerdict();
+    testFinalReportsAndReadmeRegisterHardCutoverGate();
+    std::cout << "plugin_hard_cutover_scan_test passed\n";
+    return 0;
+}

@@ -10,8 +10,8 @@
 | `internal-architecture-report.zh.md` | 实现型说明：代码目录、模块职责、内部依赖方向和开发判断准则。 |
 | `v1-core-architecture.md` | 公开架构契约：schema、CLI、diagnostics、security、migration 和 audit contract。 |
 | `ip-package-authoring-flow.md` | IP package/extension 接入流程：从现有 IP 代码库进入 Qt 前端、V1 schema、连接检查和生成流。 |
-| `plugin-architecture-hardening-report.md` | 插件式 IP 平台阶段硬化报告：阶段矩阵、anchor IP、V1 schema、旧路径隔离和 Phase 10 输入。 |
-| `plugin-architecture-completion-report.md` | Phase 10 完成报告：最终 verdict、Phases 2-10、三类 IP、V1 schema、qt-cpp-review 和遗留债务。 |
+| `plugin-architecture-hardening-report.md` | 插件式 IP 平台阶段硬化报告：阶段矩阵、anchor IP、V1 schema、旧路径隔离和 `plugin_hard_cutover_scan_test`。 |
+| `plugin-architecture-completion-report.md` | 最终完成报告：hard cutoff verdict、Phases 2-10、三类 IP、V1 schema、qt-cpp-review、最终验证和残余风险。 |
 | `v1-refactor-overview.zh.md` | 重构总览：为什么从 Graph-centric 架构切换到 project/package contract 架构。 |
 | `ipcraft-architecture-deletion-map.md` | 删除与适配边界：哪些旧概念要 delete、replace 或 adapter only。 |
 
@@ -27,6 +27,7 @@ Finepaper 当前不是单纯的 NoC 画布工具，而是 package contract 驱�
 - 外部执行：`PackageInputBuilder` / `FlowRunner` / `ArtifactCollector`
 - 结构化诊断：`DiagnosticStore`
 - Qt 画布：当前仍是 `Graph` projection，不是长期项目根模型
+- 硬截止门禁：`plugin_hard_cutover_scan_test` 禁止具体 IP 行为回到 `MainWindow`、`PackagePlugin`、`NoCPlugin` 或 `ProjectGenerationRequest`
 
 ## 文档维护规则
 

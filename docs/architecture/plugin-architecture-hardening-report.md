@@ -1,6 +1,6 @@
 # Plugin Architecture Hardening Report
 
-This report records the state before the final Phase 10 architecture review. It is a hardening gate, not a claim that every historical adapter has been deleted.
+This report records the state after the final hard cutoff scan was added. It is a hardening gate for platform boundaries and a companion to the completion report's binary final verdict.
 
 ## Phase Coverage Matrix
 
@@ -13,19 +13,19 @@ This report records the state before the final Phase 10 architecture review. It 
 | Phase 6 | Tool/generator pipeline boundary | Complete | `GenerationFlowProvider`, `ToolPipelineService`, tool scan gate |
 | Phase 7 | Commercial NoC workflow completion | Complete with vendor-fixture debt | `commercial_noc_mvp_test`, Phase 7 scan gate |
 | Phase 8 | Agent IP onboarding skill/prompt | Complete | `finepaper-ip-onboarding`, package authoring flow, Phase 8 scan gate |
-| Phase 9 | Hardening and deletion gates | In progress | This report and `plugin_architecture_phase9_scan_test` |
-| Phase 10 | Final architecture review and report | Pending | Requires `qt-cpp-review` and completion report |
+| Phase 9 | Hardening and deletion gates | Complete | This report and `plugin_architecture_phase9_scan_test` |
+| Phase 10 | Final architecture review and report | Complete | `qt-cpp-review`, completion report, `plugin_hard_cutover_scan_test` |
 
 ## Boundary Status
 
 | Boundary | Current state | Hardening gate |
 |----------|---------------|----------------|
-| Project | `ProjectDocument`, `ProjectService`, and V1 project schema remain the target durable source of truth. Generation requests consume `ProjectDesign` plus `ProjectIpInstanceRecord` state. | New normal paths must not add more `Graph`-rooted project state. |
+| Project | `ProjectDocument`, `ProjectService`, and V1 project schema remain the target durable source of truth. Generation requests consume `ProjectDesign` plus `ProjectIpInstanceRecord` state. | New normal paths must not add more `Graph`-rooted project state. `plugin_hard_cutover_scan_test` blocks `const Graph* graph` from returning to `ProjectGenerationRequest`. |
 | Package | Extension/package discovery and catalog construction are behind package services. | External/public IP deliverables must be called extensions or packages, not plugins. |
 | Editor | The node editor remains as a projection shell, with current adapters still syncing through `GraphProjectSerializer`. | Editor code may use projection `Graph` objects for interaction. Save/generate/validate must continue moving toward project/package state and must not add new Graph source-of-truth paths. |
 | Connection | Connection checks are routed through providers and package declarations. | Core/UI must not hardcode concrete connection type behavior. |
 | Tool | Validate/generate flow uses package-declared flows and `FlowRunner`. | UI code must not directly invoke package generators. |
-| Commercial NoC | `finepaper.noc`, `finepaper.ravenoc`, and `finepaper.opennoc` pass the commercial workflow gate. | Vendor fixtures remain a known test debt; the Qt-to-generator contract is covered. |
+| Commercial NoC | `finepaper.noc`, `finepaper.ravenoc`, and `finepaper.opennoc` pass the commercial workflow gate. | Vendor fixtures remain a known follow-up risk; the Qt-to-generator contract is covered. |
 | Onboarding | `finepaper-ip-onboarding` guides agents through source-IP inspection and V1 package authoring. | The skill must stay operational and concise; detailed architecture belongs in docs. |
 
 ## Three-IP Anchor Matrix
@@ -56,22 +56,22 @@ The architecture does not introduce replacement schemas for project, package, gr
 | Gate | Required state | Phase 9 classification |
 |------|----------------|------------------------|
 | Graph source-of-truth | `Graph` remains as projection/test data. Normal generation now uses `ProjectGenerationRequest::projectDesign` and instance-owned `graphConfig`; `m_graph` is not passed into the generation request. | Keep `GraphProjectSerializer` isolated to editor projection until that shell is replaced. |
-| `MainWindow` assembly | `MainWindow` should render workbench/service contributions instead of growing direct business wiring. | Continue reducing direct assembly; block new hardcoded package paths. |
+| `MainWindow` assembly | `MainWindow` should render workbench/service contributions instead of growing direct business wiring. | Continue reducing direct assembly; `plugin_hard_cutover_scan_test` blocks concrete package and module tokens. |
 | UI JSON parsing | UI and panels should not directly parse package capability JSON. | JSON field access belongs in package/descriptor readers. |
 | Direct generator calls | UI and domain plugins should not shell out to generators directly. | Generation must use `ProjectGenerationRunner`, `GenerationFlowProvider`, and `FlowRunner`. |
 | Connection hardcoding | Core/UI should not embed concrete NoC/AXI/CHI compatibility tables. | Package-declared connection rules and providers are the normal path. |
 | Legacy compatibility paths | Old generator input compatibility must not become a new normal path. | No legacy generator dependency for new package onboarding. |
 
-## Known Adapter And Deletion Debt
+## Known Adapter Boundaries
 
 - `EditorProjectionService` intentionally uses `GraphProjectSerializer` as the current projection adapter.
 - Validation may keep an optional `Graph*` only to resolve/highlight UI diagnostic targets.
 
 These adapters are allowed only as current bridge points. They are not permission for new business logic to use `Graph` as the durable source of truth.
 
-## Phase 10 Review Inputs
+## Phase 10 Hard Cutoff Inputs
 
-Phase 10 must review:
+The final cutoff review covers:
 
 - all architecture scan targets from Phase 2 through Phase 9;
 - `commercial_noc_mvp_test`;
@@ -79,4 +79,5 @@ Phase 10 must review:
 - V1 schema reuse evidence;
 - remaining editor projection debt;
 - `qt-cpp-review` output for relevant Qt/C++ changes;
-- final go/no-go verdict for the plugin-extensible IP platform architecture.
+- `plugin_hard_cutover_scan_test`;
+- final binary verdict for the plugin-extensible IP platform architecture.

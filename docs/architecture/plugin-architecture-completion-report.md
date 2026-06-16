@@ -1,12 +1,12 @@
 # Plugin Architecture Completion Report
 
-This is the Phase 10 completion report for the plugin-extensible IP creation architecture. It reviews Phases 2 through 10, records the `qt-cpp-review` outcome, and states the remaining architecture debt.
+This is the final completion report for the plugin-extensible IP creation architecture. It reviews Phases 2 through 10, records the hard cutoff gate, and states the remaining non-blocking follow-up risk.
 
 ## Final Verdict
 
-Final verdict: go-with-debt.
+Final verdict: hard pass
 
-The architecture is acceptable for the NoC IP creation MVP target because project, package, editor projection, connection rules, generation flow, commercial NoC workflow, and agent onboarding are now covered by V1 contracts and scan gates. The verdict is not a full deletion claim: Graph-centric adapters and some static application wiring remain as documented deletion debt.
+The architecture passes the hard cutoff for the NoC IP creation MVP target. Project, package, editor projection, connection rules, generation flow, commercial NoC workflow, and agent onboarding are covered by V1 contracts and scan gates, and the final hard cutoff scan blocks concrete IP behavior from leaking back into `MainWindow`, `PackagePlugin`, `NoCPlugin`, or `ProjectGenerationRequest`.
 
 ## Phase Completion Matrix
 
@@ -20,7 +20,7 @@ The architecture is acceptable for the NoC IP creation MVP target because projec
 | Phase 7 | Commercial NoC workflow | Complete with vendor-fixture debt | `commercial_noc_mvp_test`, Phase 7 scan gate |
 | Phase 8 | Agent IP onboarding | Complete | `finepaper-ip-onboarding` skill, package authoring guide, Phase 8 scan gate |
 | Phase 9 | Hardening and deletion gates | Complete | hardening report and Phase 9 scan gate |
-| Phase 10 | Final review and report | Complete when this report and Phase 10 scan pass | `qt-cpp-review`, completion report, Phase 10 scan |
+| Phase 10 | Final review and report | Complete | `qt-cpp-review`, completion report, `plugin_hard_cutover_scan_test` |
 
 ## Three-IP Anchor Matrix
 
@@ -53,8 +53,8 @@ Internal C++ architecture modules are plugins. Public or third-party deliverable
 
 | Gate | Status | Required follow-up |
 |------|--------|--------------------|
-| Graph source of truth | accepted debt remains only in editor projection | Normal generation uses `ProjectGenerationRequest::projectDesign` and instance-owned `graphConfig`; keep `GraphProjectSerializer` isolated to `EditorProjectionService` until the editor projection shell is replaced |
-| `MainWindow` direct assembly | Partially isolated | Move remaining static service assembly behind internal plugin activation when app startup is ready |
+| Graph source of truth | Isolated to projection and validation bridge points | Normal generation uses `ProjectGenerationRequest::projectDesign` and instance-owned `graphConfig`; keep `GraphProjectSerializer` isolated to `EditorProjectionService` until the editor projection shell is replaced |
+| `MainWindow` direct assembly | Hard cutoff enforced for concrete IP behavior | Move remaining static service assembly behind internal plugin activation when app startup is ready |
 | UI JSON parsing | Guarded | Keep package JSON parsing inside package/descriptor readers |
 | Direct generator calls | Guarded | UI and domain code must continue using `ProjectGenerationRunner`, providers, and `FlowRunner` |
 | Connection hardcoding | Guarded | Add bus/topology behavior through package declarations and rule providers |
@@ -62,26 +62,30 @@ Internal C++ architecture modules are plugins. Public or third-party deliverable
 
 ## Architecture Scan Status
 
-Architecture scans for Phases 1 through 10 pass at Phase 10 review time. Phase 10 adds a completion scan to verify this report names Phases 2-10, the three anchor package ids, V1 schemas, `qt-cpp-review`, scan status, and deletion-gate status.
+Earlier phase scans established coverage for Phases 1 through 10 at Phase 10 review time. Task 8 supersedes the previous debt-accepting completion posture with `plugin_hard_cutover_scan_test` as the final cutoff scan. It verifies that this report uses a binary final verdict, that `MainWindow` has no concrete IP behavior tokens, that `PackagePlugin` does not know the NoC plugin or `noc.v1`, that `NoCPlugin` does not know concrete IP package or module names, and that `ProjectGenerationRequest` does not expose `const Graph* graph`.
 
 ## Verification Command Evidence
 
-The following commands were run on this branch during Phase 10 review:
+The following commands were run in the final Task 8 verification block after the hard cutoff report update:
 
 | Command | Result |
 |---------|--------|
 | `ruby spec_generator/bin/spec-gen --check` | passed, repository manifests up to date |
-| `ruby spec_generator/test/spec_generator_test.rb` | passed, 89 runs, 494 assertions |
-| `ruby -I ipcraft_generator/lib ipcraft_generator/test/ipcraft_generator_test.rb` | passed, 29 runs, 186 assertions |
+| `ruby spec_generator/test/spec_generator_test.rb` | passed, 90 runs, 531 assertions |
+| `ruby -I ipcraft_generator/lib ipcraft_generator/test/ipcraft_generator_test.rb` | passed, 31 runs, 196 assertions |
+| `xmake run -P qt plugin_registry_test` | passed |
+| `xmake run -P qt staticplugincatalog_test` | passed |
+| `xmake run -P qt packagecoverage_test` | passed |
+| `xmake run -P qt nocplugin_test` | passed |
+| `xmake run -P qt designeditingservice_test` | passed |
+| `xmake run -P qt vendor_meshnoc_onboarding_test` | passed |
+| `xmake run -P qt plugin_hard_cutover_scan_test` | passed |
+| `xmake run -P qt validation_test` | passed |
+| `xmake run -P qt projectexternalvalidationrunner_test` | passed |
+| `xmake run -P qt projectgenerationrunner_test` | passed |
 | `xmake run -P qt commercial_noc_mvp_test` | passed |
-| `xmake run -P qt plugin_architecture_phase2_scan_test` | passed after final review scan refresh |
-| `xmake run -P qt plugin_architecture_phase5_scan_test` | passed after final review scan refresh |
-| `xmake run -P qt plugin_architecture_phase9_scan_test` | passed |
-| `xmake run -P qt plugin_architecture_phase8_scan_test` | passed |
-| `xmake run -P qt plugin_architecture_phase7_scan_test` | passed |
-| `xmake run -P qt graph_test` | passed after connection-service signature cleanup |
-| `xmake run -P qt nodeeditor_geometry_test` | passed after connection-command signature cleanup |
 | `xmake build -P qt qt` | passed |
+| `git diff --check` | passed |
 
 ## qt-cpp-review Summary
 
@@ -99,11 +103,11 @@ Deep review found these high-confidence blockers, all fixed before this report:
 | Per-candidate connection validator copies | `ConnectionRuleService` now reuses a validator per option build |
 | Dead connection service instance-record state | Removed the stored state and tightened constructor/call sites |
 
-The review also produced investigation targets. The accepted debt items are listed below and are not blockers for the static MVP architecture.
+The review also produced follow-up targets. The items below are not blockers for the hard cutoff gate because they are either projection bridge points, unload-policy work, or fixture-depth improvements rather than concrete IP behavior in platform code.
 
-## Accepted Debt And Follow-up
+## Residual Risk And Follow-up
 
-| Debt | Why accepted for MVP | Follow-up |
+| Risk | Why non-blocking for the hard cutoff | Follow-up |
 |------|----------------------|-----------|
 | Graph projection adapters remain | Current editor still needs interactive Graph projection | Move generation/save/validate fully to `ProjectDocument`, then delete adapter paths |
 | Plugin host is not yet the full app startup path | Internal plugin architecture exists, but MainWindow still owns some static assembly | Route startup through `PluginHost` and plugin registrations |
@@ -117,6 +121,5 @@ The review also produced investigation targets. The accepted debt items are list
 The architecture is complete for Phase 10 when:
 
 - this report is linked from the architecture README;
-- `plugin_architecture_phase10_scan_test` passes;
-- final verification passes after the report and scan are committed;
-- final automatic architecture and code-quality reviewers report no high-confidence blocker.
+- `plugin_hard_cutover_scan_test` passes;
+- final verification passes after the report and scan updates.
