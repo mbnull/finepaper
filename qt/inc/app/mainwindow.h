@@ -35,6 +35,7 @@ class ExtensionPointRegistry;
 class LogPanel;
 class PluginHost;
 class ServiceRegistry;
+class TopologyPresetInteractionHandler;
 class ValidationManager;
 class QAction;
 class QCloseEvent;
@@ -115,10 +116,6 @@ private slots:
     bool requireOpenProject(const QString& actionName);
     void updateWindowTitle();
     void updateCommandActions();
-    void createTopologyPresetFor(const QString& ipcoreId,
-                                 const QString& instanceId,
-                                 const QString& presetId);
-
     Graph* m_graph;
     std::unique_ptr<WorkbenchService> m_workbenchService;
     std::unique_ptr<CommandManager> m_commandManager;
@@ -137,6 +134,7 @@ private slots:
     std::unique_ptr<PluginInteractionRegistry> m_pluginInteractionRegistry;
     std::unique_ptr<PluginHost> m_pluginHost;
     std::unique_ptr<ActiveWorkspaceController> m_activeWorkspaceController;
+    std::unique_ptr<TopologyPresetInteractionHandler> m_topologyPresetInteractionHandler;
     std::vector<std::unique_ptr<IIpInstanceParameterAdapter>> m_ipInstanceParameterAdapters;
     NodeEditorWidget* m_nodeEditor;
     PropertyPanel* m_propertyPanel;

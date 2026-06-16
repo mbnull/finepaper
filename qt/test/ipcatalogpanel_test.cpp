@@ -1180,9 +1180,9 @@ void testMainWindowIgnoresStaleWorkspaceTopologyToolInstance() {
             "graph should start without topology modules");
 
     scheduleInputDialogAccepts();
-    window.createTopologyPresetFor(QStringLiteral("finepaper.ravenoc"),
-                                   QStringLiteral("stale_instance"),
-                                   QStringLiteral("mesh"));
+    window.executeWorkspaceInteractionFor(QStringLiteral("finepaper.ravenoc"),
+                                          QStringLiteral("stale_instance"),
+                                          QStringLiteral("topology:mesh"));
     processEventsFor(100);
 
     require(window.m_graph->modules().empty(),
@@ -1214,9 +1214,9 @@ void testMainWindowIgnoresTopologyToolWhenActiveInstanceChangesDuringPrompt() {
         window.m_projectIpService->handleIpInstanceRecordsMutated(std::nullopt);
     });
     scheduleInputDialogAccepts();
-    window.createTopologyPresetFor(QStringLiteral("finepaper.ravenoc"),
-                                   QStringLiteral("ravenoc_0"),
-                                   QStringLiteral("mesh"));
+    window.executeWorkspaceInteractionFor(QStringLiteral("finepaper.ravenoc"),
+                                          QStringLiteral("ravenoc_0"),
+                                          QStringLiteral("topology:mesh"));
     processEventsFor(100);
 
     require(window.m_graph->modules().empty(),

@@ -19,6 +19,7 @@
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QTemporaryDir>
+#include <optional>
 #include <chrono>
 #include <iostream>
 #include <memory>
@@ -182,10 +183,31 @@ ipcraft::core::ProjectDesign projectDesignFor(const QString& designName,
         component.packageRef = packageKey;
         component.config = instance.config;
         component.type = instance.native.value(QStringLiteral("componentType")).toString();
+        if (instance.hasGraphConfig && !instance.graphConfigIsNull) {
+            component.extensionData.insert(QStringLiteral("graph_config"), instance.graphConfig);
+        }
         design.components.append(component);
     }
 
     return design;
+}
+
+void appendOwnedGraphTopology(ipcraft::core::ProjectDesign& design,
+                              const QString& ownerComponentId,
+                              const QString& objectId,
+                              const QString& objectType) {
+    ipcraft::core::TopologyGraph topology;
+    topology.id = ownerComponentId + QStringLiteral("_graph");
+    topology.schema = ipcraft::schemaids::topologyGraphV1;
+    topology.ownerComponentId = ownerComponentId;
+    topology.kind = QStringLiteral("explicit_graph");
+    topology.nodes.append(QJsonObject{
+        {QStringLiteral("id"), objectId},
+        {QStringLiteral("type"), objectType},
+        {QStringLiteral("properties"),
+         QJsonObject{{QStringLiteral("source"), QStringLiteral("project-design")}}}
+    });
+    design.topologies.append(topology);
 }
 
 QJsonArray jsonStringArray(const QStringList& values) {
@@ -344,6 +366,8 @@ struct CapturedGenerationFlow {
     QString marker;
     QStringList frameworkToolSearchPaths;
     bool hasGraphConfig = false;
+    QString graphConfigObjectId;
+    QStringList graphConfigObjectIds;
 };
 
 class CapturingGenerationFlowProvider final : public GenerationFlowProvider {
@@ -367,6 +391,15 @@ public:
                 request.flowRequest.config.parameters.value(QStringLiteral("marker")).toString();
             m_capture->frameworkToolSearchPaths = request.flowRequest.frameworkToolSearchPaths;
             m_capture->hasGraphConfig = request.flowRequest.graphConfig.has_value();
+            if (request.flowRequest.graphConfig.has_value() &&
+                !request.flowRequest.graphConfig->objects.isEmpty()) {
+                m_capture->graphConfigObjectId =
+                    request.flowRequest.graphConfig->objects.first().id;
+                for (const ipcraft::GraphConfigObject& object :
+                     request.flowRequest.graphConfig->objects) {
+                    m_capture->graphConfigObjectIds.append(object.id);
+                }
+            }
         }
 
         require(QDir().mkpath(QDir(request.outputDirectory).filePath(QStringLiteral("inputs"))),
@@ -785,6 +818,101 @@ void testGenerationRequiresProjectDesignSource() {
             "missing ProjectDesign error should name the project/source design");
     require(!QFileInfo::exists(root.filePath(QStringLiteral("project/generated/project-snapshot.fpproj"))),
             "generation should not synthesize a snapshot when ProjectDesign is missing");
+}
+
+void testGenerateDerivesInstancesFromProjectDesignWithoutRequestInstances() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "temporary directory should be valid");
+    QDir root(tempDir.path());
+    const QString ipcoreId = QStringLiteral("org.example.design_source");
+    const QVector<ProjectIpInstanceRecord> designInstances{
+        instanceRecord(ipcoreId,
+                       QStringLiteral("design_source_0"),
+                       QStringLiteral("design-marker"))
+    };
+    ipcraft::core::ProjectDesign design =
+        projectDesignFor(QStringLiteral("design_source_design"), designInstances);
+    appendOwnedGraphTopology(design,
+                             QStringLiteral("design_source_0"),
+                             QStringLiteral("design_graph_object"),
+                             QStringLiteral("Tile"));
+
+    ProjectGenerationRequest request;
+    request.projectDesign = &design;
+    request.projectPath = root.filePath(QStringLiteral("project/design_source_design.fpproj"));
+    request.designName = QStringLiteral("design_source_design");
+    request.catalogEntries = {createFailingFlowPackage(root, ipcoreId, QStringLiteral("Tile"))};
+
+    CapturedGenerationFlow capture;
+    ProjectGenerationRunner runner;
+    runner.addGenerationFlowProvider(std::make_unique<CapturingGenerationFlowProvider>(&capture));
+
+    const ProjectGenerationResult result = runner.generate(request);
+
+    require(result.success, result.error.toLocal8Bit().constData());
+    require(capture.runCount == 1,
+            "ProjectDesign-only generation should run one package flow");
+    require(result.instances.size() == 1,
+            "ProjectDesign-only generation should report one instance result");
+    require(capture.instanceId == QStringLiteral("design_source_0"),
+            "ProjectDesign component id should become the generation instance id");
+    require(capture.marker == QStringLiteral("design-marker"),
+            "ProjectDesign component config should become the flow config bundle");
+    require(capture.hasGraphConfig,
+            "ProjectDesign topology should become the flow graph config");
+    require(capture.graphConfigObjectIds.contains(QStringLiteral("design_graph_object")),
+            "ProjectDesign topology nodes should feed the flow graph config");
+}
+
+void testGenerateIgnoresStaleRequestInstancesSideChannel() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "temporary directory should be valid");
+    QDir root(tempDir.path());
+    const QString ipcoreId = QStringLiteral("org.example.side_channel");
+    const QVector<ProjectIpInstanceRecord> designInstances{
+        instanceRecord(ipcoreId,
+                       QStringLiteral("design_authoritative_0"),
+                       QStringLiteral("design-authoritative-marker"))
+    };
+    ipcraft::core::ProjectDesign design =
+        projectDesignFor(QStringLiteral("side_channel_design"), designInstances);
+    appendOwnedGraphTopology(design,
+                             QStringLiteral("design_authoritative_0"),
+                             QStringLiteral("design_authoritative_graph_object"),
+                             QStringLiteral("Tile"));
+
+    ProjectGenerationRequest request;
+    request.projectDesign = &design;
+    request.projectPath = root.filePath(QStringLiteral("project/side_channel_design.fpproj"));
+    request.designName = QStringLiteral("side_channel_design");
+    request.catalogEntries = {createFailingFlowPackage(root, ipcoreId, QStringLiteral("Tile"))};
+    request.instances = {
+        instanceRecord(ipcoreId,
+                       QStringLiteral("stale_side_channel_0"),
+                       QStringLiteral("stale-marker"),
+                       QStringLiteral("stale_graph_object"),
+                       QStringLiteral("Tile"))
+    };
+
+    CapturedGenerationFlow capture;
+    ProjectGenerationRunner runner;
+    runner.addGenerationFlowProvider(std::make_unique<CapturingGenerationFlowProvider>(&capture));
+
+    const ProjectGenerationResult result = runner.generate(request);
+
+    require(result.success, result.error.toLocal8Bit().constData());
+    require(capture.runCount == 1,
+            "stale side-channel should not add an extra generation flow");
+    require(result.instances.size() == 1,
+            "stale side-channel should not add an extra instance result");
+    require(capture.instanceId == QStringLiteral("design_authoritative_0"),
+            "ProjectDesign component should override stale request instances");
+    require(capture.marker == QStringLiteral("design-authoritative-marker"),
+            "ProjectDesign config should override stale request instance config");
+    require(capture.graphConfigObjectIds.contains(QStringLiteral("design_authoritative_graph_object")),
+            "ProjectDesign graph config should override stale request instance graph_config");
+    require(!capture.graphConfigObjectIds.contains(QStringLiteral("stale_graph_object")),
+            "stale request instance graph_config should not feed the flow graph config");
 }
 
 void testGenerationRejectsUnsafeAndDuplicateInstanceOutputKeys() {
@@ -1276,7 +1404,7 @@ void testGenerateEmitsInputsForEveryPackageInstance() {
             "second generation manifest should record the emitted inputs schema");
 }
 
-void testGenerateUsesProjectDesignWithoutGraphAndInstanceGraphConfig() {
+void testGenerateUsesProjectDesignWithoutGraphAndRequestInstanceGraphConfig() {
     QTemporaryDir tempDir;
     require(tempDir.isValid(), "temporary directory should be valid");
     QDir root(tempDir.path());
@@ -1296,7 +1424,6 @@ void testGenerateUsesProjectDesignWithoutGraphAndInstanceGraphConfig() {
     request.projectPath = root.filePath(QStringLiteral("project/graph_free_design.fpproj"));
     request.designName = QStringLiteral("graph_free_design");
     request.catalogEntries = {createCopyingFlowPackage(root, ipcoreId, QStringLiteral("Tile"))};
-    request.instances = instances;
 
     const ProjectGenerationResult result = ProjectGenerationRunner().generate(request);
 
@@ -1310,7 +1437,7 @@ void testGenerateUsesProjectDesignWithoutGraphAndInstanceGraphConfig() {
             "graph-free emitted inputs should include instance-owned graph_config");
     require(objects.first().toObject().value(QStringLiteral("id")).toString()
                 == QStringLiteral("owned_graph_config_object"),
-            "graph-free generation should use ProjectIpInstanceRecord graph_config");
+            "graph-free generation should use ProjectDesign-owned graph_config");
 }
 
 void testGenerateWritesProjectDesignSnapshotWithoutGraph() {
@@ -1578,6 +1705,8 @@ int main(int argc, char** argv) {
         testDefaultFrameworkToolSearchPathsFindRepositoryToolFromApplicationDir();
         testGeneratesEveryProjectInstanceIntoSeparateOutputDirectories();
         testGenerationRequiresProjectDesignSource();
+        testGenerateDerivesInstancesFromProjectDesignWithoutRequestInstances();
+        testGenerateIgnoresStaleRequestInstancesSideChannel();
         testGenerationRejectsUnsafeAndDuplicateInstanceOutputKeys();
         testGenerationFailureAndTimeoutFailWholeResult();
         testGenerationManifestExcludesStaleArtifacts();
@@ -1586,7 +1715,7 @@ int main(int argc, char** argv) {
         testPackageFlowInputPathUsesEmittedInputsManifest();
         testGenerateRunsFrameworkToolFromInjectedSearchPath();
         testGenerateEmitsInputsForEveryPackageInstance();
-        testGenerateUsesProjectDesignWithoutGraphAndInstanceGraphConfig();
+        testGenerateUsesProjectDesignWithoutGraphAndRequestInstanceGraphConfig();
         testGenerateWritesProjectDesignSnapshotWithoutGraph();
         testGenerateRunsBuiltInValidationBeforeCommand();
         testInjectedGenerationFlowProviderOverridesDefaultRunner();

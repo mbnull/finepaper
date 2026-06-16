@@ -11,10 +11,10 @@
 #include "app/serviceregistry.h"
 #include "app/staticplugincatalog.h"
 #include "app/toolpipelineservice.h"
+#include "app/topologypresetinteractionhandler.h"
 #include "app/workbenchservice.h"
 #include "commands/addipinstancecommand.h"
 #include "commands/removeipinstancecommand.h"
-#include "commands/topologypresetcommand.h"
 #include "graph/graph.h"
 #include "commands/commandmanager.h"
 #include "ipcraft/ipcraftmanifest.h"
@@ -32,7 +32,6 @@
 #include "project/projectipservice.h"
 #include "project/projectservice.h"
 #include "project/projectstateservice.h"
-#include "topology/topologypresetbuilder.h"
 #include "validation/validationmanager.h"
 #include "workspace/activeworkspacecontroller.h"
 #include "modules/moduleregistry.h"
@@ -47,7 +46,6 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
-#include <QInputDialog>
 #include <QJsonValue>
 #include <QMenu>
 #include <QMenuBar>
@@ -395,6 +393,12 @@ MainWindow::MainWindow(QWidget *parent)
       m_activeWorkspaceController(std::make_unique<ActiveWorkspaceController>(
           m_projectIpService.get(),
           m_ipCatalogService.get())),
+      m_topologyPresetInteractionHandler(std::make_unique<TopologyPresetInteractionHandler>(
+          this,
+          m_graph,
+          m_commandManager.get(),
+          m_activeWorkspaceController.get(),
+          m_projectService.get())),
       m_nodeEditor(nullptr),
       m_propertyPanel(nullptr),
       m_ipCatalogPanel(nullptr),
@@ -638,9 +642,6 @@ void MainWindow::generateVerilog() {
     request.projectPath = m_currentDocumentPath;
     request.designName = QFileInfo(m_currentDocumentPath).completeBaseName();
     request.catalogEntries = m_ipCatalogService ? m_ipCatalogService->entries() : QList<IpCatalogEntry>{};
-    request.instances = m_projectStateService
-        ? m_projectStateService->ipInstanceRecords()
-        : QVector<ProjectIpInstanceRecord>{};
 
     const QString outputRoot =
         QFileInfo(m_currentDocumentPath).absoluteDir().filePath(QStringLiteral("generated"));
@@ -749,115 +750,6 @@ void MainWindow::createTopologyPreset() {
                                    action->data().toString());
 }
 
-void MainWindow::createTopologyPresetFor(const QString& ipcoreId,
-                                         const QString& instanceId,
-                                         const QString& presetId) {
-    if (!requireOpenProject(QStringLiteral("creating topology"))) {
-        return;
-    }
-    if (!m_activeWorkspaceController ||
-        ipcoreId.trimmed().isEmpty() ||
-        instanceId.trimmed().isEmpty() ||
-        presetId.trimmed().isEmpty()) {
-        qWarning().noquote() << "Ignoring incomplete topology preset request";
-        return;
-    }
-
-    const std::optional<ActiveWorkspaceContext> context =
-        m_activeWorkspaceController->activeContext();
-    if (!context.has_value() ||
-        context->record.ipcoreId != ipcoreId ||
-        context->record.instanceId != instanceId) {
-        qWarning().noquote() << "Ignoring topology preset request for inactive IP instance:"
-                             << ipcoreId << instanceId;
-        return;
-    }
-
-    // Presets are IP-core-owned; look them up by ID at trigger time so rebuilt
-    // menus cannot leave stale QAction pointers to deleted descriptors.
-    const IpCatalogEntry& entry = context->entry;
-    auto presetIt = std::find_if(entry.topologyPresets.cbegin(),
-                                 entry.topologyPresets.cend(),
-                                 [&](const TopologyPresetDescriptor& preset) {
-                                     return preset.id == presetId;
-                                 });
-    if (presetIt == entry.topologyPresets.cend()) {
-        qWarning().noquote() << "Ignoring unknown topology preset request:" << presetId;
-        return;
-    }
-
-    TopologyPresetRequest request;
-    request.ipcoreId = ipcoreId;
-    request.instanceId = instanceId;
-    request.preset = *presetIt;
-
-    struct OrderedPresetParameter {
-        QString name;
-        QString label;
-    };
-    QVector<OrderedPresetParameter> orderedParameters;
-    orderedParameters.reserve(presetIt->parameters.size());
-    for (auto parameterIt = presetIt->parameters.cbegin(); parameterIt != presetIt->parameters.cend(); ++parameterIt) {
-        OrderedPresetParameter parameter;
-        parameter.name = parameterIt.key();
-        parameter.label = parameterIt.value().label.trimmed().isEmpty()
-            ? parameterIt.key()
-            : parameterIt.value().label;
-        orderedParameters.push_back(parameter);
-    }
-
-    std::sort(orderedParameters.begin(), orderedParameters.end(), [](const auto& left, const auto& right) {
-        const int labelOrder = QString::compare(left.label, right.label, Qt::CaseInsensitive);
-        if (labelOrder != 0) {
-            return labelOrder < 0;
-        }
-        return left.name < right.name;
-    });
-    for (const OrderedPresetParameter& orderedParameter : orderedParameters) {
-        // Deterministic prompt ordering makes repeated preset creation and UI
-        // tests stable even though descriptor parameters are stored in a hash.
-        const auto parameterIt = presetIt->parameters.constFind(orderedParameter.name);
-        const TopologyPresetParameterDescriptor& parameter = parameterIt.value();
-        bool ok = false;
-        const int value = QInputDialog::getInt(this,
-                                               presetIt->label,
-                                               parameter.label,
-                                               parameter.defaultValue,
-                                               parameter.minimumValue,
-                                               parameter.maximumValue,
-                                               1,
-                                               &ok);
-        if (!ok) {
-            return;
-        }
-        request.parameters.insert(orderedParameter.name, value);
-    }
-
-    const std::optional<ActiveWorkspaceContext> contextBeforeExecute =
-        m_activeWorkspaceController->activeContext();
-    if (!contextBeforeExecute.has_value() ||
-        contextBeforeExecute->record.ipcoreId != ipcoreId ||
-        contextBeforeExecute->record.instanceId != instanceId) {
-        qWarning().noquote() << "Ignoring topology preset request after active IP changed:"
-                             << ipcoreId << instanceId;
-        return;
-    }
-
-    std::unique_ptr<Command> rejected =
-        m_commandManager->executeCommand(std::make_unique<TopologyPresetCommand>(
-            m_graph,
-            &ModuleRegistry::instance(),
-            request,
-            m_projectService.get()));
-    if (auto* failed = dynamic_cast<TopologyPresetCommand*>(rejected.get())) {
-        QMessageBox::warning(this, "Topology", failed->result().error);
-        return;
-    }
-
-    syncDocumentStateFromHistory();
-    statusBar()->showMessage(QString("Created %1 topology").arg(presetIt->label), 5000);
-}
-
 void MainWindow::executeWorkspaceInteractionFor(const QString& ipcoreId,
                                                 const QString& instanceId,
                                                 const QString& interactionId) {
@@ -909,6 +801,11 @@ void MainWindow::executeWorkspaceInteractionFor(const QString& ipcoreId,
     if (!result.handled || !result.success) {
         qWarning().noquote() << "Workspace interaction failed:" << interactionId
                              << result.message;
+        return;
+    }
+    syncDocumentStateFromHistory();
+    if (!result.message.trimmed().isEmpty()) {
+        statusBar()->showMessage(result.message, 5000);
     }
 }
 
@@ -917,28 +814,8 @@ void MainWindow::registerMainWindowInteractionHandlers() {
         return;
     }
 
-    PluginInteractionHandlerDescriptor topologyHandler;
-    topologyHandler.id = QStringLiteral("finepaper.main-window.topology-preset-handler");
-    topologyHandler.ownerPluginId = QStringLiteral("finepaper.main-window");
-    topologyHandler.interactionKind = QStringLiteral("topology.preset");
-    topologyHandler.handler = [this](const PluginInteractionDescriptor& interaction,
-                                     const PluginInteractionContext& context) {
-        PluginInteractionResult result;
-        result.handled = true;
-
-        const QString presetId = interaction.descriptor.value(QStringLiteral("presetId"))
-                                     .toString()
-                                     .trimmed();
-        if (presetId.isEmpty()) {
-            result.message = QStringLiteral("Topology interaction does not name a preset.");
-            return result;
-        }
-
-        createTopologyPresetFor(context.ipcoreId, context.instanceId, presetId);
-        result.success = true;
-        return result;
-    };
-    if (!m_pluginInteractionRegistry->registerHandler(topologyHandler)) {
+    if (!m_topologyPresetInteractionHandler ||
+        !m_topologyPresetInteractionHandler->registerHandlers(*m_pluginInteractionRegistry)) {
         qCritical().noquote() << "Topology workspace interaction handler could not be registered.";
     }
 }

@@ -244,6 +244,58 @@ void testProjectGenerationRequestHasNoGraphPointer() {
     }
 }
 
+void testProjectGenerationRunnerDoesNotReadRequestInstancesSideChannel() {
+    const QString header = readText(QStringLiteral("qt/inc/app/projectgenerationrunner.h"));
+    const QString request =
+        structBody(header, QStringLiteral("ProjectGenerationRequest"), QStringLiteral("ProjectGenerationRequest"));
+    requireContains(request,
+                    QStringLiteral("ProjectDesign"),
+                    QStringLiteral("ProjectGenerationRequest"));
+
+    const QString runner = readText(QStringLiteral("qt/src/app/projectgenerationrunner.cpp"));
+    const QString generate = functionBody(
+        runner,
+        QStringLiteral("ProjectGenerationResult ProjectGenerationRunner::generate"),
+        QStringLiteral("ProjectGenerationRunner::generate"));
+    requireNotContains(generate,
+                       QStringLiteral("request.instances"),
+                       QStringLiteral("ProjectGenerationRunner::generate"));
+
+    const QString mainWindow = readText(QStringLiteral("qt/src/app/mainwindow.cpp"));
+    const QString generateVerilog = functionBody(mainWindow,
+                                                 QStringLiteral("void MainWindow::generateVerilog"),
+                                                 QStringLiteral("MainWindow::generateVerilog"));
+    requireNotContains(generateVerilog,
+                       QStringLiteral("request.instances"),
+                       QStringLiteral("MainWindow::generateVerilog"));
+}
+
+void testMainWindowDispatchesTopologyInteractionsWithoutPresetSemantics() {
+    const QString mainWindow = readText(QStringLiteral("qt/src/app/mainwindow.cpp"));
+    const QString header = readText(QStringLiteral("qt/inc/app/mainwindow.h"));
+    const QString createTopologyPreset =
+        functionBody(mainWindow,
+                     QStringLiteral("void MainWindow::createTopologyPreset"),
+                     QStringLiteral("MainWindow::createTopologyPreset"));
+
+    requireContains(createTopologyPreset,
+                    QStringLiteral("executeWorkspaceInteractionFor"),
+                    QStringLiteral("MainWindow::createTopologyPreset"));
+    const QString combined = header + mainWindow;
+    const QStringList forbiddenTokens{
+        QStringLiteral("TopologyPresetRequest"),
+        QStringLiteral("TopologyPresetCommand"),
+        QStringLiteral("TopologyPresetParameterDescriptor"),
+        QStringLiteral("topology/topologypresetbuilder.h"),
+        QStringLiteral("commands/topologypresetcommand.h"),
+        QStringLiteral("QInputDialog::getInt"),
+        QStringLiteral("createTopologyPresetFor")
+    };
+    for (const QString& token : forbiddenTokens) {
+        requireNotContains(combined, token, QStringLiteral("MainWindow topology interaction path"));
+    }
+}
+
 void testProjectValidationRunnerUsesProjectDesignNotGraphOrBasicValidator() {
     const QString header = readText(QStringLiteral("qt/inc/validation/projectvalidationrunner.h"));
     const QString source = readText(QStringLiteral("qt/src/validation/projectvalidationrunner.cpp"));
@@ -394,6 +446,8 @@ int main(int argc, char** argv) {
     testPackagePluginDoesNotKnowNoCPluginOrNoCSchema();
     testNoCPluginDoesNotKnowConcreteIpPackagesOrModules();
     testProjectGenerationRequestHasNoGraphPointer();
+    testProjectGenerationRunnerDoesNotReadRequestInstancesSideChannel();
+    testMainWindowDispatchesTopologyInteractionsWithoutPresetSemantics();
     testProjectValidationRunnerUsesProjectDesignNotGraphOrBasicValidator();
     testRuntimeHasNoConcreteVendorModuleHardcoding();
     testCompletionReportUsesHardCutoverVerdict();
