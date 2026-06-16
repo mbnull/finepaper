@@ -32,6 +32,8 @@ The architecture passes the hard cutoff for the NoC IP creation MVP target. Proj
 
 The anchor gate proves the Qt frontend path, V1 package load, package-owned flow execution, emitted inputs, artifact collection, and generation manifest output for all three MVP package families.
 
+Vendor MeshNoC (`vendor.meshnoc`) is the current zero-C++ onboarding fixture. `vendor_meshnoc_onboarding_test` loads descriptor/package-data from `ipcores/vendor-meshnoc/ipcraft.json`, verifies descriptor-backed `VendorSwitch` and `VendorHost` catalog entries, and runs ProjectDesign-driven validation and generation through package-declared flows.
+
 ## V1 Schema Reuse Matrix
 
 | Schema | Role | Status |

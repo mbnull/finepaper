@@ -27,6 +27,7 @@ Finepaper 当前不是单纯的 NoC 画布工具，而是 package contract 驱�
 - 外部执行：`PackageInputBuilder` / `FlowRunner` / `ArtifactCollector`
 - 结构化诊断：`DiagnosticStore`
 - Qt 画布：当前仍是 `Graph` projection，不是长期项目根模型
+- Vendor MeshNoC：`vendor.meshnoc` 当前通过 descriptor/package-data loading 接入；`vendor_meshnoc_onboarding_test` 覆盖 descriptor 模块加载和 ProjectDesign-driven validation/generation
 - 硬截止门禁：`plugin_hard_cutover_scan_test` 禁止具体 IP 行为回到 `MainWindow`、`PackagePlugin`、`NoCPlugin` 或 `ProjectGenerationRequest`
 
 ## 文档维护规则

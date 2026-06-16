@@ -32,7 +32,7 @@ QString capabilityId() {
 }
 
 QString pluginId() {
-    return QStringLiteral("finepaper.") + QStringLiteral("noc");
+    return QStringLiteral("finepaper.noc-plugin");
 }
 
 QStringList extensionPoints() {

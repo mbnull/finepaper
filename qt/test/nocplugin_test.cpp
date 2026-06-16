@@ -30,11 +30,11 @@ struct ExpectedNoCContribution {
 };
 
 constexpr std::array<ExpectedNoCContribution, 5> kExpectedNoCContributions{{
-    {"ui.inspectorSection", "finepaper.noc.inspector-section", "inspectorSection"},
-    {"editor.tool", "finepaper.noc.editor-tool", "editorTool"},
-    {"connection.ruleProvider", "finepaper.noc.connection-rule-provider", "ruleProvider"},
-    {"tool.flowInputProjector", "finepaper.noc.flow-input-projector", "flowInputProjector"},
-    {"artifact.presenter", "finepaper.noc.artifact-presenter", "artifactPresenter"},
+    {"ui.inspectorSection", "finepaper.noc-plugin.inspector-section", "inspectorSection"},
+    {"editor.tool", "finepaper.noc-plugin.editor-tool", "editorTool"},
+    {"connection.ruleProvider", "finepaper.noc-plugin.connection-rule-provider", "ruleProvider"},
+    {"tool.flowInputProjector", "finepaper.noc-plugin.flow-input-projector", "flowInputProjector"},
+    {"artifact.presenter", "finepaper.noc-plugin.artifact-presenter", "artifactPresenter"},
 }};
 
 QStringList nocExtensionPoints() {
@@ -85,7 +85,7 @@ void testNoCPluginRegistersNocCapabilityAndDescriptorContributions() {
     require(result.success, "NoC plugin should activate");
 
     const CapabilityHandlerDescriptor handler = requireNocHandler(capabilities);
-    require(handler.ownerPluginId == QStringLiteral("finepaper.noc"),
+    require(handler.ownerPluginId == QStringLiteral("finepaper.noc-plugin"),
             "NoC handler owner plugin id should be stable");
     require(handler.extensionPoints == nocExtensionPoints(),
             "NoC handler should declare all semantic extension points");
@@ -107,7 +107,7 @@ void testNoCPluginRegistersNocCapabilityAndDescriptorContributions() {
         require(contribution.id == id, "NoC contribution id should be externally stable");
         require(contribution.extensionPoint == extensionPoint,
                 "NoC contribution extension point should be externally stable");
-        require(contribution.ownerPluginId == QStringLiteral("finepaper.noc"),
+        require(contribution.ownerPluginId == QStringLiteral("finepaper.noc-plugin"),
                 "NoC contribution owner plugin id should be stable");
         require(contribution.descriptor.value(QStringLiteral("capabilityId")).toString() ==
                     QStringLiteral("noc.v1"),

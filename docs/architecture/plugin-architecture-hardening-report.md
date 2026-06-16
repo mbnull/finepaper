@@ -26,6 +26,7 @@ This report records the state after the final hard cutoff scan was added. It is 
 | Connection | Connection checks are routed through providers and package declarations. | Core/UI must not hardcode concrete connection type behavior. |
 | Tool | Validate/generate flow uses package-declared flows and `FlowRunner`. | UI code must not directly invoke package generators. |
 | Commercial NoC | `finepaper.noc`, `finepaper.ravenoc`, and `finepaper.opennoc` pass the commercial workflow gate. | Vendor fixtures remain a known follow-up risk; the Qt-to-generator contract is covered. |
+| Vendor MeshNoC | `vendor.meshnoc` is loaded from descriptor/package-data without C++ onboarding code. | `vendor_meshnoc_onboarding_test` verifies descriptor-backed modules and ProjectDesign-driven validation/generation through package flows. |
 | Onboarding | `finepaper-ip-onboarding` guides agents through source-IP inspection and V1 package authoring. | The skill must stay operational and concise; detailed architecture belongs in docs. |
 
 ## Three-IP Anchor Matrix
@@ -77,7 +78,7 @@ The final cutoff review covers:
 - `commercial_noc_mvp_test`;
 - package authoring and onboarding docs;
 - V1 schema reuse evidence;
-- remaining editor projection debt;
+- remaining editor projection risk;
 - `qt-cpp-review` output for relevant Qt/C++ changes;
 - `plugin_hard_cutover_scan_test`;
 - final binary verdict for the plugin-extensible IP platform architecture.

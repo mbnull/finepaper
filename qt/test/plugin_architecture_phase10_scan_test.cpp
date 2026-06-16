@@ -27,11 +27,36 @@ void requireContains(const QString& text,
     require(text.contains(needle), context + QStringLiteral(" should contain ") + needle);
 }
 
+void requireContainsOneOf(const QString& text,
+                          const QStringList& needles,
+                          const QString& context) {
+    for (const QString& needle : needles) {
+        if (text.contains(needle)) {
+            return;
+        }
+    }
+    require(false,
+            context + QStringLiteral(" should contain one of: ") +
+                needles.join(QStringLiteral(", ")));
+}
+
+void requireNotContains(const QString& text,
+                        const QString& needle,
+                        const QString& context) {
+    require(!text.contains(needle), context + QStringLiteral(" should not contain ") + needle);
+}
+
 void testCompletionReportCoversPhaseMatrix() {
     const QString report =
         readText(QStringLiteral("docs/architecture/plugin-architecture-completion-report.md"));
 
-    requireContains(report, QStringLiteral("Final verdict: go-with-debt"), QStringLiteral("completion report"));
+    requireNotContains(report, QStringLiteral("go-with-debt"), QStringLiteral("completion report"));
+    requireContainsOneOf(report,
+                         QStringList{
+                             QStringLiteral("Final verdict: hard pass"),
+                             QStringLiteral("Final verdict: blocked")
+                         },
+                         QStringLiteral("completion report"));
     for (int phase = 2; phase <= 10; ++phase) {
         requireContains(report,
                         QStringLiteral("Phase %1").arg(phase),
@@ -71,13 +96,43 @@ void testCompletionReportCoversReviewAndDebt() {
 
     requireContains(report, QStringLiteral("qt-cpp-review"), QStringLiteral("completion report"));
     requireContains(report, QStringLiteral("Architecture Scan Status"), QStringLiteral("completion report"));
-    requireContains(report, QStringLiteral("Phases 1 through 10 pass"), QStringLiteral("completion report"));
+    requireContains(report, QStringLiteral("coverage for Phases 1 through 10"), QStringLiteral("completion report"));
     requireContains(report, QStringLiteral("Legacy Path And Deletion Gate Status"), QStringLiteral("completion report"));
-    requireContains(report, QStringLiteral("accepted debt"), QStringLiteral("completion report"));
+    requireNotContains(report, QStringLiteral("accepted debt"), QStringLiteral("completion report"));
+    requireContains(report, QStringLiteral("Residual Risk And Follow-up"), QStringLiteral("completion report"));
+    requireContains(report,
+                    QStringLiteral("remaining non-blocking follow-up risk"),
+                    QStringLiteral("completion report"));
     requireContains(report, QStringLiteral("ProjectGenerationRequest::projectDesign"), QStringLiteral("completion report"));
     requireContains(report, QStringLiteral("GraphProjectSerializer"), QStringLiteral("completion report"));
     requireContains(report, QStringLiteral("MainWindow"), QStringLiteral("completion report"));
     requireContains(report, QStringLiteral("PluginHost"), QStringLiteral("completion report"));
+}
+
+void requireVendorMeshNoCCoverage(const QString& text, const QString& context) {
+    requireContains(text, QStringLiteral("Vendor MeshNoC"), context);
+    requireContains(text, QStringLiteral("vendor.meshnoc"), context);
+    requireContains(text, QStringLiteral("vendor_meshnoc_onboarding_test"), context);
+    requireContains(text, QStringLiteral("ProjectDesign"), context);
+    requireContains(text, QStringLiteral("descriptor"), context);
+    requireContainsOneOf(text,
+                         QStringList{
+                             QStringLiteral("package-data"),
+                             QStringLiteral("package data")
+                         },
+                         context);
+}
+
+void testReportsAndReadmeCoverVendorMeshNoCCurrentState() {
+    const QString completion =
+        readText(QStringLiteral("docs/architecture/plugin-architecture-completion-report.md"));
+    const QString readme = readText(QStringLiteral("docs/architecture/README.md"));
+    const QString hardening =
+        readText(QStringLiteral("docs/architecture/plugin-architecture-hardening-report.md"));
+
+    requireVendorMeshNoCCoverage(completion, QStringLiteral("completion report"));
+    requireVendorMeshNoCCoverage(hardening, QStringLiteral("hardening report"));
+    requireVendorMeshNoCCoverage(readme, QStringLiteral("architecture README"));
 }
 
 void testReadmeAndHardeningReportReferencePhase10() {
@@ -89,7 +144,7 @@ void testReadmeAndHardeningReportReferencePhase10() {
                     QStringLiteral("plugin-architecture-completion-report.md"),
                     QStringLiteral("architecture README"));
     requireContains(hardening, QStringLiteral("Phase 10"), QStringLiteral("hardening report"));
-    requireContains(hardening, QStringLiteral("editor projection debt"), QStringLiteral("hardening report"));
+    requireContains(hardening, QStringLiteral("editor projection risk"), QStringLiteral("hardening report"));
     requireContains(hardening, QStringLiteral("qt-cpp-review"), QStringLiteral("hardening report"));
 }
 
@@ -111,6 +166,7 @@ int main(int argc, char** argv) {
     testCompletionReportCoversPhaseMatrix();
     testCompletionReportCoversAnchorPackagesAndSchemas();
     testCompletionReportCoversReviewAndDebt();
+    testReportsAndReadmeCoverVendorMeshNoCCurrentState();
     testReadmeAndHardeningReportReferencePhase10();
     testPhase10ScanIsRegistered();
     std::cout << "plugin_architecture_phase10_scan_test passed\n";

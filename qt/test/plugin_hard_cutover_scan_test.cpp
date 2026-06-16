@@ -3,6 +3,7 @@
 #include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
+#include <QRegularExpression>
 #include <QString>
 #include <QStringList>
 #include <iostream>
@@ -66,10 +67,68 @@ void requireNotContains(const QString& text,
     require(!text.contains(needle), context + QStringLiteral(" should not contain ") + needle);
 }
 
+QString whitespaceStripped(const QString& text) {
+    QString result = text;
+    result.remove(QRegularExpression(QStringLiteral("\\s+")));
+    return result;
+}
+
+bool isPackageIdToken(const QString& token) {
+    return token.contains(QLatin1Char('.')) &&
+           !token.contains(QLatin1Char(' ')) &&
+           token == token.toLower();
+}
+
+QStringList stringLiteralForms(const QString& value) {
+    return {
+        QStringLiteral("\"%1\"").arg(value),
+        QStringLiteral("QStringLiteral(\"%1\")").arg(value),
+        QStringLiteral("QString::fromLatin1(\"%1\")").arg(value),
+        QStringLiteral("QLatin1String(\"%1\")").arg(value),
+        QStringLiteral("QLatin1StringView(\"%1\")").arg(value),
+        QStringLiteral("QLatin1StringLiteral(\"%1\")").arg(value),
+    };
+}
+
+QStringList splitStringLiteralForms(const QString& token) {
+    const qsizetype split = token.lastIndexOf(QLatin1Char('.'));
+    if (split <= 0 || split == token.size() - 1) {
+        return {};
+    }
+
+    const QString prefix = token.left(split + 1);
+    const QString suffix = token.mid(split + 1);
+    QStringList patterns;
+    for (const QString& left : stringLiteralForms(prefix)) {
+        for (const QString& right : stringLiteralForms(suffix)) {
+            patterns.append(left + QLatin1Char('+') + right);
+        }
+    }
+    return patterns;
+}
+
+void requirePackageIdNotConstructed(const QString& source,
+                                    const QString& compactSource,
+                                    const QString& token,
+                                    const QString& path) {
+    for (const QString& literalForm : stringLiteralForms(token)) {
+        requireNotContains(compactSource, literalForm, path);
+    }
+    for (const QString& splitForm : splitStringLiteralForms(token)) {
+        requireNotContains(compactSource, splitForm, path);
+    }
+    requireNotContains(source, QStringLiteral("'%1'").arg(token), path);
+}
+
 void requireFileDoesNotContain(const QString& path, const QStringList& tokens) {
     const QString source = readText(path);
+    const QString compactSource = whitespaceStripped(source);
     for (const QString& token : tokens) {
-        requireNotContains(source, token, path);
+        if (isPackageIdToken(token)) {
+            requirePackageIdNotConstructed(source, compactSource, token, path);
+        } else {
+            requireNotContains(source, token, path);
+        }
     }
 }
 
