@@ -1,10 +1,11 @@
 // IP catalog panel implementation.
 #include "panels/ipcatalogpanel.h"
 
+#include "app/plugininteractionregistry.h"
 #include "ipcore/internalmodulelibrarymodel.h"
 #include "ipcore/ipcatalogservice.h"
-#include "ipcore/iptoolsmodel.h"
 #include "modules/modulelabels.h"
+#include "package/packageservice.h"
 #include "project/projectipservice.h"
 #include "project/projectstateservice.h"
 #include "widgets/collapsiblesection.h"
@@ -146,12 +147,16 @@ IpCatalogPanel::IpCatalogPanel(const IpCatalogService* catalogService,
                                ProjectStateService* stateService,
                                ProjectIpService* projectIpService,
                                ActiveWorkspaceController* workspaceController,
+                               const PluginInteractionRegistry* interactions,
+                               const PackageService* packageService,
                                QWidget* parent)
     : QWidget(parent),
       m_catalogService(catalogService),
       m_stateService(stateService),
       m_projectIpService(projectIpService),
-      m_workspaceController(workspaceController) {
+      m_workspaceController(workspaceController),
+      m_interactions(interactions),
+      m_packageService(packageService) {
     setObjectName(QStringLiteral("ipCatalogPanel"));
 
     auto* layout = new QVBoxLayout(this);
@@ -409,12 +414,22 @@ void IpCatalogPanel::refreshActiveWorkspace() {
         return;
     }
 
-    const IpToolsModel toolsModel;
-    for (const IpToolEntry& tool : toolsModel.entriesForWorkspace(state, *entry)) {
-        auto* item = new QListWidgetItem(tool.label);
-        item->setData(Qt::UserRole, tool.id);
+    const PackageCoverageReport* coverage = m_packageService
+        ? m_packageService->coverageReport(entry->packageId.trimmed().isEmpty()
+                                               ? entry->id
+                                               : entry->packageId)
+        : nullptr;
+    const QVector<PluginInteractionDescriptor> interactions = m_interactions
+        ? m_interactions->interactionsForWorkspace(state, *entry, coverage)
+        : QVector<PluginInteractionDescriptor>{};
+    for (const PluginInteractionDescriptor& interaction : interactions) {
+        auto* item = new QListWidgetItem(interaction.label);
+        item->setData(Qt::UserRole, interaction.id);
         item->setData(IpcoreIdRole, state.ipcoreId);
         item->setData(ActiveInstanceIdRole, state.instanceId);
+        item->setToolTip(interaction.category);
+        item->setFlags(interaction.enabled ? item->flags()
+                                           : (item->flags() & ~Qt::ItemIsEnabled));
         m_activeToolList->addItem(item);
     }
 }

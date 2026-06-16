@@ -7,6 +7,7 @@
 #include "app/extensionpointregistry.h"
 #include "app/mainwindow.h"
 #include "app/pluginhost.h"
+#include "app/plugininteractionregistry.h"
 #include "app/serviceregistry.h"
 #include "app/staticplugincatalog.h"
 #include "app/toolpipelineservice.h"
@@ -362,6 +363,10 @@ QStringList ipcraftDiagnosticLines(const QVector<IpcraftDiagnostic>& diagnostics
     return lines;
 }
 
+QString packageIdForEntry(const IpCatalogEntry& entry) {
+    return entry.packageId.trimmed().isEmpty() ? entry.id : entry.packageId;
+}
+
 } // namespace
 
 MainWindow::MainWindow(QWidget *parent)
@@ -385,6 +390,7 @@ MainWindow::MainWindow(QWidget *parent)
       m_serviceRegistry(std::make_unique<ServiceRegistry>()),
       m_extensionPointRegistry(std::make_unique<ExtensionPointRegistry>()),
       m_capabilityRegistry(std::make_unique<CapabilityRegistry>()),
+      m_pluginInteractionRegistry(std::make_unique<PluginInteractionRegistry>()),
       m_pluginHost(nullptr),
       m_activeWorkspaceController(std::make_unique<ActiveWorkspaceController>(
           m_projectIpService.get(),
@@ -427,12 +433,17 @@ MainWindow::MainWindow(QWidget *parent)
     context.services = m_serviceRegistry.get();
     context.extensionPoints = m_extensionPointRegistry.get();
     context.capabilities = m_capabilityRegistry.get();
+    context.interactions = m_pluginInteractionRegistry.get();
     context.workbench = m_workbenchService.get();
     context.projectService = m_projectService.get();
     context.packageService = m_packageService.get();
     context.toolPipelineService = m_toolPipelineService.get();
 
     m_pluginHost = std::make_unique<PluginHost>(context);
+    if (!registerStaticPluginInteractions(*m_pluginInteractionRegistry)) {
+        qCritical().noquote() << "Static plugin interactions could not be registered.";
+    }
+    registerMainWindowInteractionHandlers();
     registerStaticPlugins(*m_pluginHost);
     const PluginActivationResult activationResult = m_pluginHost->activatePlugins();
     if (!activationResult.success) {
@@ -733,7 +744,9 @@ void MainWindow::createTopologyPreset() {
     }
 
     const ActiveWorkspaceState& workspace = m_activeWorkspaceController->state();
-    createTopologyPresetFor(workspace.ipcoreId, workspace.instanceId, action->data().toString());
+    executeWorkspaceInteractionFor(workspace.ipcoreId,
+                                   workspace.instanceId,
+                                   action->data().toString());
 }
 
 void MainWindow::createTopologyPresetFor(const QString& ipcoreId,
@@ -845,6 +858,91 @@ void MainWindow::createTopologyPresetFor(const QString& ipcoreId,
     statusBar()->showMessage(QString("Created %1 topology").arg(presetIt->label), 5000);
 }
 
+void MainWindow::executeWorkspaceInteractionFor(const QString& ipcoreId,
+                                                const QString& instanceId,
+                                                const QString& interactionId) {
+    if (!requireOpenProject(QStringLiteral("using workspace tools"))) {
+        return;
+    }
+    if (!m_pluginInteractionRegistry ||
+        !m_activeWorkspaceController ||
+        ipcoreId.trimmed().isEmpty() ||
+        instanceId.trimmed().isEmpty() ||
+        interactionId.trimmed().isEmpty()) {
+        qWarning().noquote() << "Ignoring incomplete workspace interaction request";
+        return;
+    }
+
+    const std::optional<ActiveWorkspaceContext> context =
+        m_activeWorkspaceController->activeContext();
+    if (!context.has_value() ||
+        context->record.ipcoreId != ipcoreId ||
+        context->record.instanceId != instanceId) {
+        qWarning().noquote() << "Ignoring workspace interaction request for inactive IP instance:"
+                             << ipcoreId << instanceId << interactionId;
+        return;
+    }
+
+    const PackageCoverageReport* coverage = m_packageService
+        ? m_packageService->coverageReport(packageIdForEntry(context->entry))
+        : nullptr;
+    const std::optional<PluginInteractionDescriptor> interaction =
+        m_pluginInteractionRegistry->interactionForWorkspace(interactionId,
+                                                             context->workspace,
+                                                             context->entry,
+                                                             coverage);
+    if (!interaction.has_value()) {
+        qWarning().noquote() << "Ignoring unknown workspace interaction request:" << interactionId;
+        return;
+    }
+    if (!interaction->enabled) {
+        qWarning().noquote() << "Ignoring disabled workspace interaction request:" << interactionId;
+        return;
+    }
+
+    PluginInteractionContext dispatchContext;
+    dispatchContext.ipcoreId = ipcoreId;
+    dispatchContext.instanceId = instanceId;
+    dispatchContext.packageId = interaction->packageId;
+    const PluginInteractionResult result =
+        m_pluginInteractionRegistry->dispatch(*interaction, dispatchContext);
+    if (!result.handled || !result.success) {
+        qWarning().noquote() << "Workspace interaction failed:" << interactionId
+                             << result.message;
+    }
+}
+
+void MainWindow::registerMainWindowInteractionHandlers() {
+    if (!m_pluginInteractionRegistry) {
+        return;
+    }
+
+    PluginInteractionHandlerDescriptor topologyHandler;
+    topologyHandler.id = QStringLiteral("finepaper.main-window.topology-preset-handler");
+    topologyHandler.ownerPluginId = QStringLiteral("finepaper.main-window");
+    topologyHandler.interactionKind = QStringLiteral("topology.preset");
+    topologyHandler.handler = [this](const PluginInteractionDescriptor& interaction,
+                                     const PluginInteractionContext& context) {
+        PluginInteractionResult result;
+        result.handled = true;
+
+        const QString presetId = interaction.descriptor.value(QStringLiteral("presetId"))
+                                     .toString()
+                                     .trimmed();
+        if (presetId.isEmpty()) {
+            result.message = QStringLiteral("Topology interaction does not name a preset.");
+            return result;
+        }
+
+        createTopologyPresetFor(context.ipcoreId, context.instanceId, presetId);
+        result.success = true;
+        return result;
+    };
+    if (!m_pluginInteractionRegistry->registerHandler(topologyHandler)) {
+        qCritical().noquote() << "Topology workspace interaction handler could not be registered.";
+    }
+}
+
 void MainWindow::closeEvent(QCloseEvent* event) {
     if (maybeSaveChanges(QStringLiteral("closing the window"))) {
         if (m_appSettings) {
@@ -875,6 +973,8 @@ void MainWindow::setupPanels() {
                                           m_projectStateService.get(),
                                           m_projectIpService.get(),
                                           m_activeWorkspaceController.get(),
+                                          m_pluginInteractionRegistry.get(),
+                                          m_packageService.get(),
                                           this);
     m_logPanel = new LogPanel(this);
     m_validationManager = new ValidationManager(m_graph,
@@ -1044,13 +1144,7 @@ void MainWindow::setupConnections() {
             &IpCatalogPanel::workspaceToolRequested,
             this,
             [this](const QString& toolId, const QString& ipcoreId, const QString& instanceId) {
-                static const QString topologyPrefix = QStringLiteral("topology:");
-                if (!toolId.startsWith(topologyPrefix)) {
-                    qWarning().noquote() << "Ignoring unsupported workspace tool request:" << toolId;
-                    return;
-                }
-
-                createTopologyPresetFor(ipcoreId, instanceId, toolId.mid(topologyPrefix.size()));
+                executeWorkspaceInteractionFor(ipcoreId, instanceId, toolId);
             });
 }
 
@@ -1343,17 +1437,36 @@ void MainWindow::rebuildTopologyMenu() {
 
     m_topologyMenu->clear();
     m_topologyMenu->setEnabled(false);
-    if (!m_projectOpen || !m_activeWorkspaceController || !m_activeWorkspaceController->state().hasActiveIp) {
+    if (!m_projectOpen || !m_activeWorkspaceController || !m_pluginInteractionRegistry) {
         return;
     }
 
-    const ActiveWorkspaceState& workspace = m_activeWorkspaceController->state();
-    for (const TopologyPresetDescriptor& preset : workspace.topologyPresets) {
-        QAction* action = m_topologyMenu->addAction(preset.label);
-        action->setData(preset.id);
-        connect(action, &QAction::triggered, this, &MainWindow::createTopologyPreset);
+    const std::optional<ActiveWorkspaceContext> context =
+        m_activeWorkspaceController->activeContext();
+    if (!context.has_value()) {
+        return;
     }
-    m_topologyMenu->setEnabled(!workspace.topologyPresets.isEmpty());
+
+    const PackageCoverageReport* coverage = m_packageService
+        ? m_packageService->coverageReport(packageIdForEntry(context->entry))
+        : nullptr;
+    const QVector<PluginInteractionDescriptor> interactions =
+        m_pluginInteractionRegistry->interactionsForWorkspace(context->workspace,
+                                                              context->entry,
+                                                              coverage);
+    bool hasTopologyInteraction = false;
+    for (const PluginInteractionDescriptor& interaction : interactions) {
+        if (interaction.kind != QStringLiteral("topology.preset")) {
+            continue;
+        }
+
+        QAction* action = m_topologyMenu->addAction(interaction.label);
+        action->setData(interaction.id);
+        action->setEnabled(interaction.enabled);
+        connect(action, &QAction::triggered, this, &MainWindow::createTopologyPreset);
+        hasTopologyInteraction = true;
+    }
+    m_topologyMenu->setEnabled(hasTopologyInteraction);
 }
 
 QVector<IIpInstanceParameterAdapter*> MainWindow::rebuildIpInstanceParameterAdapters() {

@@ -1,5 +1,6 @@
 #include "app/capabilityregistry.h"
 #include "app/extensionpointregistry.h"
+#include "app/plugininteractionregistry.h"
 #include "app/pluginhost.h"
 #include "app/serviceregistry.h"
 #include "app/workbenchservice.h"
@@ -29,9 +30,10 @@ struct ExpectedNoCContribution {
     const char* contributionKind;
 };
 
-constexpr std::array<ExpectedNoCContribution, 5> kExpectedNoCContributions{{
+constexpr std::array<ExpectedNoCContribution, 6> kExpectedNoCContributions{{
     {"ui.inspectorSection", "finepaper.noc-plugin.inspector-section", "inspectorSection"},
     {"editor.tool", "finepaper.noc-plugin.editor-tool", "editorTool"},
+    {"ui.workspaceInteraction", "finepaper.noc-plugin.workspace-interaction", "workspaceInteraction"},
     {"connection.ruleProvider", "finepaper.noc-plugin.connection-rule-provider", "ruleProvider"},
     {"tool.flowInputProjector", "finepaper.noc-plugin.flow-input-projector", "flowInputProjector"},
     {"artifact.presenter", "finepaper.noc-plugin.artifact-presenter", "artifactPresenter"},
@@ -72,10 +74,12 @@ void testNoCPluginRegistersNocCapabilityAndDescriptorContributions() {
     ServiceRegistry services;
     ExtensionPointRegistry extensionPoints;
     CapabilityRegistry capabilities;
+    PluginInteractionRegistry interactions;
     AppContext context;
     context.services = &services;
     context.extensionPoints = &extensionPoints;
     context.capabilities = &capabilities;
+    context.interactions = &interactions;
     context.workbench = &workbench;
 
     PluginHost host(context);

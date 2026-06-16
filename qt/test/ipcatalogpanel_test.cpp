@@ -1,7 +1,9 @@
 // IP catalog panel widget tests.
 #include "app/appsettings.h"
+#include "app/plugininteractionregistry.h"
 #include "app/servicekey.h"
 #include "app/serviceregistry.h"
+#include "app/staticplugincatalog.h"
 #include "commands/addipinstancecommand.h"
 #include "commands/addconnectioncommand.h"
 #include "commands/addmodulecommand.h"
@@ -359,7 +361,61 @@ void writePackageWithParameter(const QString& packageRootPath,
       }
     }
   }
-})json").arg(packageId, parameterName, parameterLabel).toUtf8());
+	})json").arg(packageId, parameterName, parameterLabel).toUtf8());
+}
+
+void writePackageWithDescriptorInteractions(const QString& packageRootPath,
+                                            const QString& packageId) {
+    QDir root(packageRootPath);
+    require(root.mkpath(QStringLiteral("views")), "failed to create views directory");
+    writeFile(root.filePath(QStringLiteral("views/Module.xml")),
+              QByteArrayLiteral(R"xml(<module-view schema="v1" module="Module">
+  <anchors><anchor ref="bus" x="0" y="0" /></anchors>
+</module-view>)xml"));
+    writeFile(root.filePath(QStringLiteral("ipcraft.json")),
+              QStringLiteral(R"json({
+  "schema": "ipcraft.package.v1",
+  "id": "%1",
+  "name": "Descriptor Interaction Package",
+  "version": "1.0.0",
+  "extensions": [
+    "ipcraft.views",
+    "ipcraft.flows",
+    {
+      "id": "vendor.dynamic.feature.v1",
+      "required": false,
+      "metadata": { "label": "Dynamic Feature" }
+    }
+  ],
+  "views": [
+    { "id": "detail", "module": "Module", "file": "views/Module.xml" }
+  ],
+  "flows": [
+    { "id": "configure", "scope": "instance" }
+  ],
+  "native": {
+    "ipcraft": {
+      "editor": {
+        "connection_classes": [
+          { "id": "demo_link", "roles": ["initiator", "target"], "symmetric": false }
+        ],
+        "modules": [
+          {
+            "id": "Module",
+            "name": "Descriptor Module",
+            "interfaces": [
+              {
+                "id": "bus",
+                "modes": ["initiator"],
+                "accepts": [{ "class": "demo_link", "role": "initiator" }]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+})json").arg(packageId).toUtf8());
 }
 
 QTreeWidgetItem* firstCatalogEntry(QTreeWidget* catalog) {
@@ -413,6 +469,20 @@ bool listContainsText(QListWidget* list, const QString& text) {
     for (int row = 0; row < list->count(); ++row) {
         const QListWidgetItem* item = list->item(row);
         if (item && item->text().contains(text)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool listContainsData(QListWidget* list, const QString& value) {
+    if (!list) {
+        return false;
+    }
+
+    for (int row = 0; row < list->count(); ++row) {
+        const QListWidgetItem* item = list->item(row);
+        if (item && item->data(Qt::UserRole).toString() == value) {
             return true;
         }
     }
@@ -642,11 +712,14 @@ struct TestHarness {
     ProjectStateService stateService;
     ProjectIpService projectIpService;
     ActiveWorkspaceController workspaceController;
+    PluginInteractionRegistry interactions;
 
     TestHarness()
         : catalog(QList<IpCoreRuntimeDescriptor>{ravenoc, fabric}, &registry),
           projectIpService(&stateService),
           workspaceController(&projectIpService, &catalog) {
+        require(registerStaticPluginInteractions(interactions),
+                "static interaction providers should register for panel tests");
         ModuleType raveTile;
         raveTile.name = QStringLiteral("RaveTile");
         raveTile.ipcoreId = ravenoc.id;
@@ -680,7 +753,8 @@ void testSearchFiltersCatalogEntries() {
     IpCatalogPanel panel(&harness.catalog,
                          &harness.stateService,
                          &harness.projectIpService,
-                         &harness.workspaceController);
+                         &harness.workspaceController,
+                         &harness.interactions);
 
     require(panel.objectName() == QStringLiteral("ipCatalogPanel"),
             "panel object name should be stable");
@@ -712,7 +786,8 @@ void testCatalogSectionsAndCategoriesCanCollapse() {
     IpCatalogPanel panel(&harness.catalog,
                          &harness.stateService,
                          &harness.projectIpService,
-                         &harness.workspaceController);
+                         &harness.workspaceController,
+                         &harness.interactions);
 
     auto* toggle = panel.findChild<QToolButton*>(QStringLiteral("ipCatalogIpCoresSectionToggle"));
     auto* content = panel.findChild<QWidget*>(QStringLiteral("ipCatalogIpCoresSectionContent"));
@@ -740,7 +815,8 @@ void testSelectingIpInstanceUpdatesActiveModuleAndToolLists() {
     IpCatalogPanel panel(&harness.catalog,
                          &harness.stateService,
                          &harness.projectIpService,
-                         &harness.workspaceController);
+                         &harness.workspaceController,
+                         &harness.interactions);
 
     require(harness.projectIpService.createInstanceForIpcore(harness.ravenocEntry()).success,
             "RaveNoC instance should be created");
@@ -755,7 +831,7 @@ void testSelectingIpInstanceUpdatesActiveModuleAndToolLists() {
     require(moduleList->count() == 1, "active module list should show RaveTile");
     require(moduleList->item(0)->data(Qt::UserRole).toString() == QStringLiteral("RaveTile"),
             "active module row should store module type");
-    require(toolList->count() == 1, "active tool list should only include topology tools");
+    require(toolList->count() == 1, "active tool list should include the topology interaction");
     require(toolList->item(0)->text() == QStringLiteral("Mesh"),
             "active tool list should show the Mesh topology preset");
     for (int row = 0; row < toolList->count(); ++row) {
@@ -772,7 +848,8 @@ void testPanelEmitsWorkspaceToolIntentWithActiveInstance() {
     IpCatalogPanel panel(&harness.catalog,
                          &harness.stateService,
                          &harness.projectIpService,
-                         &harness.workspaceController);
+                         &harness.workspaceController,
+                         &harness.interactions);
 
     require(harness.projectIpService.createInstanceForIpcore(harness.ravenocEntry()).success,
             "RaveNoC instance should be created");
@@ -1789,14 +1866,51 @@ void testNewProjectAddsIpcraftPackageInstanceFromCatalog() {
             "project instance list should show the added package instance");
     require(listContainsText(moduleList, QStringLiteral("Rave")),
             "active workspace module list should show package modules for the added instance");
-    require(toolList != nullptr && toolList->count() == 1,
-            "workspace tools should expose only active-instance editing helpers");
-    require(toolList->item(0)->data(Qt::UserRole).toString() == QStringLiteral("topology:mesh"),
+    require(toolList != nullptr && toolList->count() >= 2,
+            "workspace tools should expose topology and package-described interactions");
+    require(listContainsData(toolList, QStringLiteral("topology:mesh")),
             "workspace tools should expose the package topology preset");
+    require(listContainsData(toolList, QStringLiteral("package:capability:noc.v1")),
+            "workspace tools should expose package capability coverage interactions");
 
     auto* logList = window.m_logPanel->findChild<QListWidget*>();
     require(listContainsText(logList, QStringLiteral("IP core package finepaper.ravenoc")),
             "startup log should include the loaded package manifest");
+}
+
+void testPackageDescriptorFeaturesAppearAsWorkspaceInteractions() {
+    ModuleRegistryRestore restoreRegistry;
+    QTemporaryDir settingsRoot;
+    QTemporaryDir packageRoot;
+    QTemporaryDir tempDir;
+    require(settingsRoot.isValid() && packageRoot.isValid() && tempDir.isValid(),
+            "temporary directories should be valid");
+
+    const QString packageId = QStringLiteral("org.example.descriptorinteractions");
+    writePackageWithDescriptorInteractions(packageRoot.path(), packageId);
+    configureSettingsRoot(settingsRoot.path(),
+                          QStringLiteral("ipcatalogpanel_descriptor_interactions_app"));
+    AppSettings().setIpcorePaths({packageRoot.path()});
+
+    MainWindow window;
+    const QString projectPath = tempDir.filePath(QStringLiteral("descriptor_interactions.fpproj"));
+    require(window.createProjectAt(projectPath),
+            "project should be created before descriptor interaction test");
+    const ProjectIpInstanceRecord record = addCatalogInstanceViaCommand(window, packageId);
+    require(record.instanceId == QStringLiteral("descriptorinteractions_0"),
+            "descriptor package instance should use a stable id");
+
+    auto* toolList = window.findChild<QListWidget*>(QStringLiteral("activeToolList"));
+    require(toolList != nullptr, "active tool list should exist");
+    require(listContainsData(toolList,
+                             QStringLiteral("package:capability:vendor.dynamic.feature.v1")),
+            "vendor capability should appear from package descriptor without C++ token hardcoding");
+    require(listContainsText(toolList, QStringLiteral("Dynamic Feature")),
+            "vendor capability label should come from descriptor metadata");
+    require(listContainsData(toolList, QStringLiteral("package:view:detail")),
+            "package view declaration should appear as an interaction");
+    require(listContainsData(toolList, QStringLiteral("package:flow:configure")),
+            "package flow declaration should appear as an interaction");
 }
 
 void testAmbiguousConnectionAppearsInPropertyPanelAndLog() {
@@ -2023,6 +2137,7 @@ int main(int argc, char** argv) {
         testMixedDesignOnlyAndProjectStateEditsSurviveOwnershipMerge();
         testDesignEditAfterProjectionMergeKeepsProjectionOwnedState();
         testNewProjectAddsIpcraftPackageInstanceFromCatalog();
+        testPackageDescriptorFeaturesAppearAsWorkspaceInteractions();
         testAmbiguousConnectionAppearsInPropertyPanelAndLog();
         testCatalogReloadUsesConfiguredPackageRoots();
         testCatalogReloadRefreshesPropertyPanelParameters();

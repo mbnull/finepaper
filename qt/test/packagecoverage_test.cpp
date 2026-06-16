@@ -1,13 +1,16 @@
 #include "app/appcontext.h"
 #include "app/capabilityregistry.h"
 #include "app/extensionpointregistry.h"
+#include "app/plugininteractionregistry.h"
 #include "app/pluginhost.h"
 #include "app/serviceregistry.h"
 #include "app/workbenchservice.h"
+#include "ipcore/ipcatalogservice.h"
 #include "modules/moduleregistry.h"
 #include "package/packagecoverage.h"
 #include "package/packageplugin.h"
 #include "package/packageservice.h"
+#include "workspace/activeworkspacecontroller.h"
 
 #include <QCoreApplication>
 #include <QDir>
@@ -287,6 +290,7 @@ void testPackagePluginRegistersCoverageInspectorContribution() {
     ServiceRegistry services;
     ExtensionPointRegistry extensionPoints;
     CapabilityRegistry capabilities;
+    PluginInteractionRegistry interactions;
     WorkbenchService workbench;
     ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
     PackageService packageService(&registry);
@@ -298,6 +302,7 @@ void testPackagePluginRegistersCoverageInspectorContribution() {
     context.services = &services;
     context.extensionPoints = &extensionPoints;
     context.capabilities = &capabilities;
+    context.interactions = &interactions;
     context.workbench = &workbench;
     context.packageService = &packageService;
 
@@ -317,6 +322,71 @@ void testPackagePluginRegistersCoverageInspectorContribution() {
             "package plugin should register package coverage inspector contribution");
 }
 
+void testPackagePluginRegistersGenericCoverageInteractionProvider() {
+    ServiceRegistry services;
+    ExtensionPointRegistry extensionPoints;
+    CapabilityRegistry capabilities;
+    PluginInteractionRegistry interactions;
+    WorkbenchService workbench;
+    ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
+    PackageService packageService(&registry);
+    require(services.registerService(ServiceKey::fromLiteral("finepaper.package"),
+                                     &packageService),
+            "package service should register");
+
+    AppContext context;
+    context.services = &services;
+    context.extensionPoints = &extensionPoints;
+    context.capabilities = &capabilities;
+    context.interactions = &interactions;
+    context.workbench = &workbench;
+    context.packageService = &packageService;
+
+    PluginHost host(context);
+    require(host.registerPlugin(createPackagePlugin()), "package plugin should register");
+    const PluginActivationResult result = host.activatePlugins();
+    require(result.success, "package plugin should activate");
+
+    ActiveWorkspaceState workspace;
+    workspace.hasActiveIp = true;
+    workspace.ipcoreId = QStringLiteral("vendor.dynamic");
+    workspace.instanceId = QStringLiteral("dynamic_0");
+
+    IpCatalogEntry entry;
+    entry.id = QStringLiteral("vendor.dynamic");
+    entry.packageId = QStringLiteral("vendor.dynamic");
+
+    PackageCoverageReport coverage;
+    coverage.packageId = QStringLiteral("vendor.dynamic");
+    coverage.items.append(PackageFeatureCoverageItem{
+        QStringLiteral("capability:vendor.dynamic.feature.v1"),
+        QStringLiteral("vendor.dynamic.feature.v1"),
+        PackageFeatureCoverageStatus::Unsupported,
+        QStringLiteral("Optional capability has no registered handler."),
+        QJsonObject{{QStringLiteral("metadata"),
+                     QJsonObject{{QStringLiteral("label"), QStringLiteral("Dynamic Feature")}}}}
+    });
+    coverage.items.append(PackageFeatureCoverageItem{
+        QStringLiteral("view:dynamic_view"),
+        QStringLiteral("Dynamic View"),
+        PackageFeatureCoverageStatus::Visible,
+        QStringLiteral("Descriptor declaration is visible in the package inspector."),
+        QJsonObject{{QStringLiteral("id"), QStringLiteral("dynamic_view")}}
+    });
+
+    const QVector<PluginInteractionDescriptor> projected =
+        interactions.interactionsForWorkspace(workspace, entry, &coverage);
+    require(projected.size() == 2,
+            "package provider should expose every coverage item as an interaction");
+    require(projected.at(0).id ==
+                QStringLiteral("package:capability:vendor.dynamic.feature.v1"),
+            "package provider should expose arbitrary vendor capability ids without hardcoded tokens");
+    require(projected.at(0).label == QStringLiteral("Dynamic Feature"),
+            "package provider should use descriptor metadata labels when present");
+    require(projected.at(1).id == QStringLiteral("package:view:dynamic_view"),
+            "package provider should expose view declarations as interactions");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -330,6 +400,7 @@ int main(int argc, char** argv) {
         testDirectDescriptorObjectFormExtensionsArePayloadsNotCapabilities();
         testPackageServiceStoresCoverageFromFullPackageSpecs();
         testPackagePluginRegistersCoverageInspectorContribution();
+        testPackagePluginRegistersGenericCoverageInteractionProvider();
     } catch (const std::exception& error) {
         std::cerr << "packagecoverage_test failed: " << error.what() << '\n';
         return 1;

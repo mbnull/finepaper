@@ -24,6 +24,7 @@ class PropertyPanel;
 class IpCatalogPanel;
 class IpCatalogService;
 class PackageService;
+class PluginInteractionRegistry;
 class ProjectIpService;
 class ProjectService;
 class ProjectStateService;
@@ -91,6 +92,10 @@ private slots:
     void scheduleStartupLayoutLog();
     void logStartupLayout() const;
     void rebuildTopologyMenu();
+    void executeWorkspaceInteractionFor(const QString& ipcoreId,
+                                        const QString& instanceId,
+                                        const QString& interactionId);
+    void registerMainWindowInteractionHandlers();
     QVector<IIpInstanceParameterAdapter*> rebuildIpInstanceParameterAdapters();
     void manageIpcorePackageRoots();
     void reloadIpcoreCatalog();
@@ -129,6 +134,7 @@ private slots:
     std::unique_ptr<ServiceRegistry> m_serviceRegistry;
     std::unique_ptr<ExtensionPointRegistry> m_extensionPointRegistry;
     std::unique_ptr<CapabilityRegistry> m_capabilityRegistry;
+    std::unique_ptr<PluginInteractionRegistry> m_pluginInteractionRegistry;
     std::unique_ptr<PluginHost> m_pluginHost;
     std::unique_ptr<ActiveWorkspaceController> m_activeWorkspaceController;
     std::vector<std::unique_ptr<IIpInstanceParameterAdapter>> m_ipInstanceParameterAdapters;

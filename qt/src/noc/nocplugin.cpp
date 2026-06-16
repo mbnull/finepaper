@@ -19,9 +19,10 @@ struct ContributionDefinition {
     const char* contributionKind;
 };
 
-constexpr std::array<ContributionDefinition, 5> kContributions{{
+constexpr std::array<ContributionDefinition, 6> kContributions{{
     {"ui.inspectorSection", "inspector-section", "NoC Inspector", "inspectorSection"},
     {"editor.tool", "editor-tool", "NoC Editor Tool", "editorTool"},
+    {"ui.workspaceInteraction", "workspace-interaction", "NoC Workspace Interactions", "workspaceInteraction"},
     {"connection.ruleProvider", "connection-rule-provider", "NoC Connection Rules", "ruleProvider"},
     {"tool.flowInputProjector", "flow-input-projector", "NoC Flow Input Projector", "flowInputProjector"},
     {"artifact.presenter", "artifact-presenter", "NoC Artifact Presenter", "artifactPresenter"},

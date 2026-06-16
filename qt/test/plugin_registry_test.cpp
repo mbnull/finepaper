@@ -1,9 +1,14 @@
 #include "app/appcontext.h"
 #include "app/capabilityregistry.h"
 #include "app/extensionpointregistry.h"
+#include "app/plugininteractionregistry.h"
 #include "app/serviceregistry.h"
+#include "ipcore/ipcatalogservice.h"
+#include "package/packagecoverage.h"
+#include "workspace/activeworkspacecontroller.h"
 
 #include <QCoreApplication>
+#include <QJsonObject>
 #include <QVector>
 #include <iostream>
 #include <stdexcept>
@@ -353,17 +358,118 @@ void testCapabilityRegistryPreservesHandlerAndCoverageOrder() {
             "second coverage record should preserve insertion order");
 }
 
+void testPluginInteractionRegistryProjectsAllPackageCoverageItems() {
+    ActiveWorkspaceState workspace;
+    workspace.hasActiveIp = true;
+    workspace.ipcoreId = QStringLiteral("vendor.dynamic");
+    workspace.instanceId = QStringLiteral("dynamic_0");
+
+    IpCatalogEntry entry;
+    entry.id = QStringLiteral("vendor.dynamic");
+    entry.packageId = QStringLiteral("vendor.dynamic");
+
+    PackageCoverageReport coverage;
+    coverage.packageId = QStringLiteral("vendor.dynamic");
+    coverage.items.append(PackageFeatureCoverageItem{
+        QStringLiteral("capability:vendor.dynamic.feature.v1"),
+        QStringLiteral("Dynamic Feature"),
+        PackageFeatureCoverageStatus::Visible,
+        QStringLiteral("visible"),
+        QJsonObject{{QStringLiteral("metadata"),
+                     QJsonObject{{QStringLiteral("label"), QStringLiteral("Dynamic Feature")}}}}
+    });
+    coverage.items.append(PackageFeatureCoverageItem{
+        QStringLiteral("view:dynamic_view"),
+        QStringLiteral("Dynamic View"),
+        PackageFeatureCoverageStatus::Visible,
+        QStringLiteral("visible"),
+        QJsonObject{{QStringLiteral("id"), QStringLiteral("dynamic_view")}}
+    });
+
+    PluginInteractionRegistry interactions;
+    PluginInteractionProviderDescriptor provider;
+    provider.id = QStringLiteral("test.coverage-provider");
+    provider.ownerPluginId = QStringLiteral("test.package");
+    provider.factory = [](const PluginInteractionQuery& query) {
+        QVector<PluginInteractionDescriptor> result;
+        if (!query.coverage) {
+            return result;
+        }
+        for (const PackageFeatureCoverageItem& item : query.coverage->items) {
+            PluginInteractionDescriptor descriptor;
+            descriptor.id = QStringLiteral("package:") + item.id;
+            descriptor.label = item.label;
+            descriptor.category = QStringLiteral("Package");
+            descriptor.ownerPluginId = QStringLiteral("test.package");
+            descriptor.packageId = query.coverage->packageId;
+            descriptor.kind = QStringLiteral("package.feature");
+            descriptor.descriptor = item.descriptor;
+            result.append(descriptor);
+        }
+        return result;
+    };
+    require(interactions.registerProvider(provider), "coverage provider should register");
+
+    const QVector<PluginInteractionDescriptor> projected =
+        interactions.interactionsForWorkspace(workspace, entry, &coverage);
+    require(projected.size() == 2, "all package coverage items should become interactions");
+    require(projected.at(0).id ==
+                QStringLiteral("package:capability:vendor.dynamic.feature.v1"),
+            "capability coverage item should become a package interaction");
+    require(projected.at(1).id == QStringLiteral("package:view:dynamic_view"),
+            "view coverage item should become a package interaction");
+}
+
+void testPluginInteractionRegistryDispatchesThroughRegisteredHandlers() {
+    PluginInteractionRegistry interactions;
+    int dispatchCount = 0;
+    PluginInteractionHandlerDescriptor handler;
+    handler.id = QStringLiteral("test.package-handler");
+    handler.ownerPluginId = QStringLiteral("test.package");
+    handler.interactionIdPrefix = QStringLiteral("package:");
+    handler.handler = [&](const PluginInteractionDescriptor& interaction,
+                          const PluginInteractionContext& context) {
+        require(interaction.id == QStringLiteral("package:capability:vendor.dynamic.feature.v1"),
+                "dispatcher should pass the selected interaction descriptor");
+        require(context.ipcoreId == QStringLiteral("vendor.dynamic"),
+                "dispatcher should pass workspace ipcore context");
+        ++dispatchCount;
+        PluginInteractionResult result;
+        result.handled = true;
+        result.success = true;
+        return result;
+    };
+    require(interactions.registerHandler(handler), "interaction handler should register");
+
+    PluginInteractionDescriptor descriptor;
+    descriptor.id = QStringLiteral("package:capability:vendor.dynamic.feature.v1");
+    descriptor.label = QStringLiteral("Dynamic Feature");
+
+    PluginInteractionContext context;
+    context.ipcoreId = QStringLiteral("vendor.dynamic");
+    context.instanceId = QStringLiteral("dynamic_0");
+    context.packageId = QStringLiteral("vendor.dynamic");
+
+    const PluginInteractionResult result = interactions.dispatch(descriptor, context);
+    require(result.handled, "dispatcher should mark handled interactions");
+    require(result.success, "dispatcher should return handler success");
+    require(dispatchCount == 1, "handler should be invoked exactly once");
+}
+
 void testAppContextUsesRegistries() {
     ServiceRegistry services;
     ExtensionPointRegistry extensionPoints;
     CapabilityRegistry capabilities;
+    PluginInteractionRegistry interactions;
     AppContext context;
     context.services = &services;
     context.extensionPoints = &extensionPoints;
     context.capabilities = &capabilities;
+    context.interactions = &interactions;
     require(context.services == &services, "context should expose service registry");
     require(context.extensionPoints == &extensionPoints, "context should expose extension point registry");
     require(context.capabilities == &capabilities, "context should expose capability registry");
+    require(context.interactions == &interactions, "context should expose interaction registry");
 }
 
 } // namespace
@@ -383,6 +489,8 @@ int main(int argc, char** argv) {
         testCapabilityRegistryRejectsHandlersAtCapacity();
         testCapabilityRegistryRejectsPackageCapabilitiesAtCapacity();
         testCapabilityRegistryPreservesHandlerAndCoverageOrder();
+        testPluginInteractionRegistryProjectsAllPackageCoverageItems();
+        testPluginInteractionRegistryDispatchesThroughRegisteredHandlers();
         testAppContextUsesRegistries();
     } catch (const std::exception& error) {
         std::cerr << "plugin_registry_test failed: " << error.what() << '\n';

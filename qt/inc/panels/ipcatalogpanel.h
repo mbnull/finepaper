@@ -6,6 +6,8 @@
 
 class ActiveWorkspaceController;
 class IpCatalogService;
+class PackageService;
+class PluginInteractionRegistry;
 class ProjectIpService;
 class ProjectStateService;
 class QEvent;
@@ -23,6 +25,8 @@ public:
                    ProjectStateService* stateService,
                    ProjectIpService* projectIpService,
                    ActiveWorkspaceController* workspaceController,
+                   const PluginInteractionRegistry* interactions = nullptr,
+                   const PackageService* packageService = nullptr,
                    QWidget* parent = nullptr);
 
 signals:
@@ -52,6 +56,8 @@ private:
     ProjectStateService* m_stateService = nullptr;
     ProjectIpService* m_projectIpService = nullptr;
     ActiveWorkspaceController* m_workspaceController = nullptr;
+    const PluginInteractionRegistry* m_interactions = nullptr;
+    const PackageService* m_packageService = nullptr;
     QLineEdit* m_search = nullptr;
     QTreeWidget* m_catalogList = nullptr;
     QListWidget* m_projectIpList = nullptr;

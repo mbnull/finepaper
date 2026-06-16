@@ -615,6 +615,7 @@ add_qt_test_target("packagecoverage_test", "test/packagecoverage_test.cpp", {
     "src/app/serviceregistry.cpp",
     "src/app/extensionpointregistry.cpp",
     "src/app/capabilityregistry.cpp",
+    "src/app/plugininteractionregistry.cpp",
     "src/app/workbenchservice.cpp",
     "src/app/pluginhost.cpp",
     "src/package/packagecoverage.cpp",
@@ -628,6 +629,7 @@ add_qt_test_target("packagecoverage_test", "test/packagecoverage_test.cpp", {
     "src/graph/port.cpp",
     "inc/app/appcontext.h",
     "inc/app/pluginhost.h",
+    "inc/app/plugininteractionregistry.h",
     "inc/app/workbenchservice.h",
     "inc/package/packagecoverage.h",
     "inc/package/packageplugin.h",
@@ -1144,10 +1146,15 @@ target("plugin_registry_test")
     add_files("src/app/serviceregistry.cpp")
     add_files("src/app/extensionpointregistry.cpp")
     add_files("src/app/capabilityregistry.cpp")
+    add_files("src/app/plugininteractionregistry.cpp")
+    add_files("src/package/packagecoverage.cpp")
     add_headerfiles("inc/app/servicekey.h")
     add_headerfiles("inc/app/serviceregistry.h")
     add_headerfiles("inc/app/extensionpointregistry.h")
     add_headerfiles("inc/app/capabilityregistry.h")
+    add_headerfiles("inc/app/plugininteractionregistry.h")
+    add_headerfiles("inc/package/packagecoverage.h")
+    add_headerfiles("inc/ipcore/ipcatalogservice.h")
     add_packages("qt6core")
     set_policy("build.warning", true)
     add_tests("default", {
@@ -1167,6 +1174,7 @@ target("pluginhost_foundation_test")
     add_files("src/app/serviceregistry.cpp")
     add_files("src/app/extensionpointregistry.cpp")
     add_files("src/app/capabilityregistry.cpp")
+    add_files("src/app/plugininteractionregistry.cpp")
     add_files("src/app/workbenchservice.cpp")
     add_files("src/app/pluginhost.cpp")
     add_files("inc/app/appcontext.h")
@@ -1189,6 +1197,7 @@ target("projectplugin_test")
     add_files("src/app/serviceregistry.cpp")
     add_files("src/app/extensionpointregistry.cpp")
     add_files("src/app/capabilityregistry.cpp")
+    add_files("src/app/plugininteractionregistry.cpp")
     add_files("src/app/workbenchservice.cpp")
     add_files("src/app/pluginhost.cpp")
     add_files("src/project/projectservice.cpp")
@@ -1221,6 +1230,7 @@ target("packageplugin_test")
     add_files("src/app/serviceregistry.cpp")
     add_files("src/app/extensionpointregistry.cpp")
     add_files("src/app/capabilityregistry.cpp")
+    add_files("src/app/plugininteractionregistry.cpp")
     add_files("src/app/workbenchservice.cpp")
     add_files("src/app/pluginhost.cpp")
     add_files("src/project/projectservice.cpp")
@@ -1249,6 +1259,7 @@ target("packageplugin_test")
     add_files("src/graph/port.cpp")
     add_files("inc/app/appcontext.h")
     add_files("inc/app/pluginhost.h")
+    add_files("inc/app/plugininteractionregistry.h")
     add_files("inc/app/workbenchservice.h")
     add_files("inc/project/projectservice.h")
     add_files("inc/package/packageplugin.h")
@@ -1262,6 +1273,7 @@ add_qt_test_target("toolpipelineplugin_test", "test/toolpipelineplugin_test.cpp"
     "src/app/serviceregistry.cpp",
     "src/app/extensionpointregistry.cpp",
     "src/app/capabilityregistry.cpp",
+    "src/app/plugininteractionregistry.cpp",
     "src/app/generationartifacts.cpp",
     "src/app/generationflowprovider.cpp",
     "src/app/projectflowsupport.cpp",
@@ -1315,6 +1327,7 @@ add_qt_test_target("staticplugincatalog_test", "test/staticplugincatalog_test.cp
     "src/app/serviceregistry.cpp",
     "src/app/extensionpointregistry.cpp",
     "src/app/capabilityregistry.cpp",
+    "src/app/plugininteractionregistry.cpp",
     "src/app/generationartifacts.cpp",
     "src/app/generationflowprovider.cpp",
     "src/app/projectflowsupport.cpp",
@@ -1361,6 +1374,7 @@ add_qt_test_target("staticplugincatalog_test", "test/staticplugincatalog_test.cp
     "src/**/parameter.cpp",
     "src/**/ipcoreruntimeregistry.cpp",
     "inc/app/staticplugincatalog.h",
+    "inc/app/plugininteractionregistry.h",
     "inc/app/toolpipelineplugin.h",
     "inc/app/toolpipelineservice.h",
     "inc/app/generationflowprovider.h",
@@ -1643,6 +1657,7 @@ target("ipcatalogpanel_test")
     add_files("src/app/serviceregistry.cpp")
     add_files("src/app/extensionpointregistry.cpp")
     add_files("src/app/capabilityregistry.cpp")
+    add_files("src/app/plugininteractionregistry.cpp")
     add_files("src/app/pluginhost.cpp")
     add_files("src/app/staticplugincatalog.cpp")
     add_files("src/noc/nocplugin.cpp")

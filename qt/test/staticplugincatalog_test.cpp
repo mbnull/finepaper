@@ -1,5 +1,6 @@
 #include "app/capabilityregistry.h"
 #include "app/extensionpointregistry.h"
+#include "app/plugininteractionregistry.h"
 #include "app/pluginhost.h"
 #include "app/serviceregistry.h"
 #include "app/staticplugincatalog.h"
@@ -8,6 +9,7 @@
 #include "project/projectservice.h"
 #include "app/toolpipelineservice.h"
 #include "modules/moduleregistry.h"
+#include "workspace/activeworkspacecontroller.h"
 
 #include <QCoreApplication>
 #include <iostream>
@@ -30,6 +32,7 @@ void testStaticCatalogRegistersCorePlugins() {
     ServiceRegistry services;
     ExtensionPointRegistry extensionPoints;
     CapabilityRegistry capabilities;
+    PluginInteractionRegistry interactions;
 
     services.registerService(ServiceKey::fromLiteral("finepaper.project"), &project);
     services.registerService(ServiceKey::fromLiteral("finepaper.package"), &package);
@@ -39,6 +42,7 @@ void testStaticCatalogRegistersCorePlugins() {
     context.services = &services;
     context.extensionPoints = &extensionPoints;
     context.capabilities = &capabilities;
+    context.interactions = &interactions;
     context.workbench = &workbench;
     context.projectService = &project;
     context.packageService = &package;
@@ -46,6 +50,8 @@ void testStaticCatalogRegistersCorePlugins() {
 
     PluginHost host(context);
     registerStaticPlugins(host);
+    require(registerStaticPluginInteractions(interactions),
+            "static catalog should register built-in interaction providers");
 
     const QStringList ids = host.pluginIds();
     require(ids.contains(QStringLiteral("finepaper.project")),
@@ -71,6 +77,26 @@ void testStaticCatalogRegistersCorePlugins() {
         sawNocHandler = sawNocHandler || handler.capabilityId == QStringLiteral("noc.v1");
     }
     require(sawNocHandler, "static plugin activation should register noc.v1 handler");
+
+    ActiveWorkspaceState workspace;
+    workspace.hasActiveIp = true;
+    workspace.ipcoreId = QStringLiteral("org.example.noc");
+    workspace.instanceId = QStringLiteral("noc_0");
+
+    IpCatalogEntry entry;
+    entry.id = QStringLiteral("org.example.noc");
+    entry.packageId = QStringLiteral("org.example.noc");
+    TopologyPresetDescriptor mesh;
+    mesh.id = QStringLiteral("mesh");
+    mesh.label = QStringLiteral("Mesh");
+    entry.topologyPresets.append(mesh);
+
+    const QVector<PluginInteractionDescriptor> workspaceInteractions =
+        interactions.interactionsForWorkspace(workspace, entry, nullptr);
+    require(workspaceInteractions.size() == 1,
+            "static interaction provider should expose topology descriptors");
+    require(workspaceInteractions.first().id == QStringLiteral("topology:mesh"),
+            "topology interaction id should be provider-owned, not MainWindow-owned");
 }
 
 } // namespace
