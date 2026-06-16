@@ -321,7 +321,6 @@ void testPackageValidateAndGenerateFlowsRunThroughPackageRunners() {
     request.designName = QStringLiteral("vendor_meshnoc_project");
     request.outputRoot = root.filePath(QStringLiteral("generated"));
     request.catalogEntries = context.service.catalog().entries();
-    request.instances = {instance};
 
     ProjectGenerationRunner runner(QStringList{});
     const ProjectGenerationResult result = runner.generate(request);

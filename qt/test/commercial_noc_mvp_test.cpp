@@ -414,7 +414,6 @@ ProjectGenerationResult runGeneration(const QDir& root,
     request.projectPath = root.filePath(QStringLiteral("project/design.fpproj"));
     request.designName = QStringLiteral("commercial_mvp");
     request.catalogEntries = context.catalog.entries();
-    request.instances = std::move(document.instances);
     ProjectGenerationRunner runner({repositoryPath(QStringLiteral("ipcraft_generator/bin"))});
     return runner.generate(request);
 }

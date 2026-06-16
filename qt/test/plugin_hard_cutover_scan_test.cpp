@@ -264,6 +264,14 @@ void testProjectGenerationRunnerDoesNotReadRequestInstancesSideChannel() {
     requireContains(request,
                     QStringLiteral("ProjectDesign"),
                     QStringLiteral("ProjectGenerationRequest"));
+    const QStringList requestSideChannelTokens{
+        QStringLiteral("ProjectIpInstanceRecord"),
+        QStringLiteral("instances"),
+        QStringLiteral("QVector<ProjectIpInstanceRecord>")
+    };
+    for (const QString& token : requestSideChannelTokens) {
+        requireNotContains(request, token, QStringLiteral("ProjectGenerationRequest"));
+    }
 
     const QString runner = readText(QStringLiteral("qt/src/app/projectgenerationrunner.cpp"));
     const QString generate = functionBody(

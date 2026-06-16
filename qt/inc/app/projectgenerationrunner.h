@@ -36,7 +36,6 @@ struct ProjectGenerationRequest {
     QString designName;
     QString outputRoot;
     QList<IpCatalogEntry> catalogEntries;
-    QVector<ProjectIpInstanceRecord> instances;
 };
 
 struct ProjectGenerationResult {
