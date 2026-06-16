@@ -1,8 +1,14 @@
 // RemoveConnectionCommand removes one connection and restores it on undo.
 #include "commands/removeconnectioncommand.h"
 
-RemoveConnectionCommand::RemoveConnectionCommand(Graph* graph, const QString& connectionId)
-    : m_graph(graph), m_connectionId(connectionId) {}
+#include "project/editormutationtarget.h"
+
+RemoveConnectionCommand::RemoveConnectionCommand(Graph* graph,
+                                                 const QString& connectionId,
+                                                 EditorMutationTarget* editorMutationTarget)
+    : m_graph(graph),
+      m_connectionId(connectionId),
+      m_editorMutationTarget(editorMutationTarget) {}
 
 // Remove connection from graph
 void RemoveConnectionCommand::execute() {
@@ -10,6 +16,9 @@ void RemoveConnectionCommand::execute() {
     m_undone = false;
     m_connection = m_graph->takeConnection(m_connectionId);
     if (m_connection) {
+        if (m_editorMutationTarget) {
+            m_editorMutationTarget->removeEditorConnectionRecord(m_connectionId);
+        }
         m_executed = true;
     }
 }
@@ -29,6 +38,11 @@ void RemoveConnectionCommand::undo() {
     const qsizetype after = static_cast<qsizetype>(m_graph->connections().size());
     if (after == before + 1) {
         m_connection.reset();
+        if (m_editorMutationTarget) {
+            if (const Connection* connection = m_graph->getConnection(m_connectionId)) {
+                m_editorMutationTarget->upsertEditorConnectionRecord(*connection);
+            }
+        }
         m_undone = true;
     }
 }

@@ -7,6 +7,8 @@
 #include <functional>
 #include <memory>
 
+class EditorMutationTarget;
+
 class AddConnectionCommand : public Command {
 public:
     using PackageManifestsProvider = std::function<QVector<IpcraftPackageManifest>()>;
@@ -14,7 +16,8 @@ public:
     // Takes ownership of a prepared connection to be inserted into the graph.
     AddConnectionCommand(Graph* graph,
                          std::unique_ptr<Connection> connection,
-                         PackageManifestsProvider packageManifestsProvider = {});
+                         PackageManifestsProvider packageManifestsProvider = {},
+                         EditorMutationTarget* editorMutationTarget = nullptr);
     // Inserts the connection if it passes graph validation rules.
     void execute() override;
     // Removes the inserted connection and restores local ownership.
@@ -25,4 +28,5 @@ private:
     PackageManifestsProvider m_packageManifestsProvider;
     std::unique_ptr<Connection> m_connection;
     QString m_connectionId;
+    EditorMutationTarget* m_editorMutationTarget = nullptr;
 };

@@ -32,6 +32,7 @@ class QMouseEvent;
 class EditorGraphModel;
 class GraphNodeModel;
 class ConnectionRuleService;
+class EditorMutationTarget;
 class ProjectStateService;
 namespace QtNodes { class ConnectionGraphicsObject; }
 
@@ -44,7 +45,8 @@ public:
                      ProjectStateService* projectStateService,
                      ActiveWorkspaceController* workspaceController,
                      CommandManager* commandManager,
-                     QWidget* parent = nullptr);
+                     QWidget* parent = nullptr,
+                     EditorMutationTarget* editorMutationTarget = nullptr);
     ~NodeEditorWidget() override;
     // Returns whether auto-arrange behavior is currently enabled in the view.
     bool isArrangeEnabled() const;
@@ -169,6 +171,7 @@ private:
     ProjectStateService* m_projectStateService;
     ActiveWorkspaceController* m_workspaceController;
     CommandManager* m_commandManager;
+    EditorMutationTarget* m_editorMutationTarget = nullptr;
     std::unique_ptr<ConnectionRuleService> m_connectionRuleService;
     std::shared_ptr<QtNodes::NodeDelegateModelRegistry> m_registry;
     std::unique_ptr<EditorGraphModel> m_graphModel;

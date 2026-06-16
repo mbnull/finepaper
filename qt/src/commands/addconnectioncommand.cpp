@@ -1,12 +1,16 @@
 // AddConnectionCommand adds one connection with undo support.
 #include "commands/addconnectioncommand.h"
 
+#include "project/editormutationtarget.h"
+
 AddConnectionCommand::AddConnectionCommand(Graph* graph,
                                            std::unique_ptr<Connection> connection,
-                                           PackageManifestsProvider packageManifestsProvider)
+                                           PackageManifestsProvider packageManifestsProvider,
+                                           EditorMutationTarget* editorMutationTarget)
     : m_graph(graph),
       m_packageManifestsProvider(std::move(packageManifestsProvider)),
-      m_connection(std::move(connection)) {
+      m_connection(std::move(connection)),
+      m_editorMutationTarget(editorMutationTarget) {
     m_connectionId = m_connection->id();
 }
 
@@ -34,7 +38,18 @@ void AddConnectionCommand::execute() {
     if (!m_graph->isValidConnection(m_connection->source(), m_connection->target())) {
         return;
     }
+    Connection* insertedConnection = m_connection.get();
     m_graph->insertConnection(std::move(m_connection));
+    if (m_editorMutationTarget) {
+        if (Connection* graphConnection = m_graph->getConnection(m_connectionId)) {
+            insertedConnection = graphConnection;
+        }
+        if (!insertedConnection ||
+            !m_editorMutationTarget->upsertEditorConnectionRecord(*insertedConnection)) {
+            m_connection = m_graph->takeConnection(m_connectionId);
+            return;
+        }
+    }
     m_executed = true;
 }
 
@@ -46,6 +61,9 @@ void AddConnectionCommand::undo() {
     }
     m_connection = m_graph->takeConnection(m_connectionId);
     if (m_connection) {
+        if (m_editorMutationTarget) {
+            m_editorMutationTarget->removeEditorConnectionRecord(m_connectionId);
+        }
         m_undone = true;
     }
 }

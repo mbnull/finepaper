@@ -326,6 +326,41 @@ void testNormalSaveDoesNotSyncDurableProjectFromGraphProjection() {
                     QStringLiteral("EditorProjectionService::syncProjectFromProjection"));
 }
 
+void testNodeEditorUiMutationsUseProjectOwnedMutationTarget() {
+    const QString mainWindow = readText(QStringLiteral("qt/src/app/mainwindow.cpp"));
+    const QString nodeEditor = readText(QStringLiteral("qt/src/nodeeditor/nodeeditorwidget.cpp"));
+    const QString propertyPanel = readText(QStringLiteral("qt/src/panels/propertypanel.cpp"));
+
+    requireContains(mainWindow,
+                    QStringLiteral("m_projectService.get()"),
+                    QStringLiteral("MainWindow UI construction"));
+    requireContains(nodeEditor,
+                    QStringLiteral("m_editorMutationTarget"),
+                    QStringLiteral("NodeEditorWidget mutation path"));
+    requireContains(propertyPanel,
+                    QStringLiteral("m_editorMutationTarget"),
+                    QStringLiteral("PropertyPanel mutation path"));
+
+    requireNotContains(mainWindow,
+                       QStringLiteral("NodeEditor module graph commands (AddModuleCommand/TopologyPresetCommand)"),
+                       QStringLiteral("MainWindow save blocker"));
+    requireNotContains(mainWindow,
+                       QStringLiteral("NodeEditor graph parameter/layout commands (SetParameterCommand/ArrangeCommand)"),
+                       QStringLiteral("MainWindow save blocker"));
+    requireNotContains(mainWindow,
+                       QStringLiteral("NodeEditor module graph commands (RemoveModuleCommand)"),
+                       QStringLiteral("MainWindow save blocker"));
+    requireNotContains(mainWindow,
+                       QStringLiteral("NodeEditor connection graph commands (AddConnectionCommand)"),
+                       QStringLiteral("MainWindow save blocker"));
+    requireNotContains(mainWindow,
+                       QStringLiteral("NodeEditor connection graph commands (SetConnectionClassCommand)"),
+                       QStringLiteral("MainWindow save blocker"));
+    requireNotContains(mainWindow,
+                       QStringLiteral("NodeEditor connection graph commands (RemoveConnectionCommand)"),
+                       QStringLiteral("MainWindow save blocker"));
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -338,6 +373,7 @@ int main(int argc, char** argv) {
     testCompletionReportUsesHardCutoverVerdict();
     testFinalReportsAndReadmeRegisterHardCutoverGate();
     testNormalSaveDoesNotSyncDurableProjectFromGraphProjection();
+    testNodeEditorUiMutationsUseProjectOwnedMutationTarget();
     std::cout << "plugin_hard_cutover_scan_test passed\n";
     return 0;
 }

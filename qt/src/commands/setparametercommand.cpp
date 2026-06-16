@@ -1,9 +1,17 @@
 // SetParameterCommand updates one module parameter and restores old state on undo.
 #include "commands/setparametercommand.h"
 
+#include "project/editormutationtarget.h"
+
 SetParameterCommand::SetParameterCommand(Graph* graph, const QString& moduleId,
-                                         const QString& paramName, Parameter::Value newValue)
-    : m_graph(graph), m_moduleId(moduleId), m_paramName(paramName), m_newValue(newValue) {}
+                                         const QString& paramName,
+                                         Parameter::Value newValue,
+                                         EditorMutationTarget* editorMutationTarget)
+    : m_graph(graph),
+      m_moduleId(moduleId),
+      m_paramName(paramName),
+      m_newValue(newValue),
+      m_editorMutationTarget(editorMutationTarget) {}
 
 // Set parameter value, storing old value for undo
 void SetParameterCommand::execute() {
@@ -21,6 +29,14 @@ void SetParameterCommand::execute() {
         }
     }
     module->setParameter(m_paramName, m_newValue);
+    if (m_editorMutationTarget && !m_editorMutationTarget->upsertEditorModuleRecord(*module)) {
+        if (m_parameterExisted) {
+            module->setParameter(m_paramName, m_oldValue);
+        } else {
+            module->removeParameter(m_paramName);
+        }
+        return;
+    }
     m_executed = true;
 }
 
@@ -33,6 +49,9 @@ void SetParameterCommand::undo() {
         module->setParameter(m_paramName, m_oldValue);
     } else {
         module->removeParameter(m_paramName);
+    }
+    if (m_editorMutationTarget) {
+        m_editorMutationTarget->upsertEditorModuleRecord(*module);
     }
     m_undone = true;
 }

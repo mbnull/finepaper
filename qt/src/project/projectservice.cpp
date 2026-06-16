@@ -2,13 +2,17 @@
 #include "project/projectservice.h"
 
 #include "ipcraft/schemaids.h"
+#include "graph/connection.h"
+#include "graph/module.h"
 #include "project/projectdesignserializer.h"
 #include "project/projectwriter.h"
 
 #include <QFileInfo>
 #include <QSet>
 #include <QStringList>
+#include <algorithm>
 #include <utility>
+#include <variant>
 
 namespace {
 
@@ -139,6 +143,73 @@ void mergeDesignOnlyComponentsIntoDocument(ProjectDocument& document,
     }
     document.native = mergeDesignSupplementNative(document.native, designDocument.native);
     document.ipcoreState = document.instances;
+}
+
+QJsonValue parameterValueToJson(const Parameter::Value& value) {
+    if (const auto* stringValue = std::get_if<QString>(&value)) {
+        return *stringValue;
+    }
+    if (const auto* intValue = std::get_if<int>(&value)) {
+        return *intValue;
+    }
+    if (const auto* doubleValue = std::get_if<double>(&value)) {
+        return *doubleValue;
+    }
+    if (const auto* boolValue = std::get_if<bool>(&value)) {
+        return *boolValue;
+    }
+    return {};
+}
+
+ProjectModuleRecord moduleRecordFromEditorModule(const Module& module) {
+    ProjectModuleRecord record;
+    record.id = module.id();
+    record.ipcoreId = module.ipcoreId();
+    record.instanceId = module.instanceId();
+    record.type = module.type();
+    for (auto it = module.parameters().constBegin(); it != module.parameters().constEnd(); ++it) {
+        record.parameters.insert(it.key(), parameterValueToJson(it.value().value()));
+    }
+    return record;
+}
+
+ProjectConnectionRecord connectionRecordFromEditorConnection(const Connection& connection) {
+    ProjectConnectionRecord record;
+    record.id = connection.id();
+    record.source = ProjectConnectionEndpoint{connection.source().moduleId,
+                                              connection.source().portId};
+    record.target = ProjectConnectionEndpoint{connection.target().moduleId,
+                                              connection.target().portId};
+    record.connectionClassId = connection.connectionClassId();
+    record.status = connection.status().isEmpty() ? QStringLiteral("valid") : connection.status();
+    record.alternatives = connection.alternatives();
+    for (const ConnectionInterfaceRef& interfaceRef : connection.interfaces()) {
+        record.interfaces.append(ProjectConnectionInterfaceRef{interfaceRef.instanceId,
+                                                               interfaceRef.interfaceId});
+    }
+    return record;
+}
+
+bool connectionRecordReferencesModule(const ProjectConnectionRecord& connection,
+                                      const QString& moduleId) {
+    if (connection.source.moduleId == moduleId || connection.target.moduleId == moduleId) {
+        return true;
+    }
+    return std::any_of(connection.interfaces.constBegin(),
+                       connection.interfaces.constEnd(),
+                       [&moduleId](const ProjectConnectionInterfaceRef& interfaceRef) {
+                           return interfaceRef.instanceId == moduleId;
+                       });
+}
+
+template <typename Record>
+qsizetype indexOfRecordById(const QVector<Record>& records, const QString& id) {
+    for (qsizetype index = 0; index < records.size(); ++index) {
+        if (records.at(index).id == id) {
+            return index;
+        }
+    }
+    return -1;
 }
 
 } // namespace
@@ -275,4 +346,69 @@ ipcraft::core::PatchApplyResult ProjectService::applyDesignPatch(
     const ipcraft::core::ProjectDesign& project,
     const ipcraft::core::ProjectPatch& patch) const {
     return ipcraft::core::applyPatch(project, patch);
+}
+
+bool ProjectService::upsertEditorModuleRecord(const Module& module) {
+    if (!m_hasDocument || module.id().trimmed().isEmpty()) {
+        return false;
+    }
+
+    const ProjectModuleRecord record = moduleRecordFromEditorModule(module);
+    const qsizetype index = indexOfRecordById(m_document.modules, record.id);
+    if (index >= 0) {
+        m_document.modules[index] = record;
+    } else {
+        m_document.modules.append(record);
+    }
+    emit currentDocumentChanged();
+    return true;
+}
+
+bool ProjectService::removeEditorModuleRecord(const QString& moduleId) {
+    if (!m_hasDocument || moduleId.trimmed().isEmpty()) {
+        return false;
+    }
+
+    for (qsizetype index = m_document.connections.size(); index > 0; --index) {
+        const qsizetype recordIndex = index - 1;
+        if (connectionRecordReferencesModule(m_document.connections.at(recordIndex), moduleId)) {
+            m_document.connections.removeAt(recordIndex);
+        }
+    }
+
+    const qsizetype index = indexOfRecordById(m_document.modules, moduleId);
+    if (index >= 0) {
+        m_document.modules.removeAt(index);
+    }
+    emit currentDocumentChanged();
+    return true;
+}
+
+bool ProjectService::upsertEditorConnectionRecord(const Connection& connection) {
+    if (!m_hasDocument || connection.id().trimmed().isEmpty()) {
+        return false;
+    }
+
+    const ProjectConnectionRecord record = connectionRecordFromEditorConnection(connection);
+    const qsizetype index = indexOfRecordById(m_document.connections, record.id);
+    if (index >= 0) {
+        m_document.connections[index] = record;
+    } else {
+        m_document.connections.append(record);
+    }
+    emit currentDocumentChanged();
+    return true;
+}
+
+bool ProjectService::removeEditorConnectionRecord(const QString& connectionId) {
+    if (!m_hasDocument || connectionId.trimmed().isEmpty()) {
+        return false;
+    }
+
+    const qsizetype index = indexOfRecordById(m_document.connections, connectionId);
+    if (index >= 0) {
+        m_document.connections.removeAt(index);
+    }
+    emit currentDocumentChanged();
+    return true;
 }

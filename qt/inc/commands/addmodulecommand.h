@@ -6,13 +6,16 @@
 #include <QString>
 #include <memory>
 
+class EditorMutationTarget;
+
 class AddModuleCommand : public Command {
 public:
     // Takes ownership of a prepared module to be inserted into the graph.
     AddModuleCommand(Graph* graph,
                      std::unique_ptr<Module> module,
                      QString expectedIpcoreId,
-                     QString expectedInstanceId);
+                     QString expectedInstanceId,
+                     EditorMutationTarget* editorMutationTarget = nullptr);
     // Inserts the module if ID and graph constraints are satisfied.
     void execute() override;
     // Removes the inserted module and restores local ownership.
@@ -24,4 +27,5 @@ private:
     QString m_moduleId;
     QString m_expectedIpcoreId;
     QString m_expectedInstanceId;
+    EditorMutationTarget* m_editorMutationTarget = nullptr;
 };

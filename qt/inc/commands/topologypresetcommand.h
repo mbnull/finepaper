@@ -6,12 +6,14 @@
 
 class Graph;
 class ModuleRegistry;
+class EditorMutationTarget;
 
 class TopologyPresetCommand : public Command {
 public:
     TopologyPresetCommand(Graph* graph,
                           const ModuleRegistry* registry,
-                          TopologyPresetRequest request);
+                          TopologyPresetRequest request,
+                          EditorMutationTarget* editorMutationTarget = nullptr);
 
     void execute() override;
     void undo() override;
@@ -22,4 +24,5 @@ private:
     const ModuleRegistry* m_registry = nullptr;
     TopologyPresetRequest m_request;
     TopologyPresetResult m_result;
+    EditorMutationTarget* m_editorMutationTarget = nullptr;
 };

@@ -7,6 +7,7 @@
 #include "graph/module.h"
 #include "modules/modulelabels.h"
 #include "modules/moduletypemetadata.h"
+#include "project/editormutationtarget.h"
 #include "project/ipinstanceparameteradapter.h"
 #include "project/projectstateservice.h"
 #include "commands/commandmanager.h"
@@ -261,12 +262,14 @@ PropertyPanel::PropertyPanel(Graph* graph,
                              ProjectStateService* stateService,
                              QVector<IIpInstanceParameterAdapter*> ipInstanceParameterAdapters,
                              CommandManager* commandManager,
-                             QWidget* parent)
+                             QWidget* parent,
+                             EditorMutationTarget* editorMutationTarget)
     : QWidget(parent),
       m_graph(graph),
       m_stateService(stateService),
       m_ipInstanceParameterAdapters(std::move(ipInstanceParameterAdapters)),
-      m_commandManager(commandManager) {
+      m_commandManager(commandManager),
+      m_editorMutationTarget(editorMutationTarget) {
     m_layout = new QVBoxLayout(this);
     m_descriptionView = new QPlainTextEdit(this);
     m_descriptionView->setReadOnly(true);
@@ -439,7 +442,8 @@ void PropertyPanel::populatePanel() {
                                 auto command = std::make_unique<SetConnectionClassCommand>(
                                     m_graph,
                                     connectionId,
-                                    comboBox->itemData(index).toString());
+                                    comboBox->itemData(index).toString(),
+                                    m_editorMutationTarget);
                                 m_commandManager->executeCommand(std::move(command));
                             });
                 }
@@ -599,7 +603,11 @@ void PropertyPanel::populatePanel() {
                         [this, moduleId, name, comboBox](int index) {
                             if (index < 0 || !m_graph->getModule(moduleId)) return;
                             auto cmd = std::make_unique<SetParameterCommand>(
-                                m_graph, moduleId, name, comboBox->itemData(index).toString());
+                                m_graph,
+                                moduleId,
+                                name,
+                                comboBox->itemData(index).toString(),
+                                m_editorMutationTarget);
                             m_commandManager->executeCommand(std::move(cmd));
                         });
             }
@@ -609,7 +617,12 @@ void PropertyPanel::populatePanel() {
             if (!metadata || !metadata->readOnly) {
                 connect(lineEdit, &QLineEdit::editingFinished, this, [this, moduleId, name, lineEdit]() {
                     if (!m_graph->getModule(moduleId)) return;
-                    auto cmd = std::make_unique<SetParameterCommand>(m_graph, moduleId, name, lineEdit->text());
+                    auto cmd = std::make_unique<SetParameterCommand>(
+                        m_graph,
+                        moduleId,
+                        name,
+                        lineEdit->text(),
+                        m_editorMutationTarget);
                     m_commandManager->executeCommand(std::move(cmd));
                 });
             }
@@ -621,7 +634,12 @@ void PropertyPanel::populatePanel() {
             if (!metadata || !metadata->readOnly) {
                 connect(spinBox, QOverload<int>::of(&QSpinBox::valueChanged), this, [this, moduleId, name](int value) {
                     if (!m_graph->getModule(moduleId)) return;
-                    auto cmd = std::make_unique<SetParameterCommand>(m_graph, moduleId, name, value);
+                    auto cmd = std::make_unique<SetParameterCommand>(
+                        m_graph,
+                        moduleId,
+                        name,
+                        value,
+                        m_editorMutationTarget);
                     m_commandManager->executeCommand(std::move(cmd));
                 });
             }
@@ -633,7 +651,12 @@ void PropertyPanel::populatePanel() {
             if (!metadata || !metadata->readOnly) {
                 connect(doubleSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this, moduleId, name](double value) {
                     if (!m_graph->getModule(moduleId)) return;
-                    auto cmd = std::make_unique<SetParameterCommand>(m_graph, moduleId, name, value);
+                    auto cmd = std::make_unique<SetParameterCommand>(
+                        m_graph,
+                        moduleId,
+                        name,
+                        value,
+                        m_editorMutationTarget);
                     m_commandManager->executeCommand(std::move(cmd));
                 });
             }
@@ -644,7 +667,12 @@ void PropertyPanel::populatePanel() {
             if (!metadata || !metadata->readOnly) {
                 connect(checkBox, &QCheckBox::toggled, this, [this, moduleId, name](bool checked) {
                     if (!m_graph->getModule(moduleId)) return;
-                    auto cmd = std::make_unique<SetParameterCommand>(m_graph, moduleId, name, checked);
+                    auto cmd = std::make_unique<SetParameterCommand>(
+                        m_graph,
+                        moduleId,
+                        name,
+                        checked,
+                        m_editorMutationTarget);
                     m_commandManager->executeCommand(std::move(cmd));
                 });
             }

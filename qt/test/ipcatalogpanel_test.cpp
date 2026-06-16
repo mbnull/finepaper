@@ -3,8 +3,10 @@
 #include "app/servicekey.h"
 #include "app/serviceregistry.h"
 #include "commands/addipinstancecommand.h"
+#include "commands/addconnectioncommand.h"
 #include "commands/addmodulecommand.h"
 #include "commands/commandmanager.h"
+#include "commands/setparametercommand.h"
 #include "commands/setipinstanceparametercommand.h"
 #include "ipcraft/schemaids.h"
 #include "ipcore/ipcatalogservice.h"
@@ -440,6 +442,60 @@ bool graphConfigHasObject(const ProjectDocument& document,
         for (const QJsonValue& objectValue : objects) {
             if (objectValue.isObject() &&
                 objectValue.toObject().value(QStringLiteral("id")).toString() == objectId) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+QJsonObject graphConfigObject(const ProjectDocument& document,
+                              const QString& instanceId,
+                              const QString& objectId) {
+    for (const ProjectIpInstanceRecord& instance : document.instances) {
+        if (instance.id != instanceId || !instance.hasGraphConfig) {
+            continue;
+        }
+        const QJsonArray objects = instance.graphConfig.value(QStringLiteral("objects")).toArray();
+        for (const QJsonValue& objectValue : objects) {
+            if (objectValue.isObject() &&
+                objectValue.toObject().value(QStringLiteral("id")).toString() == objectId) {
+                return objectValue.toObject();
+            }
+        }
+    }
+    return {};
+}
+
+QJsonObject layoutNodeForObject(const ProjectDocument& document, const QString& objectId) {
+    const QJsonArray views = document.layout.value(QStringLiteral("views")).toArray();
+    for (const QJsonValue& viewValue : views) {
+        if (!viewValue.isObject()) {
+            continue;
+        }
+        const QJsonObject nodes = viewValue.toObject()
+                                      .value(QStringLiteral("canvas")).toObject()
+                                      .value(QStringLiteral("nodes")).toObject();
+        const QJsonValue nodeValue = nodes.value(objectId);
+        if (nodeValue.isObject()) {
+            return nodeValue.toObject();
+        }
+    }
+    return {};
+}
+
+bool graphConfigHasRelationship(const ProjectDocument& document,
+                                const QString& instanceId,
+                                const QString& relationshipId) {
+    for (const ProjectIpInstanceRecord& instance : document.instances) {
+        if (instance.id != instanceId || !instance.hasGraphConfig) {
+            continue;
+        }
+        const QJsonArray relationships =
+            instance.graphConfig.value(QStringLiteral("relationships")).toArray();
+        for (const QJsonValue& relationshipValue : relationships) {
+            if (relationshipValue.isObject() &&
+                relationshipValue.toObject().value(QStringLiteral("id")).toString() == relationshipId) {
                 return true;
             }
         }
@@ -1240,6 +1296,104 @@ void testDesignEditingServiceAddComponentPersistsThroughMainWindowSave() {
     requireSavedComponent("clean follow-up save should preserve the design-edit component");
 }
 
+std::unique_ptr<Module> editorSaveModule(const QString& id, const QString& type) {
+    auto module = std::make_unique<Module>(id, type);
+    module->setIpcoreId(QStringLiteral("vendor.designpkg"));
+    module->setInstanceId(QStringLiteral("component0"));
+    module->addPort(Port(QStringLiteral("out"), Port::Direction::Output, QStringLiteral("bus"),
+                         QStringLiteral("Out")));
+    module->addPort(Port(QStringLiteral("in"), Port::Direction::Input, QStringLiteral("bus"),
+                         QStringLiteral("In")));
+    return module;
+}
+
+void testMigratedEditorModuleConnectionAndParameterCommandsSaveNormally() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "temporary directory should be valid");
+    const QString projectPath =
+        tempDir.filePath(QStringLiteral("migrated_editor_mutations.fpproj"));
+    writeDesignFixtureProject(projectPath,
+                              loadedDesignFixture(QStringLiteral("Migrated Editor Save")));
+
+    MainWindow window;
+    require(window.loadGraph(projectPath),
+            "project should load before migrated editor command save");
+
+    std::unique_ptr<Command> rejected = window.m_commandManager->executeCommand(
+        std::make_unique<AddModuleCommand>(window.m_graph,
+                                           editorSaveModule(QStringLiteral("editor_source"),
+                                                            QStringLiteral("EditorSource")),
+                                           QStringLiteral("vendor.designpkg"),
+                                           QStringLiteral("component0"),
+                                           window.m_projectService.get()));
+    require(rejected == nullptr, "migrated editor source module command should execute");
+    rejected = window.m_commandManager->executeCommand(
+        std::make_unique<AddModuleCommand>(window.m_graph,
+                                           editorSaveModule(QStringLiteral("editor_sink"),
+                                                            QStringLiteral("EditorSink")),
+                                           QStringLiteral("vendor.designpkg"),
+                                           QStringLiteral("component0"),
+                                           window.m_projectService.get()));
+    require(rejected == nullptr, "migrated editor sink module command should execute");
+
+    rejected = window.m_commandManager->executeCommand(
+        std::make_unique<SetParameterCommand>(window.m_graph,
+                                              QStringLiteral("editor_source"),
+                                              QStringLiteral("x"),
+                                              123,
+                                              window.m_projectService.get()));
+    require(rejected == nullptr, "migrated editor layout parameter command should execute");
+    rejected = window.m_commandManager->executeCommand(
+        std::make_unique<SetParameterCommand>(window.m_graph,
+                                              QStringLiteral("editor_source"),
+                                              QStringLiteral("vc_count"),
+                                              7,
+                                              window.m_projectService.get()));
+    require(rejected == nullptr, "migrated editor graph parameter command should execute");
+
+    rejected = window.m_commandManager->executeCommand(
+        std::make_unique<AddConnectionCommand>(
+            window.m_graph,
+            std::make_unique<Connection>(QStringLiteral("editor_link"),
+                                         PortRef{QStringLiteral("editor_source"), QStringLiteral("out")},
+                                         PortRef{QStringLiteral("editor_sink"), QStringLiteral("in")}),
+            AddConnectionCommand::PackageManifestsProvider{},
+            window.m_projectService.get()));
+    require(rejected == nullptr, "migrated editor connection command should execute");
+
+    require(window.m_projectStateDirty,
+            "migrated editor graph command should mark project state dirty before save");
+    require(saveDocumentWithAutoClosedMessageBoxes(window, projectPath),
+            "normal save should not block migrated editor command mutations");
+
+    ProjectService reloaded;
+    const ProjectServiceResult loadResult = reloaded.loadFile(projectPath);
+    require(loadResult.success, "migrated editor command project should reload as valid V1");
+    require(graphConfigHasObject(reloaded.document(),
+                                 QStringLiteral("component0"),
+                                 QStringLiteral("editor_source")),
+            "migrated editor source module should persist through graph_config");
+    require(graphConfigHasObject(reloaded.document(),
+                                 QStringLiteral("component0"),
+                                 QStringLiteral("editor_sink")),
+            "migrated editor sink module should persist through graph_config");
+    require(graphConfigObject(reloaded.document(),
+                              QStringLiteral("component0"),
+                              QStringLiteral("editor_source"))
+                .value(QStringLiteral("properties")).toObject()
+                .value(QStringLiteral("vc_count")).toInt() == 7,
+            "migrated editor graph parameter should persist through graph_config");
+    require(layoutNodeForObject(reloaded.document(), QStringLiteral("editor_source"))
+                .value(QStringLiteral("x")).toInt() == 123,
+            "migrated editor layout parameter should persist through V1 layout");
+    require(graphConfigHasRelationship(reloaded.document(),
+                                       QStringLiteral("component0"),
+                                       QStringLiteral("editor_link")),
+            "migrated editor connection should persist through graph_config");
+    require(!window.m_documentDirty && !window.isWindowModified(),
+            "successful migrated editor save should clear dirty state");
+}
+
 void testSavedDesignEditBlocksLaterUnmigratedGraphProjectionSave() {
     QTemporaryDir tempDir;
     require(tempDir.isValid(), "temporary directory should be valid");
@@ -1861,6 +2015,7 @@ int main(int argc, char** argv) {
         testMainWindowClearAndNewProjectResetDesignEditingService();
         testDesignEditingServiceEditSynchronizesProjectServiceDocument();
         testDesignEditingServiceAddComponentPersistsThroughMainWindowSave();
+        testMigratedEditorModuleConnectionAndParameterCommandsSaveNormally();
         testSavedDesignEditBlocksLaterUnmigratedGraphProjectionSave();
         testMainWindowSaveBlocksMixedGraphAndDesignEdits();
         testProjectStateInstanceAddedAfterDesignCacheSurvivesProjectionSave();

@@ -1,6 +1,8 @@
 // RemoveModuleCommand removes one module plus incident edges and restores them on undo.
 #include "commands/removemodulecommand.h"
 
+#include "project/editormutationtarget.h"
+
 namespace {
 
 const Module* findRestoredOrExistingModule(const Graph* graph,
@@ -84,8 +86,12 @@ std::unique_ptr<Connection> cloneConnection(const Connection& connection) {
 
 } // namespace
 
-RemoveModuleCommand::RemoveModuleCommand(Graph* graph, const QString& moduleId)
-    : m_graph(graph), m_moduleId(moduleId) {}
+RemoveModuleCommand::RemoveModuleCommand(Graph* graph,
+                                         const QString& moduleId,
+                                         EditorMutationTarget* editorMutationTarget)
+    : m_graph(graph),
+      m_moduleId(moduleId),
+      m_editorMutationTarget(editorMutationTarget) {}
 
 // Remove module and all connected connections
 void RemoveModuleCommand::execute() {
@@ -105,6 +111,9 @@ void RemoveModuleCommand::execute() {
         }
     }
     m_module = m_graph->takeModule(m_moduleId);
+    if (m_editorMutationTarget && m_module) {
+        m_editorMutationTarget->removeEditorModuleRecord(m_moduleId);
+    }
     m_executed = true;
 }
 
@@ -140,5 +149,17 @@ void RemoveModuleCommand::undo() {
 
     m_module.reset();
     m_connections.clear();
+    if (m_editorMutationTarget) {
+        if (const Module* module = m_graph->getModule(moduleId)) {
+            m_editorMutationTarget->upsertEditorModuleRecord(*module);
+        }
+        for (const auto& connection : m_graph->connections()) {
+            if (connection &&
+                (connection->source().moduleId == moduleId ||
+                 connection->target().moduleId == moduleId)) {
+                m_editorMutationTarget->upsertEditorConnectionRecord(*connection);
+            }
+        }
+    }
     m_undone = true;
 }

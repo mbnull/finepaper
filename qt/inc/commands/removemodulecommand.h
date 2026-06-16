@@ -5,10 +5,14 @@
 #include "graph/graph.h"
 #include <memory>
 
+class EditorMutationTarget;
+
 class RemoveModuleCommand : public Command {
 public:
     // Targets a specific module ID for deletion.
-    RemoveModuleCommand(Graph* graph, const QString& moduleId);
+    RemoveModuleCommand(Graph* graph,
+                        const QString& moduleId,
+                        EditorMutationTarget* editorMutationTarget = nullptr);
     // Removes the module and all incident connections, storing them for undo.
     void execute() override;
     // Re-inserts removed module and its captured connections.
@@ -19,4 +23,5 @@ private:
     QString m_moduleId;
     std::unique_ptr<Module> m_module;
     std::vector<std::unique_ptr<Connection>> m_connections;
+    EditorMutationTarget* m_editorMutationTarget = nullptr;
 };

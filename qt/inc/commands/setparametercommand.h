@@ -5,10 +5,16 @@
 #include "graph/graph.h"
 #include "graph/parameter.h"
 
+class EditorMutationTarget;
+
 class SetParameterCommand : public Command {
 public:
     // Targets one module parameter update and captures prior value for undo.
-    SetParameterCommand(Graph* graph, const QString& moduleId, const QString& paramName, Parameter::Value newValue);
+    SetParameterCommand(Graph* graph,
+                        const QString& moduleId,
+                        const QString& paramName,
+                        Parameter::Value newValue,
+                        EditorMutationTarget* editorMutationTarget = nullptr);
     // Applies the new parameter value.
     void execute() override;
     // Restores previous parameter value or removes newly introduced parameter.
@@ -21,4 +27,5 @@ private:
     Parameter::Value m_newValue;
     Parameter::Value m_oldValue;
     bool m_parameterExisted = false;
+    EditorMutationTarget* m_editorMutationTarget = nullptr;
 };

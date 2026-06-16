@@ -247,22 +247,22 @@ QStringList unmigratedGraphProjectionOwners(const Graph& graph,
         }
         const QString scope = instanceScopeKey(module->ipcoreId(), module->instanceId());
         if (!activeScopes.contains(scope)) {
-            addOwner(QStringLiteral("NodeEditor module graph commands (unowned module projection)"));
+            addOwner(QStringLiteral("Unowned graph projection module"));
             continue;
         }
         liveModuleIds.insert(module->id());
         const auto recordIt = moduleRecords.constFind(module->id());
         if (recordIt == moduleRecords.constEnd()) {
-            addOwner(QStringLiteral("NodeEditor module graph commands (AddModuleCommand/TopologyPresetCommand)"));
+            addOwner(QStringLiteral("Unowned graph projection module record"));
             continue;
         }
         if (!moduleMatchesDocumentRecord(*module, recordIt.value())) {
-            addOwner(QStringLiteral("NodeEditor graph parameter/layout commands (SetParameterCommand/ArrangeCommand)"));
+            addOwner(QStringLiteral("Unowned graph projection module parameters/layout"));
         }
     }
     for (auto it = moduleRecords.constBegin(); it != moduleRecords.constEnd(); ++it) {
         if (!liveModuleIds.contains(it.key())) {
-            addOwner(QStringLiteral("NodeEditor module graph commands (RemoveModuleCommand)"));
+            addOwner(QStringLiteral("Unowned graph projection module removal"));
         }
     }
 
@@ -276,22 +276,22 @@ QStringList unmigratedGraphProjectionOwners(const Graph& graph,
         const bool sourceActive = liveModuleIds.contains(connection->source().moduleId);
         const bool targetActive = liveModuleIds.contains(connection->target().moduleId);
         if (!sourceActive || !targetActive) {
-            addOwner(QStringLiteral("NodeEditor connection graph commands (unowned connection projection)"));
+            addOwner(QStringLiteral("Unowned graph projection connection"));
             continue;
         }
         liveConnectionIds.insert(connection->id());
         const auto recordIt = connectionRecords.constFind(connection->id());
         if (recordIt == connectionRecords.constEnd()) {
-            addOwner(QStringLiteral("NodeEditor connection graph commands (AddConnectionCommand)"));
+            addOwner(QStringLiteral("Unowned graph projection connection record"));
             continue;
         }
         if (!connectionMatchesDocumentRecord(*connection, recordIt.value())) {
-            addOwner(QStringLiteral("NodeEditor connection graph commands (SetConnectionClassCommand)"));
+            addOwner(QStringLiteral("Unowned graph projection connection metadata"));
         }
     }
     for (auto it = connectionRecords.constBegin(); it != connectionRecords.constEnd(); ++it) {
         if (!liveConnectionIds.contains(it.key())) {
-            addOwner(QStringLiteral("NodeEditor connection graph commands (RemoveConnectionCommand)"));
+            addOwner(QStringLiteral("Unowned graph projection connection removal"));
         }
     }
 
@@ -834,7 +834,8 @@ void MainWindow::createTopologyPresetFor(const QString& ipcoreId,
         m_commandManager->executeCommand(std::make_unique<TopologyPresetCommand>(
             m_graph,
             &ModuleRegistry::instance(),
-            request));
+            request,
+            m_projectService.get()));
     if (auto* failed = dynamic_cast<TopologyPresetCommand*>(rejected.get())) {
         QMessageBox::warning(this, "Topology", failed->result().error);
         return;
@@ -862,12 +863,14 @@ void MainWindow::setupPanels() {
                                         m_projectStateService.get(),
                                         m_activeWorkspaceController.get(),
                                         m_commandManager.get(),
-                                        this);
+                                        this,
+                                        m_projectService.get());
     m_propertyPanel = new PropertyPanel(m_graph,
                                         m_projectStateService.get(),
                                         rebuildIpInstanceParameterAdapters(),
                                         m_commandManager.get(),
-                                        this);
+                                        this,
+                                        m_projectService.get());
     m_ipCatalogPanel = new IpCatalogPanel(m_ipCatalogService.get(),
                                           m_projectStateService.get(),
                                           m_projectIpService.get(),
@@ -946,6 +949,7 @@ void MainWindow::setupConnections() {
         if (m_suppressDocumentTracking) {
             return;
         }
+        m_projectStateDirty = true;
         scheduleDocumentStateRefresh();
     };
     const auto appendConnectionAmbiguity = [this](Connection* connection) {

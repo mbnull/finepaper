@@ -2,15 +2,18 @@
 #include "commands/setconnectionclasscommand.h"
 
 #include "graph/graph.h"
+#include "project/editormutationtarget.h"
 
 #include <utility>
 
 SetConnectionClassCommand::SetConnectionClassCommand(Graph* graph,
                                                      QString connectionId,
-                                                     QString connectionClassId)
+                                                     QString connectionClassId,
+                                                     EditorMutationTarget* editorMutationTarget)
     : m_graph(graph),
       m_connectionId(std::move(connectionId)),
-      m_newConnectionClassId(std::move(connectionClassId)) {}
+      m_newConnectionClassId(std::move(connectionClassId)),
+      m_editorMutationTarget(editorMutationTarget) {}
 
 void SetConnectionClassCommand::execute() {
     m_executed = false;
@@ -42,6 +45,17 @@ void SetConnectionClassCommand::execute() {
                                                 m_newConnectionClassId,
                                                 QStringLiteral("valid"),
                                                 {});
+    if (m_executed && m_editorMutationTarget) {
+        if (const Connection* updated = m_graph->getConnection(m_connectionId)) {
+            m_executed = m_editorMutationTarget->upsertEditorConnectionRecord(*updated);
+        }
+        if (!m_executed) {
+            m_graph->setConnectionMetadata(m_connectionId,
+                                           m_oldConnectionClassId,
+                                           m_oldStatus,
+                                           m_oldAlternatives);
+        }
+    }
 }
 
 void SetConnectionClassCommand::undo() {
@@ -54,4 +68,9 @@ void SetConnectionClassCommand::undo() {
                                               m_oldConnectionClassId,
                                               m_oldStatus,
                                               m_oldAlternatives);
+    if (m_undone && m_editorMutationTarget) {
+        if (const Connection* restored = m_graph->getConnection(m_connectionId)) {
+            m_editorMutationTarget->upsertEditorConnectionRecord(*restored);
+        }
+    }
 }

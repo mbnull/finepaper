@@ -342,9 +342,17 @@ void NodeEditorWidget::finishNodeResize() {
     if (module) {
         restoreResizeParameters(module);
         auto widthCommand = std::make_unique<SetParameterCommand>(
-            m_graph, moduleId, QStringLiteral("node_width"), finalSize.width());
+            m_graph,
+            moduleId,
+            QStringLiteral("node_width"),
+            finalSize.width(),
+            m_editorMutationTarget);
         auto heightCommand = std::make_unique<SetParameterCommand>(
-            m_graph, moduleId, QStringLiteral("node_height"), finalSize.height());
+            m_graph,
+            moduleId,
+            QStringLiteral("node_height"),
+            finalSize.height(),
+            m_editorMutationTarget);
         m_commandManager->executeCommand(std::move(widthCommand));
         m_commandManager->executeCommand(std::move(heightCommand));
     }

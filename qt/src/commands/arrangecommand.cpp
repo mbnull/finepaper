@@ -5,6 +5,7 @@
 #include "modules/modulelabels.h"
 #include "modules/moduletypemetadata.h"
 #include "common/portlayout.h"
+#include "project/editormutationtarget.h"
 #include <QPoint>
 #include <QRect>
 #include <QRegularExpression>
@@ -337,8 +338,10 @@ QString xpForEndpoint(const Graph* graph, const QString& endpointModuleId) {
 
 } // namespace
 
-ArrangeCommand::ArrangeCommand(Graph* graph)
-    : m_graph(graph) {
+ArrangeCommand::ArrangeCommand(Graph* graph,
+                               EditorMutationTarget* editorMutationTarget)
+    : m_graph(graph),
+      m_editorMutationTarget(editorMutationTarget) {
 }
 
 void ArrangeCommand::execute() {
@@ -442,6 +445,10 @@ void ArrangeCommand::applyState(const QHash<QString, ModuleSnapshot>& snapshots)
             module->setParameter("collapsed", snapshot.collapsed.value);
         } else {
             module->removeParameter("collapsed");
+        }
+
+        if (m_editorMutationTarget) {
+            m_editorMutationTarget->upsertEditorModuleRecord(*module);
         }
     }
 }

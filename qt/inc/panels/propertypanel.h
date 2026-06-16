@@ -13,6 +13,7 @@ class IIpInstanceParameterAdapter;
 class Module;
 class Connection;
 class CommandManager;
+class EditorMutationTarget;
 class ProjectStateService;
 class QFormLayout;
 class QPlainTextEdit;
@@ -27,7 +28,8 @@ public:
                   ProjectStateService* stateService,
                   QVector<IIpInstanceParameterAdapter*> ipInstanceParameterAdapters,
                   CommandManager* commandManager,
-                  QWidget* parent = nullptr);
+                  QWidget* parent = nullptr,
+                  EditorMutationTarget* editorMutationTarget = nullptr);
     PropertyPanel(Graph* graph, CommandManager* commandManager, QWidget* parent = nullptr);
     void setSelectedModule(Module* module);
     void setIpInstanceParameterAdapters(QVector<IIpInstanceParameterAdapter*> adapters);
@@ -58,6 +60,7 @@ private:
     ProjectStateService* m_stateService;
     QVector<IIpInstanceParameterAdapter*> m_ipInstanceParameterAdapters;
     CommandManager* m_commandManager;
+    EditorMutationTarget* m_editorMutationTarget = nullptr;
     QPointer<Module> m_selectedModule;
     QVBoxLayout* m_layout;
     QPlainTextEdit* m_descriptionView;

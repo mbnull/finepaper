@@ -9,10 +9,12 @@
 
 class Graph;
 class Module;
+class EditorMutationTarget;
 
 class ArrangeCommand : public Command {
 public:
-    explicit ArrangeCommand(Graph* graph);
+    explicit ArrangeCommand(Graph* graph,
+                            EditorMutationTarget* editorMutationTarget = nullptr);
 
     // Computes and applies automatic placement for routers/endpoints.
     void execute() override;
@@ -44,6 +46,7 @@ private:
     QHash<QString, ModulePlacement> buildPlacements() const;
 
     Graph* m_graph;
+    EditorMutationTarget* m_editorMutationTarget = nullptr;
     bool m_initialized = false;
     QHash<QString, ModuleSnapshot> m_before;
     QHash<QString, ModuleSnapshot> m_after;
