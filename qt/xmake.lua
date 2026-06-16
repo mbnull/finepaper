@@ -153,6 +153,7 @@ add_qt_test_target("arrangecommand_test", "test/arrangecommand_test.cpp", {
 add_qt_test_target("validation_test", "test/validation_test.cpp", {
     "src/connection/connectionruleservice.cpp",
     "src/validation/projectexternalvalidationrunner.cpp",
+    "src/app/projectdesigninstanceprojection.cpp",
     "src/app/projectflowsupport.cpp",
     "src/ipcraft/flowrunner.cpp",
     "src/ipcraft/artifactmodel.cpp",
@@ -175,6 +176,7 @@ add_qt_test_target("validation_test", "test/validation_test.cpp", {
     "src/**/validationmanager.cpp",
     "src/**/logpanel.cpp",
     "src/app/generationartifacts.cpp",
+    "src/app/projectdesigninstanceprojection.cpp",
     "src/ipcraft/core/project_document_v1.cpp",
     "src/ipcraft/core/project_design.cpp",
     "src/project/projectdesignserializer.cpp",
@@ -201,6 +203,7 @@ add_qt_test_target("validation_test", "test/validation_test.cpp", {
     "inc/validation/projectexternalvalidationrunner.h",
     "inc/**/logpanel.h",
     "inc/app/projectflowsupport.h",
+    "inc/app/projectdesigninstanceprojection.h",
     "inc/ipcore/ipcoregraphexporter.h",
     "inc/ipcore/ipcatalogservice.h",
     "inc/ipcraft/flowrunner.h",
@@ -229,6 +232,7 @@ add_qt_test_target("projectexternalvalidationrunner_test", "test/projectexternal
     "src/connection/connectionruleservice.cpp",
     "src/connection/connectionruleprovider.cpp",
     "src/validation/projectexternalvalidationrunner.cpp",
+    "src/app/projectdesigninstanceprojection.cpp",
     "src/app/projectflowsupport.cpp",
     "src/ipcraft/ipcraftconnectionvalidator.cpp",
     "src/ipcraft/ipcraftbuiltinvalidator.cpp",
@@ -260,6 +264,7 @@ add_qt_test_target("projectexternalvalidationrunner_test", "test/projectexternal
     "inc/connection/connectionruleservice.h",
     "inc/connection/connectionruleprovider.h",
     "inc/app/projectflowsupport.h",
+    "inc/app/projectdesigninstanceprojection.h",
     "inc/ipcraft/flowrunner.h",
     "inc/ipcraft/artifactmodel.h",
     "inc/ipcraft/emitter.h",
@@ -414,6 +419,7 @@ add_qt_test_target("editorprojectionservice_test", "test/editorprojectionservice
 add_qt_test_target("projectgenerationrunner_test", "test/projectgenerationrunner_test.cpp", {
     "src/app/generationflowprovider.cpp",
     "src/app/projectflowsupport.cpp",
+    "src/app/projectdesigninstanceprojection.cpp",
     "src/app/projectgenerationrunner.cpp",
     "src/connection/connectionruleservice.cpp",
     "src/ipcraft/flowrunner.cpp",
@@ -447,6 +453,7 @@ add_qt_test_target("projectgenerationrunner_test", "test/projectgenerationrunner
     "inc/app/projectgenerationrunner.h",
     "inc/app/generationflowprovider.h",
     "inc/app/generationartifacts.h",
+    "inc/app/projectdesigninstanceprojection.h",
     "inc/ipcraft/flowrunner.h",
     "inc/ipcraft/artifactmodel.h",
     "inc/ipcraft/emitter.h",
@@ -468,6 +475,7 @@ add_qt_test_target("projectgenerationrunner_test", "test/projectgenerationrunner
 add_qt_test_target("commercial_noc_mvp_test", "test/commercial_noc_mvp_test.cpp", {
     "src/app/generationflowprovider.cpp",
     "src/app/projectflowsupport.cpp",
+    "src/app/projectdesigninstanceprojection.cpp",
     "src/app/projectgenerationrunner.cpp",
     "src/connection/connectionruleservice.cpp",
     "src/ipcraft/flowrunner.cpp",
@@ -502,6 +510,7 @@ add_qt_test_target("commercial_noc_mvp_test", "test/commercial_noc_mvp_test.cpp"
     "inc/app/projectgenerationrunner.h",
     "inc/app/generationflowprovider.h",
     "inc/app/generationartifacts.h",
+    "inc/app/projectdesigninstanceprojection.h",
     "inc/ipcraft/flowrunner.h",
     "inc/ipcraft/artifactmodel.h",
     "inc/ipcraft/emitter.h",
@@ -525,6 +534,7 @@ add_qt_test_target("vendor_meshnoc_onboarding_test", "test/vendor_meshnoc_onboar
     "src/app/capabilityregistry.cpp",
     "src/app/generationflowprovider.cpp",
     "src/app/projectflowsupport.cpp",
+    "src/app/projectdesigninstanceprojection.cpp",
     "src/app/projectgenerationrunner.cpp",
     "src/connection/connectionruleservice.cpp",
     "src/package/packagecoverage.cpp",
@@ -560,6 +570,7 @@ add_qt_test_target("vendor_meshnoc_onboarding_test", "test/vendor_meshnoc_onboar
     "inc/app/projectgenerationrunner.h",
     "inc/app/generationflowprovider.h",
     "inc/app/generationartifacts.h",
+    "inc/app/projectdesigninstanceprojection.h",
     "inc/app/capabilityregistry.h",
     "inc/package/packagecoverage.h",
     "inc/package/packageservice.h",
@@ -891,6 +902,7 @@ target("ipcraft_flowrunner_test")
     add_files("src/ipcraft/packagespec.cpp")
     add_files("src/ipcraft/core/project_design.cpp")
     add_files("src/app/appsettings.cpp")
+    add_files("src/app/projectdesigninstanceprojection.cpp")
     add_files("src/validation/projectvalidationrunner.cpp")
     add_files("src/validation/validationresult.cpp")
     add_files("src/ipcraft/ipcraftbuiltinvalidator.cpp")
@@ -916,6 +928,7 @@ target("ipcraft_flowrunner_test")
     add_files("inc/ipcraft/jsonhelpers.h")
     add_files("inc/ipcraft/schemaids.h")
     add_files("inc/ipcraft/core/project_design.h")
+    add_files("inc/app/projectdesigninstanceprojection.h")
     add_files("inc/validation/projectvalidationrunner.h")
     add_files("inc/graph/graph.h")
     add_files("inc/graph/module.h")
@@ -1282,6 +1295,7 @@ add_qt_test_target("toolpipelineplugin_test", "test/toolpipelineplugin_test.cpp"
     "src/app/generationartifacts.cpp",
     "src/app/generationflowprovider.cpp",
     "src/app/projectflowsupport.cpp",
+    "src/app/projectdesigninstanceprojection.cpp",
     "src/app/pluginhost.cpp",
     "src/app/projectgenerationrunner.cpp",
     "src/app/toolpipelineplugin.cpp",
@@ -1336,6 +1350,7 @@ add_qt_test_target("staticplugincatalog_test", "test/staticplugincatalog_test.cp
     "src/app/generationartifacts.cpp",
     "src/app/generationflowprovider.cpp",
     "src/app/projectflowsupport.cpp",
+    "src/app/projectdesigninstanceprojection.cpp",
     "src/app/pluginhost.cpp",
     "src/app/projectgenerationrunner.cpp",
     "src/app/staticplugincatalog.cpp",
@@ -1672,6 +1687,7 @@ target("ipcatalogpanel_test")
     add_files("src/app/generationflowprovider.cpp")
     add_files("src/app/logformat.cpp")
     add_files("src/app/projectflowsupport.cpp")
+    add_files("src/app/projectdesigninstanceprojection.cpp")
     add_files("src/app/projectgenerationrunner.cpp")
     add_files("src/app/projectlauncher.cpp")
     add_files("src/app/toolpipelineplugin.cpp")
@@ -1843,6 +1859,7 @@ add_qt_test_target("v1architecturegate_test", "test/v1architecturegate_test.cpp"
     "src/app/generationartifacts.cpp",
     "src/app/generationflowprovider.cpp",
     "src/app/projectflowsupport.cpp",
+    "src/app/projectdesigninstanceprojection.cpp",
     "src/app/projectgenerationrunner.cpp",
     "src/connection/connectionruleservice.cpp",
     "src/ipcraft/artifactmodel.cpp",

@@ -543,7 +543,7 @@ void testProjectValidationRunnerRunsInstancePackageChecksWithoutGraph() {
         projectDesignFor(QStringLiteral("graph_free_package_checks"), instances);
 
     ProjectValidationRunner runner;
-    const ProjectValidationReport report = runner.validateDetailed(&design, entries, instances);
+    const ProjectValidationReport report = runner.validateDetailed(&design, entries);
 
     require(report.diagnostics.isEmpty(),
             "missing graph should not be a global validation error when project instances are available");
@@ -556,9 +556,7 @@ void testProjectValidationRunnerRunsInstancePackageChecksWithoutGraph() {
     const ipcraft::core::ProjectDesign missingDesign =
         projectDesignFor(QStringLiteral("graph_free_missing_package"), missingInstances);
     const ProjectValidationReport missingReport =
-        runner.validateDetailed(&missingDesign,
-                                {},
-                                missingInstances);
+        runner.validateDetailed(&missingDesign, {});
     require(missingReport.diagnostics.size() == 1,
             "graph-free built-in validation should still report missing packages");
     require(missingReport.diagnostics.first().message().contains(QStringLiteral("finepaper.missing")),
@@ -588,7 +586,7 @@ void testProjectValidationRunnerReportsProjectDesignIssuesWithoutGraph() {
     design.connections.append(connection);
 
     ProjectValidationRunner runner;
-    const ProjectValidationReport report = runner.validateDetailed(&design, entries, instances);
+    const ProjectValidationReport report = runner.validateDetailed(&design, entries);
 
     require(hasRule(report.diagnostics, QStringLiteral("connection.unknown_component_ref")),
             "invalid ProjectDesign should be reported by static validation without a Graph");
@@ -616,7 +614,7 @@ void testProjectValidationRunnerDoesNotWarnForMissingDrc() {
         projectDesignFor(QStringLiteral("missing_drc"), instances);
 
     ProjectValidationRunner runner;
-    const QList<ValidationResult> results = runner.validate(&design, entries, instances);
+    const QList<ValidationResult> results = runner.validate(&design, entries);
 
     require(results.isEmpty(),
             "static project validation should not warn or execute external DRC when DRC is absent");
@@ -633,7 +631,7 @@ void testProjectValidationRunnerErrorsWhenCatalogEntryIsMissing() {
         projectDesignFor(QStringLiteral("missing_catalog_entry"), instances);
 
     ProjectValidationRunner runner;
-    const QList<ValidationResult> results = runner.validate(&design, entries, instances);
+    const QList<ValidationResult> results = runner.validate(&design, entries);
 
     require(results.size() == 1, "missing runtime/catalog entry should produce one finding");
     require(results.first().severity() == ValidationSeverity::Error,
@@ -657,7 +655,7 @@ void testBuiltInValidationReportsMissingPackage() {
         projectDesignFor(QStringLiteral("missing_package"), instances);
 
     ProjectValidationRunner runner;
-    const QList<ValidationResult> results = runner.validate(&design, entries, instances);
+    const QList<ValidationResult> results = runner.validate(&design, entries);
 
     require(results.size() == 1, "missing package should produce one built-in finding");
     require(results.first().severity() == ValidationSeverity::Error,
@@ -806,6 +804,48 @@ void testValidationManagerRunsPackageValidateWithoutGraphWhenProjectDesignExists
             "validation manager should run package validate when graph is null but project design exists");
     require(indexOfLogItemContaining(logList, QStringLiteral("Graph is not available")) < 0,
             "validation manager should not publish graph availability as a global blocker");
+}
+
+void testValidationManagerUsesProjectDesignWhenProjectStateServiceIsStale() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "failed to create temporary DRC directory");
+    const QString scriptPath = writeValidateFlowScript(tempDir);
+    const QString designPackageId = QStringLiteral("finepaper.design_authoritative");
+    writePackageSpec(tempDir.path(), designPackageId, validateFlows(scriptPath));
+
+    IpcraftPackageManifest manifest = packageManifest(designPackageId);
+    manifest.packageRootPath = tempDir.path();
+    IpCatalogService catalog(QVector<IpcraftPackageManifest>{manifest}, nullptr);
+
+    const QVector<ProjectIpInstanceRecord> designInstances{
+        projectInstanceRecord(designPackageId, QStringLiteral("design_authoritative_0"))
+    };
+    const ipcraft::core::ProjectDesign design =
+        projectDesignFor(QStringLiteral("design_authoritative_validation"), designInstances);
+
+    ProjectStateService staleStateService;
+    staleStateService.ensureIpInstanceRecord(
+        projectInstanceRecord(QStringLiteral("finepaper.stale_state"),
+                              QStringLiteral("stale_state_0")));
+
+    LogPanel logPanel;
+    ValidationManager manager(nullptr,
+                              &staleStateService,
+                              &catalog,
+                              nullptr,
+                              &logPanel,
+                              &design);
+    manager.runValidation(QStringLiteral("/tmp/design-authoritative-validation.fpproj"),
+                          QStringLiteral("design_authoritative_validation"));
+
+    auto* logList = logPanel.findChild<QListWidget*>();
+    require(indexOfLogItemContaining(logList,
+                                     QStringLiteral("Instance 'design_authoritative_0': scripted validate DRC output")) >= 0,
+            "validation manager should validate the ProjectDesign instance");
+    require(indexOfLogItemContaining(logList, QStringLiteral("finepaper.stale_state")) < 0,
+            "stale ProjectStateService records should not enter validation diagnostics");
+    require(indexOfLogItemContaining(logList, QStringLiteral("stale_state_0")) < 0,
+            "stale ProjectStateService instance ids should not enter validation diagnostics");
 }
 
 void testValidateSkipsOnlyInstanceTouchedByProjectDesignError() {
@@ -1239,7 +1279,7 @@ void testProjectValidationRunnerDoesNotRunDrcForProjectInstances() {
         projectDesignFor(QStringLiteral("scripted_static_validation"), instances);
 
     ProjectValidationRunner runner;
-    const QList<ValidationResult> results = runner.validate(&design, entries, instances);
+    const QList<ValidationResult> results = runner.validate(&design, entries);
 
     require(results.isEmpty(),
             "default project validation should not run external DRC for project instances");
@@ -1261,7 +1301,7 @@ void testProjectValidationRunnerDoesNotExportInstanceScopedDrcInput() {
         projectDesignFor(QStringLiteral("scripted_no_export"), instances);
 
     ProjectValidationRunner runner;
-    const QList<ValidationResult> results = runner.validate(&design, entries, instances);
+    const QList<ValidationResult> results = runner.validate(&design, entries);
 
     require(results.isEmpty(),
             "default project validation should not export instance-scoped DRC input");
@@ -1424,6 +1464,7 @@ int main(int argc, char** argv) {
         testBuiltInValidationRunsBeforePackageValidate();
         testValidateRunsBuiltInThenPackageValidate();
         testValidationManagerRunsPackageValidateWithoutGraphWhenProjectDesignExists();
+        testValidationManagerUsesProjectDesignWhenProjectStateServiceIsStale();
         testValidateSkipsOnlyInstanceTouchedByProjectDesignError();
         testCommandRunnerRejectsSchemaMismatch();
         testBuiltInValidationReportsMissingInterface();

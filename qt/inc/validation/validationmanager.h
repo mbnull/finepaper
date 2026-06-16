@@ -36,7 +36,6 @@ public slots:
 
 private:
     Graph* m_graph;
-    ProjectStateService* m_projectStateService;
     const IpCatalogService* m_catalogService;
     LogPanel* m_logPanel;
     const ipcraft::core::ProjectDesign* m_projectDesign;

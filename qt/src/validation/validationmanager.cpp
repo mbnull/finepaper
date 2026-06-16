@@ -2,8 +2,8 @@
 #include "validation/validationmanager.h"
 #include "graph/graph.h"
 #include "ipcore/ipcatalogservice.h"
+#include "ipcraft/core/project_design.h"
 #include "panels/logpanel.h"
-#include "project/projectstateservice.h"
 #include "validation/projectexternalvalidationrunner.h"
 #include "validation/projectvalidationrunner.h"
 #include <QDebug>
@@ -18,13 +18,13 @@ ValidationManager::ValidationManager(Graph* graph,
                                      QObject* parent)
     : QObject(parent),
       m_graph(graph),
-      m_projectStateService(projectStateService),
       m_catalogService(catalogService),
       m_logPanel(logPanel),
       m_projectDesign(projectDesign),
       m_projectValidationRunner(new ProjectValidationRunner()),
       m_projectExternalValidationRunner(new ProjectExternalValidationRunner()) {
     (void)activeWorkspaceController;
+    (void)projectStateService;
 }
 
 ValidationManager::~ValidationManager() {
@@ -37,13 +37,11 @@ void ValidationManager::runValidation(const QString& projectPath, const QString&
     qInfo() << "Running validation"
             << "modules" << (m_graph ? m_graph->modules().size() : 0)
             << "connections" << (m_graph ? m_graph->connections().size() : 0)
-            << "ipInstances" << (m_projectStateService ? m_projectStateService->ipInstanceRecords().size() : 0);
+            << "projectDesignComponents" << (m_projectDesign ? m_projectDesign->components.size() : 0);
     const QList<IpCatalogEntry> entries =
         m_catalogService ? m_catalogService->entries() : QList<IpCatalogEntry>{};
-    const QVector<ProjectIpInstanceRecord> instances =
-        m_projectStateService ? m_projectStateService->ipInstanceRecords() : QVector<ProjectIpInstanceRecord>{};
     const ProjectValidationReport staticReport =
-        m_projectValidationRunner->validateDetailed(m_projectDesign, entries, instances);
+        m_projectValidationRunner->validateDetailed(m_projectDesign, entries);
 
     ProjectExternalValidationRequest externalRequest;
     externalRequest.projectDesign = m_projectDesign;
@@ -51,7 +49,6 @@ void ValidationManager::runValidation(const QString& projectPath, const QString&
     externalRequest.projectPath = projectPath;
     externalRequest.designName = designName;
     externalRequest.catalogEntries = entries;
-    externalRequest.instances = instances;
     externalRequest.staticResults = staticReport.diagnostics;
     externalRequest.blockingInstanceIds = staticReport.blockingInstanceIds;
     externalRequest.blockAllExternalValidation = staticReport.blockAllExternalValidation;

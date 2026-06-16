@@ -1,6 +1,7 @@
 // ProjectValidationRunner implementation.
 #include "validation/projectvalidationrunner.h"
 
+#include "app/projectdesigninstanceprojection.h"
 #include "ipcraft/core/project_design.h"
 #include "ipcraft/ipcraftbuiltinvalidator.h"
 
@@ -250,25 +251,14 @@ bool ProjectValidationReport::hasErrors() const {
 
 QList<ValidationResult> ProjectValidationRunner::validate(
     const ipcraft::core::ProjectDesign* projectDesign,
-    const QList<IpCatalogEntry>& entries,
-    const QVector<ProjectIpInstanceRecord>& instances) const {
-    return validateDetailed(projectDesign, entries, instances).diagnostics;
+    const QList<IpCatalogEntry>& entries) const {
+    return validateDetailed(projectDesign, entries).diagnostics;
 }
 
 ProjectValidationReport ProjectValidationRunner::validateDetailed(
     const ipcraft::core::ProjectDesign* projectDesign,
-    const QList<IpCatalogEntry>& entries,
-    const QVector<ProjectIpInstanceRecord>& instances) const {
-    IpcraftBuiltInValidator builtInValidator;
-    const IpcraftBuiltInValidator::Result builtInResult =
-        builtInValidator.validate(nullptr,
-                                  entries,
-                                  instances,
-                                  IpcraftBuiltInValidator::CommandPurpose::Validate);
+    const QList<IpCatalogEntry>& entries) const {
     ProjectValidationReport report;
-    report.diagnostics = builtInResult.diagnostics;
-    report.blockingInstanceIds = builtInResult.blockingInstanceIds;
-
     if (!projectDesign) {
         report.diagnostics.append(ValidationResult(
             ValidationSeverity::Error,
@@ -278,6 +268,18 @@ ProjectValidationReport ProjectValidationRunner::validateDetailed(
         report.blockAllExternalValidation = true;
         return report;
     }
+
+    const QVector<ProjectIpInstanceRecord> validationInstances =
+        ProjectDesignInstanceProjection::instancesFromProjectDesign(*projectDesign, entries);
+
+    IpcraftBuiltInValidator builtInValidator;
+    const IpcraftBuiltInValidator::Result builtInResult =
+        builtInValidator.validate(nullptr,
+                                  entries,
+                                  validationInstances,
+                                  IpcraftBuiltInValidator::CommandPurpose::Validate);
+    report.diagnostics = builtInResult.diagnostics;
+    report.blockingInstanceIds = builtInResult.blockingInstanceIds;
 
     appendProjectDesignIssues(*projectDesign, report);
 

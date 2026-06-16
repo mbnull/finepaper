@@ -2,14 +2,12 @@
 
 #include "ipcore/ipcatalogservice.h"
 #include "ipcraft/core/project_design.h"
-#include "project/ipinstancestate.h"
 #include "validation/validationresult.h"
 
 #include <QList>
 #include <QSet>
 #include <QString>
 #include <QStringList>
-#include <QVector>
 
 class Graph;
 
@@ -20,7 +18,6 @@ struct ProjectExternalValidationRequest {
     QString projectPath;
     QString designName;
     QList<IpCatalogEntry> catalogEntries;
-    QVector<ProjectIpInstanceRecord> instances;
     QList<ValidationResult> staticResults;
     QSet<QString> blockingInstanceIds;
     bool blockAllExternalValidation = false;

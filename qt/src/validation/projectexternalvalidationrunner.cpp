@@ -1,5 +1,6 @@
 #include "validation/projectexternalvalidationrunner.h"
 
+#include "app/projectdesigninstanceprojection.h"
 #include "app/projectflowsupport.h"
 #include "graph/graph.h"
 #include "ipcraft/flowrunner.h"
@@ -223,109 +224,6 @@ QStringList frameworkToolSearchPathsForRequest(
         : request.frameworkToolSearchPaths;
 }
 
-QString packageRefKey(const QString& id, const QString& version) {
-    return version.isEmpty() ? id : id + QLatin1Char('@') + version;
-}
-
-QString packageRefKey(const ipcraft::core::PackageRef& package) {
-    return packageRefKey(package.id, package.version);
-}
-
-ProjectPackageRef packageRefFromComponentRef(
-    const QString& componentPackageRef,
-    const QVector<ipcraft::core::PackageRef>& packages) {
-    for (const ipcraft::core::PackageRef& package : packages) {
-        if (componentPackageRef == packageRefKey(package) ||
-            componentPackageRef == package.id) {
-            return ProjectPackageRef{package.id, package.version};
-        }
-    }
-
-    const qsizetype separator = componentPackageRef.lastIndexOf(QLatin1Char('@'));
-    if (separator > 0 && separator + 1 < componentPackageRef.size()) {
-        return ProjectPackageRef{componentPackageRef.left(separator),
-                                 componentPackageRef.mid(separator + 1)};
-    }
-
-    return ProjectPackageRef{componentPackageRef, {}};
-}
-
-bool isConfigBundleKey(const QString& key) {
-    return key == QStringLiteral("parameters") ||
-           key == QStringLiteral("tables") ||
-           key == QStringLiteral("documents") ||
-           key == QStringLiteral("files") ||
-           key == QStringLiteral("preserved");
-}
-
-bool isConfigBundleSection(const QString& key, const QJsonValue& value) {
-    return isConfigBundleKey(key) && value.isObject();
-}
-
-QJsonObject documentConfigFromRuntimeConfig(const QJsonObject& config) {
-    if (config.isEmpty()) {
-        return {};
-    }
-
-    bool allKeysAreBundleSections = true;
-    for (auto it = config.constBegin(); it != config.constEnd(); ++it) {
-        allKeysAreBundleSections =
-            allKeysAreBundleSections && isConfigBundleSection(it.key(), it.value());
-    }
-    if (allKeysAreBundleSections) {
-        return config;
-    }
-
-    QJsonObject bundleConfig;
-    QJsonObject parameters;
-    for (auto it = config.constBegin(); it != config.constEnd(); ++it) {
-        if (isConfigBundleSection(it.key(), it.value())) {
-            if (it.key() == QStringLiteral("parameters")) {
-                const QJsonObject existingParameters = it.value().toObject();
-                for (auto param = existingParameters.constBegin();
-                     param != existingParameters.constEnd();
-                     ++param) {
-                    parameters.insert(param.key(), param.value());
-                }
-            } else {
-                bundleConfig.insert(it.key(), it.value().toObject());
-            }
-            continue;
-        }
-
-        parameters.insert(it.key(), it.value());
-    }
-
-    if (!parameters.isEmpty()) {
-        bundleConfig.insert(QStringLiteral("parameters"), parameters);
-    }
-    return bundleConfig;
-}
-
-ProjectIpInstanceRecord instanceRecordFromDesignComponent(
-    const ipcraft::core::ComponentInstance& component,
-    const QVector<ipcraft::core::PackageRef>& packages) {
-    ProjectIpInstanceRecord instance;
-    instance.id = component.id;
-    instance.instanceId = component.id;
-    instance.package = packageRefFromComponentRef(component.packageRef, packages);
-    instance.ipcoreId = instance.package.id;
-    instance.config = documentConfigFromRuntimeConfig(component.config);
-    if (!component.type.isEmpty()) {
-        instance.native.insert(QStringLiteral("componentType"), component.type);
-    }
-    if (!component.identity.isEmpty()) {
-        instance.native.insert(QStringLiteral("identity"), component.identity);
-    }
-    if (!component.metadata.isEmpty()) {
-        instance.native.insert(QStringLiteral("metadata"), component.metadata);
-    }
-    if (!component.extensionData.isEmpty()) {
-        instance.native.insert(QStringLiteral("extensionData"), component.extensionData);
-    }
-    return instance;
-}
-
 ProjectIpInstanceRecord normalizedValidationRecord(ProjectIpInstanceRecord record) {
     if (record.instanceId.trimmed().isEmpty()) {
         record.instanceId = record.id.trimmed();
@@ -350,25 +248,16 @@ struct EffectiveValidationInstances {
 EffectiveValidationInstances effectiveValidationInstances(
     const ProjectExternalValidationRequest& request) {
     EffectiveValidationInstances effective;
-    QSet<QString> instanceIds;
-    effective.instances.reserve(request.instances.size());
-
-    for (const ProjectIpInstanceRecord& requestInstance : request.instances) {
-        ProjectIpInstanceRecord instance = normalizedValidationRecord(requestInstance);
-        const QString instanceId = instanceIdFor(instance);
-        if (!instanceId.isEmpty()) {
-            instanceIds.insert(instanceId);
-        }
-        effective.instances.append(std::move(instance));
-    }
-
     if (!request.projectDesign) {
         return effective;
     }
 
-    for (const ipcraft::core::ComponentInstance& component : request.projectDesign->components) {
-        ProjectIpInstanceRecord instance = normalizedValidationRecord(
-            instanceRecordFromDesignComponent(component, request.projectDesign->packages));
+    const QVector<ProjectIpInstanceRecord> projectedInstances =
+        ProjectDesignInstanceProjection::instancesFromProjectDesign(*request.projectDesign,
+                                                                    request.catalogEntries);
+    effective.instances.reserve(projectedInstances.size());
+    for (const ProjectIpInstanceRecord& projectedInstance : projectedInstances) {
+        ProjectIpInstanceRecord instance = normalizedValidationRecord(projectedInstance);
         const QString instanceId = instanceIdFor(instance);
         if (instanceId.isEmpty()) {
             appendUniqueResult(
@@ -377,9 +266,6 @@ EffectiveValidationInstances effectiveValidationInstances(
                 QStringLiteral("Project design component is missing an id for external validation."),
                 QString(),
                 QStringLiteral("DRC"));
-            continue;
-        }
-        if (instanceIds.contains(instanceId)) {
             continue;
         }
         if (instance.ipcoreId.trimmed().isEmpty()) {
@@ -393,7 +279,6 @@ EffectiveValidationInstances effectiveValidationInstances(
             continue;
         }
 
-        instanceIds.insert(instanceId);
         effective.instances.append(std::move(instance));
     }
 

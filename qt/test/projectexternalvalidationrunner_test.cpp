@@ -5,6 +5,7 @@
 #include "graph/port.h"
 #include "ipcraft/core/project_design.h"
 #include "ipcraft/schemaids.h"
+#include "project/ipinstancestate.h"
 #include "validation/projectexternalvalidationrunner.h"
 
 #include <QCoreApplication>
@@ -215,6 +216,9 @@ ipcraft::core::ProjectDesign projectDesignFor(const QString& designName,
         component.id = instance.instanceId;
         component.packageRef = packageKey;
         component.config = instance.config;
+        if (instance.hasGraphConfig && !instance.graphConfigIsNull) {
+            component.extensionData.insert(QStringLiteral("graph_config"), instance.graphConfig);
+        }
         design.components.append(component);
     }
 
@@ -240,13 +244,13 @@ std::unique_ptr<Module> moduleForInstance(const QString& moduleId,
 
 ProjectExternalValidationRequest requestFor(Graph& graph,
                                             const QList<IpCatalogEntry>& entries,
-                                            const QVector<ProjectIpInstanceRecord>& instances) {
+                                            const ipcraft::core::ProjectDesign& design) {
     ProjectExternalValidationRequest request;
+    request.projectDesign = &design;
     request.graph = &graph;
     request.projectPath = QStringLiteral("/tmp/projectexternalvalidationrunner.fpproj");
     request.designName = QStringLiteral("projectexternalvalidationrunner");
     request.catalogEntries = entries;
-    request.instances = instances;
     return request;
 }
 
@@ -279,9 +283,11 @@ void testMissingValidateFlowWarns() {
     require(graph.addModule(moduleForInstance(QStringLiteral("tile_0"), packageId, QStringLiteral("ip0"))),
             "module should add");
     const QVector<ProjectIpInstanceRecord> instances{instanceRecord(packageId, QStringLiteral("ip0"))};
+    const ipcraft::core::ProjectDesign design =
+        projectDesignFor(QStringLiteral("missing_validate_flow"), instances);
 
     ProjectExternalValidationRequest request =
-        requestFor(graph, {catalogEntry(tempDir.path(), packageId)}, instances);
+        requestFor(graph, {catalogEntry(tempDir.path(), packageId)}, design);
     const QList<ValidationResult> results = ProjectExternalValidationRunner().validate(request);
 
     require(results.size() == 1, "missing validate flow should produce one warning");
@@ -306,9 +312,11 @@ void testStructuredOutputBecomesValidationResult() {
     require(graph.addModule(moduleForInstance(QStringLiteral("tile_0"), packageId, QStringLiteral("ip0"))),
             "module should add");
     const QVector<ProjectIpInstanceRecord> instances{instanceRecord(packageId, QStringLiteral("ip0"))};
+    const ipcraft::core::ProjectDesign design =
+        projectDesignFor(QStringLiteral("structured_output"), instances);
 
     ProjectExternalValidationRequest request =
-        requestFor(graph, {catalogEntry(tempDir.path(), packageId)}, instances);
+        requestFor(graph, {catalogEntry(tempDir.path(), packageId)}, design);
     const QList<ValidationResult> results = ProjectExternalValidationRunner().validate(request);
 
     require(results.size() == 1, "structured error should produce one result");
@@ -337,9 +345,11 @@ void testStructuredOutputInstanceIdTargetsGraphModule() {
     require(graph.addModule(moduleForInstance(QStringLiteral("tile_0"), packageId, QStringLiteral("ip0"))),
             "module should add");
     const QVector<ProjectIpInstanceRecord> instances{instanceRecord(packageId, QStringLiteral("ip0"))};
+    const ipcraft::core::ProjectDesign design =
+        projectDesignFor(QStringLiteral("structured_output_target"), instances);
 
     ProjectExternalValidationRequest request =
-        requestFor(graph, {catalogEntry(tempDir.path(), packageId)}, instances);
+        requestFor(graph, {catalogEntry(tempDir.path(), packageId)}, design);
     const QList<ValidationResult> results = ProjectExternalValidationRunner().validate(request);
 
     require(results.size() == 1, "structured error should produce one result");
@@ -370,7 +380,6 @@ void testPackageValidateRunsWithProjectDesignAndNoGraph() {
     request.projectPath = QStringLiteral("/tmp/projectexternalvalidationrunner.fpproj");
     request.designName = QStringLiteral("graph_free_validate");
     request.catalogEntries = {catalogEntry(tempDir.path(), packageId)};
-    request.instances = instances;
     const QList<ValidationResult> results = ProjectExternalValidationRunner().validate(request);
 
     require(results.size() == 1,
@@ -418,19 +427,15 @@ void testProjectDesignComponentRunsValidationWhenInstancesAreEmpty() {
             "project design component should run validate flow when instance records are empty");
 }
 
-void testExplicitInstanceRecordWinsOverProjectDesignFallback() {
+void testProjectDesignGraphConfigFeedsExternalValidation() {
     QTemporaryDir tempDir;
     require(tempDir.isValid(), "failed to create package root");
-    const QString packageId = QStringLiteral("finepaper.explicit_validate");
+    const QString packageId = QStringLiteral("finepaper.design_graph_validate");
     const QString scriptPath =
         writeValidateScript(tempDir,
                             QByteArrayLiteral("inputs_dir=$(dirname \"$1\")\n"
-                                              "if grep -q 'design-marker' \"$inputs_dir/parameters.json\"; then\n"
-                                              "  echo \"ERROR explicit_0: explicit config was replaced\"\n"
-                                              "  exit 0\n"
-                                              "fi\n"
-                                              "if grep -q 'explicit-marker' \"$inputs_dir/parameters.json\" && grep -q 'explicit_graph_object' \"$inputs_dir/graph_config.json\"; then\n"
-                                              "  echo \"ERROR explicit_0: explicit record preserved\"\n"
+                                              "if grep -q 'design-marker' \"$inputs_dir/parameters.json\" && grep -q 'design_graph_object' \"$inputs_dir/graph_config.json\"; then\n"
+                                              "  echo \"ERROR design_graph_0: project design graph config preserved\"\n"
                                               "  exit 0\n"
                                               "fi\n"
                                               "if grep -q 'derived-marker' \"$inputs_dir/parameters.json\"; then\n"
@@ -448,40 +453,31 @@ void testExplicitInstanceRecordWinsOverProjectDesignFallback() {
     };
 
     ProjectIpInstanceRecord designSideExplicit =
-        instanceRecord(packageId, QStringLiteral("explicit_0"));
+        instanceRecord(packageId, QStringLiteral("design_graph_0"));
     designSideExplicit.config = QJsonObject{
         {QStringLiteral("parameters"),
          QJsonObject{{QStringLiteral("marker"), QStringLiteral("design-marker")}}}
     };
-
-    ProjectIpInstanceRecord explicitRecord = instanceRecord(packageId, QStringLiteral("explicit_0"));
-    explicitRecord.config = QJsonObject{
-        {QStringLiteral("parameters"),
-         QJsonObject{{QStringLiteral("marker"), QStringLiteral("explicit-marker")}}}
-    };
-    explicitRecord.hasGraphConfig = true;
-    explicitRecord.graphConfig = graphConfigForObject(QStringLiteral("explicit_graph_object"));
+    designSideExplicit.hasGraphConfig = true;
+    designSideExplicit.graphConfig = graphConfigForObject(QStringLiteral("design_graph_object"));
 
     const ipcraft::core::ProjectDesign design =
-        projectDesignFor(QStringLiteral("explicit_validate"), {designOnly, designSideExplicit});
+        projectDesignFor(QStringLiteral("design_graph_validate"), {designOnly, designSideExplicit});
 
     ProjectExternalValidationRequest request;
     request.projectDesign = &design;
     request.projectPath = QStringLiteral("/tmp/projectexternalvalidationrunner.fpproj");
-    request.designName = QStringLiteral("explicit_validate");
+    request.designName = QStringLiteral("design_graph_validate");
     request.catalogEntries = {catalogEntry(tempDir.path(), packageId)};
-    request.instances = {explicitRecord};
 
     const QList<ValidationResult> results = ProjectExternalValidationRunner().validate(request);
 
-    require(hasMessage(results, QStringLiteral("explicit record preserved")),
-            "explicit ProjectIpInstanceRecord config and graph_config should win");
+    require(hasMessage(results, QStringLiteral("project design graph config preserved")),
+            "ProjectDesign config and graph_config should feed external validation");
     require(hasMessage(results, QStringLiteral("design-only validate ran")),
-            "missing project design component should be derived and validated");
-    require(!hasMessage(results, QStringLiteral("explicit config was replaced")),
-            "project design fallback should not replace explicit instance config");
+            "each project design component should be derived and validated");
     require(!hasMessage(results, QStringLiteral("unrecognized validation inputs")),
-            "validate flow should receive either explicit or derived inputs");
+            "validate flow should receive ProjectDesign-derived inputs");
 }
 
 void testBlockingIdsSkipOnlyMatchingInstances() {
@@ -503,9 +499,11 @@ void testBlockingIdsSkipOnlyMatchingInstances() {
         instanceRecord(packageId, QStringLiteral("ip0")),
         instanceRecord(packageId, QStringLiteral("ip1"))
     };
+    const ipcraft::core::ProjectDesign design =
+        projectDesignFor(QStringLiteral("blocking"), instances);
 
     ProjectExternalValidationRequest request =
-        requestFor(graph, {catalogEntry(tempDir.path(), packageId)}, instances);
+        requestFor(graph, {catalogEntry(tempDir.path(), packageId)}, design);
     request.blockingInstanceIds = {QStringLiteral("ip0")};
     const QList<ValidationResult> results = ProjectExternalValidationRunner().validate(request);
 
@@ -531,9 +529,11 @@ void testBlockAllSuppressesExternalValidation() {
     require(graph.addModule(moduleForInstance(QStringLiteral("tile_0"), packageId, QStringLiteral("ip0"))),
             "module should add");
     const QVector<ProjectIpInstanceRecord> instances{instanceRecord(packageId, QStringLiteral("ip0"))};
+    const ipcraft::core::ProjectDesign design =
+        projectDesignFor(QStringLiteral("block_all"), instances);
 
     ProjectExternalValidationRequest request =
-        requestFor(graph, {catalogEntry(tempDir.path(), packageId)}, instances);
+        requestFor(graph, {catalogEntry(tempDir.path(), packageId)}, design);
     request.blockAllExternalValidation = true;
     const QList<ValidationResult> results = ProjectExternalValidationRunner().validate(request);
 
@@ -550,7 +550,7 @@ int main(int argc, char** argv) {
         testStructuredOutputInstanceIdTargetsGraphModule();
         testPackageValidateRunsWithProjectDesignAndNoGraph();
         testProjectDesignComponentRunsValidationWhenInstancesAreEmpty();
-        testExplicitInstanceRecordWinsOverProjectDesignFallback();
+        testProjectDesignGraphConfigFeedsExternalValidation();
         testBlockingIdsSkipOnlyMatchingInstances();
         testBlockAllSuppressesExternalValidation();
     } catch (const std::exception& error) {

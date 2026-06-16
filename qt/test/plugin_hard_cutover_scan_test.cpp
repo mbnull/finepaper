@@ -342,6 +342,55 @@ void testProjectValidationRunnerUsesProjectDesignNotGraphOrBasicValidator() {
     }
 }
 
+void testValidationInputApisHaveNoInstanceSideChannel() {
+    const QString externalHeader =
+        readText(QStringLiteral("qt/inc/validation/projectexternalvalidationrunner.h"));
+    const QString externalRequest = structBody(externalHeader,
+                                               QStringLiteral("ProjectExternalValidationRequest"),
+                                               QStringLiteral("ProjectExternalValidationRequest"));
+    requireContains(externalRequest,
+                    QStringLiteral("ProjectDesign"),
+                    QStringLiteral("ProjectExternalValidationRequest"));
+    const QStringList externalRequestSideChannelTokens{
+        QStringLiteral("ProjectIpInstanceRecord"),
+        QStringLiteral("QVector<ProjectIpInstanceRecord>"),
+        QStringLiteral("instances")
+    };
+    for (const QString& token : externalRequestSideChannelTokens) {
+        requireNotContains(externalRequest,
+                           token,
+                           QStringLiteral("ProjectExternalValidationRequest"));
+    }
+
+    const QString validationRunnerHeader =
+        readText(QStringLiteral("qt/inc/validation/projectvalidationrunner.h"));
+    const QStringList validationRunnerSideChannelTokens{
+        QStringLiteral("const QVector<ProjectIpInstanceRecord>& instances"),
+        QStringLiteral("QVector<ProjectIpInstanceRecord> instances"),
+        QStringLiteral("ProjectIpInstanceRecord>& instances")
+    };
+    for (const QString& token : validationRunnerSideChannelTokens) {
+        requireNotContains(validationRunnerHeader,
+                           token,
+                           QStringLiteral("ProjectValidationRunner public API"));
+    }
+
+    const QString externalSource =
+        readText(QStringLiteral("qt/src/validation/projectexternalvalidationrunner.cpp"));
+    requireNotContains(externalSource,
+                       QStringLiteral("request.instances"),
+                       QStringLiteral("ProjectExternalValidationRunner"));
+
+    const QString validationManager =
+        readText(QStringLiteral("qt/src/validation/validationmanager.cpp"));
+    requireNotContains(validationManager,
+                       QStringLiteral("ipInstanceRecords()"),
+                       QStringLiteral("ValidationManager"));
+    requireNotContains(validationManager,
+                       QStringLiteral("validateDetailed(m_projectDesign, entries, instances)"),
+                       QStringLiteral("ValidationManager"));
+}
+
 void testLegacyGraphDrcRunnerIsNotInProductValidationRuntime() {
     const QString xmake = readText(QStringLiteral("qt/xmake.lua"));
     const QString qtTarget = sectionBetween(xmake,
@@ -532,6 +581,7 @@ int main(int argc, char** argv) {
     testProjectGenerationRunnerDoesNotReadRequestInstancesSideChannel();
     testMainWindowDispatchesTopologyInteractionsWithoutPresetSemantics();
     testProjectValidationRunnerUsesProjectDesignNotGraphOrBasicValidator();
+    testValidationInputApisHaveNoInstanceSideChannel();
     testLegacyGraphDrcRunnerIsNotInProductValidationRuntime();
     testEditorMutationTargetCommandResultsAreChecked();
     testRuntimeHasNoConcreteVendorModuleHardcoding();

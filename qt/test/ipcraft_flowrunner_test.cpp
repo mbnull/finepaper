@@ -539,7 +539,7 @@ void testValidateProjectDoesNotRunFlow() {
     design.components.append(component);
 
     const QList<ValidationResult> ignored =
-        ProjectValidationRunner().validate(&design, QList<IpCatalogEntry>{entry}, {instance});
+        ProjectValidationRunner().validate(&design, QList<IpCatalogEntry>{entry});
 
     require(!QFileInfo::exists(markerPath),
             "default project validation must not execute external DRC/flow commands");
