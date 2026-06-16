@@ -107,6 +107,7 @@ private slots:
     QString defaultProjectDirectoryPath() const;
     void seedDesignEditingServiceFromProjectService();
     void syncProjectServiceFromDesignEditingService();
+    bool syncProjectServiceFromProjectState();
     void clearDocument();
     void scheduleDocumentStateRefresh();
     void syncDocumentStateFromHistory();

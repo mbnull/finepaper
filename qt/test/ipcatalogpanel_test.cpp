@@ -8,6 +8,7 @@
 #include "commands/addconnectioncommand.h"
 #include "commands/addmodulecommand.h"
 #include "commands/commandmanager.h"
+#include "commands/removeipinstancecommand.h"
 #include "commands/setparametercommand.h"
 #include "commands/setipinstanceparametercommand.h"
 #include "ipcraft/schemaids.h"
@@ -598,6 +599,30 @@ bool designHasComponentWithWidth(const ipcraft::core::ProjectDesign& design,
         }
     }
     return false;
+}
+
+const ipcraft::core::ComponentInstance* designComponent(
+    const ipcraft::core::ProjectDesign& design,
+    const QString& componentId) {
+    for (const ipcraft::core::ComponentInstance& component : design.components) {
+        if (component.id == componentId) {
+            return &component;
+        }
+    }
+    return nullptr;
+}
+
+bool designHasComponent(const ipcraft::core::ProjectDesign& design,
+                        const QString& componentId) {
+    return designComponent(design, componentId) != nullptr;
+}
+
+int designComponentIntConfig(const ipcraft::core::ProjectDesign& design,
+                             const QString& componentId,
+                             const QString& key) {
+    const ipcraft::core::ComponentInstance* component = designComponent(design, componentId);
+    require(component != nullptr, "runtime ProjectDesign should contain requested component");
+    return component->config.value(key).toInt();
 }
 
 bool graphConfigHasObject(const ProjectDocument& document,
@@ -1921,6 +1946,65 @@ void testDesignEditAfterProjectionMergeKeepsProjectionOwnedState() {
             "later design-only save should persist the new design-only component");
 }
 
+void testProjectStateMutationsRefreshProjectDesignBeforeSave() {
+    ModuleRegistryRestore restoreRegistry;
+    QTemporaryDir settingsRoot;
+    QTemporaryDir packageRoot;
+    QTemporaryDir tempDir;
+    require(settingsRoot.isValid() && packageRoot.isValid() && tempDir.isValid(),
+            "temporary directories should be valid");
+
+    const QString packageId = QStringLiteral("org.example.freshness");
+    writePackageWithParameter(packageRoot.path(),
+                              packageId,
+                              QStringLiteral("lane_width"),
+                              QStringLiteral("Lane Width"));
+    configureSettingsRoot(settingsRoot.path(), QStringLiteral("project_design_freshness_app"));
+    AppSettings().setIpcorePaths({packageRoot.path()});
+
+    MainWindow window;
+    const QString projectPath = tempDir.filePath(QStringLiteral("design_freshness.fpproj"));
+    require(window.createProjectAt(projectPath),
+            "project should be created before unsaved state mutations");
+    DesignEditingService* editing = designEditingServiceFromRegistry(window);
+
+    const ProjectIpInstanceRecord added = addCatalogInstanceViaCommand(window, packageId);
+    require(added.instanceId == QStringLiteral("freshness_0"),
+            "freshness package instance should use a stable id");
+    require(designHasComponent(window.m_projectService->design(), QStringLiteral("freshness_0")),
+            "ProjectService design should include an unsaved catalog instance immediately");
+    require(designHasComponent(editing->design(), QStringLiteral("freshness_0")),
+            "DesignEditingService cache should include an unsaved catalog instance immediately");
+
+    setIpInstanceParameterViaCommand(window,
+                                     packageId,
+                                     QStringLiteral("freshness_0"),
+                                     QStringLiteral("lane_width"),
+                                     13);
+    require(designComponentIntConfig(window.m_projectService->design(),
+                                     QStringLiteral("freshness_0"),
+                                     QStringLiteral("lane_width")) == 13,
+            "ProjectService design should use the current unsaved parameter value");
+    require(designComponentIntConfig(editing->design(),
+                                     QStringLiteral("freshness_0"),
+                                     QStringLiteral("lane_width")) == 13,
+            "DesignEditingService cache should use the current unsaved parameter value");
+
+    std::unique_ptr<Command> rejected = window.m_commandManager->executeCommand(
+        std::make_unique<RemoveIpInstanceCommand>(window.m_graph,
+                                                  window.m_projectStateService.get(),
+                                                  window.m_projectIpService.get(),
+                                                  packageId,
+                                                  QStringLiteral("freshness_0")));
+    require(rejected == nullptr, "catalog instance remove command should execute");
+    processEventsFor(0);
+
+    require(!designHasComponent(window.m_projectService->design(), QStringLiteral("freshness_0")),
+            "ProjectService design should remove an unsaved catalog instance immediately");
+    require(!designHasComponent(editing->design(), QStringLiteral("freshness_0")),
+            "DesignEditingService cache should remove an unsaved catalog instance immediately");
+}
+
 void testNewProjectAddsIpcraftPackageInstanceFromCatalog() {
     QTemporaryDir tempDir;
     QTemporaryDir settingsRoot;
@@ -2332,6 +2416,7 @@ int main(int argc, char** argv) {
         testProjectStateParameterWinsOverStaleDesignCacheOnProjectionSave();
         testMixedDesignOnlyAndProjectStateEditsSurviveOwnershipMerge();
         testDesignEditAfterProjectionMergeKeepsProjectionOwnedState();
+        testProjectStateMutationsRefreshProjectDesignBeforeSave();
         testNewProjectAddsIpcraftPackageInstanceFromCatalog();
         testPackageDescriptorFeaturesAppearAsWorkspaceInteractions();
         testPackageInspectorShowsCapabilityCoverageDetails();

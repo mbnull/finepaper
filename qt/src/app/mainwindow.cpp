@@ -636,9 +636,7 @@ void MainWindow::generateVerilog() {
     }
 
     ProjectGenerationRequest request;
-    request.projectDesign = m_designEditingService
-        ? &m_designEditingService->design()
-        : (m_projectService ? &m_projectService->design() : nullptr);
+    request.projectDesign = m_projectService ? &m_projectService->design() : nullptr;
     request.projectPath = m_currentDocumentPath;
     request.designName = QFileInfo(m_currentDocumentPath).completeBaseName();
     request.catalogEntries = m_ipCatalogService ? m_ipCatalogService->entries() : QList<IpCatalogEntry>{};
@@ -949,19 +947,30 @@ void MainWindow::setupConnections() {
     connect(m_graph, &Graph::parameterChanged, this, [trackGraphChange](const QString&, const QString&) {
         trackGraphChange();
     });
+    const auto trackProjectStateChange = [this, trackGraphChange]() {
+        if (!m_suppressDocumentTracking) {
+            syncProjectServiceFromProjectState();
+        }
+        m_projectStateDirty = true;
+        trackGraphChange();
+    };
     connect(m_projectStateService.get(),
             &ProjectStateService::parameterChanged,
             this,
-            [this, trackGraphChange](const QString&, const QString&, const QString&, const QString&) {
-                m_projectStateDirty = true;
-                trackGraphChange();
+            [trackProjectStateChange](const QString&, const QString&, const QString&, const QString&) {
+                trackProjectStateChange();
+            });
+    connect(m_projectStateService.get(),
+            &ProjectStateService::ipInstanceRecordsChanged,
+            this,
+            [trackProjectStateChange]() {
+                trackProjectStateChange();
             });
     connect(m_projectIpService.get(),
             &ProjectIpService::ipInstancesChanged,
             this,
-            [this, trackGraphChange]() {
-                m_projectStateDirty = true;
-                trackGraphChange();
+            [trackProjectStateChange]() {
+                trackProjectStateChange();
             });
     connect(m_activeWorkspaceController.get(),
             &ActiveWorkspaceController::activeWorkspaceChanged,
@@ -1647,6 +1656,41 @@ void MainWindow::syncProjectServiceFromDesignEditingService() {
     m_projectService->replaceDesign(m_designEditingService->design());
     m_designEditingDirty = true;
     syncDocumentStateFromHistory();
+}
+
+bool MainWindow::syncProjectServiceFromProjectState() {
+    if (m_syncingDesignEditingService ||
+        !m_projectOpen ||
+        !m_projectService ||
+        !m_projectService->hasDocument() ||
+        !m_projectStateService) {
+        return false;
+    }
+
+    const bool designEditingDirty = m_designEditingDirty;
+    std::optional<ipcraft::core::ProjectDesign> designBeforeProjection;
+    if (designEditingDirty && m_designEditingService &&
+        hasMeaningfulProjectDesign(m_designEditingService->design())) {
+        designBeforeProjection = m_designEditingService->design();
+    }
+
+    ProjectDocument stagedDocument = m_projectService->document();
+    m_projectStateService->writeToDocument(stagedDocument);
+    const ProjectServiceResult replaceResult =
+        m_projectService->replaceDocumentPreservingPath(std::move(stagedDocument));
+    if (!replaceResult.success) {
+        qWarning() << "Failed to refresh ProjectDesign from project state"
+                   << replaceResult.error;
+        return false;
+    }
+
+    if (designBeforeProjection.has_value()) {
+        m_projectService->mergeDesignOnlyComponents(*designBeforeProjection);
+    }
+
+    seedDesignEditingServiceFromProjectService();
+    m_designEditingDirty = designEditingDirty;
+    return true;
 }
 
 void MainWindow::clearDocument() {

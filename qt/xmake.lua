@@ -340,6 +340,8 @@ add_qt_test_target("projectdocument_test", "test/projectdocument_test.cpp", {
 })
 
 add_qt_test_target("projectservice_test", "test/projectservice_test.cpp", {
+    "src/graph/module.cpp",
+    "src/graph/parameter.cpp",
     "src/project/projectservice.cpp",
     "src/project/projectdesignserializer.cpp",
     "src/project/projectreader.cpp",
@@ -348,6 +350,7 @@ add_qt_test_target("projectservice_test", "test/projectservice_test.cpp", {
     "src/ipcraft/core/project_document_v1.cpp",
     "src/ipcraft/core/project_design.cpp",
     "src/ipcraft/core/project_patch.cpp",
+    "inc/graph/module.h",
     "inc/project/projectservice.h",
     "inc/project/projectreader.h",
     "inc/project/projectwriter.h",

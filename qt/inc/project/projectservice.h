@@ -48,6 +48,9 @@ signals:
     void currentDocumentChanged();
 
 private:
+    void reloadDesignFromDocument();
+    void reloadDesignFromDocumentWithEditorProjection();
+
     ProjectDocument m_document;
     ipcraft::core::ProjectDesign m_design;
     QString m_currentPath;

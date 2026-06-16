@@ -8,6 +8,8 @@
 #include "project/projectwriter.h"
 
 #include <QFileInfo>
+#include <QHash>
+#include <QJsonArray>
 #include <QSet>
 #include <QStringList>
 #include <algorithm>
@@ -212,6 +214,246 @@ qsizetype indexOfRecordById(const QVector<Record>& records, const QString& id) {
     return -1;
 }
 
+QString instanceScopeKey(const QString& ipcoreId, const QString& instanceId) {
+    return ipcoreId + QLatin1Char('\n') + instanceId;
+}
+
+bool isLayoutParameter(const QString& key) {
+    return key == QStringLiteral("x") ||
+           key == QStringLiteral("y") ||
+           key == QStringLiteral("collapsed");
+}
+
+bool isValidLayoutParameterValue(const QString& key, const QJsonValue& value) {
+    if (key == QStringLiteral("collapsed")) {
+        return value.isBool();
+    }
+    if (key == QStringLiteral("x") || key == QStringLiteral("y")) {
+        return value.isDouble();
+    }
+    return false;
+}
+
+QJsonObject graphObjectProperties(const QJsonObject& parameters) {
+    QJsonObject properties;
+    for (auto it = parameters.constBegin(); it != parameters.constEnd(); ++it) {
+        if (!isLayoutParameter(it.key())) {
+            properties.insert(it.key(), it.value());
+        }
+    }
+    return properties;
+}
+
+QJsonObject layoutNodeProperties(const QJsonObject& parameters) {
+    QJsonObject properties;
+    for (auto it = parameters.constBegin(); it != parameters.constEnd(); ++it) {
+        if (isLayoutParameter(it.key()) && isValidLayoutParameterValue(it.key(), it.value())) {
+            properties.insert(it.key(), it.value());
+        }
+    }
+    return properties;
+}
+
+QJsonArray stringArray(const QStringList& values) {
+    QJsonArray array;
+    for (const QString& value : values) {
+        array.append(value);
+    }
+    return array;
+}
+
+QJsonObject normalizedGraphConfigBase(const ProjectIpInstanceRecord& instance) {
+    QJsonObject graphConfig;
+    if (instance.hasGraphConfig && !instance.graphConfigIsNull) {
+        graphConfig = instance.graphConfig;
+    }
+    graphConfig.insert(QStringLiteral("schema"), ipcraft::schemaids::graphConfigV1);
+    if (!graphConfig.value(QStringLiteral("properties")).isObject()) {
+        graphConfig.insert(QStringLiteral("properties"), QJsonObject{});
+    }
+    if (!graphConfig.value(QStringLiteral("native")).isObject()) {
+        graphConfig.insert(QStringLiteral("native"), QJsonObject{});
+    }
+    return graphConfig;
+}
+
+bool hasGraphView(const QJsonObject& layout) {
+    const QJsonArray views = layout.value(QStringLiteral("views")).toArray();
+    return std::any_of(views.constBegin(), views.constEnd(), [](const QJsonValue& viewValue) {
+        return viewValue.isObject() &&
+               viewValue.toObject().value(QStringLiteral("id")).toString() == QStringLiteral("graph");
+    });
+}
+
+QJsonObject mergeGraphLayoutNode(const QJsonObject& existingNode,
+                                 const QJsonObject& projectedNode) {
+    QJsonObject node = existingNode;
+    for (auto it = projectedNode.constBegin(); it != projectedNode.constEnd(); ++it) {
+        node.insert(it.key(), it.value());
+    }
+    return node;
+}
+
+void mergeGraphLayoutNodes(QJsonObject& layout, const QJsonObject& layoutNodes) {
+    QJsonArray views = layout.value(QStringLiteral("views")).toArray();
+    bool updated = false;
+    for (qsizetype index = 0; index < views.size(); ++index) {
+        if (!views.at(index).isObject()) {
+            continue;
+        }
+        QJsonObject view = views.at(index).toObject();
+        if (view.value(QStringLiteral("id")).toString() != QStringLiteral("graph")) {
+            continue;
+        }
+
+        QJsonObject canvas = view.value(QStringLiteral("canvas")).toObject();
+        const QJsonObject existingNodes = canvas.value(QStringLiteral("nodes")).toObject();
+        QJsonObject mergedNodes;
+        for (auto it = layoutNodes.constBegin(); it != layoutNodes.constEnd(); ++it) {
+            const QJsonObject existingNode = existingNodes.value(it.key()).toObject();
+            mergedNodes.insert(it.key(), mergeGraphLayoutNode(existingNode, it.value().toObject()));
+        }
+        canvas.insert(QStringLiteral("nodes"), mergedNodes);
+        if (!canvas.value(QStringLiteral("connections")).isObject()) {
+            canvas.insert(QStringLiteral("connections"), QJsonObject{});
+        }
+        view.insert(QStringLiteral("canvas"), canvas);
+        views[index] = view;
+        updated = true;
+        break;
+    }
+
+    if (!updated && !layoutNodes.isEmpty()) {
+        QJsonObject canvas;
+        canvas.insert(QStringLiteral("nodes"), layoutNodes);
+        canvas.insert(QStringLiteral("connections"), QJsonObject{});
+        QJsonObject view;
+        view.insert(QStringLiteral("id"), QStringLiteral("graph"));
+        view.insert(QStringLiteral("kind"), QStringLiteral("canvas"));
+        view.insert(QStringLiteral("canvas"), canvas);
+        views.append(view);
+        updated = true;
+    }
+
+    if (updated) {
+        layout.insert(QStringLiteral("views"), views);
+    }
+}
+
+void attachEditorProjectionRecords(ProjectDocument& document) {
+    QHash<QString, qsizetype> instanceIndexes;
+    for (qsizetype index = 0; index < document.instances.size(); ++index) {
+        const ProjectIpInstanceRecord& instance = document.instances.at(index);
+        instanceIndexes.insert(instanceScopeKey(instance.package.id, instance.id), index);
+    }
+
+    QHash<QString, qsizetype> moduleInstanceIndexes;
+    QHash<qsizetype, QJsonArray> objectsByInstance;
+    QJsonObject layoutNodes;
+    for (const ProjectModuleRecord& module : document.modules) {
+        const QString scope = instanceScopeKey(module.ipcoreId, module.instanceId);
+        if (!instanceIndexes.contains(scope)) {
+            continue;
+        }
+        const qsizetype instanceIndex = instanceIndexes.value(scope);
+        moduleInstanceIndexes.insert(module.id, instanceIndex);
+
+        QJsonObject object;
+        object.insert(QStringLiteral("id"), module.id);
+        object.insert(QStringLiteral("type"), module.type);
+        const QJsonObject properties = graphObjectProperties(module.parameters);
+        if (!properties.isEmpty()) {
+            object.insert(QStringLiteral("properties"), properties);
+        }
+        objectsByInstance[instanceIndex].append(object);
+
+        const QJsonObject layout = layoutNodeProperties(module.parameters);
+        if (!layout.isEmpty()) {
+            layoutNodes.insert(module.id, layout);
+        }
+    }
+
+    QHash<qsizetype, QJsonArray> relationshipsByInstance;
+    for (const ProjectConnectionRecord& connection : document.connections) {
+        QJsonArray endpoints;
+        qsizetype ownerIndex = -1;
+        bool sameOwner = true;
+        const QVector<ProjectConnectionInterfaceRef> interfaces = !connection.interfaces.isEmpty()
+            ? connection.interfaces
+            : QVector<ProjectConnectionInterfaceRef>{
+                ProjectConnectionInterfaceRef{connection.source.moduleId, connection.source.portId},
+                ProjectConnectionInterfaceRef{connection.target.moduleId, connection.target.portId}
+            };
+
+        for (const ProjectConnectionInterfaceRef& interfaceRef : interfaces) {
+            if (!moduleInstanceIndexes.contains(interfaceRef.instanceId)) {
+                sameOwner = false;
+                break;
+            }
+            const qsizetype endpointOwner = moduleInstanceIndexes.value(interfaceRef.instanceId);
+            if (ownerIndex < 0) {
+                ownerIndex = endpointOwner;
+            } else if (ownerIndex != endpointOwner) {
+                sameOwner = false;
+                break;
+            }
+
+            QJsonObject endpoint;
+            endpoint.insert(QStringLiteral("object"), interfaceRef.instanceId);
+            endpoint.insert(QStringLiteral("role"), interfaceRef.interfaceId);
+            if (!interfaceRef.properties.isEmpty()) {
+                endpoint.insert(QStringLiteral("properties"), interfaceRef.properties);
+            }
+            endpoints.append(endpoint);
+        }
+
+        if (!sameOwner || ownerIndex < 0 || endpoints.size() < 2) {
+            continue;
+        }
+
+        QJsonObject relationship;
+        relationship.insert(QStringLiteral("id"), connection.id);
+        relationship.insert(QStringLiteral("type"),
+                            connection.connectionClassId.trimmed().isEmpty()
+                                ? QStringLiteral("connection")
+                                : connection.connectionClassId);
+        relationship.insert(QStringLiteral("endpoints"), endpoints);
+        QJsonObject properties = connection.properties;
+        if (!connection.status.trimmed().isEmpty()) {
+            properties.insert(QStringLiteral("status"), connection.status);
+        }
+        if (!connection.alternatives.isEmpty()) {
+            properties.insert(QStringLiteral("alternatives"), stringArray(connection.alternatives));
+        }
+        if (!properties.isEmpty()) {
+            relationship.insert(QStringLiteral("properties"), properties);
+        }
+        relationshipsByInstance[ownerIndex].append(relationship);
+    }
+
+    for (qsizetype index = 0; index < document.instances.size(); ++index) {
+        ProjectIpInstanceRecord& instance = document.instances[index];
+        const bool hasEditorProjection = objectsByInstance.contains(index) ||
+                                         relationshipsByInstance.contains(index);
+        const bool hasExistingGraphConfig = instance.hasGraphConfig &&
+                                            !instance.graphConfigIsNull;
+        if (!hasEditorProjection && !hasExistingGraphConfig) {
+            continue;
+        }
+
+        QJsonObject graphConfig = normalizedGraphConfigBase(instance);
+        graphConfig.insert(QStringLiteral("objects"), objectsByInstance.value(index));
+        graphConfig.insert(QStringLiteral("relationships"), relationshipsByInstance.value(index));
+        instance.hasGraphConfig = true;
+        instance.graphConfigIsNull = false;
+        instance.graphConfig = graphConfig;
+    }
+
+    if (!layoutNodes.isEmpty() || hasGraphView(document.layout)) {
+        mergeGraphLayoutNodes(document.layout, layoutNodes);
+    }
+}
+
 } // namespace
 
 ProjectService::ProjectService(QObject* parent) : QObject(parent) {}
@@ -240,6 +482,15 @@ void ProjectService::clear() {
     emit currentDocumentChanged();
 }
 
+void ProjectService::reloadDesignFromDocument() {
+    m_design = ProjectDesignSerializer::fromDocument(m_document);
+}
+
+void ProjectService::reloadDesignFromDocumentWithEditorProjection() {
+    attachEditorProjectionRecords(m_document);
+    reloadDesignFromDocument();
+}
+
 ProjectServiceResult ProjectService::createNew(const QString& projectName) {
     ProjectDocument document;
     document.schema = ipcraft::schemaids::projectV1;
@@ -257,7 +508,7 @@ ProjectServiceResult ProjectService::loadFile(const QString& path) {
 
     m_document = readResult.document;
     normalizeDocument(m_document);
-    m_design = ProjectDesignSerializer::fromDocument(m_document);
+    reloadDesignFromDocument();
     m_currentPath = absolutePath;
     m_hasDocument = true;
     emit currentDocumentChanged();
@@ -283,7 +534,7 @@ ProjectServiceResult ProjectService::saveFile(const QString& path) {
 ProjectServiceResult ProjectService::replaceDocument(ProjectDocument document) {
     m_document = std::move(document);
     normalizeDocument(m_document);
-    m_design = ProjectDesignSerializer::fromDocument(m_document);
+    reloadDesignFromDocument();
     m_currentPath.clear();
     m_hasDocument = true;
     emit currentDocumentChanged();
@@ -294,7 +545,7 @@ ProjectServiceResult ProjectService::replaceDocumentFromLoadedFile(ProjectDocume
                                                                    const QString& path) {
     m_document = std::move(document);
     normalizeDocument(m_document);
-    m_design = ProjectDesignSerializer::fromDocument(m_document);
+    reloadDesignFromDocument();
     m_currentPath = QFileInfo(path).absoluteFilePath();
     m_hasDocument = true;
     emit currentDocumentChanged();
@@ -304,7 +555,7 @@ ProjectServiceResult ProjectService::replaceDocumentFromLoadedFile(ProjectDocume
 ProjectServiceResult ProjectService::replaceDocumentFromProjection(ProjectDocument document) {
     m_document = std::move(document);
     normalizeDocument(m_document);
-    m_design = ProjectDesignSerializer::fromDocument(m_document);
+    reloadDesignFromDocument();
     m_hasDocument = true;
     emit currentDocumentChanged();
     return successResult();
@@ -313,7 +564,7 @@ ProjectServiceResult ProjectService::replaceDocumentFromProjection(ProjectDocume
 ProjectServiceResult ProjectService::replaceDocumentPreservingPath(ProjectDocument document) {
     m_document = std::move(document);
     normalizeDocument(m_document);
-    m_design = ProjectDesignSerializer::fromDocument(m_document);
+    reloadDesignFromDocument();
     m_hasDocument = true;
     emit currentDocumentChanged();
     return successResult();
@@ -338,7 +589,7 @@ void ProjectService::mergeDesignOnlyComponents(const ipcraft::core::ProjectDesig
 
     mergeDesignOnlyComponentsIntoDocument(m_document, design);
     normalizeDocument(m_document);
-    m_design = ProjectDesignSerializer::fromDocument(m_document);
+    reloadDesignFromDocument();
     emit currentDocumentChanged();
 }
 
@@ -360,6 +611,7 @@ bool ProjectService::upsertEditorModuleRecord(const Module& module) {
     } else {
         m_document.modules.append(record);
     }
+    reloadDesignFromDocumentWithEditorProjection();
     emit currentDocumentChanged();
     return true;
 }
@@ -380,6 +632,7 @@ bool ProjectService::removeEditorModuleRecord(const QString& moduleId) {
     if (index >= 0) {
         m_document.modules.removeAt(index);
     }
+    reloadDesignFromDocumentWithEditorProjection();
     emit currentDocumentChanged();
     return true;
 }
@@ -396,6 +649,7 @@ bool ProjectService::upsertEditorConnectionRecord(const Connection& connection) 
     } else {
         m_document.connections.append(record);
     }
+    reloadDesignFromDocumentWithEditorProjection();
     emit currentDocumentChanged();
     return true;
 }
@@ -409,6 +663,7 @@ bool ProjectService::removeEditorConnectionRecord(const QString& connectionId) {
     if (index >= 0) {
         m_document.connections.removeAt(index);
     }
+    reloadDesignFromDocumentWithEditorProjection();
     emit currentDocumentChanged();
     return true;
 }
