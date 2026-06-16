@@ -52,14 +52,14 @@ void testStaticCatalogRegistersCorePlugins() {
             "static catalog should include project plugin");
     require(ids.contains(QStringLiteral("finepaper.package")),
             "static catalog should include package plugin");
-    require(ids.contains(QStringLiteral("finepaper.noc")),
+    require(ids.contains(QStringLiteral("finepaper.noc-plugin")),
             "static catalog should include NoC plugin");
     require(ids.contains(QStringLiteral("finepaper.tool-pipeline")),
             "static catalog should include tool pipeline plugin");
     require(ids.indexOf(QStringLiteral("finepaper.package")) <
-                ids.indexOf(QStringLiteral("finepaper.noc")),
+                ids.indexOf(QStringLiteral("finepaper.noc-plugin")),
             "NoC plugin should be registered after package plugin");
-    require(ids.indexOf(QStringLiteral("finepaper.noc")) <
+    require(ids.indexOf(QStringLiteral("finepaper.noc-plugin")) <
                 ids.indexOf(QStringLiteral("finepaper.tool-pipeline")),
             "NoC plugin should be registered before tool pipeline plugin");
 
