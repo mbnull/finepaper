@@ -2,6 +2,7 @@
 #include "ipcraft/core/project_patch.h"
 #include "ipcraft/schemaids.h"
 #include "graph/module.h"
+#include "project/projectdesignserializer.h"
 #include "project/projectservice.h"
 
 #include <QCoreApplication>
@@ -401,6 +402,34 @@ void testFlatDesignConfigSavesAsV1BundleAndReloadsAsRuntimeConfig() {
             "loaded runtime design should preserve the component");
     require(loaded.design().components.first().config.value(QStringLiteral("width")).toInt() == 4,
             "loaded runtime design should restore flat component config");
+}
+
+void testProjectDesignSerializerMigratesExplicitLegacyComponentType() {
+    ProjectDocument document;
+    document.schema = ipcraft::schemaids::projectV1;
+    document.projectId = QStringLiteral("legacy_type_project");
+    document.projectName = QStringLiteral("Legacy Type Project");
+    document.ipcores.append(ProjectIpcoreRecord{QStringLiteral("vendor.legacy"),
+                                                QStringLiteral("1.0")});
+
+    ProjectIpInstanceRecord instance;
+    instance.id = QStringLiteral("legacy_0");
+    instance.instanceId = instance.id;
+    instance.ipcoreId = QStringLiteral("vendor.legacy");
+    instance.package = ProjectPackageRef{QStringLiteral("vendor.legacy"),
+                                         QStringLiteral("1.0")};
+    instance.state.insert(QStringLiteral("componentType"), QStringLiteral("LegacyTile"));
+    document.instances.append(instance);
+
+    const ipcraft::core::ProjectDesign design =
+        ProjectDesignSerializer::fromDocument(document);
+
+    require(design.components.size() == 1,
+            "legacy document should restore one design component");
+    require(design.components.first().type == QStringLiteral("LegacyTile"),
+            "serializer should migrate explicit legacy component type deterministically");
+    require(design.components.first().packageRef == QStringLiteral("vendor.legacy@1.0"),
+            "legacy component type migration should not guess from the package name");
 }
 
 void testReplaceDesignSaveLoadPreservesSemanticDesignFields() {
@@ -817,6 +846,7 @@ int main(int argc, char** argv) {
         testReplaceDocumentClearsSavedPath();
         testApplyDesignPatch();
         testFlatDesignConfigSavesAsV1BundleAndReloadsAsRuntimeConfig();
+        testProjectDesignSerializerMigratesExplicitLegacyComponentType();
         testReplaceDesignSaveLoadPreservesSemanticDesignFields();
         testMergeDesignOnlyComponentsPreservesProjectedInstancesAndSemanticSupplement();
         testReplaceDesignPreservesNonDesignProjectFields();

@@ -64,6 +64,34 @@ QJsonArray instanceLimitScopesToJson(const QVector<IpCatalogInstanceLimit>& limi
     return scopes;
 }
 
+QStringList sortedUniqueTypes(QStringList values) {
+    QStringList types;
+    for (const QString& value : values) {
+        const QString type = value.trimmed();
+        if (!type.isEmpty() && !types.contains(type)) {
+            types.append(type);
+        }
+    }
+    types.sort();
+    return types;
+}
+
+QString componentTypeForEntry(const IpCatalogEntry& entry) {
+    const QStringList catalogTypes = sortedUniqueTypes(entry.moduleTypes);
+    if (!catalogTypes.isEmpty()) {
+        // IpCatalogEntry has no root-module marker; sorting makes multi-module
+        // packages deterministic without inventing a package-derived type.
+        return catalogTypes.first();
+    }
+
+    QStringList manifestTypes;
+    for (const IpcraftModuleDescriptor& module : entry.packageManifest.modules) {
+        manifestTypes.append(module.id);
+    }
+    const QStringList descriptorTypes = sortedUniqueTypes(manifestTypes);
+    return descriptorTypes.isEmpty() ? QString() : descriptorTypes.first();
+}
+
 ProjectIpInstanceRecord defaultRecordForEntry(const IpCatalogEntry& entry, const QString& instanceId) {
     ProjectIpInstanceRecord record;
     record.id = instanceId;
@@ -80,6 +108,10 @@ ProjectIpInstanceRecord defaultRecordForEntry(const IpCatalogEntry& entry, const
     record.state.insert(QStringLiteral("type"), entry.name);
     record.state.insert(QStringLiteral("global_parameters"), parameterDefaults);
     record.config.insert(QStringLiteral("parameters"), parameterDefaults);
+    const QString componentType = componentTypeForEntry(entry);
+    if (!componentType.isEmpty()) {
+        record.native.insert(QStringLiteral("componentType"), componentType);
+    }
     const QJsonArray limitScopes = instanceLimitScopesToJson(entry.instanceLimits);
     if (!limitScopes.isEmpty()) {
         record.state.insert(QStringLiteral("instance_limit_scopes"), limitScopes);

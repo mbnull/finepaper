@@ -1071,6 +1071,9 @@ add_qt_test_target("ipxactconnectionchecker_test", "test/ipxactconnectionchecker
 add_qt_test_target("projectipservice_test", "test/projectipservice_test.cpp", {
     "src/project/projectipservice.cpp",
     "src/project/projectstateservice.cpp",
+    "src/project/projectdesignserializer.cpp",
+    "src/ipcraft/core/project_document_v1.cpp",
+    "src/ipcraft/core/project_design.cpp",
     "src/ipcore/ipcatalogservice.cpp",
     "src/workspace/activeworkspacecontroller.cpp",
     "src/modules/moduleregistry.cpp",

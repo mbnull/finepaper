@@ -1,6 +1,8 @@
 // Project IP service and active workspace tests.
 #include "ipcore/ipcatalogservice.h"
+#include "ipcraft/core/project_design.h"
 #include "modules/moduleregistry.h"
+#include "project/projectdesignserializer.h"
 #include "project/projectipservice.h"
 #include "project/projectdocument.h"
 #include "project/projectstateservice.h"
@@ -18,6 +20,16 @@ void require(bool condition, const char* message) {
     if (!condition) {
         throw std::runtime_error(message);
     }
+}
+
+bool hasProjectDesignIssue(const QVector<ipcraft::core::ValidationIssue>& issues,
+                           const QString& code) {
+    for (const ipcraft::core::ValidationIssue& issue : issues) {
+        if (issue.code == code) {
+            return true;
+        }
+    }
+    return false;
 }
 
 IpCatalogEntry ravenocEntry() {
@@ -157,6 +169,31 @@ void testProjectStateServiceWritesCanonicalInstances() {
                 .value(QStringLiteral("flit_data_width"))
                 .toInt() == 64,
             "canonical config parameters should include updated state");
+}
+
+void testCatalogCreatedInstanceProjectsCanonicalComponentTypeForValidation() {
+    ProjectStateService stateService;
+    ProjectIpService service(&stateService);
+
+    const ProjectIpServiceResult result = service.createInstanceForIpcore(fabricEntry());
+    require(result.success, "catalog add path should create a package instance");
+
+    ProjectDocument document;
+    document.projectId = QStringLiteral("catalog_project");
+    document.projectName = QStringLiteral("Catalog Project");
+    stateService.writeToDocument(document);
+
+    const ipcraft::core::ProjectDesign design =
+        ProjectDesignSerializer::fromDocument(document);
+    require(design.components.size() == 1,
+            "catalog-created document should project one design component");
+    require(design.components.first().type == QStringLiteral("FabricSwitch"),
+            "catalog-created component should use the catalog module type");
+
+    const QVector<ipcraft::core::ValidationIssue> issues =
+        ipcraft::core::validateProjectDesign(design);
+    require(!hasProjectDesignIssue(issues, QStringLiteral("component.missing_type")),
+            "catalog-created component type should satisfy ProjectDesign validation");
 }
 
 void testProjectIpServiceRejectsRepeatedNocInstances() {
@@ -509,6 +546,7 @@ int main(int argc, char** argv) {
     try {
         testProjectIpServiceCreatesDefaultStateAndSelectsIt();
         testProjectStateServiceWritesCanonicalInstances();
+        testCatalogCreatedInstanceProjectsCanonicalComponentTypeForValidation();
         testProjectIpServiceRejectsRepeatedNocInstances();
         testProjectIpServiceCreatesRepeatedNonNocInstancesForSameIpcore();
         testProjectIpServiceRejectsPackageInstanceMax();

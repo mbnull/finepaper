@@ -855,6 +855,45 @@ void testGenerateDerivesInstancesFromProjectDesignWithoutRequestInstances() {
             "ProjectDesign topology nodes should feed the flow graph config");
 }
 
+void testGenerateDoesNotDropUnknownProjectDesignComponentType() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "temporary directory should be valid");
+    QDir root(tempDir.path());
+    const QString ipcoreId = QStringLiteral("org.example.unknown_type");
+
+    ProjectIpInstanceRecord designInstance =
+        instanceRecord(ipcoreId,
+                       QStringLiteral("unknown_type_0"),
+                       QStringLiteral("unknown-type-marker"));
+    designInstance.native.insert(QStringLiteral("componentType"),
+                                 QStringLiteral("UnknownTile"));
+    const ipcraft::core::ProjectDesign design =
+        projectDesignFor(QStringLiteral("unknown_type_design"), {designInstance});
+
+    ProjectGenerationRequest request;
+    request.projectDesign = &design;
+    request.projectPath = root.filePath(QStringLiteral("project/unknown_type_design.fpproj"));
+    request.designName = QStringLiteral("unknown_type_design");
+    request.catalogEntries = {createFailingFlowPackage(root,
+                                                       ipcoreId,
+                                                       QStringLiteral("SupportedTile"))};
+
+    CapturedGenerationFlow capture;
+    ProjectGenerationRunner runner;
+    runner.addGenerationFlowProvider(std::make_unique<CapturingGenerationFlowProvider>(&capture));
+
+    const ProjectGenerationResult result = runner.generate(request);
+
+    require(result.success, result.error.toLocal8Bit().constData());
+    require(capture.runCount == 1,
+            "unknown ProjectDesign component type should still reach generation");
+    require(result.instances.size() == 1,
+            "unknown ProjectDesign component type should not be omitted from results");
+    require(result.instances.first().instance.native.value(QStringLiteral("componentType")).toString() ==
+                QStringLiteral("UnknownTile"),
+            "projector should preserve the unsupported component type for downstream diagnostics");
+}
+
 void testGenerateUsesProjectDesignAsOnlyInstanceSource() {
     QTemporaryDir tempDir;
     require(tempDir.isValid(), "temporary directory should be valid");
@@ -1438,12 +1477,14 @@ void testGenerateWritesProjectDesignSnapshotWithoutGraph() {
         projectDesignFor(QStringLiteral("snapshot_graph_free_design"), instances);
     design.components.append(ipcraft::core::ComponentInstance{
         QStringLiteral("design_only_component"),
-        QStringLiteral("DesignOnly"),
+        QStringLiteral("Tile"),
         packageRefKey(instances.first().package),
         QJsonObject{{QStringLiteral("width"), 64}},
         {},
         {},
-        {}
+        QJsonObject{{QStringLiteral("graph_config"),
+                     graphConfigForObject(QStringLiteral("design_only_object"),
+                                          QStringLiteral("Tile"))}}
     });
 
     ProjectGenerationRequest request;
@@ -1687,6 +1728,7 @@ int main(int argc, char** argv) {
         testGeneratesEveryProjectInstanceIntoSeparateOutputDirectories();
         testGenerationRequiresProjectDesignSource();
         testGenerateDerivesInstancesFromProjectDesignWithoutRequestInstances();
+        testGenerateDoesNotDropUnknownProjectDesignComponentType();
         testGenerateUsesProjectDesignAsOnlyInstanceSource();
         testGenerationRejectsUnsafeAndDuplicateInstanceOutputKeys();
         testGenerationFailureAndTimeoutFailWholeResult();

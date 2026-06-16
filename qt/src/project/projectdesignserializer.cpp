@@ -52,6 +52,22 @@ void appendPackageRefIfNew(QVector<ipcraft::core::PackageRef>& packages,
     packages.append(ipcraft::core::PackageRef{id, version});
 }
 
+QString componentTypeFromInstance(const ProjectIpInstanceRecord& instance) {
+    const QString nativeComponentType =
+        instance.native.value(QStringLiteral("componentType")).toString().trimmed();
+    if (!nativeComponentType.isEmpty()) {
+        return nativeComponentType;
+    }
+
+    const QString nativeType =
+        instance.native.value(QStringLiteral("type")).toString().trimmed();
+    if (!nativeType.isEmpty()) {
+        return nativeType;
+    }
+
+    return instance.state.value(QStringLiteral("componentType")).toString().trimmed();
+}
+
 bool isConfigBundleKey(const QString& key) {
     return key == QStringLiteral("parameters") ||
            key == QStringLiteral("tables") ||
@@ -305,10 +321,7 @@ ipcraft::core::ProjectDesign ProjectDesignSerializer::fromDocument(const Project
 
         ipcraft::core::ComponentInstance component;
         component.id = instance.id;
-        component.type = instance.native.value(QStringLiteral("componentType")).toString();
-        if (component.type.isEmpty()) {
-            component.type = instance.native.value(QStringLiteral("type")).toString();
-        }
+        component.type = componentTypeFromInstance(instance);
         component.packageRef = packageRefKey(instance.package.id, instance.package.version);
         component.config = runtimeConfigFromDocumentConfig(instance.config);
         if (instance.native.value(QStringLiteral("identity")).isObject()) {

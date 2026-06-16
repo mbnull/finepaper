@@ -7,17 +7,9 @@
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QStringList>
-#include <algorithm>
 #include <optional>
 
 namespace {
-
-const IpCatalogEntry* findCatalogEntry(const QList<IpCatalogEntry>& entries, const QString& ipcoreId) {
-    const auto it = std::find_if(entries.cbegin(), entries.cend(), [&](const IpCatalogEntry& entry) {
-        return entry.id == ipcoreId;
-    });
-    return it == entries.cend() ? nullptr : &(*it);
-}
 
 QString packageRefKey(const QString& id, const QString& version) {
     return version.trimmed().isEmpty() ? id : id + QLatin1Char('@') + version;
@@ -231,6 +223,7 @@ namespace ProjectDesignInstanceProjection {
 QVector<ProjectIpInstanceRecord> instancesFromProjectDesign(
     const ipcraft::core::ProjectDesign& design,
     const QList<IpCatalogEntry>& catalogEntries) {
+    (void)catalogEntries;
     QVector<ProjectIpInstanceRecord> instances;
     instances.reserve(design.components.size());
     const QHash<QString, QJsonObject> graphConfigs = graphConfigsByComponentId(design);
@@ -241,13 +234,6 @@ QVector<ProjectIpInstanceRecord> instancesFromProjectDesign(
         record.instanceId = component.id;
         record.package = packageRefFromComponentRef(component.packageRef, design.packages);
         record.ipcoreId = record.package.id;
-        const IpCatalogEntry* entry = findCatalogEntry(catalogEntries, record.ipcoreId);
-        if (entry &&
-            !component.type.trimmed().isEmpty() &&
-            !entry->moduleTypes.isEmpty() &&
-            !entry->moduleTypes.contains(component.type)) {
-            continue;
-        }
         record.config = configBundleJsonFromComponentConfig(component.config);
         record.displayName = component.metadata.value(QStringLiteral("label")).toString();
         if (record.displayName.trimmed().isEmpty()) {
