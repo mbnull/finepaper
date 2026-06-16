@@ -1309,6 +1309,52 @@ void testProjectDesignSerializerRoundTripsDesignWithoutGraphProjection() {
             "persisted design supplement should reload extensions");
 }
 
+void testProjectDesignSerializerProjectsInstanceGraphConfig() {
+    ProjectDocument document;
+    document.schema = ipcraft::schemaids::projectV1;
+    document.projectId = QStringLiteral("graph_config_project");
+    document.projectName = QStringLiteral("Graph Config Project");
+    document.ipcores.append(ProjectIpcoreRecord{QStringLiteral("vendor.graph"), QStringLiteral("1.0")});
+
+    ProjectIpInstanceRecord instance;
+    instance.id = QStringLiteral("graph_component");
+    instance.instanceId = instance.id;
+    instance.ipcoreId = QStringLiteral("vendor.graph");
+    instance.package = ProjectPackageRef{QStringLiteral("vendor.graph"), QStringLiteral("1.0")};
+    instance.hasGraphConfig = true;
+    instance.graphConfig = QJsonObject{
+        {QStringLiteral("schema"), ipcraft::schemaids::graphConfigV1},
+        {QStringLiteral("objects"), QJsonArray{
+            QJsonObject{
+                {QStringLiteral("id"), QStringLiteral("graph_object_0")},
+                {QStringLiteral("type"), QStringLiteral("GraphNode")}
+            }
+        }},
+        {QStringLiteral("relationships"), QJsonArray{}},
+        {QStringLiteral("properties"), QJsonObject{}},
+        {QStringLiteral("native"), QJsonObject{}}
+    };
+    document.instances.append(instance);
+
+    const ipcraft::core::ProjectDesign design =
+        ProjectDesignSerializer::fromDocument(document);
+
+    require(design.components.size() == 1,
+            "design serializer should project document instances to components");
+    const QJsonObject graphConfig =
+        design.components.first().extensionData.value(QStringLiteral("graph_config")).toObject();
+    require(!graphConfig.isEmpty(),
+            "design serializer should project instance graph_config into component extension data");
+    require(graphConfig.value(QStringLiteral("schema")).toString() ==
+                ipcraft::schemaids::graphConfigV1,
+            "projected graph_config should preserve schema");
+    require(graphConfig.value(QStringLiteral("objects")).toArray().size() == 1,
+            "projected graph_config should preserve graph objects");
+    require(graphConfig.value(QStringLiteral("objects")).toArray().first().toObject()
+                .value(QStringLiteral("id")).toString() == QStringLiteral("graph_object_0"),
+            "projected graph_config should preserve graph object ids");
+}
+
 void testLoadRejectsModuleWithoutMatchingIpcoreState() {
     ProjectDocument document = validProjectDocument();
     document.modules.first().instanceId = QStringLiteral("missing_0");
@@ -2068,6 +2114,7 @@ int main(int argc, char** argv) {
         testProjectStateServiceClearsStaleGraphConfigObjects();
         testProjectSerializerUsesModuleIpcoreOwnership();
         testProjectDesignSerializerRoundTripsDesignWithoutGraphProjection();
+        testProjectDesignSerializerProjectsInstanceGraphConfig();
         testLoadRejectsModuleWithoutMatchingIpcoreState();
         testLoadRejectsDuplicateIpcoreStateScope();
         testLoadRejectsIpcoreStateMissingOwnerFields();

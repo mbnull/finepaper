@@ -320,6 +320,9 @@ ipcraft::core::ProjectDesign ProjectDesignSerializer::fromDocument(const Project
         if (instance.native.value(QStringLiteral("extensionData")).isObject()) {
             component.extensionData = instance.native.value(QStringLiteral("extensionData")).toObject();
         }
+        if (instance.hasGraphConfig && !instance.graphConfigIsNull) {
+            component.extensionData.insert(QStringLiteral("graph_config"), instance.graphConfig);
+        }
         design.components.append(component);
     }
 

@@ -163,8 +163,11 @@ ipcraft::core::ProjectDesign projectDesignFor(const IpCatalogEntry& entry,
     ipcraft::core::ComponentInstance component;
     component.id = instance.instanceId;
     component.packageRef = entry.id + QLatin1Char('@') + entry.version;
-    component.type = QStringLiteral("VendorSwitch");
+    component.type = entry.id + QStringLiteral("::VendorSwitch");
     component.config = instance.config;
+    if (instance.hasGraphConfig && !instance.graphConfigIsNull) {
+        component.extensionData.insert(QStringLiteral("graph_config"), instance.graphConfig);
+    }
     design.components.append(component);
     return design;
 }
