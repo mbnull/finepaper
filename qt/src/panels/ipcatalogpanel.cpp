@@ -5,6 +5,7 @@
 #include "ipcore/internalmodulelibrarymodel.h"
 #include "ipcore/ipcatalogservice.h"
 #include "modules/modulelabels.h"
+#include "package/packagecoverage.h"
 #include "package/packageservice.h"
 #include "project/projectipservice.h"
 #include "project/projectstateservice.h"
@@ -38,6 +39,9 @@ namespace {
 constexpr int InstanceIdRole = Qt::UserRole + 1;
 constexpr int IpcoreIdRole = Qt::UserRole + 2;
 constexpr int ActiveInstanceIdRole = Qt::UserRole + 3;
+constexpr int PackageCoverageStatusRole = Qt::UserRole + 4;
+constexpr int PackageCoverageMessageRole = Qt::UserRole + 5;
+constexpr int PackageCoverageDescriptorRole = Qt::UserRole + 6;
 constexpr auto ScopedModuleMime = "application/x-finepaper-module";
 
 QString catalogLabel(const IpCatalogEntry& entry) {
@@ -74,6 +78,37 @@ QString humanizeCategory(const QString& category) {
     }
 
     return ModuleLabels::humanizeIdentifier(trimmed);
+}
+
+QString descriptorLabel(const PackageFeatureCoverageItem& item) {
+    const QJsonObject metadata = item.descriptor.value(QStringLiteral("metadata")).toObject();
+    const QString metadataLabel = metadata.value(QStringLiteral("label")).toString().trimmed();
+    if (!metadataLabel.isEmpty()) {
+        return metadataLabel;
+    }
+    const QString label = item.descriptor.value(QStringLiteral("label")).toString().trimmed();
+    if (!label.isEmpty()) {
+        return label;
+    }
+    const QString name = item.descriptor.value(QStringLiteral("name")).toString().trimmed();
+    if (!name.isEmpty()) {
+        return name;
+    }
+    return item.label.trimmed().isEmpty() ? item.id : item.label;
+}
+
+QString compactDescriptorJson(const QJsonObject& descriptor) {
+    return QString::fromUtf8(QJsonDocument(descriptor).toJson(QJsonDocument::Compact));
+}
+
+QString packageInspectorText(const PackageFeatureCoverageItem& item) {
+    const QString label = descriptorLabel(item);
+    const QString status = packageFeatureCoverageStatusLabel(item.status);
+    QString text = QStringLiteral("%1 [%2] - %3").arg(label, item.id, status);
+    if (!item.message.trimmed().isEmpty()) {
+        text += QStringLiteral(": ") + item.message.trimmed();
+    }
+    return text;
 }
 
 QWidget* contentWidget(QWidget* parent) {
@@ -228,6 +263,18 @@ IpCatalogPanel::IpCatalogPanel(const IpCatalogService* catalogService,
                               QStringLiteral("ipCatalogWorkspaceToolsSection"),
                               toolsContent,
                               this));
+
+    auto* packageInspectorContent = contentWidget(this);
+    auto* packageInspectorLayout =
+        qobject_cast<QVBoxLayout*>(packageInspectorContent->layout());
+    m_packageInspectorList = new QListWidget(packageInspectorContent);
+    m_packageInspectorList->setObjectName(QStringLiteral("packageInspectorList"));
+    m_packageInspectorList->setMinimumHeight(100);
+    packageInspectorLayout->addWidget(m_packageInspectorList);
+    layout->addWidget(section(QStringLiteral("Package Inspector"),
+                              QStringLiteral("ipCatalogPackageInspectorSection"),
+                              packageInspectorContent,
+                              this));
     layout->addStretch(1);
 
     connect(m_search, &QLineEdit::textChanged, this, [this] { refreshCatalog(); });
@@ -374,6 +421,9 @@ void IpCatalogPanel::refreshActiveWorkspace() {
     if (m_activeToolList) {
         m_activeToolList->clear();
     }
+    if (m_packageInspectorList) {
+        m_packageInspectorList->clear();
+    }
     if (!m_workspaceController) {
         return;
     }
@@ -405,7 +455,7 @@ void IpCatalogPanel::refreshActiveWorkspace() {
         }
     }
 
-    if (!m_catalogService || !m_activeToolList || !state.hasActiveIp) {
+    if (!m_catalogService || !state.hasActiveIp) {
         return;
     }
 
@@ -419,18 +469,34 @@ void IpCatalogPanel::refreshActiveWorkspace() {
                                                ? entry->id
                                                : entry->packageId)
         : nullptr;
-    const QVector<PluginInteractionDescriptor> interactions = m_interactions
-        ? m_interactions->interactionsForWorkspace(state, *entry, coverage)
-        : QVector<PluginInteractionDescriptor>{};
-    for (const PluginInteractionDescriptor& interaction : interactions) {
-        auto* item = new QListWidgetItem(interaction.label);
-        item->setData(Qt::UserRole, interaction.id);
-        item->setData(IpcoreIdRole, state.ipcoreId);
-        item->setData(ActiveInstanceIdRole, state.instanceId);
-        item->setToolTip(interaction.category);
-        item->setFlags(interaction.enabled ? item->flags()
-                                           : (item->flags() & ~Qt::ItemIsEnabled));
-        m_activeToolList->addItem(item);
+    if (m_packageInspectorList && coverage) {
+        for (const PackageFeatureCoverageItem& coverageItem : coverage->items) {
+            auto* item = new QListWidgetItem(packageInspectorText(coverageItem));
+            const QString descriptorJson = compactDescriptorJson(coverageItem.descriptor);
+            item->setData(Qt::UserRole, coverageItem.id);
+            item->setData(PackageCoverageStatusRole,
+                          packageFeatureCoverageStatusLabel(coverageItem.status));
+            item->setData(PackageCoverageMessageRole, coverageItem.message);
+            item->setData(PackageCoverageDescriptorRole, descriptorJson);
+            item->setToolTip(descriptorJson);
+            m_packageInspectorList->addItem(item);
+        }
+    }
+
+    if (m_activeToolList) {
+        const QVector<PluginInteractionDescriptor> interactions = m_interactions
+            ? m_interactions->interactionsForWorkspace(state, *entry, coverage)
+            : QVector<PluginInteractionDescriptor>{};
+        for (const PluginInteractionDescriptor& interaction : interactions) {
+            auto* item = new QListWidgetItem(interaction.label);
+            item->setData(Qt::UserRole, interaction.id);
+            item->setData(IpcoreIdRole, state.ipcoreId);
+            item->setData(ActiveInstanceIdRole, state.instanceId);
+            item->setToolTip(interaction.category);
+            item->setFlags(interaction.enabled ? item->flags()
+                                               : (item->flags() & ~Qt::ItemIsEnabled));
+            m_activeToolList->addItem(item);
+        }
     }
 }
 

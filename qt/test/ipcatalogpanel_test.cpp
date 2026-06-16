@@ -418,6 +418,91 @@ void writePackageWithDescriptorInteractions(const QString& packageRootPath,
 })json").arg(packageId).toUtf8());
 }
 
+void writePackageWithInspectorSurface(const QString& packageRootPath,
+                                      const QString& packageId) {
+    QDir root(packageRootPath);
+    require(root.mkpath(QStringLiteral("views")), "failed to create views directory");
+    writeFile(root.filePath(QStringLiteral("views/Module.xml")),
+              QByteArrayLiteral(R"xml(<module-view schema="v1" module="Module">
+  <anchors><anchor ref="bus" x="0" y="0" /></anchors>
+</module-view>)xml"));
+    writeFile(root.filePath(QStringLiteral("ipcraft.json")),
+              QStringLiteral(R"json({
+  "schema": "ipcraft.package.v1",
+  "id": "%1",
+  "name": "Inspector Surface Package",
+  "version": "1.0.0",
+  "extensions": [
+    { "id": "ipcraft.views", "required": false },
+    { "id": "ipcraft.flows", "required": false },
+    { "id": "ipcraft.artifacts", "required": false },
+    { "id": "ipcraft.diagnostics", "required": false },
+    { "id": "ipcraft.config.params", "required": false },
+    { "id": "ipcraft.config.documents", "required": false },
+    { "id": "ipcraft.config.files", "required": false },
+    {
+      "id": "vendor.optional.surface.v1",
+      "required": false,
+      "metadata": { "label": "Optional Surface Capability" },
+      "native": { "raw_marker": "optional-surface" }
+    },
+    {
+      "id": "vendor.required.surface.v1",
+      "required": true,
+      "metadata": { "label": "Required Surface Capability" }
+    }
+  ],
+  "config_schema": {
+    "parameters": [
+      { "id": "mesh_width", "type": "integer", "required": true }
+    ],
+    "documents": [
+      { "id": "routing_doc", "format": "json", "editable": true }
+    ],
+    "files": [
+      { "id": "constraints", "kind": "sdc", "required": false, "allowed_extensions": [".sdc"] }
+    ]
+  },
+  "views": [
+    { "id": "detail", "module": "Module", "file": "views/Module.xml" }
+  ],
+  "flows": [
+    { "id": "synthesize", "scope": "instance" }
+  ],
+  "artifacts": [
+    { "id": "netlist", "path": "out/netlist.v" }
+  ],
+  "diagnostics": {
+    "rules": [
+      { "id": "timing.window", "severity": "warning" }
+    ]
+  },
+  "native": {
+    "ipcraft": {
+      "editor": {
+        "connection_classes": [
+          { "id": "demo_link", "roles": ["initiator", "target"], "symmetric": false }
+        ],
+        "modules": [
+          {
+            "id": "Module",
+            "name": "Inspector Module",
+            "interfaces": [
+              {
+                "id": "bus",
+                "modes": ["initiator"],
+                "accepts": [{ "class": "demo_link", "role": "initiator" }]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "vendor_surface": true
+  }
+})json").arg(packageId).toUtf8());
+}
+
 QTreeWidgetItem* firstCatalogEntry(QTreeWidget* catalog) {
     if (!catalog || catalog->topLevelItemCount() == 0) {
         return nullptr;
@@ -487,6 +572,20 @@ bool listContainsData(QListWidget* list, const QString& value) {
         }
     }
     return false;
+}
+
+QListWidgetItem* listItemWithData(QListWidget* list, const QString& value) {
+    if (!list) {
+        return nullptr;
+    }
+
+    for (int row = 0; row < list->count(); ++row) {
+        QListWidgetItem* item = list->item(row);
+        if (item && item->data(Qt::UserRole).toString() == value) {
+            return item;
+        }
+    }
+    return nullptr;
 }
 
 bool designHasComponentWithWidth(const ipcraft::core::ProjectDesign& design,
@@ -1913,6 +2012,103 @@ void testPackageDescriptorFeaturesAppearAsWorkspaceInteractions() {
             "package flow declaration should appear as an interaction");
 }
 
+void testPackageInspectorShowsCapabilityCoverageDetails() {
+    ModuleRegistryRestore restoreRegistry;
+    QTemporaryDir settingsRoot;
+    QTemporaryDir packageRoot;
+    QTemporaryDir tempDir;
+    require(settingsRoot.isValid() && packageRoot.isValid() && tempDir.isValid(),
+            "temporary directories should be valid");
+
+    const QString packageId = QStringLiteral("org.example.inspectorsurface");
+    writePackageWithInspectorSurface(packageRoot.path(), packageId);
+    configureSettingsRoot(settingsRoot.path(),
+                          QStringLiteral("ipcatalogpanel_inspector_capabilities_app"));
+    AppSettings().setIpcorePaths({packageRoot.path()});
+
+    MainWindow window;
+    require(window.createProjectAt(tempDir.filePath(QStringLiteral("inspector_capabilities.fpproj"))),
+            "project should be created before inspector capability test");
+    const ProjectIpInstanceRecord record = addCatalogInstanceViaCommand(window, packageId);
+    require(record.instanceId == QStringLiteral("inspectorsurface_0"),
+            "inspector package instance should use a stable id");
+
+    auto* inspectorList = window.findChild<QListWidget*>(QStringLiteral("packageInspectorList"));
+    require(inspectorList != nullptr, "package inspector list should exist");
+
+    QListWidgetItem* optionalCapability =
+        listItemWithData(inspectorList, QStringLiteral("capability:vendor.optional.surface.v1"));
+    require(optionalCapability != nullptr,
+            "optional unknown capability should be visible in the package inspector");
+    require(optionalCapability->text().contains(QStringLiteral("Optional Surface Capability")),
+            "optional capability should use descriptor metadata label");
+    require(optionalCapability->text().contains(QStringLiteral("Unsupported")),
+            "optional unknown capability should render unsupported status");
+    require(optionalCapability->text().contains(
+                QStringLiteral("Optional capability has no registered handler.")),
+            "optional unknown capability should render handler status message");
+    require(optionalCapability->toolTip().contains(QStringLiteral("raw_marker")),
+            "optional unknown capability tooltip should preserve raw descriptor");
+
+    QListWidgetItem* requiredCapability =
+        listItemWithData(inspectorList, QStringLiteral("capability:vendor.required.surface.v1"));
+    require(requiredCapability != nullptr,
+            "required missing capability should be visible in the package inspector");
+    require(requiredCapability->text().contains(QStringLiteral("Blocking")),
+            "required missing capability should render blocking status");
+    require(requiredCapability->text().contains(
+                QStringLiteral("Required capability has no registered handler.")),
+            "required missing capability should render blocking diagnostic message");
+}
+
+void testPackageInspectorShowsDeclaredDescriptorSurface() {
+    ModuleRegistryRestore restoreRegistry;
+    QTemporaryDir settingsRoot;
+    QTemporaryDir packageRoot;
+    QTemporaryDir tempDir;
+    require(settingsRoot.isValid() && packageRoot.isValid() && tempDir.isValid(),
+            "temporary directories should be valid");
+
+    const QString packageId = QStringLiteral("org.example.inspectorsurface");
+    writePackageWithInspectorSurface(packageRoot.path(), packageId);
+    configureSettingsRoot(settingsRoot.path(),
+                          QStringLiteral("ipcatalogpanel_inspector_surface_app"));
+    AppSettings().setIpcorePaths({packageRoot.path()});
+
+    MainWindow window;
+    require(window.createProjectAt(tempDir.filePath(QStringLiteral("inspector_surface.fpproj"))),
+            "project should be created before inspector descriptor test");
+    addCatalogInstanceViaCommand(window, packageId);
+
+    auto* inspectorList = window.findChild<QListWidget*>(QStringLiteral("packageInspectorList"));
+    require(inspectorList != nullptr, "package inspector list should exist");
+    require(listContainsData(inspectorList, QStringLiteral("config_schema:parameters")),
+            "package parameters should be present in the inspector detail model");
+    require(listContainsData(inspectorList, QStringLiteral("config_schema:documents")),
+            "document inputs should be present in the inspector detail model");
+    require(listContainsData(inspectorList, QStringLiteral("config_schema:files")),
+            "file inputs should be present in the inspector detail model");
+    require(listContainsData(inspectorList, QStringLiteral("flow:synthesize")),
+            "declared tool flows should be present in the inspector detail model");
+    require(listContainsData(inspectorList, QStringLiteral("artifact:netlist")),
+            "declared artifacts should be present in the inspector detail model");
+    require(listContainsData(inspectorList, QStringLiteral("diagnostics")),
+            "declared diagnostics should be present in the inspector detail model");
+    require(listContainsData(inspectorList, QStringLiteral("view:detail")),
+            "declared view sections should be present in the inspector detail model");
+
+    QListWidgetItem* diagnostics =
+        listItemWithData(inspectorList, QStringLiteral("diagnostics"));
+    require(diagnostics != nullptr &&
+                diagnostics->toolTip().contains(QStringLiteral("timing.window")),
+            "diagnostic rule descriptor should be preserved in the inspector tooltip");
+    QListWidgetItem* parameters =
+        listItemWithData(inspectorList, QStringLiteral("config_schema:parameters"));
+    require(parameters != nullptr &&
+                parameters->toolTip().contains(QStringLiteral("mesh_width")),
+            "parameter descriptor should be preserved in the inspector tooltip");
+}
+
 void testAmbiguousConnectionAppearsInPropertyPanelAndLog() {
     QTemporaryDir tempDir;
     require(tempDir.isValid(), "temporary directory should be valid");
@@ -2138,6 +2334,8 @@ int main(int argc, char** argv) {
         testDesignEditAfterProjectionMergeKeepsProjectionOwnedState();
         testNewProjectAddsIpcraftPackageInstanceFromCatalog();
         testPackageDescriptorFeaturesAppearAsWorkspaceInteractions();
+        testPackageInspectorShowsCapabilityCoverageDetails();
+        testPackageInspectorShowsDeclaredDescriptorSurface();
         testAmbiguousConnectionAppearsInPropertyPanelAndLog();
         testCatalogReloadUsesConfiguredPackageRoots();
         testCatalogReloadRefreshesPropertyPanelParameters();

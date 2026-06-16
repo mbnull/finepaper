@@ -429,6 +429,22 @@ PackageFeatureCoverageItem PackageCoverageReport::item(const QString& id) const 
     return missing;
 }
 
+QString packageFeatureCoverageStatusLabel(PackageFeatureCoverageStatus status) {
+    switch (status) {
+    case PackageFeatureCoverageStatus::Handled:
+        return QStringLiteral("Handled");
+    case PackageFeatureCoverageStatus::Visible:
+        return QStringLiteral("Visible");
+    case PackageFeatureCoverageStatus::Unsupported:
+        return QStringLiteral("Unsupported");
+    case PackageFeatureCoverageStatus::Blocking:
+        return QStringLiteral("Blocking");
+    case PackageFeatureCoverageStatus::Invalid:
+        return QStringLiteral("Invalid");
+    }
+    return QStringLiteral("Invalid");
+}
+
 PackageCoverageReport buildPackageCoverageReport(const QJsonObject& descriptor,
                                                  const CapabilityRegistry& capabilities) {
     PackageCoverageReport report;

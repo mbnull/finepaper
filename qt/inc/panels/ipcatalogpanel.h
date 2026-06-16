@@ -63,5 +63,6 @@ private:
     QListWidget* m_projectIpList = nullptr;
     QListWidget* m_activeModuleList = nullptr;
     QListWidget* m_activeToolList = nullptr;
+    QListWidget* m_packageInspectorList = nullptr;
     bool m_projectSelectionSyncPending = false;
 };

@@ -77,6 +77,9 @@ QVector<PluginInteractionDescriptor> packageCoverageInteractions(
         interaction.descriptor.insert(QStringLiteral("coverageId"), item.id);
         interaction.descriptor.insert(QStringLiteral("coverageStatus"),
                                       static_cast<int>(item.status));
+        interaction.descriptor.insert(QStringLiteral("coverageStatusLabel"),
+                                      packageFeatureCoverageStatusLabel(item.status));
+        interaction.descriptor.insert(QStringLiteral("coverageMessage"), item.message);
         interactions.append(interaction);
     }
     return interactions;

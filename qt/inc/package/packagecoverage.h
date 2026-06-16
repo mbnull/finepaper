@@ -31,6 +31,7 @@ struct PackageCoverageReport {
     PackageFeatureCoverageItem item(const QString& id) const;
 };
 
+QString packageFeatureCoverageStatusLabel(PackageFeatureCoverageStatus status);
 PackageCoverageReport buildPackageCoverageReport(const QJsonObject& descriptor,
                                                  const CapabilityRegistry& capabilities);
 PackageCoverageReport buildPackageCoverageReport(const ipcraft::PackageSpec& spec,

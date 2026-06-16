@@ -383,6 +383,12 @@ void testPackagePluginRegistersGenericCoverageInteractionProvider() {
             "package provider should expose arbitrary vendor capability ids without hardcoded tokens");
     require(projected.at(0).label == QStringLiteral("Dynamic Feature"),
             "package provider should use descriptor metadata labels when present");
+    require(projected.at(0).descriptor.value(QStringLiteral("coverageStatusLabel")).toString() ==
+                QStringLiteral("Unsupported"),
+            "package provider should expose human-readable coverage status");
+    require(projected.at(0).descriptor.value(QStringLiteral("coverageMessage")).toString() ==
+                QStringLiteral("Optional capability has no registered handler."),
+            "package provider should expose coverage handler status message");
     require(projected.at(1).id == QStringLiteral("package:view:dynamic_view"),
             "package provider should expose view declarations as interactions");
 }
