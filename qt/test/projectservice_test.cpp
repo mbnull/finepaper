@@ -733,6 +733,22 @@ void testReplaceDesignPreservesNonDesignProjectFields() {
                 !savedRoot.contains(QStringLiteral("migration")) &&
                 !savedRoot.contains(QStringLiteral("native")),
             "saved merged document should use only the flat ProjectDesign root");
+    const QJsonArray savedConnections = savedRoot.value(QStringLiteral("connections")).toArray();
+    require(savedConnections.size() == 1,
+            "saved merged document should project legacy composition connections to flat design");
+    const QJsonObject savedConnection = savedConnections.first().toObject();
+    require(savedConnection.value(QStringLiteral("id")).toString() == QStringLiteral("conn0") &&
+                savedConnection.value(QStringLiteral("from")).toObject()
+                    .value(QStringLiteral("component")).toString() == QStringLiteral("component0") &&
+                savedConnection.value(QStringLiteral("to")).toObject()
+                    .value(QStringLiteral("interface")).toString() == QStringLiteral("in"),
+            "saved merged document should preserve legacy composition endpoints as flat connection");
+    const QJsonObject savedLegacyComposition = savedRoot.value(QStringLiteral("metadata")).toObject()
+        .value(QStringLiteral("ipcraft.legacyComposition.v1")).toObject();
+    require(savedLegacyComposition.value(QStringLiteral("connections")).toArray().size() == 1 &&
+                savedLegacyComposition.value(QStringLiteral("external_ports")).toArray().size() == 1 &&
+                savedLegacyComposition.value(QStringLiteral("groups")).toArray().size() == 1,
+            "saved merged document should preserve full legacy composition as flat metadata");
 
     ProjectService loaded;
     const ProjectServiceResult loadResult = loaded.loadFile(path);
@@ -746,6 +762,15 @@ void testReplaceDesignPreservesNonDesignProjectFields() {
     require(loaded.design().components.size() == 1 &&
                 loaded.design().components.first().config.value(QStringLiteral("width")).toInt() == 8,
             "saved merged document should reload design-owned component config");
+    require(loaded.design().connections.size() == 1 &&
+                loaded.design().connections.first().id == QStringLiteral("conn0"),
+            "saved merged document should reload projected composition connections");
+    require(loaded.design().metadata.value(QStringLiteral("ipcraft.legacyComposition.v1"))
+                .toObject()
+                .value(QStringLiteral("external_ports"))
+                .toArray()
+                .size() == 1,
+            "saved merged document should reload preserved legacy composition metadata");
     require(loaded.document().migration.fromSchema == QStringLiteral("legacy.schema"),
             "saved merged document should preserve explicit migration metadata after reload");
     require(loaded.document().instances.first().hasGraphConfig,

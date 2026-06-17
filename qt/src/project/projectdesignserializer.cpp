@@ -1,6 +1,7 @@
 // ProjectDesignSerializer converts runtime ProjectDesign records to/from ProjectDocument V1.
 #include "project/projectdesignserializer.h"
 
+#include "ipcraft/compositionmodel.h"
 #include "ipcraft/core/project_document_v1.h"
 #include "ipcraft/schemaids.h"
 
@@ -157,6 +158,10 @@ QString designSupplementKey() {
     return QStringLiteral("ipcraft.projectDesignSupplement.v1");
 }
 
+QString legacyCompositionMetadataKey() {
+    return QStringLiteral("ipcraft.legacyComposition.v1");
+}
+
 bool isSupplementField(const QString& key) {
     return key == QStringLiteral("interfaces") ||
            key == QStringLiteral("connections") ||
@@ -203,6 +208,103 @@ void applySupplementField(QJsonObject& serializedProject,
                           const QString& key) {
     if (supplement.contains(key)) {
         serializedProject.insert(key, supplement.value(key));
+    }
+}
+
+bool hasLegacyComposition(const ProjectComposition& composition) {
+    return !composition.connections.isEmpty() ||
+           !composition.externalPorts.isEmpty() ||
+           !composition.groups.isEmpty() ||
+           !composition.properties.isEmpty() ||
+           !composition.native.isEmpty();
+}
+
+ipcraft::CompositionEndpointRef compositionEndpointFromProjectEndpoint(
+    const ProjectEndpointRef& endpoint) {
+    ipcraft::CompositionEndpointRef ref;
+    ref.instanceId = endpoint.instanceId;
+    ref.interfaceId = endpoint.interfaceId;
+    ref.portId = endpoint.portId;
+    ref.role = endpoint.role;
+    ref.properties = endpoint.properties;
+    return ref;
+}
+
+ipcraft::SystemConnection systemConnectionFromProjectConnection(
+    const ProjectConnectionRecord& connection) {
+    ipcraft::SystemConnection systemConnection;
+    systemConnection.id = connection.id;
+    systemConnection.type = connection.type;
+    systemConnection.source = connection.sourceKind;
+    systemConnection.properties = connection.properties;
+    systemConnection.native = connection.native;
+    for (const ProjectEndpointRef& endpoint : connection.endpoints) {
+        systemConnection.endpoints.append(compositionEndpointFromProjectEndpoint(endpoint));
+    }
+    return systemConnection;
+}
+
+ipcraft::ExternalPort externalPortFromProjectExternalPort(
+    const ProjectExternalPortRecord& port) {
+    ipcraft::ExternalPort externalPort;
+    externalPort.id = port.id;
+    externalPort.name = port.name;
+    externalPort.hasInterface = port.hasInterface;
+    externalPort.interfaceRef = compositionEndpointFromProjectEndpoint(port.interfaceRef);
+    externalPort.properties = port.properties;
+    externalPort.native = port.native;
+    return externalPort;
+}
+
+QJsonObject legacyCompositionMetadataObject(const ProjectComposition& composition) {
+    ipcraft::CompositionModel model;
+    for (const ProjectConnectionRecord& connection : composition.connections) {
+        model.connections.append(systemConnectionFromProjectConnection(connection));
+    }
+    for (const ProjectExternalPortRecord& port : composition.externalPorts) {
+        model.externalPorts.append(externalPortFromProjectExternalPort(port));
+    }
+    model.groups = composition.groups;
+    model.properties = composition.properties;
+    model.native = composition.native;
+    return model.toJson();
+}
+
+QJsonObject legacyConnectionMetadataObject(const ProjectConnectionRecord& connection) {
+    return QJsonObject{
+        {QStringLiteral("legacy"), systemConnectionFromProjectConnection(connection).toJson()}
+    };
+}
+
+void appendLegacyCompositionProjection(ipcraft::core::ProjectDesign& design,
+                                       const ProjectComposition& composition) {
+    if (!hasLegacyComposition(composition)) {
+        return;
+    }
+
+    design.metadata.insert(legacyCompositionMetadataKey(),
+                           legacyCompositionMetadataObject(composition));
+    for (const ProjectConnectionRecord& legacyConnection : composition.connections) {
+        if (legacyConnection.endpoints.size() < 2) {
+            continue;
+        }
+
+        ipcraft::core::Connection connection;
+        connection.id = legacyConnection.id;
+        connection.from = ipcraft::core::EndpointRef{
+            legacyConnection.endpoints.at(0).instanceId,
+            legacyConnection.endpoints.at(0).interfaceId
+        };
+        connection.to = ipcraft::core::EndpointRef{
+            legacyConnection.endpoints.at(1).instanceId,
+            legacyConnection.endpoints.at(1).interfaceId
+        };
+        if (!legacyConnection.type.trimmed().isEmpty()) {
+            connection.kind = legacyConnection.type;
+        }
+        connection.config = legacyConnection.properties;
+        connection.metadata = legacyConnectionMetadataObject(legacyConnection);
+        design.connections.append(connection);
     }
 }
 
@@ -343,6 +445,7 @@ ipcraft::core::ProjectDesign ProjectDesignSerializer::fromDocument(const Project
     }
 
     design.metadata = document.projectMetadata;
+    appendLegacyCompositionProjection(design, document.composition);
     mergeDesignSupplement(design, document.native);
     return design;
 }
