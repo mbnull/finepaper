@@ -638,9 +638,15 @@ void testProductionDoesNotExposeEditorMutationTarget() {
     const QString topologyHandler =
         readText(QStringLiteral("qt/inc/app/topologypresetinteractionhandler.h")) +
         readText(QStringLiteral("qt/src/app/topologypresetinteractionhandler.cpp"));
+    requireContains(topologyHandler,
+                    QStringLiteral("DesignEditingService"),
+                    QStringLiteral("TopologyPresetInteractionHandler"));
     requireNoMatch(topologyHandler,
                    QRegularExpression(QStringLiteral("\\b(?:const\\s+)?Graph\\s*\\*")),
                    QStringLiteral("TopologyPresetInteractionHandler"));
+    requireNotContains(topologyHandler,
+                       QStringLiteral("CommandManager"),
+                       QStringLiteral("TopologyPresetInteractionHandler"));
     requireNotContains(topologyHandler,
                        QStringLiteral("EditorMutationTarget"),
                        QStringLiteral("TopologyPresetInteractionHandler"));
@@ -780,8 +786,7 @@ void testProjectPatchBoundaryDocumentsMissingDesignEditingOperations() {
         QStringLiteral("remove component"),
         QStringLiteral("add/remove connection"),
         QStringLiteral("connection metadata/class/config"),
-        QStringLiteral("layout/view state"),
-        QStringLiteral("topology preset output")
+        QStringLiteral("layout/view state")
     };
 
     for (const QString& token : requiredBacklogTokens) {

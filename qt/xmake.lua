@@ -1869,6 +1869,18 @@ add_qt_test_target("topology_preset_test", "test/topology_preset_test.cpp", {
     "inc/**/ipcoreruntimedescriptor.h"
 })
 
+add_qt_test_target("topology_preset_patch_builder_test", "test/topology_preset_patch_builder_test.cpp", {
+    "src/topology/topologypresetpatchbuilder.cpp",
+    "src/project/designeditingservice.cpp",
+    "src/ipcraft/core/project_design.cpp",
+    "src/ipcraft/core/project_patch.cpp",
+    "inc/topology/topologypresetpatchbuilder.h",
+    "inc/project/designeditingservice.h",
+    "inc/ipcraft/core/project_design.h",
+    "inc/ipcraft/core/project_patch.h",
+    "inc/**/topologypresetbuilder.h"
+})
+
 add_qt_test_target("v1architecturegate_test", "test/v1architecturegate_test.cpp", {
     "src/app/generationartifacts.cpp",
     "src/app/generationflowprovider.cpp",

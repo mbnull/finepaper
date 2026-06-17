@@ -3,17 +3,15 @@
 
 #include "app/interactionids.h"
 #include "app/pluginids.h"
-#include "commands/commandmanager.h"
 #include "ipcore/ipcatalogservice.h"
-#include "modules/moduleregistry.h"
+#include "project/designeditingservice.h"
 #include "topology/topologypresetbuilder.h"
+#include "topology/topologypresetpatchbuilder.h"
 #include "workspace/activeworkspacecontroller.h"
 
-#include <QDebug>
 #include <QInputDialog>
 #include <QMessageBox>
 #include <algorithm>
-#include <memory>
 #include <optional>
 
 namespace {
@@ -103,10 +101,10 @@ std::optional<QHash<QString, int>> promptPresetParameters(
 
 TopologyPresetInteractionHandler::TopologyPresetInteractionHandler(
     QWidget* hostWidget,
-    CommandManager* commandManager,
+    DesignEditingService* designEditingService,
     ActiveWorkspaceController* workspaceController)
     : m_hostWidget(hostWidget),
-      m_commandManager(commandManager),
+      m_designEditingService(designEditingService),
       m_workspaceController(workspaceController) {}
 
 bool TopologyPresetInteractionHandler::registerHandlers(
@@ -128,7 +126,7 @@ PluginInteractionResult TopologyPresetInteractionHandler::handleInteraction(
     PluginInteractionResult result;
     result.handled = true;
 
-    if (!m_commandManager || !m_workspaceController) {
+    if (!m_designEditingService || !m_workspaceController) {
         result.message = QStringLiteral("Topology interaction handler is not ready.");
         return result;
     }
@@ -179,9 +177,23 @@ PluginInteractionResult TopologyPresetInteractionHandler::handleInteraction(
         return result;
     }
 
-    Q_UNUSED(request);
-    result.message = QStringLiteral(
-        "Topology presets require the design-level patch planner.");
-    QMessageBox::warning(m_hostWidget, QStringLiteral("Topology"), result.message);
+    const TopologyPresetPatchBuildResult patchResult =
+        TopologyPresetPatchBuilder::build(request);
+    if (!patchResult.success) {
+        result.message = patchResult.error;
+        QMessageBox::warning(m_hostWidget, QStringLiteral("Topology"), result.message);
+        return result;
+    }
+
+    const DesignEditResult editResult = m_designEditingService->applyPatch(patchResult.patch);
+    if (!editResult.success) {
+        result.message = editResult.error.trimmed().isEmpty()
+            ? QStringLiteral("Topology preset patch was rejected.")
+            : editResult.error;
+        QMessageBox::warning(m_hostWidget, QStringLiteral("Topology"), result.message);
+        return result;
+    }
+
+    result.success = true;
     return result;
 }

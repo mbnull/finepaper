@@ -396,7 +396,7 @@ MainWindow::MainWindow(QWidget *parent)
           m_ipCatalogService.get())),
       m_topologyPresetInteractionHandler(std::make_unique<TopologyPresetInteractionHandler>(
           this,
-          m_commandManager.get(),
+          m_designEditingService.get(),
           m_activeWorkspaceController.get())),
       m_nodeEditor(nullptr),
       m_propertyPanel(nullptr),

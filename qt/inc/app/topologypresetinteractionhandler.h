@@ -4,13 +4,13 @@
 #include "app/plugininteractionregistry.h"
 
 class ActiveWorkspaceController;
-class CommandManager;
+class DesignEditingService;
 class QWidget;
 
 class TopologyPresetInteractionHandler {
 public:
     TopologyPresetInteractionHandler(QWidget* hostWidget,
-                                     CommandManager* commandManager,
+                                     DesignEditingService* designEditingService,
                                      ActiveWorkspaceController* workspaceController);
 
     bool registerHandlers(PluginInteractionRegistry& interactions) const;
@@ -20,6 +20,6 @@ private:
                                               const PluginInteractionContext& context) const;
 
     QWidget* m_hostWidget = nullptr;
-    CommandManager* m_commandManager = nullptr;
+    DesignEditingService* m_designEditingService = nullptr;
     ActiveWorkspaceController* m_workspaceController = nullptr;
 };
