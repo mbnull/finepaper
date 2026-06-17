@@ -12,6 +12,7 @@
 #include <QJsonObject>
 #include <QThread>
 #include <QTemporaryDir>
+#include <functional>
 #include <iostream>
 #include <stdexcept>
 
@@ -75,6 +76,14 @@ QJsonObject execFlow(const QJsonObject& command) {
                                 {QStringLiteral("command"), command}}}}};
 }
 
+QJsonObject execFlowValue(const QJsonValue& command) {
+    return QJsonObject{
+        {QStringLiteral("id"), QStringLiteral("generate")},
+        {QStringLiteral("steps"),
+         QJsonArray{QJsonObject{{QStringLiteral("kind"), QStringLiteral("exec")},
+                                {QStringLiteral("command"), command}}}}};
+}
+
 ipcraft::PackageSpec packageWithFlow(const QString& packageRoot, const QJsonObject& flow) {
     ipcraft::PackageSpec package;
     package.id = QStringLiteral("vendor.example.flow");
@@ -108,6 +117,35 @@ QJsonObject commandFor(const QString& executable,
     return QJsonObject{{QStringLiteral("executable"), executable},
                        {QStringLiteral("args"), args},
                        {QStringLiteral("capture"), capture}};
+}
+
+void requireMalformedCommandValueFailsBeforeStart(const QJsonValue& commandValue,
+                                                  const QString& markerName) {
+    QTemporaryDir runRoot;
+    QTemporaryDir packageRoot;
+    require(runRoot.isValid(), "run root should be valid");
+    require(packageRoot.isValid(), "package root should be valid");
+
+    const QString markerPath = QDir(runRoot.path()).filePath(markerName);
+    writeExecutable(QDir(packageRoot.path()).filePath(QStringLiteral("tools/mark.sh")),
+                    QString("#!/bin/sh\nprintf started > '%1'\n").arg(markerPath).toUtf8());
+
+    const ipcraft::FlowRunResult result =
+        ipcraft::FlowRunner::runFlow(requestFor(runRoot, packageRoot, execFlowValue(commandValue)));
+
+    require(!result.ok, "malformed command config should fail flow run");
+    require(hasRule(result.diagnostics, QStringLiteral("flow.command_policy_violation")),
+            "malformed command config should emit flow.command_policy_violation");
+    require(!QFileInfo::exists(markerPath),
+            "malformed command config must be rejected before the executable starts");
+}
+
+void requireMalformedCommandObjectFailsBeforeStart(
+    const std::function<void(QJsonObject&)>& mutate,
+    const QString& markerName) {
+    QJsonObject command = commandFor(QStringLiteral("tools/mark.sh"));
+    mutate(command);
+    requireMalformedCommandValueFailsBeforeStart(command, markerName);
 }
 
 void testExecMissingExecutableReturnsDiagnostic() {
@@ -345,6 +383,86 @@ void testTimeoutPolicyRejectsInvalidValueBeforeProcessStart() {
             "invalid timeout_ms should emit flow.command_policy_violation");
     require(!QFileInfo::exists(markerPath),
             "invalid timeout policy must be rejected before the executable starts");
+}
+
+void testMalformedCommandFieldsFailClosedBeforeProcessStart() {
+    requireMalformedCommandValueFailsBeforeStart(QStringLiteral("not-an-object"),
+                                                QStringLiteral("malformed-command-value"));
+    requireMalformedCommandObjectFailsBeforeStart(
+        [](QJsonObject& command) {
+            command.insert(QStringLiteral("executable"), 7);
+        },
+        QStringLiteral("malformed-executable"));
+    requireMalformedCommandObjectFailsBeforeStart(
+        [](QJsonObject& command) {
+            command.insert(QStringLiteral("framework_tool"), true);
+        },
+        QStringLiteral("malformed-framework-tool"));
+    requireMalformedCommandObjectFailsBeforeStart(
+        [](QJsonObject& command) {
+            command.insert(QStringLiteral("cwd"), QJsonArray{QStringLiteral("run_dir")});
+        },
+        QStringLiteral("malformed-cwd"));
+    requireMalformedCommandObjectFailsBeforeStart(
+        [](QJsonObject& command) {
+            command.insert(QStringLiteral("args"), QStringLiteral("--flag"));
+        },
+        QStringLiteral("malformed-args"));
+    requireMalformedCommandObjectFailsBeforeStart(
+        [](QJsonObject& command) {
+            command.insert(QStringLiteral("args"), QJsonArray{QStringLiteral("--flag"), 7});
+        },
+        QStringLiteral("malformed-args-item"));
+    requireMalformedCommandObjectFailsBeforeStart(
+        [](QJsonObject& command) {
+            command.insert(QStringLiteral("env"), QStringLiteral("PATH"));
+        },
+        QStringLiteral("malformed-env"));
+    requireMalformedCommandObjectFailsBeforeStart(
+        [](QJsonObject& command) {
+            command.insert(QStringLiteral("env"),
+                           QJsonObject{{QStringLiteral("allow"), QStringLiteral("PATH")}});
+        },
+        QStringLiteral("malformed-env-allow"));
+    requireMalformedCommandObjectFailsBeforeStart(
+        [](QJsonObject& command) {
+            command.insert(QStringLiteral("env"),
+                           QJsonObject{{QStringLiteral("allow"),
+                                        QJsonArray{QStringLiteral("PATH"), 3}}});
+        },
+        QStringLiteral("malformed-env-allow-item"));
+    requireMalformedCommandObjectFailsBeforeStart(
+        [](QJsonObject& command) {
+            command.insert(QStringLiteral("capture"), true);
+        },
+        QStringLiteral("malformed-capture"));
+    requireMalformedCommandObjectFailsBeforeStart(
+        [](QJsonObject& command) {
+            command.insert(QStringLiteral("capture"),
+                           QJsonObject{{QStringLiteral("stdout"), 9},
+                                       {QStringLiteral("stderr"), QStringLiteral("stderr.log")}});
+        },
+        QStringLiteral("malformed-capture-stdout"));
+    requireMalformedCommandObjectFailsBeforeStart(
+        [](QJsonObject& command) {
+            command.insert(QStringLiteral("capture"),
+                           QJsonObject{{QStringLiteral("stdout"), QStringLiteral("stdout.log")},
+                                       {QStringLiteral("stderr"), QJsonObject{}}});
+        },
+        QStringLiteral("malformed-capture-stderr"));
+    requireMalformedCommandObjectFailsBeforeStart(
+        [](QJsonObject& command) {
+            command.insert(QStringLiteral("capture"),
+                           QJsonObject{{QStringLiteral("stdout"), QStringLiteral("stdout.log")},
+                                       {QStringLiteral("stderr"), QStringLiteral("stderr.log")},
+                                       {QStringLiteral("max_bytes"), QStringLiteral("1024")}});
+        },
+        QStringLiteral("malformed-capture-max-bytes"));
+    requireMalformedCommandObjectFailsBeforeStart(
+        [](QJsonObject& command) {
+            command.insert(QStringLiteral("timeout_ms"), QStringLiteral("1000"));
+        },
+        QStringLiteral("malformed-timeout"));
 }
 
 void testDuplicateCapturePathsAreRejected() {
@@ -590,6 +708,7 @@ int main(int argc, char** argv) {
         testCaptureMaxBytesRejectsInvalidValueBeforeProcessStart();
         testTimeoutPolicyRejectsBeforeProcessStart();
         testTimeoutPolicyRejectsInvalidValueBeforeProcessStart();
+        testMalformedCommandFieldsFailClosedBeforeProcessStart();
         testDuplicateCapturePathsAreRejected();
         testParseDiagnosticsWithoutParserFailsStructurally();
         testRunFlowRejectsMissingSteps();

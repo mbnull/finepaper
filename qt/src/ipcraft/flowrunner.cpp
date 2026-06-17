@@ -232,6 +232,31 @@ QString stringValue(const QJsonObject& object, std::initializer_list<QString> ke
     return {};
 }
 
+QString indexedPath(const QString& path, qsizetype index) {
+    return QStringLiteral("%1[%2]").arg(path).arg(index);
+}
+
+bool optionalStringValue(const QJsonObject& object,
+                         const QString& key,
+                         const QString& path,
+                         ipcraft::DiagnosticStore& diagnostics,
+                         QString* value) {
+    value->clear();
+    if (!object.contains(key)) {
+        return true;
+    }
+    const QJsonValue jsonValue = object.value(key);
+    if (!jsonValue.isString()) {
+        addFlowDiagnostic(diagnostics,
+                          QStringLiteral("flow.command_policy_violation"),
+                          QStringLiteral("Flow command field must be a string."),
+                          path);
+        return false;
+    }
+    *value = jsonValue.toString().trimmed();
+    return true;
+}
+
 std::optional<qint64> strictPositiveIntegerValue(const QJsonObject& object,
                                                  const QString& key) {
     const QJsonValue value = object.value(key);
@@ -246,18 +271,36 @@ std::optional<qint64> strictPositiveIntegerValue(const QJsonObject& object,
     return intValue;
 }
 
-QStringList stringArray(const QJsonValue& value) {
-    QStringList values;
-    if (!value.isArray()) {
-        return values;
+bool optionalStringArrayValue(const QJsonObject& object,
+                              const QString& key,
+                              const QString& path,
+                              ipcraft::DiagnosticStore& diagnostics,
+                              QStringList* values) {
+    values->clear();
+    if (!object.contains(key)) {
+        return true;
     }
-    const QJsonArray array = value.toArray();
-    for (const QJsonValue& item : array) {
-        if (item.isString()) {
-            values.append(item.toString());
+    const QJsonValue jsonValue = object.value(key);
+    if (!jsonValue.isArray()) {
+        addFlowDiagnostic(diagnostics,
+                          QStringLiteral("flow.command_policy_violation"),
+                          QStringLiteral("Flow command field must be a string array."),
+                          path);
+        return false;
+    }
+    const QJsonArray array = jsonValue.toArray();
+    for (qsizetype index = 0; index < array.size(); ++index) {
+        const QJsonValue item = array.at(index);
+        if (!item.isString()) {
+            addFlowDiagnostic(diagnostics,
+                              QStringLiteral("flow.command_policy_violation"),
+                              QStringLiteral("Flow command array entries must be strings."),
+                              indexedPath(path, index));
+            return false;
         }
+        values->append(item.toString());
     }
-    return values;
+    return true;
 }
 
 QString resolvePackageRoot(const ipcraft::FlowRunRequest& request) {
@@ -281,11 +324,11 @@ QString expandPlaceholder(QString value, const ipcraft::FlowRunRequest& request,
     return value;
 }
 
-QStringList expandedArguments(const QJsonValue& value,
+QStringList expandedArguments(const QStringList& values,
                               const ipcraft::FlowRunRequest& request,
                               const ipcraft::FlowRunResult& result) {
     QStringList arguments;
-    for (const QString& argument : stringArray(value)) {
+    for (const QString& argument : values) {
         arguments.append(expandPlaceholder(argument, request, result));
     }
     return arguments;
@@ -305,11 +348,10 @@ QJsonObject findFlow(const ipcraft::PackageSpec& package, const QString& flowId)
 }
 
 bool resolvePackageExecutable(const ipcraft::FlowRunRequest& request,
-                              const QJsonObject& command,
+                              const QString& executable,
                               const QString& path,
                               ipcraft::DiagnosticStore& diagnostics,
                               QString* executablePath) {
-    const QString executable = stringValue(command, {QStringLiteral("executable")});
     if (executable.isEmpty()) {
         addFlowDiagnostic(diagnostics,
                           QStringLiteral("flow.executable_missing"),
@@ -400,12 +442,11 @@ bool resolveFrameworkToolExecutable(const ipcraft::FlowRunRequest& request,
 }
 
 bool resolveExecutable(const ipcraft::FlowRunRequest& request,
-                       const QJsonObject& command,
+                       const QString& executable,
+                       const QString& frameworkTool,
                        const QString& stepPath,
                        ipcraft::DiagnosticStore& diagnostics,
                        QString* executablePath) {
-    const QString executable = stringValue(command, {QStringLiteral("executable")});
-    const QString frameworkTool = stringValue(command, {QStringLiteral("framework_tool")});
     if (!frameworkTool.isEmpty()) {
         if (!executable.isEmpty()) {
             addFlowDiagnostic(diagnostics,
@@ -421,18 +462,17 @@ bool resolveExecutable(const ipcraft::FlowRunRequest& request,
                                               executablePath);
     }
     return resolvePackageExecutable(request,
-                                    command,
+                                    executable,
                                     childPath(stepPath, QStringLiteral("command.executable")),
                                     diagnostics,
                                     executablePath);
 }
 
 bool resolveCwd(const QString& runRoot,
-                const QJsonObject& command,
+                const QString& requested,
                 const QString& path,
                 ipcraft::DiagnosticStore& diagnostics,
                 QString* cwd) {
-    const QString requested = stringValue(command, {QStringLiteral("cwd")});
     if (requested.isEmpty() || requested == QStringLiteral("run_dir")) {
         *cwd = canonicalOrAbsoluteRoot(runRoot);
         return true;
@@ -463,9 +503,35 @@ std::optional<CapturePolicy> capturePolicy(const QJsonObject& command,
                                            const QString& stepPath,
                                            ipcraft::DiagnosticStore& diagnostics) {
     CapturePolicy policy;
-    const QJsonObject capture = command.value(QStringLiteral("capture")).toObject();
-    const QString stdoutPath = stringValue(capture, {QStringLiteral("stdout")});
-    const QString stderrPath = stringValue(capture, {QStringLiteral("stderr")});
+    QJsonObject capture;
+    if (command.contains(QStringLiteral("capture"))) {
+        const QJsonValue captureValue = command.value(QStringLiteral("capture"));
+        if (!captureValue.isObject()) {
+            addFlowDiagnostic(diagnostics,
+                              QStringLiteral("flow.command_policy_violation"),
+                              QStringLiteral("Flow capture policy must be an object."),
+                              childPath(stepPath, QStringLiteral("command.capture")));
+            return std::nullopt;
+        }
+        capture = captureValue.toObject();
+    }
+
+    QString stdoutPath;
+    if (!optionalStringValue(capture,
+                             QStringLiteral("stdout"),
+                             childPath(stepPath, QStringLiteral("command.capture.stdout")),
+                             diagnostics,
+                             &stdoutPath)) {
+        return std::nullopt;
+    }
+    QString stderrPath;
+    if (!optionalStringValue(capture,
+                             QStringLiteral("stderr"),
+                             childPath(stepPath, QStringLiteral("command.capture.stderr")),
+                             diagnostics,
+                             &stderrPath)) {
+        return std::nullopt;
+    }
     if (!stdoutPath.isEmpty()) {
         policy.stdoutPath = stdoutPath;
     }
@@ -559,7 +625,30 @@ void addTruncationDiagnostic(ipcraft::DiagnosticStore& diagnostics,
         QStringLiteral("warning")));
 }
 
-QProcessEnvironment sanitizedEnvironment(const QJsonObject& command) {
+bool parseEnvironmentAllowList(const QJsonObject& command,
+                               const QString& stepPath,
+                               ipcraft::DiagnosticStore& diagnostics,
+                               QStringList* allowList) {
+    allowList->clear();
+    if (!command.contains(QStringLiteral("env"))) {
+        return true;
+    }
+    const QJsonValue envValue = command.value(QStringLiteral("env"));
+    if (!envValue.isObject()) {
+        addFlowDiagnostic(diagnostics,
+                          QStringLiteral("flow.command_policy_violation"),
+                          QStringLiteral("Flow environment policy must be an object."),
+                          childPath(stepPath, QStringLiteral("command.env")));
+        return false;
+    }
+    return optionalStringArrayValue(envValue.toObject(),
+                                    QStringLiteral("allow"),
+                                    childPath(stepPath, QStringLiteral("command.env.allow")),
+                                    diagnostics,
+                                    allowList);
+}
+
+QProcessEnvironment sanitizedEnvironment(const QStringList& envAllowList) {
     QProcessEnvironment inherited = QProcessEnvironment::systemEnvironment();
     QProcessEnvironment environment;
     static const QStringList kBaseAllowList{
@@ -568,8 +657,7 @@ QProcessEnvironment sanitizedEnvironment(const QJsonObject& command) {
         QStringLiteral("WINDIR")
     };
     QSet<QString> allowed(kBaseAllowList.cbegin(), kBaseAllowList.cend());
-    const QJsonObject env = command.value(QStringLiteral("env")).toObject();
-    for (const QString& key : stringArray(env.value(QStringLiteral("allow")))) {
+    for (const QString& key : envAllowList) {
         if (!key.trimmed().isEmpty()) {
             allowed.insert(key);
         }
@@ -586,7 +674,16 @@ bool runExecStep(const ipcraft::FlowRunRequest& request,
                  const QJsonObject& step,
                  const QString& stepPath,
                  ipcraft::FlowRunResult& result) {
-    const QJsonObject command = step.value(QStringLiteral("command")).toObject();
+    const QJsonValue commandValue = step.value(QStringLiteral("command"));
+    if (!commandValue.isObject()) {
+        addFlowDiagnostic(result.diagnostics,
+                          QStringLiteral("flow.command_policy_violation"),
+                          QStringLiteral("Flow exec command must be an object."),
+                          childPath(stepPath, QStringLiteral("command")));
+        return false;
+    }
+
+    const QJsonObject command = commandValue.toObject();
     if (command.contains(QStringLiteral("native"))) {
         addFlowDiagnostic(result.diagnostics,
                           QStringLiteral("flow.command_policy_violation"),
@@ -595,17 +692,44 @@ bool runExecStep(const ipcraft::FlowRunRequest& request,
         return false;
     }
 
-    QString executablePath;
-    if (!resolveExecutable(request, command, stepPath, result.diagnostics, &executablePath)) {
+    QString executable;
+    if (!optionalStringValue(command,
+                             QStringLiteral("executable"),
+                             childPath(stepPath, QStringLiteral("command.executable")),
+                             result.diagnostics,
+                             &executable)) {
         return false;
     }
 
-    QString cwd;
-    if (!resolveCwd(result.runRoot,
-                    command,
-                    childPath(stepPath, QStringLiteral("command.cwd")),
-                    result.diagnostics,
-                    &cwd)) {
+    QString frameworkTool;
+    if (!optionalStringValue(command,
+                             QStringLiteral("framework_tool"),
+                             childPath(stepPath, QStringLiteral("command.framework_tool")),
+                             result.diagnostics,
+                             &frameworkTool)) {
+        return false;
+    }
+
+    QString requestedCwd;
+    if (!optionalStringValue(command,
+                             QStringLiteral("cwd"),
+                             childPath(stepPath, QStringLiteral("command.cwd")),
+                             result.diagnostics,
+                             &requestedCwd)) {
+        return false;
+    }
+
+    QStringList arguments;
+    if (!optionalStringArrayValue(command,
+                                  QStringLiteral("args"),
+                                  childPath(stepPath, QStringLiteral("command.args")),
+                                  result.diagnostics,
+                                  &arguments)) {
+        return false;
+    }
+
+    QStringList envAllowList;
+    if (!parseEnvironmentAllowList(command, stepPath, result.diagnostics, &envAllowList)) {
         return false;
     }
 
@@ -615,6 +739,32 @@ bool runExecStep(const ipcraft::FlowRunRequest& request,
         return false;
     }
     const CapturePolicy capture = *captureResult;
+
+    const std::optional<std::chrono::milliseconds> deadline =
+        commandDeadline(command, stepPath, result.diagnostics);
+    if (!deadline.has_value()) {
+        return false;
+    }
+
+    QString executablePath;
+    if (!resolveExecutable(request,
+                           executable,
+                           frameworkTool,
+                           stepPath,
+                           result.diagnostics,
+                           &executablePath)) {
+        return false;
+    }
+
+    QString cwd;
+    if (!resolveCwd(result.runRoot,
+                    requestedCwd,
+                    childPath(stepPath, QStringLiteral("command.cwd")),
+                    result.diagnostics,
+                    &cwd)) {
+        return false;
+    }
+
     if (portablePath(capture.stdoutPath) == portablePath(capture.stderrPath)) {
         addFlowDiagnostic(result.diagnostics,
                           QStringLiteral("flow.command_policy_violation"),
@@ -633,23 +783,15 @@ bool runExecStep(const ipcraft::FlowRunRequest& request,
         return false;
     }
 
-    const std::optional<std::chrono::milliseconds> deadline =
-        commandDeadline(command, stepPath, result.diagnostics);
-    if (!deadline.has_value()) {
-        return false;
-    }
-
     QProcess process;
 #ifdef Q_OS_UNIX
     process.setUnixProcessParameters(
         QProcess::UnixProcessFlag::CreateNewSession);
 #endif
     process.setProgram(executablePath);
-    process.setArguments(expandedArguments(command.value(QStringLiteral("args")),
-                                           request,
-                                           result));
+    process.setArguments(expandedArguments(arguments, request, result));
     process.setWorkingDirectory(cwd);
-    process.setProcessEnvironment(sanitizedEnvironment(command));
+    process.setProcessEnvironment(sanitizedEnvironment(envAllowList));
     process.setProcessChannelMode(QProcess::SeparateChannels);
     process.start();
     if (!process.waitForStarted()) {
