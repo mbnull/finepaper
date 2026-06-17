@@ -2,6 +2,7 @@
 #include "project/projectdesignserializer.h"
 
 #include "ipcraft/compositionmodel.h"
+#include "ipcraft/contract/projectkeys.h"
 #include "ipcraft/core/project_document_v1.h"
 #include "ipcraft/schemaids.h"
 
@@ -9,6 +10,8 @@
 #include <QSet>
 
 namespace {
+
+namespace projectkeys = ipcraft::contract::projectkeys;
 
 QString packageRefKey(const QString& id, const QString& version) {
     return version.isEmpty() ? id : id + QLatin1Char('@') + version;
@@ -163,14 +166,14 @@ QString legacyCompositionMetadataKey() {
 }
 
 bool isSupplementField(const QString& key) {
-    return key == QStringLiteral("interfaces") ||
-           key == QStringLiteral("connections") ||
-           key == QStringLiteral("topologies") ||
-           key == QStringLiteral("constraints") ||
-           key == QStringLiteral("views") ||
-           key == QStringLiteral("diagnostics") ||
-           key == QStringLiteral("artifacts") ||
-           key == QStringLiteral("extensions");
+    return key == projectkeys::interfaces() ||
+           key == projectkeys::connections() ||
+           key == projectkeys::topologies() ||
+           key == projectkeys::constraints() ||
+           key == projectkeys::views() ||
+           key == projectkeys::diagnostics() ||
+           key == projectkeys::artifacts() ||
+           key == projectkeys::extensions();
 }
 
 bool shouldStoreSupplementValue(const QJsonValue& value) {
@@ -321,14 +324,14 @@ void mergeDesignSupplement(ipcraft::core::ProjectDesign& design,
     }
 
     QJsonObject serializedProject = ipcraft::core::ProjectDocumentV1::writeObject(design);
-    applySupplementField(serializedProject, supplement, QStringLiteral("interfaces"));
-    applySupplementField(serializedProject, supplement, QStringLiteral("connections"));
-    applySupplementField(serializedProject, supplement, QStringLiteral("topologies"));
-    applySupplementField(serializedProject, supplement, QStringLiteral("constraints"));
-    applySupplementField(serializedProject, supplement, QStringLiteral("views"));
-    applySupplementField(serializedProject, supplement, QStringLiteral("diagnostics"));
-    applySupplementField(serializedProject, supplement, QStringLiteral("artifacts"));
-    applySupplementField(serializedProject, supplement, QStringLiteral("extensions"));
+    applySupplementField(serializedProject, supplement, projectkeys::interfaces());
+    applySupplementField(serializedProject, supplement, projectkeys::connections());
+    applySupplementField(serializedProject, supplement, projectkeys::topologies());
+    applySupplementField(serializedProject, supplement, projectkeys::constraints());
+    applySupplementField(serializedProject, supplement, projectkeys::views());
+    applySupplementField(serializedProject, supplement, projectkeys::diagnostics());
+    applySupplementField(serializedProject, supplement, projectkeys::artifacts());
+    applySupplementField(serializedProject, supplement, projectkeys::extensions());
 
     const ipcraft::core::ProjectDocumentReadResult readResult =
         ipcraft::core::ProjectDocumentV1::readObject(serializedProject);
@@ -336,28 +339,28 @@ void mergeDesignSupplement(ipcraft::core::ProjectDesign& design,
         return;
     }
     const ipcraft::core::ProjectDesign& supplemented = readResult.project;
-    if (supplement.contains(QStringLiteral("interfaces"))) {
+    if (supplement.contains(projectkeys::interfaces())) {
         design.interfaces = supplemented.interfaces;
     }
-    if (supplement.contains(QStringLiteral("connections"))) {
+    if (supplement.contains(projectkeys::connections())) {
         design.connections = supplemented.connections;
     }
-    if (supplement.contains(QStringLiteral("topologies"))) {
+    if (supplement.contains(projectkeys::topologies())) {
         design.topologies = supplemented.topologies;
     }
-    if (supplement.contains(QStringLiteral("constraints"))) {
+    if (supplement.contains(projectkeys::constraints())) {
         design.constraints = supplemented.constraints;
     }
-    if (supplement.contains(QStringLiteral("views"))) {
+    if (supplement.contains(projectkeys::views())) {
         design.views = supplemented.views;
     }
-    if (supplement.contains(QStringLiteral("diagnostics"))) {
+    if (supplement.contains(projectkeys::diagnostics())) {
         design.diagnostics = supplemented.diagnostics;
     }
-    if (supplement.contains(QStringLiteral("artifacts"))) {
+    if (supplement.contains(projectkeys::artifacts())) {
         design.artifacts = supplemented.artifacts;
     }
-    if (supplement.contains(QStringLiteral("extensions"))) {
+    if (supplement.contains(projectkeys::extensions())) {
         design.extensions = supplemented.extensions;
     }
 }
@@ -387,13 +390,13 @@ ProjectDocument ProjectDesignSerializer::toDocument(const ipcraft::core::Project
             instance.native.insert(QStringLiteral("componentType"), component.type);
         }
         if (!component.identity.isEmpty()) {
-            instance.native.insert(QStringLiteral("identity"), component.identity);
+            instance.native.insert(projectkeys::identity(), component.identity);
         }
         if (!component.metadata.isEmpty()) {
-            instance.native.insert(QStringLiteral("metadata"), component.metadata);
+            instance.native.insert(projectkeys::metadata(), component.metadata);
         }
         if (!component.extensionData.isEmpty()) {
-            instance.native.insert(QStringLiteral("extensionData"), component.extensionData);
+            instance.native.insert(projectkeys::extensionData(), component.extensionData);
         }
         document.instances.append(instance);
     }
@@ -429,14 +432,14 @@ ipcraft::core::ProjectDesign ProjectDesignSerializer::fromDocument(const Project
         component.type = componentTypeFromInstance(instance);
         component.packageRef = packageRefKey(instance.package.id, instance.package.version);
         component.config = runtimeConfigFromDocumentConfig(instance.config);
-        if (instance.native.value(QStringLiteral("identity")).isObject()) {
-            component.identity = instance.native.value(QStringLiteral("identity")).toObject();
+        if (instance.native.value(projectkeys::identity()).isObject()) {
+            component.identity = instance.native.value(projectkeys::identity()).toObject();
         }
-        if (instance.native.value(QStringLiteral("metadata")).isObject()) {
-            component.metadata = instance.native.value(QStringLiteral("metadata")).toObject();
+        if (instance.native.value(projectkeys::metadata()).isObject()) {
+            component.metadata = instance.native.value(projectkeys::metadata()).toObject();
         }
-        if (instance.native.value(QStringLiteral("extensionData")).isObject()) {
-            component.extensionData = instance.native.value(QStringLiteral("extensionData")).toObject();
+        if (instance.native.value(projectkeys::extensionData()).isObject()) {
+            component.extensionData = instance.native.value(projectkeys::extensionData()).toObject();
         }
         if (instance.hasGraphConfig && !instance.graphConfigIsNull) {
             component.extensionData.insert(QStringLiteral("graph_config"), instance.graphConfig);

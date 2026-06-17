@@ -2,6 +2,7 @@
 #include "project/projectwriter.h"
 
 #include "ipcraft/compositionmodel.h"
+#include "ipcraft/contract/legacyprojectkeys.h"
 #include "ipcraft/core/project_document_v1.h"
 #include "ipcraft/core/project_design.h"
 #include "ipcraft/jsonhelpers.h"
@@ -16,6 +17,8 @@
 #include <QSet>
 
 namespace {
+
+namespace legacyprojectkeys = ipcraft::contract::legacyprojectkeys;
 
 bool isNonEmpty(const QString& value) {
     return !value.trimmed().isEmpty();
@@ -47,7 +50,7 @@ QJsonObject migrationMetadataObject(const ProjectMigration& migration) {
     insertStringIfNonEmpty(object, QStringLiteral("from_version"), migration.fromVersion);
     insertObjectIfNonEmpty(object, QStringLiteral("preserved"), migration.preserved);
     insertObjectIfNonEmpty(object, QStringLiteral("metadata"), migration.metadata);
-    insertObjectIfNonEmpty(object, QStringLiteral("native"), migration.native);
+    insertObjectIfNonEmpty(object, legacyprojectkeys::native(), migration.native);
     return object;
 }
 
@@ -89,9 +92,9 @@ void appendLegacyLayoutViews(ipcraft::core::ProjectDesign& design,
         if (canvas.isObject()) {
             view.layout.insert(QStringLiteral("canvas"), canvas.toObject());
         }
-        const QJsonValue native = legacyView.value(QStringLiteral("native"));
+        const QJsonValue native = legacyView.value(legacyprojectkeys::native());
         if (native.isObject()) {
-            view.metadata.insert(QStringLiteral("native"), native.toObject());
+            view.metadata.insert(legacyprojectkeys::native(), native.toObject());
         }
 
         existingViewIds.insert(view.id);

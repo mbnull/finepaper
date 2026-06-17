@@ -2,6 +2,8 @@
 #include "project/projectreader.h"
 
 #include "ipcraft/compositionmodel.h"
+#include "ipcraft/contract/legacyprojectkeys.h"
+#include "ipcraft/contract/projectkeys.h"
 #include "ipcraft/core/project_document_v1.h"
 #include "ipcraft/schemaids.h"
 #include "project/projectdesignserializer.h"
@@ -16,6 +18,9 @@
 #include <QSet>
 
 namespace {
+
+namespace legacyprojectkeys = ipcraft::contract::legacyprojectkeys;
+namespace projectkeys = ipcraft::contract::projectkeys;
 
 constexpr qint64 kMaxProjectFileBytes = 16 * 1024 * 1024;
 
@@ -229,7 +234,7 @@ ProjectReadResult readConnection(const QJsonObject& object,
         QStringLiteral("endpoints"),
         QStringLiteral("source"),
         QStringLiteral("properties"),
-        QStringLiteral("native")
+        legacyprojectkeys::native()
     };
 
     ProjectReadResult keyResult = validateKeys(object, allowedKeys, path);
@@ -282,8 +287,8 @@ ProjectReadResult readConnection(const QJsonObject& object,
         return propertiesResult;
     }
     ProjectReadResult nativeResult = optionalObjectValue(object,
-                                                        QStringLiteral("native"),
-                                                        objectPath(path, QStringLiteral("native")),
+                                                        legacyprojectkeys::native(),
+                                                        objectPath(path, legacyprojectkeys::native()),
                                                         &connection.native);
     if (!nativeResult.diagnostics.records.isEmpty()) {
         return nativeResult;
@@ -336,7 +341,7 @@ ProjectReadResult readExternalPort(const QJsonObject& object,
         QStringLiteral("name"),
         QStringLiteral("interface"),
         QStringLiteral("properties"),
-        QStringLiteral("native")
+        legacyprojectkeys::native()
     };
 
     ProjectReadResult keyResult = validateKeys(object, allowedKeys, path);
@@ -382,8 +387,8 @@ ProjectReadResult readExternalPort(const QJsonObject& object,
         return propertiesResult;
     }
     ProjectReadResult nativeResult = optionalObjectValue(object,
-                                                        QStringLiteral("native"),
-                                                        objectPath(path, QStringLiteral("native")),
+                                                        legacyprojectkeys::native(),
+                                                        objectPath(path, legacyprojectkeys::native()),
                                                         &port.native);
     if (!nativeResult.diagnostics.records.isEmpty()) {
         return nativeResult;
@@ -397,8 +402,8 @@ ProjectReadResult readMigration(const QJsonObject& object, ProjectMigration* out
         QStringLiteral("from_schema"),
         QStringLiteral("from_version"),
         QStringLiteral("preserved"),
-        QStringLiteral("metadata"),
-        QStringLiteral("native")
+        projectkeys::metadata(),
+        legacyprojectkeys::native()
     };
     ProjectReadResult keyResult = validateKeys(object,
                                                allowedKeys,
@@ -432,14 +437,14 @@ ProjectReadResult readMigration(const QJsonObject& object, ProjectMigration* out
         return preservedResult;
     }
     ProjectReadResult metadataResult = optionalObjectValue(object,
-                                                          QStringLiteral("metadata"),
+                                                          projectkeys::metadata(),
                                                           QStringLiteral("$.migration.metadata"),
                                                           &migration.metadata);
     if (!metadataResult.diagnostics.records.isEmpty()) {
         return metadataResult;
     }
     ProjectReadResult nativeResult = optionalObjectValue(object,
-                                                        QStringLiteral("native"),
+                                                        legacyprojectkeys::native(),
                                                         QStringLiteral("$.migration.native"),
                                                         &migration.native);
     if (!nativeResult.diagnostics.records.isEmpty()) {
@@ -451,15 +456,15 @@ ProjectReadResult readMigration(const QJsonObject& object, ProjectMigration* out
 
 ProjectReadResult validateRootKeys(const QJsonObject& root) {
     static const QSet<QString> allowedKeys = {
-        QStringLiteral("schema"),
-        QStringLiteral("project"),
-        QStringLiteral("instances"),
-        QStringLiteral("composition"),
-        QStringLiteral("layout"),
-        QStringLiteral("diagnostics"),
-        QStringLiteral("artifacts"),
-        QStringLiteral("migration"),
-        QStringLiteral("native")
+        projectkeys::schema(),
+        legacyprojectkeys::project(),
+        legacyprojectkeys::instances(),
+        legacyprojectkeys::composition(),
+        legacyprojectkeys::layout(),
+        projectkeys::diagnostics(),
+        projectkeys::artifacts(),
+        legacyprojectkeys::migration(),
+        legacyprojectkeys::native()
     };
 
     QString unknownKey;
@@ -473,12 +478,12 @@ ProjectReadResult validateRootKeys(const QJsonObject& root) {
 
 ProjectReadResult validateProjectObject(const QJsonObject& project) {
     static const QSet<QString> allowedKeys = {
-        QStringLiteral("id"),
-        QStringLiteral("name"),
+        projectkeys::id(),
+        projectkeys::name(),
         QStringLiteral("description"),
         QStringLiteral("display"),
-        QStringLiteral("metadata"),
-        QStringLiteral("native")
+        projectkeys::metadata(),
+        legacyprojectkeys::native()
     };
 
     QString unknownKey;
@@ -487,7 +492,7 @@ ProjectReadResult validateProjectObject(const QJsonObject& project) {
                        QStringLiteral("Unknown project metadata field: %1").arg(unknownKey),
                        objectPath(QStringLiteral("$.project"), unknownKey));
     }
-    const QJsonValue projectId = project.value(QStringLiteral("id"));
+    const QJsonValue projectId = project.value(projectkeys::id());
     if (projectId.isUndefined()) {
         return failure(QStringLiteral("project.missing_required"),
                        QStringLiteral("Project project.id is required"),
@@ -498,7 +503,7 @@ ProjectReadResult validateProjectObject(const QJsonObject& project) {
                        QStringLiteral("Project project.id must be a non-empty string"),
                        QStringLiteral("$.project.id"));
     }
-    const QJsonValue projectName = project.value(QStringLiteral("name"));
+    const QJsonValue projectName = project.value(projectkeys::name());
     if (projectName.isUndefined()) {
         return failure(QStringLiteral("project.missing_required"),
                        QStringLiteral("Project project.name is required"),
@@ -653,7 +658,7 @@ ProjectReadResult readInstance(const QJsonObject& object,
         QStringLiteral("package"),
         QStringLiteral("config"),
         QStringLiteral("graph_config"),
-        QStringLiteral("native"),
+        legacyprojectkeys::native(),
         QStringLiteral("last_runs"),
         QStringLiteral("artifacts"),
         QStringLiteral("diagnostics"),
@@ -716,7 +721,7 @@ ProjectReadResult readInstance(const QJsonObject& object,
         return configResult;
     }
     ProjectReadResult nativeResult = optionalObjectValue(object,
-                                                        QStringLiteral("native"),
+                                                        legacyprojectkeys::native(),
                                                         QStringLiteral("$.instances[].native"),
                                                         &instance.native);
     if (!nativeResult.diagnostics.records.isEmpty()) {
@@ -922,7 +927,7 @@ ProjectReadResult validateCompositionObject(const QJsonObject& composition) {
         QStringLiteral("external_ports"),
         QStringLiteral("groups"),
         QStringLiteral("properties"),
-        QStringLiteral("native")
+        legacyprojectkeys::native()
     };
     ProjectReadResult keyResult = validateKeys(composition,
                                                allowedKeys,
@@ -976,7 +981,7 @@ QJsonObject legacyLayoutFromFlatViews(const QJsonArray& views) {
             legacyView.insert(QStringLiteral("kind"), kind);
         }
 
-        const QJsonObject layout = view.value(QStringLiteral("layout")).toObject();
+        const QJsonObject layout = view.value(projectkeys::layout()).toObject();
         const QJsonValue canvas = layout.value(QStringLiteral("canvas"));
         if (canvas.isObject()) {
             legacyView.insert(QStringLiteral("canvas"), canvas.toObject());
@@ -1012,7 +1017,7 @@ void applyMigrationMetadataProjection(ProjectDocument* document) {
     if (metadata.isObject()) {
         document->migration.metadata = metadata.toObject();
     }
-    const QJsonValue native = migration.value(QStringLiteral("native"));
+    const QJsonValue native = migration.value(legacyprojectkeys::native());
     if (native.isObject()) {
         document->migration.native = native.toObject();
     }
@@ -1032,7 +1037,7 @@ void applyFlatProjectCompatibilityProjections(ProjectDocument* document,
         appendGraphConfigProjection(instance, document);
     }
 
-    document->layout = legacyLayoutFromFlatViews(root.value(QStringLiteral("views")).toArray());
+    document->layout = legacyLayoutFromFlatViews(root.value(projectkeys::views()).toArray());
     applyLayoutProjection(document);
     document->ipcoreState = document->instances;
     applyMigrationMetadataProjection(document);
@@ -1056,7 +1061,7 @@ ProjectFileKind ProjectReader::detectKind(const QString& path) {
     }
 
     const QJsonObject root = json.object();
-    if (root.value(QStringLiteral("schema")).toString() == ipcraft::schemaids::projectV1) {
+    if (root.value(projectkeys::schema()).toString() == ipcraft::schemaids::projectV1) {
         return ProjectFileKind::Project;
     }
 
@@ -1094,14 +1099,14 @@ ProjectReadResult ProjectReader::readFile(const QString& path) {
     }
 
     const QJsonObject root = json.object();
-    if (root.value(QStringLiteral("schema")).toString() != ipcraft::schemaids::projectV1) {
+    if (root.value(projectkeys::schema()).toString() != ipcraft::schemaids::projectV1) {
         return failure(QStringLiteral("project.unsupported_schema"),
                        QStringLiteral("Unsupported project schema: %1")
-                           .arg(root.value(QStringLiteral("schema")).toString()),
+                           .arg(root.value(projectkeys::schema()).toString()),
                        QStringLiteral("$.schema"));
     }
 
-    if (!root.contains(QStringLiteral("project"))) {
+    if (!root.contains(legacyprojectkeys::project())) {
         const ipcraft::core::ProjectDocumentReadResult flatResult =
             ipcraft::core::ProjectDocumentV1::readObject(root);
         if (!flatResult.success) {
@@ -1134,7 +1139,7 @@ ProjectReadResult ProjectReader::readFile(const QString& path) {
         return rootKeysResult;
     }
 
-    const QJsonValue projectValue = root.value(QStringLiteral("project"));
+    const QJsonValue projectValue = root.value(legacyprojectkeys::project());
     if (!projectValue.isObject()) {
         return failure(QStringLiteral("project.missing_required"),
                        QStringLiteral("Project project object is required"),
@@ -1149,8 +1154,8 @@ ProjectReadResult ProjectReader::readFile(const QString& path) {
 
     ProjectDocument document;
     document.schema = ipcraft::schemaids::projectV1;
-    document.projectId = project.value(QStringLiteral("id")).toString();
-    document.projectName = project.value(QStringLiteral("name")).toString();
+    document.projectId = project.value(projectkeys::id()).toString();
+    document.projectName = project.value(projectkeys::name()).toString();
     ProjectReadResult descriptionResult = optionalStringValue(project,
                                                              QStringLiteral("description"),
                                                              QStringLiteral("$.project.description"),
@@ -1167,20 +1172,20 @@ ProjectReadResult ProjectReader::readFile(const QString& path) {
         return displayResult;
     }
     ProjectReadResult metadataResult = optionalObjectValue(project,
-                                                          QStringLiteral("metadata"),
+                                                          projectkeys::metadata(),
                                                           QStringLiteral("$.project.metadata"),
                                                           &document.projectMetadata);
     if (!metadataResult.diagnostics.records.isEmpty()) {
         return metadataResult;
     }
     ProjectReadResult projectNativeResult = optionalObjectValue(project,
-                                                               QStringLiteral("native"),
+                                                               legacyprojectkeys::native(),
                                                                QStringLiteral("$.project.native"),
                                                                &document.projectNative);
     if (!projectNativeResult.diagnostics.records.isEmpty()) {
         return projectNativeResult;
     }
-    const QJsonValue instancesValue = root.value(QStringLiteral("instances"));
+    const QJsonValue instancesValue = root.value(legacyprojectkeys::instances());
     if (!instancesValue.isUndefined() && !instancesValue.isArray()) {
         return failure(QStringLiteral("project.type_mismatch"),
                        QStringLiteral("Project instances must be an array"),
@@ -1209,7 +1214,7 @@ ProjectReadResult ProjectReader::readFile(const QString& path) {
 
     QJsonObject composition;
     ProjectReadResult compositionObjectResult = optionalObjectValue(root,
-                                                                    QStringLiteral("composition"),
+                                                                    legacyprojectkeys::composition(),
                                                                     QStringLiteral("$.composition"),
                                                                     &composition);
     if (!compositionObjectResult.diagnostics.records.isEmpty()) {
@@ -1294,7 +1299,7 @@ ProjectReadResult ProjectReader::readFile(const QString& path) {
     }
     ProjectReadResult compositionNativeResult = optionalObjectValue(
         composition,
-        QStringLiteral("native"),
+        legacyprojectkeys::native(),
         QStringLiteral("$.composition.native"),
         &document.composition.native);
     if (!compositionNativeResult.diagnostics.records.isEmpty()) {
@@ -1302,7 +1307,7 @@ ProjectReadResult ProjectReader::readFile(const QString& path) {
     }
 
     ProjectReadResult layoutResult = optionalObjectValue(root,
-                                                        QStringLiteral("layout"),
+                                                        legacyprojectkeys::layout(),
                                                         QStringLiteral("$.layout"),
                                                         &document.layout);
     if (!layoutResult.diagnostics.records.isEmpty()) {
@@ -1311,7 +1316,7 @@ ProjectReadResult ProjectReader::readFile(const QString& path) {
     applyLayoutProjection(&document);
     QJsonObject diagnostics;
     ProjectReadResult diagnosticsResult = optionalObjectValue(root,
-                                                             QStringLiteral("diagnostics"),
+                                                             projectkeys::diagnostics(),
                                                              QStringLiteral("$.diagnostics"),
                                                              &diagnostics);
     if (!diagnosticsResult.diagnostics.records.isEmpty()) {
@@ -1319,14 +1324,14 @@ ProjectReadResult ProjectReader::readFile(const QString& path) {
     }
     ProjectReadResult diagnosticsShapeResult = validateDiagnosticsObject(
         diagnostics,
-        root.contains(QStringLiteral("diagnostics")),
+        root.contains(projectkeys::diagnostics()),
         QStringLiteral("$.diagnostics"));
     if (!diagnosticsShapeResult.diagnostics.records.isEmpty()) {
         return diagnosticsShapeResult;
     }
     document.diagnostics = ipcraft::DiagnosticStore::fromJson(diagnostics);
     ProjectReadResult artifactsResult = optionalObjectValue(root,
-                                                           QStringLiteral("artifacts"),
+                                                           projectkeys::artifacts(),
                                                            QStringLiteral("$.artifacts"),
                                                            &document.artifacts);
     if (!artifactsResult.diagnostics.records.isEmpty()) {
@@ -1334,7 +1339,7 @@ ProjectReadResult ProjectReader::readFile(const QString& path) {
     }
     QJsonObject migration;
     ProjectReadResult migrationResult = optionalObjectValue(root,
-                                                           QStringLiteral("migration"),
+                                                           legacyprojectkeys::migration(),
                                                            QStringLiteral("$.migration"),
                                                            &migration);
     if (!migrationResult.diagnostics.records.isEmpty()) {
@@ -1345,7 +1350,7 @@ ProjectReadResult ProjectReader::readFile(const QString& path) {
         return migrationReadResult;
     }
     ProjectReadResult nativeResult = optionalObjectValue(root,
-                                                        QStringLiteral("native"),
+                                                        legacyprojectkeys::native(),
                                                         QStringLiteral("$.native"),
                                                         &document.native);
     if (!nativeResult.diagnostics.records.isEmpty()) {

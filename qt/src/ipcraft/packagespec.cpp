@@ -1,5 +1,6 @@
 #include "ipcraft/packagespec.h"
 
+#include "ipcraft/contract/packagekeys.h"
 #include "ipcraft/schemaids.h"
 
 #include <QDir>
@@ -11,6 +12,8 @@
 #include <QSet>
 
 namespace {
+
+namespace packagekeys = ipcraft::contract::packagekeys;
 
 constexpr auto kPackageFileName = "ipcraft.json";
 constexpr qint64 kMaxPackageFileBytes = 16 * 1024 * 1024;
@@ -594,25 +597,25 @@ void validateNativeEditorMetadata(const QJsonObject& native,
 
 const QSet<QString>& knownRootKeys() {
     static const QSet<QString> keys{
-        QStringLiteral("schema"),
-        QStringLiteral("id"),
-        QStringLiteral("version"),
-        QStringLiteral("name"),
-        QStringLiteral("display"),
-        QStringLiteral("extensions"),
-        QStringLiteral("config_schema"),
-        QStringLiteral("interfaces"),
-        QStringLiteral("connection_rules"),
-        QStringLiteral("emitters"),
-        QStringLiteral("flows"),
-        QStringLiteral("artifacts"),
-        QStringLiteral("diagnostics"),
-        QStringLiteral("views"),
-        QStringLiteral("plugin"),
-        QStringLiteral("native_schema"),
-        QStringLiteral("metadata"),
-        QStringLiteral("native"),
-        QStringLiteral("graph_config"),
+        packagekeys::schema(),
+        packagekeys::id(),
+        packagekeys::version(),
+        packagekeys::name(),
+        packagekeys::display(),
+        packagekeys::extensions(),
+        packagekeys::configSchema(),
+        packagekeys::interfaces(),
+        packagekeys::connectionRules(),
+        packagekeys::emitters(),
+        packagekeys::flows(),
+        packagekeys::artifacts(),
+        packagekeys::diagnostics(),
+        packagekeys::views(),
+        packagekeys::plugin(),
+        packagekeys::nativeSchema(),
+        packagekeys::metadata(),
+        packagekeys::native(),
+        packagekeys::graphConfig(),
     };
     return keys;
 }
@@ -1021,7 +1024,7 @@ void validatePathFields(const QString& packageRootPath,
 void parseExtensions(const QJsonObject& root,
                      ipcraft::PackageSpec& spec,
                      ipcraft::DiagnosticStore& diagnostics) {
-    const QJsonValue value = root.value(QStringLiteral("extensions"));
+    const QJsonValue value = root.value(packagekeys::extensions());
     if (value.isUndefined()) {
         return;
     }
@@ -1045,7 +1048,7 @@ void parseExtensions(const QJsonObject& root,
                         ipcraft::PackageExtensionDeclaration declaration;
                         declaration.id = id;
                         declaration.required = true;
-                        declaration.descriptor.insert(QStringLiteral("id"), id);
+                        declaration.descriptor.insert(packagekeys::id(), id);
                         spec.extensions.append(id);
                         spec.extensionDeclarations.append(declaration);
                         declaredIds.insert(id);
@@ -1056,35 +1059,35 @@ void parseExtensions(const QJsonObject& root,
             if (item.isObject()) {
                 const QJsonObject extensionObject = item.toObject();
                 hasOnlyKeys(extensionObject,
-                            {QStringLiteral("id"),
-                             QStringLiteral("required"),
-                             QStringLiteral("version"),
-                             QStringLiteral("metadata"),
-                             QStringLiteral("native")},
+                            {packagekeys::id(),
+                             packagekeys::required(),
+                             packagekeys::version(),
+                             packagekeys::metadata(),
+                             packagekeys::native()},
                             itemPath,
                             diagnostics);
                 const QString id = requiredString(extensionObject,
-                                                  QStringLiteral("id"),
-                                                  childPath(itemPath, QStringLiteral("id")),
+                                                  packagekeys::id(),
+                                                  childPath(itemPath, packagekeys::id()),
                                                   diagnostics);
                 const bool required = optionalBool(extensionObject,
-                                                   QStringLiteral("required"),
-                                                   childPath(itemPath, QStringLiteral("required")),
+                                                   packagekeys::required(),
+                                                   childPath(itemPath, packagekeys::required()),
                                                    diagnostics,
                                                    true);
                 optionalString(extensionObject,
-                               QStringLiteral("version"),
-                               childPath(itemPath, QStringLiteral("version")),
+                               packagekeys::version(),
+                               childPath(itemPath, packagekeys::version()),
                                diagnostics);
                 QJsonObject ignored;
                 optionalObject(extensionObject,
-                               QStringLiteral("metadata"),
-                               childPath(itemPath, QStringLiteral("metadata")),
+                               packagekeys::metadata(),
+                               childPath(itemPath, packagekeys::metadata()),
                                diagnostics,
                                &ignored);
                 optionalObject(extensionObject,
-                               QStringLiteral("native"),
-                               childPath(itemPath, QStringLiteral("native")),
+                               packagekeys::native(),
+                               childPath(itemPath, packagekeys::native()),
                                diagnostics,
                                &ignored);
                 if (!id.isEmpty() && !declaredIds.contains(id)) {
@@ -1145,7 +1148,7 @@ void requireExtension(const ipcraft::PackageSpec& spec,
 void enforceExtensionRules(const QJsonObject& root,
                            const ipcraft::PackageSpec& spec,
                            ipcraft::DiagnosticStore& diagnostics) {
-    const QJsonObject configSchema = root.value(QStringLiteral("config_schema")).toObject();
+    const QJsonObject configSchema = root.value(packagekeys::configSchema()).toObject();
     if (configSchema.contains(QStringLiteral("parameters"))) {
         requireExtension(spec, diagnostics, QStringLiteral("$.config_schema.parameters"), QStringLiteral("ipcraft.config.params"));
     }
@@ -1158,28 +1161,28 @@ void enforceExtensionRules(const QJsonObject& root,
     if (configSchema.contains(QStringLiteral("files"))) {
         requireExtension(spec, diagnostics, QStringLiteral("$.config_schema.files"), QStringLiteral("ipcraft.config.files"));
     }
-    if (root.contains(QStringLiteral("interfaces"))) {
+    if (root.contains(packagekeys::interfaces())) {
         requireExtension(spec, diagnostics, QStringLiteral("$.interfaces"), QStringLiteral("ipcraft.interfaces"));
     }
-    if (root.contains(QStringLiteral("connection_rules"))) {
+    if (root.contains(packagekeys::connectionRules())) {
         requireExtension(spec, diagnostics, QStringLiteral("$.connection_rules"), QStringLiteral("ipcraft.composition"));
     }
-    if (root.contains(QStringLiteral("emitters"))) {
+    if (root.contains(packagekeys::emitters())) {
         requireExtension(spec, diagnostics, QStringLiteral("$.emitters"), QStringLiteral("ipcraft.emitters"));
     }
-    if (root.contains(QStringLiteral("flows"))) {
+    if (root.contains(packagekeys::flows())) {
         requireExtension(spec, diagnostics, QStringLiteral("$.flows"), QStringLiteral("ipcraft.flows"));
     }
-    if (root.contains(QStringLiteral("artifacts"))) {
+    if (root.contains(packagekeys::artifacts())) {
         requireExtension(spec, diagnostics, QStringLiteral("$.artifacts"), QStringLiteral("ipcraft.artifacts"));
     }
-    if (root.contains(QStringLiteral("diagnostics"))) {
+    if (root.contains(packagekeys::diagnostics())) {
         requireExtension(spec, diagnostics, QStringLiteral("$.diagnostics"), QStringLiteral("ipcraft.diagnostics"));
     }
-    if (root.contains(QStringLiteral("views"))) {
+    if (root.contains(packagekeys::views())) {
         requireExtension(spec, diagnostics, QStringLiteral("$.views"), QStringLiteral("ipcraft.views"));
     }
-    if (root.contains(QStringLiteral("graph_config"))) {
+    if (root.contains(packagekeys::graphConfig())) {
         requireExtension(spec, diagnostics, QStringLiteral("$.graph_config"), QStringLiteral("ipcraft.graph_config"));
     }
 }
@@ -1236,7 +1239,7 @@ void parseConnectionRules(const QJsonObject& root,
                           ipcraft::DiagnosticStore& diagnostics) {
     QJsonObject object;
     if (!optionalObject(root,
-                        QStringLiteral("connection_rules"),
+                        packagekeys::connectionRules(),
                         QStringLiteral("$.connection_rules"),
                         diagnostics,
                         &object)) {
@@ -1351,7 +1354,7 @@ void parseInterfaces(const QJsonObject& root,
                      ipcraft::DiagnosticStore& diagnostics) {
     QJsonArray interfaces;
     if (!optionalArray(root,
-                      QStringLiteral("interfaces"),
+                      packagekeys::interfaces(),
                       QStringLiteral("$.interfaces"),
                       diagnostics,
                       &interfaces)) {
@@ -1484,49 +1487,49 @@ PackageSpecReadResult PackageSpecReader::readSpecFile(const QString& specPath) c
     const QJsonObject root = document.object();
     collectUnknownRootSections(root, result.spec);
 
-    result.spec.schema = requiredString(root, QStringLiteral("schema"), QStringLiteral("$.schema"), result.diagnostics);
+    result.spec.schema = requiredString(root, packagekeys::schema(), QStringLiteral("$.schema"), result.diagnostics);
     if (!result.spec.schema.isEmpty() && result.spec.schema != schemaids::packageV1) {
         addDiagnostic(result.diagnostics,
                       QStringLiteral("package.unsupported_schema"),
                       QStringLiteral("Package schema must be ipcraft.package.v1."),
                       QStringLiteral("$.schema"));
     }
-    result.spec.id = requiredString(root, QStringLiteral("id"), QStringLiteral("$.id"), result.diagnostics);
-    result.spec.version = requiredString(root, QStringLiteral("version"), QStringLiteral("$.version"), result.diagnostics);
-    result.spec.name = requiredString(root, QStringLiteral("name"), QStringLiteral("$.name"), result.diagnostics);
+    result.spec.id = requiredString(root, packagekeys::id(), QStringLiteral("$.id"), result.diagnostics);
+    result.spec.version = requiredString(root, packagekeys::version(), QStringLiteral("$.version"), result.diagnostics);
+    result.spec.name = requiredString(root, packagekeys::name(), QStringLiteral("$.name"), result.diagnostics);
 
-    optionalObject(root, QStringLiteral("display"), QStringLiteral("$.display"), result.diagnostics, &result.spec.display);
+    optionalObject(root, packagekeys::display(), QStringLiteral("$.display"), result.diagnostics, &result.spec.display);
     parseExtensions(root, result.spec, result.diagnostics);
-    if (optionalObject(root, QStringLiteral("config_schema"), QStringLiteral("$.config_schema"), result.diagnostics, &result.spec.configSchema)) {
+    if (optionalObject(root, packagekeys::configSchema(), QStringLiteral("$.config_schema"), result.diagnostics, &result.spec.configSchema)) {
         validateConfigSchema(result.spec.configSchema, result.diagnostics);
     }
     parseInterfaces(root, result.spec, result.diagnostics);
     parseConnectionRules(root, result.spec, result.diagnostics);
-    if (optionalArray(root, QStringLiteral("emitters"), QStringLiteral("$.emitters"), result.diagnostics, &result.spec.emitters)) {
+    if (optionalArray(root, packagekeys::emitters(), QStringLiteral("$.emitters"), result.diagnostics, &result.spec.emitters)) {
         validateArrayItemsAreObjects(result.spec.emitters, QStringLiteral("$.emitters"), result.diagnostics);
     }
-    if (optionalArray(root, QStringLiteral("flows"), QStringLiteral("$.flows"), result.diagnostics, &result.spec.flows)) {
+    if (optionalArray(root, packagekeys::flows(), QStringLiteral("$.flows"), result.diagnostics, &result.spec.flows)) {
         validateArrayItemsAreObjects(result.spec.flows, QStringLiteral("$.flows"), result.diagnostics);
         normalizeFlowScopes(&result.spec.flows);
         validateFlows(result.spec.flows, result.diagnostics);
     }
-    if (optionalArray(root, QStringLiteral("artifacts"), QStringLiteral("$.artifacts"), result.diagnostics, &result.spec.artifacts)) {
+    if (optionalArray(root, packagekeys::artifacts(), QStringLiteral("$.artifacts"), result.diagnostics, &result.spec.artifacts)) {
         validateArrayItemsAreObjects(result.spec.artifacts, QStringLiteral("$.artifacts"), result.diagnostics);
     }
-    optionalObject(root, QStringLiteral("diagnostics"), QStringLiteral("$.diagnostics"), result.diagnostics, &result.spec.diagnostics);
-    if (optionalArray(root, QStringLiteral("views"), QStringLiteral("$.views"), result.diagnostics, &result.spec.views)) {
+    optionalObject(root, packagekeys::diagnostics(), QStringLiteral("$.diagnostics"), result.diagnostics, &result.spec.diagnostics);
+    if (optionalArray(root, packagekeys::views(), QStringLiteral("$.views"), result.diagnostics, &result.spec.views)) {
         validateArrayItemsAreObjects(result.spec.views, QStringLiteral("$.views"), result.diagnostics);
     }
-    if (optionalObject(root, QStringLiteral("graph_config"), QStringLiteral("$.graph_config"), result.diagnostics, &result.spec.graphConfig)) {
+    if (optionalObject(root, packagekeys::graphConfig(), QStringLiteral("$.graph_config"), result.diagnostics, &result.spec.graphConfig)) {
         validateGraphConfigProperties(result.spec.graphConfig, QStringLiteral("$.graph_config"), result.diagnostics);
     }
-    optionalObject(root, QStringLiteral("native_schema"), QStringLiteral("$.native_schema"), result.diagnostics, &result.spec.nativeSchema);
-    optionalObject(root, QStringLiteral("metadata"), QStringLiteral("$.metadata"), result.diagnostics, &result.spec.metadata);
-    if (optionalObject(root, QStringLiteral("native"), QStringLiteral("$.native"), result.diagnostics, &result.spec.native)) {
+    optionalObject(root, packagekeys::nativeSchema(), QStringLiteral("$.native_schema"), result.diagnostics, &result.spec.nativeSchema);
+    optionalObject(root, packagekeys::metadata(), QStringLiteral("$.metadata"), result.diagnostics, &result.spec.metadata);
+    if (optionalObject(root, packagekeys::native(), QStringLiteral("$.native"), result.diagnostics, &result.spec.native)) {
         validateNativeEditorMetadata(result.spec.native, result.diagnostics);
     }
 
-    const QJsonValue pluginValue = root.value(QStringLiteral("plugin"));
+    const QJsonValue pluginValue = root.value(packagekeys::plugin());
     if (pluginValue.isObject()) {
         result.spec.hasPlugin = true;
         result.spec.plugin = pluginValue.toObject();

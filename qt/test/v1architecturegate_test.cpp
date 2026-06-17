@@ -735,6 +735,105 @@ void testRuleIdCatalogContainsEveryPublicDiagnostic() {
     failIfViolations("rule-id catalog must include every public diagnostic rule", violations);
 }
 
+void testFlowRunnerUsesCentralContractKeysAndDiagnosticIds() {
+    const QString flowRunnerPath = QStringLiteral("qt/src/ipcraft/flowrunner.cpp");
+    const QString source = readTextFile(repositoryPath(flowRunnerPath));
+
+    QStringList violations;
+    if (!source.contains(QStringLiteral("#include \"ipcraft/contract/flowkeys.h\""))) {
+        violations.append(QStringLiteral("%1 does not include flowkeys.h").arg(flowRunnerPath));
+    }
+    if (!source.contains(QStringLiteral("#include \"ipcraft/diagnosticids.h\""))) {
+        violations.append(QStringLiteral("%1 does not include diagnosticids.h").arg(flowRunnerPath));
+    }
+
+    const QStringList requiredHelpers = {
+        QStringLiteral("command"),
+        QStringLiteral("executable"),
+        QStringLiteral("frameworkTool"),
+        QStringLiteral("args"),
+        QStringLiteral("env"),
+        QStringLiteral("allow"),
+        QStringLiteral("capture"),
+        QStringLiteral("stdout"),
+        QStringLiteral("stderr"),
+        QStringLiteral("cwd"),
+        QStringLiteral("timeoutMs"),
+        QStringLiteral("native")
+    };
+    for (const QString& helper : requiredHelpers) {
+        const QString token = QStringLiteral("flowkeys::%1()").arg(helper);
+        if (!source.contains(token)) {
+            violations.append(QStringLiteral("%1 does not use %2").arg(flowRunnerPath, token));
+        }
+    }
+
+    for (const QFileInfo& fileInfo : repositoryTextFiles()) {
+        const QString relativePath = relativeRepositoryPath(fileInfo.absoluteFilePath());
+        if (!(relativePath.startsWith(QStringLiteral("qt/src/")) ||
+              relativePath.startsWith(QStringLiteral("qt/inc/"))) ||
+            relativePath == QStringLiteral("qt/inc/ipcraft/diagnosticids.h")) {
+            continue;
+        }
+
+        const QString productionSource = readTextFile(fileInfo.absoluteFilePath());
+        if (productionSource.contains(QStringLiteral("flow.command_policy_violation"))) {
+            violations.append(QStringLiteral("%1 contains raw flow.command_policy_violation")
+                                  .arg(relativePath));
+        }
+    }
+
+    failIfViolations("FlowRunner command parsing must use contract keys and diagnostic IDs",
+                     violations);
+}
+
+void testProjectCompatibilityWrapperKeysAreCentralized() {
+    const QString readerPath = QStringLiteral("qt/src/project/projectreader.cpp");
+    const QString writerPath = QStringLiteral("qt/src/project/projectwriter.cpp");
+    const QString reader = readTextFile(repositoryPath(readerPath));
+    const QString writer = readTextFile(repositoryPath(writerPath));
+
+    QStringList violations;
+    if (!reader.contains(QStringLiteral("#include \"ipcraft/contract/legacyprojectkeys.h\""))) {
+        violations.append(QStringLiteral("%1 does not include legacyprojectkeys.h").arg(readerPath));
+    }
+
+    const QStringList legacyHelpers = {
+        QStringLiteral("project"),
+        QStringLiteral("instances"),
+        QStringLiteral("composition"),
+        QStringLiteral("layout"),
+        QStringLiteral("migration"),
+        QStringLiteral("native")
+    };
+    for (const QString& helper : legacyHelpers) {
+        const QString token = QStringLiteral("legacyprojectkeys::%1()").arg(helper);
+        if (!reader.contains(token)) {
+            violations.append(QStringLiteral("%1 does not route wrapper key through %2")
+                                  .arg(readerPath, token));
+        }
+    }
+
+    if (!writer.contains(QStringLiteral("#include \"ipcraft/contract/legacyprojectkeys.h\""))) {
+        violations.append(QStringLiteral("%1 does not include legacyprojectkeys.h").arg(writerPath));
+    }
+    for (const QString& key : {
+             QStringLiteral("instances"),
+             QStringLiteral("composition"),
+             QStringLiteral("layout"),
+             QStringLiteral("migration"),
+             QStringLiteral("native")
+         }) {
+        if (writer.contains(QStringLiteral("QStringLiteral(\"%1\")").arg(key))) {
+            violations.append(QStringLiteral("%1 contains raw legacy wrapper key %2")
+                                  .arg(writerPath, key));
+        }
+    }
+
+    failIfViolations("legacy project wrapper keys must be isolated behind compatibility helpers",
+                     violations);
+}
+
 QString combinedExampleText(const QFileInfo& directoryInfo) {
     QStringList chunks;
     QDirIterator iterator(directoryInfo.absoluteFilePath(), QDir::Files, QDirIterator::Subdirectories);
@@ -823,6 +922,10 @@ int main(int argc, char** argv) {
          testAuditDocsAndSchemasExist},
         {QStringLiteral("testRuleIdCatalogContainsEveryPublicDiagnostic"),
          testRuleIdCatalogContainsEveryPublicDiagnostic},
+        {QStringLiteral("testFlowRunnerUsesCentralContractKeysAndDiagnosticIds"),
+         testFlowRunnerUsesCentralContractKeysAndDiagnosticIds},
+        {QStringLiteral("testProjectCompatibilityWrapperKeysAreCentralized"),
+         testProjectCompatibilityWrapperKeysAreCentralized},
         {QStringLiteral("testNegativeContractExamplesExist"),
          testNegativeContractExamplesExist}
     };

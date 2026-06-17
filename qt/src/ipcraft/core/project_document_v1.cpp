@@ -1,5 +1,6 @@
 #include "ipcraft/core/project_document_v1.h"
 
+#include "ipcraft/contract/projectkeys.h"
 #include "ipcraft/schemaids.h"
 
 #include <QJsonArray>
@@ -10,6 +11,8 @@
 
 namespace ipcraft::core {
 namespace {
+
+namespace projectkeys = ipcraft::contract::projectkeys;
 
 QJsonObject objectValue(const QJsonObject& object, const QString& key) {
     const QJsonValue value = object.value(key);
@@ -61,20 +64,20 @@ ValidationIssue issue(const QString& code, const QString& message, const QString
 
 bool isAllowedTopLevelKey(const QString& key) {
     static const QSet<QString> allowedKeys{
-        QStringLiteral("schema"),
-        QStringLiteral("id"),
-        QStringLiteral("name"),
-        QStringLiteral("packages"),
-        QStringLiteral("components"),
-        QStringLiteral("interfaces"),
-        QStringLiteral("connections"),
-        QStringLiteral("topologies"),
-        QStringLiteral("constraints"),
-        QStringLiteral("views"),
-        QStringLiteral("diagnostics"),
-        QStringLiteral("artifacts"),
-        QStringLiteral("extensions"),
-        QStringLiteral("metadata")
+        projectkeys::schema(),
+        projectkeys::id(),
+        projectkeys::name(),
+        projectkeys::packages(),
+        projectkeys::components(),
+        projectkeys::interfaces(),
+        projectkeys::connections(),
+        projectkeys::topologies(),
+        projectkeys::constraints(),
+        projectkeys::views(),
+        projectkeys::diagnostics(),
+        projectkeys::artifacts(),
+        projectkeys::extensions(),
+        projectkeys::metadata()
     };
 
     return allowedKeys.contains(key);
@@ -270,7 +273,7 @@ void appendNonObjectArrayEntryIssues(QVector<ValidationIssue>& issues,
 
 void appendTopologyShapeIssues(QVector<ValidationIssue>& issues,
                                const QJsonObject& project) {
-    const QJsonArray topologies = project.value(QStringLiteral("topologies")).toArray();
+    const QJsonArray topologies = project.value(projectkeys::topologies()).toArray();
     for (qsizetype index = 0; index < topologies.size(); ++index) {
         if (!topologies.at(index).isObject()) {
             continue;
@@ -281,80 +284,80 @@ void appendTopologyShapeIssues(QVector<ValidationIssue>& issues,
         appendUnknownFieldIssues(issues,
                                  topology,
                                  path,
-                                 {QStringLiteral("id"),
-                                  QStringLiteral("schema"),
-                                  QStringLiteral("ownerComponentId"),
-                                  QStringLiteral("kind"),
-                                  QStringLiteral("family"),
-                                  QStringLiteral("providerRef"),
-                                  QStringLiteral("parameters"),
-                                  QStringLiteral("constraints"),
-                                  QStringLiteral("nodes"),
-                                  QStringLiteral("links"),
-                                  QStringLiteral("attachments"),
-                                  QStringLiteral("routing"),
-                                  QStringLiteral("metadata")});
-        if (topology.value(QStringLiteral("schema")).toString() ==
+                                 {projectkeys::id(),
+                                  projectkeys::schema(),
+                                  projectkeys::ownerComponentId(),
+                                  projectkeys::kind(),
+                                  projectkeys::family(),
+                                  projectkeys::providerRef(),
+                                  projectkeys::parameters(),
+                                  projectkeys::constraints(),
+                                  projectkeys::nodes(),
+                                  projectkeys::links(),
+                                  projectkeys::attachments(),
+                                  projectkeys::routing(),
+                                  projectkeys::metadata()});
+        if (topology.value(projectkeys::schema()).toString() ==
             schemaids::topologyParametricV1) {
-            if (!topology.contains(QStringLiteral("parameters"))) {
+            if (!topology.contains(projectkeys::parameters())) {
                 issues.append(issue(QStringLiteral("topology.missing_parameters"),
                                     QStringLiteral("Parametric topology parameters are required."),
-                                    childPath(path, QStringLiteral("parameters"))));
+                                    childPath(path, projectkeys::parameters())));
             }
 
-            if (topology.contains(QStringLiteral("nodes"))) {
+            if (topology.contains(projectkeys::nodes())) {
                 issues.append(issue(QStringLiteral("project.parametric_topology_nodes_forbidden"),
                                     QStringLiteral("Parametric topology must not contain graph nodes."),
-                                    childPath(path, QStringLiteral("nodes"))));
+                                    childPath(path, projectkeys::nodes())));
             }
 
-            if (topology.contains(QStringLiteral("links"))) {
+            if (topology.contains(projectkeys::links())) {
                 issues.append(issue(QStringLiteral("project.parametric_topology_links_forbidden"),
                                     QStringLiteral("Parametric topology must not contain graph links."),
-                                    childPath(path, QStringLiteral("links"))));
+                                    childPath(path, projectkeys::links())));
             }
         }
 
-        if (topology.value(QStringLiteral("schema")).toString() ==
+        if (topology.value(projectkeys::schema()).toString() ==
             schemaids::topologyGraphV1) {
-            if (!topology.contains(QStringLiteral("nodes"))) {
+            if (!topology.contains(projectkeys::nodes())) {
                 issues.append(issue(QStringLiteral("topology.missing_nodes"),
                                     QStringLiteral("Graph topology nodes are required."),
-                                    childPath(path, QStringLiteral("nodes"))));
+                                    childPath(path, projectkeys::nodes())));
             }
 
-            if (!topology.contains(QStringLiteral("links"))) {
+            if (!topology.contains(projectkeys::links())) {
                 issues.append(issue(QStringLiteral("topology.missing_links"),
                                     QStringLiteral("Graph topology links are required."),
-                                    childPath(path, QStringLiteral("links"))));
+                                    childPath(path, projectkeys::links())));
             }
         }
 
         appendObjectFieldShapeIssues(issues,
                                      topology,
                                      path,
-                                     {{QStringLiteral("parameters"),
+                                     {{projectkeys::parameters(),
                                        QStringLiteral("project.invalid_topology_parameters_shape")},
-                                      {QStringLiteral("constraints"),
+                                      {projectkeys::constraints(),
                                        QStringLiteral("project.invalid_topology_constraints_shape")},
-                                      {QStringLiteral("routing"),
+                                      {projectkeys::routing(),
                                        QStringLiteral("project.invalid_topology_routing_shape")},
-                                      {QStringLiteral("metadata"),
+                                      {projectkeys::metadata(),
                                        QStringLiteral("project.invalid_topology_metadata_shape")}});
         appendObjectArrayFieldShapeIssues(issues,
                                           topology,
                                           path,
-                                          {{QStringLiteral("nodes"),
+                                          {{projectkeys::nodes(),
                                             QStringLiteral("project.invalid_topology_nodes_shape"),
                                             QStringLiteral("project.invalid_topology_node_shape")},
-                                           {QStringLiteral("links"),
+                                           {projectkeys::links(),
                                             QStringLiteral("project.invalid_topology_links_shape"),
                                             QStringLiteral("project.invalid_topology_link_shape")},
-                                           {QStringLiteral("attachments"),
+                                           {projectkeys::attachments(),
                                             QStringLiteral("project.invalid_topology_attachments_shape"),
                                             QStringLiteral("project.invalid_topology_attachment_shape")}});
 
-        const QJsonValue attachmentsValue = topology.value(QStringLiteral("attachments"));
+        const QJsonValue attachmentsValue = topology.value(projectkeys::attachments());
         if (!attachmentsValue.isArray()) {
             continue;
         }
@@ -372,20 +375,20 @@ void appendTopologyShapeIssues(QVector<ValidationIssue>& issues,
             appendUnknownFieldIssues(issues,
                                      attachment,
                                      attachmentPath,
-                                     {QStringLiteral("id"),
-                                      QStringLiteral("topologyId"),
-                                      QStringLiteral("attachmentPoint"),
-                                      QStringLiteral("componentRef"),
-                                      QStringLiteral("interfaceRef"),
-                                      QStringLiteral("adapterRef"),
-                                      QStringLiteral("config")});
+                                     {projectkeys::id(),
+                                      projectkeys::topologyId(),
+                                      projectkeys::attachmentPoint(),
+                                      projectkeys::componentRef(),
+                                      projectkeys::interfaceRef(),
+                                      projectkeys::adapterRef(),
+                                      projectkeys::config()});
             appendObjectFieldShapeIssues(
                 issues,
                 attachment,
                 attachmentPath,
-                {{QStringLiteral("attachmentPoint"),
+                {{projectkeys::attachmentPoint(),
                   QStringLiteral("project.invalid_topology_attachment_point_shape")},
-                 {QStringLiteral("config"),
+                 {projectkeys::config(),
                   QStringLiteral("project.invalid_topology_attachment_config_shape")}});
         }
     }
@@ -396,134 +399,134 @@ void appendReadShapeIssues(QVector<ValidationIssue>& issues,
     appendUnknownTopLevelFieldIssues(issues, object);
     appendRequiredTopLevelFieldIssue(issues,
                                      object,
-                                     QStringLiteral("packages"),
+                                     projectkeys::packages(),
                                      QStringLiteral("project.missing_packages"));
     appendRequiredTopLevelFieldIssue(issues,
                                      object,
-                                     QStringLiteral("components"),
+                                     projectkeys::components(),
                                      QStringLiteral("project.missing_components"));
     appendObjectFieldShapeIssue(issues,
                                 object,
-                                QStringLiteral("constraints"),
+                                projectkeys::constraints(),
                                 QStringLiteral("project.invalid_constraints_shape"),
                                 QStringLiteral(""));
     appendObjectFieldShapeIssue(issues,
                                 object,
-                                QStringLiteral("metadata"),
+                                projectkeys::metadata(),
                                 QStringLiteral("project.invalid_metadata_shape"),
                                 QStringLiteral(""));
     appendArrayFieldShapeIssue(issues,
                                object,
-                               QStringLiteral("packages"),
+                               projectkeys::packages(),
                                QStringLiteral("project.invalid_packages_shape"),
                                QStringLiteral(""));
     appendArrayFieldShapeIssue(issues,
                                object,
-                               QStringLiteral("components"),
+                               projectkeys::components(),
                                QStringLiteral("project.invalid_components_shape"),
                                QStringLiteral(""));
     appendArrayFieldShapeIssue(issues,
                                object,
-                               QStringLiteral("interfaces"),
+                               projectkeys::interfaces(),
                                QStringLiteral("project.invalid_interfaces_shape"),
                                QStringLiteral(""));
     appendArrayFieldShapeIssue(issues,
                                object,
-                               QStringLiteral("connections"),
+                               projectkeys::connections(),
                                QStringLiteral("project.invalid_connections_shape"),
                                QStringLiteral(""));
     appendArrayFieldShapeIssue(issues,
                                object,
-                               QStringLiteral("topologies"),
+                               projectkeys::topologies(),
                                QStringLiteral("project.invalid_topologies_shape"),
                                QStringLiteral(""));
     appendArrayFieldShapeIssue(issues,
                                object,
-                               QStringLiteral("views"),
+                               projectkeys::views(),
                                QStringLiteral("project.invalid_views_shape"),
                                QStringLiteral(""));
     appendArrayFieldShapeIssue(issues,
                                object,
-                               QStringLiteral("diagnostics"),
+                               projectkeys::diagnostics(),
                                QStringLiteral("project.invalid_diagnostics_shape"),
                                QStringLiteral(""));
     appendArrayFieldShapeIssue(issues,
                                object,
-                               QStringLiteral("artifacts"),
+                               projectkeys::artifacts(),
                                QStringLiteral("project.invalid_artifacts_shape"),
                                QStringLiteral(""));
     appendArrayFieldShapeIssue(issues,
                                object,
-                               QStringLiteral("extensions"),
+                               projectkeys::extensions(),
                                QStringLiteral("project.invalid_extensions_shape"),
                                QStringLiteral(""));
     appendCollectionUnknownFieldIssues(
         issues,
         object,
-        QStringLiteral("packages"),
-        {QStringLiteral("id"), QStringLiteral("version")});
+        projectkeys::packages(),
+        {projectkeys::id(), projectkeys::version()});
     appendCollectionUnknownFieldIssues(
         issues,
         object,
-        QStringLiteral("components"),
-        {QStringLiteral("id"),
-         QStringLiteral("type"),
-         QStringLiteral("packageRef"),
-         QStringLiteral("identity"),
-         QStringLiteral("config"),
-         QStringLiteral("metadata"),
-         QStringLiteral("extensionData")});
+        projectkeys::components(),
+        {projectkeys::id(),
+         projectkeys::type(),
+         projectkeys::packageRef(),
+         projectkeys::identity(),
+         projectkeys::config(),
+         projectkeys::metadata(),
+         projectkeys::extensionData()});
     appendCollectionObjectFieldShapeIssues(
         issues,
         object,
-        QStringLiteral("components"),
-        {{QStringLiteral("identity"), QStringLiteral("project.invalid_component_identity_shape")},
-         {QStringLiteral("config"), QStringLiteral("project.invalid_component_config_shape")},
-         {QStringLiteral("metadata"), QStringLiteral("project.invalid_component_metadata_shape")},
-         {QStringLiteral("extensionData"),
+        projectkeys::components(),
+        {{projectkeys::identity(), QStringLiteral("project.invalid_component_identity_shape")},
+         {projectkeys::config(), QStringLiteral("project.invalid_component_config_shape")},
+         {projectkeys::metadata(), QStringLiteral("project.invalid_component_metadata_shape")},
+         {projectkeys::extensionData(),
           QStringLiteral("project.invalid_component_extension_data_shape")}});
     appendCollectionUnknownFieldIssues(
         issues,
         object,
-        QStringLiteral("interfaces"),
-        {QStringLiteral("id"),
-         QStringLiteral("ownerComponentId"),
-         QStringLiteral("type"),
-         QStringLiteral("role"),
-         QStringLiteral("direction"),
-         QStringLiteral("protocol"),
-         QStringLiteral("clockRef"),
-         QStringLiteral("resetRef"),
-         QStringLiteral("config"),
-         QStringLiteral("metadata")});
+        projectkeys::interfaces(),
+        {projectkeys::id(),
+         projectkeys::ownerComponentId(),
+         projectkeys::type(),
+         projectkeys::role(),
+         projectkeys::direction(),
+         projectkeys::protocol(),
+         projectkeys::clockRef(),
+         projectkeys::resetRef(),
+         projectkeys::config(),
+         projectkeys::metadata()});
     appendCollectionObjectFieldShapeIssues(
         issues,
         object,
-        QStringLiteral("interfaces"),
-        {{QStringLiteral("config"), QStringLiteral("project.invalid_interface_config_shape")},
-         {QStringLiteral("metadata"), QStringLiteral("project.invalid_interface_metadata_shape")}});
+        projectkeys::interfaces(),
+        {{projectkeys::config(), QStringLiteral("project.invalid_interface_config_shape")},
+         {projectkeys::metadata(), QStringLiteral("project.invalid_interface_metadata_shape")}});
     appendCollectionUnknownFieldIssues(
         issues,
         object,
-        QStringLiteral("connections"),
-        {QStringLiteral("id"),
-         QStringLiteral("from"),
-         QStringLiteral("to"),
-         QStringLiteral("kind"),
-         QStringLiteral("config"),
-         QStringLiteral("constraints"),
-         QStringLiteral("metadata")});
+        projectkeys::connections(),
+        {projectkeys::id(),
+         projectkeys::from(),
+         projectkeys::to(),
+         projectkeys::kind(),
+         projectkeys::config(),
+         projectkeys::constraints(),
+         projectkeys::metadata()});
     appendCollectionObjectFieldShapeIssues(
         issues,
         object,
-        QStringLiteral("connections"),
-        {{QStringLiteral("from"), QStringLiteral("project.invalid_connection_endpoint_shape")},
-         {QStringLiteral("to"), QStringLiteral("project.invalid_connection_endpoint_shape")},
-         {QStringLiteral("config"), QStringLiteral("project.invalid_connection_config_shape")},
-         {QStringLiteral("constraints"),
+        projectkeys::connections(),
+        {{projectkeys::from(), QStringLiteral("project.invalid_connection_endpoint_shape")},
+         {projectkeys::to(), QStringLiteral("project.invalid_connection_endpoint_shape")},
+         {projectkeys::config(), QStringLiteral("project.invalid_connection_config_shape")},
+         {projectkeys::constraints(),
           QStringLiteral("project.invalid_connection_constraints_shape")},
-         {QStringLiteral("metadata"), QStringLiteral("project.invalid_connection_metadata_shape")}});
-    const QJsonArray connections = object.value(QStringLiteral("connections")).toArray();
+         {projectkeys::metadata(), QStringLiteral("project.invalid_connection_metadata_shape")}});
+    const QJsonArray connections = object.value(projectkeys::connections()).toArray();
     for (qsizetype index = 0; index < connections.size(); ++index) {
         if (!connections.at(index).isObject()) {
             continue;
@@ -531,13 +534,13 @@ void appendReadShapeIssues(QVector<ValidationIssue>& issues,
 
         const QJsonObject connection = connections.at(index).toObject();
         const QString path = QStringLiteral("/connections/%1").arg(index);
-        for (const QString& endpointKey : {QStringLiteral("from"), QStringLiteral("to")}) {
+        for (const QString& endpointKey : {projectkeys::from(), projectkeys::to()}) {
             if (connection.value(endpointKey).isObject()) {
                 appendUnknownFieldIssues(issues,
                                          connection.value(endpointKey).toObject(),
                                          childPath(path, endpointKey),
-                                         {QStringLiteral("component"),
-                                          QStringLiteral("interface")});
+                                         {projectkeys::component(),
+                                          projectkeys::interfaceId()});
             }
         }
     }
@@ -545,90 +548,90 @@ void appendReadShapeIssues(QVector<ValidationIssue>& issues,
     appendCollectionUnknownFieldIssues(
         issues,
         object,
-        QStringLiteral("views"),
-        {QStringLiteral("id"),
-         QStringLiteral("schema"),
-         QStringLiteral("kind"),
-         QStringLiteral("targetRef"),
-         QStringLiteral("providerRef"),
-         QStringLiteral("sourceRef"),
-         QStringLiteral("templates"),
-         QStringLiteral("portGrouping"),
-         QStringLiteral("labels"),
-         QStringLiteral("badges"),
-         QStringLiteral("propertyGroups"),
-         QStringLiteral("layoutPreference"),
-         QStringLiteral("interactionAffordances"),
-         QStringLiteral("diagnosticsOverlay"),
-         QStringLiteral("icons"),
-         QStringLiteral("layout"),
-         QStringLiteral("presentationState"),
-         QStringLiteral("metadata")});
+        projectkeys::views(),
+        {projectkeys::id(),
+         projectkeys::schema(),
+         projectkeys::kind(),
+         projectkeys::targetRef(),
+         projectkeys::providerRef(),
+         projectkeys::sourceRef(),
+         projectkeys::templates(),
+         projectkeys::portGrouping(),
+         projectkeys::labels(),
+         projectkeys::badges(),
+         projectkeys::propertyGroups(),
+         projectkeys::layoutPreference(),
+         projectkeys::interactionAffordances(),
+         projectkeys::diagnosticsOverlay(),
+         projectkeys::icons(),
+         projectkeys::layout(),
+         projectkeys::presentationState(),
+         projectkeys::metadata()});
     appendCollectionObjectFieldShapeIssues(
         issues,
         object,
-        QStringLiteral("views"),
-        {{QStringLiteral("templates"), QStringLiteral("project.invalid_view_templates_shape")},
-         {QStringLiteral("portGrouping"),
+        projectkeys::views(),
+        {{projectkeys::templates(), QStringLiteral("project.invalid_view_templates_shape")},
+         {projectkeys::portGrouping(),
           QStringLiteral("project.invalid_view_port_grouping_shape")},
-         {QStringLiteral("labels"), QStringLiteral("project.invalid_view_labels_shape")},
-         {QStringLiteral("badges"), QStringLiteral("project.invalid_view_badges_shape")},
-         {QStringLiteral("propertyGroups"),
+         {projectkeys::labels(), QStringLiteral("project.invalid_view_labels_shape")},
+         {projectkeys::badges(), QStringLiteral("project.invalid_view_badges_shape")},
+         {projectkeys::propertyGroups(),
           QStringLiteral("project.invalid_view_property_groups_shape")},
-         {QStringLiteral("layoutPreference"),
+         {projectkeys::layoutPreference(),
           QStringLiteral("project.invalid_view_layout_preference_shape")},
-         {QStringLiteral("interactionAffordances"),
+         {projectkeys::interactionAffordances(),
           QStringLiteral("project.invalid_view_interaction_affordances_shape")},
-         {QStringLiteral("diagnosticsOverlay"),
+         {projectkeys::diagnosticsOverlay(),
           QStringLiteral("project.invalid_view_diagnostics_overlay_shape")},
-         {QStringLiteral("icons"), QStringLiteral("project.invalid_view_icons_shape")},
-         {QStringLiteral("layout"), QStringLiteral("project.invalid_view_layout_shape")},
-         {QStringLiteral("presentationState"),
+         {projectkeys::icons(), QStringLiteral("project.invalid_view_icons_shape")},
+         {projectkeys::layout(), QStringLiteral("project.invalid_view_layout_shape")},
+         {projectkeys::presentationState(),
           QStringLiteral("project.invalid_view_presentation_state_shape")},
-         {QStringLiteral("metadata"), QStringLiteral("project.invalid_view_metadata_shape")}});
+         {projectkeys::metadata(), QStringLiteral("project.invalid_view_metadata_shape")}});
     appendCollectionUnknownFieldIssues(
         issues,
         object,
-        QStringLiteral("extensions"),
-        {QStringLiteral("ownerPackageId"),
-         QStringLiteral("schemaId"),
-         QStringLiteral("version"),
-         QStringLiteral("data"),
-         QStringLiteral("validationState")});
+        projectkeys::extensions(),
+        {projectkeys::ownerPackageId(),
+         projectkeys::schemaId(),
+         projectkeys::version(),
+         projectkeys::data(),
+         projectkeys::validationState()});
     appendCollectionObjectFieldShapeIssues(
         issues,
         object,
-        QStringLiteral("extensions"),
-        {{QStringLiteral("data"), QStringLiteral("project.invalid_extension_data_shape")},
-         {QStringLiteral("validationState"),
+        projectkeys::extensions(),
+        {{projectkeys::data(), QStringLiteral("project.invalid_extension_data_shape")},
+         {projectkeys::validationState(),
           QStringLiteral("project.invalid_extension_validation_state_shape")}});
 }
 
 EndpointRef endpointFromJson(const QJsonObject& object) {
     EndpointRef endpoint;
-    endpoint.component = object.value(QStringLiteral("component")).toString();
-    endpoint.interface = object.value(QStringLiteral("interface")).toString();
+    endpoint.component = object.value(projectkeys::component()).toString();
+    endpoint.interface = object.value(projectkeys::interfaceId()).toString();
     return endpoint;
 }
 
 QJsonObject endpointToJson(const EndpointRef& endpoint) {
     QJsonObject object;
-    object.insert(QStringLiteral("component"), endpoint.component);
-    object.insert(QStringLiteral("interface"), endpoint.interface);
+    object.insert(projectkeys::component(), endpoint.component);
+    object.insert(projectkeys::interfaceId(), endpoint.interface);
     return object;
 }
 
 PackageRef packageRefFromJson(const QJsonObject& object) {
     PackageRef package;
-    package.id = object.value(QStringLiteral("id")).toString();
-    package.version = object.value(QStringLiteral("version")).toString();
+    package.id = object.value(projectkeys::id()).toString();
+    package.version = object.value(projectkeys::version()).toString();
     return package;
 }
 
 QJsonObject packageRefToJson(const PackageRef& package) {
     QJsonObject object;
-    object.insert(QStringLiteral("id"), package.id);
-    object.insert(QStringLiteral("version"), package.version);
+    object.insert(projectkeys::id(), package.id);
+    object.insert(projectkeys::version(), package.version);
     return object;
 }
 
@@ -657,25 +660,25 @@ QJsonArray packagesToJson(const QVector<PackageRef>& packages) {
 
 ComponentInstance componentFromJson(const QJsonObject& object) {
     ComponentInstance component;
-    component.id = object.value(QStringLiteral("id")).toString();
-    component.type = object.value(QStringLiteral("type")).toString();
-    component.packageRef = object.value(QStringLiteral("packageRef")).toString();
-    component.config = objectValue(object, QStringLiteral("config"));
-    component.identity = objectValue(object, QStringLiteral("identity"));
-    component.metadata = objectValue(object, QStringLiteral("metadata"));
-    component.extensionData = objectValue(object, QStringLiteral("extensionData"));
+    component.id = object.value(projectkeys::id()).toString();
+    component.type = object.value(projectkeys::type()).toString();
+    component.packageRef = object.value(projectkeys::packageRef()).toString();
+    component.config = objectValue(object, projectkeys::config());
+    component.identity = objectValue(object, projectkeys::identity());
+    component.metadata = objectValue(object, projectkeys::metadata());
+    component.extensionData = objectValue(object, projectkeys::extensionData());
     return component;
 }
 
 QJsonObject componentToJson(const ComponentInstance& component) {
     QJsonObject object;
-    object.insert(QStringLiteral("id"), component.id);
-    insertStringIfNonEmpty(object, QStringLiteral("type"), component.type);
-    insertStringIfNonEmpty(object, QStringLiteral("packageRef"), component.packageRef);
-    insertObjectIfNonEmpty(object, QStringLiteral("identity"), component.identity);
-    insertObjectIfNonEmpty(object, QStringLiteral("config"), component.config);
-    insertObjectIfNonEmpty(object, QStringLiteral("metadata"), component.metadata);
-    insertObjectIfNonEmpty(object, QStringLiteral("extensionData"), component.extensionData);
+    object.insert(projectkeys::id(), component.id);
+    insertStringIfNonEmpty(object, projectkeys::type(), component.type);
+    insertStringIfNonEmpty(object, projectkeys::packageRef(), component.packageRef);
+    insertObjectIfNonEmpty(object, projectkeys::identity(), component.identity);
+    insertObjectIfNonEmpty(object, projectkeys::config(), component.config);
+    insertObjectIfNonEmpty(object, projectkeys::metadata(), component.metadata);
+    insertObjectIfNonEmpty(object, projectkeys::extensionData(), component.extensionData);
     return object;
 }
 
@@ -704,31 +707,31 @@ QJsonArray componentsToJson(const QVector<ComponentInstance>& components) {
 
 InterfaceInstance interfaceFromJson(const QJsonObject& object) {
     InterfaceInstance interface;
-    interface.id = object.value(QStringLiteral("id")).toString();
-    interface.ownerComponentId = object.value(QStringLiteral("ownerComponentId")).toString();
-    interface.type = object.value(QStringLiteral("type")).toString();
-    interface.role = object.value(QStringLiteral("role")).toString();
-    interface.direction = object.value(QStringLiteral("direction")).toString();
-    interface.protocol = object.value(QStringLiteral("protocol")).toString();
-    interface.clockRef = object.value(QStringLiteral("clockRef")).toString();
-    interface.resetRef = object.value(QStringLiteral("resetRef")).toString();
-    interface.config = objectValue(object, QStringLiteral("config"));
-    interface.metadata = objectValue(object, QStringLiteral("metadata"));
+    interface.id = object.value(projectkeys::id()).toString();
+    interface.ownerComponentId = object.value(projectkeys::ownerComponentId()).toString();
+    interface.type = object.value(projectkeys::type()).toString();
+    interface.role = object.value(projectkeys::role()).toString();
+    interface.direction = object.value(projectkeys::direction()).toString();
+    interface.protocol = object.value(projectkeys::protocol()).toString();
+    interface.clockRef = object.value(projectkeys::clockRef()).toString();
+    interface.resetRef = object.value(projectkeys::resetRef()).toString();
+    interface.config = objectValue(object, projectkeys::config());
+    interface.metadata = objectValue(object, projectkeys::metadata());
     return interface;
 }
 
 QJsonObject interfaceToJson(const InterfaceInstance& interface) {
     QJsonObject object;
-    object.insert(QStringLiteral("id"), interface.id);
-    insertStringIfNonEmpty(object, QStringLiteral("ownerComponentId"), interface.ownerComponentId);
-    insertStringIfNonEmpty(object, QStringLiteral("type"), interface.type);
-    insertStringIfNonEmpty(object, QStringLiteral("role"), interface.role);
-    insertStringIfNonEmpty(object, QStringLiteral("direction"), interface.direction);
-    insertStringIfNonEmpty(object, QStringLiteral("protocol"), interface.protocol);
-    insertStringIfNonEmpty(object, QStringLiteral("clockRef"), interface.clockRef);
-    insertStringIfNonEmpty(object, QStringLiteral("resetRef"), interface.resetRef);
-    insertObjectIfNonEmpty(object, QStringLiteral("config"), interface.config);
-    insertObjectIfNonEmpty(object, QStringLiteral("metadata"), interface.metadata);
+    object.insert(projectkeys::id(), interface.id);
+    insertStringIfNonEmpty(object, projectkeys::ownerComponentId(), interface.ownerComponentId);
+    insertStringIfNonEmpty(object, projectkeys::type(), interface.type);
+    insertStringIfNonEmpty(object, projectkeys::role(), interface.role);
+    insertStringIfNonEmpty(object, projectkeys::direction(), interface.direction);
+    insertStringIfNonEmpty(object, projectkeys::protocol(), interface.protocol);
+    insertStringIfNonEmpty(object, projectkeys::clockRef(), interface.clockRef);
+    insertStringIfNonEmpty(object, projectkeys::resetRef(), interface.resetRef);
+    insertObjectIfNonEmpty(object, projectkeys::config(), interface.config);
+    insertObjectIfNonEmpty(object, projectkeys::metadata(), interface.metadata);
     return object;
 }
 
@@ -757,27 +760,27 @@ QJsonArray interfacesToJson(const QVector<InterfaceInstance>& interfaces) {
 
 Connection connectionFromJson(const QJsonObject& object) {
     Connection connection;
-    connection.id = object.value(QStringLiteral("id")).toString();
-    connection.from = endpointFromJson(objectValue(object, QStringLiteral("from")));
-    connection.to = endpointFromJson(objectValue(object, QStringLiteral("to")));
-    if (object.contains(QStringLiteral("kind"))) {
-        connection.kind = object.value(QStringLiteral("kind")).toString();
+    connection.id = object.value(projectkeys::id()).toString();
+    connection.from = endpointFromJson(objectValue(object, projectkeys::from()));
+    connection.to = endpointFromJson(objectValue(object, projectkeys::to()));
+    if (object.contains(projectkeys::kind())) {
+        connection.kind = object.value(projectkeys::kind()).toString();
     }
-    connection.config = objectValue(object, QStringLiteral("config"));
-    connection.constraints = objectValue(object, QStringLiteral("constraints"));
-    connection.metadata = objectValue(object, QStringLiteral("metadata"));
+    connection.config = objectValue(object, projectkeys::config());
+    connection.constraints = objectValue(object, projectkeys::constraints());
+    connection.metadata = objectValue(object, projectkeys::metadata());
     return connection;
 }
 
 QJsonObject connectionToJson(const Connection& connection) {
     QJsonObject object;
-    object.insert(QStringLiteral("id"), connection.id);
-    object.insert(QStringLiteral("from"), endpointToJson(connection.from));
-    object.insert(QStringLiteral("to"), endpointToJson(connection.to));
-    insertStringIfNonEmpty(object, QStringLiteral("kind"), connection.kind);
-    insertObjectIfNonEmpty(object, QStringLiteral("config"), connection.config);
-    insertObjectIfNonEmpty(object, QStringLiteral("constraints"), connection.constraints);
-    insertObjectIfNonEmpty(object, QStringLiteral("metadata"), connection.metadata);
+    object.insert(projectkeys::id(), connection.id);
+    object.insert(projectkeys::from(), endpointToJson(connection.from));
+    object.insert(projectkeys::to(), endpointToJson(connection.to));
+    insertStringIfNonEmpty(object, projectkeys::kind(), connection.kind);
+    insertObjectIfNonEmpty(object, projectkeys::config(), connection.config);
+    insertObjectIfNonEmpty(object, projectkeys::constraints(), connection.constraints);
+    insertObjectIfNonEmpty(object, projectkeys::metadata(), connection.metadata);
     return object;
 }
 
@@ -806,25 +809,25 @@ QJsonArray connectionsToJson(const QVector<Connection>& connections) {
 
 TopologyAttachment attachmentFromJson(const QJsonObject& object) {
     TopologyAttachment attachment;
-    attachment.id = object.value(QStringLiteral("id")).toString();
-    attachment.topologyId = object.value(QStringLiteral("topologyId")).toString();
-    attachment.attachmentPoint = objectValue(object, QStringLiteral("attachmentPoint"));
-    attachment.componentRef = object.value(QStringLiteral("componentRef")).toString();
-    attachment.interfaceRef = object.value(QStringLiteral("interfaceRef")).toString();
-    attachment.adapterRef = object.value(QStringLiteral("adapterRef")).toString();
-    attachment.config = objectValue(object, QStringLiteral("config"));
+    attachment.id = object.value(projectkeys::id()).toString();
+    attachment.topologyId = object.value(projectkeys::topologyId()).toString();
+    attachment.attachmentPoint = objectValue(object, projectkeys::attachmentPoint());
+    attachment.componentRef = object.value(projectkeys::componentRef()).toString();
+    attachment.interfaceRef = object.value(projectkeys::interfaceRef()).toString();
+    attachment.adapterRef = object.value(projectkeys::adapterRef()).toString();
+    attachment.config = objectValue(object, projectkeys::config());
     return attachment;
 }
 
 QJsonObject attachmentToJson(const TopologyAttachment& attachment) {
     QJsonObject object;
-    object.insert(QStringLiteral("id"), attachment.id);
-    insertStringIfNonEmpty(object, QStringLiteral("topologyId"), attachment.topologyId);
-    insertObjectIfNonEmpty(object, QStringLiteral("attachmentPoint"), attachment.attachmentPoint);
-    insertStringIfNonEmpty(object, QStringLiteral("componentRef"), attachment.componentRef);
-    insertStringIfNonEmpty(object, QStringLiteral("interfaceRef"), attachment.interfaceRef);
-    insertStringIfNonEmpty(object, QStringLiteral("adapterRef"), attachment.adapterRef);
-    insertObjectIfNonEmpty(object, QStringLiteral("config"), attachment.config);
+    object.insert(projectkeys::id(), attachment.id);
+    insertStringIfNonEmpty(object, projectkeys::topologyId(), attachment.topologyId);
+    insertObjectIfNonEmpty(object, projectkeys::attachmentPoint(), attachment.attachmentPoint);
+    insertStringIfNonEmpty(object, projectkeys::componentRef(), attachment.componentRef);
+    insertStringIfNonEmpty(object, projectkeys::interfaceRef(), attachment.interfaceRef);
+    insertStringIfNonEmpty(object, projectkeys::adapterRef(), attachment.adapterRef);
+    insertObjectIfNonEmpty(object, projectkeys::config(), attachment.config);
     return object;
 }
 
@@ -853,43 +856,43 @@ QJsonArray attachmentsToJson(const QVector<TopologyAttachment>& attachments) {
 
 TopologyGraph topologyFromJson(const QJsonObject& object) {
     TopologyGraph topology;
-    topology.id = object.value(QStringLiteral("id")).toString();
-    topology.schema = object.value(QStringLiteral("schema")).toString();
-    topology.ownerComponentId = object.value(QStringLiteral("ownerComponentId")).toString();
-    topology.kind = object.value(QStringLiteral("kind")).toString();
-    topology.family = object.value(QStringLiteral("family")).toString();
-    topology.providerRef = object.value(QStringLiteral("providerRef")).toString();
-    topology.parameters = objectValue(object, QStringLiteral("parameters"));
-    topology.constraints = objectValue(object, QStringLiteral("constraints"));
-    topology.nodes = objectVectorFromJson(object.value(QStringLiteral("nodes")));
-    topology.links = objectVectorFromJson(object.value(QStringLiteral("links")));
-    topology.attachments = attachmentsFromJson(object.value(QStringLiteral("attachments")));
-    topology.routing = objectValue(object, QStringLiteral("routing"));
-    topology.metadata = objectValue(object, QStringLiteral("metadata"));
+    topology.id = object.value(projectkeys::id()).toString();
+    topology.schema = object.value(projectkeys::schema()).toString();
+    topology.ownerComponentId = object.value(projectkeys::ownerComponentId()).toString();
+    topology.kind = object.value(projectkeys::kind()).toString();
+    topology.family = object.value(projectkeys::family()).toString();
+    topology.providerRef = object.value(projectkeys::providerRef()).toString();
+    topology.parameters = objectValue(object, projectkeys::parameters());
+    topology.constraints = objectValue(object, projectkeys::constraints());
+    topology.nodes = objectVectorFromJson(object.value(projectkeys::nodes()));
+    topology.links = objectVectorFromJson(object.value(projectkeys::links()));
+    topology.attachments = attachmentsFromJson(object.value(projectkeys::attachments()));
+    topology.routing = objectValue(object, projectkeys::routing());
+    topology.metadata = objectValue(object, projectkeys::metadata());
     return topology;
 }
 
 QJsonObject topologyToJson(const TopologyGraph& topology) {
     QJsonObject object;
-    object.insert(QStringLiteral("id"), topology.id);
-    insertStringIfNonEmpty(object, QStringLiteral("schema"), topology.schema);
-    insertStringIfNonEmpty(object, QStringLiteral("ownerComponentId"), topology.ownerComponentId);
-    insertStringIfNonEmpty(object, QStringLiteral("kind"), topology.kind);
-    insertStringIfNonEmpty(object, QStringLiteral("family"), topology.family);
-    insertStringIfNonEmpty(object, QStringLiteral("providerRef"), topology.providerRef);
+    object.insert(projectkeys::id(), topology.id);
+    insertStringIfNonEmpty(object, projectkeys::schema(), topology.schema);
+    insertStringIfNonEmpty(object, projectkeys::ownerComponentId(), topology.ownerComponentId);
+    insertStringIfNonEmpty(object, projectkeys::kind(), topology.kind);
+    insertStringIfNonEmpty(object, projectkeys::family(), topology.family);
+    insertStringIfNonEmpty(object, projectkeys::providerRef(), topology.providerRef);
     if (topology.schema == schemaids::topologyParametricV1) {
-        object.insert(QStringLiteral("parameters"), topology.parameters);
+        object.insert(projectkeys::parameters(), topology.parameters);
     } else {
-        insertObjectIfNonEmpty(object, QStringLiteral("parameters"), topology.parameters);
+        insertObjectIfNonEmpty(object, projectkeys::parameters(), topology.parameters);
     }
-    insertObjectIfNonEmpty(object, QStringLiteral("constraints"), topology.constraints);
+    insertObjectIfNonEmpty(object, projectkeys::constraints(), topology.constraints);
     if (topology.schema != schemaids::topologyParametricV1) {
-        object.insert(QStringLiteral("nodes"), objectVectorToJson(topology.nodes));
-        object.insert(QStringLiteral("links"), objectVectorToJson(topology.links));
+        object.insert(projectkeys::nodes(), objectVectorToJson(topology.nodes));
+        object.insert(projectkeys::links(), objectVectorToJson(topology.links));
     }
-    object.insert(QStringLiteral("attachments"), attachmentsToJson(topology.attachments));
-    insertObjectIfNonEmpty(object, QStringLiteral("routing"), topology.routing);
-    insertObjectIfNonEmpty(object, QStringLiteral("metadata"), topology.metadata);
+    object.insert(projectkeys::attachments(), attachmentsToJson(topology.attachments));
+    insertObjectIfNonEmpty(object, projectkeys::routing(), topology.routing);
+    insertObjectIfNonEmpty(object, projectkeys::metadata(), topology.metadata);
     return object;
 }
 
@@ -918,52 +921,52 @@ QJsonArray topologiesToJson(const QVector<TopologyGraph>& topologies) {
 
 ViewDocument viewFromJson(const QJsonObject& object) {
     ViewDocument view;
-    view.id = object.value(QStringLiteral("id")).toString();
-    view.schema = object.value(QStringLiteral("schema")).toString();
-    view.kind = object.value(QStringLiteral("kind")).toString();
-    view.targetRef = object.value(QStringLiteral("targetRef")).toString();
-    view.providerRef = object.value(QStringLiteral("providerRef")).toString();
-    view.sourceRef = object.value(QStringLiteral("sourceRef")).toString();
-    view.templates = objectValue(object, QStringLiteral("templates"));
-    view.portGrouping = objectValue(object, QStringLiteral("portGrouping"));
-    view.labels = objectValue(object, QStringLiteral("labels"));
-    view.badges = objectValue(object, QStringLiteral("badges"));
-    view.propertyGroups = objectValue(object, QStringLiteral("propertyGroups"));
-    view.layoutPreference = objectValue(object, QStringLiteral("layoutPreference"));
+    view.id = object.value(projectkeys::id()).toString();
+    view.schema = object.value(projectkeys::schema()).toString();
+    view.kind = object.value(projectkeys::kind()).toString();
+    view.targetRef = object.value(projectkeys::targetRef()).toString();
+    view.providerRef = object.value(projectkeys::providerRef()).toString();
+    view.sourceRef = object.value(projectkeys::sourceRef()).toString();
+    view.templates = objectValue(object, projectkeys::templates());
+    view.portGrouping = objectValue(object, projectkeys::portGrouping());
+    view.labels = objectValue(object, projectkeys::labels());
+    view.badges = objectValue(object, projectkeys::badges());
+    view.propertyGroups = objectValue(object, projectkeys::propertyGroups());
+    view.layoutPreference = objectValue(object, projectkeys::layoutPreference());
     view.interactionAffordances =
-        objectValue(object, QStringLiteral("interactionAffordances"));
-    view.diagnosticsOverlay = objectValue(object, QStringLiteral("diagnosticsOverlay"));
-    view.icons = objectValue(object, QStringLiteral("icons"));
-    view.layout = objectValue(object, QStringLiteral("layout"));
-    view.presentationState = objectValue(object, QStringLiteral("presentationState"));
-    view.metadata = objectValue(object, QStringLiteral("metadata"));
+        objectValue(object, projectkeys::interactionAffordances());
+    view.diagnosticsOverlay = objectValue(object, projectkeys::diagnosticsOverlay());
+    view.icons = objectValue(object, projectkeys::icons());
+    view.layout = objectValue(object, projectkeys::layout());
+    view.presentationState = objectValue(object, projectkeys::presentationState());
+    view.metadata = objectValue(object, projectkeys::metadata());
     return view;
 }
 
 QJsonObject viewToJson(const ViewDocument& view) {
     QJsonObject object;
-    object.insert(QStringLiteral("id"), view.id);
-    insertStringIfNonEmpty(object, QStringLiteral("schema"), view.schema);
-    insertStringIfNonEmpty(object, QStringLiteral("kind"), view.kind);
-    insertStringIfNonEmpty(object, QStringLiteral("targetRef"), view.targetRef);
-    insertStringIfNonEmpty(object, QStringLiteral("providerRef"), view.providerRef);
-    insertStringIfNonEmpty(object, QStringLiteral("sourceRef"), view.sourceRef);
-    insertObjectIfNonEmpty(object, QStringLiteral("templates"), view.templates);
-    insertObjectIfNonEmpty(object, QStringLiteral("portGrouping"), view.portGrouping);
-    insertObjectIfNonEmpty(object, QStringLiteral("labels"), view.labels);
-    insertObjectIfNonEmpty(object, QStringLiteral("badges"), view.badges);
-    insertObjectIfNonEmpty(object, QStringLiteral("propertyGroups"), view.propertyGroups);
-    insertObjectIfNonEmpty(object, QStringLiteral("layoutPreference"), view.layoutPreference);
+    object.insert(projectkeys::id(), view.id);
+    insertStringIfNonEmpty(object, projectkeys::schema(), view.schema);
+    insertStringIfNonEmpty(object, projectkeys::kind(), view.kind);
+    insertStringIfNonEmpty(object, projectkeys::targetRef(), view.targetRef);
+    insertStringIfNonEmpty(object, projectkeys::providerRef(), view.providerRef);
+    insertStringIfNonEmpty(object, projectkeys::sourceRef(), view.sourceRef);
+    insertObjectIfNonEmpty(object, projectkeys::templates(), view.templates);
+    insertObjectIfNonEmpty(object, projectkeys::portGrouping(), view.portGrouping);
+    insertObjectIfNonEmpty(object, projectkeys::labels(), view.labels);
+    insertObjectIfNonEmpty(object, projectkeys::badges(), view.badges);
+    insertObjectIfNonEmpty(object, projectkeys::propertyGroups(), view.propertyGroups);
+    insertObjectIfNonEmpty(object, projectkeys::layoutPreference(), view.layoutPreference);
     insertObjectIfNonEmpty(object,
-                           QStringLiteral("interactionAffordances"),
+                           projectkeys::interactionAffordances(),
                            view.interactionAffordances);
     insertObjectIfNonEmpty(object,
-                           QStringLiteral("diagnosticsOverlay"),
+                           projectkeys::diagnosticsOverlay(),
                            view.diagnosticsOverlay);
-    insertObjectIfNonEmpty(object, QStringLiteral("icons"), view.icons);
-    insertObjectIfNonEmpty(object, QStringLiteral("layout"), view.layout);
-    insertObjectIfNonEmpty(object, QStringLiteral("presentationState"), view.presentationState);
-    insertObjectIfNonEmpty(object, QStringLiteral("metadata"), view.metadata);
+    insertObjectIfNonEmpty(object, projectkeys::icons(), view.icons);
+    insertObjectIfNonEmpty(object, projectkeys::layout(), view.layout);
+    insertObjectIfNonEmpty(object, projectkeys::presentationState(), view.presentationState);
+    insertObjectIfNonEmpty(object, projectkeys::metadata(), view.metadata);
     return object;
 }
 
@@ -1016,7 +1019,7 @@ QJsonArray extensionsToJson(const QVector<ExtensionBlock>& extensions) {
 } // namespace
 
 ProjectDocumentReadResult ProjectDocumentV1::readObject(const QJsonObject& object) {
-    const QString schema = object.value(QStringLiteral("schema")).toString();
+    const QString schema = object.value(projectkeys::schema()).toString();
     if (schema != schemaids::projectV1) {
         ProjectDocumentReadResult result;
         result.issues.append(issue(QStringLiteral("project.unsupported_schema"),
@@ -1027,56 +1030,56 @@ ProjectDocumentReadResult ProjectDocumentV1::readObject(const QJsonObject& objec
 
     ProjectDesign project;
     project.schema = schema;
-    project.id = object.value(QStringLiteral("id")).toString();
-    project.name = object.value(QStringLiteral("name")).toString();
-    project.constraints = objectValue(object, QStringLiteral("constraints"));
-    project.metadata = objectValue(object, QStringLiteral("metadata"));
-    project.packages = packagesFromJson(object.value(QStringLiteral("packages")));
-    project.components = componentsFromJson(object.value(QStringLiteral("components")));
-    project.interfaces = interfacesFromJson(object.value(QStringLiteral("interfaces")));
-    project.connections = connectionsFromJson(object.value(QStringLiteral("connections")));
-    project.topologies = topologiesFromJson(object.value(QStringLiteral("topologies")));
-    project.views = viewsFromJson(object.value(QStringLiteral("views")));
-    project.diagnostics = objectVectorFromJson(object.value(QStringLiteral("diagnostics")));
-    project.artifacts = objectVectorFromJson(object.value(QStringLiteral("artifacts")));
-    project.extensions = extensionsFromJson(object.value(QStringLiteral("extensions")));
+    project.id = object.value(projectkeys::id()).toString();
+    project.name = object.value(projectkeys::name()).toString();
+    project.constraints = objectValue(object, projectkeys::constraints());
+    project.metadata = objectValue(object, projectkeys::metadata());
+    project.packages = packagesFromJson(object.value(projectkeys::packages()));
+    project.components = componentsFromJson(object.value(projectkeys::components()));
+    project.interfaces = interfacesFromJson(object.value(projectkeys::interfaces()));
+    project.connections = connectionsFromJson(object.value(projectkeys::connections()));
+    project.topologies = topologiesFromJson(object.value(projectkeys::topologies()));
+    project.views = viewsFromJson(object.value(projectkeys::views()));
+    project.diagnostics = objectVectorFromJson(object.value(projectkeys::diagnostics()));
+    project.artifacts = objectVectorFromJson(object.value(projectkeys::artifacts()));
+    project.extensions = extensionsFromJson(object.value(projectkeys::extensions()));
 
     QVector<ValidationIssue> readIssues;
     appendReadShapeIssues(readIssues, object);
     appendNonObjectArrayEntryIssues(readIssues,
-                                    object.value(QStringLiteral("packages")),
+                                    object.value(projectkeys::packages()),
                                     QStringLiteral("project.invalid_package_shape"),
                                     QStringLiteral("/packages"));
     appendNonObjectArrayEntryIssues(readIssues,
-                                    object.value(QStringLiteral("components")),
+                                    object.value(projectkeys::components()),
                                     QStringLiteral("project.invalid_component_shape"),
                                     QStringLiteral("/components"));
     appendNonObjectArrayEntryIssues(readIssues,
-                                    object.value(QStringLiteral("interfaces")),
+                                    object.value(projectkeys::interfaces()),
                                     QStringLiteral("project.invalid_interface_shape"),
                                     QStringLiteral("/interfaces"));
     appendNonObjectArrayEntryIssues(readIssues,
-                                    object.value(QStringLiteral("connections")),
+                                    object.value(projectkeys::connections()),
                                     QStringLiteral("project.invalid_connection_shape"),
                                     QStringLiteral("/connections"));
     appendNonObjectArrayEntryIssues(readIssues,
-                                    object.value(QStringLiteral("topologies")),
+                                    object.value(projectkeys::topologies()),
                                     QStringLiteral("project.invalid_topology_shape"),
                                     QStringLiteral("/topologies"));
     appendNonObjectArrayEntryIssues(readIssues,
-                                    object.value(QStringLiteral("views")),
+                                    object.value(projectkeys::views()),
                                     QStringLiteral("project.invalid_view_shape"),
                                     QStringLiteral("/views"));
     appendNonObjectArrayEntryIssues(readIssues,
-                                    object.value(QStringLiteral("diagnostics")),
+                                    object.value(projectkeys::diagnostics()),
                                     QStringLiteral("project.invalid_diagnostic_shape"),
                                     QStringLiteral("/diagnostics"));
     appendNonObjectArrayEntryIssues(readIssues,
-                                    object.value(QStringLiteral("artifacts")),
+                                    object.value(projectkeys::artifacts()),
                                     QStringLiteral("project.invalid_artifact_shape"),
                                     QStringLiteral("/artifacts"));
     appendNonObjectArrayEntryIssues(readIssues,
-                                    object.value(QStringLiteral("extensions")),
+                                    object.value(projectkeys::extensions()),
                                     QStringLiteral("project.invalid_extension_shape"),
                                     QStringLiteral("/extensions"));
 
@@ -1090,20 +1093,20 @@ ProjectDocumentReadResult ProjectDocumentV1::readObject(const QJsonObject& objec
 
 QJsonObject ProjectDocumentV1::writeObject(const ProjectDesign& project) {
     QJsonObject object;
-    object.insert(QStringLiteral("schema"), schemaids::projectV1);
-    object.insert(QStringLiteral("id"), project.id);
-    object.insert(QStringLiteral("name"), project.name);
-    object.insert(QStringLiteral("packages"), packagesToJson(project.packages));
-    object.insert(QStringLiteral("components"), componentsToJson(project.components));
-    object.insert(QStringLiteral("interfaces"), interfacesToJson(project.interfaces));
-    object.insert(QStringLiteral("connections"), connectionsToJson(project.connections));
-    object.insert(QStringLiteral("topologies"), topologiesToJson(project.topologies));
-    object.insert(QStringLiteral("views"), viewsToJson(project.views));
-    object.insert(QStringLiteral("diagnostics"), objectVectorToJson(project.diagnostics));
-    object.insert(QStringLiteral("artifacts"), objectVectorToJson(project.artifacts));
-    object.insert(QStringLiteral("extensions"), extensionsToJson(project.extensions));
-    insertObjectIfNonEmpty(object, QStringLiteral("constraints"), project.constraints);
-    insertObjectIfNonEmpty(object, QStringLiteral("metadata"), project.metadata);
+    object.insert(projectkeys::schema(), schemaids::projectV1);
+    object.insert(projectkeys::id(), project.id);
+    object.insert(projectkeys::name(), project.name);
+    object.insert(projectkeys::packages(), packagesToJson(project.packages));
+    object.insert(projectkeys::components(), componentsToJson(project.components));
+    object.insert(projectkeys::interfaces(), interfacesToJson(project.interfaces));
+    object.insert(projectkeys::connections(), connectionsToJson(project.connections));
+    object.insert(projectkeys::topologies(), topologiesToJson(project.topologies));
+    object.insert(projectkeys::views(), viewsToJson(project.views));
+    object.insert(projectkeys::diagnostics(), objectVectorToJson(project.diagnostics));
+    object.insert(projectkeys::artifacts(), objectVectorToJson(project.artifacts));
+    object.insert(projectkeys::extensions(), extensionsToJson(project.extensions));
+    insertObjectIfNonEmpty(object, projectkeys::constraints(), project.constraints);
+    insertObjectIfNonEmpty(object, projectkeys::metadata(), project.metadata);
     return object;
 }
 

@@ -1,10 +1,14 @@
 #include "package/packagecoverage.h"
 
+#include "ipcraft/contract/packagekeys.h"
+
 #include <QJsonArray>
 #include <QJsonValue>
 #include <QSet>
 
 namespace {
+
+namespace packagekeys = ipcraft::contract::packagekeys;
 
 struct DeclaredCapability {
     QString id;
@@ -14,25 +18,25 @@ struct DeclaredCapability {
 
 const QSet<QString>& knownTopLevelSections() {
     static const QSet<QString> sections{
-        QStringLiteral("schema"),
-        QStringLiteral("id"),
-        QStringLiteral("version"),
-        QStringLiteral("name"),
-        QStringLiteral("display"),
-        QStringLiteral("extensions"),
-        QStringLiteral("config_schema"),
-        QStringLiteral("interfaces"),
-        QStringLiteral("connection_rules"),
-        QStringLiteral("emitters"),
-        QStringLiteral("flows"),
-        QStringLiteral("artifacts"),
-        QStringLiteral("diagnostics"),
-        QStringLiteral("views"),
-        QStringLiteral("plugin"),
-        QStringLiteral("native_schema"),
-        QStringLiteral("metadata"),
-        QStringLiteral("native"),
-        QStringLiteral("graph_config"),
+        packagekeys::schema(),
+        packagekeys::id(),
+        packagekeys::version(),
+        packagekeys::name(),
+        packagekeys::display(),
+        packagekeys::extensions(),
+        packagekeys::configSchema(),
+        packagekeys::interfaces(),
+        packagekeys::connectionRules(),
+        packagekeys::emitters(),
+        packagekeys::flows(),
+        packagekeys::artifacts(),
+        packagekeys::diagnostics(),
+        packagekeys::views(),
+        packagekeys::plugin(),
+        packagekeys::nativeSchema(),
+        packagekeys::metadata(),
+        packagekeys::native(),
+        packagekeys::graphConfig(),
     };
     return sections;
 }
@@ -50,11 +54,11 @@ QJsonObject objectDescriptor(const QJsonValue& value) {
 QString objectIdOrIndex(const QJsonObject& object,
                         const QString& fallbackPrefix,
                         qsizetype index) {
-    const QString id = object.value(QStringLiteral("id")).toString().trimmed();
+    const QString id = object.value(packagekeys::id()).toString().trimmed();
     if (!id.isEmpty()) {
         return id;
     }
-    const QString name = object.value(QStringLiteral("name")).toString().trimmed();
+    const QString name = object.value(packagekeys::name()).toString().trimmed();
     if (!name.isEmpty()) {
         return name;
     }
@@ -111,9 +115,9 @@ void appendVisibleArray(PackageCoverageReport& report,
 
 DeclaredCapability capabilityFromObject(const QJsonObject& object) {
     DeclaredCapability capability;
-    capability.id = object.value(QStringLiteral("id")).toString().trimmed();
-    capability.required = object.value(QStringLiteral("required")).isBool()
-        ? object.value(QStringLiteral("required")).toBool()
+    capability.id = object.value(packagekeys::id()).toString().trimmed();
+    capability.required = object.value(packagekeys::required()).isBool()
+        ? object.value(packagekeys::required()).toBool()
         : true;
     capability.descriptor = object;
     return capability;
@@ -121,7 +125,7 @@ DeclaredCapability capabilityFromObject(const QJsonObject& object) {
 
 QVector<DeclaredCapability> capabilitiesFromDescriptor(const QJsonObject& descriptor) {
     QVector<DeclaredCapability> capabilities;
-    const QJsonValue extensions = descriptor.value(QStringLiteral("extensions"));
+    const QJsonValue extensions = descriptor.value(packagekeys::extensions());
     if (extensions.isArray()) {
         const QJsonArray array = extensions.toArray();
         for (const QJsonValue& value : array) {
@@ -129,7 +133,7 @@ QVector<DeclaredCapability> capabilitiesFromDescriptor(const QJsonObject& descri
                 DeclaredCapability capability;
                 capability.id = value.toString().trimmed();
                 capability.required = true;
-                capability.descriptor.insert(QStringLiteral("id"), capability.id);
+                capability.descriptor.insert(packagekeys::id(), capability.id);
                 capabilities.append(capability);
                 continue;
             }
@@ -154,7 +158,7 @@ QVector<DeclaredCapability> capabilitiesFromSpec(const ipcraft::PackageSpec& spe
             capability.id = declaration.id;
             capability.required = declaration.required;
             capability.descriptor = declaration.descriptor;
-            capability.descriptor.insert(QStringLiteral("id"), declaration.id);
+            capability.descriptor.insert(packagekeys::id(), declaration.id);
             capabilities.append(capability);
         }
         return capabilities;
@@ -164,7 +168,7 @@ QVector<DeclaredCapability> capabilitiesFromSpec(const ipcraft::PackageSpec& spe
         DeclaredCapability capability;
         capability.id = extensionId;
         capability.required = true;
-        capability.descriptor.insert(QStringLiteral("id"), extensionId);
+        capability.descriptor.insert(packagekeys::id(), extensionId);
         capabilities.append(capability);
     }
     return capabilities;
@@ -227,7 +231,7 @@ void appendCapabilities(PackageCoverageReport& report,
 
 void appendConfigSchema(PackageCoverageReport& report, const QJsonObject& configSchema) {
     appendVisibleObject(report,
-                        QStringLiteral("config_schema"),
+                        packagekeys::configSchema(),
                         QStringLiteral("Config Schema"),
                         configSchema);
     for (const QString& group : {QStringLiteral("parameters"),
@@ -247,60 +251,60 @@ void appendConfigSchema(PackageCoverageReport& report, const QJsonObject& config
 }
 
 void appendDescriptorSections(PackageCoverageReport& report, const QJsonObject& descriptor) {
-    appendConfigSchema(report, descriptor.value(QStringLiteral("config_schema")).toObject());
+    appendConfigSchema(report, descriptor.value(packagekeys::configSchema()).toObject());
     appendVisibleArray(report,
-                       descriptor.value(QStringLiteral("interfaces")).toArray(),
+                       descriptor.value(packagekeys::interfaces()).toArray(),
                        QStringLiteral("interface:"),
                        QStringLiteral("Interface "),
                        QStringLiteral("interface"));
     appendVisibleObject(report,
-                        QStringLiteral("connection_rules"),
+                        packagekeys::connectionRules(),
                         QStringLiteral("Connection Rules"),
-                        descriptor.value(QStringLiteral("connection_rules")).toObject());
+                        descriptor.value(packagekeys::connectionRules()).toObject());
     appendVisibleArray(report,
-                       descriptor.value(QStringLiteral("emitters")).toArray(),
+                       descriptor.value(packagekeys::emitters()).toArray(),
                        QStringLiteral("emitter:"),
                        QStringLiteral("Emitter "),
                        QStringLiteral("emitter"));
     appendVisibleArray(report,
-                       descriptor.value(QStringLiteral("flows")).toArray(),
+                       descriptor.value(packagekeys::flows()).toArray(),
                        QStringLiteral("flow:"),
                        QStringLiteral("Flow "),
                        QStringLiteral("flow"));
     appendVisibleArray(report,
-                       descriptor.value(QStringLiteral("artifacts")).toArray(),
+                       descriptor.value(packagekeys::artifacts()).toArray(),
                        QStringLiteral("artifact:"),
                        QStringLiteral("Artifact "),
                        QStringLiteral("artifact"));
     appendVisibleObject(report,
-                        QStringLiteral("diagnostics"),
+                        packagekeys::diagnostics(),
                         QStringLiteral("Diagnostics"),
-                        descriptor.value(QStringLiteral("diagnostics")).toObject());
+                        descriptor.value(packagekeys::diagnostics()).toObject());
     appendVisibleArray(report,
-                       descriptor.value(QStringLiteral("views")).toArray(),
+                       descriptor.value(packagekeys::views()).toArray(),
                        QStringLiteral("view:"),
                        QStringLiteral("View "),
                        QStringLiteral("view"));
     appendVisibleObject(report,
-                        QStringLiteral("plugin"),
+                        packagekeys::plugin(),
                         QStringLiteral("Plugin"),
-                        descriptor.value(QStringLiteral("plugin")).toObject());
+                        descriptor.value(packagekeys::plugin()).toObject());
     appendVisibleObject(report,
-                        QStringLiteral("native_schema"),
+                        packagekeys::nativeSchema(),
                         QStringLiteral("Native Schema"),
-                        descriptor.value(QStringLiteral("native_schema")).toObject());
+                        descriptor.value(packagekeys::nativeSchema()).toObject());
     appendVisibleObject(report,
-                        QStringLiteral("metadata"),
+                        packagekeys::metadata(),
                         QStringLiteral("Metadata"),
-                        descriptor.value(QStringLiteral("metadata")).toObject());
+                        descriptor.value(packagekeys::metadata()).toObject());
     appendVisibleObject(report,
-                        QStringLiteral("native"),
+                        packagekeys::native(),
                         QStringLiteral("Native"),
-                        descriptor.value(QStringLiteral("native")).toObject());
+                        descriptor.value(packagekeys::native()).toObject());
     appendVisibleObject(report,
-                        QStringLiteral("graph_config"),
+                        packagekeys::graphConfig(),
                         QStringLiteral("Graph Config"),
-                        descriptor.value(QStringLiteral("graph_config")).toObject());
+                        descriptor.value(packagekeys::graphConfig()).toObject());
 }
 
 void appendUnknownSections(PackageCoverageReport& report, const QJsonObject& descriptor) {
@@ -320,48 +324,48 @@ void appendUnknownSections(PackageCoverageReport& report, const QJsonObject& des
 
 QJsonObject specDescriptor(const ipcraft::PackageSpec& spec) {
     QJsonObject descriptor;
-    descriptor.insert(QStringLiteral("schema"), spec.schema);
-    descriptor.insert(QStringLiteral("id"), spec.id);
-    descriptor.insert(QStringLiteral("version"), spec.version);
-    descriptor.insert(QStringLiteral("name"), spec.name);
-    descriptor.insert(QStringLiteral("display"), spec.display);
-    descriptor.insert(QStringLiteral("config_schema"), spec.configSchema);
-    descriptor.insert(QStringLiteral("emitters"), spec.emitters);
-    descriptor.insert(QStringLiteral("flows"), spec.flows);
-    descriptor.insert(QStringLiteral("artifacts"), spec.artifacts);
-    descriptor.insert(QStringLiteral("diagnostics"), spec.diagnostics);
-    descriptor.insert(QStringLiteral("views"), spec.views);
-    descriptor.insert(QStringLiteral("plugin"), spec.plugin);
-    descriptor.insert(QStringLiteral("native_schema"), spec.nativeSchema);
-    descriptor.insert(QStringLiteral("metadata"), spec.metadata);
-    descriptor.insert(QStringLiteral("native"), spec.native);
-    descriptor.insert(QStringLiteral("graph_config"), spec.graphConfig);
+    descriptor.insert(packagekeys::schema(), spec.schema);
+    descriptor.insert(packagekeys::id(), spec.id);
+    descriptor.insert(packagekeys::version(), spec.version);
+    descriptor.insert(packagekeys::name(), spec.name);
+    descriptor.insert(packagekeys::display(), spec.display);
+    descriptor.insert(packagekeys::configSchema(), spec.configSchema);
+    descriptor.insert(packagekeys::emitters(), spec.emitters);
+    descriptor.insert(packagekeys::flows(), spec.flows);
+    descriptor.insert(packagekeys::artifacts(), spec.artifacts);
+    descriptor.insert(packagekeys::diagnostics(), spec.diagnostics);
+    descriptor.insert(packagekeys::views(), spec.views);
+    descriptor.insert(packagekeys::plugin(), spec.plugin);
+    descriptor.insert(packagekeys::nativeSchema(), spec.nativeSchema);
+    descriptor.insert(packagekeys::metadata(), spec.metadata);
+    descriptor.insert(packagekeys::native(), spec.native);
+    descriptor.insert(packagekeys::graphConfig(), spec.graphConfig);
 
     QJsonArray interfaces;
     for (const ipcraft::PackageInterfaceSpec& interfaceSpec : spec.interfaces) {
         QJsonObject object;
-        object.insert(QStringLiteral("id"), interfaceSpec.id);
-        object.insert(QStringLiteral("name"), interfaceSpec.name);
+        object.insert(packagekeys::id(), interfaceSpec.id);
+        object.insert(packagekeys::name(), interfaceSpec.name);
         object.insert(QStringLiteral("label"), interfaceSpec.label);
         object.insert(QStringLiteral("kind"), interfaceSpec.kind);
         object.insert(QStringLiteral("protocol"), interfaceSpec.protocol);
         object.insert(QStringLiteral("role"), interfaceSpec.role);
         object.insert(QStringLiteral("direction"), interfaceSpec.direction);
-        object.insert(QStringLiteral("required"), interfaceSpec.required);
+        object.insert(packagekeys::required(), interfaceSpec.required);
         object.insert(QStringLiteral("fanout"), interfaceSpec.fanout);
         object.insert(QStringLiteral("properties"), interfaceSpec.properties);
-        object.insert(QStringLiteral("metadata"), interfaceSpec.metadata);
-        object.insert(QStringLiteral("native"), interfaceSpec.native);
+        object.insert(packagekeys::metadata(), interfaceSpec.metadata);
+        object.insert(packagekeys::native(), interfaceSpec.native);
         interfaces.append(object);
     }
-    descriptor.insert(QStringLiteral("interfaces"), interfaces);
+    descriptor.insert(packagekeys::interfaces(), interfaces);
 
     QJsonObject connectionRules;
     if (!spec.connectionRules.metadata.isEmpty()) {
-        connectionRules.insert(QStringLiteral("metadata"), spec.connectionRules.metadata);
+        connectionRules.insert(packagekeys::metadata(), spec.connectionRules.metadata);
     }
     if (!spec.connectionRules.native.isEmpty()) {
-        connectionRules.insert(QStringLiteral("native"), spec.connectionRules.native);
+        connectionRules.insert(packagekeys::native(), spec.connectionRules.native);
     }
     if (!spec.connectionRules.protocolAliases.isEmpty()) {
         QJsonObject aliases;
@@ -390,12 +394,12 @@ QJsonObject specDescriptor(const ipcraft::PackageSpec& spec) {
             object.insert(QStringLiteral("from"), endpointMatchDescriptor(rule.from));
             object.insert(QStringLiteral("to"), endpointMatchDescriptor(rule.to));
             object.insert(QStringLiteral("arity"), rule.arity);
-            object.insert(QStringLiteral("metadata"), rule.metadata);
+            object.insert(packagekeys::metadata(), rule.metadata);
             compatibility.append(object);
         }
         connectionRules.insert(QStringLiteral("compatibility"), compatibility);
     }
-    descriptor.insert(QStringLiteral("connection_rules"), connectionRules);
+    descriptor.insert(packagekeys::connectionRules(), connectionRules);
 
     for (auto it = spec.unknownSections.constBegin(); it != spec.unknownSections.constEnd(); ++it) {
         descriptor.insert(it.key(), it.value());
@@ -448,7 +452,7 @@ QString packageFeatureCoverageStatusLabel(PackageFeatureCoverageStatus status) {
 PackageCoverageReport buildPackageCoverageReport(const QJsonObject& descriptor,
                                                  const CapabilityRegistry& capabilities) {
     PackageCoverageReport report;
-    report.packageId = descriptor.value(QStringLiteral("id")).toString().trimmed();
+    report.packageId = descriptor.value(packagekeys::id()).toString().trimmed();
     appendCapabilities(report, capabilitiesFromDescriptor(descriptor), capabilities);
     appendDescriptorSections(report, descriptor);
     appendUnknownSections(report, descriptor);

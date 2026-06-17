@@ -1,5 +1,7 @@
 #include "ipcraft/flowrunner.h"
 
+#include "ipcraft/contract/flowkeys.h"
+#include "ipcraft/diagnosticids.h"
 #include "ipcraft/jsonhelpers.h"
 
 #include <QDateTime>
@@ -19,6 +21,9 @@
 #endif
 
 namespace {
+
+namespace diagnosticids = ipcraft::diagnosticids;
+namespace flowkeys = ipcraft::contract::flowkeys;
 
 constexpr std::chrono::milliseconds kDefaultCommandDeadline{60000};
 constexpr std::chrono::milliseconds kMaxCommandDeadline = std::chrono::hours{24};
@@ -168,7 +173,7 @@ bool validRelativePath(const QString& rootPath,
                        const QString& relativePath,
                        const QString& path,
                        ipcraft::DiagnosticStore& diagnostics,
-                       const QString& ruleId = QStringLiteral("flow.command_policy_violation")) {
+                       const QString& ruleId = diagnosticids::flowCommandPolicyViolation()) {
     const QString raw = slashPath(relativePath);
     const QString normalized = portablePath(relativePath);
     if (normalized.isEmpty() ||
@@ -198,7 +203,7 @@ bool writeBytes(const QString& runRoot,
     const QFileInfo fileInfo(absolutePath);
     if (!QDir().mkpath(fileInfo.absolutePath())) {
         addFlowDiagnostic(diagnostics,
-                          QStringLiteral("flow.command_policy_violation"),
+                          diagnosticids::flowCommandPolicyViolation(),
                           QStringLiteral("Could not create flow output directory."),
                           path);
         return false;
@@ -207,14 +212,14 @@ bool writeBytes(const QString& runRoot,
     QSaveFile file(absolutePath);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
         addFlowDiagnostic(diagnostics,
-                          QStringLiteral("flow.command_policy_violation"),
+                          diagnosticids::flowCommandPolicyViolation(),
                           QStringLiteral("Could not open flow output file."),
                           path);
         return false;
     }
     if (file.write(bytes) != bytes.size() || !file.commit()) {
         addFlowDiagnostic(diagnostics,
-                          QStringLiteral("flow.command_policy_violation"),
+                          diagnosticids::flowCommandPolicyViolation(),
                           QStringLiteral("Could not write flow output file."),
                           path);
         return false;
@@ -248,7 +253,7 @@ bool optionalStringValue(const QJsonObject& object,
     const QJsonValue jsonValue = object.value(key);
     if (!jsonValue.isString()) {
         addFlowDiagnostic(diagnostics,
-                          QStringLiteral("flow.command_policy_violation"),
+                          diagnosticids::flowCommandPolicyViolation(),
                           QStringLiteral("Flow command field must be a string."),
                           path);
         return false;
@@ -283,7 +288,7 @@ bool optionalStringArrayValue(const QJsonObject& object,
     const QJsonValue jsonValue = object.value(key);
     if (!jsonValue.isArray()) {
         addFlowDiagnostic(diagnostics,
-                          QStringLiteral("flow.command_policy_violation"),
+                          diagnosticids::flowCommandPolicyViolation(),
                           QStringLiteral("Flow command field must be a string array."),
                           path);
         return false;
@@ -293,7 +298,7 @@ bool optionalStringArrayValue(const QJsonObject& object,
         const QJsonValue item = array.at(index);
         if (!item.isString()) {
             addFlowDiagnostic(diagnostics,
-                              QStringLiteral("flow.command_policy_violation"),
+                              diagnosticids::flowCommandPolicyViolation(),
                               QStringLiteral("Flow command array entries must be strings."),
                               indexedPath(path, index));
             return false;
@@ -354,7 +359,7 @@ bool resolvePackageExecutable(const ipcraft::FlowRunRequest& request,
                               QString* executablePath) {
     if (executable.isEmpty()) {
         addFlowDiagnostic(diagnostics,
-                          QStringLiteral("flow.executable_missing"),
+                          diagnosticids::flowExecutableMissing(),
                           QStringLiteral("Flow executable is required."),
                           path);
         return false;
@@ -364,7 +369,7 @@ bool resolvePackageExecutable(const ipcraft::FlowRunRequest& request,
         isWindowsAbsolutePath(normalized) ||
         hasTraversalSegment(executable)) {
         addFlowDiagnostic(diagnostics,
-                          QStringLiteral("flow.command_policy_violation"),
+                          diagnosticids::flowCommandPolicyViolation(),
                           QStringLiteral("Flow executable must be package-relative."),
                           path);
         return false;
@@ -373,7 +378,7 @@ bool resolvePackageExecutable(const ipcraft::FlowRunRequest& request,
     const QString packageRoot = resolvePackageRoot(request);
     if (packageRoot.trimmed().isEmpty()) {
         addFlowDiagnostic(diagnostics,
-                          QStringLiteral("flow.command_policy_violation"),
+                          diagnosticids::flowCommandPolicyViolation(),
                           QStringLiteral("Package root is required for package-local executables."),
                           path);
         return false;
@@ -386,10 +391,10 @@ bool resolvePackageExecutable(const ipcraft::FlowRunRequest& request,
     QFileInfo executableInfo(absolutePath);
     if (!executableInfo.isFile() || !pathInsideRoot(packageRoot, absolutePath)) {
         addFlowDiagnostic(diagnostics,
-                          QStringLiteral("flow.executable_missing"),
+                          diagnosticids::flowExecutableMissing(),
                           QStringLiteral("Flow executable is missing."),
                           path,
-                          QJsonObject{{QStringLiteral("executable"), executable}});
+                          QJsonObject{{flowkeys::executable(), executable}});
         return false;
     }
     const QString canonical = executableInfo.canonicalFilePath();
@@ -409,7 +414,7 @@ bool resolveFrameworkToolExecutable(const ipcraft::FlowRunRequest& request,
         hasTraversalSegment(frameworkTool) ||
         normalizedTool.contains(QLatin1Char('/'))) {
         addFlowDiagnostic(diagnostics,
-                          QStringLiteral("flow.command_policy_violation"),
+                          diagnosticids::flowCommandPolicyViolation(),
                           QStringLiteral("Framework tool name is not allowed."),
                           path);
         return false;
@@ -434,10 +439,10 @@ bool resolveFrameworkToolExecutable(const ipcraft::FlowRunRequest& request,
     }
 
     addFlowDiagnostic(diagnostics,
-                      QStringLiteral("flow.executable_missing"),
+                      diagnosticids::flowExecutableMissing(),
                       QStringLiteral("Framework tool executable is missing."),
                       path,
-                      QJsonObject{{QStringLiteral("framework_tool"), frameworkTool}});
+                      QJsonObject{{flowkeys::frameworkTool(), frameworkTool}});
     return false;
 }
 
@@ -450,20 +455,20 @@ bool resolveExecutable(const ipcraft::FlowRunRequest& request,
     if (!frameworkTool.isEmpty()) {
         if (!executable.isEmpty()) {
             addFlowDiagnostic(diagnostics,
-                              QStringLiteral("flow.command_policy_violation"),
+                              diagnosticids::flowCommandPolicyViolation(),
                               QStringLiteral("Flow command must not declare both executable and framework_tool."),
-                              childPath(stepPath, QStringLiteral("command")));
+                              childPath(stepPath, flowkeys::command()));
             return false;
         }
         return resolveFrameworkToolExecutable(request,
                                               frameworkTool,
-                                              childPath(stepPath, QStringLiteral("command.framework_tool")),
+                                              childPath(stepPath, flowkeys::commandPath(flowkeys::frameworkTool())),
                                               diagnostics,
                                               executablePath);
     }
     return resolvePackageExecutable(request,
                                     executable,
-                                    childPath(stepPath, QStringLiteral("command.executable")),
+                                    childPath(stepPath, flowkeys::commandPath(flowkeys::executable())),
                                     diagnostics,
                                     executablePath);
 }
@@ -484,7 +489,7 @@ bool resolveCwd(const QString& runRoot,
     const QString absolutePath = QDir(runRoot).filePath(normalized);
     if (!QDir().mkpath(absolutePath) || !pathInsideRoot(runRoot, absolutePath)) {
         addFlowDiagnostic(diagnostics,
-                          QStringLiteral("flow.command_policy_violation"),
+                          diagnosticids::flowCommandPolicyViolation(),
                           QStringLiteral("Flow cwd must stay inside the run directory."),
                           path);
         return false;
@@ -504,13 +509,13 @@ std::optional<CapturePolicy> capturePolicy(const QJsonObject& command,
                                            ipcraft::DiagnosticStore& diagnostics) {
     CapturePolicy policy;
     QJsonObject capture;
-    if (command.contains(QStringLiteral("capture"))) {
-        const QJsonValue captureValue = command.value(QStringLiteral("capture"));
+    if (command.contains(flowkeys::capture())) {
+        const QJsonValue captureValue = command.value(flowkeys::capture());
         if (!captureValue.isObject()) {
             addFlowDiagnostic(diagnostics,
-                              QStringLiteral("flow.command_policy_violation"),
+                              diagnosticids::flowCommandPolicyViolation(),
                               QStringLiteral("Flow capture policy must be an object."),
-                              childPath(stepPath, QStringLiteral("command.capture")));
+                              childPath(stepPath, flowkeys::commandPath(flowkeys::capture())));
             return std::nullopt;
         }
         capture = captureValue.toObject();
@@ -518,16 +523,16 @@ std::optional<CapturePolicy> capturePolicy(const QJsonObject& command,
 
     QString stdoutPath;
     if (!optionalStringValue(capture,
-                             QStringLiteral("stdout"),
-                             childPath(stepPath, QStringLiteral("command.capture.stdout")),
+                             flowkeys::stdout(),
+                             childPath(stepPath, flowkeys::commandCapturePath(flowkeys::stdout())),
                              diagnostics,
                              &stdoutPath)) {
         return std::nullopt;
     }
     QString stderrPath;
     if (!optionalStringValue(capture,
-                             QStringLiteral("stderr"),
-                             childPath(stepPath, QStringLiteral("command.capture.stderr")),
+                             flowkeys::stderr(),
+                             childPath(stepPath, flowkeys::commandCapturePath(flowkeys::stderr())),
                              diagnostics,
                              &stderrPath)) {
         return std::nullopt;
@@ -538,24 +543,24 @@ std::optional<CapturePolicy> capturePolicy(const QJsonObject& command,
     if (!stderrPath.isEmpty()) {
         policy.stderrPath = stderrPath;
     }
-    if (capture.contains(QStringLiteral("max_bytes"))) {
+    if (capture.contains(flowkeys::maxBytes())) {
         const std::optional<qint64> requestedMax =
-            strictPositiveIntegerValue(capture, QStringLiteral("max_bytes"));
+            strictPositiveIntegerValue(capture, flowkeys::maxBytes());
         if (!requestedMax.has_value()) {
             addFlowDiagnostic(diagnostics,
-                              QStringLiteral("flow.command_policy_violation"),
+                              diagnosticids::flowCommandPolicyViolation(),
                               QStringLiteral("Flow capture limit must be a positive integer."),
-                              childPath(stepPath, QStringLiteral("command.capture.max_bytes")));
+                              childPath(stepPath, flowkeys::commandCapturePath(flowkeys::maxBytes())));
             return std::nullopt;
         }
         policy.maxBytes = *requestedMax;
     }
     if (policy.maxBytes > kMaxCaptureLimitBytes) {
         addFlowDiagnostic(diagnostics,
-                          QStringLiteral("flow.command_policy_violation"),
+                          diagnosticids::flowCommandPolicyViolation(),
                           QStringLiteral("Flow capture limit exceeds the application maximum."),
-                          childPath(stepPath, QStringLiteral("command.capture.max_bytes")),
-                          QJsonObject{{QStringLiteral("max_bytes"), policy.maxBytes},
+                          childPath(stepPath, flowkeys::commandCapturePath(flowkeys::maxBytes())),
+                          QJsonObject{{flowkeys::maxBytes(), policy.maxBytes},
                                       {QStringLiteral("max_allowed"), kMaxCaptureLimitBytes}});
         return std::nullopt;
     }
@@ -567,24 +572,24 @@ std::optional<std::chrono::milliseconds> commandDeadline(
     const QString& stepPath,
     ipcraft::DiagnosticStore& diagnostics) {
     qint64 milliseconds = toMilliseconds(kDefaultCommandDeadline);
-    if (command.contains(QStringLiteral("timeout_ms"))) {
+    if (command.contains(flowkeys::timeoutMs())) {
         const std::optional<qint64> requested =
-            strictPositiveIntegerValue(command, QStringLiteral("timeout_ms"));
+            strictPositiveIntegerValue(command, flowkeys::timeoutMs());
         if (!requested.has_value()) {
             addFlowDiagnostic(diagnostics,
-                              QStringLiteral("flow.command_policy_violation"),
+                              diagnosticids::flowCommandPolicyViolation(),
                               QStringLiteral("Flow timeout must be a positive integer."),
-                              childPath(stepPath, QStringLiteral("command.timeout_ms")));
+                              childPath(stepPath, flowkeys::commandPath(flowkeys::timeoutMs())));
             return std::nullopt;
         }
         milliseconds = *requested;
     }
     if (milliseconds > toMilliseconds(kMaxCommandDeadline)) {
         addFlowDiagnostic(diagnostics,
-                          QStringLiteral("flow.command_policy_violation"),
+                          diagnosticids::flowCommandPolicyViolation(),
                           QStringLiteral("Flow timeout exceeds the application maximum."),
-                          childPath(stepPath, QStringLiteral("command.timeout_ms")),
-                          QJsonObject{{QStringLiteral("timeout_ms"), milliseconds},
+                          childPath(stepPath, flowkeys::commandPath(flowkeys::timeoutMs())),
+                          QJsonObject{{flowkeys::timeoutMs(), milliseconds},
                                       {QStringLiteral("max_allowed"),
                                        toMilliseconds(kMaxCommandDeadline)}});
         return std::nullopt;
@@ -616,9 +621,9 @@ void addTruncationDiagnostic(ipcraft::DiagnosticStore& diagnostics,
     QJsonObject details;
     details.insert(QStringLiteral("stream"), streamName);
     details.insert(QStringLiteral("limit"), limit);
-    details.insert(QStringLiteral("capture"), capturePath);
+    details.insert(flowkeys::capture(), capturePath);
     diagnostics.records.append(diagnostic(
-        QStringLiteral("flow.output_truncated"),
+        diagnosticids::flowOutputTruncated(),
         QStringLiteral("Flow process output was truncated."),
         {documentLocation(commandPath), fileLocation(capturePath)},
         details,
@@ -630,20 +635,21 @@ bool parseEnvironmentAllowList(const QJsonObject& command,
                                ipcraft::DiagnosticStore& diagnostics,
                                QStringList* allowList) {
     allowList->clear();
-    if (!command.contains(QStringLiteral("env"))) {
+    if (!command.contains(flowkeys::env())) {
         return true;
     }
-    const QJsonValue envValue = command.value(QStringLiteral("env"));
+    const QJsonValue envValue = command.value(flowkeys::env());
     if (!envValue.isObject()) {
         addFlowDiagnostic(diagnostics,
-                          QStringLiteral("flow.command_policy_violation"),
+                          diagnosticids::flowCommandPolicyViolation(),
                           QStringLiteral("Flow environment policy must be an object."),
-                          childPath(stepPath, QStringLiteral("command.env")));
+                          childPath(stepPath, flowkeys::commandPath(flowkeys::env())));
         return false;
     }
     return optionalStringArrayValue(envValue.toObject(),
-                                    QStringLiteral("allow"),
-                                    childPath(stepPath, QStringLiteral("command.env.allow")),
+                                    flowkeys::allow(),
+                                    childPath(stepPath, flowkeys::commandPath(flowkeys::env()) +
+                                                          QLatin1Char('.') + flowkeys::allow()),
                                     diagnostics,
                                     allowList);
 }
@@ -674,28 +680,28 @@ bool runExecStep(const ipcraft::FlowRunRequest& request,
                  const QJsonObject& step,
                  const QString& stepPath,
                  ipcraft::FlowRunResult& result) {
-    const QJsonValue commandValue = step.value(QStringLiteral("command"));
+    const QJsonValue commandValue = step.value(flowkeys::command());
     if (!commandValue.isObject()) {
         addFlowDiagnostic(result.diagnostics,
-                          QStringLiteral("flow.command_policy_violation"),
+                          diagnosticids::flowCommandPolicyViolation(),
                           QStringLiteral("Flow exec command must be an object."),
-                          childPath(stepPath, QStringLiteral("command")));
+                          childPath(stepPath, flowkeys::command()));
         return false;
     }
 
     const QJsonObject command = commandValue.toObject();
-    if (command.contains(QStringLiteral("native"))) {
+    if (command.contains(flowkeys::native())) {
         addFlowDiagnostic(result.diagnostics,
-                          QStringLiteral("flow.command_policy_violation"),
+                          diagnosticids::flowCommandPolicyViolation(),
                           QStringLiteral("Native command policy overrides are not allowed."),
-                          childPath(stepPath, QStringLiteral("command.native")));
+                          childPath(stepPath, flowkeys::commandPath(flowkeys::native())));
         return false;
     }
 
     QString executable;
     if (!optionalStringValue(command,
-                             QStringLiteral("executable"),
-                             childPath(stepPath, QStringLiteral("command.executable")),
+                             flowkeys::executable(),
+                             childPath(stepPath, flowkeys::commandPath(flowkeys::executable())),
                              result.diagnostics,
                              &executable)) {
         return false;
@@ -703,8 +709,8 @@ bool runExecStep(const ipcraft::FlowRunRequest& request,
 
     QString frameworkTool;
     if (!optionalStringValue(command,
-                             QStringLiteral("framework_tool"),
-                             childPath(stepPath, QStringLiteral("command.framework_tool")),
+                             flowkeys::frameworkTool(),
+                             childPath(stepPath, flowkeys::commandPath(flowkeys::frameworkTool())),
                              result.diagnostics,
                              &frameworkTool)) {
         return false;
@@ -712,8 +718,8 @@ bool runExecStep(const ipcraft::FlowRunRequest& request,
 
     QString requestedCwd;
     if (!optionalStringValue(command,
-                             QStringLiteral("cwd"),
-                             childPath(stepPath, QStringLiteral("command.cwd")),
+                             flowkeys::cwd(),
+                             childPath(stepPath, flowkeys::commandPath(flowkeys::cwd())),
                              result.diagnostics,
                              &requestedCwd)) {
         return false;
@@ -721,8 +727,8 @@ bool runExecStep(const ipcraft::FlowRunRequest& request,
 
     QStringList arguments;
     if (!optionalStringArrayValue(command,
-                                  QStringLiteral("args"),
-                                  childPath(stepPath, QStringLiteral("command.args")),
+                                  flowkeys::args(),
+                                  childPath(stepPath, flowkeys::commandPath(flowkeys::args())),
                                   result.diagnostics,
                                   &arguments)) {
         return false;
@@ -759,7 +765,7 @@ bool runExecStep(const ipcraft::FlowRunRequest& request,
     QString cwd;
     if (!resolveCwd(result.runRoot,
                     requestedCwd,
-                    childPath(stepPath, QStringLiteral("command.cwd")),
+                    childPath(stepPath, flowkeys::commandPath(flowkeys::cwd())),
                     result.diagnostics,
                     &cwd)) {
         return false;
@@ -767,18 +773,18 @@ bool runExecStep(const ipcraft::FlowRunRequest& request,
 
     if (portablePath(capture.stdoutPath) == portablePath(capture.stderrPath)) {
         addFlowDiagnostic(result.diagnostics,
-                          QStringLiteral("flow.command_policy_violation"),
+                          diagnosticids::flowCommandPolicyViolation(),
                           QStringLiteral("Flow stdout and stderr capture paths must be distinct."),
-                          childPath(stepPath, QStringLiteral("command.capture")));
+                          childPath(stepPath, flowkeys::commandPath(flowkeys::capture())));
         return false;
     }
     if (!validRelativePath(result.runRoot,
                            capture.stdoutPath,
-                           childPath(stepPath, QStringLiteral("command.capture.stdout")),
+                           childPath(stepPath, flowkeys::commandCapturePath(flowkeys::stdout())),
                            result.diagnostics) ||
         !validRelativePath(result.runRoot,
                            capture.stderrPath,
-                           childPath(stepPath, QStringLiteral("command.capture.stderr")),
+                           childPath(stepPath, flowkeys::commandCapturePath(flowkeys::stderr())),
                            result.diagnostics)) {
         return false;
     }
@@ -796,10 +802,10 @@ bool runExecStep(const ipcraft::FlowRunRequest& request,
     process.start();
     if (!process.waitForStarted()) {
         addFlowDiagnostic(result.diagnostics,
-                          QStringLiteral("flow.executable_missing"),
+                          diagnosticids::flowExecutableMissing(),
                           QStringLiteral("Flow executable could not be started."),
-                          childPath(stepPath, QStringLiteral("command.executable")),
-                          QJsonObject{{QStringLiteral("executable"), executablePath}});
+                          childPath(stepPath, flowkeys::commandPath(flowkeys::executable())),
+                          QJsonObject{{flowkeys::executable(), executablePath}});
         return false;
     }
 
@@ -839,24 +845,24 @@ bool runExecStep(const ipcraft::FlowRunRequest& request,
     const bool stdoutWritten = writeBytes(result.runRoot,
                                           capture.stdoutPath,
                                           stdoutBytes,
-                                          childPath(stepPath, QStringLiteral("command.capture.stdout")),
+                                          childPath(stepPath, flowkeys::commandCapturePath(flowkeys::stdout())),
                                           result.diagnostics);
     const bool stderrWritten = writeBytes(result.runRoot,
                                           capture.stderrPath,
                                           stderrBytes,
-                                          childPath(stepPath, QStringLiteral("command.capture.stderr")),
+                                          childPath(stepPath, flowkeys::commandCapturePath(flowkeys::stderr())),
                                           result.diagnostics);
 
     if (stdoutTruncated) {
         addTruncationDiagnostic(result.diagnostics,
-                                QStringLiteral("stdout"),
+                                flowkeys::stdout(),
                                 capture.maxBytes,
                                 portablePath(capture.stdoutPath),
                                 stepPath);
     }
     if (stderrTruncated) {
         addTruncationDiagnostic(result.diagnostics,
-                                QStringLiteral("stderr"),
+                                flowkeys::stderr(),
                                 capture.maxBytes,
                                 portablePath(capture.stderrPath),
                                 stepPath);
@@ -864,10 +870,10 @@ bool runExecStep(const ipcraft::FlowRunRequest& request,
 
     if (timedOut) {
         addFlowDiagnostic(result.diagnostics,
-                          QStringLiteral("flow.timeout"),
+                          diagnosticids::flowTimeout(),
                           QStringLiteral("Flow process timed out."),
-                          childPath(stepPath, QStringLiteral("command.timeout_ms")),
-                          QJsonObject{{QStringLiteral("timeout_ms"),
+                          childPath(stepPath, flowkeys::commandPath(flowkeys::timeoutMs())),
+                          QJsonObject{{flowkeys::timeoutMs(),
                                        toMilliseconds(*deadline)}});
         return false;
     }
@@ -878,7 +884,7 @@ bool runExecStep(const ipcraft::FlowRunRequest& request,
 
     if (process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0) {
         addFlowDiagnostic(result.diagnostics,
-                          QStringLiteral("flow.exec_failed"),
+                          diagnosticids::flowExecFailed(),
                           QStringLiteral("Flow process exited with failure."),
                           stepPath,
                           QJsonObject{{QStringLiteral("exit_code"), process.exitCode()}});
@@ -895,7 +901,7 @@ bool emittedInputsManifestUnchanged(const QString& runRoot,
     QFile manifest(manifestPath);
     if (!manifest.open(QIODevice::ReadOnly)) {
         addFlowFileDiagnostic(diagnostics,
-                              QStringLiteral("flow.inputs_manifest_missing"),
+                              diagnosticids::flowInputsManifestMissing(),
                               QStringLiteral("Emitted inputs manifest was removed after emit_inputs."),
                               QStringLiteral("$.inputs.manifest"),
                               manifestPath);
@@ -905,7 +911,7 @@ bool emittedInputsManifestUnchanged(const QString& runRoot,
     const QByteArray actualBytes = manifest.readAll();
     if (actualBytes != expectedBytes) {
         addFlowFileDiagnostic(diagnostics,
-                              QStringLiteral("flow.inputs_manifest_modified"),
+                              diagnosticids::flowInputsManifestModified(),
                               QStringLiteral("Emitted inputs manifest was modified after emit_inputs."),
                               QStringLiteral("$.inputs.manifest"),
                               manifestPath);
@@ -930,7 +936,7 @@ FlowRunResult FlowRunner::runFlow(const FlowRunRequest& request) {
 
     if (!QDir().mkpath(result.runRoot)) {
         addFlowDiagnostic(result.diagnostics,
-                          QStringLiteral("flow.command_policy_violation"),
+                          diagnosticids::flowCommandPolicyViolation(),
                           QStringLiteral("Could not create flow run directory."),
                           QStringLiteral("$.run_root"));
         result.ok = false;
@@ -941,7 +947,7 @@ FlowRunResult FlowRunner::runFlow(const FlowRunRequest& request) {
     const QJsonObject flow = findFlow(request.package, request.flowId);
     if (flow.isEmpty()) {
         addFlowDiagnostic(result.diagnostics,
-                          QStringLiteral("flow.unknown_flow"),
+                          diagnosticids::flowUnknownFlow(),
                           QStringLiteral("Requested flow is not declared by the package."),
                           QStringLiteral("$.flow"));
         result.ok = false;
@@ -950,10 +956,10 @@ FlowRunResult FlowRunner::runFlow(const FlowRunRequest& request) {
 
     bool hardFailure = false;
     bool emittedInputs = false;
-    const QJsonValue stepsValue = flow.value(QStringLiteral("steps"));
+    const QJsonValue stepsValue = flow.value(flowkeys::steps());
     if (!stepsValue.isArray()) {
         addFlowDiagnostic(result.diagnostics,
-                          QStringLiteral("flow.command_policy_violation"),
+                          diagnosticids::flowCommandPolicyViolation(),
                           QStringLiteral("Flow steps must be an array."),
                           QStringLiteral("$.flow.steps"));
         result.ok = false;
@@ -965,7 +971,7 @@ FlowRunResult FlowRunner::runFlow(const FlowRunRequest& request) {
         const QJsonValue stepValue = steps.at(index);
         if (!stepValue.isObject()) {
             addFlowDiagnostic(result.diagnostics,
-                              QStringLiteral("flow.command_policy_violation"),
+                              diagnosticids::flowCommandPolicyViolation(),
                               QStringLiteral("Flow step must be an object."),
                               stepPath);
             hardFailure = true;
@@ -973,7 +979,7 @@ FlowRunResult FlowRunner::runFlow(const FlowRunRequest& request) {
         }
 
         const QJsonObject step = stepValue.toObject();
-        const QString kind = stringValue(step, {QStringLiteral("kind")});
+        const QString kind = stringValue(step, {flowkeys::kind()});
         if (kind == QStringLiteral("exec")) {
             if (!runExecStep(request, step, stepPath, result)) {
                 hardFailure = true;
@@ -1020,21 +1026,21 @@ FlowRunResult FlowRunner::runFlow(const FlowRunRequest& request) {
             }
         } else if (kind == QStringLiteral("parse_diagnostics")) {
             addFlowDiagnostic(result.diagnostics,
-                              QStringLiteral("flow.command_policy_violation"),
+                              diagnosticids::flowCommandPolicyViolation(),
                               QStringLiteral("Flow diagnostic parsing is not available without a declared parser."),
                               stepPath);
             hardFailure = true;
         } else if (kind == QStringLiteral("plugin_hook")) {
             addFlowDiagnostic(result.diagnostics,
-                              QStringLiteral("flow.plugin_unavailable"),
+                              diagnosticids::flowPluginUnavailable(),
                               QStringLiteral("Flow plugin hooks are not available in this runtime."),
                               stepPath);
             hardFailure = true;
         } else {
             addFlowDiagnostic(result.diagnostics,
-                              QStringLiteral("flow.command_policy_violation"),
+                              diagnosticids::flowCommandPolicyViolation(),
                               QStringLiteral("Flow step kind is not supported."),
-                              childPath(stepPath, QStringLiteral("kind")));
+                              childPath(stepPath, flowkeys::kind()));
             hardFailure = true;
         }
     }
