@@ -1,5 +1,5 @@
 // AddConnectionCommand adds one connection with undo support.
-#include "commands/addconnectioncommand.h"
+#include "legacy/graphcommands/addconnectioncommand.h"
 
 #include "project/editormutationtarget.h"
 

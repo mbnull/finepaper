@@ -1226,7 +1226,7 @@ void testScopedDropRejectsLegacyModuleTypeMime() {
             "legacy module MIME should not create a module");
 }
 
-void testScopedDropCreatesOwnedModule() {
+void testScopedDropDoesNotCreateGraphModuleDirectly() {
     ScopedNodeEditorHarness harness;
     harness.selectRavenoc();
     auto mimeData = scopedModuleMime(QStringLiteral("finepaper.ravenoc"),
@@ -1235,29 +1235,24 @@ void testScopedDropCreatesOwnedModule() {
 
     const bool accepted = sendScopedDrop(harness.editor, mimeData.get());
 
-    require(accepted, "matching scoped module drop should be accepted");
-    require(harness.graph.modules().size() == 1, "matching scoped drop should create one module");
-    const Module* module = harness.graph.modules().front().get();
-    require(module->type() == QStringLiteral("RaveTile"),
-            "created module should use payload module type");
-    require(module->ipcoreId() == QStringLiteral("finepaper.ravenoc"),
-            "created module should keep active IP-core ownership");
-    require(module->instanceId() == QStringLiteral("ravenoc_0"),
-            "created module should keep active instance ownership");
-    require(harness.commandManager.canUndo(),
-            "scoped module creation should enter command history");
+    require(!accepted,
+            "matching scoped module drop should not be accepted until design patch editing is wired");
+    require(harness.graph.modules().empty(),
+            "matching scoped drop should not create a graph module directly");
+    require(!harness.commandManager.canUndo(),
+            "matching scoped drop should not enter legacy graph command history");
 }
 
-void testActiveWorkspaceShowsOnlyModulesForSelectedInstance() {
+void testScopedDropsDoNotPopulateActiveWorkspaceProjectionDirectly() {
     ScopedNodeEditorHarness harness;
     harness.selectFabric();
     auto firstMime = scopedModuleMime(QStringLiteral("finepaper.fabric"),
                                       QStringLiteral("fabric_0"),
                                       QStringLiteral("FabricSwitch"));
-    require(sendScopedDrop(harness.editor, firstMime.get()),
-            "first scoped drop should create module for fabric_0");
-    require(harness.graph.modules().size() == 1, "first scoped drop should add one graph module");
-    const QString firstModuleId = harness.graph.modules().front()->id();
+    require(!sendScopedDrop(harness.editor, firstMime.get()),
+            "first scoped drop should not create module for fabric_0 directly");
+    require(harness.graph.modules().empty(),
+            "first scoped drop should not add a graph module directly");
 
     const ProjectIpServiceResult secondInstance =
         harness.projectIpService.createInstanceForIpcore(harness.fabricEntry());
@@ -1265,30 +1260,30 @@ void testActiveWorkspaceShowsOnlyModulesForSelectedInstance() {
     auto secondMime = scopedModuleMime(QStringLiteral("finepaper.fabric"),
                                        QStringLiteral("fabric_1"),
                                        QStringLiteral("FabricSwitch"));
-    require(sendScopedDrop(harness.editor, secondMime.get()),
-            "second scoped drop should create module for fabric_1");
-    require(harness.graph.modules().size() == 2, "second scoped drop should add another graph module");
-    const QString secondModuleId = harness.graph.modules().back()->id();
+    require(!sendScopedDrop(harness.editor, secondMime.get()),
+            "second scoped drop should not create module for fabric_1 directly");
+    require(harness.graph.modules().empty(),
+            "second scoped drop should not add another graph module directly");
 
     QStringList visibleIds = harness.editor.visibleModuleIds();
-    require(visibleIds == QStringList{secondModuleId},
-            "active workspace should only show modules for the selected instance");
+    require(visibleIds.isEmpty(),
+            "active workspace projection should stay empty without a design patch update");
 
     require(harness.projectIpService.selectInstance(QStringLiteral("finepaper.fabric"),
                                                     QStringLiteral("fabric_0")),
             "first instance selection should succeed");
     QCoreApplication::processEvents();
     visibleIds = harness.editor.visibleModuleIds();
-    require(visibleIds == QStringList{firstModuleId},
-            "switching back to fabric_0 should hide fabric_1 modules");
+    require(visibleIds.isEmpty(),
+            "switching back to fabric_0 should not reveal modules from rejected direct drops");
 
     require(harness.projectIpService.selectInstance(QStringLiteral("finepaper.fabric"),
                                                     QStringLiteral("fabric_1")),
             "second instance selection should succeed");
     QCoreApplication::processEvents();
     visibleIds = harness.editor.visibleModuleIds();
-    require(visibleIds == QStringList{secondModuleId},
-            "switching to fabric_1 should hide fabric_0 modules");
+    require(visibleIds.isEmpty(),
+            "switching to fabric_1 should not reveal modules from rejected direct drops");
 }
 
 void testCreateMenuTypesFollowActiveWorkspace() {
@@ -1624,8 +1619,8 @@ int main(int argc, char** argv) {
         testScopedDropRejectsMissingActiveInstance();
         testScopedDropRejectsDifferentIpcore();
         testScopedDropRejectsLegacyModuleTypeMime();
-        testScopedDropCreatesOwnedModule();
-        testActiveWorkspaceShowsOnlyModulesForSelectedInstance();
+        testScopedDropDoesNotCreateGraphModuleDirectly();
+        testScopedDropsDoNotPopulateActiveWorkspaceProjectionDirectly();
         testCreateMenuTypesFollowActiveWorkspace();
         testCollapsedHostAbsorbsEndpointWhenAttachmentConnectionIsAdded();
         testCollapsedAttachedNodeMirrorsIntoHostZone();

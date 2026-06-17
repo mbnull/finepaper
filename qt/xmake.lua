@@ -15,14 +15,6 @@ target("qt")
     add_files("src/nodeeditor/*.cpp")
     add_files("src/nodeeditor/events/*.cpp")
     add_files("src/commands/*.cpp")
-    remove_files("src/commands/addconnectioncommand.cpp")
-    remove_files("src/commands/addmodulecommand.cpp")
-    remove_files("src/commands/arrangecommand.cpp")
-    remove_files("src/commands/removeconnectioncommand.cpp")
-    remove_files("src/commands/removemodulecommand.cpp")
-    remove_files("src/commands/setconnectionclasscommand.cpp")
-    remove_files("src/commands/setparametercommand.cpp")
-    remove_files("src/commands/topologypresetcommand.cpp")
     -- add files with Q_OBJECT meta (only for qt.moc)
     add_files("inc/**/mainwindow.h")
     add_files("inc/**/graph.h")
@@ -71,12 +63,12 @@ local function add_qt_test_target(name, source_files, extra_files, qt_rule)
 end
 
 add_qt_test_target("graph_test", "test/graph_test.cpp", {
-    "src/commands/addconnectioncommand.cpp",
-    "src/commands/addmodulecommand.cpp",
+    "legacy/graphcommands/addconnectioncommand.cpp",
+    "legacy/graphcommands/addmodulecommand.cpp",
     "src/commands/command.cpp",
     "src/commands/commandmanager.cpp",
-    "src/commands/removeconnectioncommand.cpp",
-    "src/commands/removemodulecommand.cpp",
+    "legacy/graphcommands/removeconnectioncommand.cpp",
+    "legacy/graphcommands/removemodulecommand.cpp",
     "src/connection/connectionruleservice.cpp",
     "src/**/graph.cpp",
     "src/**/module.cpp",
@@ -141,7 +133,7 @@ add_qt_test_target("commandmanager_test", "test/commandmanager_test.cpp", {
 })
 
 add_qt_test_target("arrangecommand_test", "test/arrangecommand_test.cpp", {
-    "src/commands/arrangecommand.cpp",
+    "legacy/graphcommands/arrangecommand.cpp",
     "src/**/command.cpp",
     "src/**/graph.cpp",
     "src/**/module.cpp",
@@ -1125,7 +1117,7 @@ target("removeipinstancecommand_test")
     add_files("src/commands/command.cpp")
     add_files("src/commands/commandmanager.cpp")
     add_files("src/commands/addipinstancecommand.cpp")
-    add_files("src/commands/removeipinstancecommand.cpp")
+    add_files("legacy/graphcommands/removeipinstancecommand.cpp")
     add_files("src/graph/graph.cpp")
     add_files("src/graph/module.cpp")
     add_files("src/graph/connection.cpp")
@@ -1135,7 +1127,7 @@ target("removeipinstancecommand_test")
     add_files("src/project/projectstateservice.cpp")
     add_files("inc/commands/commandmanager.h")
     add_files("inc/commands/addipinstancecommand.h")
-    add_files("inc/commands/removeipinstancecommand.h")
+    add_files("inc/legacy/graphcommands/removeipinstancecommand.h")
     add_files("inc/graph/graph.h")
     add_files("inc/graph/module.h")
     add_files("inc/project/projectipservice.h")
@@ -1652,9 +1644,7 @@ target("propertypanel_test")
     add_files("src/widgets/collapsiblesection.cpp")
     add_files("src/project/projectstateservice.cpp")
     add_files("src/project/runtimeipinstanceparameteradapter.cpp")
-    add_files("src/commands/setconnectionclasscommand.cpp")
     add_files("src/commands/setipinstanceparametercommand.cpp")
-    add_files("src/commands/setparametercommand.cpp")
     add_files("src/commands/command.cpp")
     add_files("src/commands/commandmanager.cpp")
     add_files("src/graph/graph.cpp")
@@ -1747,6 +1737,10 @@ target("ipcatalogpanel_test")
     add_files("src/topology/*.cpp")
     add_files("src/connection/*.cpp")
     add_files("src/commands/*.cpp")
+    add_files("legacy/graphcommands/addconnectioncommand.cpp")
+    add_files("legacy/graphcommands/addmodulecommand.cpp")
+    add_files("legacy/graphcommands/removeipinstancecommand.cpp")
+    add_files("legacy/graphcommands/setparametercommand.cpp")
     add_files("src/graph/*.cpp")
     add_files("src/modules/*.cpp")
     add_files("src/nodeeditor/*.cpp")
@@ -1785,14 +1779,8 @@ target("nodeeditor_geometry_test")
     add_files("src/app/appsettings.cpp")
     add_files("src/connection/connectionruleprovider.cpp")
     add_files("src/connection/connectionruleservice.cpp")
-    add_files("src/commands/addconnectioncommand.cpp")
-    add_files("src/commands/addmodulecommand.cpp")
-    add_files("src/commands/arrangecommand.cpp")
     add_files("src/commands/command.cpp")
     add_files("src/commands/commandmanager.cpp")
-    add_files("src/commands/removeconnectioncommand.cpp")
-    add_files("src/commands/removemodulecommand.cpp")
-    add_files("src/commands/setparametercommand.cpp")
     add_files("src/graph/graph.cpp")
     add_files("src/graph/connection.cpp")
     add_files("src/**/module.cpp")
@@ -1862,7 +1850,7 @@ add_qt_test_target("ipcoreruntime_test", "test/ipcoreruntime_test.cpp", {
 add_qt_test_target("topology_preset_test", "test/topology_preset_test.cpp", {
     "src/commands/command.cpp",
     "src/commands/commandmanager.cpp",
-    "src/commands/topologypresetcommand.cpp",
+    "legacy/graphcommands/topologypresetcommand.cpp",
     "src/connection/connectionruleservice.cpp",
     "src/**/topologypresetbuilder.cpp",
     "src/**/graph.cpp",

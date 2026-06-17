@@ -1,5 +1,5 @@
 // AddModuleCommand inserts one module with undo support.
-#include "commands/addmodulecommand.h"
+#include "legacy/graphcommands/addmodulecommand.h"
 
 #include "project/editormutationtarget.h"
 

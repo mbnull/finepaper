@@ -16,7 +16,7 @@
 #include <vector>
 
 #define private public
-#include "commands/removeipinstancecommand.h"
+#include "legacy/graphcommands/removeipinstancecommand.h"
 #undef private
 
 namespace {

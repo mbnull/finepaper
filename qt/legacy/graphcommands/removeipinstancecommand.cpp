@@ -1,5 +1,5 @@
 // RemoveIpInstanceCommand removes a project IP instance with undo/redo support.
-#include "commands/removeipinstancecommand.h"
+#include "legacy/graphcommands/removeipinstancecommand.h"
 
 #include "graph/graph.h"
 #include "project/projectstateservice.h"

@@ -1,5 +1,5 @@
 #include "commands/commandmanager.h"
-#include "commands/topologypresetcommand.h"
+#include "legacy/graphcommands/topologypresetcommand.h"
 #include "graph/graph.h"
 #include "modules/moduleregistry.h"
 #include "modules/moduleprovider.h"

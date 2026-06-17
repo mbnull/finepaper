@@ -1,5 +1,5 @@
 // RemoveConnectionCommand removes one connection and restores it on undo.
-#include "commands/removeconnectioncommand.h"
+#include "legacy/graphcommands/removeconnectioncommand.h"
 
 #include "project/editormutationtarget.h"
 

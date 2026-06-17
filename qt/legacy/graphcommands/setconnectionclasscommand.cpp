@@ -1,5 +1,5 @@
 // SetConnectionClassCommand updates connection class metadata with undo support.
-#include "commands/setconnectionclasscommand.h"
+#include "legacy/graphcommands/setconnectionclasscommand.h"
 
 #include "graph/graph.h"
 #include "project/editormutationtarget.h"

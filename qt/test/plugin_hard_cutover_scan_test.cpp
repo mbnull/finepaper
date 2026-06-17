@@ -34,6 +34,17 @@ QString resolveRepositoryPath(const QString& path) {
     throw std::runtime_error(("missing path: " + path).toStdString());
 }
 
+QString repositoryRootPath() {
+    const QFileInfo xmake(resolveRepositoryPath(QStringLiteral("qt/xmake.lua")));
+    QDir root(xmake.dir());
+    root.cdUp();
+    return root.absolutePath();
+}
+
+bool repositoryRelativePathExists(const QString& path) {
+    return QFileInfo(QDir(repositoryRootPath()).absoluteFilePath(path)).exists();
+}
+
 QString readText(const QString& path) {
     QFile source(resolveRepositoryPath(path));
     if (!source.open(QIODevice::ReadOnly | QIODevice::Text)) {
@@ -316,7 +327,7 @@ void testMainWindowDispatchesTopologyInteractionsWithoutPresetSemantics() {
         QStringLiteral("TopologyPresetCommand"),
         QStringLiteral("TopologyPresetParameterDescriptor"),
         QStringLiteral("topology/topologypresetbuilder.h"),
-        QStringLiteral("commands/topologypresetcommand.h"),
+        QStringLiteral("legacy/graphcommands/topologypresetcommand.h"),
         QStringLiteral("QInputDialog::getInt"),
         QStringLiteral("createTopologyPresetFor")
     };
@@ -432,14 +443,14 @@ void testLegacyGraphDrcRunnerIsNotInProductValidationRuntime() {
 
 void testEditorMutationTargetCommandResultsAreChecked() {
     const QStringList commandFiles{
-        QStringLiteral("qt/src/commands/addconnectioncommand.cpp"),
-        QStringLiteral("qt/src/commands/addmodulecommand.cpp"),
-        QStringLiteral("qt/src/commands/arrangecommand.cpp"),
-        QStringLiteral("qt/src/commands/removeconnectioncommand.cpp"),
-        QStringLiteral("qt/src/commands/removemodulecommand.cpp"),
-        QStringLiteral("qt/src/commands/setconnectionclasscommand.cpp"),
-        QStringLiteral("qt/src/commands/setparametercommand.cpp"),
-        QStringLiteral("qt/src/commands/topologypresetcommand.cpp")
+        QStringLiteral("qt/legacy/graphcommands/addconnectioncommand.cpp"),
+        QStringLiteral("qt/legacy/graphcommands/addmodulecommand.cpp"),
+        QStringLiteral("qt/legacy/graphcommands/arrangecommand.cpp"),
+        QStringLiteral("qt/legacy/graphcommands/removeconnectioncommand.cpp"),
+        QStringLiteral("qt/legacy/graphcommands/removemodulecommand.cpp"),
+        QStringLiteral("qt/legacy/graphcommands/setconnectionclasscommand.cpp"),
+        QStringLiteral("qt/legacy/graphcommands/setparametercommand.cpp"),
+        QStringLiteral("qt/legacy/graphcommands/topologypresetcommand.cpp")
     };
     const QStringList ignoredPrefixes{
         QStringLiteral("m_editorMutationTarget->"),
@@ -668,6 +679,7 @@ QStringList oldGraphCommandClassNames() {
         QStringLiteral("AddConnectionCommand"),
         QStringLiteral("RemoveModuleCommand"),
         QStringLiteral("RemoveConnectionCommand"),
+        QStringLiteral("RemoveIpInstanceCommand"),
         QStringLiteral("SetParameterCommand"),
         QStringLiteral("SetConnectionClassCommand"),
         QStringLiteral("ArrangeCommand"),
@@ -681,6 +693,7 @@ QStringList oldGraphCommandIncludeNames() {
         QStringLiteral("addconnectioncommand"),
         QStringLiteral("removemodulecommand"),
         QStringLiteral("removeconnectioncommand"),
+        QStringLiteral("removeipinstancecommand"),
         QStringLiteral("setparametercommand"),
         QStringLiteral("setconnectionclasscommand"),
         QStringLiteral("arrangecommand"),
@@ -693,6 +706,9 @@ void requireNoOldGraphCommandConstruction(const QString& file) {
     for (const QString& includeName : oldGraphCommandIncludeNames()) {
         requireNotContains(source,
                            QStringLiteral("commands/%1.h").arg(includeName),
+                           file);
+        requireNotContains(source,
+                           QStringLiteral("legacy/graphcommands/%1.h").arg(includeName),
                            file);
     }
     for (const QString& className : oldGraphCommandClassNames()) {
@@ -724,16 +740,55 @@ void testProductRuntimeDoesNotConstructOldGraphCommands() {
                        QStringLiteral("TopologyPresetInteractionHandler"));
 }
 
-void testProductTargetExcludesOldGraphCommandSources() {
+void testCurrentDurableCommandDirectoriesAreGraphFree() {
+    const QStringList roots{
+        QStringLiteral("qt/inc/commands"),
+        QStringLiteral("qt/src/commands")
+    };
+    const QStringList forbiddenTokens{
+        QStringLiteral("EditorMutationTarget"),
+        QStringLiteral("project/editormutationtarget.h"),
+        QStringLiteral("graph/graph.h")
+    };
+    const QRegularExpression graphPointer(QStringLiteral("\\b(?:const\\s+)?Graph\\s*\\*"));
+    const QRegularExpression graphForwardDeclaration(QStringLiteral("\\bclass\\s+Graph\\s*;"));
+
+    for (const QString& file : runtimeSourceFiles(roots)) {
+        const QString source = readText(file);
+        for (const QString& token : forbiddenTokens) {
+            requireNotContains(source, token, file);
+        }
+        requireNoMatch(source, graphPointer, file);
+        requireNoMatch(source, graphForwardDeclaration, file);
+    }
+}
+
+void testOldGraphCommandSourcesAreLegacyOnly() {
+    for (const QString& includeName : oldGraphCommandIncludeNames()) {
+        const QString headerPath =
+            QStringLiteral("qt/inc/commands/%1.h").arg(includeName);
+        const QString sourcePath =
+            QStringLiteral("qt/src/commands/%1.cpp").arg(includeName);
+        require(!repositoryRelativePathExists(headerPath),
+                headerPath + QStringLiteral(" must stay out of the current durable command include directory"));
+        require(!repositoryRelativePathExists(sourcePath),
+                sourcePath + QStringLiteral(" must stay out of the current durable command source directory"));
+    }
+}
+
+void testProductTargetDoesNotCompileOldGraphCommandSources() {
     const QString xmake = readText(QStringLiteral("qt/xmake.lua"));
     const QString qtTarget = sectionBetween(xmake,
                                             QStringLiteral("target(\"qt\")"),
-                                            QStringLiteral("add_qt_test_target(\"graph_test\""),
+                                            QStringLiteral("local function add_qt_test_target"),
                                             QStringLiteral("qt product target"));
     for (const QString& includeName : oldGraphCommandIncludeNames()) {
-        requireContains(qtTarget,
-                        QStringLiteral("remove_files(\"src/commands/%1.cpp\")").arg(includeName),
-                        QStringLiteral("qt product target old graph command exclusion"));
+        requireNotContains(qtTarget,
+                           QStringLiteral("src/commands/%1.cpp").arg(includeName),
+                           QStringLiteral("qt product target old graph command source exclusion"));
+        requireNotContains(qtTarget,
+                           QStringLiteral("legacy/graphcommands/%1.cpp").arg(includeName),
+                           QStringLiteral("qt product target legacy graph command source exclusion"));
     }
 }
 
@@ -761,7 +816,9 @@ int main(int argc, char** argv) {
     testFlowRunnerCommandParsingRejectsPermissiveQtJsonConversions();
     testProjectPatchBoundaryDocumentsMissingDesignEditingOperations();
     testProductRuntimeDoesNotConstructOldGraphCommands();
-    testProductTargetExcludesOldGraphCommandSources();
+    testCurrentDurableCommandDirectoriesAreGraphFree();
+    testOldGraphCommandSourcesAreLegacyOnly();
+    testProductTargetDoesNotCompileOldGraphCommandSources();
     std::cout << "plugin_hard_cutover_scan_test passed\n";
     return 0;
 }

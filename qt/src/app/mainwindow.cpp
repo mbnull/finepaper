@@ -14,7 +14,6 @@
 #include "app/topologypresetinteractionhandler.h"
 #include "app/workbenchservice.h"
 #include "commands/addipinstancecommand.h"
-#include "commands/removeipinstancecommand.h"
 #include "graph/graph.h"
 #include "commands/commandmanager.h"
 #include "ipcraft/ipcraftmanifest.h"
@@ -1010,19 +1009,12 @@ void MainWindow::setupConnections() {
                 if (!requireOpenProject(QStringLiteral("editing the IP catalog"))) {
                     return;
                 }
-                std::unique_ptr<Command> rejected = m_commandManager->executeCommand(
-                    std::make_unique<RemoveIpInstanceCommand>(m_graph,
-                                                              m_projectStateService.get(),
-                                                              m_projectIpService.get(),
-                                                              ipcoreId,
-                                                              instanceId));
-                if (rejected) {
-                    QMessageBox::warning(this,
-                                         "IP Catalog",
-                                         QStringLiteral("Could not remove the selected IP instance."));
-                    return;
-                }
-                syncDocumentStateFromHistory();
+                Q_UNUSED(ipcoreId);
+                Q_UNUSED(instanceId);
+                QMessageBox::warning(
+                    this,
+                    QStringLiteral("IP Catalog"),
+                    QStringLiteral("Removing IP instances requires the design-level patch path."));
             });
     connect(m_ipCatalogPanel,
             &IpCatalogPanel::workspaceToolRequested,

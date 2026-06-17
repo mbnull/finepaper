@@ -1,5 +1,5 @@
 // ArrangeCommand tests for connection-derived mesh placement.
-#include "commands/arrangecommand.h"
+#include "legacy/graphcommands/arrangecommand.h"
 #include "graph/graph.h"
 #include "modules/moduleregistry.h"
 #include "project/editormutationtarget.h"

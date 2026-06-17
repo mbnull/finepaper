@@ -1,5 +1,5 @@
 // TopologyPresetCommand wraps preset graph mutations in command history.
-#include "commands/topologypresetcommand.h"
+#include "legacy/graphcommands/topologypresetcommand.h"
 
 #include "graph/graph.h"
 #include "modules/moduleregistry.h"

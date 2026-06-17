@@ -1,5 +1,5 @@
 // SetParameterCommand updates one module parameter and restores old state on undo.
-#include "commands/setparametercommand.h"
+#include "legacy/graphcommands/setparametercommand.h"
 
 #include "project/editormutationtarget.h"
 

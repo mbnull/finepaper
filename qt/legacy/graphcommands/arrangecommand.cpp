@@ -1,5 +1,5 @@
 // ArrangeCommand computes automatic node placement and stores previous positions for undo.
-#include "commands/arrangecommand.h"
+#include "legacy/graphcommands/arrangecommand.h"
 #include "graph/graph.h"
 #include "graph/module.h"
 #include "modules/modulelabels.h"

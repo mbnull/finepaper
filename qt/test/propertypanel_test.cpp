@@ -5,7 +5,6 @@
 #include "project/ipinstanceparameteradapter.h"
 #include "project/ipinstancestate.h"
 #include "project/projectdocument.h"
-#include "project/editormutationtarget.h"
 #include "project/projectstateservice.h"
 #include "widgets/collapsiblesection.h"
 
@@ -49,19 +48,6 @@ bool hasLabel(PropertyPanel& panel, const QString& text) {
     }
     return false;
 }
-
-class FailingEditorMutationTarget final : public EditorMutationTarget {
-public:
-    bool failModuleUpsert = false;
-    bool failModuleRemove = false;
-    bool failConnectionUpsert = false;
-    bool failConnectionRemove = false;
-
-    bool upsertEditorModuleRecord(const Module&) override { return !failModuleUpsert; }
-    bool removeEditorModuleRecord(const QString&) override { return !failModuleRemove; }
-    bool upsertEditorConnectionRecord(const Connection&) override { return !failConnectionUpsert; }
-    bool removeEditorConnectionRecord(const QString&) override { return !failConnectionRemove; }
-};
 
 const Connection* findConnection(const Graph& graph, const QString& connectionId) {
     for (const std::unique_ptr<Connection>& connection : graph.connections()) {
@@ -294,39 +280,34 @@ void testIpInstanceSectionWithoutProjectInstanceIsHidden() {
             "hidden IP-instance parameters should not create state implicitly");
 }
 
-void testModuleParameterUndoRejectsDurableUpsertFailureWithoutGraphDivergence() {
+void testModuleParameterProjectionControlsDoNotMutateGraph() {
     Graph graph;
     auto module = std::make_unique<Module>(QStringLiteral("module_0"), QStringLiteral("Demo"));
     module->setParameter(QStringLiteral("width"), 32);
     graph.addModule(std::move(module));
 
     CommandManager commandManager;
-    FailingEditorMutationTarget target;
-    PropertyPanel panel(&graph, nullptr, {}, &commandManager, nullptr, &target);
+    PropertyPanel panel(&graph, &commandManager);
     panel.setSelectedModule(QStringLiteral("module_0"));
 
     QSpinBox* spinBox = panel.findChild<QSpinBox*>();
     require(spinBox != nullptr, "integer module parameter should use spin box");
+    require(spinBox->isReadOnly(),
+            "module parameter projection control should be read-only until design patch editing is wired");
     spinBox->setValue(64);
-    require(intParameter(graph, QStringLiteral("module_0"), QStringLiteral("width")) == 64,
-            "parameter edit should update graph before undo failure setup");
-    const int executedStateId = commandManager.currentStateId();
-
-    target.failModuleUpsert = true;
-    commandManager.undo();
     QApplication::processEvents();
 
-    require(intParameter(graph, QStringLiteral("module_0"), QStringLiteral("width")) == 64,
-            "failed durable module upsert during undo should leave graph parameter unchanged");
-    require(commandManager.currentStateId() == executedStateId,
-            "failed durable module upsert during undo should not rewind command state");
-    require(commandManager.canUndo(),
-            "failed durable module upsert during undo should keep command available for retry");
+    require(intParameter(graph, QStringLiteral("module_0"), QStringLiteral("width")) == 32,
+            "module parameter projection control should not mutate graph directly");
+    require(commandManager.currentStateId() == 0,
+            "module parameter projection control should not enter legacy command history");
+    require(!commandManager.canUndo(),
+            "module parameter projection control should not create an undo command");
     require(!commandManager.canRedo(),
-            "failed durable module upsert during undo should not populate redo history");
+            "module parameter projection control should not create a redo command");
 }
 
-void testAmbiguousConnectionAppearsInPropertyPanelAndLog() {
+void testAmbiguousConnectionAppearsReadOnlyInPropertyPanelAndLog() {
     Graph graph;
     auto source = std::make_unique<Module>(QStringLiteral("source"), QStringLiteral("Source"));
     source->addPort(Port(QStringLiteral("out"), Port::Direction::Output, QStringLiteral("bus"),
@@ -366,6 +347,8 @@ void testAmbiguousConnectionAppearsInPropertyPanelAndLog() {
 
     QComboBox* comboBox = panel.findChild<QComboBox*>(QStringLiteral("connectionClassCombo"));
     require(comboBox != nullptr, "ambiguous connection class should use a combo box");
+    require(!comboBox->isEnabled(),
+            "connection class projection control should be read-only until design patch editing is wired");
     require(comboBox->currentText() == QStringLiteral("chi_node_interface"),
             "connection class combo box should show selected class");
     const int monitorTapIndex = comboBox->findText(QStringLiteral("monitor_tap"));
@@ -373,111 +356,24 @@ void testAmbiguousConnectionAppearsInPropertyPanelAndLog() {
             "connection class combo box should include class alternatives");
 
     comboBox->setCurrentIndex(monitorTapIndex);
+    QApplication::processEvents();
 
     const Connection* changedConnection = findConnection(graph, QStringLiteral("conn_1"));
     require(changedConnection != nullptr,
             "connection class selection should keep the connection in the graph");
-    require(changedConnection->connectionClassId() == QStringLiteral("monitor_tap"),
-            "connection class selection should update the selected connection class");
-    require(changedConnection->status() == QStringLiteral("valid"),
-            "choosing an ambiguous alternative should resolve the warning status");
-    require(changedConnection->alternatives().isEmpty(),
-            "resolved connection should not retain ambiguity alternatives");
-    require(commandManager.currentStateId() == 1,
-            "connection class selection should enter command history");
-    QApplication::processEvents();
-    require(panel.findChild<QComboBox*>(QStringLiteral("connectionClassCombo")) == nullptr,
-            "resolved connection should clear the connection class selector");
-
-    commandManager.undo();
-    QApplication::processEvents();
-    const Connection* undoneConnection = findConnection(graph, QStringLiteral("conn_1"));
-    require(undoneConnection != nullptr,
-            "undo should keep the connection in the graph");
-    require(undoneConnection->connectionClassId() == QStringLiteral("chi_node_interface"),
-            "undo should restore the original connection class");
-    require(undoneConnection->status() == QStringLiteral("ambiguous"),
-            "undo should restore the ambiguous status");
-    require(undoneConnection->alternatives() == QStringList({QStringLiteral("chi_node_interface"),
-                                                             QStringLiteral("monitor_tap")}),
-            "undo should restore class alternatives");
-    QComboBox* undoCombo = panel.findChild<QComboBox*>(QStringLiteral("connectionClassCombo"));
-    require(undoCombo != nullptr,
-            "undo should restore the connection class selector for an ambiguous connection");
-    require(undoCombo->currentText() == QStringLiteral("chi_node_interface"),
-            "undo should refresh the selector to the restored connection class");
-
-    commandManager.redo();
-    QApplication::processEvents();
-    const Connection* redoneConnection = findConnection(graph, QStringLiteral("conn_1"));
-    require(redoneConnection != nullptr,
-            "redo should keep the connection in the graph");
-    require(redoneConnection->connectionClassId() == QStringLiteral("monitor_tap"),
-            "redo should reapply the selected connection class");
-    require(redoneConnection->status() == QStringLiteral("valid"),
-            "redo should restore the resolved status");
-    require(panel.findChild<QComboBox*>(QStringLiteral("connectionClassCombo")) == nullptr,
-            "redo should clear the selector instead of leaving the undo state visible");
-}
-
-void testConnectionClassUndoRejectsDurableUpsertFailureWithoutGraphDivergence() {
-    Graph graph;
-    auto source = std::make_unique<Module>(QStringLiteral("source"), QStringLiteral("Source"));
-    source->addPort(Port(QStringLiteral("out"), Port::Direction::Output, QStringLiteral("bus"),
-                         QStringLiteral("Out")));
-    auto targetModule = std::make_unique<Module>(QStringLiteral("target"), QStringLiteral("Target"));
-    targetModule->addPort(Port(QStringLiteral("in"), Port::Direction::Input, QStringLiteral("bus"),
-                               QStringLiteral("In")));
-    require(graph.addModule(std::move(source)), "source module should add");
-    require(graph.addModule(std::move(targetModule)), "target module should add");
-    graph.addConnection(std::make_unique<Connection>(
-        QStringLiteral("conn_1"),
-        PortRef{QStringLiteral("source"), QStringLiteral("out")},
-        PortRef{QStringLiteral("target"), QStringLiteral("in")},
-        QStringLiteral("chi_node_interface"),
-        QVector<ConnectionInterfaceRef>{
-            ConnectionInterfaceRef{QStringLiteral("source"), QStringLiteral("out")},
-            ConnectionInterfaceRef{QStringLiteral("target"), QStringLiteral("in")}
-        },
-        QStringLiteral("ambiguous"),
-        QStringList{QStringLiteral("chi_node_interface"), QStringLiteral("monitor_tap")}));
-
-    CommandManager commandManager;
-    FailingEditorMutationTarget target;
-    PropertyPanel panel(&graph, nullptr, {}, &commandManager, nullptr, &target);
-    panel.setSelectedModule(QStringLiteral("conn_1"));
-
-    QComboBox* comboBox = panel.findChild<QComboBox*>(QStringLiteral("connectionClassCombo"));
-    require(comboBox != nullptr, "ambiguous connection class should use a combo box");
-    const int monitorTapIndex = comboBox->findText(QStringLiteral("monitor_tap"));
-    require(monitorTapIndex >= 0,
-            "connection class combo box should include class alternatives");
-    comboBox->setCurrentIndex(monitorTapIndex);
-
-    const Connection* changedConnection = findConnection(graph, QStringLiteral("conn_1"));
-    require(changedConnection != nullptr,
-            "connection class selection should keep the connection in the graph");
-    require(changedConnection->connectionClassId() == QStringLiteral("monitor_tap"),
-            "connection class selection should update the selected connection class");
-    const int executedStateId = commandManager.currentStateId();
-
-    target.failConnectionUpsert = true;
-    commandManager.undo();
-    QApplication::processEvents();
-
-    const Connection* stillChangedConnection = findConnection(graph, QStringLiteral("conn_1"));
-    require(stillChangedConnection != nullptr,
-            "failed durable connection upsert during undo should keep connection in graph");
-    require(stillChangedConnection->connectionClassId() == QStringLiteral("monitor_tap"),
-            "failed durable connection upsert during undo should leave graph connection class unchanged");
-    require(stillChangedConnection->status() == QStringLiteral("valid"),
-            "failed durable connection upsert during undo should leave graph connection status unchanged");
-    require(commandManager.currentStateId() == executedStateId,
-            "failed durable connection upsert during undo should not rewind command state");
-    require(commandManager.canUndo(),
-            "failed durable connection upsert during undo should keep command available for retry");
+    require(changedConnection->connectionClassId() == QStringLiteral("chi_node_interface"),
+            "connection class projection control should not mutate graph directly");
+    require(changedConnection->status() == QStringLiteral("ambiguous"),
+            "connection class projection control should not resolve graph status directly");
+    require(changedConnection->alternatives() == QStringList({QStringLiteral("chi_node_interface"),
+                                                              QStringLiteral("monitor_tap")}),
+            "connection class projection control should preserve ambiguity alternatives");
+    require(commandManager.currentStateId() == 0,
+            "connection class projection control should not enter legacy command history");
+    require(!commandManager.canUndo(),
+            "connection class projection control should not create an undo command");
     require(!commandManager.canRedo(),
-            "failed durable connection upsert during undo should not populate redo history");
+            "connection class projection control should not create a redo command");
 }
 
 } // namespace
@@ -494,9 +390,8 @@ int main(int argc, char** argv) {
         testUnselectedPanelUsesPersistedCustomIpInstanceId();
         testClearingGraphBeforePanelSelectionClearIsSafe();
         testIpInstanceSectionWithoutProjectInstanceIsHidden();
-        testModuleParameterUndoRejectsDurableUpsertFailureWithoutGraphDivergence();
-        testAmbiguousConnectionAppearsInPropertyPanelAndLog();
-        testConnectionClassUndoRejectsDurableUpsertFailureWithoutGraphDivergence();
+        testModuleParameterProjectionControlsDoNotMutateGraph();
+        testAmbiguousConnectionAppearsReadOnlyInPropertyPanelAndLog();
     } catch (const std::exception& error) {
         std::cerr << "propertypanel_test failed: " << error.what() << '\n';
         return 1;
