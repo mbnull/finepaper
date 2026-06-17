@@ -18,6 +18,7 @@
 #include "commands/addipinstancecommand.h"
 #include "graph/graph.h"
 #include "commands/commandmanager.h"
+#include "ipcraft/diagnosticids.h"
 #include "ipcraft/ipcraftmanifest.h"
 #include "ipcore/ipcatalogservice.h"
 #include "ipcore/ipcoreruntimediagnostics.h"
@@ -1639,6 +1640,16 @@ void MainWindow::syncProjectServiceFromDesignEditingService() {
     }
 
     m_projectService->replaceDesign(m_designEditingService->design());
+    if (m_editorProjectionService && m_projectService->hasDocument()) {
+        QScopedValueRollback<bool> rollback(m_suppressDocumentTracking, true);
+        const EditorProjectionResult projectionResult =
+            m_editorProjectionService->rebuildProjectionViewOnly(m_projectService->document());
+        if (!projectionResult.success) {
+            qWarning() << "Failed to refresh editor projection from ProjectDesign"
+                       << ipcraft::diagnosticids::editorProjectionFailed()
+                       << projectionResult.error;
+        }
+    }
     m_designEditingDirty = true;
     syncDocumentStateFromHistory();
 }

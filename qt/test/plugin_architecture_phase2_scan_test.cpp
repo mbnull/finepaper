@@ -57,8 +57,11 @@ void testMainWindowUsesProjectServiceForDurableIoAndProjectionSync() {
                     QStringLiteral("m_editorProjectionService->rebuildProjectionFromDocument"),
                     QStringLiteral("mainwindow source"));
     requireContains(mainWindow,
-                    QStringLiteral("m_editorProjectionService->syncProjectFromProjection"),
+                    QStringLiteral("m_editorProjectionService->rebuildProjectionViewOnly"),
                     QStringLiteral("mainwindow source"));
+    requireNotContains(mainWindow,
+                       QStringLiteral("m_editorProjectionService->syncProjectFromProjection"),
+                       QStringLiteral("mainwindow source"));
     requireContains(mainWindow, QStringLiteral("m_projectService->saveFile"), QStringLiteral("mainwindow source"));
     requireNotContains(mainWindow, QStringLiteral("ProjectReader::readFile"), QStringLiteral("mainwindow source"));
     requireNotContains(mainWindow, QStringLiteral("ProjectWriter::writeFile"), QStringLiteral("mainwindow source"));
@@ -66,15 +69,15 @@ void testMainWindowUsesProjectServiceForDurableIoAndProjectionSync() {
     requireContains(projectionService,
                     QStringLiteral("GraphProjectSerializer::loadProject"),
                     QStringLiteral("editor projection service source"));
-    requireContains(projectionService,
-                    QStringLiteral("GraphProjectSerializer::toProject"),
-                    QStringLiteral("editor projection service source"));
+    requireNotContains(projectionService,
+                       QStringLiteral("GraphProjectSerializer::toProject"),
+                       QStringLiteral("editor projection service source"));
     requireContains(projectionService,
                     QStringLiteral("m_projectService->replaceDocumentFromLoadedFile"),
                     QStringLiteral("editor projection service source"));
-    requireContains(projectionService,
-                    QStringLiteral("m_projectService->replaceDocumentFromProjection"),
-                    QStringLiteral("editor projection service source"));
+    requireNotContains(projectionService,
+                       QStringLiteral("m_projectService->replaceDocumentFromProjection"),
+                       QStringLiteral("editor projection service source"));
 }
 
 void testProjectServiceKeepsV1AndPatchBoundary() {

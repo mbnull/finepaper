@@ -1,6 +1,7 @@
 // EditorProjectionService bridges durable ProjectService documents and the live Graph projection.
 #pragma once
 
+#include "ipcraft/diagnostics.h"
 #include "project/projectdocument.h"
 
 #include <QString>
@@ -13,6 +14,7 @@ class ProjectStateService;
 struct EditorProjectionResult {
     bool success = false;
     QString error;
+    ipcraft::DiagnosticStore diagnostics;
 };
 
 class EditorProjectionService {
@@ -24,12 +26,19 @@ public:
 
     EditorProjectionResult rebuildProjectionFromDocument(const ProjectDocument& document,
                                                          const QString& loadedPath);
-    EditorProjectionResult syncProjectFromProjection(const QString& projectName);
+    EditorProjectionResult rebuildProjectionViewOnly(const ProjectDocument& document);
     void clearProjection();
+    bool projectionStale() const;
+    const ipcraft::DiagnosticStore& projectionDiagnostics() const;
 
 private:
+    EditorProjectionResult recordProjectionFailure(const QString& error);
+    EditorProjectionResult recordProjectionSuccess();
+
     Graph* m_graph = nullptr;
     ProjectStateService* m_projectStateService = nullptr;
     ProjectIpService* m_projectIpService = nullptr;
     ProjectService* m_projectService = nullptr;
+    bool m_projectionStale = false;
+    ipcraft::DiagnosticStore m_projectionDiagnostics;
 };

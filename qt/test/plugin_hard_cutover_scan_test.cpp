@@ -572,13 +572,58 @@ void testNormalSaveDoesNotSyncDurableProjectFromGraphProjection() {
 
     const QString projectionService =
         readText(QStringLiteral("qt/src/project/editorprojectionservice.cpp"));
-    const QString projectionSync = functionBody(
-        projectionService,
-        QStringLiteral("EditorProjectionResult EditorProjectionService::syncProjectFromProjection"),
-        QStringLiteral("EditorProjectionService::syncProjectFromProjection"));
-    requireContains(projectionSync,
-                    QStringLiteral("legacy"),
-                    QStringLiteral("EditorProjectionService::syncProjectFromProjection"));
+    const QString projectionHeader =
+        readText(QStringLiteral("qt/inc/project/editorprojectionservice.h"));
+    const QString projectServiceHeader = readText(QStringLiteral("qt/inc/project/projectservice.h"));
+    const QString projectServiceSource = readText(QStringLiteral("qt/src/project/projectservice.cpp"));
+    requireNotContains(projectionHeader,
+                       QStringLiteral("syncProjectFromProjection"),
+                       QStringLiteral("EditorProjectionService public API"));
+    requireNotContains(projectionService,
+                       QStringLiteral("syncProjectFromProjection"),
+                       QStringLiteral("EditorProjectionService implementation"));
+    requireNotContains(projectionService,
+                       QStringLiteral("GraphProjectSerializer::toProject"),
+                       QStringLiteral("EditorProjectionService implementation"));
+    requireNotContains(projectServiceHeader,
+                       QStringLiteral("replaceDocumentFromProjection"),
+                       QStringLiteral("ProjectService public API"));
+    requireNotContains(projectServiceSource,
+                       QStringLiteral("replaceDocumentFromProjection"),
+                       QStringLiteral("ProjectService implementation"));
+}
+
+void testDesignEditSyncRefreshesProjectionFromProjectDocument() {
+    const QString mainWindow = readText(QStringLiteral("qt/src/app/mainwindow.cpp"));
+    const QString sync = functionBody(
+        mainWindow,
+        QStringLiteral("void MainWindow::syncProjectServiceFromDesignEditingService"),
+        QStringLiteral("MainWindow::syncProjectServiceFromDesignEditingService"));
+
+    requireContains(sync,
+                    QStringLiteral("m_projectService->replaceDesign"),
+                    QStringLiteral("design editing sync"));
+    requireContains(sync,
+                    QStringLiteral("m_projectService->document()"),
+                    QStringLiteral("design editing sync"));
+    requireContains(sync,
+                    QStringLiteral("m_editorProjectionService->rebuildProjectionViewOnly"),
+                    QStringLiteral("design editing sync"));
+    requireContains(sync,
+                    QStringLiteral("m_suppressDocumentTracking"),
+                    QStringLiteral("design editing sync"));
+    requireContains(sync,
+                    QStringLiteral("editorProjectionFailed"),
+                    QStringLiteral("design editing sync"));
+    requireNotContains(sync,
+                       QStringLiteral("GraphProjectSerializer::toProject"),
+                       QStringLiteral("design editing sync"));
+    requireNotContains(sync,
+                       QStringLiteral("syncProjectFromProjection"),
+                       QStringLiteral("design editing sync"));
+    requireNotContains(sync,
+                       QStringLiteral("replaceDocumentFromProjection"),
+                       QStringLiteral("design editing sync"));
 }
 
 void testProductionDoesNotExposeEditorMutationTarget() {
@@ -934,6 +979,7 @@ int main(int argc, char** argv) {
     testCompletionReportUsesHardCutoverVerdict();
     testFinalReportsAndReadmeRegisterHardCutoverGate();
     testNormalSaveDoesNotSyncDurableProjectFromGraphProjection();
+    testDesignEditSyncRefreshesProjectionFromProjectDocument();
     testProductionDoesNotExposeEditorMutationTarget();
     testAppContextContainsOnlyRegistries();
     testPluginsDoNotFallbackToDirectAppContextServices();

@@ -16,5 +16,6 @@ inline QString flowUnknownFlow() { return QStringLiteral("flow.unknown_flow"); }
 inline QString flowInputsManifestMissing() { return QStringLiteral("flow.inputs_manifest_missing"); }
 inline QString flowInputsManifestModified() { return QStringLiteral("flow.inputs_manifest_modified"); }
 inline QString flowPluginUnavailable() { return QStringLiteral("flow.plugin_unavailable"); }
+inline QString editorProjectionFailed() { return QStringLiteral("editor.projection_failed"); }
 
 } // namespace ipcraft::diagnosticids

@@ -2,6 +2,7 @@
 #include "graph/graph.h"
 #include "graph/module.h"
 #include "graph/parameter.h"
+#include "ipcraft/diagnosticids.h"
 #include "modules/moduleregistry.h"
 #include "project/editorprojectionservice.h"
 #include "project/projectipservice.h"
@@ -46,6 +47,15 @@ void registerEditorTileType() {
     resetRegistry();
     require(ModuleRegistry::instance().registerType(editorTileType()),
             "editor tile type should register");
+}
+
+bool hasDiagnosticRule(const ipcraft::DiagnosticStore& diagnostics, const QString& ruleId) {
+    for (const ipcraft::Diagnostic& diagnostic : diagnostics.records) {
+        if (diagnostic.ruleId == ruleId) {
+            return true;
+        }
+    }
+    return false;
 }
 
 ProjectIpInstanceRecord editorInstanceRecord() {
@@ -117,30 +127,67 @@ void testRebuildProjectionFromDocumentUpdatesGraphAndServices() {
             "project service should keep loaded path");
 }
 
-void testSyncProjectFromProjectionUpdatesProjectService() {
+void testRebuildProjectionViewOnlyDoesNotMutateProjectService() {
     registerEditorTileType();
     Graph graph;
-    require(graph.addModule(editorTileModule(QStringLiteral("tile_1"))),
-            "test module should be added");
     ProjectStateService stateService;
     ProjectIpService ipService(&stateService);
-    stateService.ensureIpInstanceRecord(editorInstanceRecord());
     ProjectService projectService;
     EditorProjectionService projectionService(&graph, &stateService, &ipService, &projectService);
+    const ProjectDocument document = editorDocument();
 
     const EditorProjectionResult result =
-        projectionService.syncProjectFromProjection(QStringLiteral("Projected"));
+        projectionService.rebuildProjectionViewOnly(document);
 
-    require(result.success, "projection sync should succeed");
-    require(projectService.hasDocument(), "project service should have synced document");
-    require(projectService.document().projectName == QStringLiteral("Projected"),
-            "synced document should use requested project name");
-    require(projectService.document().modules.size() == 1,
-            "synced document should include graph modules");
-    require(projectService.document().instances.size() == 1,
-            "synced document should include project IP instances");
-    require(projectService.currentPath().isEmpty(),
-            "projection sync should not invent a file path");
+    require(result.success, "view-only projection rebuild should succeed");
+    require(graph.modules().size() == 1, "view-only rebuild should update the graph");
+    require(graph.getModule(QStringLiteral("tile_0")) != nullptr,
+            "view-only rebuild should load project modules into the graph");
+    require(stateService.ipInstanceRecords().size() == 1,
+            "view-only rebuild should update project IP state");
+    require(ipService.selectedIpInstance().has_value(),
+            "view-only rebuild should update project IP selection");
+    require(!projectService.hasDocument(),
+            "view-only rebuild must not adopt the document into ProjectService");
+    require(!projectionService.projectionStale(),
+            "successful view-only rebuild should clear stale projection state");
+}
+
+void testProjectionFailureReportsDiagnosticAndKeepsProjectServiceAuthoritative() {
+    registerEditorTileType();
+    Graph graph;
+    require(graph.addModule(editorTileModule(QStringLiteral("existing_tile"))),
+            "existing graph module should be added");
+    ProjectStateService stateService;
+    ProjectIpService ipService(&stateService);
+    ProjectService projectService;
+    require(projectService.replaceDocument(editorDocument()).success,
+            "project service fixture should have an authoritative document");
+    EditorProjectionService projectionService(&graph, &stateService, &ipService, &projectService);
+
+    ProjectDocument brokenDocument = editorDocument();
+    brokenDocument.modules.first().type = QStringLiteral("MissingType");
+
+    const EditorProjectionResult result =
+        projectionService.rebuildProjectionViewOnly(brokenDocument);
+
+    require(!result.success, "invalid view-only projection rebuild should fail");
+    require(hasDiagnosticRule(result.diagnostics, ipcraft::diagnosticids::editorProjectionFailed()),
+            "projection failure should report editor.projection_failed");
+    require(hasDiagnosticRule(projectionService.projectionDiagnostics(),
+                              ipcraft::diagnosticids::editorProjectionFailed()),
+            "projection service should remember the projection failure diagnostic");
+    require(projectionService.projectionStale(),
+            "failed view-only rebuild should mark the projection stale");
+    require(projectService.hasDocument(),
+            "projection failure should not clear the authoritative project service document");
+    require(projectService.document().projectName == QStringLiteral("Editor Projection"),
+            "projection failure must not replace ProjectService from the Graph projection");
+    require(projectService.document().modules.size() == 1 &&
+                projectService.document().modules.first().id == QStringLiteral("tile_0"),
+            "projection failure should leave ProjectService document unchanged");
+    require(graph.getModule(QStringLiteral("existing_tile")) != nullptr,
+            "failed projection validation should leave the previous graph projection intact");
 }
 
 void testClearProjectionClearsGraphStateAndProjectService() {
@@ -170,7 +217,8 @@ int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
     try {
         testRebuildProjectionFromDocumentUpdatesGraphAndServices();
-        testSyncProjectFromProjectionUpdatesProjectService();
+        testRebuildProjectionViewOnlyDoesNotMutateProjectService();
+        testProjectionFailureReportsDiagnosticAndKeepsProjectServiceAuthoritative();
         testClearProjectionClearsGraphStateAndProjectService();
     } catch (const std::exception& exception) {
         qCritical("%s", exception.what());

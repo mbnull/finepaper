@@ -31,7 +31,6 @@ public:
     ProjectServiceResult saveFile(const QString& path);
     ProjectServiceResult replaceDocument(ProjectDocument document);
     ProjectServiceResult replaceDocumentFromLoadedFile(ProjectDocument document, const QString& path);
-    ProjectServiceResult replaceDocumentFromProjection(ProjectDocument document);
     ProjectServiceResult replaceDocumentPreservingPath(ProjectDocument document);
     void replaceDesign(ipcraft::core::ProjectDesign design);
     void mergeDesignOnlyComponents(const ipcraft::core::ProjectDesign& design);

@@ -211,29 +211,29 @@ void testCreateSaveLoadRoundtrip() {
             "loadFile should store absolute current path");
 }
 
-void testReplaceDocumentFromProjection() {
+void testReplaceDocumentPreservingPathKeepsSavedPath() {
     QTemporaryDir tempDir;
     require(tempDir.isValid(), "temporary directory should be valid");
-    const QString path = QDir(tempDir.path()).filePath(QStringLiteral("projection.fpproj"));
+    const QString path = QDir(tempDir.path()).filePath(QStringLiteral("preserving-path.fpproj"));
 
     ProjectService service;
-    ProjectServiceResult createResult = service.createNew(QStringLiteral("Original"));
-    require(createResult.success, "createNew should succeed before projection replace");
-    ProjectServiceResult saveResult = service.saveFile(path);
-    require(saveResult.success, "saveFile should succeed before projection replace");
+    const ProjectServiceResult createResult = service.createNew(QStringLiteral("Original"));
+    require(createResult.success, "createNew should succeed before preserving-path replace");
+    const ProjectServiceResult saveResult = service.saveFile(path);
+    require(saveResult.success, "saveFile should succeed before preserving-path replace");
     const QString savedPath = service.currentPath();
 
     ProjectDocument document;
-    document.projectName = QStringLiteral("Projection");
-    document.projectId = QStringLiteral("projection_0");
+    document.projectName = QStringLiteral("Preserved Path");
+    document.projectId = QStringLiteral("preserved_path_0");
 
-    const ProjectServiceResult result = service.replaceDocumentFromProjection(document);
-    require(result.success, "replaceDocumentFromProjection should accept valid document");
-    require(service.hasDocument(), "service should have a document after projection replace");
-    require(service.document().projectName == QStringLiteral("Projection"),
-            "projection replacement should update durable document");
+    const ProjectServiceResult result = service.replaceDocumentPreservingPath(document);
+    require(result.success, "replaceDocumentPreservingPath should accept valid document");
+    require(service.hasDocument(), "service should have a document after preserving-path replace");
+    require(service.document().projectName == QStringLiteral("Preserved Path"),
+            "preserving-path replacement should update durable document");
     require(service.currentPath() == savedPath,
-            "projection replacement should preserve the current path");
+            "preserving-path replacement should preserve the current path");
 }
 
 void testReplaceDocumentFromLoadedFileStoresAbsolutePath() {
@@ -780,7 +780,7 @@ int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
     try {
         testCreateSaveLoadRoundtrip();
-        testReplaceDocumentFromProjection();
+        testReplaceDocumentPreservingPathKeepsSavedPath();
         testReplaceDocumentFromLoadedFileStoresAbsolutePath();
         testCreateNewClearsSavedPath();
         testReplaceDocumentClearsSavedPath();

@@ -234,15 +234,6 @@ ProjectServiceResult ProjectService::replaceDocumentFromLoadedFile(ProjectDocume
     return successResult();
 }
 
-ProjectServiceResult ProjectService::replaceDocumentFromProjection(ProjectDocument document) {
-    m_document = std::move(document);
-    normalizeDocument(m_document);
-    reloadDesignFromDocument();
-    m_hasDocument = true;
-    emit currentDocumentChanged();
-    return successResult();
-}
-
 ProjectServiceResult ProjectService::replaceDocumentPreservingPath(ProjectDocument document) {
     m_document = std::move(document);
     normalizeDocument(m_document);

@@ -47,14 +47,20 @@ void testEditorProjectionServiceOwnsProjectionBridge() {
                     QStringLiteral("GraphProjectSerializer::loadProject"),
                     QStringLiteral("editor projection source"));
     requireContains(source,
-                    QStringLiteral("GraphProjectSerializer::toProject"),
+                    QStringLiteral("rebuildProjectionViewOnly"),
                     QStringLiteral("editor projection source"));
     requireContains(source,
                     QStringLiteral("replaceDocumentFromLoadedFile"),
                     QStringLiteral("editor projection source"));
-    requireContains(source,
-                    QStringLiteral("replaceDocumentFromProjection"),
-                    QStringLiteral("editor projection source"));
+    requireNotContains(source,
+                       QStringLiteral("GraphProjectSerializer::toProject"),
+                       QStringLiteral("editor projection source"));
+    requireNotContains(source,
+                       QStringLiteral("replaceDocumentFromProjection"),
+                       QStringLiteral("editor projection source"));
+    requireNotContains(source,
+                       QStringLiteral("syncProjectFromProjection"),
+                       QStringLiteral("editor projection source"));
 }
 
 void testMainWindowUsesEditorProjectionService() {
@@ -67,9 +73,12 @@ void testMainWindowUsesEditorProjectionService() {
                     QStringLiteral("rebuildProjectionFromDocument"),
                     QStringLiteral("mainwindow source"));
     requireContains(source,
-                    QStringLiteral("syncProjectFromProjection"),
+                    QStringLiteral("rebuildProjectionViewOnly"),
                     QStringLiteral("mainwindow source"));
     requireContains(source, QStringLiteral("clearProjection"), QStringLiteral("mainwindow source"));
+    requireNotContains(source,
+                       QStringLiteral("syncProjectFromProjection"),
+                       QStringLiteral("mainwindow source"));
     requireNotContains(source,
                        QStringLiteral("GraphProjectSerializer::loadProject"),
                        QStringLiteral("mainwindow source"));
