@@ -1,29 +1,27 @@
 {
   "schema": "ipcraft.project.v1",
-  "project": {
-    "id": "negative_malformed_package",
-    "name": "Negative Malformed Package"
-  },
-  "instances": [
+  "id": "negative_malformed_package",
+  "name": "Negative Malformed Package",
+  "packages": [
+    {
+      "id": "vendor.example.negative_malformed",
+      "version": "1.0.0"
+    }
+  ],
+  "components": [
     {
       "id": "bad0",
-      "package": {
-        "id": "vendor.example.negative_malformed",
-        "version": "1.0.0"
-      },
+      "type": "bad0",
+      "packageRef": "vendor.example.negative_malformed@1.0.0",
       "config": {}
     }
   ],
-  "composition": {
-    "connections": [],
-    "external_ports": []
-  },
-  "layout": {},
-  "diagnostics": {
-    "schema": "ipcraft.diagnostics.v1",
-    "records": []
-  },
-  "artifacts": {},
-  "migration": {},
-  "native": {}
+  "interfaces": [],
+  "connections": [],
+  "topologies": [],
+  "views": [],
+  "diagnostics": [],
+  "artifacts": [],
+  "extensions": [],
+  "metadata": {}
 }

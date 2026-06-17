@@ -82,8 +82,10 @@ QVector<QFileInfo> filesMatching(const QString& relativeRoot, const QString& fil
     return files;
 }
 
-bool isNegativeContractFixture(const QFileInfo& project) {
-    return project.absoluteDir().dirName().startsWith(QStringLiteral("negative_"));
+bool isProjectFormatNegativeFixture(const QFileInfo& project) {
+    const QDir fixtureDir = project.absoluteDir();
+    return fixtureDir.dirName().startsWith(QStringLiteral("negative_project_format")) ||
+           QFileInfo(fixtureDir.filePath(QStringLiteral(".project-schema-negative"))).isFile();
 }
 
 void requireJsonMatchesSchema(const QString& jsonPath, const JsonSchemaValidator& schema) {
@@ -218,23 +220,32 @@ void testProjectReaderAcceptsFlatProjectDesignCurrentInput() {
             "flat component id should parse into instance id");
 }
 
-void testAllPositiveContractProjectsMatchPublicProjectSchema() {
+void testAllContractProjectsMatchPublicProjectSchemaExceptProjectFormatNegatives() {
     const JsonSchemaValidator projectSchema =
         JsonSchemaValidator::fromFile(repositoryPath(QStringLiteral("schemas/ipcraft.project.v1.schema.json")));
     const QVector<QFileInfo> projects =
         filesMatching(QStringLiteral("examples/contracts"), QStringLiteral("project.fpproj"));
     require(!projects.isEmpty(), "contract projects should exist");
 
-    qsizetype positiveCount = 0;
+    qsizetype validatedCount = 0;
+    qsizetype validatedNegativeCount = 0;
+    qsizetype skippedProjectFormatNegativeCount = 0;
     for (const QFileInfo& project : projects) {
-        if (isNegativeContractFixture(project)) {
+        if (isProjectFormatNegativeFixture(project)) {
+            ++skippedProjectFormatNegativeCount;
             continue;
         }
-        ++positiveCount;
+        ++validatedCount;
+        if (project.absoluteDir().dirName().startsWith(QStringLiteral("negative_"))) {
+            ++validatedNegativeCount;
+        }
         requireJsonMatchesSchema(project.absoluteFilePath(), projectSchema);
     }
-    require(positiveCount > 0,
-            "contract project schema gate excluded only negative_* fixtures; no positive projects were checked");
+    require(validatedCount > 0, "contract project schema gate should validate at least one project");
+    require(validatedNegativeCount > 0,
+            "ordinary negative contract fixtures should still be validated against project schema");
+    require(validatedCount + skippedProjectFormatNegativeCount == projects.size(),
+            "only explicit project-format-negative fixtures may be excluded from project schema validation");
 }
 
 void testProjectWriterOutputMatchesPublicProjectSchema() {
@@ -331,7 +342,7 @@ int main(int argc, char** argv) {
         testProjectWriterOutputMatchesPublicProjectSchema();
         testUnknownOptionalPackageExtensionIsSchemaValid();
         testContractExamplesExistAndDeclarePublicSchemas();
-        testAllPositiveContractProjectsMatchPublicProjectSchema();
+        testAllContractProjectsMatchPublicProjectSchemaExceptProjectFormatNegatives();
         testAllRepositoryRuntimePackagesMatchPublicPackageSchema();
         testPublicArchitectureAndAuditDocsExist();
     } catch (const std::exception& error) {

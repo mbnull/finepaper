@@ -1,29 +1,27 @@
 {
   "schema": "ipcraft.project.v1",
-  "project": {
-    "id": "negative_extension_required",
-    "name": "Negative Extension Required"
-  },
-  "instances": [
+  "id": "negative_extension_required",
+  "name": "Negative Extension Required",
+  "packages": [
+    {
+      "id": "vendor.example.negative_extension",
+      "version": "1.0.0"
+    }
+  ],
+  "components": [
     {
       "id": "badext0",
-      "package": {
-        "id": "vendor.example.negative_extension",
-        "version": "1.0.0"
-      },
+      "type": "badext0",
+      "packageRef": "vendor.example.negative_extension@1.0.0",
       "config": {}
     }
   ],
-  "composition": {
-    "connections": [],
-    "external_ports": []
-  },
-  "layout": {},
-  "diagnostics": {
-    "schema": "ipcraft.diagnostics.v1",
-    "records": []
-  },
-  "artifacts": {},
-  "migration": {},
-  "native": {}
+  "interfaces": [],
+  "connections": [],
+  "topologies": [],
+  "views": [],
+  "diagnostics": [],
+  "artifacts": [],
+  "extensions": [],
+  "metadata": {}
 }

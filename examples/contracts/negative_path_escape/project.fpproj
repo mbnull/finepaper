@@ -1,29 +1,27 @@
 {
   "schema": "ipcraft.project.v1",
-  "project": {
-    "id": "negative_path_escape",
-    "name": "Negative Path Escape"
-  },
-  "instances": [
+  "id": "negative_path_escape",
+  "name": "Negative Path Escape",
+  "packages": [
+    {
+      "id": "vendor.example.negative_path",
+      "version": "1.0.0"
+    }
+  ],
+  "components": [
     {
       "id": "badpath0",
-      "package": {
-        "id": "vendor.example.negative_path",
-        "version": "1.0.0"
-      },
+      "type": "badpath0",
+      "packageRef": "vendor.example.negative_path@1.0.0",
       "config": {}
     }
   ],
-  "composition": {
-    "connections": [],
-    "external_ports": []
-  },
-  "layout": {},
-  "diagnostics": {
-    "schema": "ipcraft.diagnostics.v1",
-    "records": []
-  },
-  "artifacts": {},
-  "migration": {},
-  "native": {}
+  "interfaces": [],
+  "connections": [],
+  "topologies": [],
+  "views": [],
+  "diagnostics": [],
+  "artifacts": [],
+  "extensions": [],
+  "metadata": {}
 }
