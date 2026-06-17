@@ -581,21 +581,61 @@ void testNormalSaveDoesNotSyncDurableProjectFromGraphProjection() {
                     QStringLiteral("EditorProjectionService::syncProjectFromProjection"));
 }
 
-void testNodeEditorUiMutationsUseProjectOwnedMutationTarget() {
+void testProductionDoesNotExposeEditorMutationTarget() {
+    require(!repositoryRelativePathExists(QStringLiteral("qt/inc/project/editormutationtarget.h")),
+            QStringLiteral("EditorMutationTarget must not be exposed from the project production include surface"));
+
+    const QStringList productionRoots{
+        QStringLiteral("qt/inc/app"),
+        QStringLiteral("qt/src/app"),
+        QStringLiteral("qt/inc/project"),
+        QStringLiteral("qt/src/project"),
+        QStringLiteral("qt/inc/nodeeditor"),
+        QStringLiteral("qt/src/nodeeditor"),
+        QStringLiteral("qt/inc/panels"),
+        QStringLiteral("qt/src/panels"),
+        QStringLiteral("qt/inc/package"),
+        QStringLiteral("qt/src/package"),
+        QStringLiteral("qt/inc/noc"),
+        QStringLiteral("qt/src/noc"),
+        QStringLiteral("qt/inc/validation"),
+        QStringLiteral("qt/src/validation")
+    };
+    for (const QString& file : runtimeSourceFiles(productionRoots)) {
+        requireNotContains(readText(file),
+                           QStringLiteral("project/editormutationtarget.h"),
+                           file);
+    }
+
+    const QString projectServiceHeader = readText(QStringLiteral("qt/inc/project/projectservice.h"));
+    const QString projectServiceSource = readText(QStringLiteral("qt/src/project/projectservice.cpp"));
+    requireNoMatch(projectServiceHeader,
+                   QRegularExpression(QStringLiteral(
+                       "\\bclass\\s+ProjectService\\s*:\\s*[^\\{;]*\\bEditorMutationTarget\\b")),
+                   QStringLiteral("ProjectService inheritance"));
+
+    const QStringList removedProjectServiceApis{
+        QStringLiteral("upsertEditorModuleRecord"),
+        QStringLiteral("removeEditorModuleRecord"),
+        QStringLiteral("upsertEditorConnectionRecord"),
+        QStringLiteral("removeEditorConnectionRecord")
+    };
+    for (const QString& api : removedProjectServiceApis) {
+        requireNotContains(projectServiceHeader, api, QStringLiteral("ProjectService public API"));
+        requireNotContains(projectServiceSource, api, QStringLiteral("ProjectService implementation"));
+    }
+
+    const QString topologyHandler =
+        readText(QStringLiteral("qt/inc/app/topologypresetinteractionhandler.h")) +
+        readText(QStringLiteral("qt/src/app/topologypresetinteractionhandler.cpp"));
+    requireNoMatch(topologyHandler,
+                   QRegularExpression(QStringLiteral("\\b(?:const\\s+)?Graph\\s*\\*")),
+                   QStringLiteral("TopologyPresetInteractionHandler"));
+    requireNotContains(topologyHandler,
+                       QStringLiteral("EditorMutationTarget"),
+                       QStringLiteral("TopologyPresetInteractionHandler"));
+
     const QString mainWindow = readText(QStringLiteral("qt/src/app/mainwindow.cpp"));
-    const QString nodeEditor = readText(QStringLiteral("qt/src/nodeeditor/nodeeditorwidget.cpp"));
-    const QString propertyPanel = readText(QStringLiteral("qt/src/panels/propertypanel.cpp"));
-
-    requireContains(mainWindow,
-                    QStringLiteral("m_projectService.get()"),
-                    QStringLiteral("MainWindow UI construction"));
-    requireContains(nodeEditor,
-                    QStringLiteral("m_editorMutationTarget"),
-                    QStringLiteral("NodeEditorWidget mutation path"));
-    requireContains(propertyPanel,
-                    QStringLiteral("m_editorMutationTarget"),
-                    QStringLiteral("PropertyPanel mutation path"));
-
     requireNotContains(mainWindow,
                        QStringLiteral("NodeEditor module graph commands (AddModuleCommand/TopologyPresetCommand)"),
                        QStringLiteral("MainWindow save blocker"));
@@ -879,7 +919,7 @@ int main(int argc, char** argv) {
     testCompletionReportUsesHardCutoverVerdict();
     testFinalReportsAndReadmeRegisterHardCutoverGate();
     testNormalSaveDoesNotSyncDurableProjectFromGraphProjection();
-    testNodeEditorUiMutationsUseProjectOwnedMutationTarget();
+    testProductionDoesNotExposeEditorMutationTarget();
     testAppContextContainsOnlyRegistries();
     testPluginsDoNotFallbackToDirectAppContextServices();
     testProductionUsesCentralAppBoundaryIdentifiers();

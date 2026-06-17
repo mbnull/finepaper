@@ -1,7 +1,6 @@
 // ProjectService tests for durable project source-of-truth behavior.
 #include "ipcraft/core/project_patch.h"
 #include "ipcraft/schemaids.h"
-#include "graph/module.h"
 #include "project/projectdesignserializer.h"
 #include "project/projectservice.h"
 
@@ -41,55 +40,6 @@ bool hasDiagnosticRule(const ipcraft::DiagnosticStore& diagnostics, const QStrin
         }
     }
     return false;
-}
-
-QJsonObject componentGraphConfig(const ipcraft::core::ProjectDesign& design,
-                                 const QString& componentId) {
-    for (const ipcraft::core::ComponentInstance& component : design.components) {
-        if (component.id == componentId) {
-            return component.extensionData.value(QStringLiteral("graph_config")).toObject();
-        }
-    }
-    return {};
-}
-
-bool graphConfigHasObject(const QJsonObject& graphConfig, const QString& objectId) {
-    const QJsonArray objects = graphConfig.value(QStringLiteral("objects")).toArray();
-    for (const QJsonValue& objectValue : objects) {
-        if (objectValue.isObject() &&
-            objectValue.toObject().value(QStringLiteral("id")).toString() == objectId) {
-            return true;
-        }
-    }
-    return false;
-}
-
-QJsonObject graphConfigObject(const QJsonObject& graphConfig, const QString& objectId) {
-    const QJsonArray objects = graphConfig.value(QStringLiteral("objects")).toArray();
-    for (const QJsonValue& objectValue : objects) {
-        if (objectValue.isObject() &&
-            objectValue.toObject().value(QStringLiteral("id")).toString() == objectId) {
-            return objectValue.toObject();
-        }
-    }
-    return {};
-}
-
-QJsonObject layoutNodeForObject(const ProjectDocument& document, const QString& objectId) {
-    const QJsonArray views = document.layout.value(QStringLiteral("views")).toArray();
-    for (const QJsonValue& viewValue : views) {
-        if (!viewValue.isObject()) {
-            continue;
-        }
-        const QJsonObject nodes = viewValue.toObject()
-                                      .value(QStringLiteral("canvas")).toObject()
-                                      .value(QStringLiteral("nodes")).toObject();
-        const QJsonValue nodeValue = nodes.value(objectId);
-        if (nodeValue.isObject()) {
-            return nodeValue.toObject();
-        }
-    }
-    return {};
 }
 
 QJsonObject readJsonObject(const QString& path) {
@@ -781,48 +731,6 @@ void testReplaceDesignPreservesNonDesignProjectFields() {
             "saved merged document should not revive wrapper-only sidecar fields after reload");
 }
 
-void testEditorModuleMutationRefreshesRuntimeDesignBeforeSave() {
-    ProjectDocument document;
-    document.schema = ipcraft::schemaids::projectV1;
-    document.projectId = QStringLiteral("editor_refresh_project");
-    document.projectName = QStringLiteral("Editor Refresh");
-    document.ipcores.append(ProjectIpcoreRecord{QStringLiteral("vendor.designpkg"),
-                                                QStringLiteral("1.0.0")});
-
-    ProjectIpInstanceRecord instance;
-    instance.id = QStringLiteral("component0");
-    instance.instanceId = instance.id;
-    instance.ipcoreId = QStringLiteral("vendor.designpkg");
-    instance.package = ProjectPackageRef{QStringLiteral("vendor.designpkg"),
-                                         QStringLiteral("1.0.0")};
-    document.instances.append(instance);
-
-    ProjectService service;
-    const ProjectServiceResult replaceResult = service.replaceDocument(document);
-    require(replaceResult.success, "editor refresh fixture should load into ProjectService");
-
-    Module module(QStringLiteral("editor_node"), QStringLiteral("EditorNode"));
-    module.setIpcoreId(QStringLiteral("vendor.designpkg"));
-    module.setInstanceId(QStringLiteral("component0"));
-    module.setParameter(QStringLiteral("vc_count"), 7);
-    module.setParameter(QStringLiteral("x"), 123);
-
-    require(service.upsertEditorModuleRecord(module),
-            "editor module mutation should update the durable document");
-
-    const QJsonObject graphConfig =
-        componentGraphConfig(service.design(), QStringLiteral("component0"));
-    require(graphConfigHasObject(graphConfig, QStringLiteral("editor_node")),
-            "ProjectService runtime design should expose the editor module before save");
-    require(graphConfigObject(graphConfig, QStringLiteral("editor_node"))
-                .value(QStringLiteral("properties")).toObject()
-                .value(QStringLiteral("vc_count")).toInt() == 7,
-            "ProjectService runtime design should expose editor graph parameters before save");
-    require(layoutNodeForObject(service.document(), QStringLiteral("editor_node"))
-                .value(QStringLiteral("x")).toInt() == 123,
-            "ProjectService document should expose editor layout before save");
-}
-
 void testRejectsUnsupportedDocumentKind() {
     QTemporaryDir tempDir;
     require(tempDir.isValid(), "temporary directory should be valid");
@@ -882,7 +790,6 @@ int main(int argc, char** argv) {
         testReplaceDesignSaveLoadPreservesSemanticDesignFields();
         testMergeDesignOnlyComponentsPreservesProjectedInstancesAndSemanticSupplement();
         testReplaceDesignPreservesNonDesignProjectFields();
-        testEditorModuleMutationRefreshesRuntimeDesignBeforeSave();
         testRejectsUnsupportedDocumentKind();
         testLoadFileReportsInvalidJsonDiagnostics();
     } catch (const std::exception& exception) {

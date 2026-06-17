@@ -8,7 +8,6 @@
 #include "graph/module.h"
 #include "modules/modulelabels.h"
 #include "modules/moduletypemetadata.h"
-#include "project/editormutationtarget.h"
 #include "project/ipinstanceparameteradapter.h"
 #include "project/projectstateservice.h"
 #include "commands/commandmanager.h"
@@ -261,14 +260,12 @@ PropertyPanel::PropertyPanel(Graph* graph,
                              ProjectStateService* stateService,
                              QVector<IIpInstanceParameterAdapter*> ipInstanceParameterAdapters,
                              CommandManager* commandManager,
-                             QWidget* parent,
-                             EditorMutationTarget* editorMutationTarget)
+                             QWidget* parent)
     : QWidget(parent),
       m_graph(graph),
       m_stateService(stateService),
       m_ipInstanceParameterAdapters(std::move(ipInstanceParameterAdapters)),
-      m_commandManager(commandManager),
-      m_editorMutationTarget(editorMutationTarget) {
+      m_commandManager(commandManager) {
     m_layout = new QVBoxLayout(this);
     m_descriptionView = new QPlainTextEdit(this);
     m_descriptionView->setReadOnly(true);

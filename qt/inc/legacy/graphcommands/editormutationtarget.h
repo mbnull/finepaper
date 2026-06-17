@@ -1,4 +1,5 @@
-// EditorMutationTarget receives UI graph mutations for durable project storage.
+// Legacy graph commands use this test-era mutation target to keep durable
+// records in sync while those commands remain isolated from production paths.
 #pragma once
 
 #include <QString>

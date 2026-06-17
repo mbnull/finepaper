@@ -17,7 +17,6 @@
 #include "nodeeditor/portanchorgeometry.h"
 #include "common/portlayout.h"
 #include "nodeeditor/straightconnectionpainter.h"
-#include "project/editormutationtarget.h"
 #include "project/projectstateservice.h"
 #include "workspace/activeworkspacecontroller.h"
 #include <QtNodes/NodeDelegateModelRegistry>
@@ -352,14 +351,12 @@ NodeEditorWidget::NodeEditorWidget(Graph* graph,
                                    ProjectStateService* projectStateService,
                                    ActiveWorkspaceController* workspaceController,
                                    CommandManager* commandManager,
-                                   QWidget* parent,
-                                   EditorMutationTarget* editorMutationTarget)
+                                   QWidget* parent)
     : QWidget(parent),
       m_graph(graph),
       m_projectStateService(projectStateService),
       m_workspaceController(workspaceController),
       m_commandManager(commandManager),
-      m_editorMutationTarget(editorMutationTarget),
       m_canvasRect(kCanvasRect) {
     refreshConnectionRuleService();
 

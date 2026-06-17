@@ -2,7 +2,6 @@
 #pragma once
 
 #include "ipcraft/core/project_patch.h"
-#include "project/editormutationtarget.h"
 #include "project/projectdocument.h"
 #include "project/projectreader.h"
 
@@ -15,7 +14,7 @@ struct ProjectServiceResult {
     ipcraft::DiagnosticStore diagnostics;
 };
 
-class ProjectService : public QObject, public EditorMutationTarget {
+class ProjectService : public QObject {
     Q_OBJECT
 
 public:
@@ -39,17 +38,12 @@ public:
     ipcraft::core::PatchApplyResult applyDesignPatch(
         const ipcraft::core::ProjectDesign& project,
         const ipcraft::core::ProjectPatch& patch) const;
-    bool upsertEditorModuleRecord(const Module& module) override;
-    bool removeEditorModuleRecord(const QString& moduleId) override;
-    bool upsertEditorConnectionRecord(const Connection& connection) override;
-    bool removeEditorConnectionRecord(const QString& connectionId) override;
 
 signals:
     void currentDocumentChanged();
 
 private:
     void reloadDesignFromDocument();
-    void reloadDesignFromDocumentWithEditorProjection();
 
     ProjectDocument m_document;
     ipcraft::core::ProjectDesign m_design;

@@ -1,7 +1,7 @@
 // RemoveModuleCommand removes one module plus incident edges and restores them on undo.
 #include "legacy/graphcommands/removemodulecommand.h"
 
-#include "project/editormutationtarget.h"
+#include "legacy/graphcommands/editormutationtarget.h"
 
 namespace {
 

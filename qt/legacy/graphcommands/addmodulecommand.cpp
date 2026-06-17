@@ -1,7 +1,7 @@
 // AddModuleCommand inserts one module with undo support.
 #include "legacy/graphcommands/addmodulecommand.h"
 
-#include "project/editormutationtarget.h"
+#include "legacy/graphcommands/editormutationtarget.h"
 
 AddModuleCommand::AddModuleCommand(Graph* graph,
                                    std::unique_ptr<Module> module,

@@ -1,7 +1,7 @@
 // AddConnectionCommand adds one connection with undo support.
 #include "legacy/graphcommands/addconnectioncommand.h"
 
-#include "project/editormutationtarget.h"
+#include "legacy/graphcommands/editormutationtarget.h"
 
 AddConnectionCommand::AddConnectionCommand(Graph* graph,
                                            std::unique_ptr<Connection> connection,

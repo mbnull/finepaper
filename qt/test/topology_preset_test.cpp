@@ -3,7 +3,7 @@
 #include "graph/graph.h"
 #include "modules/moduleregistry.h"
 #include "modules/moduleprovider.h"
-#include "project/editormutationtarget.h"
+#include "legacy/graphcommands/editormutationtarget.h"
 #include "topology/topologypresetbuilder.h"
 
 #include <QDir>

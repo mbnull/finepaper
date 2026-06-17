@@ -5,7 +5,7 @@
 #include "modules/modulelabels.h"
 #include "modules/moduletypemetadata.h"
 #include "common/portlayout.h"
-#include "project/editormutationtarget.h"
+#include "legacy/graphcommands/editormutationtarget.h"
 #include <QPoint>
 #include <QRect>
 #include <QRegularExpression>

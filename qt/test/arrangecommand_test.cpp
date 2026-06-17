@@ -2,7 +2,7 @@
 #include "legacy/graphcommands/arrangecommand.h"
 #include "graph/graph.h"
 #include "modules/moduleregistry.h"
-#include "project/editormutationtarget.h"
+#include "legacy/graphcommands/editormutationtarget.h"
 
 #include <QCoreApplication>
 #include <iostream>

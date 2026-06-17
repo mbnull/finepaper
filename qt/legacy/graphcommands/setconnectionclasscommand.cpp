@@ -2,7 +2,7 @@
 #include "legacy/graphcommands/setconnectionclasscommand.h"
 
 #include "graph/graph.h"
-#include "project/editormutationtarget.h"
+#include "legacy/graphcommands/editormutationtarget.h"
 
 #include <utility>
 

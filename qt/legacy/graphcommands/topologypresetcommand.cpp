@@ -3,7 +3,7 @@
 
 #include "graph/graph.h"
 #include "modules/moduleregistry.h"
-#include "project/editormutationtarget.h"
+#include "legacy/graphcommands/editormutationtarget.h"
 
 #include <utility>
 #include <vector>

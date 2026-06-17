@@ -5,17 +5,13 @@
 
 class ActiveWorkspaceController;
 class CommandManager;
-class EditorMutationTarget;
-class Graph;
 class QWidget;
 
 class TopologyPresetInteractionHandler {
 public:
     TopologyPresetInteractionHandler(QWidget* hostWidget,
-                                     Graph* graph,
                                      CommandManager* commandManager,
-                                     ActiveWorkspaceController* workspaceController,
-                                     EditorMutationTarget* editorMutationTarget);
+                                     ActiveWorkspaceController* workspaceController);
 
     bool registerHandlers(PluginInteractionRegistry& interactions) const;
 
@@ -24,8 +20,6 @@ private:
                                               const PluginInteractionContext& context) const;
 
     QWidget* m_hostWidget = nullptr;
-    Graph* m_graph = nullptr;
     CommandManager* m_commandManager = nullptr;
     ActiveWorkspaceController* m_workspaceController = nullptr;
-    EditorMutationTarget* m_editorMutationTarget = nullptr;
 };

@@ -396,10 +396,8 @@ MainWindow::MainWindow(QWidget *parent)
           m_ipCatalogService.get())),
       m_topologyPresetInteractionHandler(std::make_unique<TopologyPresetInteractionHandler>(
           this,
-          m_graph,
           m_commandManager.get(),
-          m_activeWorkspaceController.get(),
-          m_projectService.get())),
+          m_activeWorkspaceController.get())),
       m_nodeEditor(nullptr),
       m_propertyPanel(nullptr),
       m_ipCatalogPanel(nullptr),
@@ -832,14 +830,12 @@ void MainWindow::setupPanels() {
                                         m_projectStateService.get(),
                                         m_activeWorkspaceController.get(),
                                         m_commandManager.get(),
-                                        this,
-                                        m_projectService.get());
+                                        this);
     m_propertyPanel = new PropertyPanel(m_graph,
                                         m_projectStateService.get(),
                                         rebuildIpInstanceParameterAdapters(),
                                         m_commandManager.get(),
-                                        this,
-                                        m_projectService.get());
+                                        this);
     m_ipCatalogPanel = new IpCatalogPanel(m_ipCatalogService.get(),
                                           m_projectStateService.get(),
                                           m_projectIpService.get(),

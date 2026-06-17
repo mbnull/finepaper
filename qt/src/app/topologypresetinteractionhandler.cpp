@@ -103,15 +103,11 @@ std::optional<QHash<QString, int>> promptPresetParameters(
 
 TopologyPresetInteractionHandler::TopologyPresetInteractionHandler(
     QWidget* hostWidget,
-    Graph* graph,
     CommandManager* commandManager,
-    ActiveWorkspaceController* workspaceController,
-    EditorMutationTarget* editorMutationTarget)
+    ActiveWorkspaceController* workspaceController)
     : m_hostWidget(hostWidget),
-      m_graph(graph),
       m_commandManager(commandManager),
-      m_workspaceController(workspaceController),
-      m_editorMutationTarget(editorMutationTarget) {}
+      m_workspaceController(workspaceController) {}
 
 bool TopologyPresetInteractionHandler::registerHandlers(
     PluginInteractionRegistry& interactions) const {
@@ -132,7 +128,7 @@ PluginInteractionResult TopologyPresetInteractionHandler::handleInteraction(
     PluginInteractionResult result;
     result.handled = true;
 
-    if (!m_graph || !m_commandManager || !m_workspaceController) {
+    if (!m_commandManager || !m_workspaceController) {
         result.message = QStringLiteral("Topology interaction handler is not ready.");
         return result;
     }
