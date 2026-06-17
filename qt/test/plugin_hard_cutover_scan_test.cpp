@@ -67,6 +67,14 @@ void requireNotContains(const QString& text,
     require(!text.contains(needle), context + QStringLiteral(" should not contain ") + needle);
 }
 
+void requireNoMatch(const QString& text,
+                    const QRegularExpression& pattern,
+                    const QString& context) {
+    const QRegularExpressionMatch match = pattern.match(text);
+    require(!match.hasMatch(),
+            context + QStringLiteral(" should not match ") + pattern.pattern());
+}
+
 QString whitespaceStripped(const QString& text) {
     QString result = text;
     result.remove(QRegularExpression(QStringLiteral("\\s+")));
@@ -570,6 +578,90 @@ void testNodeEditorUiMutationsUseProjectOwnedMutationTarget() {
                        QStringLiteral("MainWindow save blocker"));
 }
 
+void testAppContextContainsOnlyRegistries() {
+    const QString context = readText(QStringLiteral("qt/inc/app/appcontext.h"));
+
+    const QStringList requiredRegistryPointers{
+        QStringLiteral("ServiceRegistry* services"),
+        QStringLiteral("ExtensionPointRegistry* extensionPoints"),
+        QStringLiteral("CapabilityRegistry* capabilities"),
+        QStringLiteral("PluginInteractionRegistry* interactions")
+    };
+    for (const QString& token : requiredRegistryPointers) {
+        requireContains(context, token, QStringLiteral("AppContext registry contract"));
+    }
+
+    requireNoMatch(context,
+                   QRegularExpression(QStringLiteral(
+                       "\\b(WorkbenchService|ProjectService|PackageService|ToolPipelineService)"
+                       "\\s*\\*\\s*(workbench|projectService|packageService|toolPipelineService)\\b")),
+                   QStringLiteral("AppContext business service pointer contract"));
+    requireNoMatch(context,
+                   QRegularExpression(QStringLiteral(
+                       "\\b(workbench|projectService|packageService|toolPipelineService)"
+                       "\\s*=\\s*nullptr\\b")),
+                   QStringLiteral("AppContext business service initializer contract"));
+}
+
+void testPluginsDoNotFallbackToDirectAppContextServices() {
+    const QStringList pluginFiles{
+        QStringLiteral("qt/src/project/projectplugin.cpp"),
+        QStringLiteral("qt/src/package/packageplugin.cpp"),
+        QStringLiteral("qt/src/app/toolpipelineplugin.cpp"),
+        QStringLiteral("qt/src/app/pluginhost.cpp"),
+        QStringLiteral("qt/src/noc/nocplugin.cpp")
+    };
+    const QRegularExpression directContextBusinessService(QStringLiteral(
+        "\\b(?:context|m_context)\\s*\\.\\s*"
+        "(packageService|projectService|toolPipelineService|workbench)\\b"));
+
+    for (const QString& file : pluginFiles) {
+        requireNoMatch(readText(file), directContextBusinessService, file);
+    }
+}
+
+void testFlowRunnerCommandParsingRejectsPermissiveQtJsonConversions() {
+    const QString flowRunner = readText(QStringLiteral("qt/src/ipcraft/flowrunner.cpp"));
+    const QString flowRunnerTest = readText(QStringLiteral("qt/test/ipcraft_flowrunner_test.cpp"));
+
+    const QStringList forbiddenParsingTokens{
+        QStringLiteral("step.value(QStringLiteral(\"command\")).toObject()"),
+        QStringLiteral("command.value(QStringLiteral(\"capture\")).toObject()"),
+        QStringLiteral("command.value(QStringLiteral(\"env\")).toObject()"),
+        QStringLiteral("expandedArguments(command.value(QStringLiteral(\"args\"))"),
+        QStringLiteral("sanitizedEnvironment(command)"),
+        QStringLiteral("stringArray(env.value(QStringLiteral(\"allow\")))")
+    };
+    for (const QString& token : forbiddenParsingTokens) {
+        requireNotContains(flowRunner, token, QStringLiteral("FlowRunner command parser"));
+    }
+
+    requireContains(flowRunnerTest,
+                    QStringLiteral("testMalformedCommandFieldsFailClosedBeforeProcessStart"),
+                    QStringLiteral("FlowRunner malformed command gate"));
+    requireContains(flowRunnerTest,
+                    QStringLiteral("flow.command_policy_violation"),
+                    QStringLiteral("FlowRunner malformed command gate"));
+    requireContains(flowRunnerTest,
+                    QStringLiteral("QFileInfo::exists(markerPath)"),
+                    QStringLiteral("FlowRunner marker-file fail-closed gate"));
+}
+
+void testProjectPatchBoundaryDocumentsMissingDesignEditingOperations() {
+    const QString patchHeader = readText(QStringLiteral("qt/inc/ipcraft/core/project_patch.h"));
+    const QStringList requiredBacklogTokens{
+        QStringLiteral("remove component"),
+        QStringLiteral("add/remove connection"),
+        QStringLiteral("connection metadata/class/config"),
+        QStringLiteral("layout/view state"),
+        QStringLiteral("topology preset output")
+    };
+
+    for (const QString& token : requiredBacklogTokens) {
+        requireContains(patchHeader, token, QStringLiteral("ProjectPatch P1/P2 backlog"));
+    }
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -589,6 +681,10 @@ int main(int argc, char** argv) {
     testFinalReportsAndReadmeRegisterHardCutoverGate();
     testNormalSaveDoesNotSyncDurableProjectFromGraphProjection();
     testNodeEditorUiMutationsUseProjectOwnedMutationTarget();
+    testAppContextContainsOnlyRegistries();
+    testPluginsDoNotFallbackToDirectAppContextServices();
+    testFlowRunnerCommandParsingRejectsPermissiveQtJsonConversions();
+    testProjectPatchBoundaryDocumentsMissingDesignEditingOperations();
     std::cout << "plugin_hard_cutover_scan_test passed\n";
     return 0;
 }
