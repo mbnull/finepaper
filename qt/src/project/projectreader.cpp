@@ -5,6 +5,7 @@
 #include "ipcraft/contract/legacyprojectkeys.h"
 #include "ipcraft/contract/projectkeys.h"
 #include "ipcraft/core/project_document_v1.h"
+#include "ipcraft/diagnosticids.h"
 #include "ipcraft/schemaids.h"
 #include "project/projectdesignserializer.h"
 
@@ -21,6 +22,7 @@ namespace {
 
 namespace legacyprojectkeys = ipcraft::contract::legacyprojectkeys;
 namespace projectkeys = ipcraft::contract::projectkeys;
+namespace diagnosticids = ipcraft::diagnosticids;
 
 constexpr qint64 kMaxProjectFileBytes = 16 * 1024 * 1024;
 
@@ -182,12 +184,12 @@ ProjectReadResult readEndpoint(const QJsonObject& object,
         return keyResult;
     }
     if (!isNonEmptyString(object.value(QStringLiteral("instance")))) {
-        return failure(QStringLiteral("project.missing_required"),
+        return failure(diagnosticids::projectMissingRequired(),
                        QStringLiteral("Connection endpoint instance is required"),
                        objectPath(path, QStringLiteral("instance")));
     }
     if (!isNonEmptyString(object.value(QStringLiteral("interface")))) {
-        return failure(QStringLiteral("project.missing_required"),
+        return failure(diagnosticids::projectMissingRequired(),
                        QStringLiteral("Connection endpoint interface is required"),
                        objectPath(path, QStringLiteral("interface")));
     }
@@ -242,12 +244,12 @@ ProjectReadResult readConnection(const QJsonObject& object,
         return keyResult;
     }
     if (!isNonEmptyString(object.value(QStringLiteral("id")))) {
-        return failure(QStringLiteral("project.missing_required"),
+        return failure(diagnosticids::projectMissingRequired(),
                        QStringLiteral("Connection id is required"),
                        objectPath(path, QStringLiteral("id")));
     }
     if (!object.value(QStringLiteral("endpoints")).isArray()) {
-        return failure(QStringLiteral("project.missing_required"),
+        return failure(diagnosticids::projectMissingRequired(),
                        QStringLiteral("Connection endpoints array is required"),
                        objectPath(path, QStringLiteral("endpoints")));
     }
@@ -311,7 +313,7 @@ ProjectReadResult readConnection(const QJsonObject& object,
         connection.endpoints.append(endpoint);
     }
     if (connection.endpoints.size() < 2) {
-        return failure(QStringLiteral("project.missing_required"),
+        return failure(diagnosticids::projectMissingRequired(),
                        QStringLiteral("Connection endpoints must contain at least two endpoints"),
                        objectPath(path, QStringLiteral("endpoints")));
     }
@@ -349,7 +351,7 @@ ProjectReadResult readExternalPort(const QJsonObject& object,
         return keyResult;
     }
     if (!isNonEmptyString(object.value(QStringLiteral("id")))) {
-        return failure(QStringLiteral("project.missing_required"),
+        return failure(diagnosticids::projectMissingRequired(),
                        QStringLiteral("External port id is required"),
                        objectPath(path, QStringLiteral("id")));
     }
@@ -494,7 +496,7 @@ ProjectReadResult validateProjectObject(const QJsonObject& project) {
     }
     const QJsonValue projectId = project.value(projectkeys::id());
     if (projectId.isUndefined()) {
-        return failure(QStringLiteral("project.missing_required"),
+        return failure(diagnosticids::projectMissingRequired(),
                        QStringLiteral("Project project.id is required"),
                        QStringLiteral("$.project.id"));
     }
@@ -505,7 +507,7 @@ ProjectReadResult validateProjectObject(const QJsonObject& project) {
     }
     const QJsonValue projectName = project.value(projectkeys::name());
     if (projectName.isUndefined()) {
-        return failure(QStringLiteral("project.missing_required"),
+        return failure(diagnosticids::projectMissingRequired(),
                        QStringLiteral("Project project.name is required"),
                        QStringLiteral("$.project.name"));
     }
@@ -529,12 +531,12 @@ ProjectReadResult validatePackageRef(const QJsonObject& package, const QString& 
         return keyResult;
     }
     if (!isNonEmptyString(package.value(QStringLiteral("id")))) {
-        return failure(QStringLiteral("project.missing_required"),
+        return failure(diagnosticids::projectMissingRequired(),
                        QStringLiteral("Instance %1 package.id is required").arg(instanceId),
                        QStringLiteral("$.instances[].package.id"));
     }
     if (!isNonEmptyString(package.value(QStringLiteral("version")))) {
-        return failure(QStringLiteral("project.missing_required"),
+        return failure(diagnosticids::projectMissingRequired(),
                        QStringLiteral("Instance %1 package.version is required").arg(instanceId),
                        QStringLiteral("$.instances[].package.version"));
     }
@@ -672,7 +674,7 @@ ProjectReadResult readInstance(const QJsonObject& object,
     }
 
     if (!isNonEmptyString(object.value(QStringLiteral("id")))) {
-        return failure(QStringLiteral("project.missing_required"),
+        return failure(diagnosticids::projectMissingRequired(),
                        QStringLiteral("Instance id is required"),
                        QStringLiteral("$.instances[].id"));
     }
@@ -687,7 +689,7 @@ ProjectReadResult readInstance(const QJsonObject& object,
 
     const QJsonValue packageValue = object.value(QStringLiteral("package"));
     if (!packageValue.isObject()) {
-        return failure(QStringLiteral("project.missing_required"),
+        return failure(diagnosticids::projectMissingRequired(),
                        QStringLiteral("Instance %1 package is required").arg(instanceId),
                        QStringLiteral("$.instances[].package"));
     }
@@ -1088,19 +1090,19 @@ ProjectReadResult ProjectReader::readFile(const QString& path) {
     QJsonParseError parseError;
     const QJsonDocument json = QJsonDocument::fromJson(file.readAll(), &parseError);
     if (parseError.error != QJsonParseError::NoError) {
-        return ioFailure(QStringLiteral("project.invalid_json"),
+        return ioFailure(diagnosticids::projectInvalidJson(),
                          QStringLiteral("Invalid project JSON: %1").arg(parseError.errorString()),
                          path);
     }
     if (!json.isObject()) {
-        return ioFailure(QStringLiteral("project.invalid_json"),
+        return ioFailure(diagnosticids::projectInvalidJson(),
                          QStringLiteral("Project JSON root must be an object"),
                          path);
     }
 
     const QJsonObject root = json.object();
     if (root.value(projectkeys::schema()).toString() != ipcraft::schemaids::projectV1) {
-        return failure(QStringLiteral("project.unsupported_schema"),
+        return failure(diagnosticids::projectUnsupportedSchema(),
                        QStringLiteral("Unsupported project schema: %1")
                            .arg(root.value(projectkeys::schema()).toString()),
                        QStringLiteral("$.schema"));
@@ -1141,7 +1143,7 @@ ProjectReadResult ProjectReader::readFile(const QString& path) {
 
     const QJsonValue projectValue = root.value(legacyprojectkeys::project());
     if (!projectValue.isObject()) {
-        return failure(QStringLiteral("project.missing_required"),
+        return failure(diagnosticids::projectMissingRequired(),
                        QStringLiteral("Project project object is required"),
                        QStringLiteral("$.project"));
     }

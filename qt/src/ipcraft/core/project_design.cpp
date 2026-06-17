@@ -1,5 +1,6 @@
 #include "ipcraft/core/project_design.h"
 
+#include "ipcraft/diagnosticids.h"
 #include "ipcraft/schemaids.h"
 
 #include <QJsonArray>
@@ -8,6 +9,8 @@
 
 namespace ipcraft::core {
 namespace {
+
+namespace diagnosticids = ipcraft::diagnosticids;
 
 bool isBlank(const QString& value) {
     return value.trimmed().isEmpty();
@@ -129,7 +132,7 @@ QVector<ValidationIssue> validateProjectDesign(const ProjectDesign& project) {
 
     if (!project.schema.isEmpty() && project.schema != schemaids::projectV1) {
         appendIssue(issues,
-                    QStringLiteral("project.unsupported_schema"),
+                    diagnosticids::projectUnsupportedSchema(),
                     QStringLiteral("Project schema is not supported."),
                     QStringLiteral("/schema"));
     }

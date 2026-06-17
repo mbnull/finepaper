@@ -1,6 +1,7 @@
 #include "ipcraft/core/project_document_v1.h"
 
 #include "ipcraft/contract/projectkeys.h"
+#include "ipcraft/diagnosticids.h"
 #include "ipcraft/schemaids.h"
 
 #include <QJsonArray>
@@ -13,6 +14,7 @@ namespace ipcraft::core {
 namespace {
 
 namespace projectkeys = ipcraft::contract::projectkeys;
+namespace diagnosticids = ipcraft::diagnosticids;
 
 QJsonObject objectValue(const QJsonObject& object, const QString& key) {
     const QJsonValue value = object.value(key);
@@ -1022,7 +1024,7 @@ ProjectDocumentReadResult ProjectDocumentV1::readObject(const QJsonObject& objec
     const QString schema = object.value(projectkeys::schema()).toString();
     if (schema != schemaids::projectV1) {
         ProjectDocumentReadResult result;
-        result.issues.append(issue(QStringLiteral("project.unsupported_schema"),
+        result.issues.append(issue(diagnosticids::projectUnsupportedSchema(),
                                    QStringLiteral("Project schema is not supported."),
                                    QStringLiteral("/schema")));
         return result;

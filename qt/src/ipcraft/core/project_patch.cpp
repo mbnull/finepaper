@@ -1,5 +1,6 @@
 #include "ipcraft/core/project_patch.h"
 
+#include "ipcraft/diagnosticids.h"
 #include "ipcraft/patchops.h"
 #include "ipcraft/schemaids.h"
 
@@ -7,6 +8,8 @@
 
 namespace ipcraft::core {
 namespace {
+
+namespace diagnosticids = ipcraft::diagnosticids;
 
 ValidationIssue issue(const QString& code, const QString& message, const QString& path) {
     return ValidationIssue{code, message, path};
@@ -320,7 +323,7 @@ bool applyAddComponentOperation(ProjectDesign& candidate,
                                 qsizetype opIndex,
                                 QVector<ValidationIssue>& issues) {
     if (operation.target != QStringLiteral("component")) {
-        issues.append(issue(QStringLiteral("patch.invalid_target"),
+        issues.append(issue(diagnosticids::patchInvalidTarget(),
                             QStringLiteral("Patch target is not supported."),
                             QStringLiteral("/ops/%1/target").arg(opIndex)));
         return false;
@@ -477,7 +480,7 @@ bool applyRemoveComponentOperation(ProjectDesign& candidate,
                                    QVector<ValidationIssue>& issues) {
     QString componentId;
     if (!componentIdFromTarget(operation.target, componentId)) {
-        issues.append(issue(QStringLiteral("patch.invalid_target"),
+        issues.append(issue(diagnosticids::patchInvalidTarget(),
                             QStringLiteral("Patch target is not supported."),
                             QStringLiteral("/ops/%1/target").arg(opIndex)));
         return false;
@@ -492,7 +495,7 @@ bool applyRemoveComponentOperation(ProjectDesign& candidate,
 
     const qsizetype componentIndex = componentIndexById(candidate, componentId);
     if (componentIndex < 0) {
-        issues.append(issue(QStringLiteral("patch.target_not_found"),
+        issues.append(issue(diagnosticids::patchTargetNotFound(),
                             QStringLiteral("Patch target was not found."),
                             QStringLiteral("/ops/%1/target").arg(opIndex)));
         return false;
@@ -508,7 +511,7 @@ bool applyComponentConfigSetOperation(ProjectDesign& candidate,
                                       QVector<ValidationIssue>& issues) {
     QString componentId;
     if (!componentIdFromTarget(operation.target, componentId)) {
-        issues.append(issue(QStringLiteral("patch.invalid_target"),
+        issues.append(issue(diagnosticids::patchInvalidTarget(),
                             QStringLiteral("Patch target is not supported."),
                             QStringLiteral("/ops/%1/target").arg(opIndex)));
         return false;
@@ -516,7 +519,7 @@ bool applyComponentConfigSetOperation(ProjectDesign& candidate,
 
     const qsizetype componentIndex = componentIndexById(candidate, componentId);
     if (componentIndex < 0) {
-        issues.append(issue(QStringLiteral("patch.target_not_found"),
+        issues.append(issue(diagnosticids::patchTargetNotFound(),
                             QStringLiteral("Patch target was not found."),
                             QStringLiteral("/ops/%1/target").arg(opIndex)));
         return false;
@@ -561,7 +564,7 @@ bool applyComponentConfigUnsetOperation(ProjectDesign& candidate,
                                         QVector<ValidationIssue>& issues) {
     QString componentId;
     if (!componentIdFromTarget(operation.target, componentId)) {
-        issues.append(issue(QStringLiteral("patch.invalid_target"),
+        issues.append(issue(diagnosticids::patchInvalidTarget(),
                             QStringLiteral("Patch target is not supported."),
                             QStringLiteral("/ops/%1/target").arg(opIndex)));
         return false;
@@ -569,7 +572,7 @@ bool applyComponentConfigUnsetOperation(ProjectDesign& candidate,
 
     const qsizetype componentIndex = componentIndexById(candidate, componentId);
     if (componentIndex < 0) {
-        issues.append(issue(QStringLiteral("patch.target_not_found"),
+        issues.append(issue(diagnosticids::patchTargetNotFound(),
                             QStringLiteral("Patch target was not found."),
                             QStringLiteral("/ops/%1/target").arg(opIndex)));
         return false;
@@ -599,7 +602,7 @@ bool applyAddConnectionOperation(ProjectDesign& candidate,
                                  qsizetype opIndex,
                                  QVector<ValidationIssue>& issues) {
     if (operation.target != QStringLiteral("connection")) {
-        issues.append(issue(QStringLiteral("patch.invalid_target"),
+        issues.append(issue(diagnosticids::patchInvalidTarget(),
                             QStringLiteral("Patch target is not supported."),
                             QStringLiteral("/ops/%1/target").arg(opIndex)));
         return false;
@@ -716,7 +719,7 @@ bool applyRemoveConnectionOperation(ProjectDesign& candidate,
                                     QVector<ValidationIssue>& issues) {
     QString connectionId;
     if (!connectionIdFromTarget(operation.target, connectionId)) {
-        issues.append(issue(QStringLiteral("patch.invalid_target"),
+        issues.append(issue(diagnosticids::patchInvalidTarget(),
                             QStringLiteral("Patch target is not supported."),
                             QStringLiteral("/ops/%1/target").arg(opIndex)));
         return false;
@@ -731,7 +734,7 @@ bool applyRemoveConnectionOperation(ProjectDesign& candidate,
 
     const qsizetype connectionIndex = connectionIndexById(candidate, connectionId);
     if (connectionIndex < 0) {
-        issues.append(issue(QStringLiteral("patch.target_not_found"),
+        issues.append(issue(diagnosticids::patchTargetNotFound(),
                             QStringLiteral("Patch target was not found."),
                             QStringLiteral("/ops/%1/target").arg(opIndex)));
         return false;
@@ -747,7 +750,7 @@ bool applyConnectionConfigSetOperation(ProjectDesign& candidate,
                                        QVector<ValidationIssue>& issues) {
     QString connectionId;
     if (!connectionIdFromTarget(operation.target, connectionId)) {
-        issues.append(issue(QStringLiteral("patch.invalid_target"),
+        issues.append(issue(diagnosticids::patchInvalidTarget(),
                             QStringLiteral("Patch target is not supported."),
                             QStringLiteral("/ops/%1/target").arg(opIndex)));
         return false;
@@ -755,7 +758,7 @@ bool applyConnectionConfigSetOperation(ProjectDesign& candidate,
 
     const qsizetype connectionIndex = connectionIndexById(candidate, connectionId);
     if (connectionIndex < 0) {
-        issues.append(issue(QStringLiteral("patch.target_not_found"),
+        issues.append(issue(diagnosticids::patchTargetNotFound(),
                             QStringLiteral("Patch target was not found."),
                             QStringLiteral("/ops/%1/target").arg(opIndex)));
         return false;
@@ -786,7 +789,7 @@ bool applyConnectionMetadataSetOperation(ProjectDesign& candidate,
                                          QVector<ValidationIssue>& issues) {
     QString connectionId;
     if (!connectionIdFromTarget(operation.target, connectionId)) {
-        issues.append(issue(QStringLiteral("patch.invalid_target"),
+        issues.append(issue(diagnosticids::patchInvalidTarget(),
                             QStringLiteral("Patch target is not supported."),
                             QStringLiteral("/ops/%1/target").arg(opIndex)));
         return false;
@@ -794,7 +797,7 @@ bool applyConnectionMetadataSetOperation(ProjectDesign& candidate,
 
     const qsizetype connectionIndex = connectionIndexById(candidate, connectionId);
     if (connectionIndex < 0) {
-        issues.append(issue(QStringLiteral("patch.target_not_found"),
+        issues.append(issue(diagnosticids::patchTargetNotFound(),
                             QStringLiteral("Patch target was not found."),
                             QStringLiteral("/ops/%1/target").arg(opIndex)));
         return false;
@@ -825,7 +828,7 @@ bool applyConnectionClassSetOperation(ProjectDesign& candidate,
                                       QVector<ValidationIssue>& issues) {
     QString connectionId;
     if (!connectionIdFromTarget(operation.target, connectionId)) {
-        issues.append(issue(QStringLiteral("patch.invalid_target"),
+        issues.append(issue(diagnosticids::patchInvalidTarget(),
                             QStringLiteral("Patch target is not supported."),
                             QStringLiteral("/ops/%1/target").arg(opIndex)));
         return false;
@@ -833,7 +836,7 @@ bool applyConnectionClassSetOperation(ProjectDesign& candidate,
 
     const qsizetype connectionIndex = connectionIndexById(candidate, connectionId);
     if (connectionIndex < 0) {
-        issues.append(issue(QStringLiteral("patch.target_not_found"),
+        issues.append(issue(diagnosticids::patchTargetNotFound(),
                             QStringLiteral("Patch target was not found."),
                             QStringLiteral("/ops/%1/target").arg(opIndex)));
         return false;
@@ -957,7 +960,7 @@ bool applyViewLayoutSetOperation(ProjectDesign& candidate,
 
         const qsizetype viewIndex = viewIndexById(candidate, viewId);
         if (viewIndex < 0) {
-            issues.append(issue(QStringLiteral("patch.target_not_found"),
+            issues.append(issue(diagnosticids::patchTargetNotFound(),
                                 QStringLiteral("Patch target was not found."),
                                 QStringLiteral("/ops/%1/target").arg(opIndex)));
             return false;
@@ -982,7 +985,7 @@ bool applyViewLayoutSetOperation(ProjectDesign& candidate,
         return true;
     }
 
-    issues.append(issue(QStringLiteral("patch.invalid_target"),
+    issues.append(issue(diagnosticids::patchInvalidTarget(),
                         QStringLiteral("Patch target is not supported."),
                         QStringLiteral("/ops/%1/target").arg(opIndex)));
     return false;
@@ -994,7 +997,7 @@ bool applyViewNodePositionSetOperation(ProjectDesign& candidate,
                                        QVector<ValidationIssue>& issues) {
     QString viewId;
     if (!viewIdFromTarget(operation.target, viewId)) {
-        issues.append(issue(QStringLiteral("patch.invalid_target"),
+        issues.append(issue(diagnosticids::patchInvalidTarget(),
                             QStringLiteral("Patch target is not supported."),
                             QStringLiteral("/ops/%1/target").arg(opIndex)));
         return false;
@@ -1002,7 +1005,7 @@ bool applyViewNodePositionSetOperation(ProjectDesign& candidate,
 
     const qsizetype viewIndex = viewIndexById(candidate, viewId);
     if (viewIndex < 0) {
-        issues.append(issue(QStringLiteral("patch.target_not_found"),
+        issues.append(issue(diagnosticids::patchTargetNotFound(),
                             QStringLiteral("Patch target was not found."),
                             QStringLiteral("/ops/%1/target").arg(opIndex)));
         return false;
@@ -1157,7 +1160,7 @@ bool applyTopologyAddOrUpdateOperation(ProjectDesign& candidate,
     QString targetTopologyId;
     const bool hasTargetId = topologyIdFromTarget(operation.target, targetTopologyId);
     if (!hasTargetId && operation.target != QStringLiteral("topology")) {
-        issues.append(issue(QStringLiteral("patch.invalid_target"),
+        issues.append(issue(diagnosticids::patchInvalidTarget(),
                             QStringLiteral("Patch target is not supported."),
                             QStringLiteral("/ops/%1/target").arg(opIndex)));
         return false;
@@ -1181,7 +1184,7 @@ bool applyTopologyAddOrUpdateOperation(ProjectDesign& candidate,
     if (hasTargetId) {
         const QString payloadId = payload.value(QStringLiteral("id")).toString();
         if (!payloadId.trimmed().isEmpty() && payloadId != targetTopologyId) {
-            issues.append(issue(QStringLiteral("patch.invalid_target"),
+            issues.append(issue(diagnosticids::patchInvalidTarget(),
                                 QStringLiteral("Topology target id does not match payload id."),
                                 QStringLiteral("/ops/%1/target").arg(opIndex)));
             return false;
@@ -1217,7 +1220,7 @@ bool applyTopologyRemoveOperation(ProjectDesign& candidate,
     QString topologyId;
     if (!topologyIdFromTarget(operation.target, topologyId)) {
         if (operation.target != QStringLiteral("topology")) {
-            issues.append(issue(QStringLiteral("patch.invalid_target"),
+            issues.append(issue(diagnosticids::patchInvalidTarget(),
                                 QStringLiteral("Patch target is not supported."),
                                 QStringLiteral("/ops/%1/target").arg(opIndex)));
             return false;
@@ -1243,7 +1246,7 @@ bool applyTopologyRemoveOperation(ProjectDesign& candidate,
 
     const qsizetype topologyIndex = topologyIndexById(candidate, topologyId);
     if (topologyIndex < 0) {
-        issues.append(issue(QStringLiteral("patch.target_not_found"),
+        issues.append(issue(diagnosticids::patchTargetNotFound(),
                             QStringLiteral("Patch target was not found."),
                             QStringLiteral("/ops/%1/target").arg(opIndex)));
         return false;
@@ -1299,7 +1302,7 @@ bool applyOperation(ProjectDesign& candidate,
         return applyTopologyRemoveOperation(candidate, operation, opIndex, issues);
     }
 
-    issues.append(issue(QStringLiteral("patch.unsupported_op"),
+    issues.append(issue(diagnosticids::patchUnsupportedOp(),
                         QStringLiteral("Patch operation is not supported."),
                         QStringLiteral("/ops/%1/op").arg(opIndex)));
     return false;
@@ -1354,7 +1357,7 @@ ProjectPatchReadResult ProjectPatchCodec::readObject(const QJsonObject& object) 
 
     if (patch.schema != schemaids::patchV1) {
         result.patch = patch;
-        result.issues.append(issue(QStringLiteral("patch.unsupported_schema"),
+        result.issues.append(issue(diagnosticids::patchUnsupportedSchema(),
                                    QStringLiteral("Patch schema is not supported."),
                                    QStringLiteral("/schema")));
         return result;
@@ -1418,7 +1421,7 @@ PatchApplyResult applyPatch(const ProjectDesign& project, const ProjectPatch& pa
     result.project = project;
 
     if (patch.schema != schemaids::patchV1) {
-        result.issues.append(issue(QStringLiteral("patch.unsupported_schema"),
+        result.issues.append(issue(diagnosticids::patchUnsupportedSchema(),
                                    QStringLiteral("Patch schema is not supported."),
                                    QStringLiteral("/schema")));
         return result;

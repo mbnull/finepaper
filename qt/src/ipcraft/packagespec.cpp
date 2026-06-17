@@ -1,6 +1,7 @@
 #include "ipcraft/packagespec.h"
 
 #include "ipcraft/contract/packagekeys.h"
+#include "ipcraft/diagnosticids.h"
 #include "ipcraft/schemaids.h"
 
 #include <QDir>
@@ -14,6 +15,7 @@
 namespace {
 
 namespace packagekeys = ipcraft::contract::packagekeys;
+namespace diagnosticids = ipcraft::diagnosticids;
 
 constexpr auto kPackageFileName = "ipcraft.json";
 constexpr qint64 kMaxPackageFileBytes = 16 * 1024 * 1024;
@@ -1137,7 +1139,7 @@ void requireExtension(const ipcraft::PackageSpec& spec,
     ipcraft::Diagnostic record;
     record.severity = QStringLiteral("error");
     record.source = QStringLiteral("package.parser");
-    record.ruleId = QStringLiteral("package.extension_required");
+    record.ruleId = diagnosticids::packageExtensionRequired();
     record.category = QStringLiteral("package");
     record.message = QStringLiteral("Section '%1' requires extension '%2'.")
                          .arg(sectionPath.mid(2), extensionId);
