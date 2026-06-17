@@ -578,8 +578,8 @@ void testPackageExtensionSurfacesAreEnforced() {
             continue;
         }
         const QString source = readTextFile(info.absoluteFilePath());
-        if (!source.contains(QStringLiteral("extension_required"))) {
-            violations.append(QStringLiteral("%1 does not expose package.extension_required enforcement")
+        if (!source.contains(QStringLiteral("diagnosticids::packageExtensionRequired()"))) {
+            violations.append(QStringLiteral("%1 does not use centralized package.extension_required enforcement")
                                   .arg(relativePath));
         }
     }
