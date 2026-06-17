@@ -1,5 +1,8 @@
 #include "app/pluginhost.h"
 
+#include "app/serviceregistry.h"
+#include "app/workbenchservice.h"
+
 #include <cstddef>
 #include <exception>
 #include <utility>
@@ -58,7 +61,8 @@ PluginActivationResult PluginHost::activatePlugins() {
         return result;
     }
 
-    if (!m_context.workbench) {
+    if (!m_context.services->service<WorkbenchService>(
+            ServiceKey::fromLiteral("finepaper.workbench"))) {
         result.success = false;
         result.error = QStringLiteral("WorkbenchService is required before activating plugins.");
         return result;

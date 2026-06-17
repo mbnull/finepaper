@@ -21,7 +21,7 @@ PackageService* packageService(AppContext& context) {
             return service;
         }
     }
-    return context.packageService;
+    return nullptr;
 }
 
 QString descriptorLabel(const PackageFeatureCoverageItem& item) {

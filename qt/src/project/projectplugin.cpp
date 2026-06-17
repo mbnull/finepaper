@@ -9,11 +9,8 @@
 namespace {
 
 bool hasProjectService(AppContext& context) {
-    if (context.services &&
-        context.services->service<ProjectService>(ServiceKey::fromLiteral("finepaper.project"))) {
-        return true;
-    }
-    return context.projectService != nullptr;
+    return context.services &&
+           context.services->service<ProjectService>(ServiceKey::fromLiteral("finepaper.project"));
 }
 
 class ProjectPlugin final : public IAppPlugin {

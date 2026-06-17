@@ -419,6 +419,8 @@ MainWindow::MainWindow(QWidget *parent)
       m_topologyMenu(nullptr) {
     m_serviceRegistry->registerService(ServiceKey::fromLiteral("finepaper.project"),
                                        m_projectService.get());
+    m_serviceRegistry->registerService(ServiceKey::fromLiteral("finepaper.workbench"),
+                                       m_workbenchService.get());
     m_serviceRegistry->registerService(ServiceKey::fromLiteral("finepaper.design-editing"),
                                        m_designEditingService.get());
     m_serviceRegistry->registerService(ServiceKey::fromLiteral("finepaper.package"),
@@ -438,10 +440,6 @@ MainWindow::MainWindow(QWidget *parent)
     context.extensionPoints = m_extensionPointRegistry.get();
     context.capabilities = m_capabilityRegistry.get();
     context.interactions = m_pluginInteractionRegistry.get();
-    context.workbench = m_workbenchService.get();
-    context.projectService = m_projectService.get();
-    context.packageService = m_packageService.get();
-    context.toolPipelineService = m_toolPipelineService.get();
 
     m_pluginHost = std::make_unique<PluginHost>(context);
     if (!registerStaticPluginInteractions(*m_pluginInteractionRegistry)) {

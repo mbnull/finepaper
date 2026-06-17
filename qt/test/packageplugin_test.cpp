@@ -42,9 +42,15 @@ void testPackagePluginActivatesWithPackageService() {
     RegistrySet registries;
     AppContext context;
     registries.attachTo(context);
-    context.workbench = &workbench;
-    context.projectService = &projectService;
-    context.packageService = &packageService;
+    require(registries.services.registerService(ServiceKey::fromLiteral("finepaper.workbench"),
+                                                &workbench),
+            "workbench service should register");
+    require(registries.services.registerService(ServiceKey::fromLiteral("finepaper.project"),
+                                                &projectService),
+            "project service should register");
+    require(registries.services.registerService(ServiceKey::fromLiteral("finepaper.package"),
+                                                &packageService),
+            "package service should register");
 
     PluginHost host(context);
     require(host.registerPlugin(createPackagePlugin()), "package plugin should register");
@@ -61,8 +67,12 @@ void testPackagePluginRequiresPackageService() {
     RegistrySet registries;
     AppContext context;
     registries.attachTo(context);
-    context.workbench = &workbench;
-    context.projectService = &projectService;
+    require(registries.services.registerService(ServiceKey::fromLiteral("finepaper.workbench"),
+                                                &workbench),
+            "workbench service should register");
+    require(registries.services.registerService(ServiceKey::fromLiteral("finepaper.project"),
+                                                &projectService),
+            "project service should register");
 
     PluginHost host(context);
     require(host.registerPlugin(createPackagePlugin()), "package plugin should register");

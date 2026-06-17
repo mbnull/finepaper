@@ -294,6 +294,9 @@ void testPackagePluginRegistersCoverageInspectorContribution() {
     WorkbenchService workbench;
     ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
     PackageService packageService(&registry);
+    require(services.registerService(ServiceKey::fromLiteral("finepaper.workbench"),
+                                     &workbench),
+            "workbench service should register");
     require(services.registerService(ServiceKey::fromLiteral("finepaper.package"),
                                      &packageService),
             "package service should register");
@@ -303,8 +306,6 @@ void testPackagePluginRegistersCoverageInspectorContribution() {
     context.extensionPoints = &extensionPoints;
     context.capabilities = &capabilities;
     context.interactions = &interactions;
-    context.workbench = &workbench;
-    context.packageService = &packageService;
 
     PluginHost host(context);
     require(host.registerPlugin(createPackagePlugin()), "package plugin should register");
@@ -330,6 +331,9 @@ void testPackagePluginRegistersGenericCoverageInteractionProvider() {
     WorkbenchService workbench;
     ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
     PackageService packageService(&registry);
+    require(services.registerService(ServiceKey::fromLiteral("finepaper.workbench"),
+                                     &workbench),
+            "workbench service should register");
     require(services.registerService(ServiceKey::fromLiteral("finepaper.package"),
                                      &packageService),
             "package service should register");
@@ -339,8 +343,6 @@ void testPackagePluginRegistersGenericCoverageInteractionProvider() {
     context.extensionPoints = &extensionPoints;
     context.capabilities = &capabilities;
     context.interactions = &interactions;
-    context.workbench = &workbench;
-    context.packageService = &packageService;
 
     PluginHost host(context);
     require(host.registerPlugin(createPackagePlugin()), "package plugin should register");

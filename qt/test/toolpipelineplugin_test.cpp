@@ -38,8 +38,13 @@ void testToolPipelinePluginActivatesWithService() {
     RegistrySet registries;
     AppContext context;
     registries.attachTo(context);
-    context.workbench = &workbench;
-    context.toolPipelineService = &toolPipelineService;
+    require(registries.services.registerService(ServiceKey::fromLiteral("finepaper.workbench"),
+                                                &workbench),
+            "workbench service should register");
+    require(registries.services.registerService(
+                ServiceKey::fromLiteral("finepaper.tool-pipeline"),
+                &toolPipelineService),
+            "tool pipeline service should register");
 
     PluginHost host(context);
     require(host.registerPlugin(createToolPipelinePlugin()),
@@ -56,7 +61,9 @@ void testToolPipelinePluginRequiresService() {
     RegistrySet registries;
     AppContext context;
     registries.attachTo(context);
-    context.workbench = &workbench;
+    require(registries.services.registerService(ServiceKey::fromLiteral("finepaper.workbench"),
+                                                &workbench),
+            "workbench service should register");
 
     PluginHost host(context);
     require(host.registerPlugin(createToolPipelinePlugin()),

@@ -38,8 +38,12 @@ void testProjectPluginActivatesWithProjectService() {
     RegistrySet registries;
     AppContext context;
     registries.attachTo(context);
-    context.workbench = &workbench;
-    context.projectService = &projectService;
+    require(registries.services.registerService(ServiceKey::fromLiteral("finepaper.workbench"),
+                                                &workbench),
+            "workbench service should register");
+    require(registries.services.registerService(ServiceKey::fromLiteral("finepaper.project"),
+                                                &projectService),
+            "project service should register");
 
     PluginHost host(context);
     require(host.registerPlugin(createProjectPlugin()), "project plugin should register");
@@ -55,7 +59,9 @@ void testProjectPluginRequiresProjectService() {
     RegistrySet registries;
     AppContext context;
     registries.attachTo(context);
-    context.workbench = &workbench;
+    require(registries.services.registerService(ServiceKey::fromLiteral("finepaper.workbench"),
+                                                &workbench),
+            "workbench service should register");
 
     PluginHost host(context);
     require(host.registerPlugin(createProjectPlugin()), "project plugin should register");

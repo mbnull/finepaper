@@ -34,6 +34,12 @@ struct RegistrySet {
         context.extensionPoints = &extensionPoints;
         context.capabilities = &capabilities;
     }
+
+    void registerWorkbench(WorkbenchService& workbench) {
+        require(services.registerService(ServiceKey::fromLiteral("finepaper.workbench"),
+                                         &workbench),
+                "workbench service should register");
+    }
 };
 
 class ContributingPlugin final : public IAppPlugin {
@@ -47,7 +53,15 @@ public:
     void activate(AppContext& context) override {
         ++activateCount;
 
-        context.workbench->addAction(WorkbenchActionContribution{
+        WorkbenchService* service = context.services
+            ? context.services->service<WorkbenchService>(
+                  ServiceKey::fromLiteral("finepaper.workbench"))
+            : nullptr;
+        if (!service) {
+            throw std::runtime_error("WorkbenchService is required by ContributingPlugin.");
+        }
+
+        service->addAction(WorkbenchActionContribution{
             .id = m_id + QStringLiteral(".action"),
             .text = QStringLiteral("Open"),
             .menuPath = QStringLiteral("File"),
@@ -58,7 +72,7 @@ public:
             }
         });
 
-        context.workbench->addPanel(WorkbenchPanelContribution{
+        service->addPanel(WorkbenchPanelContribution{
             .id = m_id + QStringLiteral(".panel"),
             .title = QStringLiteral("Project"),
             .objectName = m_id + QStringLiteral("Panel"),
@@ -120,7 +134,7 @@ void testActivatesPluginsWithAppContext() {
     RegistrySet registries;
     AppContext context;
     registries.attachTo(context);
-    context.workbench = &workbench;
+    registries.registerWorkbench(workbench);
     PluginHost host(context);
 
     auto plugin = std::make_unique<ContributingPlugin>(QStringLiteral("project"));
@@ -143,7 +157,7 @@ void testSuccessfulActivationDoesNotRetryPlugins() {
     RegistrySet registries;
     AppContext context;
     registries.attachTo(context);
-    context.workbench = &workbench;
+    registries.registerWorkbench(workbench);
     PluginHost host(context);
 
     auto plugin = std::make_unique<RenamingPlugin>(QStringLiteral("project"),
@@ -173,7 +187,7 @@ void testRejectsDuplicatePluginIds() {
     RegistrySet registries;
     AppContext context;
     registries.attachTo(context);
-    context.workbench = &workbench;
+    registries.registerWorkbench(workbench);
     PluginHost host(context);
 
     require(host.registerPlugin(std::make_unique<ContributingPlugin>(QStringLiteral("package"))),
@@ -190,7 +204,7 @@ void testRejectsNonCanonicalPluginIds() {
     RegistrySet registries;
     AppContext context;
     registries.attachTo(context);
-    context.workbench = &workbench;
+    registries.registerWorkbench(workbench);
     PluginHost host(context);
 
     require(host.registerPlugin(std::make_unique<ContributingPlugin>(QStringLiteral("package"))),
@@ -245,7 +259,7 @@ void testActivationFailureDoesNotRetryPlugins() {
     RegistrySet registries;
     AppContext context;
     registries.attachTo(context);
-    context.workbench = &workbench;
+    registries.registerWorkbench(workbench);
     PluginHost host(context);
 
     auto contributingPlugin = std::make_unique<ContributingPlugin>(QStringLiteral("project"));

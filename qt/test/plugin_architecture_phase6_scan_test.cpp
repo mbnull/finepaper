@@ -86,13 +86,16 @@ void testMainWindowUsesToolPipelineService() {
                        QStringLiteral("mainwindow source"));
 }
 
-void testAppContextExposesToolPipelineService() {
+void testAppContextIsRegistryOnlyForToolPipelineService() {
     const QString context = readText(QStringLiteral("qt/inc/app/appcontext.h"));
     const QString pluginSource = readText(QStringLiteral("qt/src/app/toolpipelineplugin.cpp"));
 
-    requireContains(context,
-                    QStringLiteral("ToolPipelineService* toolPipelineService"),
-                    QStringLiteral("app context"));
+    requireNotContains(context,
+                       QStringLiteral("ToolPipelineService* toolPipelineService"),
+                       QStringLiteral("app context"));
+    requireNotContains(pluginSource,
+                       QStringLiteral("context.toolPipelineService"),
+                       QStringLiteral("tool pipeline plugin source"));
     requireContains(pluginSource,
                     QStringLiteral("finepaper.tool-pipeline"),
                     QStringLiteral("tool pipeline plugin source"));
@@ -108,7 +111,7 @@ int main(int argc, char** argv) {
     testToolPipelineFilesExist();
     testFlowRunnerOwnedByProvider();
     testMainWindowUsesToolPipelineService();
-    testAppContextExposesToolPipelineService();
+    testAppContextIsRegistryOnlyForToolPipelineService();
     std::cout << "plugin_architecture_phase6_scan_test passed\n";
     return 0;
 }

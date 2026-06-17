@@ -9,12 +9,9 @@
 namespace {
 
 bool hasToolPipelineService(AppContext& context) {
-    if (context.services &&
-        context.services->service<ToolPipelineService>(
-            ServiceKey::fromLiteral("finepaper.tool-pipeline"))) {
-        return true;
-    }
-    return context.toolPipelineService != nullptr;
+    return context.services &&
+           context.services->service<ToolPipelineService>(
+               ServiceKey::fromLiteral("finepaper.tool-pipeline"));
 }
 
 class ToolPipelinePlugin final : public IAppPlugin {

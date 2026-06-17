@@ -80,7 +80,9 @@ void testNoCPluginRegistersNocCapabilityAndDescriptorContributions() {
     context.extensionPoints = &extensionPoints;
     context.capabilities = &capabilities;
     context.interactions = &interactions;
-    context.workbench = &workbench;
+    require(services.registerService(ServiceKey::fromLiteral("finepaper.workbench"),
+                                     &workbench),
+            "workbench service should register");
 
     PluginHost host(context);
     require(host.registerPlugin(createNoCPlugin()), "NoC plugin should register with host");

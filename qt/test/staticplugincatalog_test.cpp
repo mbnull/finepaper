@@ -34,6 +34,7 @@ void testStaticCatalogRegistersCorePlugins() {
     CapabilityRegistry capabilities;
     PluginInteractionRegistry interactions;
 
+    services.registerService(ServiceKey::fromLiteral("finepaper.workbench"), &workbench);
     services.registerService(ServiceKey::fromLiteral("finepaper.project"), &project);
     services.registerService(ServiceKey::fromLiteral("finepaper.package"), &package);
     services.registerService(ServiceKey::fromLiteral("finepaper.tool-pipeline"), &tools);
@@ -43,10 +44,6 @@ void testStaticCatalogRegistersCorePlugins() {
     context.extensionPoints = &extensionPoints;
     context.capabilities = &capabilities;
     context.interactions = &interactions;
-    context.workbench = &workbench;
-    context.projectService = &project;
-    context.packageService = &package;
-    context.toolPipelineService = &tools;
 
     PluginHost host(context);
     registerStaticPlugins(host);
