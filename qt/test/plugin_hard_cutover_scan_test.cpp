@@ -606,6 +606,16 @@ void testProductionDoesNotExposeEditorMutationTarget() {
                            QStringLiteral("project/editormutationtarget.h"),
                            file);
     }
+    const QStringList productionEditorMutationTargetTokens{
+        QStringLiteral("EditorMutationTarget"),
+        QStringLiteral("legacy/graphcommands/editormutationtarget.h")
+    };
+    for (const QString& file : runtimeSourceFiles(productionRoots)) {
+        const QString source = readText(file);
+        for (const QString& token : productionEditorMutationTargetTokens) {
+            requireNotContains(source, token, file);
+        }
+    }
 
     const QString projectServiceHeader = readText(QStringLiteral("qt/inc/project/projectservice.h"));
     const QString projectServiceSource = readText(QStringLiteral("qt/src/project/projectservice.cpp"));
