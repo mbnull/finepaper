@@ -1,5 +1,4 @@
 // Node editor geometry tests for interface-anchor scaling and router layout.
-#include "commands/commandmanager.h"
 #include "graph/graph.h"
 #include "graph/module.h"
 #include "graph/port.h"
@@ -10,6 +9,7 @@
 #include "nodeeditor/graphnodemodel.h"
 #include "nodeeditor/nodeeditorwidget.h"
 #include "project/projectipservice.h"
+#include "project/designeditingservice.h"
 #include "project/projectstateservice.h"
 #include "workspace/activeworkspacecontroller.h"
 
@@ -289,7 +289,7 @@ std::unique_ptr<Module> moduleFromType(const ModuleType& type,
 
 struct ScopedNodeEditorHarness {
     Graph graph;
-    CommandManager commandManager;
+    DesignEditingService designEditingService;
     ModuleRegistry registry{ModuleRegistry::LoadMode::Empty};
     IpCoreRuntimeDescriptor ravenoc = nodeEditorRavenocDescriptor();
     IpCoreRuntimeDescriptor fabric = nodeEditorFabricDescriptor();
@@ -303,7 +303,7 @@ struct ScopedNodeEditorHarness {
         : catalog(QList<IpCoreRuntimeDescriptor>{ravenoc, fabric}, &registry),
           projectIpService(&stateService),
           workspaceController(&projectIpService, &catalog),
-          editor(&graph, &stateService, &workspaceController, &commandManager) {
+          editor(&graph, &stateService, &workspaceController, &designEditingService) {
         registerScopedEditorGlobalTypes();
         require(registry.registerType(scopedEditorType(QStringLiteral("RaveTile"),
                                                        QStringLiteral("finepaper.ravenoc"))),
@@ -1125,8 +1125,8 @@ void testNodeEditorWidgetOwnsConnectionRuleServiceInputs() {
     ProjectIpService projectIpService(&stateService);
     IpCatalogService catalog(QList<IpCoreRuntimeDescriptor>{}, &ModuleRegistry::instance());
     ActiveWorkspaceController workspaceController(&projectIpService, &catalog);
-    CommandManager commandManager;
-    NodeEditorWidget widget(&graph, &stateService, &workspaceController, &commandManager);
+    DesignEditingService designEditingService;
+    NodeEditorWidget widget(&graph, &stateService, &workspaceController, &designEditingService);
 
     require(!widget.isArrangeEnabled(),
             "widget should construct with project state service dependency");
@@ -1239,8 +1239,8 @@ void testScopedDropDoesNotCreateGraphModuleDirectly() {
             "matching scoped module drop should not be accepted until design patch editing is wired");
     require(harness.graph.modules().empty(),
             "matching scoped drop should not create a graph module directly");
-    require(!harness.commandManager.canUndo(),
-            "matching scoped drop should not enter legacy graph command history");
+    require(!harness.designEditingService.canUndo(),
+            "matching scoped drop should not enter design edit history before patch editing is wired");
 }
 
 void testScopedDropsDoNotPopulateActiveWorkspaceProjectionDirectly() {
@@ -1301,7 +1301,7 @@ void testCreateMenuTypesFollowActiveWorkspace() {
 
 void testCollapsedHostAbsorbsEndpointWhenAttachmentConnectionIsAdded() {
     Graph graph;
-    CommandManager commandManager;
+    DesignEditingService designEditingService;
     ProjectStateService stateService;
     ProjectIpService projectIpService(&stateService);
     ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
@@ -1315,7 +1315,7 @@ void testCollapsedHostAbsorbsEndpointWhenAttachmentConnectionIsAdded() {
     const IpCoreRuntimeDescriptor runtime = attachmentPresentationDescriptor();
     IpCatalogService catalog(QList<IpCoreRuntimeDescriptor>{runtime}, &registry);
     ActiveWorkspaceController workspaceController(&projectIpService, &catalog);
-    NodeEditorWidget editor(&graph, &stateService, &workspaceController, &commandManager);
+    NodeEditorWidget editor(&graph, &stateService, &workspaceController, &designEditingService);
     editor.resize(360, 240);
     editor.show();
 
@@ -1357,7 +1357,7 @@ void testCollapsedHostAbsorbsEndpointWhenAttachmentConnectionIsAdded() {
 
 void testCollapsedAttachedNodeMirrorsIntoHostZone() {
     Graph graph;
-    CommandManager commandManager;
+    DesignEditingService designEditingService;
     ProjectStateService stateService;
     ProjectIpService projectIpService(&stateService);
     ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
@@ -1371,7 +1371,7 @@ void testCollapsedAttachedNodeMirrorsIntoHostZone() {
     const IpCoreRuntimeDescriptor runtime = attachmentPresentationDescriptor();
     IpCatalogService catalog(QList<IpCoreRuntimeDescriptor>{runtime}, &registry);
     ActiveWorkspaceController workspaceController(&projectIpService, &catalog);
-    NodeEditorWidget editor(&graph, &stateService, &workspaceController, &commandManager);
+    NodeEditorWidget editor(&graph, &stateService, &workspaceController, &designEditingService);
     editor.resize(360, 240);
     editor.show();
 
@@ -1433,7 +1433,7 @@ void testCollapsedAttachedNodeMirrorsIntoHostZone() {
 
 void testVisualStyleAndEndpointLikeNamesDoNotImplyAttachmentBehavior() {
     Graph graph;
-    CommandManager commandManager;
+    DesignEditingService designEditingService;
     ProjectStateService stateService;
     ProjectIpService projectIpService(&stateService);
     ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
@@ -1447,7 +1447,7 @@ void testVisualStyleAndEndpointLikeNamesDoNotImplyAttachmentBehavior() {
     const IpCoreRuntimeDescriptor runtime = attachmentPresentationDescriptor();
     IpCatalogService catalog(QList<IpCoreRuntimeDescriptor>{runtime}, &registry);
     ActiveWorkspaceController workspaceController(&projectIpService, &catalog);
-    NodeEditorWidget editor(&graph, &stateService, &workspaceController, &commandManager);
+    NodeEditorWidget editor(&graph, &stateService, &workspaceController, &designEditingService);
     editor.resize(360, 240);
     editor.show();
 
@@ -1489,7 +1489,7 @@ void testAttachmentZoneViewMetadataPlacesAttachedNodeWithoutMirroringWhenDisable
     const AttachmentZoneViewTypes types = registerAttachmentZoneViewTypes();
 
     Graph graph;
-    CommandManager commandManager;
+    DesignEditingService designEditingService;
     ProjectStateService stateService;
     ProjectIpService projectIpService(&stateService);
     ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
@@ -1501,7 +1501,7 @@ void testAttachmentZoneViewMetadataPlacesAttachedNodeWithoutMirroringWhenDisable
     runtime.name = QStringLiteral("Attachment Zone View");
     IpCatalogService catalog(QList<IpCoreRuntimeDescriptor>{runtime}, &registry);
     ActiveWorkspaceController workspaceController(&projectIpService, &catalog);
-    NodeEditorWidget editor(&graph, &stateService, &workspaceController, &commandManager);
+    NodeEditorWidget editor(&graph, &stateService, &workspaceController, &designEditingService);
     editor.resize(420, 280);
     editor.show();
 
@@ -1545,7 +1545,7 @@ void testManifestAttachZonePlacesAttachedNodeWhenZoneDiffersFromHostInterface() 
     const AttachmentZoneViewTypes types = registerManifestAttachZoneViewTypes();
 
     Graph graph;
-    CommandManager commandManager;
+    DesignEditingService designEditingService;
     ProjectStateService stateService;
     ProjectIpService projectIpService(&stateService);
     ModuleRegistry registry(ModuleRegistry::LoadMode::Empty);
@@ -1557,7 +1557,7 @@ void testManifestAttachZonePlacesAttachedNodeWhenZoneDiffersFromHostInterface() 
     runtime.name = QStringLiteral("Manifest Attachment Zone View");
     IpCatalogService catalog(QList<IpCoreRuntimeDescriptor>{runtime}, &registry);
     ActiveWorkspaceController workspaceController(&projectIpService, &catalog);
-    NodeEditorWidget editor(&graph, &stateService, &workspaceController, &commandManager);
+    NodeEditorWidget editor(&graph, &stateService, &workspaceController, &designEditingService);
     editor.resize(420, 280);
     editor.show();
 

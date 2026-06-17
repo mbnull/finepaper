@@ -830,7 +830,7 @@ void MainWindow::setupPanels() {
     m_nodeEditor = new NodeEditorWidget(m_graph,
                                         m_projectStateService.get(),
                                         m_activeWorkspaceController.get(),
-                                        m_commandManager.get(),
+                                        m_designEditingService.get(),
                                         this);
     m_propertyPanel = new PropertyPanel(m_graph,
                                         m_projectStateService.get(),

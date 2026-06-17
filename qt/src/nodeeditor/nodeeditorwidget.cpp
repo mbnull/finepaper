@@ -16,7 +16,10 @@
 #include "nodeeditor/endpointattachmentlayout.h"
 #include "nodeeditor/portanchorgeometry.h"
 #include "common/portlayout.h"
+#include "ipcraft/patchops.h"
+#include "ipcraft/schemaids.h"
 #include "nodeeditor/straightconnectionpainter.h"
+#include "project/designeditingservice.h"
 #include "project/projectstateservice.h"
 #include "workspace/activeworkspacecontroller.h"
 #include <QtNodes/NodeDelegateModelRegistry>
@@ -24,6 +27,8 @@
 #include <QtNodes/internal/ConnectionGraphicsObject.hpp>
 #include <QtNodes/internal/locateNode.hpp>
 #include <QVBoxLayout>
+#include <QJsonArray>
+#include <QJsonObject>
 #include <QMouseEvent>
 #include <QMenu>
 #include <QSet>
@@ -345,18 +350,214 @@ QVector<IpcraftPackageManifest> activePackageManifests(
     return {context->entry.packageManifest};
 }
 
+QString sanitizedConnectionIdPart(QString value) {
+    value = value.trimmed();
+    QString sanitized;
+    sanitized.reserve(value.size());
+    for (const QChar ch : value) {
+        sanitized.append(ch.isLetterOrNumber() ? ch : QLatin1Char('_'));
+    }
+    while (sanitized.contains(QStringLiteral("__"))) {
+        sanitized.replace(QStringLiteral("__"), QStringLiteral("_"));
+    }
+    return sanitized.trimmed().isEmpty() ? QStringLiteral("endpoint") : sanitized;
+}
+
+QString baseConnectionId(const PortRef& source, const PortRef& target) {
+    return QStringLiteral("conn_%1_%2__%3_%4")
+        .arg(sanitizedConnectionIdPart(source.moduleId),
+             sanitizedConnectionIdPart(source.portId),
+             sanitizedConnectionIdPart(target.moduleId),
+             sanitizedConnectionIdPart(target.portId));
+}
+
+QSet<QString> existingConnectionIds(const ipcraft::core::ProjectDesign& design,
+                                    const Graph* graph) {
+    QSet<QString> ids;
+    for (const ipcraft::core::Connection& connection : design.connections) {
+        if (!connection.id.trimmed().isEmpty()) {
+            ids.insert(connection.id);
+        }
+    }
+    if (graph) {
+        for (const auto& connection : graph->connections()) {
+            if (connection && !connection->id().trimmed().isEmpty()) {
+                ids.insert(connection->id());
+            }
+        }
+    }
+    return ids;
+}
+
+QString uniqueConnectionId(const ipcraft::core::ProjectDesign& design,
+                           const Graph* graph,
+                           const PortRef& source,
+                           const PortRef& target) {
+    const QSet<QString> ids = existingConnectionIds(design, graph);
+    const QString baseId = baseConnectionId(source, target);
+    if (!ids.contains(baseId)) {
+        return baseId;
+    }
+    for (int suffix = 2; suffix < 10000; ++suffix) {
+        const QString candidate = QStringLiteral("%1_%2").arg(baseId).arg(suffix);
+        if (!ids.contains(candidate)) {
+            return candidate;
+        }
+    }
+    return QStringLiteral("%1_%2").arg(baseId).arg(ids.size() + 1);
+}
+
+QJsonObject endpointObject(const PortRef& ref) {
+    return QJsonObject{
+        {QStringLiteral("component"), ref.moduleId},
+        {QStringLiteral("interface"), ref.portId}
+    };
+}
+
+QJsonArray interfaceRefsObject(const QVector<ProjectConnectionInterfaceRef>& interfaces) {
+    QJsonArray array;
+    for (const ProjectConnectionInterfaceRef& interfaceRef : interfaces) {
+        if (interfaceRef.instanceId.trimmed().isEmpty() ||
+            interfaceRef.interfaceId.trimmed().isEmpty()) {
+            continue;
+        }
+        array.append(QJsonObject{
+            {QStringLiteral("instanceId"), interfaceRef.instanceId},
+            {QStringLiteral("interfaceId"), interfaceRef.interfaceId}
+        });
+    }
+    return array;
+}
+
+QJsonArray alternativesObject(const QStringList& alternatives) {
+    QJsonArray array;
+    for (const QString& alternative : alternatives) {
+        if (!alternative.trimmed().isEmpty()) {
+            array.append(alternative);
+        }
+    }
+    return array;
+}
+
+ipcraft::core::ProjectPatch connectionAddPatch(const ipcraft::core::ProjectDesign& design,
+                                               const Graph* graph,
+                                               const ConnectionResolvedOption& option) {
+    const QString connectionId = uniqueConnectionId(design, graph, option.source, option.target);
+
+    QJsonObject payload{
+        {QStringLiteral("id"), connectionId},
+        {QStringLiteral("from"), endpointObject(option.source)},
+        {QStringLiteral("to"), endpointObject(option.target)},
+        {QStringLiteral("kind"), QStringLiteral("interface")}
+    };
+
+    QJsonObject metadata;
+    const QString connectionClassId = option.connectionClassId.trimmed();
+    if (!connectionClassId.isEmpty()) {
+        payload.insert(QStringLiteral("class"), connectionClassId);
+        metadata.insert(QStringLiteral("class"), connectionClassId);
+    }
+    const QString status = option.connectionStatus.trimmed();
+    if (!status.isEmpty()) {
+        payload.insert(QStringLiteral("status"), status);
+        metadata.insert(QStringLiteral("status"), status);
+    }
+    const QJsonArray alternatives = alternativesObject(option.alternatives);
+    if (!alternatives.isEmpty()) {
+        metadata.insert(QStringLiteral("alternatives"), alternatives);
+    }
+    const QJsonArray interfaces = connectionClassId.isEmpty()
+        ? QJsonArray{}
+        : interfaceRefsObject(option.normalizedInterfaces);
+    if (!interfaces.isEmpty()) {
+        payload.insert(QStringLiteral("interfaces"), interfaces);
+        metadata.insert(QStringLiteral("interfaces"), interfaces);
+    }
+    if (!metadata.isEmpty()) {
+        payload.insert(QStringLiteral("metadata"), metadata);
+    }
+
+    ipcraft::core::PatchOperation operation;
+    operation.op = ipcraft::patchops::connectionAdd;
+    operation.target = QStringLiteral("connection");
+    operation.path = QStringLiteral("/connections/-");
+    operation.payload = payload;
+
+    ipcraft::core::ProjectPatch patch;
+    patch.schema = ipcraft::schemaids::patchV1;
+    patch.id = QStringLiteral("nodeeditor.connection.add.%1").arg(connectionId);
+    patch.description = QStringLiteral("Add NodeEditor connection");
+    patch.ops.append(operation);
+    return patch;
+}
+
+bool hasViewId(const ipcraft::core::ProjectDesign& design, const QString& viewId) {
+    return std::any_of(design.views.cbegin(), design.views.cend(),
+                       [&viewId](const ipcraft::core::ViewDocument& view) {
+                           return view.id == viewId;
+                       });
+}
+
+QString jsonPointerSegment(QString segment) {
+    segment.replace(QStringLiteral("~"), QStringLiteral("~0"));
+    segment.replace(QStringLiteral("/"), QStringLiteral("~1"));
+    return segment;
+}
+
+ipcraft::core::PatchOperation graphViewAddOperation() {
+    QJsonObject payload{
+        {QStringLiteral("id"), QStringLiteral("graph")},
+        {QStringLiteral("schema"), ipcraft::schemaids::viewV1},
+        {QStringLiteral("kind"), QStringLiteral("canvas")},
+        {QStringLiteral("targetRef"), QStringLiteral("project")},
+        {QStringLiteral("providerRef"), QStringLiteral("finepaper.nodeeditor")},
+        {QStringLiteral("layout"), QJsonObject{}}
+    };
+
+    ipcraft::core::PatchOperation operation;
+    operation.op = ipcraft::patchops::viewLayoutSet;
+    operation.target = QStringLiteral("view");
+    operation.payload = payload;
+    return operation;
+}
+
+ipcraft::core::ProjectPatch nodePositionPatch(const ipcraft::core::ProjectDesign& design,
+                                              const QString& moduleId,
+                                              const QPointF& position) {
+    ipcraft::core::ProjectPatch patch;
+    patch.schema = ipcraft::schemaids::patchV1;
+    patch.id = QStringLiteral("nodeeditor.view.node_position.%1")
+        .arg(sanitizedConnectionIdPart(moduleId));
+    patch.description = QStringLiteral("Set NodeEditor node position");
+
+    if (!hasViewId(design, QStringLiteral("graph"))) {
+        patch.ops.append(graphViewAddOperation());
+    }
+
+    ipcraft::core::PatchOperation operation;
+    operation.op = ipcraft::patchops::viewNodePositionSet;
+    operation.target = QStringLiteral("view:graph");
+    operation.path = QStringLiteral("/nodes/%1").arg(jsonPointerSegment(moduleId));
+    operation.value = QJsonObject{
+        {QStringLiteral("x"), position.x()},
+        {QStringLiteral("y"), position.y()}
+    };
+    patch.ops.append(operation);
+    return patch;
+}
+
 } // namespace
 
 NodeEditorWidget::NodeEditorWidget(Graph* graph,
                                    ProjectStateService* projectStateService,
                                    ActiveWorkspaceController* workspaceController,
-                                   CommandManager* commandManager,
+                                   DesignEditingService* designEditingService,
                                    QWidget* parent)
     : QWidget(parent),
       m_graph(graph),
       m_projectStateService(projectStateService),
       m_workspaceController(workspaceController),
-      m_commandManager(commandManager),
+      m_designEditingService(designEditingService),
       m_canvasRect(kCanvasRect) {
     refreshConnectionRuleService();
 
@@ -710,9 +911,8 @@ void NodeEditorWidget::onConnectionCreated(QtNodes::ConnectionId connectionId) {
         return;
     }
 
-    // Do not mutate Graph here; refresh back to projection until the
-    // design-level connection patch path is wired.
-    executeAddConnection(result.options.first().source, result.options.first().target);
+    // Do not mutate Graph here; durable user intent flows through ProjectPatch.
+    executeAddConnection(result.options.first());
 }
 
 void NodeEditorWidget::onConnectionDeleted(QtNodes::ConnectionId connectionId) {
@@ -853,6 +1053,8 @@ bool NodeEditorWidget::tryToggleCollapsed(const QPoint& viewportPos, bool requir
 void NodeEditorWidget::toggleCollapsed(const QString& moduleId, bool collapsed) {
     Q_UNUSED(moduleId);
     Q_UNUSED(collapsed);
+    // TODO: persist collapsed presentation state through a view patch once the
+    // view schema has a stable collapsed-node field.
     refreshVisibleGraphState();
 }
 
@@ -906,12 +1108,12 @@ bool NodeEditorWidget::tryCompleteDraftConnection(const QPoint& viewportPos) {
                                                               scenePos));
 
     // Consume the temporary visual draft before delegating to the design-level
-    // edit path. Until that path is wired, the view refreshes from projection.
+    // edit path.
     m_scene->resetDraftConnection();
 
     if (result.hasSingleOption()) {
         const ConnectionResolvedOption& option = result.options.first();
-        executeAddConnection(option.source, option.target);
+        executeAddConnection(option);
         return true;
     }
 
@@ -930,30 +1132,40 @@ void NodeEditorWidget::showConnectionOptionsMenu(
     for (const ConnectionResolvedOption& option : options) {
         QAction* action = menu.addAction(option.label);
         connect(action, &QAction::triggered, this, [this, option]() {
-            executeAddConnection(option.source, option.target);
+            executeAddConnection(option);
         });
     }
     menu.exec(m_view->viewport()->mapToGlobal(viewportPos));
 }
 
-void NodeEditorWidget::executeAddConnection(const PortRef& source, const PortRef& target) {
+void NodeEditorWidget::executeAddConnection(const ConnectionResolvedOption& option) {
     refreshConnectionRuleService();
-    ConnectionResolvedOption selectedOption;
-    selectedOption.source = source;
-    selectedOption.target = target;
+    ConnectionResolvedOption selectedOption = option;
 
-    if (m_connectionRuleService) {
+    if (m_connectionRuleService && selectedOption.connectionClassId.trimmed().isEmpty()) {
         const ConnectionCheckResult result = m_connectionRuleService->check(
-            ConnectionRequest::portToPort(source, target, ConnectionRequestKind::Programmatic));
-        for (const ConnectionResolvedOption& option : result.options) {
-            if (samePortPair(option, source, target)) {
-                selectedOption = option;
+            ConnectionRequest::portToPort(option.source,
+                                          option.target,
+                                          ConnectionRequestKind::Programmatic));
+        for (const ConnectionResolvedOption& resolvedOption : result.options) {
+            if (samePortPair(resolvedOption, selectedOption.source, selectedOption.target)) {
+                selectedOption = resolvedOption;
                 break;
             }
         }
     }
 
-    Q_UNUSED(selectedOption);
+    if (!m_designEditingService) {
+        refreshVisibleGraphState();
+        return;
+    }
+
+    const DesignEditResult result = m_designEditingService->applyPatch(
+        connectionAddPatch(m_designEditingService->design(), m_graph, selectedOption));
+    if (!result.success) {
+        refreshVisibleGraphState();
+        return;
+    }
     refreshVisibleGraphState();
 }
 
@@ -994,6 +1206,17 @@ void NodeEditorWidget::onNodeMoved(QtNodes::NodeId nodeId) {
         pos = clampedPos;
     }
 
+    if (!m_designEditingService) {
+        refreshVisibleGraphState();
+        return;
+    }
+
+    const DesignEditResult result = m_designEditingService->applyPatch(
+        nodePositionPatch(m_designEditingService->design(), moduleId, pos));
+    if (!result.success) {
+        refreshVisibleGraphState();
+        return;
+    }
     refreshVisibleGraphState();
 }
 

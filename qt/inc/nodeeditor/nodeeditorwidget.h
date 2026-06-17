@@ -18,10 +18,10 @@
 #include <optional>
 #include "connection/connectionruleservice.h"
 #include "graph/graph.h"
-#include "commands/commandmanager.h"
 
 class ActiveWorkspaceController;
 class AnimatedGraphicsView;
+class DesignEditingService;
 class QDragEnterEvent;
 class QDragMoveEvent;
 class QDragLeaveEvent;
@@ -39,11 +39,11 @@ class NodeEditorWidget : public QWidget {
     Q_OBJECT
 
 public:
-    // Constructs the visual editor and binds it to Graph/CommandManager.
+    // Constructs the visual editor and binds scene intents to durable design edits.
     NodeEditorWidget(Graph* graph,
                      ProjectStateService* projectStateService,
                      ActiveWorkspaceController* workspaceController,
-                     CommandManager* commandManager,
+                     DesignEditingService* designEditingService,
                      QWidget* parent = nullptr);
     ~NodeEditorWidget() override;
     // Returns whether auto-arrange behavior is currently enabled in the view.
@@ -129,7 +129,7 @@ private:
                                              const QPointF& scenePos) const;
     void showConnectionOptionsMenu(const QPoint& viewportPos,
                                    const QVector<ConnectionResolvedOption>& options);
-    void executeAddConnection(const PortRef& source, const PortRef& target);
+    void executeAddConnection(const ConnectionResolvedOption& option);
     void syncNodePositionFromParameters(Module* module, QtNodes::NodeId nodeId);
     ModulePresentationState collectModulePresentationState(const QString& moduleId) const;
     void hideModuleConnections(const ModulePresentationState& state);
@@ -168,7 +168,7 @@ private:
     Graph* m_graph;
     ProjectStateService* m_projectStateService;
     ActiveWorkspaceController* m_workspaceController;
-    CommandManager* m_commandManager;
+    DesignEditingService* m_designEditingService;
     std::unique_ptr<ConnectionRuleService> m_connectionRuleService;
     std::shared_ptr<QtNodes::NodeDelegateModelRegistry> m_registry;
     std::unique_ptr<EditorGraphModel> m_graphModel;

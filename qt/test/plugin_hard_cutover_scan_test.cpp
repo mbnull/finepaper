@@ -717,6 +717,36 @@ void testProductionDoesNotExposeEditorMutationTarget() {
                        QStringLiteral("MainWindow save blocker"));
 }
 
+void testNodeEditorRoutesDurableIntentsThroughDesignPatches() {
+    const QString nodeEditorHeader =
+        readText(QStringLiteral("qt/inc/nodeeditor/nodeeditorwidget.h"));
+    const QString nodeEditorSource =
+        readText(QStringLiteral("qt/src/nodeeditor/nodeeditorwidget.cpp"));
+    const QString nodeEditor = nodeEditorHeader + nodeEditorSource;
+
+    requireContains(nodeEditorHeader,
+                    QStringLiteral("DesignEditingService"),
+                    QStringLiteral("NodeEditorWidget durable edit dependency"));
+    requireContains(nodeEditorSource,
+                    QStringLiteral("ProjectPatch"),
+                    QStringLiteral("NodeEditorWidget durable edit dependency"));
+    requireContains(nodeEditorSource,
+                    QStringLiteral("applyPatch"),
+                    QStringLiteral("NodeEditorWidget durable edit dependency"));
+    requireContains(nodeEditorSource,
+                    QStringLiteral("connectionAdd"),
+                    QStringLiteral("NodeEditorWidget connection intent"));
+    requireContains(nodeEditorSource,
+                    QStringLiteral("viewNodePositionSet"),
+                    QStringLiteral("NodeEditorWidget layout intent"));
+    requireNotContains(nodeEditor,
+                       QStringLiteral("CommandManager"),
+                       QStringLiteral("NodeEditorWidget should not depend on graph command history"));
+    requireNotContains(nodeEditor,
+                       QStringLiteral("legacy/graphcommands"),
+                       QStringLiteral("NodeEditorWidget should not use legacy graph commands"));
+}
+
 void testAppContextContainsOnlyRegistries() {
     const QString context = readText(QStringLiteral("qt/inc/app/appcontext.h"));
 
@@ -981,6 +1011,7 @@ int main(int argc, char** argv) {
     testNormalSaveDoesNotSyncDurableProjectFromGraphProjection();
     testDesignEditSyncRefreshesProjectionFromProjectDocument();
     testProductionDoesNotExposeEditorMutationTarget();
+    testNodeEditorRoutesDurableIntentsThroughDesignPatches();
     testAppContextContainsOnlyRegistries();
     testPluginsDoNotFallbackToDirectAppContextServices();
     testProductionUsesCentralAppBoundaryIdentifiers();

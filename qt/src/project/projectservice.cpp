@@ -6,6 +6,7 @@
 #include "project/projectwriter.h"
 
 #include <QFileInfo>
+#include <QJsonArray>
 #include <QSet>
 #include <QStringList>
 #include <utility>
@@ -100,6 +101,109 @@ ProjectIpInstanceRecord mergeDesignOwnedInstance(
     return merged;
 }
 
+QStringList stringListFromJsonArray(const QJsonValue& value) {
+    QStringList strings;
+    if (!value.isArray()) {
+        return strings;
+    }
+
+    const QJsonArray array = value.toArray();
+    for (const QJsonValue& item : array) {
+        if (item.isString() && !item.toString().trimmed().isEmpty()) {
+            strings.append(item.toString());
+        }
+    }
+    return strings;
+}
+
+QString metadataString(const QJsonObject& metadata,
+                       const QString& key,
+                       const QString& fallback = {}) {
+    const QString value = metadata.value(key).toString(fallback);
+    return value.trimmed().isEmpty() ? fallback : value;
+}
+
+ProjectConnectionInterfaceRef interfaceRefFromObject(const QJsonObject& object) {
+    ProjectConnectionInterfaceRef ref;
+    ref.instanceId = object.value(QStringLiteral("instanceId")).toString();
+    if (ref.instanceId.trimmed().isEmpty()) {
+        ref.instanceId = object.value(QStringLiteral("instance")).toString();
+    }
+    if (ref.instanceId.trimmed().isEmpty()) {
+        ref.instanceId = object.value(QStringLiteral("object")).toString();
+    }
+    if (ref.instanceId.trimmed().isEmpty()) {
+        ref.instanceId = object.value(QStringLiteral("component")).toString();
+    }
+
+    ref.interfaceId = object.value(QStringLiteral("interfaceId")).toString();
+    if (ref.interfaceId.trimmed().isEmpty()) {
+        ref.interfaceId = object.value(QStringLiteral("interface")).toString();
+    }
+    return ref;
+}
+
+QVector<ProjectConnectionInterfaceRef> interfaceRefsFromMetadata(const QJsonObject& metadata) {
+    QVector<ProjectConnectionInterfaceRef> refs;
+    const QJsonValue interfacesValue = metadata.value(QStringLiteral("interfaces"));
+    if (!interfacesValue.isArray()) {
+        return refs;
+    }
+
+    const QJsonArray interfaces = interfacesValue.toArray();
+    refs.reserve(interfaces.size());
+    for (const QJsonValue& value : interfaces) {
+        if (!value.isObject()) {
+            continue;
+        }
+        const ProjectConnectionInterfaceRef ref = interfaceRefFromObject(value.toObject());
+        if (!ref.instanceId.trimmed().isEmpty() && !ref.interfaceId.trimmed().isEmpty()) {
+            refs.append(ref);
+        }
+    }
+    return refs;
+}
+
+void projectDesignIntoEditorProjectionFields(ProjectDocument& document,
+                                             const ipcraft::core::ProjectDesign& design) {
+    document.ipcoreState = document.instances;
+
+    document.modules.clear();
+    document.modules.reserve(design.components.size());
+    for (const ipcraft::core::ComponentInstance& component : design.components) {
+        const ProjectIpInstanceRecord* instance = findInstanceById(document.instances, component.id);
+
+        ProjectModuleRecord module;
+        module.id = component.id;
+        module.ipcoreId = instance ? instance->ipcoreId : component.packageRef.section(QLatin1Char('@'), 0, 0);
+        module.instanceId = instance ? instance->instanceId : component.id;
+        module.type = component.type;
+        module.parameters = component.config;
+        document.modules.append(module);
+    }
+
+    document.connections.clear();
+    document.connections.reserve(design.connections.size());
+    for (const ipcraft::core::Connection& connection : design.connections) {
+        ProjectConnectionRecord record;
+        record.id = connection.id;
+        record.type = connection.kind;
+        record.sourceKind = QStringLiteral("design");
+        record.source = ProjectConnectionEndpoint{connection.from.component,
+                                                  connection.from.interface};
+        record.target = ProjectConnectionEndpoint{connection.to.component,
+                                                  connection.to.interface};
+        record.connectionClassId = metadataString(connection.metadata, QStringLiteral("class"));
+        record.status = metadataString(connection.metadata,
+                                       QStringLiteral("status"),
+                                       QStringLiteral("valid"));
+        record.alternatives = stringListFromJsonArray(
+            connection.metadata.value(QStringLiteral("alternatives")));
+        record.interfaces = interfaceRefsFromMetadata(connection.metadata);
+        document.connections.append(record);
+    }
+}
+
 void mergeDesignIntoDocument(ProjectDocument& document,
                              const ipcraft::core::ProjectDesign& design) {
     const ProjectDocument designDocument = ProjectDesignSerializer::toDocument(design);
@@ -120,6 +224,7 @@ void mergeDesignIntoDocument(ProjectDocument& document,
             designInstance));
     }
     document.ipcoreState = document.instances;
+    projectDesignIntoEditorProjectionFields(document, design);
 }
 
 void mergeDesignOnlyComponentsIntoDocument(ProjectDocument& document,

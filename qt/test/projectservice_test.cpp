@@ -491,6 +491,76 @@ void testReplaceDesignSaveLoadPreservesSemanticDesignFields() {
             "loaded semantic design should preserve extensions");
 }
 
+void testReplaceDesignProjectsDesignIntoEditorDocumentFields() {
+    ipcraft::core::ProjectDesign design;
+    design.schema = ipcraft::schemaids::projectV1;
+    design.id = QStringLiteral("projection_project");
+    design.name = QStringLiteral("Projection Project");
+    design.packages.append(ipcraft::core::PackageRef{QStringLiteral("pkg.projection"),
+                                                     QStringLiteral("1.0")});
+
+    ipcraft::core::ComponentInstance source;
+    source.id = QStringLiteral("source0");
+    source.type = QStringLiteral("SourceTile");
+    source.packageRef = QStringLiteral("pkg.projection@1.0");
+    source.config = QJsonObject{{QStringLiteral("width"), 32}};
+    design.components.append(source);
+
+    ipcraft::core::ComponentInstance sink;
+    sink.id = QStringLiteral("sink0");
+    sink.type = QStringLiteral("SinkTile");
+    sink.packageRef = QStringLiteral("pkg.projection@1.0");
+    sink.config = QJsonObject{{QStringLiteral("depth"), 4}};
+    design.components.append(sink);
+
+    ipcraft::core::Connection connection;
+    connection.id = QStringLiteral("source_to_sink");
+    connection.from = ipcraft::core::EndpointRef{QStringLiteral("source0"),
+                                                 QStringLiteral("out")};
+    connection.to = ipcraft::core::EndpointRef{QStringLiteral("sink0"),
+                                               QStringLiteral("in")};
+    connection.metadata = QJsonObject{
+        {QStringLiteral("class"), QStringLiteral("stream_link")},
+        {QStringLiteral("status"), QStringLiteral("ambiguous")},
+        {QStringLiteral("alternatives"), QJsonArray{
+            QStringLiteral("stream_link"),
+            QStringLiteral("memory_link")
+        }}
+    };
+    design.connections.append(connection);
+
+    ProjectService service;
+    service.replaceDesign(design);
+
+    const ProjectDocument& document = service.document();
+    require(document.ipcoreState.size() == 2,
+            "replaceDesign should project design components into editor ipcore state");
+    require(document.modules.size() == 2,
+            "replaceDesign should project design components into editor modules");
+    require(document.modules.first().id == QStringLiteral("source0") &&
+                document.modules.first().ipcoreId == QStringLiteral("pkg.projection") &&
+                document.modules.first().instanceId == QStringLiteral("source0") &&
+                document.modules.first().type == QStringLiteral("SourceTile") &&
+                document.modules.first().parameters.value(QStringLiteral("width")).toInt() == 32,
+            "projected editor module should preserve component identity and config");
+    require(document.connections.size() == 1,
+            "replaceDesign should project design connections into editor connections");
+    const ProjectConnectionRecord& projectedConnection = document.connections.first();
+    require(projectedConnection.id == QStringLiteral("source_to_sink") &&
+                projectedConnection.source.moduleId == QStringLiteral("source0") &&
+                projectedConnection.source.portId == QStringLiteral("out") &&
+                projectedConnection.target.moduleId == QStringLiteral("sink0") &&
+                projectedConnection.target.portId == QStringLiteral("in"),
+            "projected editor connection should preserve design endpoints");
+    require(projectedConnection.connectionClassId == QStringLiteral("stream_link") &&
+                projectedConnection.status == QStringLiteral("ambiguous") &&
+                projectedConnection.alternatives == QStringList({
+                    QStringLiteral("stream_link"),
+                    QStringLiteral("memory_link")
+                }),
+            "projected editor connection should preserve design connection metadata");
+}
+
 void testMergeDesignOnlyComponentsPreservesProjectedInstancesAndSemanticSupplement() {
     ProjectDocument document;
     document.schema = ipcraft::schemaids::projectV1;
@@ -788,6 +858,7 @@ int main(int argc, char** argv) {
         testFlatDesignConfigSavesAsProjectDesignAndReloadsAsRuntimeConfig();
         testProjectDesignSerializerMigratesExplicitLegacyComponentType();
         testReplaceDesignSaveLoadPreservesSemanticDesignFields();
+        testReplaceDesignProjectsDesignIntoEditorDocumentFields();
         testMergeDesignOnlyComponentsPreservesProjectedInstancesAndSemanticSupplement();
         testReplaceDesignPreservesNonDesignProjectFields();
         testRejectsUnsupportedDocumentKind();
