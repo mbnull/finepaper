@@ -1,68 +1,89 @@
 {
   "schema": "ipcraft.project.v1",
-  "project": {
-    "id": "clock_fanout_project",
-    "name": "Clock Fanout Project"
-  },
-  "instances": [
+  "id": "clock_fanout_project",
+  "name": "Clock Fanout Project",
+  "packages": [
+    {
+      "id": "vendor.example.clocked",
+      "version": "1.0.0"
+    }
+  ],
+  "components": [
     {
       "id": "pll0",
-      "package": {
-        "id": "vendor.example.clocked",
-        "version": "1.0.0"
-      },
+      "type": "vendor.example.clocked",
+      "packageRef": "vendor.example.clocked@1.0.0",
       "config": {}
     },
     {
       "id": "ip0",
-      "package": {
-        "id": "vendor.example.clocked",
-        "version": "1.0.0"
-      },
+      "type": "vendor.example.clocked",
+      "packageRef": "vendor.example.clocked@1.0.0",
       "config": {}
     },
     {
       "id": "ip1",
-      "package": {
-        "id": "vendor.example.clocked",
-        "version": "1.0.0"
-      },
+      "type": "vendor.example.clocked",
+      "packageRef": "vendor.example.clocked@1.0.0",
       "config": {}
     }
   ],
-  "composition": {
-    "connections": [
-      {
-        "id": "sys_clk",
-        "type": "clock",
-        "source": "user",
-        "endpoints": [
-          {
-            "instance": "pll0",
-            "interface": "clk_out",
-            "role": "source"
-          },
-          {
-            "instance": "ip0",
-            "interface": "clk_in",
-            "role": "sink"
-          },
-          {
-            "instance": "ip1",
-            "interface": "clk_in",
-            "role": "sink"
-          }
-        ]
-      }
-    ],
-    "external_ports": []
-  },
-  "layout": {},
-  "diagnostics": {
-    "schema": "ipcraft.diagnostics.v1",
-    "records": []
-  },
-  "artifacts": {},
-  "migration": {},
-  "native": {}
+  "interfaces": [
+    {
+      "id": "clk_out",
+      "ownerComponentId": "pll0",
+      "type": "clock",
+      "role": "source",
+      "direction": "out",
+      "protocol": "clock"
+    },
+    {
+      "id": "clk_in",
+      "ownerComponentId": "ip0",
+      "type": "clock",
+      "role": "sink",
+      "direction": "in",
+      "protocol": "clock"
+    },
+    {
+      "id": "clk_in",
+      "ownerComponentId": "ip1",
+      "type": "clock",
+      "role": "sink",
+      "direction": "in",
+      "protocol": "clock"
+    }
+  ],
+  "connections": [
+    {
+      "id": "sys_clk_ip0",
+      "from": {
+        "component": "pll0",
+        "interface": "clk_out"
+      },
+      "to": {
+        "component": "ip0",
+        "interface": "clk_in"
+      },
+      "kind": "clock"
+    },
+    {
+      "id": "sys_clk_ip1",
+      "from": {
+        "component": "pll0",
+        "interface": "clk_out"
+      },
+      "to": {
+        "component": "ip1",
+        "interface": "clk_in"
+      },
+      "kind": "clock"
+    }
+  ],
+  "topologies": [],
+  "views": [],
+  "diagnostics": [],
+  "artifacts": [],
+  "extensions": [],
+  "metadata": {}
 }

@@ -396,19 +396,24 @@
     },
     "extension_decl": {
       "oneOf": [
-        { "$ref": "#/$defs/known_extension_id" },
+        { "$ref": "#/$defs/extension_id" },
         {
           "type": "object",
           "additionalProperties": false,
           "required": ["id"],
           "properties": {
-            "id": { "$ref": "#/$defs/known_extension_id" },
+            "id": { "$ref": "#/$defs/extension_id" },
             "version": { "type": "string" },
+            "required": { "type": "boolean" },
             "metadata": { "$ref": "#/$defs/metadata" },
             "native": { "$ref": "#/$defs/native" }
           }
         }
       ]
+    },
+    "extension_id": {
+      "type": "string",
+      "minLength": 1
     },
     "known_extension_id": {
       "enum": [

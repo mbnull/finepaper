@@ -440,9 +440,11 @@ void testProjectWritesInterfaceConnectionsWithoutFromTo() {
     const QJsonObject project = QJsonDocument::fromJson(file.readAll()).object();
     require(!project.contains(QStringLiteral("graph")),
             "V1 project should not write legacy root graph");
-    const QJsonObject connection = project.value(QStringLiteral("instances"))
+    const QJsonObject connection = project.value(QStringLiteral("components"))
                                        .toArray()
                                        .first()
+                                       .toObject()
+                                       .value(QStringLiteral("extensionData"))
                                        .toObject()
                                        .value(QStringLiteral("graph_config"))
                                        .toObject()
@@ -751,19 +753,22 @@ void testProjectWriterUsesCanonicalProjectDocumentVocabulary() {
     require(!root.contains(QStringLiteral("graph")), "writer should not emit old root graph");
     require(!root.contains(QStringLiteral("plugins")), "writer should not emit plugins");
     require(!root.contains(QStringLiteral("plugin_state")), "writer should not emit plugin_state");
+    require(!root.contains(QStringLiteral("project")), "writer should not emit wrapper project root");
+    require(!root.contains(QStringLiteral("instances")), "writer should not emit wrapper instances root");
+    require(!root.contains(QStringLiteral("layout")), "writer should not emit wrapper layout root");
 
-    const QJsonObject instance = root.value(QStringLiteral("instances")).toArray().first().toObject();
-    require(instance.value(QStringLiteral("id")).toString() == QStringLiteral("ravenoc_0"),
-            "writer should emit canonical instance id");
-    require(instance.value(QStringLiteral("package")).toObject().value(QStringLiteral("id")).toString() ==
-                QStringLiteral("finepaper.ravenoc"),
-            "writer should emit canonical package id");
-    require(instance.value(QStringLiteral("config")).toObject()
-                .value(QStringLiteral("parameters")).toObject()
+    const QJsonObject component = root.value(QStringLiteral("components")).toArray().first().toObject();
+    require(component.value(QStringLiteral("id")).toString() == QStringLiteral("ravenoc_0"),
+            "writer should emit canonical component id");
+    require(component.value(QStringLiteral("packageRef")).toString() ==
+                QStringLiteral("finepaper.ravenoc@1.0"),
+            "writer should emit canonical package reference");
+    require(component.value(QStringLiteral("config")).toObject()
                 .value(QStringLiteral("flit_data_width")).toInt() == 32,
-            "writer should emit config parameters");
+            "writer should emit flat component config");
 
-    const QJsonObject graphObject = instance.value(QStringLiteral("graph_config")).toObject()
+    const QJsonObject graphObject = component.value(QStringLiteral("extensionData")).toObject()
+                                        .value(QStringLiteral("graph_config")).toObject()
                                         .value(QStringLiteral("objects")).toArray().first().toObject();
     require(graphObject.value(QStringLiteral("id")).toString() == QStringLiteral("tile_0"),
             "writer should emit graph-config object id");
@@ -775,8 +780,8 @@ void testProjectWriterUsesCanonicalProjectDocumentVocabulary() {
                 !graphProperties.contains(QStringLiteral("collapsed")),
             "writer should move editor layout out of graph-config object properties");
 
-    const QJsonObject layoutNode = root.value(QStringLiteral("layout")).toObject()
-                                       .value(QStringLiteral("views")).toArray().first().toObject()
+    const QJsonObject layoutNode = root.value(QStringLiteral("views")).toArray().first().toObject()
+                                       .value(QStringLiteral("layout")).toObject()
                                        .value(QStringLiteral("canvas")).toObject()
                                        .value(QStringLiteral("nodes")).toObject()
                                        .value(QStringLiteral("tile_0")).toObject();

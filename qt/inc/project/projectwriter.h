@@ -11,8 +11,15 @@ struct ProjectWriteResult {
     QString error;
 };
 
+struct ProjectJsonResult {
+    bool success = false;
+    QJsonObject object;
+    QString error;
+};
+
 class ProjectWriter {
 public:
     static QJsonObject toJsonObject(const ProjectDocument& document);
+    static ProjectJsonResult toJsonObjectResult(const ProjectDocument& document);
     static ProjectWriteResult writeFile(const QString& path, const ProjectDocument& document);
 };

@@ -136,6 +136,17 @@ bool hasRule(const ipcraft::DiagnosticStore& diagnostics, const QString& ruleId)
     return false;
 }
 
+QJsonObject migrationMetadata(const QJsonObject& flatProject) {
+    return flatProject.value(QStringLiteral("metadata")).toObject()
+        .value(QStringLiteral("ipcraft.migration.v1")).toObject();
+}
+
+QJsonObject preservedLegacyState(const QJsonObject& flatProject) {
+    return migrationMetadata(flatProject)
+        .value(QStringLiteral("preserved")).toObject()
+        .value(QStringLiteral("legacy_state")).toObject();
+}
+
 QString findCliBinary() {
     QDir dir(QCoreApplication::applicationDirPath());
     while (true) {
@@ -303,10 +314,7 @@ void testMigratePreservesOpaqueLegacyStateWithoutInstances() {
     require(result.document.instances.isEmpty(),
             "opaque-only legacy state should not synthesize incomplete instances");
     const QJsonObject preserved =
-        ProjectWriter::toJsonObject(result.document)
-            .value(QStringLiteral("migration")).toObject()
-            .value(QStringLiteral("preserved")).toObject()
-            .value(QStringLiteral("legacy_state")).toObject();
+        preservedLegacyState(ProjectWriter::toJsonObject(result.document));
     require(preserved.value(QStringLiteral("ipcore_state")).toArray().first().toObject()
                 .value(QStringLiteral("opaque")).toBool(),
             "opaque legacy state should be preserved");
@@ -324,12 +332,9 @@ void testMigratePreservesTopLevelLegacyState() {
         ipcraft::ProjectMigrator::migrateJson(legacy, ipcraft::schemaids::projectV1);
     require(result.ok, "top-level opaque legacy state should migrate");
     const QJsonObject preserved =
-        ProjectWriter::toJsonObject(result.document)
-            .value(QStringLiteral("migration")).toObject()
-            .value(QStringLiteral("preserved")).toObject()
-            .value(QStringLiteral("legacy_state")).toObject();
+        preservedLegacyState(ProjectWriter::toJsonObject(result.document));
     require(preserved.value(QStringLiteral("opaque")).toBool(),
-            "top-level legacy_state object should be preserved under migration.preserved.legacy_state");
+            "top-level legacy_state object should be preserved under flat migration metadata");
 }
 
 void testMigratePreservesOldIpcoreStateUnderMigrationPreserved() {
@@ -341,12 +346,11 @@ void testMigratePreservesOldIpcoreStateUnderMigrationPreserved() {
     require(migrated.value(QStringLiteral("schema")).toString() ==
                 ipcraft::schemaids::projectV1,
             "migrated document should use project v1 schema");
-    const QJsonObject preserved =
-        migrated.value(QStringLiteral("migration")).toObject()
-            .value(QStringLiteral("preserved")).toObject()
-            .value(QStringLiteral("legacy_state")).toObject();
+    require(!migrated.contains(QStringLiteral("migration")),
+            "migrated public project should not emit wrapper migration root");
+    const QJsonObject preserved = preservedLegacyState(migrated);
     require(preserved.value(QStringLiteral("ipcore_state")).isArray(),
-            "migration should preserve old ipcore_state under migration.preserved.legacy_state");
+            "migration should preserve old ipcore_state under flat migration metadata");
     require(preserved.value(QStringLiteral("ipcore_state")).toArray().first().toObject()
                 .value(QStringLiteral("schema")).toString() ==
                 QStringLiteral("ipcraft.noc.instance-state.v1"),

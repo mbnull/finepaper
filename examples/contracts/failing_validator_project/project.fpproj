@@ -1,29 +1,27 @@
 {
   "schema": "ipcraft.project.v1",
-  "project": {
-    "id": "failing_validator_project",
-    "name": "Failing Validator Project"
-  },
-  "instances": [
+  "id": "failing_validator_project",
+  "name": "Failing Validator Project",
+  "packages": [
+    {
+      "id": "vendor.example.failing_validator",
+      "version": "1.0.0"
+    }
+  ],
+  "components": [
     {
       "id": "fail0",
-      "package": {
-        "id": "vendor.example.failing_validator",
-        "version": "1.0.0"
-      },
+      "type": "vendor.example.failing_validator",
+      "packageRef": "vendor.example.failing_validator@1.0.0",
       "config": {}
     }
   ],
-  "composition": {
-    "connections": [],
-    "external_ports": []
-  },
-  "layout": {},
-  "diagnostics": {
-    "schema": "ipcraft.diagnostics.v1",
-    "records": []
-  },
-  "artifacts": {},
-  "migration": {},
-  "native": {}
+  "interfaces": [],
+  "connections": [],
+  "topologies": [],
+  "views": [],
+  "diagnostics": [],
+  "artifacts": [],
+  "extensions": [],
+  "metadata": {}
 }

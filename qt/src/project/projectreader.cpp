@@ -2,7 +2,9 @@
 #include "project/projectreader.h"
 
 #include "ipcraft/compositionmodel.h"
+#include "ipcraft/core/project_document_v1.h"
 #include "ipcraft/schemaids.h"
+#include "project/projectdesignserializer.h"
 
 #include <QFile>
 #include <QFileInfo>
@@ -957,6 +959,85 @@ ProjectReadResult validateCompositionObject(const QJsonObject& composition) {
     return {};
 }
 
+QJsonObject legacyLayoutFromFlatViews(const QJsonArray& views) {
+    QJsonArray legacyViews;
+    for (const QJsonValue& viewValue : views) {
+        if (!viewValue.isObject()) {
+            continue;
+        }
+        const QJsonObject view = viewValue.toObject();
+        QJsonObject legacyView;
+        const QString id = view.value(QStringLiteral("id")).toString();
+        if (!id.isEmpty()) {
+            legacyView.insert(QStringLiteral("id"), id);
+        }
+        const QString kind = view.value(QStringLiteral("kind")).toString();
+        if (!kind.isEmpty()) {
+            legacyView.insert(QStringLiteral("kind"), kind);
+        }
+
+        const QJsonObject layout = view.value(QStringLiteral("layout")).toObject();
+        const QJsonValue canvas = layout.value(QStringLiteral("canvas"));
+        if (canvas.isObject()) {
+            legacyView.insert(QStringLiteral("canvas"), canvas.toObject());
+        }
+        if (!legacyView.isEmpty()) {
+            legacyViews.append(legacyView);
+        }
+    }
+
+    return legacyViews.isEmpty()
+        ? QJsonObject{}
+        : QJsonObject{{QStringLiteral("views"), legacyViews}};
+}
+
+QString migrationMetadataKey() {
+    return QStringLiteral("ipcraft.migration.v1");
+}
+
+void applyMigrationMetadataProjection(ProjectDocument* document) {
+    const QJsonValue migrationValue = document->projectMetadata.value(migrationMetadataKey());
+    if (!migrationValue.isObject()) {
+        return;
+    }
+
+    const QJsonObject migration = migrationValue.toObject();
+    document->migration.fromSchema = migration.value(QStringLiteral("from_schema")).toString();
+    document->migration.fromVersion = migration.value(QStringLiteral("from_version")).toString();
+    const QJsonValue preserved = migration.value(QStringLiteral("preserved"));
+    if (preserved.isObject()) {
+        document->migration.preserved = preserved.toObject();
+    }
+    const QJsonValue metadata = migration.value(QStringLiteral("metadata"));
+    if (metadata.isObject()) {
+        document->migration.metadata = metadata.toObject();
+    }
+    const QJsonValue native = migration.value(QStringLiteral("native"));
+    if (native.isObject()) {
+        document->migration.native = native.toObject();
+    }
+}
+
+void applyFlatProjectCompatibilityProjections(ProjectDocument* document,
+                                              const QJsonObject& root) {
+    for (ProjectIpInstanceRecord& instance : document->instances) {
+        const QJsonObject extensionData =
+            instance.native.value(QStringLiteral("extensionData")).toObject();
+        const QJsonValue graphConfig = extensionData.value(QStringLiteral("graph_config"));
+        if (graphConfig.isObject()) {
+            instance.hasGraphConfig = true;
+            instance.graphConfigIsNull = false;
+            instance.graphConfig = graphConfig.toObject();
+        }
+        appendGraphConfigProjection(instance, document);
+    }
+
+    document->layout = legacyLayoutFromFlatViews(root.value(QStringLiteral("views")).toArray());
+    applyLayoutProjection(document);
+    document->ipcoreState = document->instances;
+    applyMigrationMetadataProjection(document);
+}
+
 } // namespace
 
 ProjectFileKind ProjectReader::detectKind(const QString& path) {
@@ -1020,6 +1101,34 @@ ProjectReadResult ProjectReader::readFile(const QString& path) {
                        QStringLiteral("$.schema"));
     }
 
+    if (!root.contains(QStringLiteral("project"))) {
+        const ipcraft::core::ProjectDocumentReadResult flatResult =
+            ipcraft::core::ProjectDocumentV1::readObject(root);
+        if (!flatResult.success) {
+            ProjectReadResult result;
+            result.error = QStringLiteral("Project design is invalid.");
+            for (const ipcraft::core::ValidationIssue& issue : flatResult.issues) {
+                ipcraft::Diagnostic diagnostic;
+                diagnostic.severity = QStringLiteral("error");
+                diagnostic.source = QStringLiteral("project.reader");
+                diagnostic.ruleId = issue.code;
+                diagnostic.category = QStringLiteral("project");
+                diagnostic.message = issue.message;
+                diagnostic.locations.append(documentPathLocation(issue.path));
+                result.diagnostics.records.append(diagnostic);
+            }
+            return result;
+        }
+
+        ProjectReadResult result;
+        result.success = true;
+        result.document = ProjectDesignSerializer::toDocument(flatResult.project);
+        applyFlatProjectCompatibilityProjections(&result.document, root);
+        return result;
+    }
+
+    // Legacy wrapper compatibility: accepted for read/migration only.
+    // ProjectWriter never emits this shape for ipcraft.project.v1.
     ProjectReadResult rootKeysResult = validateRootKeys(root);
     if (!rootKeysResult.diagnostics.records.isEmpty()) {
         return rootKeysResult;

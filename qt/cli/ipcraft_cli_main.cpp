@@ -79,6 +79,10 @@ CliResult projectReadFailure(const ProjectReadResult& readResult) {
     return result;
 }
 
+CliResult projectWriteFailure(const QString& message) {
+    return failure(QStringLiteral("project.write_failed"), message, QStringLiteral("$"));
+}
+
 ipcraft::PackageSpecCollectionResult readPackages(const QString& packageRoot) {
     return ipcraft::PackageSpecReader().discoverPackageRoots({packageRoot});
 }
@@ -536,11 +540,14 @@ CliResult commandMigrateProject(const QStringList& args) {
     }
     const ProjectReadResult projectResult = readProject(args.at(0));
     if (projectResult.success) {
+        const ProjectJsonResult jsonResult = ProjectWriter::toJsonObjectResult(projectResult.document);
+        if (!jsonResult.success) {
+            return projectWriteFailure(jsonResult.error);
+        }
         CliResult result;
         result.ok = true;
         QJsonObject payload;
-        payload.insert(QStringLiteral("project"),
-                       ProjectWriter::toJsonObject(projectResult.document));
+        payload.insert(QStringLiteral("project"), jsonResult.object);
         result.result = payload;
         return result;
     }
@@ -554,8 +561,11 @@ CliResult commandMigrateProject(const QStringList& args) {
     CliResult result;
     result.ok = true;
     QJsonObject payload;
-    payload.insert(QStringLiteral("project"),
-                   ProjectWriter::toJsonObject(migrationResult.document));
+    const ProjectJsonResult jsonResult = ProjectWriter::toJsonObjectResult(migrationResult.document);
+    if (!jsonResult.success) {
+        return projectWriteFailure(jsonResult.error);
+    }
+    payload.insert(QStringLiteral("project"), jsonResult.object);
     result.result = payload;
     return result;
 }

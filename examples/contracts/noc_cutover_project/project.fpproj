@@ -1,71 +1,75 @@
 {
   "schema": "ipcraft.project.v1",
-  "project": {
-    "id": "noc_cutover_project",
-    "name": "NoC Cutover Project"
-  },
-  "instances": [
+  "id": "noc_cutover_project",
+  "name": "NoC Cutover Project",
+  "packages": [
+    {
+      "id": "vendor.example.noc_cutover",
+      "version": "1.0.0"
+    }
+  ],
+  "components": [
     {
       "id": "noc0",
-      "package": {
-        "id": "vendor.example.noc_cutover",
-        "version": "1.0.0"
-      },
+      "type": "vendor.example.noc_cutover",
+      "packageRef": "vendor.example.noc_cutover@1.0.0",
       "config": {
-        "parameters": {
-          "flit_width": 64
+        "flit_width": 64
+      },
+      "extensionData": {
+        "graph_config": {
+          "schema": "ipcraft.graph-config.v1",
+          "objects": [
+            {
+              "id": "tile0",
+              "type": "vendor.example.tile",
+              "properties": {}
+            },
+            {
+              "id": "tile1",
+              "type": "vendor.example.tile",
+              "properties": {}
+            }
+          ],
+          "relationships": [
+            {
+              "id": "link0",
+              "type": "vendor.example.link",
+              "endpoints": [
+                {
+                  "object": "tile0",
+                  "role": "source"
+                },
+                {
+                  "object": "tile1",
+                  "role": "target"
+                }
+              ],
+              "properties": {}
+            }
+          ],
+          "properties": {},
+          "native": {}
         }
       },
-      "graph_config": {
-        "schema": "ipcraft.graph-config.v1",
-        "objects": [
-          {
-            "id": "tile0",
-            "type": "vendor.example.tile",
-            "properties": {}
-          },
-          {
-            "id": "tile1",
-            "type": "vendor.example.tile",
-            "properties": {}
-          }
-        ],
-        "relationships": [
-          {
-            "id": "link0",
-            "type": "vendor.example.link",
-            "endpoints": [
-              {
-                "object": "tile0",
-                "role": "source"
-              },
-              {
-                "object": "tile1",
-                "role": "target"
-              }
-            ],
-            "properties": {}
-          }
-        ],
-        "properties": {},
-        "native": {}
-      },
-      "native": {
+      "metadata": {
         "vendor.example": {
           "legacy_hint": "opaque"
         }
       }
     }
   ],
-  "composition": {
-    "connections": [],
-    "external_ports": []
-  },
-  "layout": {
-    "views": [
-      {
-        "id": "graph",
-        "kind": "canvas",
+  "interfaces": [],
+  "connections": [],
+  "topologies": [],
+  "views": [
+    {
+      "id": "graph",
+      "schema": "ipcraft.view.v1",
+      "kind": "canvas",
+      "targetRef": "project",
+      "providerRef": "finepaper.editor",
+      "layout": {
         "canvas": {
           "nodes": {
             "tile0": {
@@ -80,13 +84,10 @@
           "connections": {}
         }
       }
-    ]
-  },
-  "diagnostics": {
-    "schema": "ipcraft.diagnostics.v1",
-    "records": []
-  },
-  "artifacts": {},
-  "migration": {},
-  "native": {}
+    }
+  ],
+  "diagnostics": [],
+  "artifacts": [],
+  "extensions": [],
+  "metadata": {}
 }

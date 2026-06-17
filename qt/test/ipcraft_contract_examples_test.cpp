@@ -2,13 +2,19 @@
 #include "ipcraft/packagespec.h"
 #include "ipcraft/schemaids.h"
 #include "project/projectreader.h"
+#include "project/projectwriter.h"
+#include "jsonschemavalidator.h"
 
 #include <QCoreApplication>
 #include <QDir>
+#include <QDirIterator>
 #include <QFileInfo>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QStringList>
+#include <QTemporaryDir>
+#include <QVector>
 #include <iostream>
 #include <stdexcept>
 
@@ -50,6 +56,51 @@ QJsonObject readJsonObject(const QString& path) {
     return document.object();
 }
 
+QString repositoryRoot() {
+    QDir dir(QFileInfo(repositoryPath(QStringLiteral("schemas/ipcraft.project.v1.schema.json")))
+                 .absoluteDir());
+    require(dir.cdUp(), "repository root should be reachable from schemas directory");
+    return dir.absolutePath();
+}
+
+QString relativeToRepository(const QString& absolutePath) {
+    return QDir(repositoryRoot()).relativeFilePath(absolutePath);
+}
+
+QVector<QFileInfo> filesMatching(const QString& relativeRoot, const QString& fileName) {
+    QVector<QFileInfo> files;
+    const QFileInfo root(repositoryPath(relativeRoot));
+    require(root.isDir(), "scan root should exist");
+
+    QDirIterator iterator(root.absoluteFilePath(), QDir::Files, QDirIterator::Subdirectories);
+    while (iterator.hasNext()) {
+        iterator.next();
+        if (iterator.fileInfo().fileName() == fileName) {
+            files.append(iterator.fileInfo());
+        }
+    }
+    return files;
+}
+
+bool isNegativeContractFixture(const QFileInfo& project) {
+    return project.absoluteDir().dirName().startsWith(QStringLiteral("negative_"));
+}
+
+void requireJsonMatchesSchema(const QString& jsonPath, const JsonSchemaValidator& schema) {
+    QString error;
+    const QJsonObject object = readJsonObject(jsonPath);
+    const bool matchesSchema = schema.validate(object, &error);
+    if (!matchesSchema && error.isEmpty()) {
+        error = QStringLiteral("$: schema validation failed; top-level keys: %1")
+            .arg(object.keys().join(QStringLiteral(", ")));
+    }
+    require(matchesSchema,
+            QStringLiteral("%1 must match schema: %2")
+                .arg(relativeToRepository(jsonPath), error)
+                .toUtf8()
+                .constData());
+}
+
 bool hasRule(const ipcraft::DiagnosticStore& diagnostics, const QString& ruleId) {
     for (const ipcraft::Diagnostic& diagnostic : diagnostics.records) {
         if (diagnostic.ruleId == ruleId) {
@@ -63,6 +114,36 @@ struct ExampleExpectation {
     QString name;
     QString expectedPackageRule;
 };
+
+QJsonObject flatProjectObject() {
+    return QJsonObject{
+        {QStringLiteral("schema"), ipcraft::schemaids::projectV1},
+        {QStringLiteral("id"), QStringLiteral("flat_contract_project")},
+        {QStringLiteral("name"), QStringLiteral("Flat Contract Project")},
+        {QStringLiteral("packages"), QJsonArray{
+            QJsonObject{
+                {QStringLiteral("id"), QStringLiteral("vendor.example.flat")},
+                {QStringLiteral("version"), QStringLiteral("1.0.0")}
+            }
+        }},
+        {QStringLiteral("components"), QJsonArray{
+            QJsonObject{
+                {QStringLiteral("id"), QStringLiteral("flat0")},
+                {QStringLiteral("type"), QStringLiteral("FlatComponent")},
+                {QStringLiteral("packageRef"), QStringLiteral("vendor.example.flat@1.0.0")},
+                {QStringLiteral("config"), QJsonObject{{QStringLiteral("width"), 32}}}
+            }
+        }},
+        {QStringLiteral("interfaces"), QJsonArray{}},
+        {QStringLiteral("connections"), QJsonArray{}},
+        {QStringLiteral("topologies"), QJsonArray{}},
+        {QStringLiteral("views"), QJsonArray{}},
+        {QStringLiteral("diagnostics"), QJsonArray{}},
+        {QStringLiteral("artifacts"), QJsonArray{}},
+        {QStringLiteral("extensions"), QJsonArray{}},
+        {QStringLiteral("metadata"), QJsonObject{}}
+    };
+}
 
 void testContractExamplesExistAndDeclarePublicSchemas() {
     const QVector<ExampleExpectation> examples = {
@@ -115,6 +196,118 @@ void testContractExamplesExistAndDeclarePublicSchemas() {
     }
 }
 
+void testProjectReaderAcceptsFlatProjectDesignCurrentInput() {
+    QTemporaryDir tempDir;
+    require(tempDir.isValid(), "temporary directory should be valid");
+    const QString projectPath = QDir(tempDir.path())
+        .filePath(QStringLiteral("ipcraft_contract_flat_project.fpproj"));
+    QFile file(projectPath);
+    require(file.open(QIODevice::WriteOnly | QIODevice::Truncate),
+            "flat project fixture should open for writing");
+    const QByteArray content = QJsonDocument(flatProjectObject()).toJson(QJsonDocument::Indented);
+    require(file.write(content) == content.size(), "flat project fixture should write");
+    file.close();
+
+    const ProjectReadResult result = ProjectReader::readFile(projectPath);
+    require(result.success, "project reader should accept flat ProjectDesign input");
+    require(result.document.projectId == QStringLiteral("flat_contract_project"),
+            "flat project id should parse into ProjectDocument");
+    require(result.document.instances.size() == 1,
+            "flat components should parse into ProjectDocument instances");
+    require(result.document.instances.first().id == QStringLiteral("flat0"),
+            "flat component id should parse into instance id");
+}
+
+void testAllPositiveContractProjectsMatchPublicProjectSchema() {
+    const JsonSchemaValidator projectSchema =
+        JsonSchemaValidator::fromFile(repositoryPath(QStringLiteral("schemas/ipcraft.project.v1.schema.json")));
+    const QVector<QFileInfo> projects =
+        filesMatching(QStringLiteral("examples/contracts"), QStringLiteral("project.fpproj"));
+    require(!projects.isEmpty(), "contract projects should exist");
+
+    qsizetype positiveCount = 0;
+    for (const QFileInfo& project : projects) {
+        if (isNegativeContractFixture(project)) {
+            continue;
+        }
+        ++positiveCount;
+        requireJsonMatchesSchema(project.absoluteFilePath(), projectSchema);
+    }
+    require(positiveCount > 0,
+            "contract project schema gate excluded only negative_* fixtures; no positive projects were checked");
+}
+
+void testProjectWriterOutputMatchesPublicProjectSchema() {
+    ProjectDocument document;
+    document.schema = ipcraft::schemaids::projectV1;
+    document.projectId = QStringLiteral("writer_flat_project");
+    document.projectName = QStringLiteral("Writer Flat Project");
+    document.ipcores.append(ProjectIpcoreRecord{QStringLiteral("vendor.example.writer"),
+                                                QStringLiteral("1.0.0")});
+
+    ProjectIpInstanceRecord instance;
+    instance.id = QStringLiteral("writer0");
+    instance.package = ProjectPackageRef{QStringLiteral("vendor.example.writer"),
+                                         QStringLiteral("1.0.0")};
+    instance.native.insert(QStringLiteral("componentType"), QStringLiteral("WriterComponent"));
+    instance.config.insert(QStringLiteral("parameters"),
+                           QJsonObject{{QStringLiteral("width"), 32}});
+    document.instances.append(instance);
+
+    const QJsonObject written = ProjectWriter::toJsonObject(document);
+    require(!written.contains(QStringLiteral("project")),
+            "writer must not emit wrapper project root");
+    require(!written.contains(QStringLiteral("instances")),
+            "writer must not emit wrapper instances root");
+    require(written.contains(QStringLiteral("components")),
+            "writer must emit flat components");
+
+    const JsonSchemaValidator projectSchema =
+        JsonSchemaValidator::fromFile(repositoryPath(QStringLiteral("schemas/ipcraft.project.v1.schema.json")));
+    QString error;
+    require(projectSchema.validate(written, &error),
+            QStringLiteral("ProjectWriter output must match project schema: %1")
+                .arg(error)
+                .toUtf8()
+                .constData());
+}
+
+void testAllRepositoryRuntimePackagesMatchPublicPackageSchema() {
+    const JsonSchemaValidator packageSchema =
+        JsonSchemaValidator::fromFile(repositoryPath(QStringLiteral("schemas/ipcraft.package.v1.schema.json")));
+    const QVector<QFileInfo> packages =
+        filesMatching(QStringLiteral("ipcores"), QStringLiteral("ipcraft.json"));
+    require(!packages.isEmpty(), "runtime package manifests should exist");
+    for (const QFileInfo& package : packages) {
+        requireJsonMatchesSchema(package.absoluteFilePath(), packageSchema);
+    }
+}
+
+void testUnknownOptionalPackageExtensionIsSchemaValid() {
+    const JsonSchemaValidator packageSchema =
+        JsonSchemaValidator::fromFile(repositoryPath(QStringLiteral("schemas/ipcraft.package.v1.schema.json")));
+    const QJsonObject package{
+        {QStringLiteral("schema"), ipcraft::schemaids::packageV1},
+        {QStringLiteral("id"), QStringLiteral("vendor.experimental.schema")},
+        {QStringLiteral("version"), QStringLiteral("1.0.0")},
+        {QStringLiteral("name"), QStringLiteral("Experimental Schema")},
+        {QStringLiteral("extensions"), QJsonArray{
+            QJsonObject{
+                {QStringLiteral("id"), QStringLiteral("vendor.experimental.v1")},
+                {QStringLiteral("required"), false},
+                {QStringLiteral("version"), QStringLiteral("0.1.0")}
+            }
+        }}
+    };
+
+    QString error;
+    require(packageSchema.validate(package, &error),
+            QStringLiteral("unknown optional extension should be schema valid: %1")
+                .arg(error)
+                .toUtf8()
+                .constData());
+}
+
 void testPublicArchitectureAndAuditDocsExist() {
     const QStringList docs = {
         QStringLiteral("docs/architecture/v1-core-architecture.md"),
@@ -134,7 +327,12 @@ void testPublicArchitectureAndAuditDocsExist() {
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
     try {
+        testProjectReaderAcceptsFlatProjectDesignCurrentInput();
+        testProjectWriterOutputMatchesPublicProjectSchema();
+        testUnknownOptionalPackageExtensionIsSchemaValid();
         testContractExamplesExistAndDeclarePublicSchemas();
+        testAllPositiveContractProjectsMatchPublicProjectSchema();
+        testAllRepositoryRuntimePackagesMatchPublicPackageSchema();
         testPublicArchitectureAndAuditDocsExist();
     } catch (const std::exception& error) {
         std::cerr << "ipcraft_contract_examples_test failed: " << error.what() << '\n';

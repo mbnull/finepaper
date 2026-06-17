@@ -369,7 +369,7 @@ void testApplyDesignPatch() {
             "patch should update component config");
 }
 
-void testFlatDesignConfigSavesAsV1BundleAndReloadsAsRuntimeConfig() {
+void testFlatDesignConfigSavesAsProjectDesignAndReloadsAsRuntimeConfig() {
     QTemporaryDir tempDir;
     require(tempDir.isValid(), "temporary directory should be valid");
     const QString path = QDir(tempDir.path()).filePath(QStringLiteral("flat_config.fpproj"));
@@ -383,17 +383,18 @@ void testFlatDesignConfigSavesAsV1BundleAndReloadsAsRuntimeConfig() {
     require(saveResult.success, "saveFile should accept flat runtime design config");
 
     const QJsonObject root = readJsonObject(path);
-    const QJsonObject savedConfig = root.value(QStringLiteral("instances"))
+    require(!root.contains(QStringLiteral("instances")),
+            "saved project should not write wrapper instances root");
+    const QJsonObject savedConfig = root.value(QStringLiteral("components"))
                                         .toArray()
                                         .first()
                                         .toObject()
                                         .value(QStringLiteral("config"))
                                         .toObject();
-    require(savedConfig.value(QStringLiteral("parameters")).toObject()
-                .value(QStringLiteral("width")).toInt() == 4,
-            "saved project config should use the V1 parameters bundle");
-    require(!savedConfig.contains(QStringLiteral("width")),
-            "saved project config should not write flat keys at bundle top level");
+    require(savedConfig.value(QStringLiteral("width")).toInt() == 4,
+            "saved project config should use flat ProjectDesign keys");
+    require(!savedConfig.contains(QStringLiteral("parameters")),
+            "saved project config should not write wrapper parameters bundle");
 
     ProjectService loaded;
     const ProjectServiceResult loadResult = loaded.loadFile(path);
@@ -724,29 +725,35 @@ void testReplaceDesignPreservesNonDesignProjectFields() {
 
     const ProjectServiceResult saveResult = service.saveFile(path);
     require(saveResult.success, "merged design document should save");
+    const QJsonObject savedRoot = readJsonObject(path);
+    require(!savedRoot.contains(QStringLiteral("project")) &&
+                !savedRoot.contains(QStringLiteral("instances")) &&
+                !savedRoot.contains(QStringLiteral("composition")) &&
+                !savedRoot.contains(QStringLiteral("layout")) &&
+                !savedRoot.contains(QStringLiteral("migration")) &&
+                !savedRoot.contains(QStringLiteral("native")),
+            "saved merged document should use only the flat ProjectDesign root");
+
     ProjectService loaded;
     const ProjectServiceResult loadResult = loaded.loadFile(path);
     require(loadResult.success, "merged design document should reload");
-    require(loaded.document().projectDisplay.value(QStringLiteral("title")).toString() ==
-                QStringLiteral("Displayed"),
-            "saved merged document should preserve project display after reload");
-    require(loaded.document().composition.connections.size() == 1 &&
-                loaded.document().composition.externalPorts.size() == 1,
-            "saved merged document should preserve composition after reload");
-    require(hasDiagnosticRule(loaded.document().diagnostics, QStringLiteral("root.keep")),
-            "saved merged document should preserve root diagnostics after reload");
+    require(loaded.design().id == QStringLiteral("edited_project") &&
+                loaded.design().name == QStringLiteral("Edited Project"),
+            "saved merged document should reload the edited ProjectDesign identity");
+    require(loaded.design().metadata.value(QStringLiteral("design_metadata")).toString() ==
+                QStringLiteral("updated"),
+            "saved merged document should reload design-owned metadata");
+    require(loaded.design().components.size() == 1 &&
+                loaded.design().components.first().config.value(QStringLiteral("width")).toInt() == 8,
+            "saved merged document should reload design-owned component config");
     require(loaded.document().migration.fromSchema == QStringLiteral("legacy.schema"),
-            "saved merged document should preserve migration after reload");
+            "saved merged document should preserve explicit migration metadata after reload");
     require(loaded.document().instances.first().hasGraphConfig,
             "saved merged document should preserve instance graph_config after reload");
-    require(loaded.document().instances.first().view.value(QStringLiteral("x")).toInt() == 10,
-            "saved merged document should preserve instance view after reload");
-    require(loaded.document().instances.first().lastRuns.value(QStringLiteral("drc")).toString() ==
-                QStringLiteral("passed"),
-            "saved merged document should preserve instance last_runs after reload");
-    require(loaded.document().instances.first().native.value(QStringLiteral("vendor.keep")).toObject()
-                .value(QStringLiteral("token")).toString() == QStringLiteral("keep"),
-            "saved merged document should preserve unrelated native keys after reload");
+    require(loaded.document().projectDisplay.isEmpty() &&
+                loaded.document().composition.connections.isEmpty() &&
+                loaded.document().instances.first().lastRuns.isEmpty(),
+            "saved merged document should not revive wrapper-only sidecar fields after reload");
 }
 
 void testEditorModuleMutationRefreshesRuntimeDesignBeforeSave() {
@@ -845,7 +852,7 @@ int main(int argc, char** argv) {
         testCreateNewClearsSavedPath();
         testReplaceDocumentClearsSavedPath();
         testApplyDesignPatch();
-        testFlatDesignConfigSavesAsV1BundleAndReloadsAsRuntimeConfig();
+        testFlatDesignConfigSavesAsProjectDesignAndReloadsAsRuntimeConfig();
         testProjectDesignSerializerMigratesExplicitLegacyComponentType();
         testReplaceDesignSaveLoadPreservesSemanticDesignFields();
         testMergeDesignOnlyComponentsPreservesProjectedInstancesAndSemanticSupplement();

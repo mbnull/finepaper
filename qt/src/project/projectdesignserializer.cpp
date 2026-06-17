@@ -230,6 +230,9 @@ void mergeDesignSupplement(ipcraft::core::ProjectDesign& design,
 
     const ipcraft::core::ProjectDocumentReadResult readResult =
         ipcraft::core::ProjectDocumentV1::readObject(serializedProject);
+    if (!readResult.success) {
+        return;
+    }
     const ipcraft::core::ProjectDesign& supplemented = readResult.project;
     if (supplement.contains(QStringLiteral("interfaces"))) {
         design.interfaces = supplemented.interfaces;

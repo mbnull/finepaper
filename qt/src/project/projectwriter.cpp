@@ -2,8 +2,11 @@
 #include "project/projectwriter.h"
 
 #include "ipcraft/compositionmodel.h"
+#include "ipcraft/core/project_document_v1.h"
+#include "ipcraft/core/project_design.h"
 #include "ipcraft/jsonhelpers.h"
 #include "ipcraft/schemaids.h"
+#include "project/projectdesignserializer.h"
 
 #include <QDir>
 #include <QFileInfo>
@@ -14,149 +17,102 @@
 
 namespace {
 
-void insertObject(QJsonObject& object, const QString& key, const QJsonObject& value) {
-    if (!value.isEmpty()) {
-        object.insert(key, value);
-    }
-}
-
-void insertString(QJsonObject& object, const QString& key, const QString& value) {
-    if (!value.isEmpty()) {
-        object.insert(key, value);
-    }
-}
-
-QJsonObject packageRefObject(const ProjectPackageRef& package) {
-    QJsonObject object;
-    object.insert(QStringLiteral("id"), package.id);
-    object.insert(QStringLiteral("version"), package.version);
-    return object;
-}
-
-QJsonObject endpointObject(const ProjectEndpointRef& endpoint) {
-    QJsonObject object;
-    object.insert(QStringLiteral("instance"), endpoint.instanceId);
-    object.insert(QStringLiteral("interface"), endpoint.interfaceId);
-    insertString(object, QStringLiteral("port"), endpoint.portId);
-    insertString(object, QStringLiteral("role"), endpoint.role);
-    insertObject(object, QStringLiteral("properties"), endpoint.properties);
-    return object;
-}
-
-QJsonObject connectionObject(const ProjectConnectionRecord& connection) {
-    QJsonObject object;
-    object.insert(QStringLiteral("id"), connection.id);
-    insertString(object, QStringLiteral("type"), connection.type);
-
-    QJsonArray endpoints;
-    for (const ProjectEndpointRef& endpoint : connection.endpoints) {
-        endpoints.append(endpointObject(endpoint));
-    }
-    object.insert(QStringLiteral("endpoints"), endpoints);
-
-    insertString(object, QStringLiteral("source"), connection.sourceKind);
-    insertObject(object, QStringLiteral("properties"), connection.properties);
-    insertObject(object, QStringLiteral("native"), connection.native);
-    return object;
-}
-
-QJsonObject externalPortObject(const ProjectExternalPortRecord& port) {
-    QJsonObject object;
-    object.insert(QStringLiteral("id"), port.id);
-    insertString(object, QStringLiteral("name"), port.name);
-    if (port.hasInterface) {
-        object.insert(QStringLiteral("interface"), endpointObject(port.interfaceRef));
-    }
-    insertObject(object, QStringLiteral("properties"), port.properties);
-    insertObject(object, QStringLiteral("native"), port.native);
-    return object;
-}
-
-QJsonObject instanceObject(const ProjectIpInstanceRecord& instance) {
-    QJsonObject object;
-    object.insert(QStringLiteral("id"), instance.id);
-    insertString(object, QStringLiteral("display_name"), instance.displayName);
-
-    object.insert(QStringLiteral("package"), packageRefObject(instance.package));
-
-    insertObject(object, QStringLiteral("config"), instance.config);
-    if (instance.hasGraphConfig) {
-        if (instance.graphConfigIsNull) {
-            object.insert(QStringLiteral("graph_config"), QJsonValue::Null);
-        } else {
-            object.insert(QStringLiteral("graph_config"), instance.graphConfig);
-        }
-    }
-    insertObject(object, QStringLiteral("native"), instance.native);
-    insertObject(object, QStringLiteral("last_runs"), instance.lastRuns);
-    insertObject(object, QStringLiteral("artifacts"), instance.artifacts);
-    insertObject(object, QStringLiteral("diagnostics"), instance.diagnostics);
-    insertObject(object, QStringLiteral("view"), instance.view);
-    return object;
-}
-
-QJsonObject migrationObject(const ProjectMigration& migration) {
-    QJsonObject object;
-    insertString(object, QStringLiteral("from_schema"), migration.fromSchema);
-    insertString(object, QStringLiteral("from_version"), migration.fromVersion);
-    insertObject(object, QStringLiteral("preserved"), migration.preserved);
-    insertObject(object, QStringLiteral("metadata"), migration.metadata);
-    insertObject(object, QStringLiteral("native"), migration.native);
-    return object;
-}
-
-QJsonObject toJson(const ProjectDocument& document) {
-    QJsonObject root;
-    root.insert(QStringLiteral("schema"), ipcraft::schemaids::projectV1);
-
-    QJsonObject project;
-    project.insert(QStringLiteral("id"), document.projectId);
-    project.insert(QStringLiteral("name"), document.projectName);
-    insertString(project, QStringLiteral("description"), document.projectDescription);
-    insertObject(project, QStringLiteral("display"), document.projectDisplay);
-    insertObject(project, QStringLiteral("metadata"), document.projectMetadata);
-    insertObject(project, QStringLiteral("native"), document.projectNative);
-    root.insert(QStringLiteral("project"), project);
-
-    QJsonArray instances;
-    for (const ProjectIpInstanceRecord& instance : document.instances) {
-        instances.append(instanceObject(instance));
-    }
-    root.insert(QStringLiteral("instances"), instances);
-
-    QJsonObject composition;
-    QJsonArray connections;
-    for (const ProjectConnectionRecord& connection : document.composition.connections) {
-        connections.append(connectionObject(connection));
-    }
-    composition.insert(QStringLiteral("connections"), connections);
-
-    QJsonArray externalPorts;
-    for (const ProjectExternalPortRecord& port : document.composition.externalPorts) {
-        externalPorts.append(externalPortObject(port));
-    }
-    composition.insert(QStringLiteral("external_ports"), externalPorts);
-    if (!document.composition.groups.isEmpty()) {
-        composition.insert(QStringLiteral("groups"), document.composition.groups);
-    }
-    insertObject(composition, QStringLiteral("properties"), document.composition.properties);
-    insertObject(composition, QStringLiteral("native"), document.composition.native);
-    root.insert(QStringLiteral("composition"), composition);
-
-    root.insert(QStringLiteral("layout"), document.layout);
-    root.insert(QStringLiteral("diagnostics"), document.diagnostics.toJson());
-    root.insert(QStringLiteral("artifacts"), document.artifacts);
-    root.insert(QStringLiteral("migration"), migrationObject(document.migration));
-    root.insert(QStringLiteral("native"), document.native);
-    return root;
-}
-
 bool isNonEmpty(const QString& value) {
     return !value.trimmed().isEmpty();
 }
 
 ProjectWriteResult writeFailure(const QString& message) {
     return {false, message};
+}
+
+QString migrationMetadataKey() {
+    return QStringLiteral("ipcraft.migration.v1");
+}
+
+void insertObjectIfNonEmpty(QJsonObject& object, const QString& key, const QJsonObject& value) {
+    if (!value.isEmpty()) {
+        object.insert(key, value);
+    }
+}
+
+void insertStringIfNonEmpty(QJsonObject& object, const QString& key, const QString& value) {
+    if (!value.trimmed().isEmpty()) {
+        object.insert(key, value);
+    }
+}
+
+QJsonObject migrationMetadataObject(const ProjectMigration& migration) {
+    QJsonObject object;
+    insertStringIfNonEmpty(object, QStringLiteral("from_schema"), migration.fromSchema);
+    insertStringIfNonEmpty(object, QStringLiteral("from_version"), migration.fromVersion);
+    insertObjectIfNonEmpty(object, QStringLiteral("preserved"), migration.preserved);
+    insertObjectIfNonEmpty(object, QStringLiteral("metadata"), migration.metadata);
+    insertObjectIfNonEmpty(object, QStringLiteral("native"), migration.native);
+    return object;
+}
+
+void appendMigrationMetadata(ipcraft::core::ProjectDesign& design,
+                             const ProjectMigration& migration) {
+    const QJsonObject migrationObject = migrationMetadataObject(migration);
+    if (!migrationObject.isEmpty()) {
+        design.metadata.insert(migrationMetadataKey(), migrationObject);
+    }
+}
+
+void appendLegacyLayoutViews(ipcraft::core::ProjectDesign& design,
+                             const QJsonObject& layout) {
+    QSet<QString> existingViewIds;
+    for (const ipcraft::core::ViewDocument& view : design.views) {
+        existingViewIds.insert(view.id);
+    }
+
+    const QJsonArray views = layout.value(QStringLiteral("views")).toArray();
+    for (qsizetype index = 0; index < views.size(); ++index) {
+        if (!views.at(index).isObject()) {
+            continue;
+        }
+        const QJsonObject legacyView = views.at(index).toObject();
+        const QString id = legacyView.value(QStringLiteral("id"))
+            .toString(QStringLiteral("layout_%1").arg(index));
+        if (id.trimmed().isEmpty() || existingViewIds.contains(id)) {
+            continue;
+        }
+
+        ipcraft::core::ViewDocument view;
+        view.id = id;
+        view.schema = ipcraft::schemaids::viewV1;
+        view.kind = legacyView.value(QStringLiteral("kind")).toString(QStringLiteral("canvas"));
+        view.targetRef = QStringLiteral("project");
+        view.providerRef = QStringLiteral("finepaper.editor");
+
+        const QJsonValue canvas = legacyView.value(QStringLiteral("canvas"));
+        if (canvas.isObject()) {
+            view.layout.insert(QStringLiteral("canvas"), canvas.toObject());
+        }
+        const QJsonValue native = legacyView.value(QStringLiteral("native"));
+        if (native.isObject()) {
+            view.metadata.insert(QStringLiteral("native"), native.toObject());
+        }
+
+        existingViewIds.insert(view.id);
+        design.views.append(view);
+    }
+}
+
+ipcraft::core::ProjectDesign designForWrite(const ProjectDocument& document) {
+    ipcraft::core::ProjectDesign design = ProjectDesignSerializer::fromDocument(document);
+    design.schema = ipcraft::schemaids::projectV1;
+    for (ipcraft::core::ComponentInstance& component : design.components) {
+        if (component.type.trimmed().isEmpty()) {
+            component.type = component.packageRef.section(QLatin1Char('@'), 0, 0).trimmed();
+        }
+        if (component.type.isEmpty()) {
+            component.type = component.packageRef.trimmed();
+        }
+    }
+    appendLegacyLayoutViews(design, document.layout);
+    appendMigrationMetadata(design, document.migration);
+    return design;
 }
 
 ProjectWriteResult validateEndpoint(const ProjectEndpointRef& endpoint,
@@ -267,9 +223,9 @@ ProjectWriteResult validateDocument(const ProjectDocument& document) {
 } // namespace
 
 ProjectWriteResult ProjectWriter::writeFile(const QString& path, const ProjectDocument& document) {
-    ProjectWriteResult validationResult = validateDocument(document);
-    if (!validationResult.success) {
-        return validationResult;
+    const ProjectJsonResult jsonResult = ProjectWriter::toJsonObjectResult(document);
+    if (!jsonResult.success) {
+        return writeFailure(jsonResult.error);
     }
 
     const QFileInfo fileInfo(path);
@@ -282,7 +238,7 @@ ProjectWriteResult ProjectWriter::writeFile(const QString& path, const ProjectDo
         return {false, QStringLiteral("Could not open project file for writing: %1").arg(path)};
     }
 
-    const QByteArray content = ipcraft::toDeterministicJson(toJson(document));
+    const QByteArray content = ipcraft::toDeterministicJson(jsonResult.object);
     if (file.write(content) != content.size()) {
         return {false, QStringLiteral("Could not write project file: %1").arg(path)};
     }
@@ -294,5 +250,24 @@ ProjectWriteResult ProjectWriter::writeFile(const QString& path, const ProjectDo
 }
 
 QJsonObject ProjectWriter::toJsonObject(const ProjectDocument& document) {
-    return toJson(document);
+    return ProjectWriter::toJsonObjectResult(document).object;
+}
+
+ProjectJsonResult ProjectWriter::toJsonObjectResult(const ProjectDocument& document) {
+    const ProjectWriteResult validationResult = validateDocument(document);
+    if (!validationResult.success) {
+        return {false, {}, validationResult.error};
+    }
+
+    const ipcraft::core::ProjectDesign design = designForWrite(document);
+    const QVector<ipcraft::core::ValidationIssue> designIssues =
+        ipcraft::core::validateProjectDesign(design);
+    if (!designIssues.isEmpty()) {
+        const ipcraft::core::ValidationIssue& issue = designIssues.first();
+        return {false,
+                {},
+                QStringLiteral("Project design is invalid: %1 at %2").arg(issue.code, issue.path)};
+    }
+
+    return {true, ipcraft::core::ProjectDocumentV1::writeObject(design), {}};
 }

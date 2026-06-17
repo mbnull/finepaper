@@ -1,29 +1,27 @@
 {
   "schema": "ipcraft.project.v1",
-  "project": {
-    "id": "artifact_collection_project",
-    "name": "Artifact Collection Project"
-  },
-  "instances": [
+  "id": "artifact_collection_project",
+  "name": "Artifact Collection Project",
+  "packages": [
+    {
+      "id": "vendor.example.artifacts",
+      "version": "1.0.0"
+    }
+  ],
+  "components": [
     {
       "id": "art0",
-      "package": {
-        "id": "vendor.example.artifacts",
-        "version": "1.0.0"
-      },
+      "type": "vendor.example.artifacts",
+      "packageRef": "vendor.example.artifacts@1.0.0",
       "config": {}
     }
   ],
-  "composition": {
-    "connections": [],
-    "external_ports": []
-  },
-  "layout": {},
-  "diagnostics": {
-    "schema": "ipcraft.diagnostics.v1",
-    "records": []
-  },
-  "artifacts": {},
-  "migration": {},
-  "native": {}
+  "interfaces": [],
+  "connections": [],
+  "topologies": [],
+  "views": [],
+  "diagnostics": [],
+  "artifacts": [],
+  "extensions": [],
+  "metadata": {}
 }

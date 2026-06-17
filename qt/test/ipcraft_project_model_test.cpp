@@ -154,17 +154,24 @@ void testProjectDocumentRoundTripsInstancesCompositionLayoutNative() {
     require(written.value(QStringLiteral("schema")).toString() ==
                 ipcraft::schemaids::projectV1,
             "writer should emit project V1 schema");
-    require(written.value(QStringLiteral("project")).toObject()
-                .value(QStringLiteral("id")).toString() == QStringLiteral("project_0"),
-            "writer should preserve project id");
-    require(written.value(QStringLiteral("instances")).toArray().first().toObject()
-                .value(QStringLiteral("native")).toObject()
-                .value(QStringLiteral("vendor.example")).toObject()
-                .value(QStringLiteral("opaque")).toBool(),
-            "writer should preserve instance native data");
-    require(written.value(QStringLiteral("composition")).toObject()
-                .value(QStringLiteral("groups")).toArray().size() == 1,
-            "writer should preserve composition groups");
+    require(written.value(QStringLiteral("id")).toString() == QStringLiteral("project_0"),
+            "writer should preserve flat project id");
+    require(!written.contains(QStringLiteral("project")),
+            "writer should not emit legacy wrapper project root");
+    require(!written.contains(QStringLiteral("instances")),
+            "writer should not emit legacy wrapper instances root");
+    const QJsonObject component = written.value(QStringLiteral("components"))
+                                      .toArray()
+                                      .first()
+                                      .toObject();
+    require(component.value(QStringLiteral("id")).toString() == QStringLiteral("ip0"),
+            "writer should preserve instance id as flat component id");
+    require(component.value(QStringLiteral("packageRef")).toString() ==
+                QStringLiteral("vendor.example.simple@1.0.0"),
+            "writer should preserve package reference");
+    require(component.value(QStringLiteral("config")).toObject()
+                .value(QStringLiteral("width")).toInt() == 64,
+            "writer should emit flat component config");
 }
 
 void testProjectReaderRejectsUnsupportedSchema() {
@@ -408,6 +415,29 @@ void testProjectWriterUsesCanonicalSchemaAndRejectsLegacyAliases() {
     require(!result.success, "writer should not synthesize V1 fields from legacy aliases");
 }
 
+void testProjectWriterJsonObjectResultFailsClosedForInvalidFlatDesign() {
+    ProjectDocument document;
+    document.projectId = QStringLiteral("project_0");
+    document.projectName = QStringLiteral("Contract Project");
+
+    ProjectIpInstanceRecord instance;
+    instance.id = QStringLiteral("ip0");
+    instance.package.id = QStringLiteral("vendor.example.simple");
+    instance.package.version = QStringLiteral("1.0.0");
+    instance.config = QJsonObject{
+        {QStringLiteral("parameters"), QJsonObject{{QStringLiteral("x"), 10}}}
+    };
+    document.instances.append(instance);
+
+    const ProjectJsonResult result = ProjectWriter::toJsonObjectResult(document);
+    require(!result.success, "writer JSON API should reject invalid flat design output");
+    require(result.object.isEmpty(), "failed writer JSON API should not expose an object");
+    require(result.error.contains(QStringLiteral("Project design is invalid")),
+            "writer JSON API should report flat design validation failure");
+    require(ProjectWriter::toJsonObject(document).isEmpty(),
+            "legacy writer JSON API should fail closed for invalid flat design output");
+}
+
 void testProjectWriterRejectsUnknownEndpointInstance() {
     ProjectDocument document;
     document.projectId = QStringLiteral("project_0");
@@ -454,6 +484,7 @@ int main(int argc, char** argv) {
         testProjectReaderRejectsOldGraphConfigShape();
         testProjectWriterRejectsMalformedCompositionGroups();
         testProjectWriterUsesCanonicalSchemaAndRejectsLegacyAliases();
+        testProjectWriterJsonObjectResultFailsClosedForInvalidFlatDesign();
         testProjectWriterRejectsUnknownEndpointInstance();
     } catch (const std::exception& exception) {
         std::cerr << exception.what() << '\n';

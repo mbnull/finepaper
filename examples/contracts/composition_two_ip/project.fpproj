@@ -1,54 +1,68 @@
 {
   "schema": "ipcraft.project.v1",
-  "project": {
-    "id": "composition_two_ip_project",
-    "name": "Composition Two IP Project"
-  },
-  "instances": [
+  "id": "composition_two_ip_project",
+  "name": "Composition Two IP Project",
+  "packages": [
+    {
+      "id": "vendor.example.composition_endpoint",
+      "version": "1.0.0"
+    }
+  ],
+  "components": [
     {
       "id": "producer",
-      "package": {
-        "id": "vendor.example.composition_endpoint",
-        "version": "1.0.0"
-      },
+      "type": "vendor.example.composition_endpoint",
+      "packageRef": "vendor.example.composition_endpoint@1.0.0",
       "config": {}
     },
     {
       "id": "consumer",
-      "package": {
-        "id": "vendor.example.composition_endpoint",
-        "version": "1.0.0"
-      },
+      "type": "vendor.example.composition_endpoint",
+      "packageRef": "vendor.example.composition_endpoint@1.0.0",
       "config": {}
     }
   ],
-  "composition": {
-    "connections": [
-      {
-        "id": "axi_link",
-        "type": "interface",
-        "source": "user",
-        "endpoints": [
-          {
-            "instance": "producer",
-            "interface": "m_axi",
-            "role": "master"
-          },
-          {
-            "instance": "consumer",
-            "interface": "s_axi",
-            "role": "slave"
-          }
-        ]
-      }
-    ],
-    "external_ports": []
-  },
-  "layout": {
-    "views": [
-      {
-        "id": "main",
-        "kind": "canvas",
+  "interfaces": [
+    {
+      "id": "m_axi",
+      "ownerComponentId": "producer",
+      "type": "bus",
+      "role": "master",
+      "direction": "out",
+      "protocol": "axi4"
+    },
+    {
+      "id": "s_axi",
+      "ownerComponentId": "consumer",
+      "type": "bus",
+      "role": "slave",
+      "direction": "in",
+      "protocol": "axi4"
+    }
+  ],
+  "connections": [
+    {
+      "id": "axi_link",
+      "from": {
+        "component": "producer",
+        "interface": "m_axi"
+      },
+      "to": {
+        "component": "consumer",
+        "interface": "s_axi"
+      },
+      "kind": "interface"
+    }
+  ],
+  "topologies": [],
+  "views": [
+    {
+      "id": "main",
+      "schema": "ipcraft.view.v1",
+      "kind": "canvas",
+      "targetRef": "project",
+      "providerRef": "finepaper.editor",
+      "layout": {
         "canvas": {
           "nodes": {
             "producer": {
@@ -63,13 +77,10 @@
           "connections": {}
         }
       }
-    ]
-  },
-  "diagnostics": {
-    "schema": "ipcraft.diagnostics.v1",
-    "records": []
-  },
-  "artifacts": {},
-  "migration": {},
-  "native": {}
+    }
+  ],
+  "diagnostics": [],
+  "artifacts": [],
+  "extensions": [],
+  "metadata": {}
 }

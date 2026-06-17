@@ -1,16 +1,18 @@
 {
   "schema": "ipcraft.project.v1",
-  "project": {
-    "id": "table_config_project",
-    "name": "Table Config Project"
-  },
-  "instances": [
+  "id": "table_config_project",
+  "name": "Table Config Project",
+  "packages": [
+    {
+      "id": "vendor.example.table_config",
+      "version": "1.0.0"
+    }
+  ],
+  "components": [
     {
       "id": "table0",
-      "package": {
-        "id": "vendor.example.table_config",
-        "version": "1.0.0"
-      },
+      "type": "vendor.example.table_config",
+      "packageRef": "vendor.example.table_config@1.0.0",
       "config": {
         "tables": {
           "regions": {
@@ -26,16 +28,12 @@
       }
     }
   ],
-  "composition": {
-    "connections": [],
-    "external_ports": []
-  },
-  "layout": {},
-  "diagnostics": {
-    "schema": "ipcraft.diagnostics.v1",
-    "records": []
-  },
-  "artifacts": {},
-  "migration": {},
-  "native": {}
+  "interfaces": [],
+  "connections": [],
+  "topologies": [],
+  "views": [],
+  "diagnostics": [],
+  "artifacts": [],
+  "extensions": [],
+  "metadata": {}
 }
