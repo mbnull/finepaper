@@ -237,10 +237,12 @@ void testProjectDocumentToProjectDesignConversionPreservesCoreFields() {
 void testMainWindowRegistersDesignEditingService() {
     const QString source = readFile(sourceFilePath(QStringLiteral("qt/src/app/mainwindow.cpp"),
                                                    QStringLiteral("src/app/mainwindow.cpp")));
-    require(source.contains(QStringLiteral("finepaper.design-editing")),
-            "MainWindow should register finepaper.design-editing");
-    require(source.contains(QStringLiteral("registerService")),
-            "MainWindow registration scan should cover ServiceRegistry registration");
+    require(source.contains(QStringLiteral("#include \"app/serviceids.h\"")),
+            "MainWindow should use centralized app service id helpers");
+    require(source.contains(QStringLiteral("registerService(app::serviceids::designEditing()")),
+            "MainWindow should register design editing through the centralized service id");
+    require(source.contains(QStringLiteral("m_designEditingService.get()")),
+            "MainWindow registration scan should cover the design editing service instance");
 }
 
 } // namespace
