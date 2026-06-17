@@ -31,9 +31,8 @@ struct ProjectPatch {
     QJsonObject metadata;
 };
 
-// P1/P2 migration boundary backlog before UI durable edits can leave Graph commands:
-// remove component, add/remove connection, connection metadata/class/config,
-// and layout/view state.
+// Design-editing boundary: current durable operations are explicit patchops
+// symbols for component, connection, view/layout, and topology mutations.
 struct ProjectPatchReadResult {
     bool success = false;
     ProjectPatch patch;

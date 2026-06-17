@@ -1491,11 +1491,17 @@ bool MainWindow::loadDocument(const QString& path) {
                                                                  stagedProject.currentPath());
     if (!projectionResult.success) {
         m_suppressDocumentTracking = false;
+        if (m_nodeEditor) {
+            m_nodeEditor->setProjectionStale(true);
+        }
         qWarning() << "Failed to rebuild editor projection" << absolutePath << projectionResult.error;
         QMessageBox::warning(this, "Open Failed", projectionResult.error);
         return false;
     }
     m_suppressDocumentTracking = false;
+    if (m_nodeEditor) {
+        m_nodeEditor->setProjectionStale(false);
+    }
     if (m_propertyPanel) {
         m_propertyPanel->setSelectedModule(QString());
     }
@@ -1644,6 +1650,9 @@ void MainWindow::syncProjectServiceFromDesignEditingService() {
         QScopedValueRollback<bool> rollback(m_suppressDocumentTracking, true);
         const EditorProjectionResult projectionResult =
             m_editorProjectionService->rebuildProjectionViewOnly(m_projectService->document());
+        if (m_nodeEditor) {
+            m_nodeEditor->setProjectionStale(!projectionResult.success);
+        }
         if (!projectionResult.success) {
             qWarning() << "Failed to refresh editor projection from ProjectDesign"
                        << ipcraft::diagnosticids::editorProjectionFailed()
@@ -1693,6 +1702,9 @@ void MainWindow::clearDocument() {
     m_suppressDocumentTracking = true;
     m_editorProjectionService->clearProjection();
     m_suppressDocumentTracking = false;
+    if (m_nodeEditor) {
+        m_nodeEditor->setProjectionStale(false);
+    }
     seedDesignEditingServiceFromProjectService();
     if (m_propertyPanel) {
         m_propertyPanel->setSelectedModule(QString());

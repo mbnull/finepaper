@@ -56,6 +56,8 @@ public slots:
     void highlightElement(const QString& elementId);
     // Enables/disables auto-arrange mode and updates related interaction state.
     void setArrangeEnabled(bool enabled);
+    // Rejects graph-derived durable edits while the visual projection is stale.
+    void setProjectionStale(bool stale);
 
 signals:
     void moduleSelected(QString moduleId);
@@ -74,7 +76,7 @@ private slots:
     void onModuleRemoved(const QString& moduleId);
     void onConnectionAdded(Connection* connection);
     void onConnectionRemoved(const QString& connectionId);
-    // Convert user-made scene connections into graph commands.
+    // Convert user-made scene connections into design patches.
     void onConnectionCreated(QtNodes::ConnectionId connectionId);
     void onConnectionDeleted(QtNodes::ConnectionId connectionId);
     // Keep selection/parameter changes synchronized across view and side panels.
@@ -151,6 +153,7 @@ private:
     bool createModuleAt(const ScopedModulePayload& payload, const QPointF& scenePos);
     QString activeIpcoreId() const;
     QString activeInstanceId() const;
+    bool projectionIsCurrentForDurableEdit() const;
     bool moduleBelongsToActiveWorkspace(const Module* module) const;
     bool connectionBelongsToActiveWorkspace(const Connection* connection) const;
     void refreshVisibleGraphState();
@@ -181,5 +184,6 @@ private:
     QSet<QtNodes::ConnectionId> m_pendingRemovals;
     ResizeInteraction m_resize;
     int m_updatingFromGraph = 0;
+    bool m_projectionStale = false;
     QRectF m_canvasRect;
 };

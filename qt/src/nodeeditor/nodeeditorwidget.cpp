@@ -84,6 +84,17 @@ QString interfaceIdForPort(const Port& port) {
     return port.interfaceId().isEmpty() ? port.id() : port.interfaceId();
 }
 
+QString interfaceIdForEndpoint(const Graph* graph, const PortRef& ref) {
+    const Module* module = graph ? graph->getModule(ref.moduleId) : nullptr;
+    const Port* port = findPort(module, ref.portId);
+    if (!port) {
+        return ref.portId;
+    }
+
+    const QString interfaceId = interfaceIdForPort(*port).trimmed();
+    return interfaceId.isEmpty() ? ref.portId : interfaceId;
+}
+
 bool isAttachmentPort(const Module* module, const QString& portId) {
     const Port* port = findPort(module, portId);
     if (!port) {
@@ -407,10 +418,10 @@ QString uniqueConnectionId(const ipcraft::core::ProjectDesign& design,
     return QStringLiteral("%1_%2").arg(baseId).arg(ids.size() + 1);
 }
 
-QJsonObject endpointObject(const PortRef& ref) {
+QJsonObject endpointObject(const Graph* graph, const PortRef& ref) {
     return QJsonObject{
         {QStringLiteral("component"), ref.moduleId},
-        {QStringLiteral("interface"), ref.portId}
+        {QStringLiteral("interface"), interfaceIdForEndpoint(graph, ref)}
     };
 }
 
@@ -446,8 +457,8 @@ ipcraft::core::ProjectPatch connectionAddPatch(const ipcraft::core::ProjectDesig
 
     QJsonObject payload{
         {QStringLiteral("id"), connectionId},
-        {QStringLiteral("from"), endpointObject(option.source)},
-        {QStringLiteral("to"), endpointObject(option.target)},
+        {QStringLiteral("from"), endpointObject(graph, option.source)},
+        {QStringLiteral("to"), endpointObject(graph, option.target)},
         {QStringLiteral("kind"), QStringLiteral("interface")}
     };
 
@@ -487,6 +498,20 @@ ipcraft::core::ProjectPatch connectionAddPatch(const ipcraft::core::ProjectDesig
     patch.schema = ipcraft::schemaids::patchV1;
     patch.id = QStringLiteral("nodeeditor.connection.add.%1").arg(connectionId);
     patch.description = QStringLiteral("Add NodeEditor connection");
+    patch.ops.append(operation);
+    return patch;
+}
+
+ipcraft::core::ProjectPatch connectionRemovePatch(const QString& connectionId) {
+    ipcraft::core::PatchOperation operation;
+    operation.op = ipcraft::patchops::connectionRemove;
+    operation.target = QStringLiteral("connection:%1").arg(connectionId);
+
+    ipcraft::core::ProjectPatch patch;
+    patch.schema = ipcraft::schemaids::patchV1;
+    patch.id = QStringLiteral("nodeeditor.connection.remove.%1")
+        .arg(sanitizedConnectionIdPart(connectionId));
+    patch.description = QStringLiteral("Remove NodeEditor connection");
     patch.ops.append(operation);
     return patch;
 }
@@ -631,6 +656,10 @@ bool NodeEditorWidget::isArrangeEnabled() const {
     return m_graphModel->isEditingLocked();
 }
 
+void NodeEditorWidget::setProjectionStale(bool stale) {
+    m_projectionStale = stale;
+}
+
 QString NodeEditorWidget::activeIpcoreId() const {
     if (!m_workspaceController || !m_workspaceController->state().hasActiveIp) {
         return {};
@@ -654,6 +683,10 @@ QStringList NodeEditorWidget::availableCreateModuleTypes() const {
 
 QStringList NodeEditorWidget::visibleModuleIds() const {
     return m_moduleToNodeId.keys();
+}
+
+bool NodeEditorWidget::projectionIsCurrentForDurableEdit() const {
+    return !m_projectionStale;
 }
 
 bool NodeEditorWidget::moduleBelongsToActiveWorkspace(const Module* module) const {
@@ -885,6 +918,13 @@ void NodeEditorWidget::onConnectionCreated(QtNodes::ConnectionId connectionId) {
         }
         return;
     }
+    if (!projectionIsCurrentForDurableEdit()) {
+        GraphUpdateGuard guard(m_updatingFromGraph);
+        if (m_graphModel->connectionExists(connectionId)) {
+            m_graphModel->deleteConnection(connectionId);
+        }
+        return;
+    }
 
     // Mark the temporary scene edge until intent validation either accepts it
     // for design-level planning or rolls it back to the projection.
@@ -926,12 +966,30 @@ void NodeEditorWidget::onConnectionDeleted(QtNodes::ConnectionId connectionId) {
         return;
     }
 
+    QString designConnectionId;
     for (auto it = m_connectionToQtId.begin(); it != m_connectionToQtId.end(); ++it) {
         if (it.value() == connectionId) {
-            refreshVisibleGraphState();
+            designConnectionId = it.key();
             break;
         }
     }
+    if (designConnectionId.isEmpty()) {
+        refreshVisibleGraphState();
+        return;
+    }
+
+    if (!projectionIsCurrentForDurableEdit() || !m_designEditingService) {
+        refreshVisibleGraphState();
+        return;
+    }
+
+    const DesignEditResult result =
+        m_designEditingService->applyPatch(connectionRemovePatch(designConnectionId));
+    if (!result.success) {
+        refreshVisibleGraphState();
+        return;
+    }
+    refreshVisibleGraphState();
 }
 
 void NodeEditorWidget::onSelectionChanged() {
@@ -1139,6 +1197,11 @@ void NodeEditorWidget::showConnectionOptionsMenu(
 }
 
 void NodeEditorWidget::executeAddConnection(const ConnectionResolvedOption& option) {
+    if (!projectionIsCurrentForDurableEdit()) {
+        refreshVisibleGraphState();
+        return;
+    }
+
     refreshConnectionRuleService();
     ConnectionResolvedOption selectedOption = option;
 
@@ -1194,6 +1257,10 @@ void NodeEditorWidget::highlightElement(const QString& elementId) {
 
 void NodeEditorWidget::onNodeMoved(QtNodes::NodeId nodeId) {
     if (m_updatingFromGraph > 0) return;
+    if (!projectionIsCurrentForDurableEdit()) {
+        refreshVisibleGraphState();
+        return;
+    }
 
     QString moduleId = m_nodeToModuleId.value(nodeId);
     if (moduleId.isEmpty()) return;

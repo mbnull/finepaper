@@ -615,6 +615,9 @@ void testDesignEditSyncRefreshesProjectionFromProjectDocument() {
     requireContains(sync,
                     QStringLiteral("editorProjectionFailed"),
                     QStringLiteral("design editing sync"));
+    requireContains(sync,
+                    QStringLiteral("setProjectionStale"),
+                    QStringLiteral("design editing sync"));
     requireNotContains(sync,
                        QStringLiteral("GraphProjectSerializer::toProject"),
                        QStringLiteral("design editing sync"));
@@ -737,8 +740,23 @@ void testNodeEditorRoutesDurableIntentsThroughDesignPatches() {
                     QStringLiteral("connectionAdd"),
                     QStringLiteral("NodeEditorWidget connection intent"));
     requireContains(nodeEditorSource,
+                    QStringLiteral("connectionRemove"),
+                    QStringLiteral("NodeEditorWidget connection removal intent"));
+    requireContains(nodeEditorSource,
                     QStringLiteral("viewNodePositionSet"),
                     QStringLiteral("NodeEditorWidget layout intent"));
+    requireContains(nodeEditorHeader,
+                    QStringLiteral("setProjectionStale"),
+                    QStringLiteral("NodeEditorWidget projection-stale edit gate"));
+    requireContains(nodeEditorSource,
+                    QStringLiteral("projectionIsCurrentForDurableEdit"),
+                    QStringLiteral("NodeEditorWidget projection-stale edit gate"));
+    requireContains(nodeEditorSource,
+                    QStringLiteral("interfaceIdForEndpoint"),
+                    QStringLiteral("NodeEditorWidget design endpoint conversion"));
+    requireNotContains(nodeEditorSource,
+                       QStringLiteral("{QStringLiteral(\"interface\"), ref.portId}"),
+                       QStringLiteral("NodeEditorWidget must persist design interface ids, not graph port ids"));
     requireNotContains(nodeEditor,
                        QStringLiteral("CommandManager"),
                        QStringLiteral("NodeEditorWidget should not depend on graph command history"));
@@ -855,18 +873,30 @@ void testFlowRunnerCommandParsingRejectsPermissiveQtJsonConversions() {
                     QStringLiteral("FlowRunner marker-file fail-closed gate"));
 }
 
-void testProjectPatchBoundaryDocumentsMissingDesignEditingOperations() {
+void testProjectPatchBoundaryExposesDesignEditingOperations() {
     const QString patchHeader = readText(QStringLiteral("qt/inc/ipcraft/core/project_patch.h"));
-    const QStringList requiredBacklogTokens{
-        QStringLiteral("remove component"),
-        QStringLiteral("add/remove connection"),
-        QStringLiteral("connection metadata/class/config"),
-        QStringLiteral("layout/view state")
+    const QString patchOps = readText(QStringLiteral("qt/inc/ipcraft/patchops.h"));
+    const QString patchSource = readText(QStringLiteral("qt/src/ipcraft/core/project_patch.cpp"));
+    const QStringList requiredOperationSymbols{
+        QStringLiteral("componentRemove"),
+        QStringLiteral("connectionAdd"),
+        QStringLiteral("connectionRemove"),
+        QStringLiteral("connectionConfigSet"),
+        QStringLiteral("connectionMetadataSet"),
+        QStringLiteral("connectionClassSet"),
+        QStringLiteral("viewLayoutSet"),
+        QStringLiteral("viewNodePositionSet"),
+        QStringLiteral("topologyAddOrUpdate"),
+        QStringLiteral("topologyRemove")
     };
 
-    for (const QString& token : requiredBacklogTokens) {
-        requireContains(patchHeader, token, QStringLiteral("ProjectPatch P1/P2 backlog"));
+    for (const QString& token : requiredOperationSymbols) {
+        requireContains(patchOps, token, QStringLiteral("ProjectPatch operation symbols"));
+        requireContains(patchSource, token, QStringLiteral("ProjectPatch operation implementation"));
     }
+    requireNotContains(patchHeader,
+                       QStringLiteral("migration boundary backlog"),
+                       QStringLiteral("ProjectPatch P1/P2 boundary"));
 }
 
 QStringList oldGraphCommandClassNames() {
@@ -1016,7 +1046,7 @@ int main(int argc, char** argv) {
     testPluginsDoNotFallbackToDirectAppContextServices();
     testProductionUsesCentralAppBoundaryIdentifiers();
     testFlowRunnerCommandParsingRejectsPermissiveQtJsonConversions();
-    testProjectPatchBoundaryDocumentsMissingDesignEditingOperations();
+    testProjectPatchBoundaryExposesDesignEditingOperations();
     testProductRuntimeDoesNotConstructOldGraphCommands();
     testCurrentDurableCommandDirectoriesAreGraphFree();
     testOldGraphCommandSourcesAreLegacyOnly();
