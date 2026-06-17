@@ -1,6 +1,7 @@
 // PropertyPanel — shows editable parameters for the currently selected module.
 // Each parameter type (QString, int, double, bool) gets a matching Qt widget.
-// Changes are pushed through SetParameterCommand so they are undoable.
+// Graph-projected module values are read from the view model; durable edits
+// must go through design-level services.
 // blockSignals() prevents feedback loops when the model updates the widget.
 #include "panels/propertypanel.h"
 #include "graph/graph.h"
@@ -11,9 +12,7 @@
 #include "project/ipinstanceparameteradapter.h"
 #include "project/projectstateservice.h"
 #include "commands/commandmanager.h"
-#include "commands/setconnectionclasscommand.h"
 #include "commands/setipinstanceparametercommand.h"
-#include "commands/setparametercommand.h"
 #include "widgets/collapsiblesection.h"
 #include <cfloat>
 #include <climits>
@@ -429,24 +428,7 @@ void PropertyPanel::populatePanel() {
                 auto* comboBox = new QComboBox(this);
                 syncConnectionClassOptions(comboBox, *connection);
                 comboBox->setObjectName(QStringLiteral("connectionClassCombo"));
-                comboBox->setEnabled(connection->alternatives().size() > 1);
-                if (m_commandManager) {
-                    const QString connectionId = connection->id();
-                    connect(comboBox,
-                            QOverload<int>::of(&QComboBox::currentIndexChanged),
-                            this,
-                            [this, comboBox, connectionId](int index) {
-                                if (index < 0) {
-                                    return;
-                                }
-                                auto command = std::make_unique<SetConnectionClassCommand>(
-                                    m_graph,
-                                    connectionId,
-                                    comboBox->itemData(index).toString(),
-                                    m_editorMutationTarget);
-                                m_commandManager->executeCommand(std::move(command));
-                            });
-                }
+                comboBox->setEnabled(false);
                 m_formLayout->addRow(new QLabel(QStringLiteral("Connection class"), this), comboBox);
             }
             return;
@@ -596,86 +578,28 @@ void PropertyPanel::populatePanel() {
                 comboBox->addItem(choice.label, choice.value);
             }
             syncComboBoxValue(comboBox, std::get<QString>(param.value()));
-            if (!metadata->readOnly) {
-                connect(comboBox,
-                        QOverload<int>::of(&QComboBox::currentIndexChanged),
-                        this,
-                        [this, moduleId, name, comboBox](int index) {
-                            if (index < 0 || !m_graph->getModule(moduleId)) return;
-                            auto cmd = std::make_unique<SetParameterCommand>(
-                                m_graph,
-                                moduleId,
-                                name,
-                                comboBox->itemData(index).toString(),
-                                m_editorMutationTarget);
-                            m_commandManager->executeCommand(std::move(cmd));
-                        });
-            }
+            comboBox->setEnabled(false);
             widget = comboBox;
         } else if (std::holds_alternative<QString>(param.value())) {
             auto* lineEdit = new QLineEdit(std::get<QString>(param.value()));
-            if (!metadata || !metadata->readOnly) {
-                connect(lineEdit, &QLineEdit::editingFinished, this, [this, moduleId, name, lineEdit]() {
-                    if (!m_graph->getModule(moduleId)) return;
-                    auto cmd = std::make_unique<SetParameterCommand>(
-                        m_graph,
-                        moduleId,
-                        name,
-                        lineEdit->text(),
-                        m_editorMutationTarget);
-                    m_commandManager->executeCommand(std::move(cmd));
-                });
-            }
+            lineEdit->setReadOnly(true);
             widget = lineEdit;
         } else if (std::holds_alternative<int>(param.value())) {
             auto* spinBox = new QSpinBox();
             applySpinBoxMetadata(spinBox, metadata);
             spinBox->setValue(std::get<int>(param.value()));
-            if (!metadata || !metadata->readOnly) {
-                connect(spinBox, QOverload<int>::of(&QSpinBox::valueChanged), this, [this, moduleId, name](int value) {
-                    if (!m_graph->getModule(moduleId)) return;
-                    auto cmd = std::make_unique<SetParameterCommand>(
-                        m_graph,
-                        moduleId,
-                        name,
-                        value,
-                        m_editorMutationTarget);
-                    m_commandManager->executeCommand(std::move(cmd));
-                });
-            }
+            spinBox->setReadOnly(true);
             widget = spinBox;
         } else if (std::holds_alternative<double>(param.value())) {
             auto* doubleSpinBox = new QDoubleSpinBox();
             applyDoubleSpinBoxMetadata(doubleSpinBox, metadata);
             doubleSpinBox->setValue(std::get<double>(param.value()));
-            if (!metadata || !metadata->readOnly) {
-                connect(doubleSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this, moduleId, name](double value) {
-                    if (!m_graph->getModule(moduleId)) return;
-                    auto cmd = std::make_unique<SetParameterCommand>(
-                        m_graph,
-                        moduleId,
-                        name,
-                        value,
-                        m_editorMutationTarget);
-                    m_commandManager->executeCommand(std::move(cmd));
-                });
-            }
+            doubleSpinBox->setReadOnly(true);
             widget = doubleSpinBox;
         } else if (std::holds_alternative<bool>(param.value())) {
             auto* checkBox = new QCheckBox();
             checkBox->setChecked(std::get<bool>(param.value()));
-            if (!metadata || !metadata->readOnly) {
-                connect(checkBox, &QCheckBox::toggled, this, [this, moduleId, name](bool checked) {
-                    if (!m_graph->getModule(moduleId)) return;
-                    auto cmd = std::make_unique<SetParameterCommand>(
-                        m_graph,
-                        moduleId,
-                        name,
-                        checked,
-                        m_editorMutationTarget);
-                    m_commandManager->executeCommand(std::move(cmd));
-                });
-            }
+            checkBox->setEnabled(false);
             widget = checkBox;
         }
 

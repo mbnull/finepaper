@@ -1,10 +1,10 @@
 // Topology preset interaction handler implementation.
 #include "app/topologypresetinteractionhandler.h"
 
-#include "commands/topologypresetcommand.h"
 #include "commands/commandmanager.h"
 #include "ipcore/ipcatalogservice.h"
 #include "modules/moduleregistry.h"
+#include "topology/topologypresetbuilder.h"
 #include "workspace/activeworkspacecontroller.h"
 
 #include <QDebug>
@@ -181,22 +181,9 @@ PluginInteractionResult TopologyPresetInteractionHandler::handleInteraction(
         return result;
     }
 
-    std::unique_ptr<Command> rejected =
-        m_commandManager->executeCommand(std::make_unique<TopologyPresetCommand>(
-            m_graph,
-            &ModuleRegistry::instance(),
-            request,
-            m_editorMutationTarget));
-    if (auto* failed = dynamic_cast<TopologyPresetCommand*>(rejected.get())) {
-        result.message = failed->result().error.trimmed().isEmpty()
-            ? QStringLiteral("Topology preset command was rejected.")
-            : failed->result().error;
-        QMessageBox::warning(m_hostWidget, QStringLiteral("Topology"), result.message);
-        return result;
-    }
-
-    result.success = true;
-    result.message = QStringLiteral("Created %1 topology")
-                         .arg(preset->label.trimmed().isEmpty() ? preset->id : preset->label);
+    Q_UNUSED(request);
+    result.message = QStringLiteral(
+        "Topology presets require the design-level patch planner.");
+    QMessageBox::warning(m_hostWidget, QStringLiteral("Topology"), result.message);
     return result;
 }

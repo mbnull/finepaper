@@ -5,8 +5,6 @@
 #include "nodeeditor/nodeeditorentityfactory.h"
 #include "nodeeditor/graphnodemodel.h"
 #include "modules/moduletypemetadata.h"
-#include "commands/addmodulecommand.h"
-#include "commands/setparametercommand.h"
 
 #include <QtNodes/internal/NodeGraphicsObject.hpp>
 #include <QtNodes/internal/locateNode.hpp>
@@ -341,20 +339,6 @@ void NodeEditorWidget::finishNodeResize() {
 
     if (module) {
         restoreResizeParameters(module);
-        auto widthCommand = std::make_unique<SetParameterCommand>(
-            m_graph,
-            moduleId,
-            QStringLiteral("node_width"),
-            finalSize.width(),
-            m_editorMutationTarget);
-        auto heightCommand = std::make_unique<SetParameterCommand>(
-            m_graph,
-            moduleId,
-            QStringLiteral("node_height"),
-            finalSize.height(),
-            m_editorMutationTarget);
-        m_commandManager->executeCommand(std::move(widthCommand));
-        m_commandManager->executeCommand(std::move(heightCommand));
     }
 
     m_resize = ResizeInteraction{};

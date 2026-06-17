@@ -1,6 +1,6 @@
 // NodeEditorWidget — Qt widget that bridges the Graph data model and the
 // QtNodes visual canvas. Listens to Graph signals to keep the canvas in sync,
-// and translates QtNodes connection/deletion events back into Commands.
+// and keeps QtNodes interactions projected from the design-owned graph.
 // m_updatingFromGraph guards against re-entrant signal loops when the widget
 // itself drives a graph change.
 #include "nodeeditor/nodeeditorwidget.h"
@@ -20,12 +20,6 @@
 #include "project/editormutationtarget.h"
 #include "project/projectstateservice.h"
 #include "workspace/activeworkspacecontroller.h"
-#include "commands/arrangecommand.h"
-#include "commands/addmodulecommand.h"
-#include "commands/addconnectioncommand.h"
-#include "commands/removemodulecommand.h"
-#include "commands/removeconnectioncommand.h"
-#include "commands/setparametercommand.h"
 #include <QtNodes/NodeDelegateModelRegistry>
 #include <QtNodes/internal/NodeGraphicsObject.hpp>
 #include <QtNodes/internal/ConnectionGraphicsObject.hpp>
@@ -501,13 +495,6 @@ bool NodeEditorWidget::acceptsScopedModulePayload(const ScopedModulePayload& pay
 }
 
 void NodeEditorWidget::setArrangeEnabled(bool enabled) {
-    if (enabled) {
-        // Arrange itself is undoable, so entering arranged mode snapshots and
-        // applies layout through the command stack.
-        auto command = std::make_unique<ArrangeCommand>(m_graph, m_editorMutationTarget);
-        m_commandManager->executeCommand(std::move(command));
-    }
-
     m_graphModel->setEditingLocked(enabled);
     m_view->setEditingLocked(enabled);
 
@@ -742,11 +729,7 @@ void NodeEditorWidget::onConnectionDeleted(QtNodes::ConnectionId connectionId) {
 
     for (auto it = m_connectionToQtId.begin(); it != m_connectionToQtId.end(); ++it) {
         if (it.value() == connectionId) {
-            auto command = std::make_unique<RemoveConnectionCommand>(
-                m_graph,
-                it.key(),
-                m_editorMutationTarget);
-            m_commandManager->executeCommand(std::move(command));
+            refreshVisibleGraphState();
             break;
         }
     }
@@ -869,13 +852,9 @@ bool NodeEditorWidget::tryToggleCollapsed(const QPoint& viewportPos, bool requir
 }
 
 void NodeEditorWidget::toggleCollapsed(const QString& moduleId, bool collapsed) {
-    auto command = std::make_unique<SetParameterCommand>(
-        m_graph,
-        moduleId,
-        "collapsed",
-        collapsed,
-        m_editorMutationTarget);
-    m_commandManager->executeCommand(std::move(command));
+    Q_UNUSED(moduleId);
+    Q_UNUSED(collapsed);
+    refreshVisibleGraphState();
 }
 
 ConnectionRequest NodeEditorWidget::draftConnectionRequest(
@@ -974,31 +953,8 @@ void NodeEditorWidget::executeAddConnection(const PortRef& source, const PortRef
         }
     }
 
-    std::unique_ptr<Connection> connection;
-    if (!selectedOption.connectionClassId.isEmpty() ||
-        !selectedOption.normalizedInterfaces.isEmpty() ||
-        selectedOption.connectionStatus != QStringLiteral("valid") ||
-        !selectedOption.alternatives.isEmpty()) {
-        connection = std::make_unique<Connection>(
-            NodeEditorEntityFactory::generateEntityId(),
-            selectedOption.source,
-            selectedOption.target,
-            selectedOption.connectionClassId,
-            graphInterfaceRefs(selectedOption.normalizedInterfaces),
-            selectedOption.connectionStatus,
-            selectedOption.alternatives);
-    } else {
-        connection = std::make_unique<Connection>(NodeEditorEntityFactory::generateEntityId(), source, target);
-    }
-
-    auto packageManifestsProvider = [workspaceController = m_workspaceController]() {
-        return activePackageManifests(workspaceController);
-    };
-    auto command = std::make_unique<AddConnectionCommand>(m_graph,
-                                                          std::move(connection),
-                                                          std::move(packageManifestsProvider),
-                                                          m_editorMutationTarget);
-    m_commandManager->executeCommand(std::move(command));
+    Q_UNUSED(selectedOption);
+    refreshVisibleGraphState();
 }
 
 void NodeEditorWidget::highlightElement(const QString& elementId) {
@@ -1038,22 +994,7 @@ void NodeEditorWidget::onNodeMoved(QtNodes::NodeId nodeId) {
         pos = clampedPos;
     }
 
-    // Store coordinates as regular parameter commands so drag operations
-    // participate in undo/redo history.
-    auto xCmd = std::make_unique<SetParameterCommand>(
-        m_graph,
-        moduleId,
-        "x",
-        static_cast<int>(pos.x()),
-        m_editorMutationTarget);
-    auto yCmd = std::make_unique<SetParameterCommand>(
-        m_graph,
-        moduleId,
-        "y",
-        static_cast<int>(pos.y()),
-        m_editorMutationTarget);
-    m_commandManager->executeCommand(std::move(xCmd));
-    m_commandManager->executeCommand(std::move(yCmd));
+    refreshVisibleGraphState();
 }
 
 void NodeEditorWidget::onParameterChanged(const QString& paramName) {
@@ -1160,11 +1101,7 @@ bool NodeEditorWidget::showNodeContextMenu(const QPoint& viewportPos, const QPoi
     }
 
     if (selectedAction == deleteAction) {
-        auto command = std::make_unique<RemoveModuleCommand>(
-            m_graph,
-            moduleId,
-            m_editorMutationTarget);
-        m_commandManager->executeCommand(std::move(command));
+        refreshVisibleGraphState();
         return true;
     }
 
@@ -1209,31 +1146,9 @@ bool NodeEditorWidget::createModuleAt(const ScopedModulePayload& payload, const 
         return false;
     }
 
-    const QString moduleId = NodeEditorEntityFactory::generateEntityId();
-    auto module = NodeEditorEntityFactory::createModule(m_graph,
-                                                        moduleId,
-                                                        payload.moduleType,
-                                                        payload.ipcoreId,
-                                                        payload.instanceId);
-    if (!module) {
-        return false;
-    }
-
-    const QPointF clampedPos = clampNodePosition(QtNodes::InvalidNodeId, scenePos);
-    if (module->parameters().contains(QStringLiteral("x"))) {
-        module->setParameter(QStringLiteral("x"), static_cast<int>(clampedPos.x()));
-    }
-    if (module->parameters().contains(QStringLiteral("y"))) {
-        module->setParameter(QStringLiteral("y"), static_cast<int>(clampedPos.y()));
-    }
-
-    auto command = std::make_unique<AddModuleCommand>(m_graph,
-                                                      std::move(module),
-                                                      payload.ipcoreId,
-                                                      payload.instanceId,
-                                                      m_editorMutationTarget);
-    m_commandManager->executeCommand(std::move(command));
-    return m_graph->getModule(moduleId) != nullptr;
+    Q_UNUSED(scenePos);
+    refreshVisibleGraphState();
+    return false;
 }
 
 void NodeEditorWidget::refreshVisibleGraphState() {

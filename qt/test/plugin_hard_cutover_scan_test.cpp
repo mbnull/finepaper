@@ -662,6 +662,81 @@ void testProjectPatchBoundaryDocumentsMissingDesignEditingOperations() {
     }
 }
 
+QStringList oldGraphCommandClassNames() {
+    return {
+        QStringLiteral("AddModuleCommand"),
+        QStringLiteral("AddConnectionCommand"),
+        QStringLiteral("RemoveModuleCommand"),
+        QStringLiteral("RemoveConnectionCommand"),
+        QStringLiteral("SetParameterCommand"),
+        QStringLiteral("SetConnectionClassCommand"),
+        QStringLiteral("ArrangeCommand"),
+        QStringLiteral("TopologyPresetCommand")
+    };
+}
+
+QStringList oldGraphCommandIncludeNames() {
+    return {
+        QStringLiteral("addmodulecommand"),
+        QStringLiteral("addconnectioncommand"),
+        QStringLiteral("removemodulecommand"),
+        QStringLiteral("removeconnectioncommand"),
+        QStringLiteral("setparametercommand"),
+        QStringLiteral("setconnectionclasscommand"),
+        QStringLiteral("arrangecommand"),
+        QStringLiteral("topologypresetcommand")
+    };
+}
+
+void requireNoOldGraphCommandConstruction(const QString& file) {
+    const QString source = readText(file);
+    for (const QString& includeName : oldGraphCommandIncludeNames()) {
+        requireNotContains(source,
+                           QStringLiteral("commands/%1.h").arg(includeName),
+                           file);
+    }
+    for (const QString& className : oldGraphCommandClassNames()) {
+        requireNoMatch(source,
+                       QRegularExpression(QStringLiteral(
+                           "std::make_unique\\s*<\\s*%1\\b").arg(className)),
+                       file);
+        requireNoMatch(source,
+                       QRegularExpression(QStringLiteral(
+                           "\\bnew\\s+%1\\b").arg(className)),
+                       file);
+    }
+}
+
+void testProductRuntimeDoesNotConstructOldGraphCommands() {
+    const QStringList files{
+        QStringLiteral("qt/src/nodeeditor/nodeeditorwidget.cpp"),
+        QStringLiteral("qt/src/nodeeditor/events/nodeeditorwidget_events.cpp"),
+        QStringLiteral("qt/src/panels/propertypanel.cpp"),
+        QStringLiteral("qt/src/app/topologypresetinteractionhandler.cpp")
+    };
+    for (const QString& file : files) {
+        requireNoOldGraphCommandConstruction(file);
+    }
+    const QString topologyHandler =
+        readText(QStringLiteral("qt/src/app/topologypresetinteractionhandler.cpp"));
+    requireNotContains(topologyHandler,
+                       QStringLiteral("TopologyPresetCommand"),
+                       QStringLiteral("TopologyPresetInteractionHandler"));
+}
+
+void testProductTargetExcludesOldGraphCommandSources() {
+    const QString xmake = readText(QStringLiteral("qt/xmake.lua"));
+    const QString qtTarget = sectionBetween(xmake,
+                                            QStringLiteral("target(\"qt\")"),
+                                            QStringLiteral("add_qt_test_target(\"graph_test\""),
+                                            QStringLiteral("qt product target"));
+    for (const QString& includeName : oldGraphCommandIncludeNames()) {
+        requireContains(qtTarget,
+                        QStringLiteral("remove_files(\"src/commands/%1.cpp\")").arg(includeName),
+                        QStringLiteral("qt product target old graph command exclusion"));
+    }
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -685,6 +760,8 @@ int main(int argc, char** argv) {
     testPluginsDoNotFallbackToDirectAppContextServices();
     testFlowRunnerCommandParsingRejectsPermissiveQtJsonConversions();
     testProjectPatchBoundaryDocumentsMissingDesignEditingOperations();
+    testProductRuntimeDoesNotConstructOldGraphCommands();
+    testProductTargetExcludesOldGraphCommandSources();
     std::cout << "plugin_hard_cutover_scan_test passed\n";
     return 0;
 }
