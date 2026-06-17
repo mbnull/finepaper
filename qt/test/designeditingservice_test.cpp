@@ -1,4 +1,5 @@
 // DesignEditingService runtime ownership contract tests.
+#include "ipcraft/patchops.h"
 #include "ipcraft/schemaids.h"
 #include "project/designeditingservice.h"
 #include "project/projectservice.h"
@@ -69,7 +70,7 @@ ipcraft::core::ProjectPatch addComponentPatch(const QString& componentId = QStri
     patch.id = QStringLiteral("add-component");
 
     ipcraft::core::PatchOperation op;
-    op.op = QStringLiteral("add");
+    op.op = ipcraft::patchops::componentAdd;
     op.target = QStringLiteral("component");
     op.path = QStringLiteral("/components/-");
     op.payload = QJsonObject{

@@ -9,6 +9,11 @@
 
 namespace ipcraft::core {
 
+// ProjectPatch operations use op names from ipcraft::patchops. Collection adds
+// target "component", "connection", "view", or "topology" with a payload object.
+// Item edits/removes target "component:<id>", "connection:<id>", "view:<id>",
+// or "topology:<id>". Config/metadata paths are single-segment JSON Pointers;
+// view node positions use "/nodes/<componentId>" and write ViewDocument::layout.
 struct PatchOperation {
     QString op;
     QString target;
