@@ -785,7 +785,8 @@ void testFlowRunnerUsesCentralContractKeysAndDiagnosticIds() {
     for (const QFileInfo& fileInfo : repositoryTextFiles()) {
         const QString relativePath = relativeRepositoryPath(fileInfo.absoluteFilePath());
         if (!(relativePath.startsWith(QStringLiteral("qt/src/")) ||
-              relativePath.startsWith(QStringLiteral("qt/inc/"))) ||
+              relativePath.startsWith(QStringLiteral("qt/inc/")) ||
+              relativePath.startsWith(QStringLiteral("qt/cli/"))) ||
             relativePath == QStringLiteral("qt/inc/ipcraft/diagnosticids.h")) {
             continue;
         }

@@ -3,6 +3,7 @@
 #include "ipcraft/artifactmodel.h"
 #include "ipcraft/compositionmodel.h"
 #include "ipcraft/configschema.h"
+#include "ipcraft/diagnosticids.h"
 #include "ipcraft/emitter.h"
 #include "ipcraft/flowrunner.h"
 #include "ipcraft/jsonhelpers.h"
@@ -495,7 +496,7 @@ CliResult commandRunFlow(const QStringList& args) {
         if (flow.isEmpty()) {
             aggregate.ok = false;
             aggregate.diagnostics.records.append(ipcraft::cli::cliDiagnostic(
-                QStringLiteral("flow.unknown_flow"),
+                ipcraft::diagnosticids::flowUnknownFlow(),
                 QStringLiteral("Requested flow is not declared by the package."),
                 QStringLiteral("document_path"),
                 QStringLiteral("$.flows")));
