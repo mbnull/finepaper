@@ -732,6 +732,101 @@ void testPatchAppliesNamedViewAndTopologyOperations() {
             "topology.remove should remove the targeted topology");
 }
 
+void testPatchAppliesDirectViewAndTopologyPayloads() {
+    ipcraft::core::ProjectDesign project = projectWithCanvasView();
+
+    ipcraft::core::ProjectPatch patch;
+    patch.schema = ipcraft::schemaids::patchV1;
+
+    ipcraft::core::PatchOperation layoutOp;
+    layoutOp.op = ipcraft::patchops::viewLayoutSet;
+    layoutOp.target = QStringLiteral("view:canvas");
+    layoutOp.path = QStringLiteral("/layout");
+    layoutOp.payload = QJsonObject{
+        {QStringLiteral("canvas"), QJsonObject{{QStringLiteral("zoom"), 2.0}}}
+    };
+    patch.ops.append(layoutOp);
+
+    ipcraft::core::PatchOperation topologyOp;
+    topologyOp.op = ipcraft::patchops::topologyAddOrUpdate;
+    topologyOp.target = QStringLiteral("topology");
+    topologyOp.payload = QJsonObject{
+        {QStringLiteral("id"), QStringLiteral("direct_topo")},
+        {QStringLiteral("schema"), ipcraft::schemaids::topologyGraphV1},
+        {QStringLiteral("kind"), QStringLiteral("explicit_graph")},
+        {QStringLiteral("providerRef"), QStringLiteral("finepaper.topology")},
+        {QStringLiteral("nodes"), QJsonArray{QJsonObject{
+            {QStringLiteral("id"), QStringLiteral("n0")}
+        }}},
+        {QStringLiteral("links"), QJsonArray{}},
+        {QStringLiteral("attachments"), QJsonArray{}}
+    };
+    patch.ops.append(topologyOp);
+
+    const ipcraft::core::PatchApplyResult result =
+        ipcraft::core::applyPatch(project, patch);
+    require(result.success, "direct view/topology payloads should apply");
+    require(result.project.views.first().layout.value(QStringLiteral("canvas")).toObject()
+                .value(QStringLiteral("zoom")).toDouble() == 2.0,
+            "direct view.layout.set payload should replace layout");
+    require(topologyIndexById(result.project, QStringLiteral("direct_topo")) >= 0,
+            "direct topology.add_or_update payload should append topology");
+}
+
+void testPatchRejectsMalformedTopologyObjectArraysWithoutMutation() {
+    ipcraft::core::ProjectDesign project = projectWithCanvasView();
+    const QJsonObject topologyPayload{
+        {QStringLiteral("id"), QStringLiteral("bad_topo")},
+        {QStringLiteral("schema"), ipcraft::schemaids::topologyGraphV1},
+        {QStringLiteral("kind"), QStringLiteral("explicit_graph")},
+        {QStringLiteral("providerRef"), QStringLiteral("finepaper.topology")},
+        {QStringLiteral("nodes"), QJsonArray{QStringLiteral("not_an_object")}},
+        {QStringLiteral("links"), QJsonArray{}},
+        {QStringLiteral("attachments"), QJsonArray{}}
+    };
+
+    const ipcraft::core::ProjectPatch patch = readPatchOrThrow(
+        patchJsonWithOps(QJsonArray{QJsonObject{
+            {QStringLiteral("op"), ipcraft::patchops::topologyAddOrUpdate},
+            {QStringLiteral("target"), QStringLiteral("topology")},
+            {QStringLiteral("payload"), topologyPayload}
+        }}),
+        "malformed topology object-array patch should parse before apply");
+
+    const ipcraft::core::PatchApplyResult result =
+        ipcraft::core::applyPatch(project, patch);
+    require(!result.success, "non-object topology nodes should be rejected");
+    requireIssueCode(result.issues,
+                     QStringLiteral("patch.invalid_topology_nodes_shape"),
+                     "non-object topology nodes should report stable issue code");
+    require(result.project.topologies.isEmpty(),
+            "malformed topology rejection should return original project");
+    require(project.topologies.isEmpty(),
+            "malformed topology rejection should not mutate original project");
+}
+
+void testProjectValidationRejectsDuplicateViewAndTopologyIds() {
+    ipcraft::core::ProjectDesign project = projectWithCanvasView();
+    project.views.append(project.views.first());
+
+    ipcraft::core::TopologyGraph topology;
+    topology.id = QStringLiteral("mesh_topo");
+    topology.schema = ipcraft::schemaids::topologyGraphV1;
+    topology.kind = QStringLiteral("explicit_graph");
+    topology.providerRef = QStringLiteral("finepaper.topology");
+    project.topologies.append(topology);
+    project.topologies.append(topology);
+
+    const QVector<ipcraft::core::ValidationIssue> issues =
+        ipcraft::core::validateProjectDesign(project);
+    requireIssueCode(issues,
+                     QStringLiteral("view.duplicate_id"),
+                     "duplicate view ids should be rejected");
+    requireIssueCode(issues,
+                     QStringLiteral("topology.duplicate_id"),
+                     "duplicate topology ids should be rejected");
+}
+
 void testPatchApplyDecodesJsonPointerTildeEscapeInConfigKey() {
     ipcraft::core::ProjectDesign project = minimalProject();
     QJsonObject patchJson = setBaudPatchJson();
@@ -953,6 +1048,9 @@ int main() {
     testPatchAppliesNamedComponentOperations();
     testPatchAppliesNamedConnectionOperations();
     testPatchAppliesNamedViewAndTopologyOperations();
+    testPatchAppliesDirectViewAndTopologyPayloads();
+    testPatchRejectsMalformedTopologyObjectArraysWithoutMutation();
+    testProjectValidationRejectsDuplicateViewAndTopologyIds();
     testPatchApplyDecodesJsonPointerTildeEscapeInConfigKey();
     testPatchApplyDecodesJsonPointerSlashEscapeAsSingleSegment();
     testPatchRejectsMalformedJsonPointerEscapeDigitWithoutMutation();

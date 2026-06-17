@@ -353,14 +353,23 @@ QVector<ValidationIssue> validateProjectDesign(const ProjectDesign& project) {
         }
     }
 
+    QSet<QString> topologyIds;
     for (qsizetype index = 0; index < project.topologies.size(); ++index) {
         const TopologyGraph& topology = project.topologies.at(index);
+        const QString idPath = QStringLiteral("/topologies/%1/id").arg(index);
 
         if (isBlank(topology.id)) {
             appendIssue(issues,
                         QStringLiteral("topology.missing_id"),
                         QStringLiteral("Topology id is required."),
-                        QStringLiteral("/topologies/%1/id").arg(index));
+                        idPath);
+        } else if (topologyIds.contains(topology.id)) {
+            appendIssue(issues,
+                        QStringLiteral("topology.duplicate_id"),
+                        QStringLiteral("Topology id is duplicated."),
+                        idPath);
+        } else {
+            topologyIds.insert(topology.id);
         }
 
         if (!isSupportedTopologySchema(topology.schema)) {
@@ -430,14 +439,23 @@ QVector<ValidationIssue> validateProjectDesign(const ProjectDesign& project) {
         }
     }
 
+    QSet<QString> viewIds;
     for (qsizetype index = 0; index < project.views.size(); ++index) {
         const ViewDocument& view = project.views.at(index);
+        const QString idPath = QStringLiteral("/views/%1/id").arg(index);
 
         if (isBlank(view.id)) {
             appendIssue(issues,
                         QStringLiteral("view.missing_id"),
                         QStringLiteral("View id is required."),
-                        QStringLiteral("/views/%1/id").arg(index));
+                        idPath);
+        } else if (viewIds.contains(view.id)) {
+            appendIssue(issues,
+                        QStringLiteral("view.duplicate_id"),
+                        QStringLiteral("View id is duplicated."),
+                        idPath);
+        } else {
+            viewIds.insert(view.id);
         }
 
         if (isBlank(view.schema)) {

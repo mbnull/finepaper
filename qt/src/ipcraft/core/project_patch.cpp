@@ -275,8 +275,24 @@ bool operationObjectArgument(const PatchOperation& operation, QJsonObject& objec
         return true;
     }
 
-    object = {};
-    return false;
+    object = operation.payload;
+    const bool looksLikeSerializedOperation =
+        object.contains(QStringLiteral("op")) ||
+        object.contains(QStringLiteral("target")) ||
+        object.contains(QStringLiteral("path")) ||
+        object.contains(QStringLiteral("value")) ||
+        object.contains(QStringLiteral("payload"));
+    object.remove(QStringLiteral("op"));
+    object.remove(QStringLiteral("target"));
+    object.remove(QStringLiteral("path"));
+    object.remove(QStringLiteral("value"));
+    object.remove(QStringLiteral("payload"));
+
+    if (looksLikeSerializedOperation && object.isEmpty()) {
+        return false;
+    }
+
+    return true;
 }
 
 bool optionalObjectField(const QJsonObject& payload,
@@ -1018,17 +1034,6 @@ bool applyViewNodePositionSetOperation(ProjectDesign& candidate,
     return true;
 }
 
-QVector<QJsonObject> objectVectorFromArray(const QJsonArray& array) {
-    QVector<QJsonObject> objects;
-    objects.reserve(array.size());
-    for (const QJsonValue& value : array) {
-        if (value.isObject()) {
-            objects.append(value.toObject());
-        }
-    }
-    return objects;
-}
-
 bool optionalObjectArrayField(const QJsonObject& payload,
                               const QString& key,
                               const QString& code,
@@ -1045,7 +1050,16 @@ bool optionalObjectArrayField(const QJsonObject& payload,
         return false;
     }
 
-    output = objectVectorFromArray(payload.value(key).toArray());
+    const QJsonArray array = payload.value(key).toArray();
+    output.reserve(array.size());
+    for (const QJsonValue& value : array) {
+        if (!value.isObject()) {
+            issues.append(issue(code, QStringLiteral("Patch field array items must be objects."), path));
+            output = {};
+            return false;
+        }
+        output.append(value.toObject());
+    }
     return true;
 }
 
