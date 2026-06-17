@@ -97,7 +97,7 @@ void testAppContextIsRegistryOnlyForToolPipelineService() {
                        QStringLiteral("context.toolPipelineService"),
                        QStringLiteral("tool pipeline plugin source"));
     requireContains(pluginSource,
-                    QStringLiteral("finepaper.tool-pipeline"),
+                    QStringLiteral("app::serviceids::toolPipeline()"),
                     QStringLiteral("tool pipeline plugin source"));
     requireContains(pluginSource,
                     QStringLiteral("ToolPipelineService is required"),

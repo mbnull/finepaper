@@ -1,5 +1,7 @@
 #include "app/staticplugincatalog.h"
 
+#include "app/interactionids.h"
+#include "app/pluginids.h"
 #include "app/plugininteractionregistry.h"
 #include "app/pluginhost.h"
 #include "app/toolpipelineplugin.h"
@@ -31,10 +33,10 @@ QVector<PluginInteractionDescriptor> topologyInteractions(const PluginInteractio
         interaction.id = QStringLiteral("topology:") + preset.id;
         interaction.label = preset.label.trimmed().isEmpty() ? preset.id : preset.label;
         interaction.category = QStringLiteral("Topology");
-        interaction.ownerPluginId = QStringLiteral("finepaper.noc-plugin");
+        interaction.ownerPluginId = app::pluginids::nocPlugin();
         interaction.packageId = packageId;
-        interaction.extensionPoint = QStringLiteral("ui.workspaceInteraction");
-        interaction.kind = QStringLiteral("topology.preset");
+        interaction.extensionPoint = app::interactionids::workspaceInteraction();
+        interaction.kind = app::interactionids::topologyPreset();
         interaction.descriptor = QJsonObject{
             {QStringLiteral("presetId"), preset.id},
             {QStringLiteral("kind"), preset.kind},
@@ -56,8 +58,8 @@ void registerStaticPlugins(PluginHost& host) {
 
 bool registerStaticPluginInteractions(PluginInteractionRegistry& interactions) {
     PluginInteractionProviderDescriptor topologyProvider;
-    topologyProvider.id = QStringLiteral("finepaper.noc-plugin.topology-provider");
-    topologyProvider.ownerPluginId = QStringLiteral("finepaper.noc-plugin");
+    topologyProvider.id = app::interactionids::nocTopologyProvider();
+    topologyProvider.ownerPluginId = app::pluginids::nocPlugin();
     topologyProvider.factory = topologyInteractions;
     return interactions.registerProvider(topologyProvider);
 }

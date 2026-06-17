@@ -1,6 +1,8 @@
 // Topology preset interaction handler implementation.
 #include "app/topologypresetinteractionhandler.h"
 
+#include "app/interactionids.h"
+#include "app/pluginids.h"
 #include "commands/commandmanager.h"
 #include "ipcore/ipcatalogservice.h"
 #include "modules/moduleregistry.h"
@@ -114,9 +116,9 @@ TopologyPresetInteractionHandler::TopologyPresetInteractionHandler(
 bool TopologyPresetInteractionHandler::registerHandlers(
     PluginInteractionRegistry& interactions) const {
     PluginInteractionHandlerDescriptor topologyHandler;
-    topologyHandler.id = QStringLiteral("finepaper.noc-plugin.topology-preset-handler");
-    topologyHandler.ownerPluginId = QStringLiteral("finepaper.noc-plugin");
-    topologyHandler.interactionKind = QStringLiteral("topology.preset");
+    topologyHandler.id = app::interactionids::nocTopologyPresetHandler();
+    topologyHandler.ownerPluginId = app::pluginids::nocPlugin();
+    topologyHandler.interactionKind = app::interactionids::topologyPreset();
     topologyHandler.handler = [this](const PluginInteractionDescriptor& interaction,
                                      const PluginInteractionContext& context) {
         return handleInteraction(interaction, context);

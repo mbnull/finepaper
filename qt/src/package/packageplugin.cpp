@@ -2,7 +2,10 @@
 
 #include "app/appcontext.h"
 #include "app/extensionpointregistry.h"
+#include "app/interactionids.h"
+#include "app/pluginids.h"
 #include "app/plugininteractionregistry.h"
+#include "app/serviceids.h"
 #include "app/serviceregistry.h"
 #include "package/packagecoverage.h"
 #include "package/packageservice.h"
@@ -17,7 +20,7 @@ namespace {
 PackageService* packageService(AppContext& context) {
     if (context.services) {
         if (PackageService* service =
-                context.services->service<PackageService>(ServiceKey::fromLiteral("finepaper.package"))) {
+                context.services->service<PackageService>(app::serviceids::package())) {
             return service;
         }
     }
@@ -44,7 +47,7 @@ QString descriptorLabel(const PackageFeatureCoverageItem& item) {
 QString interactionKindForCoverageId(const QString& id) {
     const qsizetype separator = id.indexOf(QLatin1Char(':'));
     if (separator <= 0) {
-        return QStringLiteral("package.feature");
+        return app::interactionids::packageFeature();
     }
     return QStringLiteral("package.") + id.left(separator);
 }
@@ -65,13 +68,13 @@ QVector<PluginInteractionDescriptor> packageCoverageInteractions(
         interaction.id = QStringLiteral("package:") + item.id;
         interaction.label = descriptorLabel(item);
         interaction.category = QStringLiteral("Package");
-        interaction.ownerPluginId = QStringLiteral("finepaper.package");
+        interaction.ownerPluginId = app::pluginids::package();
         interaction.packageId = query.coverage->packageId;
         interaction.kind = interactionKindForCoverageId(item.id);
         if (item.id.startsWith(QStringLiteral("capability:"))) {
             interaction.capabilityId = item.id.mid(QStringLiteral("capability:").size());
         }
-        interaction.extensionPoint = QStringLiteral("ui.workspaceInteraction");
+        interaction.extensionPoint = app::interactionids::workspaceInteraction();
         interaction.enabled = item.status != PackageFeatureCoverageStatus::Invalid;
         interaction.descriptor = item.descriptor;
         interaction.descriptor.insert(QStringLiteral("coverageId"), item.id);
@@ -102,7 +105,7 @@ PluginInteractionResult acceptPackageCoverageInteraction(
 class PackagePlugin final : public IAppPlugin {
 public:
     QString id() const override {
-        return QStringLiteral("finepaper.package");
+        return app::pluginids::package();
     }
 
     void activate(AppContext& context) override {
@@ -114,16 +117,16 @@ public:
 
         if (context.interactions) {
             PluginInteractionProviderDescriptor provider;
-            provider.id = QStringLiteral("finepaper.package.coverage-interactions");
-            provider.ownerPluginId = QStringLiteral("finepaper.package");
+            provider.id = app::interactionids::packageCoverageInteractions();
+            provider.ownerPluginId = app::pluginids::package();
             provider.factory = packageCoverageInteractions;
             if (!context.interactions->registerProvider(provider)) {
                 throw std::runtime_error("Package coverage interaction provider could not be registered.");
             }
 
             PluginInteractionHandlerDescriptor handler;
-            handler.id = QStringLiteral("finepaper.package.coverage-interaction-handler");
-            handler.ownerPluginId = QStringLiteral("finepaper.package");
+            handler.id = app::interactionids::packageCoverageInteractionHandler();
+            handler.ownerPluginId = app::pluginids::package();
             handler.interactionIdPrefix = QStringLiteral("package:");
             handler.handler = acceptPackageCoverageInteraction;
             if (!context.interactions->registerHandler(handler)) {
@@ -132,9 +135,9 @@ public:
         }
 
         ExtensionContribution contribution;
-        contribution.id = QStringLiteral("finepaper.package.coverage-inspector");
-        contribution.extensionPoint = QStringLiteral("ui.inspectorSection");
-        contribution.ownerPluginId = QStringLiteral("finepaper.package");
+        contribution.id = app::interactionids::packageCoverageInspector();
+        contribution.extensionPoint = app::interactionids::inspectorSection();
+        contribution.ownerPluginId = app::pluginids::package();
         contribution.label = QStringLiteral("Package Coverage");
         if (!context.extensionPoints->registerContribution(contribution)) {
             throw std::runtime_error("Package coverage inspector contribution could not be registered.");

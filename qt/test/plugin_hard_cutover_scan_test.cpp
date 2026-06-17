@@ -220,6 +220,33 @@ QStringList runtimeSourceFiles(const QStringList& roots) {
     return files;
 }
 
+bool isCentralAppBoundaryIdHeader(const QString& path) {
+    return path.endsWith(QStringLiteral("qt/inc/app/serviceids.h")) ||
+           path.endsWith(QStringLiteral("qt/inc/app/pluginids.h")) ||
+           path.endsWith(QStringLiteral("qt/inc/app/interactionids.h"));
+}
+
+QStringList appBoundaryProductionFiles() {
+    const QStringList roots{
+        QStringLiteral("qt/inc/app"),
+        QStringLiteral("qt/src/app"),
+        QStringLiteral("qt/inc/project"),
+        QStringLiteral("qt/src/project"),
+        QStringLiteral("qt/inc/package"),
+        QStringLiteral("qt/src/package"),
+        QStringLiteral("qt/inc/noc"),
+        QStringLiteral("qt/src/noc")
+    };
+
+    QStringList files;
+    for (const QString& path : runtimeSourceFiles(roots)) {
+        if (!isCentralAppBoundaryIdHeader(path)) {
+            files.append(path);
+        }
+    }
+    return files;
+}
+
 void testMainWindowHasNoConcreteIpBehaviorTokens() {
     const QStringList concreteIpTokens{
         QStringLiteral("finepaper.ravenoc"),
@@ -631,6 +658,45 @@ void testPluginsDoNotFallbackToDirectAppContextServices() {
     }
 }
 
+void testProductionUsesCentralAppBoundaryIdentifiers() {
+    const QRegularExpression rawFinepaperServiceKey(QStringLiteral(
+        "ServiceKey\\s*::\\s*fromLiteral\\s*\\(\\s*\"finepaper\\."));
+    const QStringList appBoundaryIds{
+        QStringLiteral("finepaper.project"),
+        QStringLiteral("finepaper.design-editing"),
+        QStringLiteral("finepaper.package"),
+        QStringLiteral("finepaper.tool-pipeline"),
+        QStringLiteral("finepaper.workbench"),
+        QStringLiteral("finepaper.noc-plugin"),
+        QStringLiteral("finepaper.package.coverage-interactions"),
+        QStringLiteral("finepaper.package.coverage-interaction-handler"),
+        QStringLiteral("finepaper.package.coverage-inspector"),
+        QStringLiteral("finepaper.noc-plugin.topology-provider"),
+        QStringLiteral("finepaper.noc-plugin.topology-preset-handler"),
+        QStringLiteral("ui.workspaceInteraction"),
+        QStringLiteral("ui.inspectorSection"),
+        QStringLiteral("topology.preset"),
+        QStringLiteral("package.feature"),
+        QStringLiteral("editor.tool"),
+        QStringLiteral("connection.ruleProvider"),
+        QStringLiteral("tool.flowInputProjector"),
+        QStringLiteral("artifact.presenter")
+    };
+
+    for (const QString& path : appBoundaryProductionFiles()) {
+        const QString source = readText(path);
+        requireNoMatch(source, rawFinepaperServiceKey, path);
+        const QString compactSource = whitespaceStripped(source);
+        for (const QString& token : appBoundaryIds) {
+            if (isPackageIdToken(token)) {
+                requirePackageIdNotConstructed(source, compactSource, token, path);
+            } else {
+                requireNotContains(source, token, path);
+            }
+        }
+    }
+}
+
 void testFlowRunnerCommandParsingRejectsPermissiveQtJsonConversions() {
     const QString flowRunner = readText(QStringLiteral("qt/src/ipcraft/flowrunner.cpp"));
     const QString flowRunnerTest = readText(QStringLiteral("qt/test/ipcraft_flowrunner_test.cpp"));
@@ -816,6 +882,7 @@ int main(int argc, char** argv) {
     testNodeEditorUiMutationsUseProjectOwnedMutationTarget();
     testAppContextContainsOnlyRegistries();
     testPluginsDoNotFallbackToDirectAppContextServices();
+    testProductionUsesCentralAppBoundaryIdentifiers();
     testFlowRunnerCommandParsingRejectsPermissiveQtJsonConversions();
     testProjectPatchBoundaryDocumentsMissingDesignEditingOperations();
     testProductRuntimeDoesNotConstructOldGraphCommands();

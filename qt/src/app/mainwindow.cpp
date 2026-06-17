@@ -5,9 +5,11 @@
 #include "app/appsettings.h"
 #include "app/capabilityregistry.h"
 #include "app/extensionpointregistry.h"
+#include "app/interactionids.h"
 #include "app/mainwindow.h"
 #include "app/pluginhost.h"
 #include "app/plugininteractionregistry.h"
+#include "app/serviceids.h"
 #include "app/serviceregistry.h"
 #include "app/staticplugincatalog.h"
 #include "app/toolpipelineservice.h"
@@ -416,15 +418,12 @@ MainWindow::MainWindow(QWidget *parent)
       m_validateAction(nullptr),
       m_arrangeAction(nullptr),
       m_topologyMenu(nullptr) {
-    m_serviceRegistry->registerService(ServiceKey::fromLiteral("finepaper.project"),
-                                       m_projectService.get());
-    m_serviceRegistry->registerService(ServiceKey::fromLiteral("finepaper.workbench"),
-                                       m_workbenchService.get());
-    m_serviceRegistry->registerService(ServiceKey::fromLiteral("finepaper.design-editing"),
+    m_serviceRegistry->registerService(app::serviceids::project(), m_projectService.get());
+    m_serviceRegistry->registerService(app::serviceids::workbench(), m_workbenchService.get());
+    m_serviceRegistry->registerService(app::serviceids::designEditing(),
                                        m_designEditingService.get());
-    m_serviceRegistry->registerService(ServiceKey::fromLiteral("finepaper.package"),
-                                       m_packageService.get());
-    m_serviceRegistry->registerService(ServiceKey::fromLiteral("finepaper.tool-pipeline"),
+    m_serviceRegistry->registerService(app::serviceids::package(), m_packageService.get());
+    m_serviceRegistry->registerService(app::serviceids::toolPipeline(),
                                        m_toolPipelineService.get());
 
     connect(m_designEditingService.get(),
@@ -1332,7 +1331,7 @@ void MainWindow::rebuildTopologyMenu() {
                                                               coverage);
     bool hasTopologyInteraction = false;
     for (const PluginInteractionDescriptor& interaction : interactions) {
-        if (interaction.kind != QStringLiteral("topology.preset")) {
+        if (interaction.kind != app::interactionids::topologyPreset()) {
             continue;
         }
 

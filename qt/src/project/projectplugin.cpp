@@ -1,6 +1,8 @@
 #include "project/projectplugin.h"
 
 #include "app/appcontext.h"
+#include "app/pluginids.h"
+#include "app/serviceids.h"
 #include "app/serviceregistry.h"
 #include "project/projectservice.h"
 
@@ -10,13 +12,13 @@ namespace {
 
 bool hasProjectService(AppContext& context) {
     return context.services &&
-           context.services->service<ProjectService>(ServiceKey::fromLiteral("finepaper.project"));
+           context.services->service<ProjectService>(app::serviceids::project());
 }
 
 class ProjectPlugin final : public IAppPlugin {
 public:
     QString id() const override {
-        return QStringLiteral("finepaper.project");
+        return app::pluginids::project();
     }
 
     void activate(AppContext& context) override {

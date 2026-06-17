@@ -1,6 +1,8 @@
 #include "app/toolpipelineplugin.h"
 
 #include "app/appcontext.h"
+#include "app/pluginids.h"
+#include "app/serviceids.h"
 #include "app/serviceregistry.h"
 #include "app/toolpipelineservice.h"
 
@@ -11,13 +13,13 @@ namespace {
 bool hasToolPipelineService(AppContext& context) {
     return context.services &&
            context.services->service<ToolPipelineService>(
-               ServiceKey::fromLiteral("finepaper.tool-pipeline"));
+               app::serviceids::toolPipeline());
 }
 
 class ToolPipelinePlugin final : public IAppPlugin {
 public:
     QString id() const override {
-        return QStringLiteral("finepaper.tool-pipeline");
+        return app::pluginids::toolPipeline();
     }
 
     void activate(AppContext& context) override {
