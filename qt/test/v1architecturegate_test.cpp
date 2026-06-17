@@ -377,6 +377,20 @@ QStringList requiredPublicRuleIds() {
     };
 }
 
+QStringList centralizedFlowDiagnosticIds() {
+    return {
+        QStringLiteral("flow.command_policy_violation"),
+        QStringLiteral("flow.executable_missing"),
+        QStringLiteral("flow.exec_failed"),
+        QStringLiteral("flow.timeout"),
+        QStringLiteral("flow.output_truncated"),
+        QStringLiteral("flow.unknown_flow"),
+        QStringLiteral("flow.inputs_manifest_missing"),
+        QStringLiteral("flow.inputs_manifest_modified"),
+        QStringLiteral("flow.plugin_unavailable")
+    };
+}
+
 void testNoNormalRuntimePathUsesNocProjectV1() {
     const QStringList forbiddenTokens = {
         oldNocProjectSchemaName(),
@@ -777,9 +791,11 @@ void testFlowRunnerUsesCentralContractKeysAndDiagnosticIds() {
         }
 
         const QString productionSource = readTextFile(fileInfo.absoluteFilePath());
-        if (productionSource.contains(QStringLiteral("flow.command_policy_violation"))) {
-            violations.append(QStringLiteral("%1 contains raw flow.command_policy_violation")
-                                  .arg(relativePath));
+        for (const QString& ruleId : centralizedFlowDiagnosticIds()) {
+            if (productionSource.contains(ruleId)) {
+                violations.append(QStringLiteral("%1 contains raw %2")
+                                      .arg(relativePath, ruleId));
+            }
         }
     }
 

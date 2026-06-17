@@ -4,6 +4,7 @@
 #include "app/generationartifacts.h"
 #include "app/projectdesigninstanceprojection.h"
 #include "app/projectflowsupport.h"
+#include "ipcraft/diagnosticids.h"
 #include "ipcraft/ipcraftbuiltinvalidator.h"
 #include "ipcraft/packagespec.h"
 #include "ipcraft/schemaids.h"
@@ -25,6 +26,8 @@
 #include <vector>
 
 namespace {
+
+namespace diagnosticids = ipcraft::diagnosticids;
 
 QString generationSchemaName() {
     return QStringLiteral("ipcraft.generation.manifest.v1");
@@ -295,18 +298,18 @@ PackageFlowContext packageFlowContextForEntry(const IpCatalogEntry& entry) {
 
 QString diagnosticMessageForFlowFailure(const ipcraft::FlowRunResult& flowResult) {
     for (const ipcraft::Diagnostic& diagnostic : flowResult.diagnostics.records) {
-        if (diagnostic.ruleId == QStringLiteral("flow.timeout")) {
+        if (diagnostic.ruleId == diagnosticids::flowTimeout()) {
             const int elapsedMilliseconds =
                 diagnostic.details.value(QStringLiteral("timeout_ms")).toInt();
             return elapsedMilliseconds > 0
                 ? QStringLiteral("Generator timed out after %1 ms.").arg(elapsedMilliseconds)
                 : QStringLiteral("Generator timed out.");
         }
-        if (diagnostic.ruleId == QStringLiteral("flow.exec_failed")) {
+        if (diagnostic.ruleId == diagnosticids::flowExecFailed()) {
             const int exitCode = diagnostic.details.value(QStringLiteral("exit_code")).toInt(-1);
             return QStringLiteral("Generator failed (exit code %1).").arg(exitCode);
         }
-        if (diagnostic.ruleId == QStringLiteral("flow.executable_missing")) {
+        if (diagnostic.ruleId == diagnosticids::flowExecutableMissing()) {
             return QStringLiteral("Failed to start IP core generator.");
         }
     }
@@ -318,7 +321,7 @@ QString diagnosticMessageForFlowFailure(const ipcraft::FlowRunResult& flowResult
 
 int exitCodeForFlowResult(const ipcraft::FlowRunResult& flowResult) {
     for (const ipcraft::Diagnostic& diagnostic : flowResult.diagnostics.records) {
-        if (diagnostic.ruleId == QStringLiteral("flow.exec_failed")) {
+        if (diagnostic.ruleId == diagnosticids::flowExecFailed()) {
             return diagnostic.details.value(QStringLiteral("exit_code")).toInt(-1);
         }
     }
