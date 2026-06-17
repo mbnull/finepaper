@@ -385,8 +385,8 @@ NodeEditorWidget::NodeEditorWidget(Graph* graph,
     m_view->viewport()->setAcceptDrops(true);
     m_view->viewport()->installEventFilter(this);
 
-    // Graph signals are authoritative for persistent state. Scene callbacks
-    // below only translate UI intent into Commands.
+    // Graph is a projection. Scene callbacks can validate intent, but durable
+    // edits must wait for design-level patch commands.
     connect(m_graph, &Graph::moduleAdded, this, &NodeEditorWidget::onModuleAdded);
     connect(m_graph, &Graph::moduleRemoved, this, &NodeEditorWidget::onModuleRemoved);
     connect(m_graph, &Graph::connectionAdded, this, &NodeEditorWidget::onConnectionAdded);
@@ -688,7 +688,8 @@ void NodeEditorWidget::onConnectionCreated(QtNodes::ConnectionId connectionId) {
         return;
     }
 
-    // Mark optimistic scene edge until command execution emits graph::connectionAdded.
+    // Mark the temporary scene edge until intent validation either accepts it
+    // for design-level planning or rolls it back to the projection.
     m_pendingConnections.insert(connectionId);
 
     // The scene has only node/port indexes. Resolve them back to model IDs
@@ -712,7 +713,8 @@ void NodeEditorWidget::onConnectionCreated(QtNodes::ConnectionId connectionId) {
         return;
     }
 
-    // Command path remains the single source of truth for mutation + undo.
+    // Do not mutate Graph here; refresh back to projection until the
+    // design-level connection patch path is wired.
     executeAddConnection(result.options.first().source, result.options.first().target);
 }
 
@@ -720,8 +722,8 @@ void NodeEditorWidget::onConnectionDeleted(QtNodes::ConnectionId connectionId) {
     if (m_updatingFromGraph > 0) return;
     if (m_graphModel->isEditingLocked()) return;
 
-    // Programmatic deletes are staged in m_pendingRemovals to avoid building an
-    // undo command for a graph-to-scene synchronization event.
+    // Programmatic deletes are staged in m_pendingRemovals to avoid treating
+    // graph-to-scene synchronization as user intent.
     if (m_pendingRemovals.contains(connectionId)) {
         m_pendingRemovals.remove(connectionId);
         return;
@@ -906,7 +908,8 @@ bool NodeEditorWidget::tryCompleteDraftConnection(const QPoint& viewportPos) {
                                                               targetNode->nodeId(),
                                                               scenePos));
 
-    // Consume the temporary visual draft before applying validated command mutation.
+    // Consume the temporary visual draft before delegating to the design-level
+    // edit path. Until that path is wired, the view refreshes from projection.
     m_scene->resetDraftConnection();
 
     if (result.hasSingleOption()) {
