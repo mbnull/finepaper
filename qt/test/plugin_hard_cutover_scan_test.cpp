@@ -712,6 +712,7 @@ void requireNoOldGraphCommandConstruction(const QString& file) {
                            file);
     }
     for (const QString& className : oldGraphCommandClassNames()) {
+        requireNotContains(source, className, file);
         requireNoMatch(source,
                        QRegularExpression(QStringLiteral(
                            "std::make_unique\\s*<\\s*%1\\b").arg(className)),
@@ -724,13 +725,15 @@ void requireNoOldGraphCommandConstruction(const QString& file) {
 }
 
 void testProductRuntimeDoesNotConstructOldGraphCommands() {
-    const QStringList files{
-        QStringLiteral("qt/src/nodeeditor/nodeeditorwidget.cpp"),
-        QStringLiteral("qt/src/nodeeditor/events/nodeeditorwidget_events.cpp"),
-        QStringLiteral("qt/src/panels/propertypanel.cpp"),
-        QStringLiteral("qt/src/app/topologypresetinteractionhandler.cpp")
+    const QStringList roots{
+        QStringLiteral("qt/inc/app"),
+        QStringLiteral("qt/src/app"),
+        QStringLiteral("qt/inc/nodeeditor"),
+        QStringLiteral("qt/src/nodeeditor"),
+        QStringLiteral("qt/inc/panels"),
+        QStringLiteral("qt/src/panels")
     };
-    for (const QString& file : files) {
+    for (const QString& file : runtimeSourceFiles(roots)) {
         requireNoOldGraphCommandConstruction(file);
     }
     const QString topologyHandler =
