@@ -89,8 +89,8 @@ From UI to model:
 
 - accepts scoped module drag-and-drop from the active workspace module list
 - offers a canvas creation menu for active workspace module types
-- turns connection creation/deletion into commands
-- turns node moves into parameter updates
+- turns component/connection creation and deletion into `ProjectPatch` edits
+- turns node moves into view layout patches
 - emits `moduleSelected` for the property panel
 
 `PropertyPanel` reflects the currently selected module by generating widgets from parameter types:
@@ -100,7 +100,7 @@ From UI to model:
 - `double` -> `QDoubleSpinBox`
 - `bool` -> `QCheckBox`
 
-All edits are committed through `SetParameterCommand`.
+Project-level edits are committed through `DesignEditingService` and validated `ProjectPatch` operations. `Graph` remains a live projection for rendering and interaction, not the durable edit owner.
 
 `IpCatalogPanel` provides four workspace-facing lists:
 
@@ -180,19 +180,19 @@ Generation uses `ProjectGenerationRunner` to run built-in validation once, then 
 2. `ActiveWorkspaceController` exposes the selected instance's module types.
 3. User drags a type from Workspace Modules or chooses a type from the canvas creation menu.
 4. `NodeEditorWidget` validates the scoped module payload against the active workspace.
-5. `NodeEditorWidget` creates `AddModuleCommand`.
-6. Command inserts a `Module` into `Graph`.
-7. `Graph` emits `moduleAdded`.
-8. `NodeEditorWidget` creates the visual node.
+5. `NodeEditorWidget` applies a `component.add` patch plus a graph-view node-position patch through `DesignEditingService`.
+6. `MainWindow` synchronizes the updated `ProjectDesign` into `ProjectService`.
+7. `EditorProjectionService` rebuilds `Graph` from the project document.
+8. `Graph` emits `moduleAdded`.
+9. `NodeEditorWidget` creates the visual node.
 
 ### Edit a parameter
 
 1. User changes a widget in `PropertyPanel`.
-2. Panel creates `SetParameterCommand`.
-3. Command updates `Module::setParameter`.
-4. `Module` emits `parameterChanged`.
-5. `Graph` forwards the change.
-6. UI components refresh affected state.
+2. Panel applies a config patch through the design editing service.
+3. `MainWindow` synchronizes the updated design into the project document.
+4. The editor projection is refreshed from the document.
+5. UI components refresh affected state.
 
 ### Validate the design
 

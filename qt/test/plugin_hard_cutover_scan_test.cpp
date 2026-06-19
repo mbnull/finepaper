@@ -468,35 +468,11 @@ void testLegacyGraphDrcRunnerIsNotInProductValidationRuntime() {
     }
 }
 
-void testEditorMutationTargetCommandResultsAreChecked() {
-    const QStringList commandFiles{
-        QStringLiteral("qt/legacy/graphcommands/addconnectioncommand.cpp"),
-        QStringLiteral("qt/legacy/graphcommands/addmodulecommand.cpp"),
-        QStringLiteral("qt/legacy/graphcommands/arrangecommand.cpp"),
-        QStringLiteral("qt/legacy/graphcommands/removeconnectioncommand.cpp"),
-        QStringLiteral("qt/legacy/graphcommands/removemodulecommand.cpp"),
-        QStringLiteral("qt/legacy/graphcommands/setconnectionclasscommand.cpp"),
-        QStringLiteral("qt/legacy/graphcommands/setparametercommand.cpp"),
-        QStringLiteral("qt/legacy/graphcommands/topologypresetcommand.cpp")
-    };
-    const QStringList ignoredPrefixes{
-        QStringLiteral("m_editorMutationTarget->"),
-        QStringLiteral("editorMutationTarget->"),
-        QStringLiteral("target->")
-    };
-
-    for (const QString& path : commandFiles) {
-        const QStringList lines = readText(path).split(QLatin1Char('\n'));
-        for (int index = 0; index < lines.size(); ++index) {
-            const QString trimmed = lines.at(index).trimmed();
-            for (const QString& prefix : ignoredPrefixes) {
-                require(!trimmed.startsWith(prefix),
-                        QStringLiteral("%1:%2 must branch on EditorMutationTarget result")
-                            .arg(path)
-                            .arg(index + 1));
-            }
-        }
-    }
+void testLegacyGraphCommandDirectoryIsRemoved() {
+    require(!repositoryRelativePathExists(QStringLiteral("qt/legacy/graphcommands")),
+            QStringLiteral("qt/legacy/graphcommands must be removed after ProjectDesign cutover"));
+    require(!repositoryRelativePathExists(QStringLiteral("qt/inc/legacy/graphcommands")),
+            QStringLiteral("qt/inc/legacy/graphcommands must be removed after ProjectDesign cutover"));
 }
 
 void testRuntimeHasNoConcreteVendorModuleHardcoding() {
@@ -992,16 +968,24 @@ void testCurrentDurableCommandDirectoriesAreGraphFree() {
     }
 }
 
-void testOldGraphCommandSourcesAreLegacyOnly() {
+void testOldGraphCommandSourcesAreRemoved() {
     for (const QString& includeName : oldGraphCommandIncludeNames()) {
         const QString headerPath =
             QStringLiteral("qt/inc/commands/%1.h").arg(includeName);
         const QString sourcePath =
             QStringLiteral("qt/src/commands/%1.cpp").arg(includeName);
+        const QString legacyHeaderPath =
+            QStringLiteral("qt/inc/legacy/graphcommands/%1.h").arg(includeName);
+        const QString legacySourcePath =
+            QStringLiteral("qt/legacy/graphcommands/%1.cpp").arg(includeName);
         require(!repositoryRelativePathExists(headerPath),
                 headerPath + QStringLiteral(" must stay out of the current durable command include directory"));
         require(!repositoryRelativePathExists(sourcePath),
                 sourcePath + QStringLiteral(" must stay out of the current durable command source directory"));
+        require(!repositoryRelativePathExists(legacyHeaderPath),
+                legacyHeaderPath + QStringLiteral(" must be removed"));
+        require(!repositoryRelativePathExists(legacySourcePath),
+                legacySourcePath + QStringLiteral(" must be removed"));
     }
 }
 
@@ -1034,7 +1018,7 @@ int main(int argc, char** argv) {
     testProjectValidationRunnerUsesProjectDesignNotGraphOrBasicValidator();
     testValidationInputApisHaveNoInstanceSideChannel();
     testLegacyGraphDrcRunnerIsNotInProductValidationRuntime();
-    testEditorMutationTargetCommandResultsAreChecked();
+    testLegacyGraphCommandDirectoryIsRemoved();
     testRuntimeHasNoConcreteVendorModuleHardcoding();
     testCompletionReportUsesHardCutoverVerdict();
     testFinalReportsAndReadmeRegisterHardCutoverGate();
@@ -1049,7 +1033,7 @@ int main(int argc, char** argv) {
     testProjectPatchBoundaryExposesDesignEditingOperations();
     testProductRuntimeDoesNotConstructOldGraphCommands();
     testCurrentDurableCommandDirectoriesAreGraphFree();
-    testOldGraphCommandSourcesAreLegacyOnly();
+    testOldGraphCommandSourcesAreRemoved();
     testProductTargetDoesNotCompileOldGraphCommandSources();
     std::cout << "plugin_hard_cutover_scan_test passed\n";
     return 0;
