@@ -561,6 +561,67 @@ void testReplaceDesignProjectsDesignIntoEditorDocumentFields() {
             "projected editor connection should preserve design connection metadata");
 }
 
+void testReplaceDesignProjectsGraphConfigObjectsWithoutOwnerComponentModule() {
+    ipcraft::core::ProjectDesign design;
+    design.schema = ipcraft::schemaids::projectV1;
+    design.id = QStringLiteral("graph_config_projection_project");
+    design.name = QStringLiteral("Graph Config Projection Project");
+    design.packages.append(ipcraft::core::PackageRef{QStringLiteral("pkg.graph"),
+                                                     QStringLiteral("1.0")});
+
+    ipcraft::core::ComponentInstance owner;
+    owner.id = QStringLiteral("mesh0");
+    owner.type = QStringLiteral("GraphOwner");
+    owner.packageRef = QStringLiteral("pkg.graph@1.0");
+    owner.config = QJsonObject{{QStringLiteral("global_width"), 128}};
+    owner.extensionData.insert(QStringLiteral("graph_config"),
+                               QJsonObject{
+                                   {QStringLiteral("schema"), ipcraft::schemaids::graphConfigV1},
+                                   {QStringLiteral("objects"), QJsonArray{
+                                       QJsonObject{
+                                           {QStringLiteral("id"), QStringLiteral("tile0")},
+                                           {QStringLiteral("type"), QStringLiteral("GraphTile")},
+                                           {QStringLiteral("properties"),
+                                            QJsonObject{{QStringLiteral("width"), 4}}}
+                                       }
+                                   }},
+                                   {QStringLiteral("relationships"), QJsonArray{}},
+                                   {QStringLiteral("properties"), QJsonObject{}},
+                                   {QStringLiteral("native"), QJsonObject{}}
+                               });
+    design.components.append(owner);
+    ipcraft::core::ViewDocument view;
+    view.id = QStringLiteral("graph");
+    view.layout = QJsonObject{
+        {QStringLiteral("nodes"), QJsonObject{
+            {QStringLiteral("tile0"), QJsonObject{
+                {QStringLiteral("x"), 96.0},
+                {QStringLiteral("y"), 80.0}
+            }}
+        }}
+    };
+    design.views.append(view);
+
+    ProjectService service;
+    service.replaceDesign(design);
+
+    const ProjectDocument& document = service.document();
+    require(document.ipcoreState.size() == 1,
+            "graph_config owner component should still project to editor ipcore state");
+    require(document.instances.first().hasGraphConfig,
+            "graph_config owner component should project explicit instance graph_config");
+    require(document.modules.size() == 1,
+            "graph_config owner component should not project as an editor module");
+    require(document.modules.first().id == QStringLiteral("tile0") &&
+                document.modules.first().ipcoreId == QStringLiteral("pkg.graph") &&
+                document.modules.first().instanceId == QStringLiteral("mesh0") &&
+                document.modules.first().type == QStringLiteral("GraphTile") &&
+                document.modules.first().parameters.value(QStringLiteral("width")).toInt() == 4 &&
+                document.modules.first().parameters.value(QStringLiteral("x")).toDouble() == 96.0 &&
+                document.modules.first().parameters.value(QStringLiteral("y")).toDouble() == 80.0,
+            "graph_config object should project as the active editor module");
+}
+
 void testMergeDesignOnlyComponentsPreservesProjectedInstancesAndSemanticSupplement() {
     ProjectDocument document;
     document.schema = ipcraft::schemaids::projectV1;
@@ -859,6 +920,7 @@ int main(int argc, char** argv) {
         testProjectDesignSerializerMigratesExplicitLegacyComponentType();
         testReplaceDesignSaveLoadPreservesSemanticDesignFields();
         testReplaceDesignProjectsDesignIntoEditorDocumentFields();
+        testReplaceDesignProjectsGraphConfigObjectsWithoutOwnerComponentModule();
         testMergeDesignOnlyComponentsPreservesProjectedInstancesAndSemanticSupplement();
         testReplaceDesignPreservesNonDesignProjectFields();
         testRejectsUnsupportedDocumentKind();

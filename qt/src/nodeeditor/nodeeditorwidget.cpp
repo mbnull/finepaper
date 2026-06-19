@@ -35,6 +35,7 @@
 #include <QGraphicsItem>
 #include <algorithm>
 #include <cmath>
+#include <memory>
 #include <optional>
 
 static std::optional<double> toDouble(const Parameter::Value& v) {
@@ -127,6 +128,49 @@ bool boolParameter(const Module* module, const QString& name, bool fallbackValue
 
 bool isCollapsed(const Module* module) {
     return module && ModuleTypeMetadata::supportsCollapse(module) && boolParameter(module, "collapsed", true);
+}
+
+QJsonValue parameterValueToJson(const Parameter::Value& value) {
+    if (const auto* stringValue = std::get_if<QString>(&value)) {
+        return *stringValue;
+    }
+    if (const auto* intValue = std::get_if<int>(&value)) {
+        return *intValue;
+    }
+    if (const auto* doubleValue = std::get_if<double>(&value)) {
+        return *doubleValue;
+    }
+    if (const auto* boolValue = std::get_if<bool>(&value)) {
+        return *boolValue;
+    }
+    return QJsonValue(QJsonValue::Undefined);
+}
+
+bool isGraphObjectLayoutProperty(const QString& key) {
+    return key == QStringLiteral("x") ||
+           key == QStringLiteral("y") ||
+           key == QStringLiteral("collapsed");
+}
+
+QJsonObject graphObjectPropertiesForNewModule(Graph* graph,
+                                              const QString& objectId,
+                                              const QString& moduleType,
+                                              const QString& ipcoreId,
+                                              const QString& instanceId) {
+    const std::unique_ptr<Module> module =
+        NodeEditorEntityFactory::createModule(graph, objectId, moduleType, ipcoreId, instanceId);
+    if (!module) {
+        return {};
+    }
+
+    QJsonObject properties;
+    for (auto it = module->parameters().constBegin(); it != module->parameters().constEnd(); ++it) {
+        if (isGraphObjectLayoutProperty(it.key())) {
+            continue;
+        }
+        properties.insert(it.key(), parameterValueToJson(it.value().value()));
+    }
+    return properties;
 }
 
 bool isEndpointAttachmentConnection(const Graph* graph,
@@ -390,6 +434,23 @@ QSet<QString> existingConnectionIds(const ipcraft::core::ProjectDesign& design,
             ids.insert(connection.id);
         }
     }
+    for (const ipcraft::core::ComponentInstance& component : design.components) {
+        const QJsonArray relationships = component.extensionData
+                                             .value(QStringLiteral("graph_config"))
+                                             .toObject()
+                                             .value(QStringLiteral("relationships"))
+                                             .toArray();
+        for (const QJsonValue& relationshipValue : relationships) {
+            if (!relationshipValue.isObject()) {
+                continue;
+            }
+            const QString relationshipId =
+                relationshipValue.toObject().value(QStringLiteral("id")).toString().trimmed();
+            if (!relationshipId.isEmpty()) {
+                ids.insert(relationshipId);
+            }
+        }
+    }
     if (graph) {
         for (const auto& connection : graph->connections()) {
             if (connection && !connection->id().trimmed().isEmpty()) {
@@ -438,6 +499,13 @@ QJsonArray interfaceRefsObject(const QVector<ProjectConnectionInterfaceRef>& int
         });
     }
     return array;
+}
+
+QJsonObject graphRelationshipEndpoint(const Graph* graph, const PortRef& ref) {
+    return QJsonObject{
+        {QStringLiteral("object"), ref.moduleId},
+        {QStringLiteral("role"), interfaceIdForEndpoint(graph, ref)}
+    };
 }
 
 QJsonArray alternativesObject(const QStringList& alternatives) {
@@ -502,6 +570,51 @@ ipcraft::core::ProjectPatch connectionAddPatch(const ipcraft::core::ProjectDesig
     return patch;
 }
 
+ipcraft::core::ProjectPatch graphRelationshipAddPatch(
+    const ipcraft::core::ProjectDesign& design,
+    const Graph* graph,
+    const QString& ownerComponentId,
+    const ConnectionResolvedOption& option) {
+    const QString relationshipId = uniqueConnectionId(design, graph, option.source, option.target);
+
+    QJsonObject properties;
+    const QString status = option.connectionStatus.trimmed();
+    if (!status.isEmpty()) {
+        properties.insert(QStringLiteral("status"), status);
+    }
+    const QJsonArray alternatives = alternativesObject(option.alternatives);
+    if (!alternatives.isEmpty()) {
+        properties.insert(QStringLiteral("alternatives"), alternatives);
+    }
+
+    QJsonObject payload{
+        {QStringLiteral("id"), relationshipId},
+        {QStringLiteral("type"), option.connectionClassId.trimmed().isEmpty()
+            ? QStringLiteral("interface")
+            : option.connectionClassId.trimmed()},
+        {QStringLiteral("endpoints"), QJsonArray{
+            graphRelationshipEndpoint(graph, option.source),
+            graphRelationshipEndpoint(graph, option.target)
+        }}
+    };
+    if (!properties.isEmpty()) {
+        payload.insert(QStringLiteral("properties"), properties);
+    }
+
+    ipcraft::core::PatchOperation operation;
+    operation.op = ipcraft::patchops::componentGraphRelationshipAdd;
+    operation.target = QStringLiteral("component:%1").arg(ownerComponentId);
+    operation.payload = payload;
+
+    ipcraft::core::ProjectPatch patch;
+    patch.schema = ipcraft::schemaids::patchV1;
+    patch.id = QStringLiteral("nodeeditor.graph_relationship.add.%1")
+        .arg(sanitizedConnectionIdPart(relationshipId));
+    patch.description = QStringLiteral("Add NodeEditor graph relationship");
+    patch.ops.append(operation);
+    return patch;
+}
+
 ipcraft::core::ProjectPatch connectionRemovePatch(const QString& connectionId) {
     ipcraft::core::PatchOperation operation;
     operation.op = ipcraft::patchops::connectionRemove;
@@ -516,11 +629,42 @@ ipcraft::core::ProjectPatch connectionRemovePatch(const QString& connectionId) {
     return patch;
 }
 
+ipcraft::core::ProjectPatch graphRelationshipRemovePatch(const QString& ownerComponentId,
+                                                         const QString& relationshipId) {
+    ipcraft::core::PatchOperation operation;
+    operation.op = ipcraft::patchops::componentGraphRelationshipRemove;
+    operation.target = QStringLiteral("component:%1").arg(ownerComponentId);
+    operation.value = relationshipId;
+
+    ipcraft::core::ProjectPatch patch;
+    patch.schema = ipcraft::schemaids::patchV1;
+    patch.id = QStringLiteral("nodeeditor.graph_relationship.remove.%1")
+        .arg(sanitizedConnectionIdPart(relationshipId));
+    patch.description = QStringLiteral("Remove NodeEditor graph relationship");
+    patch.ops.append(operation);
+    return patch;
+}
+
 bool hasViewId(const ipcraft::core::ProjectDesign& design, const QString& viewId) {
     return std::any_of(design.views.cbegin(), design.views.cend(),
                        [&viewId](const ipcraft::core::ViewDocument& view) {
                            return view.id == viewId;
                        });
+}
+
+QJsonObject graphViewNodeLayout(const ipcraft::core::ProjectDesign& design,
+                                const QString& moduleId) {
+    for (const ipcraft::core::ViewDocument& view : design.views) {
+        if (view.id != QStringLiteral("graph")) {
+            continue;
+        }
+        return view.layout
+            .value(QStringLiteral("nodes"))
+            .toObject()
+            .value(moduleId)
+            .toObject();
+    }
+    return {};
 }
 
 QString jsonPointerSegment(QString segment) {
@@ -546,28 +690,91 @@ ipcraft::core::PatchOperation graphViewAddOperation() {
     return operation;
 }
 
-ipcraft::core::ProjectPatch nodePositionPatch(const ipcraft::core::ProjectDesign& design,
-                                              const QString& moduleId,
-                                              const QPointF& position) {
+ipcraft::core::ProjectPatch graphNodeLayoutPatch(const ipcraft::core::ProjectDesign& design,
+                                                 const QString& moduleId,
+                                                 const QJsonObject& updates,
+                                                 const QString& patchId,
+                                                 const QString& description) {
     ipcraft::core::ProjectPatch patch;
     patch.schema = ipcraft::schemaids::patchV1;
-    patch.id = QStringLiteral("nodeeditor.view.node_position.%1")
-        .arg(sanitizedConnectionIdPart(moduleId));
-    patch.description = QStringLiteral("Set NodeEditor node position");
+    patch.id = patchId;
+    patch.description = description;
 
     if (!hasViewId(design, QStringLiteral("graph"))) {
         patch.ops.append(graphViewAddOperation());
+    }
+
+    QJsonObject nodeLayout = graphViewNodeLayout(design, moduleId);
+    for (auto it = updates.constBegin(); it != updates.constEnd(); ++it) {
+        nodeLayout.insert(it.key(), it.value());
     }
 
     ipcraft::core::PatchOperation operation;
     operation.op = ipcraft::patchops::viewNodePositionSet;
     operation.target = QStringLiteral("view:graph");
     operation.path = QStringLiteral("/nodes/%1").arg(jsonPointerSegment(moduleId));
-    operation.value = QJsonObject{
-        {QStringLiteral("x"), position.x()},
-        {QStringLiteral("y"), position.y()}
-    };
+    operation.value = nodeLayout;
     patch.ops.append(operation);
+    return patch;
+}
+
+ipcraft::core::ProjectPatch nodePositionPatch(const ipcraft::core::ProjectDesign& design,
+                                              const QString& moduleId,
+                                              const QPointF& position) {
+    return graphNodeLayoutPatch(
+        design,
+        moduleId,
+        QJsonObject{
+            {QStringLiteral("x"), position.x()},
+            {QStringLiteral("y"), position.y()}
+        },
+        QStringLiteral("nodeeditor.view.node_position.%1")
+            .arg(sanitizedConnectionIdPart(moduleId)),
+        QStringLiteral("Set NodeEditor node position"));
+}
+
+ipcraft::core::ProjectPatch nodeCollapsedPatch(const ipcraft::core::ProjectDesign& design,
+                                               const QString& moduleId,
+                                               bool collapsed) {
+    return graphNodeLayoutPatch(
+        design,
+        moduleId,
+        QJsonObject{{QStringLiteral("collapsed"), collapsed}},
+        QStringLiteral("nodeeditor.view.node_collapsed.%1")
+            .arg(sanitizedConnectionIdPart(moduleId)),
+        QStringLiteral("Set NodeEditor node collapsed state"));
+}
+
+ipcraft::core::ProjectPatch graphObjectAddPatch(const ipcraft::core::ProjectDesign& design,
+                                                const QString& ownerComponentId,
+                                                const QString& objectId,
+                                                const QString& moduleType,
+                                                const QJsonObject& properties,
+                                                const QPointF& position) {
+    ipcraft::core::ProjectPatch patch;
+    patch.schema = ipcraft::schemaids::patchV1;
+    patch.id = QStringLiteral("nodeeditor.graph_object.add.%1")
+        .arg(sanitizedConnectionIdPart(objectId));
+    patch.description = QStringLiteral("Add NodeEditor graph object");
+
+    ipcraft::core::PatchOperation operation;
+    operation.op = ipcraft::patchops::componentGraphObjectAdd;
+    operation.target = QStringLiteral("component:%1").arg(ownerComponentId);
+    QJsonObject payload{
+        {QStringLiteral("id"), objectId},
+        {QStringLiteral("type"), moduleType}
+    };
+    if (!properties.isEmpty()) {
+        payload.insert(QStringLiteral("properties"), properties);
+    }
+    operation.payload = payload;
+    patch.ops.append(operation);
+
+    const ipcraft::core::ProjectPatch positionPatch =
+        nodePositionPatch(design, objectId, position);
+    for (const ipcraft::core::PatchOperation& positionOperation : positionPatch.ops) {
+        patch.ops.append(positionOperation);
+    }
     return patch;
 }
 
@@ -984,7 +1191,25 @@ void NodeEditorWidget::onConnectionDeleted(QtNodes::ConnectionId connectionId) {
     }
 
     const DesignEditResult result =
-        m_designEditingService->applyPatch(connectionRemovePatch(designConnectionId));
+        m_designEditingService->applyPatch([&]() {
+            const std::optional<ActiveWorkspaceContext> context =
+                m_workspaceController ? m_workspaceController->activeContext()
+                                      : std::nullopt;
+            const Connection* connection = m_graph->getConnection(designConnectionId);
+            const Module* sourceModule =
+                connection ? m_graph->getModule(connection->source().moduleId) : nullptr;
+            const Module* targetModule =
+                connection ? m_graph->getModule(connection->target().moduleId) : nullptr;
+            if (context.has_value() &&
+                sourceModule &&
+                targetModule &&
+                sourceModule->instanceId() == context->record.instanceId &&
+                targetModule->instanceId() == context->record.instanceId) {
+                return graphRelationshipRemovePatch(context->record.instanceId,
+                                                    designConnectionId);
+            }
+            return connectionRemovePatch(designConnectionId);
+        }());
     if (!result.success) {
         refreshVisibleGraphState();
         return;
@@ -1109,11 +1334,31 @@ bool NodeEditorWidget::tryToggleCollapsed(const QPoint& viewportPos, bool requir
 }
 
 void NodeEditorWidget::toggleCollapsed(const QString& moduleId, bool collapsed) {
-    Q_UNUSED(moduleId);
-    Q_UNUSED(collapsed);
-    // TODO: persist collapsed presentation state through a view patch once the
-    // view schema has a stable collapsed-node field.
-    refreshVisibleGraphState();
+    if (!projectionIsCurrentForDurableEdit()) {
+        refreshVisibleGraphState();
+        return;
+    }
+
+    Module* module = m_graph ? m_graph->getModule(moduleId) : nullptr;
+    if (!module || !ModuleTypeMetadata::supportsCollapse(module)) {
+        refreshVisibleGraphState();
+        return;
+    }
+
+    if (!m_designEditingService) {
+        refreshVisibleGraphState();
+        return;
+    }
+
+    const DesignEditResult result = m_designEditingService->applyPatch(
+        nodeCollapsedPatch(m_designEditingService->design(), moduleId, collapsed));
+    if (!result.success) {
+        refreshVisibleGraphState();
+        return;
+    }
+
+    module->setParameter(QStringLiteral("collapsed"), collapsed);
+    refreshModulePresentation(moduleId);
 }
 
 ConnectionRequest NodeEditorWidget::draftConnectionRequest(
@@ -1223,8 +1468,25 @@ void NodeEditorWidget::executeAddConnection(const ConnectionResolvedOption& opti
         return;
     }
 
+    const std::optional<ActiveWorkspaceContext> context =
+        m_workspaceController ? m_workspaceController->activeContext()
+                              : std::nullopt;
+    const Module* sourceModule = m_graph->getModule(selectedOption.source.moduleId);
+    const Module* targetModule = m_graph->getModule(selectedOption.target.moduleId);
+    const bool graphRelationshipConnection =
+        context.has_value() &&
+        sourceModule &&
+        targetModule &&
+        sourceModule->instanceId() == context->record.instanceId &&
+        targetModule->instanceId() == context->record.instanceId;
+
     const DesignEditResult result = m_designEditingService->applyPatch(
-        connectionAddPatch(m_designEditingService->design(), m_graph, selectedOption));
+        graphRelationshipConnection
+            ? graphRelationshipAddPatch(m_designEditingService->design(),
+                                        m_graph,
+                                        context->record.instanceId,
+                                        selectedOption)
+            : connectionAddPatch(m_designEditingService->design(), m_graph, selectedOption));
     if (!result.success) {
         refreshVisibleGraphState();
         return;
@@ -1284,7 +1546,12 @@ void NodeEditorWidget::onNodeMoved(QtNodes::NodeId nodeId) {
         refreshVisibleGraphState();
         return;
     }
-    refreshVisibleGraphState();
+
+    if (Module* module = m_graph->getModule(moduleId)) {
+        GraphUpdateGuard guard(m_updatingFromGraph);
+        module->setParameter(QStringLiteral("x"), pos.x());
+        module->setParameter(QStringLiteral("y"), pos.y());
+    }
 }
 
 void NodeEditorWidget::onParameterChanged(const QString& paramName) {
@@ -1436,9 +1703,35 @@ bool NodeEditorWidget::createModuleAt(const ScopedModulePayload& payload, const 
         return false;
     }
 
-    Q_UNUSED(scenePos);
+    if (!m_designEditingService || !m_workspaceController) {
+        refreshVisibleGraphState();
+        return false;
+    }
+
+    const std::optional<ActiveWorkspaceContext> context = m_workspaceController->activeContext();
+    if (!context.has_value() ||
+        context->record.ipcoreId != payload.ipcoreId ||
+        context->record.instanceId != payload.instanceId) {
+        refreshVisibleGraphState();
+        return false;
+    }
+
+    const QString objectId = NodeEditorEntityFactory::generateEntityId();
+    const QPointF clampedPos = clampNodePosition(QtNodes::InvalidNodeId, scenePos);
+    const QJsonObject properties = graphObjectPropertiesForNewModule(m_graph,
+                                                                     objectId,
+                                                                     payload.moduleType,
+                                                                     payload.ipcoreId,
+                                                                     payload.instanceId);
+    const DesignEditResult result = m_designEditingService->applyPatch(
+        graphObjectAddPatch(m_designEditingService->design(),
+                            context->record.instanceId,
+                            objectId,
+                            payload.moduleType,
+                            properties,
+                            clampedPos));
     refreshVisibleGraphState();
-    return false;
+    return result.success;
 }
 
 void NodeEditorWidget::refreshVisibleGraphState() {

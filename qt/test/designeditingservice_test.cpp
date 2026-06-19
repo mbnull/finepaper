@@ -8,6 +8,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QString>
 #include <iostream>
@@ -89,6 +90,23 @@ ipcraft::core::ProjectPatch addComponentPatch(const QString& componentId = QStri
 ipcraft::core::ProjectPatch invalidAddComponentPatch() {
     ipcraft::core::ProjectPatch patch = addComponentPatch(QStringLiteral("broken"));
     patch.ops.first().payload.remove(QStringLiteral("type"));
+    return patch;
+}
+
+ipcraft::core::ProjectPatch addGraphConfigObjectPatch() {
+    ipcraft::core::ProjectPatch patch;
+    patch.schema = ipcraft::schemaids::patchV1;
+    patch.id = QStringLiteral("add-graph-object");
+
+    ipcraft::core::PatchOperation op;
+    op.op = ipcraft::patchops::componentGraphObjectAdd;
+    op.target = QStringLiteral("component:mesh0");
+    op.payload = QJsonObject{
+        {QStringLiteral("id"), QStringLiteral("tile0")},
+        {QStringLiteral("type"), QStringLiteral("VendorSwitch")},
+        {QStringLiteral("properties"), QJsonObject{{QStringLiteral("width"), 4}}}
+    };
+    patch.ops.append(op);
     return patch;
 }
 
@@ -174,6 +192,50 @@ void testFailedPatchDoesNotPushUndoHistory() {
             "failed patch must not add an extra undo checkpoint");
 }
 
+void testComponentGraphObjectPatchMutatesExtensionDataAndSupportsUndoRedo() {
+    DesignEditingService service;
+    ipcraft::core::ProjectDesign design = emptyMeshProject();
+    ipcraft::core::ComponentInstance component;
+    component.id = QStringLiteral("mesh0");
+    component.type = QStringLiteral("VendorSwitch");
+    component.packageRef = QStringLiteral("vendor.meshnoc@1.0.0");
+    design.components.append(component);
+    service.replaceDesign(design);
+
+    const DesignEditResult apply = service.applyPatch(addGraphConfigObjectPatch());
+    require(apply.success, "graph object patch should apply");
+
+    const QJsonObject graphConfig = service.design()
+                                        .components.first()
+                                        .extensionData.value(QStringLiteral("graph_config"))
+                                        .toObject();
+    const QJsonArray objects = graphConfig.value(QStringLiteral("objects")).toArray();
+    require(objects.size() == 1, "graph object patch should append one object");
+    require(objects.first().toObject().value(QStringLiteral("id")).toString() ==
+                QStringLiteral("tile0"),
+            "graph object patch should preserve object id");
+    require(objects.first().toObject().value(QStringLiteral("type")).toString() ==
+                QStringLiteral("VendorSwitch"),
+            "graph object patch should preserve object type");
+    require(service.canUndo(), "graph object patch should be undoable");
+
+    const DesignEditResult undo = service.undo();
+    require(undo.success, "graph object patch undo should succeed");
+    require(!service.design().components.first().extensionData.contains(QStringLiteral("graph_config")),
+            "undo should remove graph object extension data");
+
+    const DesignEditResult redo = service.redo();
+    require(redo.success, "graph object patch redo should succeed");
+    require(service.design()
+                .components.first()
+                .extensionData.value(QStringLiteral("graph_config"))
+                .toObject()
+                .value(QStringLiteral("objects"))
+                .toArray()
+                .size() == 1,
+            "redo should restore graph object extension data");
+}
+
 void testProjectServiceOwnsAndReplacesRuntimeDesign() {
     ProjectService service;
     ipcraft::core::ProjectDesign design = emptyMeshProject();
@@ -253,6 +315,7 @@ int main(int argc, char** argv) {
     try {
         testApplyPatchMutatesDesignAndSupportsUndoRedo();
         testFailedPatchDoesNotPushUndoHistory();
+        testComponentGraphObjectPatchMutatesExtensionDataAndSupportsUndoRedo();
         testProjectServiceOwnsAndReplacesRuntimeDesign();
         testProjectDocumentToProjectDesignConversionPreservesCoreFields();
         testMainWindowRegistersDesignEditingService();

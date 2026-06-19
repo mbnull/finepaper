@@ -118,5 +118,10 @@ struct GraphConfigReadResult {
 };
 
 DiagnosticStore validateGraphConfig(const GraphConfig& graphConfig);
+GraphConfig graphConfigFromJsonOrDefault(const QJsonObject& object);
+bool appendGraphConfigObject(GraphConfig& graphConfig, const GraphConfigObject& graphObject);
+bool appendGraphConfigRelationship(GraphConfig& graphConfig,
+                                   const GraphConfigRelationship& relationship);
+bool removeGraphConfigRelationship(GraphConfig& graphConfig, const QString& relationshipId);
 
 } // namespace ipcraft

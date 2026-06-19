@@ -5,11 +5,7 @@
 #include "app/serviceregistry.h"
 #include "app/staticplugincatalog.h"
 #include "commands/addipinstancecommand.h"
-#include "legacy/graphcommands/addconnectioncommand.h"
-#include "legacy/graphcommands/addmodulecommand.h"
 #include "commands/commandmanager.h"
-#include "legacy/graphcommands/removeipinstancecommand.h"
-#include "legacy/graphcommands/setparametercommand.h"
 #include "commands/setipinstanceparametercommand.h"
 #include "ipcraft/schemaids.h"
 #include "ipcore/ipcatalogservice.h"
@@ -35,6 +31,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QInputDialog>
+#include <QJsonArray>
 #include <QKeyEvent>
 #include <QLabel>
 #include <QLineEdit>
@@ -52,8 +49,12 @@
 #include <iostream>
 #include <memory>
 #include <stdexcept>
+#include <variant>
 
 #define private public
+#include "nodeeditor/editorgraphmodel.h"
+#include "nodeeditor/graphnodemodel.h"
+#include "nodeeditor/nodeeditorwidget.h"
 #include "app/mainwindow.h"
 #undef private
 
@@ -695,6 +696,123 @@ bool graphConfigHasRelationship(const ProjectDocument& document,
         }
     }
     return false;
+}
+
+bool graphHasWorkspaceModule(const Graph& graph,
+                             const QString& ipcoreId,
+                             const QString& instanceId,
+                             const QString& moduleType) {
+    for (const std::unique_ptr<Module>& module : graph.modules()) {
+        if (module &&
+            module->ipcoreId() == ipcoreId &&
+            module->instanceId() == instanceId &&
+            module->type() == moduleType) {
+            return true;
+        }
+    }
+    return false;
+}
+
+QString workspaceModuleId(const Graph& graph,
+                          const QString& ipcoreId,
+                          const QString& instanceId,
+                          const QString& moduleType) {
+    for (const std::unique_ptr<Module>& module : graph.modules()) {
+        if (module &&
+            module->ipcoreId() == ipcoreId &&
+            module->instanceId() == instanceId &&
+            module->type() == moduleType) {
+            return module->id();
+        }
+    }
+    return {};
+}
+
+QStringList workspaceModuleIds(const Graph& graph,
+                               const QString& ipcoreId,
+                               const QString& instanceId,
+                               const QString& moduleType) {
+    QStringList ids;
+    for (const std::unique_ptr<Module>& module : graph.modules()) {
+        if (module &&
+            module->ipcoreId() == ipcoreId &&
+            module->instanceId() == instanceId &&
+            module->type() == moduleType) {
+            ids.append(module->id());
+        }
+    }
+    return ids;
+}
+
+double moduleDoubleParameter(const Module* module, const QString& name) {
+    require(module != nullptr, "module should exist before reading a parameter");
+    const auto it = module->parameters().constFind(name);
+    require(it != module->parameters().constEnd(), "module parameter should exist");
+    const Parameter::Value value = it.value().value();
+    if (const auto* doubleValue = std::get_if<double>(&value)) {
+        return *doubleValue;
+    }
+    if (const auto* intValue = std::get_if<int>(&value)) {
+        return static_cast<double>(*intValue);
+    }
+    require(false, "module parameter should be numeric");
+    return 0.0;
+}
+
+int graphRelationshipCount(const ipcraft::core::ProjectDesign& design,
+                           const QString& componentId) {
+    for (const ipcraft::core::ComponentInstance& component : design.components) {
+        if (component.id != componentId) {
+            continue;
+        }
+        return component.extensionData
+            .value(QStringLiteral("graph_config"))
+            .toObject()
+            .value(QStringLiteral("relationships"))
+            .toArray()
+            .size();
+    }
+    return -1;
+}
+
+QJsonObject graphConfigObjectProperties(const ipcraft::core::ProjectDesign& design,
+                                        const QString& componentId,
+                                        const QString& objectId) {
+    for (const ipcraft::core::ComponentInstance& component : design.components) {
+        if (component.id != componentId) {
+            continue;
+        }
+        const QJsonArray objects = component.extensionData
+            .value(QStringLiteral("graph_config"))
+            .toObject()
+            .value(QStringLiteral("objects"))
+            .toArray();
+        for (const QJsonValue& objectValue : objects) {
+            if (!objectValue.isObject()) {
+                continue;
+            }
+            const QJsonObject object = objectValue.toObject();
+            if (object.value(QStringLiteral("id")).toString() == objectId) {
+                return object.value(QStringLiteral("properties")).toObject();
+            }
+        }
+    }
+    return {};
+}
+
+QJsonObject graphViewNodeLayout(const ipcraft::core::ProjectDesign& design,
+                                const QString& objectId) {
+    for (const ipcraft::core::ViewDocument& view : design.views) {
+        if (view.id != QStringLiteral("graph")) {
+            continue;
+        }
+        return view.layout
+            .value(QStringLiteral("nodes"))
+            .toObject()
+            .value(objectId)
+            .toObject();
+    }
+    return {};
 }
 
 ProjectIpInstanceRecord addCatalogInstanceViaCommand(MainWindow& window,
@@ -1468,7 +1586,7 @@ void testDesignEditingServiceAddComponentPersistsThroughMainWindowSave() {
     require(edit.success, "design add-component patch should apply");
     const bool dirtyAfterEdit = window.m_documentDirty && window.isWindowModified();
 
-    require(window.saveDocument(projectPath),
+    require(saveDocumentWithAutoClosedMessageBoxes(window, projectPath),
             "MainWindow should save after a design editing patch");
     const auto requireSavedComponent = [&projectPath](const char* context) {
         ProjectService reloaded;
@@ -1492,7 +1610,7 @@ void testDesignEditingServiceAddComponentPersistsThroughMainWindowSave() {
             "design editing patch should mark MainWindow dirty before save");
     require(!window.m_documentDirty && !window.isWindowModified(),
             "successful save should clear MainWindow dirty state");
-    require(window.saveDocument(projectPath),
+    require(saveDocumentWithAutoClosedMessageBoxes(window, projectPath),
             "clean follow-up save should succeed after a design editing save");
     requireSavedComponent("clean follow-up save should preserve the design-edit component");
 }
@@ -1506,93 +1624,6 @@ std::unique_ptr<Module> editorSaveModule(const QString& id, const QString& type)
     module->addPort(Port(QStringLiteral("in"), Port::Direction::Input, QStringLiteral("bus"),
                          QStringLiteral("In")));
     return module;
-}
-
-void testMigratedEditorModuleConnectionAndParameterCommandsSaveNormally() {
-    QTemporaryDir tempDir;
-    require(tempDir.isValid(), "temporary directory should be valid");
-    const QString projectPath =
-        tempDir.filePath(QStringLiteral("migrated_editor_mutations.fpproj"));
-    writeDesignFixtureProject(projectPath,
-                              loadedDesignFixture(QStringLiteral("Migrated Editor Save")));
-
-    MainWindow window;
-    require(window.loadGraph(projectPath),
-            "project should load before migrated editor command save");
-
-    std::unique_ptr<Command> rejected = window.m_commandManager->executeCommand(
-        std::make_unique<AddModuleCommand>(window.m_graph,
-                                           editorSaveModule(QStringLiteral("editor_source"),
-                                                            QStringLiteral("EditorSource")),
-                                           QStringLiteral("vendor.designpkg"),
-                                           QStringLiteral("component0"),
-                                           window.m_projectService.get()));
-    require(rejected == nullptr, "migrated editor source module command should execute");
-    rejected = window.m_commandManager->executeCommand(
-        std::make_unique<AddModuleCommand>(window.m_graph,
-                                           editorSaveModule(QStringLiteral("editor_sink"),
-                                                            QStringLiteral("EditorSink")),
-                                           QStringLiteral("vendor.designpkg"),
-                                           QStringLiteral("component0"),
-                                           window.m_projectService.get()));
-    require(rejected == nullptr, "migrated editor sink module command should execute");
-
-    rejected = window.m_commandManager->executeCommand(
-        std::make_unique<SetParameterCommand>(window.m_graph,
-                                              QStringLiteral("editor_source"),
-                                              QStringLiteral("x"),
-                                              123,
-                                              window.m_projectService.get()));
-    require(rejected == nullptr, "migrated editor layout parameter command should execute");
-    rejected = window.m_commandManager->executeCommand(
-        std::make_unique<SetParameterCommand>(window.m_graph,
-                                              QStringLiteral("editor_source"),
-                                              QStringLiteral("vc_count"),
-                                              7,
-                                              window.m_projectService.get()));
-    require(rejected == nullptr, "migrated editor graph parameter command should execute");
-
-    rejected = window.m_commandManager->executeCommand(
-        std::make_unique<AddConnectionCommand>(
-            window.m_graph,
-            std::make_unique<Connection>(QStringLiteral("editor_link"),
-                                         PortRef{QStringLiteral("editor_source"), QStringLiteral("out")},
-                                         PortRef{QStringLiteral("editor_sink"), QStringLiteral("in")}),
-            AddConnectionCommand::PackageManifestsProvider{},
-            window.m_projectService.get()));
-    require(rejected == nullptr, "migrated editor connection command should execute");
-
-    require(window.m_projectStateDirty,
-            "migrated editor graph command should mark project state dirty before save");
-    require(saveDocumentWithAutoClosedMessageBoxes(window, projectPath),
-            "normal save should not block migrated editor command mutations");
-
-    ProjectService reloaded;
-    const ProjectServiceResult loadResult = reloaded.loadFile(projectPath);
-    require(loadResult.success, "migrated editor command project should reload as valid V1");
-    require(graphConfigHasObject(reloaded.document(),
-                                 QStringLiteral("component0"),
-                                 QStringLiteral("editor_source")),
-            "migrated editor source module should persist through graph_config");
-    require(graphConfigHasObject(reloaded.document(),
-                                 QStringLiteral("component0"),
-                                 QStringLiteral("editor_sink")),
-            "migrated editor sink module should persist through graph_config");
-    require(graphConfigObject(reloaded.document(),
-                              QStringLiteral("component0"),
-                              QStringLiteral("editor_source"))
-                .value(QStringLiteral("properties")).toObject()
-                .value(QStringLiteral("vc_count")).toInt() == 7,
-            "migrated editor graph parameter should persist through graph_config");
-    require(layoutNodeForObject(reloaded.document(), QStringLiteral("editor_source"))
-                .value(QStringLiteral("x")).toInt() == 123,
-            "migrated editor layout parameter should persist through V1 layout");
-    require(graphConfigHasRelationship(reloaded.document(),
-                                       QStringLiteral("component0"),
-                                       QStringLiteral("editor_link")),
-            "migrated editor connection should persist through graph_config");
-    require(!window.m_documentDirty && !window.isWindowModified(),
-            "successful migrated editor save should clear dirty state");
 }
 
 void testSavedDesignEditBlocksLaterUnmigratedGraphProjectionSave() {
@@ -1616,19 +1647,9 @@ void testSavedDesignEditBlocksLaterUnmigratedGraphProjectionSave() {
     require(!window.m_designEditingDirty,
             "first save should clear design editing dirty state");
 
-    auto module = std::make_unique<Module>(QStringLiteral("later_graph_node"),
-                                           QStringLiteral("LaterGraphModule"));
-    module->setIpcoreId(QStringLiteral("vendor.designpkg"));
-    module->setInstanceId(QStringLiteral("component0"));
-    std::unique_ptr<Command> rejected = window.m_commandManager->executeCommand(
-        std::make_unique<AddModuleCommand>(window.m_graph,
-                                           std::move(module),
-                                           QStringLiteral("vendor.designpkg"),
-                                           QStringLiteral("component0")));
-    require(rejected == nullptr,
-            "graph add-module command should execute after design-only save");
-    require(window.m_commandManager->currentStateId() != window.m_cleanStateId,
-            "graph edit should leave graph history dirty before second save");
+    require(window.m_graph->addModule(editorSaveModule(QStringLiteral("later_graph_node"),
+                                                       QStringLiteral("LaterGraphModule"))),
+            "unmigrated graph projection node should be added after design-only save");
     require(!window.m_designEditingDirty,
             "graph-only edit should not re-mark design editing dirty before second save");
 
@@ -1659,24 +1680,14 @@ void testMainWindowSaveBlocksMixedGraphAndDesignEdits() {
     require(window.loadGraph(projectPath),
             "project should load before mixed graph and design save block test");
 
-    auto module = std::make_unique<Module>(QStringLiteral("mixed_graph_node"),
-                                           QStringLiteral("MixedGraphModule"));
-    module->setIpcoreId(QStringLiteral("vendor.designpkg"));
-    module->setInstanceId(QStringLiteral("component0"));
-    std::unique_ptr<Command> rejected = window.m_commandManager->executeCommand(
-        std::make_unique<AddModuleCommand>(window.m_graph,
-                                           std::move(module),
-                                           QStringLiteral("vendor.designpkg"),
-                                           QStringLiteral("component0")));
-    require(rejected == nullptr,
-            "graph add-module command should execute before mixed save");
+    require(window.m_graph->addModule(editorSaveModule(QStringLiteral("mixed_graph_node"),
+                                                       QStringLiteral("MixedGraphModule"))),
+            "unmigrated graph projection node should be added before mixed save");
 
     DesignEditingService* editing = designEditingServiceFromRegistry(window);
     const DesignEditResult edit =
         editing->applyPatch(addDesignComponentPatch(QStringLiteral("component1")));
     require(edit.success, "design add-component patch should apply before mixed save");
-    require(window.m_commandManager->currentStateId() != window.m_cleanStateId,
-            "graph command should leave graph history dirty before mixed save");
     require(window.m_designEditingDirty,
             "design edit should leave design editing state dirty before mixed save");
 
@@ -1990,13 +2001,12 @@ void testProjectStateMutationsRefreshProjectDesignBeforeSave() {
                                      QStringLiteral("lane_width")) == 13,
             "DesignEditingService cache should use the current unsaved parameter value");
 
-    std::unique_ptr<Command> rejected = window.m_commandManager->executeCommand(
-        std::make_unique<RemoveIpInstanceCommand>(window.m_graph,
-                                                  window.m_projectStateService.get(),
-                                                  window.m_projectIpService.get(),
-                                                  packageId,
-                                                  QStringLiteral("freshness_0")));
-    require(rejected == nullptr, "catalog instance remove command should execute");
+    require(window.m_projectStateService->removeIpInstanceRecord(packageId,
+                                                                 QStringLiteral("freshness_0")),
+            "catalog instance state should be removed");
+    window.m_projectIpService->handleIpInstanceRecordsMutated(
+        std::nullopt,
+        ProjectIpService::SelectionFallbackPolicy::ExactOrClear);
     processEventsFor(0);
 
     require(!designHasComponent(window.m_projectService->design(), QStringLiteral("freshness_0")),
@@ -2059,6 +2069,163 @@ void testNewProjectAddsIpcraftPackageInstanceFromCatalog() {
     auto* logList = window.m_logPanel->findChild<QListWidget*>();
     require(listContainsText(logList, QStringLiteral("IP core package finepaper.ravenoc")),
             "startup log should include the loaded package manifest");
+}
+
+void testNodeEditorCreatesRavenocModulesInActiveWorkspaceProjection() {
+    QTemporaryDir tempDir;
+    QTemporaryDir settingsRoot;
+    require(tempDir.isValid() && settingsRoot.isValid(), "temporary directory should be valid");
+    configureSettingsRoot(settingsRoot.path(),
+                          QStringLiteral("ipcatalogpanel_nodeeditor_create_app"));
+    AppSettings().setIpcorePaths(QStringList{repositoryPath(QStringLiteral("ipcores"))});
+
+    MainWindow window;
+    const QString projectPath = tempDir.filePath(QStringLiteral("nodeeditor_create.fpproj"));
+    require(window.createProjectAt(projectPath), "project should be created before canvas edits");
+    const ProjectIpInstanceRecord record =
+        addCatalogInstanceViaCommand(window, QStringLiteral("finepaper.ravenoc"));
+    require(record.instanceId == QStringLiteral("ravenoc_0"),
+            "RaveNoC instance should use the stable active workspace id");
+
+    const QString tileType = ModuleRegistry::scopedTypeName(QStringLiteral("finepaper.ravenoc"),
+                                                           QStringLiteral("RaveTile"));
+    const QString endpointType = ModuleRegistry::scopedTypeName(QStringLiteral("finepaper.ravenoc"),
+                                                               QStringLiteral("RaveEndpoint"));
+    NodeEditorWidget::ScopedModulePayload tilePayload;
+    tilePayload.ipcoreId = record.ipcoreId;
+    tilePayload.instanceId = record.instanceId;
+    tilePayload.moduleType = tileType;
+    require(window.m_nodeEditor->createModuleAt(tilePayload, QPointF(96.0, 80.0)),
+            "right-click/create path should create a RaveTile");
+    QCoreApplication::processEvents();
+    require(graphHasWorkspaceModule(*window.m_graph, record.ipcoreId, record.instanceId, tileType),
+            "created RaveTile should be projected into the active workspace Graph");
+    require(!window.m_nodeEditor->visibleModuleIds().isEmpty(),
+            "created RaveTile should be visible on the active canvas");
+    const QString tileId = workspaceModuleId(*window.m_graph,
+                                             record.ipcoreId,
+                                             record.instanceId,
+                                             tileType);
+    require(!tileId.isEmpty(), "created RaveTile should have a graph module id");
+    require(graphConfigObjectProperties(designEditingServiceFromRegistry(window)->design(),
+                                        record.instanceId,
+                                        tileId)
+                .value(QStringLiteral("external_id")).toString() == QStringLiteral("rave_00"),
+            "created RaveTile graph_config object should preserve schema-expanded defaults");
+    const QtNodes::NodeId tileNodeId =
+        window.m_nodeEditor->m_moduleToNodeId.value(tileId, QtNodes::InvalidNodeId);
+    require(tileNodeId != QtNodes::InvalidNodeId,
+            "created RaveTile should have a visible node id");
+    auto* tileNodeModel =
+        window.m_nodeEditor->m_graphModel->delegateModel<GraphNodeModel>(tileNodeId);
+    require(tileNodeModel != nullptr && tileNodeModel->isCollapsed(),
+            "created RaveTile should start with collapsed visual style");
+    const QSize collapsedTileSize = window.m_nodeEditor->m_scene->nodeGeometry().size(tileNodeId);
+
+    window.m_nodeEditor->toggleCollapsed(tileId, false);
+    QCoreApplication::processEvents();
+    require(!tileNodeModel->isCollapsed(),
+            "expanding a RaveTile should update the live canvas node style");
+    require(graphViewNodeLayout(designEditingServiceFromRegistry(window)->design(), tileId)
+                .value(QStringLiteral("collapsed")).toBool(true) == false,
+            "expanding a RaveTile should persist collapsed=false in graph view layout");
+    const QSize expandedTileSize = window.m_nodeEditor->m_scene->nodeGeometry().size(tileNodeId);
+    require(expandedTileSize.height() > collapsedTileSize.height(),
+            "expanded RaveTile visual style should use expanded node geometry");
+
+    window.m_nodeEditor->m_graphModel->setNodeData(tileNodeId,
+                                                   QtNodes::NodeRole::Position,
+                                                   QPointF(180.0, 144.0));
+    window.m_nodeEditor->onNodeMoved(tileNodeId);
+    QCoreApplication::processEvents();
+    require(window.m_nodeEditor->m_moduleToNodeId.value(tileId, QtNodes::InvalidNodeId) == tileNodeId,
+            "moving a created RaveTile should not rebuild the grabbed canvas node");
+    const Module* movedTile = window.m_graph->getModule(tileId);
+    require(moduleDoubleParameter(movedTile, QStringLiteral("x")) == 180.0 &&
+                moduleDoubleParameter(movedTile, QStringLiteral("y")) == 144.0,
+            "moving a created RaveTile should preserve its position through projection refresh");
+    require(!tileNodeModel->isCollapsed(),
+            "moving an expanded RaveTile should preserve the expanded canvas node style");
+    require(graphViewNodeLayout(designEditingServiceFromRegistry(window)->design(), tileId)
+                .value(QStringLiteral("collapsed")).toBool(true) == false,
+            "moving an expanded RaveTile should preserve collapsed=false in graph view layout");
+
+    NodeEditorWidget::ScopedModulePayload endpointPayload;
+    endpointPayload.ipcoreId = record.ipcoreId;
+    endpointPayload.instanceId = record.instanceId;
+    endpointPayload.moduleType = endpointType;
+    require(window.m_nodeEditor->createModuleAt(endpointPayload, QPointF(280.0, 120.0)),
+            "right-click/create path should create a RaveEndpoint");
+    QCoreApplication::processEvents();
+    require(graphHasWorkspaceModule(*window.m_graph, record.ipcoreId, record.instanceId, endpointType),
+            "created RaveEndpoint should be projected into the active workspace Graph");
+    require(window.m_nodeEditor->visibleModuleIds().size() >= 2,
+            "created Tile and Endpoint should both be visible on the active canvas");
+
+    NodeEditorWidget::ScopedModulePayload secondTilePayload;
+    secondTilePayload.ipcoreId = record.ipcoreId;
+    secondTilePayload.instanceId = record.instanceId;
+    secondTilePayload.moduleType = tileType;
+    require(window.m_nodeEditor->createModuleAt(secondTilePayload, QPointF(420.0, 80.0)),
+            "right-click/create path should create a second RaveTile");
+    QCoreApplication::processEvents();
+    const QStringList tileIds =
+        workspaceModuleIds(*window.m_graph, record.ipcoreId, record.instanceId, tileType);
+    require(tileIds.size() >= 2, "two created RaveTiles should be projected into Graph");
+    const QString secondTileId = tileIds.first() == tileId ? tileIds.at(1) : tileIds.first();
+    require(graphConfigObjectProperties(designEditingServiceFromRegistry(window)->design(),
+                                        record.instanceId,
+                                        secondTileId)
+                .value(QStringLiteral("external_id")).toString() == QStringLiteral("rave_01"),
+            "second created RaveTile graph_config object should preserve schema-expanded identity semantics");
+    const QtNodes::NodeId sourceTileNodeId =
+        window.m_nodeEditor->m_moduleToNodeId.value(tileId, QtNodes::InvalidNodeId);
+    const QtNodes::NodeId targetTileNodeId =
+        window.m_nodeEditor->m_moduleToNodeId.value(secondTileId, QtNodes::InvalidNodeId);
+    require(sourceTileNodeId != QtNodes::InvalidNodeId &&
+                targetTileNodeId != QtNodes::InvalidNodeId,
+            "created RaveTile modules should have visible node ids before connecting");
+    auto* sourceTileNodeModel =
+        window.m_nodeEditor->m_graphModel->delegateModel<GraphNodeModel>(sourceTileNodeId);
+    auto* targetTileNodeModel =
+        window.m_nodeEditor->m_graphModel->delegateModel<GraphNodeModel>(targetTileNodeId);
+    require(sourceTileNodeModel != nullptr && targetTileNodeModel != nullptr,
+            "created RaveTile nodes should expose GraphNodeModel delegates");
+    const QtNodes::PortIndex eastPort =
+        sourceTileNodeModel->portIndex(QStringLiteral("east"), QtNodes::PortType::Out);
+    const QtNodes::PortIndex westPort =
+        targetTileNodeModel->portIndex(QStringLiteral("west"), QtNodes::PortType::In);
+    require(eastPort != QtNodes::InvalidPortIndex &&
+                westPort != QtNodes::InvalidPortIndex,
+            "RaveTile.east and RaveTile.west ports should be connectable");
+
+    const QtNodes::ConnectionId tileToTile{
+        sourceTileNodeId,
+        eastPort,
+        targetTileNodeId,
+        westPort
+    };
+    window.m_nodeEditor->m_graphModel->addConnection(tileToTile);
+    QCoreApplication::processEvents();
+    require(!window.m_graph->connections().empty(),
+            "connecting RaveTile.east to RaveTile.west should create a projected Graph connection");
+    const QString graphConnectionId = window.m_graph->connections().front()->id();
+    const QtNodes::ConnectionId projectedTileToTile =
+        window.m_nodeEditor->m_connectionToQtId.value(graphConnectionId);
+    require(window.m_nodeEditor->m_graphModel->connectionExists(projectedTileToTile),
+            "projected RaveTile.east to RaveTile.west connection should exist in the canvas model");
+    require(graphRelationshipCount(designEditingServiceFromRegistry(window)->design(),
+                                   record.instanceId) == 1,
+            "connecting RaveTile.east to RaveTile.west should persist a graph_config relationship");
+
+    require(window.m_nodeEditor->m_graphModel->deleteConnection(projectedTileToTile),
+            "deleting a RaveTile.east to RaveTile.west canvas connection should be accepted");
+    QCoreApplication::processEvents();
+    require(window.m_graph->connections().empty(),
+            "deleting a RaveTile.east to RaveTile.west canvas connection should update Graph");
+    require(graphRelationshipCount(designEditingServiceFromRegistry(window)->design(),
+                                   record.instanceId) == 0,
+            "deleting a RaveTile.east to RaveTile.west canvas connection should remove the graph_config relationship");
 }
 
 void testPackageDescriptorFeaturesAppearAsWorkspaceInteractions() {
@@ -2409,7 +2576,6 @@ int main(int argc, char** argv) {
         testMainWindowClearAndNewProjectResetDesignEditingService();
         testDesignEditingServiceEditSynchronizesProjectServiceDocument();
         testDesignEditingServiceAddComponentPersistsThroughMainWindowSave();
-        testMigratedEditorModuleConnectionAndParameterCommandsSaveNormally();
         testSavedDesignEditBlocksLaterUnmigratedGraphProjectionSave();
         testMainWindowSaveBlocksMixedGraphAndDesignEdits();
         testProjectStateInstanceAddedAfterDesignCacheSurvivesProjectionSave();
@@ -2418,6 +2584,7 @@ int main(int argc, char** argv) {
         testDesignEditAfterProjectionMergeKeepsProjectionOwnedState();
         testProjectStateMutationsRefreshProjectDesignBeforeSave();
         testNewProjectAddsIpcraftPackageInstanceFromCatalog();
+        testNodeEditorCreatesRavenocModulesInActiveWorkspaceProjection();
         testPackageDescriptorFeaturesAppearAsWorkspaceInteractions();
         testPackageInspectorShowsCapabilityCoverageDetails();
         testPackageInspectorShowsDeclaredDescriptorSurface();

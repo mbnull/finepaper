@@ -72,6 +72,11 @@ QString componentTypeFromInstance(const ProjectIpInstanceRecord& instance) {
     return instance.state.value(QStringLiteral("componentType")).toString().trimmed();
 }
 
+QJsonObject graphConfigFromExtensionData(const QJsonObject& extensionData) {
+    const QJsonValue graphConfig = extensionData.value(QStringLiteral("graph_config"));
+    return graphConfig.isObject() ? graphConfig.toObject() : QJsonObject{};
+}
+
 bool isConfigBundleKey(const QString& key) {
     return key == QStringLiteral("parameters") ||
            key == QStringLiteral("tables") ||
@@ -397,6 +402,12 @@ ProjectDocument ProjectDesignSerializer::toDocument(const ipcraft::core::Project
         }
         if (!component.extensionData.isEmpty()) {
             instance.native.insert(projectkeys::extensionData(), component.extensionData);
+        }
+        const QJsonObject graphConfig = graphConfigFromExtensionData(component.extensionData);
+        if (!graphConfig.isEmpty()) {
+            instance.hasGraphConfig = true;
+            instance.graphConfigIsNull = false;
+            instance.graphConfig = graphConfig;
         }
         document.instances.append(instance);
     }

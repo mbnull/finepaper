@@ -63,12 +63,6 @@ local function add_qt_test_target(name, source_files, extra_files, qt_rule)
 end
 
 add_qt_test_target("graph_test", "test/graph_test.cpp", {
-    "legacy/graphcommands/addconnectioncommand.cpp",
-    "legacy/graphcommands/addmodulecommand.cpp",
-    "src/commands/command.cpp",
-    "src/commands/commandmanager.cpp",
-    "legacy/graphcommands/removeconnectioncommand.cpp",
-    "legacy/graphcommands/removemodulecommand.cpp",
     "src/connection/connectionruleservice.cpp",
     "src/**/graph.cpp",
     "src/**/module.cpp",
@@ -79,11 +73,6 @@ add_qt_test_target("graph_test", "test/graph_test.cpp", {
     "src/**/moduleprovider.cpp",
     "src/**/ipcoreruntimeregistry.cpp",
     "inc/**/connectionruleservice.h",
-    "inc/**/addconnectioncommand.h",
-    "inc/**/addmodulecommand.h",
-    "inc/**/commandmanager.h",
-    "inc/**/removeconnectioncommand.h",
-    "inc/**/removemodulecommand.h",
     "inc/**/graph.h",
     "inc/**/module.h",
     "inc/**/ipcoreruntimeregistry.h",
@@ -130,24 +119,6 @@ add_qt_test_target("commandmanager_test", "test/commandmanager_test.cpp", {
     "src/**/command.cpp",
     "src/commands/compositecommand.cpp",
     "src/**/commandmanager.cpp"
-})
-
-add_qt_test_target("arrangecommand_test", "test/arrangecommand_test.cpp", {
-    "legacy/graphcommands/arrangecommand.cpp",
-    "src/**/command.cpp",
-    "src/**/graph.cpp",
-    "src/**/module.cpp",
-    "src/**/connection.cpp",
-    "src/**/port.cpp",
-    "src/**/parameter.cpp",
-    "src/**/moduleregistry.cpp",
-    "src/**/moduleprovider.cpp",
-    "src/**/ipcoreruntimeregistry.cpp",
-    "inc/**/arrangecommand.h",
-    "inc/**/graph.h",
-    "inc/**/module.h",
-    "inc/**/ipcoreruntimeregistry.h",
-    "inc/**/ipcoreruntimedescriptor.h"
 })
 
 add_qt_test_target("validation_test", "test/validation_test.cpp", {
@@ -754,6 +725,9 @@ target("ipcraft_patch_foundation_test")
 
     add_includedirs("inc")
     add_files("test/ipcraft_patch_foundation_test.cpp")
+    add_files("src/ipcraft/compositionmodel.cpp")
+    add_files("src/ipcraft/diagnostics.cpp")
+    add_files("src/ipcraft/jsonhelpers.cpp")
     add_files("src/ipcraft/core/project_patch.cpp")
     add_files("src/ipcraft/core/project_design.cpp")
     add_files("inc/ipcraft/core/project_patch.h")
@@ -1104,38 +1078,6 @@ add_qt_test_target("projectipservice_test", "test/projectipservice_test.cpp", {
     "inc/**/moduleregistry.h",
     "inc/**/ipcoreruntimedescriptor.h"
 })
-
-target("removeipinstancecommand_test")
-    add_rules("qt.console")
-    set_kind("binary")
-    set_group("test")
-    set_default(false)
-    set_languages("c++23")
-
-    add_includedirs("inc")
-    add_files("test/removeipinstancecommand_test.cpp")
-    add_files("src/commands/command.cpp")
-    add_files("src/commands/commandmanager.cpp")
-    add_files("src/commands/addipinstancecommand.cpp")
-    add_files("legacy/graphcommands/removeipinstancecommand.cpp")
-    add_files("src/graph/graph.cpp")
-    add_files("src/graph/module.cpp")
-    add_files("src/graph/connection.cpp")
-    add_files("src/graph/port.cpp")
-    add_files("src/graph/parameter.cpp")
-    add_files("src/project/projectipservice.cpp")
-    add_files("src/project/projectstateservice.cpp")
-    add_files("inc/commands/commandmanager.h")
-    add_files("inc/commands/addipinstancecommand.h")
-    add_files("inc/legacy/graphcommands/removeipinstancecommand.h")
-    add_files("inc/graph/graph.h")
-    add_files("inc/graph/module.h")
-    add_files("inc/project/projectipservice.h")
-    add_files("inc/project/projectstateservice.h")
-    add_tests("default", {
-        trim_output = true,
-        pass_outputs = "removeipinstancecommand_test passed"
-    })
 
 target("logpanel_test")
     add_rules("qt.widgetapp")
@@ -1736,10 +1678,6 @@ target("ipcatalogpanel_test")
     add_files("src/topology/*.cpp")
     add_files("src/connection/*.cpp")
     add_files("src/commands/*.cpp")
-    add_files("legacy/graphcommands/addconnectioncommand.cpp")
-    add_files("legacy/graphcommands/addmodulecommand.cpp")
-    add_files("legacy/graphcommands/removeipinstancecommand.cpp")
-    add_files("legacy/graphcommands/setparametercommand.cpp")
     add_files("src/graph/*.cpp")
     add_files("src/modules/*.cpp")
     add_files("src/nodeeditor/*.cpp")
@@ -1789,6 +1727,7 @@ target("nodeeditor_geometry_test")
     add_files("src/ipcraft/packagespec.cpp")
     add_files("src/ipcraft/diagnostics.cpp")
     add_files("src/ipcraft/jsonhelpers.cpp")
+    add_files("src/ipcraft/compositionmodel.cpp")
     add_files("src/ipcraft/ipcraftregistry.cpp")
     add_files("src/ipcraft/core/project_design.cpp")
     add_files("src/ipcraft/core/project_patch.cpp")
@@ -1848,32 +1787,12 @@ add_qt_test_target("ipcoreruntime_test", "test/ipcoreruntime_test.cpp", {
     "inc/**/ipcoreruntimedescriptor.h"
 })
 
-add_qt_test_target("topology_preset_test", "test/topology_preset_test.cpp", {
-    "src/commands/command.cpp",
-    "src/commands/commandmanager.cpp",
-    "legacy/graphcommands/topologypresetcommand.cpp",
-    "src/connection/connectionruleservice.cpp",
-    "src/**/topologypresetbuilder.cpp",
-    "src/**/graph.cpp",
-    "src/**/module.cpp",
-    "src/**/connection.cpp",
-    "src/**/port.cpp",
-    "src/**/parameter.cpp",
-    "src/**/moduleregistry.cpp",
-    "src/**/moduleprovider.cpp",
-    "src/**/ipcoreruntimeregistry.cpp",
-    "inc/**/connectionruleservice.h",
-    "inc/**/commandmanager.h",
-    "inc/**/topologypresetcommand.h",
-    "inc/**/topologypresetbuilder.h",
-    "inc/**/graph.h",
-    "inc/**/module.h",
-    "inc/**/ipcoreruntimedescriptor.h"
-})
-
 add_qt_test_target("topology_preset_patch_builder_test", "test/topology_preset_patch_builder_test.cpp", {
     "src/topology/topologypresetpatchbuilder.cpp",
     "src/project/designeditingservice.cpp",
+    "src/ipcraft/compositionmodel.cpp",
+    "src/ipcraft/diagnostics.cpp",
+    "src/ipcraft/jsonhelpers.cpp",
     "src/ipcraft/core/project_design.cpp",
     "src/ipcraft/core/project_patch.cpp",
     "inc/topology/topologypresetpatchbuilder.h",

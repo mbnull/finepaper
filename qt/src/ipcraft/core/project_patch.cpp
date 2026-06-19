@@ -1,5 +1,6 @@
 #include "ipcraft/core/project_patch.h"
 
+#include "ipcraft/compositionmodel.h"
 #include "ipcraft/diagnosticids.h"
 #include "ipcraft/patchops.h"
 #include "ipcraft/schemaids.h"
@@ -594,6 +595,190 @@ bool applyComponentConfigUnsetOperation(ProjectDesign& candidate,
     }
 
     candidate.components[componentIndex].config.remove(configKey);
+    return true;
+}
+
+bool applyComponentGraphObjectAddOperation(ProjectDesign& candidate,
+                                           const PatchOperation& operation,
+                                           qsizetype opIndex,
+                                           QVector<ValidationIssue>& issues) {
+    QString componentId;
+    if (!componentIdFromTarget(operation.target, componentId)) {
+        issues.append(issue(diagnosticids::patchInvalidTarget(),
+                            QStringLiteral("Patch target is not supported."),
+                            QStringLiteral("/ops/%1/target").arg(opIndex)));
+        return false;
+    }
+
+    const qsizetype componentIndex = componentIndexById(candidate, componentId);
+    if (componentIndex < 0) {
+        issues.append(issue(diagnosticids::patchTargetNotFound(),
+                            QStringLiteral("Patch target was not found."),
+                            QStringLiteral("/ops/%1/target").arg(opIndex)));
+        return false;
+    }
+
+    if (!operation.path.isEmpty()) {
+        issues.append(issue(QStringLiteral("patch.unsupported_path"),
+                            QStringLiteral("Patch path is not supported."),
+                            QStringLiteral("/ops/%1/path").arg(opIndex)));
+        return false;
+    }
+
+    QJsonObject object;
+    if (!operationObjectArgument(operation, object) || object.isEmpty()) {
+        issues.append(issue(QStringLiteral("patch.invalid_graph_object_payload"),
+                            QStringLiteral("graph object add requires a payload object."),
+                            QStringLiteral("/ops/%1/payload").arg(opIndex)));
+        return false;
+    }
+    if (!isNonEmptyString(object.value(QStringLiteral("id")))) {
+        issues.append(issue(QStringLiteral("patch.graph_object_missing_id"),
+                            QStringLiteral("Graph object id is required."),
+                            QStringLiteral("/ops/%1/payload/id").arg(opIndex)));
+        return false;
+    }
+    if (!isNonEmptyString(object.value(QStringLiteral("type")))) {
+        issues.append(issue(QStringLiteral("patch.graph_object_missing_type"),
+                            QStringLiteral("Graph object type is required."),
+                            QStringLiteral("/ops/%1/payload/type").arg(opIndex)));
+        return false;
+    }
+
+    ComponentInstance& component = candidate.components[componentIndex];
+    ipcraft::GraphConfig graphConfig = ipcraft::graphConfigFromJsonOrDefault(
+        component.extensionData.value(QStringLiteral("graph_config")).toObject());
+    const ipcraft::GraphConfigObject graphObject = ipcraft::GraphConfigObject::fromJson(object);
+    if (!ipcraft::appendGraphConfigObject(graphConfig, graphObject)) {
+        issues.append(issue(QStringLiteral("patch.duplicate_graph_object_id"),
+                            QStringLiteral("Graph object id is duplicated."),
+                            QStringLiteral("/ops/%1/payload/id").arg(opIndex)));
+        return false;
+    }
+
+    component.extensionData.insert(QStringLiteral("graph_config"), graphConfig.toJson());
+    return true;
+}
+
+bool applyComponentGraphRelationshipAddOperation(ProjectDesign& candidate,
+                                                 const PatchOperation& operation,
+                                                 qsizetype opIndex,
+                                                 QVector<ValidationIssue>& issues) {
+    QString componentId;
+    if (!componentIdFromTarget(operation.target, componentId)) {
+        issues.append(issue(diagnosticids::patchInvalidTarget(),
+                            QStringLiteral("Patch target is not supported."),
+                            QStringLiteral("/ops/%1/target").arg(opIndex)));
+        return false;
+    }
+
+    const qsizetype componentIndex = componentIndexById(candidate, componentId);
+    if (componentIndex < 0) {
+        issues.append(issue(diagnosticids::patchTargetNotFound(),
+                            QStringLiteral("Patch target was not found."),
+                            QStringLiteral("/ops/%1/target").arg(opIndex)));
+        return false;
+    }
+
+    if (!operation.path.isEmpty()) {
+        issues.append(issue(QStringLiteral("patch.unsupported_path"),
+                            QStringLiteral("Patch path is not supported."),
+                            QStringLiteral("/ops/%1/path").arg(opIndex)));
+        return false;
+    }
+
+    QJsonObject relationship;
+    if (!operationObjectArgument(operation, relationship) || relationship.isEmpty()) {
+        issues.append(issue(QStringLiteral("patch.invalid_graph_relationship_payload"),
+                            QStringLiteral("graph relationship add requires a payload object."),
+                            QStringLiteral("/ops/%1/payload").arg(opIndex)));
+        return false;
+    }
+    if (!isNonEmptyString(relationship.value(QStringLiteral("id")))) {
+        issues.append(issue(QStringLiteral("patch.graph_relationship_missing_id"),
+                            QStringLiteral("Graph relationship id is required."),
+                            QStringLiteral("/ops/%1/payload/id").arg(opIndex)));
+        return false;
+    }
+    if (!isNonEmptyString(relationship.value(QStringLiteral("type")))) {
+        issues.append(issue(QStringLiteral("patch.graph_relationship_missing_type"),
+                            QStringLiteral("Graph relationship type is required."),
+                            QStringLiteral("/ops/%1/payload/type").arg(opIndex)));
+        return false;
+    }
+    if (!relationship.value(QStringLiteral("endpoints")).isArray() ||
+        relationship.value(QStringLiteral("endpoints")).toArray().size() < 2) {
+        issues.append(issue(QStringLiteral("patch.invalid_graph_relationship_endpoints"),
+                            QStringLiteral("Graph relationship endpoints must contain at least two entries."),
+                            QStringLiteral("/ops/%1/payload/endpoints").arg(opIndex)));
+        return false;
+    }
+
+    ComponentInstance& component = candidate.components[componentIndex];
+    ipcraft::GraphConfig graphConfig = ipcraft::graphConfigFromJsonOrDefault(
+        component.extensionData.value(QStringLiteral("graph_config")).toObject());
+    const ipcraft::GraphConfigRelationship graphRelationship =
+        ipcraft::GraphConfigRelationship::fromJson(relationship);
+    if (!ipcraft::appendGraphConfigRelationship(graphConfig, graphRelationship)) {
+        issues.append(issue(QStringLiteral("patch.duplicate_graph_relationship_id"),
+                            QStringLiteral("Graph relationship id is duplicated."),
+                            QStringLiteral("/ops/%1/payload/id").arg(opIndex)));
+        return false;
+    }
+
+    component.extensionData.insert(QStringLiteral("graph_config"), graphConfig.toJson());
+    return true;
+}
+
+bool applyComponentGraphRelationshipRemoveOperation(ProjectDesign& candidate,
+                                                    const PatchOperation& operation,
+                                                    qsizetype opIndex,
+                                                    QVector<ValidationIssue>& issues) {
+    QString componentId;
+    if (!componentIdFromTarget(operation.target, componentId)) {
+        issues.append(issue(diagnosticids::patchInvalidTarget(),
+                            QStringLiteral("Patch target is not supported."),
+                            QStringLiteral("/ops/%1/target").arg(opIndex)));
+        return false;
+    }
+
+    const qsizetype componentIndex = componentIndexById(candidate, componentId);
+    if (componentIndex < 0) {
+        issues.append(issue(diagnosticids::patchTargetNotFound(),
+                            QStringLiteral("Patch target was not found."),
+                            QStringLiteral("/ops/%1/target").arg(opIndex)));
+        return false;
+    }
+
+    if (!operation.path.isEmpty()) {
+        issues.append(issue(QStringLiteral("patch.unsupported_path"),
+                            QStringLiteral("Patch path is not supported."),
+                            QStringLiteral("/ops/%1/path").arg(opIndex)));
+        return false;
+    }
+
+    const QString relationshipId =
+        operation.value.toString(operation.payload
+                                     .value(QStringLiteral("id"))
+                                     .toString()).trimmed();
+    if (relationshipId.isEmpty()) {
+        issues.append(issue(QStringLiteral("patch.graph_relationship_missing_id"),
+                            QStringLiteral("Graph relationship id is required."),
+                            QStringLiteral("/ops/%1/value").arg(opIndex)));
+        return false;
+    }
+
+    ComponentInstance& component = candidate.components[componentIndex];
+    ipcraft::GraphConfig graphConfig = ipcraft::graphConfigFromJsonOrDefault(
+        component.extensionData.value(QStringLiteral("graph_config")).toObject());
+    if (!ipcraft::removeGraphConfigRelationship(graphConfig, relationshipId)) {
+        issues.append(issue(diagnosticids::patchTargetNotFound(),
+                            QStringLiteral("Patch target was not found."),
+                            QStringLiteral("/ops/%1/value").arg(opIndex)));
+        return false;
+    }
+
+    component.extensionData.insert(QStringLiteral("graph_config"), graphConfig.toJson());
     return true;
 }
 
@@ -1273,6 +1458,15 @@ bool applyOperation(ProjectDesign& candidate,
     }
     if (operation.op == ipcraft::patchops::componentConfigUnset) {
         return applyComponentConfigUnsetOperation(candidate, operation, opIndex, issues);
+    }
+    if (operation.op == ipcraft::patchops::componentGraphObjectAdd) {
+        return applyComponentGraphObjectAddOperation(candidate, operation, opIndex, issues);
+    }
+    if (operation.op == ipcraft::patchops::componentGraphRelationshipAdd) {
+        return applyComponentGraphRelationshipAddOperation(candidate, operation, opIndex, issues);
+    }
+    if (operation.op == ipcraft::patchops::componentGraphRelationshipRemove) {
+        return applyComponentGraphRelationshipRemoveOperation(candidate, operation, opIndex, issues);
     }
     if (operation.op == ipcraft::patchops::connectionAdd) {
         return applyAddConnectionOperation(candidate, operation, opIndex, issues);

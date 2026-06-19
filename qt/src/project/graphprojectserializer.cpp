@@ -47,6 +47,14 @@ bool jsonValueMatchesParameterType(const QJsonValue& value, const Parameter::Val
     return false;
 }
 
+bool isSupportedViewParameter(const ModuleType& type,
+                              const QString& key,
+                              const QJsonValue& value) {
+    return key == QStringLiteral("collapsed") &&
+           type.supportsCollapse &&
+           value.isBool();
+}
+
 std::unique_ptr<Module> instantiateModule(const ModuleType& type, const QString& moduleId) {
     auto module = std::make_unique<Module>(moduleId, type.name);
     // Recreate runtime modules from type defaults first, then overlay persisted
@@ -316,6 +324,14 @@ GraphProjectLoadResult populateGraph(const ProjectDocument& document,
         // module type default as the target variant shape.
         for (auto it = record.parameters.begin(); it != record.parameters.end(); ++it) {
             const auto defaultIt = type->defaultParameters.find(it.key());
+            if (defaultIt == type->defaultParameters.end()) {
+                if (isSupportedViewParameter(*type, it.key(), it.value())) {
+                    module->setParameter(it.key(), it.value().toBool());
+                    continue;
+                }
+                return failure(QStringLiteral("Unknown parameter %1 on module %2")
+                                   .arg(it.key(), record.id));
+            }
             module->setParameter(it.key(), valueFromJson(it.value(), defaultIt.value().value()));
         }
 
@@ -541,6 +557,9 @@ GraphProjectLoadResult GraphProjectSerializer::loadProject(const ProjectDocument
         for (auto it = record.parameters.begin(); it != record.parameters.end(); ++it) {
             const auto defaultIt = type->defaultParameters.find(it.key());
             if (defaultIt == type->defaultParameters.end()) {
+                if (isSupportedViewParameter(*type, it.key(), it.value())) {
+                    continue;
+                }
                 // Unknown parameters usually indicate a stale project/schema
                 // mismatch; reject instead of silently dropping data.
                 return failure(QStringLiteral("Unknown parameter %1 on module %2")

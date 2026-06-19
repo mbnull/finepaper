@@ -19,6 +19,7 @@
 #include "graph/graph.h"
 #include "commands/commandmanager.h"
 #include "ipcraft/diagnosticids.h"
+#include "ipcraft/core/project_document_v1.h"
 #include "ipcraft/ipcraftmanifest.h"
 #include "ipcore/ipcatalogservice.h"
 #include "ipcore/ipcoreruntimediagnostics.h"
@@ -94,6 +95,16 @@ bool hasMeaningfulProjectDesign(const ipcraft::core::ProjectDesign& design) {
            !design.artifacts.isEmpty() ||
            !design.extensions.isEmpty() ||
            !design.metadata.isEmpty();
+}
+
+QJsonObject projectDesignWithoutViewsObject(ipcraft::core::ProjectDesign design) {
+    design.views.clear();
+    return ipcraft::core::ProjectDocumentV1::writeObject(design);
+}
+
+bool onlyProjectDesignViewsChanged(const ipcraft::core::ProjectDesign& before,
+                                   const ipcraft::core::ProjectDesign& after) {
+    return projectDesignWithoutViewsObject(before) == projectDesignWithoutViewsObject(after);
 }
 
 QJsonValue parameterValueToJson(const Parameter::Value& value) {
@@ -261,12 +272,6 @@ QStringList unmigratedGraphProjectionOwners(const Graph& graph,
             addOwner(QStringLiteral("Unowned graph projection module parameters/layout"));
         }
     }
-    for (auto it = moduleRecords.constBegin(); it != moduleRecords.constEnd(); ++it) {
-        if (!liveModuleIds.contains(it.key())) {
-            addOwner(QStringLiteral("Unowned graph projection module removal"));
-        }
-    }
-
     const QHash<QString, ProjectConnectionRecord> connectionRecords =
         activeConnectionRecords(stagedDocument, moduleRecords);
     QSet<QString> liveConnectionIds;
@@ -290,12 +295,6 @@ QStringList unmigratedGraphProjectionOwners(const Graph& graph,
             addOwner(QStringLiteral("Unowned graph projection connection metadata"));
         }
     }
-    for (auto it = connectionRecords.constBegin(); it != connectionRecords.constEnd(); ++it) {
-        if (!liveConnectionIds.contains(it.key())) {
-            addOwner(QStringLiteral("Unowned graph projection connection removal"));
-        }
-    }
-
     owners.sort();
     return owners;
 }
@@ -1645,8 +1644,13 @@ void MainWindow::syncProjectServiceFromDesignEditingService() {
         return;
     }
 
-    m_projectService->replaceDesign(m_designEditingService->design());
-    if (m_editorProjectionService && m_projectService->hasDocument()) {
+    const ipcraft::core::ProjectDesign previousDesign = m_projectService->design();
+    const ipcraft::core::ProjectDesign nextDesign = m_designEditingService->design();
+    const bool skipProjectionRefresh =
+        m_projectService->hasDocument() && onlyProjectDesignViewsChanged(previousDesign, nextDesign);
+
+    m_projectService->replaceDesign(nextDesign);
+    if (m_editorProjectionService && m_projectService->hasDocument() && !skipProjectionRefresh) {
         QScopedValueRollback<bool> rollback(m_suppressDocumentTracking, true);
         const EditorProjectionResult projectionResult =
             m_editorProjectionService->rebuildProjectionViewOnly(m_projectService->document());
@@ -1658,6 +1662,8 @@ void MainWindow::syncProjectServiceFromDesignEditingService() {
                        << ipcraft::diagnosticids::editorProjectionFailed()
                        << projectionResult.error;
         }
+    } else if (m_nodeEditor) {
+        m_nodeEditor->setProjectionStale(false);
     }
     m_designEditingDirty = true;
     syncDocumentStateFromHistory();

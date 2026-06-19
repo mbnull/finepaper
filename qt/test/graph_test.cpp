@@ -1,16 +1,10 @@
 // Graph integration-style tests for topology and structural behavior.
 #include "app/appsettings.h"
-#include "legacy/graphcommands/addconnectioncommand.h"
-#include "legacy/graphcommands/addmodulecommand.h"
-#include "commands/commandmanager.h"
-#include "legacy/graphcommands/removeconnectioncommand.h"
-#include "legacy/graphcommands/removemodulecommand.h"
 #include "connection/connectionruleservice.h"
 #include "graph/graph.h"
 #include "modules/moduleregistry.h"
 #include "modules/moduleprovider.h"
 #include "common/portlayout.h"
-#include "legacy/graphcommands/editormutationtarget.h"
 
 #include <QByteArray>
 #include <QCoreApplication>
@@ -35,19 +29,6 @@ static_assert(std::is_same_v<decltype(std::declval<const Graph&>().getModule(QSt
 static_assert(std::is_same_v<decltype(std::declval<Graph&>().getConnection(QString())), Connection*>);
 static_assert(std::is_same_v<decltype(std::declval<const Graph&>().getConnection(QString())), const Connection*>);
 
-class FailingEditorMutationTarget final : public EditorMutationTarget {
-public:
-    bool failModuleUpsert = false;
-    bool failModuleRemove = false;
-    bool failConnectionUpsert = false;
-    bool failConnectionRemove = false;
-
-    bool upsertEditorModuleRecord(const Module&) override { return !failModuleUpsert; }
-    bool removeEditorModuleRecord(const QString&) override { return !failModuleRemove; }
-    bool upsertEditorConnectionRecord(const Connection&) override { return !failConnectionUpsert; }
-    bool removeEditorConnectionRecord(const QString&) override { return !failConnectionRemove; }
-};
-
 std::unique_ptr<Module> makeModule(const QString& id,
                                    const QString& type,
                                    std::initializer_list<Port> ports) {
@@ -67,27 +48,6 @@ void require(bool condition, const char* message) {
     if (!condition) {
         throw std::runtime_error(message);
     }
-}
-
-void requireConnectionMetadata(const Connection* connection) {
-    require(connection != nullptr, "expected connection to exist");
-    require(connection->connectionClassId() == QStringLiteral("chi_node_interface"),
-            "restored connection should preserve connection class");
-    require(connection->status() == QStringLiteral("ambiguous"),
-            "restored connection should preserve status");
-    require(connection->alternatives() == QStringList({QStringLiteral("chi_node_interface"),
-                                                       QStringLiteral("monitor_tap")}),
-            "restored connection should preserve alternatives");
-    require(connection->interfaces().size() == 2,
-            "restored connection should preserve interface participants");
-    require(connection->interfaces().at(0).instanceId == QStringLiteral("source"),
-            "restored connection should preserve first participant instance");
-    require(connection->interfaces().at(0).interfaceId == QStringLiteral("out"),
-            "restored connection should preserve first participant interface");
-    require(connection->interfaces().at(1).instanceId == QStringLiteral("target"),
-            "restored connection should preserve second participant instance");
-    require(connection->interfaces().at(1).interfaceId == QStringLiteral("in"),
-            "restored connection should preserve second participant interface");
 }
 
 QString repositoryPath(const QString& relativePath) {
@@ -176,304 +136,6 @@ void testInoutBusConnectionsAreValid() {
 
     graph.addConnection(std::make_unique<Connection>("bus_link", source, target));
     require(graph.connections().size() == 1, "expected inout bus connection to be stored");
-}
-
-void testAddConnectionCommandRedoBuildsFreshRuleService() {
-    Graph graph;
-
-    require(graph.addModule(makeModule(
-        "source",
-        "Endpoint",
-        {Port("out", Port::Direction::Output, "endpoint", "out")})),
-        "failed to add source module");
-    require(graph.addModule(makeModule(
-        "target",
-        "Endpoint",
-        {Port("in", Port::Direction::Input, "endpoint", "in")})),
-        "failed to add target module");
-
-    int providerCalls = 0;
-    auto packageManifestsProvider = [&providerCalls]() {
-        ++providerCalls;
-        return QVector<IpcraftPackageManifest>{};
-    };
-
-    CommandManager commandManager;
-    auto command = std::make_unique<AddConnectionCommand>(
-        &graph,
-        std::make_unique<Connection>("command_link",
-                                     PortRef{"source", "out"},
-                                     PortRef{"target", "in"}),
-        packageManifestsProvider);
-
-    commandManager.executeCommand(std::move(command));
-    require(providerCalls == 1, "initial execute should build a rule service from provider state");
-    require(graph.connections().size() == 1, "initial execute should add the connection");
-
-    commandManager.undo();
-    require(graph.connections().empty(), "undo should remove the connection");
-
-    commandManager.redo();
-    require(providerCalls == 2, "redo should build a fresh rule service instead of reusing a stale pointer");
-    require(graph.connections().size() == 1, "redo should restore the connection");
-}
-
-void testAddModuleCommandUndoRejectsDurableRemoveFailureWithoutGraphDivergence() {
-    Graph graph;
-    CommandManager commandManager;
-    FailingEditorMutationTarget target;
-    auto module = makeModule("source",
-                             "Endpoint",
-                             {Port("out", Port::Direction::Output, "endpoint", "out")});
-    module->setInstanceId(QStringLiteral("source_0"));
-
-    auto command = std::make_unique<AddModuleCommand>(
-        &graph,
-        std::move(module),
-        QString(),
-        QString(),
-        &target);
-
-    std::unique_ptr<Command> rejected = commandManager.executeCommand(std::move(command));
-    require(rejected == nullptr, "add module command should execute before undo failure setup");
-    require(graph.getModule("source") != nullptr, "execute should add the module");
-    const int executedStateId = commandManager.currentStateId();
-
-    target.failModuleRemove = true;
-    commandManager.undo();
-
-    require(graph.getModule("source") != nullptr,
-            "failed durable module remove during undo should leave graph module in place");
-    require(commandManager.currentStateId() == executedStateId,
-            "failed durable module remove during undo should not rewind command state");
-    require(commandManager.canUndo(),
-            "failed durable module remove during undo should keep command available for retry");
-    require(!commandManager.canRedo(),
-            "failed durable module remove during undo should not populate redo history");
-}
-
-void testRemoveConnectionCommandExecuteRejectsDurableRemoveFailureWithoutGraphDivergence() {
-    Graph graph;
-    require(graph.addModule(makeModule(
-        "source",
-        "Endpoint",
-        {Port("out", Port::Direction::Output, "endpoint", "out")})),
-        "failed to add source module");
-    require(graph.addModule(makeModule(
-        "target",
-        "Endpoint",
-        {Port("in", Port::Direction::Input, "endpoint", "in")})),
-        "failed to add target module");
-    graph.addConnection(std::make_unique<Connection>(
-        QStringLiteral("link"),
-        PortRef{"source", "out"},
-        PortRef{"target", "in"}));
-
-    CommandManager commandManager;
-    FailingEditorMutationTarget target;
-    target.failConnectionRemove = true;
-
-    std::unique_ptr<Command> rejected = commandManager.executeCommand(
-        std::make_unique<RemoveConnectionCommand>(&graph, QStringLiteral("link"), &target));
-
-    require(rejected != nullptr,
-            "durable connection remove failure should reject remove connection command");
-    require(graph.getConnection(QStringLiteral("link")) != nullptr,
-            "durable connection remove failure should leave graph connection in place");
-    require(!commandManager.canUndo(),
-            "rejected remove connection command should not enter undo history");
-}
-
-void testRemoveConnectionCommandUndoRejectsDurableUpsertFailureWithoutGraphDivergence() {
-    Graph graph;
-    require(graph.addModule(makeModule(
-        "source",
-        "Endpoint",
-        {Port("out", Port::Direction::Output, "endpoint", "out")})),
-        "failed to add source module");
-    require(graph.addModule(makeModule(
-        "target",
-        "Endpoint",
-        {Port("in", Port::Direction::Input, "endpoint", "in")})),
-        "failed to add target module");
-    graph.addConnection(std::make_unique<Connection>(
-        QStringLiteral("link"),
-        PortRef{"source", "out"},
-        PortRef{"target", "in"}));
-
-    CommandManager commandManager;
-    FailingEditorMutationTarget target;
-    std::unique_ptr<Command> rejected = commandManager.executeCommand(
-        std::make_unique<RemoveConnectionCommand>(&graph, QStringLiteral("link"), &target));
-    require(rejected == nullptr, "remove connection command should execute before undo failure setup");
-    require(graph.getConnection(QStringLiteral("link")) == nullptr,
-            "execute should remove the connection");
-    const int executedStateId = commandManager.currentStateId();
-
-    target.failConnectionUpsert = true;
-    commandManager.undo();
-
-    require(graph.getConnection(QStringLiteral("link")) == nullptr,
-            "failed durable connection upsert during undo should leave graph connection removed");
-    require(commandManager.currentStateId() == executedStateId,
-            "failed durable connection upsert during undo should not rewind command state");
-    require(commandManager.canUndo(),
-            "failed durable connection upsert during undo should keep command available for retry");
-    require(!commandManager.canRedo(),
-            "failed durable connection upsert during undo should not populate redo history");
-}
-
-void testRemoveModuleCommandExecuteRejectsDurableRemoveFailureWithoutGraphDivergence() {
-    Graph graph;
-    require(graph.addModule(makeModule(
-        "source",
-        "Endpoint",
-        {Port("out", Port::Direction::Output, "endpoint", "out")})),
-        "failed to add source module");
-    require(graph.addModule(makeModule(
-        "target",
-        "Endpoint",
-        {Port("in", Port::Direction::Input, "endpoint", "in")})),
-        "failed to add target module");
-    graph.addConnection(std::make_unique<Connection>(
-        QStringLiteral("link"),
-        PortRef{"source", "out"},
-        PortRef{"target", "in"}));
-
-    CommandManager commandManager;
-    FailingEditorMutationTarget target;
-    target.failModuleRemove = true;
-
-    std::unique_ptr<Command> rejected = commandManager.executeCommand(
-        std::make_unique<RemoveModuleCommand>(&graph, QStringLiteral("source"), &target));
-
-    require(rejected != nullptr,
-            "durable module remove failure should reject remove module command");
-    require(graph.getModule(QStringLiteral("source")) != nullptr,
-            "durable module remove failure should leave graph module in place");
-    require(graph.getConnection(QStringLiteral("link")) != nullptr,
-            "durable module remove failure should leave incident graph connection in place");
-    require(!commandManager.canUndo(),
-            "rejected remove module command should not enter undo history");
-}
-
-void testRemoveConnectionCommandUndoRetainsSavedConnectionForRetry() {
-    Graph graph;
-
-    require(graph.addModule(makeModule(
-        "source",
-        "Endpoint",
-        {Port("out", Port::Direction::Output, "endpoint", "out")})),
-        "failed to add source module");
-    require(graph.addModule(makeModule(
-        "target",
-        "Endpoint",
-        {Port("in", Port::Direction::Input, "endpoint", "in")})),
-        "failed to add target module");
-
-    const PortRef source{"source", "out"};
-    const PortRef target{"target", "in"};
-    graph.addConnection(std::make_unique<Connection>(
-        QStringLiteral("link"),
-        source,
-        target,
-        QStringLiteral("chi_node_interface"),
-        QVector<ConnectionInterfaceRef>{
-            ConnectionInterfaceRef{QStringLiteral("source"), QStringLiteral("out")},
-            ConnectionInterfaceRef{QStringLiteral("target"), QStringLiteral("in")}
-        },
-        QStringLiteral("ambiguous"),
-        QStringList{QStringLiteral("chi_node_interface"), QStringLiteral("monitor_tap")}));
-
-    RemoveConnectionCommand command(&graph, "link");
-    command.execute();
-
-    require(command.wasExecuted(), "remove connection command should execute when the connection exists");
-    require(graph.connections().empty(), "execute should remove the target connection");
-
-    graph.addConnection(std::make_unique<Connection>("blocker", source, target));
-    require(graph.connections().size() == 1, "setup should install a blocking duplicate connection");
-
-    command.undo();
-
-    require(!command.wasUndone(), "undo should reject restoring a duplicate connection");
-    require(graph.connections().size() == 1, "failed undo should leave the blocking connection in place");
-    require(graph.connections().front()->id() == "blocker",
-            "failed undo should keep the original saved connection for retry");
-
-    graph.removeConnection("blocker");
-    command.undo();
-
-    require(command.wasUndone(), "undo should succeed after the blocking connection is removed");
-    require(graph.connections().size() == 1, "successful retry should restore exactly one connection");
-    require(graph.connections().front()->id() == "link",
-            "successful retry should restore the originally removed connection");
-    requireConnectionMetadata(graph.connections().front().get());
-}
-
-void testRemoveModuleCommandUndoRetainsSavedStateForRetryAfterRestoreConflict() {
-    Graph graph;
-
-    require(graph.addModule(makeModule(
-        "source",
-        "Endpoint",
-        {Port("out", Port::Direction::Output, "endpoint", "out")})),
-        "failed to add source module");
-    require(graph.addModule(makeModule(
-        "target",
-        "Endpoint",
-        {Port("in", Port::Direction::Input, "endpoint", "in")})),
-        "failed to add target module");
-
-    graph.addConnection(std::make_unique<Connection>(
-        QStringLiteral("link"),
-        PortRef{"source", "out"},
-        PortRef{"target", "in"},
-        QStringLiteral("chi_node_interface"),
-        QVector<ConnectionInterfaceRef>{
-            ConnectionInterfaceRef{QStringLiteral("source"), QStringLiteral("out")},
-            ConnectionInterfaceRef{QStringLiteral("target"), QStringLiteral("in")}
-        },
-        QStringLiteral("ambiguous"),
-        QStringList{QStringLiteral("chi_node_interface"), QStringLiteral("monitor_tap")}));
-
-    RemoveModuleCommand command(&graph, "source");
-    command.execute();
-
-    require(command.wasExecuted(), "remove module command should execute when the module exists");
-    require(graph.getModule("source") == nullptr, "execute should remove the target module");
-    require(graph.connections().empty(), "execute should remove incident connections");
-
-    require(graph.addModule(makeModule(
-        "source",
-        "Endpoint",
-        {Port("out", Port::Direction::Output, "endpoint", "out")})),
-        "failed to add blocking replacement module");
-    graph.addConnection(std::make_unique<Connection>(
-        "blocker",
-        PortRef{"source", "out"},
-        PortRef{"target", "in"}));
-    require(graph.connections().size() == 1,
-            "setup should install a blocking replacement connection");
-
-    command.undo();
-
-    require(!command.wasUndone(), "undo should reject when a conflicting module id is already present");
-    require(graph.getModule("source") != nullptr, "failed undo should leave the blocking module in place");
-    require(graph.connections().size() == 1, "failed undo should not partially restore saved connections");
-    require(graph.connections().front()->id() == "blocker",
-            "failed undo should preserve the blocking connection without losing saved restore state");
-
-    graph.removeConnection("blocker");
-    graph.removeModule("source");
-    command.undo();
-
-    require(command.wasUndone(), "undo should succeed after the module-id conflict is removed");
-    require(graph.getModule("source") != nullptr, "successful retry should restore the removed module");
-    require(graph.connections().size() == 1, "successful retry should restore the saved connection");
-    require(graph.connections().front()->id() == "link",
-            "successful retry should restore the originally removed connection");
-    requireConnectionMetadata(graph.connections().front().get());
 }
 
 void testInoutPortsCannotBeReusedAcrossConnectionSides() {
@@ -1103,13 +765,6 @@ int main(int argc, char** argv) {
     try {
         testGraphConnectionValidationRejectsOnlyExactDuplicates();
         testInoutBusConnectionsAreValid();
-        testAddConnectionCommandRedoBuildsFreshRuleService();
-        testAddModuleCommandUndoRejectsDurableRemoveFailureWithoutGraphDivergence();
-        testRemoveConnectionCommandExecuteRejectsDurableRemoveFailureWithoutGraphDivergence();
-        testRemoveConnectionCommandUndoRejectsDurableUpsertFailureWithoutGraphDivergence();
-        testRemoveModuleCommandExecuteRejectsDurableRemoveFailureWithoutGraphDivergence();
-        testRemoveConnectionCommandUndoRetainsSavedConnectionForRetry();
-        testRemoveModuleCommandUndoRetainsSavedStateForRetryAfterRestoreConflict();
         testInoutPortsCannotBeReusedAcrossConnectionSides();
         testInterfaceCompatibilityRejectsMismatchedConfiguredFields();
         testGraphStructuralValidationIgnoresSemanticMetadata();

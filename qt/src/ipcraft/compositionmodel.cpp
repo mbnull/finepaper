@@ -1046,4 +1046,55 @@ DiagnosticStore validateGraphConfig(const GraphConfig& graphConfig) {
     return diagnostics;
 }
 
+GraphConfig graphConfigFromJsonOrDefault(const QJsonObject& object) {
+    QJsonObject normalized = object;
+    normalized.insert(QStringLiteral("schema"), schemaids::graphConfigV1);
+    if (!normalized.value(QStringLiteral("objects")).isArray()) {
+        normalized.insert(QStringLiteral("objects"), QJsonArray{});
+    }
+    if (!normalized.value(QStringLiteral("relationships")).isArray()) {
+        normalized.insert(QStringLiteral("relationships"), QJsonArray{});
+    }
+    if (!normalized.value(QStringLiteral("properties")).isObject()) {
+        normalized.insert(QStringLiteral("properties"), QJsonObject{});
+    }
+    if (!normalized.value(QStringLiteral("native")).isObject()) {
+        normalized.insert(QStringLiteral("native"), QJsonObject{});
+    }
+
+    const GraphConfigReadResult readResult = GraphConfig::fromJson(normalized);
+    return readResult.config;
+}
+
+bool appendGraphConfigObject(GraphConfig& graphConfig, const GraphConfigObject& graphObject) {
+    for (const GraphConfigObject& existing : graphConfig.objects) {
+        if (existing.id == graphObject.id) {
+            return false;
+        }
+    }
+    graphConfig.objects.append(graphObject);
+    return true;
+}
+
+bool appendGraphConfigRelationship(GraphConfig& graphConfig,
+                                   const GraphConfigRelationship& relationship) {
+    for (const GraphConfigRelationship& existing : graphConfig.relationships) {
+        if (existing.id == relationship.id) {
+            return false;
+        }
+    }
+    graphConfig.relationships.append(relationship);
+    return true;
+}
+
+bool removeGraphConfigRelationship(GraphConfig& graphConfig, const QString& relationshipId) {
+    for (qsizetype index = 0; index < graphConfig.relationships.size(); ++index) {
+        if (graphConfig.relationships.at(index).id == relationshipId) {
+            graphConfig.relationships.removeAt(index);
+            return true;
+        }
+    }
+    return false;
+}
+
 } // namespace ipcraft

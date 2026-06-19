@@ -6,9 +6,11 @@
 #include "project/projectwriter.h"
 
 #include <QFileInfo>
+#include <QHash>
 #include <QJsonArray>
 #include <QSet>
 #include <QStringList>
+#include <optional>
 #include <utility>
 
 namespace {
@@ -74,6 +76,71 @@ QJsonObject mergeDesignSupplementNative(const QJsonObject& existingNative,
     return merged;
 }
 
+std::optional<QJsonObject> graphConfigFromObject(const QJsonObject& object) {
+    const QStringList keys{
+        QStringLiteral("graph_config"),
+        QStringLiteral("graphConfig"),
+        QStringLiteral("ipcraft.graph_config")
+    };
+    for (const QString& key : keys) {
+        const QJsonValue value = object.value(key);
+        if (value.isObject()) {
+            return value.toObject();
+        }
+    }
+    return std::nullopt;
+}
+
+std::optional<QJsonObject> graphConfigForComponent(
+    const ipcraft::core::ComponentInstance& component) {
+    if (const std::optional<QJsonObject> fromExtension =
+            graphConfigFromObject(component.extensionData)) {
+        return fromExtension;
+    }
+    return graphConfigFromObject(component.metadata);
+}
+
+bool isLayoutParameter(const QString& key) {
+    return key == QStringLiteral("x") ||
+           key == QStringLiteral("y") ||
+           key == QStringLiteral("collapsed");
+}
+
+bool isValidLayoutParameterValue(const QString& key, const QJsonValue& value) {
+    if (key == QStringLiteral("collapsed")) {
+        return value.isBool();
+    }
+    if (key == QStringLiteral("x") || key == QStringLiteral("y")) {
+        return value.isDouble();
+    }
+    return false;
+}
+
+QHash<QString, QJsonObject> graphViewNodesById(const ipcraft::core::ProjectDesign& design) {
+    QHash<QString, QJsonObject> nodesById;
+    for (const ipcraft::core::ViewDocument& view : design.views) {
+        if (view.id != QStringLiteral("graph")) {
+            continue;
+        }
+
+        const QJsonObject nodes = view.layout.value(QStringLiteral("nodes")).toObject();
+        for (auto it = nodes.constBegin(); it != nodes.constEnd(); ++it) {
+            if (it.value().isObject()) {
+                nodesById.insert(it.key(), it.value().toObject());
+            }
+        }
+    }
+    return nodesById;
+}
+
+void mergeLayoutParameters(QJsonObject& parameters, const QJsonObject& nodeLayout) {
+    for (auto it = nodeLayout.constBegin(); it != nodeLayout.constEnd(); ++it) {
+        if (isLayoutParameter(it.key()) && isValidLayoutParameterValue(it.key(), it.value())) {
+            parameters.insert(it.key(), it.value());
+        }
+    }
+}
+
 const ProjectIpInstanceRecord* findInstanceById(
     const QVector<ProjectIpInstanceRecord>& instances,
     const QString& id) {
@@ -98,6 +165,11 @@ ProjectIpInstanceRecord mergeDesignOwnedInstance(
                                                         : designInstance.ipcoreId;
     merged.config = designInstance.config;
     merged.native = mergeDesignOwnedNative(merged.native, designInstance.native);
+    if (designInstance.hasGraphConfig || designInstance.graphConfigIsNull) {
+        merged.hasGraphConfig = designInstance.hasGraphConfig;
+        merged.graphConfigIsNull = designInstance.graphConfigIsNull;
+        merged.graphConfig = designInstance.graphConfig;
+    }
     return merged;
 }
 
@@ -167,10 +239,15 @@ QVector<ProjectConnectionInterfaceRef> interfaceRefsFromMetadata(const QJsonObje
 void projectDesignIntoEditorProjectionFields(ProjectDocument& document,
                                              const ipcraft::core::ProjectDesign& design) {
     document.ipcoreState = document.instances;
+    const QHash<QString, QJsonObject> graphViewNodes = graphViewNodesById(design);
 
     document.modules.clear();
     document.modules.reserve(design.components.size());
     for (const ipcraft::core::ComponentInstance& component : design.components) {
+        if (graphConfigForComponent(component).has_value()) {
+            continue;
+        }
+
         const ProjectIpInstanceRecord* instance = findInstanceById(document.instances, component.id);
 
         ProjectModuleRecord module;
@@ -179,11 +256,104 @@ void projectDesignIntoEditorProjectionFields(ProjectDocument& document,
         module.instanceId = instance ? instance->instanceId : component.id;
         module.type = component.type;
         module.parameters = component.config;
+        mergeLayoutParameters(module.parameters, graphViewNodes.value(component.id));
         document.modules.append(module);
+    }
+
+    for (const ipcraft::core::ComponentInstance& component : design.components) {
+        const ProjectIpInstanceRecord* instance = findInstanceById(document.instances, component.id);
+        if (!instance) {
+            continue;
+        }
+        const std::optional<QJsonObject> graphConfig = graphConfigForComponent(component);
+        if (!graphConfig.has_value()) {
+            continue;
+        }
+
+        const QJsonArray objects = graphConfig->value(QStringLiteral("objects")).toArray();
+        for (const QJsonValue& objectValue : objects) {
+            if (!objectValue.isObject()) {
+                continue;
+            }
+            const QJsonObject object = objectValue.toObject();
+            const QString objectId = object.value(QStringLiteral("id")).toString().trimmed();
+            const QString objectType = object.value(QStringLiteral("type")).toString().trimmed();
+            if (objectId.isEmpty() || objectType.isEmpty()) {
+                continue;
+            }
+
+            ProjectModuleRecord module;
+            module.id = objectId;
+            module.ipcoreId = instance->ipcoreId;
+            module.instanceId = instance->instanceId;
+            module.type = objectType;
+            if (object.value(QStringLiteral("properties")).isObject()) {
+                module.parameters = object.value(QStringLiteral("properties")).toObject();
+            }
+            mergeLayoutParameters(module.parameters, graphViewNodes.value(objectId));
+            document.modules.append(module);
+        }
     }
 
     document.connections.clear();
     document.connections.reserve(design.connections.size());
+    for (const ipcraft::core::ComponentInstance& component : design.components) {
+        const ProjectIpInstanceRecord* instance = findInstanceById(document.instances, component.id);
+        if (!instance) {
+            continue;
+        }
+        const std::optional<QJsonObject> graphConfig = graphConfigForComponent(component);
+        if (!graphConfig.has_value()) {
+            continue;
+        }
+
+        const QJsonArray relationships = graphConfig->value(QStringLiteral("relationships")).toArray();
+        for (const QJsonValue& relationshipValue : relationships) {
+            if (!relationshipValue.isObject()) {
+                continue;
+            }
+            const QJsonObject relationship = relationshipValue.toObject();
+            const QString relationshipId =
+                relationship.value(QStringLiteral("id")).toString().trimmed();
+            const QString relationshipType =
+                relationship.value(QStringLiteral("type")).toString().trimmed();
+            const QJsonArray endpoints = relationship.value(QStringLiteral("endpoints")).toArray();
+            if (relationshipId.isEmpty() || relationshipType.isEmpty() || endpoints.size() < 2) {
+                continue;
+            }
+
+            ProjectConnectionRecord record;
+            record.id = relationshipId;
+            record.type = QStringLiteral("graph_config");
+            record.sourceKind = QStringLiteral("design");
+            record.connectionClassId = relationshipType;
+            record.properties = relationship.value(QStringLiteral("properties")).toObject();
+            record.status = metadataString(record.properties,
+                                           QStringLiteral("status"),
+                                           QStringLiteral("valid"));
+            record.alternatives = stringListFromJsonArray(
+                record.properties.value(QStringLiteral("alternatives")));
+
+            for (const QJsonValue& endpointValue : endpoints) {
+                if (!endpointValue.isObject()) {
+                    continue;
+                }
+                const QJsonObject endpoint = endpointValue.toObject();
+                ProjectConnectionInterfaceRef ref;
+                ref.instanceId = endpoint.value(QStringLiteral("object")).toString();
+                ref.interfaceId = endpoint.value(QStringLiteral("role")).toString();
+                ref.properties = endpoint.value(QStringLiteral("properties")).toObject();
+                if (!ref.instanceId.trimmed().isEmpty() &&
+                    !ref.interfaceId.trimmed().isEmpty()) {
+                    record.interfaces.append(ref);
+                }
+            }
+            if (record.interfaces.size() >= 2) {
+                document.connections.append(record);
+            }
+        }
+    }
+
     for (const ipcraft::core::Connection& connection : design.connections) {
         ProjectConnectionRecord record;
         record.id = connection.id;

@@ -3,6 +3,7 @@
 #include "graph/module.h"
 #include "graph/port.h"
 #include "ipcore/ipcatalogservice.h"
+#include "ipcraft/schemaids.h"
 #include "modules/moduleregistry.h"
 #include "nodeeditor/endpointattachmentlayout.h"
 #include "nodeeditor/graphnodegeometry.h"
@@ -91,6 +92,63 @@ ModuleType scopedEditorType(const QString& name, const QString& ipcoreId) {
                                      QStringLiteral("bus"),
                                      QStringLiteral("Out")));
     return type;
+}
+
+QString packageRefKey(const QString& packageId, const QString& packageVersion) {
+    return QStringLiteral("%1@%2").arg(packageId, packageVersion);
+}
+
+QString componentTypeForRecord(const ProjectIpInstanceRecord& record,
+                               const IpCatalogEntry& entry) {
+    const QString nativeType =
+        record.native.value(QStringLiteral("componentType")).toString().trimmed();
+    if (!nativeType.isEmpty()) {
+        return nativeType;
+    }
+    if (!entry.moduleTypes.isEmpty()) {
+        return entry.moduleTypes.first();
+    }
+    return QString();
+}
+
+void appendPackageIfMissing(ipcraft::core::ProjectDesign& design,
+                            const ProjectPackageRef& package) {
+    for (const ipcraft::core::PackageRef& existing : design.packages) {
+        if (existing.id == package.id && existing.version == package.version) {
+            return;
+        }
+    }
+    design.packages.append(ipcraft::core::PackageRef{package.id, package.version});
+}
+
+bool hasComponent(const ipcraft::core::ProjectDesign& design, const QString& componentId) {
+    for (const ipcraft::core::ComponentInstance& component : design.components) {
+        if (component.id == componentId) {
+            return true;
+        }
+    }
+    return false;
+}
+
+ipcraft::core::ComponentInstance componentForRecord(const ProjectIpInstanceRecord& record,
+                                                    const IpCatalogEntry& entry) {
+    ipcraft::core::ComponentInstance component;
+    component.id = record.instanceId;
+    component.type = componentTypeForRecord(record, entry);
+    component.packageRef = packageRefKey(record.package.id, record.package.version);
+    component.config = record.config;
+    return component;
+}
+
+ipcraft::core::ProjectDesign scopedEditorDesign(const ProjectIpInstanceRecord& record,
+                                                const IpCatalogEntry& entry) {
+    ipcraft::core::ProjectDesign design;
+    design.schema = ipcraft::schemaids::projectV1;
+    design.id = QStringLiteral("nodeeditor_project");
+    design.name = QStringLiteral("NodeEditor Project");
+    appendPackageIfMissing(design, record.package);
+    design.components.append(componentForRecord(record, entry));
+    return design;
 }
 
 void registerScopedEditorGlobalTypes() {
@@ -330,14 +388,29 @@ struct ScopedNodeEditorHarness {
     }
 
     void selectRavenoc() {
-        const ProjectIpServiceResult result = projectIpService.createInstanceForIpcore(ravenocEntry());
+        const IpCatalogEntry entry = ravenocEntry();
+        const ProjectIpServiceResult result = projectIpService.createInstanceForIpcore(entry);
         require(result.success, "RaveNoC instance should be selected");
+        designEditingService.replaceDesign(scopedEditorDesign(result.record, entry));
         QCoreApplication::processEvents();
     }
 
     void selectFabric() {
-        const ProjectIpServiceResult result = projectIpService.createInstanceForIpcore(fabricEntry());
+        const IpCatalogEntry entry = fabricEntry();
+        const ProjectIpServiceResult result = projectIpService.createInstanceForIpcore(entry);
         require(result.success, "Fabric instance should be selected");
+        designEditingService.replaceDesign(scopedEditorDesign(result.record, entry));
+        QCoreApplication::processEvents();
+    }
+
+    void ensureDesignComponentForRecord(const ProjectIpInstanceRecord& record,
+                                        const IpCatalogEntry& entry) {
+        ipcraft::core::ProjectDesign design = designEditingService.design();
+        appendPackageIfMissing(design, record.package);
+        if (!hasComponent(design, record.instanceId)) {
+            design.components.append(componentForRecord(record, entry));
+        }
+        designEditingService.replaceDesign(std::move(design));
         QCoreApplication::processEvents();
     }
 };
@@ -371,6 +444,49 @@ bool sendScopedDrop(NodeEditorWidget& editor, QMimeData* mimeData) {
     QCoreApplication::sendEvent(&editor, &drop);
     QCoreApplication::processEvents();
     return drop.isAccepted();
+}
+
+std::optional<QJsonObject> graphNodePosition(
+    const ipcraft::core::ProjectDesign& design,
+    const QString& componentId) {
+    for (const ipcraft::core::ViewDocument& view : design.views) {
+        if (view.id != QStringLiteral("graph")) {
+            continue;
+        }
+
+        const QJsonObject nodes = view.layout.value(QStringLiteral("nodes")).toObject();
+        const QJsonValue position = nodes.value(componentId);
+        if (position.isObject()) {
+            return position.toObject();
+        }
+    }
+    return std::nullopt;
+}
+
+QJsonArray graphObjectsForComponent(const ipcraft::core::ProjectDesign& design,
+                                    const QString& componentId) {
+    for (const ipcraft::core::ComponentInstance& component : design.components) {
+        if (component.id != componentId) {
+            continue;
+        }
+
+        return component.extensionData
+            .value(QStringLiteral("graph_config"))
+            .toObject()
+            .value(QStringLiteral("objects"))
+            .toArray();
+    }
+    return {};
+}
+
+std::optional<QJsonObject> firstGraphObjectForComponent(
+    const ipcraft::core::ProjectDesign& design,
+    const QString& componentId) {
+    const QJsonArray objects = graphObjectsForComponent(design, componentId);
+    if (objects.isEmpty() || !objects.first().isObject()) {
+        return std::nullopt;
+    }
+    return objects.first().toObject();
 }
 
 std::optional<QPointF> visibleModulePosition(NodeEditorWidget& editor, const QString& moduleId) {
@@ -1226,7 +1342,7 @@ void testScopedDropRejectsLegacyModuleTypeMime() {
             "legacy module MIME should not create a module");
 }
 
-void testScopedDropDoesNotCreateGraphModuleDirectly() {
+void testScopedDropCreatesGraphObjectThroughPatch() {
     ScopedNodeEditorHarness harness;
     harness.selectRavenoc();
     auto mimeData = scopedModuleMime(QStringLiteral("finepaper.ravenoc"),
@@ -1235,39 +1351,65 @@ void testScopedDropDoesNotCreateGraphModuleDirectly() {
 
     const bool accepted = sendScopedDrop(harness.editor, mimeData.get());
 
-    require(!accepted,
-            "matching scoped module drop should not be accepted until design patch editing is wired");
+    require(accepted, "matching scoped module drop should create a graph object");
+    require(harness.designEditingService.canUndo(),
+            "matching scoped module drop should enter design edit history");
+    const ipcraft::core::ProjectDesign& design = harness.designEditingService.design();
+    require(design.components.size() == 1,
+            "matching scoped module drop should keep one active workspace component");
+    const ipcraft::core::ComponentInstance& component = design.components.first();
+    require(component.id == QStringLiteral("ravenoc_0"),
+            "matching scoped module drop should target the active workspace component");
+    require(component.packageRef == QStringLiteral("finepaper.ravenoc@1.0"),
+            "active workspace component should reference the active package version");
+    const std::optional<QJsonObject> graphObject =
+        firstGraphObjectForComponent(design, QStringLiteral("ravenoc_0"));
+    require(graphObject.has_value(),
+            "matching scoped module drop should append a graph_config object");
+    require(graphObject->value(QStringLiteral("type")).toString() == QStringLiteral("RaveTile"),
+            "graph_config object should preserve the scoped module type");
+    const QString objectId = graphObject->value(QStringLiteral("id")).toString();
+    require(!objectId.isEmpty(), "graph_config object should have a generated id");
+    require(graphNodePosition(design, objectId).has_value(),
+            "graph_config object should persist its canvas node position");
     require(harness.graph.modules().empty(),
             "matching scoped drop should not create a graph module directly");
-    require(!harness.designEditingService.canUndo(),
-            "matching scoped drop should not enter design edit history before patch editing is wired");
 }
 
-void testScopedDropsDoNotPopulateActiveWorkspaceProjectionDirectly() {
+void testScopedDropsStayScopedToActiveWorkspaceDesign() {
     ScopedNodeEditorHarness harness;
     harness.selectFabric();
     auto firstMime = scopedModuleMime(QStringLiteral("finepaper.fabric"),
                                       QStringLiteral("fabric_0"),
                                       QStringLiteral("FabricSwitch"));
-    require(!sendScopedDrop(harness.editor, firstMime.get()),
-            "first scoped drop should not create module for fabric_0 directly");
+    require(sendScopedDrop(harness.editor, firstMime.get()),
+            "first scoped drop should create a design component for fabric_0");
     require(harness.graph.modules().empty(),
             "first scoped drop should not add a graph module directly");
 
     const ProjectIpServiceResult secondInstance =
         harness.projectIpService.createInstanceForIpcore(harness.fabricEntry());
     require(secondInstance.success, "second Fabric instance should be created");
+    harness.ensureDesignComponentForRecord(secondInstance.record, harness.fabricEntry());
     auto secondMime = scopedModuleMime(QStringLiteral("finepaper.fabric"),
                                        QStringLiteral("fabric_1"),
                                        QStringLiteral("FabricSwitch"));
-    require(!sendScopedDrop(harness.editor, secondMime.get()),
-            "second scoped drop should not create module for fabric_1 directly");
+    require(sendScopedDrop(harness.editor, secondMime.get()),
+            "second scoped drop should create a graph object for fabric_1");
     require(harness.graph.modules().empty(),
             "second scoped drop should not add another graph module directly");
+    require(harness.designEditingService.design().components.size() == 2,
+            "scoped drops should keep one workspace component per IP instance");
+    require(graphObjectsForComponent(harness.designEditingService.design(),
+                                     QStringLiteral("fabric_0")).size() == 1,
+            "first fabric instance should own its dropped graph object");
+    require(graphObjectsForComponent(harness.designEditingService.design(),
+                                     QStringLiteral("fabric_1")).size() == 1,
+            "second fabric instance should own its dropped graph object");
 
     QStringList visibleIds = harness.editor.visibleModuleIds();
     require(visibleIds.isEmpty(),
-            "active workspace projection should stay empty without a design patch update");
+            "active workspace projection should stay empty until the design is projected");
 
     require(harness.projectIpService.selectInstance(QStringLiteral("finepaper.fabric"),
                                                     QStringLiteral("fabric_0")),
@@ -1275,7 +1417,7 @@ void testScopedDropsDoNotPopulateActiveWorkspaceProjectionDirectly() {
     QCoreApplication::processEvents();
     visibleIds = harness.editor.visibleModuleIds();
     require(visibleIds.isEmpty(),
-            "switching back to fabric_0 should not reveal modules from rejected direct drops");
+            "switching back to fabric_0 should not reveal unprojected design components");
 
     require(harness.projectIpService.selectInstance(QStringLiteral("finepaper.fabric"),
                                                     QStringLiteral("fabric_1")),
@@ -1283,7 +1425,7 @@ void testScopedDropsDoNotPopulateActiveWorkspaceProjectionDirectly() {
     QCoreApplication::processEvents();
     visibleIds = harness.editor.visibleModuleIds();
     require(visibleIds.isEmpty(),
-            "switching to fabric_1 should not reveal modules from rejected direct drops");
+            "switching to fabric_1 should not reveal unprojected design components");
 }
 
 void testCreateMenuTypesFollowActiveWorkspace() {
@@ -1619,8 +1761,8 @@ int main(int argc, char** argv) {
         testScopedDropRejectsMissingActiveInstance();
         testScopedDropRejectsDifferentIpcore();
         testScopedDropRejectsLegacyModuleTypeMime();
-        testScopedDropDoesNotCreateGraphModuleDirectly();
-        testScopedDropsDoNotPopulateActiveWorkspaceProjectionDirectly();
+        testScopedDropCreatesGraphObjectThroughPatch();
+        testScopedDropsStayScopedToActiveWorkspaceDesign();
         testCreateMenuTypesFollowActiveWorkspace();
         testCollapsedHostAbsorbsEndpointWhenAttachmentConnectionIsAdded();
         testCollapsedAttachedNodeMirrorsIntoHostZone();
