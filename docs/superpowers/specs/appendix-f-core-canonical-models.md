@@ -208,7 +208,7 @@ Allowed `kind`: `topology-materialization`, `default-engine-migration`.
 }
 ```
 
-Impact code, severity, dataLoss, Subjects, details, and resolution participate in candidate digest. Localized title/message/help URLs do not exist in this object and are derived by the UI from `code`.
+Impact code, severity, dataLoss, Subjects, details, and resolution participate in candidate digest. Impact entries sort by the total key `(code, severity, dataLoss, canonical subjects, canonical details, resolution)` in exactly that order. Localized title/message/help URLs do not exist in this object and are derived by the UI from `code`.
 
 Stable V1 impact codes:
 
@@ -269,7 +269,7 @@ Freshness is computed against all exact fields plus current authoritative/saved 
 
 ## F10. Canonical Collection Rules
 
-Every schema array carries `x-ipcraft-canonical`. Its value has one consistent shape:
+Every reachable explicit array schema frozen at Gate 0 carries `x-ipcraft-canonical`. Its value has one consistent shape:
 
 ```json
 { "kind": "set", "sortKey": ["id"] }
@@ -277,129 +277,120 @@ Every schema array carries `x-ipcraft-canonical`. Its value has one consistent s
 { "kind": "derived-ordered", "sortKey": ["unicodeScalarValue"] }
 ```
 
-`sortKey` members name the comparison components below; `canonicalJson` and `*CanonicalJson` mean UTF-8 RFC 8785 canonical JSON bytes after nested normalization, `unicodeScalarValue` means literal string order, and `objectRefToken` means F2's token. `state-order` places resolved before unresolved. `persistedEndpointCanonicalKey` is resolved `(state-order, subject.kind, id:<subject.id>)` or unresolved `(state-order, intendedSubject.kind, id:<intendedSubject.id>, reasonCode)`. `patchEndpointCanonicalKey` is resolved `(state-order, subject.kind, objectRefToken(subject.ref))` or unresolved `(state-order, intendedSubject.kind, objectRefToken(intendedSubject.ref), reasonCode)`. The companion vector's `canonicalCollections` array is the machine-readable copy of this table.
+Each machine rule has exact `{schemaId, schemaPointer, kind, sortKey}` addressing; ordered rules omit `sortKey`. `schemaPointer` is an RFC 6901 pointer to the physical array schema node in the catalogued document named by `schemaId`. Validators resolve local/external `$ref` edges and map every reachable reuse to that defining location exactly once; alias/display paths never create duplicate rules. The committed `docs/contracts/tools/verify_canonical_rules.py` authoring check proves this one-to-one graph coverage and exact metadata equality.
 
-| Exact document path | Kind | Sort key / retained meaning |
-|---|---|---|
-| `projectDesign.dependencies` | set | `lockId` |
-| `projectDesign.dependencies[].supportedPlatformAbis` | set | `unicodeScalarValue` |
-| `projectDesign.components` | set | `id` |
-| `projectDesign.components[].extensions` | set | `ownerLockId,schema,version` |
-| `projectDesign.interfaces` | set | `id` |
-| `projectDesign.interfaces[].extensions` | set | `ownerLockId,schema,version` |
-| `projectDesign.interfaces[].capabilities.*[]` | set | `canonicalJson` |
-| `projectDesign.connections` | set | `id` |
-| `projectDesign.topologies` | set | `id` |
-| `projectDesign.topologies[].routers` | set | `id` |
-| `projectDesign.topologies[].structuralLinks` | set | `id` |
-| `projectDesign.topologies[].accessSlots` | set | `id` |
-| `projectDesign.topologies[].accessSlots[].allowedContracts` | set | `contractLockId` |
-| `projectDesign.topologies[].accessSlots[].allowedContracts[].roles` | set | `unicodeScalarValue` |
-| `projectDesign.topologies[].accessSlots[].allowedContracts[].capabilityConstraints.*[]` | set | `canonicalJson` |
-| `projectDesign.topologies[].attachments` | set | `id` |
-| `projectDesign.topologies[].domains` | set | `id` |
-| `projectDesign.topologies[].domainMemberships` | set | `id` |
-| `projectDesign.topologies[].packageEntities` | set | `id` |
-| `projectDesign.topologies[].packageEntities[].extensions` | set | `ownerLockId,schema,version` |
-| `projectDesign.topologies[].packageRelations` | set | `id` |
-| `projectDesign.topologies[].packageRelations[].sources` | set | `persistedEndpointCanonicalKey` |
-| `projectDesign.topologies[].packageRelations[].targets` | set | `persistedEndpointCanonicalKey` |
-| `projectDesign.topologies[].packageRelations[].extensions` | set | `ownerLockId,schema,version` |
-| `projectDesign.topologies[].extensions` | set | `ownerLockId,schema,version` |
-| `projectDesign.views` | set | `id` |
-| `projectDesign.extensions` | set | `ownerLockId,schema,version` |
-| `topologyIntent.packageEntities` | set | `id` |
-| `topologyIntent.packageRelations` | set | `id` |
-| `topologyIntent.packageRelations[].sources` | set | `persistedEndpointCanonicalKey` |
-| `topologyIntent.packageRelations[].targets` | set | `persistedEndpointCanonicalKey` |
-| `normalizedTopologyInput.mesh.slotTemplates` | set | `stableKey` |
-| `normalizedTopologyInput.mesh.slotTemplates[].allowedContracts` | set | `contractId,version,bundleManifestDigest` |
-| `normalizedTopologyInput.mesh.slotTemplates[].allowedContracts[].roles` | set | `unicodeScalarValue` |
-| `normalizedTopologyInput.mesh.slotTemplates[].allowedContracts[].capabilityConstraints.*[]` | set | `canonicalJson` |
-| `derivedState.routers` | set | `id` |
-| `derivedState.structuralLinks` | set | `id` |
-| `derivedState.accessSlots` | set | `id` |
-| `derivedState.accessSlots[].allowedContracts` | set | `contractLockId` |
-| `derivedState.accessSlots[].allowedContracts[].roles` | set | `unicodeScalarValue` |
-| `derivedState.accessSlots[].allowedContracts[].capabilityConstraints.*[]` | set | `canonicalJson` |
-| `derivedState.packageEntities` | set | `id` |
-| `derivedState.packageRelations` | set | `id` |
-| `derivedState.packageRelations[].sources` | set | `persistedEndpointCanonicalKey` |
-| `derivedState.packageRelations[].targets` | set | `persistedEndpointCanonicalKey` |
-| `patch.preconditions` | set | `canonicalJson` |
-| `patch.operations` | ordered | operation sequence retained |
-| `patchBody.operations` | ordered | operation sequence retained |
-| `patchOperations[].unset` | set | `unicodeScalarValue` |
-| `patchOperations[].value.allowedContracts` | set | `contractLockId` |
-| `patchOperations[].value.allowedContracts[].roles` | set | `unicodeScalarValue` |
-| `patchOperations[].value.allowedContracts[].capabilityConstraints.*[]` | set | `canonicalJson` |
-| `patchOperations[].value.capabilities.*[]` | set | `canonicalJson` |
-| `patchOperations[].value.sources` | set | `patchEndpointCanonicalKey` |
-| `patchOperations[].value.targets` | set | `patchEndpointCanonicalKey` |
-| `patchOperations[].value.extensions` | set | `ownerLockId,schema,version` |
-| `candidateTransaction.authorityPatch.operations` | ordered | operation sequence retained |
-| `candidateTransaction.applicationPatch.operations` | ordered | operation sequence retained |
-| `candidateTransaction.tombstones` | set | `subjectKind,id` |
-| `candidateTransaction.allocationOrder` | derived-ordered | `unicodeScalarValue` |
-| `topologyImpactReport.impacts` | set | `code,subjectsCanonicalJson,detailsCanonicalJson,resolution` |
-| `topologyImpactReport.impacts[].subjects` | set | `kind,id` |
-| `pipelinePlan.steps` | ordered | declared pipeline order retained |
-| `nocPackage.interfaceTemplates` | set | `key` |
-| `nocPackage.domainTypes` | set | `key` |
-| `nocPackage.packageEntityTypes` | set | `typeKey` |
-| `nocPackage.packageRelationTypes` | set | `typeKey` |
-| `nocPackage.extensions` | set | `ownerLockId,schema,version` |
-| `nocPackage.configuration.global.fields` | set | `key` |
-| `nocPackage.configuration.global.fields[].values` | set | `canonicalJson` |
-| `nocPackage.topology.slotTemplates` | set | `stableKey` |
-| `nocPackage.topology.slotTemplates[].allowedContracts` | set | `contractId,version,bundleManifestDigest` |
-| `nocPackage.topology.slotTemplates[].allowedContracts[].roles` | set | `unicodeScalarValue` |
-| `nocPackage.topology.slotTemplates[].allowedContracts[].capabilityConstraints.*[]` | set | `canonicalJson` |
-| `nocPackage.interfaceTemplates[].nocConfig.fields` | set | `key` |
-| `nocPackage.interfaceTemplates[].nocConfig.fields[].values` | set | `canonicalJson` |
-| `nocPackage.interfaceTemplates[].capabilityDefaults.*[]` | set | `canonicalJson` |
-| `nocPackage.domainTypes[].configuration.fields` | set | `key` |
-| `nocPackage.domainTypes[].configuration.fields[].values` | set | `canonicalJson` |
-| `nocPackage.packageRelationTypes[].sources.kinds` | set | `unicodeScalarValue` |
-| `nocPackage.packageRelationTypes[].targets.kinds` | set | `unicodeScalarValue` |
-| `nocPackage.tools.drc.command` | ordered | argv order retained |
-| `nocPackage.tools.generate.command` | ordered | argv order retained |
-| `interfaceContract.roles` | set | `key` |
-| `interfaceContract.capabilities` | set | `key` |
-| `interfaceContract.capabilities[].values` | set | `canonicalJson` |
-| `interfaceContract.fields` | set | `key` |
-| `interfaceContract.fields[].values` | set | `canonicalJson` |
-| `engineBundle.migrationFromCompatibilityVersions` | set | `unicodeScalarValue` |
-| `engineBundle.supportedPlatformAbis` | set | `unicodeScalarValue` |
-| `providerManifest.command` | ordered | argv order retained |
-| `providerManifest.capabilities` | set | `unicodeScalarValue` |
-| `providerManifest.ownedEntityTypes` | set | `unicodeScalarValue` |
-| `providerManifest.ownedRelationTypes` | set | `unicodeScalarValue` |
-| `providerHello.requestedCapabilities` | set | `unicodeScalarValue` |
-| `providerHelloResult.capabilities` | set | `unicodeScalarValue` |
-| `reconcileRequest.dependencyLocks` | set | `lockId` |
-| `reconcileRequest.capabilities` | set | `canonicalJson` |
-| `providerResult.diagnostics` | ordered | producer emission order retained |
-| `toolManifest.command` | ordered | argv order retained |
-| `toolManifest.capabilities` | set | `unicodeScalarValue` |
-| `toolInput.dependencies` | set | `lockId` |
-| `bundleManifest.files` | set | `path` |
-| `artifactManifest.artifacts` | set | `path` |
-| `diagnosticReport.diagnostics` | ordered | producer emission order retained |
-| `diagnosticReport.diagnostics[].subjects` | set | `kind,id` |
-| `diagnosticReport.diagnostics[].properties` | set | `unicodeScalarValue` |
-| `commandResult.diagnostics` | ordered | producer emission order retained |
-| `pipelineResult.steps` | ordered | execution-plan order retained |
-| `recovery.draftOverlay` | ordered | `sequence`/submission order retained |
-| `recovery.draftUndo` | ordered | stack order retained |
-| `recovery.draftRedo` | ordered | stack order retained |
-| `recovery.draftOverlay[].diagnostics` | ordered | producer emission order retained |
-| `recovery.draftUndo[].before` | ordered | Draft sequence retained |
-| `recovery.draftUndo[].after` | ordered | Draft sequence retained |
-| `recovery.draftRedo[].before` | ordered | Draft sequence retained |
-| `recovery.draftRedo[].after` | ordered | Draft sequence retained |
-| `recovery.pendingTopologyGroup.intentUndo` | ordered | stack order retained |
-| `recovery.pendingTopologyGroup.intentRedo` | ordered | stack order retained |
+`sortKey` members name the comparison components below; `canonicalJson` and `*CanonicalJson` mean UTF-8 RFC 8785 canonical JSON bytes after nested normalization, `unicodeScalarValue` means literal string order, and `objectRefToken` means F2's token. `state-order` places resolved before unresolved. `persistedEndpointCanonicalKey` is resolved `(state-order, subject.kind, id:<subject.id>)` or unresolved `(state-order, intendedSubject.kind, id:<intendedSubject.id>, reasonCode)`. `patchEndpointCanonicalKey` is resolved `(state-order, subject.kind, objectRefToken(subject.ref))` or unresolved `(state-order, intendedSubject.kind, objectRefToken(intendedSubject.ref), reasonCode)`. The companion vector's `canonicalCollections` array is the machine-readable source mirrored by this table.
+
+| Schema ID | RFC 6901 schema pointer | Kind | Sort key |
+|---|---|---|---|
+| `ipcraft.artifact-manifest.v1` | `/properties/artifacts` | set | `path` |
+| `ipcraft.bundle-manifest.v1` | `/properties/files` | set | `path` |
+| `ipcraft.command-result.v1` | `/properties/diagnostics` | ordered | `—` |
+| `ipcraft.core-canonical-models.v1` | `/$defs/accessSlot/properties/allowedContracts` | set | `contractLockId` |
+| `ipcraft.core-canonical-models.v1` | `/$defs/accessSlot/properties/allowedContracts/items/properties/roles` | set | `unicodeScalarValue` |
+| `ipcraft.core-canonical-models.v1` | `/$defs/candidateTransaction/properties/allocationOrder` | derived-ordered | `unicodeScalarValue` |
+| `ipcraft.core-canonical-models.v1` | `/$defs/candidateTransaction/properties/tombstones` | set | `subjectKind,id` |
+| `ipcraft.core-canonical-models.v1` | `/$defs/derivedState/properties/accessSlots` | set | `id` |
+| `ipcraft.core-canonical-models.v1` | `/$defs/derivedState/properties/packageEntities` | set | `id` |
+| `ipcraft.core-canonical-models.v1` | `/$defs/derivedState/properties/packageRelations` | set | `id` |
+| `ipcraft.core-canonical-models.v1` | `/$defs/derivedState/properties/routers` | set | `id` |
+| `ipcraft.core-canonical-models.v1` | `/$defs/derivedState/properties/structuralLinks` | set | `id` |
+| `ipcraft.core-canonical-models.v1` | `/$defs/impact/properties/subjects` | set | `kind,id` |
+| `ipcraft.core-canonical-models.v1` | `/$defs/impactReport/properties/impacts` | set | `code,severity,dataLoss,subjectsCanonicalJson,detailsCanonicalJson,resolution` |
+| `ipcraft.core-canonical-models.v1` | `/$defs/normalizedTopologyInput/properties/mesh/properties/slotTemplates` | set | `stableKey` |
+| `ipcraft.core-canonical-models.v1` | `/$defs/packageRelation/properties/sources` | set | `persistedEndpointCanonicalKey` |
+| `ipcraft.core-canonical-models.v1` | `/$defs/packageRelation/properties/targets` | set | `persistedEndpointCanonicalKey` |
+| `ipcraft.core-canonical-models.v1` | `/$defs/patchComponentValue/properties/extensions` | set | `ownerLockId,schema,version` |
+| `ipcraft.core-canonical-models.v1` | `/$defs/patchInterfaceValue/properties/extensions` | set | `ownerLockId,schema,version` |
+| `ipcraft.core-canonical-models.v1` | `/$defs/patchOperations` | ordered | `—` |
+| `ipcraft.core-canonical-models.v1` | `/$defs/patchPackageEntityValue/properties/extensions` | set | `ownerLockId,schema,version` |
+| `ipcraft.core-canonical-models.v1` | `/$defs/patchPackageRelationValue/properties/extensions` | set | `ownerLockId,schema,version` |
+| `ipcraft.core-canonical-models.v1` | `/$defs/patchPackageRelationValue/properties/sources` | set | `patchEndpointCanonicalKey` |
+| `ipcraft.core-canonical-models.v1` | `/$defs/patchPackageRelationValue/properties/targets` | set | `patchEndpointCanonicalKey` |
+| `ipcraft.core-canonical-models.v1` | `/$defs/pipelinePlan/properties/steps` | ordered | `—` |
+| `ipcraft.core-canonical-models.v1` | `/$defs/slotAllowedContract/properties/roles` | set | `unicodeScalarValue` |
+| `ipcraft.core-canonical-models.v1` | `/$defs/slotTemplate/properties/allowedContracts` | set | `contractId,version,bundleManifestDigest` |
+| `ipcraft.core-canonical-models.v1` | `/$defs/topologyIntent/properties/packageEntities` | set | `id` |
+| `ipcraft.core-canonical-models.v1` | `/$defs/topologyIntent/properties/packageRelations` | set | `id` |
+| `ipcraft.core-canonical-models.v1` | `/$defs/updateEntityOperation/properties/unset` | set | `unicodeScalarValue` |
+| `ipcraft.core-canonical-models.v1` | `/$defs/updateRelationOperation/properties/unset` | set | `unicodeScalarValue` |
+| `ipcraft.diagnostic-report.v1` | `/$defs/diagnostic/properties/properties` | set | `unicodeScalarValue` |
+| `ipcraft.diagnostic-report.v1` | `/$defs/diagnostic/properties/subjects` | set | `kind,id` |
+| `ipcraft.diagnostic-report.v1` | `/properties/diagnostics` | ordered | `—` |
+| `ipcraft.engine-bundle.v1` | `/properties/migrationFromCompatibilityVersions` | set | `unicodeScalarValue` |
+| `ipcraft.engine-bundle.v1` | `/properties/supportedPlatformAbis` | set | `unicodeScalarValue` |
+| `ipcraft.interface-contract.v1` | `/$defs/capability/properties/values/oneOf/0` | set | `canonicalJson` |
+| `ipcraft.interface-contract.v1` | `/$defs/field/properties/values/oneOf/0` | set | `canonicalJson` |
+| `ipcraft.interface-contract.v1` | `/properties/capabilities` | set | `key` |
+| `ipcraft.interface-contract.v1` | `/properties/fields` | set | `key` |
+| `ipcraft.interface-contract.v1` | `/properties/roles` | set | `key` |
+| `ipcraft.noc-package.v1` | `/$defs/allowedContract/properties/roles` | set | `unicodeScalarValue` |
+| `ipcraft.noc-package.v1` | `/$defs/configuration/properties/global/properties/fields` | set | `key` |
+| `ipcraft.noc-package.v1` | `/$defs/domainType/properties/configuration/properties/fields` | set | `key` |
+| `ipcraft.noc-package.v1` | `/$defs/endpointDeclaration/properties/kinds` | set | `unicodeScalarValue` |
+| `ipcraft.noc-package.v1` | `/$defs/field/properties/values/oneOf/0` | set | `canonicalJson` |
+| `ipcraft.noc-package.v1` | `/$defs/interfaceTemplate/properties/nocConfig/properties/fields` | set | `key` |
+| `ipcraft.noc-package.v1` | `/$defs/slotTemplate/properties/allowedContracts` | set | `contractId,version,bundleManifestDigest` |
+| `ipcraft.noc-package.v1` | `/$defs/tool/properties/command` | ordered | `—` |
+| `ipcraft.noc-package.v1` | `/$defs/topology/properties/slotTemplates` | set | `stableKey` |
+| `ipcraft.noc-package.v1` | `/properties/domainTypes` | set | `key` |
+| `ipcraft.noc-package.v1` | `/properties/extensions` | set | `ownerLockId,schema,version` |
+| `ipcraft.noc-package.v1` | `/properties/interfaceTemplates` | set | `key` |
+| `ipcraft.noc-package.v1` | `/properties/packageEntityTypes` | set | `typeKey` |
+| `ipcraft.noc-package.v1` | `/properties/packageRelationTypes` | set | `typeKey` |
+| `ipcraft.patch.v1` | `/properties/preconditions` | set | `canonicalJson` |
+| `ipcraft.pipeline-result.v1` | `/properties/steps` | ordered | `—` |
+| `ipcraft.project-design.v1` | `/$defs/component/properties/extensions` | set | `ownerLockId,schema,version` |
+| `ipcraft.project-design.v1` | `/$defs/defaultEngineDependencyLock/properties/supportedPlatformAbis` | set | `unicodeScalarValue` |
+| `ipcraft.project-design.v1` | `/$defs/interface/properties/extensions` | set | `ownerLockId,schema,version` |
+| `ipcraft.project-design.v1` | `/$defs/packageEntity/properties/extensions` | set | `ownerLockId,schema,version` |
+| `ipcraft.project-design.v1` | `/$defs/packageRelation/properties/extensions` | set | `ownerLockId,schema,version` |
+| `ipcraft.project-design.v1` | `/$defs/packageRelation/properties/sources` | set | `persistedEndpointCanonicalKey` |
+| `ipcraft.project-design.v1` | `/$defs/packageRelation/properties/targets` | set | `persistedEndpointCanonicalKey` |
+| `ipcraft.project-design.v1` | `/$defs/topology/properties/accessSlots` | set | `id` |
+| `ipcraft.project-design.v1` | `/$defs/topology/properties/attachments` | set | `id` |
+| `ipcraft.project-design.v1` | `/$defs/topology/properties/domainMemberships` | set | `id` |
+| `ipcraft.project-design.v1` | `/$defs/topology/properties/domains` | set | `id` |
+| `ipcraft.project-design.v1` | `/$defs/topology/properties/extensions` | set | `ownerLockId,schema,version` |
+| `ipcraft.project-design.v1` | `/$defs/topology/properties/packageEntities` | set | `id` |
+| `ipcraft.project-design.v1` | `/$defs/topology/properties/packageRelations` | set | `id` |
+| `ipcraft.project-design.v1` | `/$defs/topology/properties/routers` | set | `id` |
+| `ipcraft.project-design.v1` | `/$defs/topology/properties/structuralLinks` | set | `id` |
+| `ipcraft.project-design.v1` | `/properties/components` | set | `id` |
+| `ipcraft.project-design.v1` | `/properties/connections` | set | `id` |
+| `ipcraft.project-design.v1` | `/properties/dependencies` | set | `lockId` |
+| `ipcraft.project-design.v1` | `/properties/extensions` | set | `ownerLockId,schema,version` |
+| `ipcraft.project-design.v1` | `/properties/interfaces` | set | `id` |
+| `ipcraft.project-design.v1` | `/properties/topologies` | set | `id` |
+| `ipcraft.project-design.v1` | `/properties/views` | set | `id` |
+| `ipcraft.recovery.v1` | `/$defs/draftEntry/properties/diagnostics` | ordered | `—` |
+| `ipcraft.recovery.v1` | `/$defs/draftOverlayMutation/properties/after` | ordered | `—` |
+| `ipcraft.recovery.v1` | `/$defs/draftOverlayMutation/properties/before` | ordered | `—` |
+| `ipcraft.recovery.v1` | `/$defs/pendingTopologyGroup/properties/intentRedo` | ordered | `—` |
+| `ipcraft.recovery.v1` | `/$defs/pendingTopologyGroup/properties/intentUndo` | ordered | `—` |
+| `ipcraft.recovery.v1` | `/properties/draftOverlay` | ordered | `—` |
+| `ipcraft.recovery.v1` | `/properties/draftRedo` | ordered | `—` |
+| `ipcraft.recovery.v1` | `/properties/draftUndo` | ordered | `—` |
+| `ipcraft.tool-input.v1` | `/properties/dependencies` | set | `lockId` |
+
+Kind-specific Patch update-set schemas reuse the create-value property schemas for `allowedContracts`/nested `roles`, Package Relation `sources`/`targets`, and `extensions`. Their create and update permutations therefore resolve to the same physical locations above and cannot diverge in canonicalization. The only open update values are the explicitly Package/Contract-defined `data`, `config`, `properties`, `contractConfig`, `nocConfig`, and `capabilities` maps.
+
+### Deferred Extension Collections
+
+These prose-only Provider/Tool capability paths freeze at Gate D. They are intentionally display-only, have no Gate 0 `schemaId`/`schemaPointer`, and are excluded from Core completeness checks.
+
+| Display path | Freeze gate |
+|---|---|
+| `providerManifest.command` | `extension` |
+| `providerManifest.capabilities` | `extension` |
+| `providerManifest.ownedEntityTypes` | `extension` |
+| `providerManifest.ownedRelationTypes` | `extension` |
+| `providerHello.requestedCapabilities` | `extension` |
+| `providerHelloResult.capabilities` | `extension` |
+| `reconcileRequest.dependencyLocks` | `extension` |
+| `reconcileRequest.capabilities` | `extension` |
+| `providerResult.diagnostics` | `extension` |
+| `toolManifest.capabilities` | `extension` |
 
 Every set key is candidate/document-wide unique at its owning path. Literal sets also use `uniqueItems` where useful; composite-key uniqueness, canonical sorting, nested normalization, localRef graph integrity, allocation-order derivation, endpoint normalization, and digest equality are semantic-validator rules because standard JSON Schema cannot compare sibling array items or recompute digests. Schemas carry both `x-ipcraft-canonical` and `$comment` where this limitation matters; implementations MUST NOT claim JSON Schema alone enforces these rules.
 

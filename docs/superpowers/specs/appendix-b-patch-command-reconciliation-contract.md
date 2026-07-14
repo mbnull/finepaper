@@ -133,6 +133,8 @@ All preconditions are evaluated before the first operation. Failure rejects the 
 ```
 
 - `set` replaces complete top-level schema properties.
+- `set` is a closed object selected by `entityKind` or `relationKind`; it may contain only fields declared for that subject kind. Each field is optional in the update set, and the final object must validate after applying `set` and `unset`.
+- Nested `allowedContracts`, `roles`, Package Relation `sources`/`targets`, and `extensions` reuse the same typed canonical array schemas as create values. Only Package/Contract-defined `data`, `config`, `properties`, `contractConfig`, `nocConfig`, and `capabilities` value maps remain open for their owning semantic schema.
 - Nested objects are replaced, never deep-merged.
 - JSON `null` is a value only when the property schema permits it.
 - Property removal uses `unset`; the same property cannot appear in both lists.

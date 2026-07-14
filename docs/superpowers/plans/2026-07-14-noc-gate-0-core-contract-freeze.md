@@ -108,27 +108,30 @@ git commit -m "docs: define Gate 0 contract schema roots"
 **Files:**
 - Modify: `docs/contracts/schemas/ipcraft.core-canonical-models.v1.schema.json`
 - Modify: `docs/contracts/vectors/core-canonical-projection-v1.json`
+- Create: `docs/contracts/tools/verify_canonical_rules.py`
 - Create: `docs/contracts/vectors/core-set-permutation-v1.json`
 - Create: `docs/contracts/vectors/candidate-local-ref-v1.json`
 
-- [ ] **Step 1: Add an explicit canonical collection table to the vector document**
+- [ ] **Step 1: Add an explicit schema-addressed canonical collection table to the vector document**
 
-Represent every set-valued array with its exact sort key:
+Represent every physical frozen array schema node with its catalogued schema ID, exact RFC 6901 schema pointer, kind, and sort key. Resolve `$ref` reuse to the defining node rather than duplicating display aliases:
 
 ```json
 {
-  "path": "derivedState.routers",
+  "schemaId": "ipcraft.core-canonical-models.v1",
+  "schemaPointer": "/$defs/derivedState/properties/routers",
   "kind": "set",
   "sortKey": ["id"]
 },
 {
-  "path": "normalizedTopologyInput.slotTemplates[].allowedContracts",
+  "schemaId": "ipcraft.core-canonical-models.v1",
+  "schemaPointer": "/$defs/slotTemplate/properties/allowedContracts",
   "kind": "set",
   "sortKey": ["contractId", "version", "bundleManifestDigest"]
 }
 ```
 
-Include dependencies, domains, memberships, package entities, package relations, relation endpoint sets, roles, extensions, Routers, Links, Slots, and allowed contracts. Mark only pipeline steps, display order, and other explicitly semantic sequences as ordered.
+Include dependencies, domains, memberships, package entities, package relations, relation endpoint sets, roles, extensions, Routers, Links, Slots, allowed contracts, update-set reuse, and all other reachable catalogued arrays. Mark only pipeline steps, operation order, and other explicitly semantic sequences as ordered. Keep prose-only Provider ABI collections in `deferredExtensionCollections` with `freezeGate: extension`; they are not Gate 0 Core-completeness entries.
 
 - [ ] **Step 2: Freeze transaction-wide local references**
 
@@ -155,6 +158,14 @@ Add vectors proving that Authority and Application operations share one candidat
 - [ ] **Step 3: Add permutation pairs**
 
 For each set-valued array, store two inputs with different source order and one expected canonical JSON/digest. For ordered arrays, store a counter-vector whose digest must differ.
+
+Run the stdlib-only authoring verifier before computing vector digests:
+
+```bash
+python3 docs/contracts/tools/verify_canonical_rules.py
+```
+
+It must prove one rule per reachable physical annotated array schema node, exact schema/table metadata equality, valid RFC 6901 locations, and exclusion of deferred Gate D display paths from Core completeness.
 
 - [ ] **Step 4: Recompute vector digests with one reference implementation**
 

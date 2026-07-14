@@ -2,125 +2,752 @@
   "schema": "ipcraft.core-canonical-vectors.v1",
   "canonicalization": "RFC8785-after-Appendix-F-set-projection",
   "canonicalCollections": [
-    { "path": "projectDesign.dependencies", "kind": "set", "sortKey": ["lockId"] },
-    { "path": "projectDesign.dependencies[].supportedPlatformAbis", "kind": "set", "sortKey": ["unicodeScalarValue"] },
-    { "path": "projectDesign.components", "kind": "set", "sortKey": ["id"] },
-    { "path": "projectDesign.components[].extensions", "kind": "set", "sortKey": ["ownerLockId", "schema", "version"] },
-    { "path": "projectDesign.interfaces", "kind": "set", "sortKey": ["id"] },
-    { "path": "projectDesign.interfaces[].extensions", "kind": "set", "sortKey": ["ownerLockId", "schema", "version"] },
-    { "path": "projectDesign.interfaces[].capabilities.*[]", "kind": "set", "sortKey": ["canonicalJson"] },
-    { "path": "projectDesign.connections", "kind": "set", "sortKey": ["id"] },
-    { "path": "projectDesign.topologies", "kind": "set", "sortKey": ["id"] },
-    { "path": "projectDesign.topologies[].routers", "kind": "set", "sortKey": ["id"] },
-    { "path": "projectDesign.topologies[].structuralLinks", "kind": "set", "sortKey": ["id"] },
-    { "path": "projectDesign.topologies[].accessSlots", "kind": "set", "sortKey": ["id"] },
-    { "path": "projectDesign.topologies[].accessSlots[].allowedContracts", "kind": "set", "sortKey": ["contractLockId"] },
-    { "path": "projectDesign.topologies[].accessSlots[].allowedContracts[].roles", "kind": "set", "sortKey": ["unicodeScalarValue"] },
-    { "path": "projectDesign.topologies[].accessSlots[].allowedContracts[].capabilityConstraints.*[]", "kind": "set", "sortKey": ["canonicalJson"] },
-    { "path": "projectDesign.topologies[].attachments", "kind": "set", "sortKey": ["id"] },
-    { "path": "projectDesign.topologies[].domains", "kind": "set", "sortKey": ["id"] },
-    { "path": "projectDesign.topologies[].domainMemberships", "kind": "set", "sortKey": ["id"] },
-    { "path": "projectDesign.topologies[].packageEntities", "kind": "set", "sortKey": ["id"] },
-    { "path": "projectDesign.topologies[].packageEntities[].extensions", "kind": "set", "sortKey": ["ownerLockId", "schema", "version"] },
-    { "path": "projectDesign.topologies[].packageRelations", "kind": "set", "sortKey": ["id"] },
-    { "path": "projectDesign.topologies[].packageRelations[].sources", "kind": "set", "sortKey": ["persistedEndpointCanonicalKey"] },
-    { "path": "projectDesign.topologies[].packageRelations[].targets", "kind": "set", "sortKey": ["persistedEndpointCanonicalKey"] },
-    { "path": "projectDesign.topologies[].packageRelations[].extensions", "kind": "set", "sortKey": ["ownerLockId", "schema", "version"] },
-    { "path": "projectDesign.topologies[].extensions", "kind": "set", "sortKey": ["ownerLockId", "schema", "version"] },
-    { "path": "projectDesign.views", "kind": "set", "sortKey": ["id"] },
-    { "path": "projectDesign.extensions", "kind": "set", "sortKey": ["ownerLockId", "schema", "version"] },
-    { "path": "topologyIntent.packageEntities", "kind": "set", "sortKey": ["id"] },
-    { "path": "topologyIntent.packageRelations", "kind": "set", "sortKey": ["id"] },
-    { "path": "topologyIntent.packageRelations[].sources", "kind": "set", "sortKey": ["persistedEndpointCanonicalKey"] },
-    { "path": "topologyIntent.packageRelations[].targets", "kind": "set", "sortKey": ["persistedEndpointCanonicalKey"] },
-    { "path": "normalizedTopologyInput.mesh.slotTemplates", "kind": "set", "sortKey": ["stableKey"] },
-    { "path": "normalizedTopologyInput.mesh.slotTemplates[].allowedContracts", "kind": "set", "sortKey": ["contractId", "version", "bundleManifestDigest"] },
-    { "path": "normalizedTopologyInput.mesh.slotTemplates[].allowedContracts[].roles", "kind": "set", "sortKey": ["unicodeScalarValue"] },
-    { "path": "normalizedTopologyInput.mesh.slotTemplates[].allowedContracts[].capabilityConstraints.*[]", "kind": "set", "sortKey": ["canonicalJson"] },
-    { "path": "derivedState.routers", "kind": "set", "sortKey": ["id"] },
-    { "path": "derivedState.structuralLinks", "kind": "set", "sortKey": ["id"] },
-    { "path": "derivedState.accessSlots", "kind": "set", "sortKey": ["id"] },
-    { "path": "derivedState.accessSlots[].allowedContracts", "kind": "set", "sortKey": ["contractLockId"] },
-    { "path": "derivedState.accessSlots[].allowedContracts[].roles", "kind": "set", "sortKey": ["unicodeScalarValue"] },
-    { "path": "derivedState.accessSlots[].allowedContracts[].capabilityConstraints.*[]", "kind": "set", "sortKey": ["canonicalJson"] },
-    { "path": "derivedState.packageEntities", "kind": "set", "sortKey": ["id"] },
-    { "path": "derivedState.packageRelations", "kind": "set", "sortKey": ["id"] },
-    { "path": "derivedState.packageRelations[].sources", "kind": "set", "sortKey": ["persistedEndpointCanonicalKey"] },
-    { "path": "derivedState.packageRelations[].targets", "kind": "set", "sortKey": ["persistedEndpointCanonicalKey"] },
-    { "path": "patch.preconditions", "kind": "set", "sortKey": ["canonicalJson"] },
-    { "path": "patch.operations", "kind": "ordered" },
-    { "path": "patchBody.operations", "kind": "ordered" },
-    { "path": "patchOperations[].unset", "kind": "set", "sortKey": ["unicodeScalarValue"] },
-    { "path": "patchOperations[].value.allowedContracts", "kind": "set", "sortKey": ["contractLockId"] },
-    { "path": "patchOperations[].value.allowedContracts[].roles", "kind": "set", "sortKey": ["unicodeScalarValue"] },
-    { "path": "patchOperations[].value.allowedContracts[].capabilityConstraints.*[]", "kind": "set", "sortKey": ["canonicalJson"] },
-    { "path": "patchOperations[].value.capabilities.*[]", "kind": "set", "sortKey": ["canonicalJson"] },
-    { "path": "patchOperations[].value.sources", "kind": "set", "sortKey": ["patchEndpointCanonicalKey"] },
-    { "path": "patchOperations[].value.targets", "kind": "set", "sortKey": ["patchEndpointCanonicalKey"] },
-    { "path": "patchOperations[].value.extensions", "kind": "set", "sortKey": ["ownerLockId", "schema", "version"] },
-    { "path": "candidateTransaction.authorityPatch.operations", "kind": "ordered" },
-    { "path": "candidateTransaction.applicationPatch.operations", "kind": "ordered" },
-    { "path": "candidateTransaction.tombstones", "kind": "set", "sortKey": ["subjectKind", "id"] },
-    { "path": "candidateTransaction.allocationOrder", "kind": "derived-ordered", "sortKey": ["unicodeScalarValue"] },
-    { "path": "topologyImpactReport.impacts", "kind": "set", "sortKey": ["code", "subjectsCanonicalJson", "detailsCanonicalJson", "resolution"] },
-    { "path": "topologyImpactReport.impacts[].subjects", "kind": "set", "sortKey": ["kind", "id"] },
-    { "path": "pipelinePlan.steps", "kind": "ordered" },
-    { "path": "nocPackage.interfaceTemplates", "kind": "set", "sortKey": ["key"] },
-    { "path": "nocPackage.domainTypes", "kind": "set", "sortKey": ["key"] },
-    { "path": "nocPackage.packageEntityTypes", "kind": "set", "sortKey": ["typeKey"] },
-    { "path": "nocPackage.packageRelationTypes", "kind": "set", "sortKey": ["typeKey"] },
-    { "path": "nocPackage.extensions", "kind": "set", "sortKey": ["ownerLockId", "schema", "version"] },
-    { "path": "nocPackage.configuration.global.fields", "kind": "set", "sortKey": ["key"] },
-    { "path": "nocPackage.configuration.global.fields[].values", "kind": "set", "sortKey": ["canonicalJson"] },
-    { "path": "nocPackage.topology.slotTemplates", "kind": "set", "sortKey": ["stableKey"] },
-    { "path": "nocPackage.topology.slotTemplates[].allowedContracts", "kind": "set", "sortKey": ["contractId", "version", "bundleManifestDigest"] },
-    { "path": "nocPackage.topology.slotTemplates[].allowedContracts[].roles", "kind": "set", "sortKey": ["unicodeScalarValue"] },
-    { "path": "nocPackage.topology.slotTemplates[].allowedContracts[].capabilityConstraints.*[]", "kind": "set", "sortKey": ["canonicalJson"] },
-    { "path": "nocPackage.interfaceTemplates[].nocConfig.fields", "kind": "set", "sortKey": ["key"] },
-    { "path": "nocPackage.interfaceTemplates[].nocConfig.fields[].values", "kind": "set", "sortKey": ["canonicalJson"] },
-    { "path": "nocPackage.interfaceTemplates[].capabilityDefaults.*[]", "kind": "set", "sortKey": ["canonicalJson"] },
-    { "path": "nocPackage.domainTypes[].configuration.fields", "kind": "set", "sortKey": ["key"] },
-    { "path": "nocPackage.domainTypes[].configuration.fields[].values", "kind": "set", "sortKey": ["canonicalJson"] },
-    { "path": "nocPackage.packageRelationTypes[].sources.kinds", "kind": "set", "sortKey": ["unicodeScalarValue"] },
-    { "path": "nocPackage.packageRelationTypes[].targets.kinds", "kind": "set", "sortKey": ["unicodeScalarValue"] },
-    { "path": "nocPackage.tools.drc.command", "kind": "ordered" },
-    { "path": "nocPackage.tools.generate.command", "kind": "ordered" },
-    { "path": "interfaceContract.roles", "kind": "set", "sortKey": ["key"] },
-    { "path": "interfaceContract.capabilities", "kind": "set", "sortKey": ["key"] },
-    { "path": "interfaceContract.capabilities[].values", "kind": "set", "sortKey": ["canonicalJson"] },
-    { "path": "interfaceContract.fields", "kind": "set", "sortKey": ["key"] },
-    { "path": "interfaceContract.fields[].values", "kind": "set", "sortKey": ["canonicalJson"] },
-    { "path": "engineBundle.migrationFromCompatibilityVersions", "kind": "set", "sortKey": ["unicodeScalarValue"] },
-    { "path": "engineBundle.supportedPlatformAbis", "kind": "set", "sortKey": ["unicodeScalarValue"] },
-    { "path": "providerManifest.command", "kind": "ordered" },
-    { "path": "providerManifest.capabilities", "kind": "set", "sortKey": ["unicodeScalarValue"] },
-    { "path": "providerManifest.ownedEntityTypes", "kind": "set", "sortKey": ["unicodeScalarValue"] },
-    { "path": "providerManifest.ownedRelationTypes", "kind": "set", "sortKey": ["unicodeScalarValue"] },
-    { "path": "providerHello.requestedCapabilities", "kind": "set", "sortKey": ["unicodeScalarValue"] },
-    { "path": "providerHelloResult.capabilities", "kind": "set", "sortKey": ["unicodeScalarValue"] },
-    { "path": "reconcileRequest.dependencyLocks", "kind": "set", "sortKey": ["lockId"] },
-    { "path": "reconcileRequest.capabilities", "kind": "set", "sortKey": ["canonicalJson"] },
-    { "path": "providerResult.diagnostics", "kind": "ordered" },
-    { "path": "toolManifest.command", "kind": "ordered" },
-    { "path": "toolManifest.capabilities", "kind": "set", "sortKey": ["unicodeScalarValue"] },
-    { "path": "toolInput.dependencies", "kind": "set", "sortKey": ["lockId"] },
-    { "path": "bundleManifest.files", "kind": "set", "sortKey": ["path"] },
-    { "path": "artifactManifest.artifacts", "kind": "set", "sortKey": ["path"] },
-    { "path": "diagnosticReport.diagnostics", "kind": "ordered" },
-    { "path": "diagnosticReport.diagnostics[].subjects", "kind": "set", "sortKey": ["kind", "id"] },
-    { "path": "diagnosticReport.diagnostics[].properties", "kind": "set", "sortKey": ["unicodeScalarValue"] },
-    { "path": "commandResult.diagnostics", "kind": "ordered" },
-    { "path": "pipelineResult.steps", "kind": "ordered" },
-    { "path": "recovery.draftOverlay", "kind": "ordered" },
-    { "path": "recovery.draftUndo", "kind": "ordered" },
-    { "path": "recovery.draftRedo", "kind": "ordered" },
-    { "path": "recovery.draftOverlay[].diagnostics", "kind": "ordered" },
-    { "path": "recovery.draftUndo[].before", "kind": "ordered" },
-    { "path": "recovery.draftUndo[].after", "kind": "ordered" },
-    { "path": "recovery.draftRedo[].before", "kind": "ordered" },
-    { "path": "recovery.draftRedo[].after", "kind": "ordered" },
-    { "path": "recovery.pendingTopologyGroup.intentUndo", "kind": "ordered" },
-    { "path": "recovery.pendingTopologyGroup.intentRedo", "kind": "ordered" }
+    {
+      "schemaId": "ipcraft.artifact-manifest.v1",
+      "schemaPointer": "/properties/artifacts",
+      "kind": "set",
+      "sortKey": [
+        "path"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.bundle-manifest.v1",
+      "schemaPointer": "/properties/files",
+      "kind": "set",
+      "sortKey": [
+        "path"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.command-result.v1",
+      "schemaPointer": "/properties/diagnostics",
+      "kind": "ordered"
+    },
+    {
+      "schemaId": "ipcraft.core-canonical-models.v1",
+      "schemaPointer": "/$defs/accessSlot/properties/allowedContracts",
+      "kind": "set",
+      "sortKey": [
+        "contractLockId"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.core-canonical-models.v1",
+      "schemaPointer": "/$defs/accessSlot/properties/allowedContracts/items/properties/roles",
+      "kind": "set",
+      "sortKey": [
+        "unicodeScalarValue"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.core-canonical-models.v1",
+      "schemaPointer": "/$defs/candidateTransaction/properties/allocationOrder",
+      "kind": "derived-ordered",
+      "sortKey": [
+        "unicodeScalarValue"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.core-canonical-models.v1",
+      "schemaPointer": "/$defs/candidateTransaction/properties/tombstones",
+      "kind": "set",
+      "sortKey": [
+        "subjectKind",
+        "id"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.core-canonical-models.v1",
+      "schemaPointer": "/$defs/derivedState/properties/accessSlots",
+      "kind": "set",
+      "sortKey": [
+        "id"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.core-canonical-models.v1",
+      "schemaPointer": "/$defs/derivedState/properties/packageEntities",
+      "kind": "set",
+      "sortKey": [
+        "id"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.core-canonical-models.v1",
+      "schemaPointer": "/$defs/derivedState/properties/packageRelations",
+      "kind": "set",
+      "sortKey": [
+        "id"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.core-canonical-models.v1",
+      "schemaPointer": "/$defs/derivedState/properties/routers",
+      "kind": "set",
+      "sortKey": [
+        "id"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.core-canonical-models.v1",
+      "schemaPointer": "/$defs/derivedState/properties/structuralLinks",
+      "kind": "set",
+      "sortKey": [
+        "id"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.core-canonical-models.v1",
+      "schemaPointer": "/$defs/impact/properties/subjects",
+      "kind": "set",
+      "sortKey": [
+        "kind",
+        "id"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.core-canonical-models.v1",
+      "schemaPointer": "/$defs/impactReport/properties/impacts",
+      "kind": "set",
+      "sortKey": [
+        "code",
+        "severity",
+        "dataLoss",
+        "subjectsCanonicalJson",
+        "detailsCanonicalJson",
+        "resolution"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.core-canonical-models.v1",
+      "schemaPointer": "/$defs/normalizedTopologyInput/properties/mesh/properties/slotTemplates",
+      "kind": "set",
+      "sortKey": [
+        "stableKey"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.core-canonical-models.v1",
+      "schemaPointer": "/$defs/packageRelation/properties/sources",
+      "kind": "set",
+      "sortKey": [
+        "persistedEndpointCanonicalKey"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.core-canonical-models.v1",
+      "schemaPointer": "/$defs/packageRelation/properties/targets",
+      "kind": "set",
+      "sortKey": [
+        "persistedEndpointCanonicalKey"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.core-canonical-models.v1",
+      "schemaPointer": "/$defs/patchComponentValue/properties/extensions",
+      "kind": "set",
+      "sortKey": [
+        "ownerLockId",
+        "schema",
+        "version"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.core-canonical-models.v1",
+      "schemaPointer": "/$defs/patchInterfaceValue/properties/extensions",
+      "kind": "set",
+      "sortKey": [
+        "ownerLockId",
+        "schema",
+        "version"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.core-canonical-models.v1",
+      "schemaPointer": "/$defs/patchOperations",
+      "kind": "ordered"
+    },
+    {
+      "schemaId": "ipcraft.core-canonical-models.v1",
+      "schemaPointer": "/$defs/patchPackageEntityValue/properties/extensions",
+      "kind": "set",
+      "sortKey": [
+        "ownerLockId",
+        "schema",
+        "version"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.core-canonical-models.v1",
+      "schemaPointer": "/$defs/patchPackageRelationValue/properties/extensions",
+      "kind": "set",
+      "sortKey": [
+        "ownerLockId",
+        "schema",
+        "version"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.core-canonical-models.v1",
+      "schemaPointer": "/$defs/patchPackageRelationValue/properties/sources",
+      "kind": "set",
+      "sortKey": [
+        "patchEndpointCanonicalKey"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.core-canonical-models.v1",
+      "schemaPointer": "/$defs/patchPackageRelationValue/properties/targets",
+      "kind": "set",
+      "sortKey": [
+        "patchEndpointCanonicalKey"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.core-canonical-models.v1",
+      "schemaPointer": "/$defs/pipelinePlan/properties/steps",
+      "kind": "ordered"
+    },
+    {
+      "schemaId": "ipcraft.core-canonical-models.v1",
+      "schemaPointer": "/$defs/slotAllowedContract/properties/roles",
+      "kind": "set",
+      "sortKey": [
+        "unicodeScalarValue"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.core-canonical-models.v1",
+      "schemaPointer": "/$defs/slotTemplate/properties/allowedContracts",
+      "kind": "set",
+      "sortKey": [
+        "contractId",
+        "version",
+        "bundleManifestDigest"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.core-canonical-models.v1",
+      "schemaPointer": "/$defs/topologyIntent/properties/packageEntities",
+      "kind": "set",
+      "sortKey": [
+        "id"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.core-canonical-models.v1",
+      "schemaPointer": "/$defs/topologyIntent/properties/packageRelations",
+      "kind": "set",
+      "sortKey": [
+        "id"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.core-canonical-models.v1",
+      "schemaPointer": "/$defs/updateEntityOperation/properties/unset",
+      "kind": "set",
+      "sortKey": [
+        "unicodeScalarValue"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.core-canonical-models.v1",
+      "schemaPointer": "/$defs/updateRelationOperation/properties/unset",
+      "kind": "set",
+      "sortKey": [
+        "unicodeScalarValue"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.diagnostic-report.v1",
+      "schemaPointer": "/$defs/diagnostic/properties/properties",
+      "kind": "set",
+      "sortKey": [
+        "unicodeScalarValue"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.diagnostic-report.v1",
+      "schemaPointer": "/$defs/diagnostic/properties/subjects",
+      "kind": "set",
+      "sortKey": [
+        "kind",
+        "id"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.diagnostic-report.v1",
+      "schemaPointer": "/properties/diagnostics",
+      "kind": "ordered"
+    },
+    {
+      "schemaId": "ipcraft.engine-bundle.v1",
+      "schemaPointer": "/properties/migrationFromCompatibilityVersions",
+      "kind": "set",
+      "sortKey": [
+        "unicodeScalarValue"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.engine-bundle.v1",
+      "schemaPointer": "/properties/supportedPlatformAbis",
+      "kind": "set",
+      "sortKey": [
+        "unicodeScalarValue"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.interface-contract.v1",
+      "schemaPointer": "/$defs/capability/properties/values/oneOf/0",
+      "kind": "set",
+      "sortKey": [
+        "canonicalJson"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.interface-contract.v1",
+      "schemaPointer": "/$defs/field/properties/values/oneOf/0",
+      "kind": "set",
+      "sortKey": [
+        "canonicalJson"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.interface-contract.v1",
+      "schemaPointer": "/properties/capabilities",
+      "kind": "set",
+      "sortKey": [
+        "key"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.interface-contract.v1",
+      "schemaPointer": "/properties/fields",
+      "kind": "set",
+      "sortKey": [
+        "key"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.interface-contract.v1",
+      "schemaPointer": "/properties/roles",
+      "kind": "set",
+      "sortKey": [
+        "key"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.noc-package.v1",
+      "schemaPointer": "/$defs/allowedContract/properties/roles",
+      "kind": "set",
+      "sortKey": [
+        "unicodeScalarValue"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.noc-package.v1",
+      "schemaPointer": "/$defs/configuration/properties/global/properties/fields",
+      "kind": "set",
+      "sortKey": [
+        "key"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.noc-package.v1",
+      "schemaPointer": "/$defs/domainType/properties/configuration/properties/fields",
+      "kind": "set",
+      "sortKey": [
+        "key"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.noc-package.v1",
+      "schemaPointer": "/$defs/endpointDeclaration/properties/kinds",
+      "kind": "set",
+      "sortKey": [
+        "unicodeScalarValue"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.noc-package.v1",
+      "schemaPointer": "/$defs/field/properties/values/oneOf/0",
+      "kind": "set",
+      "sortKey": [
+        "canonicalJson"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.noc-package.v1",
+      "schemaPointer": "/$defs/interfaceTemplate/properties/nocConfig/properties/fields",
+      "kind": "set",
+      "sortKey": [
+        "key"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.noc-package.v1",
+      "schemaPointer": "/$defs/slotTemplate/properties/allowedContracts",
+      "kind": "set",
+      "sortKey": [
+        "contractId",
+        "version",
+        "bundleManifestDigest"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.noc-package.v1",
+      "schemaPointer": "/$defs/tool/properties/command",
+      "kind": "ordered"
+    },
+    {
+      "schemaId": "ipcraft.noc-package.v1",
+      "schemaPointer": "/$defs/topology/properties/slotTemplates",
+      "kind": "set",
+      "sortKey": [
+        "stableKey"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.noc-package.v1",
+      "schemaPointer": "/properties/domainTypes",
+      "kind": "set",
+      "sortKey": [
+        "key"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.noc-package.v1",
+      "schemaPointer": "/properties/extensions",
+      "kind": "set",
+      "sortKey": [
+        "ownerLockId",
+        "schema",
+        "version"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.noc-package.v1",
+      "schemaPointer": "/properties/interfaceTemplates",
+      "kind": "set",
+      "sortKey": [
+        "key"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.noc-package.v1",
+      "schemaPointer": "/properties/packageEntityTypes",
+      "kind": "set",
+      "sortKey": [
+        "typeKey"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.noc-package.v1",
+      "schemaPointer": "/properties/packageRelationTypes",
+      "kind": "set",
+      "sortKey": [
+        "typeKey"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.patch.v1",
+      "schemaPointer": "/properties/preconditions",
+      "kind": "set",
+      "sortKey": [
+        "canonicalJson"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.pipeline-result.v1",
+      "schemaPointer": "/properties/steps",
+      "kind": "ordered"
+    },
+    {
+      "schemaId": "ipcraft.project-design.v1",
+      "schemaPointer": "/$defs/component/properties/extensions",
+      "kind": "set",
+      "sortKey": [
+        "ownerLockId",
+        "schema",
+        "version"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.project-design.v1",
+      "schemaPointer": "/$defs/defaultEngineDependencyLock/properties/supportedPlatformAbis",
+      "kind": "set",
+      "sortKey": [
+        "unicodeScalarValue"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.project-design.v1",
+      "schemaPointer": "/$defs/interface/properties/extensions",
+      "kind": "set",
+      "sortKey": [
+        "ownerLockId",
+        "schema",
+        "version"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.project-design.v1",
+      "schemaPointer": "/$defs/packageEntity/properties/extensions",
+      "kind": "set",
+      "sortKey": [
+        "ownerLockId",
+        "schema",
+        "version"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.project-design.v1",
+      "schemaPointer": "/$defs/packageRelation/properties/extensions",
+      "kind": "set",
+      "sortKey": [
+        "ownerLockId",
+        "schema",
+        "version"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.project-design.v1",
+      "schemaPointer": "/$defs/packageRelation/properties/sources",
+      "kind": "set",
+      "sortKey": [
+        "persistedEndpointCanonicalKey"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.project-design.v1",
+      "schemaPointer": "/$defs/packageRelation/properties/targets",
+      "kind": "set",
+      "sortKey": [
+        "persistedEndpointCanonicalKey"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.project-design.v1",
+      "schemaPointer": "/$defs/topology/properties/accessSlots",
+      "kind": "set",
+      "sortKey": [
+        "id"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.project-design.v1",
+      "schemaPointer": "/$defs/topology/properties/attachments",
+      "kind": "set",
+      "sortKey": [
+        "id"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.project-design.v1",
+      "schemaPointer": "/$defs/topology/properties/domainMemberships",
+      "kind": "set",
+      "sortKey": [
+        "id"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.project-design.v1",
+      "schemaPointer": "/$defs/topology/properties/domains",
+      "kind": "set",
+      "sortKey": [
+        "id"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.project-design.v1",
+      "schemaPointer": "/$defs/topology/properties/extensions",
+      "kind": "set",
+      "sortKey": [
+        "ownerLockId",
+        "schema",
+        "version"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.project-design.v1",
+      "schemaPointer": "/$defs/topology/properties/packageEntities",
+      "kind": "set",
+      "sortKey": [
+        "id"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.project-design.v1",
+      "schemaPointer": "/$defs/topology/properties/packageRelations",
+      "kind": "set",
+      "sortKey": [
+        "id"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.project-design.v1",
+      "schemaPointer": "/$defs/topology/properties/routers",
+      "kind": "set",
+      "sortKey": [
+        "id"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.project-design.v1",
+      "schemaPointer": "/$defs/topology/properties/structuralLinks",
+      "kind": "set",
+      "sortKey": [
+        "id"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.project-design.v1",
+      "schemaPointer": "/properties/components",
+      "kind": "set",
+      "sortKey": [
+        "id"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.project-design.v1",
+      "schemaPointer": "/properties/connections",
+      "kind": "set",
+      "sortKey": [
+        "id"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.project-design.v1",
+      "schemaPointer": "/properties/dependencies",
+      "kind": "set",
+      "sortKey": [
+        "lockId"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.project-design.v1",
+      "schemaPointer": "/properties/extensions",
+      "kind": "set",
+      "sortKey": [
+        "ownerLockId",
+        "schema",
+        "version"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.project-design.v1",
+      "schemaPointer": "/properties/interfaces",
+      "kind": "set",
+      "sortKey": [
+        "id"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.project-design.v1",
+      "schemaPointer": "/properties/topologies",
+      "kind": "set",
+      "sortKey": [
+        "id"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.project-design.v1",
+      "schemaPointer": "/properties/views",
+      "kind": "set",
+      "sortKey": [
+        "id"
+      ]
+    },
+    {
+      "schemaId": "ipcraft.recovery.v1",
+      "schemaPointer": "/$defs/draftEntry/properties/diagnostics",
+      "kind": "ordered"
+    },
+    {
+      "schemaId": "ipcraft.recovery.v1",
+      "schemaPointer": "/$defs/draftOverlayMutation/properties/after",
+      "kind": "ordered"
+    },
+    {
+      "schemaId": "ipcraft.recovery.v1",
+      "schemaPointer": "/$defs/draftOverlayMutation/properties/before",
+      "kind": "ordered"
+    },
+    {
+      "schemaId": "ipcraft.recovery.v1",
+      "schemaPointer": "/$defs/pendingTopologyGroup/properties/intentRedo",
+      "kind": "ordered"
+    },
+    {
+      "schemaId": "ipcraft.recovery.v1",
+      "schemaPointer": "/$defs/pendingTopologyGroup/properties/intentUndo",
+      "kind": "ordered"
+    },
+    {
+      "schemaId": "ipcraft.recovery.v1",
+      "schemaPointer": "/properties/draftOverlay",
+      "kind": "ordered"
+    },
+    {
+      "schemaId": "ipcraft.recovery.v1",
+      "schemaPointer": "/properties/draftRedo",
+      "kind": "ordered"
+    },
+    {
+      "schemaId": "ipcraft.recovery.v1",
+      "schemaPointer": "/properties/draftUndo",
+      "kind": "ordered"
+    },
+    {
+      "schemaId": "ipcraft.tool-input.v1",
+      "schemaPointer": "/properties/dependencies",
+      "kind": "set",
+      "sortKey": [
+        "lockId"
+      ]
+    }
+  ],
+  "deferredExtensionCollections": [
+    {
+      "freezeGate": "extension",
+      "displayPath": "providerManifest.command"
+    },
+    {
+      "freezeGate": "extension",
+      "displayPath": "providerManifest.capabilities"
+    },
+    {
+      "freezeGate": "extension",
+      "displayPath": "providerManifest.ownedEntityTypes"
+    },
+    {
+      "freezeGate": "extension",
+      "displayPath": "providerManifest.ownedRelationTypes"
+    },
+    {
+      "freezeGate": "extension",
+      "displayPath": "providerHello.requestedCapabilities"
+    },
+    {
+      "freezeGate": "extension",
+      "displayPath": "providerHelloResult.capabilities"
+    },
+    {
+      "freezeGate": "extension",
+      "displayPath": "reconcileRequest.dependencyLocks"
+    },
+    {
+      "freezeGate": "extension",
+      "displayPath": "reconcileRequest.capabilities"
+    },
+    {
+      "freezeGate": "extension",
+      "displayPath": "providerResult.diagnostics"
+    },
+    {
+      "freezeGate": "extension",
+      "displayPath": "toolManifest.capabilities"
+    }
   ],
   "vectors": [
     {
@@ -194,13 +821,19 @@
           "contractId": "arm.chi",
           "version": "1.0.0",
           "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-          "roles": ["target", "requester"]
+          "roles": [
+            "target",
+            "requester"
+          ]
         },
         {
           "contractId": "arm.ace",
           "version": "1.0.0",
           "bundleManifestDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-          "roles": ["slave", "master"]
+          "roles": [
+            "slave",
+            "master"
+          ]
         }
       ],
       "normalized": [
@@ -208,13 +841,19 @@
           "contractId": "arm.ace",
           "version": "1.0.0",
           "bundleManifestDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-          "roles": ["master", "slave"]
+          "roles": [
+            "master",
+            "slave"
+          ]
         },
         {
           "contractId": "arm.chi",
           "version": "1.0.0",
           "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-          "roles": ["requester", "target"]
+          "roles": [
+            "requester",
+            "target"
+          ]
         }
       ]
     },

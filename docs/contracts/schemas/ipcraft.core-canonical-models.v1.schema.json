@@ -315,7 +315,7 @@
         "allowedContracts": {
           "type": "array",
           "x-ipcraft-canonical": { "kind": "set", "sortKey": ["contractLockId"] },
-          "$comment": "Composite-key uniqueness and sorting are semantic-validator rules.",
+          "$comment": "Key uniqueness and sorting are semantic-validator rules.",
           "items": {
             "type": "object",
             "additionalProperties": false,
@@ -515,6 +515,134 @@
         "extensions": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["ownerLockId", "schema", "version"] }, "items": { "$ref": "#/$defs/extension" } }
       }
     },
+    "patchProjectUpdateSet": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "dependencies": { "$ref": "ipcraft.project-design.v1.schema.json#/properties/dependencies" }
+      }
+    },
+    "patchComponentUpdateSet": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "kind": { "$ref": "#/$defs/patchComponentValue/properties/kind" },
+        "name": { "$ref": "#/$defs/patchComponentValue/properties/name" },
+        "packageLockId": { "$ref": "#/$defs/patchComponentValue/properties/packageLockId" },
+        "typeKey": { "$ref": "#/$defs/patchComponentValue/properties/typeKey" },
+        "config": { "$ref": "#/$defs/patchComponentValue/properties/config" },
+        "extensions": { "$ref": "#/$defs/patchComponentValue/properties/extensions" }
+      }
+    },
+    "patchInterfaceUpdateSet": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "ownerComponentRef": { "$ref": "#/$defs/patchInterfaceValue/properties/ownerComponentRef" },
+        "templateKey": { "$ref": "#/$defs/patchInterfaceValue/properties/templateKey" },
+        "name": { "$ref": "#/$defs/patchInterfaceValue/properties/name" },
+        "contract": { "$ref": "#/$defs/patchInterfaceValue/properties/contract" },
+        "capabilities": { "$ref": "#/$defs/patchInterfaceValue/properties/capabilities" },
+        "contractConfig": { "$ref": "#/$defs/patchInterfaceValue/properties/contractConfig" },
+        "nocConfig": { "$ref": "#/$defs/patchInterfaceValue/properties/nocConfig" },
+        "extensions": { "$ref": "#/$defs/patchInterfaceValue/properties/extensions" }
+      }
+    },
+    "patchRouterUpdateSet": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "templateKey": { "$ref": "#/$defs/patchRouterValue/properties/templateKey" },
+        "identityCompatibilityVersion": { "$ref": "#/$defs/patchRouterValue/properties/identityCompatibilityVersion" },
+        "coordinate": { "$ref": "#/$defs/patchRouterValue/properties/coordinate" },
+        "properties": { "$ref": "#/$defs/patchRouterValue/properties/properties" }
+      }
+    },
+    "patchStructuralLinkUpdateSet": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "templateKey": { "$ref": "#/$defs/patchStructuralLinkValue/properties/templateKey" },
+        "identityCompatibilityVersion": { "$ref": "#/$defs/patchStructuralLinkValue/properties/identityCompatibilityVersion" },
+        "endpointA": { "$ref": "#/$defs/patchStructuralLinkValue/properties/endpointA" },
+        "endpointB": { "$ref": "#/$defs/patchStructuralLinkValue/properties/endpointB" },
+        "axis": { "$ref": "#/$defs/patchStructuralLinkValue/properties/axis" },
+        "properties": { "$ref": "#/$defs/patchStructuralLinkValue/properties/properties" }
+      }
+    },
+    "patchAccessSlotUpdateSet": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "routerRef": { "$ref": "#/$defs/patchAccessSlotValue/properties/routerRef" },
+        "templateKey": { "$ref": "#/$defs/patchAccessSlotValue/properties/templateKey" },
+        "identityCompatibilityVersion": { "$ref": "#/$defs/patchAccessSlotValue/properties/identityCompatibilityVersion" },
+        "displayOrder": { "$ref": "#/$defs/patchAccessSlotValue/properties/displayOrder" },
+        "label": { "$ref": "#/$defs/patchAccessSlotValue/properties/label" },
+        "allowedContracts": { "$ref": "#/$defs/patchAccessSlotValue/properties/allowedContracts" },
+        "properties": { "$ref": "#/$defs/patchAccessSlotValue/properties/properties" }
+      }
+    },
+    "patchDomainUpdateSet": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "typeKey": { "$ref": "#/$defs/patchDomainValue/properties/typeKey" },
+        "name": { "$ref": "#/$defs/patchDomainValue/properties/name" },
+        "isDefault": { "$ref": "#/$defs/patchDomainValue/properties/isDefault" },
+        "config": { "$ref": "#/$defs/patchDomainValue/properties/config" }
+      }
+    },
+    "patchPackageEntityUpdateSet": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "typeKey": { "$ref": "#/$defs/patchPackageEntityValue/properties/typeKey" },
+        "data": { "$ref": "#/$defs/patchPackageEntityValue/properties/data" },
+        "extensions": { "$ref": "#/$defs/patchPackageEntityValue/properties/extensions" }
+      }
+    },
+    "patchAttachmentUpdateSet": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "interfaceRef": { "$ref": "#/$defs/patchAttachmentValue/oneOf/0/properties/interfaceRef" },
+        "state": { "enum": ["resolved", "unresolved"] },
+        "routerRef": { "$ref": "#/$defs/patchAttachmentValue/oneOf/0/properties/routerRef" },
+        "slotRef": { "$ref": "#/$defs/patchAttachmentValue/oneOf/0/properties/slotRef" },
+        "intendedTarget": { "$ref": "#/$defs/patchAttachmentValue/oneOf/1/properties/intendedTarget" },
+        "reasonCode": { "$ref": "#/$defs/patchAttachmentValue/oneOf/1/properties/reasonCode" }
+      }
+    },
+    "patchDomainMembershipUpdateSet": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "domainRef": { "$ref": "#/$defs/patchDomainMembershipValue/properties/domainRef" },
+        "routerRef": { "$ref": "#/$defs/patchDomainMembershipValue/properties/routerRef" }
+      }
+    },
+    "patchPackageRelationUpdateSet": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "typeKey": { "$ref": "#/$defs/patchPackageRelationValue/properties/typeKey" },
+        "sources": { "$ref": "#/$defs/patchPackageRelationValue/properties/sources" },
+        "targets": { "$ref": "#/$defs/patchPackageRelationValue/properties/targets" },
+        "data": { "$ref": "#/$defs/patchPackageRelationValue/properties/data" },
+        "extensions": { "$ref": "#/$defs/patchPackageRelationValue/properties/extensions" }
+      }
+    },
+    "patchEntityUpdateSet": {
+      "anyOf": [
+        { "$ref": "#/$defs/patchProjectUpdateSet" },
+        { "$ref": "#/$defs/patchComponentUpdateSet" },
+        { "$ref": "#/$defs/patchInterfaceUpdateSet" },
+        { "$ref": "#/$defs/patchRouterUpdateSet" },
+        { "$ref": "#/$defs/patchStructuralLinkUpdateSet" },
+        { "$ref": "#/$defs/patchAccessSlotUpdateSet" },
+        { "$ref": "#/$defs/patchDomainUpdateSet" },
+        { "$ref": "#/$defs/patchPackageEntityUpdateSet" }
+      ]
+    },
+    "patchRelationUpdateSet": {
+      "anyOf": [
+        { "$ref": "#/$defs/patchAttachmentUpdateSet" },
+        { "$ref": "#/$defs/patchDomainMembershipUpdateSet" },
+        { "$ref": "#/$defs/patchPackageRelationUpdateSet" }
+      ]
+    },
     "createEntityOperation": {
       "type": "object",
       "additionalProperties": false,
@@ -543,9 +671,19 @@
         "op": { "const": "updateEntity" },
         "entityKind": { "enum": ["component", "project", "interface", "router", "structural-link", "access-slot", "domain", "package-entity"] },
         "id": { "$ref": "#/$defs/id" },
-        "set": { "type": "object" },
+        "set": { "$ref": "#/$defs/patchEntityUpdateSet" },
         "unset": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["unicodeScalarValue"] }, "items": { "$ref": "#/$defs/id" }, "uniqueItems": true }
-      }
+      },
+      "allOf": [
+        { "if": { "properties": { "entityKind": { "const": "project" } }, "required": ["entityKind"] }, "then": { "properties": { "set": { "$ref": "#/$defs/patchProjectUpdateSet" } } } },
+        { "if": { "properties": { "entityKind": { "const": "component" } }, "required": ["entityKind"] }, "then": { "properties": { "set": { "$ref": "#/$defs/patchComponentUpdateSet" } } } },
+        { "if": { "properties": { "entityKind": { "const": "interface" } }, "required": ["entityKind"] }, "then": { "properties": { "set": { "$ref": "#/$defs/patchInterfaceUpdateSet" } } } },
+        { "if": { "properties": { "entityKind": { "const": "router" } }, "required": ["entityKind"] }, "then": { "properties": { "set": { "$ref": "#/$defs/patchRouterUpdateSet" } } } },
+        { "if": { "properties": { "entityKind": { "const": "structural-link" } }, "required": ["entityKind"] }, "then": { "properties": { "set": { "$ref": "#/$defs/patchStructuralLinkUpdateSet" } } } },
+        { "if": { "properties": { "entityKind": { "const": "access-slot" } }, "required": ["entityKind"] }, "then": { "properties": { "set": { "$ref": "#/$defs/patchAccessSlotUpdateSet" } } } },
+        { "if": { "properties": { "entityKind": { "const": "domain" } }, "required": ["entityKind"] }, "then": { "properties": { "set": { "$ref": "#/$defs/patchDomainUpdateSet" } } } },
+        { "if": { "properties": { "entityKind": { "const": "package-entity" } }, "required": ["entityKind"] }, "then": { "properties": { "set": { "$ref": "#/$defs/patchPackageEntityUpdateSet" } } } }
+      ]
     },
     "deleteEntityOperation": {
       "type": "object",
@@ -581,9 +719,14 @@
         "op": { "const": "updateRelation" },
         "relationKind": { "enum": ["attachment", "domain-membership", "package-relation"] },
         "id": { "$ref": "#/$defs/id" },
-        "set": { "type": "object" },
+        "set": { "$ref": "#/$defs/patchRelationUpdateSet" },
         "unset": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["unicodeScalarValue"] }, "items": { "$ref": "#/$defs/id" }, "uniqueItems": true }
-      }
+      },
+      "allOf": [
+        { "if": { "properties": { "relationKind": { "const": "attachment" } }, "required": ["relationKind"] }, "then": { "properties": { "set": { "$ref": "#/$defs/patchAttachmentUpdateSet" } } } },
+        { "if": { "properties": { "relationKind": { "const": "domain-membership" } }, "required": ["relationKind"] }, "then": { "properties": { "set": { "$ref": "#/$defs/patchDomainMembershipUpdateSet" } } } },
+        { "if": { "properties": { "relationKind": { "const": "package-relation" } }, "required": ["relationKind"] }, "then": { "properties": { "set": { "$ref": "#/$defs/patchPackageRelationUpdateSet" } } } }
+      ]
     },
     "deleteRelationOperation": {
       "type": "object",
@@ -639,7 +782,7 @@
       "required": ["schema", "impacts"],
       "properties": {
         "schema": { "const": "ipcraft.topology-impact-report.v1" },
-        "impacts": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["code", "subjectsCanonicalJson", "detailsCanonicalJson", "resolution"] }, "$comment": "Composite values are compared by RFC 8785 canonical JSON bytes after nested set normalization; uniqueness and sorting are semantic-validator rules.", "items": { "$ref": "#/$defs/impact" } }
+        "impacts": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["code", "severity", "dataLoss", "subjectsCanonicalJson", "detailsCanonicalJson", "resolution"] }, "$comment": "The total key is (code, severity, dataLoss, canonical subjects, canonical details, resolution). Composite values compare by RFC 8785 canonical JSON bytes after nested set normalization; uniqueness and sorting are semantic-validator rules.", "items": { "$ref": "#/$defs/impact" } }
       }
     },
     "sourcePatch": {
