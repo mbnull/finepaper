@@ -155,9 +155,9 @@ Add vectors proving that Authority and Application operations share one candidat
 }
 ```
 
-- [ ] **Step 3: Add permutation pairs**
+- [ ] **Step 3: Add complete collection permutation cases**
 
-For each set-valued array, store two inputs with different source order and one expected canonical JSON/digest. For ordered arrays, store a counter-vector whose digest must differ.
+For each set-valued array, store canonical, reverse, and fixed-seed shuffled inputs containing the same non-empty values and one expected normalized array/canonical JSON/digest. For ordered arrays, store a counter-vector whose canonical JSON and digest differ. For derived-ordered arrays, store the valid derived order and a noncanonical supplied order with its stable error code.
 
 Run the stdlib-only authoring verifier before computing vector digests:
 

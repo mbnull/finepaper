@@ -7,6 +7,7 @@ This authoring check is read-only and uses only the Python standard library.
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -18,6 +19,32 @@ CATALOG_PATH = CONTRACTS / "schema-catalog.json"
 VECTOR_PATH = CONTRACTS / "vectors" / "core-canonical-projection-v1.json"
 CANONICAL_KEY = "x-ipcraft-canonical"
 VALID_KINDS = {"set", "ordered", "derived-ordered"}
+DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
+VECTOR_SCHEMA = "ipcraft.canonical-vector-catalog.v1"
+CANONICALIZATION = "RFC8785-after-Appendix-F-set-projection"
+REQUIRED_CANDIDATE_CASE_IDS = {
+    "shared-authority-application-localref-namespace",
+    "hypothetical-final-host-id-mappings-excluded",
+    "localized-impact-presentation-excluded",
+    "object-key-order-permutation",
+    "undirected-link-endpoint-swap-normalizes-equally",
+    "localref-rename-with-edges-updated-changes-digest",
+    "localref-edge-change-changes-digest",
+    "patch-operation-order-swap-changes-digest",
+    "pipeline-step-order-swap-changes-digest",
+    "update-set-reused-collection-permutations",
+    "applicability-change-changes-digest",
+    "transaction-id-change-changes-digest",
+    "structured-impact-change-changes-digest",
+    "candidate-localref-collision",
+    "authority-uses-application-prefix",
+    "application-uses-authority-prefix",
+    "allocation-order-missing",
+    "allocation-order-duplicate",
+    "allocation-order-noncanonical",
+    "final-host-id-mapping-injected",
+    "published-host-id-injected",
+}
 
 
 class VerificationError(RuntimeError):
@@ -46,9 +73,16 @@ def resolve_pointer(document: Any, pointer: str) -> Any:
         fail(f"invalid RFC 6901 pointer {pointer!r}")
     current = document
     for raw_token in pointer[1:].split("/"):
+        if re.search(r"~(?:[^01]|$)", raw_token):
+            fail(f"invalid RFC 6901 escape in pointer {pointer!r}")
         token = raw_token.replace("~1", "/").replace("~0", "~")
         try:
-            current = current[int(token)] if isinstance(current, list) else current[token]
+            if isinstance(current, list):
+                if not re.fullmatch(r"0|[1-9][0-9]*", token):
+                    fail(f"noncanonical array index {token!r} in pointer {pointer!r}")
+                current = current[int(token)]
+            else:
+                current = current[token]
         except (KeyError, IndexError, ValueError, TypeError):
             fail(f"JSON Pointer {pointer!r} does not resolve")
     return current
@@ -186,6 +220,8 @@ def validate_rule_table(graph: SchemaGraph) -> tuple[dict[tuple[str, str], dict[
             fail(f"{location_name}: schemaId must name a catalogued schema")
         if not isinstance(pointer, str):
             fail(f"{location_name}: schemaPointer must be a string")
+        if "displayPath" in rule and (not isinstance(rule["displayPath"], str) or not rule["displayPath"]):
+            fail(f"{location_name}: displayPath must be a non-empty string when present")
         node = resolve_pointer(graph.documents[schema_id], pointer)
         if not isinstance(node, dict) or node.get("type") != "array":
             fail(f"{location_name}: {schema_id}#{pointer} does not point to an explicit array schema")
@@ -218,6 +254,149 @@ def validate_rule_table(graph: SchemaGraph) -> tuple[dict[tuple[str, str], dict[
     return table, deferred
 
 
+def validate_digest(value: Any, location: str) -> None:
+    if value is None:
+        return
+    if isinstance(value, list):
+        for index, item in enumerate(value):
+            validate_digest(item, f"{location}[{index}]")
+        return
+    if not isinstance(value, str) or DIGEST_RE.fullmatch(value) is None:
+        fail(f"{location}: expected sha256: plus 64 lowercase hexadecimal characters")
+
+
+def validate_vector_catalog(
+    table: dict[tuple[str, str], dict[str, Any]], deferred: list[dict[str, Any]]
+) -> tuple[int, int]:
+    index = load_json(VECTOR_PATH)
+    catalog = index.get("vectorCatalog")
+    if not isinstance(catalog, list) or not catalog:
+        fail("vector document requires a non-empty vectorCatalog")
+    expected_files = {path.name for path in VECTOR_PATH.parent.glob("*.json")}
+    catalog_files: set[str] = set()
+    for item_index, item in enumerate(catalog):
+        name = f"vectorCatalog[{item_index}]"
+        if not isinstance(item, dict) or set(item) != {"path", "purpose"}:
+            fail(f"{name} must contain exactly path and purpose")
+        path_value = item["path"]
+        purpose = item["purpose"]
+        if not isinstance(path_value, str) or not path_value.startswith("vectors/"):
+            fail(f"{name}.path must be a vectors/ relative path")
+        if not isinstance(purpose, str) or not purpose:
+            fail(f"{name}.purpose must be a non-empty string")
+        path = CONTRACTS / path_value
+        if not path.is_file():
+            fail(f"{name}: missing vector file {path_value}")
+        if path.name in catalog_files:
+            fail(f"duplicate vector catalog path {path_value}")
+        catalog_files.add(path.name)
+    if catalog_files != expected_files:
+        fail(f"vectorCatalog file coverage mismatch; missing={sorted(expected_files - catalog_files)}, extra={sorted(catalog_files - expected_files)}")
+
+    collection_path = VECTOR_PATH.parent / "core-set-permutation-v1.json"
+    candidate_path = VECTOR_PATH.parent / "candidate-local-ref-v1.json"
+    collection = load_json(collection_path)
+    candidate = load_json(candidate_path)
+    for path, document, expected_kind in (
+        (collection_path, collection, "collection-permutation"),
+        (candidate_path, candidate, "candidate-causality"),
+    ):
+        if not isinstance(document, dict) or set(document) != {"schema", "kind", "canonicalization", "cases"}:
+            fail(f"{path.relative_to(ROOT)}: vector envelope must contain exactly schema, kind, canonicalization, cases")
+        if document["schema"] != VECTOR_SCHEMA or document["kind"] != expected_kind or document["canonicalization"] != CANONICALIZATION:
+            fail(f"{path.relative_to(ROOT)}: invalid vector envelope identity")
+        if not isinstance(document["cases"], list) or not document["cases"]:
+            fail(f"{path.relative_to(ROOT)}: cases must be a non-empty array")
+
+    ids: set[str] = set()
+    covered: dict[tuple[str, str], int] = {}
+    for case_index, case in enumerate(collection["cases"]):
+        name = f"core-set-permutation-v1 cases[{case_index}]"
+        if not isinstance(case, dict):
+            fail(f"{name} must be an object")
+        case_id = case.get("id")
+        if not isinstance(case_id, str) or not case_id or case_id in ids:
+            fail(f"{name}: id must be non-empty and globally unique")
+        ids.add(case_id)
+        schema_id = case.get("schemaId")
+        pointer_value = case.get("schemaPointer")
+        location = (schema_id, pointer_value)
+        if location not in table:
+            fail(f"{name}: location is not a Core canonical collection")
+        covered[location] = covered.get(location, 0) + 1
+        metadata = table[location]
+        if case.get("collectionKind") != metadata["kind"]:
+            fail(f"{name}: collectionKind does not match canonical table")
+        if metadata["kind"] == "ordered":
+            if "sortKey" in case or case.get("expectedRelation") != "different":
+                fail(f"{name}: ordered cases omit sortKey and must expect different")
+            if not isinstance(case.get("inputVariants"), list) or len(case["inputVariants"]) < 2:
+                fail(f"{name}: ordered cases require at least two variants")
+        else:
+            if case.get("sortKey") != metadata["sortKey"]:
+                fail(f"{name}: sortKey does not match canonical table")
+        if metadata["kind"] == "set":
+            variants = case.get("inputVariants")
+            if not isinstance(variants, list) or len(variants) < 3 or any(not isinstance(value, list) or not value for value in variants):
+                fail(f"{name}: set cases require at least three non-empty permutations")
+            if case.get("expectedRelation") != "equal":
+                fail(f"{name}: set cases must expect equal")
+            canonical_members = [
+                sorted(json.dumps(item, sort_keys=True, separators=(",", ":"), ensure_ascii=False) for item in value)
+                for value in variants
+            ]
+            if any(members != canonical_members[0] for members in canonical_members[1:]):
+                fail(f"{name}: set inputVariants are not permutations of identical values")
+            encoded_variants = {json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False) for value in variants}
+            if len(encoded_variants) < 3:
+                fail(f"{name}: set cases require three distinct source orders")
+            if not isinstance(case.get("expectedDigest"), str):
+                fail(f"{name}: equal set cases require one expectedDigest string")
+        elif metadata["kind"] == "derived-ordered":
+            if case.get("expectedRelation") != "invalid" or not isinstance(case.get("expectedErrorCode"), list):
+                fail(f"{name}: derived-ordered case must include valid/invalid variants and stable errors")
+        elif not isinstance(case.get("expectedDigest"), list) or len(set(case["expectedDigest"])) != len(case["expectedDigest"]):
+            fail(f"{name}: ordered cases require aligned distinct expected digests")
+        validate_digest(case.get("expectedDigest"), f"{name}.expectedDigest")
+    duplicates = sorted(location for location, count in covered.items() if count != 1)
+    missing = sorted(set(table) - set(covered))
+    if duplicates or missing:
+        fail(f"collection vector coverage mismatch; duplicate={duplicates}, missing={missing}")
+
+    deferred_paths = {entry["displayPath"] for entry in deferred}
+    candidate_ids: set[str] = set()
+    for case_index, case in enumerate(candidate["cases"]):
+        name = f"candidate-local-ref-v1 cases[{case_index}]"
+        if not isinstance(case, dict):
+            fail(f"{name} must be an object")
+        case_id = case.get("id")
+        if not isinstance(case_id, str) or not case_id or case_id in ids:
+            fail(f"{name}: id must be non-empty and globally unique")
+        ids.add(case_id)
+        candidate_ids.add(case_id)
+        if case.get("expectedRelation") not in {"equal", "different", "invalid"}:
+            fail(f"{name}: invalid expectedRelation")
+        if not isinstance(case.get("includedProjection"), list) or not isinstance(case.get("excludedProjection"), list):
+            fail(f"{name}: includedProjection/excludedProjection must be arrays")
+        if any(value in deferred_paths for value in case.get("includedProjection", [])):
+            fail(f"{name}: deferred Extension path appears in Core vectors")
+        relation = case["expectedRelation"]
+        if relation == "equal" and not isinstance(case.get("expectedDigest"), str):
+            fail(f"{name}: equal cases require one expectedDigest string")
+        if relation == "different" and (not isinstance(case.get("expectedDigest"), list) or len(set(case["expectedDigest"])) != len(case["expectedDigest"])):
+            fail(f"{name}: different cases require aligned distinct expected digests")
+        if relation == "invalid" and (not isinstance(case.get("expectedErrorCode"), str) or not case["expectedErrorCode"]):
+            fail(f"{name}: invalid cases require a stable expectedErrorCode")
+        validate_digest(case.get("expectedDigest"), f"{name}.expectedDigest")
+    if candidate_ids != REQUIRED_CANDIDATE_CASE_IDS:
+        fail(
+            "candidate vector coverage mismatch; "
+            f"missing={sorted(REQUIRED_CANDIDATE_CASE_IDS - candidate_ids)}, "
+            f"extra={sorted(candidate_ids - REQUIRED_CANDIDATE_CASE_IDS)}"
+        )
+    return len(collection["cases"]), len(candidate["cases"])
+
+
 def run_witnesses(graph: SchemaGraph, table: dict[tuple[str, str], dict[str, Any]], deferred: list[dict[str, Any]]) -> None:
     core_id = "ipcraft.core-canonical-models.v1"
     core = graph.documents[core_id]
@@ -235,6 +414,20 @@ def run_witnesses(graph: SchemaGraph, table: dict[tuple[str, str], dict[str, Any
         "/$defs/patchPackageRelationUpdateSet/properties/sources",
         "/$defs/patchPackageRelationValue/properties/sources",
     )
+    assert_ref(
+        "/$defs/patchPackageRelationUpdateSet/properties/targets",
+        "/$defs/patchPackageRelationValue/properties/targets",
+    )
+    for definition_name, value_name in (
+        ("patchComponentUpdateSet", "patchComponentValue"),
+        ("patchInterfaceUpdateSet", "patchInterfaceValue"),
+        ("patchPackageEntityUpdateSet", "patchPackageEntityValue"),
+        ("patchPackageRelationUpdateSet", "patchPackageRelationValue"),
+    ):
+        assert_ref(
+            f"/$defs/{definition_name}/properties/extensions",
+            f"/$defs/{value_name}/properties/extensions",
+        )
     for definition_name in (
         "patchProjectUpdateSet", "patchComponentUpdateSet", "patchInterfaceUpdateSet",
         "patchRouterUpdateSet", "patchStructuralLinkUpdateSet", "patchAccessSlotUpdateSet",
@@ -252,6 +445,11 @@ def run_witnesses(graph: SchemaGraph, table: dict[tuple[str, str], dict[str, Any
         (core_id, "/$defs/accessSlot/properties/allowedContracts"),
         (core_id, "/$defs/accessSlot/properties/allowedContracts/items/properties/roles"),
         (core_id, "/$defs/patchPackageRelationValue/properties/sources"),
+        (core_id, "/$defs/patchPackageRelationValue/properties/targets"),
+        (core_id, "/$defs/patchComponentValue/properties/extensions"),
+        (core_id, "/$defs/patchInterfaceValue/properties/extensions"),
+        (core_id, "/$defs/patchPackageEntityValue/properties/extensions"),
+        (core_id, "/$defs/patchPackageRelationValue/properties/extensions"),
     }
     if not expected_update_locations <= set(table):
         fail("self-check: update-set allowedContracts/roles/sources locations are not covered")
@@ -277,12 +475,14 @@ def main() -> int:
         graph.validate_all_custom_keywords()
         table, deferred = validate_rule_table(graph)
         run_witnesses(graph, table, deferred)
+        collection_count, candidate_count = validate_vector_catalog(table, deferred)
     except VerificationError as error:
         print(f"canonical rule verification failed: {error}", file=sys.stderr)
         return 1
     print(
         f"canonical rule verification passed: {len(table)} Core array locations, "
-        f"{len(deferred)} deferred extension display paths"
+        f"{len(deferred)} deferred extension display paths, "
+        f"{collection_count} collection cases, {candidate_count} candidate cases"
     )
     return 0
 

@@ -1,6 +1,20 @@
 {
   "schema": "ipcraft.core-canonical-vectors.v1",
   "canonicalization": "RFC8785-after-Appendix-F-set-projection",
+  "vectorCatalog": [
+    {
+      "path": "vectors/core-canonical-projection-v1.json",
+      "purpose": "Closed schema-addressed canonical collection rule index and legacy projection witnesses."
+    },
+    {
+      "path": "vectors/core-set-permutation-v1.json",
+      "purpose": "Complete set, ordered, and derived-ordered collection canonical JSON and SHA-256 golden vectors."
+    },
+    {
+      "path": "vectors/candidate-local-ref-v1.json",
+      "purpose": "Candidate causality, localRef graph, exclusion, normalization, inequality, and invalidity golden vectors."
+    }
+  ],
   "canonicalCollections": [
     {
       "schemaId": "ipcraft.artifact-manifest.v1",

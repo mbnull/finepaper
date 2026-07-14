@@ -8,6 +8,8 @@ Machine-readable companion artifacts:
 - [Core canonical models schema](../../contracts/schemas/ipcraft.core-canonical-models.v1.schema.json)
 - [Default Engine Bundle schema](../../contracts/schemas/ipcraft.engine-bundle.v1.schema.json)
 - [Core projection/digest vectors](../../contracts/vectors/core-canonical-projection-v1.json)
+- [Core collection permutation vectors](../../contracts/vectors/core-set-permutation-v1.json)
+- [Candidate/local-reference vectors](../../contracts/vectors/candidate-local-ref-v1.json)
 
 ## F1. Core Schema IDs
 
@@ -397,6 +399,25 @@ Every set key is candidate/document-wide unique at its owning path. Literal sets
 Capability meanings remain path-specific: Package/Contract declaration arrays sort by declaration `key`; Interface/runtime capability-value arrays sort by `canonicalJson`; Provider/Tool declared capability string lists sort by `unicodeScalarValue`.
 
 Undirected persisted/Core Structural Links store endpoint string Host IDs and normalize them as `id:` + ID. Candidate Patch Links use objectRef envelopes and normalize `endpointA`/`endpointB` by `objectRefToken`, so candidate endpoints may contain local refs. Candidate localRefs are unique across both sub-patches, Authority owns `authority:*`, Application owns `application:*`, and `allocationOrder` contains every create localRef exactly once. Literal Unicode ordering therefore places `application:000001` before `authority:router-0`.
+
+### Golden-vector envelope and coverage
+
+Every focused canonical vector file uses this closed envelope:
+
+```json
+{
+  "schema": "ipcraft.canonical-vector-catalog.v1",
+  "kind": "collection-permutation",
+  "canonicalization": "RFC8785-after-Appendix-F-set-projection",
+  "cases": []
+}
+```
+
+`kind` is exactly `collection-permutation` or `candidate-causality`. No other top-level members are permitted. Collection cases contain `id`, `schemaId`, `schemaPointer`, `collectionKind`, `inputVariants`, `expectedRelation`, `expectedNormalized`, `expectedCanonicalJson`, and either `expectedDigest` or the applicable `expectedErrorCode`; non-ordered cases also contain the exact `sortKey`. Candidate cases use complete candidate inputs where practical and state `includedProjection` and `excludedProjection` explicitly.
+
+The collection catalog has exactly one case for every `{schemaId,schemaPointer}` in `canonicalCollections` and no case for a `deferredExtensionCollections` display path. Every set case contains at least three non-empty, nontrivial permutations of the same structurally conforming items (canonical, reverse, and fixed-seed shuffle) with one normalized array, canonical JSON string, and digest. Every ordered case contains at least two variants differing only in order and aligned normalized arrays, canonical JSON strings, and distinct digests. Every derived-ordered location contains its valid derived order and a noncanonical supplied order with a stable error code. Case IDs are unique across both focused catalogs, and every digest is `sha256:` followed by 64 lowercase hexadecimal characters.
+
+Collection vectors exercise the physical array comparator independently of enclosing root cardinality. This matters for V1-reserved ProjectDesign arrays such as `connections` and `views`, whose root schemas currently require `maxItems: 0`; their collection-level items have no additional item constraints, while the root cardinality remains enforced separately.
 
 ## F11. Host Side-effect Contract V1
 
