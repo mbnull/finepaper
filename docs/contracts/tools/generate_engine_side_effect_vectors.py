@@ -40,7 +40,7 @@ def manifest(version: str = "1.0.0", compat: str = "1") -> dict:
 
 
 def bundle(d: str = D["a"], **kw: object) -> dict:
-    out = {"bundleManifestDigest":d,"verifiedBundleManifestDigest":d,"installed":True,"revoked":False,"contentVerified":True,"manifest":manifest()}
+    out = {"bundleManifestDigest":d,"verifiedBundleManifestDigest":d,"installed":True,"revoked":False,"contentVerified":True,"source":"store","manifest":manifest()}
     out.update(kw)
     return out
 
@@ -50,7 +50,7 @@ def resolution_case(case_id: str, description: str, exact: dict | None = None, a
     return {"id":case_id,"description":description,"input":{"projectLock":lock(),"installedBundles":[] if exact is None else [exact],
             "currentPlatformAbi":"linux-x86_64-gnu-v1","supportedEngineHostContracts":["ipcraft.engine-host.v1"],
             "supportedHostSideEffectContracts":["ipcraft.noc-side-effects.v1"],"alternativeBundles":alternatives or []},
-            "expected":{"outcome":outcome,"selectedBundleManifestDigest":selected,"diagnosticCode":code,"upgradeAvailable":upgrade}}
+            "expected":{"outcome":outcome,"selectedBundleManifestDigest":selected,"diagnosticCode":code,"upgradeAvailable":upgrade,"retainedInContentAddressedStore":False}}
 
 
 def resolution_cases() -> list[dict]:
@@ -100,36 +100,19 @@ def derivation(target: dict) -> dict:
 
 
 def migration_record() -> dict:
-    current,target=lock(),lock(D["b"],"2.0.0","2")
-    deps=[{"lockId":"dep.noc","kind":"noc-package","id":"vendor.noc","version":"1.0.0","bundleManifestDigest":D["f"]},target]
-    old_der={**derivation(current),"topologyInputRevision":4,"derivedStateRevision":7,"defaultEngineBundleDigest":D["a"],"structureAuthority":{**derivation(current)["structureAuthority"],"bundleDigest":D["a"]}}
-    forward={"projectDependencies":deps,"topologyDerivation":derivation(target),"derivedState":{"router.r0":"host-router-001"},"hostSideEffects":{"membership.default.r0":"host-membership-001"},"localRefToHostId":{"authority:router-0":"host-router-001","application:000001":"host-membership-001"}}
-    inverse={"projectDependencies":[deps[0],current],"topologyDerivation":old_der,"derivedState":{"router.r0":"host-router-001"},"hostSideEffects":{"membership.default.r0":"host-membership-001"},"localRefToHostId":forward["localRefToHostId"]}
-    migration={"currentDefaultEngineLock":current,"targetDefaultEngineLock":target}
-    impact_value={"code":"engine_migration.dependency_replaced","severity":"warning","dataLoss":False,"subjects":[{"kind":"project","id":"project.main"}],"details":{"lockId":"dep.default-engine","currentBundleDigest":D["a"],"targetBundleDigest":D["b"]},"resolution":"confirm-or-discard"}
-    candidate={"schema":"ipcraft.candidate-transaction.v1","transactionId":"tx.migration","kind":"default-engine-migration","applicability":applicability(),
-      "topologyIntent":{"schema":"ipcraft.topology-intent.v1","componentId":"component.noc","topologyId":"topology.main","topologyKind":"mesh","globalConfig":{"columns":3,"rows":2},"packageEntities":[],"packageRelations":[]},
-      "authorityPatch":{"patchId":"patch.target-engine","source":{"kind":"default-engine","identity":"ipcraft.default-noc-engine","version":"2.0.0","bundleDigest":D["b"]},"operations":[]},
-      "applicationPatch":{"patchId":"patch.migration","source":{"kind":"application-migration","identity":"host","version":"1"},"operations":[{"op":"updateEntity","entityKind":"project","id":"project.main","set":{"dependencies":deps},"unset":[]},{"op":"updateEntity","entityKind":"topology","id":"topology.main","set":{"derivation":derivation(target)},"unset":[]}]},
-      "migration":migration,"tombstones":[],"allocationOrder":[],"impactReport":{"schema":"ipcraft.topology-impact-report.v1","impacts":[impact_value]}}
-    candidate["candidateDigest"]=digest(candidate)
-    return {"migration":migration,"candidate":candidate,"applicability":applicability(),"targetManifest":manifest("2.0.0","2"),
-            "baseDependencies":[deps[0],current],"forwardTransaction":forward,"inverseTransaction":inverse,
-            "dependencyProvenance":{"unchangedLockIds":["dep.noc"],"replacedLockId":"dep.default-engine"},"derivationProvenance":{"current":old_der,"target":derivation(target)},
-            "impactProvenance":{"code":"engine_migration.dependency_replaced","lockId":"dep.default-engine","currentBundleDigest":D["a"],"targetBundleDigest":D["b"]}}
+    return make_migration_input(False)
 
 
 def migration_cases() -> list[dict]:
-    base=migration_record()
-    def c(i,d,mut=None,exp=None):
-        x=copy.deepcopy(base); (mut or (lambda _:None))(x)
+    def c(i,d,base=None,mut=None,exp=None):
+        x=copy.deepcopy(base or migration_record()); (mut or (lambda _:None))(x)
         return {"id":i,"description":d,"input":x,"expected":exp or {"offered":True,"groupState":"ready-to-commit","requiresConfirmation":True,"atomicCommit":True,"engineExecutions":[D["b"]]}}
     return [c("engine-migration-compatible-target-offered","Target declares source compatibility."),
-            c("engine-migration-incompatible-target-not-offered","Target omits source compatibility.",lambda x:x["targetManifest"].update(migrationFromCompatibilityVersions=["9"]),{"offered":False,"diagnosticCode":"engine.migration_incompatible","engineExecutions":[]}),
+            c("engine-migration-incompatible-target-not-offered","Target omits source compatibility.",mut=lambda x:x["targetManifest"].update(migrationFromCompatibilityVersions=["9"]),exp={"offered":False,"diagnosticCode":"engine.migration_incompatible","engineExecutions":[]}),
             c("engine-migration-atomic-commit","Lock, Derived State, side effects, mapping, and provenance commit atomically."),
-            c("engine-migration-blocked-by-package-relation","Universal relation blocking priority wins.",lambda x:x.update(blockingImpact="package_relation.endpoint_blocks_candidate"),{"offered":True,"groupState":"blocked","requiresConfirmation":False,"atomicCommit":False,"engineExecutions":[D["b"]]}),
-            c("engine-migration-undo-exact-inverse","Undo restores exact stored inverse without Engine execution.",lambda x:x.update(action="undo"),{"offered":True,"restoredTransaction":"inverseTransaction","stableHostIds":True,"engineExecutions":[],"resultMode":"normal"}),
-            c("engine-migration-undo-source-missing-degraded","Undo restores exact state then degrades if source Bundle is missing.",lambda x:x.update(action="undo",sourceBundleAvailable=False),{"offered":True,"restoredTransaction":"inverseTransaction","stableHostIds":True,"engineExecutions":[],"resultMode":"degraded-inspect","diagnosticCode":"engine.bundle_missing"})]
+            c("engine-migration-blocked-by-package-relation","Universal relation blocking priority is derived from the causal relation endpoint.",base=make_migration_input(True),exp={"offered":True,"groupState":"blocked","requiresConfirmation":False,"atomicCommit":False,"engineExecutions":[D["b"]]}),
+            c("engine-migration-undo-exact-inverse","Undo restores the exact stored inverse without Engine execution.",mut=lambda x:x.update(action="undo"),exp={"offered":True,"restoredSnapshot":"beforeSnapshot","stableHostIds":True,"engineExecutions":[],"resultMode":"normal"}),
+            c("engine-migration-undo-source-missing-degraded","Undo restores exact state then degrades if the source Bundle is missing.",mut=lambda x:x.update(action="undo",sourceBundleAvailable=False),exp={"offered":True,"restoredSnapshot":"beforeSnapshot","stableHostIds":True,"engineExecutions":[],"resultMode":"degraded-inspect","diagnosticCode":"engine.bundle_missing"})]
 
 
 def freshness_cases() -> list[dict]:
@@ -162,8 +145,8 @@ def side_input(ops:list[dict]) -> dict:
     return {"domainTypes":[dtype("clock"),dtype("power")],"relationDeclarations":[decl("route.allowed",True),decl("route.blocked",False)],
       "currentDerivedState":{"schema":"ipcraft.derived-state.v1","topologyId":"topology.main","routers":[router("router.a",0,0),router("router.b",0,1),router("router.c",0,2)],
       "structuralLinks":[link("link.ab","router.a","router.b"),link("link.bc","router.b","router.c")],"accessSlots":[slot("slot.a","router.a"),slot("slot.b","router.b")],"packageEntities":[],"packageRelations":[]},
-      "domains":[domain("domain.clock.default","clock",True),domain("domain.power.default","power",True),domain("domain.clock.aux","clock",False)],
-      "domainMemberships":[member("membership.ca","domain.clock.default","router.a"),member("membership.cb","domain.clock.default","router.b"),member("membership.cc","domain.clock.default","router.c"),member("membership.pa","domain.power.default","router.a"),member("membership.pb","domain.power.default","router.b"),member("membership.pc","domain.power.default","router.c"),member("membership.auxa","domain.clock.aux","router.a"),member("membership.auxb","domain.clock.aux","router.b")],
+      "domains":[domain("domain.clock.default","clock",True),domain("domain.power.default","power",True)],
+      "domainMemberships":[member("membership.ca","domain.clock.default","router.a"),member("membership.cb","domain.clock.default","router.b"),member("membership.cc","domain.clock.default","router.c"),member("membership.pa","domain.power.default","router.a"),member("membership.pb","domain.power.default","router.b"),member("membership.pc","domain.power.default","router.c")],
       "attachments":[{"id":"attachment.a","interfaceId":"interface.a","state":"resolved","routerId":"router.a","slotId":"slot.a"}],
       "packageRelations":[{"id":"relation.allowed","typeKey":"route.allowed","sources":[resolved("router","router.a")],"targets":[resolved("package-entity","entity.a")],"data":{"weight":1},"extensions":[]},{"id":"relation.blocked","typeKey":"route.blocked","sources":[resolved("router","router.b")],"targets":[resolved("package-entity","entity.a")],"data":{"weight":2},"extensions":[]}],
       "authorityPatch":{"patchId":"patch.authority","source":{"kind":"default-engine","identity":"ipcraft.default-noc-engine","version":"1.0.0","bundleDigest":D["a"]},"operations":ops}}
@@ -174,10 +157,10 @@ def ref_token(ref): return "id:"+ref["id"] if "id" in ref else "localRef:"+ref["
 
 def evaluate_side(inp:dict)->dict:
     ops=[]; impacts=[]; tomb=[]; diagnostics=[]
-    deleted_r={o["id"] for o in inp["authorityPatch"]["operations"] if o["op"]=="deleteEntity" and o["entityKind"]=="router"}
-    deleted_s={o["id"] for o in inp["authorityPatch"]["operations"] if o["op"]=="deleteEntity" and o["entityKind"]=="access-slot"}
-    deleted_l={o["id"] for o in inp["authorityPatch"]["operations"] if o["op"]=="deleteEntity" and o["entityKind"]=="structural-link"}
-    created=[o for o in inp["authorityPatch"]["operations"] if o["op"]=="createEntity" and o["entityKind"]=="router"]
+    authority=inp["authorityPatch"]["operations"]
+    deleted_r={o["id"] for o in authority if o["op"]=="deleteEntity" and o["entityKind"]=="router"}
+    deleted_s={o["id"] for o in authority if o["op"]=="deleteEntity" and o["entityKind"]=="access-slot"}
+    created=[o for o in authority if o["op"]=="createEntity" and o["entityKind"]=="router"]
     defaults={d["typeKey"]:d for d in inp["domains"] if d["isDefault"]}
     seq=1
     for dtype,o in sorted(((t["key"],o) for t in inp["domainTypes"] for o in created),key=lambda x:(x[0],ref_token({"localRef":x[1]["localRef"]}))):
@@ -201,16 +184,22 @@ def evaluate_side(inp:dict)->dict:
             ops.append({"op":"updateRelation","relationKind":"package-relation","id":rel["id"],"set":{"sources":[conv(e) for e in rel["sources"]],"targets":[conv(e) for e in rel["targets"]]},"unset":[]})
             impacts.append({"code":"package_relation.endpoint_unresolved","severity":"warning","dataLoss":False,"subjects":[{"kind":"package-relation","id":rel["id"]}],"details":{"typeKey":rel["typeKey"]},"resolution":"reattach-or-delete-relation"})
         else: impacts.append({"code":"package_relation.endpoint_blocks_candidate","severity":"error","dataLoss":False,"subjects":[{"kind":"package-relation","id":rel["id"]}],"details":{"typeKey":rel["typeKey"]},"resolution":"discard-and-repair"})
-    remaining_members=[m for m in inp["domainMemberships"] if m["routerId"] not in deleted_r]
+    remaining_members=[(m["domainId"],"id:"+m["routerId"]) for m in inp["domainMemberships"] if m["routerId"] not in deleted_r]
+    remaining_members += [(o["value"]["domainRef"]["id"],ref_token(o["value"]["routerRef"])) for o in ops if o["op"]=="createRelation" and o["relationKind"]=="domain-membership"]
+    links={l["id"]:("id:"+l["endpointA"],"id:"+l["endpointB"]) for l in inp["currentDerivedState"]["structuralLinks"]}
+    for operation in authority:
+        if operation["op"]=="deleteEntity" and operation["entityKind"]=="structural-link": links.pop(operation["id"],None)
+        elif operation["op"]=="createEntity" and operation["entityKind"]=="structural-link": links[operation["localRef"]]=(ref_token(operation["value"]["endpointA"]),ref_token(operation["value"]["endpointB"]))
+        elif operation["op"]=="updateEntity" and operation["entityKind"]=="structural-link":
+            old=links[operation["id"]]; links[operation["id"]]=(ref_token(operation["set"].get("endpointA",{"id":old[0][3:]})),ref_token(operation["set"].get("endpointB",{"id":old[1][3:]})))
+    links={key:value for key,value in links.items() if all(not (token.startswith("id:") and token[3:] in deleted_r) for token in value)}
     for d in sorted(inp["domains"],key=lambda x:x["id"]):
-        members={m["routerId"] for m in remaining_members if m["domainId"]==d["id"]}
+        members={router for domain_id,router in remaining_members if domain_id==d["id"]}
         if not members and not d["isDefault"]:
             ops.append({"op":"deleteEntity","entityKind":"domain","id":d["id"]}); tomb.append({"subjectKind":"domain","id":d["id"],"value":d})
             impacts.append({"code":"domain.non_default_deleted","severity":"warning","dataLoss":True,"subjects":[{"kind":"domain","id":d["id"]}],"details":{"discardedConfig":True},"resolution":"confirm-or-discard"}); continue
         if len(members)>1:
-            edges=[]
-            for l in inp["currentDerivedState"]["structuralLinks"]:
-                if l["id"] not in deleted_l and l["endpointA"] not in deleted_r and l["endpointB"] not in deleted_r: edges.append((l["endpointA"],l["endpointB"]))
+            edges=list(links.values())
             seen={next(iter(members))}
             while True:
                 more={b for a,b in edges if a in seen and b in members}|{a for a,b in edges if b in seen and a in members}
@@ -228,22 +217,90 @@ def evaluate_side(inp:dict)->dict:
     return {"applicationPatch":{"patchId":"patch.application","source":{"kind":"application-reconcile","identity":"host","version":"1"},"operations":ops},"tombstones":sorted(tomb,key=lambda x:(x["subjectKind"],x["id"])),"allocationOrder":sorted(creates),"impactReport":{"schema":"ipcraft.topology-impact-report.v1","impacts":impacts},"coreDiagnostics":diagnostics,"groupState":state,"requiresConfirmation":confirm,"commitDisposition":disp}
 
 
+def materialize_ref(ref:dict,mapping:dict)->str:
+    return ref["id"] if "id" in ref else mapping[ref["localRef"]]
+
+
+def apply_forward_authoring(before:dict,tx:dict)->dict:
+    result=copy.deepcopy(before); mapping=tx["localRefToHostId"]; derived=result["derivedState"]
+    arrays={"router":"routers","structural-link":"structuralLinks","access-slot":"accessSlots"}
+    for op in tx["authorityPatch"]["operations"]:
+        if op["entityKind"] not in arrays: continue
+        array=derived[arrays[op["entityKind"]]]
+        if op["op"]=="deleteEntity": array[:]=[item for item in array if item["id"]!=op["id"]]
+        elif op["op"]=="createEntity":
+            value=copy.deepcopy(op["value"]); value["id"]=mapping[op["localRef"]]
+            if op["entityKind"]=="structural-link": value["endpointA"],value["endpointB"]=materialize_ref(value["endpointA"],mapping),materialize_ref(value["endpointB"],mapping)
+            if op["entityKind"]=="access-slot": value["routerId"]=materialize_ref(value.pop("routerRef"),mapping)
+            array.append(value)
+    for key in ("routers","structuralLinks","accessSlots"): derived[key].sort(key=lambda x:x["id"])
+    host=result["hostSideEffects"]
+    for op in tx["applicationPatch"]["operations"]:
+        if op["op"]=="createRelation" and op["relationKind"]=="domain-membership": host["domainMemberships"].append({"id":mapping[op["localRef"]],"domainId":materialize_ref(op["value"]["domainRef"],mapping),"routerId":materialize_ref(op["value"]["routerRef"],mapping)})
+        elif op["op"]=="deleteRelation" and op["relationKind"]=="domain-membership": host["domainMemberships"]=[x for x in host["domainMemberships"] if x["id"]!=op["id"]]
+        elif op["op"]=="updateRelation" and op["relationKind"]=="attachment":
+            item=next(x for x in host["attachments"] if x["id"]==op["id"]); item.clear(); item.update({"id":op["id"],"interfaceId":"interface.c","state":"unresolved","intendedTarget":{"routerId":op["set"]["intendedTarget"]["routerRef"]["id"],"slotId":op["set"]["intendedTarget"]["slotRef"]["id"]},"reasonCode":op["set"]["reasonCode"]})
+        elif op["op"]=="updateRelation" and op["relationKind"]=="package-relation":
+            item=next(x for x in host["packageRelations"] if x["id"]==op["id"])
+            def persisted(e):
+                if e["state"]=="resolved": return {"state":"resolved","subject":{"kind":e["subject"]["kind"],"id":materialize_ref(e["subject"]["ref"],mapping)}}
+                return {"state":"unresolved","intendedSubject":{"kind":e["intendedSubject"]["kind"],"id":materialize_ref(e["intendedSubject"]["ref"],mapping)},"reasonCode":e["reasonCode"]}
+            item["sources"],item["targets"]=[persisted(e) for e in op["set"]["sources"]],[persisted(e) for e in op["set"]["targets"]]
+        elif op["op"]=="deleteEntity" and op["entityKind"]=="domain": host["domains"]=[x for x in host["domains"] if x["id"]!=op["id"]]
+    for key in host: host[key].sort(key=lambda x:x["id"])
+    result["dependencies"]=copy.deepcopy(tx["targetDependencies"]);result["derivation"]=copy.deepcopy(tx["targetDerivation"]);result["hostIds"]={"localRefToHostId":copy.deepcopy(mapping)};result["engineInvocationCount"]+=len(tx["engineInvocations"])
+    return result
+
+
+def make_migration_input(blocked:bool)->dict:
+    current,target=lock(),lock(D["b"],"2.0.0","2"); noc={"lockId":"dep.noc","kind":"noc-package","id":"vendor.noc","version":"1.0.0","bundleManifestDigest":D["f"]}
+    old_der={**derivation(current),"topologyInputRevision":4,"derivedStateRevision":7,"defaultEngineBundleDigest":D["a"],"engineCompatibilityVersion":"1","structureAuthority":{**derivation(current)["structureAuthority"],"version":"1.0.0","bundleDigest":D["a"]}}
+    create_router={"op":"createEntity","entityKind":"router","localRef":"authority:router-d","value":{"templateKey":"mesh-router","identityCompatibilityVersion":1,"coordinate":{"row":1,"column":0},"properties":{"generation":"target"}}}
+    create_link={"op":"createEntity","entityKind":"structural-link","localRef":"authority:link-bd","value":{"templateKey":"mesh-link","identityCompatibilityVersion":1,"endpointA":{"id":"router.b"},"endpointB":{"localRef":"authority:router-d"},"axis":"vertical","properties":{"generation":"target"}}}
+    create_slot={"op":"createEntity","entityKind":"access-slot","localRef":"authority:slot-d","value":{"routerRef":{"localRef":"authority:router-d"},"templateKey":"local-0","identityCompatibilityVersion":1,"displayOrder":0,"label":"Target Local","allowedContracts":[],"properties":{"generation":"target"}}}
+    authority={"patchId":"patch.target-engine","source":{"kind":"default-engine","identity":"ipcraft.default-noc-engine","version":"2.0.0","bundleDigest":D["b"]},"operations":[{"op":"deleteEntity","entityKind":"structural-link","id":"link.bc"},{"op":"deleteEntity","entityKind":"access-slot","id":"slot.c"},{"op":"deleteEntity","entityKind":"router","id":"router.c"},create_router,create_link,create_slot]}
+    causal=side_input(authority["operations"]);causal["authorityPatch"]=copy.deepcopy(authority);causal["currentDerivedState"]["accessSlots"].append(slot("slot.c","router.c"));causal["attachments"]=[{"id":"attachment.c","interfaceId":"interface.c","state":"resolved","routerId":"router.c","slotId":"slot.c"}];causal["packageRelations"]=[]
+    if blocked:
+        causal["attachments"]=[]
+        causal["packageRelations"]=[{"id":"relation.blocked","typeKey":"route.blocked","sources":[resolved("router","router.c")],"targets":[resolved("package-entity","entity.a")],"data":{"weight":9},"extensions":[]}]
+    side=evaluate_side(causal);target_deps=sorted([noc,target],key=lambda x:x["lockId"]);target_der=derivation(target)
+    application=copy.deepcopy(side["applicationPatch"]);application["patchId"]="patch.migration";application["source"]={"kind":"application-migration","identity":"host","version":"1"};application["operations"] += [{"op":"updateEntity","entityKind":"project","id":"project.main","set":{"dependencies":target_deps},"unset":[]},{"op":"updateEntity","entityKind":"topology","id":"topology.main","set":{"derivation":target_der},"unset":[]}]
+    migration={"currentDefaultEngineLock":current,"targetDefaultEngineLock":target};migration_impact={"code":"engine_migration.dependency_replaced","severity":"warning","dataLoss":False,"subjects":[{"kind":"project","id":"project.main"}],"details":{"lockId":"dep.default-engine","currentBundleDigest":D["a"],"targetBundleDigest":D["b"]},"resolution":"confirm-or-discard"}
+    impacts=copy.deepcopy(side["impactReport"]["impacts"])+[migration_impact];impacts.sort(key=lambda x:(x["code"],x["severity"],x["dataLoss"],cj(x["subjects"]),cj(x["details"]),x["resolution"]))
+    mapping={"authority:link-bd":"host-link-bd","authority:router-d":"host-router-d","authority:slot-d":"host-slot-d","application:000001":"host-membership-clock-d","application:000002":"host-membership-power-d"}
+    deleted={("structural-link","link.bc"):link("link.bc","router.b","router.c"),("access-slot","slot.c"):slot("slot.c","router.c"),("router","router.c"):router("router.c",0,2)}
+    for m in causal["domainMemberships"]:
+        if m["routerId"]=="router.c": deleted[("domain-membership",m["id"])]=m
+    tombstones=[{"subjectKind":kind,"id":id,"value":value} for (kind,id),value in sorted(deleted.items())]
+    allocation=sorted(mapping)
+    candidate={"schema":"ipcraft.candidate-transaction.v1","transactionId":"tx.migration","kind":"default-engine-migration","applicability":applicability(),"topologyIntent":{"schema":"ipcraft.topology-intent.v1","componentId":"component.noc","topologyId":"topology.main","topologyKind":"mesh","globalConfig":{"columns":2,"rows":2},"packageEntities":[],"packageRelations":[]},"authorityPatch":authority,"applicationPatch":application,"migration":migration,"tombstones":tombstones,"allocationOrder":allocation,"impactReport":{"schema":"ipcraft.topology-impact-report.v1","impacts":impacts}}
+    candidate["candidateDigest"]=digest(candidate)
+    before={"dependencies":sorted([noc,current],key=lambda x:x["lockId"]),"derivedState":copy.deepcopy(causal["currentDerivedState"]),"derivation":old_der,"hostSideEffects":{"domains":copy.deepcopy(causal["domains"]),"domainMemberships":copy.deepcopy(causal["domainMemberships"]),"attachments":copy.deepcopy(causal["attachments"]),"packageRelations":copy.deepcopy(causal["packageRelations"])},"hostIds":{"localRefToHostId":{}},"engineInvocationCount":0}
+    forward={"authorityPatch":authority,"applicationPatch":application,"tombstones":tombstones,"allocationOrder":allocation,"localRefToHostId":mapping,"targetDependencies":target_deps,"targetDerivation":target_der,"engineInvocations":[D["b"]]}
+    after=apply_forward_authoring(before,forward)
+    inverse={"restoreDependencies":copy.deepcopy(before["dependencies"]),"restoreDerivedState":copy.deepcopy(before["derivedState"]),"restoreDerivation":copy.deepcopy(before["derivation"]),"restoreHostSideEffects":copy.deepcopy(before["hostSideEffects"]),"restoreHostIds":copy.deepcopy(before["hostIds"]),"restoreEngineInvocationCount":before["engineInvocationCount"],"engineInvocations":[]}
+    return {"action":"migrate","sourceBundleAvailable":True,"migration":migration,"applicability":applicability(),"targetManifest":manifest("2.0.0","2"),"sideEffectInput":causal,"beforeSnapshot":before,"afterSnapshot":after,"candidate":candidate,"forwardTransaction":forward,"inverseTransaction":inverse}
+
+
 def side_cases()->list[dict]:
     create=lambda lr,r,c:{"op":"createEntity","entityKind":"router","localRef":lr,"value":{"templateKey":"mesh-router","identityCompatibilityVersion":1,"coordinate":{"row":r,"column":c},"properties":{}}}
+    create_link=lambda lr,a,b:{"op":"createEntity","entityKind":"structural-link","localRef":lr,"value":{"templateKey":"mesh-link","identityCompatibilityVersion":1,"endpointA":a,"endpointB":b,"axis":"vertical","properties":{}}}
     delete=lambda kind,i:{"op":"deleteEntity","entityKind":kind,"id":i}
-    specs=[("side-effects-created-router-default-memberships",[create("authority:router-z",1,0)],lambda x:None),
-      ("side-effects-created-routers-membership-order",[create("authority:router-z",1,0),create("authority:router-a",1,1)],lambda x:None),
+    update_link=lambda i,a,b:{"op":"updateEntity","entityKind":"structural-link","id":i,"set":{"endpointA":a,"endpointB":b},"unset":[]}
+    specs=[("side-effects-created-router-default-memberships",[create("authority:router-z",1,0),create_link("authority:link-z",{"id":"router.c"},{"localRef":"authority:router-z"})],lambda x:None),
+      ("side-effects-created-routers-membership-order",[create("authority:router-z",1,0),create("authority:router-a",1,1),create_link("authority:link-a",{"id":"router.c"},{"localRef":"authority:router-a"}),create_link("authority:link-z",{"localRef":"authority:router-a"},{"localRef":"authority:router-z"})],lambda x:None),
       ("side-effects-deleted-router-memberships",[delete("router","router.c")],lambda x:x.update(packageRelations=[])),
       ("side-effects-deleted-router-attachment-unresolved",[delete("router","router.a")],lambda x:x.update(packageRelations=[])),
       ("side-effects-deleted-slot-attachment-unresolved",[delete("access-slot","slot.a")],lambda x:x.update(packageRelations=[])),
       ("side-effects-package-relation-endpoint-unresolved",[delete("router","router.a")],lambda x:x.update(attachments=[],packageRelations=[x["packageRelations"][0]])),
       ("side-effects-package-relation-endpoint-blocked",[delete("router","router.b")],lambda x:x.update(attachments=[],packageRelations=[x["packageRelations"][1]])),
-      ("side-effects-empty-non-default-domain-tombstone",[delete("router","router.a"),delete("router","router.b")],lambda x:x.update(attachments=[],packageRelations=[])),
+      ("side-effects-empty-non-default-domain-tombstone",[delete("router","router.a")],lambda x:(x.update(attachments=[],packageRelations=[]),x["domains"].append(domain("domain.clock.aux","clock",False)),x["domainMemberships"].append(member("membership.auxa","domain.clock.aux","router.a")))),
       ("side-effects-empty-default-domain-preserved",[delete("router","router.a"),delete("router","router.b"),delete("router","router.c")],lambda x:x.update(attachments=[],packageRelations=[],domains=[x["domains"][0]],domainMemberships=[m for m in x["domainMemberships"] if m["domainId"]=="domain.clock.default"])),
-      ("side-effects-domain-disconnected-router-delete",[delete("router","router.b")],lambda x:x.update(attachments=[],packageRelations=[],domainMemberships=[m for m in x["domainMemberships"] if m["domainId"]!="domain.clock.aux"])),
-      ("side-effects-domain-disconnected-link-delete",[delete("structural-link","link.ab")],lambda x:x.update(attachments=[],packageRelations=[],domainMemberships=[m for m in x["domainMemberships"] if m["domainId"]!="domain.clock.aux"])),
-      ("side-effects-domain-disconnected-membership-placement",[],lambda x:x.update(attachments=[],packageRelations=[],domainMemberships=[m for m in x["domainMemberships"] if m["domainId"] not in ("domain.clock.aux",) and not (m["domainId"]=="domain.clock.default" and m["routerId"]=="router.b")])),
-      ("side-effects-combined-deterministic-order",[create("authority:router-z",1,0),delete("router","router.a"),delete("access-slot","slot.a"),delete("structural-link","link.bc")],lambda x:x.update(packageRelations=[x["packageRelations"][0]]))]
+      ("side-effects-domain-disconnected-router-delete",[delete("router","router.b")],lambda x:x.update(attachments=[],packageRelations=[],domainTypes=[x["domainTypes"][0]],domains=[x["domains"][0]],domainMemberships=[m for m in x["domainMemberships"] if m["domainId"]=="domain.clock.default"])),
+      ("side-effects-domain-disconnected-link-delete",[delete("structural-link","link.ab")],lambda x:x.update(attachments=[],packageRelations=[],domainTypes=[x["domainTypes"][0]],domains=[x["domains"][0]],domainMemberships=[m for m in x["domainMemberships"] if m["domainId"]=="domain.clock.default"])),
+      ("side-effects-domain-disconnected-link-update",[update_link("link.bc",{"id":"router.a"},{"id":"router.b"})],lambda x:x.update(attachments=[],packageRelations=[],domainTypes=[x["domainTypes"][0]],domains=[x["domains"][0]],domainMemberships=[m for m in x["domainMemberships"] if m["domainId"]=="domain.clock.default"])),
+      ("side-effects-domain-disconnected-membership-placement",[create("authority:router-isolated",2,2)],lambda x:x.update(attachments=[],packageRelations=[],domainTypes=[x["domainTypes"][0]],domains=[x["domains"][0]],domainMemberships=[m for m in x["domainMemberships"] if m["domainId"]=="domain.clock.default"])),
+      ("side-effects-combined-deterministic-order",[create("authority:router-z",1,0),create_link("authority:link-z",{"id":"router.c"},{"localRef":"authority:router-z"}),delete("router","router.a"),delete("access-slot","slot.a"),delete("structural-link","link.bc")],lambda x:x.update(packageRelations=[x["packageRelations"][0]]))]
     out=[]
     for cid,ops,mut in specs:
         inp=side_input(ops); mut(inp); doc={"schema":"ipcraft.noc-side-effects.v1","contractVersion":"ipcraft.noc-side-effects.v1","input":inp,"expected":evaluate_side(inp)}

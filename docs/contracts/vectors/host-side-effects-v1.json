@@ -180,15 +180,6 @@
               "config": {
                 "frequencyMHz": 100
               }
-            },
-            {
-              "id": "domain.clock.aux",
-              "typeKey": "clock",
-              "name": "domain.clock.aux",
-              "isDefault": false,
-              "config": {
-                "frequencyMHz": 100
-              }
             }
           ],
           "domainMemberships": [
@@ -221,16 +212,6 @@
               "id": "membership.pc",
               "domainId": "domain.power.default",
               "routerId": "router.c"
-            },
-            {
-              "id": "membership.auxa",
-              "domainId": "domain.clock.aux",
-              "routerId": "router.a"
-            },
-            {
-              "id": "membership.auxb",
-              "domainId": "domain.clock.aux",
-              "routerId": "router.b"
             }
           ],
           "attachments": [
@@ -318,6 +299,23 @@
                   },
                   "properties": {}
                 }
+              },
+              {
+                "op": "createEntity",
+                "entityKind": "structural-link",
+                "localRef": "authority:link-z",
+                "value": {
+                  "templateKey": "mesh-link",
+                  "identityCompatibilityVersion": 1,
+                  "endpointA": {
+                    "id": "router.c"
+                  },
+                  "endpointB": {
+                    "localRef": "authority:router-z"
+                  },
+                  "axis": "vertical",
+                  "properties": {}
+                }
               }
             ]
           }
@@ -363,6 +361,7 @@
           "allocationOrder": [
             "application:000001",
             "application:000002",
+            "authority:link-z",
             "authority:router-z"
           ],
           "impactReport": {
@@ -375,7 +374,7 @@
           "commitDisposition": "auto-commit"
         }
       },
-      "expectedCanonicalDigest": "sha256:ee5307930183acd37967ed4a9244ba27f21c8ed72e0d9b4538b65e4898540595"
+      "expectedCanonicalDigest": "sha256:3bf3589d8d348bd618867daa3da4721f6803461b441f366b1f4cdf448858e14b"
     },
     {
       "caseId": "side-effects-created-routers-membership-order",
@@ -554,15 +553,6 @@
               "config": {
                 "frequencyMHz": 100
               }
-            },
-            {
-              "id": "domain.clock.aux",
-              "typeKey": "clock",
-              "name": "domain.clock.aux",
-              "isDefault": false,
-              "config": {
-                "frequencyMHz": 100
-              }
             }
           ],
           "domainMemberships": [
@@ -595,16 +585,6 @@
               "id": "membership.pc",
               "domainId": "domain.power.default",
               "routerId": "router.c"
-            },
-            {
-              "id": "membership.auxa",
-              "domainId": "domain.clock.aux",
-              "routerId": "router.a"
-            },
-            {
-              "id": "membership.auxb",
-              "domainId": "domain.clock.aux",
-              "routerId": "router.b"
             }
           ],
           "attachments": [
@@ -706,6 +686,40 @@
                   },
                   "properties": {}
                 }
+              },
+              {
+                "op": "createEntity",
+                "entityKind": "structural-link",
+                "localRef": "authority:link-a",
+                "value": {
+                  "templateKey": "mesh-link",
+                  "identityCompatibilityVersion": 1,
+                  "endpointA": {
+                    "id": "router.c"
+                  },
+                  "endpointB": {
+                    "localRef": "authority:router-a"
+                  },
+                  "axis": "vertical",
+                  "properties": {}
+                }
+              },
+              {
+                "op": "createEntity",
+                "entityKind": "structural-link",
+                "localRef": "authority:link-z",
+                "value": {
+                  "templateKey": "mesh-link",
+                  "identityCompatibilityVersion": 1,
+                  "endpointA": {
+                    "localRef": "authority:router-a"
+                  },
+                  "endpointB": {
+                    "localRef": "authority:router-z"
+                  },
+                  "axis": "vertical",
+                  "properties": {}
+                }
               }
             ]
           }
@@ -779,6 +793,8 @@
             "application:000002",
             "application:000003",
             "application:000004",
+            "authority:link-a",
+            "authority:link-z",
             "authority:router-a",
             "authority:router-z"
           ],
@@ -792,7 +808,7 @@
           "commitDisposition": "auto-commit"
         }
       },
-      "expectedCanonicalDigest": "sha256:4794b33c8e2092df640e39eae04506b32738654b7ce7254c9884a58701166b19"
+      "expectedCanonicalDigest": "sha256:7d884eca1d8eac9ac079ceca6042b290c8f2a280f72d86abf6503b8ad6141931"
     },
     {
       "caseId": "side-effects-deleted-router-memberships",
@@ -971,15 +987,6 @@
               "config": {
                 "frequencyMHz": 100
               }
-            },
-            {
-              "id": "domain.clock.aux",
-              "typeKey": "clock",
-              "name": "domain.clock.aux",
-              "isDefault": false,
-              "config": {
-                "frequencyMHz": 100
-              }
             }
           ],
           "domainMemberships": [
@@ -1012,16 +1019,6 @@
               "id": "membership.pc",
               "domainId": "domain.power.default",
               "routerId": "router.c"
-            },
-            {
-              "id": "membership.auxa",
-              "domainId": "domain.clock.aux",
-              "routerId": "router.a"
-            },
-            {
-              "id": "membership.auxb",
-              "domainId": "domain.clock.aux",
-              "routerId": "router.b"
             }
           ],
           "attachments": [
@@ -1263,15 +1260,6 @@
               "config": {
                 "frequencyMHz": 100
               }
-            },
-            {
-              "id": "domain.clock.aux",
-              "typeKey": "clock",
-              "name": "domain.clock.aux",
-              "isDefault": false,
-              "config": {
-                "frequencyMHz": 100
-              }
             }
           ],
           "domainMemberships": [
@@ -1304,16 +1292,6 @@
               "id": "membership.pc",
               "domainId": "domain.power.default",
               "routerId": "router.c"
-            },
-            {
-              "id": "membership.auxa",
-              "domainId": "domain.clock.aux",
-              "routerId": "router.a"
-            },
-            {
-              "id": "membership.auxb",
-              "domainId": "domain.clock.aux",
-              "routerId": "router.b"
             }
           ],
           "attachments": [
@@ -1352,11 +1330,6 @@
               "version": "1"
             },
             "operations": [
-              {
-                "op": "deleteRelation",
-                "relationKind": "domain-membership",
-                "id": "membership.auxa"
-              },
               {
                 "op": "deleteRelation",
                 "relationKind": "domain-membership",
@@ -1419,7 +1392,7 @@
           "commitDisposition": "auto-commit"
         }
       },
-      "expectedCanonicalDigest": "sha256:d1daad2f2740650abe551afaf5415aedb538999a5efce7e47d48ceb7a088de06"
+      "expectedCanonicalDigest": "sha256:39885165771527ef3308eba385c037cbdc2f99ca3606cc525073922fa4c12111"
     },
     {
       "caseId": "side-effects-deleted-slot-attachment-unresolved",
@@ -1598,15 +1571,6 @@
               "config": {
                 "frequencyMHz": 100
               }
-            },
-            {
-              "id": "domain.clock.aux",
-              "typeKey": "clock",
-              "name": "domain.clock.aux",
-              "isDefault": false,
-              "config": {
-                "frequencyMHz": 100
-              }
             }
           ],
           "domainMemberships": [
@@ -1639,16 +1603,6 @@
               "id": "membership.pc",
               "domainId": "domain.power.default",
               "routerId": "router.c"
-            },
-            {
-              "id": "membership.auxa",
-              "domainId": "domain.clock.aux",
-              "routerId": "router.a"
-            },
-            {
-              "id": "membership.auxb",
-              "domainId": "domain.clock.aux",
-              "routerId": "router.b"
             }
           ],
           "attachments": [
@@ -1918,15 +1872,6 @@
               "config": {
                 "frequencyMHz": 100
               }
-            },
-            {
-              "id": "domain.clock.aux",
-              "typeKey": "clock",
-              "name": "domain.clock.aux",
-              "isDefault": false,
-              "config": {
-                "frequencyMHz": 100
-              }
             }
           ],
           "domainMemberships": [
@@ -1959,16 +1904,6 @@
               "id": "membership.pc",
               "domainId": "domain.power.default",
               "routerId": "router.c"
-            },
-            {
-              "id": "membership.auxa",
-              "domainId": "domain.clock.aux",
-              "routerId": "router.a"
-            },
-            {
-              "id": "membership.auxb",
-              "domainId": "domain.clock.aux",
-              "routerId": "router.b"
             }
           ],
           "attachments": [],
@@ -2026,11 +1961,6 @@
               "version": "1"
             },
             "operations": [
-              {
-                "op": "deleteRelation",
-                "relationKind": "domain-membership",
-                "id": "membership.auxa"
-              },
               {
                 "op": "deleteRelation",
                 "relationKind": "domain-membership",
@@ -2102,7 +2032,7 @@
           "commitDisposition": "auto-commit"
         }
       },
-      "expectedCanonicalDigest": "sha256:320d8d2714b390e47377febd69529bb1a98892fad49ec178fa309c277c8aa8e3"
+      "expectedCanonicalDigest": "sha256:195eb146b4bbf60834f3e2f38a9bea0150ba450ec285cc343688a6835da2b20b"
     },
     {
       "caseId": "side-effects-package-relation-endpoint-blocked",
@@ -2281,15 +2211,6 @@
               "config": {
                 "frequencyMHz": 100
               }
-            },
-            {
-              "id": "domain.clock.aux",
-              "typeKey": "clock",
-              "name": "domain.clock.aux",
-              "isDefault": false,
-              "config": {
-                "frequencyMHz": 100
-              }
             }
           ],
           "domainMemberships": [
@@ -2322,16 +2243,6 @@
               "id": "membership.pc",
               "domainId": "domain.power.default",
               "routerId": "router.c"
-            },
-            {
-              "id": "membership.auxa",
-              "domainId": "domain.clock.aux",
-              "routerId": "router.a"
-            },
-            {
-              "id": "membership.auxb",
-              "domainId": "domain.clock.aux",
-              "routerId": "router.b"
             }
           ],
           "attachments": [],
@@ -2389,11 +2300,6 @@
               "version": "1"
             },
             "operations": [
-              {
-                "op": "deleteRelation",
-                "relationKind": "domain-membership",
-                "id": "membership.auxb"
-              },
               {
                 "op": "deleteRelation",
                 "relationKind": "domain-membership",
@@ -2491,7 +2397,7 @@
           "commitDisposition": "blocked"
         }
       },
-      "expectedCanonicalDigest": "sha256:7b4ebe68b3155241fbf97720c4713e7d504ab4f6bcd623662da37497d0f7c766"
+      "expectedCanonicalDigest": "sha256:869293620596fef7425805abd1b37228e55c3c8b5de57d623d9b71f99428a8ac"
     },
     {
       "caseId": "side-effects-empty-non-default-domain-tombstone",
@@ -2716,11 +2622,6 @@
               "id": "membership.auxa",
               "domainId": "domain.clock.aux",
               "routerId": "router.a"
-            },
-            {
-              "id": "membership.auxb",
-              "domainId": "domain.clock.aux",
-              "routerId": "router.b"
             }
           ],
           "attachments": [],
@@ -2738,11 +2639,6 @@
                 "op": "deleteEntity",
                 "entityKind": "router",
                 "id": "router.a"
-              },
-              {
-                "op": "deleteEntity",
-                "entityKind": "router",
-                "id": "router.b"
               }
             ]
           }
@@ -2764,27 +2660,12 @@
               {
                 "op": "deleteRelation",
                 "relationKind": "domain-membership",
-                "id": "membership.auxb"
-              },
-              {
-                "op": "deleteRelation",
-                "relationKind": "domain-membership",
                 "id": "membership.ca"
               },
               {
                 "op": "deleteRelation",
                 "relationKind": "domain-membership",
-                "id": "membership.cb"
-              },
-              {
-                "op": "deleteRelation",
-                "relationKind": "domain-membership",
                 "id": "membership.pa"
-              },
-              {
-                "op": "deleteRelation",
-                "relationKind": "domain-membership",
-                "id": "membership.pb"
               },
               {
                 "op": "deleteEntity",
@@ -2835,7 +2716,7 @@
           "commitDisposition": "confirmation-required"
         }
       },
-      "expectedCanonicalDigest": "sha256:8187ee0f45def87c491486754fa206e4549dbcfb32c16c5824882658329ca082"
+      "expectedCanonicalDigest": "sha256:b45f38a7b8e35b382354d9c5d884d390191a4e63434850d5b04fc9d12845e362"
     },
     {
       "caseId": "side-effects-empty-default-domain-preserved",
@@ -3113,19 +2994,6 @@
               "configuration": {
                 "fields": []
               }
-            },
-            {
-              "key": "power",
-              "label": "Power",
-              "defaultName": "power-default",
-              "visual": {
-                "fill": "#123456",
-                "border": "#abcdef",
-                "pattern": "solid"
-              },
-              "configuration": {
-                "fields": []
-              }
             }
           ],
           "relationDeclarations": [
@@ -3261,24 +3129,6 @@
               "config": {
                 "frequencyMHz": 100
               }
-            },
-            {
-              "id": "domain.power.default",
-              "typeKey": "power",
-              "name": "domain.power.default",
-              "isDefault": true,
-              "config": {
-                "frequencyMHz": 100
-              }
-            },
-            {
-              "id": "domain.clock.aux",
-              "typeKey": "clock",
-              "name": "domain.clock.aux",
-              "isDefault": false,
-              "config": {
-                "frequencyMHz": 100
-              }
             }
           ],
           "domainMemberships": [
@@ -3295,21 +3145,6 @@
             {
               "id": "membership.cc",
               "domainId": "domain.clock.default",
-              "routerId": "router.c"
-            },
-            {
-              "id": "membership.pa",
-              "domainId": "domain.power.default",
-              "routerId": "router.a"
-            },
-            {
-              "id": "membership.pb",
-              "domainId": "domain.power.default",
-              "routerId": "router.b"
-            },
-            {
-              "id": "membership.pc",
-              "domainId": "domain.power.default",
               "routerId": "router.c"
             }
           ],
@@ -3345,34 +3180,10 @@
                 "op": "deleteRelation",
                 "relationKind": "domain-membership",
                 "id": "membership.cb"
-              },
-              {
-                "op": "deleteRelation",
-                "relationKind": "domain-membership",
-                "id": "membership.pb"
-              },
-              {
-                "op": "deleteEntity",
-                "entityKind": "domain",
-                "id": "domain.clock.aux"
               }
             ]
           },
-          "tombstones": [
-            {
-              "subjectKind": "domain",
-              "id": "domain.clock.aux",
-              "value": {
-                "id": "domain.clock.aux",
-                "typeKey": "clock",
-                "name": "domain.clock.aux",
-                "isDefault": false,
-                "config": {
-                  "frequencyMHz": 100
-                }
-              }
-            }
-          ],
+          "tombstones": [],
           "allocationOrder": [],
           "impactReport": {
             "schema": "ipcraft.topology-impact-report.v1",
@@ -3391,36 +3202,6 @@
                   "memberCount": 2
                 },
                 "resolution": "repair-domain"
-              },
-              {
-                "code": "domain.disconnected",
-                "severity": "error",
-                "dataLoss": false,
-                "subjects": [
-                  {
-                    "kind": "domain",
-                    "id": "domain.power.default"
-                  }
-                ],
-                "details": {
-                  "memberCount": 2
-                },
-                "resolution": "repair-domain"
-              },
-              {
-                "code": "domain.non_default_deleted",
-                "severity": "warning",
-                "dataLoss": true,
-                "subjects": [
-                  {
-                    "kind": "domain",
-                    "id": "domain.clock.aux"
-                  }
-                ],
-                "details": {
-                  "discardedConfig": true
-                },
-                "resolution": "confirm-or-discard"
               }
             ]
           },
@@ -3437,27 +3218,14 @@
                 }
               ],
               "properties": []
-            },
-            {
-              "ruleId": "domain.disconnected",
-              "severity": "error",
-              "message": "Domain is disconnected.",
-              "blocking": true,
-              "subjects": [
-                {
-                  "kind": "domain",
-                  "id": "domain.power.default"
-                }
-              ],
-              "properties": []
             }
           ],
-          "groupState": "ready-to-commit",
-          "requiresConfirmation": true,
-          "commitDisposition": "confirmation-required"
+          "groupState": "auto-commit",
+          "requiresConfirmation": false,
+          "commitDisposition": "auto-commit"
         }
       },
-      "expectedCanonicalDigest": "sha256:796b286dbbf5f6792dbcbfe5dbb4c5e833bf12f6e0fb2133d75444d64e03741e"
+      "expectedCanonicalDigest": "sha256:eadd649a7e9dd927de7afb7302e0eff128c30b590dde8df4f9fcf871fa5b7240"
     },
     {
       "caseId": "side-effects-domain-disconnected-link-delete",
@@ -3471,19 +3239,6 @@
               "key": "clock",
               "label": "Clock",
               "defaultName": "clock-default",
-              "visual": {
-                "fill": "#123456",
-                "border": "#abcdef",
-                "pattern": "solid"
-              },
-              "configuration": {
-                "fields": []
-              }
-            },
-            {
-              "key": "power",
-              "label": "Power",
-              "defaultName": "power-default",
               "visual": {
                 "fill": "#123456",
                 "border": "#abcdef",
@@ -3627,24 +3382,6 @@
               "config": {
                 "frequencyMHz": 100
               }
-            },
-            {
-              "id": "domain.power.default",
-              "typeKey": "power",
-              "name": "domain.power.default",
-              "isDefault": true,
-              "config": {
-                "frequencyMHz": 100
-              }
-            },
-            {
-              "id": "domain.clock.aux",
-              "typeKey": "clock",
-              "name": "domain.clock.aux",
-              "isDefault": false,
-              "config": {
-                "frequencyMHz": 100
-              }
             }
           ],
           "domainMemberships": [
@@ -3661,21 +3398,6 @@
             {
               "id": "membership.cc",
               "domainId": "domain.clock.default",
-              "routerId": "router.c"
-            },
-            {
-              "id": "membership.pa",
-              "domainId": "domain.power.default",
-              "routerId": "router.a"
-            },
-            {
-              "id": "membership.pb",
-              "domainId": "domain.power.default",
-              "routerId": "router.b"
-            },
-            {
-              "id": "membership.pc",
-              "domainId": "domain.power.default",
               "routerId": "router.c"
             }
           ],
@@ -3706,29 +3428,9 @@
               "identity": "host",
               "version": "1"
             },
-            "operations": [
-              {
-                "op": "deleteEntity",
-                "entityKind": "domain",
-                "id": "domain.clock.aux"
-              }
-            ]
+            "operations": []
           },
-          "tombstones": [
-            {
-              "subjectKind": "domain",
-              "id": "domain.clock.aux",
-              "value": {
-                "id": "domain.clock.aux",
-                "typeKey": "clock",
-                "name": "domain.clock.aux",
-                "isDefault": false,
-                "config": {
-                  "frequencyMHz": 100
-                }
-              }
-            }
-          ],
+          "tombstones": [],
           "allocationOrder": [],
           "impactReport": {
             "schema": "ipcraft.topology-impact-report.v1",
@@ -3747,36 +3449,6 @@
                   "memberCount": 3
                 },
                 "resolution": "repair-domain"
-              },
-              {
-                "code": "domain.disconnected",
-                "severity": "error",
-                "dataLoss": false,
-                "subjects": [
-                  {
-                    "kind": "domain",
-                    "id": "domain.power.default"
-                  }
-                ],
-                "details": {
-                  "memberCount": 3
-                },
-                "resolution": "repair-domain"
-              },
-              {
-                "code": "domain.non_default_deleted",
-                "severity": "warning",
-                "dataLoss": true,
-                "subjects": [
-                  {
-                    "kind": "domain",
-                    "id": "domain.clock.aux"
-                  }
-                ],
-                "details": {
-                  "discardedConfig": true
-                },
-                "resolution": "confirm-or-discard"
               }
             ]
           },
@@ -3793,31 +3465,18 @@
                 }
               ],
               "properties": []
-            },
-            {
-              "ruleId": "domain.disconnected",
-              "severity": "error",
-              "message": "Domain is disconnected.",
-              "blocking": true,
-              "subjects": [
-                {
-                  "kind": "domain",
-                  "id": "domain.power.default"
-                }
-              ],
-              "properties": []
             }
           ],
-          "groupState": "ready-to-commit",
-          "requiresConfirmation": true,
-          "commitDisposition": "confirmation-required"
+          "groupState": "auto-commit",
+          "requiresConfirmation": false,
+          "commitDisposition": "auto-commit"
         }
       },
-      "expectedCanonicalDigest": "sha256:0b9adb5772e2d26c58e1062debaf8877abdf0fbf9b2b32144de7728741e2f79e"
+      "expectedCanonicalDigest": "sha256:49f6940717a0477058543c506df0c939e00009559e52b26cc3d10477b754d61f"
     },
     {
-      "caseId": "side-effects-domain-disconnected-membership-placement",
-      "description": "domain disconnected membership placement",
+      "caseId": "side-effects-domain-disconnected-link-update",
+      "description": "domain disconnected link update",
       "document": {
         "schema": "ipcraft.noc-side-effects.v1",
         "contractVersion": "ipcraft.noc-side-effects.v1",
@@ -3827,19 +3486,6 @@
               "key": "clock",
               "label": "Clock",
               "defaultName": "clock-default",
-              "visual": {
-                "fill": "#123456",
-                "border": "#abcdef",
-                "pattern": "solid"
-              },
-              "configuration": {
-                "fields": []
-              }
-            },
-            {
-              "key": "power",
-              "label": "Power",
-              "defaultName": "power-default",
               "visual": {
                 "fill": "#123456",
                 "border": "#abcdef",
@@ -3983,24 +3629,6 @@
               "config": {
                 "frequencyMHz": 100
               }
-            },
-            {
-              "id": "domain.power.default",
-              "typeKey": "power",
-              "name": "domain.power.default",
-              "isDefault": true,
-              "config": {
-                "frequencyMHz": 100
-              }
-            },
-            {
-              "id": "domain.clock.aux",
-              "typeKey": "clock",
-              "name": "domain.clock.aux",
-              "isDefault": false,
-              "config": {
-                "frequencyMHz": 100
-              }
             }
           ],
           "domainMemberships": [
@@ -4010,23 +3638,13 @@
               "routerId": "router.a"
             },
             {
-              "id": "membership.cc",
+              "id": "membership.cb",
               "domainId": "domain.clock.default",
-              "routerId": "router.c"
-            },
-            {
-              "id": "membership.pa",
-              "domainId": "domain.power.default",
-              "routerId": "router.a"
-            },
-            {
-              "id": "membership.pb",
-              "domainId": "domain.power.default",
               "routerId": "router.b"
             },
             {
-              "id": "membership.pc",
-              "domainId": "domain.power.default",
+              "id": "membership.cc",
+              "domainId": "domain.clock.default",
               "routerId": "router.c"
             }
           ],
@@ -4040,7 +3658,22 @@
               "version": "1.0.0",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
-            "operations": []
+            "operations": [
+              {
+                "op": "updateEntity",
+                "entityKind": "structural-link",
+                "id": "link.bc",
+                "set": {
+                  "endpointA": {
+                    "id": "router.a"
+                  },
+                  "endpointB": {
+                    "id": "router.b"
+                  }
+                },
+                "unset": []
+              }
+            ]
           }
         },
         "expected": {
@@ -4051,29 +3684,9 @@
               "identity": "host",
               "version": "1"
             },
-            "operations": [
-              {
-                "op": "deleteEntity",
-                "entityKind": "domain",
-                "id": "domain.clock.aux"
-              }
-            ]
+            "operations": []
           },
-          "tombstones": [
-            {
-              "subjectKind": "domain",
-              "id": "domain.clock.aux",
-              "value": {
-                "id": "domain.clock.aux",
-                "typeKey": "clock",
-                "name": "domain.clock.aux",
-                "isDefault": false,
-                "config": {
-                  "frequencyMHz": 100
-                }
-              }
-            }
-          ],
+          "tombstones": [],
           "allocationOrder": [],
           "impactReport": {
             "schema": "ipcraft.topology-impact-report.v1",
@@ -4089,24 +3702,9 @@
                   }
                 ],
                 "details": {
-                  "memberCount": 2
+                  "memberCount": 3
                 },
                 "resolution": "repair-domain"
-              },
-              {
-                "code": "domain.non_default_deleted",
-                "severity": "warning",
-                "dataLoss": true,
-                "subjects": [
-                  {
-                    "kind": "domain",
-                    "id": "domain.clock.aux"
-                  }
-                ],
-                "details": {
-                  "discardedConfig": true
-                },
-                "resolution": "confirm-or-discard"
               }
             ]
           },
@@ -4125,12 +3723,285 @@
               "properties": []
             }
           ],
-          "groupState": "ready-to-commit",
-          "requiresConfirmation": true,
-          "commitDisposition": "confirmation-required"
+          "groupState": "auto-commit",
+          "requiresConfirmation": false,
+          "commitDisposition": "auto-commit"
         }
       },
-      "expectedCanonicalDigest": "sha256:7b288a585ecf50c702af2577e5a52a6a035ad2d6388682e7b9a271296a7e16f1"
+      "expectedCanonicalDigest": "sha256:49f6940717a0477058543c506df0c939e00009559e52b26cc3d10477b754d61f"
+    },
+    {
+      "caseId": "side-effects-domain-disconnected-membership-placement",
+      "description": "domain disconnected membership placement",
+      "document": {
+        "schema": "ipcraft.noc-side-effects.v1",
+        "contractVersion": "ipcraft.noc-side-effects.v1",
+        "input": {
+          "domainTypes": [
+            {
+              "key": "clock",
+              "label": "Clock",
+              "defaultName": "clock-default",
+              "visual": {
+                "fill": "#123456",
+                "border": "#abcdef",
+                "pattern": "solid"
+              },
+              "configuration": {
+                "fields": []
+              }
+            }
+          ],
+          "relationDeclarations": [
+            {
+              "typeKey": "route.allowed",
+              "ownership": "user",
+              "topologyDriving": false,
+              "sources": {
+                "kinds": [
+                  "router"
+                ],
+                "minimum": 1,
+                "maximum": 1
+              },
+              "targets": {
+                "kinds": [
+                  "package-entity"
+                ],
+                "minimum": 1,
+                "maximum": 1
+              },
+              "unresolvedAllowed": true,
+              "schema": {}
+            },
+            {
+              "typeKey": "route.blocked",
+              "ownership": "user",
+              "topologyDriving": false,
+              "sources": {
+                "kinds": [
+                  "router"
+                ],
+                "minimum": 1,
+                "maximum": 1
+              },
+              "targets": {
+                "kinds": [
+                  "package-entity"
+                ],
+                "minimum": 1,
+                "maximum": 1
+              },
+              "unresolvedAllowed": false,
+              "schema": {}
+            }
+          ],
+          "currentDerivedState": {
+            "schema": "ipcraft.derived-state.v1",
+            "topologyId": "topology.main",
+            "routers": [
+              {
+                "id": "router.a",
+                "templateKey": "mesh-router",
+                "identityCompatibilityVersion": 1,
+                "coordinate": {
+                  "row": 0,
+                  "column": 0
+                },
+                "properties": {}
+              },
+              {
+                "id": "router.b",
+                "templateKey": "mesh-router",
+                "identityCompatibilityVersion": 1,
+                "coordinate": {
+                  "row": 0,
+                  "column": 1
+                },
+                "properties": {}
+              },
+              {
+                "id": "router.c",
+                "templateKey": "mesh-router",
+                "identityCompatibilityVersion": 1,
+                "coordinate": {
+                  "row": 0,
+                  "column": 2
+                },
+                "properties": {}
+              }
+            ],
+            "structuralLinks": [
+              {
+                "id": "link.ab",
+                "templateKey": "mesh-link",
+                "identityCompatibilityVersion": 1,
+                "endpointA": "router.a",
+                "endpointB": "router.b",
+                "axis": "horizontal",
+                "properties": {}
+              },
+              {
+                "id": "link.bc",
+                "templateKey": "mesh-link",
+                "identityCompatibilityVersion": 1,
+                "endpointA": "router.b",
+                "endpointB": "router.c",
+                "axis": "horizontal",
+                "properties": {}
+              }
+            ],
+            "accessSlots": [
+              {
+                "id": "slot.a",
+                "routerId": "router.a",
+                "templateKey": "local-0",
+                "identityCompatibilityVersion": 1,
+                "displayOrder": 0,
+                "label": "Local 0",
+                "allowedContracts": [],
+                "properties": {}
+              },
+              {
+                "id": "slot.b",
+                "routerId": "router.b",
+                "templateKey": "local-0",
+                "identityCompatibilityVersion": 1,
+                "displayOrder": 0,
+                "label": "Local 0",
+                "allowedContracts": [],
+                "properties": {}
+              }
+            ],
+            "packageEntities": [],
+            "packageRelations": []
+          },
+          "domains": [
+            {
+              "id": "domain.clock.default",
+              "typeKey": "clock",
+              "name": "domain.clock.default",
+              "isDefault": true,
+              "config": {
+                "frequencyMHz": 100
+              }
+            }
+          ],
+          "domainMemberships": [
+            {
+              "id": "membership.ca",
+              "domainId": "domain.clock.default",
+              "routerId": "router.a"
+            },
+            {
+              "id": "membership.cb",
+              "domainId": "domain.clock.default",
+              "routerId": "router.b"
+            },
+            {
+              "id": "membership.cc",
+              "domainId": "domain.clock.default",
+              "routerId": "router.c"
+            }
+          ],
+          "attachments": [],
+          "packageRelations": [],
+          "authorityPatch": {
+            "patchId": "patch.authority",
+            "source": {
+              "kind": "default-engine",
+              "identity": "ipcraft.default-noc-engine",
+              "version": "1.0.0",
+              "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            "operations": [
+              {
+                "op": "createEntity",
+                "entityKind": "router",
+                "localRef": "authority:router-isolated",
+                "value": {
+                  "templateKey": "mesh-router",
+                  "identityCompatibilityVersion": 1,
+                  "coordinate": {
+                    "row": 2,
+                    "column": 2
+                  },
+                  "properties": {}
+                }
+              }
+            ]
+          }
+        },
+        "expected": {
+          "applicationPatch": {
+            "patchId": "patch.application",
+            "source": {
+              "kind": "application-reconcile",
+              "identity": "host",
+              "version": "1"
+            },
+            "operations": [
+              {
+                "op": "createRelation",
+                "relationKind": "domain-membership",
+                "localRef": "application:000001",
+                "value": {
+                  "domainRef": {
+                    "id": "domain.clock.default"
+                  },
+                  "routerRef": {
+                    "localRef": "authority:router-isolated"
+                  }
+                }
+              }
+            ]
+          },
+          "tombstones": [],
+          "allocationOrder": [
+            "application:000001",
+            "authority:router-isolated"
+          ],
+          "impactReport": {
+            "schema": "ipcraft.topology-impact-report.v1",
+            "impacts": [
+              {
+                "code": "domain.disconnected",
+                "severity": "error",
+                "dataLoss": false,
+                "subjects": [
+                  {
+                    "kind": "domain",
+                    "id": "domain.clock.default"
+                  }
+                ],
+                "details": {
+                  "memberCount": 4
+                },
+                "resolution": "repair-domain"
+              }
+            ]
+          },
+          "coreDiagnostics": [
+            {
+              "ruleId": "domain.disconnected",
+              "severity": "error",
+              "message": "Domain is disconnected.",
+              "blocking": true,
+              "subjects": [
+                {
+                  "kind": "domain",
+                  "id": "domain.clock.default"
+                }
+              ],
+              "properties": []
+            }
+          ],
+          "groupState": "auto-commit",
+          "requiresConfirmation": false,
+          "commitDisposition": "auto-commit"
+        }
+      },
+      "expectedCanonicalDigest": "sha256:589352940d5ae5b0c04571db6c43b6ecd7b7f81d1dcf997a0bc51af649c5dcef"
     },
     {
       "caseId": "side-effects-combined-deterministic-order",
@@ -4309,15 +4180,6 @@
               "config": {
                 "frequencyMHz": 100
               }
-            },
-            {
-              "id": "domain.clock.aux",
-              "typeKey": "clock",
-              "name": "domain.clock.aux",
-              "isDefault": false,
-              "config": {
-                "frequencyMHz": 100
-              }
             }
           ],
           "domainMemberships": [
@@ -4350,16 +4212,6 @@
               "id": "membership.pc",
               "domainId": "domain.power.default",
               "routerId": "router.c"
-            },
-            {
-              "id": "membership.auxa",
-              "domainId": "domain.clock.aux",
-              "routerId": "router.a"
-            },
-            {
-              "id": "membership.auxb",
-              "domainId": "domain.clock.aux",
-              "routerId": "router.b"
             }
           ],
           "attachments": [
@@ -4423,6 +4275,23 @@
                 }
               },
               {
+                "op": "createEntity",
+                "entityKind": "structural-link",
+                "localRef": "authority:link-z",
+                "value": {
+                  "templateKey": "mesh-link",
+                  "identityCompatibilityVersion": 1,
+                  "endpointA": {
+                    "id": "router.c"
+                  },
+                  "endpointB": {
+                    "localRef": "authority:router-z"
+                  },
+                  "axis": "vertical",
+                  "properties": {}
+                }
+              },
+              {
                 "op": "deleteEntity",
                 "entityKind": "router",
                 "id": "router.a"
@@ -4474,11 +4343,6 @@
                     "localRef": "authority:router-z"
                   }
                 }
-              },
-              {
-                "op": "deleteRelation",
-                "relationKind": "domain-membership",
-                "id": "membership.auxa"
               },
               {
                 "op": "deleteRelation",
@@ -4548,6 +4412,7 @@
           "allocationOrder": [
             "application:000001",
             "application:000002",
+            "authority:link-z",
             "authority:router-z"
           ],
           "impactReport": {
@@ -4580,7 +4445,7 @@
                   }
                 ],
                 "details": {
-                  "memberCount": 2
+                  "memberCount": 3
                 },
                 "resolution": "repair-domain"
               },
@@ -4595,7 +4460,7 @@
                   }
                 ],
                 "details": {
-                  "memberCount": 2
+                  "memberCount": 3
                 },
                 "resolution": "repair-domain"
               },
@@ -4649,7 +4514,7 @@
           "commitDisposition": "auto-commit"
         }
       },
-      "expectedCanonicalDigest": "sha256:04dcc860051c6da00a10c3a1a64d4e914c3ea887bc09a6729143a16bbbfefaaf"
+      "expectedCanonicalDigest": "sha256:7162b9623f2de894fa8c293045a60c277f04fec4279f3ff8b80857929396cf14"
     }
   ]
 }

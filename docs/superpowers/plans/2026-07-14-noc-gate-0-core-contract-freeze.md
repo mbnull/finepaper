@@ -243,15 +243,15 @@ git commit -m "docs: close exact Default Engine and side-effect contracts"
 
 - [x] **Step 1: Close exact resolution, migration, and freshness catalogs**
 
-Cover exact selection with no fallback, every stable degraded diagnostic, metadata mismatch dimensions, upgrade-only discovery, retained unsupported Bundles, migration eligibility/atomicity/inverse restoration, and all computed freshness states/reasons.
+Cover the exact committed set of 18 resolution IDs with no fallback, every stable degraded diagnostic, metadata mismatch dimensions, upgrade-only discovery, and retained unsupported Bundles; six migration IDs with complete before/after Snapshots, causal side effects, normalized candidate digests, forward/inverse application, exact Host IDs/provenance, and zero-Engine Undo/Redo; and eight computed freshness IDs.
 
 - [x] **Step 2: Close causal Host side-effect vectors**
 
-Use complete non-empty `ipcraft.noc-side-effects.v1` documents. Derive Application operations, impacts, tombstones, diagnostics, allocation order, and disposition from current state plus Authority Patch for every F11 behavior and a combined ordering witness.
+Use exactly 14 complete non-empty `ipcraft.noc-side-effects.v1` documents. Derive Application operations, impacts, tombstones, diagnostics, allocation order, and disposition from current state plus Authority Patch. Connectivity materializes Router/Structural-Link/Slot creates, updates, and deletes plus generated Membership operations before evaluating the post-candidate undirected graph; isolated vectors cover Router deletion, Link deletion, Link endpoint update, and new-Router Default-membership placement.
 
 - [x] **Step 3: Require generator/verifier independence and mutations**
 
-The stdlib-only generator writes both byte-stable catalogs to `--output-dir`. The independent verifier imports neither generator nor smoke witness, validates the schema subset, recomputes behavior/digests/order, and rejects the required corruption matrix.
+The stdlib-only generator writes both byte-stable catalogs to `--output-dir`. The independent verifier imports neither generator nor smoke witness, validates closed envelopes and the catalogued schema subset, recomputes transitions/behavior/digests/order, requires exact ID sets, and rejects causal, inverse-state, provenance, identity, ordering, ID-set, and extra-field corruptions.
 
 - [x] **Step 4: Register behavior catalogs and verify regeneration**
 
