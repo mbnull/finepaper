@@ -76,30 +76,13 @@
         "topologyInputDigest": { "$ref": "#/$defs/digest" },
         "status": { "enum": ["drafting", "running", "candidate-validating", "ready-to-commit", "blocked", "failed"] },
         "candidate": { "type": "null" },
-        "defaultEngineLockId": { "$ref": "#/$defs/id" },
-        "currentDefaultEngineBundleDigest": { "$ref": "#/$defs/digest" },
-        "targetDefaultEngineBundleDigest": { "$ref": "#/$defs/digest" },
-        "targetEngineHostContractVersion": { "$ref": "#/$defs/id" },
-        "hostSideEffectContractVersion": { "$ref": "#/$defs/id" }
+        "migration": { "$ref": "ipcraft.core-canonical-models.v1.schema.json#/$defs/migrationContext" }
       },
       "allOf": [
         {
           "if": { "properties": { "kind": { "const": "default-engine-migration" } }, "required": ["kind"] },
-          "then": {
-            "required": [
-              "defaultEngineLockId", "currentDefaultEngineBundleDigest", "targetDefaultEngineBundleDigest",
-              "targetEngineHostContractVersion", "hostSideEffectContractVersion"
-            ]
-          },
-          "else": {
-            "allOf": [
-              { "not": { "required": ["defaultEngineLockId"] } },
-              { "not": { "required": ["currentDefaultEngineBundleDigest"] } },
-              { "not": { "required": ["targetDefaultEngineBundleDigest"] } },
-              { "not": { "required": ["targetEngineHostContractVersion"] } },
-              { "not": { "required": ["hostSideEffectContractVersion"] } }
-            ]
-          }
+          "then": { "required": ["migration"] },
+          "else": { "not": { "required": ["migration"] } }
         }
       ]
     }

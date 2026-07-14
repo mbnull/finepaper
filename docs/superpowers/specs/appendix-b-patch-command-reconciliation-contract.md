@@ -453,11 +453,12 @@ Rules:
 
 - `authoritativeDesign` is the last materialized ProjectDesign; pending topology intent is stored only in `pendingTopologyGroup`.
 - Recovery serializes `pendingTopologyGroup.candidate` as JSON `null`; validated candidates, impact confirmations, provisional allocation plans, and candidate digests are never trusted across process lifetime.
+- A recovered `default-engine-migration` Group stores the shared complete Appendix F `migration` context with exact current and target locks; no parallel partial digest/version fields exist. A `topology-edit` Group forbids `migration`.
 - Recovery persists Draft Overlay and its local undo/redo because drafts are not formal commands. It does not persist formal undo/redo history, Provider process state, active request/process IDs, DRC/Generate jobs, or staging paths.
 - The host writes recovery with atomic single-file replacement after a one-second idle debounce following user commands or draft changes and immediately before a deliberate close that keeps recovery.
 - Recovery is applied only when project ID and the digest of the currently saved `.nocproj` equal `savedProjectDigest`.
 - Mismatch, malformed JSON, or unsupported recovery schema is quarantined/ignored with a user diagnostic; it never modifies the project.
-- Restore creates a new Session with empty formal history, recomputes the authoritative-design/input/Derived-State/dependency digests, rejects a Group whose `baseAuthoritativeDesignDigest` no longer matches, restores at most one remaining Group as `drafting` with no candidate, increments its generation, and schedules a fresh request only after dependency validation.
+- Restore creates a new Session with empty formal history, recomputes the authoritative-design/input/Derived-State/dependency digests, rejects a Group whose `baseAuthoritativeDesignDigest` no longer matches, restores at most one remaining Group as `drafting` with no candidate, preserves both migration locks canonically byte-for-byte, increments its generation, and schedules a fresh request only after dependency validation.
 - Successful formal Save, explicit Discard Recovery, or successful Clone/Migrate clears recovery.
 - Recovery is disposable and is never a dependency for reproducibility or generation.
 

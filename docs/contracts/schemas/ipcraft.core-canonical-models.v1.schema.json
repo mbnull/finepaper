@@ -968,7 +968,8 @@
                 "properties": {
                   "impacts": {
                     "contains": { "type": "object", "properties": { "code": { "const": "engine_migration.dependency_replaced" } }, "required": ["code"] },
-                    "minContains": 1
+                    "minContains": 1,
+                    "maxContains": 1
                   }
                 }
               }

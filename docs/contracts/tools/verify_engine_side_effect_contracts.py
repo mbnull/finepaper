@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import copy
+import json
 import sys
 from pathlib import Path
 
@@ -106,6 +107,12 @@ def normalized_input(host_contract: str = "ipcraft.engine-host.v1") -> dict:
 
 
 def recovery_migration_group() -> dict:
+    current = engine_lock(DIGEST_A)
+    target = engine_lock(DIGEST_B)
+    current["engineHostContractVersion"] = "ipcraft.engine-host.v999"
+    current["hostSideEffectContractVersion"] = "ipcraft.noc-side-effects.v999"
+    target["engineHostContractVersion"] = "ipcraft.engine-host.v999"
+    target["hostSideEffectContractVersion"] = "ipcraft.noc-side-effects.v999"
     return {
         "groupId": "group.migration", "kind": "default-engine-migration",
         "topologyInputRevision": 2, "requestGeneration": 1,
@@ -113,10 +120,7 @@ def recovery_migration_group() -> dict:
         "baseDerivedStateDigest": DIGEST_B, "topologyIntent": topology_intent(),
         "intentUndo": [], "intentRedo": [], "normalizedTopologyInput": normalized_input(),
         "topologyInputDigest": DIGEST_A, "status": "drafting", "candidate": None,
-        "defaultEngineLockId": "dep.default-engine", "currentDefaultEngineBundleDigest": DIGEST_A,
-        "targetDefaultEngineBundleDigest": DIGEST_B,
-        "targetEngineHostContractVersion": "ipcraft.engine-host.v999",
-        "hostSideEffectContractVersion": "ipcraft.noc-side-effects.v999",
+        "migration": {"currentDefaultEngineLock": current, "targetDefaultEngineLock": target},
     }
 
 
@@ -147,7 +151,7 @@ def migration_candidate() -> dict:
         ]},
         "migration": {"currentDefaultEngineLock": current, "targetDefaultEngineLock": target},
         "tombstones": [], "allocationOrder": [],
-        "impactReport": {"schema": "ipcraft.topology-impact-report.v1", "impacts": [{"code": "engine_migration.dependency_replaced", "severity": "warning", "dataLoss": False, "subjects": [{"kind": "project", "id": "project.main"}], "details": {}, "resolution": "confirm-or-discard"}]},
+        "impactReport": {"schema": "ipcraft.topology-impact-report.v1", "impacts": [{"code": "engine_migration.dependency_replaced", "severity": "warning", "dataLoss": False, "subjects": [{"kind": "project", "id": "project.main"}], "details": {"lockId": current["lockId"], "currentBundleDigest": current["bundleManifestDigest"], "targetBundleDigest": target["bundleManifestDigest"]}, "resolution": "confirm-or-discard"}]},
         "candidateDigest": DIGEST_C,
     }
 
@@ -207,7 +211,15 @@ def migration_semantic_errors(candidate: dict, base_dependencies: list[dict], ta
     if current["engineCompatibilityVersion"] not in target_manifest["migrationFromCompatibilityVersions"]:
         errors.append("migration-ineligible")
     impacts = candidate["impactReport"]["impacts"]
-    if not any(impact["code"] == "engine_migration.dependency_replaced" for impact in impacts): errors.append("confirmation-impact")
+    migration_impacts = [impact for impact in impacts if impact["code"] == "engine_migration.dependency_replaced"]
+    if len(migration_impacts) != 1:
+        errors.append("confirmation-impact-count")
+    else:
+        migration_impact = migration_impacts[0]
+        expected_subjects = [{"kind": "project", "id": project_update["id"]}] if project_update is not None else []
+        expected_details = {"lockId": current["lockId"], "currentBundleDigest": current["bundleManifestDigest"], "targetBundleDigest": target["bundleManifestDigest"]}
+        if migration_impact["subjects"] != expected_subjects: errors.append("confirmation-impact-subject")
+        if migration_impact["details"] != expected_details: errors.append("confirmation-impact-details")
     expected_disposition = (
         ("blocked", False, "blocked")
         if any(impact["code"] == "package_relation.endpoint_blocks_candidate" for impact in impacts)
@@ -281,7 +293,20 @@ def main() -> int:
     assert_invalid(world, "ipcraft.engine-bundle.v1", world.documents["ipcraft.engine-bundle.v1"], wrong_id_manifest, "Default Engine manifest metadata ID")
     unsupported_lock = engine_lock(); unsupported_lock["engineHostContractVersion"] = "ipcraft.engine-host.v999"
     assert_valid(world, "ipcraft.project-design.v1", project["defaultEngineDependencyLock"], unsupported_lock, "unsupported lock parses")
-    assert_valid(world, "ipcraft.recovery.v1", recovery["pendingTopologyGroup"], recovery_migration_group(), "unsupported recovery versions parse")
+    recovery_group = recovery_migration_group()
+    assert_valid(world, "ipcraft.recovery.v1", recovery["pendingTopologyGroup"], recovery_group, "unsupported recovery versions parse")
+    recovered_group = json.loads(json.dumps(recovery_group, ensure_ascii=False, sort_keys=True))
+    assert canonical_json(recovered_group["migration"]) == canonical_json(recovery_group["migration"])
+    assert recovered_group["candidate"] is None
+    supported_recovery = recovery_migration_group()
+    supported_recovery["migration"] = copy.deepcopy(migration_candidate()["migration"])
+    assert_valid(world, "ipcraft.recovery.v1", recovery["pendingTopologyGroup"], supported_recovery, "supported migration recovery")
+    rederived_candidate = migration_candidate()
+    assert supported_recovery["candidate"] is None and rederived_candidate["migration"] == supported_recovery["migration"]
+    topology_recovery = copy.deepcopy(recovery_group); topology_recovery["kind"] = "topology-edit"; topology_recovery.pop("migration")
+    assert_valid(world, "ipcraft.recovery.v1", recovery["pendingTopologyGroup"], topology_recovery, "topology recovery omits migration")
+    topology_recovery["migration"] = copy.deepcopy(recovery_group["migration"])
+    assert_invalid(world, "ipcraft.recovery.v1", recovery["pendingTopologyGroup"], topology_recovery, "topology recovery forbids migration")
 
     manifest = engine_manifest()
     outcomes = [
@@ -340,10 +365,12 @@ def main() -> int:
     no_impact = copy.deepcopy(candidate); no_impact["impactReport"]["impacts"] = []; schema_negatives.append(("missing migration impact", no_impact))
     duplicate_project = copy.deepcopy(candidate); duplicate_project["applicationPatch"]["operations"].append(copy.deepcopy(duplicate_project["applicationPatch"]["operations"][0])); schema_negatives.append(("duplicate project update", duplicate_project))
     duplicate_topology = copy.deepcopy(candidate); duplicate_topology["applicationPatch"]["operations"].append(copy.deepcopy(duplicate_topology["applicationPatch"]["operations"][1])); schema_negatives.append(("duplicate topology update", duplicate_topology))
+    duplicate_migration_impact = copy.deepcopy(candidate); duplicate_migration_impact["impactReport"]["impacts"].append(copy.deepcopy(duplicate_migration_impact["impactReport"]["impacts"][0])); schema_negatives.append(("duplicate migration impact", duplicate_migration_impact))
     for name, negative in schema_negatives:
         assert_invalid(world, "ipcraft.core-canonical-models.v1", core["candidateTransaction"], negative, name)
     assert "project-update-count" in migration_semantic_errors(duplicate_project, base_dependencies, target_manifest)
     assert "topology-update-count" in migration_semantic_errors(duplicate_topology, base_dependencies, target_manifest)
+    assert "confirmation-impact-count" in migration_semantic_errors(duplicate_migration_impact, base_dependencies, target_manifest)
     semantic_negatives = []
     wrong_lock = copy.deepcopy(candidate); wrong_lock["migration"]["targetDefaultEngineLock"]["lockId"] = "dep.other"; semantic_negatives.append(("differing lockId", wrong_lock, "lockId"))
     wrong_dependency = copy.deepcopy(candidate); wrong_dependency["applicationPatch"]["operations"][0]["set"]["dependencies"][1] = engine_lock(DIGEST_C); semantic_negatives.append(("wrong dependency target", wrong_dependency, "target-dependency"))
@@ -354,6 +381,10 @@ def main() -> int:
     nonempty_unset = copy.deepcopy(candidate); nonempty_unset["applicationPatch"]["operations"][1]["unset"] = ["derivation"]; semantic_negatives.append(("nonempty migration unset", nonempty_unset, "topology-update-shape"))
     changed_non_engine = copy.deepcopy(candidate); changed_non_engine["applicationPatch"]["operations"][0]["set"]["dependencies"][0]["version"] = "2"; semantic_negatives.append(("changed non-Engine dependency", changed_non_engine, "non-engine-dependencies"))
     duplicate_lock_id = copy.deepcopy(candidate); duplicate_lock_id["applicationPatch"]["operations"][0]["set"]["dependencies"].append({"lockId": "dep.noc", "kind": "interface-contract", "id": "vendor.contract", "version": "1", "bundleManifestDigest": DIGEST_A}); semantic_negatives.append(("duplicate dependency lockId", duplicate_lock_id, "duplicate-lockId"))
+    wrong_impact_subject = copy.deepcopy(candidate); wrong_impact_subject["impactReport"]["impacts"][0]["subjects"] = [{"kind": "project", "id": "project.other"}]; semantic_negatives.append(("wrong migration impact Project subject", wrong_impact_subject, "confirmation-impact-subject"))
+    wrong_impact_lock = copy.deepcopy(candidate); wrong_impact_lock["impactReport"]["impacts"][0]["details"]["lockId"] = "dep.other"; semantic_negatives.append(("wrong migration impact lockId", wrong_impact_lock, "confirmation-impact-details"))
+    wrong_impact_current = copy.deepcopy(candidate); wrong_impact_current["impactReport"]["impacts"][0]["details"]["currentBundleDigest"] = DIGEST_C; semantic_negatives.append(("wrong migration impact current digest", wrong_impact_current, "confirmation-impact-details"))
+    wrong_impact_target = copy.deepcopy(candidate); wrong_impact_target["impactReport"]["impacts"][0]["details"]["targetBundleDigest"] = DIGEST_C; semantic_negatives.append(("wrong migration impact target digest", wrong_impact_target, "confirmation-impact-details"))
     for name, negative, expected_error in semantic_negatives:
         assert_valid(world, "ipcraft.core-canonical-models.v1", core["candidateTransaction"], negative, name + " structurally parses")
         assert expected_error in migration_semantic_errors(negative, base_dependencies, target_manifest)
@@ -407,7 +438,7 @@ def main() -> int:
     for name, negative in contradictory:
         assert_invalid(world, "ipcraft.noc-side-effects.v1", side_schema, negative, name)
 
-    print("engine/side-effect witnesses passed: 9 resolution cases, Patch ownership, exact migration binding + blocking priority + 17 negatives, 6 dispositions + 5 negatives")
+    print("engine/side-effect witnesses passed: 9 resolution cases, Patch ownership, exact migration binding + blocking priority + 22 negatives, 6 dispositions + 5 negatives")
     return 0
 
 
