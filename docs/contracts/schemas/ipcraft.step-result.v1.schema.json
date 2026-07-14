@@ -4,7 +4,7 @@
   "title": "Ipcraft Normalized Pipeline Step Result V1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema", "pipelineRunId", "stepId", "stepKind", "status", "failure"],
+  "required": ["schema", "pipelineRunId", "stepId", "stepKind", "status", "toolResult", "failure"],
   "properties": {
     "schema": { "const": "ipcraft.step-result.v1" },
     "pipelineRunId": { "$ref": "#/$defs/id" },
@@ -32,6 +32,7 @@
         ]
       },
       "else": {
+        "properties": { "toolResult": { "type": "null" } },
         "allOf": [
           { "not": { "required": ["invocationId"] } },
           { "not": { "required": ["toolLockId"] } }
