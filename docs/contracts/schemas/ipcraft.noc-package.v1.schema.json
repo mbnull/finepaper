@@ -49,9 +49,9 @@
       "type": "object", "additionalProperties": false,
       "required": ["engineHostContractVersion", "engineCompatibilityVersion", "hostSideEffectContractVersion"],
       "properties": {
-        "engineHostContractVersion": { "const": "ipcraft.engine-host.v1" },
+        "engineHostContractVersion": { "$ref": "#/$defs/id" },
         "engineCompatibilityVersion": { "$ref": "#/$defs/id" },
-        "hostSideEffectContractVersion": { "const": "ipcraft.noc-side-effects.v1" }
+        "hostSideEffectContractVersion": { "$ref": "#/$defs/id" }
       }
     },
     "condition": {

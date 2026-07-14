@@ -35,7 +35,7 @@ An Extension Provider cannot mutate user-owned Component config, Interface, Atta
   "patchId": "patch-id",
   "source": {
     "kind": "default-engine",
-    "identity": "ipcraft.default-engine",
+    "identity": "ipcraft.default-noc-engine",
     "version": "1",
     "bundleDigest": "sha256:..."
   },
@@ -54,7 +54,7 @@ An Extension Provider cannot mutate user-owned Component config, Interface, Atta
     "structureAuthority": {
       "kind": "default-engine",
       "lockId": "dep.default-engine",
-      "identity": "ipcraft.default-engine",
+      "identity": "ipcraft.default-noc-engine",
       "version": "1",
       "bundleDigest": "sha256:..."
     },
@@ -157,6 +157,7 @@ Allowed V1 entity kinds:
 ```text
 component
 project
+topology (update only)
 interface
 router
 structural-link
@@ -173,7 +174,7 @@ domain-membership
 package-relation
 ```
 
-`project` is a singleton Patch subject with ID equal to ProjectDesign root `id`. Ordinary user Patch permits only `updateEntity(project)` of `name`; create/delete Project and mutation of schema/profile/dependencies are forbidden. A confirmed Engine Migration candidate may use source `application-migration` to replace the exact `dependencies` array and related derivation provenance in the same atomic transaction; no other source may do so.
+`project` is a singleton Patch subject with ID equal to ProjectDesign root `id`. Ordinary user Patch permits only `updateEntity(project)` of `name`; create/delete Project and mutation of schema/profile/dependencies are forbidden. `topology` is update-only with ID equal to the TopologyDocument ID and a closed set containing only complete `derivation` replacement; V1 has no create/delete topology operation. A confirmed Engine Migration candidate may use source `application-migration` to replace the exact `dependencies` array and update topology `derivation` in the same atomic transaction. Application reconcile may update topology derivation; user and Authority sources may not perform either Application-owned mutation.
 
 ## B5. Operation Ordering and Atomicity
 
@@ -336,7 +337,7 @@ Request:
     "structureAuthority": {
       "kind": "default-engine",
       "lockId": "dep.default-engine",
-      "identity": "ipcraft.default-engine",
+      "identity": "ipcraft.default-noc-engine",
       "version": "1",
       "bundleDigest": "sha256:..."
     },
@@ -378,7 +379,9 @@ An Authority response never commits directly. The Host validates its transaction
 
 - No destructive impact and no blocked reference: host automatically commits the candidate.
 - Any impact with `dataLoss: true`: Group becomes `ready-to-commit`; only `ConfirmPendingTopologyGroup(candidateDigest)` may commit it.
+- `engine_migration.dependency_replaced` always makes the migration Group `ready-to-commit` even though `dataLoss` is false.
 - An impact that cannot be made legal automatically, including deletion of a target used by a user Package Relation with `unresolvedAllowed: false`, makes the Group `blocked`. It cannot be confirmed; the user discards the Group, repairs/deletes the relation, and retries.
+- `domain.disconnected` is a legal auto-committed candidate impact and produces blocking Core DRC in the resulting current design; it does not make the Group blocked.
 - Attachment targets removed by the candidate become unresolved. Package Relation endpoints with `unresolvedAllowed: true` become their unresolved envelope. These are explicit Application side effects included in the candidate.
 
 Commit rechecks the entire applicability tuple and candidate digest, allocates/publishes Host IDs in canonical localRef order, rewrites all local references, and atomically applies final topology intent + Authority Patch + side effects/migration Patch + tombstones + derivation metadata. It stores the mapping in the formal history record, increments `sessionRevision` and `derivedStateRevision`, closes the Group, and adds one formal history record. `topologyInputRevision` is already the Group's reserved revision. Derived State may be current while Core Structural DRC is blocking after any Router/Link/Slot topology materialization, not only Router deletion.

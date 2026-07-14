@@ -235,8 +235,8 @@
         "nocPackageBundleDigest": { "$ref": "#/$defs/digest" },
         "defaultEngineLockId": { "$ref": "#/$defs/id" },
         "defaultEngineBundleDigest": { "$ref": "#/$defs/digest" },
-        "engineHostContractVersion": { "const": "ipcraft.engine-host.v1" },
-        "hostSideEffectContractVersion": { "const": "ipcraft.noc-side-effects.v1" },
+        "engineHostContractVersion": { "$ref": "#/$defs/id" },
+        "hostSideEffectContractVersion": { "$ref": "#/$defs/id" },
         "structureAuthority": { "$ref": "#/$defs/structureAuthority" },
         "reconcileDependencySetDigest": { "$ref": "#/$defs/digest" }
       }
@@ -383,8 +383,8 @@
         "reconcileDependencySetDigest": { "$ref": "#/$defs/digest" },
         "defaultEngineLockId": { "$ref": "#/$defs/id" },
         "defaultEngineBundleDigest": { "$ref": "#/$defs/digest" },
-        "engineHostContractVersion": { "const": "ipcraft.engine-host.v1" },
-        "hostSideEffectContractVersion": { "const": "ipcraft.noc-side-effects.v1" }
+        "engineHostContractVersion": { "$ref": "#/$defs/id" },
+        "hostSideEffectContractVersion": { "$ref": "#/$defs/id" }
       }
     },
     "extension": {
@@ -523,6 +523,13 @@
         "dependencies": { "$ref": "ipcraft.project-design.v1.schema.json#/properties/dependencies" }
       }
     },
+    "patchTopologyUpdateSet": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "derivation": { "$ref": "ipcraft.project-design.v1.schema.json#/$defs/derivation" }
+      }
+    },
     "patchComponentUpdateSet": {
       "type": "object", "additionalProperties": false,
       "properties": {
@@ -627,6 +634,7 @@
     "patchEntityUpdateSet": {
       "anyOf": [
         { "$ref": "#/$defs/patchProjectUpdateSet" },
+        { "$ref": "#/$defs/patchTopologyUpdateSet" },
         { "$ref": "#/$defs/patchComponentUpdateSet" },
         { "$ref": "#/$defs/patchInterfaceUpdateSet" },
         { "$ref": "#/$defs/patchRouterUpdateSet" },
@@ -669,13 +677,14 @@
       "required": ["op", "entityKind", "id", "set", "unset"],
       "properties": {
         "op": { "const": "updateEntity" },
-        "entityKind": { "enum": ["component", "project", "interface", "router", "structural-link", "access-slot", "domain", "package-entity"] },
+        "entityKind": { "enum": ["component", "project", "topology", "interface", "router", "structural-link", "access-slot", "domain", "package-entity"] },
         "id": { "$ref": "#/$defs/id" },
         "set": { "$ref": "#/$defs/patchEntityUpdateSet" },
         "unset": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["unicodeScalarValue"] }, "items": { "$ref": "#/$defs/id" }, "uniqueItems": true }
       },
       "allOf": [
         { "if": { "properties": { "entityKind": { "const": "project" } }, "required": ["entityKind"] }, "then": { "properties": { "set": { "$ref": "#/$defs/patchProjectUpdateSet" } } } },
+        { "if": { "properties": { "entityKind": { "const": "topology" } }, "required": ["entityKind"] }, "then": { "properties": { "set": { "$ref": "#/$defs/patchTopologyUpdateSet" } } } },
         { "if": { "properties": { "entityKind": { "const": "component" } }, "required": ["entityKind"] }, "then": { "properties": { "set": { "$ref": "#/$defs/patchComponentUpdateSet" } } } },
         { "if": { "properties": { "entityKind": { "const": "interface" } }, "required": ["entityKind"] }, "then": { "properties": { "set": { "$ref": "#/$defs/patchInterfaceUpdateSet" } } } },
         { "if": { "properties": { "entityKind": { "const": "router" } }, "required": ["entityKind"] }, "then": { "properties": { "set": { "$ref": "#/$defs/patchRouterUpdateSet" } } } },
@@ -768,13 +777,21 @@
       "additionalProperties": false,
       "required": ["code", "severity", "dataLoss", "subjects", "details", "resolution"],
       "properties": {
-        "code": { "$ref": "#/$defs/id" },
+        "code": { "enum": ["attachment.target_removed", "domain.non_default_deleted", "domain.disconnected", "package_relation.endpoint_unresolved", "package_relation.endpoint_blocks_candidate", "engine_migration.dependency_replaced"] },
         "severity": { "enum": ["info", "warning", "error"] },
         "dataLoss": { "type": "boolean" },
         "subjects": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["kind", "id"] }, "items": { "$ref": "#/$defs/subjectRef" } },
         "details": { "type": "object" },
-        "resolution": { "$ref": "#/$defs/id" }
-      }
+        "resolution": { "enum": ["reattach-or-detach", "confirm-or-discard", "repair-domain", "reattach-or-delete-relation", "discard-and-repair"] }
+      },
+      "allOf": [
+        { "if": { "properties": { "code": { "const": "attachment.target_removed" } }, "required": ["code"] }, "then": { "properties": { "severity": { "const": "warning" }, "dataLoss": { "const": false }, "resolution": { "const": "reattach-or-detach" } } } },
+        { "if": { "properties": { "code": { "const": "domain.non_default_deleted" } }, "required": ["code"] }, "then": { "properties": { "severity": { "const": "warning" }, "dataLoss": { "const": true }, "resolution": { "const": "confirm-or-discard" } } } },
+        { "if": { "properties": { "code": { "const": "domain.disconnected" } }, "required": ["code"] }, "then": { "properties": { "severity": { "const": "error" }, "dataLoss": { "const": false }, "resolution": { "const": "repair-domain" } } } },
+        { "if": { "properties": { "code": { "const": "package_relation.endpoint_unresolved" } }, "required": ["code"] }, "then": { "properties": { "severity": { "const": "warning" }, "dataLoss": { "const": false }, "resolution": { "const": "reattach-or-delete-relation" } } } },
+        { "if": { "properties": { "code": { "const": "package_relation.endpoint_blocks_candidate" } }, "required": ["code"] }, "then": { "properties": { "severity": { "const": "error" }, "dataLoss": { "const": false }, "resolution": { "const": "discard-and-repair" } } } },
+        { "if": { "properties": { "code": { "const": "engine_migration.dependency_replaced" } }, "required": ["code"] }, "then": { "properties": { "severity": { "const": "warning" }, "dataLoss": { "const": false }, "resolution": { "const": "confirm-or-discard" } } } }
+      ]
     },
     "impactReport": {
       "type": "object",
@@ -825,19 +842,10 @@
     "migrationContext": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "defaultEngineLockId",
-        "currentDefaultEngineBundleDigest",
-        "targetDefaultEngineBundleDigest",
-        "targetEngineHostContractVersion",
-        "hostSideEffectContractVersion"
-      ],
+      "required": ["currentDefaultEngineLock", "targetDefaultEngineLock"],
       "properties": {
-        "defaultEngineLockId": { "$ref": "#/$defs/id" },
-        "currentDefaultEngineBundleDigest": { "$ref": "#/$defs/digest" },
-        "targetDefaultEngineBundleDigest": { "$ref": "#/$defs/digest" },
-        "targetEngineHostContractVersion": { "$ref": "#/$defs/id" },
-        "hostSideEffectContractVersion": { "$ref": "#/$defs/id" }
+        "currentDefaultEngineLock": { "$ref": "ipcraft.project-design.v1.schema.json#/$defs/defaultEngineDependencyLock" },
+        "targetDefaultEngineLock": { "$ref": "ipcraft.project-design.v1.schema.json#/$defs/defaultEngineDependencyLock" }
       }
     },
     "candidateTransaction": {

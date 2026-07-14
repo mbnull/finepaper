@@ -10,6 +10,7 @@
     "version",
     "engineHostContractVersion",
     "engineCompatibilityVersion",
+    "hostSideEffectContractVersion",
     "migrationFromCompatibilityVersions",
     "supportedPlatformAbis",
     "entrypoint"
@@ -18,8 +19,9 @@
     "schema": { "const": "ipcraft.engine-bundle.v1" },
     "id": { "type": "string", "minLength": 1 },
     "version": { "type": "string", "minLength": 1 },
-    "engineHostContractVersion": { "const": "ipcraft.engine-host.v1" },
+    "engineHostContractVersion": { "type": "string", "minLength": 1 },
     "engineCompatibilityVersion": { "type": "string", "minLength": 1 },
+    "hostSideEffectContractVersion": { "type": "string", "minLength": 1 },
     "migrationFromCompatibilityVersions": {
       "type": "array",
       "x-ipcraft-canonical": { "kind": "set", "sortKey": ["unicodeScalarValue"] },

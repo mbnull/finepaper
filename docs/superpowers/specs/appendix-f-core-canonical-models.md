@@ -267,7 +267,7 @@ engine_migration.dependency_replaced
 }
 ```
 
-Freshness is computed against all exact fields plus current authoritative/saved design and Group/Draft state; it is not stored in this manifest.
+Freshness is computed against all exact fields plus current authoritative/saved design and Group/Draft state; it is not stored in this manifest. Engine Host or Host-side-effect contract mismatch uses the existing stale reason `dependency-changed`.
 
 ## F10. Canonical Collection Rules
 
@@ -340,6 +340,15 @@ Each machine rule has exact `{schemaId, schemaPointer, kind, sortKey}` addressin
 | `ipcraft.noc-package.v1` | `/properties/interfaceTemplates` | set | `key` |
 | `ipcraft.noc-package.v1` | `/properties/packageEntityTypes` | set | `typeKey` |
 | `ipcraft.noc-package.v1` | `/properties/packageRelationTypes` | set | `typeKey` |
+| `ipcraft.noc-side-effects.v1` | `/$defs/expected/properties/allocationOrder` | derived-ordered | `unicodeScalarValue` |
+| `ipcraft.noc-side-effects.v1` | `/$defs/expected/properties/coreDiagnostics` | ordered | `—` |
+| `ipcraft.noc-side-effects.v1` | `/$defs/expected/properties/tombstones` | set | `subjectKind,id` |
+| `ipcraft.noc-side-effects.v1` | `/$defs/input/properties/attachments` | set | `id` |
+| `ipcraft.noc-side-effects.v1` | `/$defs/input/properties/domainMemberships` | set | `id` |
+| `ipcraft.noc-side-effects.v1` | `/$defs/input/properties/domainTypes` | set | `key` |
+| `ipcraft.noc-side-effects.v1` | `/$defs/input/properties/domains` | set | `id` |
+| `ipcraft.noc-side-effects.v1` | `/$defs/input/properties/packageRelations` | set | `id` |
+| `ipcraft.noc-side-effects.v1` | `/$defs/input/properties/relationDeclarations` | set | `typeKey` |
 | `ipcraft.patch.v1` | `/properties/preconditions` | set | `canonicalJson` |
 | `ipcraft.pipeline-result.v1` | `/properties/steps` | ordered | `—` |
 | `ipcraft.project-design.v1` | `/$defs/component/properties/extensions` | set | `ownerLockId,schema,version` |
@@ -455,21 +464,49 @@ Collection vectors exercise the physical array comparator independently of enclo
 7. Attachment/Package-Relation conversions, Membership creates/deletes, Domain cleanup, impacts, and Application localRefs are deterministic functions of the frozen canonical inputs; Packages/Engines cannot override them in V1.
 8. A different Host side-effect contract version is incompatible for replay. Migration must explicitly replace provenance through a confirmed candidate.
 
+Exact impact dispositions and candidate effects:
+
+| Code | Severity | `dataLoss` | Resolution | Candidate effect |
+|---|---|---:|---|---|
+| `attachment.target_removed` | warning | false | `reattach-or-detach` | legal auto-commit |
+| `domain.non_default_deleted` | warning | true | `confirm-or-discard` | ready-to-commit confirmation |
+| `domain.disconnected` | error | false | `repair-domain` | legal auto-commit; resulting design has blocking Core DRC, Group is not blocked |
+| `package_relation.endpoint_unresolved` | warning | false | `reattach-or-delete-relation` | legal auto-commit |
+| `package_relation.endpoint_blocks_candidate` | error | false | `discard-and-repair` | blocked and unconfirmable |
+| `engine_migration.dependency_replaced` | warning | false | `confirm-or-discard` | ready-to-commit confirmation regardless of data loss |
+
 ## F12. Default Engine Migration Candidate
 
-Engine migration uses `candidate-transaction.kind: default-engine-migration` and always requires confirmation. Applicability includes both current and target Engine locks:
+Engine migration uses `candidate-transaction.kind: default-engine-migration` and always requires confirmation. Normal exact reconcile applicability remains unchanged and continues to describe the current base. Separate `candidateTransaction.migration` provenance contains both complete exact locks:
 
 ```json
 {
-  "defaultEngineLockId": "dep.default-engine",
-  "currentDefaultEngineBundleDigest": "sha256:...",
-  "targetDefaultEngineBundleDigest": "sha256:...",
-  "targetEngineHostContractVersion": "ipcraft.engine-host.v1",
-  "hostSideEffectContractVersion": "ipcraft.noc-side-effects.v1"
+  "currentDefaultEngineLock": {
+    "lockId": "dep.default-engine",
+    "kind": "default-engine",
+    "id": "ipcraft.default-noc-engine",
+    "version": "1.0.0",
+    "bundleManifestDigest": "sha256:...",
+    "engineCompatibilityVersion": "1",
+    "engineHostContractVersion": "ipcraft.engine-host.v1",
+    "hostSideEffectContractVersion": "ipcraft.noc-side-effects.v1",
+    "supportedPlatformAbis": ["linux-x86_64-gnu-v1"]
+  },
+  "targetDefaultEngineLock": {
+    "lockId": "dep.default-engine",
+    "kind": "default-engine",
+    "id": "ipcraft.default-noc-engine",
+    "version": "2.0.0",
+    "bundleManifestDigest": "sha256:...",
+    "engineCompatibilityVersion": "2",
+    "engineHostContractVersion": "ipcraft.engine-host.v1",
+    "hostSideEffectContractVersion": "ipcraft.noc-side-effects.v1",
+    "supportedPlatformAbis": ["linux-x86_64-gnu-v1"]
+  }
 }
 ```
 
-The dependency `lockId` remains stable while its exact Engine metadata/digest is replaced. The target Engine returns a Patch body against current Derived State. The Host candidate includes an `application-migration` update of the exact dependency array and derivation provenance plus normal F11 side effects. Commit is atomic. Formal Undo/Redo uses stored forward/inverse Patches and localRef→Host-ID mappings without loading either Engine.
+The dependency `lockId` remains stable while its exact Engine metadata/digest is replaced. The target Engine returns a Patch body against current Derived State. The Host candidate includes an `application-migration` `updateEntity(project)` replacing the exact dependency array and `updateEntity(topology)` replacing only derivation provenance, plus normal F11 side effects. Commit is atomic. Formal Undo/Redo uses stored forward/inverse Patches and localRef→Host-ID mappings without loading either Engine.
 
 ## F13. Golden Projection Vector Requirements
 

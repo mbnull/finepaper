@@ -259,14 +259,14 @@ def set_keyed_sample(world: SchemaWorld, schema_id: str, node: dict[str, Any], i
         else:
             value[key] = label
     if keys == ['code', 'severity', 'dataLoss', 'subjectsCanonicalJson', 'detailsCanonicalJson', 'resolution']:
-        value.update({
-            'code': 'impact.same-old-key',
-            'severity': ['warning', 'error', 'error'][index],
-            'dataLoss': [False, False, True][index],
-            'subjects': [{'kind': 'router', 'id': label}],
-            'details': {'rank': index + 1},
-            'resolution': label,
-        })
+        code, severity, data_loss, resolution = [
+            ('attachment.target_removed', 'warning', False, 'reattach-or-detach'),
+            ('domain.non_default_deleted', 'warning', True, 'confirm-or-discard'),
+            ('package_relation.endpoint_blocks_candidate', 'error', False, 'discard-and-repair'),
+        ][index]
+        value.update({'code': code, 'severity': severity, 'dataLoss': data_loss,
+                      'subjects': [{'kind': 'router', 'id': label}],
+                      'details': {'rank': index + 1}, 'resolution': resolution})
     return value
 
 
@@ -298,25 +298,29 @@ def context_value(world: SchemaWorld, schema_id: str, item_schema: Any, key: str
 
 
 def impact_component_samples() -> list[dict[str, Any]]:
-    base = {
-        'code': 'impact.tie', 'severity': 'info', 'dataLoss': False,
-        'subjects': [{'kind': 'router', 'id': 'router.tie'}],
-        'details': {'rank': 1}, 'resolution': 'resolution.tie',
-    }
-    pairs = []
-    changes = [
-        ('code', 'impact.alpha', 'impact.zeta'),
-        ('severity', 'info', 'warning'),
-        ('dataLoss', False, True),
-        ('subjects', [{'kind':'router','id':'router.alpha'}], [{'kind':'router','id':'router.zeta'}]),
-        ('details', {'rank':1}, {'rank':2}),
-        ('resolution', 'resolution.alpha', 'resolution.zeta'),
+    dispositions = [
+        ('attachment.target_removed', 'warning', False, 'reattach-or-detach'),
+        ('domain.non_default_deleted', 'warning', True, 'confirm-or-discard'),
+        ('domain.disconnected', 'error', False, 'repair-domain'),
+        ('package_relation.endpoint_unresolved', 'warning', False, 'reattach-or-delete-relation'),
+        ('package_relation.endpoint_blocks_candidate', 'error', False, 'discard-and-repair'),
+        ('engine_migration.dependency_replaced', 'warning', False, 'confirm-or-discard'),
     ]
-    for key, low, high in changes:
-        left = copy.deepcopy(base); right = copy.deepcopy(base)
-        left[key] = low; right[key] = high
-        pairs.extend((left, right))
-    return pairs
+    values = [
+        {'code': code, 'severity': severity, 'dataLoss': data_loss,
+         'subjects': [{'kind': 'router', 'id': f'router.{index:02d}'}],
+         'details': {'rank': index + 1}, 'resolution': resolution}
+        for index, (code, severity, data_loss, resolution) in enumerate(dispositions)
+    ]
+    values.extend([
+        {'code': 'attachment.target_removed', 'severity': 'warning', 'dataLoss': False,
+         'subjects': [{'kind': 'router', 'id': 'router.zeta'}],
+         'details': {'rank': 1}, 'resolution': 'reattach-or-detach'},
+        {'code': 'attachment.target_removed', 'severity': 'warning', 'dataLoss': False,
+         'subjects': [{'kind': 'router', 'id': 'router.zeta'}],
+         'details': {'rank': 2}, 'resolution': 'reattach-or-detach'},
+    ])
+    return values
 
 
 def persisted_endpoint_samples() -> list[dict[str, Any]]:

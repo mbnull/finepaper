@@ -1548,128 +1548,23 @@
       "inputVariants": [
         [
           {
-            "code": "impact.alpha",
-            "severity": "info",
+            "code": "attachment.target_removed",
+            "severity": "warning",
             "dataLoss": false,
             "subjects": [
               {
                 "kind": "router",
-                "id": "router.tie"
+                "id": "router.00"
               }
             ],
             "details": {
               "rank": 1
             },
-            "resolution": "resolution.tie"
+            "resolution": "reattach-or-detach"
           },
           {
-            "code": "impact.tie",
-            "severity": "info",
-            "dataLoss": false,
-            "subjects": [
-              {
-                "kind": "router",
-                "id": "router.alpha"
-              }
-            ],
-            "details": {
-              "rank": 1
-            },
-            "resolution": "resolution.tie"
-          },
-          {
-            "code": "impact.tie",
-            "severity": "info",
-            "dataLoss": false,
-            "subjects": [
-              {
-                "kind": "router",
-                "id": "router.tie"
-              }
-            ],
-            "details": {
-              "rank": 1
-            },
-            "resolution": "resolution.alpha"
-          },
-          {
-            "code": "impact.tie",
-            "severity": "info",
-            "dataLoss": false,
-            "subjects": [
-              {
-                "kind": "router",
-                "id": "router.tie"
-              }
-            ],
-            "details": {
-              "rank": 1
-            },
-            "resolution": "resolution.tie"
-          },
-          {
-            "code": "impact.tie",
-            "severity": "info",
-            "dataLoss": false,
-            "subjects": [
-              {
-                "kind": "router",
-                "id": "router.tie"
-              }
-            ],
-            "details": {
-              "rank": 1
-            },
-            "resolution": "resolution.tie"
-          },
-          {
-            "code": "impact.tie",
-            "severity": "info",
-            "dataLoss": false,
-            "subjects": [
-              {
-                "kind": "router",
-                "id": "router.tie"
-              }
-            ],
-            "details": {
-              "rank": 1
-            },
-            "resolution": "resolution.tie"
-          },
-          {
-            "code": "impact.tie",
-            "severity": "info",
-            "dataLoss": false,
-            "subjects": [
-              {
-                "kind": "router",
-                "id": "router.tie"
-              }
-            ],
-            "details": {
-              "rank": 1
-            },
-            "resolution": "resolution.zeta"
-          },
-          {
-            "code": "impact.tie",
-            "severity": "info",
-            "dataLoss": false,
-            "subjects": [
-              {
-                "kind": "router",
-                "id": "router.tie"
-              }
-            ],
-            "details": {
-              "rank": 2
-            },
-            "resolution": "resolution.tie"
-          },
-          {
-            "code": "impact.tie",
-            "severity": "info",
+            "code": "attachment.target_removed",
+            "severity": "warning",
             "dataLoss": false,
             "subjects": [
               {
@@ -1680,103 +1575,193 @@
             "details": {
               "rank": 1
             },
-            "resolution": "resolution.tie"
+            "resolution": "reattach-or-detach"
           },
           {
-            "code": "impact.tie",
-            "severity": "info",
-            "dataLoss": true,
-            "subjects": [
-              {
-                "kind": "router",
-                "id": "router.tie"
-              }
-            ],
-            "details": {
-              "rank": 1
-            },
-            "resolution": "resolution.tie"
-          },
-          {
-            "code": "impact.tie",
+            "code": "attachment.target_removed",
             "severity": "warning",
             "dataLoss": false,
             "subjects": [
               {
                 "kind": "router",
-                "id": "router.tie"
+                "id": "router.zeta"
               }
             ],
             "details": {
-              "rank": 1
+              "rank": 2
             },
-            "resolution": "resolution.tie"
+            "resolution": "reattach-or-detach"
           },
           {
-            "code": "impact.zeta",
-            "severity": "info",
+            "code": "domain.disconnected",
+            "severity": "error",
             "dataLoss": false,
             "subjects": [
               {
                 "kind": "router",
-                "id": "router.tie"
+                "id": "router.02"
               }
             ],
             "details": {
-              "rank": 1
+              "rank": 3
             },
-            "resolution": "resolution.tie"
+            "resolution": "repair-domain"
+          },
+          {
+            "code": "domain.non_default_deleted",
+            "severity": "warning",
+            "dataLoss": true,
+            "subjects": [
+              {
+                "kind": "router",
+                "id": "router.01"
+              }
+            ],
+            "details": {
+              "rank": 2
+            },
+            "resolution": "confirm-or-discard"
+          },
+          {
+            "code": "engine_migration.dependency_replaced",
+            "severity": "warning",
+            "dataLoss": false,
+            "subjects": [
+              {
+                "kind": "router",
+                "id": "router.05"
+              }
+            ],
+            "details": {
+              "rank": 6
+            },
+            "resolution": "confirm-or-discard"
+          },
+          {
+            "code": "package_relation.endpoint_blocks_candidate",
+            "severity": "error",
+            "dataLoss": false,
+            "subjects": [
+              {
+                "kind": "router",
+                "id": "router.04"
+              }
+            ],
+            "details": {
+              "rank": 5
+            },
+            "resolution": "discard-and-repair"
+          },
+          {
+            "code": "package_relation.endpoint_unresolved",
+            "severity": "warning",
+            "dataLoss": false,
+            "subjects": [
+              {
+                "kind": "router",
+                "id": "router.03"
+              }
+            ],
+            "details": {
+              "rank": 4
+            },
+            "resolution": "reattach-or-delete-relation"
           }
         ],
         [
           {
-            "code": "impact.zeta",
-            "severity": "info",
-            "dataLoss": false,
-            "subjects": [
-              {
-                "kind": "router",
-                "id": "router.tie"
-              }
-            ],
-            "details": {
-              "rank": 1
-            },
-            "resolution": "resolution.tie"
-          },
-          {
-            "code": "impact.tie",
+            "code": "package_relation.endpoint_unresolved",
             "severity": "warning",
             "dataLoss": false,
             "subjects": [
               {
                 "kind": "router",
-                "id": "router.tie"
+                "id": "router.03"
               }
             ],
             "details": {
-              "rank": 1
+              "rank": 4
             },
-            "resolution": "resolution.tie"
+            "resolution": "reattach-or-delete-relation"
           },
           {
-            "code": "impact.tie",
-            "severity": "info",
+            "code": "package_relation.endpoint_blocks_candidate",
+            "severity": "error",
+            "dataLoss": false,
+            "subjects": [
+              {
+                "kind": "router",
+                "id": "router.04"
+              }
+            ],
+            "details": {
+              "rank": 5
+            },
+            "resolution": "discard-and-repair"
+          },
+          {
+            "code": "engine_migration.dependency_replaced",
+            "severity": "warning",
+            "dataLoss": false,
+            "subjects": [
+              {
+                "kind": "router",
+                "id": "router.05"
+              }
+            ],
+            "details": {
+              "rank": 6
+            },
+            "resolution": "confirm-or-discard"
+          },
+          {
+            "code": "domain.non_default_deleted",
+            "severity": "warning",
             "dataLoss": true,
             "subjects": [
               {
                 "kind": "router",
-                "id": "router.tie"
+                "id": "router.01"
               }
             ],
             "details": {
-              "rank": 1
+              "rank": 2
             },
-            "resolution": "resolution.tie"
+            "resolution": "confirm-or-discard"
           },
           {
-            "code": "impact.tie",
-            "severity": "info",
+            "code": "domain.disconnected",
+            "severity": "error",
+            "dataLoss": false,
+            "subjects": [
+              {
+                "kind": "router",
+                "id": "router.02"
+              }
+            ],
+            "details": {
+              "rank": 3
+            },
+            "resolution": "repair-domain"
+          },
+          {
+            "code": "attachment.target_removed",
+            "severity": "warning",
+            "dataLoss": false,
+            "subjects": [
+              {
+                "kind": "router",
+                "id": "router.zeta"
+              }
+            ],
+            "details": {
+              "rank": 2
+            },
+            "resolution": "reattach-or-detach"
+          },
+          {
+            "code": "attachment.target_removed",
+            "severity": "warning",
             "dataLoss": false,
             "subjects": [
               {
@@ -1787,193 +1772,103 @@
             "details": {
               "rank": 1
             },
-            "resolution": "resolution.tie"
+            "resolution": "reattach-or-detach"
           },
           {
-            "code": "impact.tie",
-            "severity": "info",
+            "code": "attachment.target_removed",
+            "severity": "warning",
             "dataLoss": false,
             "subjects": [
               {
                 "kind": "router",
-                "id": "router.tie"
-              }
-            ],
-            "details": {
-              "rank": 2
-            },
-            "resolution": "resolution.tie"
-          },
-          {
-            "code": "impact.tie",
-            "severity": "info",
-            "dataLoss": false,
-            "subjects": [
-              {
-                "kind": "router",
-                "id": "router.tie"
+                "id": "router.00"
               }
             ],
             "details": {
               "rank": 1
             },
-            "resolution": "resolution.zeta"
-          },
-          {
-            "code": "impact.tie",
-            "severity": "info",
-            "dataLoss": false,
-            "subjects": [
-              {
-                "kind": "router",
-                "id": "router.tie"
-              }
-            ],
-            "details": {
-              "rank": 1
-            },
-            "resolution": "resolution.tie"
-          },
-          {
-            "code": "impact.tie",
-            "severity": "info",
-            "dataLoss": false,
-            "subjects": [
-              {
-                "kind": "router",
-                "id": "router.tie"
-              }
-            ],
-            "details": {
-              "rank": 1
-            },
-            "resolution": "resolution.tie"
-          },
-          {
-            "code": "impact.tie",
-            "severity": "info",
-            "dataLoss": false,
-            "subjects": [
-              {
-                "kind": "router",
-                "id": "router.tie"
-              }
-            ],
-            "details": {
-              "rank": 1
-            },
-            "resolution": "resolution.tie"
-          },
-          {
-            "code": "impact.tie",
-            "severity": "info",
-            "dataLoss": false,
-            "subjects": [
-              {
-                "kind": "router",
-                "id": "router.tie"
-              }
-            ],
-            "details": {
-              "rank": 1
-            },
-            "resolution": "resolution.alpha"
-          },
-          {
-            "code": "impact.tie",
-            "severity": "info",
-            "dataLoss": false,
-            "subjects": [
-              {
-                "kind": "router",
-                "id": "router.alpha"
-              }
-            ],
-            "details": {
-              "rank": 1
-            },
-            "resolution": "resolution.tie"
-          },
-          {
-            "code": "impact.alpha",
-            "severity": "info",
-            "dataLoss": false,
-            "subjects": [
-              {
-                "kind": "router",
-                "id": "router.tie"
-              }
-            ],
-            "details": {
-              "rank": 1
-            },
-            "resolution": "resolution.tie"
+            "resolution": "reattach-or-detach"
           }
         ],
         [
           {
-            "code": "impact.tie",
-            "severity": "info",
+            "code": "package_relation.endpoint_unresolved",
+            "severity": "warning",
             "dataLoss": false,
             "subjects": [
               {
                 "kind": "router",
-                "id": "router.alpha"
+                "id": "router.03"
               }
             ],
             "details": {
-              "rank": 1
+              "rank": 4
             },
-            "resolution": "resolution.tie"
+            "resolution": "reattach-or-delete-relation"
           },
           {
-            "code": "impact.zeta",
-            "severity": "info",
+            "code": "package_relation.endpoint_blocks_candidate",
+            "severity": "error",
             "dataLoss": false,
             "subjects": [
               {
                 "kind": "router",
-                "id": "router.tie"
+                "id": "router.04"
               }
             ],
             "details": {
-              "rank": 1
+              "rank": 5
             },
-            "resolution": "resolution.tie"
+            "resolution": "discard-and-repair"
           },
           {
-            "code": "impact.tie",
-            "severity": "info",
+            "code": "domain.non_default_deleted",
+            "severity": "warning",
             "dataLoss": true,
             "subjects": [
               {
                 "kind": "router",
-                "id": "router.tie"
-              }
-            ],
-            "details": {
-              "rank": 1
-            },
-            "resolution": "resolution.tie"
-          },
-          {
-            "code": "impact.tie",
-            "severity": "info",
-            "dataLoss": false,
-            "subjects": [
-              {
-                "kind": "router",
-                "id": "router.tie"
+                "id": "router.01"
               }
             ],
             "details": {
               "rank": 2
             },
-            "resolution": "resolution.tie"
+            "resolution": "confirm-or-discard"
           },
           {
-            "code": "impact.tie",
-            "severity": "info",
+            "code": "domain.disconnected",
+            "severity": "error",
+            "dataLoss": false,
+            "subjects": [
+              {
+                "kind": "router",
+                "id": "router.02"
+              }
+            ],
+            "details": {
+              "rank": 3
+            },
+            "resolution": "repair-domain"
+          },
+          {
+            "code": "attachment.target_removed",
+            "severity": "warning",
+            "dataLoss": false,
+            "subjects": [
+              {
+                "kind": "router",
+                "id": "router.zeta"
+              }
+            ],
+            "details": {
+              "rank": 2
+            },
+            "resolution": "reattach-or-detach"
+          },
+          {
+            "code": "attachment.target_removed",
+            "severity": "warning",
             "dataLoss": false,
             "subjects": [
               {
@@ -1984,240 +1879,60 @@
             "details": {
               "rank": 1
             },
-            "resolution": "resolution.tie"
+            "resolution": "reattach-or-detach"
           },
           {
-            "code": "impact.tie",
-            "severity": "info",
-            "dataLoss": false,
-            "subjects": [
-              {
-                "kind": "router",
-                "id": "router.tie"
-              }
-            ],
-            "details": {
-              "rank": 1
-            },
-            "resolution": "resolution.tie"
-          },
-          {
-            "code": "impact.tie",
-            "severity": "info",
-            "dataLoss": false,
-            "subjects": [
-              {
-                "kind": "router",
-                "id": "router.tie"
-              }
-            ],
-            "details": {
-              "rank": 1
-            },
-            "resolution": "resolution.tie"
-          },
-          {
-            "code": "impact.tie",
-            "severity": "info",
-            "dataLoss": false,
-            "subjects": [
-              {
-                "kind": "router",
-                "id": "router.tie"
-              }
-            ],
-            "details": {
-              "rank": 1
-            },
-            "resolution": "resolution.zeta"
-          },
-          {
-            "code": "impact.tie",
-            "severity": "info",
-            "dataLoss": false,
-            "subjects": [
-              {
-                "kind": "router",
-                "id": "router.tie"
-              }
-            ],
-            "details": {
-              "rank": 1
-            },
-            "resolution": "resolution.tie"
-          },
-          {
-            "code": "impact.tie",
-            "severity": "info",
-            "dataLoss": false,
-            "subjects": [
-              {
-                "kind": "router",
-                "id": "router.tie"
-              }
-            ],
-            "details": {
-              "rank": 1
-            },
-            "resolution": "resolution.alpha"
-          },
-          {
-            "code": "impact.tie",
+            "code": "engine_migration.dependency_replaced",
             "severity": "warning",
             "dataLoss": false,
             "subjects": [
               {
                 "kind": "router",
-                "id": "router.tie"
+                "id": "router.05"
               }
             ],
             "details": {
-              "rank": 1
+              "rank": 6
             },
-            "resolution": "resolution.tie"
+            "resolution": "confirm-or-discard"
           },
           {
-            "code": "impact.alpha",
-            "severity": "info",
+            "code": "attachment.target_removed",
+            "severity": "warning",
             "dataLoss": false,
             "subjects": [
               {
                 "kind": "router",
-                "id": "router.tie"
+                "id": "router.00"
               }
             ],
             "details": {
               "rank": 1
             },
-            "resolution": "resolution.tie"
+            "resolution": "reattach-or-detach"
           }
         ]
       ],
       "expectedRelation": "equal",
       "expectedNormalized": [
         {
-          "code": "impact.alpha",
-          "severity": "info",
+          "code": "attachment.target_removed",
+          "severity": "warning",
           "dataLoss": false,
           "subjects": [
             {
               "kind": "router",
-              "id": "router.tie"
+              "id": "router.00"
             }
           ],
           "details": {
             "rank": 1
           },
-          "resolution": "resolution.tie"
+          "resolution": "reattach-or-detach"
         },
         {
-          "code": "impact.tie",
-          "severity": "info",
-          "dataLoss": false,
-          "subjects": [
-            {
-              "kind": "router",
-              "id": "router.alpha"
-            }
-          ],
-          "details": {
-            "rank": 1
-          },
-          "resolution": "resolution.tie"
-        },
-        {
-          "code": "impact.tie",
-          "severity": "info",
-          "dataLoss": false,
-          "subjects": [
-            {
-              "kind": "router",
-              "id": "router.tie"
-            }
-          ],
-          "details": {
-            "rank": 1
-          },
-          "resolution": "resolution.alpha"
-        },
-        {
-          "code": "impact.tie",
-          "severity": "info",
-          "dataLoss": false,
-          "subjects": [
-            {
-              "kind": "router",
-              "id": "router.tie"
-            }
-          ],
-          "details": {
-            "rank": 1
-          },
-          "resolution": "resolution.tie"
-        },
-        {
-          "code": "impact.tie",
-          "severity": "info",
-          "dataLoss": false,
-          "subjects": [
-            {
-              "kind": "router",
-              "id": "router.tie"
-            }
-          ],
-          "details": {
-            "rank": 1
-          },
-          "resolution": "resolution.tie"
-        },
-        {
-          "code": "impact.tie",
-          "severity": "info",
-          "dataLoss": false,
-          "subjects": [
-            {
-              "kind": "router",
-              "id": "router.tie"
-            }
-          ],
-          "details": {
-            "rank": 1
-          },
-          "resolution": "resolution.tie"
-        },
-        {
-          "code": "impact.tie",
-          "severity": "info",
-          "dataLoss": false,
-          "subjects": [
-            {
-              "kind": "router",
-              "id": "router.tie"
-            }
-          ],
-          "details": {
-            "rank": 1
-          },
-          "resolution": "resolution.zeta"
-        },
-        {
-          "code": "impact.tie",
-          "severity": "info",
-          "dataLoss": false,
-          "subjects": [
-            {
-              "kind": "router",
-              "id": "router.tie"
-            }
-          ],
-          "details": {
-            "rank": 2
-          },
-          "resolution": "resolution.tie"
-        },
-        {
-          "code": "impact.tie",
-          "severity": "info",
+          "code": "attachment.target_removed",
+          "severity": "warning",
           "dataLoss": false,
           "subjects": [
             {
@@ -2228,56 +1943,101 @@
           "details": {
             "rank": 1
           },
-          "resolution": "resolution.tie"
+          "resolution": "reattach-or-detach"
         },
         {
-          "code": "impact.tie",
-          "severity": "info",
-          "dataLoss": true,
-          "subjects": [
-            {
-              "kind": "router",
-              "id": "router.tie"
-            }
-          ],
-          "details": {
-            "rank": 1
-          },
-          "resolution": "resolution.tie"
-        },
-        {
-          "code": "impact.tie",
+          "code": "attachment.target_removed",
           "severity": "warning",
           "dataLoss": false,
           "subjects": [
             {
               "kind": "router",
-              "id": "router.tie"
+              "id": "router.zeta"
             }
           ],
           "details": {
-            "rank": 1
+            "rank": 2
           },
-          "resolution": "resolution.tie"
+          "resolution": "reattach-or-detach"
         },
         {
-          "code": "impact.zeta",
-          "severity": "info",
+          "code": "domain.disconnected",
+          "severity": "error",
           "dataLoss": false,
           "subjects": [
             {
               "kind": "router",
-              "id": "router.tie"
+              "id": "router.02"
             }
           ],
           "details": {
-            "rank": 1
+            "rank": 3
           },
-          "resolution": "resolution.tie"
+          "resolution": "repair-domain"
+        },
+        {
+          "code": "domain.non_default_deleted",
+          "severity": "warning",
+          "dataLoss": true,
+          "subjects": [
+            {
+              "kind": "router",
+              "id": "router.01"
+            }
+          ],
+          "details": {
+            "rank": 2
+          },
+          "resolution": "confirm-or-discard"
+        },
+        {
+          "code": "engine_migration.dependency_replaced",
+          "severity": "warning",
+          "dataLoss": false,
+          "subjects": [
+            {
+              "kind": "router",
+              "id": "router.05"
+            }
+          ],
+          "details": {
+            "rank": 6
+          },
+          "resolution": "confirm-or-discard"
+        },
+        {
+          "code": "package_relation.endpoint_blocks_candidate",
+          "severity": "error",
+          "dataLoss": false,
+          "subjects": [
+            {
+              "kind": "router",
+              "id": "router.04"
+            }
+          ],
+          "details": {
+            "rank": 5
+          },
+          "resolution": "discard-and-repair"
+        },
+        {
+          "code": "package_relation.endpoint_unresolved",
+          "severity": "warning",
+          "dataLoss": false,
+          "subjects": [
+            {
+              "kind": "router",
+              "id": "router.03"
+            }
+          ],
+          "details": {
+            "rank": 4
+          },
+          "resolution": "reattach-or-delete-relation"
         }
       ],
-      "expectedCanonicalJson": "[{\"code\":\"impact.alpha\",\"dataLoss\":false,\"details\":{\"rank\":1},\"resolution\":\"resolution.tie\",\"severity\":\"info\",\"subjects\":[{\"id\":\"router.tie\",\"kind\":\"router\"}]},{\"code\":\"impact.tie\",\"dataLoss\":false,\"details\":{\"rank\":1},\"resolution\":\"resolution.tie\",\"severity\":\"info\",\"subjects\":[{\"id\":\"router.alpha\",\"kind\":\"router\"}]},{\"code\":\"impact.tie\",\"dataLoss\":false,\"details\":{\"rank\":1},\"resolution\":\"resolution.alpha\",\"severity\":\"info\",\"subjects\":[{\"id\":\"router.tie\",\"kind\":\"router\"}]},{\"code\":\"impact.tie\",\"dataLoss\":false,\"details\":{\"rank\":1},\"resolution\":\"resolution.tie\",\"severity\":\"info\",\"subjects\":[{\"id\":\"router.tie\",\"kind\":\"router\"}]},{\"code\":\"impact.tie\",\"dataLoss\":false,\"details\":{\"rank\":1},\"resolution\":\"resolution.tie\",\"severity\":\"info\",\"subjects\":[{\"id\":\"router.tie\",\"kind\":\"router\"}]},{\"code\":\"impact.tie\",\"dataLoss\":false,\"details\":{\"rank\":1},\"resolution\":\"resolution.tie\",\"severity\":\"info\",\"subjects\":[{\"id\":\"router.tie\",\"kind\":\"router\"}]},{\"code\":\"impact.tie\",\"dataLoss\":false,\"details\":{\"rank\":1},\"resolution\":\"resolution.zeta\",\"severity\":\"info\",\"subjects\":[{\"id\":\"router.tie\",\"kind\":\"router\"}]},{\"code\":\"impact.tie\",\"dataLoss\":false,\"details\":{\"rank\":2},\"resolution\":\"resolution.tie\",\"severity\":\"info\",\"subjects\":[{\"id\":\"router.tie\",\"kind\":\"router\"}]},{\"code\":\"impact.tie\",\"dataLoss\":false,\"details\":{\"rank\":1},\"resolution\":\"resolution.tie\",\"severity\":\"info\",\"subjects\":[{\"id\":\"router.zeta\",\"kind\":\"router\"}]},{\"code\":\"impact.tie\",\"dataLoss\":true,\"details\":{\"rank\":1},\"resolution\":\"resolution.tie\",\"severity\":\"info\",\"subjects\":[{\"id\":\"router.tie\",\"kind\":\"router\"}]},{\"code\":\"impact.tie\",\"dataLoss\":false,\"details\":{\"rank\":1},\"resolution\":\"resolution.tie\",\"severity\":\"warning\",\"subjects\":[{\"id\":\"router.tie\",\"kind\":\"router\"}]},{\"code\":\"impact.zeta\",\"dataLoss\":false,\"details\":{\"rank\":1},\"resolution\":\"resolution.tie\",\"severity\":\"info\",\"subjects\":[{\"id\":\"router.tie\",\"kind\":\"router\"}]}]",
-      "expectedDigest": "sha256:5e96fe49404256920e7f9cf35bb5e7a670ca01bf3a133fa666095316b5bdc13c"
+      "expectedCanonicalJson": "[{\"code\":\"attachment.target_removed\",\"dataLoss\":false,\"details\":{\"rank\":1},\"resolution\":\"reattach-or-detach\",\"severity\":\"warning\",\"subjects\":[{\"id\":\"router.00\",\"kind\":\"router\"}]},{\"code\":\"attachment.target_removed\",\"dataLoss\":false,\"details\":{\"rank\":1},\"resolution\":\"reattach-or-detach\",\"severity\":\"warning\",\"subjects\":[{\"id\":\"router.zeta\",\"kind\":\"router\"}]},{\"code\":\"attachment.target_removed\",\"dataLoss\":false,\"details\":{\"rank\":2},\"resolution\":\"reattach-or-detach\",\"severity\":\"warning\",\"subjects\":[{\"id\":\"router.zeta\",\"kind\":\"router\"}]},{\"code\":\"domain.disconnected\",\"dataLoss\":false,\"details\":{\"rank\":3},\"resolution\":\"repair-domain\",\"severity\":\"error\",\"subjects\":[{\"id\":\"router.02\",\"kind\":\"router\"}]},{\"code\":\"domain.non_default_deleted\",\"dataLoss\":true,\"details\":{\"rank\":2},\"resolution\":\"confirm-or-discard\",\"severity\":\"warning\",\"subjects\":[{\"id\":\"router.01\",\"kind\":\"router\"}]},{\"code\":\"engine_migration.dependency_replaced\",\"dataLoss\":false,\"details\":{\"rank\":6},\"resolution\":\"confirm-or-discard\",\"severity\":\"warning\",\"subjects\":[{\"id\":\"router.05\",\"kind\":\"router\"}]},{\"code\":\"package_relation.endpoint_blocks_candidate\",\"dataLoss\":false,\"details\":{\"rank\":5},\"resolution\":\"discard-and-repair\",\"severity\":\"error\",\"subjects\":[{\"id\":\"router.04\",\"kind\":\"router\"}]},{\"code\":\"package_relation.endpoint_unresolved\",\"dataLoss\":false,\"details\":{\"rank\":4},\"resolution\":\"reattach-or-delete-relation\",\"severity\":\"warning\",\"subjects\":[{\"id\":\"router.03\",\"kind\":\"router\"}]}]",
+      "expectedDigest": "sha256:e6dda3fb9535f89e76d3161742ba4df0d6e5e0b1b37ddc12fd2d23c2c75a4b03"
     },
     {
       "id": "core-canonical-models-normalizedTopologyInput-mesh-slotTemplates",
@@ -8993,6 +8753,1726 @@
       "expectedDigest": "sha256:c4348eae0d87aef761c6182b73b494e48531079fd53deda740d630d50bcbc3ba"
     },
     {
+      "id": "noc-side-effects-expected-allocationOrder",
+      "schemaId": "ipcraft.noc-side-effects.v1",
+      "schemaPointer": "/$defs/expected/properties/allocationOrder",
+      "collectionKind": "derived-ordered",
+      "sortKey": [
+        "unicodeScalarValue"
+      ],
+      "inputVariants": [
+        [
+          "application:000001",
+          "authority:router-0",
+          "authority:router-1"
+        ],
+        [
+          "authority:router-0",
+          "application:000001",
+          "authority:router-1"
+        ]
+      ],
+      "expectedRelation": "invalid",
+      "expectedNormalized": [
+        [
+          "application:000001",
+          "authority:router-0",
+          "authority:router-1"
+        ],
+        null
+      ],
+      "expectedCanonicalJson": [
+        "[\"application:000001\",\"authority:router-0\",\"authority:router-1\"]",
+        null
+      ],
+      "expectedDigest": [
+        "sha256:0ad2b9a755a7e4d7f7ba8176acda74b42b92d485209bf62fbd5cf2ee240fb8e8",
+        null
+      ],
+      "expectedErrorCode": [
+        null,
+        "patch.invariant_violation"
+      ]
+    },
+    {
+      "id": "noc-side-effects-expected-coreDiagnostics",
+      "schemaId": "ipcraft.noc-side-effects.v1",
+      "schemaPointer": "/$defs/expected/properties/coreDiagnostics",
+      "collectionKind": "ordered",
+      "inputVariants": [
+        [
+          {
+            "ruleId": "ruleId-1",
+            "severity": "info",
+            "message": "alpha-1",
+            "blocking": false,
+            "subjects": [
+              {
+                "kind": "project",
+                "id": "alpha-1"
+              }
+            ],
+            "properties": [
+              "alpha-1"
+            ]
+          },
+          {
+            "ruleId": "ruleId-2",
+            "severity": "error",
+            "message": "mu-2",
+            "blocking": true,
+            "subjects": [
+              {
+                "kind": "component",
+                "id": "mu-2"
+              }
+            ],
+            "properties": [
+              "mu-2"
+            ]
+          }
+        ],
+        [
+          {
+            "ruleId": "ruleId-2",
+            "severity": "error",
+            "message": "mu-2",
+            "blocking": true,
+            "subjects": [
+              {
+                "kind": "component",
+                "id": "mu-2"
+              }
+            ],
+            "properties": [
+              "mu-2"
+            ]
+          },
+          {
+            "ruleId": "ruleId-1",
+            "severity": "info",
+            "message": "alpha-1",
+            "blocking": false,
+            "subjects": [
+              {
+                "kind": "project",
+                "id": "alpha-1"
+              }
+            ],
+            "properties": [
+              "alpha-1"
+            ]
+          }
+        ]
+      ],
+      "expectedRelation": "different",
+      "expectedNormalized": [
+        [
+          {
+            "ruleId": "ruleId-1",
+            "severity": "info",
+            "message": "alpha-1",
+            "blocking": false,
+            "subjects": [
+              {
+                "kind": "project",
+                "id": "alpha-1"
+              }
+            ],
+            "properties": [
+              "alpha-1"
+            ]
+          },
+          {
+            "ruleId": "ruleId-2",
+            "severity": "error",
+            "message": "mu-2",
+            "blocking": true,
+            "subjects": [
+              {
+                "kind": "component",
+                "id": "mu-2"
+              }
+            ],
+            "properties": [
+              "mu-2"
+            ]
+          }
+        ],
+        [
+          {
+            "ruleId": "ruleId-2",
+            "severity": "error",
+            "message": "mu-2",
+            "blocking": true,
+            "subjects": [
+              {
+                "kind": "component",
+                "id": "mu-2"
+              }
+            ],
+            "properties": [
+              "mu-2"
+            ]
+          },
+          {
+            "ruleId": "ruleId-1",
+            "severity": "info",
+            "message": "alpha-1",
+            "blocking": false,
+            "subjects": [
+              {
+                "kind": "project",
+                "id": "alpha-1"
+              }
+            ],
+            "properties": [
+              "alpha-1"
+            ]
+          }
+        ]
+      ],
+      "expectedCanonicalJson": [
+        "[{\"blocking\":false,\"message\":\"alpha-1\",\"properties\":[\"alpha-1\"],\"ruleId\":\"ruleId-1\",\"severity\":\"info\",\"subjects\":[{\"id\":\"alpha-1\",\"kind\":\"project\"}]},{\"blocking\":true,\"message\":\"mu-2\",\"properties\":[\"mu-2\"],\"ruleId\":\"ruleId-2\",\"severity\":\"error\",\"subjects\":[{\"id\":\"mu-2\",\"kind\":\"component\"}]}]",
+        "[{\"blocking\":true,\"message\":\"mu-2\",\"properties\":[\"mu-2\"],\"ruleId\":\"ruleId-2\",\"severity\":\"error\",\"subjects\":[{\"id\":\"mu-2\",\"kind\":\"component\"}]},{\"blocking\":false,\"message\":\"alpha-1\",\"properties\":[\"alpha-1\"],\"ruleId\":\"ruleId-1\",\"severity\":\"info\",\"subjects\":[{\"id\":\"alpha-1\",\"kind\":\"project\"}]}]"
+      ],
+      "expectedDigest": [
+        "sha256:db19aa8e3b3d63d8c7f9cc166478946be838cc5c0fe963d79b2cd294decf0f8f",
+        "sha256:b3fdb694f9dc6d036703ea77f102f3251d15f5477a792f2f19d070f869ea0542"
+      ]
+    },
+    {
+      "id": "noc-side-effects-expected-tombstones",
+      "schemaId": "ipcraft.noc-side-effects.v1",
+      "schemaPointer": "/$defs/expected/properties/tombstones",
+      "collectionKind": "set",
+      "sortKey": [
+        "subjectKind",
+        "id"
+      ],
+      "inputVariants": [
+        [
+          {
+            "subjectKind": "alpha",
+            "id": "context-0",
+            "value": {}
+          },
+          {
+            "subjectKind": "context-1",
+            "id": "alpha",
+            "value": {}
+          },
+          {
+            "subjectKind": "context-1",
+            "id": "zeta",
+            "value": {}
+          },
+          {
+            "subjectKind": "zeta",
+            "id": "context-0",
+            "value": {}
+          }
+        ],
+        [
+          {
+            "subjectKind": "zeta",
+            "id": "context-0",
+            "value": {}
+          },
+          {
+            "subjectKind": "context-1",
+            "id": "zeta",
+            "value": {}
+          },
+          {
+            "subjectKind": "context-1",
+            "id": "alpha",
+            "value": {}
+          },
+          {
+            "subjectKind": "alpha",
+            "id": "context-0",
+            "value": {}
+          }
+        ],
+        [
+          {
+            "subjectKind": "context-1",
+            "id": "alpha",
+            "value": {}
+          },
+          {
+            "subjectKind": "zeta",
+            "id": "context-0",
+            "value": {}
+          },
+          {
+            "subjectKind": "context-1",
+            "id": "zeta",
+            "value": {}
+          },
+          {
+            "subjectKind": "alpha",
+            "id": "context-0",
+            "value": {}
+          }
+        ]
+      ],
+      "expectedRelation": "equal",
+      "expectedNormalized": [
+        {
+          "subjectKind": "alpha",
+          "id": "context-0",
+          "value": {}
+        },
+        {
+          "subjectKind": "context-1",
+          "id": "alpha",
+          "value": {}
+        },
+        {
+          "subjectKind": "context-1",
+          "id": "zeta",
+          "value": {}
+        },
+        {
+          "subjectKind": "zeta",
+          "id": "context-0",
+          "value": {}
+        }
+      ],
+      "expectedCanonicalJson": "[{\"id\":\"context-0\",\"subjectKind\":\"alpha\",\"value\":{}},{\"id\":\"alpha\",\"subjectKind\":\"context-1\",\"value\":{}},{\"id\":\"zeta\",\"subjectKind\":\"context-1\",\"value\":{}},{\"id\":\"context-0\",\"subjectKind\":\"zeta\",\"value\":{}}]",
+      "expectedDigest": "sha256:a15a1b03d2a54078f6586dc444dcbd4f29e91396633498f3bece29ef85a4f8e4"
+    },
+    {
+      "id": "noc-side-effects-input-attachments",
+      "schemaId": "ipcraft.noc-side-effects.v1",
+      "schemaPointer": "/$defs/input/properties/attachments",
+      "collectionKind": "set",
+      "sortKey": [
+        "id"
+      ],
+      "inputVariants": [
+        [
+          {
+            "id": "alpha",
+            "interfaceId": "alpha-1",
+            "state": "resolved",
+            "routerId": "alpha-1",
+            "slotId": "alpha-1"
+          },
+          {
+            "id": "mu",
+            "interfaceId": "mu-2",
+            "state": "unresolved",
+            "intendedTarget": {
+              "routerId": "mu-2",
+              "slotId": "mu-2"
+            },
+            "reasonCode": "mu-2"
+          },
+          {
+            "id": "zeta",
+            "interfaceId": "zeta-3",
+            "state": "resolved",
+            "routerId": "zeta-3",
+            "slotId": "zeta-3"
+          }
+        ],
+        [
+          {
+            "id": "zeta",
+            "interfaceId": "zeta-3",
+            "state": "resolved",
+            "routerId": "zeta-3",
+            "slotId": "zeta-3"
+          },
+          {
+            "id": "mu",
+            "interfaceId": "mu-2",
+            "state": "unresolved",
+            "intendedTarget": {
+              "routerId": "mu-2",
+              "slotId": "mu-2"
+            },
+            "reasonCode": "mu-2"
+          },
+          {
+            "id": "alpha",
+            "interfaceId": "alpha-1",
+            "state": "resolved",
+            "routerId": "alpha-1",
+            "slotId": "alpha-1"
+          }
+        ],
+        [
+          {
+            "id": "mu",
+            "interfaceId": "mu-2",
+            "state": "unresolved",
+            "intendedTarget": {
+              "routerId": "mu-2",
+              "slotId": "mu-2"
+            },
+            "reasonCode": "mu-2"
+          },
+          {
+            "id": "zeta",
+            "interfaceId": "zeta-3",
+            "state": "resolved",
+            "routerId": "zeta-3",
+            "slotId": "zeta-3"
+          },
+          {
+            "id": "alpha",
+            "interfaceId": "alpha-1",
+            "state": "resolved",
+            "routerId": "alpha-1",
+            "slotId": "alpha-1"
+          }
+        ]
+      ],
+      "expectedRelation": "equal",
+      "expectedNormalized": [
+        {
+          "id": "alpha",
+          "interfaceId": "alpha-1",
+          "state": "resolved",
+          "routerId": "alpha-1",
+          "slotId": "alpha-1"
+        },
+        {
+          "id": "mu",
+          "interfaceId": "mu-2",
+          "state": "unresolved",
+          "intendedTarget": {
+            "routerId": "mu-2",
+            "slotId": "mu-2"
+          },
+          "reasonCode": "mu-2"
+        },
+        {
+          "id": "zeta",
+          "interfaceId": "zeta-3",
+          "state": "resolved",
+          "routerId": "zeta-3",
+          "slotId": "zeta-3"
+        }
+      ],
+      "expectedCanonicalJson": "[{\"id\":\"alpha\",\"interfaceId\":\"alpha-1\",\"routerId\":\"alpha-1\",\"slotId\":\"alpha-1\",\"state\":\"resolved\"},{\"id\":\"mu\",\"intendedTarget\":{\"routerId\":\"mu-2\",\"slotId\":\"mu-2\"},\"interfaceId\":\"mu-2\",\"reasonCode\":\"mu-2\",\"state\":\"unresolved\"},{\"id\":\"zeta\",\"interfaceId\":\"zeta-3\",\"routerId\":\"zeta-3\",\"slotId\":\"zeta-3\",\"state\":\"resolved\"}]",
+      "expectedDigest": "sha256:e80e9839dd88d1021845849517addccaec1022128fe89b5b73f0481f32b3f856"
+    },
+    {
+      "id": "noc-side-effects-input-domainMemberships",
+      "schemaId": "ipcraft.noc-side-effects.v1",
+      "schemaPointer": "/$defs/input/properties/domainMemberships",
+      "collectionKind": "set",
+      "sortKey": [
+        "id"
+      ],
+      "inputVariants": [
+        [
+          {
+            "id": "alpha",
+            "domainId": "alpha-1",
+            "routerId": "alpha-1"
+          },
+          {
+            "id": "mu",
+            "domainId": "mu-2",
+            "routerId": "mu-2"
+          },
+          {
+            "id": "zeta",
+            "domainId": "zeta-3",
+            "routerId": "zeta-3"
+          }
+        ],
+        [
+          {
+            "id": "zeta",
+            "domainId": "zeta-3",
+            "routerId": "zeta-3"
+          },
+          {
+            "id": "mu",
+            "domainId": "mu-2",
+            "routerId": "mu-2"
+          },
+          {
+            "id": "alpha",
+            "domainId": "alpha-1",
+            "routerId": "alpha-1"
+          }
+        ],
+        [
+          {
+            "id": "mu",
+            "domainId": "mu-2",
+            "routerId": "mu-2"
+          },
+          {
+            "id": "zeta",
+            "domainId": "zeta-3",
+            "routerId": "zeta-3"
+          },
+          {
+            "id": "alpha",
+            "domainId": "alpha-1",
+            "routerId": "alpha-1"
+          }
+        ]
+      ],
+      "expectedRelation": "equal",
+      "expectedNormalized": [
+        {
+          "id": "alpha",
+          "domainId": "alpha-1",
+          "routerId": "alpha-1"
+        },
+        {
+          "id": "mu",
+          "domainId": "mu-2",
+          "routerId": "mu-2"
+        },
+        {
+          "id": "zeta",
+          "domainId": "zeta-3",
+          "routerId": "zeta-3"
+        }
+      ],
+      "expectedCanonicalJson": "[{\"domainId\":\"alpha-1\",\"id\":\"alpha\",\"routerId\":\"alpha-1\"},{\"domainId\":\"mu-2\",\"id\":\"mu\",\"routerId\":\"mu-2\"},{\"domainId\":\"zeta-3\",\"id\":\"zeta\",\"routerId\":\"zeta-3\"}]",
+      "expectedDigest": "sha256:e35d4a2752f4bca72b8054bed1b082daf07f464d204aebe10b93256923685741"
+    },
+    {
+      "id": "noc-side-effects-input-domainTypes",
+      "schemaId": "ipcraft.noc-side-effects.v1",
+      "schemaPointer": "/$defs/input/properties/domainTypes",
+      "collectionKind": "set",
+      "sortKey": [
+        "key"
+      ],
+      "inputVariants": [
+        [
+          {
+            "key": "alpha",
+            "label": "alpha-1",
+            "defaultName": "alpha-1",
+            "visual": {
+              "fill": "alpha-1",
+              "border": "alpha-1",
+              "pattern": "alpha-1"
+            },
+            "configuration": {
+              "fields": [
+                {
+                  "key": "alpha-1",
+                  "type": "bool",
+                  "label": "alpha-1",
+                  "description": "alpha-1",
+                  "default": false,
+                  "required": false,
+                  "readOnly": false,
+                  "minimum": 1,
+                  "maximum": 1,
+                  "unit": "alpha-1",
+                  "values": [
+                    false
+                  ],
+                  "visibleWhen": {
+                    "field": "alpha-1",
+                    "equals": false
+                  },
+                  "enabledWhen": {
+                    "field": "alpha-1",
+                    "equals": false
+                  },
+                  "topologyDriving": false
+                }
+              ]
+            }
+          },
+          {
+            "key": "mu",
+            "label": "mu-2",
+            "defaultName": "mu-2",
+            "visual": {
+              "fill": "mu-2",
+              "border": "mu-2",
+              "pattern": "mu-2"
+            },
+            "configuration": {
+              "fields": [
+                {
+                  "key": "mu-2",
+                  "type": "int",
+                  "label": "mu-2",
+                  "description": "mu-2",
+                  "default": true,
+                  "required": true,
+                  "readOnly": true,
+                  "minimum": null,
+                  "maximum": null,
+                  "unit": null,
+                  "values": null,
+                  "visibleWhen": null,
+                  "enabledWhen": null,
+                  "topologyDriving": true
+                }
+              ]
+            }
+          },
+          {
+            "key": "zeta",
+            "label": "zeta-3",
+            "defaultName": "zeta-3",
+            "visual": {
+              "fill": "zeta-3",
+              "border": "zeta-3",
+              "pattern": "zeta-3"
+            },
+            "configuration": {
+              "fields": [
+                {
+                  "key": "zeta-3",
+                  "type": "double",
+                  "label": "zeta-3",
+                  "description": "zeta-3",
+                  "default": false,
+                  "required": false,
+                  "readOnly": false,
+                  "minimum": 3,
+                  "maximum": 3,
+                  "unit": "zeta-3",
+                  "values": [
+                    false
+                  ],
+                  "visibleWhen": {
+                    "field": "zeta-3",
+                    "equals": false
+                  },
+                  "enabledWhen": {
+                    "field": "zeta-3",
+                    "equals": false
+                  },
+                  "topologyDriving": false
+                }
+              ]
+            }
+          }
+        ],
+        [
+          {
+            "key": "zeta",
+            "label": "zeta-3",
+            "defaultName": "zeta-3",
+            "visual": {
+              "fill": "zeta-3",
+              "border": "zeta-3",
+              "pattern": "zeta-3"
+            },
+            "configuration": {
+              "fields": [
+                {
+                  "key": "zeta-3",
+                  "type": "double",
+                  "label": "zeta-3",
+                  "description": "zeta-3",
+                  "default": false,
+                  "required": false,
+                  "readOnly": false,
+                  "minimum": 3,
+                  "maximum": 3,
+                  "unit": "zeta-3",
+                  "values": [
+                    false
+                  ],
+                  "visibleWhen": {
+                    "field": "zeta-3",
+                    "equals": false
+                  },
+                  "enabledWhen": {
+                    "field": "zeta-3",
+                    "equals": false
+                  },
+                  "topologyDriving": false
+                }
+              ]
+            }
+          },
+          {
+            "key": "mu",
+            "label": "mu-2",
+            "defaultName": "mu-2",
+            "visual": {
+              "fill": "mu-2",
+              "border": "mu-2",
+              "pattern": "mu-2"
+            },
+            "configuration": {
+              "fields": [
+                {
+                  "key": "mu-2",
+                  "type": "int",
+                  "label": "mu-2",
+                  "description": "mu-2",
+                  "default": true,
+                  "required": true,
+                  "readOnly": true,
+                  "minimum": null,
+                  "maximum": null,
+                  "unit": null,
+                  "values": null,
+                  "visibleWhen": null,
+                  "enabledWhen": null,
+                  "topologyDriving": true
+                }
+              ]
+            }
+          },
+          {
+            "key": "alpha",
+            "label": "alpha-1",
+            "defaultName": "alpha-1",
+            "visual": {
+              "fill": "alpha-1",
+              "border": "alpha-1",
+              "pattern": "alpha-1"
+            },
+            "configuration": {
+              "fields": [
+                {
+                  "key": "alpha-1",
+                  "type": "bool",
+                  "label": "alpha-1",
+                  "description": "alpha-1",
+                  "default": false,
+                  "required": false,
+                  "readOnly": false,
+                  "minimum": 1,
+                  "maximum": 1,
+                  "unit": "alpha-1",
+                  "values": [
+                    false
+                  ],
+                  "visibleWhen": {
+                    "field": "alpha-1",
+                    "equals": false
+                  },
+                  "enabledWhen": {
+                    "field": "alpha-1",
+                    "equals": false
+                  },
+                  "topologyDriving": false
+                }
+              ]
+            }
+          }
+        ],
+        [
+          {
+            "key": "mu",
+            "label": "mu-2",
+            "defaultName": "mu-2",
+            "visual": {
+              "fill": "mu-2",
+              "border": "mu-2",
+              "pattern": "mu-2"
+            },
+            "configuration": {
+              "fields": [
+                {
+                  "key": "mu-2",
+                  "type": "int",
+                  "label": "mu-2",
+                  "description": "mu-2",
+                  "default": true,
+                  "required": true,
+                  "readOnly": true,
+                  "minimum": null,
+                  "maximum": null,
+                  "unit": null,
+                  "values": null,
+                  "visibleWhen": null,
+                  "enabledWhen": null,
+                  "topologyDriving": true
+                }
+              ]
+            }
+          },
+          {
+            "key": "zeta",
+            "label": "zeta-3",
+            "defaultName": "zeta-3",
+            "visual": {
+              "fill": "zeta-3",
+              "border": "zeta-3",
+              "pattern": "zeta-3"
+            },
+            "configuration": {
+              "fields": [
+                {
+                  "key": "zeta-3",
+                  "type": "double",
+                  "label": "zeta-3",
+                  "description": "zeta-3",
+                  "default": false,
+                  "required": false,
+                  "readOnly": false,
+                  "minimum": 3,
+                  "maximum": 3,
+                  "unit": "zeta-3",
+                  "values": [
+                    false
+                  ],
+                  "visibleWhen": {
+                    "field": "zeta-3",
+                    "equals": false
+                  },
+                  "enabledWhen": {
+                    "field": "zeta-3",
+                    "equals": false
+                  },
+                  "topologyDriving": false
+                }
+              ]
+            }
+          },
+          {
+            "key": "alpha",
+            "label": "alpha-1",
+            "defaultName": "alpha-1",
+            "visual": {
+              "fill": "alpha-1",
+              "border": "alpha-1",
+              "pattern": "alpha-1"
+            },
+            "configuration": {
+              "fields": [
+                {
+                  "key": "alpha-1",
+                  "type": "bool",
+                  "label": "alpha-1",
+                  "description": "alpha-1",
+                  "default": false,
+                  "required": false,
+                  "readOnly": false,
+                  "minimum": 1,
+                  "maximum": 1,
+                  "unit": "alpha-1",
+                  "values": [
+                    false
+                  ],
+                  "visibleWhen": {
+                    "field": "alpha-1",
+                    "equals": false
+                  },
+                  "enabledWhen": {
+                    "field": "alpha-1",
+                    "equals": false
+                  },
+                  "topologyDriving": false
+                }
+              ]
+            }
+          }
+        ]
+      ],
+      "expectedRelation": "equal",
+      "expectedNormalized": [
+        {
+          "key": "alpha",
+          "label": "alpha-1",
+          "defaultName": "alpha-1",
+          "visual": {
+            "fill": "alpha-1",
+            "border": "alpha-1",
+            "pattern": "alpha-1"
+          },
+          "configuration": {
+            "fields": [
+              {
+                "key": "alpha-1",
+                "type": "bool",
+                "label": "alpha-1",
+                "description": "alpha-1",
+                "default": false,
+                "required": false,
+                "readOnly": false,
+                "minimum": 1,
+                "maximum": 1,
+                "unit": "alpha-1",
+                "values": [
+                  false
+                ],
+                "visibleWhen": {
+                  "field": "alpha-1",
+                  "equals": false
+                },
+                "enabledWhen": {
+                  "field": "alpha-1",
+                  "equals": false
+                },
+                "topologyDriving": false
+              }
+            ]
+          }
+        },
+        {
+          "key": "mu",
+          "label": "mu-2",
+          "defaultName": "mu-2",
+          "visual": {
+            "fill": "mu-2",
+            "border": "mu-2",
+            "pattern": "mu-2"
+          },
+          "configuration": {
+            "fields": [
+              {
+                "key": "mu-2",
+                "type": "int",
+                "label": "mu-2",
+                "description": "mu-2",
+                "default": true,
+                "required": true,
+                "readOnly": true,
+                "minimum": null,
+                "maximum": null,
+                "unit": null,
+                "values": null,
+                "visibleWhen": null,
+                "enabledWhen": null,
+                "topologyDriving": true
+              }
+            ]
+          }
+        },
+        {
+          "key": "zeta",
+          "label": "zeta-3",
+          "defaultName": "zeta-3",
+          "visual": {
+            "fill": "zeta-3",
+            "border": "zeta-3",
+            "pattern": "zeta-3"
+          },
+          "configuration": {
+            "fields": [
+              {
+                "key": "zeta-3",
+                "type": "double",
+                "label": "zeta-3",
+                "description": "zeta-3",
+                "default": false,
+                "required": false,
+                "readOnly": false,
+                "minimum": 3,
+                "maximum": 3,
+                "unit": "zeta-3",
+                "values": [
+                  false
+                ],
+                "visibleWhen": {
+                  "field": "zeta-3",
+                  "equals": false
+                },
+                "enabledWhen": {
+                  "field": "zeta-3",
+                  "equals": false
+                },
+                "topologyDriving": false
+              }
+            ]
+          }
+        }
+      ],
+      "expectedCanonicalJson": "[{\"configuration\":{\"fields\":[{\"default\":false,\"description\":\"alpha-1\",\"enabledWhen\":{\"equals\":false,\"field\":\"alpha-1\"},\"key\":\"alpha-1\",\"label\":\"alpha-1\",\"maximum\":1,\"minimum\":1,\"readOnly\":false,\"required\":false,\"topologyDriving\":false,\"type\":\"bool\",\"unit\":\"alpha-1\",\"values\":[false],\"visibleWhen\":{\"equals\":false,\"field\":\"alpha-1\"}}]},\"defaultName\":\"alpha-1\",\"key\":\"alpha\",\"label\":\"alpha-1\",\"visual\":{\"border\":\"alpha-1\",\"fill\":\"alpha-1\",\"pattern\":\"alpha-1\"}},{\"configuration\":{\"fields\":[{\"default\":true,\"description\":\"mu-2\",\"enabledWhen\":null,\"key\":\"mu-2\",\"label\":\"mu-2\",\"maximum\":null,\"minimum\":null,\"readOnly\":true,\"required\":true,\"topologyDriving\":true,\"type\":\"int\",\"unit\":null,\"values\":null,\"visibleWhen\":null}]},\"defaultName\":\"mu-2\",\"key\":\"mu\",\"label\":\"mu-2\",\"visual\":{\"border\":\"mu-2\",\"fill\":\"mu-2\",\"pattern\":\"mu-2\"}},{\"configuration\":{\"fields\":[{\"default\":false,\"description\":\"zeta-3\",\"enabledWhen\":{\"equals\":false,\"field\":\"zeta-3\"},\"key\":\"zeta-3\",\"label\":\"zeta-3\",\"maximum\":3,\"minimum\":3,\"readOnly\":false,\"required\":false,\"topologyDriving\":false,\"type\":\"double\",\"unit\":\"zeta-3\",\"values\":[false],\"visibleWhen\":{\"equals\":false,\"field\":\"zeta-3\"}}]},\"defaultName\":\"zeta-3\",\"key\":\"zeta\",\"label\":\"zeta-3\",\"visual\":{\"border\":\"zeta-3\",\"fill\":\"zeta-3\",\"pattern\":\"zeta-3\"}}]",
+      "expectedDigest": "sha256:de60257525f3de45c01a0f58a1deeaed508a3f76b721768479f36b671b984b2d"
+    },
+    {
+      "id": "noc-side-effects-input-domains",
+      "schemaId": "ipcraft.noc-side-effects.v1",
+      "schemaPointer": "/$defs/input/properties/domains",
+      "collectionKind": "set",
+      "sortKey": [
+        "id"
+      ],
+      "inputVariants": [
+        [
+          {
+            "id": "alpha",
+            "typeKey": "alpha-1",
+            "name": "alpha-1",
+            "isDefault": false,
+            "config": {}
+          },
+          {
+            "id": "mu",
+            "typeKey": "mu-2",
+            "name": "mu-2",
+            "isDefault": true,
+            "config": {}
+          },
+          {
+            "id": "zeta",
+            "typeKey": "zeta-3",
+            "name": "zeta-3",
+            "isDefault": false,
+            "config": {}
+          }
+        ],
+        [
+          {
+            "id": "zeta",
+            "typeKey": "zeta-3",
+            "name": "zeta-3",
+            "isDefault": false,
+            "config": {}
+          },
+          {
+            "id": "mu",
+            "typeKey": "mu-2",
+            "name": "mu-2",
+            "isDefault": true,
+            "config": {}
+          },
+          {
+            "id": "alpha",
+            "typeKey": "alpha-1",
+            "name": "alpha-1",
+            "isDefault": false,
+            "config": {}
+          }
+        ],
+        [
+          {
+            "id": "mu",
+            "typeKey": "mu-2",
+            "name": "mu-2",
+            "isDefault": true,
+            "config": {}
+          },
+          {
+            "id": "zeta",
+            "typeKey": "zeta-3",
+            "name": "zeta-3",
+            "isDefault": false,
+            "config": {}
+          },
+          {
+            "id": "alpha",
+            "typeKey": "alpha-1",
+            "name": "alpha-1",
+            "isDefault": false,
+            "config": {}
+          }
+        ]
+      ],
+      "expectedRelation": "equal",
+      "expectedNormalized": [
+        {
+          "id": "alpha",
+          "typeKey": "alpha-1",
+          "name": "alpha-1",
+          "isDefault": false,
+          "config": {}
+        },
+        {
+          "id": "mu",
+          "typeKey": "mu-2",
+          "name": "mu-2",
+          "isDefault": true,
+          "config": {}
+        },
+        {
+          "id": "zeta",
+          "typeKey": "zeta-3",
+          "name": "zeta-3",
+          "isDefault": false,
+          "config": {}
+        }
+      ],
+      "expectedCanonicalJson": "[{\"config\":{},\"id\":\"alpha\",\"isDefault\":false,\"name\":\"alpha-1\",\"typeKey\":\"alpha-1\"},{\"config\":{},\"id\":\"mu\",\"isDefault\":true,\"name\":\"mu-2\",\"typeKey\":\"mu-2\"},{\"config\":{},\"id\":\"zeta\",\"isDefault\":false,\"name\":\"zeta-3\",\"typeKey\":\"zeta-3\"}]",
+      "expectedDigest": "sha256:1e97b4697901ff9af758777ca6ed87e1d01075448d6fea341256c9e2b845c1f4"
+    },
+    {
+      "id": "noc-side-effects-input-packageRelations",
+      "schemaId": "ipcraft.noc-side-effects.v1",
+      "schemaPointer": "/$defs/input/properties/packageRelations",
+      "collectionKind": "set",
+      "sortKey": [
+        "id"
+      ],
+      "inputVariants": [
+        [
+          {
+            "id": "alpha",
+            "typeKey": "alpha-1",
+            "sources": [
+              {
+                "state": "resolved",
+                "subject": {
+                  "kind": "project",
+                  "id": "alpha-1"
+                }
+              }
+            ],
+            "targets": [
+              {
+                "state": "resolved",
+                "subject": {
+                  "kind": "project",
+                  "id": "alpha-1"
+                }
+              }
+            ],
+            "data": {},
+            "extensions": [
+              {
+                "ownerLockId": "alpha-1",
+                "schema": "alpha-1",
+                "version": "alpha-1",
+                "data": {}
+              }
+            ]
+          },
+          {
+            "id": "mu",
+            "typeKey": "mu-2",
+            "sources": [
+              {
+                "state": "unresolved",
+                "intendedSubject": {
+                  "kind": "component",
+                  "id": "mu-2"
+                },
+                "reasonCode": "mu-2"
+              }
+            ],
+            "targets": [
+              {
+                "state": "unresolved",
+                "intendedSubject": {
+                  "kind": "component",
+                  "id": "mu-2"
+                },
+                "reasonCode": "mu-2"
+              }
+            ],
+            "data": {},
+            "extensions": [
+              {
+                "ownerLockId": "mu-2",
+                "schema": "mu-2",
+                "version": "mu-2",
+                "data": {}
+              }
+            ]
+          },
+          {
+            "id": "zeta",
+            "typeKey": "zeta-3",
+            "sources": [
+              {
+                "state": "resolved",
+                "subject": {
+                  "kind": "interface",
+                  "id": "zeta-3"
+                }
+              }
+            ],
+            "targets": [
+              {
+                "state": "resolved",
+                "subject": {
+                  "kind": "interface",
+                  "id": "zeta-3"
+                }
+              }
+            ],
+            "data": {},
+            "extensions": [
+              {
+                "ownerLockId": "zeta-3",
+                "schema": "zeta-3",
+                "version": "zeta-3",
+                "data": {}
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "id": "zeta",
+            "typeKey": "zeta-3",
+            "sources": [
+              {
+                "state": "resolved",
+                "subject": {
+                  "kind": "interface",
+                  "id": "zeta-3"
+                }
+              }
+            ],
+            "targets": [
+              {
+                "state": "resolved",
+                "subject": {
+                  "kind": "interface",
+                  "id": "zeta-3"
+                }
+              }
+            ],
+            "data": {},
+            "extensions": [
+              {
+                "ownerLockId": "zeta-3",
+                "schema": "zeta-3",
+                "version": "zeta-3",
+                "data": {}
+              }
+            ]
+          },
+          {
+            "id": "mu",
+            "typeKey": "mu-2",
+            "sources": [
+              {
+                "state": "unresolved",
+                "intendedSubject": {
+                  "kind": "component",
+                  "id": "mu-2"
+                },
+                "reasonCode": "mu-2"
+              }
+            ],
+            "targets": [
+              {
+                "state": "unresolved",
+                "intendedSubject": {
+                  "kind": "component",
+                  "id": "mu-2"
+                },
+                "reasonCode": "mu-2"
+              }
+            ],
+            "data": {},
+            "extensions": [
+              {
+                "ownerLockId": "mu-2",
+                "schema": "mu-2",
+                "version": "mu-2",
+                "data": {}
+              }
+            ]
+          },
+          {
+            "id": "alpha",
+            "typeKey": "alpha-1",
+            "sources": [
+              {
+                "state": "resolved",
+                "subject": {
+                  "kind": "project",
+                  "id": "alpha-1"
+                }
+              }
+            ],
+            "targets": [
+              {
+                "state": "resolved",
+                "subject": {
+                  "kind": "project",
+                  "id": "alpha-1"
+                }
+              }
+            ],
+            "data": {},
+            "extensions": [
+              {
+                "ownerLockId": "alpha-1",
+                "schema": "alpha-1",
+                "version": "alpha-1",
+                "data": {}
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "id": "mu",
+            "typeKey": "mu-2",
+            "sources": [
+              {
+                "state": "unresolved",
+                "intendedSubject": {
+                  "kind": "component",
+                  "id": "mu-2"
+                },
+                "reasonCode": "mu-2"
+              }
+            ],
+            "targets": [
+              {
+                "state": "unresolved",
+                "intendedSubject": {
+                  "kind": "component",
+                  "id": "mu-2"
+                },
+                "reasonCode": "mu-2"
+              }
+            ],
+            "data": {},
+            "extensions": [
+              {
+                "ownerLockId": "mu-2",
+                "schema": "mu-2",
+                "version": "mu-2",
+                "data": {}
+              }
+            ]
+          },
+          {
+            "id": "zeta",
+            "typeKey": "zeta-3",
+            "sources": [
+              {
+                "state": "resolved",
+                "subject": {
+                  "kind": "interface",
+                  "id": "zeta-3"
+                }
+              }
+            ],
+            "targets": [
+              {
+                "state": "resolved",
+                "subject": {
+                  "kind": "interface",
+                  "id": "zeta-3"
+                }
+              }
+            ],
+            "data": {},
+            "extensions": [
+              {
+                "ownerLockId": "zeta-3",
+                "schema": "zeta-3",
+                "version": "zeta-3",
+                "data": {}
+              }
+            ]
+          },
+          {
+            "id": "alpha",
+            "typeKey": "alpha-1",
+            "sources": [
+              {
+                "state": "resolved",
+                "subject": {
+                  "kind": "project",
+                  "id": "alpha-1"
+                }
+              }
+            ],
+            "targets": [
+              {
+                "state": "resolved",
+                "subject": {
+                  "kind": "project",
+                  "id": "alpha-1"
+                }
+              }
+            ],
+            "data": {},
+            "extensions": [
+              {
+                "ownerLockId": "alpha-1",
+                "schema": "alpha-1",
+                "version": "alpha-1",
+                "data": {}
+              }
+            ]
+          }
+        ]
+      ],
+      "expectedRelation": "equal",
+      "expectedNormalized": [
+        {
+          "id": "alpha",
+          "typeKey": "alpha-1",
+          "sources": [
+            {
+              "state": "resolved",
+              "subject": {
+                "kind": "project",
+                "id": "alpha-1"
+              }
+            }
+          ],
+          "targets": [
+            {
+              "state": "resolved",
+              "subject": {
+                "kind": "project",
+                "id": "alpha-1"
+              }
+            }
+          ],
+          "data": {},
+          "extensions": [
+            {
+              "ownerLockId": "alpha-1",
+              "schema": "alpha-1",
+              "version": "alpha-1",
+              "data": {}
+            }
+          ]
+        },
+        {
+          "id": "mu",
+          "typeKey": "mu-2",
+          "sources": [
+            {
+              "state": "unresolved",
+              "intendedSubject": {
+                "kind": "component",
+                "id": "mu-2"
+              },
+              "reasonCode": "mu-2"
+            }
+          ],
+          "targets": [
+            {
+              "state": "unresolved",
+              "intendedSubject": {
+                "kind": "component",
+                "id": "mu-2"
+              },
+              "reasonCode": "mu-2"
+            }
+          ],
+          "data": {},
+          "extensions": [
+            {
+              "ownerLockId": "mu-2",
+              "schema": "mu-2",
+              "version": "mu-2",
+              "data": {}
+            }
+          ]
+        },
+        {
+          "id": "zeta",
+          "typeKey": "zeta-3",
+          "sources": [
+            {
+              "state": "resolved",
+              "subject": {
+                "kind": "interface",
+                "id": "zeta-3"
+              }
+            }
+          ],
+          "targets": [
+            {
+              "state": "resolved",
+              "subject": {
+                "kind": "interface",
+                "id": "zeta-3"
+              }
+            }
+          ],
+          "data": {},
+          "extensions": [
+            {
+              "ownerLockId": "zeta-3",
+              "schema": "zeta-3",
+              "version": "zeta-3",
+              "data": {}
+            }
+          ]
+        }
+      ],
+      "expectedCanonicalJson": "[{\"data\":{},\"extensions\":[{\"data\":{},\"ownerLockId\":\"alpha-1\",\"schema\":\"alpha-1\",\"version\":\"alpha-1\"}],\"id\":\"alpha\",\"sources\":[{\"state\":\"resolved\",\"subject\":{\"id\":\"alpha-1\",\"kind\":\"project\"}}],\"targets\":[{\"state\":\"resolved\",\"subject\":{\"id\":\"alpha-1\",\"kind\":\"project\"}}],\"typeKey\":\"alpha-1\"},{\"data\":{},\"extensions\":[{\"data\":{},\"ownerLockId\":\"mu-2\",\"schema\":\"mu-2\",\"version\":\"mu-2\"}],\"id\":\"mu\",\"sources\":[{\"intendedSubject\":{\"id\":\"mu-2\",\"kind\":\"component\"},\"reasonCode\":\"mu-2\",\"state\":\"unresolved\"}],\"targets\":[{\"intendedSubject\":{\"id\":\"mu-2\",\"kind\":\"component\"},\"reasonCode\":\"mu-2\",\"state\":\"unresolved\"}],\"typeKey\":\"mu-2\"},{\"data\":{},\"extensions\":[{\"data\":{},\"ownerLockId\":\"zeta-3\",\"schema\":\"zeta-3\",\"version\":\"zeta-3\"}],\"id\":\"zeta\",\"sources\":[{\"state\":\"resolved\",\"subject\":{\"id\":\"zeta-3\",\"kind\":\"interface\"}}],\"targets\":[{\"state\":\"resolved\",\"subject\":{\"id\":\"zeta-3\",\"kind\":\"interface\"}}],\"typeKey\":\"zeta-3\"}]",
+      "expectedDigest": "sha256:4c366c33636bf786253283c52d46c889c699288eebdf54db06cf90b16ae758c3"
+    },
+    {
+      "id": "noc-side-effects-input-relationDeclarations",
+      "schemaId": "ipcraft.noc-side-effects.v1",
+      "schemaPointer": "/$defs/input/properties/relationDeclarations",
+      "collectionKind": "set",
+      "sortKey": [
+        "typeKey"
+      ],
+      "inputVariants": [
+        [
+          {
+            "typeKey": "alpha",
+            "ownership": "user",
+            "topologyDriving": false,
+            "sources": {
+              "kinds": [
+                "project"
+              ],
+              "minimum": 1,
+              "maximum": 1
+            },
+            "targets": {
+              "kinds": [
+                "project"
+              ],
+              "minimum": 1,
+              "maximum": 1
+            },
+            "unresolvedAllowed": false,
+            "schema": {}
+          },
+          {
+            "typeKey": "mu",
+            "ownership": "engine",
+            "topologyDriving": false,
+            "sources": {
+              "kinds": [
+                "component"
+              ],
+              "minimum": 2,
+              "maximum": 2
+            },
+            "targets": {
+              "kinds": [
+                "component"
+              ],
+              "minimum": 2,
+              "maximum": 2
+            },
+            "unresolvedAllowed": true,
+            "schema": {}
+          },
+          {
+            "typeKey": "zeta",
+            "ownership": "user",
+            "topologyDriving": false,
+            "sources": {
+              "kinds": [
+                "interface"
+              ],
+              "minimum": 3,
+              "maximum": 3
+            },
+            "targets": {
+              "kinds": [
+                "interface"
+              ],
+              "minimum": 3,
+              "maximum": 3
+            },
+            "unresolvedAllowed": false,
+            "schema": {}
+          }
+        ],
+        [
+          {
+            "typeKey": "zeta",
+            "ownership": "user",
+            "topologyDriving": false,
+            "sources": {
+              "kinds": [
+                "interface"
+              ],
+              "minimum": 3,
+              "maximum": 3
+            },
+            "targets": {
+              "kinds": [
+                "interface"
+              ],
+              "minimum": 3,
+              "maximum": 3
+            },
+            "unresolvedAllowed": false,
+            "schema": {}
+          },
+          {
+            "typeKey": "mu",
+            "ownership": "engine",
+            "topologyDriving": false,
+            "sources": {
+              "kinds": [
+                "component"
+              ],
+              "minimum": 2,
+              "maximum": 2
+            },
+            "targets": {
+              "kinds": [
+                "component"
+              ],
+              "minimum": 2,
+              "maximum": 2
+            },
+            "unresolvedAllowed": true,
+            "schema": {}
+          },
+          {
+            "typeKey": "alpha",
+            "ownership": "user",
+            "topologyDriving": false,
+            "sources": {
+              "kinds": [
+                "project"
+              ],
+              "minimum": 1,
+              "maximum": 1
+            },
+            "targets": {
+              "kinds": [
+                "project"
+              ],
+              "minimum": 1,
+              "maximum": 1
+            },
+            "unresolvedAllowed": false,
+            "schema": {}
+          }
+        ],
+        [
+          {
+            "typeKey": "mu",
+            "ownership": "engine",
+            "topologyDriving": false,
+            "sources": {
+              "kinds": [
+                "component"
+              ],
+              "minimum": 2,
+              "maximum": 2
+            },
+            "targets": {
+              "kinds": [
+                "component"
+              ],
+              "minimum": 2,
+              "maximum": 2
+            },
+            "unresolvedAllowed": true,
+            "schema": {}
+          },
+          {
+            "typeKey": "zeta",
+            "ownership": "user",
+            "topologyDriving": false,
+            "sources": {
+              "kinds": [
+                "interface"
+              ],
+              "minimum": 3,
+              "maximum": 3
+            },
+            "targets": {
+              "kinds": [
+                "interface"
+              ],
+              "minimum": 3,
+              "maximum": 3
+            },
+            "unresolvedAllowed": false,
+            "schema": {}
+          },
+          {
+            "typeKey": "alpha",
+            "ownership": "user",
+            "topologyDriving": false,
+            "sources": {
+              "kinds": [
+                "project"
+              ],
+              "minimum": 1,
+              "maximum": 1
+            },
+            "targets": {
+              "kinds": [
+                "project"
+              ],
+              "minimum": 1,
+              "maximum": 1
+            },
+            "unresolvedAllowed": false,
+            "schema": {}
+          }
+        ]
+      ],
+      "expectedRelation": "equal",
+      "expectedNormalized": [
+        {
+          "typeKey": "alpha",
+          "ownership": "user",
+          "topologyDriving": false,
+          "sources": {
+            "kinds": [
+              "project"
+            ],
+            "minimum": 1,
+            "maximum": 1
+          },
+          "targets": {
+            "kinds": [
+              "project"
+            ],
+            "minimum": 1,
+            "maximum": 1
+          },
+          "unresolvedAllowed": false,
+          "schema": {}
+        },
+        {
+          "typeKey": "mu",
+          "ownership": "engine",
+          "topologyDriving": false,
+          "sources": {
+            "kinds": [
+              "component"
+            ],
+            "minimum": 2,
+            "maximum": 2
+          },
+          "targets": {
+            "kinds": [
+              "component"
+            ],
+            "minimum": 2,
+            "maximum": 2
+          },
+          "unresolvedAllowed": true,
+          "schema": {}
+        },
+        {
+          "typeKey": "zeta",
+          "ownership": "user",
+          "topologyDriving": false,
+          "sources": {
+            "kinds": [
+              "interface"
+            ],
+            "minimum": 3,
+            "maximum": 3
+          },
+          "targets": {
+            "kinds": [
+              "interface"
+            ],
+            "minimum": 3,
+            "maximum": 3
+          },
+          "unresolvedAllowed": false,
+          "schema": {}
+        }
+      ],
+      "expectedCanonicalJson": "[{\"ownership\":\"user\",\"schema\":{},\"sources\":{\"kinds\":[\"project\"],\"maximum\":1,\"minimum\":1},\"targets\":{\"kinds\":[\"project\"],\"maximum\":1,\"minimum\":1},\"topologyDriving\":false,\"typeKey\":\"alpha\",\"unresolvedAllowed\":false},{\"ownership\":\"engine\",\"schema\":{},\"sources\":{\"kinds\":[\"component\"],\"maximum\":2,\"minimum\":2},\"targets\":{\"kinds\":[\"component\"],\"maximum\":2,\"minimum\":2},\"topologyDriving\":false,\"typeKey\":\"mu\",\"unresolvedAllowed\":true},{\"ownership\":\"user\",\"schema\":{},\"sources\":{\"kinds\":[\"interface\"],\"maximum\":3,\"minimum\":3},\"targets\":{\"kinds\":[\"interface\"],\"maximum\":3,\"minimum\":3},\"topologyDriving\":false,\"typeKey\":\"zeta\",\"unresolvedAllowed\":false}]",
+      "expectedDigest": "sha256:c4348eae0d87aef761c6182b73b494e48531079fd53deda740d630d50bcbc3ba"
+    },
+    {
       "id": "patch-preconditions",
       "schemaId": "ipcraft.patch.v1",
       "schemaPointer": "/properties/preconditions",
@@ -12182,8 +13662,9 @@
             "id": "mu-2",
             "version": "mu-2",
             "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-            "engineHostContractVersion": "ipcraft.engine-host.v1",
+            "engineHostContractVersion": "mu-2",
             "engineCompatibilityVersion": "mu-2",
+            "hostSideEffectContractVersion": "mu-2",
             "supportedPlatformAbis": [
               "mu-2"
             ]
@@ -12214,8 +13695,9 @@
             "id": "mu-2",
             "version": "mu-2",
             "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-            "engineHostContractVersion": "ipcraft.engine-host.v1",
+            "engineHostContractVersion": "mu-2",
             "engineCompatibilityVersion": "mu-2",
+            "hostSideEffectContractVersion": "mu-2",
             "supportedPlatformAbis": [
               "mu-2"
             ]
@@ -12235,8 +13717,9 @@
             "id": "mu-2",
             "version": "mu-2",
             "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-            "engineHostContractVersion": "ipcraft.engine-host.v1",
+            "engineHostContractVersion": "mu-2",
             "engineCompatibilityVersion": "mu-2",
+            "hostSideEffectContractVersion": "mu-2",
             "supportedPlatformAbis": [
               "mu-2"
             ]
@@ -12274,8 +13757,9 @@
           "id": "mu-2",
           "version": "mu-2",
           "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-          "engineHostContractVersion": "ipcraft.engine-host.v1",
+          "engineHostContractVersion": "mu-2",
           "engineCompatibilityVersion": "mu-2",
+          "hostSideEffectContractVersion": "mu-2",
           "supportedPlatformAbis": [
             "mu-2"
           ]
@@ -12290,8 +13774,8 @@
           "runtimeLockId": "zeta-3"
         }
       ],
-      "expectedCanonicalJson": "[{\"bundleManifestDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"id\":\"alpha-1\",\"kind\":\"noc-package\",\"lockId\":\"alpha\",\"version\":\"alpha-1\"},{\"bundleManifestDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"engineCompatibilityVersion\":\"mu-2\",\"engineHostContractVersion\":\"ipcraft.engine-host.v1\",\"id\":\"mu-2\",\"kind\":\"default-engine\",\"lockId\":\"mu\",\"supportedPlatformAbis\":[\"mu-2\"],\"version\":\"mu-2\"},{\"bundleManifestDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"id\":\"zeta-3\",\"kind\":\"extension-provider\",\"lockId\":\"zeta\",\"protocolVersion\":\"ipcraft.provider-protocol.v1\",\"runtimeLockId\":\"zeta-3\",\"version\":\"zeta-3\"}]",
-      "expectedDigest": "sha256:e2a9577d17f2ec7d266efa61485cb8cf47222ff6d31defeb95b3274b2d63cf95"
+      "expectedCanonicalJson": "[{\"bundleManifestDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"id\":\"alpha-1\",\"kind\":\"noc-package\",\"lockId\":\"alpha\",\"version\":\"alpha-1\"},{\"bundleManifestDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"engineCompatibilityVersion\":\"mu-2\",\"engineHostContractVersion\":\"mu-2\",\"hostSideEffectContractVersion\":\"mu-2\",\"id\":\"mu-2\",\"kind\":\"default-engine\",\"lockId\":\"mu\",\"supportedPlatformAbis\":[\"mu-2\"],\"version\":\"mu-2\"},{\"bundleManifestDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"id\":\"zeta-3\",\"kind\":\"extension-provider\",\"lockId\":\"zeta\",\"protocolVersion\":\"ipcraft.provider-protocol.v1\",\"runtimeLockId\":\"zeta-3\",\"version\":\"zeta-3\"}]",
+      "expectedDigest": "sha256:981f385c7037b6cfd95a5fcaaef21152c7c723fd8fc4dcee7991f20ddce51592"
     },
     {
       "id": "project-design-extensions",
@@ -12759,8 +14243,8 @@
               "reconcileDependencySetDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
               "defaultEngineLockId": "alpha-1",
               "defaultEngineBundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-              "engineHostContractVersion": "ipcraft.engine-host.v1",
-              "hostSideEffectContractVersion": "ipcraft.noc-side-effects.v1",
+              "engineHostContractVersion": "alpha-1",
+              "hostSideEffectContractVersion": "alpha-1",
               "structureAuthority": {
                 "kind": "default-engine",
                 "lockId": "alpha-1",
@@ -12909,8 +14393,8 @@
               "reconcileDependencySetDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
               "defaultEngineLockId": "mu-2",
               "defaultEngineBundleDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-              "engineHostContractVersion": "ipcraft.engine-host.v1",
-              "hostSideEffectContractVersion": "ipcraft.noc-side-effects.v1",
+              "engineHostContractVersion": "mu-2",
+              "hostSideEffectContractVersion": "mu-2",
               "structureAuthority": {
                 "kind": "extension-provider",
                 "lockId": "mu-2",
@@ -13064,8 +14548,8 @@
               "reconcileDependencySetDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
               "defaultEngineLockId": "zeta-3",
               "defaultEngineBundleDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-              "engineHostContractVersion": "ipcraft.engine-host.v1",
-              "hostSideEffectContractVersion": "ipcraft.noc-side-effects.v1",
+              "engineHostContractVersion": "zeta-3",
+              "hostSideEffectContractVersion": "zeta-3",
               "structureAuthority": {
                 "kind": "default-engine",
                 "lockId": "zeta-3",
@@ -13216,8 +14700,8 @@
               "reconcileDependencySetDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
               "defaultEngineLockId": "zeta-3",
               "defaultEngineBundleDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-              "engineHostContractVersion": "ipcraft.engine-host.v1",
-              "hostSideEffectContractVersion": "ipcraft.noc-side-effects.v1",
+              "engineHostContractVersion": "zeta-3",
+              "hostSideEffectContractVersion": "zeta-3",
               "structureAuthority": {
                 "kind": "default-engine",
                 "lockId": "zeta-3",
@@ -13366,8 +14850,8 @@
               "reconcileDependencySetDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
               "defaultEngineLockId": "mu-2",
               "defaultEngineBundleDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-              "engineHostContractVersion": "ipcraft.engine-host.v1",
-              "hostSideEffectContractVersion": "ipcraft.noc-side-effects.v1",
+              "engineHostContractVersion": "mu-2",
+              "hostSideEffectContractVersion": "mu-2",
               "structureAuthority": {
                 "kind": "extension-provider",
                 "lockId": "mu-2",
@@ -13521,8 +15005,8 @@
               "reconcileDependencySetDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
               "defaultEngineLockId": "alpha-1",
               "defaultEngineBundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-              "engineHostContractVersion": "ipcraft.engine-host.v1",
-              "hostSideEffectContractVersion": "ipcraft.noc-side-effects.v1",
+              "engineHostContractVersion": "alpha-1",
+              "hostSideEffectContractVersion": "alpha-1",
               "structureAuthority": {
                 "kind": "default-engine",
                 "lockId": "alpha-1",
@@ -13673,8 +15157,8 @@
               "reconcileDependencySetDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
               "defaultEngineLockId": "mu-2",
               "defaultEngineBundleDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-              "engineHostContractVersion": "ipcraft.engine-host.v1",
-              "hostSideEffectContractVersion": "ipcraft.noc-side-effects.v1",
+              "engineHostContractVersion": "mu-2",
+              "hostSideEffectContractVersion": "mu-2",
               "structureAuthority": {
                 "kind": "extension-provider",
                 "lockId": "mu-2",
@@ -13828,8 +15312,8 @@
               "reconcileDependencySetDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
               "defaultEngineLockId": "zeta-3",
               "defaultEngineBundleDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-              "engineHostContractVersion": "ipcraft.engine-host.v1",
-              "hostSideEffectContractVersion": "ipcraft.noc-side-effects.v1",
+              "engineHostContractVersion": "zeta-3",
+              "hostSideEffectContractVersion": "zeta-3",
               "structureAuthority": {
                 "kind": "default-engine",
                 "lockId": "zeta-3",
@@ -13978,8 +15462,8 @@
               "reconcileDependencySetDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
               "defaultEngineLockId": "alpha-1",
               "defaultEngineBundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-              "engineHostContractVersion": "ipcraft.engine-host.v1",
-              "hostSideEffectContractVersion": "ipcraft.noc-side-effects.v1",
+              "engineHostContractVersion": "alpha-1",
+              "hostSideEffectContractVersion": "alpha-1",
               "structureAuthority": {
                 "kind": "default-engine",
                 "lockId": "alpha-1",
@@ -14132,8 +15616,8 @@
             "reconcileDependencySetDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             "defaultEngineLockId": "alpha-1",
             "defaultEngineBundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            "engineHostContractVersion": "ipcraft.engine-host.v1",
-            "hostSideEffectContractVersion": "ipcraft.noc-side-effects.v1",
+            "engineHostContractVersion": "alpha-1",
+            "hostSideEffectContractVersion": "alpha-1",
             "structureAuthority": {
               "kind": "default-engine",
               "lockId": "alpha-1",
@@ -14282,8 +15766,8 @@
             "reconcileDependencySetDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             "defaultEngineLockId": "mu-2",
             "defaultEngineBundleDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-            "engineHostContractVersion": "ipcraft.engine-host.v1",
-            "hostSideEffectContractVersion": "ipcraft.noc-side-effects.v1",
+            "engineHostContractVersion": "mu-2",
+            "hostSideEffectContractVersion": "mu-2",
             "structureAuthority": {
               "kind": "extension-provider",
               "lockId": "mu-2",
@@ -14437,8 +15921,8 @@
             "reconcileDependencySetDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
             "defaultEngineLockId": "zeta-3",
             "defaultEngineBundleDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-            "engineHostContractVersion": "ipcraft.engine-host.v1",
-            "hostSideEffectContractVersion": "ipcraft.noc-side-effects.v1",
+            "engineHostContractVersion": "zeta-3",
+            "hostSideEffectContractVersion": "zeta-3",
             "structureAuthority": {
               "kind": "default-engine",
               "lockId": "zeta-3",
@@ -14574,8 +16058,8 @@
           ]
         }
       ],
-      "expectedCanonicalJson": "[{\"accessSlots\":[{\"allowedContracts\":[{\"capabilityConstraints\":{},\"contractLockId\":\"alpha-1\",\"roles\":[\"alpha-1\"]}],\"displayOrder\":1,\"id\":\"alpha-1\",\"identityCompatibilityVersion\":1,\"label\":\"alpha-1\",\"properties\":{},\"routerId\":\"alpha-1\",\"templateKey\":\"alpha-1\"}],\"attachments\":[{\"id\":\"alpha-1\",\"interfaceId\":\"alpha-1\",\"routerId\":\"alpha-1\",\"slotId\":\"alpha-1\",\"state\":\"resolved\"}],\"derivation\":{\"defaultEngineBundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"defaultEngineLockId\":\"alpha-1\",\"derivedStateDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"derivedStateRevision\":1,\"engineCompatibilityVersion\":\"alpha-1\",\"engineHostContractVersion\":\"ipcraft.engine-host.v1\",\"hostSideEffectContractVersion\":\"ipcraft.noc-side-effects.v1\",\"packageBundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"reconcileDependencySetDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"structureAuthority\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"alpha-1\",\"kind\":\"default-engine\",\"lockId\":\"alpha-1\",\"version\":\"alpha-1\"},\"topologyInputDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"topologyInputRevision\":1},\"domainMemberships\":[{\"domainId\":\"alpha-1\",\"id\":\"alpha-1\",\"routerId\":\"alpha-1\"}],\"domains\":[{\"config\":{},\"id\":\"alpha-1\",\"isDefault\":false,\"name\":\"alpha-1\",\"typeKey\":\"alpha-1\"}],\"extensions\":[{\"data\":{},\"ownerLockId\":\"alpha-1\",\"schema\":\"alpha-1\",\"version\":\"alpha-1\"}],\"id\":\"alpha\",\"kind\":\"mesh\",\"ownerComponentId\":\"alpha-1\",\"packageEntities\":[{\"data\":{},\"extensions\":[{\"data\":{},\"ownerLockId\":\"alpha-1\",\"schema\":\"alpha-1\",\"version\":\"alpha-1\"}],\"id\":\"alpha-1\",\"typeKey\":\"alpha-1\"}],\"packageRelations\":[{\"data\":{},\"extensions\":[{\"data\":{},\"ownerLockId\":\"alpha-1\",\"schema\":\"alpha-1\",\"version\":\"alpha-1\"}],\"id\":\"alpha-1\",\"sources\":[{\"state\":\"resolved\",\"subject\":{\"id\":\"alpha-1\",\"kind\":\"project\"}}],\"targets\":[{\"state\":\"resolved\",\"subject\":{\"id\":\"alpha-1\",\"kind\":\"project\"}}],\"typeKey\":\"alpha-1\"}],\"routers\":[{\"coordinate\":{\"column\":1,\"row\":1},\"id\":\"alpha-1\",\"identityCompatibilityVersion\":1,\"properties\":{},\"templateKey\":\"alpha-1\"}],\"structuralLinks\":[{\"axis\":\"horizontal\",\"endpointA\":\"alpha-1\",\"endpointB\":\"alpha-1\",\"id\":\"alpha-1\",\"identityCompatibilityVersion\":1,\"properties\":{},\"templateKey\":\"alpha-1\"}],\"templateKey\":\"alpha-1\"},{\"accessSlots\":[{\"allowedContracts\":[{\"capabilityConstraints\":{},\"contractLockId\":\"mu-2\",\"roles\":[\"mu-2\"]}],\"displayOrder\":2,\"id\":\"mu-2\",\"identityCompatibilityVersion\":2,\"label\":\"mu-2\",\"properties\":{},\"routerId\":\"mu-2\",\"templateKey\":\"mu-2\"}],\"attachments\":[{\"id\":\"mu-2\",\"intendedTarget\":{\"routerId\":\"mu-2\",\"slotId\":\"mu-2\"},\"interfaceId\":\"mu-2\",\"reasonCode\":\"mu-2\",\"state\":\"unresolved\"}],\"derivation\":{\"defaultEngineBundleDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"defaultEngineLockId\":\"mu-2\",\"derivedStateDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"derivedStateRevision\":2,\"engineCompatibilityVersion\":\"mu-2\",\"engineHostContractVersion\":\"ipcraft.engine-host.v1\",\"hostSideEffectContractVersion\":\"ipcraft.noc-side-effects.v1\",\"packageBundleDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"reconcileDependencySetDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"structureAuthority\":{\"bundleDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"identity\":\"mu-2\",\"kind\":\"extension-provider\",\"lockId\":\"mu-2\",\"version\":\"mu-2\"},\"topologyInputDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"topologyInputRevision\":2},\"domainMemberships\":[{\"domainId\":\"mu-2\",\"id\":\"mu-2\",\"routerId\":\"mu-2\"}],\"domains\":[{\"config\":{},\"id\":\"mu-2\",\"isDefault\":true,\"name\":\"mu-2\",\"typeKey\":\"mu-2\"}],\"extensions\":[{\"data\":{},\"ownerLockId\":\"mu-2\",\"schema\":\"mu-2\",\"version\":\"mu-2\"}],\"id\":\"mu\",\"kind\":\"mesh\",\"ownerComponentId\":\"mu-2\",\"packageEntities\":[{\"data\":{},\"extensions\":[{\"data\":{},\"ownerLockId\":\"mu-2\",\"schema\":\"mu-2\",\"version\":\"mu-2\"}],\"id\":\"mu-2\",\"typeKey\":\"mu-2\"}],\"packageRelations\":[{\"data\":{},\"extensions\":[{\"data\":{},\"ownerLockId\":\"mu-2\",\"schema\":\"mu-2\",\"version\":\"mu-2\"}],\"id\":\"mu-2\",\"sources\":[{\"intendedSubject\":{\"id\":\"mu-2\",\"kind\":\"component\"},\"reasonCode\":\"mu-2\",\"state\":\"unresolved\"}],\"targets\":[{\"intendedSubject\":{\"id\":\"mu-2\",\"kind\":\"component\"},\"reasonCode\":\"mu-2\",\"state\":\"unresolved\"}],\"typeKey\":\"mu-2\"}],\"routers\":[{\"coordinate\":{\"column\":2,\"row\":2},\"id\":\"mu-2\",\"identityCompatibilityVersion\":2,\"properties\":{},\"templateKey\":\"mu-2\"}],\"structuralLinks\":[{\"axis\":\"vertical\",\"endpointA\":\"mu-2\",\"endpointB\":\"mu-2\",\"id\":\"mu-2\",\"identityCompatibilityVersion\":2,\"properties\":{},\"templateKey\":\"mu-2\"}],\"templateKey\":\"mu-2\"},{\"accessSlots\":[{\"allowedContracts\":[{\"capabilityConstraints\":{},\"contractLockId\":\"zeta-3\",\"roles\":[\"zeta-3\"]}],\"displayOrder\":3,\"id\":\"zeta-3\",\"identityCompatibilityVersion\":3,\"label\":\"zeta-3\",\"properties\":{},\"routerId\":\"zeta-3\",\"templateKey\":\"zeta-3\"}],\"attachments\":[{\"id\":\"zeta-3\",\"interfaceId\":\"zeta-3\",\"routerId\":\"zeta-3\",\"slotId\":\"zeta-3\",\"state\":\"resolved\"}],\"derivation\":{\"defaultEngineBundleDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"defaultEngineLockId\":\"zeta-3\",\"derivedStateDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"derivedStateRevision\":3,\"engineCompatibilityVersion\":\"zeta-3\",\"engineHostContractVersion\":\"ipcraft.engine-host.v1\",\"hostSideEffectContractVersion\":\"ipcraft.noc-side-effects.v1\",\"packageBundleDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"reconcileDependencySetDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"structureAuthority\":{\"bundleDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"identity\":\"zeta-3\",\"kind\":\"default-engine\",\"lockId\":\"zeta-3\",\"version\":\"zeta-3\"},\"topologyInputDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"topologyInputRevision\":3},\"domainMemberships\":[{\"domainId\":\"zeta-3\",\"id\":\"zeta-3\",\"routerId\":\"zeta-3\"}],\"domains\":[{\"config\":{},\"id\":\"zeta-3\",\"isDefault\":false,\"name\":\"zeta-3\",\"typeKey\":\"zeta-3\"}],\"extensions\":[{\"data\":{},\"ownerLockId\":\"zeta-3\",\"schema\":\"zeta-3\",\"version\":\"zeta-3\"}],\"id\":\"zeta\",\"kind\":\"mesh\",\"ownerComponentId\":\"zeta-3\",\"packageEntities\":[{\"data\":{},\"extensions\":[{\"data\":{},\"ownerLockId\":\"zeta-3\",\"schema\":\"zeta-3\",\"version\":\"zeta-3\"}],\"id\":\"zeta-3\",\"typeKey\":\"zeta-3\"}],\"packageRelations\":[{\"data\":{},\"extensions\":[{\"data\":{},\"ownerLockId\":\"zeta-3\",\"schema\":\"zeta-3\",\"version\":\"zeta-3\"}],\"id\":\"zeta-3\",\"sources\":[{\"state\":\"resolved\",\"subject\":{\"id\":\"zeta-3\",\"kind\":\"interface\"}}],\"targets\":[{\"state\":\"resolved\",\"subject\":{\"id\":\"zeta-3\",\"kind\":\"interface\"}}],\"typeKey\":\"zeta-3\"}],\"routers\":[{\"coordinate\":{\"column\":3,\"row\":3},\"id\":\"zeta-3\",\"identityCompatibilityVersion\":3,\"properties\":{},\"templateKey\":\"zeta-3\"}],\"structuralLinks\":[{\"axis\":\"horizontal\",\"endpointA\":\"zeta-3\",\"endpointB\":\"zeta-3\",\"id\":\"zeta-3\",\"identityCompatibilityVersion\":3,\"properties\":{},\"templateKey\":\"zeta-3\"}],\"templateKey\":\"zeta-3\"}]",
-      "expectedDigest": "sha256:f135c853918ebdc4e011104e958259b0bbb5852ff751384bc3d243ff1d7cfb30"
+      "expectedCanonicalJson": "[{\"accessSlots\":[{\"allowedContracts\":[{\"capabilityConstraints\":{},\"contractLockId\":\"alpha-1\",\"roles\":[\"alpha-1\"]}],\"displayOrder\":1,\"id\":\"alpha-1\",\"identityCompatibilityVersion\":1,\"label\":\"alpha-1\",\"properties\":{},\"routerId\":\"alpha-1\",\"templateKey\":\"alpha-1\"}],\"attachments\":[{\"id\":\"alpha-1\",\"interfaceId\":\"alpha-1\",\"routerId\":\"alpha-1\",\"slotId\":\"alpha-1\",\"state\":\"resolved\"}],\"derivation\":{\"defaultEngineBundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"defaultEngineLockId\":\"alpha-1\",\"derivedStateDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"derivedStateRevision\":1,\"engineCompatibilityVersion\":\"alpha-1\",\"engineHostContractVersion\":\"alpha-1\",\"hostSideEffectContractVersion\":\"alpha-1\",\"packageBundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"reconcileDependencySetDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"structureAuthority\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"alpha-1\",\"kind\":\"default-engine\",\"lockId\":\"alpha-1\",\"version\":\"alpha-1\"},\"topologyInputDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"topologyInputRevision\":1},\"domainMemberships\":[{\"domainId\":\"alpha-1\",\"id\":\"alpha-1\",\"routerId\":\"alpha-1\"}],\"domains\":[{\"config\":{},\"id\":\"alpha-1\",\"isDefault\":false,\"name\":\"alpha-1\",\"typeKey\":\"alpha-1\"}],\"extensions\":[{\"data\":{},\"ownerLockId\":\"alpha-1\",\"schema\":\"alpha-1\",\"version\":\"alpha-1\"}],\"id\":\"alpha\",\"kind\":\"mesh\",\"ownerComponentId\":\"alpha-1\",\"packageEntities\":[{\"data\":{},\"extensions\":[{\"data\":{},\"ownerLockId\":\"alpha-1\",\"schema\":\"alpha-1\",\"version\":\"alpha-1\"}],\"id\":\"alpha-1\",\"typeKey\":\"alpha-1\"}],\"packageRelations\":[{\"data\":{},\"extensions\":[{\"data\":{},\"ownerLockId\":\"alpha-1\",\"schema\":\"alpha-1\",\"version\":\"alpha-1\"}],\"id\":\"alpha-1\",\"sources\":[{\"state\":\"resolved\",\"subject\":{\"id\":\"alpha-1\",\"kind\":\"project\"}}],\"targets\":[{\"state\":\"resolved\",\"subject\":{\"id\":\"alpha-1\",\"kind\":\"project\"}}],\"typeKey\":\"alpha-1\"}],\"routers\":[{\"coordinate\":{\"column\":1,\"row\":1},\"id\":\"alpha-1\",\"identityCompatibilityVersion\":1,\"properties\":{},\"templateKey\":\"alpha-1\"}],\"structuralLinks\":[{\"axis\":\"horizontal\",\"endpointA\":\"alpha-1\",\"endpointB\":\"alpha-1\",\"id\":\"alpha-1\",\"identityCompatibilityVersion\":1,\"properties\":{},\"templateKey\":\"alpha-1\"}],\"templateKey\":\"alpha-1\"},{\"accessSlots\":[{\"allowedContracts\":[{\"capabilityConstraints\":{},\"contractLockId\":\"mu-2\",\"roles\":[\"mu-2\"]}],\"displayOrder\":2,\"id\":\"mu-2\",\"identityCompatibilityVersion\":2,\"label\":\"mu-2\",\"properties\":{},\"routerId\":\"mu-2\",\"templateKey\":\"mu-2\"}],\"attachments\":[{\"id\":\"mu-2\",\"intendedTarget\":{\"routerId\":\"mu-2\",\"slotId\":\"mu-2\"},\"interfaceId\":\"mu-2\",\"reasonCode\":\"mu-2\",\"state\":\"unresolved\"}],\"derivation\":{\"defaultEngineBundleDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"defaultEngineLockId\":\"mu-2\",\"derivedStateDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"derivedStateRevision\":2,\"engineCompatibilityVersion\":\"mu-2\",\"engineHostContractVersion\":\"mu-2\",\"hostSideEffectContractVersion\":\"mu-2\",\"packageBundleDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"reconcileDependencySetDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"structureAuthority\":{\"bundleDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"identity\":\"mu-2\",\"kind\":\"extension-provider\",\"lockId\":\"mu-2\",\"version\":\"mu-2\"},\"topologyInputDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"topologyInputRevision\":2},\"domainMemberships\":[{\"domainId\":\"mu-2\",\"id\":\"mu-2\",\"routerId\":\"mu-2\"}],\"domains\":[{\"config\":{},\"id\":\"mu-2\",\"isDefault\":true,\"name\":\"mu-2\",\"typeKey\":\"mu-2\"}],\"extensions\":[{\"data\":{},\"ownerLockId\":\"mu-2\",\"schema\":\"mu-2\",\"version\":\"mu-2\"}],\"id\":\"mu\",\"kind\":\"mesh\",\"ownerComponentId\":\"mu-2\",\"packageEntities\":[{\"data\":{},\"extensions\":[{\"data\":{},\"ownerLockId\":\"mu-2\",\"schema\":\"mu-2\",\"version\":\"mu-2\"}],\"id\":\"mu-2\",\"typeKey\":\"mu-2\"}],\"packageRelations\":[{\"data\":{},\"extensions\":[{\"data\":{},\"ownerLockId\":\"mu-2\",\"schema\":\"mu-2\",\"version\":\"mu-2\"}],\"id\":\"mu-2\",\"sources\":[{\"intendedSubject\":{\"id\":\"mu-2\",\"kind\":\"component\"},\"reasonCode\":\"mu-2\",\"state\":\"unresolved\"}],\"targets\":[{\"intendedSubject\":{\"id\":\"mu-2\",\"kind\":\"component\"},\"reasonCode\":\"mu-2\",\"state\":\"unresolved\"}],\"typeKey\":\"mu-2\"}],\"routers\":[{\"coordinate\":{\"column\":2,\"row\":2},\"id\":\"mu-2\",\"identityCompatibilityVersion\":2,\"properties\":{},\"templateKey\":\"mu-2\"}],\"structuralLinks\":[{\"axis\":\"vertical\",\"endpointA\":\"mu-2\",\"endpointB\":\"mu-2\",\"id\":\"mu-2\",\"identityCompatibilityVersion\":2,\"properties\":{},\"templateKey\":\"mu-2\"}],\"templateKey\":\"mu-2\"},{\"accessSlots\":[{\"allowedContracts\":[{\"capabilityConstraints\":{},\"contractLockId\":\"zeta-3\",\"roles\":[\"zeta-3\"]}],\"displayOrder\":3,\"id\":\"zeta-3\",\"identityCompatibilityVersion\":3,\"label\":\"zeta-3\",\"properties\":{},\"routerId\":\"zeta-3\",\"templateKey\":\"zeta-3\"}],\"attachments\":[{\"id\":\"zeta-3\",\"interfaceId\":\"zeta-3\",\"routerId\":\"zeta-3\",\"slotId\":\"zeta-3\",\"state\":\"resolved\"}],\"derivation\":{\"defaultEngineBundleDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"defaultEngineLockId\":\"zeta-3\",\"derivedStateDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"derivedStateRevision\":3,\"engineCompatibilityVersion\":\"zeta-3\",\"engineHostContractVersion\":\"zeta-3\",\"hostSideEffectContractVersion\":\"zeta-3\",\"packageBundleDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"reconcileDependencySetDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"structureAuthority\":{\"bundleDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"identity\":\"zeta-3\",\"kind\":\"default-engine\",\"lockId\":\"zeta-3\",\"version\":\"zeta-3\"},\"topologyInputDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"topologyInputRevision\":3},\"domainMemberships\":[{\"domainId\":\"zeta-3\",\"id\":\"zeta-3\",\"routerId\":\"zeta-3\"}],\"domains\":[{\"config\":{},\"id\":\"zeta-3\",\"isDefault\":false,\"name\":\"zeta-3\",\"typeKey\":\"zeta-3\"}],\"extensions\":[{\"data\":{},\"ownerLockId\":\"zeta-3\",\"schema\":\"zeta-3\",\"version\":\"zeta-3\"}],\"id\":\"zeta\",\"kind\":\"mesh\",\"ownerComponentId\":\"zeta-3\",\"packageEntities\":[{\"data\":{},\"extensions\":[{\"data\":{},\"ownerLockId\":\"zeta-3\",\"schema\":\"zeta-3\",\"version\":\"zeta-3\"}],\"id\":\"zeta-3\",\"typeKey\":\"zeta-3\"}],\"packageRelations\":[{\"data\":{},\"extensions\":[{\"data\":{},\"ownerLockId\":\"zeta-3\",\"schema\":\"zeta-3\",\"version\":\"zeta-3\"}],\"id\":\"zeta-3\",\"sources\":[{\"state\":\"resolved\",\"subject\":{\"id\":\"zeta-3\",\"kind\":\"interface\"}}],\"targets\":[{\"state\":\"resolved\",\"subject\":{\"id\":\"zeta-3\",\"kind\":\"interface\"}}],\"typeKey\":\"zeta-3\"}],\"routers\":[{\"coordinate\":{\"column\":3,\"row\":3},\"id\":\"zeta-3\",\"identityCompatibilityVersion\":3,\"properties\":{},\"templateKey\":\"zeta-3\"}],\"structuralLinks\":[{\"axis\":\"horizontal\",\"endpointA\":\"zeta-3\",\"endpointB\":\"zeta-3\",\"id\":\"zeta-3\",\"identityCompatibilityVersion\":3,\"properties\":{},\"templateKey\":\"zeta-3\"}],\"templateKey\":\"zeta-3\"}]",
+      "expectedDigest": "sha256:145643de9d01aea7f2ce049ba0ff74e65ad79df5386142695e0a725efc641dc0"
     },
     {
       "id": "project-design-views",
@@ -17042,8 +18526,9 @@
             "id": "mu-2",
             "version": "mu-2",
             "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-            "engineHostContractVersion": "ipcraft.engine-host.v1",
+            "engineHostContractVersion": "mu-2",
             "engineCompatibilityVersion": "mu-2",
+            "hostSideEffectContractVersion": "mu-2",
             "supportedPlatformAbis": [
               "mu-2"
             ]
@@ -17074,8 +18559,9 @@
             "id": "mu-2",
             "version": "mu-2",
             "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-            "engineHostContractVersion": "ipcraft.engine-host.v1",
+            "engineHostContractVersion": "mu-2",
             "engineCompatibilityVersion": "mu-2",
+            "hostSideEffectContractVersion": "mu-2",
             "supportedPlatformAbis": [
               "mu-2"
             ]
@@ -17095,8 +18581,9 @@
             "id": "mu-2",
             "version": "mu-2",
             "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-            "engineHostContractVersion": "ipcraft.engine-host.v1",
+            "engineHostContractVersion": "mu-2",
             "engineCompatibilityVersion": "mu-2",
+            "hostSideEffectContractVersion": "mu-2",
             "supportedPlatformAbis": [
               "mu-2"
             ]
@@ -17134,8 +18621,9 @@
           "id": "mu-2",
           "version": "mu-2",
           "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-          "engineHostContractVersion": "ipcraft.engine-host.v1",
+          "engineHostContractVersion": "mu-2",
           "engineCompatibilityVersion": "mu-2",
+          "hostSideEffectContractVersion": "mu-2",
           "supportedPlatformAbis": [
             "mu-2"
           ]
@@ -17150,8 +18638,8 @@
           "runtimeLockId": "zeta-3"
         }
       ],
-      "expectedCanonicalJson": "[{\"bundleManifestDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"id\":\"alpha-1\",\"kind\":\"noc-package\",\"lockId\":\"alpha\",\"version\":\"alpha-1\"},{\"bundleManifestDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"engineCompatibilityVersion\":\"mu-2\",\"engineHostContractVersion\":\"ipcraft.engine-host.v1\",\"id\":\"mu-2\",\"kind\":\"default-engine\",\"lockId\":\"mu\",\"supportedPlatformAbis\":[\"mu-2\"],\"version\":\"mu-2\"},{\"bundleManifestDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"id\":\"zeta-3\",\"kind\":\"extension-provider\",\"lockId\":\"zeta\",\"protocolVersion\":\"ipcraft.provider-protocol.v1\",\"runtimeLockId\":\"zeta-3\",\"version\":\"zeta-3\"}]",
-      "expectedDigest": "sha256:e2a9577d17f2ec7d266efa61485cb8cf47222ff6d31defeb95b3274b2d63cf95"
+      "expectedCanonicalJson": "[{\"bundleManifestDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"id\":\"alpha-1\",\"kind\":\"noc-package\",\"lockId\":\"alpha\",\"version\":\"alpha-1\"},{\"bundleManifestDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"engineCompatibilityVersion\":\"mu-2\",\"engineHostContractVersion\":\"mu-2\",\"hostSideEffectContractVersion\":\"mu-2\",\"id\":\"mu-2\",\"kind\":\"default-engine\",\"lockId\":\"mu\",\"supportedPlatformAbis\":[\"mu-2\"],\"version\":\"mu-2\"},{\"bundleManifestDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"id\":\"zeta-3\",\"kind\":\"extension-provider\",\"lockId\":\"zeta\",\"protocolVersion\":\"ipcraft.provider-protocol.v1\",\"runtimeLockId\":\"zeta-3\",\"version\":\"zeta-3\"}]",
+      "expectedDigest": "sha256:981f385c7037b6cfd95a5fcaaef21152c7c723fd8fc4dcee7991f20ddce51592"
     }
   ]
 }

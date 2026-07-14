@@ -181,12 +181,16 @@ git commit -m "docs: freeze Core canonical projection vectors"
 ## Task 3: Close exact Default Engine and Host side-effect contracts
 
 **Files:**
+- Modify: `docs/contracts/schemas/ipcraft.project-design.v1.schema.json`
+- Modify: `docs/contracts/schemas/ipcraft.core-canonical-models.v1.schema.json`
 - Modify: `docs/contracts/schemas/ipcraft.engine-bundle.v1.schema.json`
-- Create: `docs/contracts/vectors/default-engine-lock-v1.json`
-- Create: `docs/contracts/vectors/host-side-effects-v1.json`
-- Create: `docs/contracts/fixtures/invalid/engine-lock-fallback.json`
-- Create: `docs/contracts/fixtures/invalid/engine-host-contract-mismatch.json`
-- Create: `docs/contracts/fixtures/invalid/host-side-effect-contract-mismatch.json`
+- Create: `docs/contracts/schemas/ipcraft.noc-side-effects.v1.schema.json`
+- Modify: `docs/contracts/schema-catalog.json`
+- Modify: `docs/contracts/vectors/core-canonical-projection-v1.json`
+- Regenerate: `docs/contracts/vectors/core-set-permutation-v1.json`
+- Regenerate: `docs/contracts/vectors/candidate-local-ref-v1.json`
+
+Task 3A closes schema and normative contracts only. Full Default Engine resolution/migration and Host side-effect behavioral vector catalogs remain in the later Task 3 vector pass. Engine Host/side-effect mismatch fixtures are structurally valid degraded-inspect witnesses, not schema-invalid fixtures.
 
 - [ ] **Step 1: Make the exact digest the sole implementation identity**
 
@@ -196,34 +200,35 @@ Require this dependency lock shape:
 {
   "lockId": "dep.engine.default",
   "kind": "default-engine",
-  "id": "ipcraft.default-mesh-engine",
+  "id": "ipcraft.default-noc-engine",
   "version": "1.0.0",
   "bundleManifestDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-  "engineCompatibilityVersion": 1,
+  "engineCompatibilityVersion": "1",
   "engineHostContractVersion": "ipcraft.engine-host.v1",
-  "hostSideEffectContractVersion": "ipcraft.noc-side-effects.v1"
+  "hostSideEffectContractVersion": "ipcraft.noc-side-effects.v1",
+  "supportedPlatformAbis": ["linux-x86_64-gnu-v1"]
 }
 ```
 
 `id`, `version`, and `engineCompatibilityVersion` never satisfy exact resolution when the digest differs.
 
-- [ ] **Step 2: Add resolver outcome vectors**
+- [ ] **Step 2: Close resolver outcome semantics**
 
-Cover exact available, missing, revoked, platform incompatible, Host ABI incompatible, side-effect contract incompatible, and different-digest/same-compatibility-version. Every non-exact case expects degraded inspect and no fallback.
+Specify and witness exact available, missing, revoked, corrupt/mismatch, platform incompatible, Host ABI incompatible, side-effect contract incompatible, and different-digest/same-compatibility-version. Every non-exact case expects degraded inspect and no fallback; full behavioral vectors are deferred to the Task 3 vector pass.
 
-- [ ] **Step 3: Add migration transaction vectors**
+- [ ] **Step 3: Close migration transaction schema**
 
 The candidate must atomically contain dependency-lock update, Derived State Patch, Host side effects, and provenance. Its inverse must restore all four without invoking an Engine.
 
 - [ ] **Step 4: Version Host-owned side effects**
 
-Vectors for `ipcraft.noc-side-effects.v1` must cover Default Domain membership creation, membership deletion, Attachment unresolved conversion, Package Relation unresolved/blocking behavior, empty non-Default Domain tombstoning, and connectivity diagnostics.
+The closed `ipcraft.noc-side-effects.v1` root defines inputs and expected outputs for Default Domain membership creation, membership deletion, Attachment unresolved conversion, Package Relation unresolved/blocking behavior, empty non-Default Domain tombstoning, and connectivity diagnostics. Add only minimal collection-permutation cases required by canonical completeness; behavioral scenarios remain in the Task 3 vector pass.
 
 - [ ] **Step 5: Commit Engine and side-effect contracts**
 
 ```bash
-git add docs/contracts/schemas/ipcraft.engine-bundle.v1.schema.json docs/contracts/vectors docs/contracts/fixtures/invalid
-git commit -m "docs: lock Default Engine and Host side effects"
+git add docs/contracts docs/adr/0054-lock-default-engine-as-an-installable-exact-bundle.md docs/superpowers/specs docs/superpowers/plans/2026-07-14-noc-gate-0-core-contract-freeze.md
+git commit -m "docs: close exact Default Engine and side-effect contracts"
 ```
 
 ## Task 4: Build the valid/invalid fixture catalog

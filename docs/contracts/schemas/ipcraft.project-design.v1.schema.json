@@ -87,14 +87,15 @@
       "type": "object", "additionalProperties": false,
       "required": [
         "lockId", "kind", "id", "version", "bundleManifestDigest", "engineHostContractVersion",
-        "engineCompatibilityVersion", "supportedPlatformAbis"
+        "engineCompatibilityVersion", "hostSideEffectContractVersion", "supportedPlatformAbis"
       ],
       "properties": {
         "lockId": { "$ref": "#/$defs/id" }, "kind": { "const": "default-engine" },
         "id": { "$ref": "#/$defs/id" }, "version": { "$ref": "#/$defs/id" },
         "bundleManifestDigest": { "$ref": "#/$defs/digest" },
-        "engineHostContractVersion": { "const": "ipcraft.engine-host.v1" },
+        "engineHostContractVersion": { "$ref": "#/$defs/id" },
         "engineCompatibilityVersion": { "$ref": "#/$defs/id" },
+        "hostSideEffectContractVersion": { "$ref": "#/$defs/id" },
         "supportedPlatformAbis": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["unicodeScalarValue"] }, "items": { "$ref": "#/$defs/id" }, "minItems": 1, "uniqueItems": true }
       }
     },
@@ -170,8 +171,8 @@
         "derivedStateRevision": { "type": "integer", "minimum": 0 }, "derivedStateDigest": { "$ref": "#/$defs/digest" },
         "packageBundleDigest": { "$ref": "#/$defs/digest" }, "reconcileDependencySetDigest": { "$ref": "#/$defs/digest" },
         "defaultEngineLockId": { "$ref": "#/$defs/id" }, "defaultEngineBundleDigest": { "$ref": "#/$defs/digest" },
-        "engineHostContractVersion": { "const": "ipcraft.engine-host.v1" },
-        "hostSideEffectContractVersion": { "const": "ipcraft.noc-side-effects.v1" },
+        "engineHostContractVersion": { "$ref": "#/$defs/id" },
+        "hostSideEffectContractVersion": { "$ref": "#/$defs/id" },
         "structureAuthority": { "$ref": "#/$defs/structureAuthority" },
         "engineCompatibilityVersion": { "$ref": "#/$defs/id" }
       }

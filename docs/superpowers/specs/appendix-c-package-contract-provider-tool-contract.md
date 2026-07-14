@@ -324,17 +324,20 @@ Default Engine is an independently installable, immutable Bundle resolved exclus
   "version": "1.0.0",
   "engineHostContractVersion": "ipcraft.engine-host.v1",
   "engineCompatibilityVersion": "1",
+  "hostSideEffectContractVersion": "ipcraft.noc-side-effects.v1",
   "migrationFromCompatibilityVersions": ["1"],
   "supportedPlatformAbis": ["linux-x86_64-gnu-v1"],
   "entrypoint": "lib/libipcraft_noc_engine.so"
 }
 ```
 
-The Engine manifest is inside its Bundle and therefore does not contain its own bundle digest. `id`/`version` are display metadata. `engineCompatibilityVersion` classifies whether explicit migration may be offered; it never authorizes replacement. A different digest is always a different exact Engine implementation.
+The Engine manifest is inside its content-addressed installable Bundle and therefore does not contain its own bundle digest. `id`/`version` are display metadata. `engineCompatibilityVersion` classifies whether explicit migration may be offered; it never authorizes replacement. Engine/side-effect version fields are structurally open non-empty IDs so unsupported installed Bundles still parse. A different digest is always a different exact Engine implementation.
 
 `ipcraft.engine-host.v1` is a C-compatible function-table ABI with no Qt or C++ standard-library types across the boundary. The shared library exports exactly `ipcraft_engine_host_v1_get_api`. It returns a size-versioned table containing `create`, `reconcile`, `release_buffer`, and `destroy`. `create` receives size-versioned Host allocator/log callbacks and returns an opaque Engine handle. `reconcile` is serialized per handle, accepts canonical UTF-8 JSON `normalizedTopologyInput`, `currentDerivedState`, and `reconcileApplicability` byte spans, and returns one canonical UTF-8 JSON `ipcraft.patch-body.v1` byte span plus optional structured diagnostics. Engine-owned output buffers remain valid until `release_buffer`; nonzero ABI status returns no Patch body. `destroy` releases the handle after outstanding calls finish. No callback supplies project paths, Qt objects, files, environment, clock, randomness, or network. The Host injects source identity, Session provenance, transaction ID, and Host IDs. Platform ABI or function-table size/version mismatch prevents loading.
 
-The Host verifies exact Engine Bundle bytes before loading and records bundle digest and `engineHostContractVersion` in applicability, derivation, Pipeline provenance, and output freshness. A missing, revoked, corrupt, incompatible, or unsupported-platform Engine Bundle opens the project in degraded inspect mode. The Host MUST NOT fall back to another installed/built-in Engine with matching ID/version or compatibility class.
+The Host verifies exact Engine Bundle bytes before loading and records bundle digest and `engineHostContractVersion` in applicability, derivation, Pipeline provenance, and output freshness. A missing, revoked, corrupt, incompatible, or unsupported-platform Engine Bundle opens the project in degraded inspect mode; corruption uses `engine.bundle_mismatch`. A structurally valid Bundle unsupported by the current platform/Host ABI may be installed and retained in the content-addressed store but cannot resolve for execution. The Host MUST NOT fall back to another installed/built-in Engine with matching ID/version or compatibility class.
+
+`upgrade-available` is an informational overlay on an exact normal resolution. It neither changes availability nor selects a digest. Engine Host or Host-side-effect freshness mismatch uses the existing output stale reason `dependency-changed`.
 
 Host-owned invariant side effects use `hostSideEffectContractVersion: ipcraft.noc-side-effects.v1`. V1 fixes Router-created Default Membership, Router/Slot removal Attachment handling, Domain cleanup/connectivity evaluation, Package Relation unresolved/blocking handling, impact codes, and canonical side-effect localRef/order semantics in Appendix F. A Host that does not support the persisted side-effect contract opens degraded inspect mode; it cannot silently reinterpret an old project.
 

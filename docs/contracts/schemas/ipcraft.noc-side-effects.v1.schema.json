@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ipcraft.noc-side-effects.v1",
+  "title": "Ipcraft NoC Host Side-effect Contract V1",
+  "$comment": "Closed behavioral input/expected-output contract for Host conformance vectors; not executable Provider ABI.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "contractVersion", "input", "expected"],
+  "properties": {
+    "schema": { "const": "ipcraft.noc-side-effects.v1" },
+    "contractVersion": { "$ref": "#/$defs/id" },
+    "input": { "$ref": "#/$defs/input" },
+    "expected": { "$ref": "#/$defs/expected" }
+  },
+  "$defs": {
+    "id": { "type": "string", "minLength": 1 },
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["domainTypes", "relationDeclarations", "currentDerivedState", "domains", "domainMemberships", "attachments", "packageRelations", "authorityPatch"],
+      "properties": {
+        "domainTypes": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["key"] }, "items": { "$ref": "ipcraft.noc-package.v1.schema.json#/$defs/domainType" } },
+        "relationDeclarations": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["typeKey"] }, "items": { "$ref": "ipcraft.noc-package.v1.schema.json#/$defs/relationType" } },
+        "currentDerivedState": { "$ref": "ipcraft.core-canonical-models.v1.schema.json#/$defs/derivedState" },
+        "domains": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["id"] }, "items": { "$ref": "ipcraft.project-design.v1.schema.json#/$defs/domain" } },
+        "domainMemberships": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["id"] }, "items": { "$ref": "ipcraft.project-design.v1.schema.json#/$defs/domainMembership" } },
+        "attachments": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["id"] }, "items": { "$ref": "ipcraft.project-design.v1.schema.json#/$defs/attachment" } },
+        "packageRelations": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["id"] }, "items": { "$ref": "ipcraft.project-design.v1.schema.json#/$defs/packageRelation" } },
+        "authorityPatch": {
+          "allOf": [
+            { "$ref": "ipcraft.core-canonical-models.v1.schema.json#/$defs/sourcePatch" },
+            { "properties": { "source": { "properties": { "kind": { "enum": ["default-engine", "extension-provider"] } } } } }
+          ]
+        }
+      }
+    },
+    "expected": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["applicationPatch", "tombstones", "allocationOrder", "impactReport", "coreDiagnostics", "groupState", "requiresConfirmation", "commitDisposition"],
+      "properties": {
+        "applicationPatch": {
+          "allOf": [
+            { "$ref": "ipcraft.core-canonical-models.v1.schema.json#/$defs/sourcePatch" },
+            { "properties": { "source": { "properties": { "kind": { "enum": ["application-reconcile", "application-migration"] } } } } }
+          ]
+        },
+        "tombstones": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["subjectKind", "id"] }, "items": { "$ref": "ipcraft.core-canonical-models.v1.schema.json#/$defs/tombstone" } },
+        "allocationOrder": { "type": "array", "x-ipcraft-canonical": { "kind": "derived-ordered", "sortKey": ["unicodeScalarValue"] }, "items": { "$ref": "ipcraft.core-canonical-models.v1.schema.json#/$defs/localRefString" }, "uniqueItems": true },
+        "impactReport": { "$ref": "ipcraft.core-canonical-models.v1.schema.json#/$defs/impactReport" },
+        "coreDiagnostics": { "type": "array", "x-ipcraft-canonical": { "kind": "ordered" }, "items": { "$ref": "ipcraft.diagnostic-report.v1.schema.json#/$defs/diagnostic" } },
+        "groupState": { "enum": ["auto-commit", "ready-to-commit", "blocked"] },
+        "requiresConfirmation": { "type": "boolean" },
+        "commitDisposition": { "enum": ["auto-commit", "confirmation-required", "blocked"] }
+      }
+    }
+  }
+}

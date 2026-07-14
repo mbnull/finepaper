@@ -446,15 +446,15 @@ One host process holds an exclusive project-level mutation lock for Save, recove
 
 Providers and IP tools never directly read or write the project directory. Tool inputs are emitted into controlled staging by the application.
 
-Dependency availability has three states:
+Dependency execution availability has two states, with a separate informational upgrade overlay:
 
 - `exact`: all pinned identities, versions, and digests match; normal operation is allowed.
 - `degraded-inspect`: an exact dependency/Engine/runtime/Host contract is missing, revoked, mismatched, or incompatible; the project exposes persisted data with no fallback and disables normal editing/reconciliation/Save/DRC/Generate. The only possible mutation is an explicitly supported target-Engine migration candidate that does not execute the missing source Engine.
-- `upgrade-available`: a newer version exists but is never selected automatically.
+- `upgrade-available`: informational only on an otherwise `exact` resolution; it is not a mutually exclusive availability state and never selects a digest.
 
 Package identity and version cannot change in place. After the stable `1.0` baseline, `Clone and Migrate` creates a new project using target-Package migration steps, reconciles it, and requires Core Structural DRC before its first formal Save. Failure discards the incomplete clone and leaves the original reproducible project unchanged. Before `1.0`, old Contracts, schemas, cores, tools, and projects may be discarded without migration support.
 
-Default Engine migration is a distinct explicit candidate transaction and may update the existing design. It runs the exact target Engine Bundle through its declared Host contract, always requires candidate confirmation, and atomically replaces the Engine dependency lock, Derived State, Host side effects, and provenance. Undo applies the saved inverse transaction and ID mapping without executing either Engine; it may return the Session to degraded inspect mode if the restored Bundle is unavailable. Different Engine digests are never selected automatically merely because compatibility versions match.
+Default Engine migration is a distinct explicit candidate transaction and may update the existing design. Normal applicability still describes the current base; separate migration provenance carries complete current and target exact locks. It runs the exact target Engine Bundle through its declared Host contract, always requires candidate confirmation, and atomically replaces the Engine dependency lock, Derived State, Host side effects, and provenance. Undo applies the saved inverse transaction and ID mapping without executing either Engine; it may return the Session to degraded inspect mode if the restored Bundle is unavailable. Different Engine digests are never selected automatically merely because compatibility versions match.
 
 ## 12. V1 UI/UX
 

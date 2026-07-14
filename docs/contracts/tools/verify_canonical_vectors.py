@@ -553,9 +553,19 @@ def verify_collection_cases(world: SchemaWorld, document: Any, rules: dict[tuple
 
 def verify_comparator_depth(case: dict[str, Any], normalized: list[Any], location: str) -> None:
     keys = case["sortKey"]
+    dependent_components = set()
+    if (case.get("schemaId"), case.get("schemaPointer")) == (
+        "ipcraft.core-canonical-models.v1", "/$defs/impactReport/properties/impacts"
+    ):
+        # The closed impact code contract functionally determines these fields.
+        # They remain in the frozen total key for audit stability but cannot be
+        # independently decisive without constructing a schema-invalid impact.
+        dependent_components = {"severity", "dataLoss", "resolution"}
     if len(keys) > 1:
         components = [sort_components(keys, item, location) for item in normalized]
         for index in range(len(keys)):
+            if keys[index] in dependent_components:
+                continue
             if not any(left[:index] == right[:index] and left[index] != right[index] for pos, left in enumerate(components) for right in components[pos + 1:]):
                 fail(f"{location}: comparator component {keys[index]!r} is never decisive")
     if keys == ["persistedEndpointCanonicalKey"]:

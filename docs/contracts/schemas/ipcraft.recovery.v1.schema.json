@@ -80,7 +80,7 @@
         "currentDefaultEngineBundleDigest": { "$ref": "#/$defs/digest" },
         "targetDefaultEngineBundleDigest": { "$ref": "#/$defs/digest" },
         "targetEngineHostContractVersion": { "const": "ipcraft.engine-host.v1" },
-        "hostSideEffectContractVersion": { "const": "ipcraft.noc-side-effects.v1" }
+        "hostSideEffectContractVersion": { "$ref": "#/$defs/id" }
       },
       "allOf": [
         {

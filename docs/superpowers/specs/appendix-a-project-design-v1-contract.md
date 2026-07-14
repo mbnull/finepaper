@@ -76,11 +76,27 @@ Additional required fields:
 
 | Kind | Additional fields |
 |---|---|
-| `default-engine` | `engineHostContractVersion`, `engineCompatibilityVersion`, `supportedPlatformAbis` |
+| `default-engine` | `engineHostContractVersion`, `engineCompatibilityVersion`, `hostSideEffectContractVersion`, `supportedPlatformAbis` |
 | `extension-provider` | `protocolVersion`, `runtimeLockId` |
 | `drc-tool` | `toolProtocolVersion`, `runtimeLockId` |
 | `generator-tool` | `toolProtocolVersion`, `runtimeLockId` |
 | `runtime` | `runtimeClosure` |
+
+Exact Default Engine lock:
+
+```json
+{
+  "lockId": "dep.default-engine",
+  "kind": "default-engine",
+  "id": "ipcraft.default-noc-engine",
+  "version": "1.0.0",
+  "bundleManifestDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "engineCompatibilityVersion": "1",
+  "engineHostContractVersion": "ipcraft.engine-host.v1",
+  "hostSideEffectContractVersion": "ipcraft.noc-side-effects.v1",
+  "supportedPlatformAbis": ["linux-x86_64-gnu-v1"]
+}
+```
 
 Rules:
 
@@ -88,6 +104,7 @@ Rules:
 - Exactly one `noc-package` lock exists.
 - Exactly one `default-engine` lock exists. Its `bundleManifestDigest` is the sole exact Engine implementation identity; `id` and `version` are display metadata, and `engineCompatibilityVersion` is migration classification only.
 - Resolved Engine Bundle manifest ID/version/Host contract/compatibility metadata must equal the lock metadata, but equality of those metadata never compensates for a digest mismatch. The Host supports only explicitly registered `engineHostContractVersion` and `hostSideEffectContractVersion` values.
+- Engine Host and Host side-effect version fields are structurally non-empty IDs, not schema constants. Unsupported values parse through Core validation and resolve to degraded inspect rather than making the project schema-invalid.
 - At least one Contract lock exists for every Contract referenced by an Interface template or instance.
 - Provider and tool locks exist only when the selected Package declares those dependencies.
 - `bundleManifestDigest` follows Appendix C's Package Bundle Contract rather than hashing an arbitrary directory directly.
@@ -117,7 +134,8 @@ Rules:
 
 - `closureKind` is `host-managed` or `package-contained`. Common `bundleManifestDigest` and `runtimeClosure.runtimeDistributionBundleDigest` MUST be identical.
 - Any exact dependency/runtime mismatch produces degraded inspect mode; the reader still parses core fields and preserves opaque extensions without fallback.
-- A missing, revoked, digest-mismatched, Host-ABI-incompatible, or platform-incompatible Default Engine lock produces degraded inspect mode. The Host MUST NOT substitute its current Engine implementation, even when ID/version or compatibility version match.
+- A missing, revoked, corrupt, digest-mismatched, Host-ABI-incompatible, Host-side-effect-incompatible, or platform-incompatible Default Engine lock produces degraded inspect mode. Corruption and manifest/content disagreement use `engine.bundle_mismatch`. The Host MUST NOT substitute its current Engine implementation, even when ID/version or compatibility version match.
+- A structurally valid unsupported-platform Bundle may remain installed in the content-addressed store but cannot resolve for execution. `upgrade-available` is only an informational overlay on an exact normal resolution and never selects a digest.
 
 ## A4. NoC Component
 
@@ -205,7 +223,7 @@ Rules:
   "structureAuthority": {
     "kind": "default-engine",
     "lockId": "dep.default-engine",
-    "identity": "ipcraft.default-engine",
+    "identity": "ipcraft.default-noc-engine",
     "version": "1",
     "bundleDigest": "sha256:..."
   },

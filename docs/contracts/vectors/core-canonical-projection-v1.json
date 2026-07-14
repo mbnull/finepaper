@@ -464,6 +464,59 @@
       ]
     },
     {
+      "schemaId": "ipcraft.noc-side-effects.v1",
+      "schemaPointer": "/$defs/expected/properties/allocationOrder",
+      "kind": "derived-ordered",
+      "sortKey": ["unicodeScalarValue"]
+    },
+    {
+      "schemaId": "ipcraft.noc-side-effects.v1",
+      "schemaPointer": "/$defs/expected/properties/coreDiagnostics",
+      "kind": "ordered"
+    },
+    {
+      "schemaId": "ipcraft.noc-side-effects.v1",
+      "schemaPointer": "/$defs/expected/properties/tombstones",
+      "kind": "set",
+      "sortKey": ["subjectKind", "id"]
+    },
+    {
+      "schemaId": "ipcraft.noc-side-effects.v1",
+      "schemaPointer": "/$defs/input/properties/attachments",
+      "kind": "set",
+      "sortKey": ["id"]
+    },
+    {
+      "schemaId": "ipcraft.noc-side-effects.v1",
+      "schemaPointer": "/$defs/input/properties/domainMemberships",
+      "kind": "set",
+      "sortKey": ["id"]
+    },
+    {
+      "schemaId": "ipcraft.noc-side-effects.v1",
+      "schemaPointer": "/$defs/input/properties/domainTypes",
+      "kind": "set",
+      "sortKey": ["key"]
+    },
+    {
+      "schemaId": "ipcraft.noc-side-effects.v1",
+      "schemaPointer": "/$defs/input/properties/domains",
+      "kind": "set",
+      "sortKey": ["id"]
+    },
+    {
+      "schemaId": "ipcraft.noc-side-effects.v1",
+      "schemaPointer": "/$defs/input/properties/packageRelations",
+      "kind": "set",
+      "sortKey": ["id"]
+    },
+    {
+      "schemaId": "ipcraft.noc-side-effects.v1",
+      "schemaPointer": "/$defs/input/properties/relationDeclarations",
+      "kind": "set",
+      "sortKey": ["typeKey"]
+    },
+    {
       "schemaId": "ipcraft.patch.v1",
       "schemaPointer": "/properties/preconditions",
       "kind": "set",

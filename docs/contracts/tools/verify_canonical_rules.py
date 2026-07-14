@@ -517,7 +517,7 @@ def run_witnesses(graph: SchemaGraph, table: dict[tuple[str, str], dict[str, Any
             f"/$defs/{value_name}/properties/extensions",
         )
     for definition_name in (
-        "patchProjectUpdateSet", "patchComponentUpdateSet", "patchInterfaceUpdateSet",
+        "patchProjectUpdateSet", "patchTopologyUpdateSet", "patchComponentUpdateSet", "patchInterfaceUpdateSet",
         "patchRouterUpdateSet", "patchStructuralLinkUpdateSet", "patchAccessSlotUpdateSet",
         "patchDomainUpdateSet", "patchPackageEntityUpdateSet", "patchAttachmentUpdateSet",
         "patchDomainMembershipUpdateSet", "patchPackageRelationUpdateSet",
