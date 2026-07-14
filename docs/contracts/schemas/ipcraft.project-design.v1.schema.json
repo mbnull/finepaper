@@ -1,0 +1,255 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ipcraft.project-design.v1",
+  "title": "Ipcraft ProjectDesign V1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema", "profile", "id", "name", "dependencies", "components", "interfaces",
+    "connections", "topologies", "views", "extensions"
+  ],
+  "properties": {
+    "schema": { "const": "ipcraft.project-design.v1" },
+    "profile": {
+      "type": "object", "additionalProperties": false, "required": ["id", "version"],
+      "properties": { "id": { "const": "ipcraft.profile.noc" }, "version": { "const": "1" } }
+    },
+    "id": { "$ref": "#/$defs/id" },
+    "name": { "type": "string", "minLength": 1 },
+    "dependencies": { "type": "array", "items": { "$ref": "#/$defs/dependencyLock" } },
+    "components": { "type": "array", "minItems": 1, "maxItems": 1, "items": { "$ref": "#/$defs/component" } },
+    "interfaces": { "type": "array", "items": { "$ref": "#/$defs/interface" } },
+    "connections": { "type": "array", "maxItems": 0 },
+    "topologies": { "type": "array", "minItems": 1, "maxItems": 1, "items": { "$ref": "#/$defs/topology" } },
+    "views": { "type": "array", "maxItems": 0 },
+    "extensions": { "type": "array", "items": { "$ref": "#/$defs/extension" } }
+  },
+  "$defs": {
+    "id": { "type": "string", "minLength": 1 },
+    "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "dependencyKind": {
+      "enum": ["noc-package", "interface-contract", "default-engine", "extension-provider", "drc-tool", "generator-tool", "runtime"]
+    },
+    "runtimeClosure": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "closureKind", "runtimeId", "runtimeVersion", "runtimeDistributionBundleDigest", "entrypoint",
+        "platformAbi", "invocationProfile", "moduleSearchPolicy", "environmentProfile", "networkPolicy"
+      ],
+      "properties": {
+        "closureKind": { "enum": ["host-managed", "package-contained"] },
+        "runtimeId": { "$ref": "#/$defs/id" },
+        "runtimeVersion": { "$ref": "#/$defs/id" },
+        "runtimeDistributionBundleDigest": { "$ref": "#/$defs/digest" },
+        "entrypoint": { "$ref": "#/$defs/path" },
+        "platformAbi": { "$ref": "#/$defs/id" },
+        "invocationProfile": { "$ref": "#/$defs/id" },
+        "moduleSearchPolicy": { "const": "runtime-and-tool-bundles-only" },
+        "environmentProfile": { "$ref": "#/$defs/id" },
+        "networkPolicy": { "const": "prohibited" }
+      }
+    },
+    "dependencyLock": {
+      "oneOf": [
+        { "$ref": "#/$defs/basicDependencyLock" },
+        { "$ref": "#/$defs/defaultEngineDependencyLock" },
+        { "$ref": "#/$defs/providerDependencyLock" },
+        { "$ref": "#/$defs/toolDependencyLock" },
+        { "$ref": "#/$defs/runtimeDependencyLock" }
+      ]
+    },
+    "basicDependencyLock": {
+      "type": "object", "additionalProperties": false,
+      "required": ["lockId", "kind", "id", "version", "bundleManifestDigest"],
+      "properties": {
+        "lockId": { "$ref": "#/$defs/id" },
+        "kind": { "enum": ["noc-package", "interface-contract"] },
+        "id": { "$ref": "#/$defs/id" },
+        "version": { "$ref": "#/$defs/id" },
+        "bundleManifestDigest": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "defaultEngineDependencyLock": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "lockId", "kind", "id", "version", "bundleManifestDigest", "engineHostContractVersion",
+        "engineCompatibilityVersion", "supportedPlatformAbis"
+      ],
+      "properties": {
+        "lockId": { "$ref": "#/$defs/id" }, "kind": { "const": "default-engine" },
+        "id": { "$ref": "#/$defs/id" }, "version": { "$ref": "#/$defs/id" },
+        "bundleManifestDigest": { "$ref": "#/$defs/digest" },
+        "engineHostContractVersion": { "const": "ipcraft.engine-host.v1" },
+        "engineCompatibilityVersion": { "$ref": "#/$defs/id" },
+        "supportedPlatformAbis": { "type": "array", "items": { "$ref": "#/$defs/id" }, "minItems": 1, "uniqueItems": true }
+      }
+    },
+    "providerDependencyLock": {
+      "type": "object", "additionalProperties": false,
+      "required": ["lockId", "kind", "id", "version", "bundleManifestDigest", "protocolVersion", "runtimeLockId"],
+      "properties": {
+        "lockId": { "$ref": "#/$defs/id" }, "kind": { "const": "extension-provider" },
+        "id": { "$ref": "#/$defs/id" }, "version": { "$ref": "#/$defs/id" },
+        "bundleManifestDigest": { "$ref": "#/$defs/digest" },
+        "protocolVersion": { "const": "ipcraft.provider-protocol.v1" }, "runtimeLockId": { "$ref": "#/$defs/id" }
+      }
+    },
+    "toolDependencyLock": {
+      "type": "object", "additionalProperties": false,
+      "required": ["lockId", "kind", "id", "version", "bundleManifestDigest", "toolProtocolVersion", "runtimeLockId"],
+      "properties": {
+        "lockId": { "$ref": "#/$defs/id" }, "kind": { "enum": ["drc-tool", "generator-tool"] },
+        "id": { "$ref": "#/$defs/id" }, "version": { "$ref": "#/$defs/id" },
+        "bundleManifestDigest": { "$ref": "#/$defs/digest" },
+        "toolProtocolVersion": { "const": "ipcraft.tool-input.v1" }, "runtimeLockId": { "$ref": "#/$defs/id" }
+      }
+    },
+    "runtimeDependencyLock": {
+      "type": "object", "additionalProperties": false,
+      "required": ["lockId", "kind", "id", "version", "bundleManifestDigest", "runtimeClosure"],
+      "properties": {
+        "lockId": { "$ref": "#/$defs/id" }, "kind": { "const": "runtime" },
+        "id": { "$ref": "#/$defs/id" }, "version": { "$ref": "#/$defs/id" },
+        "bundleManifestDigest": { "$ref": "#/$defs/digest" }, "runtimeClosure": { "$ref": "#/$defs/runtimeClosure" }
+      }
+    },
+    "extension": {
+      "type": "object", "additionalProperties": false, "required": ["ownerLockId", "schema", "version", "data"],
+      "properties": {
+        "ownerLockId": { "$ref": "#/$defs/id" }, "schema": { "$ref": "#/$defs/id" },
+        "version": { "$ref": "#/$defs/id" }, "data": { "type": "object" }
+      }
+    },
+    "component": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "kind", "name", "packageLockId", "typeKey", "config", "extensions"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" }, "kind": { "const": "noc" }, "name": { "type": "string", "minLength": 1 },
+        "packageLockId": { "$ref": "#/$defs/id" }, "typeKey": { "$ref": "#/$defs/id" },
+        "config": { "type": "object" }, "extensions": { "type": "array", "items": { "$ref": "#/$defs/extension" } }
+      }
+    },
+    "interface": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "ownerComponentId", "templateKey", "name", "contract", "capabilities", "contractConfig", "nocConfig", "extensions"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" }, "ownerComponentId": { "$ref": "#/$defs/id" },
+        "templateKey": { "$ref": "#/$defs/id" }, "name": { "type": "string", "minLength": 1 },
+        "contract": {
+          "type": "object", "additionalProperties": false, "required": ["lockId", "role"],
+          "properties": { "lockId": { "$ref": "#/$defs/id" }, "role": { "$ref": "#/$defs/id" } }
+        },
+        "capabilities": { "type": "object" }, "contractConfig": { "type": "object" }, "nocConfig": { "type": "object" },
+        "extensions": { "type": "array", "items": { "$ref": "#/$defs/extension" } }
+      }
+    },
+    "structureAuthority": { "$ref": "ipcraft.core-canonical-models.v1.schema.json#/$defs/structureAuthority" },
+    "derivation": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "topologyInputRevision", "topologyInputDigest", "derivedStateRevision", "derivedStateDigest",
+        "packageBundleDigest", "reconcileDependencySetDigest", "defaultEngineLockId", "defaultEngineBundleDigest",
+        "engineHostContractVersion", "hostSideEffectContractVersion", "structureAuthority", "engineCompatibilityVersion"
+      ],
+      "properties": {
+        "topologyInputRevision": { "type": "integer", "minimum": 1 }, "topologyInputDigest": { "$ref": "#/$defs/digest" },
+        "derivedStateRevision": { "type": "integer", "minimum": 0 }, "derivedStateDigest": { "$ref": "#/$defs/digest" },
+        "packageBundleDigest": { "$ref": "#/$defs/digest" }, "reconcileDependencySetDigest": { "$ref": "#/$defs/digest" },
+        "defaultEngineLockId": { "$ref": "#/$defs/id" }, "defaultEngineBundleDigest": { "$ref": "#/$defs/digest" },
+        "engineHostContractVersion": { "const": "ipcraft.engine-host.v1" },
+        "hostSideEffectContractVersion": { "const": "ipcraft.noc-side-effects.v1" },
+        "structureAuthority": { "$ref": "#/$defs/structureAuthority" },
+        "engineCompatibilityVersion": { "$ref": "#/$defs/id" }
+      }
+    },
+    "router": { "$ref": "ipcraft.core-canonical-models.v1.schema.json#/$defs/router" },
+    "structuralLink": { "$ref": "ipcraft.core-canonical-models.v1.schema.json#/$defs/structuralLink" },
+    "accessSlot": { "$ref": "ipcraft.core-canonical-models.v1.schema.json#/$defs/accessSlot" },
+    "resolvedAttachment": {
+      "type": "object", "additionalProperties": false, "required": ["id", "interfaceId", "state", "routerId", "slotId"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" }, "interfaceId": { "$ref": "#/$defs/id" }, "state": { "const": "resolved" },
+        "routerId": { "$ref": "#/$defs/id" }, "slotId": { "$ref": "#/$defs/id" }
+      }
+    },
+    "unresolvedAttachment": {
+      "type": "object", "additionalProperties": false, "required": ["id", "interfaceId", "state", "intendedTarget", "reasonCode"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" }, "interfaceId": { "$ref": "#/$defs/id" }, "state": { "const": "unresolved" },
+        "intendedTarget": {
+          "type": "object", "additionalProperties": false, "required": ["routerId", "slotId"],
+          "properties": { "routerId": { "$ref": "#/$defs/id" }, "slotId": { "$ref": "#/$defs/id" } }
+        },
+        "reasonCode": { "$ref": "#/$defs/id" }
+      }
+    },
+    "attachment": { "oneOf": [{ "$ref": "#/$defs/resolvedAttachment" }, { "$ref": "#/$defs/unresolvedAttachment" }] },
+    "domain": {
+      "type": "object", "additionalProperties": false, "required": ["id", "typeKey", "name", "isDefault", "config"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" }, "typeKey": { "$ref": "#/$defs/id" }, "name": { "type": "string", "minLength": 1 },
+        "isDefault": { "type": "boolean" }, "config": { "type": "object" }
+      }
+    },
+    "domainMembership": {
+      "type": "object", "additionalProperties": false, "required": ["id", "domainId", "routerId"],
+      "properties": { "id": { "$ref": "#/$defs/id" }, "domainId": { "$ref": "#/$defs/id" }, "routerId": { "$ref": "#/$defs/id" } }
+    },
+    "packageEntity": {
+      "type": "object", "additionalProperties": false, "required": ["id", "typeKey", "data", "extensions"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" }, "typeKey": { "$ref": "#/$defs/id" }, "data": { "type": "object" },
+        "extensions": { "type": "array", "items": { "$ref": "#/$defs/extension" } }
+      }
+    },
+    "relationSubjectRef": {
+      "type": "object", "additionalProperties": false, "required": ["kind", "id"],
+      "properties": {
+        "kind": { "enum": ["component", "interface", "router", "structural-link", "access-slot", "attachment", "domain", "domain-membership", "package-entity", "package-relation"] },
+        "id": { "$ref": "#/$defs/id" }
+      }
+    },
+    "resolvedRelationEndpoint": {
+      "type": "object", "additionalProperties": false, "required": ["state", "subject"],
+      "properties": { "state": { "const": "resolved" }, "subject": { "$ref": "#/$defs/relationSubjectRef" } }
+    },
+    "unresolvedRelationEndpoint": {
+      "type": "object", "additionalProperties": false, "required": ["state", "intendedSubject", "reasonCode"],
+      "properties": {
+        "state": { "const": "unresolved" }, "intendedSubject": { "$ref": "#/$defs/relationSubjectRef" },
+        "reasonCode": { "$ref": "#/$defs/id" }
+      }
+    },
+    "relationEndpoint": { "oneOf": [{ "$ref": "#/$defs/resolvedRelationEndpoint" }, { "$ref": "#/$defs/unresolvedRelationEndpoint" }] },
+    "packageRelation": {
+      "type": "object", "additionalProperties": false, "required": ["id", "typeKey", "sources", "targets", "data", "extensions"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" }, "typeKey": { "$ref": "#/$defs/id" },
+        "sources": { "type": "array", "items": { "$ref": "#/$defs/relationEndpoint" } },
+        "targets": { "type": "array", "items": { "$ref": "#/$defs/relationEndpoint" } },
+        "data": { "type": "object" }, "extensions": { "type": "array", "items": { "$ref": "#/$defs/extension" } }
+      }
+    },
+    "topology": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "id", "ownerComponentId", "kind", "templateKey", "derivation", "routers", "structuralLinks",
+        "accessSlots", "attachments", "domains", "domainMemberships", "packageEntities", "packageRelations", "extensions"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" }, "ownerComponentId": { "$ref": "#/$defs/id" }, "kind": { "const": "mesh" },
+        "templateKey": { "$ref": "#/$defs/id" }, "derivation": { "$ref": "#/$defs/derivation" },
+        "routers": { "type": "array", "items": { "$ref": "#/$defs/router" } },
+        "structuralLinks": { "type": "array", "items": { "$ref": "#/$defs/structuralLink" } },
+        "accessSlots": { "type": "array", "items": { "$ref": "#/$defs/accessSlot" } },
+        "attachments": { "type": "array", "items": { "$ref": "#/$defs/attachment" } },
+        "domains": { "type": "array", "items": { "$ref": "#/$defs/domain" } },
+        "domainMemberships": { "type": "array", "items": { "$ref": "#/$defs/domainMembership" } },
+        "packageEntities": { "type": "array", "items": { "$ref": "#/$defs/packageEntity" } },
+        "packageRelations": { "type": "array", "items": { "$ref": "#/$defs/packageRelation" } },
+        "extensions": { "type": "array", "items": { "$ref": "#/$defs/extension" } }
+      }
+    },
+    "path": { "type": "string", "minLength": 1, "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*\\\\).+$" }
+  }
+}

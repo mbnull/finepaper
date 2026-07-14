@@ -1,0 +1,6 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ipcraft.output-manifest.v1",
+  "title": "Ipcraft Promoted Output Manifest V1",
+  "$ref": "ipcraft.core-canonical-models.v1.schema.json#/$defs/outputManifest"
+}

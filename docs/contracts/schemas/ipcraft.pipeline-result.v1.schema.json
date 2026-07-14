@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ipcraft.pipeline-result.v1",
+  "title": "Ipcraft Pipeline Result V1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema", "pipelineRunId", "kind", "snapshotDigest", "dependencySetDigest",
+    "status", "failedStepId", "steps", "startedAt", "completedAt"
+  ],
+  "properties": {
+    "schema": { "const": "ipcraft.pipeline-result.v1" },
+    "pipelineRunId": { "$ref": "#/$defs/id" },
+    "kind": { "enum": ["validate", "generate"] },
+    "snapshotDigest": { "$ref": "#/$defs/digest" },
+    "dependencySetDigest": { "$ref": "#/$defs/digest" },
+    "status": { "enum": ["succeeded", "failed", "cancelled", "timed-out"] },
+    "failedStepId": { "oneOf": [{ "$ref": "#/$defs/id" }, { "type": "null" }] },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["stepId", "result"],
+        "properties": {
+          "stepId": { "$ref": "#/$defs/id" },
+          "result": { "$ref": "#/$defs/path" }
+        }
+      }
+    },
+    "startedAt": { "type": "string", "format": "date-time" },
+    "completedAt": { "type": "string", "format": "date-time" }
+  },
+  "$defs": {
+    "id": { "type": "string", "minLength": 1 },
+    "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "path": { "type": "string", "minLength": 1, "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*\\\\).+$" }
+  }
+}

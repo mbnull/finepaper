@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ipcraft.recovery.v1",
+  "title": "Ipcraft Session Recovery V1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema", "projectId", "savedProjectDigest", "updatedAt", "authoritativeDesign",
+    "sessionRevision", "derivedStateRevision", "pendingTopologyGroup", "draftOverlay", "draftUndo", "draftRedo"
+  ],
+  "properties": {
+    "schema": { "const": "ipcraft.recovery.v1" },
+    "projectId": { "$ref": "#/$defs/id" },
+    "savedProjectDigest": { "$ref": "#/$defs/digest" },
+    "updatedAt": { "type": "string", "format": "date-time" },
+    "authoritativeDesign": { "$ref": "ipcraft.project-design.v1.schema.json" },
+    "sessionRevision": { "type": "integer", "minimum": 0 },
+    "derivedStateRevision": { "type": "integer", "minimum": 0 },
+    "pendingTopologyGroup": { "oneOf": [{ "$ref": "#/$defs/pendingTopologyGroup" }, { "type": "null" }] },
+    "draftOverlay": { "type": "array", "items": { "$ref": "#/$defs/draftEntry" } },
+    "draftUndo": { "type": "array", "items": { "type": "object" } },
+    "draftRedo": { "type": "array", "items": { "type": "object" } }
+  },
+  "$defs": {
+    "id": { "type": "string", "minLength": 1 },
+    "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "draftEntry": {
+      "type": "object", "additionalProperties": false,
+      "required": ["draftId", "sequence", "commandType", "parameters", "validationStatus", "diagnostics"],
+      "properties": {
+        "draftId": { "$ref": "#/$defs/id" },
+        "sequence": { "type": "integer", "minimum": 1 },
+        "commandType": { "$ref": "#/$defs/id" },
+        "parameters": { "type": "object" },
+        "validationStatus": { "enum": ["unvalidated", "valid", "invalid"] },
+        "diagnostics": { "type": "array", "items": { "$ref": "ipcraft.command-result.v1.schema.json#/$defs/issue" } }
+      }
+    },
+    "pendingTopologyGroup": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "groupId", "kind", "topologyInputRevision", "requestGeneration", "baseAuthoritativeDesignDigest",
+        "baseDerivedStateRevision", "baseDerivedStateDigest", "topologyIntent", "intentUndo", "intentRedo",
+        "normalizedTopologyInput", "topologyInputDigest", "status", "candidate"
+      ],
+      "properties": {
+        "groupId": { "$ref": "#/$defs/id" },
+        "kind": { "enum": ["topology-edit", "default-engine-migration"] },
+        "topologyInputRevision": { "type": "integer", "minimum": 1 },
+        "requestGeneration": { "type": "integer", "minimum": 1 },
+        "baseAuthoritativeDesignDigest": { "$ref": "#/$defs/digest" },
+        "baseDerivedStateRevision": { "type": "integer", "minimum": 0 },
+        "baseDerivedStateDigest": { "$ref": "#/$defs/digest" },
+        "topologyIntent": { "$ref": "ipcraft.core-canonical-models.v1.schema.json#/$defs/topologyIntent" },
+        "intentUndo": { "type": "array", "items": { "type": "object" } },
+        "intentRedo": { "type": "array", "items": { "type": "object" } },
+        "normalizedTopologyInput": { "$ref": "ipcraft.core-canonical-models.v1.schema.json#/$defs/normalizedTopologyInput" },
+        "topologyInputDigest": { "$ref": "#/$defs/digest" },
+        "status": { "enum": ["drafting", "running", "candidate-validating", "ready-to-commit", "blocked", "failed"] },
+        "candidate": { "type": "null" }
+      }
+    }
+  }
+}

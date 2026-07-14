@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ipcraft.patch.v1",
+  "title": "Ipcraft Trusted Host Patch Envelope V1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "transactionId", "patchId", "source", "causality", "preconditions", "operations"],
+  "properties": {
+    "schema": { "const": "ipcraft.patch.v1" },
+    "transactionId": { "$ref": "#/$defs/id" },
+    "patchId": { "$ref": "#/$defs/id" },
+    "source": { "$ref": "#/$defs/source" },
+    "causality": { "$ref": "#/$defs/causality" },
+    "applicability": { "$ref": "ipcraft.core-canonical-models.v1.schema.json#/$defs/reconcileApplicability" },
+    "preconditions": { "type": "array", "items": { "$ref": "#/$defs/precondition" } },
+    "operations": { "type": "array", "items": { "$ref": "#/$defs/operation" } }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "source": { "properties": { "kind": { "enum": ["default-engine", "extension-provider", "application-reconcile", "application-migration"] } } }
+        },
+        "required": ["source"]
+      },
+      "then": { "required": ["applicability"] }
+    }
+  ],
+  "$defs": {
+    "id": { "type": "string", "minLength": 1 },
+    "source": {
+      "type": "object", "additionalProperties": false, "required": ["kind", "identity", "version"],
+      "properties": {
+        "kind": { "enum": ["user-command", "application-reconcile", "application-migration", "default-engine", "extension-provider", "recovery", "undo-redo"] },
+        "identity": { "$ref": "#/$defs/id" },
+        "version": { "$ref": "#/$defs/id" }
+      }
+    },
+    "causality": {
+      "type": "object", "additionalProperties": false, "required": ["sessionRevision"],
+      "properties": { "sessionRevision": { "type": "integer", "minimum": 0 } }
+    },
+    "entityKind": { "enum": ["component", "project", "interface", "router", "structural-link", "access-slot", "domain", "package-entity"] },
+    "relationKind": { "enum": ["attachment", "domain-membership", "package-relation"] },
+    "jsonValue": { "type": ["array", "boolean", "integer", "number", "null", "object", "string"] },
+    "entityExists": {
+      "type": "object", "additionalProperties": false, "required": ["kind", "entityKind", "id"],
+      "properties": { "kind": { "const": "entity-exists" }, "entityKind": { "$ref": "#/$defs/entityKind" }, "id": { "$ref": "#/$defs/id" } }
+    },
+    "entityAbsent": {
+      "type": "object", "additionalProperties": false, "required": ["kind", "entityKind", "id"],
+      "properties": { "kind": { "const": "entity-absent" }, "entityKind": { "$ref": "#/$defs/entityKind" }, "id": { "$ref": "#/$defs/id" } }
+    },
+    "propertyEquals": {
+      "type": "object", "additionalProperties": false, "required": ["kind", "entityKind", "id", "property", "value"],
+      "properties": {
+        "kind": { "const": "property-equals" }, "entityKind": { "$ref": "#/$defs/entityKind" }, "id": { "$ref": "#/$defs/id" },
+        "property": { "$ref": "#/$defs/id" }, "value": { "$ref": "#/$defs/jsonValue" }
+      }
+    },
+    "relationExists": {
+      "type": "object", "additionalProperties": false, "required": ["kind", "relationKind", "id"],
+      "properties": { "kind": { "const": "relation-exists" }, "relationKind": { "$ref": "#/$defs/relationKind" }, "id": { "$ref": "#/$defs/id" } }
+    },
+    "slotUnoccupied": {
+      "type": "object", "additionalProperties": false, "required": ["kind", "slotId"],
+      "properties": { "kind": { "const": "slot-unoccupied" }, "slotId": { "$ref": "#/$defs/id" } }
+    },
+    "precondition": {
+      "oneOf": [
+        { "$ref": "#/$defs/entityExists" }, { "$ref": "#/$defs/entityAbsent" }, { "$ref": "#/$defs/propertyEquals" },
+        { "$ref": "#/$defs/relationExists" }, { "$ref": "#/$defs/slotUnoccupied" }
+      ]
+    },
+    "createEntity": {
+      "type": "object", "additionalProperties": false, "required": ["op", "entityKind", "localRef", "value"],
+      "properties": { "op": { "const": "createEntity" }, "entityKind": { "$ref": "#/$defs/entityKind" }, "localRef": { "$ref": "ipcraft.core-canonical-models.v1.schema.json#/$defs/localRefString" }, "value": { "type": "object" } }
+    },
+    "updateEntity": {
+      "type": "object", "additionalProperties": false, "required": ["op", "entityKind", "id", "set", "unset"],
+      "properties": {
+        "op": { "const": "updateEntity" }, "entityKind": { "$ref": "#/$defs/entityKind" }, "id": { "$ref": "#/$defs/id" },
+        "set": { "type": "object" }, "unset": { "type": "array", "items": { "$ref": "#/$defs/id" }, "uniqueItems": true }
+      }
+    },
+    "deleteEntity": {
+      "type": "object", "additionalProperties": false, "required": ["op", "entityKind", "id"],
+      "properties": { "op": { "const": "deleteEntity" }, "entityKind": { "$ref": "#/$defs/entityKind" }, "id": { "$ref": "#/$defs/id" } }
+    },
+    "createRelation": {
+      "type": "object", "additionalProperties": false, "required": ["op", "relationKind", "localRef", "value"],
+      "properties": { "op": { "const": "createRelation" }, "relationKind": { "$ref": "#/$defs/relationKind" }, "localRef": { "$ref": "ipcraft.core-canonical-models.v1.schema.json#/$defs/localRefString" }, "value": { "type": "object" } }
+    },
+    "updateRelation": {
+      "type": "object", "additionalProperties": false, "required": ["op", "relationKind", "id", "set", "unset"],
+      "properties": {
+        "op": { "const": "updateRelation" }, "relationKind": { "$ref": "#/$defs/relationKind" }, "id": { "$ref": "#/$defs/id" },
+        "set": { "type": "object" }, "unset": { "type": "array", "items": { "$ref": "#/$defs/id" }, "uniqueItems": true }
+      }
+    },
+    "deleteRelation": {
+      "type": "object", "additionalProperties": false, "required": ["op", "relationKind", "id"],
+      "properties": { "op": { "const": "deleteRelation" }, "relationKind": { "$ref": "#/$defs/relationKind" }, "id": { "$ref": "#/$defs/id" } }
+    },
+    "operation": {
+      "oneOf": [
+        { "$ref": "#/$defs/createEntity" }, { "$ref": "#/$defs/updateEntity" }, { "$ref": "#/$defs/deleteEntity" },
+        { "$ref": "#/$defs/createRelation" }, { "$ref": "#/$defs/updateRelation" }, { "$ref": "#/$defs/deleteRelation" }
+      ]
+    }
+  }
+}

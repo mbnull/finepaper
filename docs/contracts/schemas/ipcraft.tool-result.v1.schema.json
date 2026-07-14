@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ipcraft.tool-result.v1",
+  "title": "Ipcraft Tool Result V1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema", "pipelineRunId", "stepId", "invocationId", "snapshotDigest",
+    "dependencySetDigest", "status", "diagnosticReport", "metrics", "failure"
+  ],
+  "properties": {
+    "schema": { "const": "ipcraft.tool-result.v1" },
+    "pipelineRunId": { "$ref": "#/$defs/id" },
+    "stepId": { "$ref": "#/$defs/id" },
+    "invocationId": { "$ref": "#/$defs/id" },
+    "snapshotDigest": { "$ref": "#/$defs/digest" },
+    "dependencySetDigest": { "$ref": "#/$defs/digest" },
+    "status": { "enum": ["succeeded", "failed"] },
+    "diagnosticReport": { "oneOf": [{ "$ref": "#/$defs/path" }, { "type": "null" }] },
+    "artifactManifest": { "$ref": "#/$defs/path" },
+    "metrics": { "type": "object" },
+    "failure": { "oneOf": [{ "$ref": "#/$defs/failure" }, { "type": "null" }] }
+  },
+  "$defs": {
+    "id": { "type": "string", "minLength": 1 },
+    "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "path": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*[\\\\\\u0000]).+$"
+    },
+    "failure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code"],
+      "properties": {
+        "code": { "$ref": "#/$defs/id" },
+        "data": { "type": "object" }
+      }
+    }
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ipcraft.tool-input.v1",
+  "title": "Ipcraft Tool Input Manifest V1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema", "pipelineRunId", "stepId", "invocationId", "toolLockId", "kind",
+    "snapshotSessionRevision", "snapshotDigest", "formallySavedProjectDigest",
+    "dependencies", "projectDesignFile", "resultFile", "reportDirectory"
+  ],
+  "properties": {
+    "schema": { "const": "ipcraft.tool-input.v1" },
+    "pipelineRunId": { "$ref": "#/$defs/id" },
+    "stepId": { "$ref": "#/$defs/id" },
+    "invocationId": { "$ref": "#/$defs/id" },
+    "toolLockId": { "$ref": "#/$defs/id" },
+    "kind": { "enum": ["semantic-drc", "generator"] },
+    "snapshotSessionRevision": { "type": "integer", "minimum": 0 },
+    "snapshotDigest": { "$ref": "#/$defs/digest" },
+    "formallySavedProjectDigest": {
+      "oneOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }]
+    },
+    "dependencies": {
+      "type": "array",
+      "items": { "$ref": "ipcraft.project-design.v1.schema.json#/$defs/dependencyLock" }
+    },
+    "projectDesignFile": { "$ref": "#/$defs/path" },
+    "resultFile": { "$ref": "#/$defs/path" },
+    "reportDirectory": { "$ref": "#/$defs/path" },
+    "outputDirectory": { "$ref": "#/$defs/path" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "kind": { "const": "generator" } }, "required": ["kind"] },
+      "then": { "required": ["outputDirectory"] },
+      "else": { "not": { "required": ["outputDirectory"] } }
+    }
+  ],
+  "$defs": {
+    "id": { "type": "string", "minLength": 1 },
+    "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "path": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*[\\\\\\u0000]).+$"
+    }
+  }
+}
