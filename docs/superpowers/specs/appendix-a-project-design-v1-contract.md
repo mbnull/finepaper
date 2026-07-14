@@ -103,6 +103,7 @@ Rules:
 - `lockId` is project-global and is the value used by all references.
 - Exactly one `noc-package` lock exists.
 - Exactly one `default-engine` lock exists. Its `bundleManifestDigest` is the sole exact Engine implementation identity; `id` and `version` are display metadata, and `engineCompatibilityVersion` is migration classification only.
+- The Default Engine metadata type ID is exactly `ipcraft.default-noc-engine` in both lock and Bundle manifest. This constant identifies the artifact type; it never permits substitution because exact execution identity remains only `bundleManifestDigest`.
 - Resolved Engine Bundle manifest ID/version/Host contract/compatibility metadata must equal the lock metadata, but equality of those metadata never compensates for a digest mismatch. The Host supports only explicitly registered `engineHostContractVersion` and `hostSideEffectContractVersion` values.
 - Engine Host and Host side-effect version fields are structurally non-empty IDs, not schema constants. Unsupported values parse through Core validation and resolve to degraded inspect rather than making the project schema-invalid.
 - At least one Contract lock exists for every Contract referenced by an Interface template or instance.

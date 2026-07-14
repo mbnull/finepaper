@@ -52,6 +52,23 @@
       },
       "then": { "properties": { "source": { "required": ["bundleDigest"] } } },
       "else": { "properties": { "source": { "not": { "required": ["bundleDigest"] } } } }
+    },
+    {
+      "if": { "properties": { "source": { "properties": { "kind": { "const": "application-reconcile" } }, "required": ["kind"] } }, "required": ["source"] },
+      "then": { "properties": { "operations": { "not": { "contains": { "$ref": "ipcraft.core-canonical-models.v1.schema.json#/$defs/projectDependenciesUpdateOperationPredicate" } } } } }
+    },
+    {
+      "if": { "properties": { "source": { "properties": { "kind": { "enum": ["default-engine", "extension-provider", "user-command", "recovery", "undo-redo"] } }, "required": ["kind"] } }, "required": ["source"] },
+      "then": {
+        "properties": {
+          "operations": {
+            "allOf": [
+              { "not": { "contains": { "$ref": "ipcraft.core-canonical-models.v1.schema.json#/$defs/projectDependenciesUpdateOperationPredicate" } } },
+              { "not": { "contains": { "$ref": "ipcraft.core-canonical-models.v1.schema.json#/$defs/topologyDerivationUpdateOperationPredicate" } } }
+            ]
+          }
+        }
+      }
     }
   ],
   "$defs": {
@@ -63,7 +80,13 @@
         "identity": { "$ref": "#/$defs/id" },
         "version": { "$ref": "#/$defs/id" },
         "bundleDigest": { "$ref": "ipcraft.core-canonical-models.v1.schema.json#/$defs/digest" }
-      }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "kind": { "const": "default-engine" } }, "required": ["kind"] },
+          "then": { "properties": { "identity": { "const": "ipcraft.default-noc-engine" } } }
+        }
+      ]
     },
     "causality": {
       "type": "object", "additionalProperties": false, "required": ["sessionRevision"],

@@ -91,7 +91,7 @@
       ],
       "properties": {
         "lockId": { "$ref": "#/$defs/id" }, "kind": { "const": "default-engine" },
-        "id": { "$ref": "#/$defs/id" }, "version": { "$ref": "#/$defs/id" },
+        "id": { "const": "ipcraft.default-noc-engine" }, "version": { "$ref": "#/$defs/id" },
         "bundleManifestDigest": { "$ref": "#/$defs/digest" },
         "engineHostContractVersion": { "$ref": "#/$defs/id" },
         "engineCompatibilityVersion": { "$ref": "#/$defs/id" },

@@ -215,7 +215,13 @@
         "identity": { "$ref": "#/$defs/id" },
         "version": { "$ref": "#/$defs/id" },
         "bundleDigest": { "$ref": "#/$defs/digest" }
-      }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "kind": { "const": "default-engine" } }, "required": ["kind"] },
+          "then": { "properties": { "identity": { "const": "ipcraft.default-noc-engine" } } }
+        }
+      ]
     },
     "dependencyContext": {
       "type": "object",
@@ -651,6 +657,32 @@
         { "$ref": "#/$defs/patchPackageRelationUpdateSet" }
       ]
     },
+    "projectDependenciesUpdateOperationPredicate": {
+      "type": "object",
+      "required": ["op", "entityKind", "set"],
+      "properties": {
+        "op": { "const": "updateEntity" },
+        "entityKind": { "const": "project" },
+        "set": {
+          "type": "object",
+          "required": ["dependencies"],
+          "properties": { "dependencies": {} }
+        }
+      }
+    },
+    "topologyDerivationUpdateOperationPredicate": {
+      "type": "object",
+      "required": ["op", "entityKind", "set"],
+      "properties": {
+        "op": { "const": "updateEntity" },
+        "entityKind": { "const": "topology" },
+        "set": {
+          "type": "object",
+          "required": ["derivation"],
+          "properties": { "derivation": {} }
+        }
+      }
+    },
     "createEntityOperation": {
       "type": "object",
       "additionalProperties": false,
@@ -826,6 +858,27 @@
           "if": { "properties": { "source": { "properties": { "kind": { "enum": ["default-engine", "extension-provider"] } }, "required": ["kind"] } }, "required": ["source"] },
           "then": { "properties": { "source": { "required": ["bundleDigest"] } } },
           "else": { "properties": { "source": { "not": { "required": ["bundleDigest"] } } } }
+        },
+        {
+          "if": { "properties": { "source": { "properties": { "kind": { "const": "default-engine" } }, "required": ["kind"] } }, "required": ["source"] },
+          "then": { "properties": { "source": { "properties": { "identity": { "const": "ipcraft.default-noc-engine" } } } } }
+        },
+        {
+          "if": { "properties": { "source": { "properties": { "kind": { "const": "application-reconcile" } }, "required": ["kind"] } }, "required": ["source"] },
+          "then": { "properties": { "operations": { "not": { "contains": { "$ref": "#/$defs/projectDependenciesUpdateOperationPredicate" } } } } }
+        },
+        {
+          "if": { "properties": { "source": { "properties": { "kind": { "enum": ["default-engine", "extension-provider"] } }, "required": ["kind"] } }, "required": ["source"] },
+          "then": {
+            "properties": {
+              "operations": {
+                "allOf": [
+                  { "not": { "contains": { "$ref": "#/$defs/projectDependenciesUpdateOperationPredicate" } } },
+                  { "not": { "contains": { "$ref": "#/$defs/topologyDerivationUpdateOperationPredicate" } } }
+                ]
+              }
+            }
+          }
         }
       ]
     },
@@ -899,7 +952,27 @@
           "if": { "properties": { "kind": { "const": "default-engine-migration" } } },
           "then": {
             "required": ["migration"],
-            "properties": { "applicationPatch": { "properties": { "source": { "properties": { "kind": { "const": "application-migration" } } } } } }
+            "properties": {
+              "applicationPatch": {
+                "properties": {
+                  "source": { "properties": { "kind": { "const": "application-migration" } } },
+                  "operations": {
+                    "allOf": [
+                      { "contains": { "$ref": "#/$defs/projectDependenciesUpdateOperationPredicate" }, "minContains": 1 },
+                      { "contains": { "$ref": "#/$defs/topologyDerivationUpdateOperationPredicate" }, "minContains": 1 }
+                    ]
+                  }
+                }
+              },
+              "impactReport": {
+                "properties": {
+                  "impacts": {
+                    "contains": { "type": "object", "properties": { "code": { "const": "engine_migration.dependency_replaced" } }, "required": ["code"] },
+                    "minContains": 1
+                  }
+                }
+              }
+            }
           },
           "else": {
             "not": { "required": ["migration"] },

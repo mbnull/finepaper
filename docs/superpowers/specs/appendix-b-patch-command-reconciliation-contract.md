@@ -174,7 +174,7 @@ domain-membership
 package-relation
 ```
 
-`project` is a singleton Patch subject with ID equal to ProjectDesign root `id`. Ordinary user Patch permits only `updateEntity(project)` of `name`; create/delete Project and mutation of schema/profile/dependencies are forbidden. `topology` is update-only with ID equal to the TopologyDocument ID and a closed set containing only complete `derivation` replacement; V1 has no create/delete topology operation. A confirmed Engine Migration candidate may use source `application-migration` to replace the exact `dependencies` array and update topology `derivation` in the same atomic transaction. Application reconcile may update topology derivation; user and Authority sources may not perform either Application-owned mutation.
+`project` is a singleton Patch subject with ID equal to ProjectDesign root `id`. Ordinary user Patch permits only `updateEntity(project)` of `name`; create/delete Project and mutation of schema/profile/dependencies are forbidden. `topology` is update-only with ID equal to the TopologyDocument ID and a closed set containing only complete `derivation` replacement; V1 has no create/delete topology operation. The schemas structurally enforce that only `application-migration` may replace exact `dependencies`, and only `application-reconcile` or `application-migration` may replace topology `derivation`. Authority, user, recovery, and fresh undo-redo Patch envelopes reject those Application-owned mutations. A confirmed Engine Migration candidate must contain both updates and the migration confirmation impact in the same atomic transaction.
 
 ## B5. Operation Ordering and Atomicity
 
@@ -471,6 +471,8 @@ Opening a project performs:
 4. Package/Contract/extension semantic validation only when exact dependencies are available.
 
 If steps 1–2 pass but dependency/Engine/runtime/Host-contract resolution fails, the project opens degraded inspect mode. Core-known data is displayed, Package-owned schema content is preserved as raw read-only JSON, and opaque extensions remain uninterpreted. Save, normal reconciliation, DRC, Generate, and generic editing are disabled. The only allowed mutation is an explicitly offered Default Engine migration whose target manifest declares the source compatibility class and whose candidate can be derived without executing the missing source Engine. There is no fallback substitution. Failure of steps 1–2 means the project cannot open as a design.
+
+Persisted and recovery Engine Host/Host-side-effect version values are structurally non-empty IDs. Unknown values survive parsing and cause degraded inspect during resolution; only the selected behavioral schema `ipcraft.noc-side-effects.v1` fixes its own `contractVersion` to V1.
 
 ## B14. Command Result
 

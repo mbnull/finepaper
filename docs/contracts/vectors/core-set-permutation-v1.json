@@ -13659,7 +13659,7 @@
           {
             "lockId": "mu",
             "kind": "default-engine",
-            "id": "mu-2",
+            "id": "ipcraft.default-noc-engine",
             "version": "mu-2",
             "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             "engineHostContractVersion": "mu-2",
@@ -13692,7 +13692,7 @@
           {
             "lockId": "mu",
             "kind": "default-engine",
-            "id": "mu-2",
+            "id": "ipcraft.default-noc-engine",
             "version": "mu-2",
             "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             "engineHostContractVersion": "mu-2",
@@ -13714,7 +13714,7 @@
           {
             "lockId": "mu",
             "kind": "default-engine",
-            "id": "mu-2",
+            "id": "ipcraft.default-noc-engine",
             "version": "mu-2",
             "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             "engineHostContractVersion": "mu-2",
@@ -13754,7 +13754,7 @@
         {
           "lockId": "mu",
           "kind": "default-engine",
-          "id": "mu-2",
+          "id": "ipcraft.default-noc-engine",
           "version": "mu-2",
           "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
           "engineHostContractVersion": "mu-2",
@@ -13774,8 +13774,8 @@
           "runtimeLockId": "zeta-3"
         }
       ],
-      "expectedCanonicalJson": "[{\"bundleManifestDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"id\":\"alpha-1\",\"kind\":\"noc-package\",\"lockId\":\"alpha\",\"version\":\"alpha-1\"},{\"bundleManifestDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"engineCompatibilityVersion\":\"mu-2\",\"engineHostContractVersion\":\"mu-2\",\"hostSideEffectContractVersion\":\"mu-2\",\"id\":\"mu-2\",\"kind\":\"default-engine\",\"lockId\":\"mu\",\"supportedPlatformAbis\":[\"mu-2\"],\"version\":\"mu-2\"},{\"bundleManifestDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"id\":\"zeta-3\",\"kind\":\"extension-provider\",\"lockId\":\"zeta\",\"protocolVersion\":\"ipcraft.provider-protocol.v1\",\"runtimeLockId\":\"zeta-3\",\"version\":\"zeta-3\"}]",
-      "expectedDigest": "sha256:981f385c7037b6cfd95a5fcaaef21152c7c723fd8fc4dcee7991f20ddce51592"
+      "expectedCanonicalJson": "[{\"bundleManifestDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"id\":\"alpha-1\",\"kind\":\"noc-package\",\"lockId\":\"alpha\",\"version\":\"alpha-1\"},{\"bundleManifestDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"engineCompatibilityVersion\":\"mu-2\",\"engineHostContractVersion\":\"mu-2\",\"hostSideEffectContractVersion\":\"mu-2\",\"id\":\"ipcraft.default-noc-engine\",\"kind\":\"default-engine\",\"lockId\":\"mu\",\"supportedPlatformAbis\":[\"mu-2\"],\"version\":\"mu-2\"},{\"bundleManifestDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"id\":\"zeta-3\",\"kind\":\"extension-provider\",\"lockId\":\"zeta\",\"protocolVersion\":\"ipcraft.provider-protocol.v1\",\"runtimeLockId\":\"zeta-3\",\"version\":\"zeta-3\"}]",
+      "expectedDigest": "sha256:5d387924ba96c283df9f8f9f733f5eaff41ff1b8f91c1660a9ec5c91787a900c"
     },
     {
       "id": "project-design-extensions",
@@ -14248,7 +14248,7 @@
               "structureAuthority": {
                 "kind": "default-engine",
                 "lockId": "alpha-1",
-                "identity": "alpha-1",
+                "identity": "ipcraft.default-noc-engine",
                 "version": "alpha-1",
                 "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
               },
@@ -14553,7 +14553,7 @@
               "structureAuthority": {
                 "kind": "default-engine",
                 "lockId": "zeta-3",
-                "identity": "zeta-3",
+                "identity": "ipcraft.default-noc-engine",
                 "version": "zeta-3",
                 "bundleDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
               },
@@ -14705,7 +14705,7 @@
               "structureAuthority": {
                 "kind": "default-engine",
                 "lockId": "zeta-3",
-                "identity": "zeta-3",
+                "identity": "ipcraft.default-noc-engine",
                 "version": "zeta-3",
                 "bundleDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
               },
@@ -15010,7 +15010,7 @@
               "structureAuthority": {
                 "kind": "default-engine",
                 "lockId": "alpha-1",
-                "identity": "alpha-1",
+                "identity": "ipcraft.default-noc-engine",
                 "version": "alpha-1",
                 "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
               },
@@ -15317,7 +15317,7 @@
               "structureAuthority": {
                 "kind": "default-engine",
                 "lockId": "zeta-3",
-                "identity": "zeta-3",
+                "identity": "ipcraft.default-noc-engine",
                 "version": "zeta-3",
                 "bundleDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
               },
@@ -15467,7 +15467,7 @@
               "structureAuthority": {
                 "kind": "default-engine",
                 "lockId": "alpha-1",
-                "identity": "alpha-1",
+                "identity": "ipcraft.default-noc-engine",
                 "version": "alpha-1",
                 "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
               },
@@ -15621,7 +15621,7 @@
             "structureAuthority": {
               "kind": "default-engine",
               "lockId": "alpha-1",
-              "identity": "alpha-1",
+              "identity": "ipcraft.default-noc-engine",
               "version": "alpha-1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -15926,7 +15926,7 @@
             "structureAuthority": {
               "kind": "default-engine",
               "lockId": "zeta-3",
-              "identity": "zeta-3",
+              "identity": "ipcraft.default-noc-engine",
               "version": "zeta-3",
               "bundleDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
             },
@@ -16058,8 +16058,8 @@
           ]
         }
       ],
-      "expectedCanonicalJson": "[{\"accessSlots\":[{\"allowedContracts\":[{\"capabilityConstraints\":{},\"contractLockId\":\"alpha-1\",\"roles\":[\"alpha-1\"]}],\"displayOrder\":1,\"id\":\"alpha-1\",\"identityCompatibilityVersion\":1,\"label\":\"alpha-1\",\"properties\":{},\"routerId\":\"alpha-1\",\"templateKey\":\"alpha-1\"}],\"attachments\":[{\"id\":\"alpha-1\",\"interfaceId\":\"alpha-1\",\"routerId\":\"alpha-1\",\"slotId\":\"alpha-1\",\"state\":\"resolved\"}],\"derivation\":{\"defaultEngineBundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"defaultEngineLockId\":\"alpha-1\",\"derivedStateDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"derivedStateRevision\":1,\"engineCompatibilityVersion\":\"alpha-1\",\"engineHostContractVersion\":\"alpha-1\",\"hostSideEffectContractVersion\":\"alpha-1\",\"packageBundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"reconcileDependencySetDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"structureAuthority\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"alpha-1\",\"kind\":\"default-engine\",\"lockId\":\"alpha-1\",\"version\":\"alpha-1\"},\"topologyInputDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"topologyInputRevision\":1},\"domainMemberships\":[{\"domainId\":\"alpha-1\",\"id\":\"alpha-1\",\"routerId\":\"alpha-1\"}],\"domains\":[{\"config\":{},\"id\":\"alpha-1\",\"isDefault\":false,\"name\":\"alpha-1\",\"typeKey\":\"alpha-1\"}],\"extensions\":[{\"data\":{},\"ownerLockId\":\"alpha-1\",\"schema\":\"alpha-1\",\"version\":\"alpha-1\"}],\"id\":\"alpha\",\"kind\":\"mesh\",\"ownerComponentId\":\"alpha-1\",\"packageEntities\":[{\"data\":{},\"extensions\":[{\"data\":{},\"ownerLockId\":\"alpha-1\",\"schema\":\"alpha-1\",\"version\":\"alpha-1\"}],\"id\":\"alpha-1\",\"typeKey\":\"alpha-1\"}],\"packageRelations\":[{\"data\":{},\"extensions\":[{\"data\":{},\"ownerLockId\":\"alpha-1\",\"schema\":\"alpha-1\",\"version\":\"alpha-1\"}],\"id\":\"alpha-1\",\"sources\":[{\"state\":\"resolved\",\"subject\":{\"id\":\"alpha-1\",\"kind\":\"project\"}}],\"targets\":[{\"state\":\"resolved\",\"subject\":{\"id\":\"alpha-1\",\"kind\":\"project\"}}],\"typeKey\":\"alpha-1\"}],\"routers\":[{\"coordinate\":{\"column\":1,\"row\":1},\"id\":\"alpha-1\",\"identityCompatibilityVersion\":1,\"properties\":{},\"templateKey\":\"alpha-1\"}],\"structuralLinks\":[{\"axis\":\"horizontal\",\"endpointA\":\"alpha-1\",\"endpointB\":\"alpha-1\",\"id\":\"alpha-1\",\"identityCompatibilityVersion\":1,\"properties\":{},\"templateKey\":\"alpha-1\"}],\"templateKey\":\"alpha-1\"},{\"accessSlots\":[{\"allowedContracts\":[{\"capabilityConstraints\":{},\"contractLockId\":\"mu-2\",\"roles\":[\"mu-2\"]}],\"displayOrder\":2,\"id\":\"mu-2\",\"identityCompatibilityVersion\":2,\"label\":\"mu-2\",\"properties\":{},\"routerId\":\"mu-2\",\"templateKey\":\"mu-2\"}],\"attachments\":[{\"id\":\"mu-2\",\"intendedTarget\":{\"routerId\":\"mu-2\",\"slotId\":\"mu-2\"},\"interfaceId\":\"mu-2\",\"reasonCode\":\"mu-2\",\"state\":\"unresolved\"}],\"derivation\":{\"defaultEngineBundleDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"defaultEngineLockId\":\"mu-2\",\"derivedStateDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"derivedStateRevision\":2,\"engineCompatibilityVersion\":\"mu-2\",\"engineHostContractVersion\":\"mu-2\",\"hostSideEffectContractVersion\":\"mu-2\",\"packageBundleDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"reconcileDependencySetDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"structureAuthority\":{\"bundleDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"identity\":\"mu-2\",\"kind\":\"extension-provider\",\"lockId\":\"mu-2\",\"version\":\"mu-2\"},\"topologyInputDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"topologyInputRevision\":2},\"domainMemberships\":[{\"domainId\":\"mu-2\",\"id\":\"mu-2\",\"routerId\":\"mu-2\"}],\"domains\":[{\"config\":{},\"id\":\"mu-2\",\"isDefault\":true,\"name\":\"mu-2\",\"typeKey\":\"mu-2\"}],\"extensions\":[{\"data\":{},\"ownerLockId\":\"mu-2\",\"schema\":\"mu-2\",\"version\":\"mu-2\"}],\"id\":\"mu\",\"kind\":\"mesh\",\"ownerComponentId\":\"mu-2\",\"packageEntities\":[{\"data\":{},\"extensions\":[{\"data\":{},\"ownerLockId\":\"mu-2\",\"schema\":\"mu-2\",\"version\":\"mu-2\"}],\"id\":\"mu-2\",\"typeKey\":\"mu-2\"}],\"packageRelations\":[{\"data\":{},\"extensions\":[{\"data\":{},\"ownerLockId\":\"mu-2\",\"schema\":\"mu-2\",\"version\":\"mu-2\"}],\"id\":\"mu-2\",\"sources\":[{\"intendedSubject\":{\"id\":\"mu-2\",\"kind\":\"component\"},\"reasonCode\":\"mu-2\",\"state\":\"unresolved\"}],\"targets\":[{\"intendedSubject\":{\"id\":\"mu-2\",\"kind\":\"component\"},\"reasonCode\":\"mu-2\",\"state\":\"unresolved\"}],\"typeKey\":\"mu-2\"}],\"routers\":[{\"coordinate\":{\"column\":2,\"row\":2},\"id\":\"mu-2\",\"identityCompatibilityVersion\":2,\"properties\":{},\"templateKey\":\"mu-2\"}],\"structuralLinks\":[{\"axis\":\"vertical\",\"endpointA\":\"mu-2\",\"endpointB\":\"mu-2\",\"id\":\"mu-2\",\"identityCompatibilityVersion\":2,\"properties\":{},\"templateKey\":\"mu-2\"}],\"templateKey\":\"mu-2\"},{\"accessSlots\":[{\"allowedContracts\":[{\"capabilityConstraints\":{},\"contractLockId\":\"zeta-3\",\"roles\":[\"zeta-3\"]}],\"displayOrder\":3,\"id\":\"zeta-3\",\"identityCompatibilityVersion\":3,\"label\":\"zeta-3\",\"properties\":{},\"routerId\":\"zeta-3\",\"templateKey\":\"zeta-3\"}],\"attachments\":[{\"id\":\"zeta-3\",\"interfaceId\":\"zeta-3\",\"routerId\":\"zeta-3\",\"slotId\":\"zeta-3\",\"state\":\"resolved\"}],\"derivation\":{\"defaultEngineBundleDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"defaultEngineLockId\":\"zeta-3\",\"derivedStateDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"derivedStateRevision\":3,\"engineCompatibilityVersion\":\"zeta-3\",\"engineHostContractVersion\":\"zeta-3\",\"hostSideEffectContractVersion\":\"zeta-3\",\"packageBundleDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"reconcileDependencySetDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"structureAuthority\":{\"bundleDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"identity\":\"zeta-3\",\"kind\":\"default-engine\",\"lockId\":\"zeta-3\",\"version\":\"zeta-3\"},\"topologyInputDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"topologyInputRevision\":3},\"domainMemberships\":[{\"domainId\":\"zeta-3\",\"id\":\"zeta-3\",\"routerId\":\"zeta-3\"}],\"domains\":[{\"config\":{},\"id\":\"zeta-3\",\"isDefault\":false,\"name\":\"zeta-3\",\"typeKey\":\"zeta-3\"}],\"extensions\":[{\"data\":{},\"ownerLockId\":\"zeta-3\",\"schema\":\"zeta-3\",\"version\":\"zeta-3\"}],\"id\":\"zeta\",\"kind\":\"mesh\",\"ownerComponentId\":\"zeta-3\",\"packageEntities\":[{\"data\":{},\"extensions\":[{\"data\":{},\"ownerLockId\":\"zeta-3\",\"schema\":\"zeta-3\",\"version\":\"zeta-3\"}],\"id\":\"zeta-3\",\"typeKey\":\"zeta-3\"}],\"packageRelations\":[{\"data\":{},\"extensions\":[{\"data\":{},\"ownerLockId\":\"zeta-3\",\"schema\":\"zeta-3\",\"version\":\"zeta-3\"}],\"id\":\"zeta-3\",\"sources\":[{\"state\":\"resolved\",\"subject\":{\"id\":\"zeta-3\",\"kind\":\"interface\"}}],\"targets\":[{\"state\":\"resolved\",\"subject\":{\"id\":\"zeta-3\",\"kind\":\"interface\"}}],\"typeKey\":\"zeta-3\"}],\"routers\":[{\"coordinate\":{\"column\":3,\"row\":3},\"id\":\"zeta-3\",\"identityCompatibilityVersion\":3,\"properties\":{},\"templateKey\":\"zeta-3\"}],\"structuralLinks\":[{\"axis\":\"horizontal\",\"endpointA\":\"zeta-3\",\"endpointB\":\"zeta-3\",\"id\":\"zeta-3\",\"identityCompatibilityVersion\":3,\"properties\":{},\"templateKey\":\"zeta-3\"}],\"templateKey\":\"zeta-3\"}]",
-      "expectedDigest": "sha256:145643de9d01aea7f2ce049ba0ff74e65ad79df5386142695e0a725efc641dc0"
+      "expectedCanonicalJson": "[{\"accessSlots\":[{\"allowedContracts\":[{\"capabilityConstraints\":{},\"contractLockId\":\"alpha-1\",\"roles\":[\"alpha-1\"]}],\"displayOrder\":1,\"id\":\"alpha-1\",\"identityCompatibilityVersion\":1,\"label\":\"alpha-1\",\"properties\":{},\"routerId\":\"alpha-1\",\"templateKey\":\"alpha-1\"}],\"attachments\":[{\"id\":\"alpha-1\",\"interfaceId\":\"alpha-1\",\"routerId\":\"alpha-1\",\"slotId\":\"alpha-1\",\"state\":\"resolved\"}],\"derivation\":{\"defaultEngineBundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"defaultEngineLockId\":\"alpha-1\",\"derivedStateDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"derivedStateRevision\":1,\"engineCompatibilityVersion\":\"alpha-1\",\"engineHostContractVersion\":\"alpha-1\",\"hostSideEffectContractVersion\":\"alpha-1\",\"packageBundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"reconcileDependencySetDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"structureAuthority\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"ipcraft.default-noc-engine\",\"kind\":\"default-engine\",\"lockId\":\"alpha-1\",\"version\":\"alpha-1\"},\"topologyInputDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"topologyInputRevision\":1},\"domainMemberships\":[{\"domainId\":\"alpha-1\",\"id\":\"alpha-1\",\"routerId\":\"alpha-1\"}],\"domains\":[{\"config\":{},\"id\":\"alpha-1\",\"isDefault\":false,\"name\":\"alpha-1\",\"typeKey\":\"alpha-1\"}],\"extensions\":[{\"data\":{},\"ownerLockId\":\"alpha-1\",\"schema\":\"alpha-1\",\"version\":\"alpha-1\"}],\"id\":\"alpha\",\"kind\":\"mesh\",\"ownerComponentId\":\"alpha-1\",\"packageEntities\":[{\"data\":{},\"extensions\":[{\"data\":{},\"ownerLockId\":\"alpha-1\",\"schema\":\"alpha-1\",\"version\":\"alpha-1\"}],\"id\":\"alpha-1\",\"typeKey\":\"alpha-1\"}],\"packageRelations\":[{\"data\":{},\"extensions\":[{\"data\":{},\"ownerLockId\":\"alpha-1\",\"schema\":\"alpha-1\",\"version\":\"alpha-1\"}],\"id\":\"alpha-1\",\"sources\":[{\"state\":\"resolved\",\"subject\":{\"id\":\"alpha-1\",\"kind\":\"project\"}}],\"targets\":[{\"state\":\"resolved\",\"subject\":{\"id\":\"alpha-1\",\"kind\":\"project\"}}],\"typeKey\":\"alpha-1\"}],\"routers\":[{\"coordinate\":{\"column\":1,\"row\":1},\"id\":\"alpha-1\",\"identityCompatibilityVersion\":1,\"properties\":{},\"templateKey\":\"alpha-1\"}],\"structuralLinks\":[{\"axis\":\"horizontal\",\"endpointA\":\"alpha-1\",\"endpointB\":\"alpha-1\",\"id\":\"alpha-1\",\"identityCompatibilityVersion\":1,\"properties\":{},\"templateKey\":\"alpha-1\"}],\"templateKey\":\"alpha-1\"},{\"accessSlots\":[{\"allowedContracts\":[{\"capabilityConstraints\":{},\"contractLockId\":\"mu-2\",\"roles\":[\"mu-2\"]}],\"displayOrder\":2,\"id\":\"mu-2\",\"identityCompatibilityVersion\":2,\"label\":\"mu-2\",\"properties\":{},\"routerId\":\"mu-2\",\"templateKey\":\"mu-2\"}],\"attachments\":[{\"id\":\"mu-2\",\"intendedTarget\":{\"routerId\":\"mu-2\",\"slotId\":\"mu-2\"},\"interfaceId\":\"mu-2\",\"reasonCode\":\"mu-2\",\"state\":\"unresolved\"}],\"derivation\":{\"defaultEngineBundleDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"defaultEngineLockId\":\"mu-2\",\"derivedStateDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"derivedStateRevision\":2,\"engineCompatibilityVersion\":\"mu-2\",\"engineHostContractVersion\":\"mu-2\",\"hostSideEffectContractVersion\":\"mu-2\",\"packageBundleDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"reconcileDependencySetDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"structureAuthority\":{\"bundleDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"identity\":\"mu-2\",\"kind\":\"extension-provider\",\"lockId\":\"mu-2\",\"version\":\"mu-2\"},\"topologyInputDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"topologyInputRevision\":2},\"domainMemberships\":[{\"domainId\":\"mu-2\",\"id\":\"mu-2\",\"routerId\":\"mu-2\"}],\"domains\":[{\"config\":{},\"id\":\"mu-2\",\"isDefault\":true,\"name\":\"mu-2\",\"typeKey\":\"mu-2\"}],\"extensions\":[{\"data\":{},\"ownerLockId\":\"mu-2\",\"schema\":\"mu-2\",\"version\":\"mu-2\"}],\"id\":\"mu\",\"kind\":\"mesh\",\"ownerComponentId\":\"mu-2\",\"packageEntities\":[{\"data\":{},\"extensions\":[{\"data\":{},\"ownerLockId\":\"mu-2\",\"schema\":\"mu-2\",\"version\":\"mu-2\"}],\"id\":\"mu-2\",\"typeKey\":\"mu-2\"}],\"packageRelations\":[{\"data\":{},\"extensions\":[{\"data\":{},\"ownerLockId\":\"mu-2\",\"schema\":\"mu-2\",\"version\":\"mu-2\"}],\"id\":\"mu-2\",\"sources\":[{\"intendedSubject\":{\"id\":\"mu-2\",\"kind\":\"component\"},\"reasonCode\":\"mu-2\",\"state\":\"unresolved\"}],\"targets\":[{\"intendedSubject\":{\"id\":\"mu-2\",\"kind\":\"component\"},\"reasonCode\":\"mu-2\",\"state\":\"unresolved\"}],\"typeKey\":\"mu-2\"}],\"routers\":[{\"coordinate\":{\"column\":2,\"row\":2},\"id\":\"mu-2\",\"identityCompatibilityVersion\":2,\"properties\":{},\"templateKey\":\"mu-2\"}],\"structuralLinks\":[{\"axis\":\"vertical\",\"endpointA\":\"mu-2\",\"endpointB\":\"mu-2\",\"id\":\"mu-2\",\"identityCompatibilityVersion\":2,\"properties\":{},\"templateKey\":\"mu-2\"}],\"templateKey\":\"mu-2\"},{\"accessSlots\":[{\"allowedContracts\":[{\"capabilityConstraints\":{},\"contractLockId\":\"zeta-3\",\"roles\":[\"zeta-3\"]}],\"displayOrder\":3,\"id\":\"zeta-3\",\"identityCompatibilityVersion\":3,\"label\":\"zeta-3\",\"properties\":{},\"routerId\":\"zeta-3\",\"templateKey\":\"zeta-3\"}],\"attachments\":[{\"id\":\"zeta-3\",\"interfaceId\":\"zeta-3\",\"routerId\":\"zeta-3\",\"slotId\":\"zeta-3\",\"state\":\"resolved\"}],\"derivation\":{\"defaultEngineBundleDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"defaultEngineLockId\":\"zeta-3\",\"derivedStateDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"derivedStateRevision\":3,\"engineCompatibilityVersion\":\"zeta-3\",\"engineHostContractVersion\":\"zeta-3\",\"hostSideEffectContractVersion\":\"zeta-3\",\"packageBundleDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"reconcileDependencySetDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"structureAuthority\":{\"bundleDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"identity\":\"ipcraft.default-noc-engine\",\"kind\":\"default-engine\",\"lockId\":\"zeta-3\",\"version\":\"zeta-3\"},\"topologyInputDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"topologyInputRevision\":3},\"domainMemberships\":[{\"domainId\":\"zeta-3\",\"id\":\"zeta-3\",\"routerId\":\"zeta-3\"}],\"domains\":[{\"config\":{},\"id\":\"zeta-3\",\"isDefault\":false,\"name\":\"zeta-3\",\"typeKey\":\"zeta-3\"}],\"extensions\":[{\"data\":{},\"ownerLockId\":\"zeta-3\",\"schema\":\"zeta-3\",\"version\":\"zeta-3\"}],\"id\":\"zeta\",\"kind\":\"mesh\",\"ownerComponentId\":\"zeta-3\",\"packageEntities\":[{\"data\":{},\"extensions\":[{\"data\":{},\"ownerLockId\":\"zeta-3\",\"schema\":\"zeta-3\",\"version\":\"zeta-3\"}],\"id\":\"zeta-3\",\"typeKey\":\"zeta-3\"}],\"packageRelations\":[{\"data\":{},\"extensions\":[{\"data\":{},\"ownerLockId\":\"zeta-3\",\"schema\":\"zeta-3\",\"version\":\"zeta-3\"}],\"id\":\"zeta-3\",\"sources\":[{\"state\":\"resolved\",\"subject\":{\"id\":\"zeta-3\",\"kind\":\"interface\"}}],\"targets\":[{\"state\":\"resolved\",\"subject\":{\"id\":\"zeta-3\",\"kind\":\"interface\"}}],\"typeKey\":\"zeta-3\"}],\"routers\":[{\"coordinate\":{\"column\":3,\"row\":3},\"id\":\"zeta-3\",\"identityCompatibilityVersion\":3,\"properties\":{},\"templateKey\":\"zeta-3\"}],\"structuralLinks\":[{\"axis\":\"horizontal\",\"endpointA\":\"zeta-3\",\"endpointB\":\"zeta-3\",\"id\":\"zeta-3\",\"identityCompatibilityVersion\":3,\"properties\":{},\"templateKey\":\"zeta-3\"}],\"templateKey\":\"zeta-3\"}]",
+      "expectedDigest": "sha256:3897028547d17314c4ee19caf04ff4c29438c5e83eda1f18141a51ca01a3c02f"
     },
     {
       "id": "project-design-views",
@@ -18523,7 +18523,7 @@
           {
             "lockId": "mu",
             "kind": "default-engine",
-            "id": "mu-2",
+            "id": "ipcraft.default-noc-engine",
             "version": "mu-2",
             "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             "engineHostContractVersion": "mu-2",
@@ -18556,7 +18556,7 @@
           {
             "lockId": "mu",
             "kind": "default-engine",
-            "id": "mu-2",
+            "id": "ipcraft.default-noc-engine",
             "version": "mu-2",
             "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             "engineHostContractVersion": "mu-2",
@@ -18578,7 +18578,7 @@
           {
             "lockId": "mu",
             "kind": "default-engine",
-            "id": "mu-2",
+            "id": "ipcraft.default-noc-engine",
             "version": "mu-2",
             "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             "engineHostContractVersion": "mu-2",
@@ -18618,7 +18618,7 @@
         {
           "lockId": "mu",
           "kind": "default-engine",
-          "id": "mu-2",
+          "id": "ipcraft.default-noc-engine",
           "version": "mu-2",
           "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
           "engineHostContractVersion": "mu-2",
@@ -18638,8 +18638,8 @@
           "runtimeLockId": "zeta-3"
         }
       ],
-      "expectedCanonicalJson": "[{\"bundleManifestDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"id\":\"alpha-1\",\"kind\":\"noc-package\",\"lockId\":\"alpha\",\"version\":\"alpha-1\"},{\"bundleManifestDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"engineCompatibilityVersion\":\"mu-2\",\"engineHostContractVersion\":\"mu-2\",\"hostSideEffectContractVersion\":\"mu-2\",\"id\":\"mu-2\",\"kind\":\"default-engine\",\"lockId\":\"mu\",\"supportedPlatformAbis\":[\"mu-2\"],\"version\":\"mu-2\"},{\"bundleManifestDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"id\":\"zeta-3\",\"kind\":\"extension-provider\",\"lockId\":\"zeta\",\"protocolVersion\":\"ipcraft.provider-protocol.v1\",\"runtimeLockId\":\"zeta-3\",\"version\":\"zeta-3\"}]",
-      "expectedDigest": "sha256:981f385c7037b6cfd95a5fcaaef21152c7c723fd8fc4dcee7991f20ddce51592"
+      "expectedCanonicalJson": "[{\"bundleManifestDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"id\":\"alpha-1\",\"kind\":\"noc-package\",\"lockId\":\"alpha\",\"version\":\"alpha-1\"},{\"bundleManifestDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"engineCompatibilityVersion\":\"mu-2\",\"engineHostContractVersion\":\"mu-2\",\"hostSideEffectContractVersion\":\"mu-2\",\"id\":\"ipcraft.default-noc-engine\",\"kind\":\"default-engine\",\"lockId\":\"mu\",\"supportedPlatformAbis\":[\"mu-2\"],\"version\":\"mu-2\"},{\"bundleManifestDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"id\":\"zeta-3\",\"kind\":\"extension-provider\",\"lockId\":\"zeta\",\"protocolVersion\":\"ipcraft.provider-protocol.v1\",\"runtimeLockId\":\"zeta-3\",\"version\":\"zeta-3\"}]",
+      "expectedDigest": "sha256:5d387924ba96c283df9f8f9f733f5eaff41ff1b8f91c1660a9ec5c91787a900c"
     }
   ]
 }

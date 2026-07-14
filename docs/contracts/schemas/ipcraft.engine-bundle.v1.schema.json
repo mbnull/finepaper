@@ -17,7 +17,7 @@
   ],
   "properties": {
     "schema": { "const": "ipcraft.engine-bundle.v1" },
-    "id": { "type": "string", "minLength": 1 },
+    "id": { "const": "ipcraft.default-noc-engine" },
     "version": { "type": "string", "minLength": 1 },
     "engineHostContractVersion": { "type": "string", "minLength": 1 },
     "engineCompatibilityVersion": { "type": "string", "minLength": 1 },

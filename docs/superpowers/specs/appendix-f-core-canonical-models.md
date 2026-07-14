@@ -453,7 +453,7 @@ Collection vectors exercise the physical array comparator independently of enclo
 
 ## F11. Host Side-effect Contract V1
 
-`ipcraft.noc-side-effects.v1` is stable for all V1 Hosts:
+`ipcraft.noc-side-effects.v1` is stable for all V1 Hosts and fixes its behavioral `contractVersion` to that exact V1 ID. Persisted locks remain structurally open so unsupported versions degrade before this schema is selected:
 
 1. Process Authority operations in order and build the candidate-wide local-reference graph. Reject duplicate localRefs, wrong source prefixes, unknown local references, or references whose create is not visible in combined Authority-then-Application operation order.
 2. For every created Router, create one Membership in each Domain type's Default Domain. Sort by `(domainTypeKey, objectRefToken(routerRef))` and assign `application:000001...` localRefs in that order.
@@ -474,6 +474,8 @@ Exact impact dispositions and candidate effects:
 | `package_relation.endpoint_unresolved` | warning | false | `reattach-or-delete-relation` | legal auto-commit |
 | `package_relation.endpoint_blocks_candidate` | error | false | `discard-and-repair` | blocked and unconfirmable |
 | `engine_migration.dependency_replaced` | warning | false | `confirm-or-discard` | ready-to-commit confirmation regardless of data loss |
+
+Disposition priority is exact: `package_relation.endpoint_blocks_candidate` wins and blocks; otherwise either confirmation impact requires confirmation; otherwise the candidate auto-commits. `domain.disconnected` therefore auto-commits while a matching blocking `domain.disconnected` Core diagnostic blocks Save, Validate, and Generate in the resulting current design.
 
 ## F12. Default Engine Migration Candidate
 
@@ -506,7 +508,7 @@ Engine migration uses `candidate-transaction.kind: default-engine-migration` and
 }
 ```
 
-The dependency `lockId` remains stable while its exact Engine metadata/digest is replaced. The target Engine returns a Patch body against current Derived State. The Host candidate includes an `application-migration` `updateEntity(project)` replacing the exact dependency array and `updateEntity(topology)` replacing only derivation provenance, plus normal F11 side effects. Commit is atomic. Formal Undo/Redo uses stored forward/inverse Patches and localRef→Host-ID mappings without loading either Engine.
+The dependency `lockId` remains stable while its exact Engine metadata/digest is replaced. Machine schema requires both Application-owned updates and `engine_migration.dependency_replaced`; semantic validation requires equal lock IDs, different digests, the target exact lock in dependencies, and target derivation provenance. The target Engine returns a Patch body against current Derived State. The Host candidate includes an `application-migration` `updateEntity(project)` replacing the exact dependency array and `updateEntity(topology)` replacing only derivation provenance, plus normal F11 side effects. Commit is atomic and always requires confirmation. Formal Undo/Redo uses stored forward/inverse Patches and localRef→Host-ID mappings without loading either Engine.
 
 ## F13. Golden Projection Vector Requirements
 

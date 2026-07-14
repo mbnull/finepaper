@@ -36,7 +36,7 @@ SCHEMA_KEYWORDS = {
     "$ref", "$comment", "$defs", "definitions", "title", "description", "$id", "$schema",
     "type", "required", "properties", "additionalProperties", "enum", "const", "oneOf",
     "anyOf", "allOf", "if", "then", "else", "not", "items", "minItems", "maxItems",
-    "uniqueItems", "pattern", "minimum", "maximum", "minLength", "maxLength", "format",
+    "contains", "minContains", "maxContains", "uniqueItems", "pattern", "minimum", "maximum", "minLength", "maxLength", "format",
     "x-ipcraft-canonical",
 }
 
@@ -217,6 +217,14 @@ class SchemaWorld:
             if "items" in schema:
                 for index, item in enumerate(value):
                     self.validate(schema_id, schema["items"], item, f"{location}/{index}")
+            if "contains" in schema:
+                matches = sum(self.is_valid(schema_id, schema["contains"], item, f"{location}/{index}") for index, item in enumerate(value))
+                minimum_contains = schema.get("minContains", 1)
+                maximum_contains = schema.get("maxContains")
+                if not isinstance(minimum_contains, int) or (maximum_contains is not None and not isinstance(maximum_contains, int)):
+                    fail(f"{location}: minContains/maxContains must be integers")
+                if matches < minimum_contains or (maximum_contains is not None and matches > maximum_contains):
+                    raise SchemaViolation(f"{location}: contains cardinality is outside bounds")
         if isinstance(value, str):
             minimum = schema.get("minLength", 0)
             maximum = schema.get("maxLength")
@@ -238,14 +246,13 @@ class SchemaWorld:
                 raise SchemaViolation(f"{location}: below minimum")
             if "maximum" in schema and value > schema["maximum"]:
                 raise SchemaViolation(f"{location}: above maximum")
+        if "if" in schema:
+            chosen = schema.get("then", {}) if self.is_valid(schema_id, schema["if"], value, location) else schema.get("else", {})
+            self.validate(schema_id, chosen, value, f"{location}/conditional")
         for index, branch in enumerate(schema.get("allOf", [])):
             if not isinstance(branch, dict):
                 fail(f"{location}: allOf[{index}] must be an object")
-            if "if" in branch:
-                chosen = branch.get("then", {}) if self.is_valid(schema_id, branch["if"], value, location) else branch.get("else", {})
-                self.validate(schema_id, chosen, value, f"{location}/allOf/{index}")
-            else:
-                self.validate(schema_id, branch, value, f"{location}/allOf/{index}")
+            self.validate(schema_id, branch, value, f"{location}/allOf/{index}")
 
     def is_valid(self, schema_id: str, schema: Any, value: Any, location: str) -> bool:
         try:

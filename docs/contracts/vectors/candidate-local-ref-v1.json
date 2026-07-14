@@ -22,7 +22,7 @@
             "structureAuthority": {
               "kind": "default-engine",
               "lockId": "dep.engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -49,7 +49,7 @@
             "patchId": "patch.authority",
             "source": {
               "kind": "default-engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -128,7 +128,7 @@
           "structureAuthority": {
             "kind": "default-engine",
             "lockId": "dep.engine",
-            "identity": "engine.mesh",
+            "identity": "ipcraft.default-noc-engine",
             "version": "1",
             "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
           },
@@ -155,7 +155,7 @@
           "patchId": "patch.authority",
           "source": {
             "kind": "default-engine",
-            "identity": "engine.mesh",
+            "identity": "ipcraft.default-noc-engine",
             "version": "1",
             "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
           },
@@ -209,8 +209,8 @@
           "impacts": []
         }
       },
-      "expectedCanonicalJson": "{\"allocationOrder\":[\"application:000001\",\"authority:router-0\"],\"applicability\":{\"baseAuthoritativeDesignDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"baseDerivedStateDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"baseDerivedStateRevision\":3,\"defaultEngineBundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"defaultEngineLockId\":\"dep.engine\",\"engineHostContractVersion\":\"ipcraft.engine-host.v1\",\"groupId\":\"group-1\",\"hostSideEffectContractVersion\":\"ipcraft.noc-side-effects.v1\",\"packageBundleDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"reconcileDependencySetDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"requestGeneration\":1,\"schema\":\"ipcraft.reconcile-applicability.v1\",\"structureAuthority\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"engine.mesh\",\"kind\":\"default-engine\",\"lockId\":\"dep.engine\",\"version\":\"1\"},\"topologyInputDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"topologyInputRevision\":2},\"applicationPatch\":{\"operations\":[{\"localRef\":\"application:000001\",\"op\":\"createRelation\",\"relationKind\":\"domain-membership\",\"value\":{\"domainRef\":{\"id\":\"domain.default\"},\"routerRef\":{\"localRef\":\"authority:router-0\"}}}],\"patchId\":\"patch.application\",\"source\":{\"identity\":\"host\",\"kind\":\"application-reconcile\",\"version\":\"1\"}},\"authorityPatch\":{\"operations\":[{\"entityKind\":\"router\",\"localRef\":\"authority:router-0\",\"op\":\"createEntity\",\"value\":{\"coordinate\":{\"column\":0,\"row\":0},\"identityCompatibilityVersion\":1,\"properties\":{},\"templateKey\":\"mesh-router\"}}],\"patchId\":\"patch.authority\",\"source\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"engine.mesh\",\"kind\":\"default-engine\",\"version\":\"1\"}},\"impactReport\":{\"impacts\":[],\"schema\":\"ipcraft.topology-impact-report.v1\"},\"kind\":\"topology-materialization\",\"schema\":\"ipcraft.candidate-transaction.v1\",\"tombstones\":[],\"topologyIntent\":{\"componentId\":\"component.noc\",\"globalConfig\":{\"columns\":2,\"rows\":2},\"packageEntities\":[],\"packageRelations\":[],\"schema\":\"ipcraft.topology-intent.v1\",\"topologyId\":\"topology.main\",\"topologyKind\":\"mesh\"},\"transactionId\":\"tx-1\"}",
-      "expectedDigest": "sha256:68ba3d63bff0cfd1367fbedd98dd62f1a455e4ba708163f86b92ae4d0f20ff9b"
+      "expectedCanonicalJson": "{\"allocationOrder\":[\"application:000001\",\"authority:router-0\"],\"applicability\":{\"baseAuthoritativeDesignDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"baseDerivedStateDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"baseDerivedStateRevision\":3,\"defaultEngineBundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"defaultEngineLockId\":\"dep.engine\",\"engineHostContractVersion\":\"ipcraft.engine-host.v1\",\"groupId\":\"group-1\",\"hostSideEffectContractVersion\":\"ipcraft.noc-side-effects.v1\",\"packageBundleDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"reconcileDependencySetDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"requestGeneration\":1,\"schema\":\"ipcraft.reconcile-applicability.v1\",\"structureAuthority\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"ipcraft.default-noc-engine\",\"kind\":\"default-engine\",\"lockId\":\"dep.engine\",\"version\":\"1\"},\"topologyInputDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"topologyInputRevision\":2},\"applicationPatch\":{\"operations\":[{\"localRef\":\"application:000001\",\"op\":\"createRelation\",\"relationKind\":\"domain-membership\",\"value\":{\"domainRef\":{\"id\":\"domain.default\"},\"routerRef\":{\"localRef\":\"authority:router-0\"}}}],\"patchId\":\"patch.application\",\"source\":{\"identity\":\"host\",\"kind\":\"application-reconcile\",\"version\":\"1\"}},\"authorityPatch\":{\"operations\":[{\"entityKind\":\"router\",\"localRef\":\"authority:router-0\",\"op\":\"createEntity\",\"value\":{\"coordinate\":{\"column\":0,\"row\":0},\"identityCompatibilityVersion\":1,\"properties\":{},\"templateKey\":\"mesh-router\"}}],\"patchId\":\"patch.authority\",\"source\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"ipcraft.default-noc-engine\",\"kind\":\"default-engine\",\"version\":\"1\"}},\"impactReport\":{\"impacts\":[],\"schema\":\"ipcraft.topology-impact-report.v1\"},\"kind\":\"topology-materialization\",\"schema\":\"ipcraft.candidate-transaction.v1\",\"tombstones\":[],\"topologyIntent\":{\"componentId\":\"component.noc\",\"globalConfig\":{\"columns\":2,\"rows\":2},\"packageEntities\":[],\"packageRelations\":[],\"schema\":\"ipcraft.topology-intent.v1\",\"topologyId\":\"topology.main\",\"topologyKind\":\"mesh\"},\"transactionId\":\"tx-1\"}",
+      "expectedDigest": "sha256:8ebcc7d833b6049830227eed3e787fe0726635d01758a0770b7fd1f7e282880e"
     },
     {
       "id": "hypothetical-final-host-id-mappings-excluded",
@@ -232,7 +232,7 @@
               "structureAuthority": {
                 "kind": "default-engine",
                 "lockId": "dep.engine",
-                "identity": "engine.mesh",
+                "identity": "ipcraft.default-noc-engine",
                 "version": "1",
                 "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
               },
@@ -259,7 +259,7 @@
               "patchId": "patch.authority",
               "source": {
                 "kind": "default-engine",
-                "identity": "engine.mesh",
+                "identity": "ipcraft.default-noc-engine",
                 "version": "1",
                 "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
               },
@@ -336,7 +336,7 @@
               "structureAuthority": {
                 "kind": "default-engine",
                 "lockId": "dep.engine",
-                "identity": "engine.mesh",
+                "identity": "ipcraft.default-noc-engine",
                 "version": "1",
                 "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
               },
@@ -363,7 +363,7 @@
               "patchId": "patch.authority",
               "source": {
                 "kind": "default-engine",
-                "identity": "engine.mesh",
+                "identity": "ipcraft.default-noc-engine",
                 "version": "1",
                 "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
               },
@@ -447,7 +447,7 @@
           "structureAuthority": {
             "kind": "default-engine",
             "lockId": "dep.engine",
-            "identity": "engine.mesh",
+            "identity": "ipcraft.default-noc-engine",
             "version": "1",
             "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
           },
@@ -474,7 +474,7 @@
           "patchId": "patch.authority",
           "source": {
             "kind": "default-engine",
-            "identity": "engine.mesh",
+            "identity": "ipcraft.default-noc-engine",
             "version": "1",
             "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
           },
@@ -528,8 +528,8 @@
           "impacts": []
         }
       },
-      "expectedCanonicalJson": "{\"allocationOrder\":[\"application:000001\",\"authority:router-0\"],\"applicability\":{\"baseAuthoritativeDesignDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"baseDerivedStateDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"baseDerivedStateRevision\":3,\"defaultEngineBundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"defaultEngineLockId\":\"dep.engine\",\"engineHostContractVersion\":\"ipcraft.engine-host.v1\",\"groupId\":\"group-1\",\"hostSideEffectContractVersion\":\"ipcraft.noc-side-effects.v1\",\"packageBundleDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"reconcileDependencySetDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"requestGeneration\":1,\"schema\":\"ipcraft.reconcile-applicability.v1\",\"structureAuthority\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"engine.mesh\",\"kind\":\"default-engine\",\"lockId\":\"dep.engine\",\"version\":\"1\"},\"topologyInputDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"topologyInputRevision\":2},\"applicationPatch\":{\"operations\":[{\"localRef\":\"application:000001\",\"op\":\"createRelation\",\"relationKind\":\"domain-membership\",\"value\":{\"domainRef\":{\"id\":\"domain.default\"},\"routerRef\":{\"localRef\":\"authority:router-0\"}}}],\"patchId\":\"patch.application\",\"source\":{\"identity\":\"host\",\"kind\":\"application-reconcile\",\"version\":\"1\"}},\"authorityPatch\":{\"operations\":[{\"entityKind\":\"router\",\"localRef\":\"authority:router-0\",\"op\":\"createEntity\",\"value\":{\"coordinate\":{\"column\":0,\"row\":0},\"identityCompatibilityVersion\":1,\"properties\":{},\"templateKey\":\"mesh-router\"}}],\"patchId\":\"patch.authority\",\"source\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"engine.mesh\",\"kind\":\"default-engine\",\"version\":\"1\"}},\"impactReport\":{\"impacts\":[],\"schema\":\"ipcraft.topology-impact-report.v1\"},\"kind\":\"topology-materialization\",\"schema\":\"ipcraft.candidate-transaction.v1\",\"tombstones\":[],\"topologyIntent\":{\"componentId\":\"component.noc\",\"globalConfig\":{\"columns\":2,\"rows\":2},\"packageEntities\":[],\"packageRelations\":[],\"schema\":\"ipcraft.topology-intent.v1\",\"topologyId\":\"topology.main\",\"topologyKind\":\"mesh\"},\"transactionId\":\"tx-1\"}",
-      "expectedDigest": "sha256:68ba3d63bff0cfd1367fbedd98dd62f1a455e4ba708163f86b92ae4d0f20ff9b"
+      "expectedCanonicalJson": "{\"allocationOrder\":[\"application:000001\",\"authority:router-0\"],\"applicability\":{\"baseAuthoritativeDesignDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"baseDerivedStateDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"baseDerivedStateRevision\":3,\"defaultEngineBundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"defaultEngineLockId\":\"dep.engine\",\"engineHostContractVersion\":\"ipcraft.engine-host.v1\",\"groupId\":\"group-1\",\"hostSideEffectContractVersion\":\"ipcraft.noc-side-effects.v1\",\"packageBundleDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"reconcileDependencySetDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"requestGeneration\":1,\"schema\":\"ipcraft.reconcile-applicability.v1\",\"structureAuthority\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"ipcraft.default-noc-engine\",\"kind\":\"default-engine\",\"lockId\":\"dep.engine\",\"version\":\"1\"},\"topologyInputDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"topologyInputRevision\":2},\"applicationPatch\":{\"operations\":[{\"localRef\":\"application:000001\",\"op\":\"createRelation\",\"relationKind\":\"domain-membership\",\"value\":{\"domainRef\":{\"id\":\"domain.default\"},\"routerRef\":{\"localRef\":\"authority:router-0\"}}}],\"patchId\":\"patch.application\",\"source\":{\"identity\":\"host\",\"kind\":\"application-reconcile\",\"version\":\"1\"}},\"authorityPatch\":{\"operations\":[{\"entityKind\":\"router\",\"localRef\":\"authority:router-0\",\"op\":\"createEntity\",\"value\":{\"coordinate\":{\"column\":0,\"row\":0},\"identityCompatibilityVersion\":1,\"properties\":{},\"templateKey\":\"mesh-router\"}}],\"patchId\":\"patch.authority\",\"source\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"ipcraft.default-noc-engine\",\"kind\":\"default-engine\",\"version\":\"1\"}},\"impactReport\":{\"impacts\":[],\"schema\":\"ipcraft.topology-impact-report.v1\"},\"kind\":\"topology-materialization\",\"schema\":\"ipcraft.candidate-transaction.v1\",\"tombstones\":[],\"topologyIntent\":{\"componentId\":\"component.noc\",\"globalConfig\":{\"columns\":2,\"rows\":2},\"packageEntities\":[],\"packageRelations\":[],\"schema\":\"ipcraft.topology-intent.v1\",\"topologyId\":\"topology.main\",\"topologyKind\":\"mesh\"},\"transactionId\":\"tx-1\"}",
+      "expectedDigest": "sha256:8ebcc7d833b6049830227eed3e787fe0726635d01758a0770b7fd1f7e282880e"
     },
     {
       "id": "localized-impact-presentation-excluded",
@@ -551,7 +551,7 @@
               "structureAuthority": {
                 "kind": "default-engine",
                 "lockId": "dep.engine",
-                "identity": "engine.mesh",
+                "identity": "ipcraft.default-noc-engine",
                 "version": "1",
                 "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
               },
@@ -578,7 +578,7 @@
               "patchId": "patch.authority",
               "source": {
                 "kind": "default-engine",
-                "identity": "engine.mesh",
+                "identity": "ipcraft.default-noc-engine",
                 "version": "1",
                 "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
               },
@@ -655,7 +655,7 @@
               "structureAuthority": {
                 "kind": "default-engine",
                 "lockId": "dep.engine",
-                "identity": "engine.mesh",
+                "identity": "ipcraft.default-noc-engine",
                 "version": "1",
                 "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
               },
@@ -682,7 +682,7 @@
               "patchId": "patch.authority",
               "source": {
                 "kind": "default-engine",
-                "identity": "engine.mesh",
+                "identity": "ipcraft.default-noc-engine",
                 "version": "1",
                 "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
               },
@@ -766,7 +766,7 @@
           "structureAuthority": {
             "kind": "default-engine",
             "lockId": "dep.engine",
-            "identity": "engine.mesh",
+            "identity": "ipcraft.default-noc-engine",
             "version": "1",
             "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
           },
@@ -793,7 +793,7 @@
           "patchId": "patch.authority",
           "source": {
             "kind": "default-engine",
-            "identity": "engine.mesh",
+            "identity": "ipcraft.default-noc-engine",
             "version": "1",
             "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
           },
@@ -847,8 +847,8 @@
           "impacts": []
         }
       },
-      "expectedCanonicalJson": "{\"allocationOrder\":[\"application:000001\",\"authority:router-0\"],\"applicability\":{\"baseAuthoritativeDesignDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"baseDerivedStateDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"baseDerivedStateRevision\":3,\"defaultEngineBundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"defaultEngineLockId\":\"dep.engine\",\"engineHostContractVersion\":\"ipcraft.engine-host.v1\",\"groupId\":\"group-1\",\"hostSideEffectContractVersion\":\"ipcraft.noc-side-effects.v1\",\"packageBundleDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"reconcileDependencySetDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"requestGeneration\":1,\"schema\":\"ipcraft.reconcile-applicability.v1\",\"structureAuthority\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"engine.mesh\",\"kind\":\"default-engine\",\"lockId\":\"dep.engine\",\"version\":\"1\"},\"topologyInputDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"topologyInputRevision\":2},\"applicationPatch\":{\"operations\":[{\"localRef\":\"application:000001\",\"op\":\"createRelation\",\"relationKind\":\"domain-membership\",\"value\":{\"domainRef\":{\"id\":\"domain.default\"},\"routerRef\":{\"localRef\":\"authority:router-0\"}}}],\"patchId\":\"patch.application\",\"source\":{\"identity\":\"host\",\"kind\":\"application-reconcile\",\"version\":\"1\"}},\"authorityPatch\":{\"operations\":[{\"entityKind\":\"router\",\"localRef\":\"authority:router-0\",\"op\":\"createEntity\",\"value\":{\"coordinate\":{\"column\":0,\"row\":0},\"identityCompatibilityVersion\":1,\"properties\":{},\"templateKey\":\"mesh-router\"}}],\"patchId\":\"patch.authority\",\"source\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"engine.mesh\",\"kind\":\"default-engine\",\"version\":\"1\"}},\"impactReport\":{\"impacts\":[],\"schema\":\"ipcraft.topology-impact-report.v1\"},\"kind\":\"topology-materialization\",\"schema\":\"ipcraft.candidate-transaction.v1\",\"tombstones\":[],\"topologyIntent\":{\"componentId\":\"component.noc\",\"globalConfig\":{\"columns\":2,\"rows\":2},\"packageEntities\":[],\"packageRelations\":[],\"schema\":\"ipcraft.topology-intent.v1\",\"topologyId\":\"topology.main\",\"topologyKind\":\"mesh\"},\"transactionId\":\"tx-1\"}",
-      "expectedDigest": "sha256:68ba3d63bff0cfd1367fbedd98dd62f1a455e4ba708163f86b92ae4d0f20ff9b"
+      "expectedCanonicalJson": "{\"allocationOrder\":[\"application:000001\",\"authority:router-0\"],\"applicability\":{\"baseAuthoritativeDesignDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"baseDerivedStateDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"baseDerivedStateRevision\":3,\"defaultEngineBundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"defaultEngineLockId\":\"dep.engine\",\"engineHostContractVersion\":\"ipcraft.engine-host.v1\",\"groupId\":\"group-1\",\"hostSideEffectContractVersion\":\"ipcraft.noc-side-effects.v1\",\"packageBundleDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"reconcileDependencySetDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"requestGeneration\":1,\"schema\":\"ipcraft.reconcile-applicability.v1\",\"structureAuthority\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"ipcraft.default-noc-engine\",\"kind\":\"default-engine\",\"lockId\":\"dep.engine\",\"version\":\"1\"},\"topologyInputDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"topologyInputRevision\":2},\"applicationPatch\":{\"operations\":[{\"localRef\":\"application:000001\",\"op\":\"createRelation\",\"relationKind\":\"domain-membership\",\"value\":{\"domainRef\":{\"id\":\"domain.default\"},\"routerRef\":{\"localRef\":\"authority:router-0\"}}}],\"patchId\":\"patch.application\",\"source\":{\"identity\":\"host\",\"kind\":\"application-reconcile\",\"version\":\"1\"}},\"authorityPatch\":{\"operations\":[{\"entityKind\":\"router\",\"localRef\":\"authority:router-0\",\"op\":\"createEntity\",\"value\":{\"coordinate\":{\"column\":0,\"row\":0},\"identityCompatibilityVersion\":1,\"properties\":{},\"templateKey\":\"mesh-router\"}}],\"patchId\":\"patch.authority\",\"source\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"ipcraft.default-noc-engine\",\"kind\":\"default-engine\",\"version\":\"1\"}},\"impactReport\":{\"impacts\":[],\"schema\":\"ipcraft.topology-impact-report.v1\"},\"kind\":\"topology-materialization\",\"schema\":\"ipcraft.candidate-transaction.v1\",\"tombstones\":[],\"topologyIntent\":{\"componentId\":\"component.noc\",\"globalConfig\":{\"columns\":2,\"rows\":2},\"packageEntities\":[],\"packageRelations\":[],\"schema\":\"ipcraft.topology-intent.v1\",\"topologyId\":\"topology.main\",\"topologyKind\":\"mesh\"},\"transactionId\":\"tx-1\"}",
+      "expectedDigest": "sha256:8ebcc7d833b6049830227eed3e787fe0726635d01758a0770b7fd1f7e282880e"
     },
     {
       "id": "object-key-order-permutation",
@@ -869,7 +869,7 @@
             "structureAuthority": {
               "kind": "default-engine",
               "lockId": "dep.engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -896,7 +896,7 @@
             "patchId": "patch.authority",
             "source": {
               "kind": "default-engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -971,7 +971,7 @@
             "schema": "ipcraft.reconcile-applicability.v1",
             "structureAuthority": {
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "kind": "default-engine",
               "lockId": "dep.engine",
               "version": "1"
@@ -1022,7 +1022,7 @@
             "patchId": "patch.authority",
             "source": {
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "kind": "default-engine",
               "version": "1"
             }
@@ -1071,7 +1071,7 @@
           "structureAuthority": {
             "kind": "default-engine",
             "lockId": "dep.engine",
-            "identity": "engine.mesh",
+            "identity": "ipcraft.default-noc-engine",
             "version": "1",
             "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
           },
@@ -1098,7 +1098,7 @@
           "patchId": "patch.authority",
           "source": {
             "kind": "default-engine",
-            "identity": "engine.mesh",
+            "identity": "ipcraft.default-noc-engine",
             "version": "1",
             "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
           },
@@ -1152,8 +1152,8 @@
           "impacts": []
         }
       },
-      "expectedCanonicalJson": "{\"allocationOrder\":[\"application:000001\",\"authority:router-0\"],\"applicability\":{\"baseAuthoritativeDesignDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"baseDerivedStateDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"baseDerivedStateRevision\":3,\"defaultEngineBundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"defaultEngineLockId\":\"dep.engine\",\"engineHostContractVersion\":\"ipcraft.engine-host.v1\",\"groupId\":\"group-1\",\"hostSideEffectContractVersion\":\"ipcraft.noc-side-effects.v1\",\"packageBundleDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"reconcileDependencySetDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"requestGeneration\":1,\"schema\":\"ipcraft.reconcile-applicability.v1\",\"structureAuthority\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"engine.mesh\",\"kind\":\"default-engine\",\"lockId\":\"dep.engine\",\"version\":\"1\"},\"topologyInputDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"topologyInputRevision\":2},\"applicationPatch\":{\"operations\":[{\"localRef\":\"application:000001\",\"op\":\"createRelation\",\"relationKind\":\"domain-membership\",\"value\":{\"domainRef\":{\"id\":\"domain.default\"},\"routerRef\":{\"localRef\":\"authority:router-0\"}}}],\"patchId\":\"patch.application\",\"source\":{\"identity\":\"host\",\"kind\":\"application-reconcile\",\"version\":\"1\"}},\"authorityPatch\":{\"operations\":[{\"entityKind\":\"router\",\"localRef\":\"authority:router-0\",\"op\":\"createEntity\",\"value\":{\"coordinate\":{\"column\":0,\"row\":0},\"identityCompatibilityVersion\":1,\"properties\":{},\"templateKey\":\"mesh-router\"}}],\"patchId\":\"patch.authority\",\"source\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"engine.mesh\",\"kind\":\"default-engine\",\"version\":\"1\"}},\"impactReport\":{\"impacts\":[],\"schema\":\"ipcraft.topology-impact-report.v1\"},\"kind\":\"topology-materialization\",\"schema\":\"ipcraft.candidate-transaction.v1\",\"tombstones\":[],\"topologyIntent\":{\"componentId\":\"component.noc\",\"globalConfig\":{\"columns\":2,\"rows\":2},\"packageEntities\":[],\"packageRelations\":[],\"schema\":\"ipcraft.topology-intent.v1\",\"topologyId\":\"topology.main\",\"topologyKind\":\"mesh\"},\"transactionId\":\"tx-1\"}",
-      "expectedDigest": "sha256:68ba3d63bff0cfd1367fbedd98dd62f1a455e4ba708163f86b92ae4d0f20ff9b"
+      "expectedCanonicalJson": "{\"allocationOrder\":[\"application:000001\",\"authority:router-0\"],\"applicability\":{\"baseAuthoritativeDesignDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"baseDerivedStateDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"baseDerivedStateRevision\":3,\"defaultEngineBundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"defaultEngineLockId\":\"dep.engine\",\"engineHostContractVersion\":\"ipcraft.engine-host.v1\",\"groupId\":\"group-1\",\"hostSideEffectContractVersion\":\"ipcraft.noc-side-effects.v1\",\"packageBundleDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"reconcileDependencySetDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"requestGeneration\":1,\"schema\":\"ipcraft.reconcile-applicability.v1\",\"structureAuthority\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"ipcraft.default-noc-engine\",\"kind\":\"default-engine\",\"lockId\":\"dep.engine\",\"version\":\"1\"},\"topologyInputDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"topologyInputRevision\":2},\"applicationPatch\":{\"operations\":[{\"localRef\":\"application:000001\",\"op\":\"createRelation\",\"relationKind\":\"domain-membership\",\"value\":{\"domainRef\":{\"id\":\"domain.default\"},\"routerRef\":{\"localRef\":\"authority:router-0\"}}}],\"patchId\":\"patch.application\",\"source\":{\"identity\":\"host\",\"kind\":\"application-reconcile\",\"version\":\"1\"}},\"authorityPatch\":{\"operations\":[{\"entityKind\":\"router\",\"localRef\":\"authority:router-0\",\"op\":\"createEntity\",\"value\":{\"coordinate\":{\"column\":0,\"row\":0},\"identityCompatibilityVersion\":1,\"properties\":{},\"templateKey\":\"mesh-router\"}}],\"patchId\":\"patch.authority\",\"source\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"ipcraft.default-noc-engine\",\"kind\":\"default-engine\",\"version\":\"1\"}},\"impactReport\":{\"impacts\":[],\"schema\":\"ipcraft.topology-impact-report.v1\"},\"kind\":\"topology-materialization\",\"schema\":\"ipcraft.candidate-transaction.v1\",\"tombstones\":[],\"topologyIntent\":{\"componentId\":\"component.noc\",\"globalConfig\":{\"columns\":2,\"rows\":2},\"packageEntities\":[],\"packageRelations\":[],\"schema\":\"ipcraft.topology-intent.v1\",\"topologyId\":\"topology.main\",\"topologyKind\":\"mesh\"},\"transactionId\":\"tx-1\"}",
+      "expectedDigest": "sha256:8ebcc7d833b6049830227eed3e787fe0726635d01758a0770b7fd1f7e282880e"
     },
     {
       "id": "undirected-link-endpoint-swap-normalizes-equally",
@@ -1174,7 +1174,7 @@
             "structureAuthority": {
               "kind": "default-engine",
               "lockId": "dep.engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -1201,7 +1201,7 @@
             "patchId": "patch.authority",
             "source": {
               "kind": "default-engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -1290,7 +1290,7 @@
             "structureAuthority": {
               "kind": "default-engine",
               "lockId": "dep.engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -1317,7 +1317,7 @@
             "patchId": "patch.authority",
             "source": {
               "kind": "default-engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -1413,7 +1413,7 @@
           "structureAuthority": {
             "kind": "default-engine",
             "lockId": "dep.engine",
-            "identity": "engine.mesh",
+            "identity": "ipcraft.default-noc-engine",
             "version": "1",
             "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
           },
@@ -1440,7 +1440,7 @@
           "patchId": "patch.authority",
           "source": {
             "kind": "default-engine",
-            "identity": "engine.mesh",
+            "identity": "ipcraft.default-noc-engine",
             "version": "1",
             "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
           },
@@ -1512,8 +1512,8 @@
           "impacts": []
         }
       },
-      "expectedCanonicalJson": "{\"allocationOrder\":[\"application:000001\",\"authority:link-0\",\"authority:router-0\"],\"applicability\":{\"baseAuthoritativeDesignDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"baseDerivedStateDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"baseDerivedStateRevision\":3,\"defaultEngineBundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"defaultEngineLockId\":\"dep.engine\",\"engineHostContractVersion\":\"ipcraft.engine-host.v1\",\"groupId\":\"group-1\",\"hostSideEffectContractVersion\":\"ipcraft.noc-side-effects.v1\",\"packageBundleDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"reconcileDependencySetDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"requestGeneration\":1,\"schema\":\"ipcraft.reconcile-applicability.v1\",\"structureAuthority\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"engine.mesh\",\"kind\":\"default-engine\",\"lockId\":\"dep.engine\",\"version\":\"1\"},\"topologyInputDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"topologyInputRevision\":2},\"applicationPatch\":{\"operations\":[{\"localRef\":\"application:000001\",\"op\":\"createRelation\",\"relationKind\":\"domain-membership\",\"value\":{\"domainRef\":{\"id\":\"domain.default\"},\"routerRef\":{\"localRef\":\"authority:router-0\"}}}],\"patchId\":\"patch.application\",\"source\":{\"identity\":\"host\",\"kind\":\"application-reconcile\",\"version\":\"1\"}},\"authorityPatch\":{\"operations\":[{\"entityKind\":\"router\",\"localRef\":\"authority:router-0\",\"op\":\"createEntity\",\"value\":{\"coordinate\":{\"column\":0,\"row\":0},\"identityCompatibilityVersion\":1,\"properties\":{},\"templateKey\":\"mesh-router\"}},{\"entityKind\":\"structural-link\",\"localRef\":\"authority:link-0\",\"op\":\"createEntity\",\"value\":{\"axis\":\"horizontal\",\"endpointA\":{\"id\":\"router.existing\"},\"endpointB\":{\"localRef\":\"authority:router-0\"},\"identityCompatibilityVersion\":1,\"properties\":{},\"templateKey\":\"mesh-link\"}}],\"patchId\":\"patch.authority\",\"source\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"engine.mesh\",\"kind\":\"default-engine\",\"version\":\"1\"}},\"impactReport\":{\"impacts\":[],\"schema\":\"ipcraft.topology-impact-report.v1\"},\"kind\":\"topology-materialization\",\"schema\":\"ipcraft.candidate-transaction.v1\",\"tombstones\":[],\"topologyIntent\":{\"componentId\":\"component.noc\",\"globalConfig\":{\"columns\":2,\"rows\":2},\"packageEntities\":[],\"packageRelations\":[],\"schema\":\"ipcraft.topology-intent.v1\",\"topologyId\":\"topology.main\",\"topologyKind\":\"mesh\"},\"transactionId\":\"tx-1\"}",
-      "expectedDigest": "sha256:c98ddfe1a2cc819a9437b709aab0449124568affaa08d60c0868f5ec3914f242"
+      "expectedCanonicalJson": "{\"allocationOrder\":[\"application:000001\",\"authority:link-0\",\"authority:router-0\"],\"applicability\":{\"baseAuthoritativeDesignDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"baseDerivedStateDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"baseDerivedStateRevision\":3,\"defaultEngineBundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"defaultEngineLockId\":\"dep.engine\",\"engineHostContractVersion\":\"ipcraft.engine-host.v1\",\"groupId\":\"group-1\",\"hostSideEffectContractVersion\":\"ipcraft.noc-side-effects.v1\",\"packageBundleDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"reconcileDependencySetDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"requestGeneration\":1,\"schema\":\"ipcraft.reconcile-applicability.v1\",\"structureAuthority\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"ipcraft.default-noc-engine\",\"kind\":\"default-engine\",\"lockId\":\"dep.engine\",\"version\":\"1\"},\"topologyInputDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"topologyInputRevision\":2},\"applicationPatch\":{\"operations\":[{\"localRef\":\"application:000001\",\"op\":\"createRelation\",\"relationKind\":\"domain-membership\",\"value\":{\"domainRef\":{\"id\":\"domain.default\"},\"routerRef\":{\"localRef\":\"authority:router-0\"}}}],\"patchId\":\"patch.application\",\"source\":{\"identity\":\"host\",\"kind\":\"application-reconcile\",\"version\":\"1\"}},\"authorityPatch\":{\"operations\":[{\"entityKind\":\"router\",\"localRef\":\"authority:router-0\",\"op\":\"createEntity\",\"value\":{\"coordinate\":{\"column\":0,\"row\":0},\"identityCompatibilityVersion\":1,\"properties\":{},\"templateKey\":\"mesh-router\"}},{\"entityKind\":\"structural-link\",\"localRef\":\"authority:link-0\",\"op\":\"createEntity\",\"value\":{\"axis\":\"horizontal\",\"endpointA\":{\"id\":\"router.existing\"},\"endpointB\":{\"localRef\":\"authority:router-0\"},\"identityCompatibilityVersion\":1,\"properties\":{},\"templateKey\":\"mesh-link\"}}],\"patchId\":\"patch.authority\",\"source\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"ipcraft.default-noc-engine\",\"kind\":\"default-engine\",\"version\":\"1\"}},\"impactReport\":{\"impacts\":[],\"schema\":\"ipcraft.topology-impact-report.v1\"},\"kind\":\"topology-materialization\",\"schema\":\"ipcraft.candidate-transaction.v1\",\"tombstones\":[],\"topologyIntent\":{\"componentId\":\"component.noc\",\"globalConfig\":{\"columns\":2,\"rows\":2},\"packageEntities\":[],\"packageRelations\":[],\"schema\":\"ipcraft.topology-intent.v1\",\"topologyId\":\"topology.main\",\"topologyKind\":\"mesh\"},\"transactionId\":\"tx-1\"}",
+      "expectedDigest": "sha256:4aa3f495f019228c1126d491ea3739c6d9c3824ff300c2e0f385da8a6a5503e0"
     },
     {
       "id": "localref-rename-with-edges-updated-changes-digest",
@@ -1534,7 +1534,7 @@
             "structureAuthority": {
               "kind": "default-engine",
               "lockId": "dep.engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -1561,7 +1561,7 @@
             "patchId": "patch.authority",
             "source": {
               "kind": "default-engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -1632,7 +1632,7 @@
             "structureAuthority": {
               "kind": "default-engine",
               "lockId": "dep.engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -1659,7 +1659,7 @@
             "patchId": "patch.authority",
             "source": {
               "kind": "default-engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -1738,7 +1738,7 @@
             "structureAuthority": {
               "kind": "default-engine",
               "lockId": "dep.engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -1765,7 +1765,7 @@
             "patchId": "patch.authority",
             "source": {
               "kind": "default-engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -1835,7 +1835,7 @@
             "structureAuthority": {
               "kind": "default-engine",
               "lockId": "dep.engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -1862,7 +1862,7 @@
             "patchId": "patch.authority",
             "source": {
               "kind": "default-engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -1918,12 +1918,12 @@
         }
       ],
       "expectedCanonicalJson": [
-        "{\"allocationOrder\":[\"application:000001\",\"authority:router-0\"],\"applicability\":{\"baseAuthoritativeDesignDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"baseDerivedStateDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"baseDerivedStateRevision\":3,\"defaultEngineBundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"defaultEngineLockId\":\"dep.engine\",\"engineHostContractVersion\":\"ipcraft.engine-host.v1\",\"groupId\":\"group-1\",\"hostSideEffectContractVersion\":\"ipcraft.noc-side-effects.v1\",\"packageBundleDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"reconcileDependencySetDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"requestGeneration\":1,\"schema\":\"ipcraft.reconcile-applicability.v1\",\"structureAuthority\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"engine.mesh\",\"kind\":\"default-engine\",\"lockId\":\"dep.engine\",\"version\":\"1\"},\"topologyInputDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"topologyInputRevision\":2},\"applicationPatch\":{\"operations\":[{\"localRef\":\"application:000001\",\"op\":\"createRelation\",\"relationKind\":\"domain-membership\",\"value\":{\"domainRef\":{\"id\":\"domain.default\"},\"routerRef\":{\"localRef\":\"authority:router-0\"}}}],\"patchId\":\"patch.application\",\"source\":{\"identity\":\"host\",\"kind\":\"application-reconcile\",\"version\":\"1\"}},\"authorityPatch\":{\"operations\":[{\"entityKind\":\"router\",\"localRef\":\"authority:router-0\",\"op\":\"createEntity\",\"value\":{\"coordinate\":{\"column\":0,\"row\":0},\"identityCompatibilityVersion\":1,\"properties\":{},\"templateKey\":\"mesh-router\"}}],\"patchId\":\"patch.authority\",\"source\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"engine.mesh\",\"kind\":\"default-engine\",\"version\":\"1\"}},\"impactReport\":{\"impacts\":[],\"schema\":\"ipcraft.topology-impact-report.v1\"},\"kind\":\"topology-materialization\",\"schema\":\"ipcraft.candidate-transaction.v1\",\"tombstones\":[],\"topologyIntent\":{\"componentId\":\"component.noc\",\"globalConfig\":{\"columns\":2,\"rows\":2},\"packageEntities\":[],\"packageRelations\":[],\"schema\":\"ipcraft.topology-intent.v1\",\"topologyId\":\"topology.main\",\"topologyKind\":\"mesh\"},\"transactionId\":\"tx-1\"}",
-        "{\"allocationOrder\":[\"application:000001\",\"authority:router-renamed\"],\"applicability\":{\"baseAuthoritativeDesignDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"baseDerivedStateDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"baseDerivedStateRevision\":3,\"defaultEngineBundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"defaultEngineLockId\":\"dep.engine\",\"engineHostContractVersion\":\"ipcraft.engine-host.v1\",\"groupId\":\"group-1\",\"hostSideEffectContractVersion\":\"ipcraft.noc-side-effects.v1\",\"packageBundleDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"reconcileDependencySetDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"requestGeneration\":1,\"schema\":\"ipcraft.reconcile-applicability.v1\",\"structureAuthority\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"engine.mesh\",\"kind\":\"default-engine\",\"lockId\":\"dep.engine\",\"version\":\"1\"},\"topologyInputDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"topologyInputRevision\":2},\"applicationPatch\":{\"operations\":[{\"localRef\":\"application:000001\",\"op\":\"createRelation\",\"relationKind\":\"domain-membership\",\"value\":{\"domainRef\":{\"id\":\"domain.default\"},\"routerRef\":{\"localRef\":\"authority:router-renamed\"}}}],\"patchId\":\"patch.application\",\"source\":{\"identity\":\"host\",\"kind\":\"application-reconcile\",\"version\":\"1\"}},\"authorityPatch\":{\"operations\":[{\"entityKind\":\"router\",\"localRef\":\"authority:router-renamed\",\"op\":\"createEntity\",\"value\":{\"coordinate\":{\"column\":0,\"row\":0},\"identityCompatibilityVersion\":1,\"properties\":{},\"templateKey\":\"mesh-router\"}}],\"patchId\":\"patch.authority\",\"source\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"engine.mesh\",\"kind\":\"default-engine\",\"version\":\"1\"}},\"impactReport\":{\"impacts\":[],\"schema\":\"ipcraft.topology-impact-report.v1\"},\"kind\":\"topology-materialization\",\"schema\":\"ipcraft.candidate-transaction.v1\",\"tombstones\":[],\"topologyIntent\":{\"componentId\":\"component.noc\",\"globalConfig\":{\"columns\":2,\"rows\":2},\"packageEntities\":[],\"packageRelations\":[],\"schema\":\"ipcraft.topology-intent.v1\",\"topologyId\":\"topology.main\",\"topologyKind\":\"mesh\"},\"transactionId\":\"tx-1\"}"
+        "{\"allocationOrder\":[\"application:000001\",\"authority:router-0\"],\"applicability\":{\"baseAuthoritativeDesignDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"baseDerivedStateDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"baseDerivedStateRevision\":3,\"defaultEngineBundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"defaultEngineLockId\":\"dep.engine\",\"engineHostContractVersion\":\"ipcraft.engine-host.v1\",\"groupId\":\"group-1\",\"hostSideEffectContractVersion\":\"ipcraft.noc-side-effects.v1\",\"packageBundleDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"reconcileDependencySetDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"requestGeneration\":1,\"schema\":\"ipcraft.reconcile-applicability.v1\",\"structureAuthority\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"ipcraft.default-noc-engine\",\"kind\":\"default-engine\",\"lockId\":\"dep.engine\",\"version\":\"1\"},\"topologyInputDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"topologyInputRevision\":2},\"applicationPatch\":{\"operations\":[{\"localRef\":\"application:000001\",\"op\":\"createRelation\",\"relationKind\":\"domain-membership\",\"value\":{\"domainRef\":{\"id\":\"domain.default\"},\"routerRef\":{\"localRef\":\"authority:router-0\"}}}],\"patchId\":\"patch.application\",\"source\":{\"identity\":\"host\",\"kind\":\"application-reconcile\",\"version\":\"1\"}},\"authorityPatch\":{\"operations\":[{\"entityKind\":\"router\",\"localRef\":\"authority:router-0\",\"op\":\"createEntity\",\"value\":{\"coordinate\":{\"column\":0,\"row\":0},\"identityCompatibilityVersion\":1,\"properties\":{},\"templateKey\":\"mesh-router\"}}],\"patchId\":\"patch.authority\",\"source\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"ipcraft.default-noc-engine\",\"kind\":\"default-engine\",\"version\":\"1\"}},\"impactReport\":{\"impacts\":[],\"schema\":\"ipcraft.topology-impact-report.v1\"},\"kind\":\"topology-materialization\",\"schema\":\"ipcraft.candidate-transaction.v1\",\"tombstones\":[],\"topologyIntent\":{\"componentId\":\"component.noc\",\"globalConfig\":{\"columns\":2,\"rows\":2},\"packageEntities\":[],\"packageRelations\":[],\"schema\":\"ipcraft.topology-intent.v1\",\"topologyId\":\"topology.main\",\"topologyKind\":\"mesh\"},\"transactionId\":\"tx-1\"}",
+        "{\"allocationOrder\":[\"application:000001\",\"authority:router-renamed\"],\"applicability\":{\"baseAuthoritativeDesignDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"baseDerivedStateDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"baseDerivedStateRevision\":3,\"defaultEngineBundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"defaultEngineLockId\":\"dep.engine\",\"engineHostContractVersion\":\"ipcraft.engine-host.v1\",\"groupId\":\"group-1\",\"hostSideEffectContractVersion\":\"ipcraft.noc-side-effects.v1\",\"packageBundleDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"reconcileDependencySetDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"requestGeneration\":1,\"schema\":\"ipcraft.reconcile-applicability.v1\",\"structureAuthority\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"ipcraft.default-noc-engine\",\"kind\":\"default-engine\",\"lockId\":\"dep.engine\",\"version\":\"1\"},\"topologyInputDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"topologyInputRevision\":2},\"applicationPatch\":{\"operations\":[{\"localRef\":\"application:000001\",\"op\":\"createRelation\",\"relationKind\":\"domain-membership\",\"value\":{\"domainRef\":{\"id\":\"domain.default\"},\"routerRef\":{\"localRef\":\"authority:router-renamed\"}}}],\"patchId\":\"patch.application\",\"source\":{\"identity\":\"host\",\"kind\":\"application-reconcile\",\"version\":\"1\"}},\"authorityPatch\":{\"operations\":[{\"entityKind\":\"router\",\"localRef\":\"authority:router-renamed\",\"op\":\"createEntity\",\"value\":{\"coordinate\":{\"column\":0,\"row\":0},\"identityCompatibilityVersion\":1,\"properties\":{},\"templateKey\":\"mesh-router\"}}],\"patchId\":\"patch.authority\",\"source\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"ipcraft.default-noc-engine\",\"kind\":\"default-engine\",\"version\":\"1\"}},\"impactReport\":{\"impacts\":[],\"schema\":\"ipcraft.topology-impact-report.v1\"},\"kind\":\"topology-materialization\",\"schema\":\"ipcraft.candidate-transaction.v1\",\"tombstones\":[],\"topologyIntent\":{\"componentId\":\"component.noc\",\"globalConfig\":{\"columns\":2,\"rows\":2},\"packageEntities\":[],\"packageRelations\":[],\"schema\":\"ipcraft.topology-intent.v1\",\"topologyId\":\"topology.main\",\"topologyKind\":\"mesh\"},\"transactionId\":\"tx-1\"}"
       ],
       "expectedDigest": [
-        "sha256:68ba3d63bff0cfd1367fbedd98dd62f1a455e4ba708163f86b92ae4d0f20ff9b",
-        "sha256:fb24f7ccacac75c8341701e8786e26f600f833a82d6550ea7a380b294cee7a6c"
+        "sha256:8ebcc7d833b6049830227eed3e787fe0726635d01758a0770b7fd1f7e282880e",
+        "sha256:42cb7f7cbe492ba8aa8bedf6c72a475fa69a0a57a5d51665c8afaa6da70048c7"
       ]
     },
     {
@@ -1945,7 +1945,7 @@
             "structureAuthority": {
               "kind": "default-engine",
               "lockId": "dep.engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -1972,7 +1972,7 @@
             "patchId": "patch.authority",
             "source": {
               "kind": "default-engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -2043,7 +2043,7 @@
             "structureAuthority": {
               "kind": "default-engine",
               "lockId": "dep.engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -2070,7 +2070,7 @@
             "patchId": "patch.authority",
             "source": {
               "kind": "default-engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -2148,7 +2148,7 @@
             "structureAuthority": {
               "kind": "default-engine",
               "lockId": "dep.engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -2175,7 +2175,7 @@
             "patchId": "patch.authority",
             "source": {
               "kind": "default-engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -2245,7 +2245,7 @@
             "structureAuthority": {
               "kind": "default-engine",
               "lockId": "dep.engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -2272,7 +2272,7 @@
             "patchId": "patch.authority",
             "source": {
               "kind": "default-engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -2328,12 +2328,12 @@
         }
       ],
       "expectedCanonicalJson": [
-        "{\"allocationOrder\":[\"application:000001\",\"authority:router-0\"],\"applicability\":{\"baseAuthoritativeDesignDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"baseDerivedStateDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"baseDerivedStateRevision\":3,\"defaultEngineBundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"defaultEngineLockId\":\"dep.engine\",\"engineHostContractVersion\":\"ipcraft.engine-host.v1\",\"groupId\":\"group-1\",\"hostSideEffectContractVersion\":\"ipcraft.noc-side-effects.v1\",\"packageBundleDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"reconcileDependencySetDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"requestGeneration\":1,\"schema\":\"ipcraft.reconcile-applicability.v1\",\"structureAuthority\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"engine.mesh\",\"kind\":\"default-engine\",\"lockId\":\"dep.engine\",\"version\":\"1\"},\"topologyInputDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"topologyInputRevision\":2},\"applicationPatch\":{\"operations\":[{\"localRef\":\"application:000001\",\"op\":\"createRelation\",\"relationKind\":\"domain-membership\",\"value\":{\"domainRef\":{\"id\":\"domain.default\"},\"routerRef\":{\"localRef\":\"authority:router-0\"}}}],\"patchId\":\"patch.application\",\"source\":{\"identity\":\"host\",\"kind\":\"application-reconcile\",\"version\":\"1\"}},\"authorityPatch\":{\"operations\":[{\"entityKind\":\"router\",\"localRef\":\"authority:router-0\",\"op\":\"createEntity\",\"value\":{\"coordinate\":{\"column\":0,\"row\":0},\"identityCompatibilityVersion\":1,\"properties\":{},\"templateKey\":\"mesh-router\"}}],\"patchId\":\"patch.authority\",\"source\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"engine.mesh\",\"kind\":\"default-engine\",\"version\":\"1\"}},\"impactReport\":{\"impacts\":[],\"schema\":\"ipcraft.topology-impact-report.v1\"},\"kind\":\"topology-materialization\",\"schema\":\"ipcraft.candidate-transaction.v1\",\"tombstones\":[],\"topologyIntent\":{\"componentId\":\"component.noc\",\"globalConfig\":{\"columns\":2,\"rows\":2},\"packageEntities\":[],\"packageRelations\":[],\"schema\":\"ipcraft.topology-intent.v1\",\"topologyId\":\"topology.main\",\"topologyKind\":\"mesh\"},\"transactionId\":\"tx-1\"}",
-        "{\"allocationOrder\":[\"application:000001\",\"authority:router-0\"],\"applicability\":{\"baseAuthoritativeDesignDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"baseDerivedStateDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"baseDerivedStateRevision\":3,\"defaultEngineBundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"defaultEngineLockId\":\"dep.engine\",\"engineHostContractVersion\":\"ipcraft.engine-host.v1\",\"groupId\":\"group-1\",\"hostSideEffectContractVersion\":\"ipcraft.noc-side-effects.v1\",\"packageBundleDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"reconcileDependencySetDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"requestGeneration\":1,\"schema\":\"ipcraft.reconcile-applicability.v1\",\"structureAuthority\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"engine.mesh\",\"kind\":\"default-engine\",\"lockId\":\"dep.engine\",\"version\":\"1\"},\"topologyInputDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"topologyInputRevision\":2},\"applicationPatch\":{\"operations\":[{\"localRef\":\"application:000001\",\"op\":\"createRelation\",\"relationKind\":\"domain-membership\",\"value\":{\"domainRef\":{\"id\":\"domain.default\"},\"routerRef\":{\"id\":\"router.other\"}}}],\"patchId\":\"patch.application\",\"source\":{\"identity\":\"host\",\"kind\":\"application-reconcile\",\"version\":\"1\"}},\"authorityPatch\":{\"operations\":[{\"entityKind\":\"router\",\"localRef\":\"authority:router-0\",\"op\":\"createEntity\",\"value\":{\"coordinate\":{\"column\":0,\"row\":0},\"identityCompatibilityVersion\":1,\"properties\":{},\"templateKey\":\"mesh-router\"}}],\"patchId\":\"patch.authority\",\"source\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"engine.mesh\",\"kind\":\"default-engine\",\"version\":\"1\"}},\"impactReport\":{\"impacts\":[],\"schema\":\"ipcraft.topology-impact-report.v1\"},\"kind\":\"topology-materialization\",\"schema\":\"ipcraft.candidate-transaction.v1\",\"tombstones\":[],\"topologyIntent\":{\"componentId\":\"component.noc\",\"globalConfig\":{\"columns\":2,\"rows\":2},\"packageEntities\":[],\"packageRelations\":[],\"schema\":\"ipcraft.topology-intent.v1\",\"topologyId\":\"topology.main\",\"topologyKind\":\"mesh\"},\"transactionId\":\"tx-1\"}"
+        "{\"allocationOrder\":[\"application:000001\",\"authority:router-0\"],\"applicability\":{\"baseAuthoritativeDesignDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"baseDerivedStateDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"baseDerivedStateRevision\":3,\"defaultEngineBundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"defaultEngineLockId\":\"dep.engine\",\"engineHostContractVersion\":\"ipcraft.engine-host.v1\",\"groupId\":\"group-1\",\"hostSideEffectContractVersion\":\"ipcraft.noc-side-effects.v1\",\"packageBundleDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"reconcileDependencySetDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"requestGeneration\":1,\"schema\":\"ipcraft.reconcile-applicability.v1\",\"structureAuthority\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"ipcraft.default-noc-engine\",\"kind\":\"default-engine\",\"lockId\":\"dep.engine\",\"version\":\"1\"},\"topologyInputDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"topologyInputRevision\":2},\"applicationPatch\":{\"operations\":[{\"localRef\":\"application:000001\",\"op\":\"createRelation\",\"relationKind\":\"domain-membership\",\"value\":{\"domainRef\":{\"id\":\"domain.default\"},\"routerRef\":{\"localRef\":\"authority:router-0\"}}}],\"patchId\":\"patch.application\",\"source\":{\"identity\":\"host\",\"kind\":\"application-reconcile\",\"version\":\"1\"}},\"authorityPatch\":{\"operations\":[{\"entityKind\":\"router\",\"localRef\":\"authority:router-0\",\"op\":\"createEntity\",\"value\":{\"coordinate\":{\"column\":0,\"row\":0},\"identityCompatibilityVersion\":1,\"properties\":{},\"templateKey\":\"mesh-router\"}}],\"patchId\":\"patch.authority\",\"source\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"ipcraft.default-noc-engine\",\"kind\":\"default-engine\",\"version\":\"1\"}},\"impactReport\":{\"impacts\":[],\"schema\":\"ipcraft.topology-impact-report.v1\"},\"kind\":\"topology-materialization\",\"schema\":\"ipcraft.candidate-transaction.v1\",\"tombstones\":[],\"topologyIntent\":{\"componentId\":\"component.noc\",\"globalConfig\":{\"columns\":2,\"rows\":2},\"packageEntities\":[],\"packageRelations\":[],\"schema\":\"ipcraft.topology-intent.v1\",\"topologyId\":\"topology.main\",\"topologyKind\":\"mesh\"},\"transactionId\":\"tx-1\"}",
+        "{\"allocationOrder\":[\"application:000001\",\"authority:router-0\"],\"applicability\":{\"baseAuthoritativeDesignDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"baseDerivedStateDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"baseDerivedStateRevision\":3,\"defaultEngineBundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"defaultEngineLockId\":\"dep.engine\",\"engineHostContractVersion\":\"ipcraft.engine-host.v1\",\"groupId\":\"group-1\",\"hostSideEffectContractVersion\":\"ipcraft.noc-side-effects.v1\",\"packageBundleDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"reconcileDependencySetDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"requestGeneration\":1,\"schema\":\"ipcraft.reconcile-applicability.v1\",\"structureAuthority\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"ipcraft.default-noc-engine\",\"kind\":\"default-engine\",\"lockId\":\"dep.engine\",\"version\":\"1\"},\"topologyInputDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"topologyInputRevision\":2},\"applicationPatch\":{\"operations\":[{\"localRef\":\"application:000001\",\"op\":\"createRelation\",\"relationKind\":\"domain-membership\",\"value\":{\"domainRef\":{\"id\":\"domain.default\"},\"routerRef\":{\"id\":\"router.other\"}}}],\"patchId\":\"patch.application\",\"source\":{\"identity\":\"host\",\"kind\":\"application-reconcile\",\"version\":\"1\"}},\"authorityPatch\":{\"operations\":[{\"entityKind\":\"router\",\"localRef\":\"authority:router-0\",\"op\":\"createEntity\",\"value\":{\"coordinate\":{\"column\":0,\"row\":0},\"identityCompatibilityVersion\":1,\"properties\":{},\"templateKey\":\"mesh-router\"}}],\"patchId\":\"patch.authority\",\"source\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"ipcraft.default-noc-engine\",\"kind\":\"default-engine\",\"version\":\"1\"}},\"impactReport\":{\"impacts\":[],\"schema\":\"ipcraft.topology-impact-report.v1\"},\"kind\":\"topology-materialization\",\"schema\":\"ipcraft.candidate-transaction.v1\",\"tombstones\":[],\"topologyIntent\":{\"componentId\":\"component.noc\",\"globalConfig\":{\"columns\":2,\"rows\":2},\"packageEntities\":[],\"packageRelations\":[],\"schema\":\"ipcraft.topology-intent.v1\",\"topologyId\":\"topology.main\",\"topologyKind\":\"mesh\"},\"transactionId\":\"tx-1\"}"
       ],
       "expectedDigest": [
-        "sha256:68ba3d63bff0cfd1367fbedd98dd62f1a455e4ba708163f86b92ae4d0f20ff9b",
-        "sha256:ae8e4c0f071e86bd789213ca694f036885fca8e0f04083f0b1eb6c41369d3394"
+        "sha256:8ebcc7d833b6049830227eed3e787fe0726635d01758a0770b7fd1f7e282880e",
+        "sha256:516ad1b8ca0b5742f520716aa193e3e7d59370116321db2e4e3a32a22382e2d5"
       ]
     },
     {
@@ -2355,7 +2355,7 @@
             "structureAuthority": {
               "kind": "default-engine",
               "lockId": "dep.engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -2382,7 +2382,7 @@
             "patchId": "patch.authority",
             "source": {
               "kind": "default-engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -2458,7 +2458,7 @@
             "structureAuthority": {
               "kind": "default-engine",
               "lockId": "dep.engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -2485,7 +2485,7 @@
             "patchId": "patch.authority",
             "source": {
               "kind": "default-engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -2568,7 +2568,7 @@
             "structureAuthority": {
               "kind": "default-engine",
               "lockId": "dep.engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -2595,7 +2595,7 @@
             "patchId": "patch.authority",
             "source": {
               "kind": "default-engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -2670,7 +2670,7 @@
             "structureAuthority": {
               "kind": "default-engine",
               "lockId": "dep.engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -2697,7 +2697,7 @@
             "patchId": "patch.authority",
             "source": {
               "kind": "default-engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -2758,12 +2758,12 @@
         }
       ],
       "expectedCanonicalJson": [
-        "{\"allocationOrder\":[\"application:000001\",\"authority:router-0\"],\"applicability\":{\"baseAuthoritativeDesignDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"baseDerivedStateDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"baseDerivedStateRevision\":3,\"defaultEngineBundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"defaultEngineLockId\":\"dep.engine\",\"engineHostContractVersion\":\"ipcraft.engine-host.v1\",\"groupId\":\"group-1\",\"hostSideEffectContractVersion\":\"ipcraft.noc-side-effects.v1\",\"packageBundleDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"reconcileDependencySetDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"requestGeneration\":1,\"schema\":\"ipcraft.reconcile-applicability.v1\",\"structureAuthority\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"engine.mesh\",\"kind\":\"default-engine\",\"lockId\":\"dep.engine\",\"version\":\"1\"},\"topologyInputDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"topologyInputRevision\":2},\"applicationPatch\":{\"operations\":[{\"localRef\":\"application:000001\",\"op\":\"createRelation\",\"relationKind\":\"domain-membership\",\"value\":{\"domainRef\":{\"id\":\"domain.default\"},\"routerRef\":{\"localRef\":\"authority:router-0\"}}}],\"patchId\":\"patch.application\",\"source\":{\"identity\":\"host\",\"kind\":\"application-reconcile\",\"version\":\"1\"}},\"authorityPatch\":{\"operations\":[{\"entityKind\":\"router\",\"localRef\":\"authority:router-0\",\"op\":\"createEntity\",\"value\":{\"coordinate\":{\"column\":0,\"row\":0},\"identityCompatibilityVersion\":1,\"properties\":{},\"templateKey\":\"mesh-router\"}},{\"entityKind\":\"router\",\"id\":\"router.old\",\"op\":\"deleteEntity\"}],\"patchId\":\"patch.authority\",\"source\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"engine.mesh\",\"kind\":\"default-engine\",\"version\":\"1\"}},\"impactReport\":{\"impacts\":[],\"schema\":\"ipcraft.topology-impact-report.v1\"},\"kind\":\"topology-materialization\",\"schema\":\"ipcraft.candidate-transaction.v1\",\"tombstones\":[],\"topologyIntent\":{\"componentId\":\"component.noc\",\"globalConfig\":{\"columns\":2,\"rows\":2},\"packageEntities\":[],\"packageRelations\":[],\"schema\":\"ipcraft.topology-intent.v1\",\"topologyId\":\"topology.main\",\"topologyKind\":\"mesh\"},\"transactionId\":\"tx-1\"}",
-        "{\"allocationOrder\":[\"application:000001\",\"authority:router-0\"],\"applicability\":{\"baseAuthoritativeDesignDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"baseDerivedStateDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"baseDerivedStateRevision\":3,\"defaultEngineBundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"defaultEngineLockId\":\"dep.engine\",\"engineHostContractVersion\":\"ipcraft.engine-host.v1\",\"groupId\":\"group-1\",\"hostSideEffectContractVersion\":\"ipcraft.noc-side-effects.v1\",\"packageBundleDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"reconcileDependencySetDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"requestGeneration\":1,\"schema\":\"ipcraft.reconcile-applicability.v1\",\"structureAuthority\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"engine.mesh\",\"kind\":\"default-engine\",\"lockId\":\"dep.engine\",\"version\":\"1\"},\"topologyInputDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"topologyInputRevision\":2},\"applicationPatch\":{\"operations\":[{\"localRef\":\"application:000001\",\"op\":\"createRelation\",\"relationKind\":\"domain-membership\",\"value\":{\"domainRef\":{\"id\":\"domain.default\"},\"routerRef\":{\"localRef\":\"authority:router-0\"}}}],\"patchId\":\"patch.application\",\"source\":{\"identity\":\"host\",\"kind\":\"application-reconcile\",\"version\":\"1\"}},\"authorityPatch\":{\"operations\":[{\"entityKind\":\"router\",\"id\":\"router.old\",\"op\":\"deleteEntity\"},{\"entityKind\":\"router\",\"localRef\":\"authority:router-0\",\"op\":\"createEntity\",\"value\":{\"coordinate\":{\"column\":0,\"row\":0},\"identityCompatibilityVersion\":1,\"properties\":{},\"templateKey\":\"mesh-router\"}}],\"patchId\":\"patch.authority\",\"source\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"engine.mesh\",\"kind\":\"default-engine\",\"version\":\"1\"}},\"impactReport\":{\"impacts\":[],\"schema\":\"ipcraft.topology-impact-report.v1\"},\"kind\":\"topology-materialization\",\"schema\":\"ipcraft.candidate-transaction.v1\",\"tombstones\":[],\"topologyIntent\":{\"componentId\":\"component.noc\",\"globalConfig\":{\"columns\":2,\"rows\":2},\"packageEntities\":[],\"packageRelations\":[],\"schema\":\"ipcraft.topology-intent.v1\",\"topologyId\":\"topology.main\",\"topologyKind\":\"mesh\"},\"transactionId\":\"tx-1\"}"
+        "{\"allocationOrder\":[\"application:000001\",\"authority:router-0\"],\"applicability\":{\"baseAuthoritativeDesignDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"baseDerivedStateDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"baseDerivedStateRevision\":3,\"defaultEngineBundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"defaultEngineLockId\":\"dep.engine\",\"engineHostContractVersion\":\"ipcraft.engine-host.v1\",\"groupId\":\"group-1\",\"hostSideEffectContractVersion\":\"ipcraft.noc-side-effects.v1\",\"packageBundleDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"reconcileDependencySetDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"requestGeneration\":1,\"schema\":\"ipcraft.reconcile-applicability.v1\",\"structureAuthority\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"ipcraft.default-noc-engine\",\"kind\":\"default-engine\",\"lockId\":\"dep.engine\",\"version\":\"1\"},\"topologyInputDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"topologyInputRevision\":2},\"applicationPatch\":{\"operations\":[{\"localRef\":\"application:000001\",\"op\":\"createRelation\",\"relationKind\":\"domain-membership\",\"value\":{\"domainRef\":{\"id\":\"domain.default\"},\"routerRef\":{\"localRef\":\"authority:router-0\"}}}],\"patchId\":\"patch.application\",\"source\":{\"identity\":\"host\",\"kind\":\"application-reconcile\",\"version\":\"1\"}},\"authorityPatch\":{\"operations\":[{\"entityKind\":\"router\",\"localRef\":\"authority:router-0\",\"op\":\"createEntity\",\"value\":{\"coordinate\":{\"column\":0,\"row\":0},\"identityCompatibilityVersion\":1,\"properties\":{},\"templateKey\":\"mesh-router\"}},{\"entityKind\":\"router\",\"id\":\"router.old\",\"op\":\"deleteEntity\"}],\"patchId\":\"patch.authority\",\"source\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"ipcraft.default-noc-engine\",\"kind\":\"default-engine\",\"version\":\"1\"}},\"impactReport\":{\"impacts\":[],\"schema\":\"ipcraft.topology-impact-report.v1\"},\"kind\":\"topology-materialization\",\"schema\":\"ipcraft.candidate-transaction.v1\",\"tombstones\":[],\"topologyIntent\":{\"componentId\":\"component.noc\",\"globalConfig\":{\"columns\":2,\"rows\":2},\"packageEntities\":[],\"packageRelations\":[],\"schema\":\"ipcraft.topology-intent.v1\",\"topologyId\":\"topology.main\",\"topologyKind\":\"mesh\"},\"transactionId\":\"tx-1\"}",
+        "{\"allocationOrder\":[\"application:000001\",\"authority:router-0\"],\"applicability\":{\"baseAuthoritativeDesignDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"baseDerivedStateDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"baseDerivedStateRevision\":3,\"defaultEngineBundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"defaultEngineLockId\":\"dep.engine\",\"engineHostContractVersion\":\"ipcraft.engine-host.v1\",\"groupId\":\"group-1\",\"hostSideEffectContractVersion\":\"ipcraft.noc-side-effects.v1\",\"packageBundleDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"reconcileDependencySetDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"requestGeneration\":1,\"schema\":\"ipcraft.reconcile-applicability.v1\",\"structureAuthority\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"ipcraft.default-noc-engine\",\"kind\":\"default-engine\",\"lockId\":\"dep.engine\",\"version\":\"1\"},\"topologyInputDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"topologyInputRevision\":2},\"applicationPatch\":{\"operations\":[{\"localRef\":\"application:000001\",\"op\":\"createRelation\",\"relationKind\":\"domain-membership\",\"value\":{\"domainRef\":{\"id\":\"domain.default\"},\"routerRef\":{\"localRef\":\"authority:router-0\"}}}],\"patchId\":\"patch.application\",\"source\":{\"identity\":\"host\",\"kind\":\"application-reconcile\",\"version\":\"1\"}},\"authorityPatch\":{\"operations\":[{\"entityKind\":\"router\",\"id\":\"router.old\",\"op\":\"deleteEntity\"},{\"entityKind\":\"router\",\"localRef\":\"authority:router-0\",\"op\":\"createEntity\",\"value\":{\"coordinate\":{\"column\":0,\"row\":0},\"identityCompatibilityVersion\":1,\"properties\":{},\"templateKey\":\"mesh-router\"}}],\"patchId\":\"patch.authority\",\"source\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"ipcraft.default-noc-engine\",\"kind\":\"default-engine\",\"version\":\"1\"}},\"impactReport\":{\"impacts\":[],\"schema\":\"ipcraft.topology-impact-report.v1\"},\"kind\":\"topology-materialization\",\"schema\":\"ipcraft.candidate-transaction.v1\",\"tombstones\":[],\"topologyIntent\":{\"componentId\":\"component.noc\",\"globalConfig\":{\"columns\":2,\"rows\":2},\"packageEntities\":[],\"packageRelations\":[],\"schema\":\"ipcraft.topology-intent.v1\",\"topologyId\":\"topology.main\",\"topologyKind\":\"mesh\"},\"transactionId\":\"tx-1\"}"
       ],
       "expectedDigest": [
-        "sha256:6606f0c488191505bbdaebfede657baada3970f72f916ef40f4b463dd6f99838",
-        "sha256:4f1460d2e678d9591a84504c1c16c371fd12ef785667df1d6075552267376267"
+        "sha256:a78e03a9e7c0f0acd3881b8b04266629d3ab5c1c10f338d83770922236c43f0b",
+        "sha256:f426f1580e4e32b8636502e12cfa8f51548888c30727c1b646197d18a4a58fca"
       ]
     },
     {
@@ -2898,7 +2898,7 @@
             "structureAuthority": {
               "kind": "default-engine",
               "lockId": "dep.engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -2925,7 +2925,7 @@
             "patchId": "patch.authority",
             "source": {
               "kind": "default-engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -3144,7 +3144,7 @@
             "structureAuthority": {
               "kind": "default-engine",
               "lockId": "dep.engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -3171,7 +3171,7 @@
             "patchId": "patch.authority",
             "source": {
               "kind": "default-engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -3400,7 +3400,7 @@
           "structureAuthority": {
             "kind": "default-engine",
             "lockId": "dep.engine",
-            "identity": "engine.mesh",
+            "identity": "ipcraft.default-noc-engine",
             "version": "1",
             "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
           },
@@ -3427,7 +3427,7 @@
           "patchId": "patch.authority",
           "source": {
             "kind": "default-engine",
-            "identity": "engine.mesh",
+            "identity": "ipcraft.default-noc-engine",
             "version": "1",
             "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
           },
@@ -3629,8 +3629,8 @@
           "impacts": []
         }
       },
-      "expectedCanonicalJson": "{\"allocationOrder\":[\"application:000001\",\"authority:router-0\"],\"applicability\":{\"baseAuthoritativeDesignDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"baseDerivedStateDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"baseDerivedStateRevision\":3,\"defaultEngineBundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"defaultEngineLockId\":\"dep.engine\",\"engineHostContractVersion\":\"ipcraft.engine-host.v1\",\"groupId\":\"group-1\",\"hostSideEffectContractVersion\":\"ipcraft.noc-side-effects.v1\",\"packageBundleDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"reconcileDependencySetDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"requestGeneration\":1,\"schema\":\"ipcraft.reconcile-applicability.v1\",\"structureAuthority\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"engine.mesh\",\"kind\":\"default-engine\",\"lockId\":\"dep.engine\",\"version\":\"1\"},\"topologyInputDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"topologyInputRevision\":2},\"applicationPatch\":{\"operations\":[{\"localRef\":\"application:000001\",\"op\":\"createRelation\",\"relationKind\":\"domain-membership\",\"value\":{\"domainRef\":{\"id\":\"domain.default\"},\"routerRef\":{\"localRef\":\"authority:router-0\"}}}],\"patchId\":\"patch.application\",\"source\":{\"identity\":\"host\",\"kind\":\"application-reconcile\",\"version\":\"1\"}},\"authorityPatch\":{\"operations\":[{\"entityKind\":\"router\",\"localRef\":\"authority:router-0\",\"op\":\"createEntity\",\"value\":{\"coordinate\":{\"column\":0,\"row\":0},\"identityCompatibilityVersion\":1,\"properties\":{},\"templateKey\":\"mesh-router\"}},{\"entityKind\":\"access-slot\",\"id\":\"slot.0\",\"op\":\"updateEntity\",\"set\":{\"allowedContracts\":[{\"capabilityConstraints\":{},\"contractLockId\":\"contract.a\",\"roles\":[\"master\",\"slave\"]},{\"capabilityConstraints\":{},\"contractLockId\":\"contract.m\",\"roles\":[\"initiator\",\"observer\"]},{\"capabilityConstraints\":{},\"contractLockId\":\"contract.z\",\"roles\":[\"requester\",\"target\"]}]},\"unset\":[]},{\"entityKind\":\"component\",\"id\":\"component.noc\",\"op\":\"updateEntity\",\"set\":{\"extensions\":[{\"data\":{},\"ownerLockId\":\"owner.a\",\"schema\":\"ext.a\",\"version\":\"1\"},{\"data\":{},\"ownerLockId\":\"owner.m\",\"schema\":\"ext.m\",\"version\":\"1\"},{\"data\":{},\"ownerLockId\":\"owner.z\",\"schema\":\"ext.z\",\"version\":\"1\"}]},\"unset\":[]},{\"id\":\"relation.0\",\"op\":\"updateRelation\",\"relationKind\":\"package-relation\",\"set\":{\"extensions\":[{\"data\":{},\"ownerLockId\":\"owner.a\",\"schema\":\"ext.a\",\"version\":\"1\"},{\"data\":{},\"ownerLockId\":\"owner.m\",\"schema\":\"ext.m\",\"version\":\"1\"},{\"data\":{},\"ownerLockId\":\"owner.z\",\"schema\":\"ext.z\",\"version\":\"1\"}],\"sources\":[{\"state\":\"resolved\",\"subject\":{\"kind\":\"component\",\"ref\":{\"id\":\"component.m\"}}},{\"state\":\"resolved\",\"subject\":{\"kind\":\"interface\",\"ref\":{\"id\":\"interface.a\"}}},{\"state\":\"resolved\",\"subject\":{\"kind\":\"router\",\"ref\":{\"id\":\"router.z\"}}}],\"targets\":[{\"state\":\"resolved\",\"subject\":{\"kind\":\"component\",\"ref\":{\"id\":\"component.m\"}}},{\"state\":\"resolved\",\"subject\":{\"kind\":\"interface\",\"ref\":{\"id\":\"interface.a\"}}},{\"state\":\"resolved\",\"subject\":{\"kind\":\"router\",\"ref\":{\"id\":\"router.z\"}}}]},\"unset\":[]}],\"patchId\":\"patch.authority\",\"source\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"engine.mesh\",\"kind\":\"default-engine\",\"version\":\"1\"}},\"impactReport\":{\"impacts\":[],\"schema\":\"ipcraft.topology-impact-report.v1\"},\"kind\":\"topology-materialization\",\"schema\":\"ipcraft.candidate-transaction.v1\",\"tombstones\":[],\"topologyIntent\":{\"componentId\":\"component.noc\",\"globalConfig\":{\"columns\":2,\"rows\":2},\"packageEntities\":[],\"packageRelations\":[],\"schema\":\"ipcraft.topology-intent.v1\",\"topologyId\":\"topology.main\",\"topologyKind\":\"mesh\"},\"transactionId\":\"tx-1\"}",
-      "expectedDigest": "sha256:6028c210c45469cf2468971375c87c28af9135b9f9634bf711710b68279b5340"
+      "expectedCanonicalJson": "{\"allocationOrder\":[\"application:000001\",\"authority:router-0\"],\"applicability\":{\"baseAuthoritativeDesignDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"baseDerivedStateDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"baseDerivedStateRevision\":3,\"defaultEngineBundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"defaultEngineLockId\":\"dep.engine\",\"engineHostContractVersion\":\"ipcraft.engine-host.v1\",\"groupId\":\"group-1\",\"hostSideEffectContractVersion\":\"ipcraft.noc-side-effects.v1\",\"packageBundleDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"reconcileDependencySetDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"requestGeneration\":1,\"schema\":\"ipcraft.reconcile-applicability.v1\",\"structureAuthority\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"ipcraft.default-noc-engine\",\"kind\":\"default-engine\",\"lockId\":\"dep.engine\",\"version\":\"1\"},\"topologyInputDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"topologyInputRevision\":2},\"applicationPatch\":{\"operations\":[{\"localRef\":\"application:000001\",\"op\":\"createRelation\",\"relationKind\":\"domain-membership\",\"value\":{\"domainRef\":{\"id\":\"domain.default\"},\"routerRef\":{\"localRef\":\"authority:router-0\"}}}],\"patchId\":\"patch.application\",\"source\":{\"identity\":\"host\",\"kind\":\"application-reconcile\",\"version\":\"1\"}},\"authorityPatch\":{\"operations\":[{\"entityKind\":\"router\",\"localRef\":\"authority:router-0\",\"op\":\"createEntity\",\"value\":{\"coordinate\":{\"column\":0,\"row\":0},\"identityCompatibilityVersion\":1,\"properties\":{},\"templateKey\":\"mesh-router\"}},{\"entityKind\":\"access-slot\",\"id\":\"slot.0\",\"op\":\"updateEntity\",\"set\":{\"allowedContracts\":[{\"capabilityConstraints\":{},\"contractLockId\":\"contract.a\",\"roles\":[\"master\",\"slave\"]},{\"capabilityConstraints\":{},\"contractLockId\":\"contract.m\",\"roles\":[\"initiator\",\"observer\"]},{\"capabilityConstraints\":{},\"contractLockId\":\"contract.z\",\"roles\":[\"requester\",\"target\"]}]},\"unset\":[]},{\"entityKind\":\"component\",\"id\":\"component.noc\",\"op\":\"updateEntity\",\"set\":{\"extensions\":[{\"data\":{},\"ownerLockId\":\"owner.a\",\"schema\":\"ext.a\",\"version\":\"1\"},{\"data\":{},\"ownerLockId\":\"owner.m\",\"schema\":\"ext.m\",\"version\":\"1\"},{\"data\":{},\"ownerLockId\":\"owner.z\",\"schema\":\"ext.z\",\"version\":\"1\"}]},\"unset\":[]},{\"id\":\"relation.0\",\"op\":\"updateRelation\",\"relationKind\":\"package-relation\",\"set\":{\"extensions\":[{\"data\":{},\"ownerLockId\":\"owner.a\",\"schema\":\"ext.a\",\"version\":\"1\"},{\"data\":{},\"ownerLockId\":\"owner.m\",\"schema\":\"ext.m\",\"version\":\"1\"},{\"data\":{},\"ownerLockId\":\"owner.z\",\"schema\":\"ext.z\",\"version\":\"1\"}],\"sources\":[{\"state\":\"resolved\",\"subject\":{\"kind\":\"component\",\"ref\":{\"id\":\"component.m\"}}},{\"state\":\"resolved\",\"subject\":{\"kind\":\"interface\",\"ref\":{\"id\":\"interface.a\"}}},{\"state\":\"resolved\",\"subject\":{\"kind\":\"router\",\"ref\":{\"id\":\"router.z\"}}}],\"targets\":[{\"state\":\"resolved\",\"subject\":{\"kind\":\"component\",\"ref\":{\"id\":\"component.m\"}}},{\"state\":\"resolved\",\"subject\":{\"kind\":\"interface\",\"ref\":{\"id\":\"interface.a\"}}},{\"state\":\"resolved\",\"subject\":{\"kind\":\"router\",\"ref\":{\"id\":\"router.z\"}}}]},\"unset\":[]}],\"patchId\":\"patch.authority\",\"source\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"ipcraft.default-noc-engine\",\"kind\":\"default-engine\",\"version\":\"1\"}},\"impactReport\":{\"impacts\":[],\"schema\":\"ipcraft.topology-impact-report.v1\"},\"kind\":\"topology-materialization\",\"schema\":\"ipcraft.candidate-transaction.v1\",\"tombstones\":[],\"topologyIntent\":{\"componentId\":\"component.noc\",\"globalConfig\":{\"columns\":2,\"rows\":2},\"packageEntities\":[],\"packageRelations\":[],\"schema\":\"ipcraft.topology-intent.v1\",\"topologyId\":\"topology.main\",\"topologyKind\":\"mesh\"},\"transactionId\":\"tx-1\"}",
+      "expectedDigest": "sha256:ceef73497d1a06d65a9e593be835ece2786963ee2d38938e8dc78b6baaa6c2db"
     },
     {
       "id": "applicability-change-changes-digest",
@@ -3651,7 +3651,7 @@
             "structureAuthority": {
               "kind": "default-engine",
               "lockId": "dep.engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -3678,7 +3678,7 @@
             "patchId": "patch.authority",
             "source": {
               "kind": "default-engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -3749,7 +3749,7 @@
             "structureAuthority": {
               "kind": "default-engine",
               "lockId": "dep.engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -3776,7 +3776,7 @@
             "patchId": "patch.authority",
             "source": {
               "kind": "default-engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -3854,7 +3854,7 @@
             "structureAuthority": {
               "kind": "default-engine",
               "lockId": "dep.engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -3881,7 +3881,7 @@
             "patchId": "patch.authority",
             "source": {
               "kind": "default-engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -3951,7 +3951,7 @@
             "structureAuthority": {
               "kind": "default-engine",
               "lockId": "dep.engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -3978,7 +3978,7 @@
             "patchId": "patch.authority",
             "source": {
               "kind": "default-engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -4034,12 +4034,12 @@
         }
       ],
       "expectedCanonicalJson": [
-        "{\"allocationOrder\":[\"application:000001\",\"authority:router-0\"],\"applicability\":{\"baseAuthoritativeDesignDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"baseDerivedStateDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"baseDerivedStateRevision\":3,\"defaultEngineBundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"defaultEngineLockId\":\"dep.engine\",\"engineHostContractVersion\":\"ipcraft.engine-host.v1\",\"groupId\":\"group-1\",\"hostSideEffectContractVersion\":\"ipcraft.noc-side-effects.v1\",\"packageBundleDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"reconcileDependencySetDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"requestGeneration\":1,\"schema\":\"ipcraft.reconcile-applicability.v1\",\"structureAuthority\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"engine.mesh\",\"kind\":\"default-engine\",\"lockId\":\"dep.engine\",\"version\":\"1\"},\"topologyInputDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"topologyInputRevision\":2},\"applicationPatch\":{\"operations\":[{\"localRef\":\"application:000001\",\"op\":\"createRelation\",\"relationKind\":\"domain-membership\",\"value\":{\"domainRef\":{\"id\":\"domain.default\"},\"routerRef\":{\"localRef\":\"authority:router-0\"}}}],\"patchId\":\"patch.application\",\"source\":{\"identity\":\"host\",\"kind\":\"application-reconcile\",\"version\":\"1\"}},\"authorityPatch\":{\"operations\":[{\"entityKind\":\"router\",\"localRef\":\"authority:router-0\",\"op\":\"createEntity\",\"value\":{\"coordinate\":{\"column\":0,\"row\":0},\"identityCompatibilityVersion\":1,\"properties\":{},\"templateKey\":\"mesh-router\"}}],\"patchId\":\"patch.authority\",\"source\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"engine.mesh\",\"kind\":\"default-engine\",\"version\":\"1\"}},\"impactReport\":{\"impacts\":[],\"schema\":\"ipcraft.topology-impact-report.v1\"},\"kind\":\"topology-materialization\",\"schema\":\"ipcraft.candidate-transaction.v1\",\"tombstones\":[],\"topologyIntent\":{\"componentId\":\"component.noc\",\"globalConfig\":{\"columns\":2,\"rows\":2},\"packageEntities\":[],\"packageRelations\":[],\"schema\":\"ipcraft.topology-intent.v1\",\"topologyId\":\"topology.main\",\"topologyKind\":\"mesh\"},\"transactionId\":\"tx-1\"}",
-        "{\"allocationOrder\":[\"application:000001\",\"authority:router-0\"],\"applicability\":{\"baseAuthoritativeDesignDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"baseDerivedStateDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"baseDerivedStateRevision\":3,\"defaultEngineBundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"defaultEngineLockId\":\"dep.engine\",\"engineHostContractVersion\":\"ipcraft.engine-host.v1\",\"groupId\":\"group-1\",\"hostSideEffectContractVersion\":\"ipcraft.noc-side-effects.v1\",\"packageBundleDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"reconcileDependencySetDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"requestGeneration\":2,\"schema\":\"ipcraft.reconcile-applicability.v1\",\"structureAuthority\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"engine.mesh\",\"kind\":\"default-engine\",\"lockId\":\"dep.engine\",\"version\":\"1\"},\"topologyInputDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"topologyInputRevision\":2},\"applicationPatch\":{\"operations\":[{\"localRef\":\"application:000001\",\"op\":\"createRelation\",\"relationKind\":\"domain-membership\",\"value\":{\"domainRef\":{\"id\":\"domain.default\"},\"routerRef\":{\"localRef\":\"authority:router-0\"}}}],\"patchId\":\"patch.application\",\"source\":{\"identity\":\"host\",\"kind\":\"application-reconcile\",\"version\":\"1\"}},\"authorityPatch\":{\"operations\":[{\"entityKind\":\"router\",\"localRef\":\"authority:router-0\",\"op\":\"createEntity\",\"value\":{\"coordinate\":{\"column\":0,\"row\":0},\"identityCompatibilityVersion\":1,\"properties\":{},\"templateKey\":\"mesh-router\"}}],\"patchId\":\"patch.authority\",\"source\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"engine.mesh\",\"kind\":\"default-engine\",\"version\":\"1\"}},\"impactReport\":{\"impacts\":[],\"schema\":\"ipcraft.topology-impact-report.v1\"},\"kind\":\"topology-materialization\",\"schema\":\"ipcraft.candidate-transaction.v1\",\"tombstones\":[],\"topologyIntent\":{\"componentId\":\"component.noc\",\"globalConfig\":{\"columns\":2,\"rows\":2},\"packageEntities\":[],\"packageRelations\":[],\"schema\":\"ipcraft.topology-intent.v1\",\"topologyId\":\"topology.main\",\"topologyKind\":\"mesh\"},\"transactionId\":\"tx-1\"}"
+        "{\"allocationOrder\":[\"application:000001\",\"authority:router-0\"],\"applicability\":{\"baseAuthoritativeDesignDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"baseDerivedStateDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"baseDerivedStateRevision\":3,\"defaultEngineBundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"defaultEngineLockId\":\"dep.engine\",\"engineHostContractVersion\":\"ipcraft.engine-host.v1\",\"groupId\":\"group-1\",\"hostSideEffectContractVersion\":\"ipcraft.noc-side-effects.v1\",\"packageBundleDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"reconcileDependencySetDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"requestGeneration\":1,\"schema\":\"ipcraft.reconcile-applicability.v1\",\"structureAuthority\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"ipcraft.default-noc-engine\",\"kind\":\"default-engine\",\"lockId\":\"dep.engine\",\"version\":\"1\"},\"topologyInputDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"topologyInputRevision\":2},\"applicationPatch\":{\"operations\":[{\"localRef\":\"application:000001\",\"op\":\"createRelation\",\"relationKind\":\"domain-membership\",\"value\":{\"domainRef\":{\"id\":\"domain.default\"},\"routerRef\":{\"localRef\":\"authority:router-0\"}}}],\"patchId\":\"patch.application\",\"source\":{\"identity\":\"host\",\"kind\":\"application-reconcile\",\"version\":\"1\"}},\"authorityPatch\":{\"operations\":[{\"entityKind\":\"router\",\"localRef\":\"authority:router-0\",\"op\":\"createEntity\",\"value\":{\"coordinate\":{\"column\":0,\"row\":0},\"identityCompatibilityVersion\":1,\"properties\":{},\"templateKey\":\"mesh-router\"}}],\"patchId\":\"patch.authority\",\"source\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"ipcraft.default-noc-engine\",\"kind\":\"default-engine\",\"version\":\"1\"}},\"impactReport\":{\"impacts\":[],\"schema\":\"ipcraft.topology-impact-report.v1\"},\"kind\":\"topology-materialization\",\"schema\":\"ipcraft.candidate-transaction.v1\",\"tombstones\":[],\"topologyIntent\":{\"componentId\":\"component.noc\",\"globalConfig\":{\"columns\":2,\"rows\":2},\"packageEntities\":[],\"packageRelations\":[],\"schema\":\"ipcraft.topology-intent.v1\",\"topologyId\":\"topology.main\",\"topologyKind\":\"mesh\"},\"transactionId\":\"tx-1\"}",
+        "{\"allocationOrder\":[\"application:000001\",\"authority:router-0\"],\"applicability\":{\"baseAuthoritativeDesignDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"baseDerivedStateDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"baseDerivedStateRevision\":3,\"defaultEngineBundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"defaultEngineLockId\":\"dep.engine\",\"engineHostContractVersion\":\"ipcraft.engine-host.v1\",\"groupId\":\"group-1\",\"hostSideEffectContractVersion\":\"ipcraft.noc-side-effects.v1\",\"packageBundleDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"reconcileDependencySetDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"requestGeneration\":2,\"schema\":\"ipcraft.reconcile-applicability.v1\",\"structureAuthority\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"ipcraft.default-noc-engine\",\"kind\":\"default-engine\",\"lockId\":\"dep.engine\",\"version\":\"1\"},\"topologyInputDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"topologyInputRevision\":2},\"applicationPatch\":{\"operations\":[{\"localRef\":\"application:000001\",\"op\":\"createRelation\",\"relationKind\":\"domain-membership\",\"value\":{\"domainRef\":{\"id\":\"domain.default\"},\"routerRef\":{\"localRef\":\"authority:router-0\"}}}],\"patchId\":\"patch.application\",\"source\":{\"identity\":\"host\",\"kind\":\"application-reconcile\",\"version\":\"1\"}},\"authorityPatch\":{\"operations\":[{\"entityKind\":\"router\",\"localRef\":\"authority:router-0\",\"op\":\"createEntity\",\"value\":{\"coordinate\":{\"column\":0,\"row\":0},\"identityCompatibilityVersion\":1,\"properties\":{},\"templateKey\":\"mesh-router\"}}],\"patchId\":\"patch.authority\",\"source\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"ipcraft.default-noc-engine\",\"kind\":\"default-engine\",\"version\":\"1\"}},\"impactReport\":{\"impacts\":[],\"schema\":\"ipcraft.topology-impact-report.v1\"},\"kind\":\"topology-materialization\",\"schema\":\"ipcraft.candidate-transaction.v1\",\"tombstones\":[],\"topologyIntent\":{\"componentId\":\"component.noc\",\"globalConfig\":{\"columns\":2,\"rows\":2},\"packageEntities\":[],\"packageRelations\":[],\"schema\":\"ipcraft.topology-intent.v1\",\"topologyId\":\"topology.main\",\"topologyKind\":\"mesh\"},\"transactionId\":\"tx-1\"}"
       ],
       "expectedDigest": [
-        "sha256:68ba3d63bff0cfd1367fbedd98dd62f1a455e4ba708163f86b92ae4d0f20ff9b",
-        "sha256:50a82e3c29c0e14f96558ebb8e743da8b9e3b5e96d7548503b6f581c0cb7ad05"
+        "sha256:8ebcc7d833b6049830227eed3e787fe0726635d01758a0770b7fd1f7e282880e",
+        "sha256:b885ad2e9d93a914d71317068daeffa4cd9b4e9a76bb722ed91d39c5c50ee5e5"
       ]
     },
     {
@@ -4061,7 +4061,7 @@
             "structureAuthority": {
               "kind": "default-engine",
               "lockId": "dep.engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -4088,7 +4088,7 @@
             "patchId": "patch.authority",
             "source": {
               "kind": "default-engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -4159,7 +4159,7 @@
             "structureAuthority": {
               "kind": "default-engine",
               "lockId": "dep.engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -4186,7 +4186,7 @@
             "patchId": "patch.authority",
             "source": {
               "kind": "default-engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -4264,7 +4264,7 @@
             "structureAuthority": {
               "kind": "default-engine",
               "lockId": "dep.engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -4291,7 +4291,7 @@
             "patchId": "patch.authority",
             "source": {
               "kind": "default-engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -4361,7 +4361,7 @@
             "structureAuthority": {
               "kind": "default-engine",
               "lockId": "dep.engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -4388,7 +4388,7 @@
             "patchId": "patch.authority",
             "source": {
               "kind": "default-engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -4444,12 +4444,12 @@
         }
       ],
       "expectedCanonicalJson": [
-        "{\"allocationOrder\":[\"application:000001\",\"authority:router-0\"],\"applicability\":{\"baseAuthoritativeDesignDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"baseDerivedStateDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"baseDerivedStateRevision\":3,\"defaultEngineBundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"defaultEngineLockId\":\"dep.engine\",\"engineHostContractVersion\":\"ipcraft.engine-host.v1\",\"groupId\":\"group-1\",\"hostSideEffectContractVersion\":\"ipcraft.noc-side-effects.v1\",\"packageBundleDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"reconcileDependencySetDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"requestGeneration\":1,\"schema\":\"ipcraft.reconcile-applicability.v1\",\"structureAuthority\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"engine.mesh\",\"kind\":\"default-engine\",\"lockId\":\"dep.engine\",\"version\":\"1\"},\"topologyInputDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"topologyInputRevision\":2},\"applicationPatch\":{\"operations\":[{\"localRef\":\"application:000001\",\"op\":\"createRelation\",\"relationKind\":\"domain-membership\",\"value\":{\"domainRef\":{\"id\":\"domain.default\"},\"routerRef\":{\"localRef\":\"authority:router-0\"}}}],\"patchId\":\"patch.application\",\"source\":{\"identity\":\"host\",\"kind\":\"application-reconcile\",\"version\":\"1\"}},\"authorityPatch\":{\"operations\":[{\"entityKind\":\"router\",\"localRef\":\"authority:router-0\",\"op\":\"createEntity\",\"value\":{\"coordinate\":{\"column\":0,\"row\":0},\"identityCompatibilityVersion\":1,\"properties\":{},\"templateKey\":\"mesh-router\"}}],\"patchId\":\"patch.authority\",\"source\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"engine.mesh\",\"kind\":\"default-engine\",\"version\":\"1\"}},\"impactReport\":{\"impacts\":[],\"schema\":\"ipcraft.topology-impact-report.v1\"},\"kind\":\"topology-materialization\",\"schema\":\"ipcraft.candidate-transaction.v1\",\"tombstones\":[],\"topologyIntent\":{\"componentId\":\"component.noc\",\"globalConfig\":{\"columns\":2,\"rows\":2},\"packageEntities\":[],\"packageRelations\":[],\"schema\":\"ipcraft.topology-intent.v1\",\"topologyId\":\"topology.main\",\"topologyKind\":\"mesh\"},\"transactionId\":\"tx-1\"}",
-        "{\"allocationOrder\":[\"application:000001\",\"authority:router-0\"],\"applicability\":{\"baseAuthoritativeDesignDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"baseDerivedStateDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"baseDerivedStateRevision\":3,\"defaultEngineBundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"defaultEngineLockId\":\"dep.engine\",\"engineHostContractVersion\":\"ipcraft.engine-host.v1\",\"groupId\":\"group-1\",\"hostSideEffectContractVersion\":\"ipcraft.noc-side-effects.v1\",\"packageBundleDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"reconcileDependencySetDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"requestGeneration\":1,\"schema\":\"ipcraft.reconcile-applicability.v1\",\"structureAuthority\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"engine.mesh\",\"kind\":\"default-engine\",\"lockId\":\"dep.engine\",\"version\":\"1\"},\"topologyInputDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"topologyInputRevision\":2},\"applicationPatch\":{\"operations\":[{\"localRef\":\"application:000001\",\"op\":\"createRelation\",\"relationKind\":\"domain-membership\",\"value\":{\"domainRef\":{\"id\":\"domain.default\"},\"routerRef\":{\"localRef\":\"authority:router-0\"}}}],\"patchId\":\"patch.application\",\"source\":{\"identity\":\"host\",\"kind\":\"application-reconcile\",\"version\":\"1\"}},\"authorityPatch\":{\"operations\":[{\"entityKind\":\"router\",\"localRef\":\"authority:router-0\",\"op\":\"createEntity\",\"value\":{\"coordinate\":{\"column\":0,\"row\":0},\"identityCompatibilityVersion\":1,\"properties\":{},\"templateKey\":\"mesh-router\"}}],\"patchId\":\"patch.authority\",\"source\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"engine.mesh\",\"kind\":\"default-engine\",\"version\":\"1\"}},\"impactReport\":{\"impacts\":[],\"schema\":\"ipcraft.topology-impact-report.v1\"},\"kind\":\"topology-materialization\",\"schema\":\"ipcraft.candidate-transaction.v1\",\"tombstones\":[],\"topologyIntent\":{\"componentId\":\"component.noc\",\"globalConfig\":{\"columns\":2,\"rows\":2},\"packageEntities\":[],\"packageRelations\":[],\"schema\":\"ipcraft.topology-intent.v1\",\"topologyId\":\"topology.main\",\"topologyKind\":\"mesh\"},\"transactionId\":\"tx-2\"}"
+        "{\"allocationOrder\":[\"application:000001\",\"authority:router-0\"],\"applicability\":{\"baseAuthoritativeDesignDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"baseDerivedStateDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"baseDerivedStateRevision\":3,\"defaultEngineBundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"defaultEngineLockId\":\"dep.engine\",\"engineHostContractVersion\":\"ipcraft.engine-host.v1\",\"groupId\":\"group-1\",\"hostSideEffectContractVersion\":\"ipcraft.noc-side-effects.v1\",\"packageBundleDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"reconcileDependencySetDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"requestGeneration\":1,\"schema\":\"ipcraft.reconcile-applicability.v1\",\"structureAuthority\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"ipcraft.default-noc-engine\",\"kind\":\"default-engine\",\"lockId\":\"dep.engine\",\"version\":\"1\"},\"topologyInputDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"topologyInputRevision\":2},\"applicationPatch\":{\"operations\":[{\"localRef\":\"application:000001\",\"op\":\"createRelation\",\"relationKind\":\"domain-membership\",\"value\":{\"domainRef\":{\"id\":\"domain.default\"},\"routerRef\":{\"localRef\":\"authority:router-0\"}}}],\"patchId\":\"patch.application\",\"source\":{\"identity\":\"host\",\"kind\":\"application-reconcile\",\"version\":\"1\"}},\"authorityPatch\":{\"operations\":[{\"entityKind\":\"router\",\"localRef\":\"authority:router-0\",\"op\":\"createEntity\",\"value\":{\"coordinate\":{\"column\":0,\"row\":0},\"identityCompatibilityVersion\":1,\"properties\":{},\"templateKey\":\"mesh-router\"}}],\"patchId\":\"patch.authority\",\"source\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"ipcraft.default-noc-engine\",\"kind\":\"default-engine\",\"version\":\"1\"}},\"impactReport\":{\"impacts\":[],\"schema\":\"ipcraft.topology-impact-report.v1\"},\"kind\":\"topology-materialization\",\"schema\":\"ipcraft.candidate-transaction.v1\",\"tombstones\":[],\"topologyIntent\":{\"componentId\":\"component.noc\",\"globalConfig\":{\"columns\":2,\"rows\":2},\"packageEntities\":[],\"packageRelations\":[],\"schema\":\"ipcraft.topology-intent.v1\",\"topologyId\":\"topology.main\",\"topologyKind\":\"mesh\"},\"transactionId\":\"tx-1\"}",
+        "{\"allocationOrder\":[\"application:000001\",\"authority:router-0\"],\"applicability\":{\"baseAuthoritativeDesignDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"baseDerivedStateDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"baseDerivedStateRevision\":3,\"defaultEngineBundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"defaultEngineLockId\":\"dep.engine\",\"engineHostContractVersion\":\"ipcraft.engine-host.v1\",\"groupId\":\"group-1\",\"hostSideEffectContractVersion\":\"ipcraft.noc-side-effects.v1\",\"packageBundleDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"reconcileDependencySetDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"requestGeneration\":1,\"schema\":\"ipcraft.reconcile-applicability.v1\",\"structureAuthority\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"ipcraft.default-noc-engine\",\"kind\":\"default-engine\",\"lockId\":\"dep.engine\",\"version\":\"1\"},\"topologyInputDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"topologyInputRevision\":2},\"applicationPatch\":{\"operations\":[{\"localRef\":\"application:000001\",\"op\":\"createRelation\",\"relationKind\":\"domain-membership\",\"value\":{\"domainRef\":{\"id\":\"domain.default\"},\"routerRef\":{\"localRef\":\"authority:router-0\"}}}],\"patchId\":\"patch.application\",\"source\":{\"identity\":\"host\",\"kind\":\"application-reconcile\",\"version\":\"1\"}},\"authorityPatch\":{\"operations\":[{\"entityKind\":\"router\",\"localRef\":\"authority:router-0\",\"op\":\"createEntity\",\"value\":{\"coordinate\":{\"column\":0,\"row\":0},\"identityCompatibilityVersion\":1,\"properties\":{},\"templateKey\":\"mesh-router\"}}],\"patchId\":\"patch.authority\",\"source\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"ipcraft.default-noc-engine\",\"kind\":\"default-engine\",\"version\":\"1\"}},\"impactReport\":{\"impacts\":[],\"schema\":\"ipcraft.topology-impact-report.v1\"},\"kind\":\"topology-materialization\",\"schema\":\"ipcraft.candidate-transaction.v1\",\"tombstones\":[],\"topologyIntent\":{\"componentId\":\"component.noc\",\"globalConfig\":{\"columns\":2,\"rows\":2},\"packageEntities\":[],\"packageRelations\":[],\"schema\":\"ipcraft.topology-intent.v1\",\"topologyId\":\"topology.main\",\"topologyKind\":\"mesh\"},\"transactionId\":\"tx-2\"}"
       ],
       "expectedDigest": [
-        "sha256:68ba3d63bff0cfd1367fbedd98dd62f1a455e4ba708163f86b92ae4d0f20ff9b",
-        "sha256:284dbab062420cc07a27fd68497e498a9ecd04fbc0fb2f407d1a21d8c9dca646"
+        "sha256:8ebcc7d833b6049830227eed3e787fe0726635d01758a0770b7fd1f7e282880e",
+        "sha256:5bd42d492bc8894179dd2513dbdd05c7cd40628da007d215cceae18328e80103"
       ]
     },
     {
@@ -4471,7 +4471,7 @@
             "structureAuthority": {
               "kind": "default-engine",
               "lockId": "dep.engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -4498,7 +4498,7 @@
             "patchId": "patch.authority",
             "source": {
               "kind": "default-engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -4569,7 +4569,7 @@
             "structureAuthority": {
               "kind": "default-engine",
               "lockId": "dep.engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -4596,7 +4596,7 @@
             "patchId": "patch.authority",
             "source": {
               "kind": "default-engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -4690,7 +4690,7 @@
             "structureAuthority": {
               "kind": "default-engine",
               "lockId": "dep.engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -4717,7 +4717,7 @@
             "patchId": "patch.authority",
             "source": {
               "kind": "default-engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -4787,7 +4787,7 @@
             "structureAuthority": {
               "kind": "default-engine",
               "lockId": "dep.engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -4814,7 +4814,7 @@
             "patchId": "patch.authority",
             "source": {
               "kind": "default-engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -4886,12 +4886,12 @@
         }
       ],
       "expectedCanonicalJson": [
-        "{\"allocationOrder\":[\"application:000001\",\"authority:router-0\"],\"applicability\":{\"baseAuthoritativeDesignDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"baseDerivedStateDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"baseDerivedStateRevision\":3,\"defaultEngineBundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"defaultEngineLockId\":\"dep.engine\",\"engineHostContractVersion\":\"ipcraft.engine-host.v1\",\"groupId\":\"group-1\",\"hostSideEffectContractVersion\":\"ipcraft.noc-side-effects.v1\",\"packageBundleDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"reconcileDependencySetDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"requestGeneration\":1,\"schema\":\"ipcraft.reconcile-applicability.v1\",\"structureAuthority\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"engine.mesh\",\"kind\":\"default-engine\",\"lockId\":\"dep.engine\",\"version\":\"1\"},\"topologyInputDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"topologyInputRevision\":2},\"applicationPatch\":{\"operations\":[{\"localRef\":\"application:000001\",\"op\":\"createRelation\",\"relationKind\":\"domain-membership\",\"value\":{\"domainRef\":{\"id\":\"domain.default\"},\"routerRef\":{\"localRef\":\"authority:router-0\"}}}],\"patchId\":\"patch.application\",\"source\":{\"identity\":\"host\",\"kind\":\"application-reconcile\",\"version\":\"1\"}},\"authorityPatch\":{\"operations\":[{\"entityKind\":\"router\",\"localRef\":\"authority:router-0\",\"op\":\"createEntity\",\"value\":{\"coordinate\":{\"column\":0,\"row\":0},\"identityCompatibilityVersion\":1,\"properties\":{},\"templateKey\":\"mesh-router\"}}],\"patchId\":\"patch.authority\",\"source\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"engine.mesh\",\"kind\":\"default-engine\",\"version\":\"1\"}},\"impactReport\":{\"impacts\":[],\"schema\":\"ipcraft.topology-impact-report.v1\"},\"kind\":\"topology-materialization\",\"schema\":\"ipcraft.candidate-transaction.v1\",\"tombstones\":[],\"topologyIntent\":{\"componentId\":\"component.noc\",\"globalConfig\":{\"columns\":2,\"rows\":2},\"packageEntities\":[],\"packageRelations\":[],\"schema\":\"ipcraft.topology-intent.v1\",\"topologyId\":\"topology.main\",\"topologyKind\":\"mesh\"},\"transactionId\":\"tx-1\"}",
-        "{\"allocationOrder\":[\"application:000001\",\"authority:router-0\"],\"applicability\":{\"baseAuthoritativeDesignDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"baseDerivedStateDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"baseDerivedStateRevision\":3,\"defaultEngineBundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"defaultEngineLockId\":\"dep.engine\",\"engineHostContractVersion\":\"ipcraft.engine-host.v1\",\"groupId\":\"group-1\",\"hostSideEffectContractVersion\":\"ipcraft.noc-side-effects.v1\",\"packageBundleDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"reconcileDependencySetDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"requestGeneration\":1,\"schema\":\"ipcraft.reconcile-applicability.v1\",\"structureAuthority\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"engine.mesh\",\"kind\":\"default-engine\",\"lockId\":\"dep.engine\",\"version\":\"1\"},\"topologyInputDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"topologyInputRevision\":2},\"applicationPatch\":{\"operations\":[{\"localRef\":\"application:000001\",\"op\":\"createRelation\",\"relationKind\":\"domain-membership\",\"value\":{\"domainRef\":{\"id\":\"domain.default\"},\"routerRef\":{\"localRef\":\"authority:router-0\"}}}],\"patchId\":\"patch.application\",\"source\":{\"identity\":\"host\",\"kind\":\"application-reconcile\",\"version\":\"1\"}},\"authorityPatch\":{\"operations\":[{\"entityKind\":\"router\",\"localRef\":\"authority:router-0\",\"op\":\"createEntity\",\"value\":{\"coordinate\":{\"column\":0,\"row\":0},\"identityCompatibilityVersion\":1,\"properties\":{},\"templateKey\":\"mesh-router\"}}],\"patchId\":\"patch.authority\",\"source\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"engine.mesh\",\"kind\":\"default-engine\",\"version\":\"1\"}},\"impactReport\":{\"impacts\":[{\"code\":\"domain.non_default_deleted\",\"dataLoss\":true,\"details\":{\"discardedConfig\":true},\"resolution\":\"confirm-or-discard\",\"severity\":\"warning\",\"subjects\":[{\"id\":\"domain.old\",\"kind\":\"domain\"}]}],\"schema\":\"ipcraft.topology-impact-report.v1\"},\"kind\":\"topology-materialization\",\"schema\":\"ipcraft.candidate-transaction.v1\",\"tombstones\":[],\"topologyIntent\":{\"componentId\":\"component.noc\",\"globalConfig\":{\"columns\":2,\"rows\":2},\"packageEntities\":[],\"packageRelations\":[],\"schema\":\"ipcraft.topology-intent.v1\",\"topologyId\":\"topology.main\",\"topologyKind\":\"mesh\"},\"transactionId\":\"tx-1\"}"
+        "{\"allocationOrder\":[\"application:000001\",\"authority:router-0\"],\"applicability\":{\"baseAuthoritativeDesignDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"baseDerivedStateDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"baseDerivedStateRevision\":3,\"defaultEngineBundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"defaultEngineLockId\":\"dep.engine\",\"engineHostContractVersion\":\"ipcraft.engine-host.v1\",\"groupId\":\"group-1\",\"hostSideEffectContractVersion\":\"ipcraft.noc-side-effects.v1\",\"packageBundleDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"reconcileDependencySetDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"requestGeneration\":1,\"schema\":\"ipcraft.reconcile-applicability.v1\",\"structureAuthority\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"ipcraft.default-noc-engine\",\"kind\":\"default-engine\",\"lockId\":\"dep.engine\",\"version\":\"1\"},\"topologyInputDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"topologyInputRevision\":2},\"applicationPatch\":{\"operations\":[{\"localRef\":\"application:000001\",\"op\":\"createRelation\",\"relationKind\":\"domain-membership\",\"value\":{\"domainRef\":{\"id\":\"domain.default\"},\"routerRef\":{\"localRef\":\"authority:router-0\"}}}],\"patchId\":\"patch.application\",\"source\":{\"identity\":\"host\",\"kind\":\"application-reconcile\",\"version\":\"1\"}},\"authorityPatch\":{\"operations\":[{\"entityKind\":\"router\",\"localRef\":\"authority:router-0\",\"op\":\"createEntity\",\"value\":{\"coordinate\":{\"column\":0,\"row\":0},\"identityCompatibilityVersion\":1,\"properties\":{},\"templateKey\":\"mesh-router\"}}],\"patchId\":\"patch.authority\",\"source\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"ipcraft.default-noc-engine\",\"kind\":\"default-engine\",\"version\":\"1\"}},\"impactReport\":{\"impacts\":[],\"schema\":\"ipcraft.topology-impact-report.v1\"},\"kind\":\"topology-materialization\",\"schema\":\"ipcraft.candidate-transaction.v1\",\"tombstones\":[],\"topologyIntent\":{\"componentId\":\"component.noc\",\"globalConfig\":{\"columns\":2,\"rows\":2},\"packageEntities\":[],\"packageRelations\":[],\"schema\":\"ipcraft.topology-intent.v1\",\"topologyId\":\"topology.main\",\"topologyKind\":\"mesh\"},\"transactionId\":\"tx-1\"}",
+        "{\"allocationOrder\":[\"application:000001\",\"authority:router-0\"],\"applicability\":{\"baseAuthoritativeDesignDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"baseDerivedStateDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"baseDerivedStateRevision\":3,\"defaultEngineBundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"defaultEngineLockId\":\"dep.engine\",\"engineHostContractVersion\":\"ipcraft.engine-host.v1\",\"groupId\":\"group-1\",\"hostSideEffectContractVersion\":\"ipcraft.noc-side-effects.v1\",\"packageBundleDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"reconcileDependencySetDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"requestGeneration\":1,\"schema\":\"ipcraft.reconcile-applicability.v1\",\"structureAuthority\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"ipcraft.default-noc-engine\",\"kind\":\"default-engine\",\"lockId\":\"dep.engine\",\"version\":\"1\"},\"topologyInputDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"topologyInputRevision\":2},\"applicationPatch\":{\"operations\":[{\"localRef\":\"application:000001\",\"op\":\"createRelation\",\"relationKind\":\"domain-membership\",\"value\":{\"domainRef\":{\"id\":\"domain.default\"},\"routerRef\":{\"localRef\":\"authority:router-0\"}}}],\"patchId\":\"patch.application\",\"source\":{\"identity\":\"host\",\"kind\":\"application-reconcile\",\"version\":\"1\"}},\"authorityPatch\":{\"operations\":[{\"entityKind\":\"router\",\"localRef\":\"authority:router-0\",\"op\":\"createEntity\",\"value\":{\"coordinate\":{\"column\":0,\"row\":0},\"identityCompatibilityVersion\":1,\"properties\":{},\"templateKey\":\"mesh-router\"}}],\"patchId\":\"patch.authority\",\"source\":{\"bundleDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"identity\":\"ipcraft.default-noc-engine\",\"kind\":\"default-engine\",\"version\":\"1\"}},\"impactReport\":{\"impacts\":[{\"code\":\"domain.non_default_deleted\",\"dataLoss\":true,\"details\":{\"discardedConfig\":true},\"resolution\":\"confirm-or-discard\",\"severity\":\"warning\",\"subjects\":[{\"id\":\"domain.old\",\"kind\":\"domain\"}]}],\"schema\":\"ipcraft.topology-impact-report.v1\"},\"kind\":\"topology-materialization\",\"schema\":\"ipcraft.candidate-transaction.v1\",\"tombstones\":[],\"topologyIntent\":{\"componentId\":\"component.noc\",\"globalConfig\":{\"columns\":2,\"rows\":2},\"packageEntities\":[],\"packageRelations\":[],\"schema\":\"ipcraft.topology-intent.v1\",\"topologyId\":\"topology.main\",\"topologyKind\":\"mesh\"},\"transactionId\":\"tx-1\"}"
       ],
       "expectedDigest": [
-        "sha256:68ba3d63bff0cfd1367fbedd98dd62f1a455e4ba708163f86b92ae4d0f20ff9b",
-        "sha256:2e8a935dc000d26d620a64b4a8baed975f8c4b09c3ec6b9d28f2f838fc205e03"
+        "sha256:8ebcc7d833b6049830227eed3e787fe0726635d01758a0770b7fd1f7e282880e",
+        "sha256:3fbc11d68b84ab036e39eb099913faf3ca0c3511f85b95d938cec17f3e4689a7"
       ]
     },
     {
@@ -4932,7 +4932,7 @@
             "structureAuthority": {
               "kind": "default-engine",
               "lockId": "dep.engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -4959,7 +4959,7 @@
             "patchId": "patch.authority",
             "source": {
               "kind": "default-engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -5062,7 +5062,7 @@
             "structureAuthority": {
               "kind": "default-engine",
               "lockId": "dep.engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -5089,7 +5089,7 @@
             "patchId": "patch.authority",
             "source": {
               "kind": "default-engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -5178,7 +5178,7 @@
             "structureAuthority": {
               "kind": "default-engine",
               "lockId": "dep.engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -5205,7 +5205,7 @@
             "patchId": "patch.authority",
             "source": {
               "kind": "default-engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -5293,7 +5293,7 @@
             "structureAuthority": {
               "kind": "default-engine",
               "lockId": "dep.engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -5320,7 +5320,7 @@
             "patchId": "patch.authority",
             "source": {
               "kind": "default-engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -5409,7 +5409,7 @@
             "structureAuthority": {
               "kind": "default-engine",
               "lockId": "dep.engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -5436,7 +5436,7 @@
             "patchId": "patch.authority",
             "source": {
               "kind": "default-engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -5529,7 +5529,7 @@
             "structureAuthority": {
               "kind": "default-engine",
               "lockId": "dep.engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -5556,7 +5556,7 @@
             "patchId": "patch.authority",
             "source": {
               "kind": "default-engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -5647,7 +5647,7 @@
             "structureAuthority": {
               "kind": "default-engine",
               "lockId": "dep.engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -5674,7 +5674,7 @@
             "patchId": "patch.authority",
             "source": {
               "kind": "default-engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -5768,7 +5768,7 @@
             "structureAuthority": {
               "kind": "default-engine",
               "lockId": "dep.engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
@@ -5795,7 +5795,7 @@
             "patchId": "patch.authority",
             "source": {
               "kind": "default-engine",
-              "identity": "engine.mesh",
+              "identity": "ipcraft.default-noc-engine",
               "version": "1",
               "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },

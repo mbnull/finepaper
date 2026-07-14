@@ -79,7 +79,7 @@
         "defaultEngineLockId": { "$ref": "#/$defs/id" },
         "currentDefaultEngineBundleDigest": { "$ref": "#/$defs/digest" },
         "targetDefaultEngineBundleDigest": { "$ref": "#/$defs/digest" },
-        "targetEngineHostContractVersion": { "const": "ipcraft.engine-host.v1" },
+        "targetEngineHostContractVersion": { "$ref": "#/$defs/id" },
         "hostSideEffectContractVersion": { "$ref": "#/$defs/id" }
       },
       "allOf": [

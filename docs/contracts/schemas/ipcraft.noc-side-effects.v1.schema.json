@@ -8,7 +8,7 @@
   "required": ["schema", "contractVersion", "input", "expected"],
   "properties": {
     "schema": { "const": "ipcraft.noc-side-effects.v1" },
-    "contractVersion": { "$ref": "#/$defs/id" },
+    "contractVersion": { "const": "ipcraft.noc-side-effects.v1" },
     "input": { "$ref": "#/$defs/input" },
     "expected": { "$ref": "#/$defs/expected" }
   },
@@ -37,6 +37,7 @@
     "expected": {
       "type": "object",
       "additionalProperties": false,
+      "$comment": "Disposition priority is blocking relation, then confirmation impacts, then auto-commit. domain.disconnected auto-commits the candidate but requires blocking Core DRC, which blocks Save/Validate/Generate after commit rather than blocking the Pending Group.",
       "required": ["applicationPatch", "tombstones", "allocationOrder", "impactReport", "coreDiagnostics", "groupState", "requiresConfirmation", "commitDisposition"],
       "properties": {
         "applicationPatch": {
@@ -52,7 +53,85 @@
         "groupState": { "enum": ["auto-commit", "ready-to-commit", "blocked"] },
         "requiresConfirmation": { "type": "boolean" },
         "commitDisposition": { "enum": ["auto-commit", "confirmation-required", "blocked"] }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "impactReport": {
+                "properties": {
+                  "impacts": { "contains": { "type": "object", "properties": { "code": { "const": "package_relation.endpoint_blocks_candidate" } }, "required": ["code"] } }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "groupState": { "const": "blocked" },
+              "requiresConfirmation": { "const": false },
+              "commitDisposition": { "const": "blocked" }
+            }
+          },
+          "else": {
+            "if": {
+              "properties": {
+                "impactReport": {
+                  "properties": {
+                    "impacts": {
+                      "contains": {
+                        "type": "object",
+                        "properties": { "code": { "enum": ["domain.non_default_deleted", "engine_migration.dependency_replaced"] } },
+                        "required": ["code"]
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "groupState": { "const": "ready-to-commit" },
+                "requiresConfirmation": { "const": true },
+                "commitDisposition": { "const": "confirmation-required" }
+              }
+            },
+            "else": {
+              "properties": {
+                "groupState": { "const": "auto-commit" },
+                "requiresConfirmation": { "const": false },
+                "commitDisposition": { "const": "auto-commit" }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "impactReport": {
+                "properties": {
+                  "impacts": { "contains": { "type": "object", "properties": { "code": { "const": "domain.disconnected" } }, "required": ["code"] } }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "coreDiagnostics": {
+                "contains": {
+                  "type": "object",
+                  "properties": {
+                    "ruleId": { "const": "domain.disconnected" },
+                    "severity": { "const": "error" },
+                    "blocking": { "const": true }
+                  },
+                  "required": ["ruleId", "severity", "blocking"]
+                },
+                "minContains": 1
+              }
+            }
+          }
+        }
+      ]
     }
   }
 }
