@@ -318,7 +318,7 @@ failed
 
 The Group itself is not ProjectDesign and never enters formal history before materialization. `topologyInputRevision` is reserved when a Group opens; discarded reservations are never reused. On materialization it becomes the authoritative topology-input revision. Formal Undo/Redo of a topology transaction allocates another new revision.
 
-Allowed Group `kind`: `topology-edit`, `default-engine-migration`. Engine migration uses the same single-open-Group exclusion, candidate digest, confirmation, recovery re-derivation, localRef namespace, and atomic history rules; it always requires confirmation and carries current/target Engine locks from Appendix F.
+Allowed Group `kind`: `topology-edit`, `default-engine-migration`. Engine migration uses the same single-open-Group exclusion, candidate digest, recovery re-derivation, localRef namespace, and atomic history rules; its migration impact requires confirmation unless a universal blocking impact makes the Group blocked and unconfirmable. It carries current/target Engine locks from Appendix F.
 
 Request:
 

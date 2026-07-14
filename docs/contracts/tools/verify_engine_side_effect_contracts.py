@@ -208,7 +208,12 @@ def migration_semantic_errors(candidate: dict, base_dependencies: list[dict], ta
         errors.append("migration-ineligible")
     impacts = candidate["impactReport"]["impacts"]
     if not any(impact["code"] == "engine_migration.dependency_replaced" for impact in impacts): errors.append("confirmation-impact")
-    if disposition_for_impacts(impacts) != ("ready-to-commit", True, "confirmation-required"):
+    expected_disposition = (
+        ("blocked", False, "blocked")
+        if any(impact["code"] == "package_relation.endpoint_blocks_candidate" for impact in impacts)
+        else ("ready-to-commit", True, "confirmation-required")
+    )
+    if disposition_for_impacts(impacts) != expected_disposition:
         errors.append("confirmation-disposition")
     return errors
 
@@ -323,6 +328,11 @@ def main() -> int:
     target_manifest = engine_manifest()
     assert_valid(world, "ipcraft.core-canonical-models.v1", core["candidateTransaction"], candidate, "complete migration candidate")
     assert migration_semantic_errors(candidate, base_dependencies, target_manifest) == []
+    blocked_migration = copy.deepcopy(candidate)
+    blocked_migration["impactReport"]["impacts"].append({"code": "package_relation.endpoint_blocks_candidate", "severity": "error", "dataLoss": False, "subjects": [{"kind": "package-relation", "id": "relation.blocked"}], "details": {}, "resolution": "discard-and-repair"})
+    assert_valid(world, "ipcraft.core-canonical-models.v1", core["candidateTransaction"], blocked_migration, "migration with blocking relation impact")
+    assert disposition_for_impacts(blocked_migration["impactReport"]["impacts"]) == ("blocked", False, "blocked")
+    assert migration_semantic_errors(blocked_migration, base_dependencies, target_manifest) == []
     schema_negatives = []
     empty = copy.deepcopy(candidate); empty["applicationPatch"]["operations"] = []; schema_negatives.append(("empty migration application Patch", empty))
     no_project = copy.deepcopy(candidate); no_project["applicationPatch"]["operations"].pop(0); schema_negatives.append(("missing project dependency update", no_project))
@@ -397,7 +407,7 @@ def main() -> int:
     for name, negative in contradictory:
         assert_invalid(world, "ipcraft.noc-side-effects.v1", side_schema, negative, name)
 
-    print("engine/side-effect witnesses passed: 9 resolution cases, Patch ownership, exact migration binding + 17 negatives, 6 dispositions + 5 negatives")
+    print("engine/side-effect witnesses passed: 9 resolution cases, Patch ownership, exact migration binding + blocking priority + 17 negatives, 6 dispositions + 5 negatives")
     return 0
 
 

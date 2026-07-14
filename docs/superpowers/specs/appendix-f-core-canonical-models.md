@@ -479,7 +479,7 @@ Disposition priority is exact: `package_relation.endpoint_blocks_candidate` wins
 
 ## F12. Default Engine Migration Candidate
 
-Engine migration uses `candidate-transaction.kind: default-engine-migration` and always requires confirmation. Normal exact reconcile applicability remains unchanged and continues to describe the current base. Separate `candidateTransaction.migration` provenance contains both complete exact locks:
+Engine migration uses `candidate-transaction.kind: default-engine-migration`. Its migration impact normally requires confirmation; universal blocking-impact priority still applies, so `package_relation.endpoint_blocks_candidate` makes the migration blocked and unconfirmable. Normal exact reconcile applicability remains unchanged and continues to describe the current base. Separate `candidateTransaction.migration` provenance contains both complete exact locks:
 
 ```json
 {
@@ -508,7 +508,7 @@ Engine migration uses `candidate-transaction.kind: default-engine-migration` and
 }
 ```
 
-The dependency `lockId` remains stable while its exact Engine metadata/digest is replaced. Machine schema requires exactly one of each Application-owned update and `engine_migration.dependency_replaced`; semantic validation binds the current lock exactly to applicability, requires equal lock IDs and different digests, binds target Authority source/derivation to the target lock, preserves every non-Engine dependency canonically unchanged with unique lock IDs, and requires the target manifest to declare the source compatibility version. The Project update contains only `dependencies`, the Topology update only `derivation`, and both `unset` arrays are empty. The target Engine returns a Patch body against current Derived State. Commit is atomic and always requires confirmation. Formal Undo/Redo uses stored forward/inverse Patches and localRef→Host-ID mappings without loading either Engine.
+The dependency `lockId` remains stable while its exact Engine metadata/digest is replaced. Machine schema requires exactly one of each Application-owned update and `engine_migration.dependency_replaced`; semantic validation binds the current lock exactly to applicability, requires equal lock IDs and different digests, binds target Authority source/derivation to the target lock, preserves every non-Engine dependency canonically unchanged with unique lock IDs, and requires the target manifest to declare the source compatibility version. The Project update contains only `dependencies`, the Topology update only `derivation`, and both `unset` arrays are empty. The target Engine returns a Patch body against current Derived State. Commit is atomic after confirmation, unless a universal blocking impact makes the candidate unconfirmable. Formal Undo/Redo uses stored forward/inverse Patches and localRef→Host-ID mappings without loading either Engine.
 
 ## F13. Golden Projection Vector Requirements
 
