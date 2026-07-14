@@ -1066,6 +1066,7 @@
       "id": "engine-migration-compatible-target-offered",
       "description": "Target declares source compatibility.",
       "input": {
+        "caseKind": "offered",
         "action": "migrate",
         "sourceBundleAvailable": true,
         "migration": {
@@ -1103,7 +1104,7 @@
           "topologyInputRevision": 4,
           "topologyInputDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
           "baseDerivedStateRevision": 7,
-          "baseDerivedStateDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "baseDerivedStateDigest": "sha256:c9423ae91afdb0244e49a35b93a4529ea6526eefbb267c7c3a5d7298ebca849e",
           "baseAuthoritativeDesignDigest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
           "structureAuthority": {
             "kind": "default-engine",
@@ -1556,7 +1557,7 @@
             "topologyInputRevision": 4,
             "topologyInputDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             "derivedStateRevision": 7,
-            "derivedStateDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "derivedStateDigest": "sha256:c9423ae91afdb0244e49a35b93a4529ea6526eefbb267c7c3a5d7298ebca849e",
             "packageBundleDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
             "reconcileDependencySetDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             "defaultEngineLockId": "dep.default-engine",
@@ -1764,7 +1765,7 @@
             "topologyInputRevision": 5,
             "topologyInputDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             "derivedStateRevision": 8,
-            "derivedStateDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "derivedStateDigest": "sha256:3fdae3c06d7b94381f9710fc638ef007b2bfbb12cec230165393f43cc582c5d6",
             "packageBundleDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
             "reconcileDependencySetDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             "defaultEngineLockId": "dep.default-engine",
@@ -1869,7 +1870,7 @@
             "topologyInputRevision": 4,
             "topologyInputDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
             "baseDerivedStateRevision": 7,
-            "baseDerivedStateDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "baseDerivedStateDigest": "sha256:c9423ae91afdb0244e49a35b93a4529ea6526eefbb267c7c3a5d7298ebca849e",
             "baseAuthoritativeDesignDigest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
             "structureAuthority": {
               "kind": "default-engine",
@@ -2080,7 +2081,7 @@
                     "topologyInputRevision": 5,
                     "topologyInputDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
                     "derivedStateRevision": 8,
-                    "derivedStateDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                    "derivedStateDigest": "sha256:3fdae3c06d7b94381f9710fc638ef007b2bfbb12cec230165393f43cc582c5d6",
                     "packageBundleDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
                     "reconcileDependencySetDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
                     "defaultEngineLockId": "dep.default-engine",
@@ -2235,7 +2236,7 @@
               }
             ]
           },
-          "candidateDigest": "sha256:f1269f318a60d3081601e9c3388210edd0f14ce95019d896be13f0684be72982"
+          "candidateDigest": "sha256:3e9da9b8c573f29cc723ac11397ac63eb32027e7a66c4aca5f4a94dd60642406"
         },
         "forwardTransaction": {
           "authorityPatch": {
@@ -2421,7 +2422,7 @@
                     "topologyInputRevision": 5,
                     "topologyInputDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
                     "derivedStateRevision": 8,
-                    "derivedStateDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                    "derivedStateDigest": "sha256:3fdae3c06d7b94381f9710fc638ef007b2bfbb12cec230165393f43cc582c5d6",
                     "packageBundleDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
                     "reconcileDependencySetDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
                     "defaultEngineLockId": "dep.default-engine",
@@ -2543,7 +2544,7 @@
             "topologyInputRevision": 5,
             "topologyInputDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             "derivedStateRevision": 8,
-            "derivedStateDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "derivedStateDigest": "sha256:3fdae3c06d7b94381f9710fc638ef007b2bfbb12cec230165393f43cc582c5d6",
             "packageBundleDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
             "reconcileDependencySetDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             "defaultEngineLockId": "dep.default-engine",
@@ -2680,7 +2681,7 @@
             "topologyInputRevision": 4,
             "topologyInputDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             "derivedStateRevision": 7,
-            "derivedStateDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "derivedStateDigest": "sha256:c9423ae91afdb0244e49a35b93a4529ea6526eefbb267c7c3a5d7298ebca849e",
             "packageBundleDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
             "reconcileDependencySetDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             "defaultEngineLockId": "dep.default-engine",
@@ -2779,60 +2780,34 @@
     },
     {
       "id": "engine-migration-incompatible-target-not-offered",
-      "description": "Target omits source compatibility.",
+      "description": "Target omits source compatibility; discovery retains only unchanged current state.",
       "input": {
-        "action": "migrate",
-        "sourceBundleAvailable": true,
-        "migration": {
-          "currentDefaultEngineLock": {
-            "lockId": "dep.default-engine",
-            "kind": "default-engine",
-            "id": "ipcraft.default-noc-engine",
-            "version": "1.0.0",
-            "bundleManifestDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            "engineCompatibilityVersion": "1",
-            "engineHostContractVersion": "ipcraft.engine-host.v1",
-            "hostSideEffectContractVersion": "ipcraft.noc-side-effects.v1",
-            "supportedPlatformAbis": [
-              "linux-x86_64-gnu-v1"
-            ]
-          },
-          "targetDefaultEngineLock": {
-            "lockId": "dep.default-engine",
-            "kind": "default-engine",
-            "id": "ipcraft.default-noc-engine",
-            "version": "2.0.0",
-            "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-            "engineCompatibilityVersion": "2",
-            "engineHostContractVersion": "ipcraft.engine-host.v1",
-            "hostSideEffectContractVersion": "ipcraft.noc-side-effects.v1",
-            "supportedPlatformAbis": [
-              "linux-x86_64-gnu-v1"
-            ]
-          }
-        },
-        "applicability": {
-          "schema": "ipcraft.reconcile-applicability.v1",
-          "groupId": "group.migration",
-          "requestGeneration": 1,
-          "topologyInputRevision": 4,
-          "topologyInputDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-          "baseDerivedStateRevision": 7,
-          "baseDerivedStateDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-          "baseAuthoritativeDesignDigest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-          "structureAuthority": {
-            "kind": "default-engine",
-            "lockId": "dep.default-engine",
-            "identity": "ipcraft.default-noc-engine",
-            "version": "1.0.0",
-            "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-          },
-          "packageBundleDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-          "reconcileDependencySetDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-          "defaultEngineLockId": "dep.default-engine",
-          "defaultEngineBundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "caseKind": "discovery",
+        "currentDefaultEngineLock": {
+          "lockId": "dep.default-engine",
+          "kind": "default-engine",
+          "id": "ipcraft.default-noc-engine",
+          "version": "1.0.0",
+          "bundleManifestDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "engineCompatibilityVersion": "1",
           "engineHostContractVersion": "ipcraft.engine-host.v1",
-          "hostSideEffectContractVersion": "ipcraft.noc-side-effects.v1"
+          "hostSideEffectContractVersion": "ipcraft.noc-side-effects.v1",
+          "supportedPlatformAbis": [
+            "linux-x86_64-gnu-v1"
+          ]
+        },
+        "targetDefaultEngineLock": {
+          "lockId": "dep.default-engine",
+          "kind": "default-engine",
+          "id": "ipcraft.default-noc-engine",
+          "version": "2.0.0",
+          "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "engineCompatibilityVersion": "2",
+          "engineHostContractVersion": "ipcraft.engine-host.v1",
+          "hostSideEffectContractVersion": "ipcraft.noc-side-effects.v1",
+          "supportedPlatformAbis": [
+            "linux-x86_64-gnu-v1"
+          ]
         },
         "targetManifest": {
           "schema": "ipcraft.engine-bundle.v1",
@@ -2849,312 +2824,14 @@
           ],
           "entrypoint": "lib/libipcraft_noc_engine.so"
         },
-        "sideEffectInput": {
-          "domainTypes": [
-            {
-              "key": "clock",
-              "label": "Clock",
-              "defaultName": "clock-default",
-              "visual": {
-                "fill": "#123456",
-                "border": "#abcdef",
-                "pattern": "solid"
-              },
-              "configuration": {
-                "fields": []
-              }
-            },
-            {
-              "key": "power",
-              "label": "Power",
-              "defaultName": "power-default",
-              "visual": {
-                "fill": "#123456",
-                "border": "#abcdef",
-                "pattern": "solid"
-              },
-              "configuration": {
-                "fields": []
-              }
-            }
-          ],
-          "relationDeclarations": [
-            {
-              "typeKey": "route.allowed",
-              "ownership": "user",
-              "topologyDriving": false,
-              "sources": {
-                "kinds": [
-                  "router"
-                ],
-                "minimum": 1,
-                "maximum": 1
-              },
-              "targets": {
-                "kinds": [
-                  "package-entity"
-                ],
-                "minimum": 1,
-                "maximum": 1
-              },
-              "unresolvedAllowed": true,
-              "schema": {}
-            },
-            {
-              "typeKey": "route.blocked",
-              "ownership": "user",
-              "topologyDriving": false,
-              "sources": {
-                "kinds": [
-                  "router"
-                ],
-                "minimum": 1,
-                "maximum": 1
-              },
-              "targets": {
-                "kinds": [
-                  "package-entity"
-                ],
-                "minimum": 1,
-                "maximum": 1
-              },
-              "unresolvedAllowed": false,
-              "schema": {}
-            }
-          ],
-          "currentDerivedState": {
-            "schema": "ipcraft.derived-state.v1",
-            "topologyId": "topology.main",
-            "routers": [
-              {
-                "id": "router.a",
-                "templateKey": "mesh-router",
-                "identityCompatibilityVersion": 1,
-                "coordinate": {
-                  "row": 0,
-                  "column": 0
-                },
-                "properties": {}
-              },
-              {
-                "id": "router.b",
-                "templateKey": "mesh-router",
-                "identityCompatibilityVersion": 1,
-                "coordinate": {
-                  "row": 0,
-                  "column": 1
-                },
-                "properties": {}
-              },
-              {
-                "id": "router.c",
-                "templateKey": "mesh-router",
-                "identityCompatibilityVersion": 1,
-                "coordinate": {
-                  "row": 0,
-                  "column": 2
-                },
-                "properties": {}
-              }
-            ],
-            "structuralLinks": [
-              {
-                "id": "link.ab",
-                "templateKey": "mesh-link",
-                "identityCompatibilityVersion": 1,
-                "endpointA": "router.a",
-                "endpointB": "router.b",
-                "axis": "horizontal",
-                "properties": {}
-              },
-              {
-                "id": "link.bc",
-                "templateKey": "mesh-link",
-                "identityCompatibilityVersion": 1,
-                "endpointA": "router.b",
-                "endpointB": "router.c",
-                "axis": "horizontal",
-                "properties": {}
-              }
-            ],
-            "accessSlots": [
-              {
-                "id": "slot.a",
-                "routerId": "router.a",
-                "templateKey": "local-0",
-                "identityCompatibilityVersion": 1,
-                "displayOrder": 0,
-                "label": "Local 0",
-                "allowedContracts": [],
-                "properties": {}
-              },
-              {
-                "id": "slot.b",
-                "routerId": "router.b",
-                "templateKey": "local-0",
-                "identityCompatibilityVersion": 1,
-                "displayOrder": 0,
-                "label": "Local 0",
-                "allowedContracts": [],
-                "properties": {}
-              },
-              {
-                "id": "slot.c",
-                "routerId": "router.c",
-                "templateKey": "local-0",
-                "identityCompatibilityVersion": 1,
-                "displayOrder": 0,
-                "label": "Local 0",
-                "allowedContracts": [],
-                "properties": {}
-              }
-            ],
-            "packageEntities": [],
-            "packageRelations": []
-          },
-          "domains": [
-            {
-              "id": "domain.clock.default",
-              "typeKey": "clock",
-              "name": "domain.clock.default",
-              "isDefault": true,
-              "config": {
-                "frequencyMHz": 100
-              }
-            },
-            {
-              "id": "domain.power.default",
-              "typeKey": "power",
-              "name": "domain.power.default",
-              "isDefault": true,
-              "config": {
-                "frequencyMHz": 100
-              }
-            }
-          ],
-          "domainMemberships": [
-            {
-              "id": "membership.ca",
-              "domainId": "domain.clock.default",
-              "routerId": "router.a"
-            },
-            {
-              "id": "membership.cb",
-              "domainId": "domain.clock.default",
-              "routerId": "router.b"
-            },
-            {
-              "id": "membership.cc",
-              "domainId": "domain.clock.default",
-              "routerId": "router.c"
-            },
-            {
-              "id": "membership.pa",
-              "domainId": "domain.power.default",
-              "routerId": "router.a"
-            },
-            {
-              "id": "membership.pb",
-              "domainId": "domain.power.default",
-              "routerId": "router.b"
-            },
-            {
-              "id": "membership.pc",
-              "domainId": "domain.power.default",
-              "routerId": "router.c"
-            }
-          ],
-          "attachments": [
-            {
-              "id": "attachment.c",
-              "interfaceId": "interface.c",
-              "state": "resolved",
-              "routerId": "router.c",
-              "slotId": "slot.c"
-            }
-          ],
-          "packageRelations": [],
-          "authorityPatch": {
-            "patchId": "patch.target-engine",
-            "source": {
-              "kind": "default-engine",
-              "identity": "ipcraft.default-noc-engine",
-              "version": "2.0.0",
-              "bundleDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-            },
-            "operations": [
-              {
-                "op": "deleteEntity",
-                "entityKind": "structural-link",
-                "id": "link.bc"
-              },
-              {
-                "op": "deleteEntity",
-                "entityKind": "access-slot",
-                "id": "slot.c"
-              },
-              {
-                "op": "deleteEntity",
-                "entityKind": "router",
-                "id": "router.c"
-              },
-              {
-                "op": "createEntity",
-                "entityKind": "router",
-                "localRef": "authority:router-d",
-                "value": {
-                  "templateKey": "mesh-router",
-                  "identityCompatibilityVersion": 1,
-                  "coordinate": {
-                    "row": 1,
-                    "column": 0
-                  },
-                  "properties": {
-                    "generation": "target"
-                  }
-                }
-              },
-              {
-                "op": "createEntity",
-                "entityKind": "structural-link",
-                "localRef": "authority:link-bd",
-                "value": {
-                  "templateKey": "mesh-link",
-                  "identityCompatibilityVersion": 1,
-                  "endpointA": {
-                    "id": "router.b"
-                  },
-                  "endpointB": {
-                    "localRef": "authority:router-d"
-                  },
-                  "axis": "vertical",
-                  "properties": {
-                    "generation": "target"
-                  }
-                }
-              },
-              {
-                "op": "createEntity",
-                "entityKind": "access-slot",
-                "localRef": "authority:slot-d",
-                "value": {
-                  "routerRef": {
-                    "localRef": "authority:router-d"
-                  },
-                  "templateKey": "local-0",
-                  "identityCompatibilityVersion": 1,
-                  "displayOrder": 0,
-                  "label": "Target Local",
-                  "allowedContracts": [],
-                  "properties": {
-                    "generation": "target"
-                  }
-                }
-              }
-            ]
-          }
-        },
-        "beforeSnapshot": {
+        "supportedEngineHostContracts": [
+          "ipcraft.engine-host.v1"
+        ],
+        "supportedHostSideEffectContracts": [
+          "ipcraft.noc-side-effects.v1"
+        ],
+        "currentPlatformAbi": "linux-x86_64-gnu-v1",
+        "currentSnapshot": {
           "dependencies": [
             {
               "lockId": "dep.default-engine",
@@ -3271,7 +2948,7 @@
             "topologyInputRevision": 4,
             "topologyInputDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             "derivedStateRevision": 7,
-            "derivedStateDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "derivedStateDigest": "sha256:c9423ae91afdb0244e49a35b93a4529ea6526eefbb267c7c3a5d7298ebca849e",
             "packageBundleDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
             "reconcileDependencySetDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             "defaultEngineLockId": "dep.default-engine",
@@ -3355,1131 +3032,6 @@
             "localRefToHostId": {}
           },
           "engineInvocationCount": 0
-        },
-        "afterSnapshot": {
-          "dependencies": [
-            {
-              "lockId": "dep.default-engine",
-              "kind": "default-engine",
-              "id": "ipcraft.default-noc-engine",
-              "version": "2.0.0",
-              "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-              "engineCompatibilityVersion": "2",
-              "engineHostContractVersion": "ipcraft.engine-host.v1",
-              "hostSideEffectContractVersion": "ipcraft.noc-side-effects.v1",
-              "supportedPlatformAbis": [
-                "linux-x86_64-gnu-v1"
-              ]
-            },
-            {
-              "lockId": "dep.noc",
-              "kind": "noc-package",
-              "id": "vendor.noc",
-              "version": "1.0.0",
-              "bundleManifestDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
-            }
-          ],
-          "derivedState": {
-            "schema": "ipcraft.derived-state.v1",
-            "topologyId": "topology.main",
-            "routers": [
-              {
-                "templateKey": "mesh-router",
-                "identityCompatibilityVersion": 1,
-                "coordinate": {
-                  "row": 1,
-                  "column": 0
-                },
-                "properties": {
-                  "generation": "target"
-                },
-                "id": "host-router-d"
-              },
-              {
-                "id": "router.a",
-                "templateKey": "mesh-router",
-                "identityCompatibilityVersion": 1,
-                "coordinate": {
-                  "row": 0,
-                  "column": 0
-                },
-                "properties": {}
-              },
-              {
-                "id": "router.b",
-                "templateKey": "mesh-router",
-                "identityCompatibilityVersion": 1,
-                "coordinate": {
-                  "row": 0,
-                  "column": 1
-                },
-                "properties": {}
-              }
-            ],
-            "structuralLinks": [
-              {
-                "templateKey": "mesh-link",
-                "identityCompatibilityVersion": 1,
-                "endpointA": "router.b",
-                "endpointB": "host-router-d",
-                "axis": "vertical",
-                "properties": {
-                  "generation": "target"
-                },
-                "id": "host-link-bd"
-              },
-              {
-                "id": "link.ab",
-                "templateKey": "mesh-link",
-                "identityCompatibilityVersion": 1,
-                "endpointA": "router.a",
-                "endpointB": "router.b",
-                "axis": "horizontal",
-                "properties": {}
-              }
-            ],
-            "accessSlots": [
-              {
-                "templateKey": "local-0",
-                "identityCompatibilityVersion": 1,
-                "displayOrder": 0,
-                "label": "Target Local",
-                "allowedContracts": [],
-                "properties": {
-                  "generation": "target"
-                },
-                "id": "host-slot-d",
-                "routerId": "host-router-d"
-              },
-              {
-                "id": "slot.a",
-                "routerId": "router.a",
-                "templateKey": "local-0",
-                "identityCompatibilityVersion": 1,
-                "displayOrder": 0,
-                "label": "Local 0",
-                "allowedContracts": [],
-                "properties": {}
-              },
-              {
-                "id": "slot.b",
-                "routerId": "router.b",
-                "templateKey": "local-0",
-                "identityCompatibilityVersion": 1,
-                "displayOrder": 0,
-                "label": "Local 0",
-                "allowedContracts": [],
-                "properties": {}
-              }
-            ],
-            "packageEntities": [],
-            "packageRelations": []
-          },
-          "derivation": {
-            "topologyInputRevision": 5,
-            "topologyInputDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-            "derivedStateRevision": 8,
-            "derivedStateDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-            "packageBundleDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-            "reconcileDependencySetDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-            "defaultEngineLockId": "dep.default-engine",
-            "defaultEngineBundleDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-            "engineHostContractVersion": "ipcraft.engine-host.v1",
-            "hostSideEffectContractVersion": "ipcraft.noc-side-effects.v1",
-            "structureAuthority": {
-              "kind": "default-engine",
-              "lockId": "dep.default-engine",
-              "identity": "ipcraft.default-noc-engine",
-              "version": "2.0.0",
-              "bundleDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-            },
-            "engineCompatibilityVersion": "2"
-          },
-          "hostSideEffects": {
-            "domains": [
-              {
-                "id": "domain.clock.default",
-                "typeKey": "clock",
-                "name": "domain.clock.default",
-                "isDefault": true,
-                "config": {
-                  "frequencyMHz": 100
-                }
-              },
-              {
-                "id": "domain.power.default",
-                "typeKey": "power",
-                "name": "domain.power.default",
-                "isDefault": true,
-                "config": {
-                  "frequencyMHz": 100
-                }
-              }
-            ],
-            "domainMemberships": [
-              {
-                "id": "host-membership-clock-d",
-                "domainId": "domain.clock.default",
-                "routerId": "host-router-d"
-              },
-              {
-                "id": "host-membership-power-d",
-                "domainId": "domain.power.default",
-                "routerId": "host-router-d"
-              },
-              {
-                "id": "membership.ca",
-                "domainId": "domain.clock.default",
-                "routerId": "router.a"
-              },
-              {
-                "id": "membership.cb",
-                "domainId": "domain.clock.default",
-                "routerId": "router.b"
-              },
-              {
-                "id": "membership.pa",
-                "domainId": "domain.power.default",
-                "routerId": "router.a"
-              },
-              {
-                "id": "membership.pb",
-                "domainId": "domain.power.default",
-                "routerId": "router.b"
-              }
-            ],
-            "attachments": [
-              {
-                "id": "attachment.c",
-                "interfaceId": "interface.c",
-                "state": "unresolved",
-                "intendedTarget": {
-                  "routerId": "router.c",
-                  "slotId": "slot.c"
-                },
-                "reasonCode": "attachment.target_removed"
-              }
-            ],
-            "packageRelations": []
-          },
-          "hostIds": {
-            "localRefToHostId": {
-              "authority:link-bd": "host-link-bd",
-              "authority:router-d": "host-router-d",
-              "authority:slot-d": "host-slot-d",
-              "application:000001": "host-membership-clock-d",
-              "application:000002": "host-membership-power-d"
-            }
-          },
-          "engineInvocationCount": 1
-        },
-        "candidate": {
-          "schema": "ipcraft.candidate-transaction.v1",
-          "transactionId": "tx.migration",
-          "kind": "default-engine-migration",
-          "applicability": {
-            "schema": "ipcraft.reconcile-applicability.v1",
-            "groupId": "group.migration",
-            "requestGeneration": 1,
-            "topologyInputRevision": 4,
-            "topologyInputDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-            "baseDerivedStateRevision": 7,
-            "baseDerivedStateDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-            "baseAuthoritativeDesignDigest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-            "structureAuthority": {
-              "kind": "default-engine",
-              "lockId": "dep.default-engine",
-              "identity": "ipcraft.default-noc-engine",
-              "version": "1.0.0",
-              "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-            },
-            "packageBundleDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-            "reconcileDependencySetDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-            "defaultEngineLockId": "dep.default-engine",
-            "defaultEngineBundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            "engineHostContractVersion": "ipcraft.engine-host.v1",
-            "hostSideEffectContractVersion": "ipcraft.noc-side-effects.v1"
-          },
-          "topologyIntent": {
-            "schema": "ipcraft.topology-intent.v1",
-            "componentId": "component.noc",
-            "topologyId": "topology.main",
-            "topologyKind": "mesh",
-            "globalConfig": {
-              "columns": 2,
-              "rows": 2
-            },
-            "packageEntities": [],
-            "packageRelations": []
-          },
-          "authorityPatch": {
-            "patchId": "patch.target-engine",
-            "source": {
-              "kind": "default-engine",
-              "identity": "ipcraft.default-noc-engine",
-              "version": "2.0.0",
-              "bundleDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-            },
-            "operations": [
-              {
-                "op": "deleteEntity",
-                "entityKind": "structural-link",
-                "id": "link.bc"
-              },
-              {
-                "op": "deleteEntity",
-                "entityKind": "access-slot",
-                "id": "slot.c"
-              },
-              {
-                "op": "deleteEntity",
-                "entityKind": "router",
-                "id": "router.c"
-              },
-              {
-                "op": "createEntity",
-                "entityKind": "router",
-                "localRef": "authority:router-d",
-                "value": {
-                  "templateKey": "mesh-router",
-                  "identityCompatibilityVersion": 1,
-                  "coordinate": {
-                    "row": 1,
-                    "column": 0
-                  },
-                  "properties": {
-                    "generation": "target"
-                  }
-                }
-              },
-              {
-                "op": "createEntity",
-                "entityKind": "structural-link",
-                "localRef": "authority:link-bd",
-                "value": {
-                  "templateKey": "mesh-link",
-                  "identityCompatibilityVersion": 1,
-                  "endpointA": {
-                    "id": "router.b"
-                  },
-                  "endpointB": {
-                    "localRef": "authority:router-d"
-                  },
-                  "axis": "vertical",
-                  "properties": {
-                    "generation": "target"
-                  }
-                }
-              },
-              {
-                "op": "createEntity",
-                "entityKind": "access-slot",
-                "localRef": "authority:slot-d",
-                "value": {
-                  "routerRef": {
-                    "localRef": "authority:router-d"
-                  },
-                  "templateKey": "local-0",
-                  "identityCompatibilityVersion": 1,
-                  "displayOrder": 0,
-                  "label": "Target Local",
-                  "allowedContracts": [],
-                  "properties": {
-                    "generation": "target"
-                  }
-                }
-              }
-            ]
-          },
-          "applicationPatch": {
-            "patchId": "patch.migration",
-            "source": {
-              "kind": "application-migration",
-              "identity": "host",
-              "version": "1"
-            },
-            "operations": [
-              {
-                "op": "createRelation",
-                "relationKind": "domain-membership",
-                "localRef": "application:000001",
-                "value": {
-                  "domainRef": {
-                    "id": "domain.clock.default"
-                  },
-                  "routerRef": {
-                    "localRef": "authority:router-d"
-                  }
-                }
-              },
-              {
-                "op": "createRelation",
-                "relationKind": "domain-membership",
-                "localRef": "application:000002",
-                "value": {
-                  "domainRef": {
-                    "id": "domain.power.default"
-                  },
-                  "routerRef": {
-                    "localRef": "authority:router-d"
-                  }
-                }
-              },
-              {
-                "op": "deleteRelation",
-                "relationKind": "domain-membership",
-                "id": "membership.cc"
-              },
-              {
-                "op": "deleteRelation",
-                "relationKind": "domain-membership",
-                "id": "membership.pc"
-              },
-              {
-                "op": "updateRelation",
-                "relationKind": "attachment",
-                "id": "attachment.c",
-                "set": {
-                  "state": "unresolved",
-                  "intendedTarget": {
-                    "routerRef": {
-                      "id": "router.c"
-                    },
-                    "slotRef": {
-                      "id": "slot.c"
-                    }
-                  },
-                  "reasonCode": "attachment.target_removed"
-                },
-                "unset": [
-                  "routerRef",
-                  "slotRef"
-                ]
-              },
-              {
-                "op": "updateEntity",
-                "entityKind": "project",
-                "id": "project.main",
-                "set": {
-                  "dependencies": [
-                    {
-                      "lockId": "dep.default-engine",
-                      "kind": "default-engine",
-                      "id": "ipcraft.default-noc-engine",
-                      "version": "2.0.0",
-                      "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-                      "engineCompatibilityVersion": "2",
-                      "engineHostContractVersion": "ipcraft.engine-host.v1",
-                      "hostSideEffectContractVersion": "ipcraft.noc-side-effects.v1",
-                      "supportedPlatformAbis": [
-                        "linux-x86_64-gnu-v1"
-                      ]
-                    },
-                    {
-                      "lockId": "dep.noc",
-                      "kind": "noc-package",
-                      "id": "vendor.noc",
-                      "version": "1.0.0",
-                      "bundleManifestDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
-                    }
-                  ]
-                },
-                "unset": []
-              },
-              {
-                "op": "updateEntity",
-                "entityKind": "topology",
-                "id": "topology.main",
-                "set": {
-                  "derivation": {
-                    "topologyInputRevision": 5,
-                    "topologyInputDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-                    "derivedStateRevision": 8,
-                    "derivedStateDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-                    "packageBundleDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-                    "reconcileDependencySetDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-                    "defaultEngineLockId": "dep.default-engine",
-                    "defaultEngineBundleDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-                    "engineHostContractVersion": "ipcraft.engine-host.v1",
-                    "hostSideEffectContractVersion": "ipcraft.noc-side-effects.v1",
-                    "structureAuthority": {
-                      "kind": "default-engine",
-                      "lockId": "dep.default-engine",
-                      "identity": "ipcraft.default-noc-engine",
-                      "version": "2.0.0",
-                      "bundleDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-                    },
-                    "engineCompatibilityVersion": "2"
-                  }
-                },
-                "unset": []
-              }
-            ]
-          },
-          "migration": {
-            "currentDefaultEngineLock": {
-              "lockId": "dep.default-engine",
-              "kind": "default-engine",
-              "id": "ipcraft.default-noc-engine",
-              "version": "1.0.0",
-              "bundleManifestDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-              "engineCompatibilityVersion": "1",
-              "engineHostContractVersion": "ipcraft.engine-host.v1",
-              "hostSideEffectContractVersion": "ipcraft.noc-side-effects.v1",
-              "supportedPlatformAbis": [
-                "linux-x86_64-gnu-v1"
-              ]
-            },
-            "targetDefaultEngineLock": {
-              "lockId": "dep.default-engine",
-              "kind": "default-engine",
-              "id": "ipcraft.default-noc-engine",
-              "version": "2.0.0",
-              "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-              "engineCompatibilityVersion": "2",
-              "engineHostContractVersion": "ipcraft.engine-host.v1",
-              "hostSideEffectContractVersion": "ipcraft.noc-side-effects.v1",
-              "supportedPlatformAbis": [
-                "linux-x86_64-gnu-v1"
-              ]
-            }
-          },
-          "tombstones": [
-            {
-              "subjectKind": "access-slot",
-              "id": "slot.c",
-              "value": {
-                "id": "slot.c",
-                "routerId": "router.c",
-                "templateKey": "local-0",
-                "identityCompatibilityVersion": 1,
-                "displayOrder": 0,
-                "label": "Local 0",
-                "allowedContracts": [],
-                "properties": {}
-              }
-            },
-            {
-              "subjectKind": "domain-membership",
-              "id": "membership.cc",
-              "value": {
-                "id": "membership.cc",
-                "domainId": "domain.clock.default",
-                "routerId": "router.c"
-              }
-            },
-            {
-              "subjectKind": "domain-membership",
-              "id": "membership.pc",
-              "value": {
-                "id": "membership.pc",
-                "domainId": "domain.power.default",
-                "routerId": "router.c"
-              }
-            },
-            {
-              "subjectKind": "router",
-              "id": "router.c",
-              "value": {
-                "id": "router.c",
-                "templateKey": "mesh-router",
-                "identityCompatibilityVersion": 1,
-                "coordinate": {
-                  "row": 0,
-                  "column": 2
-                },
-                "properties": {}
-              }
-            },
-            {
-              "subjectKind": "structural-link",
-              "id": "link.bc",
-              "value": {
-                "id": "link.bc",
-                "templateKey": "mesh-link",
-                "identityCompatibilityVersion": 1,
-                "endpointA": "router.b",
-                "endpointB": "router.c",
-                "axis": "horizontal",
-                "properties": {}
-              }
-            }
-          ],
-          "allocationOrder": [
-            "application:000001",
-            "application:000002",
-            "authority:link-bd",
-            "authority:router-d",
-            "authority:slot-d"
-          ],
-          "impactReport": {
-            "schema": "ipcraft.topology-impact-report.v1",
-            "impacts": [
-              {
-                "code": "attachment.target_removed",
-                "severity": "warning",
-                "dataLoss": false,
-                "subjects": [
-                  {
-                    "kind": "attachment",
-                    "id": "attachment.c"
-                  }
-                ],
-                "details": {
-                  "routerId": "router.c",
-                  "slotId": "slot.c"
-                },
-                "resolution": "reattach-or-detach"
-              },
-              {
-                "code": "engine_migration.dependency_replaced",
-                "severity": "warning",
-                "dataLoss": false,
-                "subjects": [
-                  {
-                    "kind": "project",
-                    "id": "project.main"
-                  }
-                ],
-                "details": {
-                  "lockId": "dep.default-engine",
-                  "currentBundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                  "targetBundleDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-                },
-                "resolution": "confirm-or-discard"
-              }
-            ]
-          },
-          "candidateDigest": "sha256:f1269f318a60d3081601e9c3388210edd0f14ce95019d896be13f0684be72982"
-        },
-        "forwardTransaction": {
-          "authorityPatch": {
-            "patchId": "patch.target-engine",
-            "source": {
-              "kind": "default-engine",
-              "identity": "ipcraft.default-noc-engine",
-              "version": "2.0.0",
-              "bundleDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-            },
-            "operations": [
-              {
-                "op": "deleteEntity",
-                "entityKind": "structural-link",
-                "id": "link.bc"
-              },
-              {
-                "op": "deleteEntity",
-                "entityKind": "access-slot",
-                "id": "slot.c"
-              },
-              {
-                "op": "deleteEntity",
-                "entityKind": "router",
-                "id": "router.c"
-              },
-              {
-                "op": "createEntity",
-                "entityKind": "router",
-                "localRef": "authority:router-d",
-                "value": {
-                  "templateKey": "mesh-router",
-                  "identityCompatibilityVersion": 1,
-                  "coordinate": {
-                    "row": 1,
-                    "column": 0
-                  },
-                  "properties": {
-                    "generation": "target"
-                  }
-                }
-              },
-              {
-                "op": "createEntity",
-                "entityKind": "structural-link",
-                "localRef": "authority:link-bd",
-                "value": {
-                  "templateKey": "mesh-link",
-                  "identityCompatibilityVersion": 1,
-                  "endpointA": {
-                    "id": "router.b"
-                  },
-                  "endpointB": {
-                    "localRef": "authority:router-d"
-                  },
-                  "axis": "vertical",
-                  "properties": {
-                    "generation": "target"
-                  }
-                }
-              },
-              {
-                "op": "createEntity",
-                "entityKind": "access-slot",
-                "localRef": "authority:slot-d",
-                "value": {
-                  "routerRef": {
-                    "localRef": "authority:router-d"
-                  },
-                  "templateKey": "local-0",
-                  "identityCompatibilityVersion": 1,
-                  "displayOrder": 0,
-                  "label": "Target Local",
-                  "allowedContracts": [],
-                  "properties": {
-                    "generation": "target"
-                  }
-                }
-              }
-            ]
-          },
-          "applicationPatch": {
-            "patchId": "patch.migration",
-            "source": {
-              "kind": "application-migration",
-              "identity": "host",
-              "version": "1"
-            },
-            "operations": [
-              {
-                "op": "createRelation",
-                "relationKind": "domain-membership",
-                "localRef": "application:000001",
-                "value": {
-                  "domainRef": {
-                    "id": "domain.clock.default"
-                  },
-                  "routerRef": {
-                    "localRef": "authority:router-d"
-                  }
-                }
-              },
-              {
-                "op": "createRelation",
-                "relationKind": "domain-membership",
-                "localRef": "application:000002",
-                "value": {
-                  "domainRef": {
-                    "id": "domain.power.default"
-                  },
-                  "routerRef": {
-                    "localRef": "authority:router-d"
-                  }
-                }
-              },
-              {
-                "op": "deleteRelation",
-                "relationKind": "domain-membership",
-                "id": "membership.cc"
-              },
-              {
-                "op": "deleteRelation",
-                "relationKind": "domain-membership",
-                "id": "membership.pc"
-              },
-              {
-                "op": "updateRelation",
-                "relationKind": "attachment",
-                "id": "attachment.c",
-                "set": {
-                  "state": "unresolved",
-                  "intendedTarget": {
-                    "routerRef": {
-                      "id": "router.c"
-                    },
-                    "slotRef": {
-                      "id": "slot.c"
-                    }
-                  },
-                  "reasonCode": "attachment.target_removed"
-                },
-                "unset": [
-                  "routerRef",
-                  "slotRef"
-                ]
-              },
-              {
-                "op": "updateEntity",
-                "entityKind": "project",
-                "id": "project.main",
-                "set": {
-                  "dependencies": [
-                    {
-                      "lockId": "dep.default-engine",
-                      "kind": "default-engine",
-                      "id": "ipcraft.default-noc-engine",
-                      "version": "2.0.0",
-                      "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-                      "engineCompatibilityVersion": "2",
-                      "engineHostContractVersion": "ipcraft.engine-host.v1",
-                      "hostSideEffectContractVersion": "ipcraft.noc-side-effects.v1",
-                      "supportedPlatformAbis": [
-                        "linux-x86_64-gnu-v1"
-                      ]
-                    },
-                    {
-                      "lockId": "dep.noc",
-                      "kind": "noc-package",
-                      "id": "vendor.noc",
-                      "version": "1.0.0",
-                      "bundleManifestDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
-                    }
-                  ]
-                },
-                "unset": []
-              },
-              {
-                "op": "updateEntity",
-                "entityKind": "topology",
-                "id": "topology.main",
-                "set": {
-                  "derivation": {
-                    "topologyInputRevision": 5,
-                    "topologyInputDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-                    "derivedStateRevision": 8,
-                    "derivedStateDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-                    "packageBundleDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-                    "reconcileDependencySetDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-                    "defaultEngineLockId": "dep.default-engine",
-                    "defaultEngineBundleDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-                    "engineHostContractVersion": "ipcraft.engine-host.v1",
-                    "hostSideEffectContractVersion": "ipcraft.noc-side-effects.v1",
-                    "structureAuthority": {
-                      "kind": "default-engine",
-                      "lockId": "dep.default-engine",
-                      "identity": "ipcraft.default-noc-engine",
-                      "version": "2.0.0",
-                      "bundleDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-                    },
-                    "engineCompatibilityVersion": "2"
-                  }
-                },
-                "unset": []
-              }
-            ]
-          },
-          "tombstones": [
-            {
-              "subjectKind": "access-slot",
-              "id": "slot.c",
-              "value": {
-                "id": "slot.c",
-                "routerId": "router.c",
-                "templateKey": "local-0",
-                "identityCompatibilityVersion": 1,
-                "displayOrder": 0,
-                "label": "Local 0",
-                "allowedContracts": [],
-                "properties": {}
-              }
-            },
-            {
-              "subjectKind": "domain-membership",
-              "id": "membership.cc",
-              "value": {
-                "id": "membership.cc",
-                "domainId": "domain.clock.default",
-                "routerId": "router.c"
-              }
-            },
-            {
-              "subjectKind": "domain-membership",
-              "id": "membership.pc",
-              "value": {
-                "id": "membership.pc",
-                "domainId": "domain.power.default",
-                "routerId": "router.c"
-              }
-            },
-            {
-              "subjectKind": "router",
-              "id": "router.c",
-              "value": {
-                "id": "router.c",
-                "templateKey": "mesh-router",
-                "identityCompatibilityVersion": 1,
-                "coordinate": {
-                  "row": 0,
-                  "column": 2
-                },
-                "properties": {}
-              }
-            },
-            {
-              "subjectKind": "structural-link",
-              "id": "link.bc",
-              "value": {
-                "id": "link.bc",
-                "templateKey": "mesh-link",
-                "identityCompatibilityVersion": 1,
-                "endpointA": "router.b",
-                "endpointB": "router.c",
-                "axis": "horizontal",
-                "properties": {}
-              }
-            }
-          ],
-          "allocationOrder": [
-            "application:000001",
-            "application:000002",
-            "authority:link-bd",
-            "authority:router-d",
-            "authority:slot-d"
-          ],
-          "localRefToHostId": {
-            "authority:link-bd": "host-link-bd",
-            "authority:router-d": "host-router-d",
-            "authority:slot-d": "host-slot-d",
-            "application:000001": "host-membership-clock-d",
-            "application:000002": "host-membership-power-d"
-          },
-          "targetDependencies": [
-            {
-              "lockId": "dep.default-engine",
-              "kind": "default-engine",
-              "id": "ipcraft.default-noc-engine",
-              "version": "2.0.0",
-              "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-              "engineCompatibilityVersion": "2",
-              "engineHostContractVersion": "ipcraft.engine-host.v1",
-              "hostSideEffectContractVersion": "ipcraft.noc-side-effects.v1",
-              "supportedPlatformAbis": [
-                "linux-x86_64-gnu-v1"
-              ]
-            },
-            {
-              "lockId": "dep.noc",
-              "kind": "noc-package",
-              "id": "vendor.noc",
-              "version": "1.0.0",
-              "bundleManifestDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
-            }
-          ],
-          "targetDerivation": {
-            "topologyInputRevision": 5,
-            "topologyInputDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-            "derivedStateRevision": 8,
-            "derivedStateDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-            "packageBundleDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-            "reconcileDependencySetDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-            "defaultEngineLockId": "dep.default-engine",
-            "defaultEngineBundleDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-            "engineHostContractVersion": "ipcraft.engine-host.v1",
-            "hostSideEffectContractVersion": "ipcraft.noc-side-effects.v1",
-            "structureAuthority": {
-              "kind": "default-engine",
-              "lockId": "dep.default-engine",
-              "identity": "ipcraft.default-noc-engine",
-              "version": "2.0.0",
-              "bundleDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-            },
-            "engineCompatibilityVersion": "2"
-          },
-          "engineInvocations": [
-            "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-          ]
-        },
-        "inverseTransaction": {
-          "restoreDependencies": [
-            {
-              "lockId": "dep.default-engine",
-              "kind": "default-engine",
-              "id": "ipcraft.default-noc-engine",
-              "version": "1.0.0",
-              "bundleManifestDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-              "engineCompatibilityVersion": "1",
-              "engineHostContractVersion": "ipcraft.engine-host.v1",
-              "hostSideEffectContractVersion": "ipcraft.noc-side-effects.v1",
-              "supportedPlatformAbis": [
-                "linux-x86_64-gnu-v1"
-              ]
-            },
-            {
-              "lockId": "dep.noc",
-              "kind": "noc-package",
-              "id": "vendor.noc",
-              "version": "1.0.0",
-              "bundleManifestDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
-            }
-          ],
-          "restoreDerivedState": {
-            "schema": "ipcraft.derived-state.v1",
-            "topologyId": "topology.main",
-            "routers": [
-              {
-                "id": "router.a",
-                "templateKey": "mesh-router",
-                "identityCompatibilityVersion": 1,
-                "coordinate": {
-                  "row": 0,
-                  "column": 0
-                },
-                "properties": {}
-              },
-              {
-                "id": "router.b",
-                "templateKey": "mesh-router",
-                "identityCompatibilityVersion": 1,
-                "coordinate": {
-                  "row": 0,
-                  "column": 1
-                },
-                "properties": {}
-              },
-              {
-                "id": "router.c",
-                "templateKey": "mesh-router",
-                "identityCompatibilityVersion": 1,
-                "coordinate": {
-                  "row": 0,
-                  "column": 2
-                },
-                "properties": {}
-              }
-            ],
-            "structuralLinks": [
-              {
-                "id": "link.ab",
-                "templateKey": "mesh-link",
-                "identityCompatibilityVersion": 1,
-                "endpointA": "router.a",
-                "endpointB": "router.b",
-                "axis": "horizontal",
-                "properties": {}
-              },
-              {
-                "id": "link.bc",
-                "templateKey": "mesh-link",
-                "identityCompatibilityVersion": 1,
-                "endpointA": "router.b",
-                "endpointB": "router.c",
-                "axis": "horizontal",
-                "properties": {}
-              }
-            ],
-            "accessSlots": [
-              {
-                "id": "slot.a",
-                "routerId": "router.a",
-                "templateKey": "local-0",
-                "identityCompatibilityVersion": 1,
-                "displayOrder": 0,
-                "label": "Local 0",
-                "allowedContracts": [],
-                "properties": {}
-              },
-              {
-                "id": "slot.b",
-                "routerId": "router.b",
-                "templateKey": "local-0",
-                "identityCompatibilityVersion": 1,
-                "displayOrder": 0,
-                "label": "Local 0",
-                "allowedContracts": [],
-                "properties": {}
-              },
-              {
-                "id": "slot.c",
-                "routerId": "router.c",
-                "templateKey": "local-0",
-                "identityCompatibilityVersion": 1,
-                "displayOrder": 0,
-                "label": "Local 0",
-                "allowedContracts": [],
-                "properties": {}
-              }
-            ],
-            "packageEntities": [],
-            "packageRelations": []
-          },
-          "restoreDerivation": {
-            "topologyInputRevision": 4,
-            "topologyInputDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-            "derivedStateRevision": 7,
-            "derivedStateDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-            "packageBundleDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-            "reconcileDependencySetDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-            "defaultEngineLockId": "dep.default-engine",
-            "defaultEngineBundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            "engineHostContractVersion": "ipcraft.engine-host.v1",
-            "hostSideEffectContractVersion": "ipcraft.noc-side-effects.v1",
-            "structureAuthority": {
-              "kind": "default-engine",
-              "lockId": "dep.default-engine",
-              "identity": "ipcraft.default-noc-engine",
-              "version": "1.0.0",
-              "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-            },
-            "engineCompatibilityVersion": "1"
-          },
-          "restoreHostSideEffects": {
-            "domains": [
-              {
-                "id": "domain.clock.default",
-                "typeKey": "clock",
-                "name": "domain.clock.default",
-                "isDefault": true,
-                "config": {
-                  "frequencyMHz": 100
-                }
-              },
-              {
-                "id": "domain.power.default",
-                "typeKey": "power",
-                "name": "domain.power.default",
-                "isDefault": true,
-                "config": {
-                  "frequencyMHz": 100
-                }
-              }
-            ],
-            "domainMemberships": [
-              {
-                "id": "membership.ca",
-                "domainId": "domain.clock.default",
-                "routerId": "router.a"
-              },
-              {
-                "id": "membership.cb",
-                "domainId": "domain.clock.default",
-                "routerId": "router.b"
-              },
-              {
-                "id": "membership.cc",
-                "domainId": "domain.clock.default",
-                "routerId": "router.c"
-              },
-              {
-                "id": "membership.pa",
-                "domainId": "domain.power.default",
-                "routerId": "router.a"
-              },
-              {
-                "id": "membership.pb",
-                "domainId": "domain.power.default",
-                "routerId": "router.b"
-              },
-              {
-                "id": "membership.pc",
-                "domainId": "domain.power.default",
-                "routerId": "router.c"
-              }
-            ],
-            "attachments": [
-              {
-                "id": "attachment.c",
-                "interfaceId": "interface.c",
-                "state": "resolved",
-                "routerId": "router.c",
-                "slotId": "slot.c"
-              }
-            ],
-            "packageRelations": []
-          },
-          "restoreHostIds": {
-            "localRefToHostId": {}
-          },
-          "restoreEngineInvocationCount": 0,
-          "engineInvocations": []
         }
       },
       "expected": {
@@ -4492,6 +3044,7 @@
       "id": "engine-migration-atomic-commit",
       "description": "Lock, Derived State, side effects, mapping, and provenance commit atomically.",
       "input": {
+        "caseKind": "offered",
         "action": "migrate",
         "sourceBundleAvailable": true,
         "migration": {
@@ -4529,7 +3082,7 @@
           "topologyInputRevision": 4,
           "topologyInputDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
           "baseDerivedStateRevision": 7,
-          "baseDerivedStateDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "baseDerivedStateDigest": "sha256:c9423ae91afdb0244e49a35b93a4529ea6526eefbb267c7c3a5d7298ebca849e",
           "baseAuthoritativeDesignDigest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
           "structureAuthority": {
             "kind": "default-engine",
@@ -4982,7 +3535,7 @@
             "topologyInputRevision": 4,
             "topologyInputDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             "derivedStateRevision": 7,
-            "derivedStateDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "derivedStateDigest": "sha256:c9423ae91afdb0244e49a35b93a4529ea6526eefbb267c7c3a5d7298ebca849e",
             "packageBundleDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
             "reconcileDependencySetDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             "defaultEngineLockId": "dep.default-engine",
@@ -5190,7 +3743,7 @@
             "topologyInputRevision": 5,
             "topologyInputDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             "derivedStateRevision": 8,
-            "derivedStateDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "derivedStateDigest": "sha256:3fdae3c06d7b94381f9710fc638ef007b2bfbb12cec230165393f43cc582c5d6",
             "packageBundleDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
             "reconcileDependencySetDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             "defaultEngineLockId": "dep.default-engine",
@@ -5295,7 +3848,7 @@
             "topologyInputRevision": 4,
             "topologyInputDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
             "baseDerivedStateRevision": 7,
-            "baseDerivedStateDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "baseDerivedStateDigest": "sha256:c9423ae91afdb0244e49a35b93a4529ea6526eefbb267c7c3a5d7298ebca849e",
             "baseAuthoritativeDesignDigest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
             "structureAuthority": {
               "kind": "default-engine",
@@ -5506,7 +4059,7 @@
                     "topologyInputRevision": 5,
                     "topologyInputDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
                     "derivedStateRevision": 8,
-                    "derivedStateDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                    "derivedStateDigest": "sha256:3fdae3c06d7b94381f9710fc638ef007b2bfbb12cec230165393f43cc582c5d6",
                     "packageBundleDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
                     "reconcileDependencySetDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
                     "defaultEngineLockId": "dep.default-engine",
@@ -5661,7 +4214,7 @@
               }
             ]
           },
-          "candidateDigest": "sha256:f1269f318a60d3081601e9c3388210edd0f14ce95019d896be13f0684be72982"
+          "candidateDigest": "sha256:3e9da9b8c573f29cc723ac11397ac63eb32027e7a66c4aca5f4a94dd60642406"
         },
         "forwardTransaction": {
           "authorityPatch": {
@@ -5847,7 +4400,7 @@
                     "topologyInputRevision": 5,
                     "topologyInputDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
                     "derivedStateRevision": 8,
-                    "derivedStateDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                    "derivedStateDigest": "sha256:3fdae3c06d7b94381f9710fc638ef007b2bfbb12cec230165393f43cc582c5d6",
                     "packageBundleDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
                     "reconcileDependencySetDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
                     "defaultEngineLockId": "dep.default-engine",
@@ -5969,7 +4522,7 @@
             "topologyInputRevision": 5,
             "topologyInputDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             "derivedStateRevision": 8,
-            "derivedStateDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "derivedStateDigest": "sha256:3fdae3c06d7b94381f9710fc638ef007b2bfbb12cec230165393f43cc582c5d6",
             "packageBundleDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
             "reconcileDependencySetDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             "defaultEngineLockId": "dep.default-engine",
@@ -6106,7 +4659,7 @@
             "topologyInputRevision": 4,
             "topologyInputDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             "derivedStateRevision": 7,
-            "derivedStateDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "derivedStateDigest": "sha256:c9423ae91afdb0244e49a35b93a4529ea6526eefbb267c7c3a5d7298ebca849e",
             "packageBundleDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
             "reconcileDependencySetDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             "defaultEngineLockId": "dep.default-engine",
@@ -6207,6 +4760,7 @@
       "id": "engine-migration-blocked-by-package-relation",
       "description": "Universal relation blocking priority is derived from the causal relation endpoint.",
       "input": {
+        "caseKind": "offered",
         "action": "migrate",
         "sourceBundleAvailable": true,
         "migration": {
@@ -6244,7 +4798,7 @@
           "topologyInputRevision": 4,
           "topologyInputDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
           "baseDerivedStateRevision": 7,
-          "baseDerivedStateDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "baseDerivedStateDigest": "sha256:c9423ae91afdb0244e49a35b93a4529ea6526eefbb267c7c3a5d7298ebca849e",
           "baseAuthoritativeDesignDigest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
           "structureAuthority": {
             "kind": "default-engine",
@@ -6716,7 +5270,7 @@
             "topologyInputRevision": 4,
             "topologyInputDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             "derivedStateRevision": 7,
-            "derivedStateDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "derivedStateDigest": "sha256:c9423ae91afdb0244e49a35b93a4529ea6526eefbb267c7c3a5d7298ebca849e",
             "packageBundleDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
             "reconcileDependencySetDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             "defaultEngineLockId": "dep.default-engine",
@@ -6943,7 +5497,7 @@
             "topologyInputRevision": 5,
             "topologyInputDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             "derivedStateRevision": 8,
-            "derivedStateDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "derivedStateDigest": "sha256:3fdae3c06d7b94381f9710fc638ef007b2bfbb12cec230165393f43cc582c5d6",
             "packageBundleDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
             "reconcileDependencySetDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             "defaultEngineLockId": "dep.default-engine",
@@ -7064,7 +5618,7 @@
             "topologyInputRevision": 4,
             "topologyInputDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
             "baseDerivedStateRevision": 7,
-            "baseDerivedStateDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "baseDerivedStateDigest": "sha256:c9423ae91afdb0244e49a35b93a4529ea6526eefbb267c7c3a5d7298ebca849e",
             "baseAuthoritativeDesignDigest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
             "structureAuthority": {
               "kind": "default-engine",
@@ -7254,7 +5808,7 @@
                     "topologyInputRevision": 5,
                     "topologyInputDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
                     "derivedStateRevision": 8,
-                    "derivedStateDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                    "derivedStateDigest": "sha256:3fdae3c06d7b94381f9710fc638ef007b2bfbb12cec230165393f43cc582c5d6",
                     "packageBundleDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
                     "reconcileDependencySetDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
                     "defaultEngineLockId": "dep.default-engine",
@@ -7408,7 +5962,7 @@
               }
             ]
           },
-          "candidateDigest": "sha256:88a5a3ed099dc07ba1d0f2b738a30eded62f9c18454e53ce57eda7042696f883"
+          "candidateDigest": "sha256:10711868876defb903d0d5da73e06e7660bf1796c4b5c88857740b5ec46b8e2c"
         },
         "forwardTransaction": {
           "authorityPatch": {
@@ -7573,7 +6127,7 @@
                     "topologyInputRevision": 5,
                     "topologyInputDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
                     "derivedStateRevision": 8,
-                    "derivedStateDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                    "derivedStateDigest": "sha256:3fdae3c06d7b94381f9710fc638ef007b2bfbb12cec230165393f43cc582c5d6",
                     "packageBundleDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
                     "reconcileDependencySetDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
                     "defaultEngineLockId": "dep.default-engine",
@@ -7695,7 +6249,7 @@
             "topologyInputRevision": 5,
             "topologyInputDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             "derivedStateRevision": 8,
-            "derivedStateDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "derivedStateDigest": "sha256:3fdae3c06d7b94381f9710fc638ef007b2bfbb12cec230165393f43cc582c5d6",
             "packageBundleDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
             "reconcileDependencySetDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             "defaultEngineLockId": "dep.default-engine",
@@ -7832,7 +6386,7 @@
             "topologyInputRevision": 4,
             "topologyInputDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             "derivedStateRevision": 7,
-            "derivedStateDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "derivedStateDigest": "sha256:c9423ae91afdb0244e49a35b93a4529ea6526eefbb267c7c3a5d7298ebca849e",
             "packageBundleDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
             "reconcileDependencySetDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             "defaultEngineLockId": "dep.default-engine",
@@ -7952,6 +6506,7 @@
       "id": "engine-migration-undo-exact-inverse",
       "description": "Undo restores the exact stored inverse without Engine execution.",
       "input": {
+        "caseKind": "offered",
         "action": "undo",
         "sourceBundleAvailable": true,
         "migration": {
@@ -7989,7 +6544,7 @@
           "topologyInputRevision": 4,
           "topologyInputDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
           "baseDerivedStateRevision": 7,
-          "baseDerivedStateDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "baseDerivedStateDigest": "sha256:c9423ae91afdb0244e49a35b93a4529ea6526eefbb267c7c3a5d7298ebca849e",
           "baseAuthoritativeDesignDigest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
           "structureAuthority": {
             "kind": "default-engine",
@@ -8442,7 +6997,7 @@
             "topologyInputRevision": 4,
             "topologyInputDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             "derivedStateRevision": 7,
-            "derivedStateDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "derivedStateDigest": "sha256:c9423ae91afdb0244e49a35b93a4529ea6526eefbb267c7c3a5d7298ebca849e",
             "packageBundleDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
             "reconcileDependencySetDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             "defaultEngineLockId": "dep.default-engine",
@@ -8650,7 +7205,7 @@
             "topologyInputRevision": 5,
             "topologyInputDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             "derivedStateRevision": 8,
-            "derivedStateDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "derivedStateDigest": "sha256:3fdae3c06d7b94381f9710fc638ef007b2bfbb12cec230165393f43cc582c5d6",
             "packageBundleDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
             "reconcileDependencySetDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             "defaultEngineLockId": "dep.default-engine",
@@ -8755,7 +7310,7 @@
             "topologyInputRevision": 4,
             "topologyInputDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
             "baseDerivedStateRevision": 7,
-            "baseDerivedStateDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "baseDerivedStateDigest": "sha256:c9423ae91afdb0244e49a35b93a4529ea6526eefbb267c7c3a5d7298ebca849e",
             "baseAuthoritativeDesignDigest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
             "structureAuthority": {
               "kind": "default-engine",
@@ -8966,7 +7521,7 @@
                     "topologyInputRevision": 5,
                     "topologyInputDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
                     "derivedStateRevision": 8,
-                    "derivedStateDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                    "derivedStateDigest": "sha256:3fdae3c06d7b94381f9710fc638ef007b2bfbb12cec230165393f43cc582c5d6",
                     "packageBundleDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
                     "reconcileDependencySetDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
                     "defaultEngineLockId": "dep.default-engine",
@@ -9121,7 +7676,7 @@
               }
             ]
           },
-          "candidateDigest": "sha256:f1269f318a60d3081601e9c3388210edd0f14ce95019d896be13f0684be72982"
+          "candidateDigest": "sha256:3e9da9b8c573f29cc723ac11397ac63eb32027e7a66c4aca5f4a94dd60642406"
         },
         "forwardTransaction": {
           "authorityPatch": {
@@ -9307,7 +7862,7 @@
                     "topologyInputRevision": 5,
                     "topologyInputDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
                     "derivedStateRevision": 8,
-                    "derivedStateDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                    "derivedStateDigest": "sha256:3fdae3c06d7b94381f9710fc638ef007b2bfbb12cec230165393f43cc582c5d6",
                     "packageBundleDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
                     "reconcileDependencySetDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
                     "defaultEngineLockId": "dep.default-engine",
@@ -9429,7 +7984,7 @@
             "topologyInputRevision": 5,
             "topologyInputDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             "derivedStateRevision": 8,
-            "derivedStateDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "derivedStateDigest": "sha256:3fdae3c06d7b94381f9710fc638ef007b2bfbb12cec230165393f43cc582c5d6",
             "packageBundleDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
             "reconcileDependencySetDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             "defaultEngineLockId": "dep.default-engine",
@@ -9566,7 +8121,7 @@
             "topologyInputRevision": 4,
             "topologyInputDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             "derivedStateRevision": 7,
-            "derivedStateDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "derivedStateDigest": "sha256:c9423ae91afdb0244e49a35b93a4529ea6526eefbb267c7c3a5d7298ebca849e",
             "packageBundleDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
             "reconcileDependencySetDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             "defaultEngineLockId": "dep.default-engine",
@@ -9665,6 +8220,7 @@
       "id": "engine-migration-undo-source-missing-degraded",
       "description": "Undo restores exact state then degrades if the source Bundle is missing.",
       "input": {
+        "caseKind": "offered",
         "action": "undo",
         "sourceBundleAvailable": false,
         "migration": {
@@ -9702,7 +8258,7 @@
           "topologyInputRevision": 4,
           "topologyInputDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
           "baseDerivedStateRevision": 7,
-          "baseDerivedStateDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "baseDerivedStateDigest": "sha256:c9423ae91afdb0244e49a35b93a4529ea6526eefbb267c7c3a5d7298ebca849e",
           "baseAuthoritativeDesignDigest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
           "structureAuthority": {
             "kind": "default-engine",
@@ -10155,7 +8711,7 @@
             "topologyInputRevision": 4,
             "topologyInputDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             "derivedStateRevision": 7,
-            "derivedStateDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "derivedStateDigest": "sha256:c9423ae91afdb0244e49a35b93a4529ea6526eefbb267c7c3a5d7298ebca849e",
             "packageBundleDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
             "reconcileDependencySetDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             "defaultEngineLockId": "dep.default-engine",
@@ -10363,7 +8919,7 @@
             "topologyInputRevision": 5,
             "topologyInputDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             "derivedStateRevision": 8,
-            "derivedStateDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "derivedStateDigest": "sha256:3fdae3c06d7b94381f9710fc638ef007b2bfbb12cec230165393f43cc582c5d6",
             "packageBundleDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
             "reconcileDependencySetDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             "defaultEngineLockId": "dep.default-engine",
@@ -10468,7 +9024,7 @@
             "topologyInputRevision": 4,
             "topologyInputDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
             "baseDerivedStateRevision": 7,
-            "baseDerivedStateDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "baseDerivedStateDigest": "sha256:c9423ae91afdb0244e49a35b93a4529ea6526eefbb267c7c3a5d7298ebca849e",
             "baseAuthoritativeDesignDigest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
             "structureAuthority": {
               "kind": "default-engine",
@@ -10679,7 +9235,7 @@
                     "topologyInputRevision": 5,
                     "topologyInputDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
                     "derivedStateRevision": 8,
-                    "derivedStateDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                    "derivedStateDigest": "sha256:3fdae3c06d7b94381f9710fc638ef007b2bfbb12cec230165393f43cc582c5d6",
                     "packageBundleDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
                     "reconcileDependencySetDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
                     "defaultEngineLockId": "dep.default-engine",
@@ -10834,7 +9390,7 @@
               }
             ]
           },
-          "candidateDigest": "sha256:f1269f318a60d3081601e9c3388210edd0f14ce95019d896be13f0684be72982"
+          "candidateDigest": "sha256:3e9da9b8c573f29cc723ac11397ac63eb32027e7a66c4aca5f4a94dd60642406"
         },
         "forwardTransaction": {
           "authorityPatch": {
@@ -11020,7 +9576,7 @@
                     "topologyInputRevision": 5,
                     "topologyInputDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
                     "derivedStateRevision": 8,
-                    "derivedStateDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                    "derivedStateDigest": "sha256:3fdae3c06d7b94381f9710fc638ef007b2bfbb12cec230165393f43cc582c5d6",
                     "packageBundleDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
                     "reconcileDependencySetDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
                     "defaultEngineLockId": "dep.default-engine",
@@ -11142,7 +9698,7 @@
             "topologyInputRevision": 5,
             "topologyInputDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             "derivedStateRevision": 8,
-            "derivedStateDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "derivedStateDigest": "sha256:3fdae3c06d7b94381f9710fc638ef007b2bfbb12cec230165393f43cc582c5d6",
             "packageBundleDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
             "reconcileDependencySetDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             "defaultEngineLockId": "dep.default-engine",
@@ -11279,7 +9835,7 @@
             "topologyInputRevision": 4,
             "topologyInputDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             "derivedStateRevision": 7,
-            "derivedStateDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "derivedStateDigest": "sha256:c9423ae91afdb0244e49a35b93a4529ea6526eefbb267c7c3a5d7298ebca849e",
             "packageBundleDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
             "reconcileDependencySetDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             "defaultEngineLockId": "dep.default-engine",

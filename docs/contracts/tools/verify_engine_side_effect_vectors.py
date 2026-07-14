@@ -14,7 +14,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from verify_canonical_vectors import SchemaWorld, normalize_candidate, sha256_digest
+from verify_canonical_vectors import SchemaWorld, normalize, normalize_candidate, sha256_digest
 
 ROOT=Path(__file__).resolve().parents[3]
 CONTRACTS=ROOT/"docs/contracts"
@@ -86,6 +86,9 @@ def eval_fresh(inp:dict)->dict:
 
 
 def eval_migration(inp:dict)->dict:
+    if inp["caseKind"]=="discovery":
+        eligible=inp["currentDefaultEngineLock"]["engineCompatibilityVersion"] in inp["targetManifest"]["migrationFromCompatibilityVersions"]
+        return {"offered":eligible,"diagnosticCode":None if eligible else "engine.migration_incompatible","engineExecutions":[]}
     cur=inp["migration"]["currentDefaultEngineLock"]; target=inp["migration"]["targetDefaultEngineLock"]; man=inp["targetManifest"]
     eligible=cur["engineCompatibilityVersion"] in man["migrationFromCompatibilityVersions"]
     if not eligible:return {"offered":False,"diagnosticCode":"engine.migration_incompatible","engineExecutions":[]}
@@ -153,6 +156,7 @@ def validate_migration_binding(inp:dict,world:SchemaWorld)->None:
     if old!=new: fail("migration changed non-Engine dependency")
     if inp["forwardTransaction"]["targetDerivation"]["defaultEngineBundleDigest"]!=target["bundleManifestDigest"]: fail("migration derivation target mismatch")
     candidate=inp["candidate"]
+    if candidate["applicability"]!=app:fail("candidate applicability differs from migration applicability")
     if candidate["authorityPatch"]!=inp["forwardTransaction"]["authorityPatch"] or candidate["authorityPatch"]["source"]["bundleDigest"]!=target["bundleManifestDigest"]:fail("migration Authority source mismatch")
     side=evaluate_side(inp["sideEffectInput"]);expected_ops=side["applicationPatch"]["operations"]+[{"op":"updateEntity","entityKind":"project","id":"project.main","set":{"dependencies":inp["forwardTransaction"]["targetDependencies"]},"unset":[]},{"op":"updateEntity","entityKind":"topology","id":"topology.main","set":{"derivation":inp["forwardTransaction"]["targetDerivation"]},"unset":[]}]
     side_document={"schema":"ipcraft.noc-side-effects.v1","contractVersion":"ipcraft.noc-side-effects.v1","input":inp["sideEffectInput"],"expected":side}
@@ -167,6 +171,29 @@ def validate_migration_binding(inp:dict,world:SchemaWorld)->None:
     if apply_forward(inp["beforeSnapshot"],inp["forwardTransaction"])!=inp["afterSnapshot"]:fail("migration forward transaction does not produce afterSnapshot")
     if apply_inverse(inp["afterSnapshot"],inp["inverseTransaction"])!=inp["beforeSnapshot"]:fail("migration inverse transaction does not restore beforeSnapshot")
     if inp["inverseTransaction"]["engineInvocations"]:fail("Undo/Redo invokes an Engine")
+    core_defs=world.documents["ipcraft.core-canonical-models.v1"]["$defs"]
+    before_norm=normalize(world,"ipcraft.core-canonical-models.v1",core_defs["derivedState"],inp["beforeSnapshot"]["derivedState"],"before Derived State")
+    after_norm=normalize(world,"ipcraft.core-canonical-models.v1",core_defs["derivedState"],inp["afterSnapshot"]["derivedState"],"after Derived State")
+    before_digest,after_digest=sha256_digest(before_norm),sha256_digest(after_norm)
+    before_der,after_der=inp["beforeSnapshot"]["derivation"],inp["afterSnapshot"]["derivation"]
+    if before_digest==after_digest:fail("migration before/after Derived State digests are not distinct")
+    if before_der["derivedStateDigest"]!=before_digest:fail("before derivation Derived State digest mismatch")
+    if after_der["derivedStateDigest"]!=after_digest:fail("after derivation Derived State digest mismatch")
+    if app["baseDerivedStateRevision"]!=before_der["derivedStateRevision"] or app["baseDerivedStateDigest"]!=before_digest:fail("applicability does not bind exact before Derived State revision/digest")
+    if after_der["derivedStateRevision"]<=before_der["derivedStateRevision"]:fail("after Derived State revision is not monotonic")
+
+
+def validate_migration_discovery(inp:dict,world:SchemaWorld)->None:
+    project=world.documents["ipcraft.project-design.v1"]["$defs"]["defaultEngineDependencyLock"]
+    world.validate("ipcraft.project-design.v1",project,inp["currentDefaultEngineLock"],"discovery current lock");world.validate("ipcraft.project-design.v1",project,inp["targetDefaultEngineLock"],"discovery target lock")
+    world.validate("ipcraft.engine-bundle.v1",world.documents["ipcraft.engine-bundle.v1"],inp["targetManifest"],"discovery target manifest")
+    current,target=inp["currentDefaultEngineLock"],inp["targetDefaultEngineLock"]
+    if current["lockId"]!=target["lockId"] or current["bundleManifestDigest"]==target["bundleManifestDigest"]:fail("discovery lock identity invalid")
+    metadata=("id","version","engineCompatibilityVersion","engineHostContractVersion","hostSideEffectContractVersion","supportedPlatformAbis")
+    if any(inp["targetManifest"][key]!=target[key] for key in metadata):fail("discovery target manifest mismatch")
+    if target["engineHostContractVersion"] not in inp["supportedEngineHostContracts"] or target["hostSideEffectContractVersion"] not in inp["supportedHostSideEffectContracts"] or inp["currentPlatformAbi"] not in target["supportedPlatformAbis"]:fail("discovery target execution context incompatible")
+    snapshot=inp["currentSnapshot"];core=world.documents["ipcraft.core-canonical-models.v1"]["$defs"];normalized=normalize(world,"ipcraft.core-canonical-models.v1",core["derivedState"],snapshot["derivedState"],"discovery current Derived State")
+    if snapshot["derivation"]["derivedStateDigest"]!=sha256_digest(normalized):fail("discovery current Snapshot Derived State digest mismatch")
 
 
 def token(ref:dict)->str:return "id:"+ref["id"] if "id" in ref else "localRef:"+ref["localRef"]
@@ -227,7 +254,8 @@ def impact(code,severity,loss,subjects,details,resolution):return {"code":code,"
 RES_INPUT={"projectLock","installedBundles","currentPlatformAbi","supportedEngineHostContracts","supportedHostSideEffectContracts","alternativeBundles"}
 BUNDLE_FIELDS={"bundleManifestDigest","verifiedBundleManifestDigest","installed","revoked","contentVerified","source","manifest"}
 RES_EXPECTED={"outcome","selectedBundleManifestDigest","diagnosticCode","upgradeAvailable","retainedInContentAddressedStore"}
-MIG_INPUT={"action","sourceBundleAvailable","migration","applicability","targetManifest","sideEffectInput","beforeSnapshot","afterSnapshot","candidate","forwardTransaction","inverseTransaction"}
+MIG_INPUT={"caseKind","action","sourceBundleAvailable","migration","applicability","targetManifest","sideEffectInput","beforeSnapshot","afterSnapshot","candidate","forwardTransaction","inverseTransaction"}
+MIG_DISCOVERY_INPUT={"caseKind","currentDefaultEngineLock","targetDefaultEngineLock","targetManifest","supportedEngineHostContracts","supportedHostSideEffectContracts","currentPlatformAbi","currentSnapshot"}
 SNAPSHOT_FIELDS={"dependencies","derivedState","derivation","hostSideEffects","hostIds","engineInvocationCount"}
 HOST_EFFECT_FIELDS={"domains","domainMemberships","attachments","packageRelations"}
 FORWARD_FIELDS={"authorityPatch","applicationPatch","tombstones","allocationOrder","localRefToHostId","targetDependencies","targetDerivation","engineInvocations"}
@@ -242,6 +270,8 @@ def validate_closed_engine_case(case:dict,kind:str)->None:
         exact_keys(inp,RES_INPUT,case["id"]+" input");exact_keys(expected,RES_EXPECTED,case["id"]+" expected")
         for item in inp["installedBundles"]+inp["alternativeBundles"]:exact_keys(item,BUNDLE_FIELDS,case["id"]+" bundle")
     elif kind=="migration":
+        if case["id"]=="engine-migration-incompatible-target-not-offered":
+            exact_keys(inp,MIG_DISCOVERY_INPUT,case["id"]+" input");exact_keys(inp["currentSnapshot"],SNAPSHOT_FIELDS,case["id"]+" currentSnapshot");exact_keys(inp["currentSnapshot"]["hostSideEffects"],HOST_EFFECT_FIELDS,case["id"]+" currentSnapshot hostSideEffects");exact_keys(inp["currentSnapshot"]["hostIds"],{"localRefToHostId"},case["id"]+" currentSnapshot hostIds");exact_keys(expected,{"offered","diagnosticCode","engineExecutions"},case["id"]+" expected");return
         exact_keys(inp,MIG_INPUT,case["id"]+" input")
         for name in ("beforeSnapshot","afterSnapshot"):exact_keys(inp[name],SNAPSHOT_FIELDS,case["id"]+" "+name);exact_keys(inp[name]["hostSideEffects"],HOST_EFFECT_FIELDS,case["id"]+" "+name+" hostSideEffects");exact_keys(inp[name]["hostIds"],{"localRefToHostId"},case["id"]+" "+name+" hostIds")
         exact_keys(inp["forwardTransaction"],FORWARD_FIELDS,case["id"]+" forwardTransaction");exact_keys(inp["inverseTransaction"],INVERSE_FIELDS,case["id"]+" inverseTransaction")
@@ -268,7 +298,13 @@ def verify_engine(doc:dict,world:SchemaWorld|None=None)->tuple[int,int,int]:
         if got!=c["expected"]:fail(f"{cid}: resolution mismatch\n{got}\n{c['expected']}")
         if got["selectedBundleManifestDigest"] not in (None,c["input"]["projectLock"]["bundleManifestDigest"]):fail(f"{cid}: selected a different digest")
     for cid,c in ms.items():
-        validate_closed_engine_case(c,"migration");validate_migration_binding(c["input"],world)
+        validate_closed_engine_case(c,"migration")
+        if c["input"]["caseKind"]=="discovery":
+            validate_migration_discovery(c["input"],world)
+            got=eval_migration(c["input"])
+            if got!=c["expected"]:fail(f"{cid}: migration discovery mismatch")
+            continue
+        validate_migration_binding(c["input"],world)
         defs=world.documents["ipcraft.core-canonical-models.v1"]["$defs"]
         world.validate("ipcraft.core-canonical-models.v1",defs["candidateTransaction"],c["input"]["candidate"],cid+" candidate")
         got=eval_migration(c["input"])
@@ -323,10 +359,21 @@ def mutation_tests(engine:dict,side:dict)->int:
       ("wrong dependency replacement",lambda x:x["input"]["forwardTransaction"]["targetDependencies"][1].update(version="9")),
       ("wrong candidateDigest",lambda x:x["input"]["candidate"].update(candidateDigest="sha256:"+"f"*64)),
       ("Undo invoking Engine",lambda x:x["input"]["inverseTransaction"]["engineInvocations"].append("sha256:"+"a"*64)),
+      ("wrong before Derived State digest",lambda x:x["input"]["beforeSnapshot"]["derivation"].update(derivedStateDigest="sha256:"+"f"*64)),
+      ("wrong before Derived State revision",lambda x:x["input"]["beforeSnapshot"]["derivation"].update(derivedStateRevision=99)),
+      ("wrong after Derived State digest",lambda x:x["input"]["afterSnapshot"]["derivation"].update(derivedStateDigest="sha256:"+"f"*64)),
+      ("wrong after Derived State revision",lambda x:x["input"]["afterSnapshot"]["derivation"].update(derivedStateRevision=7)),
+      ("wrong applicability base Derived State digest",lambda x:x["input"]["applicability"].update(baseDerivedStateDigest="sha256:"+"f"*64)),
+      ("wrong applicability base Derived State revision",lambda x:x["input"]["applicability"].update(baseDerivedStateRevision=99)),
     ]
     for name,mut in migrations:
         x=copy.deepcopy(base);mut(x);tests.append((name,lambda x=x:verify_engine(engine_case("migrationCases",x))))
     x=copy.deepcopy(m["engine-migration-blocked-by-package-relation"]);x["input"]["sideEffectInput"]["packageRelations"]=[];tests.append(("causal blocked relation removed",lambda x=x:verify_engine(engine_case("migrationCases",x))))
+    discovery=m["engine-migration-incompatible-target-not-offered"]
+    x=copy.deepcopy(discovery);x["input"]["currentSnapshot"]["derivation"]["derivedStateDigest"]="sha256:"+"f"*64;tests.append(("discovery current digest corrupt",lambda x=x:verify_engine(engine_case("migrationCases",x))))
+    for evidence in ("candidate","afterSnapshot","forwardTransaction","engineInvocations"):
+        x=copy.deepcopy(discovery);x["input"][evidence]={} if evidence!="engineInvocations" else ["sha256:"+"b"*64];tests.append((f"discovery carries {evidence} evidence",lambda x=x:verify_engine(engine_case("migrationCases",x))))
+    x=copy.deepcopy(discovery);x["expected"]["engineExecutions"]=["sha256:"+"b"*64];tests.append(("discovery expected target execution",lambda x=x:verify_engine(engine_case("migrationCases",x))))
     # Exact ID-set rejection for every behavior section/catalog.
     for section in ("resolutionCases","migrationCases","freshnessCases"):
         missing=copy.deepcopy(engine);missing[section]=missing[section][1:];tests.append((section+" missing ID",lambda x=missing:verify_engine(x)))

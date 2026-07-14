@@ -83,16 +83,16 @@ def resolution_cases() -> list[dict]:
     return cases
 
 
-def applicability(d: str=D["a"]) -> dict:
+def applicability(d: str=D["a"], base_revision:int=7, base_digest:str=D["d"]) -> dict:
     return {"schema":"ipcraft.reconcile-applicability.v1","groupId":"group.migration","requestGeneration":1,"topologyInputRevision":4,
-            "topologyInputDigest":D["c"],"baseDerivedStateRevision":7,"baseDerivedStateDigest":D["d"],"baseAuthoritativeDesignDigest":D["e"],
+            "topologyInputDigest":D["c"],"baseDerivedStateRevision":base_revision,"baseDerivedStateDigest":base_digest,"baseAuthoritativeDesignDigest":D["e"],
             "structureAuthority":{"kind":"default-engine","lockId":"dep.default-engine","identity":"ipcraft.default-noc-engine","version":"1.0.0","bundleDigest":d},
             "packageBundleDigest":D["f"],"reconcileDependencySetDigest":D["c"],"defaultEngineLockId":"dep.default-engine",
             "defaultEngineBundleDigest":d,"engineHostContractVersion":"ipcraft.engine-host.v1","hostSideEffectContractVersion":"ipcraft.noc-side-effects.v1"}
 
 
-def derivation(target: dict) -> dict:
-    return {"topologyInputRevision":5,"topologyInputDigest":D["b"],"derivedStateRevision":8,"derivedStateDigest":D["c"],
+def derivation(target: dict, state_digest:str=D["c"], revision:int=8) -> dict:
+    return {"topologyInputRevision":5,"topologyInputDigest":D["b"],"derivedStateRevision":revision,"derivedStateDigest":state_digest,
             "packageBundleDigest":D["f"],"reconcileDependencySetDigest":D["b"],"defaultEngineLockId":target["lockId"],
             "defaultEngineBundleDigest":target["bundleManifestDigest"],"engineHostContractVersion":target["engineHostContractVersion"],
             "hostSideEffectContractVersion":target["hostSideEffectContractVersion"],"structureAuthority":{"kind":"default-engine","lockId":target["lockId"],
@@ -108,7 +108,7 @@ def migration_cases() -> list[dict]:
         x=copy.deepcopy(base or migration_record()); (mut or (lambda _:None))(x)
         return {"id":i,"description":d,"input":x,"expected":exp or {"offered":True,"groupState":"ready-to-commit","requiresConfirmation":True,"atomicCommit":True,"engineExecutions":[D["b"]]}}
     return [c("engine-migration-compatible-target-offered","Target declares source compatibility."),
-            c("engine-migration-incompatible-target-not-offered","Target omits source compatibility.",mut=lambda x:x["targetManifest"].update(migrationFromCompatibilityVersions=["9"]),exp={"offered":False,"diagnosticCode":"engine.migration_incompatible","engineExecutions":[]}),
+            c("engine-migration-incompatible-target-not-offered","Target omits source compatibility; discovery retains only unchanged current state.",base=make_migration_discovery_input(),exp={"offered":False,"diagnosticCode":"engine.migration_incompatible","engineExecutions":[]}),
             c("engine-migration-atomic-commit","Lock, Derived State, side effects, mapping, and provenance commit atomically."),
             c("engine-migration-blocked-by-package-relation","Universal relation blocking priority is derived from the causal relation endpoint.",base=make_migration_input(True),exp={"offered":True,"groupState":"blocked","requiresConfirmation":False,"atomicCommit":False,"engineExecutions":[D["b"]]}),
             c("engine-migration-undo-exact-inverse","Undo restores the exact stored inverse without Engine execution.",mut=lambda x:x.update(action="undo"),exp={"offered":True,"restoredSnapshot":"beforeSnapshot","stableHostIds":True,"engineExecutions":[],"resultMode":"normal"}),
@@ -221,6 +221,31 @@ def materialize_ref(ref:dict,mapping:dict)->str:
     return ref["id"] if "id" in ref else mapping[ref["localRef"]]
 
 
+def normalize_derived_authoring(value:dict)->dict:
+    result=copy.deepcopy(value)
+    for key in ("routers","structuralLinks","accessSlots","packageEntities","packageRelations"):result[key].sort(key=lambda x:x["id"])
+    for item in result["accessSlots"]:
+        item["allowedContracts"].sort(key=lambda x:x["contractLockId"])
+        for allowed in item["allowedContracts"]:allowed["roles"].sort()
+    for item in result["packageEntities"]:item["extensions"].sort(key=lambda x:(x["ownerLockId"],x["schema"],x["version"]))
+    def endpoint_key(endpoint):
+        if endpoint["state"]=="resolved":return (0,endpoint["subject"]["kind"],"id:"+endpoint["subject"]["id"])
+        return (1,endpoint["intendedSubject"]["kind"],"id:"+endpoint["intendedSubject"]["id"],endpoint["reasonCode"])
+    for item in result["packageRelations"]:
+        item["sources"].sort(key=endpoint_key);item["targets"].sort(key=endpoint_key);item["extensions"].sort(key=lambda x:(x["ownerLockId"],x["schema"],x["version"]))
+    return result
+
+
+def derived_digest_authoring(value:dict)->str:
+    return digest(normalize_derived_authoring(value))
+
+
+def materialize_derived_authoring(current:dict,authority:dict,mapping:dict)->dict:
+    wrapper={"dependencies":[],"derivedState":copy.deepcopy(current),"derivation":{},"hostSideEffects":{"domains":[],"domainMemberships":[],"attachments":[],"packageRelations":[]},"hostIds":{"localRefToHostId":{}},"engineInvocationCount":0}
+    tx={"authorityPatch":authority,"applicationPatch":{"operations":[]},"localRefToHostId":mapping,"targetDependencies":[],"targetDerivation":{},"engineInvocations":[]}
+    return apply_forward_authoring(wrapper,tx)["derivedState"]
+
+
 def apply_forward_authoring(before:dict,tx:dict)->dict:
     result=copy.deepcopy(before); mapping=tx["localRefToHostId"]; derived=result["derivedState"]
     arrays={"router":"routers","structural-link":"structuralLinks","access-slot":"accessSlots"}
@@ -254,7 +279,6 @@ def apply_forward_authoring(before:dict,tx:dict)->dict:
 
 def make_migration_input(blocked:bool)->dict:
     current,target=lock(),lock(D["b"],"2.0.0","2"); noc={"lockId":"dep.noc","kind":"noc-package","id":"vendor.noc","version":"1.0.0","bundleManifestDigest":D["f"]}
-    old_der={**derivation(current),"topologyInputRevision":4,"derivedStateRevision":7,"defaultEngineBundleDigest":D["a"],"engineCompatibilityVersion":"1","structureAuthority":{**derivation(current)["structureAuthority"],"version":"1.0.0","bundleDigest":D["a"]}}
     create_router={"op":"createEntity","entityKind":"router","localRef":"authority:router-d","value":{"templateKey":"mesh-router","identityCompatibilityVersion":1,"coordinate":{"row":1,"column":0},"properties":{"generation":"target"}}}
     create_link={"op":"createEntity","entityKind":"structural-link","localRef":"authority:link-bd","value":{"templateKey":"mesh-link","identityCompatibilityVersion":1,"endpointA":{"id":"router.b"},"endpointB":{"localRef":"authority:router-d"},"axis":"vertical","properties":{"generation":"target"}}}
     create_slot={"op":"createEntity","entityKind":"access-slot","localRef":"authority:slot-d","value":{"routerRef":{"localRef":"authority:router-d"},"templateKey":"local-0","identityCompatibilityVersion":1,"displayOrder":0,"label":"Target Local","allowedContracts":[],"properties":{"generation":"target"}}}
@@ -263,23 +287,31 @@ def make_migration_input(blocked:bool)->dict:
     if blocked:
         causal["attachments"]=[]
         causal["packageRelations"]=[{"id":"relation.blocked","typeKey":"route.blocked","sources":[resolved("router","router.c")],"targets":[resolved("package-entity","entity.a")],"data":{"weight":9},"extensions":[]}]
-    side=evaluate_side(causal);target_deps=sorted([noc,target],key=lambda x:x["lockId"]);target_der=derivation(target)
+    mapping={"authority:link-bd":"host-link-bd","authority:router-d":"host-router-d","authority:slot-d":"host-slot-d","application:000001":"host-membership-clock-d","application:000002":"host-membership-power-d"}
+    before_state=copy.deepcopy(causal["currentDerivedState"]);before_digest=derived_digest_authoring(before_state);after_state=materialize_derived_authoring(before_state,authority,mapping);after_digest=derived_digest_authoring(after_state)
+    old_der={**derivation(current,before_digest,7),"topologyInputRevision":4,"defaultEngineBundleDigest":D["a"],"engineCompatibilityVersion":"1","structureAuthority":{**derivation(current,before_digest,7)["structureAuthority"],"version":"1.0.0","bundleDigest":D["a"]}}
+    target_der=derivation(target,after_digest,8);app_value=applicability(D["a"],old_der["derivedStateRevision"],before_digest)
+    side=evaluate_side(causal);target_deps=sorted([noc,target],key=lambda x:x["lockId"])
     application=copy.deepcopy(side["applicationPatch"]);application["patchId"]="patch.migration";application["source"]={"kind":"application-migration","identity":"host","version":"1"};application["operations"] += [{"op":"updateEntity","entityKind":"project","id":"project.main","set":{"dependencies":target_deps},"unset":[]},{"op":"updateEntity","entityKind":"topology","id":"topology.main","set":{"derivation":target_der},"unset":[]}]
     migration={"currentDefaultEngineLock":current,"targetDefaultEngineLock":target};migration_impact={"code":"engine_migration.dependency_replaced","severity":"warning","dataLoss":False,"subjects":[{"kind":"project","id":"project.main"}],"details":{"lockId":"dep.default-engine","currentBundleDigest":D["a"],"targetBundleDigest":D["b"]},"resolution":"confirm-or-discard"}
     impacts=copy.deepcopy(side["impactReport"]["impacts"])+[migration_impact];impacts.sort(key=lambda x:(x["code"],x["severity"],x["dataLoss"],cj(x["subjects"]),cj(x["details"]),x["resolution"]))
-    mapping={"authority:link-bd":"host-link-bd","authority:router-d":"host-router-d","authority:slot-d":"host-slot-d","application:000001":"host-membership-clock-d","application:000002":"host-membership-power-d"}
     deleted={("structural-link","link.bc"):link("link.bc","router.b","router.c"),("access-slot","slot.c"):slot("slot.c","router.c"),("router","router.c"):router("router.c",0,2)}
     for m in causal["domainMemberships"]:
         if m["routerId"]=="router.c": deleted[("domain-membership",m["id"])]=m
     tombstones=[{"subjectKind":kind,"id":id,"value":value} for (kind,id),value in sorted(deleted.items())]
     allocation=sorted(mapping)
-    candidate={"schema":"ipcraft.candidate-transaction.v1","transactionId":"tx.migration","kind":"default-engine-migration","applicability":applicability(),"topologyIntent":{"schema":"ipcraft.topology-intent.v1","componentId":"component.noc","topologyId":"topology.main","topologyKind":"mesh","globalConfig":{"columns":2,"rows":2},"packageEntities":[],"packageRelations":[]},"authorityPatch":authority,"applicationPatch":application,"migration":migration,"tombstones":tombstones,"allocationOrder":allocation,"impactReport":{"schema":"ipcraft.topology-impact-report.v1","impacts":impacts}}
+    candidate={"schema":"ipcraft.candidate-transaction.v1","transactionId":"tx.migration","kind":"default-engine-migration","applicability":app_value,"topologyIntent":{"schema":"ipcraft.topology-intent.v1","componentId":"component.noc","topologyId":"topology.main","topologyKind":"mesh","globalConfig":{"columns":2,"rows":2},"packageEntities":[],"packageRelations":[]},"authorityPatch":authority,"applicationPatch":application,"migration":migration,"tombstones":tombstones,"allocationOrder":allocation,"impactReport":{"schema":"ipcraft.topology-impact-report.v1","impacts":impacts}}
     candidate["candidateDigest"]=digest(candidate)
-    before={"dependencies":sorted([noc,current],key=lambda x:x["lockId"]),"derivedState":copy.deepcopy(causal["currentDerivedState"]),"derivation":old_der,"hostSideEffects":{"domains":copy.deepcopy(causal["domains"]),"domainMemberships":copy.deepcopy(causal["domainMemberships"]),"attachments":copy.deepcopy(causal["attachments"]),"packageRelations":copy.deepcopy(causal["packageRelations"])},"hostIds":{"localRefToHostId":{}},"engineInvocationCount":0}
+    before={"dependencies":sorted([noc,current],key=lambda x:x["lockId"]),"derivedState":before_state,"derivation":old_der,"hostSideEffects":{"domains":copy.deepcopy(causal["domains"]),"domainMemberships":copy.deepcopy(causal["domainMemberships"]),"attachments":copy.deepcopy(causal["attachments"]),"packageRelations":copy.deepcopy(causal["packageRelations"])},"hostIds":{"localRefToHostId":{}},"engineInvocationCount":0}
     forward={"authorityPatch":authority,"applicationPatch":application,"tombstones":tombstones,"allocationOrder":allocation,"localRefToHostId":mapping,"targetDependencies":target_deps,"targetDerivation":target_der,"engineInvocations":[D["b"]]}
     after=apply_forward_authoring(before,forward)
     inverse={"restoreDependencies":copy.deepcopy(before["dependencies"]),"restoreDerivedState":copy.deepcopy(before["derivedState"]),"restoreDerivation":copy.deepcopy(before["derivation"]),"restoreHostSideEffects":copy.deepcopy(before["hostSideEffects"]),"restoreHostIds":copy.deepcopy(before["hostIds"]),"restoreEngineInvocationCount":before["engineInvocationCount"],"engineInvocations":[]}
-    return {"action":"migrate","sourceBundleAvailable":True,"migration":migration,"applicability":applicability(),"targetManifest":manifest("2.0.0","2"),"sideEffectInput":causal,"beforeSnapshot":before,"afterSnapshot":after,"candidate":candidate,"forwardTransaction":forward,"inverseTransaction":inverse}
+    return {"caseKind":"offered","action":"migrate","sourceBundleAvailable":True,"migration":migration,"applicability":app_value,"targetManifest":manifest("2.0.0","2"),"sideEffectInput":causal,"beforeSnapshot":before,"afterSnapshot":after,"candidate":candidate,"forwardTransaction":forward,"inverseTransaction":inverse}
+
+
+def make_migration_discovery_input()->dict:
+    offered=make_migration_input(False);target_manifest=copy.deepcopy(offered["targetManifest"]);target_manifest["migrationFromCompatibilityVersions"]=["9"]
+    return {"caseKind":"discovery","currentDefaultEngineLock":copy.deepcopy(offered["migration"]["currentDefaultEngineLock"]),"targetDefaultEngineLock":copy.deepcopy(offered["migration"]["targetDefaultEngineLock"]),"targetManifest":target_manifest,"supportedEngineHostContracts":["ipcraft.engine-host.v1"],"supportedHostSideEffectContracts":["ipcraft.noc-side-effects.v1"],"currentPlatformAbi":"linux-x86_64-gnu-v1","currentSnapshot":copy.deepcopy(offered["beforeSnapshot"])}
 
 
 def side_cases()->list[dict]:

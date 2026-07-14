@@ -243,7 +243,7 @@ git commit -m "docs: close exact Default Engine and side-effect contracts"
 
 - [x] **Step 1: Close exact resolution, migration, and freshness catalogs**
 
-Cover the exact committed set of 18 resolution IDs with no fallback, every stable degraded diagnostic, metadata mismatch dimensions, upgrade-only discovery, and retained unsupported Bundles; six migration IDs with complete before/after Snapshots, causal side effects, normalized candidate digests, forward/inverse application, exact Host IDs/provenance, and zero-Engine Undo/Redo; and eight computed freshness IDs.
+Cover the exact committed set of 18 resolution IDs with no fallback, every stable degraded diagnostic, metadata mismatch dimensions, upgrade-only discovery, and retained unsupported Bundles; six migration IDs whose offered variants carry complete before/after Snapshots, causal side effects, normalized candidate digests, forward/inverse application, exact Host IDs/provenance, and zero-Engine Undo/Redo, while the incompatible discovery-only variant forbids transaction/after/execution evidence; and eight computed freshness IDs. Every migration Snapshot Derived State is canonically hashed, bound to derivation, and the before revision/digest is repeated exactly in applicability.
 
 - [x] **Step 2: Close causal Host side-effect vectors**
 
