@@ -18,6 +18,7 @@
     "failedStepId": { "oneOf": [{ "$ref": "#/$defs/id" }, { "type": "null" }] },
     "steps": {
       "type": "array",
+      "x-ipcraft-canonical": { "kind": "ordered" },
       "minItems": 1,
       "items": {
         "type": "object",

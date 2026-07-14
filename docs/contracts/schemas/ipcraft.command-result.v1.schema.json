@@ -12,7 +12,7 @@
     "sessionRevision": { "type": "integer", "minimum": 0 },
     "pendingGroupId": { "oneOf": [{ "$ref": "#/$defs/id" }, { "type": "null" }] },
     "draftId": { "oneOf": [{ "$ref": "#/$defs/id" }, { "type": "null" }] },
-    "diagnostics": { "type": "array", "items": { "$ref": "#/$defs/issue" } }
+    "diagnostics": { "type": "array", "x-ipcraft-canonical": { "kind": "ordered" }, "items": { "$ref": "#/$defs/issue" } }
   },
   "allOf": [
     {

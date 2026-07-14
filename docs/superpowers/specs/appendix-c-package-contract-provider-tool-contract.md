@@ -247,6 +247,8 @@ Relation declaration:
 
 V1 endpoint cardinalities are non-negative integers with `maximum >= minimum`. Relation instances use Appendix A resolved/unresolved endpoint envelopes. Unresolved endpoints are legal only when the declaration opts in.
 
+Each declaration's `sources.kinds[]` and `targets.kinds[]` is a set sorted by literal Unicode scalar-value order; duplicates are invalid.
+
 ## C3. Unknown Capability Fallback
 
 Processing order:
@@ -424,6 +426,7 @@ The reproducibility claim is limited to verifiable replay with identical canonic
 Rules:
 
 - Command elements are literal argv entries; shell interpolation is forbidden.
+- `command[]` is ordered and retains argv order. `capabilities[]`, `ownedEntityTypes[]`, and `ownedRelationTypes[]` are literal-string sets sorted by Unicode scalar-value order with duplicates invalid. Provider capability strings are not Package/Contract declaration objects and are not runtime capability values.
 - Relative executable/script paths resolve under the immutable Provider sub-bundle root.
 - The Provider manifest MUST NOT contain its own Provider bundle digest. The external project dependency lock plus Package `providerLockId`/`manifestPath` binds it to the verified bundle; the host carries that digest in launch context, handshake checks, applicability, transaction provenance, and diagnostics.
 - The host verifies the externally locked Provider bundle and runtime closure before every launch.
@@ -512,6 +515,8 @@ Request:
 
 The abbreviated `applicability`, `normalizedTopologyInput`, and `currentDerivedState` objects above MUST validate against the exact Appendix F machine models; `{}` is editorial elision, not an open object. Provider ABI may wrap but cannot extend them.
 
+`dependencyLocks[]` is a set sorted by `lockId`. `capabilities[]` contains runtime capability values and sorts by the UTF-8 bytes of each value's RFC 8785 canonical JSON after nested set normalization. This is distinct from Package/Contract capability declarations sorted by `key` and Provider/Tool declared capability string lists sorted literally.
+
 Progress event:
 
 ```json
@@ -595,6 +600,8 @@ Package tool declaration:
 ```
 
 These declarations live in the parent NoC Package manifest, outside each locked Tool sub-bundle, so their `bundleManifestDigest` fields do not hash a file that contains the same digest. Only documented literal placeholders are substituted. Shell execution and arbitrary environment expansion are forbidden. Manifest runtime/environment/network declarations must equal the referenced Runtime Lock/profile; a mismatch rejects launch.
+
+Each Tool `command[]` is an ordered argv sequence. Any Tool manifest capability declaration string list is a set sorted by literal Unicode scalar-value order; it does not use the Package/Contract declaration-key or runtime capability-value comparator.
 
 ## C11. Tool Input Manifest
 

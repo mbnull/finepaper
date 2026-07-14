@@ -148,7 +148,7 @@ Add vectors proving that Authority and Application operations share one candidat
       "target": { "id": "domain.default" }
     }]
   },
-  "allocationOrder": ["authority:router-0", "application:000001"]
+  "allocationOrder": ["application:000001", "authority:router-0"]
 }
 ```
 

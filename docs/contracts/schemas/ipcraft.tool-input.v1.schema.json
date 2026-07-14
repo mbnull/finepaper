@@ -23,6 +23,8 @@
     },
     "dependencies": {
       "type": "array",
+      "x-ipcraft-canonical": { "kind": "set", "sortKey": ["lockId"] },
+      "$comment": "lockId uniqueness and sorting are semantic-validator rules.",
       "items": { "$ref": "ipcraft.project-design.v1.schema.json#/$defs/dependencyLock" }
     },
     "projectDesignFile": { "$ref": "#/$defs/path" },

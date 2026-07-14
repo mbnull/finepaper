@@ -18,6 +18,8 @@
     "name": { "type": "string", "minLength": 1 },
     "dependencies": {
       "type": "array",
+      "x-ipcraft-canonical": { "kind": "set", "sortKey": ["lockId"] },
+      "$comment": "Sorting and lockId uniqueness are semantic-validator rules.",
       "items": { "$ref": "#/$defs/dependencyLock" },
       "allOf": [
         {
@@ -32,12 +34,12 @@
         }
       ]
     },
-    "components": { "type": "array", "minItems": 1, "maxItems": 1, "items": { "$ref": "#/$defs/component" } },
-    "interfaces": { "type": "array", "items": { "$ref": "#/$defs/interface" } },
-    "connections": { "type": "array", "maxItems": 0 },
-    "topologies": { "type": "array", "minItems": 1, "maxItems": 1, "items": { "$ref": "#/$defs/topology" } },
-    "views": { "type": "array", "maxItems": 0 },
-    "extensions": { "type": "array", "items": { "$ref": "#/$defs/extension" } }
+    "components": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["id"] }, "minItems": 1, "maxItems": 1, "items": { "$ref": "#/$defs/component" } },
+    "interfaces": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["id"] }, "items": { "$ref": "#/$defs/interface" } },
+    "connections": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["id"] }, "maxItems": 0 },
+    "topologies": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["id"] }, "minItems": 1, "maxItems": 1, "items": { "$ref": "#/$defs/topology" } },
+    "views": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["id"] }, "maxItems": 0 },
+    "extensions": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["ownerLockId", "schema", "version"] }, "$comment": "Composite-key uniqueness and sorting are semantic-validator rules.", "items": { "$ref": "#/$defs/extension" } }
   },
   "$defs": {
     "id": { "type": "string", "minLength": 1 },
@@ -93,7 +95,7 @@
         "bundleManifestDigest": { "$ref": "#/$defs/digest" },
         "engineHostContractVersion": { "const": "ipcraft.engine-host.v1" },
         "engineCompatibilityVersion": { "$ref": "#/$defs/id" },
-        "supportedPlatformAbis": { "type": "array", "items": { "$ref": "#/$defs/id" }, "minItems": 1, "uniqueItems": true }
+        "supportedPlatformAbis": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["unicodeScalarValue"] }, "items": { "$ref": "#/$defs/id" }, "minItems": 1, "uniqueItems": true }
       }
     },
     "providerDependencyLock": {
@@ -138,7 +140,7 @@
       "properties": {
         "id": { "$ref": "#/$defs/id" }, "kind": { "const": "noc" }, "name": { "type": "string", "minLength": 1 },
         "packageLockId": { "$ref": "#/$defs/id" }, "typeKey": { "$ref": "#/$defs/id" },
-        "config": { "type": "object" }, "extensions": { "type": "array", "items": { "$ref": "#/$defs/extension" } }
+        "config": { "type": "object" }, "extensions": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["ownerLockId", "schema", "version"] }, "items": { "$ref": "#/$defs/extension" } }
       }
     },
     "interface": {
@@ -151,8 +153,8 @@
           "type": "object", "additionalProperties": false, "required": ["lockId", "role"],
           "properties": { "lockId": { "$ref": "#/$defs/id" }, "role": { "$ref": "#/$defs/id" } }
         },
-        "capabilities": { "type": "object" }, "contractConfig": { "type": "object" }, "nocConfig": { "type": "object" },
-        "extensions": { "type": "array", "items": { "$ref": "#/$defs/extension" } }
+        "capabilities": { "type": "object", "$comment": "Any Contract-declared capability-value array nested here is a canonicalJson set under Appendix F; the Contract semantic validator supplies its item schema." }, "contractConfig": { "type": "object" }, "nocConfig": { "type": "object" },
+        "extensions": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["ownerLockId", "schema", "version"] }, "items": { "$ref": "#/$defs/extension" } }
       }
     },
     "structureAuthority": { "$ref": "ipcraft.core-canonical-models.v1.schema.json#/$defs/structureAuthority" },
@@ -211,13 +213,13 @@
       "type": "object", "additionalProperties": false, "required": ["id", "typeKey", "data", "extensions"],
       "properties": {
         "id": { "$ref": "#/$defs/id" }, "typeKey": { "$ref": "#/$defs/id" }, "data": { "type": "object" },
-        "extensions": { "type": "array", "items": { "$ref": "#/$defs/extension" } }
+        "extensions": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["ownerLockId", "schema", "version"] }, "items": { "$ref": "#/$defs/extension" } }
       }
     },
     "relationSubjectRef": {
       "type": "object", "additionalProperties": false, "required": ["kind", "id"],
       "properties": {
-        "kind": { "enum": ["component", "interface", "router", "structural-link", "access-slot", "attachment", "domain", "domain-membership", "package-entity", "package-relation"] },
+        "kind": { "enum": ["project", "component", "interface", "router", "structural-link", "access-slot", "attachment", "domain", "domain-membership", "package-entity", "package-relation"] },
         "id": { "$ref": "#/$defs/id" }
       }
     },
@@ -237,9 +239,9 @@
       "type": "object", "additionalProperties": false, "required": ["id", "typeKey", "sources", "targets", "data", "extensions"],
       "properties": {
         "id": { "$ref": "#/$defs/id" }, "typeKey": { "$ref": "#/$defs/id" },
-        "sources": { "type": "array", "items": { "$ref": "#/$defs/relationEndpoint" } },
-        "targets": { "type": "array", "items": { "$ref": "#/$defs/relationEndpoint" } },
-        "data": { "type": "object" }, "extensions": { "type": "array", "items": { "$ref": "#/$defs/extension" } }
+        "sources": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["endpointCanonicalKey"] }, "$comment": "Composite-key uniqueness and sorting are semantic-validator rules.", "items": { "$ref": "#/$defs/relationEndpoint" } },
+        "targets": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["endpointCanonicalKey"] }, "$comment": "Composite-key uniqueness and sorting are semantic-validator rules.", "items": { "$ref": "#/$defs/relationEndpoint" } },
+        "data": { "type": "object" }, "extensions": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["ownerLockId", "schema", "version"] }, "items": { "$ref": "#/$defs/extension" } }
       }
     },
     "topology": {
@@ -251,15 +253,15 @@
       "properties": {
         "id": { "$ref": "#/$defs/id" }, "ownerComponentId": { "$ref": "#/$defs/id" }, "kind": { "const": "mesh" },
         "templateKey": { "$ref": "#/$defs/id" }, "derivation": { "$ref": "#/$defs/derivation" },
-        "routers": { "type": "array", "items": { "$ref": "#/$defs/router" } },
-        "structuralLinks": { "type": "array", "items": { "$ref": "#/$defs/structuralLink" } },
-        "accessSlots": { "type": "array", "items": { "$ref": "#/$defs/accessSlot" } },
-        "attachments": { "type": "array", "items": { "$ref": "#/$defs/attachment" } },
-        "domains": { "type": "array", "items": { "$ref": "#/$defs/domain" } },
-        "domainMemberships": { "type": "array", "items": { "$ref": "#/$defs/domainMembership" } },
-        "packageEntities": { "type": "array", "items": { "$ref": "#/$defs/packageEntity" } },
-        "packageRelations": { "type": "array", "items": { "$ref": "#/$defs/packageRelation" } },
-        "extensions": { "type": "array", "items": { "$ref": "#/$defs/extension" } }
+        "routers": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["id"] }, "items": { "$ref": "#/$defs/router" } },
+        "structuralLinks": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["id"] }, "items": { "$ref": "#/$defs/structuralLink" } },
+        "accessSlots": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["id"] }, "items": { "$ref": "#/$defs/accessSlot" } },
+        "attachments": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["id"] }, "items": { "$ref": "#/$defs/attachment" } },
+        "domains": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["id"] }, "items": { "$ref": "#/$defs/domain" } },
+        "domainMemberships": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["id"] }, "items": { "$ref": "#/$defs/domainMembership" } },
+        "packageEntities": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["id"] }, "items": { "$ref": "#/$defs/packageEntity" } },
+        "packageRelations": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["id"] }, "items": { "$ref": "#/$defs/packageRelation" } },
+        "extensions": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["ownerLockId", "schema", "version"] }, "items": { "$ref": "#/$defs/extension" } }
       }
     },
     "path": {

@@ -13,7 +13,7 @@
 - References use IDs; array positions are never identity.
 - Digests use `sha256:<64 lowercase hexadecimal characters>` over RFC 8785 canonical JSON unless a field explicitly says otherwise.
 - Unknown enum values in core fields are errors. Unknown namespaced extension schemas are preserved as opaque content.
-- Before digesting, every ID-keyed set is sorted by Unicode scalar-value order of its ID; dependency locks sort by `lockId`, declarations by `key`/`typeKey`, and undirected Link endpoints are stored/hash-normalized with the smaller Router ID first. Only arrays explicitly declared ordered retain source order.
+- Before digesting, every canonical collection follows the exhaustive per-path table in Appendix F. Undirected Link endpoints are stored/hash-normalized by Appendix F's object-reference comparison token. Only arrays explicitly declared ordered retain source order.
 
 ## A2. Root Object
 
@@ -245,8 +245,8 @@ Rules:
   "id": "link-id",
   "templateKey": "mesh-link",
   "identityCompatibilityVersion": 1,
-  "endpointA": "router-a",
-  "endpointB": "router-b",
+  "endpointA": { "id": "router-a" },
+  "endpointB": { "id": "router-b" },
   "axis": "horizontal",
   "properties": {}
 }
@@ -256,6 +256,7 @@ Rules:
 
 - `axis` is `horizontal` or `vertical`.
 - Endpoints exist, differ, and are orthogonally adjacent.
+- Persisted endpoints are Host references. Candidate Patch values may instead use candidate-local references; both forms normalize with Appendix F's object-reference comparison token.
 - Exactly one Link exists per unordered endpoint pair.
 - Link directionality of private transport is not represented.
 
@@ -386,6 +387,7 @@ Relation:
 Allowed `SubjectRef.kind` values:
 
 ```text
+project
 component
 interface
 router

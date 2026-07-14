@@ -22,11 +22,13 @@
     "engineCompatibilityVersion": { "type": "string", "minLength": 1 },
     "migrationFromCompatibilityVersions": {
       "type": "array",
+      "x-ipcraft-canonical": { "kind": "set", "sortKey": ["unicodeScalarValue"] },
       "items": { "type": "string", "minLength": 1 },
       "uniqueItems": true
     },
     "supportedPlatformAbis": {
       "type": "array",
+      "x-ipcraft-canonical": { "kind": "set", "sortKey": ["unicodeScalarValue"] },
       "items": { "type": "string", "minLength": 1 },
       "minItems": 1,
       "uniqueItems": true

@@ -13,6 +13,7 @@
     "snapshotDigest": { "$ref": "#/$defs/digest" },
     "diagnostics": {
       "type": "array",
+      "x-ipcraft-canonical": { "kind": "ordered" },
       "items": { "$ref": "#/$defs/diagnostic" }
     }
   },
@@ -30,9 +31,10 @@
         "blocking": { "type": "boolean" },
         "subjects": {
           "type": "array",
+          "x-ipcraft-canonical": { "kind": "set", "sortKey": ["kind", "id"] },
           "items": { "$ref": "ipcraft.core-canonical-models.v1.schema.json#/$defs/subjectRef" }
         },
-        "properties": { "type": "array", "items": { "$ref": "#/$defs/id" } }
+        "properties": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["unicodeScalarValue"] }, "items": { "$ref": "#/$defs/id" }, "uniqueItems": true }
       },
       "allOf": [
         {

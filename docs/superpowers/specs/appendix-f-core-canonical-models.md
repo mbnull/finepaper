@@ -35,6 +35,8 @@ Machine-readable Gate 0 schemas use these exact IDs or `$defs` with identical na
 - Candidate transaction-local references are `{ "localRef": "authority:r0" }` or `{ "localRef": "application:000001" }`.
 - Authority localRefs start `authority:` and are unique within one transaction. Host side effects use `application:` followed by a zero-padded decimal sequence allocated in F11 order.
 - A reference object contains exactly one of `id` or `localRef`.
+- The object-reference comparison token is the UTF-8 string `id:` + X for `{id:X}` and `localRef:` + X for `{localRef:X}`. Tokens compare by Unicode scalar-value order. Every `routerRef` or other object reference in a sort key uses this token.
+- Composite canonical values compare by the UTF-8 bytes of their RFC 8785 canonical JSON after recursively applying this Appendix's nested set normalization.
 - Random final Host IDs never enter candidate digest input.
 
 ## F3. Topology Intent
@@ -179,8 +181,8 @@ The Host constructs source-attributed `ipcraft.patch.v1` sub-patches inside one 
 
 Allowed `kind`: `topology-materialization`, `default-engine-migration`.
 
-- `authorityPatch` source is the exact selected Authority lock.
-- `applicationPatch` source is `application-reconcile` or `application-migration` and contains only F11 side effects plus, for Engine migration, exact dependency/derivation replacement.
+- `authorityPatch` source is the exact selected Authority lock and includes its exact bundle digest for both `default-engine` and `extension-provider`.
+- `applicationPatch` source is `application-reconcile` or `application-migration`, omits Authority bundle digest, and contains only F11 side effects plus, for Engine migration, exact dependency/derivation replacement.
 - Operations retain semantic order within each sub-patch. Candidate combined order is Authority operations followed by Application operations.
 - `allocationOrder` is every create localRef sorted by Unicode scalar-value order. It is derived, included for audit, and must equal the creates in the two patches.
 - Tombstones sort by `(subjectKind,id)` and contain complete inverse values.
@@ -264,42 +266,152 @@ engine_migration.dependency_replaced
 
 Freshness is computed against all exact fields plus current authoritative/saved design and Group/Draft state; it is not stored in this manifest.
 
-## F10. Canonical Set/Sequence Table
+## F10. Canonical Collection Rules
 
-| Location | Semantics | Canonical rule |
+Every schema array carries `x-ipcraft-canonical`. Its value has one consistent shape:
+
+```json
+{ "kind": "set", "sortKey": ["id"] }
+{ "kind": "ordered" }
+{ "kind": "derived-ordered", "sortKey": ["unicodeScalarValue"] }
+```
+
+`sortKey` members name the comparison components below; `canonicalJson` and `*CanonicalJson` mean UTF-8 RFC 8785 canonical JSON bytes after nested normalization, `unicodeScalarValue` means literal string order, `objectRefToken` means F2's token, and `endpointCanonicalKey` means resolved endpoints first by `(subject.kind,subject.id)`, then unresolved endpoints by `(intendedSubject.kind,intendedSubject.id,reasonCode)`. The companion vector's `canonicalCollections` array is the machine-readable copy of this table.
+
+| Exact document path | Kind | Sort key / retained meaning |
 |---|---|---|
-| Project `dependencies` | set | `lockId` |
-| `components`, `interfaces`, `connections`, `topologies`, `views` | set | `id` |
-| every topology entity/relation array | set | `id` |
-| Package/Contract roles, fields, capabilities | set | `key` |
-| Interface templates | set | `key` |
-| Router/Link/Slot templates | set | `stableKey` |
-| Domain types | set | `key` |
-| Package entity/relation type declarations | set | `typeKey` |
-| Slot `allowedContracts` | set | `(contractId,version,bundleManifestDigest)` in Package; `contractLockId` in Project |
-| every `roles[]` | set | Unicode scalar-value string order; duplicates invalid |
-| Relation `sources`/`targets` | set | resolved before unresolved, then `(subject.kind,subject.id)` or `(intendedSubject.kind,intendedSubject.id,reasonCode)` |
-| SubjectRef lists | set unless explicitly diagnostic emission order | `(kind,id)` |
-| `extensions[]` | set | unique `(ownerLockId,schema,version)` |
-| Bundle files/artifacts | set | normalized `path` |
-| Engine `supportedPlatformAbis`, `migrationFromCompatibilityVersions` | set | Unicode scalar-value string order; duplicates invalid |
-| Provider/Tool capability declarations | set | Unicode scalar-value string order |
-| Pipeline `steps` | ordered | declared order retained |
-| Patch `operations` | ordered | declared order retained |
-| command/draft/local undo records | ordered | sequence retained |
-| candidate `impacts` | set | `(code, canonical subjects, canonical details, resolution)` |
-| candidate `tombstones` | set | `(subjectKind,id)` |
-| candidate `allocationOrder` | derived ordered | `localRef` Unicode scalar-value order |
-| diagnostic array | ordered | producer emission order retained; sequence required for streamed diagnostics |
+| `projectDesign.dependencies` | set | `lockId` |
+| `projectDesign.dependencies[].supportedPlatformAbis` | set | `unicodeScalarValue` |
+| `projectDesign.components` | set | `id` |
+| `projectDesign.components[].extensions` | set | `ownerLockId,schema,version` |
+| `projectDesign.interfaces` | set | `id` |
+| `projectDesign.interfaces[].extensions` | set | `ownerLockId,schema,version` |
+| `projectDesign.interfaces[].capabilities.*[]` | set | `canonicalJson` |
+| `projectDesign.connections` | set | `id` |
+| `projectDesign.topologies` | set | `id` |
+| `projectDesign.topologies[].routers` | set | `id` |
+| `projectDesign.topologies[].structuralLinks` | set | `id` |
+| `projectDesign.topologies[].accessSlots` | set | `id` |
+| `projectDesign.topologies[].accessSlots[].allowedContracts` | set | `contractLockId` |
+| `projectDesign.topologies[].accessSlots[].allowedContracts[].roles` | set | `unicodeScalarValue` |
+| `projectDesign.topologies[].accessSlots[].allowedContracts[].capabilityConstraints.*[]` | set | `canonicalJson` |
+| `projectDesign.topologies[].attachments` | set | `id` |
+| `projectDesign.topologies[].domains` | set | `id` |
+| `projectDesign.topologies[].domainMemberships` | set | `id` |
+| `projectDesign.topologies[].packageEntities` | set | `id` |
+| `projectDesign.topologies[].packageEntities[].extensions` | set | `ownerLockId,schema,version` |
+| `projectDesign.topologies[].packageRelations` | set | `id` |
+| `projectDesign.topologies[].packageRelations[].sources` | set | `endpointCanonicalKey` |
+| `projectDesign.topologies[].packageRelations[].targets` | set | `endpointCanonicalKey` |
+| `projectDesign.topologies[].packageRelations[].extensions` | set | `ownerLockId,schema,version` |
+| `projectDesign.topologies[].extensions` | set | `ownerLockId,schema,version` |
+| `projectDesign.views` | set | `id` |
+| `projectDesign.extensions` | set | `ownerLockId,schema,version` |
+| `topologyIntent.packageEntities` | set | `id` |
+| `topologyIntent.packageRelations` | set | `id` |
+| `topologyIntent.packageRelations[].sources` | set | `endpointCanonicalKey` |
+| `topologyIntent.packageRelations[].targets` | set | `endpointCanonicalKey` |
+| `normalizedTopologyInput.mesh.slotTemplates` | set | `stableKey` |
+| `normalizedTopologyInput.mesh.slotTemplates[].allowedContracts` | set | `contractId,version,bundleManifestDigest` |
+| `normalizedTopologyInput.mesh.slotTemplates[].allowedContracts[].roles` | set | `unicodeScalarValue` |
+| `normalizedTopologyInput.mesh.slotTemplates[].allowedContracts[].capabilityConstraints.*[]` | set | `canonicalJson` |
+| `derivedState.routers` | set | `id` |
+| `derivedState.structuralLinks` | set | `id` |
+| `derivedState.accessSlots` | set | `id` |
+| `derivedState.accessSlots[].allowedContracts` | set | `contractLockId` |
+| `derivedState.accessSlots[].allowedContracts[].roles` | set | `unicodeScalarValue` |
+| `derivedState.accessSlots[].allowedContracts[].capabilityConstraints.*[]` | set | `canonicalJson` |
+| `derivedState.packageEntities` | set | `id` |
+| `derivedState.packageRelations` | set | `id` |
+| `derivedState.packageRelations[].sources` | set | `endpointCanonicalKey` |
+| `derivedState.packageRelations[].targets` | set | `endpointCanonicalKey` |
+| `patch.preconditions` | set | `canonicalJson` |
+| `patch.operations` | ordered | operation sequence retained |
+| `patchBody.operations` | ordered | operation sequence retained |
+| `patchOperations[].unset` | set | `unicodeScalarValue` |
+| `patchOperations[].value.allowedContracts` | set | `contractLockId` |
+| `patchOperations[].value.allowedContracts[].roles` | set | `unicodeScalarValue` |
+| `patchOperations[].value.allowedContracts[].capabilityConstraints.*[]` | set | `canonicalJson` |
+| `patchOperations[].value.capabilities.*[]` | set | `canonicalJson` |
+| `patchOperations[].value.sources` | set | `endpointCanonicalKey` |
+| `patchOperations[].value.targets` | set | `endpointCanonicalKey` |
+| `patchOperations[].value.extensions` | set | `ownerLockId,schema,version` |
+| `candidateTransaction.authorityPatch.operations` | ordered | operation sequence retained |
+| `candidateTransaction.applicationPatch.operations` | ordered | operation sequence retained |
+| `candidateTransaction.tombstones` | set | `subjectKind,id` |
+| `candidateTransaction.allocationOrder` | derived-ordered | `unicodeScalarValue` |
+| `topologyImpactReport.impacts` | set | `code,subjectsCanonicalJson,detailsCanonicalJson,resolution` |
+| `topologyImpactReport.impacts[].subjects` | set | `kind,id` |
+| `pipelinePlan.steps` | ordered | declared pipeline order retained |
+| `nocPackage.interfaceTemplates` | set | `key` |
+| `nocPackage.domainTypes` | set | `key` |
+| `nocPackage.packageEntityTypes` | set | `typeKey` |
+| `nocPackage.packageRelationTypes` | set | `typeKey` |
+| `nocPackage.extensions` | set | `ownerLockId,schema,version` |
+| `nocPackage.configuration.global.fields` | set | `key` |
+| `nocPackage.configuration.global.fields[].values` | set | `canonicalJson` |
+| `nocPackage.topology.slotTemplates` | set | `stableKey` |
+| `nocPackage.topology.slotTemplates[].allowedContracts` | set | `contractId,version,bundleManifestDigest` |
+| `nocPackage.topology.slotTemplates[].allowedContracts[].roles` | set | `unicodeScalarValue` |
+| `nocPackage.topology.slotTemplates[].allowedContracts[].capabilityConstraints.*[]` | set | `canonicalJson` |
+| `nocPackage.interfaceTemplates[].nocConfig.fields` | set | `key` |
+| `nocPackage.interfaceTemplates[].nocConfig.fields[].values` | set | `canonicalJson` |
+| `nocPackage.interfaceTemplates[].capabilityDefaults.*[]` | set | `canonicalJson` |
+| `nocPackage.domainTypes[].configuration.fields` | set | `key` |
+| `nocPackage.domainTypes[].configuration.fields[].values` | set | `canonicalJson` |
+| `nocPackage.packageRelationTypes[].sources.kinds` | set | `unicodeScalarValue` |
+| `nocPackage.packageRelationTypes[].targets.kinds` | set | `unicodeScalarValue` |
+| `nocPackage.tools.drc.command` | ordered | argv order retained |
+| `nocPackage.tools.generate.command` | ordered | argv order retained |
+| `interfaceContract.roles` | set | `key` |
+| `interfaceContract.capabilities` | set | `key` |
+| `interfaceContract.capabilities[].values` | set | `canonicalJson` |
+| `interfaceContract.fields` | set | `key` |
+| `interfaceContract.fields[].values` | set | `canonicalJson` |
+| `engineBundle.migrationFromCompatibilityVersions` | set | `unicodeScalarValue` |
+| `engineBundle.supportedPlatformAbis` | set | `unicodeScalarValue` |
+| `providerManifest.command` | ordered | argv order retained |
+| `providerManifest.capabilities` | set | `unicodeScalarValue` |
+| `providerManifest.ownedEntityTypes` | set | `unicodeScalarValue` |
+| `providerManifest.ownedRelationTypes` | set | `unicodeScalarValue` |
+| `providerHello.requestedCapabilities` | set | `unicodeScalarValue` |
+| `providerHelloResult.capabilities` | set | `unicodeScalarValue` |
+| `reconcileRequest.dependencyLocks` | set | `lockId` |
+| `reconcileRequest.capabilities` | set | `canonicalJson` |
+| `providerResult.diagnostics` | ordered | producer emission order retained |
+| `toolManifest.command` | ordered | argv order retained |
+| `toolManifest.capabilities` | set | `unicodeScalarValue` |
+| `toolInput.dependencies` | set | `lockId` |
+| `bundleManifest.files` | set | `path` |
+| `artifactManifest.artifacts` | set | `path` |
+| `diagnosticReport.diagnostics` | ordered | producer emission order retained |
+| `diagnosticReport.diagnostics[].subjects` | set | `kind,id` |
+| `diagnosticReport.diagnostics[].properties` | set | `unicodeScalarValue` |
+| `commandResult.diagnostics` | ordered | producer emission order retained |
+| `pipelineResult.steps` | ordered | execution-plan order retained |
+| `recovery.draftOverlay` | ordered | `sequence`/submission order retained |
+| `recovery.draftUndo` | ordered | stack order retained |
+| `recovery.draftRedo` | ordered | stack order retained |
+| `recovery.draftOverlay[].diagnostics` | ordered | producer emission order retained |
+| `recovery.draftUndo[].before` | ordered | Draft sequence retained |
+| `recovery.draftUndo[].after` | ordered | Draft sequence retained |
+| `recovery.draftRedo[].before` | ordered | Draft sequence retained |
+| `recovery.draftRedo[].after` | ordered | Draft sequence retained |
+| `recovery.pendingTopologyGroup.intentUndo` | ordered | stack order retained |
+| `recovery.pendingTopologyGroup.intentRedo` | ordered | stack order retained |
 
-Every set key is unique; collisions are schema errors. For any set not named above, the owning schema MUST add a key before Gate 0 freeze rather than infer one. Undirected Link endpoints are normalized with the smaller Router reference first; localRefs compare by their literal string.
+Every set key is candidate/document-wide unique at its owning path. Literal sets also use `uniqueItems` where useful; composite-key uniqueness, canonical sorting, nested normalization, localRef graph integrity, allocation-order derivation, endpoint normalization, and digest equality are semantic-validator rules because standard JSON Schema cannot compare sibling array items or recompute digests. Schemas carry both `x-ipcraft-canonical` and `$comment` where this limitation matters; implementations MUST NOT claim JSON Schema alone enforces these rules.
+
+Capability meanings remain path-specific: Package/Contract declaration arrays sort by declaration `key`; Interface/runtime capability-value arrays sort by `canonicalJson`; Provider/Tool declared capability string lists sort by `unicodeScalarValue`.
+
+Undirected Structural Links normalize `endpointA`/`endpointB` by `objectRefToken`. Persisted current-state Links ordinarily contain Host refs; candidate Links may contain local refs. Candidate localRefs are unique across both sub-patches, Authority owns `authority:*`, Application owns `application:*`, and `allocationOrder` contains every create localRef exactly once. Literal Unicode ordering therefore places `application:000001` before `authority:router-0`.
 
 ## F11. Host Side-effect Contract V1
 
 `ipcraft.noc-side-effects.v1` is stable for all V1 Hosts:
 
-1. Process Authority operations in order and build the candidate local-reference graph.
-2. For every created Router, create one Membership in each Domain type's Default Domain. Sort by `(domainTypeKey, routerRef)` and assign `application:000001...` localRefs in that order.
+1. Process Authority operations in order and build the candidate-wide local-reference graph. Reject duplicate localRefs, wrong source prefixes, unknown local references, or references whose create is not visible in combined Authority-then-Application operation order.
+2. For every created Router, create one Membership in each Domain type's Default Domain. Sort by `(domainTypeKey, objectRefToken(routerRef))` and assign `application:000001...` localRefs in that order.
 3. For every deleted Router, delete its Domain Memberships; for every deleted Router/Slot, convert affected Attachments to unresolved with `attachment.target_removed`.
 4. For each user Package Relation endpoint targeting a deleted object: convert to unresolved and add `package_relation.endpoint_unresolved` when allowed; otherwise add `package_relation.endpoint_blocks_candidate` and mark candidate blocked.
 5. After proposed Router/Link changes, recompute every Domain's structural-undirected connectivity. Disconnection adds blocking Core DRC/impact regardless of whether the cause was Router deletion, Link deletion/change, or membership placement.

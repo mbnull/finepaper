@@ -11,6 +11,8 @@
     "bundleVersion": { "type": "string", "minLength": 1 },
     "files": {
       "type": "array",
+      "x-ipcraft-canonical": { "kind": "set", "sortKey": ["path"] },
+      "$comment": "Path uniqueness, portable-path collision checks, exhaustive membership, and sorting are semantic-validator rules.",
       "items": {
         "type": "object",
         "additionalProperties": false,

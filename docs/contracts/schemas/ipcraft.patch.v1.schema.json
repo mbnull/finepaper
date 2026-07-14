@@ -2,6 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "ipcraft.patch.v1",
   "title": "Ipcraft Trusted Host Patch Envelope V1",
+  "$comment": "Canonical collection sorting, canonical precondition uniqueness, source/operation ownership, and cross-operation localRef/reference validation require the semantic validator in addition to this schema.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema", "transactionId", "patchId", "source", "causality", "preconditions", "operations"],
@@ -12,8 +13,8 @@
     "source": { "$ref": "#/$defs/source" },
     "causality": { "$ref": "#/$defs/causality" },
     "applicability": { "$ref": "ipcraft.core-canonical-models.v1.schema.json#/$defs/reconcileApplicability" },
-    "preconditions": { "type": "array", "items": { "$ref": "#/$defs/precondition" } },
-    "operations": { "type": "array", "items": { "$ref": "#/$defs/operation" } }
+    "preconditions": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["canonicalJson"] }, "$comment": "Preconditions are evaluated as a set before operations; semantic validation sorts and rejects duplicate RFC 8785 canonical JSON values after nested normalization.", "items": { "$ref": "#/$defs/precondition" } },
+    "operations": { "$ref": "ipcraft.core-canonical-models.v1.schema.json#/$defs/patchOperations" }
   },
   "allOf": [
     {
@@ -41,6 +42,16 @@
         "required": ["source"]
       },
       "then": { "not": { "required": ["applicability"] } }
+    },
+    {
+      "if": {
+        "properties": {
+          "source": { "properties": { "kind": { "enum": ["default-engine", "extension-provider"] } }, "required": ["kind"] }
+        },
+        "required": ["source"]
+      },
+      "then": { "properties": { "source": { "required": ["bundleDigest"] } } },
+      "else": { "properties": { "source": { "not": { "required": ["bundleDigest"] } } } }
     }
   ],
   "$defs": {
@@ -50,7 +61,8 @@
       "properties": {
         "kind": { "enum": ["user-command", "application-reconcile", "application-migration", "default-engine", "extension-provider", "recovery", "undo-redo"] },
         "identity": { "$ref": "#/$defs/id" },
-        "version": { "$ref": "#/$defs/id" }
+        "version": { "$ref": "#/$defs/id" },
+        "bundleDigest": { "$ref": "ipcraft.core-canonical-models.v1.schema.json#/$defs/digest" }
       }
     },
     "causality": {
@@ -89,41 +101,6 @@
         { "$ref": "#/$defs/relationExists" }, { "$ref": "#/$defs/slotUnoccupied" }
       ]
     },
-    "createEntity": {
-      "type": "object", "additionalProperties": false, "required": ["op", "entityKind", "localRef", "value"],
-      "properties": { "op": { "const": "createEntity" }, "entityKind": { "$ref": "#/$defs/entityKind" }, "localRef": { "$ref": "ipcraft.core-canonical-models.v1.schema.json#/$defs/localRefString" }, "value": { "type": "object" } }
-    },
-    "updateEntity": {
-      "type": "object", "additionalProperties": false, "required": ["op", "entityKind", "id", "set", "unset"],
-      "properties": {
-        "op": { "const": "updateEntity" }, "entityKind": { "$ref": "#/$defs/entityKind" }, "id": { "$ref": "#/$defs/id" },
-        "set": { "type": "object" }, "unset": { "type": "array", "items": { "$ref": "#/$defs/id" }, "uniqueItems": true }
-      }
-    },
-    "deleteEntity": {
-      "type": "object", "additionalProperties": false, "required": ["op", "entityKind", "id"],
-      "properties": { "op": { "const": "deleteEntity" }, "entityKind": { "$ref": "#/$defs/entityKind" }, "id": { "$ref": "#/$defs/id" } }
-    },
-    "createRelation": {
-      "type": "object", "additionalProperties": false, "required": ["op", "relationKind", "localRef", "value"],
-      "properties": { "op": { "const": "createRelation" }, "relationKind": { "$ref": "#/$defs/relationKind" }, "localRef": { "$ref": "ipcraft.core-canonical-models.v1.schema.json#/$defs/localRefString" }, "value": { "type": "object" } }
-    },
-    "updateRelation": {
-      "type": "object", "additionalProperties": false, "required": ["op", "relationKind", "id", "set", "unset"],
-      "properties": {
-        "op": { "const": "updateRelation" }, "relationKind": { "$ref": "#/$defs/relationKind" }, "id": { "$ref": "#/$defs/id" },
-        "set": { "type": "object" }, "unset": { "type": "array", "items": { "$ref": "#/$defs/id" }, "uniqueItems": true }
-      }
-    },
-    "deleteRelation": {
-      "type": "object", "additionalProperties": false, "required": ["op", "relationKind", "id"],
-      "properties": { "op": { "const": "deleteRelation" }, "relationKind": { "$ref": "#/$defs/relationKind" }, "id": { "$ref": "#/$defs/id" } }
-    },
-    "operation": {
-      "oneOf": [
-        { "$ref": "#/$defs/createEntity" }, { "$ref": "#/$defs/updateEntity" }, { "$ref": "#/$defs/deleteEntity" },
-        { "$ref": "#/$defs/createRelation" }, { "$ref": "#/$defs/updateRelation" }, { "$ref": "#/$defs/deleteRelation" }
-      ]
-    }
+    "operation": { "$ref": "ipcraft.core-canonical-models.v1.schema.json#/$defs/operation" }
   }
 }

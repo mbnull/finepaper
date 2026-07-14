@@ -36,7 +36,8 @@ An Extension Provider cannot mutate user-owned Component config, Interface, Atta
   "source": {
     "kind": "default-engine",
     "identity": "ipcraft.default-engine",
-    "version": "1"
+    "version": "1",
+    "bundleDigest": "sha256:..."
   },
   "causality": {
     "sessionRevision": 12
@@ -82,6 +83,8 @@ undo-redo
 ```
 
 Authority reconciliation Patches require the complete `applicability` object shown above; it is part of the Patch and candidate digest rather than an out-of-band request association. `sessionRevision` is provenance only for reconciliation and cannot reject an otherwise applicable response. Accepted ordinary user-command Patches omit `applicability` and require the current `sessionRevision`. Topology-driving intent remains pending until materialization and is never accepted as a standalone user Patch.
+
+Patch source provenance is exact by source kind. `default-engine` and `extension-provider` sources MUST include `bundleDigest` equal to the selected Authority bundle digest. `user-command`, `application-reconcile`, `application-migration`, `recovery`, and `undo-redo` sources MUST omit it; Application/user provenance never invents an Authority digest.
 
 ## B3. Preconditions
 
@@ -133,6 +136,7 @@ All preconditions are evaluated before the first operation. Failure rejects the 
 - Nested objects are replaced, never deep-merged.
 - JSON `null` is a value only when the property schema permits it.
 - Property removal uses `unset`; the same property cannot appear in both lists.
+- `unset[]` is a set of literal property names, sorted by Unicode scalar-value order; duplicates are invalid.
 
 ### Delete entity
 
@@ -144,7 +148,7 @@ Delete never cascades silently. Application invariant side effects are explicit 
 
 ### Create/update/delete relation
 
-Relations use the same structure with `relationKind` instead of `entityKind`. Relation `value` contains exact Host-ID or transaction-local references. Operation order controls visibility, but a side-effect Patch may reference an Authority local object created earlier in the candidate transaction's canonical combined operation order.
+Relations use the same structure with `relationKind` instead of `entityKind`. Relation `value` contains exact Host or transaction-local object references. A Host ref `{id:X}` compares as the UTF-8 string `id:` + X; a candidate-local ref `{localRef:X}` compares as `localRef:` + X. Tokens compare by Unicode scalar-value order wherever an object reference participates in a sort key. Operation order controls visibility, but a side-effect Patch may reference an Authority local object created earlier in the candidate transaction's canonical combined operation order.
 
 Allowed V1 entity kinds:
 
@@ -174,7 +178,7 @@ package-relation
 - Operations execute in array order after all Patch-level checks pass.
 - Creates become visible to later combined-transaction operations only through local references.
 - Any operation, ownership, schema, reference, or invariant failure rejects all operations and allocated IDs.
-- Candidate digest covers the normalized local-reference graph and canonical Host-ID allocation order, never random final Host-ID strings. Atomic commit sorts creates by `localRef`, allocates Host IDs in that order, rewrites every local reference, and stores the complete `localRef → hostId` map in the formal history transaction. Rejected/discarded candidates publish and burn no Host IDs.
+- Candidate digest covers the normalized local-reference graph and canonical Host-ID allocation order, never random final Host-ID strings. `allocationOrder` contains every create localRef across both candidate sub-patches exactly once, sorted by literal Unicode scalar-value order (`application:000001` sorts before `authority:router-0`). Atomic commit allocates Host IDs in that order, rewrites every local reference, and stores the complete `localRef → hostId` map in the formal history transaction. Rejected/discarded candidates publish and burn no Host IDs.
 - Provider Patch response order is semantically significant and must be deterministic.
 
 ## B6. Stable Patch Error Codes
@@ -350,6 +354,8 @@ Request:
 
 `applicability`, `normalizedTopologyInput`, and `currentDerivedState` are the exact closed Appendix F machine models; abbreviated `{}` values are editorial only.
 
+`dependencyLocks[]` is a set sorted by `lockId`. `capabilities[]` is a set sorted by the UTF-8 bytes of each value's RFC 8785 canonical JSON after recursively normalizing any nested sets. These runtime capability values are distinct from Package/Contract capability declarations, which sort by declaration `key`, and Provider/Tool declared capability strings, which sort as literal strings.
+
 Applicability requires an exact match of `groupId`, `requestGeneration`, topology revision/digest, base Derived State revision/digest, base authoritative-design digest, selected Authority identity/version/bundle digest, Package bundle digest, reconcile dependency-set digest, Default Engine lock/digest, Engine Host contract, and Host side-effect contract. `sessionRevision` is not part of this comparison. `engineCompatibilityVersion` is excluded because it classifies explicit migration only. The dependency-set digest covers every locked bundle/runtime exposed to reconcile. The payload is closed; an Authority may not observe complete ProjectDesign or excluded user data.
 
 An Authority response never commits directly. The Host validates its transaction-wide local-reference graph without allocating Host IDs, computes explicit Domain/Attachment/Package-Relation side effects in the same namespace, and produces an immutable candidate:
@@ -383,8 +389,9 @@ Editing topology intent, local Group Undo/Redo, Retry, dependency/Authority chan
 - Hash: SHA-256.
 - String: `sha256:` plus lowercase hexadecimal.
 - Objects use canonical key ordering.
-- Arrays declared as ordered sequences retain order. Arrays representing ID-keyed sets are normalized by ascending Unicode scalar-value order of `id`; dependency locks use `lockId`, type declarations use `key`/`typeKey`, and capability sets use their canonical JSON value.
-- An undirected Link normalizes `endpointA` to the lexicographically smaller Router ID and `endpointB` to the larger ID before hashing.
+- Arrays declared as ordered sequences retain order. Every set and sequence uses the exact Appendix F per-path rule; no implementation may infer a key from a field name.
+- Composite canonical values are compared by the UTF-8 bytes of RFC 8785 canonical JSON after their nested set-valued arrays have first been normalized.
+- An undirected Link normalizes `endpointA`/`endpointB` by the object-reference comparison token: `{id:X}` becomes `id:` + X and `{localRef:X}` becomes `localRef:` + X, compared by Unicode scalar-value order.
 - Topology input excludes Attachments, Domains, Views, diagnostics, runs, and non-driving Interface data.
 - Derived State digest includes Router/Link/Slot IDs and properties, ownership=`engine` Package Entities/Relations, and every Authority-owned property affecting generation or later reconciliation.
 - User-owned intent, Draft Overlay, Attachments, Domains, Views, diagnostics, and runs are excluded from Derived State digest.

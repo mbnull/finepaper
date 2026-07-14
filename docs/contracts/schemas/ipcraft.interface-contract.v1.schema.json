@@ -10,9 +10,9 @@
     "id": { "$ref": "#/$defs/id" },
     "name": { "type": "string", "minLength": 1 },
     "version": { "$ref": "#/$defs/id" },
-    "roles": { "type": "array", "items": { "$ref": "#/$defs/role" } },
-    "capabilities": { "type": "array", "items": { "$ref": "#/$defs/capability" } },
-    "fields": { "type": "array", "items": { "$ref": "#/$defs/field" } }
+    "roles": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["key"] }, "items": { "$ref": "#/$defs/role" } },
+    "capabilities": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["key"] }, "items": { "$ref": "#/$defs/capability" } },
+    "fields": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["key"] }, "items": { "$ref": "#/$defs/field" } }
   },
   "$defs": {
     "id": { "type": "string", "minLength": 1 },
@@ -35,7 +35,7 @@
         "default": { "$ref": "#/$defs/scalarOrNull" },
         "required": { "type": "boolean" },
         "editable": { "type": "boolean" },
-        "values": { "oneOf": [{ "type": "array", "items": { "$ref": "#/$defs/scalar" } }, { "type": "null" }] }
+        "values": { "oneOf": [{ "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["canonicalJson"] }, "items": { "$ref": "#/$defs/scalar" }, "uniqueItems": true }, { "type": "null" }] }
       }
     },
     "condition": {
@@ -65,7 +65,7 @@
         "minimum": { "oneOf": [{ "type": "number" }, { "type": "null" }] },
         "maximum": { "oneOf": [{ "type": "number" }, { "type": "null" }] },
         "unit": { "oneOf": [{ "type": "string" }, { "type": "null" }] },
-        "values": { "oneOf": [{ "type": "array", "items": { "$ref": "#/$defs/scalar" } }, { "type": "null" }] },
+        "values": { "oneOf": [{ "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["canonicalJson"] }, "items": { "$ref": "#/$defs/scalar" }, "uniqueItems": true }, { "type": "null" }] },
         "visibleWhen": { "oneOf": [{ "$ref": "#/$defs/condition" }, { "type": "null" }] },
         "enabledWhen": { "oneOf": [{ "$ref": "#/$defs/condition" }, { "type": "null" }] }
       }

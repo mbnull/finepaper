@@ -2,6 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "ipcraft.core-canonical-models.v1",
   "title": "Ipcraft V1 Gate 0 Core Canonical Models",
+  "$comment": "x-ipcraft-canonical is normative metadata. Canonical sorting, composite-key uniqueness, nested normalization, candidate-wide localRef graph integrity/prefix ownership, allocationOrder derivation, endpoint normalization, and digest equality require semantic validation beyond standard JSON Schema.",
   "oneOf": [
     { "$ref": "#/$defs/topologyIntent" },
     { "$ref": "#/$defs/normalizedTopologyInput" },
@@ -40,6 +41,7 @@
     },
     "localRefString": {
       "type": "string",
+      "$comment": "Within a candidate transaction localRefs are unique across Authority and Application patches. Authority sources own authority:* and Application sources own application:*; semantic validation enforces source-prefix ownership and allocationOrder totality.",
       "pattern": "^(authority:[^\\s]+|application:[0-9]{6,})$"
     },
     "objectRef": {
@@ -115,10 +117,14 @@
         "typeKey": { "$ref": "#/$defs/id" },
         "sources": {
           "type": "array",
+          "x-ipcraft-canonical": { "kind": "set", "sortKey": ["endpointCanonicalKey"] },
+          "$comment": "Semantic validation normalizes endpoints by Appendix F's resolved/unresolved endpoint key and rejects duplicate composite keys.",
           "items": { "$ref": "#/$defs/relationEndpoint" }
         },
         "targets": {
           "type": "array",
+          "x-ipcraft-canonical": { "kind": "set", "sortKey": ["endpointCanonicalKey"] },
+          "$comment": "Semantic validation normalizes endpoints by Appendix F's resolved/unresolved endpoint key and rejects duplicate composite keys.",
           "items": { "$ref": "#/$defs/relationEndpoint" }
         },
         "data": { "type": "object" }
@@ -144,10 +150,12 @@
         "globalConfig": { "type": "object" },
         "packageEntities": {
           "type": "array",
+          "x-ipcraft-canonical": { "kind": "set", "sortKey": ["id"] },
           "items": { "$ref": "#/$defs/packageEntity" }
         },
         "packageRelations": {
           "type": "array",
+          "x-ipcraft-canonical": { "kind": "set", "sortKey": ["id"] },
           "items": { "$ref": "#/$defs/packageRelation" }
         }
       }
@@ -172,10 +180,11 @@
         "bundleManifestDigest": { "$ref": "#/$defs/digest" },
         "roles": {
           "type": "array",
+          "x-ipcraft-canonical": { "kind": "set", "sortKey": ["unicodeScalarValue"] },
           "items": { "$ref": "#/$defs/id" },
           "uniqueItems": true
         },
-        "capabilityConstraints": { "type": "object" }
+        "capabilityConstraints": { "type": "object", "$comment": "Any schema-declared capability-value array nested here is a canonicalJson set under Appendix F; the Package/Contract semantic validator supplies its item schema." }
       }
     },
     "slotTemplate": {
@@ -190,6 +199,8 @@
         "label": { "type": "string" },
         "allowedContracts": {
           "type": "array",
+          "x-ipcraft-canonical": { "kind": "set", "sortKey": ["contractId", "version", "bundleManifestDigest"] },
+          "$comment": "Composite-key uniqueness and sorting are semantic-validator rules.",
           "items": { "$ref": "#/$defs/slotAllowedContract" }
         }
       }
@@ -248,6 +259,7 @@
             "linkTemplate": { "$ref": "#/$defs/template" },
             "slotTemplates": {
               "type": "array",
+              "x-ipcraft-canonical": { "kind": "set", "sortKey": ["stableKey"] },
               "items": { "$ref": "#/$defs/slotTemplate" }
             }
           }
@@ -283,8 +295,8 @@
         "id": { "$ref": "#/$defs/id" },
         "templateKey": { "$ref": "#/$defs/id" },
         "identityCompatibilityVersion": { "type": "integer", "minimum": 1 },
-        "endpointA": { "$ref": "#/$defs/id" },
-        "endpointB": { "$ref": "#/$defs/id" },
+        "endpointA": { "$ref": "#/$defs/hostRef" },
+        "endpointB": { "$ref": "#/$defs/hostRef" },
         "axis": { "enum": ["horizontal", "vertical"] },
         "properties": { "type": "object" }
       }
@@ -302,6 +314,8 @@
         "label": { "type": "string" },
         "allowedContracts": {
           "type": "array",
+          "x-ipcraft-canonical": { "kind": "set", "sortKey": ["contractLockId"] },
+          "$comment": "Composite-key uniqueness and sorting are semantic-validator rules.",
           "items": {
             "type": "object",
             "additionalProperties": false,
@@ -310,10 +324,11 @@
               "contractLockId": { "$ref": "#/$defs/id" },
               "roles": {
                 "type": "array",
+                "x-ipcraft-canonical": { "kind": "set", "sortKey": ["unicodeScalarValue"] },
                 "items": { "$ref": "#/$defs/id" },
                 "uniqueItems": true
               },
-              "capabilityConstraints": { "type": "object" }
+              "capabilityConstraints": { "type": "object", "$comment": "Any schema-declared capability-value array nested here is a canonicalJson set under Appendix F; the Package/Contract semantic validator supplies its item schema." }
             }
           }
         },
@@ -327,11 +342,11 @@
       "properties": {
         "schema": { "const": "ipcraft.derived-state.v1" },
         "topologyId": { "$ref": "#/$defs/id" },
-        "routers": { "type": "array", "items": { "$ref": "#/$defs/router" } },
-        "structuralLinks": { "type": "array", "items": { "$ref": "#/$defs/structuralLink" } },
-        "accessSlots": { "type": "array", "items": { "$ref": "#/$defs/accessSlot" } },
-        "packageEntities": { "type": "array", "items": { "$ref": "#/$defs/packageEntity" } },
-        "packageRelations": { "type": "array", "items": { "$ref": "#/$defs/packageRelation" } }
+        "routers": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["id"] }, "items": { "$ref": "#/$defs/router" } },
+        "structuralLinks": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["id"] }, "items": { "$ref": "#/$defs/structuralLink" } },
+        "accessSlots": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["id"] }, "items": { "$ref": "#/$defs/accessSlot" } },
+        "packageEntities": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["id"] }, "items": { "$ref": "#/$defs/packageEntity" } },
+        "packageRelations": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["id"] }, "items": { "$ref": "#/$defs/packageRelation" } }
       }
     },
     "reconcileApplicability": {
@@ -372,16 +387,153 @@
         "hostSideEffectContractVersion": { "const": "ipcraft.noc-side-effects.v1" }
       }
     },
+    "extension": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ownerLockId", "schema", "version", "data"],
+      "properties": {
+        "ownerLockId": { "$ref": "#/$defs/id" },
+        "schema": { "$ref": "#/$defs/id" },
+        "version": { "$ref": "#/$defs/id" },
+        "data": { "type": "object" }
+      }
+    },
+    "patchSubjectRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "ref"],
+      "properties": {
+        "kind": { "$ref": "#/$defs/subjectRef/properties/kind" },
+        "ref": { "$ref": "#/$defs/objectRef" }
+      }
+    },
+    "patchResolvedEndpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "subject"],
+      "properties": {
+        "state": { "const": "resolved" },
+        "subject": { "$ref": "#/$defs/patchSubjectRef" }
+      }
+    },
+    "patchUnresolvedEndpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "intendedSubject", "reasonCode"],
+      "properties": {
+        "state": { "const": "unresolved" },
+        "intendedSubject": { "$ref": "#/$defs/patchSubjectRef" },
+        "reasonCode": { "$ref": "#/$defs/id" }
+      }
+    },
+    "patchRelationEndpoint": {
+      "oneOf": [
+        { "$ref": "#/$defs/patchResolvedEndpoint" },
+        { "$ref": "#/$defs/patchUnresolvedEndpoint" }
+      ]
+    },
+    "patchComponentValue": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "name", "packageLockId", "typeKey", "config", "extensions"],
+      "properties": {
+        "kind": { "const": "noc" }, "name": { "type": "string", "minLength": 1 },
+        "packageLockId": { "$ref": "#/$defs/id" }, "typeKey": { "$ref": "#/$defs/id" },
+        "config": { "type": "object" },
+        "extensions": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["ownerLockId", "schema", "version"] }, "items": { "$ref": "#/$defs/extension" } }
+      }
+    },
+    "patchInterfaceValue": {
+      "type": "object", "additionalProperties": false,
+      "required": ["ownerComponentRef", "templateKey", "name", "contract", "capabilities", "contractConfig", "nocConfig", "extensions"],
+      "properties": {
+        "ownerComponentRef": { "$ref": "#/$defs/objectRef" }, "templateKey": { "$ref": "#/$defs/id" }, "name": { "type": "string", "minLength": 1 },
+        "contract": { "type": "object", "additionalProperties": false, "required": ["lockId", "role"], "properties": { "lockId": { "$ref": "#/$defs/id" }, "role": { "$ref": "#/$defs/id" } } },
+        "capabilities": { "type": "object", "$comment": "Any schema-declared capability-value array nested here is a canonicalJson set under Appendix F; the Contract semantic validator supplies its item schema." }, "contractConfig": { "type": "object" }, "nocConfig": { "type": "object" },
+        "extensions": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["ownerLockId", "schema", "version"] }, "items": { "$ref": "#/$defs/extension" } }
+      }
+    },
+    "patchRouterValue": {
+      "type": "object", "additionalProperties": false,
+      "required": ["templateKey", "identityCompatibilityVersion", "coordinate", "properties"],
+      "properties": {
+        "templateKey": { "$ref": "#/$defs/id" }, "identityCompatibilityVersion": { "type": "integer", "minimum": 1 },
+        "coordinate": { "type": "object", "additionalProperties": false, "required": ["row", "column"], "properties": { "row": { "type": "integer", "minimum": 0 }, "column": { "type": "integer", "minimum": 0 } } },
+        "properties": { "type": "object" }
+      }
+    },
+    "patchStructuralLinkValue": {
+      "type": "object", "additionalProperties": false,
+      "required": ["templateKey", "identityCompatibilityVersion", "endpointA", "endpointB", "axis", "properties"],
+      "properties": {
+        "templateKey": { "$ref": "#/$defs/id" }, "identityCompatibilityVersion": { "type": "integer", "minimum": 1 },
+        "endpointA": { "$ref": "#/$defs/objectRef" }, "endpointB": { "$ref": "#/$defs/objectRef" },
+        "axis": { "enum": ["horizontal", "vertical"] }, "properties": { "type": "object" }
+      },
+      "$comment": "Semantic validation normalizes endpointA/endpointB by the Appendix F object-reference token and rejects equal endpoints."
+    },
+    "patchAccessSlotValue": {
+      "type": "object", "additionalProperties": false,
+      "required": ["routerRef", "templateKey", "identityCompatibilityVersion", "displayOrder", "label", "allowedContracts", "properties"],
+      "properties": {
+        "routerRef": { "$ref": "#/$defs/objectRef" }, "templateKey": { "$ref": "#/$defs/id" },
+        "identityCompatibilityVersion": { "type": "integer", "minimum": 1 }, "displayOrder": { "type": "integer", "minimum": 0 }, "label": { "type": "string" },
+        "allowedContracts": { "$ref": "#/$defs/accessSlot/properties/allowedContracts" }, "properties": { "type": "object" }
+      }
+    },
+    "patchDomainValue": {
+      "type": "object", "additionalProperties": false,
+      "required": ["typeKey", "name", "isDefault", "config"],
+      "properties": { "typeKey": { "$ref": "#/$defs/id" }, "name": { "type": "string", "minLength": 1 }, "isDefault": { "type": "boolean" }, "config": { "type": "object" } }
+    },
+    "patchPackageEntityValue": {
+      "type": "object", "additionalProperties": false,
+      "required": ["typeKey", "data", "extensions"],
+      "properties": {
+        "typeKey": { "$ref": "#/$defs/id" }, "data": { "type": "object" },
+        "extensions": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["ownerLockId", "schema", "version"] }, "items": { "$ref": "#/$defs/extension" } }
+      }
+    },
+    "patchAttachmentValue": {
+      "oneOf": [
+        { "type": "object", "additionalProperties": false, "required": ["interfaceRef", "state", "routerRef", "slotRef"], "properties": { "interfaceRef": { "$ref": "#/$defs/objectRef" }, "state": { "const": "resolved" }, "routerRef": { "$ref": "#/$defs/objectRef" }, "slotRef": { "$ref": "#/$defs/objectRef" } } },
+        { "type": "object", "additionalProperties": false, "required": ["interfaceRef", "state", "intendedTarget", "reasonCode"], "properties": { "interfaceRef": { "$ref": "#/$defs/objectRef" }, "state": { "const": "unresolved" }, "intendedTarget": { "type": "object", "additionalProperties": false, "required": ["routerRef", "slotRef"], "properties": { "routerRef": { "$ref": "#/$defs/objectRef" }, "slotRef": { "$ref": "#/$defs/objectRef" } } }, "reasonCode": { "$ref": "#/$defs/id" } } }
+      ]
+    },
+    "patchDomainMembershipValue": {
+      "type": "object", "additionalProperties": false,
+      "required": ["domainRef", "routerRef"],
+      "properties": { "domainRef": { "$ref": "#/$defs/objectRef" }, "routerRef": { "$ref": "#/$defs/objectRef" } }
+    },
+    "patchPackageRelationValue": {
+      "type": "object", "additionalProperties": false,
+      "required": ["typeKey", "sources", "targets", "data", "extensions"],
+      "properties": {
+        "typeKey": { "$ref": "#/$defs/id" },
+        "sources": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["endpointCanonicalKey"] }, "items": { "$ref": "#/$defs/patchRelationEndpoint" } },
+        "targets": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["endpointCanonicalKey"] }, "items": { "$ref": "#/$defs/patchRelationEndpoint" } },
+        "data": { "type": "object" },
+        "extensions": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["ownerLockId", "schema", "version"] }, "items": { "$ref": "#/$defs/extension" } }
+      }
+    },
     "createEntityOperation": {
       "type": "object",
       "additionalProperties": false,
       "required": ["op", "entityKind", "localRef", "value"],
       "properties": {
         "op": { "const": "createEntity" },
-        "entityKind": { "$ref": "#/$defs/id" },
+        "entityKind": { "enum": ["component", "interface", "router", "structural-link", "access-slot", "domain", "package-entity"] },
         "localRef": { "$ref": "#/$defs/localRefString" },
-        "value": {}
-      }
+        "value": { "type": "object" }
+      },
+      "allOf": [
+        { "if": { "properties": { "entityKind": { "const": "component" } }, "required": ["entityKind"] }, "then": { "properties": { "value": { "$ref": "#/$defs/patchComponentValue" } } } },
+        { "if": { "properties": { "entityKind": { "const": "interface" } }, "required": ["entityKind"] }, "then": { "properties": { "value": { "$ref": "#/$defs/patchInterfaceValue" } } } },
+        { "if": { "properties": { "entityKind": { "const": "router" } }, "required": ["entityKind"] }, "then": { "properties": { "value": { "$ref": "#/$defs/patchRouterValue" } } } },
+        { "if": { "properties": { "entityKind": { "const": "structural-link" } }, "required": ["entityKind"] }, "then": { "properties": { "value": { "$ref": "#/$defs/patchStructuralLinkValue" } } } },
+        { "if": { "properties": { "entityKind": { "const": "access-slot" } }, "required": ["entityKind"] }, "then": { "properties": { "value": { "$ref": "#/$defs/patchAccessSlotValue" } } } },
+        { "if": { "properties": { "entityKind": { "const": "domain" } }, "required": ["entityKind"] }, "then": { "properties": { "value": { "$ref": "#/$defs/patchDomainValue" } } } },
+        { "if": { "properties": { "entityKind": { "const": "package-entity" } }, "required": ["entityKind"] }, "then": { "properties": { "value": { "$ref": "#/$defs/patchPackageEntityValue" } } } }
+      ]
     },
     "updateEntityOperation": {
       "type": "object",
@@ -389,10 +541,10 @@
       "required": ["op", "entityKind", "id", "set", "unset"],
       "properties": {
         "op": { "const": "updateEntity" },
-        "entityKind": { "$ref": "#/$defs/id" },
+        "entityKind": { "enum": ["component", "project", "interface", "router", "structural-link", "access-slot", "domain", "package-entity"] },
         "id": { "$ref": "#/$defs/id" },
         "set": { "type": "object" },
-        "unset": { "type": "array", "items": { "$ref": "#/$defs/id" }, "uniqueItems": true }
+        "unset": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["unicodeScalarValue"] }, "items": { "$ref": "#/$defs/id" }, "uniqueItems": true }
       }
     },
     "deleteEntityOperation": {
@@ -401,7 +553,7 @@
       "required": ["op", "entityKind", "id"],
       "properties": {
         "op": { "const": "deleteEntity" },
-        "entityKind": { "$ref": "#/$defs/id" },
+        "entityKind": { "enum": ["component", "interface", "router", "structural-link", "access-slot", "domain", "package-entity"] },
         "id": { "$ref": "#/$defs/id" }
       }
     },
@@ -411,10 +563,15 @@
       "required": ["op", "relationKind", "localRef", "value"],
       "properties": {
         "op": { "const": "createRelation" },
-        "relationKind": { "$ref": "#/$defs/id" },
+        "relationKind": { "enum": ["attachment", "domain-membership", "package-relation"] },
         "localRef": { "$ref": "#/$defs/localRefString" },
-        "value": {}
-      }
+        "value": { "type": "object" }
+      },
+      "allOf": [
+        { "if": { "properties": { "relationKind": { "const": "attachment" } }, "required": ["relationKind"] }, "then": { "properties": { "value": { "$ref": "#/$defs/patchAttachmentValue" } } } },
+        { "if": { "properties": { "relationKind": { "const": "domain-membership" } }, "required": ["relationKind"] }, "then": { "properties": { "value": { "$ref": "#/$defs/patchDomainMembershipValue" } } } },
+        { "if": { "properties": { "relationKind": { "const": "package-relation" } }, "required": ["relationKind"] }, "then": { "properties": { "value": { "$ref": "#/$defs/patchPackageRelationValue" } } } }
+      ]
     },
     "updateRelationOperation": {
       "type": "object",
@@ -422,10 +579,10 @@
       "required": ["op", "relationKind", "id", "set", "unset"],
       "properties": {
         "op": { "const": "updateRelation" },
-        "relationKind": { "$ref": "#/$defs/id" },
+        "relationKind": { "enum": ["attachment", "domain-membership", "package-relation"] },
         "id": { "$ref": "#/$defs/id" },
         "set": { "type": "object" },
-        "unset": { "type": "array", "items": { "$ref": "#/$defs/id" }, "uniqueItems": true }
+        "unset": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["unicodeScalarValue"] }, "items": { "$ref": "#/$defs/id" }, "uniqueItems": true }
       }
     },
     "deleteRelationOperation": {
@@ -434,7 +591,7 @@
       "required": ["op", "relationKind", "id"],
       "properties": {
         "op": { "const": "deleteRelation" },
-        "relationKind": { "$ref": "#/$defs/id" },
+        "relationKind": { "enum": ["attachment", "domain-membership", "package-relation"] },
         "id": { "$ref": "#/$defs/id" }
       }
     },
@@ -448,6 +605,11 @@
         { "$ref": "#/$defs/deleteRelationOperation" }
       ]
     },
+    "patchOperations": {
+      "type": "array",
+      "x-ipcraft-canonical": { "kind": "ordered" },
+      "items": { "$ref": "#/$defs/operation" }
+    },
     "patchBody": {
       "type": "object",
       "additionalProperties": false,
@@ -455,7 +617,7 @@
       "properties": {
         "schema": { "const": "ipcraft.patch-body.v1" },
         "applicability": { "$ref": "#/$defs/reconcileApplicability" },
-        "operations": { "type": "array", "items": { "$ref": "#/$defs/operation" } }
+        "operations": { "$ref": "#/$defs/patchOperations" }
       }
     },
     "impact": {
@@ -466,7 +628,7 @@
         "code": { "$ref": "#/$defs/id" },
         "severity": { "enum": ["info", "warning", "error"] },
         "dataLoss": { "type": "boolean" },
-        "subjects": { "type": "array", "items": { "$ref": "#/$defs/subjectRef" } },
+        "subjects": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["kind", "id"] }, "items": { "$ref": "#/$defs/subjectRef" } },
         "details": { "type": "object" },
         "resolution": { "$ref": "#/$defs/id" }
       }
@@ -477,7 +639,7 @@
       "required": ["schema", "impacts"],
       "properties": {
         "schema": { "const": "ipcraft.topology-impact-report.v1" },
-        "impacts": { "type": "array", "items": { "$ref": "#/$defs/impact" } }
+        "impacts": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["code", "subjectsCanonicalJson", "detailsCanonicalJson", "resolution"] }, "$comment": "Composite values are compared by RFC 8785 canonical JSON bytes after nested set normalization; uniqueness and sorting are semantic-validator rules.", "items": { "$ref": "#/$defs/impact" } }
       }
     },
     "sourcePatch": {
@@ -497,8 +659,15 @@
             "bundleDigest": { "$ref": "#/$defs/digest" }
           }
         },
-        "operations": { "type": "array", "items": { "$ref": "#/$defs/operation" } }
-      }
+        "operations": { "$ref": "#/$defs/patchOperations" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "source": { "properties": { "kind": { "enum": ["default-engine", "extension-provider"] } }, "required": ["kind"] } }, "required": ["source"] },
+          "then": { "properties": { "source": { "required": ["bundleDigest"] } } },
+          "else": { "properties": { "source": { "not": { "required": ["bundleDigest"] } } } }
+        }
+      ]
     },
     "tombstone": {
       "type": "object",
@@ -507,7 +676,7 @@
       "properties": {
         "subjectKind": { "$ref": "#/$defs/id" },
         "id": { "$ref": "#/$defs/id" },
-        "value": {}
+        "value": { "type": "object", "$comment": "The semantic validator matches this complete inverse value to subjectKind; package-defined data/property/config maps remain opaque." }
       }
     },
     "migrationContext": {
@@ -550,12 +719,24 @@
         "kind": { "enum": ["topology-materialization", "default-engine-migration"] },
         "applicability": { "$ref": "#/$defs/reconcileApplicability" },
         "topologyIntent": { "$ref": "#/$defs/topologyIntent" },
-        "authorityPatch": { "$ref": "#/$defs/sourcePatch" },
-        "applicationPatch": { "$ref": "#/$defs/sourcePatch" },
+        "authorityPatch": {
+          "allOf": [
+            { "$ref": "#/$defs/sourcePatch" },
+            { "properties": { "source": { "properties": { "kind": { "enum": ["default-engine", "extension-provider"] } } } } }
+          ]
+        },
+        "applicationPatch": {
+          "allOf": [
+            { "$ref": "#/$defs/sourcePatch" },
+            { "properties": { "source": { "properties": { "kind": { "enum": ["application-reconcile", "application-migration"] } } } } }
+          ]
+        },
         "migration": { "$ref": "#/$defs/migrationContext" },
-        "tombstones": { "type": "array", "items": { "$ref": "#/$defs/tombstone" } },
+        "tombstones": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["subjectKind", "id"] }, "$comment": "Composite-key uniqueness and sorting are semantic-validator rules.", "items": { "$ref": "#/$defs/tombstone" } },
         "allocationOrder": {
           "type": "array",
+          "x-ipcraft-canonical": { "kind": "derived-ordered", "sortKey": ["unicodeScalarValue"] },
+          "$comment": "Semantic validation requires every create localRef across authorityPatch and applicationPatch exactly once, with candidate-wide prefix ownership and uniqueness, sorted by literal Unicode scalar-value order. Final Host IDs are not candidate digest input.",
           "items": { "$ref": "#/$defs/localRefString" },
           "uniqueItems": true
         },
@@ -565,8 +746,14 @@
       "allOf": [
         {
           "if": { "properties": { "kind": { "const": "default-engine-migration" } } },
-          "then": { "required": ["migration"] },
-          "else": { "not": { "required": ["migration"] } }
+          "then": {
+            "required": ["migration"],
+            "properties": { "applicationPatch": { "properties": { "source": { "properties": { "kind": { "const": "application-migration" } } } } } }
+          },
+          "else": {
+            "not": { "required": ["migration"] },
+            "properties": { "applicationPatch": { "properties": { "source": { "properties": { "kind": { "const": "application-reconcile" } } } } } }
+          }
         }
       ]
     },
@@ -614,7 +801,7 @@
         "defaultEngineBundleDigest": { "$ref": "#/$defs/digest" },
         "engineHostContractVersion": { "$ref": "#/$defs/id" },
         "hostSideEffectContractVersion": { "$ref": "#/$defs/id" },
-        "steps": { "type": "array", "items": { "$ref": "#/$defs/pipelineStep" }, "minItems": 1 }
+        "steps": { "type": "array", "x-ipcraft-canonical": { "kind": "ordered" }, "items": { "$ref": "#/$defs/pipelineStep" }, "minItems": 1 }
       }
     },
     "outputManifest": {
