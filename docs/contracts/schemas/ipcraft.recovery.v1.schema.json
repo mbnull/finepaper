@@ -18,8 +18,8 @@
     "derivedStateRevision": { "type": "integer", "minimum": 0 },
     "pendingTopologyGroup": { "oneOf": [{ "$ref": "#/$defs/pendingTopologyGroup" }, { "type": "null" }] },
     "draftOverlay": { "type": "array", "items": { "$ref": "#/$defs/draftEntry" } },
-    "draftUndo": { "type": "array", "items": { "type": "object" } },
-    "draftRedo": { "type": "array", "items": { "type": "object" } }
+    "draftUndo": { "type": "array", "items": { "$ref": "#/$defs/draftOverlayMutation" } },
+    "draftRedo": { "type": "array", "items": { "$ref": "#/$defs/draftOverlayMutation" } }
   },
   "$defs": {
     "id": { "type": "string", "minLength": 1 },
@@ -34,6 +34,24 @@
         "parameters": { "type": "object" },
         "validationStatus": { "enum": ["unvalidated", "valid", "invalid"] },
         "diagnostics": { "type": "array", "items": { "$ref": "ipcraft.command-result.v1.schema.json#/$defs/issue" } }
+      }
+    },
+    "draftOverlayMutation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["before", "after"],
+      "properties": {
+        "before": { "type": "array", "items": { "$ref": "#/$defs/draftEntry" } },
+        "after": { "type": "array", "items": { "$ref": "#/$defs/draftEntry" } }
+      }
+    },
+    "topologyIntentMutation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["before", "after"],
+      "properties": {
+        "before": { "$ref": "ipcraft.core-canonical-models.v1.schema.json#/$defs/topologyIntent" },
+        "after": { "$ref": "ipcraft.core-canonical-models.v1.schema.json#/$defs/topologyIntent" }
       }
     },
     "pendingTopologyGroup": {
@@ -52,8 +70,8 @@
         "baseDerivedStateRevision": { "type": "integer", "minimum": 0 },
         "baseDerivedStateDigest": { "$ref": "#/$defs/digest" },
         "topologyIntent": { "$ref": "ipcraft.core-canonical-models.v1.schema.json#/$defs/topologyIntent" },
-        "intentUndo": { "type": "array", "items": { "type": "object" } },
-        "intentRedo": { "type": "array", "items": { "type": "object" } },
+        "intentUndo": { "type": "array", "items": { "$ref": "#/$defs/topologyIntentMutation" } },
+        "intentRedo": { "type": "array", "items": { "$ref": "#/$defs/topologyIntentMutation" } },
         "normalizedTopologyInput": { "$ref": "ipcraft.core-canonical-models.v1.schema.json#/$defs/normalizedTopologyInput" },
         "topologyInputDigest": { "$ref": "#/$defs/digest" },
         "status": { "enum": ["drafting", "running", "candidate-validating", "ready-to-commit", "blocked", "failed"] },

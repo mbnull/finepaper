@@ -21,12 +21,20 @@
     "metrics": { "type": "object" },
     "failure": { "oneOf": [{ "$ref": "#/$defs/failure" }, { "type": "null" }] }
   },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "succeeded" } }, "required": ["status"] },
+      "then": { "properties": { "failure": { "type": "null" } } },
+      "else": { "properties": { "failure": { "$ref": "#/$defs/failure" } } }
+    }
+  ],
   "$defs": {
     "id": { "type": "string", "minLength": 1 },
     "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
     "path": {
       "type": "string",
-      "pattern": "^(?![A-Za-z]:)(?!.*\\\\)(?!.*\\u0000)(?!.*(?:^|/)\\.{1,2}(?:/|$))[^/]+(?:/[^/]+)*$"
+      "$comment": "Semantic validation MUST enforce NFC, Windows reserved device names and trailing-dot/space rules, Unicode simple-case-fold collision detection, and exhaustive filesystem containment because JSON Schema regex cannot prove them.",
+      "pattern": "^(?!.*[\\u0000-\\u001F\\u007F:])(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$))[^/]+(?:/[^/]+)*$"
     },
     "failure": {
       "type": "object",

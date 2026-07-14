@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": [
     "schema", "pipelineRunId", "kind", "snapshotDigest", "dependencySetDigest",
-    "status", "failedStepId", "steps", "startedAt", "completedAt"
+    "status", "failedStepId", "failure", "steps", "startedAt", "completedAt"
   ],
   "properties": {
     "schema": { "const": "ipcraft.pipeline-result.v1" },
@@ -16,6 +16,12 @@
     "dependencySetDigest": { "$ref": "#/$defs/digest" },
     "status": { "enum": ["succeeded", "failed", "cancelled", "timed-out"] },
     "failedStepId": { "oneOf": [{ "$ref": "#/$defs/id" }, { "type": "null" }] },
+    "failure": {
+      "oneOf": [
+        { "$ref": "ipcraft.step-result.v1.schema.json#/$defs/failure" },
+        { "type": "null" }
+      ]
+    },
     "steps": {
       "type": "array",
       "minItems": 1,
@@ -32,12 +38,31 @@
     "startedAt": { "type": "string", "format": "date-time" },
     "completedAt": { "type": "string", "format": "date-time" }
   },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "succeeded" } }, "required": ["status"] },
+      "then": {
+        "properties": {
+          "failure": { "type": "null" },
+          "failedStepId": { "type": "null" }
+        }
+      },
+      "else": {
+        "properties": { "failure": { "$ref": "ipcraft.step-result.v1.schema.json#/$defs/failure" } }
+      }
+    },
+    {
+      "if": { "properties": { "status": { "const": "failed" } }, "required": ["status"] },
+      "then": { "properties": { "failedStepId": { "$ref": "#/$defs/id" } } }
+    }
+  ],
   "$defs": {
     "id": { "type": "string", "minLength": 1 },
     "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
     "path": {
       "type": "string",
-      "pattern": "^(?![A-Za-z]:)(?!.*\\\\)(?!.*\\u0000)(?!.*(?:^|/)\\.{1,2}(?:/|$))[^/]+(?:/[^/]+)*$"
+      "$comment": "Semantic validation MUST enforce NFC, Windows reserved device names and trailing-dot/space rules, Unicode simple-case-fold collision detection, and exhaustive filesystem containment because JSON Schema regex cannot prove them.",
+      "pattern": "^(?!.*[\\u0000-\\u001F\\u007F:])(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$))[^/]+(?:/[^/]+)*$"
     }
   }
 }
