@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[3]
 CONTRACTS = ROOT / "docs" / "contracts"
 CATALOG_PATH = CONTRACTS / "schema-catalog.json"
 VECTOR_PATH = CONTRACTS / "vectors" / "core-canonical-projection-v1.json"
+ERROR_CATALOG_PATH = CONTRACTS / "error-codes-v1.json"
 CANONICAL_KEY = "x-ipcraft-canonical"
 VALID_KINDS = {"set", "ordered", "derived-ordered"}
 DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
@@ -57,6 +58,18 @@ EXPECTED_DEFERRED_EXTENSION_PATHS = frozenset({
     "providerResult.diagnostics",
     "toolManifest.capabilities",
 })
+COLLECTION_COMMON_FIELDS = {
+    "id", "schemaId", "schemaPointer", "collectionKind", "inputVariants",
+    "expectedRelation", "expectedNormalized", "expectedCanonicalJson", "expectedDigest",
+}
+VALID_CANDIDATE_FIELDS = {
+    "id", "inputVariants", "expectedRelation", "includedProjection", "excludedProjection",
+    "expectedNormalized", "expectedCanonicalJson", "expectedDigest",
+}
+INVALID_CANDIDATE_FIELDS = {
+    "id", "baselineId", "mutation", "inputVariants", "expectedRelation",
+    "includedProjection", "excludedProjection", "expectedErrorCode", "violatedRule",
+}
 
 
 class VerificationError(RuntimeError):
@@ -129,6 +142,8 @@ def validate_rule_members(rule: dict[str, Any], location: str) -> None:
 class SchemaGraph:
     def __init__(self) -> None:
         catalog = load_json(CATALOG_PATH)
+        if not isinstance(catalog, dict):
+            fail("schema catalog root must be an object")
         items = catalog.get("items")
         if not isinstance(items, list):
             fail("schema catalog items must be an array")
@@ -221,6 +236,8 @@ class SchemaGraph:
 
 def validate_rule_table(graph: SchemaGraph) -> tuple[dict[tuple[str, str], dict[str, Any]], list[dict[str, Any]]]:
     vectors = load_json(VECTOR_PATH)
+    if not isinstance(vectors, dict):
+        fail("canonical vector index root must be an object")
     rules = vectors.get("canonicalCollections")
     deferred = vectors.get("deferredExtensionCollections")
     if not isinstance(rules, list) or not isinstance(deferred, list):
@@ -293,78 +310,12 @@ def validate_digest(value: Any, location: str) -> None:
         fail(f"{location}: expected sha256: plus 64 lowercase hexadecimal characters")
 
 
-def collect_local_ref_references(value: Any) -> set[str]:
-    references: set[str] = set()
-    if isinstance(value, dict):
-        if set(value) == {"localRef"} and isinstance(value["localRef"], str):
-            references.add(value["localRef"])
-        for child in value.values():
-            references.update(collect_local_ref_references(child))
-    elif isinstance(value, list):
-        for child in value:
-            references.update(collect_local_ref_references(child))
-    return references
-
-
-def validate_candidate_negative_isolation(case: dict[str, Any], location: str) -> None:
-    if case.get("expectedRelation") != "invalid":
-        return
-    variants = case.get("inputVariants")
-    if not isinstance(variants, list) or len(variants) != 1 or not isinstance(variants[0], dict):
-        fail(f"{location}: invalid candidate cases require exactly one object variant")
-    candidate = variants[0]
-    case_id = case["id"]
-    authority_operations = candidate.get("authorityPatch", {}).get("operations", [])
-    application_operations = candidate.get("applicationPatch", {}).get("operations", [])
-    authority_creates = [operation.get("localRef") for operation in authority_operations if operation.get("op") in {"createEntity", "createRelation"}]
-    application_creates = [operation.get("localRef") for operation in application_operations if operation.get("op") in {"createEntity", "createRelation"}]
-    creates = authority_creates + application_creates
-    references: set[str] = set()
-    for operation in authority_operations + application_operations:
-        references.update(collect_local_ref_references(operation.get("value")))
-    if not references <= set(creates):
-        fail(f"{location}: negative case contains an unknown localRef reference")
-
-    allocation = candidate.get("allocationOrder")
-    canonical_allocation = sorted(set(creates))
-    if case_id == "candidate-localref-collision":
-        if len(authority_creates) == len(set(authority_creates)) or any(not value.startswith("authority:") for value in authority_creates):
-            fail(f"{location}: collision must be duplicate Authority localRefs with correct prefixes")
-        if any(not value.startswith("application:") for value in application_creates) or allocation != canonical_allocation:
-            fail(f"{location}: collision case must otherwise have exact prefixes and allocationOrder")
-    elif case_id == "authority-uses-application-prefix":
-        if sum(value.startswith("application:") for value in authority_creates) != 1:
-            fail(f"{location}: exactly one Authority create must use the Application prefix")
-        if any(not value.startswith("application:") for value in application_creates) or allocation != canonical_allocation:
-            fail(f"{location}: Authority-prefix case must otherwise be isolated")
-    elif case_id == "application-uses-authority-prefix":
-        if sum(value.startswith("authority:") for value in application_creates) != 1:
-            fail(f"{location}: exactly one Application create must use the Authority prefix")
-        if any(not value.startswith("authority:") for value in authority_creates) or allocation != canonical_allocation:
-            fail(f"{location}: Application-prefix case must otherwise be isolated")
-    elif case_id == "allocation-order-missing":
-        if "allocationOrder" in candidate or case.get("expectedErrorCode") != "patch.schema_violation":
-            fail(f"{location}: missing allocationOrder must be a schema violation")
-    elif case_id == "allocation-order-duplicate":
-        if not isinstance(allocation, list) or len(allocation) == len(set(allocation)) or set(allocation) != set(creates):
-            fail(f"{location}: duplicate allocationOrder must contain the exact create refs with one duplicate")
-        if case.get("expectedErrorCode") != "patch.schema_violation":
-            fail(f"{location}: duplicate allocationOrder is rejected by uniqueItems")
-    elif case_id == "allocation-order-noncanonical":
-        if not isinstance(allocation, list) or set(allocation) != set(creates) or len(allocation) != len(set(allocation)) or allocation == canonical_allocation:
-            fail(f"{location}: noncanonical allocationOrder must differ only in order")
-    elif case_id == "final-host-id-mapping-injected":
-        if "finalHostIdMapping" not in candidate or allocation != canonical_allocation:
-            fail(f"{location}: final Host-ID mapping injection must otherwise be isolated")
-    elif case_id == "published-host-id-injected":
-        if "publishedHostIds" not in candidate or allocation != canonical_allocation:
-            fail(f"{location}: published Host-ID injection must otherwise be isolated")
-
-
 def validate_vector_catalog(
     table: dict[tuple[str, str], dict[str, Any]], deferred: list[dict[str, Any]]
 ) -> tuple[int, int]:
     index = load_json(VECTOR_PATH)
+    if not isinstance(index, dict):
+        fail("canonical vector index root must be an object")
     catalog = index.get("vectorCatalog")
     if not isinstance(catalog, list) or not catalog:
         fail("vector document requires a non-empty vectorCatalog")
@@ -393,6 +344,14 @@ def validate_vector_catalog(
     candidate_path = VECTOR_PATH.parent / "candidate-local-ref-v1.json"
     collection = load_json(collection_path)
     candidate = load_json(candidate_path)
+    error_catalog = load_json(ERROR_CATALOG_PATH)
+    if not isinstance(error_catalog, dict) or not isinstance(error_catalog.get("codes"), list):
+        fail("error catalog requires a codes array")
+    error_codes: set[str] = set()
+    for index, entry in enumerate(error_catalog["codes"]):
+        if not isinstance(entry, dict) or not isinstance(entry.get("code"), str):
+            fail(f"error catalog codes[{index}] requires a string code")
+        error_codes.add(entry["code"])
     for path, document, expected_kind in (
         (collection_path, collection, "collection-permutation"),
         (candidate_path, candidate, "candidate-causality"),
@@ -410,6 +369,14 @@ def validate_vector_catalog(
         name = f"core-set-permutation-v1 cases[{case_index}]"
         if not isinstance(case, dict):
             fail(f"{name} must be an object")
+        kind = case.get("collectionKind")
+        expected_fields = set(COLLECTION_COMMON_FIELDS)
+        if kind != "ordered":
+            expected_fields.add("sortKey")
+        if kind == "derived-ordered":
+            expected_fields.add("expectedErrorCode")
+        if set(case) != expected_fields:
+            fail(f"{name}: fields must be exactly {sorted(expected_fields)}")
         case_id = case.get("id")
         if not isinstance(case_id, str) or not case_id or case_id in ids:
             fail(f"{name}: id must be non-empty and globally unique")
@@ -449,8 +416,13 @@ def validate_vector_catalog(
             if not isinstance(case.get("expectedDigest"), str):
                 fail(f"{name}: equal set cases require one expectedDigest string")
         elif metadata["kind"] == "derived-ordered":
-            if case.get("expectedRelation") != "invalid" or not isinstance(case.get("expectedErrorCode"), list):
+            fields = (case.get("expectedNormalized"), case.get("expectedCanonicalJson"), case.get("expectedDigest"), case.get("expectedErrorCode"))
+            if case.get("expectedRelation") != "invalid" or not all(isinstance(value, list) and len(value) == 2 for value in fields):
                 fail(f"{name}: derived-ordered case must include valid/invalid variants and stable errors")
+            if fields[0][1] is not None or fields[1][1] is not None or fields[2][1] is not None or fields[3][0] is not None:
+                fail(f"{name}: derived valid/invalid null placement is incorrect")
+            if not isinstance(fields[3][1], str) or fields[3][1] not in error_codes:
+                fail(f"{name}: derived invalid variant requires a catalogued error code")
         elif not isinstance(case.get("expectedDigest"), list) or len(set(case["expectedDigest"])) != len(case["expectedDigest"]):
             fail(f"{name}: ordered cases require aligned distinct expected digests")
         validate_digest(case.get("expectedDigest"), f"{name}.expectedDigest")
@@ -465,25 +437,44 @@ def validate_vector_catalog(
         name = f"candidate-local-ref-v1 cases[{case_index}]"
         if not isinstance(case, dict):
             fail(f"{name} must be an object")
+        relation = case.get("expectedRelation")
+        expected_fields = INVALID_CANDIDATE_FIELDS if relation == "invalid" else set(VALID_CANDIDATE_FIELDS)
+        if relation != "invalid" and "modelSchema" in case:
+            expected_fields.add("modelSchema")
+        if set(case) != expected_fields:
+            fail(f"{name}: fields must be exactly {sorted(expected_fields)}")
         case_id = case.get("id")
         if not isinstance(case_id, str) or not case_id or case_id in ids:
             fail(f"{name}: id must be non-empty and globally unique")
         ids.add(case_id)
         candidate_ids.add(case_id)
-        if case.get("expectedRelation") not in {"equal", "different", "invalid"}:
+        if relation not in {"equal", "different", "invalid"}:
             fail(f"{name}: invalid expectedRelation")
-        if not isinstance(case.get("includedProjection"), list) or not isinstance(case.get("excludedProjection"), list):
+        if not isinstance(case.get("includedProjection"), list) or not all(isinstance(value, str) and value for value in case["includedProjection"]):
+            fail(f"{name}: includedProjection must be a non-empty-string array")
+        if not isinstance(case.get("excludedProjection"), list) or not all(isinstance(value, str) and value for value in case["excludedProjection"]):
             fail(f"{name}: includedProjection/excludedProjection must be arrays")
         if any(value in deferred_paths for value in case.get("includedProjection", [])):
             fail(f"{name}: deferred Extension path appears in Core vectors")
-        relation = case["expectedRelation"]
         if relation == "equal" and not isinstance(case.get("expectedDigest"), str):
             fail(f"{name}: equal cases require one expectedDigest string")
         if relation == "different" and (not isinstance(case.get("expectedDigest"), list) or len(set(case["expectedDigest"])) != len(case["expectedDigest"])):
             fail(f"{name}: different cases require aligned distinct expected digests")
         if relation == "invalid" and (not isinstance(case.get("expectedErrorCode"), str) or not case["expectedErrorCode"]):
             fail(f"{name}: invalid cases require a stable expectedErrorCode")
-        validate_candidate_negative_isolation(case, name)
+        if relation == "invalid":
+            if case["expectedErrorCode"] not in error_codes:
+                fail(f"{name}: unknown expectedErrorCode {case['expectedErrorCode']!r}")
+            if not isinstance(case.get("baselineId"), str) or not case["baselineId"]:
+                fail(f"{name}: baselineId must be a non-empty string")
+            if not isinstance(case.get("violatedRule"), str) or not case["violatedRule"]:
+                fail(f"{name}: violatedRule must be a non-empty string")
+            mutation = case.get("mutation")
+            if not isinstance(mutation, dict) or not isinstance(mutation.get("operation"), str) or not isinstance(mutation.get("path"), str):
+                fail(f"{name}: mutation requires string operation/path")
+            expected_mutation_fields = {"operation", "path"} if mutation["operation"] == "remove" else {"operation", "path", "value"}
+            if mutation["operation"] not in {"remove", "replace", "add", "append", "rename-local-ref"} or set(mutation) != expected_mutation_fields:
+                fail(f"{name}: mutation fields/operation are invalid")
         validate_digest(case.get("expectedDigest"), f"{name}.expectedDigest")
     if candidate_ids != REQUIRED_CANDIDATE_CASE_IDS:
         fail(

@@ -457,51 +457,66 @@
         [
           {
             "subjectKind": "alpha",
+            "id": "context-0",
+            "value": {}
+          },
+          {
+            "subjectKind": "context-1",
             "id": "alpha",
             "value": {}
           },
           {
-            "subjectKind": "mu",
-            "id": "mu",
+            "subjectKind": "context-1",
+            "id": "zeta",
             "value": {}
           },
           {
             "subjectKind": "zeta",
-            "id": "zeta",
+            "id": "context-0",
             "value": {}
           }
         ],
         [
           {
             "subjectKind": "zeta",
+            "id": "context-0",
+            "value": {}
+          },
+          {
+            "subjectKind": "context-1",
             "id": "zeta",
             "value": {}
           },
           {
-            "subjectKind": "mu",
-            "id": "mu",
+            "subjectKind": "context-1",
+            "id": "alpha",
             "value": {}
           },
           {
             "subjectKind": "alpha",
-            "id": "alpha",
+            "id": "context-0",
             "value": {}
           }
         ],
         [
           {
-            "subjectKind": "mu",
-            "id": "mu",
+            "subjectKind": "context-1",
+            "id": "alpha",
             "value": {}
           },
           {
             "subjectKind": "zeta",
+            "id": "context-0",
+            "value": {}
+          },
+          {
+            "subjectKind": "context-1",
             "id": "zeta",
             "value": {}
           },
           {
             "subjectKind": "alpha",
-            "id": "alpha",
+            "id": "context-0",
             "value": {}
           }
         ]
@@ -510,22 +525,27 @@
       "expectedNormalized": [
         {
           "subjectKind": "alpha",
+          "id": "context-0",
+          "value": {}
+        },
+        {
+          "subjectKind": "context-1",
           "id": "alpha",
           "value": {}
         },
         {
-          "subjectKind": "mu",
-          "id": "mu",
+          "subjectKind": "context-1",
+          "id": "zeta",
           "value": {}
         },
         {
           "subjectKind": "zeta",
-          "id": "zeta",
+          "id": "context-0",
           "value": {}
         }
       ],
-      "expectedCanonicalJson": "[{\"id\":\"alpha\",\"subjectKind\":\"alpha\",\"value\":{}},{\"id\":\"mu\",\"subjectKind\":\"mu\",\"value\":{}},{\"id\":\"zeta\",\"subjectKind\":\"zeta\",\"value\":{}}]",
-      "expectedDigest": "sha256:1a5255819d9324edde716d3e2db11a75b37350ac647863126f06afa1e2a4e84c"
+      "expectedCanonicalJson": "[{\"id\":\"context-0\",\"subjectKind\":\"alpha\",\"value\":{}},{\"id\":\"alpha\",\"subjectKind\":\"context-1\",\"value\":{}},{\"id\":\"zeta\",\"subjectKind\":\"context-1\",\"value\":{}},{\"id\":\"context-0\",\"subjectKind\":\"zeta\",\"value\":{}}]",
+      "expectedDigest": "sha256:a15a1b03d2a54078f6586dc444dcbd4f29e91396633498f3bece29ef85a4f8e4"
     },
     {
       "id": "core-canonical-models-derivedState-accessSlots",
@@ -1437,64 +1457,80 @@
       "inputVariants": [
         [
           {
-            "kind": "component",
-            "id": "mu"
+            "kind": "access-slot",
+            "id": "alpha"
           },
           {
-            "kind": "interface",
+            "kind": "access-slot",
+            "id": "context-0"
+          },
+          {
+            "kind": "access-slot",
             "id": "zeta"
           },
           {
-            "kind": "project",
+            "kind": "structural-link",
+            "id": "context-0"
+          }
+        ],
+        [
+          {
+            "kind": "structural-link",
+            "id": "context-0"
+          },
+          {
+            "kind": "access-slot",
+            "id": "zeta"
+          },
+          {
+            "kind": "access-slot",
+            "id": "context-0"
+          },
+          {
+            "kind": "access-slot",
             "id": "alpha"
           }
         ],
         [
           {
-            "kind": "project",
-            "id": "alpha"
+            "kind": "access-slot",
+            "id": "context-0"
           },
           {
-            "kind": "interface",
+            "kind": "structural-link",
+            "id": "context-0"
+          },
+          {
+            "kind": "access-slot",
             "id": "zeta"
           },
           {
-            "kind": "component",
-            "id": "mu"
-          }
-        ],
-        [
-          {
-            "kind": "interface",
-            "id": "zeta"
-          },
-          {
-            "kind": "project",
+            "kind": "access-slot",
             "id": "alpha"
-          },
-          {
-            "kind": "component",
-            "id": "mu"
           }
         ]
       ],
       "expectedRelation": "equal",
       "expectedNormalized": [
         {
-          "kind": "component",
-          "id": "mu"
+          "kind": "access-slot",
+          "id": "alpha"
         },
         {
-          "kind": "interface",
+          "kind": "access-slot",
+          "id": "context-0"
+        },
+        {
+          "kind": "access-slot",
           "id": "zeta"
         },
         {
-          "kind": "project",
-          "id": "alpha"
+          "kind": "structural-link",
+          "id": "context-0"
         }
       ],
-      "expectedCanonicalJson": "[{\"id\":\"mu\",\"kind\":\"component\"},{\"id\":\"zeta\",\"kind\":\"interface\"},{\"id\":\"alpha\",\"kind\":\"project\"}]",
-      "expectedDigest": "sha256:85105f37a1def40067c14443f33bad69df63dfccb1f69990eaf7df1cfd62553d"
+      "expectedCanonicalJson": "[{\"id\":\"alpha\",\"kind\":\"access-slot\"},{\"id\":\"context-0\",\"kind\":\"access-slot\"},{\"id\":\"zeta\",\"kind\":\"access-slot\"},{\"id\":\"context-0\",\"kind\":\"structural-link\"}]",
+      "expectedDigest": "sha256:2e66b442b5312d97bf8ccad620c0d258b2d73a832bd26846ee05967f55553caa"
     },
     {
       "id": "core-canonical-models-impactReport-impacts",
@@ -1512,196 +1548,736 @@
       "inputVariants": [
         [
           {
-            "code": "impact.same-old-key",
-            "severity": "error",
+            "code": "impact.alpha",
+            "severity": "info",
             "dataLoss": false,
             "subjects": [
               {
                 "kind": "router",
-                "id": "mu"
-              }
-            ],
-            "details": {
-              "rank": 2
-            },
-            "resolution": "mu"
-          },
-          {
-            "code": "impact.same-old-key",
-            "severity": "error",
-            "dataLoss": true,
-            "subjects": [
-              {
-                "kind": "router",
-                "id": "zeta"
-              }
-            ],
-            "details": {
-              "rank": 3
-            },
-            "resolution": "zeta"
-          },
-          {
-            "code": "impact.same-old-key",
-            "severity": "warning",
-            "dataLoss": false,
-            "subjects": [
-              {
-                "kind": "router",
-                "id": "alpha"
+                "id": "router.tie"
               }
             ],
             "details": {
               "rank": 1
             },
-            "resolution": "alpha"
+            "resolution": "resolution.tie"
+          },
+          {
+            "code": "impact.tie",
+            "severity": "info",
+            "dataLoss": false,
+            "subjects": [
+              {
+                "kind": "router",
+                "id": "router.alpha"
+              }
+            ],
+            "details": {
+              "rank": 1
+            },
+            "resolution": "resolution.tie"
+          },
+          {
+            "code": "impact.tie",
+            "severity": "info",
+            "dataLoss": false,
+            "subjects": [
+              {
+                "kind": "router",
+                "id": "router.tie"
+              }
+            ],
+            "details": {
+              "rank": 1
+            },
+            "resolution": "resolution.alpha"
+          },
+          {
+            "code": "impact.tie",
+            "severity": "info",
+            "dataLoss": false,
+            "subjects": [
+              {
+                "kind": "router",
+                "id": "router.tie"
+              }
+            ],
+            "details": {
+              "rank": 1
+            },
+            "resolution": "resolution.tie"
+          },
+          {
+            "code": "impact.tie",
+            "severity": "info",
+            "dataLoss": false,
+            "subjects": [
+              {
+                "kind": "router",
+                "id": "router.tie"
+              }
+            ],
+            "details": {
+              "rank": 1
+            },
+            "resolution": "resolution.tie"
+          },
+          {
+            "code": "impact.tie",
+            "severity": "info",
+            "dataLoss": false,
+            "subjects": [
+              {
+                "kind": "router",
+                "id": "router.tie"
+              }
+            ],
+            "details": {
+              "rank": 1
+            },
+            "resolution": "resolution.tie"
+          },
+          {
+            "code": "impact.tie",
+            "severity": "info",
+            "dataLoss": false,
+            "subjects": [
+              {
+                "kind": "router",
+                "id": "router.tie"
+              }
+            ],
+            "details": {
+              "rank": 1
+            },
+            "resolution": "resolution.zeta"
+          },
+          {
+            "code": "impact.tie",
+            "severity": "info",
+            "dataLoss": false,
+            "subjects": [
+              {
+                "kind": "router",
+                "id": "router.tie"
+              }
+            ],
+            "details": {
+              "rank": 2
+            },
+            "resolution": "resolution.tie"
+          },
+          {
+            "code": "impact.tie",
+            "severity": "info",
+            "dataLoss": false,
+            "subjects": [
+              {
+                "kind": "router",
+                "id": "router.zeta"
+              }
+            ],
+            "details": {
+              "rank": 1
+            },
+            "resolution": "resolution.tie"
+          },
+          {
+            "code": "impact.tie",
+            "severity": "info",
+            "dataLoss": true,
+            "subjects": [
+              {
+                "kind": "router",
+                "id": "router.tie"
+              }
+            ],
+            "details": {
+              "rank": 1
+            },
+            "resolution": "resolution.tie"
+          },
+          {
+            "code": "impact.tie",
+            "severity": "warning",
+            "dataLoss": false,
+            "subjects": [
+              {
+                "kind": "router",
+                "id": "router.tie"
+              }
+            ],
+            "details": {
+              "rank": 1
+            },
+            "resolution": "resolution.tie"
+          },
+          {
+            "code": "impact.zeta",
+            "severity": "info",
+            "dataLoss": false,
+            "subjects": [
+              {
+                "kind": "router",
+                "id": "router.tie"
+              }
+            ],
+            "details": {
+              "rank": 1
+            },
+            "resolution": "resolution.tie"
           }
         ],
         [
           {
-            "code": "impact.same-old-key",
-            "severity": "warning",
+            "code": "impact.zeta",
+            "severity": "info",
             "dataLoss": false,
             "subjects": [
               {
                 "kind": "router",
-                "id": "alpha"
+                "id": "router.tie"
               }
             ],
             "details": {
               "rank": 1
             },
-            "resolution": "alpha"
+            "resolution": "resolution.tie"
           },
           {
-            "code": "impact.same-old-key",
-            "severity": "error",
-            "dataLoss": true,
-            "subjects": [
-              {
-                "kind": "router",
-                "id": "zeta"
-              }
-            ],
-            "details": {
-              "rank": 3
-            },
-            "resolution": "zeta"
-          },
-          {
-            "code": "impact.same-old-key",
-            "severity": "error",
+            "code": "impact.tie",
+            "severity": "warning",
             "dataLoss": false,
             "subjects": [
               {
                 "kind": "router",
-                "id": "mu"
+                "id": "router.tie"
+              }
+            ],
+            "details": {
+              "rank": 1
+            },
+            "resolution": "resolution.tie"
+          },
+          {
+            "code": "impact.tie",
+            "severity": "info",
+            "dataLoss": true,
+            "subjects": [
+              {
+                "kind": "router",
+                "id": "router.tie"
+              }
+            ],
+            "details": {
+              "rank": 1
+            },
+            "resolution": "resolution.tie"
+          },
+          {
+            "code": "impact.tie",
+            "severity": "info",
+            "dataLoss": false,
+            "subjects": [
+              {
+                "kind": "router",
+                "id": "router.zeta"
+              }
+            ],
+            "details": {
+              "rank": 1
+            },
+            "resolution": "resolution.tie"
+          },
+          {
+            "code": "impact.tie",
+            "severity": "info",
+            "dataLoss": false,
+            "subjects": [
+              {
+                "kind": "router",
+                "id": "router.tie"
               }
             ],
             "details": {
               "rank": 2
             },
-            "resolution": "mu"
+            "resolution": "resolution.tie"
+          },
+          {
+            "code": "impact.tie",
+            "severity": "info",
+            "dataLoss": false,
+            "subjects": [
+              {
+                "kind": "router",
+                "id": "router.tie"
+              }
+            ],
+            "details": {
+              "rank": 1
+            },
+            "resolution": "resolution.zeta"
+          },
+          {
+            "code": "impact.tie",
+            "severity": "info",
+            "dataLoss": false,
+            "subjects": [
+              {
+                "kind": "router",
+                "id": "router.tie"
+              }
+            ],
+            "details": {
+              "rank": 1
+            },
+            "resolution": "resolution.tie"
+          },
+          {
+            "code": "impact.tie",
+            "severity": "info",
+            "dataLoss": false,
+            "subjects": [
+              {
+                "kind": "router",
+                "id": "router.tie"
+              }
+            ],
+            "details": {
+              "rank": 1
+            },
+            "resolution": "resolution.tie"
+          },
+          {
+            "code": "impact.tie",
+            "severity": "info",
+            "dataLoss": false,
+            "subjects": [
+              {
+                "kind": "router",
+                "id": "router.tie"
+              }
+            ],
+            "details": {
+              "rank": 1
+            },
+            "resolution": "resolution.tie"
+          },
+          {
+            "code": "impact.tie",
+            "severity": "info",
+            "dataLoss": false,
+            "subjects": [
+              {
+                "kind": "router",
+                "id": "router.tie"
+              }
+            ],
+            "details": {
+              "rank": 1
+            },
+            "resolution": "resolution.alpha"
+          },
+          {
+            "code": "impact.tie",
+            "severity": "info",
+            "dataLoss": false,
+            "subjects": [
+              {
+                "kind": "router",
+                "id": "router.alpha"
+              }
+            ],
+            "details": {
+              "rank": 1
+            },
+            "resolution": "resolution.tie"
+          },
+          {
+            "code": "impact.alpha",
+            "severity": "info",
+            "dataLoss": false,
+            "subjects": [
+              {
+                "kind": "router",
+                "id": "router.tie"
+              }
+            ],
+            "details": {
+              "rank": 1
+            },
+            "resolution": "resolution.tie"
           }
         ],
         [
           {
-            "code": "impact.same-old-key",
-            "severity": "error",
-            "dataLoss": true,
-            "subjects": [
-              {
-                "kind": "router",
-                "id": "zeta"
-              }
-            ],
-            "details": {
-              "rank": 3
-            },
-            "resolution": "zeta"
-          },
-          {
-            "code": "impact.same-old-key",
-            "severity": "warning",
+            "code": "impact.tie",
+            "severity": "info",
             "dataLoss": false,
             "subjects": [
               {
                 "kind": "router",
-                "id": "alpha"
+                "id": "router.alpha"
               }
             ],
             "details": {
               "rank": 1
             },
-            "resolution": "alpha"
+            "resolution": "resolution.tie"
           },
           {
-            "code": "impact.same-old-key",
-            "severity": "error",
+            "code": "impact.zeta",
+            "severity": "info",
             "dataLoss": false,
             "subjects": [
               {
                 "kind": "router",
-                "id": "mu"
+                "id": "router.tie"
+              }
+            ],
+            "details": {
+              "rank": 1
+            },
+            "resolution": "resolution.tie"
+          },
+          {
+            "code": "impact.tie",
+            "severity": "info",
+            "dataLoss": true,
+            "subjects": [
+              {
+                "kind": "router",
+                "id": "router.tie"
+              }
+            ],
+            "details": {
+              "rank": 1
+            },
+            "resolution": "resolution.tie"
+          },
+          {
+            "code": "impact.tie",
+            "severity": "info",
+            "dataLoss": false,
+            "subjects": [
+              {
+                "kind": "router",
+                "id": "router.tie"
               }
             ],
             "details": {
               "rank": 2
             },
-            "resolution": "mu"
+            "resolution": "resolution.tie"
+          },
+          {
+            "code": "impact.tie",
+            "severity": "info",
+            "dataLoss": false,
+            "subjects": [
+              {
+                "kind": "router",
+                "id": "router.zeta"
+              }
+            ],
+            "details": {
+              "rank": 1
+            },
+            "resolution": "resolution.tie"
+          },
+          {
+            "code": "impact.tie",
+            "severity": "info",
+            "dataLoss": false,
+            "subjects": [
+              {
+                "kind": "router",
+                "id": "router.tie"
+              }
+            ],
+            "details": {
+              "rank": 1
+            },
+            "resolution": "resolution.tie"
+          },
+          {
+            "code": "impact.tie",
+            "severity": "info",
+            "dataLoss": false,
+            "subjects": [
+              {
+                "kind": "router",
+                "id": "router.tie"
+              }
+            ],
+            "details": {
+              "rank": 1
+            },
+            "resolution": "resolution.tie"
+          },
+          {
+            "code": "impact.tie",
+            "severity": "info",
+            "dataLoss": false,
+            "subjects": [
+              {
+                "kind": "router",
+                "id": "router.tie"
+              }
+            ],
+            "details": {
+              "rank": 1
+            },
+            "resolution": "resolution.zeta"
+          },
+          {
+            "code": "impact.tie",
+            "severity": "info",
+            "dataLoss": false,
+            "subjects": [
+              {
+                "kind": "router",
+                "id": "router.tie"
+              }
+            ],
+            "details": {
+              "rank": 1
+            },
+            "resolution": "resolution.tie"
+          },
+          {
+            "code": "impact.tie",
+            "severity": "info",
+            "dataLoss": false,
+            "subjects": [
+              {
+                "kind": "router",
+                "id": "router.tie"
+              }
+            ],
+            "details": {
+              "rank": 1
+            },
+            "resolution": "resolution.alpha"
+          },
+          {
+            "code": "impact.tie",
+            "severity": "warning",
+            "dataLoss": false,
+            "subjects": [
+              {
+                "kind": "router",
+                "id": "router.tie"
+              }
+            ],
+            "details": {
+              "rank": 1
+            },
+            "resolution": "resolution.tie"
+          },
+          {
+            "code": "impact.alpha",
+            "severity": "info",
+            "dataLoss": false,
+            "subjects": [
+              {
+                "kind": "router",
+                "id": "router.tie"
+              }
+            ],
+            "details": {
+              "rank": 1
+            },
+            "resolution": "resolution.tie"
           }
         ]
       ],
       "expectedRelation": "equal",
       "expectedNormalized": [
         {
-          "code": "impact.same-old-key",
-          "severity": "error",
+          "code": "impact.alpha",
+          "severity": "info",
           "dataLoss": false,
           "subjects": [
             {
               "kind": "router",
-              "id": "mu"
-            }
-          ],
-          "details": {
-            "rank": 2
-          },
-          "resolution": "mu"
-        },
-        {
-          "code": "impact.same-old-key",
-          "severity": "error",
-          "dataLoss": true,
-          "subjects": [
-            {
-              "kind": "router",
-              "id": "zeta"
-            }
-          ],
-          "details": {
-            "rank": 3
-          },
-          "resolution": "zeta"
-        },
-        {
-          "code": "impact.same-old-key",
-          "severity": "warning",
-          "dataLoss": false,
-          "subjects": [
-            {
-              "kind": "router",
-              "id": "alpha"
+              "id": "router.tie"
             }
           ],
           "details": {
             "rank": 1
           },
-          "resolution": "alpha"
+          "resolution": "resolution.tie"
+        },
+        {
+          "code": "impact.tie",
+          "severity": "info",
+          "dataLoss": false,
+          "subjects": [
+            {
+              "kind": "router",
+              "id": "router.alpha"
+            }
+          ],
+          "details": {
+            "rank": 1
+          },
+          "resolution": "resolution.tie"
+        },
+        {
+          "code": "impact.tie",
+          "severity": "info",
+          "dataLoss": false,
+          "subjects": [
+            {
+              "kind": "router",
+              "id": "router.tie"
+            }
+          ],
+          "details": {
+            "rank": 1
+          },
+          "resolution": "resolution.alpha"
+        },
+        {
+          "code": "impact.tie",
+          "severity": "info",
+          "dataLoss": false,
+          "subjects": [
+            {
+              "kind": "router",
+              "id": "router.tie"
+            }
+          ],
+          "details": {
+            "rank": 1
+          },
+          "resolution": "resolution.tie"
+        },
+        {
+          "code": "impact.tie",
+          "severity": "info",
+          "dataLoss": false,
+          "subjects": [
+            {
+              "kind": "router",
+              "id": "router.tie"
+            }
+          ],
+          "details": {
+            "rank": 1
+          },
+          "resolution": "resolution.tie"
+        },
+        {
+          "code": "impact.tie",
+          "severity": "info",
+          "dataLoss": false,
+          "subjects": [
+            {
+              "kind": "router",
+              "id": "router.tie"
+            }
+          ],
+          "details": {
+            "rank": 1
+          },
+          "resolution": "resolution.tie"
+        },
+        {
+          "code": "impact.tie",
+          "severity": "info",
+          "dataLoss": false,
+          "subjects": [
+            {
+              "kind": "router",
+              "id": "router.tie"
+            }
+          ],
+          "details": {
+            "rank": 1
+          },
+          "resolution": "resolution.zeta"
+        },
+        {
+          "code": "impact.tie",
+          "severity": "info",
+          "dataLoss": false,
+          "subjects": [
+            {
+              "kind": "router",
+              "id": "router.tie"
+            }
+          ],
+          "details": {
+            "rank": 2
+          },
+          "resolution": "resolution.tie"
+        },
+        {
+          "code": "impact.tie",
+          "severity": "info",
+          "dataLoss": false,
+          "subjects": [
+            {
+              "kind": "router",
+              "id": "router.zeta"
+            }
+          ],
+          "details": {
+            "rank": 1
+          },
+          "resolution": "resolution.tie"
+        },
+        {
+          "code": "impact.tie",
+          "severity": "info",
+          "dataLoss": true,
+          "subjects": [
+            {
+              "kind": "router",
+              "id": "router.tie"
+            }
+          ],
+          "details": {
+            "rank": 1
+          },
+          "resolution": "resolution.tie"
+        },
+        {
+          "code": "impact.tie",
+          "severity": "warning",
+          "dataLoss": false,
+          "subjects": [
+            {
+              "kind": "router",
+              "id": "router.tie"
+            }
+          ],
+          "details": {
+            "rank": 1
+          },
+          "resolution": "resolution.tie"
+        },
+        {
+          "code": "impact.zeta",
+          "severity": "info",
+          "dataLoss": false,
+          "subjects": [
+            {
+              "kind": "router",
+              "id": "router.tie"
+            }
+          ],
+          "details": {
+            "rank": 1
+          },
+          "resolution": "resolution.tie"
         }
       ],
-      "expectedCanonicalJson": "[{\"code\":\"impact.same-old-key\",\"dataLoss\":false,\"details\":{\"rank\":2},\"resolution\":\"mu\",\"severity\":\"error\",\"subjects\":[{\"id\":\"mu\",\"kind\":\"router\"}]},{\"code\":\"impact.same-old-key\",\"dataLoss\":true,\"details\":{\"rank\":3},\"resolution\":\"zeta\",\"severity\":\"error\",\"subjects\":[{\"id\":\"zeta\",\"kind\":\"router\"}]},{\"code\":\"impact.same-old-key\",\"dataLoss\":false,\"details\":{\"rank\":1},\"resolution\":\"alpha\",\"severity\":\"warning\",\"subjects\":[{\"id\":\"alpha\",\"kind\":\"router\"}]}]",
-      "expectedDigest": "sha256:33665965f75a8cd5f7cb6295e9541add79f18a447cd256786081f619edf4c332"
+      "expectedCanonicalJson": "[{\"code\":\"impact.alpha\",\"dataLoss\":false,\"details\":{\"rank\":1},\"resolution\":\"resolution.tie\",\"severity\":\"info\",\"subjects\":[{\"id\":\"router.tie\",\"kind\":\"router\"}]},{\"code\":\"impact.tie\",\"dataLoss\":false,\"details\":{\"rank\":1},\"resolution\":\"resolution.tie\",\"severity\":\"info\",\"subjects\":[{\"id\":\"router.alpha\",\"kind\":\"router\"}]},{\"code\":\"impact.tie\",\"dataLoss\":false,\"details\":{\"rank\":1},\"resolution\":\"resolution.alpha\",\"severity\":\"info\",\"subjects\":[{\"id\":\"router.tie\",\"kind\":\"router\"}]},{\"code\":\"impact.tie\",\"dataLoss\":false,\"details\":{\"rank\":1},\"resolution\":\"resolution.tie\",\"severity\":\"info\",\"subjects\":[{\"id\":\"router.tie\",\"kind\":\"router\"}]},{\"code\":\"impact.tie\",\"dataLoss\":false,\"details\":{\"rank\":1},\"resolution\":\"resolution.tie\",\"severity\":\"info\",\"subjects\":[{\"id\":\"router.tie\",\"kind\":\"router\"}]},{\"code\":\"impact.tie\",\"dataLoss\":false,\"details\":{\"rank\":1},\"resolution\":\"resolution.tie\",\"severity\":\"info\",\"subjects\":[{\"id\":\"router.tie\",\"kind\":\"router\"}]},{\"code\":\"impact.tie\",\"dataLoss\":false,\"details\":{\"rank\":1},\"resolution\":\"resolution.zeta\",\"severity\":\"info\",\"subjects\":[{\"id\":\"router.tie\",\"kind\":\"router\"}]},{\"code\":\"impact.tie\",\"dataLoss\":false,\"details\":{\"rank\":2},\"resolution\":\"resolution.tie\",\"severity\":\"info\",\"subjects\":[{\"id\":\"router.tie\",\"kind\":\"router\"}]},{\"code\":\"impact.tie\",\"dataLoss\":false,\"details\":{\"rank\":1},\"resolution\":\"resolution.tie\",\"severity\":\"info\",\"subjects\":[{\"id\":\"router.zeta\",\"kind\":\"router\"}]},{\"code\":\"impact.tie\",\"dataLoss\":true,\"details\":{\"rank\":1},\"resolution\":\"resolution.tie\",\"severity\":\"info\",\"subjects\":[{\"id\":\"router.tie\",\"kind\":\"router\"}]},{\"code\":\"impact.tie\",\"dataLoss\":false,\"details\":{\"rank\":1},\"resolution\":\"resolution.tie\",\"severity\":\"warning\",\"subjects\":[{\"id\":\"router.tie\",\"kind\":\"router\"}]},{\"code\":\"impact.zeta\",\"dataLoss\":false,\"details\":{\"rank\":1},\"resolution\":\"resolution.tie\",\"severity\":\"info\",\"subjects\":[{\"id\":\"router.tie\",\"kind\":\"router\"}]}]",
+      "expectedDigest": "sha256:5e96fe49404256920e7f9cf35bb5e7a670ca01bf3a133fa666095316b5bdc13c"
     },
     {
       "id": "core-canonical-models-normalizedTopologyInput-mesh-slotTemplates",
@@ -1961,30 +2537,94 @@
           {
             "state": "resolved",
             "subject": {
-              "kind": "interface",
+              "kind": "component",
               "id": "zeta"
             }
           },
           {
             "state": "resolved",
             "subject": {
-              "kind": "router",
-              "id": "mu"
+              "kind": "interface",
+              "id": "alpha"
             }
+          },
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "component",
+              "id": "alpha"
+            },
+            "reasonCode": "reason.alpha"
+          },
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "component",
+              "id": "alpha"
+            },
+            "reasonCode": "reason.zeta"
+          },
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "component",
+              "id": "zeta"
+            },
+            "reasonCode": "reason.alpha"
+          },
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "interface",
+              "id": "alpha"
+            },
+            "reasonCode": "reason.alpha"
           }
         ],
         [
           {
-            "state": "resolved",
-            "subject": {
-              "kind": "router",
-              "id": "mu"
-            }
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "interface",
+              "id": "alpha"
+            },
+            "reasonCode": "reason.alpha"
+          },
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "component",
+              "id": "zeta"
+            },
+            "reasonCode": "reason.alpha"
+          },
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "component",
+              "id": "alpha"
+            },
+            "reasonCode": "reason.zeta"
+          },
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "component",
+              "id": "alpha"
+            },
+            "reasonCode": "reason.alpha"
           },
           {
             "state": "resolved",
             "subject": {
               "kind": "interface",
+              "id": "alpha"
+            }
+          },
+          {
+            "state": "resolved",
+            "subject": {
+              "kind": "component",
               "id": "zeta"
             }
           },
@@ -1998,18 +2638,50 @@
         ],
         [
           {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "interface",
+              "id": "alpha"
+            },
+            "reasonCode": "reason.alpha"
+          },
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "component",
+              "id": "alpha"
+            },
+            "reasonCode": "reason.alpha"
+          },
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "component",
+              "id": "alpha"
+            },
+            "reasonCode": "reason.zeta"
+          },
+          {
             "state": "resolved",
             "subject": {
               "kind": "interface",
-              "id": "zeta"
+              "id": "alpha"
             }
           },
           {
             "state": "resolved",
             "subject": {
-              "kind": "router",
-              "id": "mu"
+              "kind": "component",
+              "id": "zeta"
             }
+          },
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "component",
+              "id": "zeta"
+            },
+            "reasonCode": "reason.alpha"
           },
           {
             "state": "resolved",
@@ -2032,20 +2704,52 @@
         {
           "state": "resolved",
           "subject": {
-            "kind": "interface",
+            "kind": "component",
             "id": "zeta"
           }
         },
         {
           "state": "resolved",
           "subject": {
-            "kind": "router",
-            "id": "mu"
+            "kind": "interface",
+            "id": "alpha"
           }
+        },
+        {
+          "state": "unresolved",
+          "intendedSubject": {
+            "kind": "component",
+            "id": "alpha"
+          },
+          "reasonCode": "reason.alpha"
+        },
+        {
+          "state": "unresolved",
+          "intendedSubject": {
+            "kind": "component",
+            "id": "alpha"
+          },
+          "reasonCode": "reason.zeta"
+        },
+        {
+          "state": "unresolved",
+          "intendedSubject": {
+            "kind": "component",
+            "id": "zeta"
+          },
+          "reasonCode": "reason.alpha"
+        },
+        {
+          "state": "unresolved",
+          "intendedSubject": {
+            "kind": "interface",
+            "id": "alpha"
+          },
+          "reasonCode": "reason.alpha"
         }
       ],
-      "expectedCanonicalJson": "[{\"state\":\"resolved\",\"subject\":{\"id\":\"alpha\",\"kind\":\"component\"}},{\"state\":\"resolved\",\"subject\":{\"id\":\"zeta\",\"kind\":\"interface\"}},{\"state\":\"resolved\",\"subject\":{\"id\":\"mu\",\"kind\":\"router\"}}]",
-      "expectedDigest": "sha256:1f755e3116a430f39e08429f7a4e446da29b826dbb0192d64a5a4d964a733d95"
+      "expectedCanonicalJson": "[{\"state\":\"resolved\",\"subject\":{\"id\":\"alpha\",\"kind\":\"component\"}},{\"state\":\"resolved\",\"subject\":{\"id\":\"zeta\",\"kind\":\"component\"}},{\"state\":\"resolved\",\"subject\":{\"id\":\"alpha\",\"kind\":\"interface\"}},{\"intendedSubject\":{\"id\":\"alpha\",\"kind\":\"component\"},\"reasonCode\":\"reason.alpha\",\"state\":\"unresolved\"},{\"intendedSubject\":{\"id\":\"alpha\",\"kind\":\"component\"},\"reasonCode\":\"reason.zeta\",\"state\":\"unresolved\"},{\"intendedSubject\":{\"id\":\"zeta\",\"kind\":\"component\"},\"reasonCode\":\"reason.alpha\",\"state\":\"unresolved\"},{\"intendedSubject\":{\"id\":\"alpha\",\"kind\":\"interface\"},\"reasonCode\":\"reason.alpha\",\"state\":\"unresolved\"}]",
+      "expectedDigest": "sha256:21b4777e1e880cd8a03a0aefcdf0e11264cb12d9c1e203f27279801557ba1aaf"
     },
     {
       "id": "core-canonical-models-packageRelation-targets",
@@ -2067,30 +2771,94 @@
           {
             "state": "resolved",
             "subject": {
-              "kind": "interface",
+              "kind": "component",
               "id": "zeta"
             }
           },
           {
             "state": "resolved",
             "subject": {
-              "kind": "router",
-              "id": "mu"
+              "kind": "interface",
+              "id": "alpha"
             }
+          },
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "component",
+              "id": "alpha"
+            },
+            "reasonCode": "reason.alpha"
+          },
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "component",
+              "id": "alpha"
+            },
+            "reasonCode": "reason.zeta"
+          },
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "component",
+              "id": "zeta"
+            },
+            "reasonCode": "reason.alpha"
+          },
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "interface",
+              "id": "alpha"
+            },
+            "reasonCode": "reason.alpha"
           }
         ],
         [
           {
-            "state": "resolved",
-            "subject": {
-              "kind": "router",
-              "id": "mu"
-            }
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "interface",
+              "id": "alpha"
+            },
+            "reasonCode": "reason.alpha"
+          },
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "component",
+              "id": "zeta"
+            },
+            "reasonCode": "reason.alpha"
+          },
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "component",
+              "id": "alpha"
+            },
+            "reasonCode": "reason.zeta"
+          },
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "component",
+              "id": "alpha"
+            },
+            "reasonCode": "reason.alpha"
           },
           {
             "state": "resolved",
             "subject": {
               "kind": "interface",
+              "id": "alpha"
+            }
+          },
+          {
+            "state": "resolved",
+            "subject": {
+              "kind": "component",
               "id": "zeta"
             }
           },
@@ -2104,18 +2872,50 @@
         ],
         [
           {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "interface",
+              "id": "alpha"
+            },
+            "reasonCode": "reason.alpha"
+          },
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "component",
+              "id": "alpha"
+            },
+            "reasonCode": "reason.alpha"
+          },
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "component",
+              "id": "alpha"
+            },
+            "reasonCode": "reason.zeta"
+          },
+          {
             "state": "resolved",
             "subject": {
               "kind": "interface",
-              "id": "zeta"
+              "id": "alpha"
             }
           },
           {
             "state": "resolved",
             "subject": {
-              "kind": "router",
-              "id": "mu"
+              "kind": "component",
+              "id": "zeta"
             }
+          },
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "component",
+              "id": "zeta"
+            },
+            "reasonCode": "reason.alpha"
           },
           {
             "state": "resolved",
@@ -2138,20 +2938,52 @@
         {
           "state": "resolved",
           "subject": {
-            "kind": "interface",
+            "kind": "component",
             "id": "zeta"
           }
         },
         {
           "state": "resolved",
           "subject": {
-            "kind": "router",
-            "id": "mu"
+            "kind": "interface",
+            "id": "alpha"
           }
+        },
+        {
+          "state": "unresolved",
+          "intendedSubject": {
+            "kind": "component",
+            "id": "alpha"
+          },
+          "reasonCode": "reason.alpha"
+        },
+        {
+          "state": "unresolved",
+          "intendedSubject": {
+            "kind": "component",
+            "id": "alpha"
+          },
+          "reasonCode": "reason.zeta"
+        },
+        {
+          "state": "unresolved",
+          "intendedSubject": {
+            "kind": "component",
+            "id": "zeta"
+          },
+          "reasonCode": "reason.alpha"
+        },
+        {
+          "state": "unresolved",
+          "intendedSubject": {
+            "kind": "interface",
+            "id": "alpha"
+          },
+          "reasonCode": "reason.alpha"
         }
       ],
-      "expectedCanonicalJson": "[{\"state\":\"resolved\",\"subject\":{\"id\":\"alpha\",\"kind\":\"component\"}},{\"state\":\"resolved\",\"subject\":{\"id\":\"zeta\",\"kind\":\"interface\"}},{\"state\":\"resolved\",\"subject\":{\"id\":\"mu\",\"kind\":\"router\"}}]",
-      "expectedDigest": "sha256:1f755e3116a430f39e08429f7a4e446da29b826dbb0192d64a5a4d964a733d95"
+      "expectedCanonicalJson": "[{\"state\":\"resolved\",\"subject\":{\"id\":\"alpha\",\"kind\":\"component\"}},{\"state\":\"resolved\",\"subject\":{\"id\":\"zeta\",\"kind\":\"component\"}},{\"state\":\"resolved\",\"subject\":{\"id\":\"alpha\",\"kind\":\"interface\"}},{\"intendedSubject\":{\"id\":\"alpha\",\"kind\":\"component\"},\"reasonCode\":\"reason.alpha\",\"state\":\"unresolved\"},{\"intendedSubject\":{\"id\":\"alpha\",\"kind\":\"component\"},\"reasonCode\":\"reason.zeta\",\"state\":\"unresolved\"},{\"intendedSubject\":{\"id\":\"zeta\",\"kind\":\"component\"},\"reasonCode\":\"reason.alpha\",\"state\":\"unresolved\"},{\"intendedSubject\":{\"id\":\"alpha\",\"kind\":\"interface\"},\"reasonCode\":\"reason.alpha\",\"state\":\"unresolved\"}]",
+      "expectedDigest": "sha256:21b4777e1e880cd8a03a0aefcdf0e11264cb12d9c1e203f27279801557ba1aaf"
     },
     {
       "id": "core-canonical-models-patchComponentValue-extensions",
@@ -2167,60 +2999,114 @@
         [
           {
             "ownerLockId": "alpha",
+            "schema": "context-0",
+            "version": "context-0",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-1",
             "schema": "alpha",
+            "version": "context-1",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-1",
+            "schema": "zeta",
+            "version": "context-1",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-2",
+            "schema": "context-2",
             "version": "alpha",
             "data": {}
           },
           {
-            "ownerLockId": "mu",
-            "schema": "mu",
-            "version": "mu",
+            "ownerLockId": "context-2",
+            "schema": "context-2",
+            "version": "zeta",
             "data": {}
           },
           {
             "ownerLockId": "zeta",
-            "schema": "zeta",
-            "version": "zeta",
+            "schema": "context-0",
+            "version": "context-0",
             "data": {}
           }
         ],
         [
           {
             "ownerLockId": "zeta",
-            "schema": "zeta",
+            "schema": "context-0",
+            "version": "context-0",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-2",
+            "schema": "context-2",
             "version": "zeta",
             "data": {}
           },
           {
-            "ownerLockId": "mu",
-            "schema": "mu",
-            "version": "mu",
+            "ownerLockId": "context-2",
+            "schema": "context-2",
+            "version": "alpha",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-1",
+            "schema": "zeta",
+            "version": "context-1",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-1",
+            "schema": "alpha",
+            "version": "context-1",
             "data": {}
           },
           {
             "ownerLockId": "alpha",
-            "schema": "alpha",
-            "version": "alpha",
+            "schema": "context-0",
+            "version": "context-0",
             "data": {}
           }
         ],
         [
           {
-            "ownerLockId": "mu",
-            "schema": "mu",
-            "version": "mu",
+            "ownerLockId": "zeta",
+            "schema": "context-0",
+            "version": "context-0",
             "data": {}
           },
           {
-            "ownerLockId": "zeta",
-            "schema": "zeta",
+            "ownerLockId": "context-2",
+            "schema": "context-2",
+            "version": "alpha",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-2",
+            "schema": "context-2",
             "version": "zeta",
             "data": {}
           },
           {
-            "ownerLockId": "alpha",
+            "ownerLockId": "context-1",
+            "schema": "zeta",
+            "version": "context-1",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-1",
             "schema": "alpha",
-            "version": "alpha",
+            "version": "context-1",
+            "data": {}
+          },
+          {
+            "ownerLockId": "alpha",
+            "schema": "context-0",
+            "version": "context-0",
             "data": {}
           }
         ]
@@ -2229,25 +3115,43 @@
       "expectedNormalized": [
         {
           "ownerLockId": "alpha",
+          "schema": "context-0",
+          "version": "context-0",
+          "data": {}
+        },
+        {
+          "ownerLockId": "context-1",
           "schema": "alpha",
+          "version": "context-1",
+          "data": {}
+        },
+        {
+          "ownerLockId": "context-1",
+          "schema": "zeta",
+          "version": "context-1",
+          "data": {}
+        },
+        {
+          "ownerLockId": "context-2",
+          "schema": "context-2",
           "version": "alpha",
           "data": {}
         },
         {
-          "ownerLockId": "mu",
-          "schema": "mu",
-          "version": "mu",
+          "ownerLockId": "context-2",
+          "schema": "context-2",
+          "version": "zeta",
           "data": {}
         },
         {
           "ownerLockId": "zeta",
-          "schema": "zeta",
-          "version": "zeta",
+          "schema": "context-0",
+          "version": "context-0",
           "data": {}
         }
       ],
-      "expectedCanonicalJson": "[{\"data\":{},\"ownerLockId\":\"alpha\",\"schema\":\"alpha\",\"version\":\"alpha\"},{\"data\":{},\"ownerLockId\":\"mu\",\"schema\":\"mu\",\"version\":\"mu\"},{\"data\":{},\"ownerLockId\":\"zeta\",\"schema\":\"zeta\",\"version\":\"zeta\"}]",
-      "expectedDigest": "sha256:7f07ce23d6445229db03ef46d5a805a7dbb4915ab35a6b3c76e5df330d8cf0b6"
+      "expectedCanonicalJson": "[{\"data\":{},\"ownerLockId\":\"alpha\",\"schema\":\"context-0\",\"version\":\"context-0\"},{\"data\":{},\"ownerLockId\":\"context-1\",\"schema\":\"alpha\",\"version\":\"context-1\"},{\"data\":{},\"ownerLockId\":\"context-1\",\"schema\":\"zeta\",\"version\":\"context-1\"},{\"data\":{},\"ownerLockId\":\"context-2\",\"schema\":\"context-2\",\"version\":\"alpha\"},{\"data\":{},\"ownerLockId\":\"context-2\",\"schema\":\"context-2\",\"version\":\"zeta\"},{\"data\":{},\"ownerLockId\":\"zeta\",\"schema\":\"context-0\",\"version\":\"context-0\"}]",
+      "expectedDigest": "sha256:dd65de411ab9ed43999f32f7c67105f7edaf2fdf7d9db059e053561bfd0b35c5"
     },
     {
       "id": "core-canonical-models-patchInterfaceValue-extensions",
@@ -2263,60 +3167,114 @@
         [
           {
             "ownerLockId": "alpha",
+            "schema": "context-0",
+            "version": "context-0",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-1",
             "schema": "alpha",
+            "version": "context-1",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-1",
+            "schema": "zeta",
+            "version": "context-1",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-2",
+            "schema": "context-2",
             "version": "alpha",
             "data": {}
           },
           {
-            "ownerLockId": "mu",
-            "schema": "mu",
-            "version": "mu",
+            "ownerLockId": "context-2",
+            "schema": "context-2",
+            "version": "zeta",
             "data": {}
           },
           {
             "ownerLockId": "zeta",
-            "schema": "zeta",
-            "version": "zeta",
+            "schema": "context-0",
+            "version": "context-0",
             "data": {}
           }
         ],
         [
           {
             "ownerLockId": "zeta",
-            "schema": "zeta",
+            "schema": "context-0",
+            "version": "context-0",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-2",
+            "schema": "context-2",
             "version": "zeta",
             "data": {}
           },
           {
-            "ownerLockId": "mu",
-            "schema": "mu",
-            "version": "mu",
+            "ownerLockId": "context-2",
+            "schema": "context-2",
+            "version": "alpha",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-1",
+            "schema": "zeta",
+            "version": "context-1",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-1",
+            "schema": "alpha",
+            "version": "context-1",
             "data": {}
           },
           {
             "ownerLockId": "alpha",
-            "schema": "alpha",
-            "version": "alpha",
+            "schema": "context-0",
+            "version": "context-0",
             "data": {}
           }
         ],
         [
           {
-            "ownerLockId": "mu",
-            "schema": "mu",
-            "version": "mu",
+            "ownerLockId": "zeta",
+            "schema": "context-0",
+            "version": "context-0",
             "data": {}
           },
           {
-            "ownerLockId": "zeta",
-            "schema": "zeta",
+            "ownerLockId": "context-2",
+            "schema": "context-2",
+            "version": "alpha",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-2",
+            "schema": "context-2",
             "version": "zeta",
             "data": {}
           },
           {
-            "ownerLockId": "alpha",
+            "ownerLockId": "context-1",
+            "schema": "zeta",
+            "version": "context-1",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-1",
             "schema": "alpha",
-            "version": "alpha",
+            "version": "context-1",
+            "data": {}
+          },
+          {
+            "ownerLockId": "alpha",
+            "schema": "context-0",
+            "version": "context-0",
             "data": {}
           }
         ]
@@ -2325,25 +3283,43 @@
       "expectedNormalized": [
         {
           "ownerLockId": "alpha",
+          "schema": "context-0",
+          "version": "context-0",
+          "data": {}
+        },
+        {
+          "ownerLockId": "context-1",
           "schema": "alpha",
+          "version": "context-1",
+          "data": {}
+        },
+        {
+          "ownerLockId": "context-1",
+          "schema": "zeta",
+          "version": "context-1",
+          "data": {}
+        },
+        {
+          "ownerLockId": "context-2",
+          "schema": "context-2",
           "version": "alpha",
           "data": {}
         },
         {
-          "ownerLockId": "mu",
-          "schema": "mu",
-          "version": "mu",
+          "ownerLockId": "context-2",
+          "schema": "context-2",
+          "version": "zeta",
           "data": {}
         },
         {
           "ownerLockId": "zeta",
-          "schema": "zeta",
-          "version": "zeta",
+          "schema": "context-0",
+          "version": "context-0",
           "data": {}
         }
       ],
-      "expectedCanonicalJson": "[{\"data\":{},\"ownerLockId\":\"alpha\",\"schema\":\"alpha\",\"version\":\"alpha\"},{\"data\":{},\"ownerLockId\":\"mu\",\"schema\":\"mu\",\"version\":\"mu\"},{\"data\":{},\"ownerLockId\":\"zeta\",\"schema\":\"zeta\",\"version\":\"zeta\"}]",
-      "expectedDigest": "sha256:7f07ce23d6445229db03ef46d5a805a7dbb4915ab35a6b3c76e5df330d8cf0b6"
+      "expectedCanonicalJson": "[{\"data\":{},\"ownerLockId\":\"alpha\",\"schema\":\"context-0\",\"version\":\"context-0\"},{\"data\":{},\"ownerLockId\":\"context-1\",\"schema\":\"alpha\",\"version\":\"context-1\"},{\"data\":{},\"ownerLockId\":\"context-1\",\"schema\":\"zeta\",\"version\":\"context-1\"},{\"data\":{},\"ownerLockId\":\"context-2\",\"schema\":\"context-2\",\"version\":\"alpha\"},{\"data\":{},\"ownerLockId\":\"context-2\",\"schema\":\"context-2\",\"version\":\"zeta\"},{\"data\":{},\"ownerLockId\":\"zeta\",\"schema\":\"context-0\",\"version\":\"context-0\"}]",
+      "expectedDigest": "sha256:dd65de411ab9ed43999f32f7c67105f7edaf2fdf7d9db059e053561bfd0b35c5"
     },
     {
       "id": "core-canonical-models-patchOperations",
@@ -2502,60 +3478,114 @@
         [
           {
             "ownerLockId": "alpha",
+            "schema": "context-0",
+            "version": "context-0",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-1",
             "schema": "alpha",
+            "version": "context-1",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-1",
+            "schema": "zeta",
+            "version": "context-1",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-2",
+            "schema": "context-2",
             "version": "alpha",
             "data": {}
           },
           {
-            "ownerLockId": "mu",
-            "schema": "mu",
-            "version": "mu",
+            "ownerLockId": "context-2",
+            "schema": "context-2",
+            "version": "zeta",
             "data": {}
           },
           {
             "ownerLockId": "zeta",
-            "schema": "zeta",
-            "version": "zeta",
+            "schema": "context-0",
+            "version": "context-0",
             "data": {}
           }
         ],
         [
           {
             "ownerLockId": "zeta",
-            "schema": "zeta",
+            "schema": "context-0",
+            "version": "context-0",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-2",
+            "schema": "context-2",
             "version": "zeta",
             "data": {}
           },
           {
-            "ownerLockId": "mu",
-            "schema": "mu",
-            "version": "mu",
+            "ownerLockId": "context-2",
+            "schema": "context-2",
+            "version": "alpha",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-1",
+            "schema": "zeta",
+            "version": "context-1",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-1",
+            "schema": "alpha",
+            "version": "context-1",
             "data": {}
           },
           {
             "ownerLockId": "alpha",
-            "schema": "alpha",
-            "version": "alpha",
+            "schema": "context-0",
+            "version": "context-0",
             "data": {}
           }
         ],
         [
           {
-            "ownerLockId": "mu",
-            "schema": "mu",
-            "version": "mu",
+            "ownerLockId": "zeta",
+            "schema": "context-0",
+            "version": "context-0",
             "data": {}
           },
           {
-            "ownerLockId": "zeta",
-            "schema": "zeta",
+            "ownerLockId": "context-2",
+            "schema": "context-2",
+            "version": "alpha",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-2",
+            "schema": "context-2",
             "version": "zeta",
             "data": {}
           },
           {
-            "ownerLockId": "alpha",
+            "ownerLockId": "context-1",
+            "schema": "zeta",
+            "version": "context-1",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-1",
             "schema": "alpha",
-            "version": "alpha",
+            "version": "context-1",
+            "data": {}
+          },
+          {
+            "ownerLockId": "alpha",
+            "schema": "context-0",
+            "version": "context-0",
             "data": {}
           }
         ]
@@ -2564,25 +3594,43 @@
       "expectedNormalized": [
         {
           "ownerLockId": "alpha",
+          "schema": "context-0",
+          "version": "context-0",
+          "data": {}
+        },
+        {
+          "ownerLockId": "context-1",
           "schema": "alpha",
+          "version": "context-1",
+          "data": {}
+        },
+        {
+          "ownerLockId": "context-1",
+          "schema": "zeta",
+          "version": "context-1",
+          "data": {}
+        },
+        {
+          "ownerLockId": "context-2",
+          "schema": "context-2",
           "version": "alpha",
           "data": {}
         },
         {
-          "ownerLockId": "mu",
-          "schema": "mu",
-          "version": "mu",
+          "ownerLockId": "context-2",
+          "schema": "context-2",
+          "version": "zeta",
           "data": {}
         },
         {
           "ownerLockId": "zeta",
-          "schema": "zeta",
-          "version": "zeta",
+          "schema": "context-0",
+          "version": "context-0",
           "data": {}
         }
       ],
-      "expectedCanonicalJson": "[{\"data\":{},\"ownerLockId\":\"alpha\",\"schema\":\"alpha\",\"version\":\"alpha\"},{\"data\":{},\"ownerLockId\":\"mu\",\"schema\":\"mu\",\"version\":\"mu\"},{\"data\":{},\"ownerLockId\":\"zeta\",\"schema\":\"zeta\",\"version\":\"zeta\"}]",
-      "expectedDigest": "sha256:7f07ce23d6445229db03ef46d5a805a7dbb4915ab35a6b3c76e5df330d8cf0b6"
+      "expectedCanonicalJson": "[{\"data\":{},\"ownerLockId\":\"alpha\",\"schema\":\"context-0\",\"version\":\"context-0\"},{\"data\":{},\"ownerLockId\":\"context-1\",\"schema\":\"alpha\",\"version\":\"context-1\"},{\"data\":{},\"ownerLockId\":\"context-1\",\"schema\":\"zeta\",\"version\":\"context-1\"},{\"data\":{},\"ownerLockId\":\"context-2\",\"schema\":\"context-2\",\"version\":\"alpha\"},{\"data\":{},\"ownerLockId\":\"context-2\",\"schema\":\"context-2\",\"version\":\"zeta\"},{\"data\":{},\"ownerLockId\":\"zeta\",\"schema\":\"context-0\",\"version\":\"context-0\"}]",
+      "expectedDigest": "sha256:dd65de411ab9ed43999f32f7c67105f7edaf2fdf7d9db059e053561bfd0b35c5"
     },
     {
       "id": "core-canonical-models-patchPackageRelationValue-extensions",
@@ -2598,60 +3646,114 @@
         [
           {
             "ownerLockId": "alpha",
+            "schema": "context-0",
+            "version": "context-0",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-1",
             "schema": "alpha",
+            "version": "context-1",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-1",
+            "schema": "zeta",
+            "version": "context-1",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-2",
+            "schema": "context-2",
             "version": "alpha",
             "data": {}
           },
           {
-            "ownerLockId": "mu",
-            "schema": "mu",
-            "version": "mu",
+            "ownerLockId": "context-2",
+            "schema": "context-2",
+            "version": "zeta",
             "data": {}
           },
           {
             "ownerLockId": "zeta",
-            "schema": "zeta",
-            "version": "zeta",
+            "schema": "context-0",
+            "version": "context-0",
             "data": {}
           }
         ],
         [
           {
             "ownerLockId": "zeta",
-            "schema": "zeta",
+            "schema": "context-0",
+            "version": "context-0",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-2",
+            "schema": "context-2",
             "version": "zeta",
             "data": {}
           },
           {
-            "ownerLockId": "mu",
-            "schema": "mu",
-            "version": "mu",
+            "ownerLockId": "context-2",
+            "schema": "context-2",
+            "version": "alpha",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-1",
+            "schema": "zeta",
+            "version": "context-1",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-1",
+            "schema": "alpha",
+            "version": "context-1",
             "data": {}
           },
           {
             "ownerLockId": "alpha",
-            "schema": "alpha",
-            "version": "alpha",
+            "schema": "context-0",
+            "version": "context-0",
             "data": {}
           }
         ],
         [
           {
-            "ownerLockId": "mu",
-            "schema": "mu",
-            "version": "mu",
+            "ownerLockId": "zeta",
+            "schema": "context-0",
+            "version": "context-0",
             "data": {}
           },
           {
-            "ownerLockId": "zeta",
-            "schema": "zeta",
+            "ownerLockId": "context-2",
+            "schema": "context-2",
+            "version": "alpha",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-2",
+            "schema": "context-2",
             "version": "zeta",
             "data": {}
           },
           {
-            "ownerLockId": "alpha",
+            "ownerLockId": "context-1",
+            "schema": "zeta",
+            "version": "context-1",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-1",
             "schema": "alpha",
-            "version": "alpha",
+            "version": "context-1",
+            "data": {}
+          },
+          {
+            "ownerLockId": "alpha",
+            "schema": "context-0",
+            "version": "context-0",
             "data": {}
           }
         ]
@@ -2660,25 +3762,43 @@
       "expectedNormalized": [
         {
           "ownerLockId": "alpha",
+          "schema": "context-0",
+          "version": "context-0",
+          "data": {}
+        },
+        {
+          "ownerLockId": "context-1",
           "schema": "alpha",
+          "version": "context-1",
+          "data": {}
+        },
+        {
+          "ownerLockId": "context-1",
+          "schema": "zeta",
+          "version": "context-1",
+          "data": {}
+        },
+        {
+          "ownerLockId": "context-2",
+          "schema": "context-2",
           "version": "alpha",
           "data": {}
         },
         {
-          "ownerLockId": "mu",
-          "schema": "mu",
-          "version": "mu",
+          "ownerLockId": "context-2",
+          "schema": "context-2",
+          "version": "zeta",
           "data": {}
         },
         {
           "ownerLockId": "zeta",
-          "schema": "zeta",
-          "version": "zeta",
+          "schema": "context-0",
+          "version": "context-0",
           "data": {}
         }
       ],
-      "expectedCanonicalJson": "[{\"data\":{},\"ownerLockId\":\"alpha\",\"schema\":\"alpha\",\"version\":\"alpha\"},{\"data\":{},\"ownerLockId\":\"mu\",\"schema\":\"mu\",\"version\":\"mu\"},{\"data\":{},\"ownerLockId\":\"zeta\",\"schema\":\"zeta\",\"version\":\"zeta\"}]",
-      "expectedDigest": "sha256:7f07ce23d6445229db03ef46d5a805a7dbb4915ab35a6b3c76e5df330d8cf0b6"
+      "expectedCanonicalJson": "[{\"data\":{},\"ownerLockId\":\"alpha\",\"schema\":\"context-0\",\"version\":\"context-0\"},{\"data\":{},\"ownerLockId\":\"context-1\",\"schema\":\"alpha\",\"version\":\"context-1\"},{\"data\":{},\"ownerLockId\":\"context-1\",\"schema\":\"zeta\",\"version\":\"context-1\"},{\"data\":{},\"ownerLockId\":\"context-2\",\"schema\":\"context-2\",\"version\":\"alpha\"},{\"data\":{},\"ownerLockId\":\"context-2\",\"schema\":\"context-2\",\"version\":\"zeta\"},{\"data\":{},\"ownerLockId\":\"zeta\",\"schema\":\"context-0\",\"version\":\"context-0\"}]",
+      "expectedDigest": "sha256:dd65de411ab9ed43999f32f7c67105f7edaf2fdf7d9db059e053561bfd0b35c5"
     },
     {
       "id": "core-canonical-models-patchPackageRelationValue-sources",
@@ -2702,7 +3822,7 @@
           {
             "state": "resolved",
             "subject": {
-              "kind": "interface",
+              "kind": "component",
               "ref": {
                 "id": "zeta"
               }
@@ -2711,20 +3831,9 @@
           {
             "state": "resolved",
             "subject": {
-              "kind": "router",
+              "kind": "component",
               "ref": {
-                "id": "mu"
-              }
-            }
-          }
-        ],
-        [
-          {
-            "state": "resolved",
-            "subject": {
-              "kind": "router",
-              "ref": {
-                "id": "mu"
+                "localRef": "authority:alpha"
               }
             }
           },
@@ -2732,6 +3841,115 @@
             "state": "resolved",
             "subject": {
               "kind": "interface",
+              "ref": {
+                "id": "alpha"
+              }
+            }
+          },
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "component",
+              "ref": {
+                "id": "alpha"
+              }
+            },
+            "reasonCode": "reason.alpha"
+          },
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "component",
+              "ref": {
+                "id": "alpha"
+              }
+            },
+            "reasonCode": "reason.zeta"
+          },
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "component",
+              "ref": {
+                "localRef": "authority:alpha"
+              }
+            },
+            "reasonCode": "reason.alpha"
+          },
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "interface",
+              "ref": {
+                "id": "alpha"
+              }
+            },
+            "reasonCode": "reason.alpha"
+          }
+        ],
+        [
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "interface",
+              "ref": {
+                "id": "alpha"
+              }
+            },
+            "reasonCode": "reason.alpha"
+          },
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "component",
+              "ref": {
+                "localRef": "authority:alpha"
+              }
+            },
+            "reasonCode": "reason.alpha"
+          },
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "component",
+              "ref": {
+                "id": "alpha"
+              }
+            },
+            "reasonCode": "reason.zeta"
+          },
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "component",
+              "ref": {
+                "id": "alpha"
+              }
+            },
+            "reasonCode": "reason.alpha"
+          },
+          {
+            "state": "resolved",
+            "subject": {
+              "kind": "interface",
+              "ref": {
+                "id": "alpha"
+              }
+            }
+          },
+          {
+            "state": "resolved",
+            "subject": {
+              "kind": "component",
+              "ref": {
+                "localRef": "authority:alpha"
+              }
+            }
+          },
+          {
+            "state": "resolved",
+            "subject": {
+              "kind": "component",
               "ref": {
                 "id": "zeta"
               }
@@ -2749,22 +3967,71 @@
         ],
         [
           {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "interface",
+              "ref": {
+                "id": "alpha"
+              }
+            },
+            "reasonCode": "reason.alpha"
+          },
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "component",
+              "ref": {
+                "localRef": "authority:alpha"
+              }
+            },
+            "reasonCode": "reason.alpha"
+          },
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "component",
+              "ref": {
+                "id": "alpha"
+              }
+            },
+            "reasonCode": "reason.alpha"
+          },
+          {
             "state": "resolved",
             "subject": {
               "kind": "interface",
               "ref": {
-                "id": "zeta"
+                "id": "alpha"
               }
             }
           },
           {
             "state": "resolved",
             "subject": {
-              "kind": "router",
+              "kind": "component",
               "ref": {
-                "id": "mu"
+                "localRef": "authority:alpha"
               }
             }
+          },
+          {
+            "state": "resolved",
+            "subject": {
+              "kind": "component",
+              "ref": {
+                "id": "zeta"
+              }
+            }
+          },
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "component",
+              "ref": {
+                "id": "alpha"
+              }
+            },
+            "reasonCode": "reason.zeta"
           },
           {
             "state": "resolved",
@@ -2791,7 +4058,7 @@
         {
           "state": "resolved",
           "subject": {
-            "kind": "interface",
+            "kind": "component",
             "ref": {
               "id": "zeta"
             }
@@ -2800,15 +4067,64 @@
         {
           "state": "resolved",
           "subject": {
-            "kind": "router",
+            "kind": "component",
             "ref": {
-              "id": "mu"
+              "localRef": "authority:alpha"
             }
           }
+        },
+        {
+          "state": "resolved",
+          "subject": {
+            "kind": "interface",
+            "ref": {
+              "id": "alpha"
+            }
+          }
+        },
+        {
+          "state": "unresolved",
+          "intendedSubject": {
+            "kind": "component",
+            "ref": {
+              "id": "alpha"
+            }
+          },
+          "reasonCode": "reason.alpha"
+        },
+        {
+          "state": "unresolved",
+          "intendedSubject": {
+            "kind": "component",
+            "ref": {
+              "id": "alpha"
+            }
+          },
+          "reasonCode": "reason.zeta"
+        },
+        {
+          "state": "unresolved",
+          "intendedSubject": {
+            "kind": "component",
+            "ref": {
+              "localRef": "authority:alpha"
+            }
+          },
+          "reasonCode": "reason.alpha"
+        },
+        {
+          "state": "unresolved",
+          "intendedSubject": {
+            "kind": "interface",
+            "ref": {
+              "id": "alpha"
+            }
+          },
+          "reasonCode": "reason.alpha"
         }
       ],
-      "expectedCanonicalJson": "[{\"state\":\"resolved\",\"subject\":{\"kind\":\"component\",\"ref\":{\"id\":\"alpha\"}}},{\"state\":\"resolved\",\"subject\":{\"kind\":\"interface\",\"ref\":{\"id\":\"zeta\"}}},{\"state\":\"resolved\",\"subject\":{\"kind\":\"router\",\"ref\":{\"id\":\"mu\"}}}]",
-      "expectedDigest": "sha256:a1372de4b91882165c35cf394f0ef84a5cc2927344ece78463c957232a059b29"
+      "expectedCanonicalJson": "[{\"state\":\"resolved\",\"subject\":{\"kind\":\"component\",\"ref\":{\"id\":\"alpha\"}}},{\"state\":\"resolved\",\"subject\":{\"kind\":\"component\",\"ref\":{\"id\":\"zeta\"}}},{\"state\":\"resolved\",\"subject\":{\"kind\":\"component\",\"ref\":{\"localRef\":\"authority:alpha\"}}},{\"state\":\"resolved\",\"subject\":{\"kind\":\"interface\",\"ref\":{\"id\":\"alpha\"}}},{\"intendedSubject\":{\"kind\":\"component\",\"ref\":{\"id\":\"alpha\"}},\"reasonCode\":\"reason.alpha\",\"state\":\"unresolved\"},{\"intendedSubject\":{\"kind\":\"component\",\"ref\":{\"id\":\"alpha\"}},\"reasonCode\":\"reason.zeta\",\"state\":\"unresolved\"},{\"intendedSubject\":{\"kind\":\"component\",\"ref\":{\"localRef\":\"authority:alpha\"}},\"reasonCode\":\"reason.alpha\",\"state\":\"unresolved\"},{\"intendedSubject\":{\"kind\":\"interface\",\"ref\":{\"id\":\"alpha\"}},\"reasonCode\":\"reason.alpha\",\"state\":\"unresolved\"}]",
+      "expectedDigest": "sha256:3428731a87cfd7ab59139bc472c786a5508df28447d85b1bb00ccc5a6388f7bd"
     },
     {
       "id": "core-canonical-models-patchPackageRelationValue-targets",
@@ -2832,7 +4148,7 @@
           {
             "state": "resolved",
             "subject": {
-              "kind": "interface",
+              "kind": "component",
               "ref": {
                 "id": "zeta"
               }
@@ -2841,20 +4157,9 @@
           {
             "state": "resolved",
             "subject": {
-              "kind": "router",
+              "kind": "component",
               "ref": {
-                "id": "mu"
-              }
-            }
-          }
-        ],
-        [
-          {
-            "state": "resolved",
-            "subject": {
-              "kind": "router",
-              "ref": {
-                "id": "mu"
+                "localRef": "authority:alpha"
               }
             }
           },
@@ -2862,6 +4167,115 @@
             "state": "resolved",
             "subject": {
               "kind": "interface",
+              "ref": {
+                "id": "alpha"
+              }
+            }
+          },
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "component",
+              "ref": {
+                "id": "alpha"
+              }
+            },
+            "reasonCode": "reason.alpha"
+          },
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "component",
+              "ref": {
+                "id": "alpha"
+              }
+            },
+            "reasonCode": "reason.zeta"
+          },
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "component",
+              "ref": {
+                "localRef": "authority:alpha"
+              }
+            },
+            "reasonCode": "reason.alpha"
+          },
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "interface",
+              "ref": {
+                "id": "alpha"
+              }
+            },
+            "reasonCode": "reason.alpha"
+          }
+        ],
+        [
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "interface",
+              "ref": {
+                "id": "alpha"
+              }
+            },
+            "reasonCode": "reason.alpha"
+          },
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "component",
+              "ref": {
+                "localRef": "authority:alpha"
+              }
+            },
+            "reasonCode": "reason.alpha"
+          },
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "component",
+              "ref": {
+                "id": "alpha"
+              }
+            },
+            "reasonCode": "reason.zeta"
+          },
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "component",
+              "ref": {
+                "id": "alpha"
+              }
+            },
+            "reasonCode": "reason.alpha"
+          },
+          {
+            "state": "resolved",
+            "subject": {
+              "kind": "interface",
+              "ref": {
+                "id": "alpha"
+              }
+            }
+          },
+          {
+            "state": "resolved",
+            "subject": {
+              "kind": "component",
+              "ref": {
+                "localRef": "authority:alpha"
+              }
+            }
+          },
+          {
+            "state": "resolved",
+            "subject": {
+              "kind": "component",
               "ref": {
                 "id": "zeta"
               }
@@ -2879,22 +4293,71 @@
         ],
         [
           {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "interface",
+              "ref": {
+                "id": "alpha"
+              }
+            },
+            "reasonCode": "reason.alpha"
+          },
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "component",
+              "ref": {
+                "localRef": "authority:alpha"
+              }
+            },
+            "reasonCode": "reason.alpha"
+          },
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "component",
+              "ref": {
+                "id": "alpha"
+              }
+            },
+            "reasonCode": "reason.alpha"
+          },
+          {
             "state": "resolved",
             "subject": {
               "kind": "interface",
               "ref": {
-                "id": "zeta"
+                "id": "alpha"
               }
             }
           },
           {
             "state": "resolved",
             "subject": {
-              "kind": "router",
+              "kind": "component",
               "ref": {
-                "id": "mu"
+                "localRef": "authority:alpha"
               }
             }
+          },
+          {
+            "state": "resolved",
+            "subject": {
+              "kind": "component",
+              "ref": {
+                "id": "zeta"
+              }
+            }
+          },
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "component",
+              "ref": {
+                "id": "alpha"
+              }
+            },
+            "reasonCode": "reason.zeta"
           },
           {
             "state": "resolved",
@@ -2921,7 +4384,7 @@
         {
           "state": "resolved",
           "subject": {
-            "kind": "interface",
+            "kind": "component",
             "ref": {
               "id": "zeta"
             }
@@ -2930,15 +4393,64 @@
         {
           "state": "resolved",
           "subject": {
-            "kind": "router",
+            "kind": "component",
             "ref": {
-              "id": "mu"
+              "localRef": "authority:alpha"
             }
           }
+        },
+        {
+          "state": "resolved",
+          "subject": {
+            "kind": "interface",
+            "ref": {
+              "id": "alpha"
+            }
+          }
+        },
+        {
+          "state": "unresolved",
+          "intendedSubject": {
+            "kind": "component",
+            "ref": {
+              "id": "alpha"
+            }
+          },
+          "reasonCode": "reason.alpha"
+        },
+        {
+          "state": "unresolved",
+          "intendedSubject": {
+            "kind": "component",
+            "ref": {
+              "id": "alpha"
+            }
+          },
+          "reasonCode": "reason.zeta"
+        },
+        {
+          "state": "unresolved",
+          "intendedSubject": {
+            "kind": "component",
+            "ref": {
+              "localRef": "authority:alpha"
+            }
+          },
+          "reasonCode": "reason.alpha"
+        },
+        {
+          "state": "unresolved",
+          "intendedSubject": {
+            "kind": "interface",
+            "ref": {
+              "id": "alpha"
+            }
+          },
+          "reasonCode": "reason.alpha"
         }
       ],
-      "expectedCanonicalJson": "[{\"state\":\"resolved\",\"subject\":{\"kind\":\"component\",\"ref\":{\"id\":\"alpha\"}}},{\"state\":\"resolved\",\"subject\":{\"kind\":\"interface\",\"ref\":{\"id\":\"zeta\"}}},{\"state\":\"resolved\",\"subject\":{\"kind\":\"router\",\"ref\":{\"id\":\"mu\"}}}]",
-      "expectedDigest": "sha256:a1372de4b91882165c35cf394f0ef84a5cc2927344ece78463c957232a059b29"
+      "expectedCanonicalJson": "[{\"state\":\"resolved\",\"subject\":{\"kind\":\"component\",\"ref\":{\"id\":\"alpha\"}}},{\"state\":\"resolved\",\"subject\":{\"kind\":\"component\",\"ref\":{\"id\":\"zeta\"}}},{\"state\":\"resolved\",\"subject\":{\"kind\":\"component\",\"ref\":{\"localRef\":\"authority:alpha\"}}},{\"state\":\"resolved\",\"subject\":{\"kind\":\"interface\",\"ref\":{\"id\":\"alpha\"}}},{\"intendedSubject\":{\"kind\":\"component\",\"ref\":{\"id\":\"alpha\"}},\"reasonCode\":\"reason.alpha\",\"state\":\"unresolved\"},{\"intendedSubject\":{\"kind\":\"component\",\"ref\":{\"id\":\"alpha\"}},\"reasonCode\":\"reason.zeta\",\"state\":\"unresolved\"},{\"intendedSubject\":{\"kind\":\"component\",\"ref\":{\"localRef\":\"authority:alpha\"}},\"reasonCode\":\"reason.alpha\",\"state\":\"unresolved\"},{\"intendedSubject\":{\"kind\":\"interface\",\"ref\":{\"id\":\"alpha\"}},\"reasonCode\":\"reason.alpha\",\"state\":\"unresolved\"}]",
+      "expectedDigest": "sha256:3428731a87cfd7ab59139bc472c786a5508df28447d85b1bb00ccc5a6388f7bd"
     },
     {
       "id": "core-canonical-models-pipelinePlan-steps",
@@ -3051,28 +4563,55 @@
         [
           {
             "contractId": "alpha",
-            "version": "alpha",
-            "bundleManifestDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "version": "context-0",
+            "bundleManifestDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
             "roles": [
               "alpha-1"
             ],
             "capabilityConstraints": {}
           },
           {
-            "contractId": "mu",
-            "version": "mu",
-            "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "contractId": "context-1",
+            "version": "alpha",
+            "bundleManifestDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
             "roles": [
               "mu-2"
             ],
             "capabilityConstraints": {}
           },
           {
-            "contractId": "zeta",
+            "contractId": "context-1",
             "version": "zeta",
             "bundleManifestDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
             "roles": [
+              "mu-2"
+            ],
+            "capabilityConstraints": {}
+          },
+          {
+            "contractId": "context-2",
+            "version": "context-2",
+            "bundleManifestDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "roles": [
               "zeta-3"
+            ],
+            "capabilityConstraints": {}
+          },
+          {
+            "contractId": "context-2",
+            "version": "context-2",
+            "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "roles": [
+              "zeta-3"
+            ],
+            "capabilityConstraints": {}
+          },
+          {
+            "contractId": "zeta",
+            "version": "context-0",
+            "bundleManifestDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "roles": [
+              "alpha-1"
             ],
             "capabilityConstraints": {}
           }
@@ -3080,17 +4619,44 @@
         [
           {
             "contractId": "zeta",
-            "version": "zeta",
+            "version": "context-0",
             "bundleManifestDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "roles": [
+              "alpha-1"
+            ],
+            "capabilityConstraints": {}
+          },
+          {
+            "contractId": "context-2",
+            "version": "context-2",
+            "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             "roles": [
               "zeta-3"
             ],
             "capabilityConstraints": {}
           },
           {
-            "contractId": "mu",
-            "version": "mu",
-            "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "contractId": "context-2",
+            "version": "context-2",
+            "bundleManifestDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "roles": [
+              "zeta-3"
+            ],
+            "capabilityConstraints": {}
+          },
+          {
+            "contractId": "context-1",
+            "version": "zeta",
+            "bundleManifestDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "roles": [
+              "mu-2"
+            ],
+            "capabilityConstraints": {}
+          },
+          {
+            "contractId": "context-1",
+            "version": "alpha",
+            "bundleManifestDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
             "roles": [
               "mu-2"
             ],
@@ -3098,8 +4664,8 @@
           },
           {
             "contractId": "alpha",
-            "version": "alpha",
-            "bundleManifestDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "version": "context-0",
+            "bundleManifestDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
             "roles": [
               "alpha-1"
             ],
@@ -3108,27 +4674,54 @@
         ],
         [
           {
-            "contractId": "mu",
-            "version": "mu",
-            "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "contractId": "zeta",
+            "version": "context-0",
+            "bundleManifestDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
             "roles": [
-              "mu-2"
+              "alpha-1"
             ],
             "capabilityConstraints": {}
           },
           {
-            "contractId": "zeta",
-            "version": "zeta",
-            "bundleManifestDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "contractId": "context-2",
+            "version": "context-2",
+            "bundleManifestDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             "roles": [
               "zeta-3"
             ],
             "capabilityConstraints": {}
           },
           {
-            "contractId": "alpha",
+            "contractId": "context-2",
+            "version": "context-2",
+            "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "roles": [
+              "zeta-3"
+            ],
+            "capabilityConstraints": {}
+          },
+          {
+            "contractId": "context-1",
+            "version": "zeta",
+            "bundleManifestDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "roles": [
+              "mu-2"
+            ],
+            "capabilityConstraints": {}
+          },
+          {
+            "contractId": "context-1",
             "version": "alpha",
-            "bundleManifestDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "bundleManifestDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "roles": [
+              "mu-2"
+            ],
+            "capabilityConstraints": {}
+          },
+          {
+            "contractId": "alpha",
+            "version": "context-0",
+            "bundleManifestDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
             "roles": [
               "alpha-1"
             ],
@@ -3140,34 +4733,61 @@
       "expectedNormalized": [
         {
           "contractId": "alpha",
-          "version": "alpha",
-          "bundleManifestDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "version": "context-0",
+          "bundleManifestDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
           "roles": [
             "alpha-1"
           ],
           "capabilityConstraints": {}
         },
         {
-          "contractId": "mu",
-          "version": "mu",
-          "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "contractId": "context-1",
+          "version": "alpha",
+          "bundleManifestDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
           "roles": [
             "mu-2"
           ],
           "capabilityConstraints": {}
         },
         {
-          "contractId": "zeta",
+          "contractId": "context-1",
           "version": "zeta",
           "bundleManifestDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "roles": [
+            "mu-2"
+          ],
+          "capabilityConstraints": {}
+        },
+        {
+          "contractId": "context-2",
+          "version": "context-2",
+          "bundleManifestDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "roles": [
             "zeta-3"
           ],
           "capabilityConstraints": {}
+        },
+        {
+          "contractId": "context-2",
+          "version": "context-2",
+          "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "roles": [
+            "zeta-3"
+          ],
+          "capabilityConstraints": {}
+        },
+        {
+          "contractId": "zeta",
+          "version": "context-0",
+          "bundleManifestDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "roles": [
+            "alpha-1"
+          ],
+          "capabilityConstraints": {}
         }
       ],
-      "expectedCanonicalJson": "[{\"bundleManifestDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"capabilityConstraints\":{},\"contractId\":\"alpha\",\"roles\":[\"alpha-1\"],\"version\":\"alpha\"},{\"bundleManifestDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"capabilityConstraints\":{},\"contractId\":\"mu\",\"roles\":[\"mu-2\"],\"version\":\"mu\"},{\"bundleManifestDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"capabilityConstraints\":{},\"contractId\":\"zeta\",\"roles\":[\"zeta-3\"],\"version\":\"zeta\"}]",
-      "expectedDigest": "sha256:e9a425650cec97cf2d186105ee23577fd0371f746ea8943d045c58b5e6fb76e9"
+      "expectedCanonicalJson": "[{\"bundleManifestDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"capabilityConstraints\":{},\"contractId\":\"alpha\",\"roles\":[\"alpha-1\"],\"version\":\"context-0\"},{\"bundleManifestDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"capabilityConstraints\":{},\"contractId\":\"context-1\",\"roles\":[\"mu-2\"],\"version\":\"alpha\"},{\"bundleManifestDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"capabilityConstraints\":{},\"contractId\":\"context-1\",\"roles\":[\"mu-2\"],\"version\":\"zeta\"},{\"bundleManifestDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"capabilityConstraints\":{},\"contractId\":\"context-2\",\"roles\":[\"zeta-3\"],\"version\":\"context-2\"},{\"bundleManifestDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"capabilityConstraints\":{},\"contractId\":\"context-2\",\"roles\":[\"zeta-3\"],\"version\":\"context-2\"},{\"bundleManifestDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"capabilityConstraints\":{},\"contractId\":\"zeta\",\"roles\":[\"alpha-1\"],\"version\":\"context-0\"}]",
+      "expectedDigest": "sha256:0ee57353cb4148eaf2746fe6d1e951bf7dd7bf345543fe83e94515ec1a5a891a"
     },
     {
       "id": "core-canonical-models-topologyIntent-packageEntities",
@@ -3671,64 +5291,80 @@
       "inputVariants": [
         [
           {
-            "kind": "component",
-            "id": "mu"
+            "kind": "access-slot",
+            "id": "alpha"
           },
           {
-            "kind": "interface",
+            "kind": "access-slot",
+            "id": "context-0"
+          },
+          {
+            "kind": "access-slot",
             "id": "zeta"
           },
           {
-            "kind": "project",
+            "kind": "structural-link",
+            "id": "context-0"
+          }
+        ],
+        [
+          {
+            "kind": "structural-link",
+            "id": "context-0"
+          },
+          {
+            "kind": "access-slot",
+            "id": "zeta"
+          },
+          {
+            "kind": "access-slot",
+            "id": "context-0"
+          },
+          {
+            "kind": "access-slot",
             "id": "alpha"
           }
         ],
         [
           {
-            "kind": "project",
-            "id": "alpha"
+            "kind": "access-slot",
+            "id": "context-0"
           },
           {
-            "kind": "interface",
+            "kind": "structural-link",
+            "id": "context-0"
+          },
+          {
+            "kind": "access-slot",
             "id": "zeta"
           },
           {
-            "kind": "component",
-            "id": "mu"
-          }
-        ],
-        [
-          {
-            "kind": "interface",
-            "id": "zeta"
-          },
-          {
-            "kind": "project",
+            "kind": "access-slot",
             "id": "alpha"
-          },
-          {
-            "kind": "component",
-            "id": "mu"
           }
         ]
       ],
       "expectedRelation": "equal",
       "expectedNormalized": [
         {
-          "kind": "component",
-          "id": "mu"
+          "kind": "access-slot",
+          "id": "alpha"
         },
         {
-          "kind": "interface",
+          "kind": "access-slot",
+          "id": "context-0"
+        },
+        {
+          "kind": "access-slot",
           "id": "zeta"
         },
         {
-          "kind": "project",
-          "id": "alpha"
+          "kind": "structural-link",
+          "id": "context-0"
         }
       ],
-      "expectedCanonicalJson": "[{\"id\":\"mu\",\"kind\":\"component\"},{\"id\":\"zeta\",\"kind\":\"interface\"},{\"id\":\"alpha\",\"kind\":\"project\"}]",
-      "expectedDigest": "sha256:85105f37a1def40067c14443f33bad69df63dfccb1f69990eaf7df1cfd62553d"
+      "expectedCanonicalJson": "[{\"id\":\"alpha\",\"kind\":\"access-slot\"},{\"id\":\"context-0\",\"kind\":\"access-slot\"},{\"id\":\"zeta\",\"kind\":\"access-slot\"},{\"id\":\"context-0\",\"kind\":\"structural-link\"}]",
+      "expectedDigest": "sha256:2e66b442b5312d97bf8ccad620c0d258b2d73a832bd26846ee05967f55553caa"
     },
     {
       "id": "diagnostic-report-diagnostics",
@@ -5405,28 +7041,55 @@
         [
           {
             "contractId": "alpha",
-            "version": "alpha",
-            "bundleManifestDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "version": "context-0",
+            "bundleManifestDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
             "roles": [
               "alpha-1"
             ],
             "capabilityConstraints": {}
           },
           {
-            "contractId": "mu",
-            "version": "mu",
-            "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "contractId": "context-1",
+            "version": "alpha",
+            "bundleManifestDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
             "roles": [
               "mu-2"
             ],
             "capabilityConstraints": {}
           },
           {
-            "contractId": "zeta",
+            "contractId": "context-1",
             "version": "zeta",
             "bundleManifestDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
             "roles": [
+              "mu-2"
+            ],
+            "capabilityConstraints": {}
+          },
+          {
+            "contractId": "context-2",
+            "version": "context-2",
+            "bundleManifestDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "roles": [
               "zeta-3"
+            ],
+            "capabilityConstraints": {}
+          },
+          {
+            "contractId": "context-2",
+            "version": "context-2",
+            "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "roles": [
+              "zeta-3"
+            ],
+            "capabilityConstraints": {}
+          },
+          {
+            "contractId": "zeta",
+            "version": "context-0",
+            "bundleManifestDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "roles": [
+              "alpha-1"
             ],
             "capabilityConstraints": {}
           }
@@ -5434,17 +7097,44 @@
         [
           {
             "contractId": "zeta",
-            "version": "zeta",
+            "version": "context-0",
             "bundleManifestDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "roles": [
+              "alpha-1"
+            ],
+            "capabilityConstraints": {}
+          },
+          {
+            "contractId": "context-2",
+            "version": "context-2",
+            "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             "roles": [
               "zeta-3"
             ],
             "capabilityConstraints": {}
           },
           {
-            "contractId": "mu",
-            "version": "mu",
-            "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "contractId": "context-2",
+            "version": "context-2",
+            "bundleManifestDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "roles": [
+              "zeta-3"
+            ],
+            "capabilityConstraints": {}
+          },
+          {
+            "contractId": "context-1",
+            "version": "zeta",
+            "bundleManifestDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "roles": [
+              "mu-2"
+            ],
+            "capabilityConstraints": {}
+          },
+          {
+            "contractId": "context-1",
+            "version": "alpha",
+            "bundleManifestDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
             "roles": [
               "mu-2"
             ],
@@ -5452,8 +7142,8 @@
           },
           {
             "contractId": "alpha",
-            "version": "alpha",
-            "bundleManifestDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "version": "context-0",
+            "bundleManifestDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
             "roles": [
               "alpha-1"
             ],
@@ -5462,27 +7152,54 @@
         ],
         [
           {
-            "contractId": "mu",
-            "version": "mu",
-            "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "contractId": "zeta",
+            "version": "context-0",
+            "bundleManifestDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
             "roles": [
-              "mu-2"
+              "alpha-1"
             ],
             "capabilityConstraints": {}
           },
           {
-            "contractId": "zeta",
-            "version": "zeta",
-            "bundleManifestDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "contractId": "context-2",
+            "version": "context-2",
+            "bundleManifestDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             "roles": [
               "zeta-3"
             ],
             "capabilityConstraints": {}
           },
           {
-            "contractId": "alpha",
+            "contractId": "context-2",
+            "version": "context-2",
+            "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "roles": [
+              "zeta-3"
+            ],
+            "capabilityConstraints": {}
+          },
+          {
+            "contractId": "context-1",
+            "version": "zeta",
+            "bundleManifestDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "roles": [
+              "mu-2"
+            ],
+            "capabilityConstraints": {}
+          },
+          {
+            "contractId": "context-1",
             "version": "alpha",
-            "bundleManifestDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "bundleManifestDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "roles": [
+              "mu-2"
+            ],
+            "capabilityConstraints": {}
+          },
+          {
+            "contractId": "alpha",
+            "version": "context-0",
+            "bundleManifestDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
             "roles": [
               "alpha-1"
             ],
@@ -5494,34 +7211,61 @@
       "expectedNormalized": [
         {
           "contractId": "alpha",
-          "version": "alpha",
-          "bundleManifestDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "version": "context-0",
+          "bundleManifestDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
           "roles": [
             "alpha-1"
           ],
           "capabilityConstraints": {}
         },
         {
-          "contractId": "mu",
-          "version": "mu",
-          "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "contractId": "context-1",
+          "version": "alpha",
+          "bundleManifestDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
           "roles": [
             "mu-2"
           ],
           "capabilityConstraints": {}
         },
         {
-          "contractId": "zeta",
+          "contractId": "context-1",
           "version": "zeta",
           "bundleManifestDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "roles": [
+            "mu-2"
+          ],
+          "capabilityConstraints": {}
+        },
+        {
+          "contractId": "context-2",
+          "version": "context-2",
+          "bundleManifestDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "roles": [
             "zeta-3"
           ],
           "capabilityConstraints": {}
+        },
+        {
+          "contractId": "context-2",
+          "version": "context-2",
+          "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "roles": [
+            "zeta-3"
+          ],
+          "capabilityConstraints": {}
+        },
+        {
+          "contractId": "zeta",
+          "version": "context-0",
+          "bundleManifestDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "roles": [
+            "alpha-1"
+          ],
+          "capabilityConstraints": {}
         }
       ],
-      "expectedCanonicalJson": "[{\"bundleManifestDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"capabilityConstraints\":{},\"contractId\":\"alpha\",\"roles\":[\"alpha-1\"],\"version\":\"alpha\"},{\"bundleManifestDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"capabilityConstraints\":{},\"contractId\":\"mu\",\"roles\":[\"mu-2\"],\"version\":\"mu\"},{\"bundleManifestDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"capabilityConstraints\":{},\"contractId\":\"zeta\",\"roles\":[\"zeta-3\"],\"version\":\"zeta\"}]",
-      "expectedDigest": "sha256:e9a425650cec97cf2d186105ee23577fd0371f746ea8943d045c58b5e6fb76e9"
+      "expectedCanonicalJson": "[{\"bundleManifestDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"capabilityConstraints\":{},\"contractId\":\"alpha\",\"roles\":[\"alpha-1\"],\"version\":\"context-0\"},{\"bundleManifestDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"capabilityConstraints\":{},\"contractId\":\"context-1\",\"roles\":[\"mu-2\"],\"version\":\"alpha\"},{\"bundleManifestDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"capabilityConstraints\":{},\"contractId\":\"context-1\",\"roles\":[\"mu-2\"],\"version\":\"zeta\"},{\"bundleManifestDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"capabilityConstraints\":{},\"contractId\":\"context-2\",\"roles\":[\"zeta-3\"],\"version\":\"context-2\"},{\"bundleManifestDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"capabilityConstraints\":{},\"contractId\":\"context-2\",\"roles\":[\"zeta-3\"],\"version\":\"context-2\"},{\"bundleManifestDigest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"capabilityConstraints\":{},\"contractId\":\"zeta\",\"roles\":[\"alpha-1\"],\"version\":\"context-0\"}]",
+      "expectedDigest": "sha256:0ee57353cb4148eaf2746fe6d1e951bf7dd7bf345543fe83e94515ec1a5a891a"
     },
     {
       "id": "noc-package-tool-command",
@@ -6256,60 +8000,114 @@
         [
           {
             "ownerLockId": "alpha",
+            "schema": "context-0",
+            "version": "context-0",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-1",
             "schema": "alpha",
+            "version": "context-1",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-1",
+            "schema": "zeta",
+            "version": "context-1",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-2",
+            "schema": "context-2",
             "version": "alpha",
             "data": {}
           },
           {
-            "ownerLockId": "mu",
-            "schema": "mu",
-            "version": "mu",
+            "ownerLockId": "context-2",
+            "schema": "context-2",
+            "version": "zeta",
             "data": {}
           },
           {
             "ownerLockId": "zeta",
-            "schema": "zeta",
-            "version": "zeta",
+            "schema": "context-0",
+            "version": "context-0",
             "data": {}
           }
         ],
         [
           {
             "ownerLockId": "zeta",
-            "schema": "zeta",
+            "schema": "context-0",
+            "version": "context-0",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-2",
+            "schema": "context-2",
             "version": "zeta",
             "data": {}
           },
           {
-            "ownerLockId": "mu",
-            "schema": "mu",
-            "version": "mu",
+            "ownerLockId": "context-2",
+            "schema": "context-2",
+            "version": "alpha",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-1",
+            "schema": "zeta",
+            "version": "context-1",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-1",
+            "schema": "alpha",
+            "version": "context-1",
             "data": {}
           },
           {
             "ownerLockId": "alpha",
-            "schema": "alpha",
-            "version": "alpha",
+            "schema": "context-0",
+            "version": "context-0",
             "data": {}
           }
         ],
         [
           {
-            "ownerLockId": "mu",
-            "schema": "mu",
-            "version": "mu",
+            "ownerLockId": "zeta",
+            "schema": "context-0",
+            "version": "context-0",
             "data": {}
           },
           {
-            "ownerLockId": "zeta",
-            "schema": "zeta",
+            "ownerLockId": "context-2",
+            "schema": "context-2",
+            "version": "alpha",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-2",
+            "schema": "context-2",
             "version": "zeta",
             "data": {}
           },
           {
-            "ownerLockId": "alpha",
+            "ownerLockId": "context-1",
+            "schema": "zeta",
+            "version": "context-1",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-1",
             "schema": "alpha",
-            "version": "alpha",
+            "version": "context-1",
+            "data": {}
+          },
+          {
+            "ownerLockId": "alpha",
+            "schema": "context-0",
+            "version": "context-0",
             "data": {}
           }
         ]
@@ -6318,25 +8116,43 @@
       "expectedNormalized": [
         {
           "ownerLockId": "alpha",
+          "schema": "context-0",
+          "version": "context-0",
+          "data": {}
+        },
+        {
+          "ownerLockId": "context-1",
           "schema": "alpha",
+          "version": "context-1",
+          "data": {}
+        },
+        {
+          "ownerLockId": "context-1",
+          "schema": "zeta",
+          "version": "context-1",
+          "data": {}
+        },
+        {
+          "ownerLockId": "context-2",
+          "schema": "context-2",
           "version": "alpha",
           "data": {}
         },
         {
-          "ownerLockId": "mu",
-          "schema": "mu",
-          "version": "mu",
+          "ownerLockId": "context-2",
+          "schema": "context-2",
+          "version": "zeta",
           "data": {}
         },
         {
           "ownerLockId": "zeta",
-          "schema": "zeta",
-          "version": "zeta",
+          "schema": "context-0",
+          "version": "context-0",
           "data": {}
         }
       ],
-      "expectedCanonicalJson": "[{\"data\":{},\"ownerLockId\":\"alpha\",\"schema\":\"alpha\",\"version\":\"alpha\"},{\"data\":{},\"ownerLockId\":\"mu\",\"schema\":\"mu\",\"version\":\"mu\"},{\"data\":{},\"ownerLockId\":\"zeta\",\"schema\":\"zeta\",\"version\":\"zeta\"}]",
-      "expectedDigest": "sha256:7f07ce23d6445229db03ef46d5a805a7dbb4915ab35a6b3c76e5df330d8cf0b6"
+      "expectedCanonicalJson": "[{\"data\":{},\"ownerLockId\":\"alpha\",\"schema\":\"context-0\",\"version\":\"context-0\"},{\"data\":{},\"ownerLockId\":\"context-1\",\"schema\":\"alpha\",\"version\":\"context-1\"},{\"data\":{},\"ownerLockId\":\"context-1\",\"schema\":\"zeta\",\"version\":\"context-1\"},{\"data\":{},\"ownerLockId\":\"context-2\",\"schema\":\"context-2\",\"version\":\"alpha\"},{\"data\":{},\"ownerLockId\":\"context-2\",\"schema\":\"context-2\",\"version\":\"zeta\"},{\"data\":{},\"ownerLockId\":\"zeta\",\"schema\":\"context-0\",\"version\":\"context-0\"}]",
+      "expectedDigest": "sha256:dd65de411ab9ed43999f32f7c67105f7edaf2fdf7d9db059e053561bfd0b35c5"
     },
     {
       "id": "noc-package-interfaceTemplates",
@@ -7347,60 +9163,114 @@
         [
           {
             "ownerLockId": "alpha",
+            "schema": "context-0",
+            "version": "context-0",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-1",
             "schema": "alpha",
+            "version": "context-1",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-1",
+            "schema": "zeta",
+            "version": "context-1",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-2",
+            "schema": "context-2",
             "version": "alpha",
             "data": {}
           },
           {
-            "ownerLockId": "mu",
-            "schema": "mu",
-            "version": "mu",
+            "ownerLockId": "context-2",
+            "schema": "context-2",
+            "version": "zeta",
             "data": {}
           },
           {
             "ownerLockId": "zeta",
-            "schema": "zeta",
-            "version": "zeta",
+            "schema": "context-0",
+            "version": "context-0",
             "data": {}
           }
         ],
         [
           {
             "ownerLockId": "zeta",
-            "schema": "zeta",
+            "schema": "context-0",
+            "version": "context-0",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-2",
+            "schema": "context-2",
             "version": "zeta",
             "data": {}
           },
           {
-            "ownerLockId": "mu",
-            "schema": "mu",
-            "version": "mu",
+            "ownerLockId": "context-2",
+            "schema": "context-2",
+            "version": "alpha",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-1",
+            "schema": "zeta",
+            "version": "context-1",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-1",
+            "schema": "alpha",
+            "version": "context-1",
             "data": {}
           },
           {
             "ownerLockId": "alpha",
-            "schema": "alpha",
-            "version": "alpha",
+            "schema": "context-0",
+            "version": "context-0",
             "data": {}
           }
         ],
         [
           {
-            "ownerLockId": "mu",
-            "schema": "mu",
-            "version": "mu",
+            "ownerLockId": "zeta",
+            "schema": "context-0",
+            "version": "context-0",
             "data": {}
           },
           {
-            "ownerLockId": "zeta",
-            "schema": "zeta",
+            "ownerLockId": "context-2",
+            "schema": "context-2",
+            "version": "alpha",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-2",
+            "schema": "context-2",
             "version": "zeta",
             "data": {}
           },
           {
-            "ownerLockId": "alpha",
+            "ownerLockId": "context-1",
+            "schema": "zeta",
+            "version": "context-1",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-1",
             "schema": "alpha",
-            "version": "alpha",
+            "version": "context-1",
+            "data": {}
+          },
+          {
+            "ownerLockId": "alpha",
+            "schema": "context-0",
+            "version": "context-0",
             "data": {}
           }
         ]
@@ -7409,25 +9279,43 @@
       "expectedNormalized": [
         {
           "ownerLockId": "alpha",
+          "schema": "context-0",
+          "version": "context-0",
+          "data": {}
+        },
+        {
+          "ownerLockId": "context-1",
           "schema": "alpha",
+          "version": "context-1",
+          "data": {}
+        },
+        {
+          "ownerLockId": "context-1",
+          "schema": "zeta",
+          "version": "context-1",
+          "data": {}
+        },
+        {
+          "ownerLockId": "context-2",
+          "schema": "context-2",
           "version": "alpha",
           "data": {}
         },
         {
-          "ownerLockId": "mu",
-          "schema": "mu",
-          "version": "mu",
+          "ownerLockId": "context-2",
+          "schema": "context-2",
+          "version": "zeta",
           "data": {}
         },
         {
           "ownerLockId": "zeta",
-          "schema": "zeta",
-          "version": "zeta",
+          "schema": "context-0",
+          "version": "context-0",
           "data": {}
         }
       ],
-      "expectedCanonicalJson": "[{\"data\":{},\"ownerLockId\":\"alpha\",\"schema\":\"alpha\",\"version\":\"alpha\"},{\"data\":{},\"ownerLockId\":\"mu\",\"schema\":\"mu\",\"version\":\"mu\"},{\"data\":{},\"ownerLockId\":\"zeta\",\"schema\":\"zeta\",\"version\":\"zeta\"}]",
-      "expectedDigest": "sha256:7f07ce23d6445229db03ef46d5a805a7dbb4915ab35a6b3c76e5df330d8cf0b6"
+      "expectedCanonicalJson": "[{\"data\":{},\"ownerLockId\":\"alpha\",\"schema\":\"context-0\",\"version\":\"context-0\"},{\"data\":{},\"ownerLockId\":\"context-1\",\"schema\":\"alpha\",\"version\":\"context-1\"},{\"data\":{},\"ownerLockId\":\"context-1\",\"schema\":\"zeta\",\"version\":\"context-1\"},{\"data\":{},\"ownerLockId\":\"context-2\",\"schema\":\"context-2\",\"version\":\"alpha\"},{\"data\":{},\"ownerLockId\":\"context-2\",\"schema\":\"context-2\",\"version\":\"zeta\"},{\"data\":{},\"ownerLockId\":\"zeta\",\"schema\":\"context-0\",\"version\":\"context-0\"}]",
+      "expectedDigest": "sha256:dd65de411ab9ed43999f32f7c67105f7edaf2fdf7d9db059e053561bfd0b35c5"
     },
     {
       "id": "project-design-defaultEngineDependencyLock-supportedPlatformAbis",
@@ -7477,60 +9365,114 @@
         [
           {
             "ownerLockId": "alpha",
+            "schema": "context-0",
+            "version": "context-0",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-1",
             "schema": "alpha",
+            "version": "context-1",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-1",
+            "schema": "zeta",
+            "version": "context-1",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-2",
+            "schema": "context-2",
             "version": "alpha",
             "data": {}
           },
           {
-            "ownerLockId": "mu",
-            "schema": "mu",
-            "version": "mu",
+            "ownerLockId": "context-2",
+            "schema": "context-2",
+            "version": "zeta",
             "data": {}
           },
           {
             "ownerLockId": "zeta",
-            "schema": "zeta",
-            "version": "zeta",
+            "schema": "context-0",
+            "version": "context-0",
             "data": {}
           }
         ],
         [
           {
             "ownerLockId": "zeta",
-            "schema": "zeta",
+            "schema": "context-0",
+            "version": "context-0",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-2",
+            "schema": "context-2",
             "version": "zeta",
             "data": {}
           },
           {
-            "ownerLockId": "mu",
-            "schema": "mu",
-            "version": "mu",
+            "ownerLockId": "context-2",
+            "schema": "context-2",
+            "version": "alpha",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-1",
+            "schema": "zeta",
+            "version": "context-1",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-1",
+            "schema": "alpha",
+            "version": "context-1",
             "data": {}
           },
           {
             "ownerLockId": "alpha",
-            "schema": "alpha",
-            "version": "alpha",
+            "schema": "context-0",
+            "version": "context-0",
             "data": {}
           }
         ],
         [
           {
-            "ownerLockId": "mu",
-            "schema": "mu",
-            "version": "mu",
+            "ownerLockId": "zeta",
+            "schema": "context-0",
+            "version": "context-0",
             "data": {}
           },
           {
-            "ownerLockId": "zeta",
-            "schema": "zeta",
+            "ownerLockId": "context-2",
+            "schema": "context-2",
+            "version": "alpha",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-2",
+            "schema": "context-2",
             "version": "zeta",
             "data": {}
           },
           {
-            "ownerLockId": "alpha",
+            "ownerLockId": "context-1",
+            "schema": "zeta",
+            "version": "context-1",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-1",
             "schema": "alpha",
-            "version": "alpha",
+            "version": "context-1",
+            "data": {}
+          },
+          {
+            "ownerLockId": "alpha",
+            "schema": "context-0",
+            "version": "context-0",
             "data": {}
           }
         ]
@@ -7539,25 +9481,43 @@
       "expectedNormalized": [
         {
           "ownerLockId": "alpha",
+          "schema": "context-0",
+          "version": "context-0",
+          "data": {}
+        },
+        {
+          "ownerLockId": "context-1",
           "schema": "alpha",
+          "version": "context-1",
+          "data": {}
+        },
+        {
+          "ownerLockId": "context-1",
+          "schema": "zeta",
+          "version": "context-1",
+          "data": {}
+        },
+        {
+          "ownerLockId": "context-2",
+          "schema": "context-2",
           "version": "alpha",
           "data": {}
         },
         {
-          "ownerLockId": "mu",
-          "schema": "mu",
-          "version": "mu",
+          "ownerLockId": "context-2",
+          "schema": "context-2",
+          "version": "zeta",
           "data": {}
         },
         {
           "ownerLockId": "zeta",
-          "schema": "zeta",
-          "version": "zeta",
+          "schema": "context-0",
+          "version": "context-0",
           "data": {}
         }
       ],
-      "expectedCanonicalJson": "[{\"data\":{},\"ownerLockId\":\"alpha\",\"schema\":\"alpha\",\"version\":\"alpha\"},{\"data\":{},\"ownerLockId\":\"mu\",\"schema\":\"mu\",\"version\":\"mu\"},{\"data\":{},\"ownerLockId\":\"zeta\",\"schema\":\"zeta\",\"version\":\"zeta\"}]",
-      "expectedDigest": "sha256:7f07ce23d6445229db03ef46d5a805a7dbb4915ab35a6b3c76e5df330d8cf0b6"
+      "expectedCanonicalJson": "[{\"data\":{},\"ownerLockId\":\"alpha\",\"schema\":\"context-0\",\"version\":\"context-0\"},{\"data\":{},\"ownerLockId\":\"context-1\",\"schema\":\"alpha\",\"version\":\"context-1\"},{\"data\":{},\"ownerLockId\":\"context-1\",\"schema\":\"zeta\",\"version\":\"context-1\"},{\"data\":{},\"ownerLockId\":\"context-2\",\"schema\":\"context-2\",\"version\":\"alpha\"},{\"data\":{},\"ownerLockId\":\"context-2\",\"schema\":\"context-2\",\"version\":\"zeta\"},{\"data\":{},\"ownerLockId\":\"zeta\",\"schema\":\"context-0\",\"version\":\"context-0\"}]",
+      "expectedDigest": "sha256:dd65de411ab9ed43999f32f7c67105f7edaf2fdf7d9db059e053561bfd0b35c5"
     },
     {
       "id": "project-design-packageEntity-extensions",
@@ -7573,60 +9533,114 @@
         [
           {
             "ownerLockId": "alpha",
+            "schema": "context-0",
+            "version": "context-0",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-1",
             "schema": "alpha",
+            "version": "context-1",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-1",
+            "schema": "zeta",
+            "version": "context-1",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-2",
+            "schema": "context-2",
             "version": "alpha",
             "data": {}
           },
           {
-            "ownerLockId": "mu",
-            "schema": "mu",
-            "version": "mu",
+            "ownerLockId": "context-2",
+            "schema": "context-2",
+            "version": "zeta",
             "data": {}
           },
           {
             "ownerLockId": "zeta",
-            "schema": "zeta",
-            "version": "zeta",
+            "schema": "context-0",
+            "version": "context-0",
             "data": {}
           }
         ],
         [
           {
             "ownerLockId": "zeta",
-            "schema": "zeta",
+            "schema": "context-0",
+            "version": "context-0",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-2",
+            "schema": "context-2",
             "version": "zeta",
             "data": {}
           },
           {
-            "ownerLockId": "mu",
-            "schema": "mu",
-            "version": "mu",
+            "ownerLockId": "context-2",
+            "schema": "context-2",
+            "version": "alpha",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-1",
+            "schema": "zeta",
+            "version": "context-1",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-1",
+            "schema": "alpha",
+            "version": "context-1",
             "data": {}
           },
           {
             "ownerLockId": "alpha",
-            "schema": "alpha",
-            "version": "alpha",
+            "schema": "context-0",
+            "version": "context-0",
             "data": {}
           }
         ],
         [
           {
-            "ownerLockId": "mu",
-            "schema": "mu",
-            "version": "mu",
+            "ownerLockId": "zeta",
+            "schema": "context-0",
+            "version": "context-0",
             "data": {}
           },
           {
-            "ownerLockId": "zeta",
-            "schema": "zeta",
+            "ownerLockId": "context-2",
+            "schema": "context-2",
+            "version": "alpha",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-2",
+            "schema": "context-2",
             "version": "zeta",
             "data": {}
           },
           {
-            "ownerLockId": "alpha",
+            "ownerLockId": "context-1",
+            "schema": "zeta",
+            "version": "context-1",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-1",
             "schema": "alpha",
-            "version": "alpha",
+            "version": "context-1",
+            "data": {}
+          },
+          {
+            "ownerLockId": "alpha",
+            "schema": "context-0",
+            "version": "context-0",
             "data": {}
           }
         ]
@@ -7635,25 +9649,43 @@
       "expectedNormalized": [
         {
           "ownerLockId": "alpha",
+          "schema": "context-0",
+          "version": "context-0",
+          "data": {}
+        },
+        {
+          "ownerLockId": "context-1",
           "schema": "alpha",
+          "version": "context-1",
+          "data": {}
+        },
+        {
+          "ownerLockId": "context-1",
+          "schema": "zeta",
+          "version": "context-1",
+          "data": {}
+        },
+        {
+          "ownerLockId": "context-2",
+          "schema": "context-2",
           "version": "alpha",
           "data": {}
         },
         {
-          "ownerLockId": "mu",
-          "schema": "mu",
-          "version": "mu",
+          "ownerLockId": "context-2",
+          "schema": "context-2",
+          "version": "zeta",
           "data": {}
         },
         {
           "ownerLockId": "zeta",
-          "schema": "zeta",
-          "version": "zeta",
+          "schema": "context-0",
+          "version": "context-0",
           "data": {}
         }
       ],
-      "expectedCanonicalJson": "[{\"data\":{},\"ownerLockId\":\"alpha\",\"schema\":\"alpha\",\"version\":\"alpha\"},{\"data\":{},\"ownerLockId\":\"mu\",\"schema\":\"mu\",\"version\":\"mu\"},{\"data\":{},\"ownerLockId\":\"zeta\",\"schema\":\"zeta\",\"version\":\"zeta\"}]",
-      "expectedDigest": "sha256:7f07ce23d6445229db03ef46d5a805a7dbb4915ab35a6b3c76e5df330d8cf0b6"
+      "expectedCanonicalJson": "[{\"data\":{},\"ownerLockId\":\"alpha\",\"schema\":\"context-0\",\"version\":\"context-0\"},{\"data\":{},\"ownerLockId\":\"context-1\",\"schema\":\"alpha\",\"version\":\"context-1\"},{\"data\":{},\"ownerLockId\":\"context-1\",\"schema\":\"zeta\",\"version\":\"context-1\"},{\"data\":{},\"ownerLockId\":\"context-2\",\"schema\":\"context-2\",\"version\":\"alpha\"},{\"data\":{},\"ownerLockId\":\"context-2\",\"schema\":\"context-2\",\"version\":\"zeta\"},{\"data\":{},\"ownerLockId\":\"zeta\",\"schema\":\"context-0\",\"version\":\"context-0\"}]",
+      "expectedDigest": "sha256:dd65de411ab9ed43999f32f7c67105f7edaf2fdf7d9db059e053561bfd0b35c5"
     },
     {
       "id": "project-design-packageRelation-extensions",
@@ -7669,60 +9701,114 @@
         [
           {
             "ownerLockId": "alpha",
+            "schema": "context-0",
+            "version": "context-0",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-1",
             "schema": "alpha",
+            "version": "context-1",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-1",
+            "schema": "zeta",
+            "version": "context-1",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-2",
+            "schema": "context-2",
             "version": "alpha",
             "data": {}
           },
           {
-            "ownerLockId": "mu",
-            "schema": "mu",
-            "version": "mu",
+            "ownerLockId": "context-2",
+            "schema": "context-2",
+            "version": "zeta",
             "data": {}
           },
           {
             "ownerLockId": "zeta",
-            "schema": "zeta",
-            "version": "zeta",
+            "schema": "context-0",
+            "version": "context-0",
             "data": {}
           }
         ],
         [
           {
             "ownerLockId": "zeta",
-            "schema": "zeta",
+            "schema": "context-0",
+            "version": "context-0",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-2",
+            "schema": "context-2",
             "version": "zeta",
             "data": {}
           },
           {
-            "ownerLockId": "mu",
-            "schema": "mu",
-            "version": "mu",
+            "ownerLockId": "context-2",
+            "schema": "context-2",
+            "version": "alpha",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-1",
+            "schema": "zeta",
+            "version": "context-1",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-1",
+            "schema": "alpha",
+            "version": "context-1",
             "data": {}
           },
           {
             "ownerLockId": "alpha",
-            "schema": "alpha",
-            "version": "alpha",
+            "schema": "context-0",
+            "version": "context-0",
             "data": {}
           }
         ],
         [
           {
-            "ownerLockId": "mu",
-            "schema": "mu",
-            "version": "mu",
+            "ownerLockId": "zeta",
+            "schema": "context-0",
+            "version": "context-0",
             "data": {}
           },
           {
-            "ownerLockId": "zeta",
-            "schema": "zeta",
+            "ownerLockId": "context-2",
+            "schema": "context-2",
+            "version": "alpha",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-2",
+            "schema": "context-2",
             "version": "zeta",
             "data": {}
           },
           {
-            "ownerLockId": "alpha",
+            "ownerLockId": "context-1",
+            "schema": "zeta",
+            "version": "context-1",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-1",
             "schema": "alpha",
-            "version": "alpha",
+            "version": "context-1",
+            "data": {}
+          },
+          {
+            "ownerLockId": "alpha",
+            "schema": "context-0",
+            "version": "context-0",
             "data": {}
           }
         ]
@@ -7731,25 +9817,43 @@
       "expectedNormalized": [
         {
           "ownerLockId": "alpha",
+          "schema": "context-0",
+          "version": "context-0",
+          "data": {}
+        },
+        {
+          "ownerLockId": "context-1",
           "schema": "alpha",
+          "version": "context-1",
+          "data": {}
+        },
+        {
+          "ownerLockId": "context-1",
+          "schema": "zeta",
+          "version": "context-1",
+          "data": {}
+        },
+        {
+          "ownerLockId": "context-2",
+          "schema": "context-2",
           "version": "alpha",
           "data": {}
         },
         {
-          "ownerLockId": "mu",
-          "schema": "mu",
-          "version": "mu",
+          "ownerLockId": "context-2",
+          "schema": "context-2",
+          "version": "zeta",
           "data": {}
         },
         {
           "ownerLockId": "zeta",
-          "schema": "zeta",
-          "version": "zeta",
+          "schema": "context-0",
+          "version": "context-0",
           "data": {}
         }
       ],
-      "expectedCanonicalJson": "[{\"data\":{},\"ownerLockId\":\"alpha\",\"schema\":\"alpha\",\"version\":\"alpha\"},{\"data\":{},\"ownerLockId\":\"mu\",\"schema\":\"mu\",\"version\":\"mu\"},{\"data\":{},\"ownerLockId\":\"zeta\",\"schema\":\"zeta\",\"version\":\"zeta\"}]",
-      "expectedDigest": "sha256:7f07ce23d6445229db03ef46d5a805a7dbb4915ab35a6b3c76e5df330d8cf0b6"
+      "expectedCanonicalJson": "[{\"data\":{},\"ownerLockId\":\"alpha\",\"schema\":\"context-0\",\"version\":\"context-0\"},{\"data\":{},\"ownerLockId\":\"context-1\",\"schema\":\"alpha\",\"version\":\"context-1\"},{\"data\":{},\"ownerLockId\":\"context-1\",\"schema\":\"zeta\",\"version\":\"context-1\"},{\"data\":{},\"ownerLockId\":\"context-2\",\"schema\":\"context-2\",\"version\":\"alpha\"},{\"data\":{},\"ownerLockId\":\"context-2\",\"schema\":\"context-2\",\"version\":\"zeta\"},{\"data\":{},\"ownerLockId\":\"zeta\",\"schema\":\"context-0\",\"version\":\"context-0\"}]",
+      "expectedDigest": "sha256:dd65de411ab9ed43999f32f7c67105f7edaf2fdf7d9db059e053561bfd0b35c5"
     },
     {
       "id": "project-design-packageRelation-sources",
@@ -7771,30 +9875,94 @@
           {
             "state": "resolved",
             "subject": {
-              "kind": "interface",
+              "kind": "component",
               "id": "zeta"
             }
           },
           {
             "state": "resolved",
             "subject": {
-              "kind": "router",
-              "id": "mu"
+              "kind": "interface",
+              "id": "alpha"
             }
+          },
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "component",
+              "id": "alpha"
+            },
+            "reasonCode": "reason.alpha"
+          },
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "component",
+              "id": "alpha"
+            },
+            "reasonCode": "reason.zeta"
+          },
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "component",
+              "id": "zeta"
+            },
+            "reasonCode": "reason.alpha"
+          },
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "interface",
+              "id": "alpha"
+            },
+            "reasonCode": "reason.alpha"
           }
         ],
         [
           {
-            "state": "resolved",
-            "subject": {
-              "kind": "router",
-              "id": "mu"
-            }
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "interface",
+              "id": "alpha"
+            },
+            "reasonCode": "reason.alpha"
+          },
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "component",
+              "id": "zeta"
+            },
+            "reasonCode": "reason.alpha"
+          },
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "component",
+              "id": "alpha"
+            },
+            "reasonCode": "reason.zeta"
+          },
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "component",
+              "id": "alpha"
+            },
+            "reasonCode": "reason.alpha"
           },
           {
             "state": "resolved",
             "subject": {
               "kind": "interface",
+              "id": "alpha"
+            }
+          },
+          {
+            "state": "resolved",
+            "subject": {
+              "kind": "component",
               "id": "zeta"
             }
           },
@@ -7808,18 +9976,50 @@
         ],
         [
           {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "interface",
+              "id": "alpha"
+            },
+            "reasonCode": "reason.alpha"
+          },
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "component",
+              "id": "alpha"
+            },
+            "reasonCode": "reason.alpha"
+          },
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "component",
+              "id": "alpha"
+            },
+            "reasonCode": "reason.zeta"
+          },
+          {
             "state": "resolved",
             "subject": {
               "kind": "interface",
-              "id": "zeta"
+              "id": "alpha"
             }
           },
           {
             "state": "resolved",
             "subject": {
-              "kind": "router",
-              "id": "mu"
+              "kind": "component",
+              "id": "zeta"
             }
+          },
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "component",
+              "id": "zeta"
+            },
+            "reasonCode": "reason.alpha"
           },
           {
             "state": "resolved",
@@ -7842,20 +10042,52 @@
         {
           "state": "resolved",
           "subject": {
-            "kind": "interface",
+            "kind": "component",
             "id": "zeta"
           }
         },
         {
           "state": "resolved",
           "subject": {
-            "kind": "router",
-            "id": "mu"
+            "kind": "interface",
+            "id": "alpha"
           }
+        },
+        {
+          "state": "unresolved",
+          "intendedSubject": {
+            "kind": "component",
+            "id": "alpha"
+          },
+          "reasonCode": "reason.alpha"
+        },
+        {
+          "state": "unresolved",
+          "intendedSubject": {
+            "kind": "component",
+            "id": "alpha"
+          },
+          "reasonCode": "reason.zeta"
+        },
+        {
+          "state": "unresolved",
+          "intendedSubject": {
+            "kind": "component",
+            "id": "zeta"
+          },
+          "reasonCode": "reason.alpha"
+        },
+        {
+          "state": "unresolved",
+          "intendedSubject": {
+            "kind": "interface",
+            "id": "alpha"
+          },
+          "reasonCode": "reason.alpha"
         }
       ],
-      "expectedCanonicalJson": "[{\"state\":\"resolved\",\"subject\":{\"id\":\"alpha\",\"kind\":\"component\"}},{\"state\":\"resolved\",\"subject\":{\"id\":\"zeta\",\"kind\":\"interface\"}},{\"state\":\"resolved\",\"subject\":{\"id\":\"mu\",\"kind\":\"router\"}}]",
-      "expectedDigest": "sha256:1f755e3116a430f39e08429f7a4e446da29b826dbb0192d64a5a4d964a733d95"
+      "expectedCanonicalJson": "[{\"state\":\"resolved\",\"subject\":{\"id\":\"alpha\",\"kind\":\"component\"}},{\"state\":\"resolved\",\"subject\":{\"id\":\"zeta\",\"kind\":\"component\"}},{\"state\":\"resolved\",\"subject\":{\"id\":\"alpha\",\"kind\":\"interface\"}},{\"intendedSubject\":{\"id\":\"alpha\",\"kind\":\"component\"},\"reasonCode\":\"reason.alpha\",\"state\":\"unresolved\"},{\"intendedSubject\":{\"id\":\"alpha\",\"kind\":\"component\"},\"reasonCode\":\"reason.zeta\",\"state\":\"unresolved\"},{\"intendedSubject\":{\"id\":\"zeta\",\"kind\":\"component\"},\"reasonCode\":\"reason.alpha\",\"state\":\"unresolved\"},{\"intendedSubject\":{\"id\":\"alpha\",\"kind\":\"interface\"},\"reasonCode\":\"reason.alpha\",\"state\":\"unresolved\"}]",
+      "expectedDigest": "sha256:21b4777e1e880cd8a03a0aefcdf0e11264cb12d9c1e203f27279801557ba1aaf"
     },
     {
       "id": "project-design-packageRelation-targets",
@@ -7877,30 +10109,94 @@
           {
             "state": "resolved",
             "subject": {
-              "kind": "interface",
+              "kind": "component",
               "id": "zeta"
             }
           },
           {
             "state": "resolved",
             "subject": {
-              "kind": "router",
-              "id": "mu"
+              "kind": "interface",
+              "id": "alpha"
             }
+          },
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "component",
+              "id": "alpha"
+            },
+            "reasonCode": "reason.alpha"
+          },
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "component",
+              "id": "alpha"
+            },
+            "reasonCode": "reason.zeta"
+          },
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "component",
+              "id": "zeta"
+            },
+            "reasonCode": "reason.alpha"
+          },
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "interface",
+              "id": "alpha"
+            },
+            "reasonCode": "reason.alpha"
           }
         ],
         [
           {
-            "state": "resolved",
-            "subject": {
-              "kind": "router",
-              "id": "mu"
-            }
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "interface",
+              "id": "alpha"
+            },
+            "reasonCode": "reason.alpha"
+          },
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "component",
+              "id": "zeta"
+            },
+            "reasonCode": "reason.alpha"
+          },
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "component",
+              "id": "alpha"
+            },
+            "reasonCode": "reason.zeta"
+          },
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "component",
+              "id": "alpha"
+            },
+            "reasonCode": "reason.alpha"
           },
           {
             "state": "resolved",
             "subject": {
               "kind": "interface",
+              "id": "alpha"
+            }
+          },
+          {
+            "state": "resolved",
+            "subject": {
+              "kind": "component",
               "id": "zeta"
             }
           },
@@ -7914,18 +10210,50 @@
         ],
         [
           {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "interface",
+              "id": "alpha"
+            },
+            "reasonCode": "reason.alpha"
+          },
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "component",
+              "id": "alpha"
+            },
+            "reasonCode": "reason.alpha"
+          },
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "component",
+              "id": "alpha"
+            },
+            "reasonCode": "reason.zeta"
+          },
+          {
             "state": "resolved",
             "subject": {
               "kind": "interface",
-              "id": "zeta"
+              "id": "alpha"
             }
           },
           {
             "state": "resolved",
             "subject": {
-              "kind": "router",
-              "id": "mu"
+              "kind": "component",
+              "id": "zeta"
             }
+          },
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "component",
+              "id": "zeta"
+            },
+            "reasonCode": "reason.alpha"
           },
           {
             "state": "resolved",
@@ -7948,20 +10276,52 @@
         {
           "state": "resolved",
           "subject": {
-            "kind": "interface",
+            "kind": "component",
             "id": "zeta"
           }
         },
         {
           "state": "resolved",
           "subject": {
-            "kind": "router",
-            "id": "mu"
+            "kind": "interface",
+            "id": "alpha"
           }
+        },
+        {
+          "state": "unresolved",
+          "intendedSubject": {
+            "kind": "component",
+            "id": "alpha"
+          },
+          "reasonCode": "reason.alpha"
+        },
+        {
+          "state": "unresolved",
+          "intendedSubject": {
+            "kind": "component",
+            "id": "alpha"
+          },
+          "reasonCode": "reason.zeta"
+        },
+        {
+          "state": "unresolved",
+          "intendedSubject": {
+            "kind": "component",
+            "id": "zeta"
+          },
+          "reasonCode": "reason.alpha"
+        },
+        {
+          "state": "unresolved",
+          "intendedSubject": {
+            "kind": "interface",
+            "id": "alpha"
+          },
+          "reasonCode": "reason.alpha"
         }
       ],
-      "expectedCanonicalJson": "[{\"state\":\"resolved\",\"subject\":{\"id\":\"alpha\",\"kind\":\"component\"}},{\"state\":\"resolved\",\"subject\":{\"id\":\"zeta\",\"kind\":\"interface\"}},{\"state\":\"resolved\",\"subject\":{\"id\":\"mu\",\"kind\":\"router\"}}]",
-      "expectedDigest": "sha256:1f755e3116a430f39e08429f7a4e446da29b826dbb0192d64a5a4d964a733d95"
+      "expectedCanonicalJson": "[{\"state\":\"resolved\",\"subject\":{\"id\":\"alpha\",\"kind\":\"component\"}},{\"state\":\"resolved\",\"subject\":{\"id\":\"zeta\",\"kind\":\"component\"}},{\"state\":\"resolved\",\"subject\":{\"id\":\"alpha\",\"kind\":\"interface\"}},{\"intendedSubject\":{\"id\":\"alpha\",\"kind\":\"component\"},\"reasonCode\":\"reason.alpha\",\"state\":\"unresolved\"},{\"intendedSubject\":{\"id\":\"alpha\",\"kind\":\"component\"},\"reasonCode\":\"reason.zeta\",\"state\":\"unresolved\"},{\"intendedSubject\":{\"id\":\"zeta\",\"kind\":\"component\"},\"reasonCode\":\"reason.alpha\",\"state\":\"unresolved\"},{\"intendedSubject\":{\"id\":\"alpha\",\"kind\":\"interface\"},\"reasonCode\":\"reason.alpha\",\"state\":\"unresolved\"}]",
+      "expectedDigest": "sha256:21b4777e1e880cd8a03a0aefcdf0e11264cb12d9c1e203f27279801557ba1aaf"
     },
     {
       "id": "project-design-topology-accessSlots",
@@ -8521,60 +10881,114 @@
         [
           {
             "ownerLockId": "alpha",
+            "schema": "context-0",
+            "version": "context-0",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-1",
             "schema": "alpha",
+            "version": "context-1",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-1",
+            "schema": "zeta",
+            "version": "context-1",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-2",
+            "schema": "context-2",
             "version": "alpha",
             "data": {}
           },
           {
-            "ownerLockId": "mu",
-            "schema": "mu",
-            "version": "mu",
+            "ownerLockId": "context-2",
+            "schema": "context-2",
+            "version": "zeta",
             "data": {}
           },
           {
             "ownerLockId": "zeta",
-            "schema": "zeta",
-            "version": "zeta",
+            "schema": "context-0",
+            "version": "context-0",
             "data": {}
           }
         ],
         [
           {
             "ownerLockId": "zeta",
-            "schema": "zeta",
+            "schema": "context-0",
+            "version": "context-0",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-2",
+            "schema": "context-2",
             "version": "zeta",
             "data": {}
           },
           {
-            "ownerLockId": "mu",
-            "schema": "mu",
-            "version": "mu",
+            "ownerLockId": "context-2",
+            "schema": "context-2",
+            "version": "alpha",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-1",
+            "schema": "zeta",
+            "version": "context-1",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-1",
+            "schema": "alpha",
+            "version": "context-1",
             "data": {}
           },
           {
             "ownerLockId": "alpha",
-            "schema": "alpha",
-            "version": "alpha",
+            "schema": "context-0",
+            "version": "context-0",
             "data": {}
           }
         ],
         [
           {
-            "ownerLockId": "mu",
-            "schema": "mu",
-            "version": "mu",
+            "ownerLockId": "zeta",
+            "schema": "context-0",
+            "version": "context-0",
             "data": {}
           },
           {
-            "ownerLockId": "zeta",
-            "schema": "zeta",
+            "ownerLockId": "context-2",
+            "schema": "context-2",
+            "version": "alpha",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-2",
+            "schema": "context-2",
             "version": "zeta",
             "data": {}
           },
           {
-            "ownerLockId": "alpha",
+            "ownerLockId": "context-1",
+            "schema": "zeta",
+            "version": "context-1",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-1",
             "schema": "alpha",
-            "version": "alpha",
+            "version": "context-1",
+            "data": {}
+          },
+          {
+            "ownerLockId": "alpha",
+            "schema": "context-0",
+            "version": "context-0",
             "data": {}
           }
         ]
@@ -8583,25 +10997,43 @@
       "expectedNormalized": [
         {
           "ownerLockId": "alpha",
+          "schema": "context-0",
+          "version": "context-0",
+          "data": {}
+        },
+        {
+          "ownerLockId": "context-1",
           "schema": "alpha",
+          "version": "context-1",
+          "data": {}
+        },
+        {
+          "ownerLockId": "context-1",
+          "schema": "zeta",
+          "version": "context-1",
+          "data": {}
+        },
+        {
+          "ownerLockId": "context-2",
+          "schema": "context-2",
           "version": "alpha",
           "data": {}
         },
         {
-          "ownerLockId": "mu",
-          "schema": "mu",
-          "version": "mu",
+          "ownerLockId": "context-2",
+          "schema": "context-2",
+          "version": "zeta",
           "data": {}
         },
         {
           "ownerLockId": "zeta",
-          "schema": "zeta",
-          "version": "zeta",
+          "schema": "context-0",
+          "version": "context-0",
           "data": {}
         }
       ],
-      "expectedCanonicalJson": "[{\"data\":{},\"ownerLockId\":\"alpha\",\"schema\":\"alpha\",\"version\":\"alpha\"},{\"data\":{},\"ownerLockId\":\"mu\",\"schema\":\"mu\",\"version\":\"mu\"},{\"data\":{},\"ownerLockId\":\"zeta\",\"schema\":\"zeta\",\"version\":\"zeta\"}]",
-      "expectedDigest": "sha256:7f07ce23d6445229db03ef46d5a805a7dbb4915ab35a6b3c76e5df330d8cf0b6"
+      "expectedCanonicalJson": "[{\"data\":{},\"ownerLockId\":\"alpha\",\"schema\":\"context-0\",\"version\":\"context-0\"},{\"data\":{},\"ownerLockId\":\"context-1\",\"schema\":\"alpha\",\"version\":\"context-1\"},{\"data\":{},\"ownerLockId\":\"context-1\",\"schema\":\"zeta\",\"version\":\"context-1\"},{\"data\":{},\"ownerLockId\":\"context-2\",\"schema\":\"context-2\",\"version\":\"alpha\"},{\"data\":{},\"ownerLockId\":\"context-2\",\"schema\":\"context-2\",\"version\":\"zeta\"},{\"data\":{},\"ownerLockId\":\"zeta\",\"schema\":\"context-0\",\"version\":\"context-0\"}]",
+      "expectedDigest": "sha256:dd65de411ab9ed43999f32f7c67105f7edaf2fdf7d9db059e053561bfd0b35c5"
     },
     {
       "id": "project-design-topology-packageEntities",
@@ -9875,60 +12307,114 @@
         [
           {
             "ownerLockId": "alpha",
+            "schema": "context-0",
+            "version": "context-0",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-1",
             "schema": "alpha",
+            "version": "context-1",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-1",
+            "schema": "zeta",
+            "version": "context-1",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-2",
+            "schema": "context-2",
             "version": "alpha",
             "data": {}
           },
           {
-            "ownerLockId": "mu",
-            "schema": "mu",
-            "version": "mu",
+            "ownerLockId": "context-2",
+            "schema": "context-2",
+            "version": "zeta",
             "data": {}
           },
           {
             "ownerLockId": "zeta",
-            "schema": "zeta",
-            "version": "zeta",
+            "schema": "context-0",
+            "version": "context-0",
             "data": {}
           }
         ],
         [
           {
             "ownerLockId": "zeta",
-            "schema": "zeta",
+            "schema": "context-0",
+            "version": "context-0",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-2",
+            "schema": "context-2",
             "version": "zeta",
             "data": {}
           },
           {
-            "ownerLockId": "mu",
-            "schema": "mu",
-            "version": "mu",
+            "ownerLockId": "context-2",
+            "schema": "context-2",
+            "version": "alpha",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-1",
+            "schema": "zeta",
+            "version": "context-1",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-1",
+            "schema": "alpha",
+            "version": "context-1",
             "data": {}
           },
           {
             "ownerLockId": "alpha",
-            "schema": "alpha",
-            "version": "alpha",
+            "schema": "context-0",
+            "version": "context-0",
             "data": {}
           }
         ],
         [
           {
-            "ownerLockId": "mu",
-            "schema": "mu",
-            "version": "mu",
+            "ownerLockId": "zeta",
+            "schema": "context-0",
+            "version": "context-0",
             "data": {}
           },
           {
-            "ownerLockId": "zeta",
-            "schema": "zeta",
+            "ownerLockId": "context-2",
+            "schema": "context-2",
+            "version": "alpha",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-2",
+            "schema": "context-2",
             "version": "zeta",
             "data": {}
           },
           {
-            "ownerLockId": "alpha",
+            "ownerLockId": "context-1",
+            "schema": "zeta",
+            "version": "context-1",
+            "data": {}
+          },
+          {
+            "ownerLockId": "context-1",
             "schema": "alpha",
-            "version": "alpha",
+            "version": "context-1",
+            "data": {}
+          },
+          {
+            "ownerLockId": "alpha",
+            "schema": "context-0",
+            "version": "context-0",
             "data": {}
           }
         ]
@@ -9937,25 +12423,43 @@
       "expectedNormalized": [
         {
           "ownerLockId": "alpha",
+          "schema": "context-0",
+          "version": "context-0",
+          "data": {}
+        },
+        {
+          "ownerLockId": "context-1",
           "schema": "alpha",
+          "version": "context-1",
+          "data": {}
+        },
+        {
+          "ownerLockId": "context-1",
+          "schema": "zeta",
+          "version": "context-1",
+          "data": {}
+        },
+        {
+          "ownerLockId": "context-2",
+          "schema": "context-2",
           "version": "alpha",
           "data": {}
         },
         {
-          "ownerLockId": "mu",
-          "schema": "mu",
-          "version": "mu",
+          "ownerLockId": "context-2",
+          "schema": "context-2",
+          "version": "zeta",
           "data": {}
         },
         {
           "ownerLockId": "zeta",
-          "schema": "zeta",
-          "version": "zeta",
+          "schema": "context-0",
+          "version": "context-0",
           "data": {}
         }
       ],
-      "expectedCanonicalJson": "[{\"data\":{},\"ownerLockId\":\"alpha\",\"schema\":\"alpha\",\"version\":\"alpha\"},{\"data\":{},\"ownerLockId\":\"mu\",\"schema\":\"mu\",\"version\":\"mu\"},{\"data\":{},\"ownerLockId\":\"zeta\",\"schema\":\"zeta\",\"version\":\"zeta\"}]",
-      "expectedDigest": "sha256:7f07ce23d6445229db03ef46d5a805a7dbb4915ab35a6b3c76e5df330d8cf0b6"
+      "expectedCanonicalJson": "[{\"data\":{},\"ownerLockId\":\"alpha\",\"schema\":\"context-0\",\"version\":\"context-0\"},{\"data\":{},\"ownerLockId\":\"context-1\",\"schema\":\"alpha\",\"version\":\"context-1\"},{\"data\":{},\"ownerLockId\":\"context-1\",\"schema\":\"zeta\",\"version\":\"context-1\"},{\"data\":{},\"ownerLockId\":\"context-2\",\"schema\":\"context-2\",\"version\":\"alpha\"},{\"data\":{},\"ownerLockId\":\"context-2\",\"schema\":\"context-2\",\"version\":\"zeta\"},{\"data\":{},\"ownerLockId\":\"zeta\",\"schema\":\"context-0\",\"version\":\"context-0\"}]",
+      "expectedDigest": "sha256:dd65de411ab9ed43999f32f7c67105f7edaf2fdf7d9db059e053561bfd0b35c5"
     },
     {
       "id": "project-design-interfaces",

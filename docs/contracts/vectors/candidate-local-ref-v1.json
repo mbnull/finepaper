@@ -4896,6 +4896,25 @@
     },
     {
       "id": "candidate-localref-collision",
+      "baselineId": "shared-authority-application-localref-namespace",
+      "mutation": {
+        "operation": "append",
+        "path": "/authorityPatch/operations",
+        "value": {
+          "op": "createEntity",
+          "entityKind": "router",
+          "localRef": "authority:router-0",
+          "value": {
+            "templateKey": "mesh-router",
+            "identityCompatibilityVersion": 1,
+            "coordinate": {
+              "row": 0,
+              "column": 0
+            },
+            "properties": {}
+          }
+        }
+      },
       "inputVariants": [
         {
           "schema": "ipcraft.candidate-transaction.v1",
@@ -5015,10 +5034,17 @@
         "semantic validation"
       ],
       "excludedProjection": [],
-      "expectedErrorCode": "patch.local_ref_invalid"
+      "expectedErrorCode": "patch.local_ref_invalid",
+      "violatedRule": "candidate.localRef.unique"
     },
     {
       "id": "authority-uses-application-prefix",
+      "baselineId": "shared-authority-application-localref-namespace",
+      "mutation": {
+        "operation": "rename-local-ref",
+        "path": "/authorityPatch/operations/0/localRef",
+        "value": "application:000009"
+      },
       "inputVariants": [
         {
           "schema": "ipcraft.candidate-transaction.v1",
@@ -5124,10 +5150,17 @@
         "semantic validation"
       ],
       "excludedProjection": [],
-      "expectedErrorCode": "patch.local_ref_invalid"
+      "expectedErrorCode": "patch.local_ref_invalid",
+      "violatedRule": "candidate.localRef.authority-prefix"
     },
     {
       "id": "application-uses-authority-prefix",
+      "baselineId": "shared-authority-application-localref-namespace",
+      "mutation": {
+        "operation": "rename-local-ref",
+        "path": "/applicationPatch/operations/0/localRef",
+        "value": "authority:membership-0"
+      },
       "inputVariants": [
         {
           "schema": "ipcraft.candidate-transaction.v1",
@@ -5233,10 +5266,16 @@
         "semantic validation"
       ],
       "excludedProjection": [],
-      "expectedErrorCode": "patch.local_ref_invalid"
+      "expectedErrorCode": "patch.local_ref_invalid",
+      "violatedRule": "candidate.localRef.application-prefix"
     },
     {
       "id": "allocation-order-missing",
+      "baselineId": "shared-authority-application-localref-namespace",
+      "mutation": {
+        "operation": "remove",
+        "path": "/allocationOrder"
+      },
       "inputVariants": [
         {
           "schema": "ipcraft.candidate-transaction.v1",
@@ -5338,10 +5377,21 @@
         "semantic validation"
       ],
       "excludedProjection": [],
-      "expectedErrorCode": "patch.schema_violation"
+      "expectedErrorCode": "patch.schema_violation",
+      "violatedRule": "candidate.required.allocationOrder"
     },
     {
       "id": "allocation-order-duplicate",
+      "baselineId": "shared-authority-application-localref-namespace",
+      "mutation": {
+        "operation": "replace",
+        "path": "/allocationOrder",
+        "value": [
+          "application:000001",
+          "authority:router-0",
+          "authority:router-0"
+        ]
+      },
       "inputVariants": [
         {
           "schema": "ipcraft.candidate-transaction.v1",
@@ -5448,10 +5498,20 @@
         "semantic validation"
       ],
       "excludedProjection": [],
-      "expectedErrorCode": "patch.schema_violation"
+      "expectedErrorCode": "patch.schema_violation",
+      "violatedRule": "candidate.allocationOrder.uniqueItems"
     },
     {
       "id": "allocation-order-noncanonical",
+      "baselineId": "shared-authority-application-localref-namespace",
+      "mutation": {
+        "operation": "replace",
+        "path": "/allocationOrder",
+        "value": [
+          "authority:router-0",
+          "application:000001"
+        ]
+      },
       "inputVariants": [
         {
           "schema": "ipcraft.candidate-transaction.v1",
@@ -5557,10 +5617,19 @@
         "semantic validation"
       ],
       "excludedProjection": [],
-      "expectedErrorCode": "patch.invariant_violation"
+      "expectedErrorCode": "patch.invariant_violation",
+      "violatedRule": "candidate.allocationOrder.canonical"
     },
     {
       "id": "final-host-id-mapping-injected",
+      "baselineId": "shared-authority-application-localref-namespace",
+      "mutation": {
+        "operation": "add",
+        "path": "/finalHostIdMapping",
+        "value": {
+          "authority:router-0": "router.host"
+        }
+      },
       "inputVariants": [
         {
           "schema": "ipcraft.candidate-transaction.v1",
@@ -5669,10 +5738,19 @@
         "semantic validation"
       ],
       "excludedProjection": [],
-      "expectedErrorCode": "patch.schema_violation"
+      "expectedErrorCode": "patch.schema_violation",
+      "violatedRule": "candidate.additionalProperties.finalHostIdMapping"
     },
     {
       "id": "published-host-id-injected",
+      "baselineId": "shared-authority-application-localref-namespace",
+      "mutation": {
+        "operation": "add",
+        "path": "/publishedHostIds",
+        "value": [
+          "router.host"
+        ]
+      },
       "inputVariants": [
         {
           "schema": "ipcraft.candidate-transaction.v1",
@@ -5781,7 +5859,8 @@
         "semantic validation"
       ],
       "excludedProjection": [],
-      "expectedErrorCode": "patch.schema_violation"
+      "expectedErrorCode": "patch.schema_violation",
+      "violatedRule": "candidate.additionalProperties.publishedHostIds"
     }
   ]
 }
