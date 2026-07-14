@@ -33,7 +33,15 @@
   "allOf": [
     {
       "if": { "properties": { "kind": { "const": "generator" } }, "required": ["kind"] },
-      "then": { "required": ["outputDirectory"] },
+      "then": {
+        "$comment": "Generator semantic validation MUST require formallySavedProjectDigest to equal snapshotDigest; Draft 2020-12 cannot compare arbitrary property values.",
+        "required": ["outputDirectory", "snapshotDigest", "formallySavedProjectDigest"],
+        "properties": {
+          "outputDirectory": { "$ref": "#/$defs/path" },
+          "snapshotDigest": { "$ref": "#/$defs/digest" },
+          "formallySavedProjectDigest": { "$ref": "#/$defs/digest" }
+        }
+      },
       "else": { "not": { "required": ["outputDirectory"] } }
     }
   ],
@@ -42,8 +50,7 @@
     "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
     "path": {
       "type": "string",
-      "minLength": 1,
-      "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*[\\\\\\u0000]).+$"
+      "pattern": "^(?![A-Za-z]:)(?!.*\\\\)(?!.*\\u0000)(?!.*(?:^|/)\\.{1,2}(?:/|$))[^/]+(?:/[^/]+)*$"
     }
   }
 }

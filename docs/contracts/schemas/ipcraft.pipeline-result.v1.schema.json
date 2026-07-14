@@ -35,6 +35,9 @@
   "$defs": {
     "id": { "type": "string", "minLength": 1 },
     "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
-    "path": { "type": "string", "minLength": 1, "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*\\\\).+$" }
+    "path": {
+      "type": "string",
+      "pattern": "^(?![A-Za-z]:)(?!.*\\\\)(?!.*\\u0000)(?!.*(?:^|/)\\.{1,2}(?:/|$))[^/]+(?:/[^/]+)*$"
+    }
   }
 }

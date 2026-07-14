@@ -11,7 +11,12 @@
     "patchId": { "$ref": "#/$defs/id" },
     "source": { "$ref": "#/$defs/source" },
     "causality": { "$ref": "#/$defs/causality" },
-    "applicability": { "$ref": "ipcraft.core-canonical-models.v1.schema.json#/$defs/reconcileApplicability" },
+    "applicability": {
+      "oneOf": [
+        { "$ref": "ipcraft.core-canonical-models.v1.schema.json#/$defs/reconcileApplicability" },
+        { "$ref": "#/$defs/migrationApplicability" }
+      ]
+    },
     "preconditions": { "type": "array", "items": { "$ref": "#/$defs/precondition" } },
     "operations": { "type": "array", "items": { "$ref": "#/$defs/operation" } }
   },
@@ -19,11 +24,40 @@
     {
       "if": {
         "properties": {
-          "source": { "properties": { "kind": { "enum": ["default-engine", "extension-provider", "application-reconcile", "application-migration"] } } }
+          "source": {
+            "properties": { "kind": { "enum": ["default-engine", "extension-provider", "application-reconcile"] } },
+            "required": ["kind"]
+          }
         },
         "required": ["source"]
       },
-      "then": { "required": ["applicability"] }
+      "then": {
+        "required": ["applicability"],
+        "properties": {
+          "applicability": { "$ref": "ipcraft.core-canonical-models.v1.schema.json#/$defs/reconcileApplicability" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "source": { "properties": { "kind": { "const": "application-migration" } }, "required": ["kind"] }
+        },
+        "required": ["source"]
+      },
+      "then": {
+        "required": ["applicability"],
+        "properties": { "applicability": { "$ref": "#/$defs/migrationApplicability" } }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "source": { "properties": { "kind": { "enum": ["user-command", "recovery", "undo-redo"] } }, "required": ["kind"] }
+        },
+        "required": ["source"]
+      },
+      "then": { "not": { "required": ["applicability"] } }
     }
   ],
   "$defs": {
@@ -39,6 +73,21 @@
     "causality": {
       "type": "object", "additionalProperties": false, "required": ["sessionRevision"],
       "properties": { "sessionRevision": { "type": "integer", "minimum": 0 } }
+    },
+    "migrationApplicability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "defaultEngineLockId", "currentDefaultEngineBundleDigest", "targetDefaultEngineBundleDigest",
+        "targetEngineHostContractVersion", "hostSideEffectContractVersion"
+      ],
+      "properties": {
+        "defaultEngineLockId": { "$ref": "#/$defs/id" },
+        "currentDefaultEngineBundleDigest": { "$ref": "ipcraft.core-canonical-models.v1.schema.json#/$defs/digest" },
+        "targetDefaultEngineBundleDigest": { "$ref": "ipcraft.core-canonical-models.v1.schema.json#/$defs/digest" },
+        "targetEngineHostContractVersion": { "const": "ipcraft.engine-host.v1" },
+        "hostSideEffectContractVersion": { "const": "ipcraft.noc-side-effects.v1" }
+      }
     },
     "entityKind": { "enum": ["component", "project", "interface", "router", "structural-link", "access-slot", "domain", "package-entity"] },
     "relationKind": { "enum": ["attachment", "domain-membership", "package-relation"] },

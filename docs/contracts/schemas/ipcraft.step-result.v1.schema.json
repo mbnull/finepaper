@@ -4,7 +4,7 @@
   "title": "Ipcraft Normalized Pipeline Step Result V1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema", "pipelineRunId", "stepId", "stepKind", "status", "toolResult", "failure"],
+  "required": ["schema", "pipelineRunId", "stepId", "stepKind", "status", "failure"],
   "properties": {
     "schema": { "const": "ipcraft.step-result.v1" },
     "pipelineRunId": { "$ref": "#/$defs/id" },
@@ -19,7 +19,18 @@
   "allOf": [
     {
       "if": { "properties": { "stepKind": { "const": "external-tool" } }, "required": ["stepKind"] },
-      "then": { "required": ["invocationId", "toolLockId"] },
+      "then": {
+        "required": ["invocationId", "toolLockId"],
+        "allOf": [
+          {
+            "if": { "properties": { "status": { "const": "succeeded" } }, "required": ["status"] },
+            "then": {
+              "required": ["toolResult"],
+              "properties": { "toolResult": { "$ref": "#/$defs/path" } }
+            }
+          }
+        ]
+      },
       "else": {
         "allOf": [
           { "not": { "required": ["invocationId"] } },
@@ -30,7 +41,10 @@
   ],
   "$defs": {
     "id": { "type": "string", "minLength": 1 },
-    "path": { "type": "string", "minLength": 1, "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*\\\\).+$" },
+    "path": {
+      "type": "string",
+      "pattern": "^(?![A-Za-z]:)(?!.*\\\\)(?!.*\\u0000)(?!.*(?:^|/)\\.{1,2}(?:/|$))[^/]+(?:/[^/]+)*$"
+    },
     "failure": {
       "type": "object",
       "additionalProperties": false,

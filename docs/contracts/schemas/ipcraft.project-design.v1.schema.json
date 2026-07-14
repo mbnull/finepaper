@@ -16,7 +16,22 @@
     },
     "id": { "$ref": "#/$defs/id" },
     "name": { "type": "string", "minLength": 1 },
-    "dependencies": { "type": "array", "items": { "$ref": "#/$defs/dependencyLock" } },
+    "dependencies": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/dependencyLock" },
+      "allOf": [
+        {
+          "contains": { "type": "object", "properties": { "kind": { "const": "noc-package" } }, "required": ["kind"] },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": { "type": "object", "properties": { "kind": { "const": "default-engine" } }, "required": ["kind"] },
+          "minContains": 1,
+          "maxContains": 1
+        }
+      ]
+    },
     "components": { "type": "array", "minItems": 1, "maxItems": 1, "items": { "$ref": "#/$defs/component" } },
     "interfaces": { "type": "array", "items": { "$ref": "#/$defs/interface" } },
     "connections": { "type": "array", "maxItems": 0 },
@@ -250,6 +265,9 @@
         "extensions": { "type": "array", "items": { "$ref": "#/$defs/extension" } }
       }
     },
-    "path": { "type": "string", "minLength": 1, "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*\\\\).+$" }
+    "path": {
+      "type": "string",
+      "pattern": "^(?![A-Za-z]:)(?!.*\\\\)(?!.*\\u0000)(?!.*(?:^|/)\\.{1,2}(?:/|$))[^/]+(?:/[^/]+)*$"
+    }
   }
 }
