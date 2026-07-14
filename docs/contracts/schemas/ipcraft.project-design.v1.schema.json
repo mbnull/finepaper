@@ -239,8 +239,8 @@
       "type": "object", "additionalProperties": false, "required": ["id", "typeKey", "sources", "targets", "data", "extensions"],
       "properties": {
         "id": { "$ref": "#/$defs/id" }, "typeKey": { "$ref": "#/$defs/id" },
-        "sources": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["endpointCanonicalKey"] }, "$comment": "Composite-key uniqueness and sorting are semantic-validator rules.", "items": { "$ref": "#/$defs/relationEndpoint" } },
-        "targets": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["endpointCanonicalKey"] }, "$comment": "Composite-key uniqueness and sorting are semantic-validator rules.", "items": { "$ref": "#/$defs/relationEndpoint" } },
+        "sources": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["persistedEndpointCanonicalKey"] }, "$comment": "Semantic validation uses persistedEndpointCanonicalKey and rejects duplicate composite keys.", "items": { "$ref": "#/$defs/relationEndpoint" } },
+        "targets": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["persistedEndpointCanonicalKey"] }, "$comment": "Semantic validation uses persistedEndpointCanonicalKey and rejects duplicate composite keys.", "items": { "$ref": "#/$defs/relationEndpoint" } },
         "data": { "type": "object" }, "extensions": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["ownerLockId", "schema", "version"] }, "items": { "$ref": "#/$defs/extension" } }
       }
     },

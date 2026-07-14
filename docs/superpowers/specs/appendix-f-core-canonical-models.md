@@ -33,6 +33,7 @@ Machine-readable Gate 0 schemas use these exact IDs or `$defs` with identical na
 - IDs are opaque non-empty strings.
 - Host references are `{ "id": "host-id" }`.
 - Candidate transaction-local references are `{ "localRef": "authority:r0" }` or `{ "localRef": "application:000001" }`.
+- Persisted/Core Structural Link `endpointA` and `endpointB` are string Host IDs rather than reference envelopes; for comparison each is treated as `id:` + ID.
 - Authority localRefs start `authority:` and are unique within one transaction. Host side effects use `application:` followed by a zero-padded decimal sequence allocated in F11 order.
 - A reference object contains exactly one of `id` or `localRef`.
 - The object-reference comparison token is the UTF-8 string `id:` + X for `{id:X}` and `localRef:` + X for `{localRef:X}`. Tokens compare by Unicode scalar-value order. Every `routerRef` or other object reference in a sort key uses this token.
@@ -276,7 +277,7 @@ Every schema array carries `x-ipcraft-canonical`. Its value has one consistent s
 { "kind": "derived-ordered", "sortKey": ["unicodeScalarValue"] }
 ```
 
-`sortKey` members name the comparison components below; `canonicalJson` and `*CanonicalJson` mean UTF-8 RFC 8785 canonical JSON bytes after nested normalization, `unicodeScalarValue` means literal string order, `objectRefToken` means F2's token, and `endpointCanonicalKey` means resolved endpoints first by `(subject.kind,subject.id)`, then unresolved endpoints by `(intendedSubject.kind,intendedSubject.id,reasonCode)`. The companion vector's `canonicalCollections` array is the machine-readable copy of this table.
+`sortKey` members name the comparison components below; `canonicalJson` and `*CanonicalJson` mean UTF-8 RFC 8785 canonical JSON bytes after nested normalization, `unicodeScalarValue` means literal string order, and `objectRefToken` means F2's token. `state-order` places resolved before unresolved. `persistedEndpointCanonicalKey` is resolved `(state-order, subject.kind, id:<subject.id>)` or unresolved `(state-order, intendedSubject.kind, id:<intendedSubject.id>, reasonCode)`. `patchEndpointCanonicalKey` is resolved `(state-order, subject.kind, objectRefToken(subject.ref))` or unresolved `(state-order, intendedSubject.kind, objectRefToken(intendedSubject.ref), reasonCode)`. The companion vector's `canonicalCollections` array is the machine-readable copy of this table.
 
 | Exact document path | Kind | Sort key / retained meaning |
 |---|---|---|
@@ -301,16 +302,16 @@ Every schema array carries `x-ipcraft-canonical`. Its value has one consistent s
 | `projectDesign.topologies[].packageEntities` | set | `id` |
 | `projectDesign.topologies[].packageEntities[].extensions` | set | `ownerLockId,schema,version` |
 | `projectDesign.topologies[].packageRelations` | set | `id` |
-| `projectDesign.topologies[].packageRelations[].sources` | set | `endpointCanonicalKey` |
-| `projectDesign.topologies[].packageRelations[].targets` | set | `endpointCanonicalKey` |
+| `projectDesign.topologies[].packageRelations[].sources` | set | `persistedEndpointCanonicalKey` |
+| `projectDesign.topologies[].packageRelations[].targets` | set | `persistedEndpointCanonicalKey` |
 | `projectDesign.topologies[].packageRelations[].extensions` | set | `ownerLockId,schema,version` |
 | `projectDesign.topologies[].extensions` | set | `ownerLockId,schema,version` |
 | `projectDesign.views` | set | `id` |
 | `projectDesign.extensions` | set | `ownerLockId,schema,version` |
 | `topologyIntent.packageEntities` | set | `id` |
 | `topologyIntent.packageRelations` | set | `id` |
-| `topologyIntent.packageRelations[].sources` | set | `endpointCanonicalKey` |
-| `topologyIntent.packageRelations[].targets` | set | `endpointCanonicalKey` |
+| `topologyIntent.packageRelations[].sources` | set | `persistedEndpointCanonicalKey` |
+| `topologyIntent.packageRelations[].targets` | set | `persistedEndpointCanonicalKey` |
 | `normalizedTopologyInput.mesh.slotTemplates` | set | `stableKey` |
 | `normalizedTopologyInput.mesh.slotTemplates[].allowedContracts` | set | `contractId,version,bundleManifestDigest` |
 | `normalizedTopologyInput.mesh.slotTemplates[].allowedContracts[].roles` | set | `unicodeScalarValue` |
@@ -323,8 +324,8 @@ Every schema array carries `x-ipcraft-canonical`. Its value has one consistent s
 | `derivedState.accessSlots[].allowedContracts[].capabilityConstraints.*[]` | set | `canonicalJson` |
 | `derivedState.packageEntities` | set | `id` |
 | `derivedState.packageRelations` | set | `id` |
-| `derivedState.packageRelations[].sources` | set | `endpointCanonicalKey` |
-| `derivedState.packageRelations[].targets` | set | `endpointCanonicalKey` |
+| `derivedState.packageRelations[].sources` | set | `persistedEndpointCanonicalKey` |
+| `derivedState.packageRelations[].targets` | set | `persistedEndpointCanonicalKey` |
 | `patch.preconditions` | set | `canonicalJson` |
 | `patch.operations` | ordered | operation sequence retained |
 | `patchBody.operations` | ordered | operation sequence retained |
@@ -333,8 +334,8 @@ Every schema array carries `x-ipcraft-canonical`. Its value has one consistent s
 | `patchOperations[].value.allowedContracts[].roles` | set | `unicodeScalarValue` |
 | `patchOperations[].value.allowedContracts[].capabilityConstraints.*[]` | set | `canonicalJson` |
 | `patchOperations[].value.capabilities.*[]` | set | `canonicalJson` |
-| `patchOperations[].value.sources` | set | `endpointCanonicalKey` |
-| `patchOperations[].value.targets` | set | `endpointCanonicalKey` |
+| `patchOperations[].value.sources` | set | `patchEndpointCanonicalKey` |
+| `patchOperations[].value.targets` | set | `patchEndpointCanonicalKey` |
 | `patchOperations[].value.extensions` | set | `ownerLockId,schema,version` |
 | `candidateTransaction.authorityPatch.operations` | ordered | operation sequence retained |
 | `candidateTransaction.applicationPatch.operations` | ordered | operation sequence retained |
@@ -404,7 +405,7 @@ Every set key is candidate/document-wide unique at its owning path. Literal sets
 
 Capability meanings remain path-specific: Package/Contract declaration arrays sort by declaration `key`; Interface/runtime capability-value arrays sort by `canonicalJson`; Provider/Tool declared capability string lists sort by `unicodeScalarValue`.
 
-Undirected Structural Links normalize `endpointA`/`endpointB` by `objectRefToken`. Persisted current-state Links ordinarily contain Host refs; candidate Links may contain local refs. Candidate localRefs are unique across both sub-patches, Authority owns `authority:*`, Application owns `application:*`, and `allocationOrder` contains every create localRef exactly once. Literal Unicode ordering therefore places `application:000001` before `authority:router-0`.
+Undirected persisted/Core Structural Links store endpoint string Host IDs and normalize them as `id:` + ID. Candidate Patch Links use objectRef envelopes and normalize `endpointA`/`endpointB` by `objectRefToken`, so candidate endpoints may contain local refs. Candidate localRefs are unique across both sub-patches, Authority owns `authority:*`, Application owns `application:*`, and `allocationOrder` contains every create localRef exactly once. Literal Unicode ordering therefore places `application:000001` before `authority:router-0`.
 
 ## F11. Host Side-effect Contract V1
 

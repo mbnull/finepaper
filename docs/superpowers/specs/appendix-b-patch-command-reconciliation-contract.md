@@ -391,7 +391,7 @@ Editing topology intent, local Group Undo/Redo, Retry, dependency/Authority chan
 - Objects use canonical key ordering.
 - Arrays declared as ordered sequences retain order. Every set and sequence uses the exact Appendix F per-path rule; no implementation may infer a key from a field name.
 - Composite canonical values are compared by the UTF-8 bytes of RFC 8785 canonical JSON after their nested set-valued arrays have first been normalized.
-- An undirected Link normalizes `endpointA`/`endpointB` by the object-reference comparison token: `{id:X}` becomes `id:` + X and `{localRef:X}` becomes `localRef:` + X, compared by Unicode scalar-value order.
+- An undirected persisted/Core Link stores string Host IDs and compares each endpoint as the token `id:` + ID. A candidate Patch Link uses object-reference envelopes: `{id:X}` becomes `id:` + X and `{localRef:X}` becomes `localRef:` + X. Tokens compare by Unicode scalar-value order.
 - Topology input excludes Attachments, Domains, Views, diagnostics, runs, and non-driving Interface data.
 - Derived State digest includes Router/Link/Slot IDs and properties, ownership=`engine` Package Entities/Relations, and every Authority-owned property affecting generation or later reconciliation.
 - User-owned intent, Draft Overlay, Attachments, Domains, Views, diagnostics, and runs are excluded from Derived State digest.

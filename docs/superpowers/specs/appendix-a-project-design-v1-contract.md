@@ -245,8 +245,8 @@ Rules:
   "id": "link-id",
   "templateKey": "mesh-link",
   "identityCompatibilityVersion": 1,
-  "endpointA": { "id": "router-a" },
-  "endpointB": { "id": "router-b" },
+  "endpointA": "router-a",
+  "endpointB": "router-b",
   "axis": "horizontal",
   "properties": {}
 }
@@ -256,7 +256,7 @@ Rules:
 
 - `axis` is `horizontal` or `vertical`.
 - Endpoints exist, differ, and are orthogonally adjacent.
-- Persisted endpoints are Host references. Candidate Patch values may instead use candidate-local references; both forms normalize with Appendix F's object-reference comparison token.
+- Persisted/Core endpoints are string Host IDs and compare as tokens `id:` + ID. Candidate Patch link values use `{id:X}` or `{localRef:X}` object-reference envelopes and compare by Appendix F's object-reference token.
 - Exactly one Link exists per unordered endpoint pair.
 - Link directionality of private transport is not represented.
 

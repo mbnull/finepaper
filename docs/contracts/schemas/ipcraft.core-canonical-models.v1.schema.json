@@ -117,14 +117,14 @@
         "typeKey": { "$ref": "#/$defs/id" },
         "sources": {
           "type": "array",
-          "x-ipcraft-canonical": { "kind": "set", "sortKey": ["endpointCanonicalKey"] },
-          "$comment": "Semantic validation normalizes endpoints by Appendix F's resolved/unresolved endpoint key and rejects duplicate composite keys.",
+          "x-ipcraft-canonical": { "kind": "set", "sortKey": ["persistedEndpointCanonicalKey"] },
+          "$comment": "Semantic validation uses persistedEndpointCanonicalKey: resolved (state-order, subject.kind, id:<subject.id>), unresolved (state-order, intendedSubject.kind, id:<intendedSubject.id>, reasonCode); it rejects duplicate composite keys.",
           "items": { "$ref": "#/$defs/relationEndpoint" }
         },
         "targets": {
           "type": "array",
-          "x-ipcraft-canonical": { "kind": "set", "sortKey": ["endpointCanonicalKey"] },
-          "$comment": "Semantic validation normalizes endpoints by Appendix F's resolved/unresolved endpoint key and rejects duplicate composite keys.",
+          "x-ipcraft-canonical": { "kind": "set", "sortKey": ["persistedEndpointCanonicalKey"] },
+          "$comment": "Semantic validation uses persistedEndpointCanonicalKey: resolved (state-order, subject.kind, id:<subject.id>), unresolved (state-order, intendedSubject.kind, id:<intendedSubject.id>, reasonCode); it rejects duplicate composite keys.",
           "items": { "$ref": "#/$defs/relationEndpoint" }
         },
         "data": { "type": "object" }
@@ -295,8 +295,8 @@
         "id": { "$ref": "#/$defs/id" },
         "templateKey": { "$ref": "#/$defs/id" },
         "identityCompatibilityVersion": { "type": "integer", "minimum": 1 },
-        "endpointA": { "$ref": "#/$defs/hostRef" },
-        "endpointB": { "$ref": "#/$defs/hostRef" },
+        "endpointA": { "$ref": "#/$defs/id" },
+        "endpointB": { "$ref": "#/$defs/id" },
         "axis": { "enum": ["horizontal", "vertical"] },
         "properties": { "type": "object" }
       }
@@ -509,8 +509,8 @@
       "required": ["typeKey", "sources", "targets", "data", "extensions"],
       "properties": {
         "typeKey": { "$ref": "#/$defs/id" },
-        "sources": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["endpointCanonicalKey"] }, "items": { "$ref": "#/$defs/patchRelationEndpoint" } },
-        "targets": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["endpointCanonicalKey"] }, "items": { "$ref": "#/$defs/patchRelationEndpoint" } },
+        "sources": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["patchEndpointCanonicalKey"] }, "$comment": "Semantic validation uses patchEndpointCanonicalKey: resolved (state-order, subject.kind, objectRefToken(subject.ref)), unresolved (state-order, intendedSubject.kind, objectRefToken(intendedSubject.ref), reasonCode).", "items": { "$ref": "#/$defs/patchRelationEndpoint" } },
+        "targets": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["patchEndpointCanonicalKey"] }, "$comment": "Semantic validation uses patchEndpointCanonicalKey: resolved (state-order, subject.kind, objectRefToken(subject.ref)), unresolved (state-order, intendedSubject.kind, objectRefToken(intendedSubject.ref), reasonCode).", "items": { "$ref": "#/$defs/patchRelationEndpoint" } },
         "data": { "type": "object" },
         "extensions": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["ownerLockId", "schema", "version"] }, "items": { "$ref": "#/$defs/extension" } }
       }
