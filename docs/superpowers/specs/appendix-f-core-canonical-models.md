@@ -381,6 +381,23 @@ Kind-specific Patch update-set schemas reuse the create-value property schemas f
 
 These prose-only Provider/Tool capability paths freeze at Gate D. They are intentionally display-only, have no Gate 0 `schemaId`/`schemaPointer`, and are excluded from Core completeness checks.
 
+The exact normative V1 set is `DEFERRED_EXTENSION_COLLECTIONS_V1` below; replacement, omission, or addition of a path is a contract change:
+
+```text
+DEFERRED_EXTENSION_COLLECTIONS_V1 = {
+  providerManifest.command,
+  providerManifest.capabilities,
+  providerManifest.ownedEntityTypes,
+  providerManifest.ownedRelationTypes,
+  providerHello.requestedCapabilities,
+  providerHelloResult.capabilities,
+  reconcileRequest.dependencyLocks,
+  reconcileRequest.capabilities,
+  providerResult.diagnostics,
+  toolManifest.capabilities
+}
+```
+
 | Display path | Freeze gate |
 |---|---|
 | `providerManifest.command` | `extension` |

@@ -45,6 +45,18 @@ REQUIRED_CANDIDATE_CASE_IDS = {
     "final-host-id-mapping-injected",
     "published-host-id-injected",
 }
+EXPECTED_DEFERRED_EXTENSION_PATHS = frozenset({
+    "providerManifest.command",
+    "providerManifest.capabilities",
+    "providerManifest.ownedEntityTypes",
+    "providerManifest.ownedRelationTypes",
+    "providerHello.requestedCapabilities",
+    "providerHelloResult.capabilities",
+    "reconcileRequest.dependencyLocks",
+    "reconcileRequest.capabilities",
+    "providerResult.diagnostics",
+    "toolManifest.capabilities",
+})
 
 
 class VerificationError(RuntimeError):
@@ -104,6 +116,14 @@ def validate_metadata(metadata: Any, location: str) -> dict[str, Any]:
         if not isinstance(sort_key, list) or not sort_key or not all(isinstance(item, str) and item for item in sort_key):
             fail(f"{location}: {kind} collections require a non-empty string sortKey")
     return metadata
+
+
+def validate_rule_members(rule: dict[str, Any], location: str) -> None:
+    expected_members = {"schemaId", "schemaPointer", "kind"}
+    if rule.get("kind") != "ordered":
+        expected_members.add("sortKey")
+    if set(rule) != expected_members:
+        fail(f"{location}: members must be exactly {sorted(expected_members)}")
 
 
 class SchemaGraph:
@@ -211,17 +231,13 @@ def validate_rule_table(graph: SchemaGraph) -> tuple[dict[tuple[str, str], dict[
         location_name = f"canonicalCollections[{index}]"
         if not isinstance(rule, dict):
             fail(f"{location_name} must be an object")
-        allowed = {"schemaId", "schemaPointer", "kind", "sortKey", "displayPath"}
-        if set(rule) - allowed:
-            fail(f"{location_name}: unknown members {sorted(set(rule) - allowed)}")
+        validate_rule_members(rule, location_name)
         schema_id = rule.get("schemaId")
         pointer = rule.get("schemaPointer")
         if not isinstance(schema_id, str) or schema_id not in graph.documents:
             fail(f"{location_name}: schemaId must name a catalogued schema")
         if not isinstance(pointer, str):
             fail(f"{location_name}: schemaPointer must be a string")
-        if "displayPath" in rule and (not isinstance(rule["displayPath"], str) or not rule["displayPath"]):
-            fail(f"{location_name}: displayPath must be a non-empty string when present")
         node = resolve_pointer(graph.documents[schema_id], pointer)
         if not isinstance(node, dict) or node.get("type") != "array":
             fail(f"{location_name}: {schema_id}#{pointer} does not point to an explicit array schema")
@@ -241,6 +257,13 @@ def validate_rule_table(graph: SchemaGraph) -> tuple[dict[tuple[str, str], dict[
         if table[location] != metadata:
             fail(f"{location[0]}#{location[1]}: table metadata {table[location]} != schema metadata {metadata}")
 
+    validate_deferred_extensions(deferred)
+    return table, deferred
+
+
+def validate_deferred_extensions(deferred: Any) -> None:
+    if not isinstance(deferred, list):
+        fail("deferredExtensionCollections must be an array")
     seen_deferred: set[str] = set()
     for index, entry in enumerate(deferred):
         name = f"deferredExtensionCollections[{index}]"
@@ -251,7 +274,12 @@ def validate_rule_table(graph: SchemaGraph) -> tuple[dict[tuple[str, str], dict[
         if entry["displayPath"] in seen_deferred:
             fail(f"duplicate deferred extension display path {entry['displayPath']}")
         seen_deferred.add(entry["displayPath"])
-    return table, deferred
+    if seen_deferred != EXPECTED_DEFERRED_EXTENSION_PATHS:
+        fail(
+            "deferred Extension path set mismatch; "
+            f"missing={sorted(EXPECTED_DEFERRED_EXTENSION_PATHS - seen_deferred)}, "
+            f"extra={sorted(seen_deferred - EXPECTED_DEFERRED_EXTENSION_PATHS)}"
+        )
 
 
 def validate_digest(value: Any, location: str) -> None:
@@ -263,6 +291,74 @@ def validate_digest(value: Any, location: str) -> None:
         return
     if not isinstance(value, str) or DIGEST_RE.fullmatch(value) is None:
         fail(f"{location}: expected sha256: plus 64 lowercase hexadecimal characters")
+
+
+def collect_local_ref_references(value: Any) -> set[str]:
+    references: set[str] = set()
+    if isinstance(value, dict):
+        if set(value) == {"localRef"} and isinstance(value["localRef"], str):
+            references.add(value["localRef"])
+        for child in value.values():
+            references.update(collect_local_ref_references(child))
+    elif isinstance(value, list):
+        for child in value:
+            references.update(collect_local_ref_references(child))
+    return references
+
+
+def validate_candidate_negative_isolation(case: dict[str, Any], location: str) -> None:
+    if case.get("expectedRelation") != "invalid":
+        return
+    variants = case.get("inputVariants")
+    if not isinstance(variants, list) or len(variants) != 1 or not isinstance(variants[0], dict):
+        fail(f"{location}: invalid candidate cases require exactly one object variant")
+    candidate = variants[0]
+    case_id = case["id"]
+    authority_operations = candidate.get("authorityPatch", {}).get("operations", [])
+    application_operations = candidate.get("applicationPatch", {}).get("operations", [])
+    authority_creates = [operation.get("localRef") for operation in authority_operations if operation.get("op") in {"createEntity", "createRelation"}]
+    application_creates = [operation.get("localRef") for operation in application_operations if operation.get("op") in {"createEntity", "createRelation"}]
+    creates = authority_creates + application_creates
+    references: set[str] = set()
+    for operation in authority_operations + application_operations:
+        references.update(collect_local_ref_references(operation.get("value")))
+    if not references <= set(creates):
+        fail(f"{location}: negative case contains an unknown localRef reference")
+
+    allocation = candidate.get("allocationOrder")
+    canonical_allocation = sorted(set(creates))
+    if case_id == "candidate-localref-collision":
+        if len(authority_creates) == len(set(authority_creates)) or any(not value.startswith("authority:") for value in authority_creates):
+            fail(f"{location}: collision must be duplicate Authority localRefs with correct prefixes")
+        if any(not value.startswith("application:") for value in application_creates) or allocation != canonical_allocation:
+            fail(f"{location}: collision case must otherwise have exact prefixes and allocationOrder")
+    elif case_id == "authority-uses-application-prefix":
+        if sum(value.startswith("application:") for value in authority_creates) != 1:
+            fail(f"{location}: exactly one Authority create must use the Application prefix")
+        if any(not value.startswith("application:") for value in application_creates) or allocation != canonical_allocation:
+            fail(f"{location}: Authority-prefix case must otherwise be isolated")
+    elif case_id == "application-uses-authority-prefix":
+        if sum(value.startswith("authority:") for value in application_creates) != 1:
+            fail(f"{location}: exactly one Application create must use the Authority prefix")
+        if any(not value.startswith("authority:") for value in authority_creates) or allocation != canonical_allocation:
+            fail(f"{location}: Application-prefix case must otherwise be isolated")
+    elif case_id == "allocation-order-missing":
+        if "allocationOrder" in candidate or case.get("expectedErrorCode") != "patch.schema_violation":
+            fail(f"{location}: missing allocationOrder must be a schema violation")
+    elif case_id == "allocation-order-duplicate":
+        if not isinstance(allocation, list) or len(allocation) == len(set(allocation)) or set(allocation) != set(creates):
+            fail(f"{location}: duplicate allocationOrder must contain the exact create refs with one duplicate")
+        if case.get("expectedErrorCode") != "patch.schema_violation":
+            fail(f"{location}: duplicate allocationOrder is rejected by uniqueItems")
+    elif case_id == "allocation-order-noncanonical":
+        if not isinstance(allocation, list) or set(allocation) != set(creates) or len(allocation) != len(set(allocation)) or allocation == canonical_allocation:
+            fail(f"{location}: noncanonical allocationOrder must differ only in order")
+    elif case_id == "final-host-id-mapping-injected":
+        if "finalHostIdMapping" not in candidate or allocation != canonical_allocation:
+            fail(f"{location}: final Host-ID mapping injection must otherwise be isolated")
+    elif case_id == "published-host-id-injected":
+        if "publishedHostIds" not in candidate or allocation != canonical_allocation:
+            fail(f"{location}: published Host-ID injection must otherwise be isolated")
 
 
 def validate_vector_catalog(
@@ -387,6 +483,7 @@ def validate_vector_catalog(
             fail(f"{name}: different cases require aligned distinct expected digests")
         if relation == "invalid" and (not isinstance(case.get("expectedErrorCode"), str) or not case["expectedErrorCode"]):
             fail(f"{name}: invalid cases require a stable expectedErrorCode")
+        validate_candidate_negative_isolation(case, name)
         validate_digest(case.get("expectedDigest"), f"{name}.expectedDigest")
     if candidate_ids != REQUIRED_CANDIDATE_CASE_IDS:
         fail(
@@ -467,6 +564,28 @@ def run_witnesses(graph: SchemaGraph, table: dict[tuple[str, str], dict[str, Any
 
     if any("schemaId" in entry or "schemaPointer" in entry for entry in deferred):
         fail("self-check: Gate D deferred entries must not count as Core-addressed rules")
+
+    mutated_rule = {
+        "schemaId": core_id,
+        "schemaPointer": "/$defs/patchOperations",
+        "kind": "ordered",
+        "displayPath": "not.allowed",
+    }
+    try:
+        validate_rule_members(mutated_rule, "self-check canonical rule")
+    except VerificationError:
+        pass
+    else:
+        fail("self-check: canonical rule displayPath mutation was accepted")
+
+    replaced_deferred = [dict(entry) for entry in deferred]
+    replaced_deferred[0]["displayPath"] = "arbitrary.replacement"
+    try:
+        validate_deferred_extensions(replaced_deferred)
+    except VerificationError:
+        pass
+    else:
+        fail("self-check: arbitrary deferred Extension replacement was accepted")
 
 
 def main() -> int:
