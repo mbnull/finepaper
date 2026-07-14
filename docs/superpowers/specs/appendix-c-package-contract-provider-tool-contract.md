@@ -361,7 +361,8 @@ Every resolved Package, Contract, Provider, and Tool sub-bundle has an `ipcraft.
 
 Rules:
 
-- Paths are UTF-8 NFC, `/`-separated, relative, non-empty, case-sensitive identifiers with no `.`, `..`, absolute prefix, drive prefix, NUL, backslash, or duplicate after normalization. A bundle is also rejected when two normalized paths collide under Unicode simple case folding, so it remains installable on case-insensitive hosts.
+- V1 paths are portable normalized relative identifiers: UTF-8 NFC, `/`-separated, relative, case-sensitive, and composed of non-empty segments. They contain no C0 control (`U+0000`–`U+001F`), DEL (`U+007F`), colon, backslash, absolute or drive prefix, empty segment, `.` segment, or `..` segment.
+- Semantic path validation rejects Windows reserved device names, segments ending in dot or space, duplicate normalized paths, Unicode simple-case-fold collisions, and any path escape. This portable contract intentionally rejects some filenames that are legal on a particular host so locked Bundles and execution views have one cross-platform identity.
 - Entries sort by normalized path before canonicalization. Regular files only; symlinks, hard-link aliases, devices, sockets, and other special files are rejected.
 - `files[]` is exhaustive: it enumerates every regular file visible under that Bundle root except the Bundle Manifest document itself. Any unlisted entry, directory containing unlisted descendants, duplicate normalized path, Unicode/case-fold collision, link, special file, or path escape rejects installation/launch.
 - Package, Contract, Engine, Provider, Runtime, and Tool sub-bundle roots are non-overlapping content-addressed roots. A process receives separate read-only execution views for only the exact locked roots declared in its dependency set; parent Bundle files are not implicitly visible to a child and child files are not included in a parent digest.
@@ -727,13 +728,14 @@ Allowed severity: `info`, `warning`, `error`. `blocking: true` is authoritative 
 
 Rules:
 
-- Paths are normalized relative paths without `..`, absolute roots, drive prefixes, NUL, or platform escape.
+- Artifact paths are portable normalized relative identifiers under the C6 path contract: UTF-8 NFC, `/`-separated, with no C0/DEL controls, colon, backslash, absolute or drive prefix, empty segment, `.` segment, or `..` segment.
+- Semantic validation rejects Windows reserved device names, trailing dot/space segments, Unicode simple-case-fold collisions, and any filesystem containment escape. This intentionally excludes some host-native legal filenames to preserve one cross-platform artifact and report identity.
 - Artifact files must be regular files under staging; symlinks and special files are rejected.
 - `artifacts[]` is exhaustive for the promoted output: every entry under execution `artifacts/` must appear exactly once. Unlisted files/directories, hard links, duplicate normalized paths, Unicode/case-fold collisions, symlinks, special files, and escapes reject verification.
 - Host policy defines maximum entry count, per-file size, and total size; exceeding policy rejects promotion with stable diagnostics.
 - Every manifest size/digest is verified before promotion.
 - The Host builds a new clean promotion tree by copying only verified manifest entries in canonical path order. It never renames or promotes the arbitrary tool-written `artifacts/` directory itself.
-- `diagnosticReport`, `artifactManifest`, Tool Input paths, and Tool Result pointer paths use the same normalized-relative-path and containment checks, relative to the invocation execution root.
+- `diagnosticReport`, `artifactManifest`, Tool Input paths, Tool Result pointer paths, and archive-relative paths use the same C6 portable normalized-relative-path and containment checks, relative to their declared execution or report root.
 
 ## C15. Run, Pipeline, and Output Ownership
 

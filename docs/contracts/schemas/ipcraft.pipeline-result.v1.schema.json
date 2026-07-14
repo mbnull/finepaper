@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": [
     "schema", "pipelineRunId", "kind", "snapshotDigest", "dependencySetDigest",
-    "status", "failedStepId", "failure", "steps", "startedAt", "completedAt"
+    "status", "failedStepId", "steps", "startedAt", "completedAt"
   ],
   "properties": {
     "schema": { "const": "ipcraft.pipeline-result.v1" },
@@ -16,12 +16,6 @@
     "dependencySetDigest": { "$ref": "#/$defs/digest" },
     "status": { "enum": ["succeeded", "failed", "cancelled", "timed-out"] },
     "failedStepId": { "oneOf": [{ "$ref": "#/$defs/id" }, { "type": "null" }] },
-    "failure": {
-      "oneOf": [
-        { "$ref": "ipcraft.step-result.v1.schema.json#/$defs/failure" },
-        { "type": "null" }
-      ]
-    },
     "steps": {
       "type": "array",
       "minItems": 1,
@@ -41,15 +35,7 @@
   "allOf": [
     {
       "if": { "properties": { "status": { "const": "succeeded" } }, "required": ["status"] },
-      "then": {
-        "properties": {
-          "failure": { "type": "null" },
-          "failedStepId": { "type": "null" }
-        }
-      },
-      "else": {
-        "properties": { "failure": { "$ref": "ipcraft.step-result.v1.schema.json#/$defs/failure" } }
-      }
+      "then": { "properties": { "failedStepId": { "type": "null" } } }
     },
     {
       "if": { "properties": { "status": { "const": "failed" } }, "required": ["status"] },
