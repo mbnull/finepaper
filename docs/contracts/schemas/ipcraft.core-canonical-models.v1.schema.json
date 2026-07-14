@@ -958,8 +958,8 @@
                   "source": { "properties": { "kind": { "const": "application-migration" } } },
                   "operations": {
                     "allOf": [
-                      { "contains": { "$ref": "#/$defs/projectDependenciesUpdateOperationPredicate" }, "minContains": 1 },
-                      { "contains": { "$ref": "#/$defs/topologyDerivationUpdateOperationPredicate" }, "minContains": 1 }
+                      { "contains": { "$ref": "#/$defs/projectDependenciesUpdateOperationPredicate" }, "minContains": 1, "maxContains": 1 },
+                      { "contains": { "$ref": "#/$defs/topologyDerivationUpdateOperationPredicate" }, "minContains": 1, "maxContains": 1 }
                     ]
                   }
                 }

@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from verify_canonical_vectors import SchemaWorld  # noqa: E402
+from verify_canonical_vectors import SchemaWorld, canonical_json  # noqa: E402
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -37,6 +37,13 @@ def engine_manifest() -> dict:
         "supportedPlatformAbis": ["linux-x86_64-gnu-v1"],
         "entrypoint": "lib/libipcraft_noc_engine.so",
     }
+
+
+def current_dependencies() -> list[dict]:
+    return [
+        {"lockId": "dep.noc", "kind": "noc-package", "id": "vendor.noc", "version": "1", "bundleManifestDigest": DIGEST_C},
+        engine_lock(DIGEST_A),
+    ]
 
 
 def resolve(lock: dict, manifest: dict, *, installed: bool = True, installed_digest: str = DIGEST_A,
@@ -128,10 +135,7 @@ def derivation(target: dict) -> dict:
 
 def migration_candidate() -> dict:
     current, target = engine_lock(DIGEST_A), engine_lock(DIGEST_B)
-    dependencies = [
-        {"lockId": "dep.noc", "kind": "noc-package", "id": "vendor.noc", "version": "1", "bundleManifestDigest": DIGEST_C},
-        target,
-    ]
+    dependencies = [current_dependencies()[0], target]
     return {
         "schema": "ipcraft.candidate-transaction.v1", "transactionId": "tx.migration",
         "kind": "default-engine-migration", "applicability": applicability(DIGEST_A),
@@ -148,18 +152,60 @@ def migration_candidate() -> dict:
     }
 
 
-def migration_semantic_errors(candidate: dict) -> list[str]:
+def migration_semantic_errors(candidate: dict, base_dependencies: list[dict], target_manifest: dict) -> list[str]:
     errors = []
     current = candidate["migration"]["currentDefaultEngineLock"]
     target = candidate["migration"]["targetDefaultEngineLock"]
+    applicability_value = candidate["applicability"]
+    current_authority = applicability_value["structureAuthority"]
+    if not (
+        current["lockId"] == applicability_value["defaultEngineLockId"] == current_authority["lockId"]
+        and current["bundleManifestDigest"] == applicability_value["defaultEngineBundleDigest"] == current_authority["bundleDigest"]
+        and current["engineHostContractVersion"] == applicability_value["engineHostContractVersion"]
+        and current["hostSideEffectContractVersion"] == applicability_value["hostSideEffectContractVersion"]
+        and current_authority["kind"] == "default-engine"
+        and current["id"] == current_authority["identity"]
+        and current["version"] == current_authority["version"]
+    ):
+        errors.append("current-applicability")
     if current["lockId"] != target["lockId"]: errors.append("lockId")
     if current["bundleManifestDigest"] == target["bundleManifestDigest"]: errors.append("digest")
+    target_source = candidate["authorityPatch"]["source"]
+    if not (
+        target_source["kind"] == "default-engine"
+        and target_source["identity"] == target["id"]
+        and target_source["version"] == target["version"]
+        and target_source["bundleDigest"] == target["bundleManifestDigest"]
+    ):
+        errors.append("target-authority")
     operations = candidate["applicationPatch"]["operations"]
-    project_update = next((op for op in operations if op.get("entityKind") == "project" and "dependencies" in op.get("set", {})), None)
-    topology_update = next((op for op in operations if op.get("entityKind") == "topology" and "derivation" in op.get("set", {})), None)
-    if project_update is None or target not in project_update["set"]["dependencies"]: errors.append("target-dependency")
+    project_updates = [op for op in operations if op.get("entityKind") == "project" and "dependencies" in op.get("set", {})]
+    topology_updates = [op for op in operations if op.get("entityKind") == "topology" and "derivation" in op.get("set", {})]
+    if len(project_updates) != 1: errors.append("project-update-count")
+    if len(topology_updates) != 1: errors.append("topology-update-count")
+    project_update = project_updates[0] if len(project_updates) == 1 else None
+    topology_update = topology_updates[0] if len(topology_updates) == 1 else None
+    if project_update is not None and (set(project_update["set"]) != {"dependencies"} or project_update["unset"] != []):
+        errors.append("project-update-shape")
+    if topology_update is not None and (set(topology_update["set"]) != {"derivation"} or topology_update["unset"] != []):
+        errors.append("topology-update-shape")
+    if project_update is not None:
+        dependencies = project_update["set"]["dependencies"]
+        lock_ids = [dependency["lockId"] for dependency in dependencies]
+        if len(lock_ids) != len(set(lock_ids)): errors.append("duplicate-lockId")
+        defaults = [dependency for dependency in dependencies if dependency["kind"] == "default-engine"]
+        if defaults != [target]: errors.append("target-dependency")
+        old_other = sorted((dependency for dependency in base_dependencies if dependency["kind"] != "default-engine"), key=lambda dependency: dependency["lockId"])
+        new_other = sorted((dependency for dependency in dependencies if dependency["kind"] != "default-engine"), key=lambda dependency: dependency["lockId"])
+        if canonical_json(old_other) != canonical_json(new_other): errors.append("non-engine-dependencies")
+    else:
+        errors.append("target-dependency")
     expected_derivation = derivation(target)
     if topology_update is None or topology_update["set"]["derivation"] != expected_derivation: errors.append("target-derivation")
+    manifest_metadata = ("id", "version", "engineHostContractVersion", "hostSideEffectContractVersion", "engineCompatibilityVersion", "supportedPlatformAbis")
+    if any(target_manifest[field] != target[field] for field in manifest_metadata): errors.append("target-manifest")
+    if current["engineCompatibilityVersion"] not in target_manifest["migrationFromCompatibilityVersions"]:
+        errors.append("migration-ineligible")
     impacts = candidate["impactReport"]["impacts"]
     if not any(impact["code"] == "engine_migration.dependency_replaced" for impact in impacts): errors.append("confirmation-impact")
     if disposition_for_impacts(impacts) != ("ready-to-commit", True, "confirmation-required"):
@@ -273,22 +319,38 @@ def main() -> int:
     assert freshness_reason(unsupported_side, {"ipcraft.engine-host.v1"}, {"ipcraft.noc-side-effects.v1"}) == "dependency-changed"
 
     candidate = migration_candidate()
+    base_dependencies = current_dependencies()
+    target_manifest = engine_manifest()
     assert_valid(world, "ipcraft.core-canonical-models.v1", core["candidateTransaction"], candidate, "complete migration candidate")
-    assert migration_semantic_errors(candidate) == []
+    assert migration_semantic_errors(candidate, base_dependencies, target_manifest) == []
     schema_negatives = []
     empty = copy.deepcopy(candidate); empty["applicationPatch"]["operations"] = []; schema_negatives.append(("empty migration application Patch", empty))
     no_project = copy.deepcopy(candidate); no_project["applicationPatch"]["operations"].pop(0); schema_negatives.append(("missing project dependency update", no_project))
     no_topology = copy.deepcopy(candidate); no_topology["applicationPatch"]["operations"].pop(1); schema_negatives.append(("missing topology derivation update", no_topology))
     no_impact = copy.deepcopy(candidate); no_impact["impactReport"]["impacts"] = []; schema_negatives.append(("missing migration impact", no_impact))
+    duplicate_project = copy.deepcopy(candidate); duplicate_project["applicationPatch"]["operations"].append(copy.deepcopy(duplicate_project["applicationPatch"]["operations"][0])); schema_negatives.append(("duplicate project update", duplicate_project))
+    duplicate_topology = copy.deepcopy(candidate); duplicate_topology["applicationPatch"]["operations"].append(copy.deepcopy(duplicate_topology["applicationPatch"]["operations"][1])); schema_negatives.append(("duplicate topology update", duplicate_topology))
     for name, negative in schema_negatives:
         assert_invalid(world, "ipcraft.core-canonical-models.v1", core["candidateTransaction"], negative, name)
+    assert "project-update-count" in migration_semantic_errors(duplicate_project, base_dependencies, target_manifest)
+    assert "topology-update-count" in migration_semantic_errors(duplicate_topology, base_dependencies, target_manifest)
     semantic_negatives = []
     wrong_lock = copy.deepcopy(candidate); wrong_lock["migration"]["targetDefaultEngineLock"]["lockId"] = "dep.other"; semantic_negatives.append(("differing lockId", wrong_lock, "lockId"))
     wrong_dependency = copy.deepcopy(candidate); wrong_dependency["applicationPatch"]["operations"][0]["set"]["dependencies"][1] = engine_lock(DIGEST_C); semantic_negatives.append(("wrong dependency target", wrong_dependency, "target-dependency"))
     wrong_derivation = copy.deepcopy(candidate); wrong_derivation["applicationPatch"]["operations"][1]["set"]["derivation"]["defaultEngineBundleDigest"] = DIGEST_C; semantic_negatives.append(("wrong derivation target", wrong_derivation, "target-derivation"))
+    wrong_base = copy.deepcopy(candidate); wrong_base["applicability"]["defaultEngineBundleDigest"] = DIGEST_C; semantic_negatives.append(("current applicability mismatch", wrong_base, "current-applicability"))
+    wrong_authority = copy.deepcopy(candidate); wrong_authority["authorityPatch"]["source"]["version"] = "2.0.0"; semantic_negatives.append(("target Authority mismatch", wrong_authority, "target-authority"))
+    extra_name = copy.deepcopy(candidate); extra_name["applicationPatch"]["operations"][0]["set"]["name"] = "not-a-migration-field"; semantic_negatives.append(("extra project update property", extra_name, "project-update-shape"))
+    nonempty_unset = copy.deepcopy(candidate); nonempty_unset["applicationPatch"]["operations"][1]["unset"] = ["derivation"]; semantic_negatives.append(("nonempty migration unset", nonempty_unset, "topology-update-shape"))
+    changed_non_engine = copy.deepcopy(candidate); changed_non_engine["applicationPatch"]["operations"][0]["set"]["dependencies"][0]["version"] = "2"; semantic_negatives.append(("changed non-Engine dependency", changed_non_engine, "non-engine-dependencies"))
+    duplicate_lock_id = copy.deepcopy(candidate); duplicate_lock_id["applicationPatch"]["operations"][0]["set"]["dependencies"].append({"lockId": "dep.noc", "kind": "interface-contract", "id": "vendor.contract", "version": "1", "bundleManifestDigest": DIGEST_A}); semantic_negatives.append(("duplicate dependency lockId", duplicate_lock_id, "duplicate-lockId"))
     for name, negative, expected_error in semantic_negatives:
         assert_valid(world, "ipcraft.core-canonical-models.v1", core["candidateTransaction"], negative, name + " structurally parses")
-        assert expected_error in migration_semantic_errors(negative)
+        assert expected_error in migration_semantic_errors(negative, base_dependencies, target_manifest)
+    dropped_non_engine = copy.deepcopy(candidate); dropped_non_engine["applicationPatch"]["operations"][0]["set"]["dependencies"].pop(0)
+    assert "non-engine-dependencies" in migration_semantic_errors(dropped_non_engine, base_dependencies, target_manifest)
+    incompatible_manifest = copy.deepcopy(target_manifest); incompatible_manifest["migrationFromCompatibilityVersions"] = ["other"]
+    assert "migration-ineligible" in migration_semantic_errors(candidate, base_dependencies, incompatible_manifest)
 
     project_update = candidate["applicationPatch"]["operations"][0]
     topology_update = candidate["applicationPatch"]["operations"][1]
@@ -335,7 +397,7 @@ def main() -> int:
     for name, negative in contradictory:
         assert_invalid(world, "ipcraft.noc-side-effects.v1", side_schema, negative, name)
 
-    print("engine/side-effect witnesses passed: 9 resolution cases, Patch ownership, migration + 7 negatives, 6 dispositions + 5 negatives")
+    print("engine/side-effect witnesses passed: 9 resolution cases, Patch ownership, exact migration binding + 17 negatives, 6 dispositions + 5 negatives")
     return 0
 
 
