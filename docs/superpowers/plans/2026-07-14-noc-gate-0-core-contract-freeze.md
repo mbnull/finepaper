@@ -231,6 +231,32 @@ git add docs/contracts docs/adr/0054-lock-default-engine-as-an-installable-exact
 git commit -m "docs: close exact Default Engine and side-effect contracts"
 ```
 
+### Task 3B: Complete Engine and Host side-effect behavioral vectors
+
+**Files:**
+- Create: `docs/contracts/vectors/default-engine-lock-v1.json`
+- Create: `docs/contracts/vectors/host-side-effects-v1.json`
+- Create: `docs/contracts/tools/generate_engine_side_effect_vectors.py`
+- Create: `docs/contracts/tools/verify_engine_side_effect_vectors.py`
+- Modify: `docs/contracts/vectors/core-canonical-projection-v1.json`
+- Modify: `docs/superpowers/specs/appendix-f-core-canonical-models.md`
+
+- [x] **Step 1: Close exact resolution, migration, and freshness catalogs**
+
+Cover exact selection with no fallback, every stable degraded diagnostic, metadata mismatch dimensions, upgrade-only discovery, retained unsupported Bundles, migration eligibility/atomicity/inverse restoration, and all computed freshness states/reasons.
+
+- [x] **Step 2: Close causal Host side-effect vectors**
+
+Use complete non-empty `ipcraft.noc-side-effects.v1` documents. Derive Application operations, impacts, tombstones, diagnostics, allocation order, and disposition from current state plus Authority Patch for every F11 behavior and a combined ordering witness.
+
+- [x] **Step 3: Require generator/verifier independence and mutations**
+
+The stdlib-only generator writes both byte-stable catalogs to `--output-dir`. The independent verifier imports neither generator nor smoke witness, validates the schema subset, recomputes behavior/digests/order, and rejects the required corruption matrix.
+
+- [x] **Step 4: Register behavior catalogs and verify regeneration**
+
+The Core vector catalog lists both behavioral catalogs. Appendix F records the closed formats, complete coverage, independent evaluation, and mutation requirements. Authoring verification regenerates to a temporary directory and byte-compares both committed files.
+
 ## Task 4: Build the valid/invalid fixture catalog
 
 **Files:**

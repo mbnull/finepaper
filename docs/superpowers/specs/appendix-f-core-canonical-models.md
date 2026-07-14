@@ -10,6 +10,8 @@ Machine-readable companion artifacts:
 - [Core projection/digest vectors](../../contracts/vectors/core-canonical-projection-v1.json)
 - [Core collection permutation vectors](../../contracts/vectors/core-set-permutation-v1.json)
 - [Candidate/local-reference vectors](../../contracts/vectors/candidate-local-ref-v1.json)
+- [Default Engine behavior vectors](../../contracts/vectors/default-engine-lock-v1.json)
+- [Host side-effect behavior vectors](../../contracts/vectors/host-side-effects-v1.json)
 
 ## F1. Core Schema IDs
 
@@ -448,6 +450,10 @@ The collection catalog has exactly one case for every `{schemaId,schemaPointer}`
 For each multi-component comparator, the evidence includes a decisive pair for every component: all earlier components tie and that component differs. Persisted endpoint evidence separately covers resolved before unresolved, kind, Host ID, and unresolved reason ordering. Candidate Patch endpoint evidence additionally covers `id:` versus `localRef:` object-reference tokens. An implementation that compares only an early component cannot pass the independent verifier.
 
 The two large focused JSON files are generated evidence. [generate_canonical_vectors.py](../../contracts/tools/generate_canonical_vectors.py) is a deterministic, stdlib-only, non-normative authoring generator; schemas, this Appendix, and the committed artifacts remain normative. [verify_canonical_vectors.py](../../contracts/tools/verify_canonical_vectors.py) is an independent stdlib-only recomputation and structural verifier and shares no implementation module with the generator. Authoring requires generation to a temporary directory followed by byte comparison with both committed artifacts.
+
+The behavioral catalogs use separate closed envelopes. `ipcraft.default-engine-behavior-vectors.v1` contains exactly `resolutionCases`, `migrationCases`, and `freshnessCases`; each case has a stable ID, complete causal input, and closed expected result. `ipcraft.host-side-effect-behavior-vectors.v1` contains closed wrappers whose `document` is one complete valid `ipcraft.noc-side-effects.v1` value and whose expected output is derived solely from `document.input`. [generate_engine_side_effect_vectors.py](../../contracts/tools/generate_engine_side_effect_vectors.py) deterministically authors both catalogs. [verify_engine_side_effect_vectors.py](../../contracts/tools/verify_engine_side_effect_vectors.py) imports neither that generator nor the schema smoke witness and separately recomputes resolution, migration binding/eligibility, freshness, Host side effects, canonical expected digests, ordering, and dispositions.
+
+Behavioral coverage is complete for exact available/missing/revoked/corrupt/digest and metadata mismatch, platform/Host/side-effect incompatibility, no fallback, upgrade overlay, retained unsupported Bundles, compatible/incompatible and atomic Engine migration, blocking priority, exact inverse Undo and degraded restoration, every output-freshness state/reason, Router-created memberships, Router/Slot deletion effects, Package Relation unresolved/blocking behavior, empty Domain handling, every connectivity cause, and combined deterministic ordering. The independent verifier also requires rejection of wrong digest selection, fallback substitution, wrong freshness reason, missing/nondeterministic memberships, Attachment deletion instead of unresolved conversion, incorrect disposition priority/connectivity, changed non-Engine migration dependencies, and Undo Engine execution.
 
 Collection vectors exercise the physical array comparator independently of enclosing root cardinality. This matters for V1-reserved ProjectDesign arrays such as `connections` and `views`, whose root schemas currently require `maxItems: 0`; their collection-level items have no additional item constraints, while the root cardinality remains enforced separately.
 

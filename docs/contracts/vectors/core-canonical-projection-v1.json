@@ -13,6 +13,14 @@
     {
       "path": "vectors/candidate-local-ref-v1.json",
       "purpose": "Candidate causality, localRef graph, exclusion, normalization, inequality, and invalidity golden vectors."
+    },
+    {
+      "path": "vectors/default-engine-lock-v1.json",
+      "purpose": "Exact Default Engine resolution, explicit migration, Undo/Redo, and computed output-freshness behavioral golden vectors."
+    },
+    {
+      "path": "vectors/host-side-effects-v1.json",
+      "purpose": "Causal Host side-effect Application Patch, impact, tombstone, diagnostic, allocation-order, and disposition golden vectors."
     }
   ],
   "canonicalCollections": [
