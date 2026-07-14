@@ -1,0 +1,3 @@
+# Let Undo and Redo restore deleted structure identities
+
+The rule that a deleted entity receives a new ID when later recreated applies to new reconciliation, not historical restoration. Only a successfully materialized Pending Topology Group records one causal transaction containing final topology intent, Structure Authority Patch effects, Application Domain/Attachment side effects, deleted-entity tombstones, original IDs, and affected relations. Undo and Redo atomically restore or reapply that transaction without running ordinary topology derivation, so a reverted Mesh resize restores the exact prior Router/Slot/Link IDs and Attachments while Derived-State revisions continue increasing.

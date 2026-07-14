@@ -1,0 +1,3 @@
+# Use a project directory with a single authoritative entry file
+
+The creation wizard produces a named project directory containing a same-named `.nocproj` entry file as the single authoritative design document, a local `.workspace/` area, and an `output/` directory used by generation by default. The entry file is formatted, versioned JSON, parsed with standard Qt JSON APIs and saved through atomic replacement rather than Qt-specific object serialization. Users open the entry file as a project. Provider and tool protocols receive snapshots or controlled staging references rather than project paths and prohibit direct project-file access, without claiming an OS sandbox unless one is separately enabled; output location may be overridden explicitly.

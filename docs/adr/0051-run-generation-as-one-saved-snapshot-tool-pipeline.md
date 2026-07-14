@@ -1,0 +1,3 @@
+# Run generation as one formally saved Snapshot tool pipeline
+
+Generate is one parent Pipeline Run containing Core Structural DRC, optional semantic DRC invocation, Generator invocation, artifact verification, and promotion against one formally saved Snapshot/dependency set. Each external process has its own Invocation ID, input, optional raw Tool Result, logs, timeout, and identity; the host always emits a normalized Step Result and aggregates them in a Pipeline Result. Missing, stale, failed, mismatched, or blocking DRC prevents Generator launch. Reports retain canonical ProjectDesign and every invocation input/result, and promoted output records its Snapshot/dependency digests so the UI can distinguish current canonical output from last successful stale output.

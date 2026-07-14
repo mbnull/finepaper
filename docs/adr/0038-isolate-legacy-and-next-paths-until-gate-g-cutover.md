@@ -1,0 +1,3 @@
+# Isolate legacy and next paths until Gate G cutover
+
+During Gates A–F, the frozen legacy `.fpproj` workbench may remain buildable in the repository while an internal startup option selects the new `.nocproj` path, but a process may instantiate only one composition root. The new path must not instantiate, synchronize through, or adapt `ProjectDocument`, `ProjectService`, `ProjectDesignSerializer`, legacy Graph authority, old CommandManager, or the old save path. Only stateless lower-level utilities may be shared. Gate G removes the legacy composition root, startup option, readers/writers, authority services, and obsolete tests after blinded acceptance.

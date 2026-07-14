@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ipcraft.engine-bundle.v1",
+  "title": "Ipcraft Default Engine Bundle Manifest V1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "id",
+    "version",
+    "engineHostContractVersion",
+    "engineCompatibilityVersion",
+    "migrationFromCompatibilityVersions",
+    "supportedPlatformAbis",
+    "entrypoint"
+  ],
+  "properties": {
+    "schema": { "const": "ipcraft.engine-bundle.v1" },
+    "id": { "type": "string", "minLength": 1 },
+    "version": { "type": "string", "minLength": 1 },
+    "engineHostContractVersion": { "const": "ipcraft.engine-host.v1" },
+    "engineCompatibilityVersion": { "type": "string", "minLength": 1 },
+    "migrationFromCompatibilityVersions": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+    "supportedPlatformAbis": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "entrypoint": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).+$"
+    }
+  }
+}

@@ -1,0 +1,3 @@
+# Limit the V1 configuration runtime to scopes with concrete users
+
+V1 implements user-editable `global`, `interface`, and `domain` scopes with boolean, integer, double, string, and enum fields; supported metadata is default, required, read-only, min/max, unit, label/description, and simple equality-based visibility or enablement. Router, Link, and Access Slot template properties are read-only. Other scopes, inheritance chains, arbitrary expression languages, and generic overlay/configuration DSLs are not interpreted as editable V1 behavior; supported generic schema content uses the default path and everything else must remain a namespaced opaque extension.

@@ -1,0 +1,3 @@
+# Save only current designs and recover incomplete work separately
+
+The authoritative `.nocproj` file is a reproducible, regenerable design artifact rather than a collaborative working draft. It is updated only when Engine reconciliation is current and core structural DRC passes. Pending, stale, failed, or structurally incomplete working revisions cannot be formally saved, validated, or generated; a disposable `.workspace/recovery.json` record exists only for crash and interaction recovery and is not project state, a checkpoint, or a version-control artifact. When Save is disabled, the UI must list every blocking reason explicitly.

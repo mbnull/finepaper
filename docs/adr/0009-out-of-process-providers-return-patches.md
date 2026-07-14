@@ -1,0 +1,3 @@
+# Run language-neutral Providers out of process and require Patches for state changes
+
+Advanced Extension Providers run as independently managed processes and communicate through a versioned request-response protocol, allowing implementation in scripting or compiled languages without a Qt/C++ ABI dependency. Providers receive immutable design snapshots. Every proposed state change must be a Design Patch validated and committed by the Application; non-state responses may contain preview data or structured diagnostics. Reconciliation Patches are associated with the originating user configuration change and do not create an independent user undo history entry.

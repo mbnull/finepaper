@@ -1,0 +1,3 @@
+# Fix Domain side effects during topology reconciliation
+
+Creating a Router atomically creates its membership in the Default Domain for every V1 Domain type; deleting a Router deletes its Domain memberships rather than preserving unresolved membership. A topology materialization that disconnects a remaining Domain is accepted as current Derived State but produces blocking Core Structural DRC until repaired. Empty Default Domains are legal; a non-Default Domain emptied by a user command or topology shrink is deleted/tombstoned in the same atomic transaction. Split preserves the source ID and creates a new ID, while Merge names an explicit survivor and requires the Default Domain to survive when involved.

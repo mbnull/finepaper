@@ -1,0 +1,3 @@
+# Freeze Core contracts at Gate 0 and Extension ABI at Gate D
+
+Gate 0 freezes machine-readable Core/Appendix F schemas, projection/normalization/localRef vectors, error codes, Pending Group/Candidate semantics, exact Default Engine/Engine Host/Host side-effect contracts, exhaustive Bundle/Runtime/Tool contracts, and migration boundaries before implementation coding. Provider envelope ABI remains open until the explicitly named Restricted Advanced Mesh Capability Spike V1 (`RAMCS-V1`) satisfies its public tests and restricted evidence checklist at Gate D, but it may only wrap frozen Core models. Any later Core or Extension gap requires an ADR, a corresponding unfreeze/new-freeze record, and repetition of affected downstream Gates.

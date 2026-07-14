@@ -1,0 +1,3 @@
+# Fix V1 Mesh identity retention by coordinate and compatible template
+
+V1 Mesh uses a fixed top-left origin with rows growing downward and columns rightward; resizing adds or removes only the bottom and right edges. A Router retains ID when its coordinate remains and its template stable key and identity compatibility version match. Each orthogonally adjacent Router pair has one undirected structural Link retained by endpoint IDs, axis, and compatible template. A Slot is retained by parent Router ID and compatible slot template key. Ordinary recreation gets new IDs, Clone-and-Migrate need not preserve IDs, and Undo/Redo may restore tombstoned IDs.

@@ -1,0 +1,3 @@
+# Preserve structure identity through explicit ID-based diffs
+
+Reconciliation does not return a replacement graph or an additional logical matching key. The Package-selected Structure Authority receives current Derived State with opaque Host IDs and returns an explicit Patch body that updates/deletes existing IDs and creates new entities through candidate transaction-wide localRefs shared with Host side effects. The Application alone assigns Host IDs in canonical localRef order during atomic commit and stores the mapping in formal history; once an entity is deleted, later ordinary recreation receives a different ID. Template compatibility declarations determine whether an upgrade is expressed as update or delete-plus-create.

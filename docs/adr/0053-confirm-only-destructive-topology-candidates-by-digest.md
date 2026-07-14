@@ -1,0 +1,3 @@
+# Confirm only destructive topology candidates by digest
+
+An Authority response is validated into an immutable Topology Candidate and never commits directly. Candidates without destructive or blocked impacts auto-commit; a candidate whose impact report declares data loss enters `ready-to-commit` and commits only through `ConfirmPendingTopologyGroup(candidateDigest)`; an impact that cannot be made legal automatically enters `blocked` and requires Group discard plus user repair. Candidate digest covers applicability, Authority/side-effect Patches, tombstones, impact report, and provisional allocation plan. Candidate content is invalidated by any Group/dependency/Authority/base-design change and is never trusted through recovery.

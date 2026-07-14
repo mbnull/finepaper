@@ -1,0 +1,3 @@
+# Run IP Core tools asynchronously through isolated staging
+
+Semantic DRC and generation run asynchronously from an immutable current Design Snapshot using controlled staging inputs. Structured Diagnostic Reports feed Problems and raw process streams feed Output. Successful generation uses run-specific same-filesystem staging, manifest validation, backup rename, promotion, and rollback; this is rollback-safe transactional promotion on supported filesystems rather than a universal directory-atomicity guarantee. Failures and cancellation preserve a recoverable previous successful output and the authoritative project file.

@@ -1,0 +1,3 @@
+# Spike complex capabilities before contract freeze and blind-test after freeze
+
+Before the stable contract freeze, an architecture owner uses a confidential, reduced complex-IP scenario to test ProjectDesign, reconciliation, identity, Package entities/relations, diagnostics, generation snapshots, and Extension Provider boundaries; only generic capability gaps enter public specifications. After freeze, a separate blinded acceptance uses the full hidden Package with randomized identifiers and fixtures, prohibits core changes or Package-specific branches, and treats any genuine contract gap as a failed acceptance requiring formal unfreeze rather than a hardcoded exception.

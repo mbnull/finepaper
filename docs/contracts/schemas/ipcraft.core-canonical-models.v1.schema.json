@@ -1,0 +1,647 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ipcraft.core-canonical-models.v1",
+  "title": "Ipcraft V1 Gate 0 Core Canonical Models",
+  "oneOf": [
+    { "$ref": "#/$defs/topologyIntent" },
+    { "$ref": "#/$defs/normalizedTopologyInput" },
+    { "$ref": "#/$defs/derivedState" },
+    { "$ref": "#/$defs/reconcileApplicability" },
+    { "$ref": "#/$defs/patchBody" },
+    { "$ref": "#/$defs/impactReport" },
+    { "$ref": "#/$defs/candidateTransaction" },
+    { "$ref": "#/$defs/pipelinePlan" },
+    { "$ref": "#/$defs/outputManifest" }
+  ],
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "hostRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" }
+      }
+    },
+    "localRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["localRef"],
+      "properties": {
+        "localRef": { "$ref": "#/$defs/localRefString" }
+      }
+    },
+    "localRefString": {
+      "type": "string",
+      "pattern": "^(authority:[^\\s]+|application:[0-9]{6,})$"
+    },
+    "objectRef": {
+      "oneOf": [
+        { "$ref": "#/$defs/hostRef" },
+        { "$ref": "#/$defs/localRef" }
+      ]
+    },
+    "subjectRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id"],
+      "properties": {
+        "kind": {
+          "enum": [
+            "project",
+            "component",
+            "interface",
+            "router",
+            "structural-link",
+            "access-slot",
+            "attachment",
+            "domain",
+            "domain-membership",
+            "package-entity",
+            "package-relation"
+          ]
+        },
+        "id": { "$ref": "#/$defs/id" }
+      }
+    },
+    "resolvedEndpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "subject"],
+      "properties": {
+        "state": { "const": "resolved" },
+        "subject": { "$ref": "#/$defs/subjectRef" }
+      }
+    },
+    "unresolvedEndpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "intendedSubject", "reasonCode"],
+      "properties": {
+        "state": { "const": "unresolved" },
+        "intendedSubject": { "$ref": "#/$defs/subjectRef" },
+        "reasonCode": { "$ref": "#/$defs/id" }
+      }
+    },
+    "relationEndpoint": {
+      "oneOf": [
+        { "$ref": "#/$defs/resolvedEndpoint" },
+        { "$ref": "#/$defs/unresolvedEndpoint" }
+      ]
+    },
+    "packageEntity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "typeKey", "data"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "typeKey": { "$ref": "#/$defs/id" },
+        "data": { "type": "object" }
+      }
+    },
+    "packageRelation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "typeKey", "sources", "targets", "data"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "typeKey": { "$ref": "#/$defs/id" },
+        "sources": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/relationEndpoint" }
+        },
+        "targets": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/relationEndpoint" }
+        },
+        "data": { "type": "object" }
+      }
+    },
+    "topologyIntent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "componentId",
+        "topologyId",
+        "topologyKind",
+        "globalConfig",
+        "packageEntities",
+        "packageRelations"
+      ],
+      "properties": {
+        "schema": { "const": "ipcraft.topology-intent.v1" },
+        "componentId": { "$ref": "#/$defs/id" },
+        "topologyId": { "$ref": "#/$defs/id" },
+        "topologyKind": { "const": "mesh" },
+        "globalConfig": { "type": "object" },
+        "packageEntities": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/packageEntity" }
+        },
+        "packageRelations": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/packageRelation" }
+        }
+      }
+    },
+    "template": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stableKey", "identityCompatibilityVersion", "properties"],
+      "properties": {
+        "stableKey": { "$ref": "#/$defs/id" },
+        "identityCompatibilityVersion": { "type": "integer", "minimum": 1 },
+        "properties": { "type": "object" }
+      }
+    },
+    "slotAllowedContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contractId", "version", "bundleManifestDigest", "roles", "capabilityConstraints"],
+      "properties": {
+        "contractId": { "$ref": "#/$defs/id" },
+        "version": { "$ref": "#/$defs/id" },
+        "bundleManifestDigest": { "$ref": "#/$defs/digest" },
+        "roles": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/id" },
+          "uniqueItems": true
+        },
+        "capabilityConstraints": { "type": "object" }
+      }
+    },
+    "slotTemplate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stableKey", "identityCompatibilityVersion", "properties", "displayOrder", "label", "allowedContracts"],
+      "properties": {
+        "stableKey": { "$ref": "#/$defs/id" },
+        "identityCompatibilityVersion": { "type": "integer", "minimum": 1 },
+        "properties": { "type": "object" },
+        "displayOrder": { "type": "integer", "minimum": 0 },
+        "label": { "type": "string" },
+        "allowedContracts": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/slotAllowedContract" }
+        }
+      }
+    },
+    "structureAuthority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "lockId", "identity", "version", "bundleDigest"],
+      "properties": {
+        "kind": { "enum": ["default-engine", "extension-provider"] },
+        "lockId": { "$ref": "#/$defs/id" },
+        "identity": { "$ref": "#/$defs/id" },
+        "version": { "$ref": "#/$defs/id" },
+        "bundleDigest": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "dependencyContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "nocPackageLockId",
+        "nocPackageBundleDigest",
+        "defaultEngineLockId",
+        "defaultEngineBundleDigest",
+        "engineHostContractVersion",
+        "hostSideEffectContractVersion",
+        "structureAuthority",
+        "reconcileDependencySetDigest"
+      ],
+      "properties": {
+        "nocPackageLockId": { "$ref": "#/$defs/id" },
+        "nocPackageBundleDigest": { "$ref": "#/$defs/digest" },
+        "defaultEngineLockId": { "$ref": "#/$defs/id" },
+        "defaultEngineBundleDigest": { "$ref": "#/$defs/digest" },
+        "engineHostContractVersion": { "const": "ipcraft.engine-host.v1" },
+        "hostSideEffectContractVersion": { "const": "ipcraft.noc-side-effects.v1" },
+        "structureAuthority": { "$ref": "#/$defs/structureAuthority" },
+        "reconcileDependencySetDigest": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "normalizedTopologyInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "intent", "mesh", "dependencyContext"],
+      "properties": {
+        "schema": { "const": "ipcraft.normalized-topology-input.v1" },
+        "intent": { "$ref": "#/$defs/topologyIntent" },
+        "mesh": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["rows", "columns", "routerTemplate", "linkTemplate", "slotTemplates"],
+          "properties": {
+            "rows": { "type": "integer", "minimum": 1 },
+            "columns": { "type": "integer", "minimum": 1 },
+            "routerTemplate": { "$ref": "#/$defs/template" },
+            "linkTemplate": { "$ref": "#/$defs/template" },
+            "slotTemplates": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/slotTemplate" }
+            }
+          }
+        },
+        "dependencyContext": { "$ref": "#/$defs/dependencyContext" }
+      }
+    },
+    "router": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "templateKey", "identityCompatibilityVersion", "coordinate", "properties"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "templateKey": { "$ref": "#/$defs/id" },
+        "identityCompatibilityVersion": { "type": "integer", "minimum": 1 },
+        "coordinate": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["row", "column"],
+          "properties": {
+            "row": { "type": "integer", "minimum": 0 },
+            "column": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "properties": { "type": "object" }
+      }
+    },
+    "structuralLink": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "templateKey", "identityCompatibilityVersion", "endpointA", "endpointB", "axis", "properties"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "templateKey": { "$ref": "#/$defs/id" },
+        "identityCompatibilityVersion": { "type": "integer", "minimum": 1 },
+        "endpointA": { "$ref": "#/$defs/id" },
+        "endpointB": { "$ref": "#/$defs/id" },
+        "axis": { "enum": ["horizontal", "vertical"] },
+        "properties": { "type": "object" }
+      }
+    },
+    "accessSlot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "routerId", "templateKey", "identityCompatibilityVersion", "displayOrder", "label", "allowedContracts", "properties"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "routerId": { "$ref": "#/$defs/id" },
+        "templateKey": { "$ref": "#/$defs/id" },
+        "identityCompatibilityVersion": { "type": "integer", "minimum": 1 },
+        "displayOrder": { "type": "integer", "minimum": 0 },
+        "label": { "type": "string" },
+        "allowedContracts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["contractLockId", "roles", "capabilityConstraints"],
+            "properties": {
+              "contractLockId": { "$ref": "#/$defs/id" },
+              "roles": {
+                "type": "array",
+                "items": { "$ref": "#/$defs/id" },
+                "uniqueItems": true
+              },
+              "capabilityConstraints": { "type": "object" }
+            }
+          }
+        },
+        "properties": { "type": "object" }
+      }
+    },
+    "derivedState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "topologyId", "routers", "structuralLinks", "accessSlots", "packageEntities", "packageRelations"],
+      "properties": {
+        "schema": { "const": "ipcraft.derived-state.v1" },
+        "topologyId": { "$ref": "#/$defs/id" },
+        "routers": { "type": "array", "items": { "$ref": "#/$defs/router" } },
+        "structuralLinks": { "type": "array", "items": { "$ref": "#/$defs/structuralLink" } },
+        "accessSlots": { "type": "array", "items": { "$ref": "#/$defs/accessSlot" } },
+        "packageEntities": { "type": "array", "items": { "$ref": "#/$defs/packageEntity" } },
+        "packageRelations": { "type": "array", "items": { "$ref": "#/$defs/packageRelation" } }
+      }
+    },
+    "reconcileApplicability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "groupId",
+        "requestGeneration",
+        "topologyInputRevision",
+        "topologyInputDigest",
+        "baseDerivedStateRevision",
+        "baseDerivedStateDigest",
+        "baseAuthoritativeDesignDigest",
+        "structureAuthority",
+        "packageBundleDigest",
+        "reconcileDependencySetDigest",
+        "defaultEngineLockId",
+        "defaultEngineBundleDigest",
+        "engineHostContractVersion",
+        "hostSideEffectContractVersion"
+      ],
+      "properties": {
+        "schema": { "const": "ipcraft.reconcile-applicability.v1" },
+        "groupId": { "$ref": "#/$defs/id" },
+        "requestGeneration": { "type": "integer", "minimum": 1 },
+        "topologyInputRevision": { "type": "integer", "minimum": 1 },
+        "topologyInputDigest": { "$ref": "#/$defs/digest" },
+        "baseDerivedStateRevision": { "type": "integer", "minimum": 0 },
+        "baseDerivedStateDigest": { "$ref": "#/$defs/digest" },
+        "baseAuthoritativeDesignDigest": { "$ref": "#/$defs/digest" },
+        "structureAuthority": { "$ref": "#/$defs/structureAuthority" },
+        "packageBundleDigest": { "$ref": "#/$defs/digest" },
+        "reconcileDependencySetDigest": { "$ref": "#/$defs/digest" },
+        "defaultEngineLockId": { "$ref": "#/$defs/id" },
+        "defaultEngineBundleDigest": { "$ref": "#/$defs/digest" },
+        "engineHostContractVersion": { "const": "ipcraft.engine-host.v1" },
+        "hostSideEffectContractVersion": { "const": "ipcraft.noc-side-effects.v1" }
+      }
+    },
+    "createEntityOperation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "entityKind", "localRef", "value"],
+      "properties": {
+        "op": { "const": "createEntity" },
+        "entityKind": { "$ref": "#/$defs/id" },
+        "localRef": { "$ref": "#/$defs/localRefString" },
+        "value": {}
+      }
+    },
+    "updateEntityOperation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "entityKind", "id", "set", "unset"],
+      "properties": {
+        "op": { "const": "updateEntity" },
+        "entityKind": { "$ref": "#/$defs/id" },
+        "id": { "$ref": "#/$defs/id" },
+        "set": { "type": "object" },
+        "unset": { "type": "array", "items": { "$ref": "#/$defs/id" }, "uniqueItems": true }
+      }
+    },
+    "deleteEntityOperation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "entityKind", "id"],
+      "properties": {
+        "op": { "const": "deleteEntity" },
+        "entityKind": { "$ref": "#/$defs/id" },
+        "id": { "$ref": "#/$defs/id" }
+      }
+    },
+    "createRelationOperation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "relationKind", "localRef", "value"],
+      "properties": {
+        "op": { "const": "createRelation" },
+        "relationKind": { "$ref": "#/$defs/id" },
+        "localRef": { "$ref": "#/$defs/localRefString" },
+        "value": {}
+      }
+    },
+    "updateRelationOperation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "relationKind", "id", "set", "unset"],
+      "properties": {
+        "op": { "const": "updateRelation" },
+        "relationKind": { "$ref": "#/$defs/id" },
+        "id": { "$ref": "#/$defs/id" },
+        "set": { "type": "object" },
+        "unset": { "type": "array", "items": { "$ref": "#/$defs/id" }, "uniqueItems": true }
+      }
+    },
+    "deleteRelationOperation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "relationKind", "id"],
+      "properties": {
+        "op": { "const": "deleteRelation" },
+        "relationKind": { "$ref": "#/$defs/id" },
+        "id": { "$ref": "#/$defs/id" }
+      }
+    },
+    "operation": {
+      "oneOf": [
+        { "$ref": "#/$defs/createEntityOperation" },
+        { "$ref": "#/$defs/updateEntityOperation" },
+        { "$ref": "#/$defs/deleteEntityOperation" },
+        { "$ref": "#/$defs/createRelationOperation" },
+        { "$ref": "#/$defs/updateRelationOperation" },
+        { "$ref": "#/$defs/deleteRelationOperation" }
+      ]
+    },
+    "patchBody": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "applicability", "operations"],
+      "properties": {
+        "schema": { "const": "ipcraft.patch-body.v1" },
+        "applicability": { "$ref": "#/$defs/reconcileApplicability" },
+        "operations": { "type": "array", "items": { "$ref": "#/$defs/operation" } }
+      }
+    },
+    "impact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "severity", "dataLoss", "subjects", "details", "resolution"],
+      "properties": {
+        "code": { "$ref": "#/$defs/id" },
+        "severity": { "enum": ["info", "warning", "error"] },
+        "dataLoss": { "type": "boolean" },
+        "subjects": { "type": "array", "items": { "$ref": "#/$defs/subjectRef" } },
+        "details": { "type": "object" },
+        "resolution": { "$ref": "#/$defs/id" }
+      }
+    },
+    "impactReport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "impacts"],
+      "properties": {
+        "schema": { "const": "ipcraft.topology-impact-report.v1" },
+        "impacts": { "type": "array", "items": { "$ref": "#/$defs/impact" } }
+      }
+    },
+    "sourcePatch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["patchId", "source", "operations"],
+      "properties": {
+        "patchId": { "$ref": "#/$defs/id" },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "identity", "version"],
+          "properties": {
+            "kind": { "enum": ["default-engine", "extension-provider", "application-reconcile", "application-migration"] },
+            "identity": { "$ref": "#/$defs/id" },
+            "version": { "$ref": "#/$defs/id" },
+            "bundleDigest": { "$ref": "#/$defs/digest" }
+          }
+        },
+        "operations": { "type": "array", "items": { "$ref": "#/$defs/operation" } }
+      }
+    },
+    "tombstone": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["subjectKind", "id", "value"],
+      "properties": {
+        "subjectKind": { "$ref": "#/$defs/id" },
+        "id": { "$ref": "#/$defs/id" },
+        "value": {}
+      }
+    },
+    "migrationContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "defaultEngineLockId",
+        "currentDefaultEngineBundleDigest",
+        "targetDefaultEngineBundleDigest",
+        "targetEngineHostContractVersion",
+        "hostSideEffectContractVersion"
+      ],
+      "properties": {
+        "defaultEngineLockId": { "$ref": "#/$defs/id" },
+        "currentDefaultEngineBundleDigest": { "$ref": "#/$defs/digest" },
+        "targetDefaultEngineBundleDigest": { "$ref": "#/$defs/digest" },
+        "targetEngineHostContractVersion": { "$ref": "#/$defs/id" },
+        "hostSideEffectContractVersion": { "$ref": "#/$defs/id" }
+      }
+    },
+    "candidateTransaction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "transactionId",
+        "kind",
+        "applicability",
+        "topologyIntent",
+        "authorityPatch",
+        "applicationPatch",
+        "tombstones",
+        "allocationOrder",
+        "impactReport",
+        "candidateDigest"
+      ],
+      "properties": {
+        "schema": { "const": "ipcraft.candidate-transaction.v1" },
+        "transactionId": { "$ref": "#/$defs/id" },
+        "kind": { "enum": ["topology-materialization", "default-engine-migration"] },
+        "applicability": { "$ref": "#/$defs/reconcileApplicability" },
+        "topologyIntent": { "$ref": "#/$defs/topologyIntent" },
+        "authorityPatch": { "$ref": "#/$defs/sourcePatch" },
+        "applicationPatch": { "$ref": "#/$defs/sourcePatch" },
+        "migration": { "$ref": "#/$defs/migrationContext" },
+        "tombstones": { "type": "array", "items": { "$ref": "#/$defs/tombstone" } },
+        "allocationOrder": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/localRefString" },
+          "uniqueItems": true
+        },
+        "impactReport": { "$ref": "#/$defs/impactReport" },
+        "candidateDigest": { "$ref": "#/$defs/digest" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "kind": { "const": "default-engine-migration" } } },
+          "then": { "required": ["migration"] },
+          "else": { "not": { "required": ["migration"] } }
+        }
+      ]
+    },
+    "pipelineStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stepId", "kind"],
+      "properties": {
+        "stepId": { "$ref": "#/$defs/id" },
+        "kind": { "enum": ["host", "external-tool"] },
+        "toolLockId": { "$ref": "#/$defs/id" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "kind": { "const": "external-tool" } } },
+          "then": { "required": ["toolLockId"] },
+          "else": { "not": { "required": ["toolLockId"] } }
+        }
+      ]
+    },
+    "pipelinePlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "pipelineRunId",
+        "kind",
+        "snapshotSessionRevision",
+        "snapshotDigest",
+        "formallySavedProjectDigest",
+        "dependencySetDigest",
+        "defaultEngineBundleDigest",
+        "engineHostContractVersion",
+        "hostSideEffectContractVersion",
+        "steps"
+      ],
+      "properties": {
+        "schema": { "const": "ipcraft.pipeline-plan.v1" },
+        "pipelineRunId": { "$ref": "#/$defs/id" },
+        "kind": { "enum": ["validate", "generate"] },
+        "snapshotSessionRevision": { "type": "integer", "minimum": 0 },
+        "snapshotDigest": { "$ref": "#/$defs/digest" },
+        "formallySavedProjectDigest": { "oneOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }] },
+        "dependencySetDigest": { "$ref": "#/$defs/digest" },
+        "defaultEngineBundleDigest": { "$ref": "#/$defs/digest" },
+        "engineHostContractVersion": { "$ref": "#/$defs/id" },
+        "hostSideEffectContractVersion": { "$ref": "#/$defs/id" },
+        "steps": { "type": "array", "items": { "$ref": "#/$defs/pipelineStep" }, "minItems": 1 }
+      }
+    },
+    "outputManifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "pipelineRunId",
+        "snapshotDigest",
+        "dependencySetDigest",
+        "defaultEngineBundleDigest",
+        "engineHostContractVersion",
+        "hostSideEffectContractVersion",
+        "artifactManifestDigest",
+        "completedAt"
+      ],
+      "properties": {
+        "schema": { "const": "ipcraft.output-manifest.v1" },
+        "pipelineRunId": { "$ref": "#/$defs/id" },
+        "snapshotDigest": { "$ref": "#/$defs/digest" },
+        "dependencySetDigest": { "$ref": "#/$defs/digest" },
+        "defaultEngineBundleDigest": { "$ref": "#/$defs/digest" },
+        "engineHostContractVersion": { "$ref": "#/$defs/id" },
+        "hostSideEffectContractVersion": { "$ref": "#/$defs/id" },
+        "artifactManifestDigest": { "$ref": "#/$defs/digest" },
+        "completedAt": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

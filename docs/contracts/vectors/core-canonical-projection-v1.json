@@ -1,0 +1,117 @@
+{
+  "schema": "ipcraft.core-canonical-vectors.v1",
+  "canonicalization": "RFC8785-after-Appendix-F-set-projection",
+  "vectors": [
+    {
+      "id": "topology-intent-object-key-order",
+      "modelSchema": "ipcraft.topology-intent.v1",
+      "input": {
+        "topologyKind": "mesh",
+        "packageRelations": [],
+        "globalConfig": {
+          "rows": 2,
+          "columns": 2
+        },
+        "componentId": "component.noc",
+        "schema": "ipcraft.topology-intent.v1",
+        "packageEntities": [],
+        "topologyId": "topology.main"
+      },
+      "canonicalJson": "{\"componentId\":\"component.noc\",\"globalConfig\":{\"columns\":2,\"rows\":2},\"packageEntities\":[],\"packageRelations\":[],\"schema\":\"ipcraft.topology-intent.v1\",\"topologyId\":\"topology.main\",\"topologyKind\":\"mesh\"}",
+      "digest": "sha256:1ceece550d13af57ca88e0221991c1c9fcb66edf2fa8421bec3d9a6fc84af6e7"
+    },
+    {
+      "id": "derived-state-empty-set-order",
+      "modelSchema": "ipcraft.derived-state.v1",
+      "input": {
+        "packageRelations": [],
+        "structuralLinks": [],
+        "schema": "ipcraft.derived-state.v1",
+        "topologyId": "topology.main",
+        "accessSlots": [],
+        "routers": [],
+        "packageEntities": []
+      },
+      "canonicalJson": "{\"accessSlots\":[],\"packageEntities\":[],\"packageRelations\":[],\"routers\":[],\"schema\":\"ipcraft.derived-state.v1\",\"structuralLinks\":[],\"topologyId\":\"topology.main\"}",
+      "digest": "sha256:def78e7ecf150fb80136b13b7d7a0117fd6564656002939d8142354365c07831"
+    },
+    {
+      "id": "impact-presentation-excluded",
+      "modelSchema": "ipcraft.topology-impact-report.v1",
+      "input": {
+        "schema": "ipcraft.topology-impact-report.v1",
+        "impacts": [
+          {
+            "severity": "warning",
+            "code": "domain.non_default_deleted",
+            "subjects": [
+              {
+                "id": "domain-a",
+                "kind": "domain"
+              }
+            ],
+            "dataLoss": true,
+            "resolution": "confirm-or-discard",
+            "details": {
+              "discardedConfig": true
+            }
+          }
+        ]
+      },
+      "presentation": {
+        "en": "Domain will be deleted",
+        "zh-CN": "该 Domain 将被删除"
+      },
+      "canonicalJson": "{\"impacts\":[{\"code\":\"domain.non_default_deleted\",\"dataLoss\":true,\"details\":{\"discardedConfig\":true},\"resolution\":\"confirm-or-discard\",\"severity\":\"warning\",\"subjects\":[{\"id\":\"domain-a\",\"kind\":\"domain\"}]}],\"schema\":\"ipcraft.topology-impact-report.v1\"}",
+      "digest": "sha256:c23d42f86e49879aa6dd679f43963f52325c394c39605e6d1870105aa4ecf6de"
+    },
+    {
+      "id": "slot-contract-role-set-order",
+      "setRule": "allowedContracts by contractId/version/digest; roles by Unicode scalar value",
+      "input": [
+        {
+          "contractId": "arm.chi",
+          "version": "1.0.0",
+          "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "roles": ["target", "requester"]
+        },
+        {
+          "contractId": "arm.ace",
+          "version": "1.0.0",
+          "bundleManifestDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "roles": ["slave", "master"]
+        }
+      ],
+      "normalized": [
+        {
+          "contractId": "arm.ace",
+          "version": "1.0.0",
+          "bundleManifestDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "roles": ["master", "slave"]
+        },
+        {
+          "contractId": "arm.chi",
+          "version": "1.0.0",
+          "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "roles": ["requester", "target"]
+        }
+      ]
+    },
+    {
+      "id": "candidate-localref-allocation-order",
+      "setRule": "localRef Unicode scalar value",
+      "input": [
+        "application:000002",
+        "authority:r1",
+        "application:000001",
+        "authority:r0"
+      ],
+      "normalized": [
+        "application:000001",
+        "application:000002",
+        "authority:r0",
+        "authority:r1"
+      ]
+    }
+  ]
+}
