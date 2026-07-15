@@ -326,6 +326,24 @@
       "behaviorEvidence": null
     },
     {
+      "path": "fixtures/invalid/project-duplicate-relation-source-key.json",
+      "schemaId": "ipcraft.project-design.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "project-invariant",
+      "expected": "reject",
+      "errorCode": "project.invariant_violation",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/project-duplicate-root-extension-key.json",
+      "schemaId": "ipcraft.project-design.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "project-invariant",
+      "expected": "reject",
+      "errorCode": "project.invariant_violation",
+      "behaviorEvidence": null
+    },
+    {
       "path": "fixtures/invalid/project-duplicate-router-coordinate.json",
       "schemaId": "ipcraft.project-design.v1",
       "validationPhase": "core-semantic",
@@ -335,7 +353,25 @@
       "behaviorEvidence": null
     },
     {
+      "path": "fixtures/invalid/project-duplicate-slot-allowed-contract-key.json",
+      "schemaId": "ipcraft.project-design.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "project-invariant",
+      "expected": "reject",
+      "errorCode": "project.invariant_violation",
+      "behaviorEvidence": null
+    },
+    {
       "path": "fixtures/invalid/project-duplicate-slot-key.json",
+      "schemaId": "ipcraft.project-design.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "project-invariant",
+      "expected": "reject",
+      "errorCode": "project.invariant_violation",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/project-duplicate-slot-role-key.json",
       "schemaId": "ipcraft.project-design.v1",
       "validationPhase": "core-semantic",
       "failureBoundary": "project-invariant",

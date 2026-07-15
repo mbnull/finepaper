@@ -42,7 +42,7 @@
     "localRefString": {
       "type": "string",
       "$comment": "Within a candidate transaction localRefs are unique across Authority and Application patches. Authority sources own authority:* and Application sources own application:*; semantic validation enforces source-prefix ownership and allocationOrder totality.",
-      "pattern": "^(authority:[^\\s]+|application:[0-9]{6,})$"
+      "pattern": "^(authority:[^\\u0009-\\u000D\\u0020\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000\\uFEFF]+|application:[0-9]{6,})$"
     },
     "objectRef": {
       "oneOf": [
@@ -331,8 +331,7 @@
               "roles": {
                 "type": "array",
                 "x-ipcraft-canonical": { "kind": "set", "sortKey": ["unicodeScalarValue"] },
-                "items": { "$ref": "#/$defs/id" },
-                "uniqueItems": true
+                "items": { "$ref": "#/$defs/id" }
               },
               "capabilityConstraints": { "type": "object", "$comment": "Any schema-declared capability-value array nested here is a canonicalJson set under Appendix F; the Package/Contract semantic validator supplies its item schema." }
             }

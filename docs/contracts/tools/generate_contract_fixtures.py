@@ -8,6 +8,7 @@ import argparse
 import hashlib
 import json
 import shutil
+from decimal import Decimal, ROUND_CEILING
 from pathlib import Path
 from typing import Any
 
@@ -19,25 +20,61 @@ DIGEST_A = "sha256:" + "a" * 64
 DIGEST_B = "sha256:" + "b" * 64
 
 
+class UnsatisfiableSampleError(RuntimeError):
+    """A deterministic authoring failure for a schema with no valid sample."""
+
+
 class SampleBuilder:
     def __init__(self, contracts: Path):
         self.validator = verifier.Draft202012Subset(contracts)
 
-    def root(self, schema_id: str) -> Any:
+    def root(self, schema_id: str, validate: bool = True) -> Any:
         schema, path = self.validator.schemas[schema_id]
         value = self.build(schema, schema, path)
-        return self.satisfy(schema, value, schema, path)
+        value = self.satisfy(schema, value, schema, path)
+        if validate:
+            self.validate_sample(schema_id, value)
+        return value
 
-    def build(self, schema: dict[str, Any], root: dict[str, Any], root_path: Path) -> Any:
+    def validate_sample(self, schema_id: str, value: Any) -> None:
+        schema, path = self.validator.schemas[schema_id]
+        try:
+            self.validator._validate(schema, value, schema, path, "$")
+        except verifier.SchemaFailure as error:
+            raise UnsatisfiableSampleError(
+                f"generated sample for {schema_id} does not satisfy its schema: {error}"
+            ) from error
+
+    def build(self, schema: Any, root: Any, root_path: Path, context: str = "false schema") -> Any:
+        if schema is True:
+            return None
+        if schema is False:
+            raise UnsatisfiableSampleError(f"cannot generate sample for {context}: false schema is unsatisfiable")
         if "$ref" in schema:
             target, target_root, target_path = self.validator._resolve(schema["$ref"], root, root_path)
-            return self.build(target, target_root, target_path)
+            return self.build(target, target_root, target_path, context)
         if "const" in schema: return copy.deepcopy(schema["const"])
         if "enum" in schema: return copy.deepcopy(schema["enum"][0])
         if "oneOf" in schema:
-            nullable = next((branch for branch in schema["oneOf"] if branch.get("type") == "null"), None)
-            return self.build(nullable if nullable is not None else schema["oneOf"][0], root, root_path)
-        if "anyOf" in schema: return self.build(schema["anyOf"][0], root, root_path)
+            nullable = next((branch for branch in schema["oneOf"] if isinstance(branch, dict) and branch.get("type") == "null"), None)
+            branches = ([nullable] if nullable is not None else []) + [branch for branch in schema["oneOf"] if branch is not nullable]
+            for branch in branches:
+                try:
+                    candidate = self.build(branch, root, root_path, context)
+                except UnsatisfiableSampleError:
+                    continue
+                if self.validator._is_valid(schema, candidate, root, root_path):
+                    return candidate
+            raise UnsatisfiableSampleError(f"cannot generate sample for {context}: oneOf has no satisfiable branch")
+        if "anyOf" in schema:
+            for branch in schema["anyOf"]:
+                try:
+                    candidate = self.build(branch, root, root_path, context)
+                except UnsatisfiableSampleError:
+                    continue
+                if self.validator._is_valid(schema, candidate, root, root_path):
+                    return candidate
+            raise UnsatisfiableSampleError(f"cannot generate sample for {context}: anyOf has no satisfiable branch")
         declared = schema.get("type")
         if isinstance(declared, list): declared = next(value for value in declared if value != "null")
         if declared is None:
@@ -50,14 +87,17 @@ class SampleBuilder:
         if declared == "object":
             result = {}
             for member in schema.get("required", []):
-                result[member] = self.build(schema.get("properties", {}).get(member, {}), root, root_path)
+                result[member] = self.build(
+                    schema.get("properties", {}).get(member, {}), root, root_path,
+                    f"required property {member}",
+                )
             return self.satisfy(schema, result, root, root_path)
         if declared == "array":
-            result = [self.build(schema.get("items", {}), root, root_path) for _ in range(schema.get("minItems", 0))]
+            result = [self.build(schema.get("items", {}), root, root_path, "array item") for _ in range(schema.get("minItems", 0))]
             if "contains" in schema:
                 required = schema.get("minContains", 1)
                 while sum(self.validator._is_valid(schema["contains"], item, root, root_path) for item in result) < required:
-                    result.append(self.build(schema["contains"], root, root_path))
+                    result.append(self.build(schema["contains"], root, root_path, "contains item"))
             return result
         if declared == "string":
             pattern = schema.get("pattern", "")
@@ -66,38 +106,85 @@ class SampleBuilder:
             if schema.get("format") == "date-time": return "2026-07-14T00:00:00Z"
             if "\\.json" in pattern: return "fixture.json"
             return "value"
-        if declared == "integer": return max(0, schema.get("minimum", 0))
-        if declared == "number": return max(0, schema.get("minimum", 0))
+        if declared == "integer": return self.numeric_sample(schema, True, context)
+        if declared == "number": return self.numeric_sample(schema, False, context)
         if declared == "boolean": return False
         if declared == "null": return None
         raise RuntimeError(f"unsupported sample type {declared!r}")
 
-    def merge(self, target: Any, addition: Any) -> Any:
-        if isinstance(target, dict) and isinstance(addition, dict):
-            for key, value in addition.items():
-                if key not in target: target[key] = value
-                elif isinstance(target[key], dict) and isinstance(value, dict): self.merge(target[key], value)
-            return target
-        return target
+    def numeric_sample(self, schema: dict[str, Any], integer: bool, context: str) -> int | float:
+        lower = Decimal(str(schema.get("minimum", schema.get("exclusiveMinimum", 0))))
+        exclusive = "exclusiveMinimum" in schema and "minimum" not in schema
+        step = Decimal(str(schema["multipleOf"])) if "multipleOf" in schema else None
+        if step is not None:
+            multiplier = (lower / step).to_integral_value(rounding=ROUND_CEILING)
+            candidate = multiplier * step
+            if exclusive and candidate <= lower:
+                candidate += step
+        elif integer:
+            candidate = lower.to_integral_value(rounding=ROUND_CEILING)
+            if exclusive and candidate <= lower:
+                candidate += 1
+        else:
+            candidate = lower + (Decimal(1) if exclusive else Decimal(0))
 
-    def satisfy(self, schema: dict[str, Any], value: Any, root: dict[str, Any], root_path: Path) -> Any:
+        if integer and candidate != candidate.to_integral_value():
+            if step is None:
+                candidate = candidate.to_integral_value(rounding=ROUND_CEILING)
+            else:
+                for _ in range(10000):
+                    candidate += step
+                    if candidate == candidate.to_integral_value():
+                        break
+                else:
+                    raise UnsatisfiableSampleError(
+                        f"cannot generate sample for {context}: integer multipleOf search exceeded V1 authoring bound"
+                    )
+        if "maximum" in schema and candidate > Decimal(str(schema["maximum"])):
+            raise UnsatisfiableSampleError(f"cannot generate sample for {context}: numeric bounds are unsatisfiable")
+        if integer:
+            return int(candidate)
+        return int(candidate) if candidate == candidate.to_integral_value() else float(candidate)
+
+    def satisfy(
+        self, schema: Any, value: Any, root: Any, root_path: Path,
+        fallback_schema: Any = None,
+    ) -> Any:
+        if schema is True:
+            return value
+        if schema is False:
+            raise UnsatisfiableSampleError("cannot satisfy sample: false schema is unsatisfiable")
+        if "const" in schema:
+            return copy.deepcopy(schema["const"])
+        if "enum" in schema and not any(verifier._json_equal(value, candidate) for candidate in schema["enum"]):
+            return copy.deepcopy(schema["enum"][0])
         if "$ref" in schema:
             target, target_root, target_path = self.validator._resolve(schema["$ref"], root, root_path)
-            value = self.satisfy(target, value, target_root, target_path)
+            value = self.satisfy(target, value, target_root, target_path, fallback_schema)
         for branch in schema.get("allOf", []):
+            if branch is False:
+                raise UnsatisfiableSampleError("cannot generate sample for false schema: allOf contains an unsatisfiable branch")
+            if branch is True:
+                continue
             selected = branch
             if "if" in branch:
                 selected = branch.get("then", {}) if self.validator._is_valid(branch["if"], value, root, root_path) else branch.get("else", {})
-            addition = self.build(selected, root, root_path)
-            value = self.merge(value, addition)
-            value = self.satisfy(selected, value, root, root_path)
+            value = self.satisfy(selected, value, root, root_path, schema)
         if isinstance(value, dict):
+            fallback_properties = fallback_schema.get("properties", {}) if isinstance(fallback_schema, dict) else {}
             for member in schema.get("required", []):
                 if member not in value:
-                    value[member] = self.build(schema.get("properties", {}).get(member, {}), root, root_path)
+                    member_schema = schema.get("properties", {}).get(member, fallback_properties.get(member, {}))
+                    value[member] = self.build(
+                        member_schema, root, root_path,
+                        f"required property {member}",
+                    )
             for member, member_schema in schema.get("properties", {}).items():
                 if member in value:
-                    value[member] = self.satisfy(member_schema, value[member], root, root_path)
+                    value[member] = self.satisfy(
+                        member_schema, value[member], root, root_path,
+                        fallback_properties.get(member),
+                    )
         return value
 
 
@@ -163,6 +250,8 @@ def generate(contracts: Path) -> None:
 
     def add(name: str, schema_id: str, document: Any, expected: str, phase: str,
             boundary: str | None, code: str | None, evidence: str | None = None) -> None:
+        if expected == "accept":
+            builder.validate_sample(schema_id, document)
         relative = f"fixtures/{'valid' if expected == 'accept' else 'invalid'}/{name}.json"
         write_json(contracts / relative, document)
         entries.append({
@@ -172,7 +261,7 @@ def generate(contracts: Path) -> None:
         })
 
     for schema_id in schema_ids:
-        document = builder.root(schema_id)
+        document = builder.root(schema_id, validate=False)
         if schema_id == "ipcraft.bundle-manifest.v1":
             digest_input = {key: value for key, value in document.items() if key != "manifestDigest"}
             canonical = json.dumps(digest_input, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
@@ -209,6 +298,7 @@ def generate(contracts: Path) -> None:
         if schema_id == "ipcraft.noc-side-effects.v1":
             document["input"]["authorityPatch"]["source"].update({"identity":"ipcraft.default-noc-engine","bundleDigest":DIGEST_A})
             document["expected"]["applicationPatch"]["source"] = {"kind":"application-reconcile","identity":"ipcraft.host","version":"1"}
+        builder.validate_sample(schema_id, document)
         valid[schema_id] = document
         add(schema_id.removeprefix("ipcraft.").removesuffix(".v1").replace(".", "-"), schema_id,
             document, "accept", "schema", None, None)
@@ -337,6 +427,22 @@ def generate(contracts: Path) -> None:
     project_semantic_cases.append(("project-slot-contract-lock-missing", missing_slot_contract, "project-reference"))
     missing_extension_owner = package_extension_project(valid["ipcraft.project-design.v1"]); missing_extension_owner["extensions"][0]["ownerLockId"] = "dep.missing"
     project_semantic_cases.append(("project-extension-owner-missing", missing_extension_owner, "project-reference"))
+    duplicate_root_extension = package_extension_project(valid["ipcraft.project-design.v1"])
+    duplicate_root_extension["extensions"].append(copy.deepcopy(duplicate_root_extension["extensions"][0]))
+    project_semantic_cases.append(("project-duplicate-root-extension-key", duplicate_root_extension, "project-invariant"))
+    duplicate_relation_source = package_extension_project(valid["ipcraft.project-design.v1"])
+    duplicate_relation_source["topologies"][0]["packageRelations"][0]["sources"].append(
+        copy.deepcopy(duplicate_relation_source["topologies"][0]["packageRelations"][0]["sources"][0])
+    )
+    project_semantic_cases.append(("project-duplicate-relation-source-key", duplicate_relation_source, "project-invariant"))
+    duplicate_allowed_contract = copy.deepcopy(project_2x2)
+    duplicate_allowed_contract["topologies"][0]["accessSlots"][0]["allowedContracts"].append(
+        copy.deepcopy(duplicate_allowed_contract["topologies"][0]["accessSlots"][0]["allowedContracts"][0])
+    )
+    project_semantic_cases.append(("project-duplicate-slot-allowed-contract-key", duplicate_allowed_contract, "project-invariant"))
+    duplicate_slot_role = copy.deepcopy(project_2x2)
+    duplicate_slot_role["topologies"][0]["accessSlots"][0]["allowedContracts"][0]["roles"].append("initiator")
+    project_semantic_cases.append(("project-duplicate-slot-role-key", duplicate_slot_role, "project-invariant"))
     derivation_mismatch = copy.deepcopy(project_2x2); derivation_mismatch["topologies"][0]["derivation"]["defaultEngineBundleDigest"] = DIGEST_B
     project_semantic_cases.append(("project-derivation-engine-lock-mismatch", derivation_mismatch, "project-invariant"))
     link_missing = copy.deepcopy(project_2x2); link_missing["topologies"][0]["structuralLinks"][0]["endpointB"] = "router.missing"

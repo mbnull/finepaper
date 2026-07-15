@@ -11,11 +11,13 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import re
 import shutil
 import sys
 from dataclasses import dataclass
 from datetime import datetime
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
@@ -62,7 +64,10 @@ def load_strict_json(path: Path) -> Any:
         raise FixtureVerificationError(f"{path}: non-JSON numeric constant {value}")
 
     try:
-        return json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=object_pairs, parse_constant=non_json_constant)
+        return json.loads(
+            path.read_text(encoding="utf-8"), object_pairs_hook=object_pairs,
+            parse_float=Decimal, parse_constant=non_json_constant,
+        )
     except (OSError, UnicodeError, json.JSONDecodeError) as error:
         raise FixtureVerificationError(f"cannot load strict JSON {path}: {error}") from error
 
@@ -70,7 +75,10 @@ def load_strict_json(path: Path) -> Any:
 def _json_equal(left: Any, right: Any) -> bool:
     if isinstance(left, bool) or isinstance(right, bool):
         return isinstance(left, bool) and isinstance(right, bool) and left == right
-    if isinstance(left, (int, float)) and isinstance(right, (int, float)):
+    if (
+        isinstance(left, (int, float, Decimal)) and not isinstance(left, bool)
+        and isinstance(right, (int, float, Decimal)) and not isinstance(right, bool)
+    ):
         return left == right
     if isinstance(left, list) and isinstance(right, list):
         return len(left) == len(right) and all(_json_equal(a, b) for a, b in zip(left, right))
@@ -83,9 +91,11 @@ class Draft202012Subset:
     def __init__(self, contracts: Path):
         self.contracts = contracts
         self.schemas: dict[str, tuple[Any, Path]] = {}
+        self.schema_ids_by_filename: dict[str, str] = {}
         for item in load_strict_json(contracts / "schema-catalog.json")["items"]:
             path = contracts / item["path"]
             self.schemas[item["id"]] = (load_strict_json(path), path)
+            self.schema_ids_by_filename[path.name] = item["id"]
 
     def validate(self, schema_id: str, instance: Any) -> None:
         root, path = self.schemas[schema_id]
@@ -111,11 +121,23 @@ class Draft202012Subset:
 
     @staticmethod
     def _matches_type(instance: Any, declared: str) -> bool:
+        is_number = (
+            isinstance(instance, (int, float, Decimal))
+            and not isinstance(instance, bool)
+            and (
+                (not isinstance(instance, float) or math.isfinite(instance))
+                and (not isinstance(instance, Decimal) or instance.is_finite())
+            )
+        )
         return {
             "null": instance is None,
             "boolean": isinstance(instance, bool),
-            "integer": isinstance(instance, int) and not isinstance(instance, bool),
-            "number": isinstance(instance, (int, float)) and not isinstance(instance, bool),
+            "integer": is_number and (
+                isinstance(instance, int)
+                or (isinstance(instance, float) and instance.is_integer())
+                or (isinstance(instance, Decimal) and instance == instance.to_integral_value())
+            ),
+            "number": is_number,
             "string": isinstance(instance, str),
             "array": isinstance(instance, list),
             "object": isinstance(instance, dict),
@@ -135,6 +157,11 @@ class Draft202012Subset:
             raise SchemaFailure(path, "false schema rejected instance")
         if not isinstance(schema, dict):
             raise FixtureVerificationError(f"{root_path}: schema at {path} is neither an object nor a boolean")
+        if (
+            isinstance(instance, float) and not math.isfinite(instance)
+            or isinstance(instance, Decimal) and not instance.is_finite()
+        ):
+            raise SchemaFailure(path, "non-finite value is not a JSON number")
         if "$ref" in schema:
             target, target_root, target_path = self._resolve(schema["$ref"], root, root_path)
             self._validate(target, instance, target_root, target_path, path)
@@ -149,7 +176,7 @@ class Draft202012Subset:
         if isinstance(instance, str):
             if len(instance) < schema.get("minLength", 0):
                 raise SchemaFailure(path, "string shorter than minLength")
-            if "pattern" in schema and re.search(schema["pattern"], instance) is None:
+            if "pattern" in schema and re.search(_translate_portable_pattern(schema["pattern"]), instance) is None:
                 raise SchemaFailure(path, "pattern mismatch")
             if schema.get("format") == "date-time":
                 if re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})", instance) is None:
@@ -158,13 +185,20 @@ class Draft202012Subset:
                     datetime.fromisoformat(instance.replace("Z", "+00:00"))
                 except ValueError as error:
                     raise SchemaFailure(path, "invalid date-time") from error
-        if isinstance(instance, (int, float)) and not isinstance(instance, bool):
+        if isinstance(instance, (int, float, Decimal)) and not isinstance(instance, bool):
             if "minimum" in schema and instance < schema["minimum"]:
                 raise SchemaFailure(path, "below minimum")
             if "maximum" in schema and instance > schema["maximum"]:
                 raise SchemaFailure(path, "above maximum")
             if "exclusiveMinimum" in schema and instance <= schema["exclusiveMinimum"]:
                 raise SchemaFailure(path, "not above exclusiveMinimum")
+            if "multipleOf" in schema:
+                try:
+                    quotient = Decimal(str(instance)) / Decimal(str(schema["multipleOf"]))
+                except (InvalidOperation, ZeroDivisionError):
+                    raise SchemaFailure(path, "invalid multipleOf comparison")
+                if not quotient.is_finite() or quotient != quotient.to_integral_value():
+                    raise SchemaFailure(path, "not a multipleOf")
         if isinstance(instance, list):
             if len(instance) < schema.get("minItems", 0):
                 raise SchemaFailure(path, "too few items")
@@ -212,14 +246,88 @@ SUPPORTED_SCHEMA_KEYWORDS = {
     "$schema", "$id", "$ref", "$defs", "$comment", "title", "description", "default",
     "type", "const", "enum", "required", "properties", "additionalProperties",
     "items", "minItems", "maxItems", "uniqueItems", "contains", "minContains", "maxContains",
-    "minLength", "pattern", "format", "minimum", "maximum", "exclusiveMinimum",
+    "minLength", "pattern", "format", "minimum", "maximum", "exclusiveMinimum", "multipleOf",
     "allOf", "anyOf", "oneOf", "not", "if", "then", "else", "x-ipcraft-canonical",
 }
+
+
+_LOCAL_SCHEMA_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._~-]*$")
+_SCHEMA_FILENAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._~-]*\.schema\.json$")
+_FRAGMENT_CHARACTERS = re.compile(r"^[A-Za-z0-9._~!$&'()*+,;=:@/\-]*$")
+
+
+def _is_supported_schema_id(value: str) -> bool:
+    return value == "" or _LOCAL_SCHEMA_ID.fullmatch(value) is not None
+
+
+def _is_supported_schema_ref(value: str) -> bool:
+    if not value or any(ord(character) <= 0x20 or ord(character) == 0x7F for character in value):
+        return False
+    if "%" in value or value.count("#") > 1:
+        return False
+    file_part, separator, fragment = value.partition("#")
+    if file_part and _SCHEMA_FILENAME.fullmatch(file_part) is None:
+        return False
+    if not file_part and not separator:
+        return False
+    if not separator:
+        return True
+    if fragment == "":
+        return bool(file_part)
+    if not fragment.startswith("/") or _FRAGMENT_CHARACTERS.fullmatch(fragment) is None:
+        return False
+    return all(re.search(r"~(?:[^01]|$)", token) is None for token in fragment[1:].split("/"))
+
+
+def _is_supported_portable_pattern(value: str) -> bool:
+    """Closed ECMA-262/Python intersection used by the committed V1 schemas."""
+    for match in re.finditer(r"\(\?", value):
+        if not (value.startswith("(?:", match.start()) or value.startswith("(?!", match.start())):
+            return False
+    if re.search(r"\\(?:[bBdDsSwW]|[1-9]|0[0-9]|g[<{]|k[<{]|A|Z|z|N\{|U[0-9A-Fa-f]{8})", value):
+        return False
+    if re.search(r"(?:[*+?]|\{[0-9]+(?:,[0-9]*)?\})\+", value):
+        return False
+    if any(operator in value for operator in ("&&", "--", "~~", "||")):
+        return False
+    try:
+        re.compile(_translate_portable_pattern(value))
+    except re.error:
+        return False
+    return True
+
+
+def _translate_portable_pattern(value: str) -> str:
+    """Give wildcard `.` its fixed ECMA-262 line-terminator semantics."""
+    result: list[str] = []
+    in_class = False
+    index = 0
+    while index < len(value):
+        character = value[index]
+        if character == "\\" and index + 1 < len(value):
+            result.extend((character, value[index + 1]))
+            index += 2
+            continue
+        if character == "[":
+            in_class = True
+        elif character == "]" and in_class:
+            in_class = False
+        if character == "." and not in_class:
+            result.append("[^\\n\\r\\u2028\\u2029]")
+        elif character == "$" and not in_class:
+            result.append("\\Z")
+        else:
+            result.append(character)
+        index += 1
+    return "".join(result)
 
 
 def audit_schema_keywords(contracts: Path) -> set[str]:
     """Return unknown keywords and malformed supported-keyword locations."""
     unknown: set[str] = set()
+    catalog = load_strict_json(contracts / "schema-catalog.json")["items"]
+    documents = {item["id"]: load_strict_json(contracts / item["path"]) for item in catalog}
+    filenames = {Path(item["path"]).name: item["id"] for item in catalog}
 
     schema_types = {"array", "boolean", "integer", "null", "number", "object", "string"}
 
@@ -230,7 +338,14 @@ def audit_schema_keywords(contracts: Path) -> set[str]:
         return isinstance(value, int) and not isinstance(value, bool) and value >= 0
 
     def is_number(value: Any) -> bool:
-        return isinstance(value, (int, float)) and not isinstance(value, bool)
+        return (
+            isinstance(value, (int, float, Decimal))
+            and not isinstance(value, bool)
+            and (
+                (not isinstance(value, float) or math.isfinite(value))
+                and (not isinstance(value, Decimal) or value.is_finite())
+            )
+        )
 
     def is_schema(value: Any) -> bool:
         return isinstance(value, (bool, dict))
@@ -238,7 +353,22 @@ def audit_schema_keywords(contracts: Path) -> set[str]:
     def json_values_are_unique(values: list[Any]) -> bool:
         return not any(_json_equal(values[left], values[right]) for left in range(len(values)) for right in range(left + 1, len(values)))
 
-    def walk(schema: Any, location: str) -> None:
+    def reference_resolves(current_schema_id: str, reference: str) -> bool:
+        file_part, separator, fragment = reference.partition("#")
+        target_schema_id = filenames.get(file_part) if file_part else current_schema_id
+        if target_schema_id not in documents:
+            return False
+        node: Any = documents[target_schema_id]
+        if separator and fragment:
+            try:
+                for raw in fragment[1:].split("/"):
+                    token = raw.replace("~1", "/").replace("~0", "~")
+                    node = node[int(token)] if isinstance(node, list) else node[token]
+            except (KeyError, IndexError, TypeError, ValueError):
+                return False
+        return isinstance(node, (bool, dict))
+
+    def walk(schema: Any, location: str, current_schema_id: str) -> None:
         if isinstance(schema, bool):
             return
         if not isinstance(schema, dict):
@@ -253,8 +383,11 @@ def audit_schema_keywords(contracts: Path) -> set[str]:
                 malformed(location, key)
         if "$schema" in schema and schema["$schema"] != "https://json-schema.org/draft/2020-12/schema":
             malformed(location, "$schema")
-        if "$ref" in schema and schema["$ref"] == "":
-            malformed(location, "$ref")
+        if "$id" in schema and isinstance(schema["$id"], str) and not _is_supported_schema_id(schema["$id"]):
+            malformed(location, "$id")
+        if "$ref" in schema and isinstance(schema["$ref"], str):
+            if not _is_supported_schema_ref(schema["$ref"]) or not reference_resolves(current_schema_id, schema["$ref"]):
+                malformed(location, "$ref")
 
         if "type" in schema:
             declared = schema["type"]
@@ -287,15 +420,14 @@ def audit_schema_keywords(contracts: Path) -> set[str]:
         for key in ("minimum", "maximum", "exclusiveMinimum"):
             if key in schema and not is_number(schema[key]):
                 malformed(location, key)
+        if "multipleOf" in schema and (not is_number(schema["multipleOf"]) or schema["multipleOf"] <= 0):
+            malformed(location, "multipleOf")
         if "pattern" in schema:
             pattern = schema["pattern"]
             if not isinstance(pattern, str):
                 malformed(location, "pattern")
-            else:
-                try:
-                    re.compile(pattern)
-                except re.error:
-                    malformed(location, "pattern")
+            elif not _is_supported_portable_pattern(pattern):
+                malformed(location, "pattern")
         if "format" in schema and schema["format"] != "date-time":
             malformed(location, "format")
 
@@ -323,13 +455,13 @@ def audit_schema_keywords(contracts: Path) -> set[str]:
                 for key, child in values.items():
                     if not is_schema(child):
                         malformed(f"{location}/{member}", key)
-                    walk(child, f"{location}/{member}/{key}")
+                    walk(child, f"{location}/{member}/{key}", current_schema_id)
         for member in ("items", "additionalProperties", "contains", "not", "if", "then", "else"):
             if member in schema:
                 child = schema[member]
                 if not is_schema(child):
                     malformed(location, member)
-                walk(child, f"{location}/{member}")
+                walk(child, f"{location}/{member}", current_schema_id)
         for member in ("allOf", "anyOf", "oneOf"):
             if member not in schema:
                 continue
@@ -340,11 +472,374 @@ def audit_schema_keywords(contracts: Path) -> set[str]:
                 for index, child in enumerate(children):
                     if not is_schema(child):
                         malformed(f"{location}/{member}", str(index))
-                    walk(child, f"{location}/{member}/{index}")
+                    walk(child, f"{location}/{member}/{index}", current_schema_id)
 
-    for item in load_strict_json(contracts / "schema-catalog.json")["items"]:
-        walk(load_strict_json(contracts / item["path"]), item["id"])
+    for item in catalog:
+        walk(documents[item["id"]], item["id"], item["id"])
     return unknown
+
+
+def _pointer(document: Any, pointer: str) -> Any:
+    if pointer == "":
+        return document
+    node = document
+    for raw in pointer[1:].split("/"):
+        token = raw.replace("~1", "/").replace("~0", "~")
+        node = node[int(token)] if isinstance(node, list) else node[token]
+    return node
+
+
+def _pointer_child(pointer: str, token: str) -> str:
+    return f"{pointer}/{token.replace('~', '~0').replace('/', '~1')}"
+
+
+class ProjectCanonicalSetVerifier:
+    """Execute every frozen canonical collection reachable from ProjectDesign."""
+
+    _SPECIAL_KEYS = {
+        "unicodeScalarValue", "canonicalJson", "subjectsCanonicalJson", "detailsCanonicalJson",
+        "persistedEndpointCanonicalKey", "patchEndpointCanonicalKey",
+    }
+
+    def __init__(self, contracts: Path, validator: Draft202012Subset | None = None):
+        self.contracts = contracts
+        self.validator = validator or Draft202012Subset(contracts)
+        index = load_strict_json(contracts / "vectors/core-canonical-projection-v1.json")
+        if not isinstance(index, dict) or not isinstance(index.get("canonicalCollections"), list):
+            raise FixtureVerificationError("canonical vector index lacks canonicalCollections")
+        self.rules: dict[tuple[str, str], dict[str, Any]] = {}
+        for rule in index["canonicalCollections"]:
+            if not isinstance(rule, dict) or rule.get("kind") not in {"set", "ordered", "derived-ordered"}:
+                raise FixtureVerificationError("malformed canonical collection rule")
+            if not isinstance(rule.get("schemaId"), str) or not isinstance(rule.get("schemaPointer"), str):
+                raise FixtureVerificationError("malformed canonical collection rule location")
+            if rule["kind"] != "ordered" and (
+                not isinstance(rule.get("sortKey"), list) or not rule["sortKey"]
+            ):
+                raise FixtureVerificationError("malformed canonical collection sortKey")
+            key = (rule["schemaId"], rule["schemaPointer"])
+            if key in self.rules:
+                raise FixtureVerificationError(f"duplicate canonical set rule {key}")
+            self.rules[key] = rule
+
+    def _resolve(self, schema_id: str, reference: str) -> tuple[str, str, Any]:
+        file_part, separator, fragment = reference.partition("#")
+        if file_part:
+            try:
+                schema_id = self.validator.schema_ids_by_filename[file_part]
+            except KeyError as error:
+                raise FixtureVerificationError(f"unresolved canonical schema reference {reference!r}") from error
+        pointer = fragment if separator else ""
+        document = self.validator.schemas[schema_id][0]
+        try:
+            return schema_id, pointer, _pointer(document, pointer)
+        except (KeyError, IndexError, TypeError, ValueError) as error:
+            raise FixtureVerificationError(f"unresolved canonical schema pointer {reference!r}") from error
+
+    @staticmethod
+    def _metadata(rule: dict[str, Any]) -> dict[str, Any]:
+        result = {"kind": rule["kind"]}
+        if "sortKey" in rule:
+            result["sortKey"] = rule["sortKey"]
+        return result
+
+    def _item_schema_has_property(
+        self, schema_id: str, schema: Any, property_name: str,
+        visited: set[tuple[str, int]] | None = None,
+    ) -> bool:
+        if isinstance(schema, bool):
+            return False
+        visited = visited or set()
+        marker = (schema_id, id(schema))
+        if marker in visited:
+            return False
+        visited.add(marker)
+        if "$ref" in schema:
+            target_id, _, target = self._resolve(schema_id, schema["$ref"])
+            if self._item_schema_has_property(target_id, target, property_name, visited):
+                return True
+        if property_name in schema.get("properties", {}) and property_name in schema.get("required", []):
+            return True
+        for member in ("oneOf", "anyOf"):
+            branches = schema.get(member, [])
+            if branches and all(self._item_schema_has_property(schema_id, branch, property_name, set(visited)) for branch in branches):
+                return True
+        return any(
+            self._item_schema_has_property(schema_id, branch, property_name, set(visited))
+            for branch in schema.get("allOf", [])
+        )
+
+    def _schema_variants(
+        self, schema_id: str, schema: Any, visited: set[tuple[str, int]] | None = None,
+    ) -> list[tuple[str, dict[str, Any]]]:
+        if not isinstance(schema, dict):
+            return []
+        visited = visited or set()
+        marker = (schema_id, id(schema))
+        if marker in visited:
+            return []
+        visited.add(marker)
+        if "$ref" in schema:
+            target_id, _, target = self._resolve(schema_id, schema["$ref"])
+            return self._schema_variants(target_id, target, visited)
+        for member in ("oneOf", "anyOf"):
+            if member in schema:
+                return [
+                    variant
+                    for branch in schema[member]
+                    for variant in self._schema_variants(schema_id, branch, set(visited))
+                ]
+        return [(schema_id, schema)]
+
+    def _required_names(self, schema_id: str, schema: Any) -> set[str]:
+        variants = self._schema_variants(schema_id, schema)
+        if len(variants) > 1:
+            required_sets = [self._required_names(variant_id, variant) for variant_id, variant in variants]
+            return set.intersection(*required_sets) if required_sets else set()
+        if not variants:
+            return set()
+        variant_id, variant = variants[0]
+        required = set(variant.get("required", []))
+        for branch in variant.get("allOf", []):
+            required.update(self._required_names(variant_id, branch))
+        return required
+
+    def _property_schema(self, schema_id: str, schema: Any, property_name: str) -> tuple[str, Any] | None:
+        variants = self._schema_variants(schema_id, schema)
+        if len(variants) != 1:
+            return None
+        variant_id, variant = variants[0]
+        if property_name in variant.get("properties", {}):
+            return variant_id, variant["properties"][property_name]
+        for branch in variant.get("allOf", []):
+            result = self._property_schema(variant_id, branch, property_name)
+            if result is not None:
+                return result
+        return None
+
+    def _endpoint_key_is_total(self, schema_id: str, schema: Any, patch: bool) -> bool:
+        variants = self._schema_variants(schema_id, schema)
+        if not variants:
+            return False
+        for variant_id, variant in variants:
+            required = self._required_names(variant_id, variant)
+            state_schema = self._property_schema(variant_id, variant, "state")
+            if state_schema is None or not isinstance(state_schema[1], dict):
+                return False
+            state = state_schema[1].get("const")
+            if state == "resolved":
+                subject_name = "subject"
+                if not {"state", subject_name} <= required:
+                    return False
+            elif state == "unresolved":
+                subject_name = "intendedSubject"
+                if not {"state", subject_name, "reasonCode"} <= required:
+                    return False
+            else:
+                return False
+            subject_schema = self._property_schema(variant_id, variant, subject_name)
+            if subject_schema is None:
+                return False
+            subject_id, subject = subject_schema
+            subject_required = self._required_names(subject_id, subject)
+            if patch:
+                if not {"kind", "ref"} <= subject_required:
+                    return False
+                reference_schema = self._property_schema(subject_id, subject, "ref")
+                if reference_schema is None:
+                    return False
+                reference_variants = self._schema_variants(*reference_schema)
+                if not reference_variants or any(
+                    not ({"id"} <= self._required_names(ref_id, ref_schema) or {"localRef"} <= self._required_names(ref_id, ref_schema))
+                    for ref_id, ref_schema in reference_variants
+                ):
+                    return False
+            elif not {"kind", "id"} <= subject_required:
+                return False
+        return True
+
+    def _special_key_is_executable(self, schema_id: str, schema: Any, key: str) -> bool:
+        item_schema = schema.get("items", False)
+        if key == "unicodeScalarValue":
+            variants = self._schema_variants(schema_id, item_schema)
+            return bool(variants) and all(variant.get("type") == "string" for _, variant in variants)
+        if key == "persistedEndpointCanonicalKey":
+            return self._endpoint_key_is_total(schema_id, item_schema, False)
+        if key == "patchEndpointCanonicalKey":
+            return self._endpoint_key_is_total(schema_id, item_schema, True)
+        if key == "canonicalJson":
+            return True
+        if key == "subjectsCanonicalJson":
+            return self._item_schema_has_property(schema_id, item_schema, "subjects")
+        if key == "detailsCanonicalJson":
+            return self._item_schema_has_property(schema_id, item_schema, "details")
+        return False
+
+    def audit_coverage(self) -> None:
+        visited: set[tuple[str, str]] = set()
+
+        def walk(schema_id: str, pointer: str, schema: Any) -> None:
+            location = (schema_id, pointer)
+            if location in visited or isinstance(schema, bool):
+                return
+            if not isinstance(schema, dict):
+                raise FixtureVerificationError(f"{schema_id}#{pointer}: non-schema in Project canonical graph")
+            visited.add(location)
+            if schema.get("type") == "array":
+                metadata = schema.get("x-ipcraft-canonical")
+                rule = self.rules.get(location)
+                if rule is None:
+                    raise FixtureVerificationError(f"canonical set rule missing for {schema_id}#{pointer}")
+                if metadata != self._metadata(rule):
+                    raise FixtureVerificationError(f"canonical set rule drift for {schema_id}#{pointer}")
+                if rule["kind"] == "set":
+                    for key in rule["sortKey"]:
+                        if not isinstance(key, str) or not key or (
+                            key not in self._SPECIAL_KEYS and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_-]*", key) is None
+                        ):
+                            raise FixtureVerificationError(f"unsupported canonical set key for {schema_id}#{pointer}")
+                        if schema.get("maxItems") != 0 and key not in self._SPECIAL_KEYS and not self._item_schema_has_property(
+                            schema_id, schema.get("items", False), key
+                        ):
+                            raise FixtureVerificationError(
+                                f"canonical set key {key!r} has no executable item property for {schema_id}#{pointer}"
+                            )
+                        if schema.get("maxItems") != 0 and key in self._SPECIAL_KEYS and not self._special_key_is_executable(
+                            schema_id, schema, key
+                        ):
+                            label = {
+                                "persistedEndpointCanonicalKey": "persisted endpoint",
+                                "patchEndpointCanonicalKey": "patch endpoint",
+                            }.get(key, key)
+                            raise FixtureVerificationError(
+                                f"{label} canonical key is not total/executable for {schema_id}#{pointer}"
+                            )
+            if "$ref" in schema:
+                target_id, target_pointer, target = self._resolve(schema_id, schema["$ref"])
+                walk(target_id, target_pointer, target)
+            for member in ("properties", "$defs"):
+                for key, child in schema.get(member, {}).items():
+                    walk(schema_id, _pointer_child(_pointer_child(pointer, member), key), child)
+            for member in ("items", "additionalProperties", "contains", "not", "if", "then", "else"):
+                if member in schema:
+                    walk(schema_id, _pointer_child(pointer, member), schema[member])
+            for member in ("allOf", "anyOf", "oneOf"):
+                for index, child in enumerate(schema.get(member, [])):
+                    walk(schema_id, _pointer_child(_pointer_child(pointer, member), str(index)), child)
+
+        schema, _ = self.validator.schemas["ipcraft.project-design.v1"]
+        walk("ipcraft.project-design.v1", "", schema)
+
+    @staticmethod
+    def _endpoint_key(item: Any, patch: bool) -> tuple[Any, ...]:
+        if not isinstance(item, dict) or item.get("state") not in {"resolved", "unresolved"}:
+            raise FixtureVerificationError("canonical endpoint lacks resolved/unresolved state")
+        state = item["state"]
+        subject_name = "subject" if state == "resolved" else "intendedSubject"
+        subject = item.get(subject_name)
+        if not isinstance(subject, dict) or not isinstance(subject.get("kind"), str):
+            raise FixtureVerificationError("canonical endpoint subject lacks required kind")
+        if patch:
+            reference = subject.get("ref")
+            if not isinstance(reference, dict) or set(reference) not in ({"id"}, {"localRef"}):
+                raise FixtureVerificationError("patch endpoint subject lacks exactly one id/localRef")
+            reference_name = "id" if "id" in reference else "localRef"
+            if not isinstance(reference[reference_name], str):
+                raise FixtureVerificationError("patch endpoint reference is not a string")
+            token = f"{reference_name}:" + reference[reference_name]
+        else:
+            if not isinstance(subject.get("id"), str):
+                raise FixtureVerificationError("persisted endpoint subject lacks required id")
+            token = "id:" + subject["id"]
+        key: tuple[Any, ...] = (0 if state == "resolved" else 1, subject["kind"], token)
+        if state == "unresolved":
+            if not isinstance(item.get("reasonCode"), str):
+                raise FixtureVerificationError("unresolved endpoint lacks required reasonCode")
+            key += (item["reasonCode"],)
+        return key
+
+    @staticmethod
+    def _canonical_json(value: Any) -> str:
+        return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+    def _key(self, sort_keys: list[str], item: Any) -> tuple[Any, ...]:
+        result: list[Any] = []
+        for key in sort_keys:
+            if key == "unicodeScalarValue":
+                result.append(item)
+            elif key == "canonicalJson":
+                result.append(self._canonical_json(item))
+            elif key == "subjectsCanonicalJson":
+                result.append(self._canonical_json(item["subjects"]))
+            elif key == "detailsCanonicalJson":
+                result.append(self._canonical_json(item["details"]))
+            elif key == "persistedEndpointCanonicalKey":
+                result.extend(self._endpoint_key(item, False))
+            elif key == "patchEndpointCanonicalKey":
+                result.extend(self._endpoint_key(item, True))
+            else:
+                if not isinstance(item, dict) or key not in item:
+                    raise FixtureVerificationError(f"canonical set item lacks required sort key {key!r}")
+                result.append(self._canonical_json(item[key]))
+        return tuple(result)
+
+    def has_duplicate(self, document: Any) -> bool:
+        self.audit_coverage()
+        active: set[tuple[str, str, int]] = set()
+
+        def walk(schema_id: str, pointer: str, schema: Any, instance: Any) -> bool:
+            if isinstance(schema, bool):
+                return False
+            marker = (schema_id, pointer, id(instance))
+            if marker in active:
+                return False
+            active.add(marker)
+            try:
+                root, root_path = self.validator.schemas[schema_id]
+                if "$ref" in schema:
+                    target_id, target_pointer, target = self._resolve(schema_id, schema["$ref"])
+                    if walk(target_id, target_pointer, target, instance):
+                        return True
+                for member in ("oneOf", "anyOf"):
+                    if member in schema:
+                        matches = [branch for branch in schema[member] if self.validator._is_valid(branch, instance, root, root_path)]
+                        selected = matches if member == "oneOf" else matches[:1]
+                        if any(walk(schema_id, _pointer_child(_pointer_child(pointer, member), str(schema[member].index(branch))), branch, instance) for branch in selected):
+                            return True
+                for index, branch in enumerate(schema.get("allOf", [])):
+                    if walk(schema_id, _pointer_child(_pointer_child(pointer, "allOf"), str(index)), branch, instance):
+                        return True
+                if "if" in schema:
+                    branch_name = "then" if self.validator._is_valid(schema["if"], instance, root, root_path) else "else"
+                    if branch_name in schema and walk(schema_id, _pointer_child(pointer, branch_name), schema[branch_name], instance):
+                        return True
+                if isinstance(instance, list):
+                    metadata = schema.get("x-ipcraft-canonical")
+                    if isinstance(metadata, dict) and metadata.get("kind") == "set":
+                        keys = [self._key(metadata["sortKey"], item) for item in instance]
+                        if len(keys) != len(set(keys)):
+                            return True
+                    if "items" in schema:
+                        return any(walk(schema_id, _pointer_child(pointer, "items"), schema["items"], item) for item in instance)
+                if isinstance(instance, dict):
+                    properties = schema.get("properties", {})
+                    return any(
+                        member in properties and walk(
+                            schema_id, _pointer_child(_pointer_child(pointer, "properties"), member),
+                            properties[member], value,
+                        )
+                        for member, value in instance.items()
+                    )
+                return False
+            finally:
+                active.remove(marker)
+
+        schema, _ = self.validator.schemas["ipcraft.project-design.v1"]
+        return walk("ipcraft.project-design.v1", "", schema, document)
+
+
+def audit_project_canonical_set_coverage(contracts: Path) -> None:
+    ProjectCanonicalSetVerifier(contracts).audit_coverage()
 
 
 SCHEMA_BOUNDARY = {
@@ -377,15 +872,17 @@ def _declared_scalar_matches(kind: str, value: Any) -> bool:
     if kind == "bool":
         return isinstance(value, bool)
     if kind == "int":
-        return isinstance(value, int) and not isinstance(value, bool)
+        return Draft202012Subset._matches_type(value, "integer")
     if kind == "double":
-        return isinstance(value, (int, float)) and not isinstance(value, bool)
+        return Draft202012Subset._matches_type(value, "number")
     if kind in {"string", "enum"}:
         return isinstance(value, str) if kind == "string" else True
     return False
 
 
-def semantic_failure(schema_id: str, document: Any) -> tuple[str, str] | None:
+def semantic_failure(
+    schema_id: str, document: Any, validator: Draft202012Subset | None = None
+) -> tuple[str, str] | None:
     if schema_id == "ipcraft.project-design.v1":
         groups = [document.get(name, []) for name in ("components", "interfaces", "topologies")]
         topology = document.get("topologies", [{}])[0] if document.get("topologies") else {}
@@ -395,6 +892,10 @@ def semantic_failure(schema_id: str, document: Any) -> tuple[str, str] | None:
         ids += [item.get("lockId") for item in document.get("dependencies", []) if isinstance(item, dict)]
         if len(ids) != len(set(ids)):
             return "project-duplicate-id", "project.duplicate_id"
+        if ProjectCanonicalSetVerifier(
+            (validator.contracts if validator is not None else Path(__file__).resolve().parents[1]), validator
+        ).has_duplicate(document):
+            return "project-invariant", "project.invariant_violation"
         known = set(ids)
         components = {item["id"]: item for item in document.get("components", [])}
         dependencies = {item["lockId"]: item for item in document.get("dependencies", [])}
@@ -599,7 +1100,7 @@ def semantic_failure(schema_id: str, document: Any) -> tuple[str, str] | None:
             minimum, maximum = field.get("minimum"), field.get("maximum")
             if minimum is not None and maximum is not None and minimum > maximum:
                 return "contract-declaration", "contract.invariant_violation"
-            if isinstance(default, (int, float)) and not isinstance(default, bool):
+            if isinstance(default, (int, float, Decimal)) and not isinstance(default, bool):
                 if minimum is not None and default < minimum or maximum is not None and default > maximum:
                     return "contract-declaration", "contract.invariant_violation"
             values = field.get("values")
@@ -710,7 +1211,7 @@ def classify_document(contracts: Path, schema_id: str, document: Any) -> Classif
         else:
             boundary, code = SCHEMA_BOUNDARY.get(schema_id, ("generic-structure", "contract.schema_invalid"))
         return Classification("schema", boundary, code)
-    semantic = semantic_failure(schema_id, document)
+    semantic = semantic_failure(schema_id, document, validator)
     if semantic:
         return Classification("core-semantic", semantic[0], semantic[1])
     return Classification(None, None, None)
@@ -728,6 +1229,7 @@ def verify_all(contracts: Path) -> Summary:
     unsupported = audit_schema_keywords(contracts)
     if unsupported:
         raise FixtureVerificationError(f"unsupported JSON Schema keywords: {sorted(unsupported)}")
+    audit_project_canonical_set_coverage(contracts)
     try:
         fixture_count, schema_count, _ = verify_fixture_catalog.verify(contracts / "fixture-catalog.json", contracts)
     except verify_fixture_catalog.VerificationError as error:

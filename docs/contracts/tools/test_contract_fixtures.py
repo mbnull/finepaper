@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import copy
 import json
+import math
 import tempfile
 import unittest
 from pathlib import Path
@@ -41,6 +42,10 @@ class ContractFixtureTest(unittest.TestCase):
         "fixtures/invalid/project-core-field-wrong-type.json",
         "fixtures/invalid/project-opaque-outside-extension.json",
         "fixtures/invalid/project-runtime-lock-incomplete.json",
+        "fixtures/invalid/project-duplicate-root-extension-key.json",
+        "fixtures/invalid/project-duplicate-relation-source-key.json",
+        "fixtures/invalid/project-duplicate-slot-allowed-contract-key.json",
+        "fixtures/invalid/project-duplicate-slot-role-key.json",
     }
 
     def test_committed_fixture_catalog_is_complete_and_classifies_exactly(self) -> None:
@@ -174,7 +179,13 @@ class ContractFixtureTest(unittest.TestCase):
         mutations = (
             lambda schema: schema.__setitem__("$schema", 7),
             lambda schema: schema.__setitem__("$id", False),
+            lambda schema: schema.__setitem__("$id", "not a valid id"),
+            lambda schema: schema.__setitem__("$id", "bad%ZZ"),
+            lambda schema: schema.__setitem__("$id", "bad\nvalue"),
             lambda schema: schema.__setitem__("$ref", []),
+            lambda schema: schema.__setitem__("$ref", "not a valid ref with spaces"),
+            lambda schema: schema.__setitem__("$ref", "#/$defs/%ZZ"),
+            lambda schema: schema.__setitem__("$ref", "#/$defs/id\n"),
             lambda schema: schema.__setitem__("$comment", {}),
             lambda schema: schema.__setitem__("title", []),
             lambda schema: schema.__setitem__("description", 1),
@@ -211,8 +222,18 @@ class ContractFixtureTest(unittest.TestCase):
             lambda schema: schema.__setitem__("minimum", False),
             lambda schema: schema.__setitem__("maximum", "1"),
             lambda schema: schema.__setitem__("exclusiveMinimum", None),
+            lambda schema: schema.__setitem__("multipleOf", 0),
+            lambda schema: schema.__setitem__("multipleOf", False),
             lambda schema: schema.__setitem__("pattern", 1),
             lambda schema: schema.__setitem__("pattern", "["),
+            lambda schema: schema.__setitem__("pattern", "(?P<n>a)"),
+            lambda schema: schema.__setitem__("pattern", r"(a)\1"),
+            lambda schema: schema.__setitem__("pattern", "(?i)a"),
+            lambda schema: schema.__setitem__("pattern", "[a&&b]"),
+            lambda schema: schema.__setitem__("pattern", r"^\d+$"),
+            lambda schema: schema.__setitem__("pattern", r"^\w+$"),
+            lambda schema: schema.__setitem__("pattern", r"^\s+$"),
+            lambda schema: schema.__setitem__("pattern", r"^\b.$"),
             lambda schema: schema.__setitem__("format", 1),
             lambda schema: schema.__setitem__("format", "uuid"),
             lambda schema: schema.__setitem__("x-ipcraft-canonical", []),
@@ -238,6 +259,187 @@ class ContractFixtureTest(unittest.TestCase):
             schema["$id"] = ""
             schema_path.write_text(json.dumps(schema))
             self.assertEqual(subject.audit_schema_keywords(root), set())
+            validator = subject.Draft202012Subset(root)
+            schema_root, root_path = validator.schemas["ipcraft.pipeline-result.v1"]
+            validator._validate({"type": "string", "pattern": "^.$"}, "é", schema_root, root_path, "$")
+            with self.assertRaises(subject.SchemaFailure):
+                validator._validate({"type": "string", "pattern": "^.$"}, "\r", schema_root, root_path, "$")
+            with self.assertRaises(subject.SchemaFailure):
+                validator._validate({"type": "string", "pattern": "^a$"}, "a\n", schema_root, root_path, "$")
+
+    def test_schema_form_audit_accepts_supported_local_references_and_regex(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "contracts"
+            subject.copy_contract_tree(CONTRACTS, root)
+            schema_path = root / "schemas/ipcraft.pipeline-result.v1.schema.json"
+            schema = json.loads(schema_path.read_text())
+            schema["$id"] = "local.schema-v1"
+            schema["properties"]["pipelineRunId"] = {
+                "$ref": "ipcraft.core-canonical-models.v1.schema.json#/$defs/id"
+            }
+            schema["properties"]["kind"]["pattern"] = r"^(?:validate|generate)$"
+            schema_path.write_text(json.dumps(schema))
+            self.assertEqual(subject.audit_schema_keywords(root), set())
+
+    def test_schema_form_audit_resolves_every_unused_reference(self) -> None:
+        for reference in (
+            "missing.schema.json#/$defs/id",
+            "ipcraft.core-canonical-models.v1.schema.json#/$defs/missing",
+        ):
+            with self.subTest(reference=reference), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary) / "contracts"
+                subject.copy_contract_tree(CONTRACTS, root)
+                schema_path = root / "schemas/ipcraft.pipeline-result.v1.schema.json"
+                schema = json.loads(schema_path.read_text())
+                schema["$defs"]["unusedBroken"] = {"$ref": reference}
+                schema_path.write_text(json.dumps(schema))
+                self.assertTrue(subject.audit_schema_keywords(root))
+                with self.assertRaisesRegex(subject.FixtureVerificationError, "unsupported JSON Schema keywords"):
+                    subject.verify_all(root)
+
+    def test_sample_builder_handles_boolean_schemas_without_type_errors(self) -> None:
+        builder = generate_contract_fixtures.SampleBuilder(CONTRACTS)
+        root_path = CONTRACTS / "schemas/authoring-test.schema.json"
+        true_property = {
+            "type": "object", "required": ["free"], "properties": {"free": True}
+        }
+        self.assertEqual(builder.build(true_property, true_property, root_path), {"free": None})
+        true_items = {"type": "array", "minItems": 1, "items": True}
+        self.assertEqual(builder.build(true_items, true_items, root_path), [None])
+        true_ref = {"$defs": {"free": True}, "$ref": "#/$defs/free"}
+        self.assertIsNone(builder.build(true_ref, true_ref, root_path))
+        self.assertIsNone(builder.build({"anyOf": [False, True]}, {}, root_path))
+        self.assertIsNone(builder.build({"oneOf": [False, True]}, {}, root_path))
+        for schema in ({"oneOf": [True, True]}, {"oneOf": [True, {}]}):
+            with self.subTest(schema=schema), self.assertRaisesRegex(
+                generate_contract_fixtures.UnsatisfiableSampleError, "oneOf has no satisfiable branch"
+            ):
+                builder.build(schema, schema, root_path)
+
+        false_positions = (
+            ({"type": "object", "required": ["blocked"], "properties": {"blocked": False}}, "required property blocked"),
+            ({"type": "array", "minItems": 1, "items": False}, "array item"),
+            ({"$defs": {"blocked": False}, "$ref": "#/$defs/blocked"}, "false schema"),
+            ({"allOf": [False]}, "false schema"),
+        )
+        for schema, message in false_positions:
+            with self.subTest(message=message), self.assertRaisesRegex(
+                generate_contract_fixtures.UnsatisfiableSampleError, message
+            ):
+                builder.build(schema, schema, root_path)
+
+        self.assertEqual(
+            builder.build({"type": "number", "minimum": 0.1, "multipleOf": 0.2}, {}, root_path),
+            0.2,
+        )
+        self.assertEqual(builder.build({"type": "integer", "minimum": 1.5}, {}, root_path), 2)
+
+    def test_project_canonical_set_duplicates_are_project_invariants(self) -> None:
+        source = json.loads((CONTRACTS / "fixtures/valid/mesh-2x2-package-extension.json").read_text())
+        attached = json.loads((CONTRACTS / "fixtures/valid/mesh-2x2-attached.json").read_text())
+        mutations = {
+            "root-extension": lambda d: d["extensions"].append(copy.deepcopy(d["extensions"][0])),
+            "component-extension": lambda d: d["components"][0]["extensions"].extend(
+                [copy.deepcopy(d["extensions"][0]), copy.deepcopy(d["extensions"][0])]
+            ),
+            "topology-extension": lambda d: d["topologies"][0]["extensions"].extend(
+                [copy.deepcopy(d["extensions"][0]), copy.deepcopy(d["extensions"][0])]
+            ),
+            "package-entity-extension": lambda d: d["topologies"][0]["packageEntities"][0]["extensions"].extend(
+                [copy.deepcopy(d["extensions"][0]), copy.deepcopy(d["extensions"][0])]
+            ),
+            "package-relation-extension": lambda d: d["topologies"][0]["packageRelations"][0]["extensions"].extend(
+                [copy.deepcopy(d["extensions"][0]), copy.deepcopy(d["extensions"][0])]
+            ),
+            "relation-source": lambda d: d["topologies"][0]["packageRelations"][0]["sources"].append(
+                copy.deepcopy(d["topologies"][0]["packageRelations"][0]["sources"][0])
+            ),
+        }
+        for name, mutate in mutations.items():
+            with self.subTest(name=name):
+                document = copy.deepcopy(source)
+                mutate(document)
+                self.assertEqual(
+                    subject.classify_document(CONTRACTS, "ipcraft.project-design.v1", document),
+                    subject.Classification("core-semantic", "project-invariant", "project.invariant_violation"),
+                )
+        for name, mutate in {
+            "interface-extension": lambda d: d["interfaces"][0]["extensions"].extend(
+                [copy.deepcopy(source["extensions"][0]), copy.deepcopy(source["extensions"][0])]
+            ),
+            "allowed-contract": lambda d: d["topologies"][0]["accessSlots"][0]["allowedContracts"].append(
+                copy.deepcopy(d["topologies"][0]["accessSlots"][0]["allowedContracts"][0])
+            ),
+            "allowed-role": lambda d: d["topologies"][0]["accessSlots"][0]["allowedContracts"][0]["roles"].append("initiator"),
+        }.items():
+            with self.subTest(name=name):
+                document = copy.deepcopy(attached)
+                mutate(document)
+                self.assertEqual(
+                    subject.classify_document(CONTRACTS, "ipcraft.project-design.v1", document),
+                    subject.Classification("core-semantic", "project-invariant", "project.invariant_violation"),
+                )
+
+    def test_project_canonical_set_rule_coverage_fails_closed_on_index_drift(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "contracts"
+            subject.copy_contract_tree(CONTRACTS, root)
+            index_path = root / "vectors/core-canonical-projection-v1.json"
+            index = json.loads(index_path.read_text())
+            index["canonicalCollections"] = [
+                rule for rule in index["canonicalCollections"]
+                if not (
+                    rule["schemaId"] == "ipcraft.core-canonical-models.v1"
+                    and rule["schemaPointer"] == "/$defs/accessSlot/properties/allowedContracts"
+                )
+            ]
+            index_path.write_text(json.dumps(index))
+            with self.assertRaisesRegex(subject.FixtureVerificationError, "canonical set rule missing"):
+                subject.audit_project_canonical_set_coverage(root)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "contracts"
+            subject.copy_contract_tree(CONTRACTS, root)
+            schema_path = root / "schemas/ipcraft.core-canonical-models.v1.schema.json"
+            schema = json.loads(schema_path.read_text())
+            allowed = schema["$defs"]["accessSlot"]["properties"]["allowedContracts"]["items"]
+            allowed["required"].remove("contractLockId")
+            schema_path.write_text(json.dumps(schema))
+            with self.assertRaisesRegex(subject.FixtureVerificationError, "no executable item property"):
+                subject.audit_project_canonical_set_coverage(root)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "contracts"
+            subject.copy_contract_tree(CONTRACTS, root)
+            schema_path = root / "schemas/ipcraft.project-design.v1.schema.json"
+            schema = json.loads(schema_path.read_text())
+            schema["$defs"]["unresolvedRelationEndpoint"]["required"].remove("reasonCode")
+            schema_path.write_text(json.dumps(schema))
+            with self.assertRaisesRegex(subject.FixtureVerificationError, "persisted endpoint canonical key"):
+                subject.audit_project_canonical_set_coverage(root)
+
+    def test_json_schema_integer_accepts_integral_numbers_only(self) -> None:
+        matches = subject.Draft202012Subset._matches_type
+        for value in (1, 1.0, -0.0):
+            with self.subTest(value=value):
+                self.assertTrue(matches(value, "integer"))
+        for value in (True, 1.5, math.inf, -math.inf, math.nan):
+            with self.subTest(value=value):
+                self.assertFalse(matches(value, "integer"))
+        self.assertFalse(matches(math.inf, "number"))
+
+        project = json.loads((CONTRACTS / "fixtures/valid/minimal-1x1.json").read_text())
+        project["topologies"][0]["derivation"]["topologyInputRevision"] = 1.0
+        self.assertIsNone(subject.classify_document(CONTRACTS, "ipcraft.project-design.v1", project).phase)
+        project["topologies"][0]["derivation"]["topologyInputRevision"] = 1.5
+        self.assertEqual(subject.classify_document(CONTRACTS, "ipcraft.project-design.v1", project).phase, "schema")
+
+        validator = subject.Draft202012Subset(CONTRACTS)
+        root, root_path = validator.schemas["ipcraft.pipeline-result.v1"]
+        numeric_schema = {"type": "number", "multipleOf": 0.1, "minimum": 0, "maximum": 1}
+        validator._validate(numeric_schema, 0.3, root, root_path, "$")
+        with self.assertRaises(subject.SchemaFailure):
+            validator._validate(numeric_schema, 0.31, root, root_path, "$")
 
     def test_schema_validator_rejects_mutated_valid_fixture(self) -> None:
         catalog = subject.load_catalog(CONTRACTS)
@@ -262,6 +464,17 @@ class ContractFixtureTest(unittest.TestCase):
                 path.write_text(raw)
                 with self.assertRaises(subject.FixtureVerificationError):
                     subject.load_strict_json(path)
+
+    def test_strict_json_preserves_exact_numeric_tokens(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "exact.json"
+            path.write_text('{"x":1e-400,"y":0.3000000000000000000000001}')
+            document = subject.load_strict_json(path)
+            self.assertFalse(subject.Draft202012Subset._matches_type(document["x"], "integer"))
+            validator = subject.Draft202012Subset(CONTRACTS)
+            root, root_path = validator.schemas["ipcraft.pipeline-result.v1"]
+            with self.assertRaises(subject.SchemaFailure):
+                validator._validate({"type": "number", "multipleOf": 0.1}, document["y"], root, root_path, "$")
 
     def test_wrong_catalog_expectation_boundary_and_code_are_rejected(self) -> None:
         catalog = subject.load_catalog(CONTRACTS)
