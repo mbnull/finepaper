@@ -8,6 +8,7 @@ committed JSON table and never depends on a host Unicode data installation.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -15,6 +16,8 @@ from pathlib import Path
 
 UNICODE_VERSION = "17.0.0"
 SOURCE_HEADER = f"# CaseFolding-{UNICODE_VERSION}.txt"
+SOURCE_SHA256 = "ff8d8fefbf123574205085d6714c36149eb946d717a0c585c27f0f4ef58c4183"
+EXPECTED_MAPPING_COUNT = 1512
 HEX_RE = re.compile(r"^[0-9A-F]{4,6}$")
 STATUS_PRIORITY = {"C": 0, "S": 1}
 
@@ -29,7 +32,10 @@ def scalar(hex_value: str, location: str) -> int:
 
 
 def generate(input_path: Path) -> dict[str, object]:
-    lines = input_path.read_text(encoding="utf-8").splitlines()
+    source_bytes = input_path.read_bytes()
+    if hashlib.sha256(source_bytes).hexdigest() != SOURCE_SHA256:
+        raise ValueError("input does not match the pinned CaseFolding-17.0.0 source digest")
+    lines = source_bytes.decode("utf-8").splitlines()
     if not lines or lines[0] != SOURCE_HEADER:
         raise ValueError(f"input must begin with exact {SOURCE_HEADER!r}")
     selected: dict[int, tuple[int, int]] = {}
@@ -60,13 +66,22 @@ def generate(input_path: Path) -> dict[str, object]:
         {"source": f"{source:04X}", "target": f"{selected[source][1]:04X}"}
         for source in sorted(selected)
     ]
+    if len(mappings) != EXPECTED_MAPPING_COUNT:
+        raise ValueError(f"expected {EXPECTED_MAPPING_COUNT} simple mappings, got {len(mappings)}")
+    mappings_sha256 = hashlib.sha256(
+        json.dumps(mappings, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
     return {
         "schema": "ipcraft.unicode-simple-case-folding.v1",
         "unicodeVersion": UNICODE_VERSION,
         "source": "Unicode CaseFolding-17.0.0 C/S mappings",
         "sourceUrl": "https://www.unicode.org/Public/17.0.0/ucd/CaseFolding.txt",
+        "sourceSha256": SOURCE_SHA256,
         "licenseName": "Unicode License V3",
         "licenseUrl": "https://www.unicode.org/license.txt",
+        "licenseFile": "UNICODE-LICENSE.txt",
+        "mappingCount": EXPECTED_MAPPING_COUNT,
+        "mappingsSha256": mappings_sha256,
         "mappings": mappings,
     }
 

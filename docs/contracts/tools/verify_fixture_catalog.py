@@ -9,20 +9,25 @@ the later executable fixture test owns that responsibility.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
 import sys
-import unicodedata
 from pathlib import Path, PurePosixPath
 from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_CONTRACTS = ROOT / "docs" / "contracts"
-UNICODE_TABLE_PATH = Path("unicode/simple-case-folding-17.0.0.json")
+UNICODE_CASE_FOLD_PATH = Path("unicode/simple-case-folding-17.0.0.json")
+UNICODE_NFC_PATH = Path("unicode/nfc-normalization-17.0.0.json")
+UNICODE_NORMALIZATION_TEST_PATH = Path("unicode/NormalizationTest-17.0.0.txt")
+ERROR_POLICY_PATH = Path("fixture-error-policy-v1.json")
+ERROR_POLICY_RULES_SHA256 = "170504c680d673256a70be4d6a3a0f94646060d99f34c2a726b8a98f64b5d577"
 UNICODE_TABLE_FIELDS = {
-    "schema", "unicodeVersion", "source", "sourceUrl", "licenseName", "licenseUrl", "mappings"
+    "schema", "unicodeVersion", "source", "sourceUrl", "sourceSha256", "licenseName", "licenseUrl",
+    "licenseFile", "mappingCount", "mappingsSha256", "mappings"
 }
 ENTRY_FIELDS = {
     "path", "schemaId", "validationPhase", "expected", "errorCode", "behaviorEvidence"
@@ -34,6 +39,27 @@ WINDOWS_RESERVED = {
 }
 EVIDENCE_RE = re.compile(r"^vectors/([^/]+\.json)#([A-Za-z0-9][A-Za-z0-9._-]*)$")
 CODE_POINT_RE = re.compile(r"^[0-9A-F]{4,6}$")
+SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+CASE_FOLD_SOURCE_SHA256 = "ff8d8fefbf123574205085d6714c36149eb946d717a0c585c27f0f4ef58c4183"
+CASE_FOLD_MAPPING_COUNT = 1512
+CASE_FOLD_MAPPINGS_SHA256 = "9696b3c0460d3cbab57dcd9baadc26ba24cf289f2e14ae2585063ca11eea3095"
+NORMALIZATION_TEST_SHA256 = "5019ffd530751a741900c849c0e010332f142a3612234639bd200b82138a87db"
+UNICODE_LICENSE_SHA256 = "e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96"
+NFC_ARRAY_IDENTITIES = {
+    "decompositions": (2081, "85fc2687c3fabab6bfe7f711374fdd35f92165d411b7e8da079ada27e590dc08"),
+    "combiningClasses": (968, "e96a0ef8091026c67939f5037e1e8e3e4be2ec0ea5c7dae3db252fe06343c652"),
+    "compositions": (961, "03965ad919c780b3b2d877b240d7f4148d23608fe13f47fe1a19726b7cde0f31"),
+}
+RECOGNIZED_VECTORS = {
+    "core-canonical-projection-v1.json": ("ipcraft.core-canonical-vectors.v1", None, ("vectors",), "bf570f7a18cc99f58fb3d50a94ccc2598c9285a85976da0235ec3c82c95e4e44"),
+    "core-set-permutation-v1.json": ("ipcraft.canonical-vector-catalog.v1", "collection-permutation", ("cases",), "79366d15bcf0b46903bc8457aef03a0f94c129a2062c68fe8839b813b65d8483"),
+    "candidate-local-ref-v1.json": ("ipcraft.canonical-vector-catalog.v1", "candidate-causality", ("cases",), "8de0ba093da10867d8864bec4526c10db3474d354b70cb7dfbd5292777d712ef"),
+    "default-engine-lock-v1.json": (
+        "ipcraft.default-engine-behavior-vectors.v1", None,
+        ("resolutionCases", "migrationCases", "freshnessCases"), "24fa76edfdbf48c26be68ae0b31247879f846c87d82479aa3bc01a4c6a5fffb9",
+    ),
+    "host-side-effects-v1.json": ("ipcraft.host-side-effect-behavior-vectors.v1", None, ("cases",), "6ca6cbbe2daff2589f86c13ed877e7accee39a1aa95390996ce7d7877fbb7c79"),
+}
 
 
 class VerificationError(RuntimeError):
@@ -50,6 +76,10 @@ def load_json(path: Path) -> Any:
             return json.load(stream)
     except (OSError, UnicodeError, json.JSONDecodeError) as error:
         fail(f"cannot load {path}: {error}")
+
+
+def canonical_digest(value: object) -> str:
+    return hashlib.sha256(json.dumps(value, ensure_ascii=True, separators=(",", ":")).encode()).hexdigest()
 
 
 def require_exact_object(value: Any, fields: set[str], location: str) -> dict[str, Any]:
@@ -72,22 +102,30 @@ def code_point(value: Any, location: str) -> int:
 
 
 def load_simple_case_folding_table(contracts: Path) -> dict[int, int]:
-    location = str(contracts / UNICODE_TABLE_PATH)
-    document = require_exact_object(load_json(contracts / UNICODE_TABLE_PATH), UNICODE_TABLE_FIELDS, location)
+    location = str(contracts / UNICODE_CASE_FOLD_PATH)
+    document = require_exact_object(load_json(contracts / UNICODE_CASE_FOLD_PATH), UNICODE_TABLE_FIELDS, location)
     expected_metadata = {
         "schema": "ipcraft.unicode-simple-case-folding.v1",
         "unicodeVersion": "17.0.0",
         "source": "Unicode CaseFolding-17.0.0 C/S mappings",
         "sourceUrl": "https://www.unicode.org/Public/17.0.0/ucd/CaseFolding.txt",
+        "sourceSha256": CASE_FOLD_SOURCE_SHA256,
         "licenseName": "Unicode License V3",
         "licenseUrl": "https://www.unicode.org/license.txt",
+        "licenseFile": "UNICODE-LICENSE.txt",
+        "mappingCount": CASE_FOLD_MAPPING_COUNT,
+        "mappingsSha256": CASE_FOLD_MAPPINGS_SHA256,
     }
     for field, expected in expected_metadata.items():
         if document[field] != expected:
             fail(f"{location}.{field} must be exactly {expected!r}")
     mappings = document["mappings"]
-    if not isinstance(mappings, list) or not mappings:
-        fail(f"{location}.mappings must be a non-empty sorted array")
+    if not isinstance(mappings, list) or len(mappings) != CASE_FOLD_MAPPING_COUNT:
+        fail(f"{location}.mappings must contain exactly {CASE_FOLD_MAPPING_COUNT} sorted entries")
+    if not isinstance(document["mappingsSha256"], str) or not SHA256_RE.fullmatch(document["mappingsSha256"]):
+        fail(f"{location}.mappingsSha256 must be lowercase SHA-256")
+    if canonical_digest(mappings) != CASE_FOLD_MAPPINGS_SHA256:
+        fail(f"{location}.mappings does not match its pinned full-table digest")
     result: dict[int, int] = {}
     previous_source = -1
     for index, raw in enumerate(mappings):
@@ -100,6 +138,152 @@ def load_simple_case_folding_table(contracts: Path) -> dict[int, int]:
         previous_source = source
         result[source] = target
     return result
+
+
+def load_unicode_normalization_data(contracts: Path) -> tuple[dict[int, tuple[int, ...]], dict[int, int], dict[tuple[int, int], int]]:
+    location = str(contracts / UNICODE_NFC_PATH)
+    fields = {
+        "schema", "unicodeVersion", "sources", "licenseName", "licenseUrl", "licenseFile",
+        "decompositionCount", "decompositionsSha256", "combiningClassCount", "combiningClassesSha256",
+        "compositionCount", "compositionsSha256", "decompositions", "combiningClasses", "compositions",
+    }
+    document = require_exact_object(load_json(contracts / UNICODE_NFC_PATH), fields, location)
+    expected_sources = [
+        ("UnicodeData.txt", "2e1efc1dcb59c575eedf5ccae60f95229f706ee6d031835247d843c11d96470c"),
+        ("CompositionExclusions.txt", "2f239196ef3b5b61db5cc476e9bd80f534d15aa1b74e1be1dea5d042a344c85f"),
+        ("NormalizationTest.txt", NORMALIZATION_TEST_SHA256),
+    ]
+    if document["schema"] != "ipcraft.unicode-nfc-data.v1" or document["unicodeVersion"] != "17.0.0":
+        fail(f"{location} has the wrong identity/version")
+    if (document["licenseName"] != "Unicode License V3" or document["licenseUrl"] != "https://www.unicode.org/license.txt"
+            or document["licenseFile"] != "UNICODE-LICENSE.txt"):
+        fail(f"{location} must reference the committed Unicode License V3 notice")
+    license_path = contracts / "unicode" / document["licenseFile"]
+    if not license_path.is_file() or hashlib.sha256(license_path.read_bytes()).hexdigest() != UNICODE_LICENSE_SHA256:
+        fail(f"{location} license file is missing")
+    sources = document["sources"]
+    if not isinstance(sources, list) or len(sources) != len(expected_sources):
+        fail(f"{location}.sources is not the pinned source set")
+    for index, (name, digest) in enumerate(expected_sources):
+        source = require_exact_object(sources[index], {"name", "url", "sha256"}, f"{location}.sources[{index}]")
+        if source["name"] != name or source["sha256"] != digest or source["url"] != f"https://www.unicode.org/Public/17.0.0/ucd/{name}":
+            fail(f"{location}.sources[{index}] is not the pinned {name} identity")
+    arrays = (
+        ("decompositions", "decompositionCount", "decompositionsSha256"),
+        ("combiningClasses", "combiningClassCount", "combiningClassesSha256"),
+        ("compositions", "compositionCount", "compositionsSha256"),
+    )
+    for member, count_member, digest_member in arrays:
+        values = document[member]
+        expected_count, expected_digest = NFC_ARRAY_IDENTITIES[member]
+        if not isinstance(values, list) or document[count_member] != expected_count or len(values) != expected_count:
+            fail(f"{location}.{member} count mismatch")
+        if document[digest_member] != expected_digest or canonical_digest(values) != expected_digest:
+            fail(f"{location}.{member} full-table digest mismatch")
+    decompositions: dict[int, tuple[int, ...]] = {}
+    for index, raw in enumerate(document["decompositions"]):
+        entry = require_exact_object(raw, {"codePoint", "mapping"}, f"{location}.decompositions[{index}]")
+        point = code_point(entry["codePoint"], f"{location}.decompositions[{index}].codePoint")
+        if point in decompositions or not isinstance(entry["mapping"], list) or not entry["mapping"]:
+            fail(f"{location}.decompositions must be unique and non-empty")
+        decompositions[point] = tuple(code_point(value, f"{location}.decompositions[{index}].mapping") for value in entry["mapping"])
+    combining: dict[int, int] = {}
+    for index, raw in enumerate(document["combiningClasses"]):
+        entry = require_exact_object(raw, {"codePoint", "class"}, f"{location}.combiningClasses[{index}]")
+        point = code_point(entry["codePoint"], f"{location}.combiningClasses[{index}].codePoint")
+        if point in combining or not isinstance(entry["class"], int) or not 1 <= entry["class"] <= 255:
+            fail(f"{location}.combiningClasses has invalid or duplicate entry")
+        combining[point] = entry["class"]
+    compositions: dict[tuple[int, int], int] = {}
+    for index, raw in enumerate(document["compositions"]):
+        entry = require_exact_object(raw, {"starter", "combining", "composite"}, f"{location}.compositions[{index}]")
+        key = (code_point(entry["starter"], f"{location}.compositions[{index}].starter"),
+               code_point(entry["combining"], f"{location}.compositions[{index}].combining"))
+        if key in compositions:
+            fail(f"{location}.compositions has a duplicate pair")
+        compositions[key] = code_point(entry["composite"], f"{location}.compositions[{index}].composite")
+    return decompositions, combining, compositions
+
+
+def nfc_normalize(text: str, tables: tuple[dict[int, tuple[int, ...]], dict[int, int], dict[tuple[int, int], int]]) -> str:
+    decompositions, combining_classes, compositions = tables
+    s_base, l_base, v_base, t_base = 0xAC00, 0x1100, 0x1161, 0x11A7
+    l_count, v_count, t_count = 19, 21, 28
+    n_count, s_count = v_count * t_count, l_count * v_count * t_count
+
+    def decompose(point: int, out: list[int]) -> None:
+        s_index = point - s_base
+        if 0 <= s_index < s_count:
+            out.extend((l_base + s_index // n_count, v_base + (s_index % n_count) // t_count))
+            tail = s_index % t_count
+            if tail:
+                out.append(t_base + tail)
+            return
+        mapping = decompositions.get(point)
+        if mapping is None:
+            out.append(point)
+        else:
+            for child in mapping:
+                decompose(child, out)
+
+    ordered: list[int] = []
+    for character in text:
+        expanded: list[int] = []
+        decompose(ord(character), expanded)
+        for value in expanded:
+            ordered.append(value)
+            index = len(ordered) - 1
+            ccc = combining_classes.get(value, 0)
+            cursor = index
+            while cursor > 0 and ccc and combining_classes.get(ordered[cursor - 1], 0) > ccc:
+                ordered[cursor] = ordered[cursor - 1]
+                cursor -= 1
+            ordered[cursor] = value
+    if not ordered:
+        return ""
+    result = [ordered[0]]
+    starter_pos = 0
+    starter = ordered[0]
+    last_ccc = 0
+    for point in ordered[1:]:
+        composite = None
+        l_index, v_index = starter - l_base, point - v_base
+        if 0 <= l_index < l_count and 0 <= v_index < v_count:
+            composite = s_base + (l_index * v_count + v_index) * t_count
+        else:
+            s_index, t_index = starter - s_base, point - t_base
+            if 0 <= s_index < s_count and s_index % t_count == 0 and 1 <= t_index < t_count:
+                composite = starter + t_index
+            else:
+                composite = compositions.get((starter, point))
+        ccc = combining_classes.get(point, 0)
+        if composite is not None and (last_ccc < ccc or last_ccc == 0):
+            result[starter_pos] = composite
+            starter = composite
+        else:
+            if ccc == 0:
+                starter_pos = len(result)
+                starter = point
+            result.append(point)
+            last_ccc = ccc
+    return "".join(chr(point) for point in result)
+
+
+def verify_normalization_conformance(contracts: Path, tables: tuple[dict[int, tuple[int, ...]], dict[int, int], dict[tuple[int, int], int]]) -> None:
+    path = contracts / UNICODE_NORMALIZATION_TEST_PATH
+    data = path.read_bytes()
+    if hashlib.sha256(data).hexdigest() != NORMALIZATION_TEST_SHA256:
+        fail(f"{path} does not match the official Unicode 17.0.0 normalization conformance source")
+    for line_number, line in enumerate(data.decode("utf-8").splitlines(), 1):
+        body = line.split("#", 1)[0].strip()
+        if not body or body.startswith("@"): continue
+        fields = [part.strip() for part in body.split(";")]
+        if len(fields) < 5: fail(f"{path}:{line_number} malformed conformance row")
+        columns = ["".join(chr(int(value, 16)) for value in field.split()) for field in fields[:5]]
+        c1, c2, c3, c4, c5 = columns
+        for source, expected in ((c1,c2),(c2,c2),(c3,c2),(c4,c4),(c5,c4)):
+            if nfc_normalize(source, tables) != expected:
+                fail(f"Unicode 17 NFC conformance failed at {path}:{line_number}")
 
 
 def simple_case_fold(text: str, mappings: dict[int, int]) -> str:
@@ -136,10 +320,10 @@ def run_simple_case_fold_witnesses(mappings: dict[int, int]) -> None:
         fail("simple-fold self-check: multi-code-point full-fold expansions are forbidden")
 
 
-def portable_path(value: Any, location: str) -> str:
+def portable_path(value: Any, location: str, normalization_tables: tuple[dict[int, tuple[int, ...]], dict[int, int], dict[tuple[int, int], int]]) -> str:
     if not isinstance(value, str) or not value:
         fail(f"{location} must be a non-empty string")
-    if unicodedata.normalize("NFC", value) != value:
+    if nfc_normalize(value, normalization_tables) != value:
         fail(f"{location} must be NFC-normalized")
     if value.startswith("/") or "\\" in value or ":" in value:
         fail(f"{location} must be a portable relative POSIX path")
@@ -161,7 +345,9 @@ def portable_path(value: Any, location: str) -> str:
     return value
 
 
-def catalog_ids(contracts: Path) -> set[str]:
+def catalog_ids(contracts: Path, normalization_tables=None) -> set[str]:
+    if normalization_tables is None:
+        normalization_tables = load_unicode_normalization_data(contracts)
     document = require_exact_object(
         load_json(contracts / "schema-catalog.json"), {"schema", "items"}, "schema catalog"
     )
@@ -178,7 +364,21 @@ def catalog_ids(contracts: Path) -> set[str]:
             fail(f"schema catalog items[{index}] members must be non-empty strings")
         if entry["id"] in ids or entry["path"] in paths:
             fail(f"schema catalog duplicate id/path at items[{index}]")
-        schema_path = contracts / entry["path"]
+        catalog_path = portable_path(entry["path"], f"schema catalog items[{index}].path", normalization_tables)
+        if (len(PurePosixPath(catalog_path).parts) != 2 or not catalog_path.startswith("schemas/")
+                or not catalog_path.endswith(".schema.json")):
+            fail(f"schema catalog items[{index}].path must match schemas/*.schema.json")
+        schema_path = contracts / catalog_path
+        schema_root_path = contracts / "schemas"
+        schema_root = schema_root_path.resolve()
+        relative_parts = Path(catalog_path).parts[1:]
+        traversed = schema_root_path
+        has_symlink_component = schema_root_path.is_symlink()
+        for part in relative_parts:
+            traversed /= part
+            has_symlink_component = has_symlink_component or traversed.is_symlink()
+        if has_symlink_component or not schema_root_path.is_dir() or not schema_path.is_file() or not schema_path.resolve().is_relative_to(schema_root):
+            fail(f"schema catalog items[{index}].path must resolve to a regular non-symlink inside schemas/")
         schema = load_json(schema_path)
         if not isinstance(schema, dict) or schema.get("$id") != entry["id"]:
             fail(f"schema catalog items[{index}] does not resolve to its exact $id")
@@ -208,13 +408,18 @@ def error_codes(contracts: Path) -> set[str]:
     return result
 
 
-def behavior_case_ids(vector: Any, location: str) -> set[str]:
-    if not isinstance(vector, dict):
-        fail(f"{location} root must be an object")
+def behavior_case_ids(vector: Any, filename: str, location: str) -> set[str]:
+    expected = RECOGNIZED_VECTORS.get(filename)
+    if expected is None:
+        fail(f"{location} is not in the closed recognized vector catalog")
+    if not isinstance(vector, dict) or vector.get("schema") != expected[0]:
+        fail(f"{location} has the wrong recognized vector envelope")
+    if expected[1] is not None and vector.get("kind") != expected[1]:
+        fail(f"{location} has the wrong recognized vector kind")
     result: set[str] = set()
-    for member, values in vector.items():
-        if not isinstance(values, list):
-            continue
+    for member in expected[2]:
+        values = vector.get(member)
+        if not isinstance(values, list): fail(f"{location}.{member} must be the recognized case array")
         for index, entry in enumerate(values):
             if not isinstance(entry, dict):
                 continue
@@ -233,14 +438,19 @@ def verify_evidence(value: str, contracts: Path, location: str) -> None:
     match = EVIDENCE_RE.fullmatch(value)
     if match is None:
         fail(f"{location} must be vectors/<file>.json#<case-id>")
-    vector_path = contracts / "vectors" / match.group(1)
+    filename = match.group(1)
+    if filename not in RECOGNIZED_VECTORS:
+        fail(f"{location} references a file outside the closed vector catalog")
+    vector_path = contracts / "vectors" / filename
     if not vector_path.is_file() or vector_path.is_symlink():
         fail(f"{location} references an unknown committed vector file")
-    if match.group(2) not in behavior_case_ids(load_json(vector_path), str(vector_path)):
+    if hashlib.sha256(vector_path.read_bytes()).hexdigest() != RECOGNIZED_VECTORS[filename][3]:
+        fail(f"{location} references a recognized vector file whose frozen content digest does not match")
+    if match.group(2) not in behavior_case_ids(load_json(vector_path), filename, str(vector_path)):
         fail(f"{location} references unknown exact case ID {match.group(2)!r}")
 
 
-def physical_fixtures(contracts: Path) -> set[str]:
+def physical_fixtures(contracts: Path, normalization_tables) -> set[str]:
     root = contracts / "fixtures"
     if not root.exists():
         return set()
@@ -260,8 +470,33 @@ def physical_fixtures(contracts: Path) -> set[str]:
                 fail(f"fixture must be a regular JSON file: {relative}")
             if child.suffix != ".json":
                 fail(f"fixture directories may contain only JSON documents: {relative}")
-            result.add(portable_path(relative, f"physical fixture {relative}"))
+            result.add(portable_path(relative, f"physical fixture {relative}", normalization_tables))
     return result
+
+
+def load_error_policy(contracts: Path) -> dict[tuple[str, str], set[str]]:
+    document = require_exact_object(
+        load_json(contracts / ERROR_POLICY_PATH), {"schema", "version", "rulesSha256", "rules"}, "error policy"
+    )
+    if document["schema"] != "ipcraft.fixture-error-policy.v1" or document["version"] != "1":
+        fail("error policy has the wrong identity/version")
+    if document["rulesSha256"] != ERROR_POLICY_RULES_SHA256 or canonical_digest(document["rules"]) != ERROR_POLICY_RULES_SHA256:
+        fail("error policy rules do not match the frozen Gate 0 mapping")
+    result = {}
+    for index, raw in enumerate(document["rules"]):
+        entry = require_exact_object(raw, {"schemaId", "validationPhase", "allowedErrorCodes"}, f"error policy rules[{index}]")
+        key = (entry["schemaId"], entry["validationPhase"])
+        codes = entry["allowedErrorCodes"]
+        if key in result or not isinstance(codes, list) or not codes or codes != sorted(set(codes)):
+            fail(f"error policy rules[{index}] must be unique with sorted unique codes")
+        result[key] = set(codes)
+    return result
+
+
+def verify_error_policy(schema_id: str, phase: str, code: str, policy: dict[tuple[str, str], set[str]], location: str) -> None:
+    allowed = policy.get((schema_id, phase))
+    if allowed is None or code not in allowed:
+        fail(f"{location}.errorCode {code!r} is not allowed for ({schema_id}, {phase})")
 
 
 def verify(catalog_path: Path, contracts: Path, allow_empty: bool = False) -> tuple[int, int, int]:
@@ -274,8 +509,11 @@ def verify(catalog_path: Path, contracts: Path, allow_empty: bool = False) -> tu
     if not items and not allow_empty:
         fail("fixture catalog is empty; use --allow-empty only during Task 4A authoring")
 
-    known_schemas = catalog_ids(contracts)
+    normalization_tables = load_unicode_normalization_data(contracts)
+    verify_normalization_conformance(contracts, normalization_tables)
+    known_schemas = catalog_ids(contracts, normalization_tables)
     known_errors = error_codes(contracts)
+    error_policy = load_error_policy(contracts)
     folding_mappings = load_simple_case_folding_table(contracts)
     run_simple_case_fold_witnesses(folding_mappings)
     paths: list[str] = []
@@ -283,8 +521,8 @@ def verify(catalog_path: Path, contracts: Path, allow_empty: bool = False) -> tu
     for index, raw in enumerate(items):
         location = f"fixture catalog items[{index}]"
         entry = require_exact_object(raw, ENTRY_FIELDS, location)
-        path = portable_path(entry["path"], f"{location}.path")
-        collision_key = simple_case_fold(unicodedata.normalize("NFC", path), folding_mappings)
+        path = portable_path(entry["path"], f"{location}.path", normalization_tables)
+        collision_key = simple_case_fold(nfc_normalize(path, normalization_tables), folding_mappings)
         if path in paths or collision_key in casefold_paths:
             fail(f"{location}.path is duplicate or portable-case-colliding")
         paths.append(path)
@@ -321,10 +559,12 @@ def verify(catalog_path: Path, contracts: Path, allow_empty: bool = False) -> tu
             fail(f"{location}.expected must be accept or reject")
         if error_code is not None and error_code not in known_errors:
             fail(f"{location}.errorCode does not resolve in the error catalog")
+        if error_code is not None:
+            verify_error_policy(schema_id, entry["validationPhase"], error_code, error_policy, location)
 
     if paths != sorted(paths):
         fail("fixture catalog items must be sorted by path")
-    physical = physical_fixtures(contracts)
+    physical = physical_fixtures(contracts, normalization_tables)
     catalogued = set(paths)
     if physical != catalogued:
         fail(

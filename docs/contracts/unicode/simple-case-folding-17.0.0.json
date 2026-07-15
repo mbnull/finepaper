@@ -3,8 +3,12 @@
   "unicodeVersion": "17.0.0",
   "source": "Unicode CaseFolding-17.0.0 C/S mappings",
   "sourceUrl": "https://www.unicode.org/Public/17.0.0/ucd/CaseFolding.txt",
+  "sourceSha256": "ff8d8fefbf123574205085d6714c36149eb946d717a0c585c27f0f4ef58c4183",
   "licenseName": "Unicode License V3",
   "licenseUrl": "https://www.unicode.org/license.txt",
+  "licenseFile": "UNICODE-LICENSE.txt",
+  "mappingCount": 1512,
+  "mappingsSha256": "9696b3c0460d3cbab57dcd9baadc26ba24cf289f2e14ae2585063ca11eea3095",
   "mappings": [
     {
       "source": "0041",
