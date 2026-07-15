@@ -134,6 +134,7 @@ def freshness_cases() -> list[dict]:
 def router(i:str,row:int,col:int)->dict: return {"id":i,"templateKey":"mesh-router","identityCompatibilityVersion":1,"coordinate":{"row":row,"column":col},"properties":{}}
 def link(i:str,a:str,b:str)->dict: return {"id":i,"templateKey":"mesh-link","identityCompatibilityVersion":1,"endpointA":a,"endpointB":b,"axis":"horizontal","properties":{}}
 def slot(i:str,r:str)->dict: return {"id":i,"routerId":r,"templateKey":"local-0","identityCompatibilityVersion":1,"displayOrder":0,"label":"Local 0","allowedContracts":[],"properties":{}}
+def package_entity(i:str)->dict: return {"id":i,"typeKey":"endpoint","data":{"name":i}}
 def domain(i,t,default): return {"id":i,"typeKey":t,"name":i,"isDefault":default,"config":{"frequencyMHz":100}}
 def member(i,d,r): return {"id":i,"domainId":d,"routerId":r}
 def resolved(kind,id): return {"state":"resolved","subject":{"kind":kind,"id":id}}
@@ -144,7 +145,7 @@ def side_input(ops:list[dict]) -> dict:
     decl=lambda k,allow:{"typeKey":k,"ownership":"user","topologyDriving":False,"sources":{"kinds":["router"],"minimum":1,"maximum":1},"targets":{"kinds":["package-entity"],"minimum":1,"maximum":1},"unresolvedAllowed":allow,"schema":{}}
     return {"domainTypes":[dtype("clock"),dtype("power")],"relationDeclarations":[decl("route.allowed",True),decl("route.blocked",False)],
       "currentDerivedState":{"schema":"ipcraft.derived-state.v1","topologyId":"topology.main","routers":[router("router.a",0,0),router("router.b",0,1),router("router.c",0,2)],
-      "structuralLinks":[link("link.ab","router.a","router.b"),link("link.bc","router.b","router.c")],"accessSlots":[slot("slot.a","router.a"),slot("slot.b","router.b")],"packageEntities":[],"packageRelations":[]},
+      "structuralLinks":[link("link.ab","router.a","router.b"),link("link.bc","router.b","router.c")],"accessSlots":[slot("slot.a","router.a"),slot("slot.b","router.b")],"packageEntities":[package_entity("entity.a")],"packageRelations":[]},
       "domains":[domain("domain.clock.default","clock",True),domain("domain.power.default","power",True)],
       "domainMemberships":[member("membership.ca","domain.clock.default","router.a"),member("membership.cb","domain.clock.default","router.b"),member("membership.cc","domain.clock.default","router.c"),member("membership.pa","domain.power.default","router.a"),member("membership.pb","domain.power.default","router.b"),member("membership.pc","domain.power.default","router.c")],
       "attachments":[{"id":"attachment.a","interfaceId":"interface.a","state":"resolved","routerId":"router.a","slotId":"slot.a"}],
@@ -227,7 +228,6 @@ def normalize_derived_authoring(value:dict)->dict:
     for item in result["accessSlots"]:
         item["allowedContracts"].sort(key=lambda x:x["contractLockId"])
         for allowed in item["allowedContracts"]:allowed["roles"].sort()
-    for item in result["packageEntities"]:item["extensions"].sort(key=lambda x:(x["ownerLockId"],x["schema"],x["version"]))
     def endpoint_key(endpoint):
         if endpoint["state"]=="resolved":return (0,endpoint["subject"]["kind"],"id:"+endpoint["subject"]["id"])
         return (1,endpoint["intendedSubject"]["kind"],"id:"+endpoint["intendedSubject"]["id"],endpoint["reasonCode"])
@@ -242,7 +242,7 @@ def derived_digest_authoring(value:dict)->str:
 
 def materialize_derived_authoring(current:dict,authority:dict,mapping:dict)->dict:
     wrapper={"dependencies":[],"derivedState":copy.deepcopy(current),"derivation":{},"hostSideEffects":{"domains":[],"domainMemberships":[],"attachments":[],"packageRelations":[]},"hostIds":{"localRefToHostId":{}},"engineInvocationCount":0}
-    tx={"authorityPatch":authority,"applicationPatch":{"operations":[]},"localRefToHostId":mapping,"targetDependencies":[],"targetDerivation":{},"engineInvocations":[]}
+    tx={"authorityPatch":authority,"applicationPatch":{"operations":[]},"localRefToHostId":mapping,"targetDependencies":[],"targetDerivation":{},"resultEngineInvocationCount":0,"engineInvocations":[]}
     return apply_forward_authoring(wrapper,tx)["derivedState"]
 
 
@@ -273,7 +273,7 @@ def apply_forward_authoring(before:dict,tx:dict)->dict:
             item["sources"],item["targets"]=[persisted(e) for e in op["set"]["sources"]],[persisted(e) for e in op["set"]["targets"]]
         elif op["op"]=="deleteEntity" and op["entityKind"]=="domain": host["domains"]=[x for x in host["domains"] if x["id"]!=op["id"]]
     for key in host: host[key].sort(key=lambda x:x["id"])
-    result["dependencies"]=copy.deepcopy(tx["targetDependencies"]);result["derivation"]=copy.deepcopy(tx["targetDerivation"]);result["hostIds"]={"localRefToHostId":copy.deepcopy(mapping)};result["engineInvocationCount"]+=len(tx["engineInvocations"])
+    result["dependencies"]=copy.deepcopy(tx["targetDependencies"]);result["derivation"]=copy.deepcopy(tx["targetDerivation"]);result["hostIds"]={"localRefToHostId":copy.deepcopy(mapping)};result["engineInvocationCount"]=tx["resultEngineInvocationCount"]
     return result
 
 
@@ -287,7 +287,7 @@ def make_migration_input(blocked:bool)->dict:
     if blocked:
         causal["attachments"]=[]
         causal["packageRelations"]=[{"id":"relation.blocked","typeKey":"route.blocked","sources":[resolved("router","router.c")],"targets":[resolved("package-entity","entity.a")],"data":{"weight":9},"extensions":[]}]
-    mapping={"authority:link-bd":"host-link-bd","authority:router-d":"host-router-d","authority:slot-d":"host-slot-d","application:000001":"host-membership-clock-d","application:000002":"host-membership-power-d"}
+    mapping_values={"authority:link-bd":"host-link-bd","authority:router-d":"host-router-d","authority:slot-d":"host-slot-d","application:000001":"host-membership-clock-d","application:000002":"host-membership-power-d"};mapping={key:mapping_values[key] for key in sorted(mapping_values)}
     before_state=copy.deepcopy(causal["currentDerivedState"]);before_digest=derived_digest_authoring(before_state);after_state=materialize_derived_authoring(before_state,authority,mapping);after_digest=derived_digest_authoring(after_state)
     old_der={**derivation(current,before_digest,7),"topologyInputRevision":4,"defaultEngineBundleDigest":D["a"],"engineCompatibilityVersion":"1","structureAuthority":{**derivation(current,before_digest,7)["structureAuthority"],"version":"1.0.0","bundleDigest":D["a"]}}
     target_der=derivation(target,after_digest,8);app_value=applicability(D["a"],old_der["derivedStateRevision"],before_digest)
@@ -303,15 +303,15 @@ def make_migration_input(blocked:bool)->dict:
     candidate={"schema":"ipcraft.candidate-transaction.v1","transactionId":"tx.migration","kind":"default-engine-migration","applicability":app_value,"topologyIntent":{"schema":"ipcraft.topology-intent.v1","componentId":"component.noc","topologyId":"topology.main","topologyKind":"mesh","globalConfig":{"columns":2,"rows":2},"packageEntities":[],"packageRelations":[]},"authorityPatch":authority,"applicationPatch":application,"migration":migration,"tombstones":tombstones,"allocationOrder":allocation,"impactReport":{"schema":"ipcraft.topology-impact-report.v1","impacts":impacts}}
     candidate["candidateDigest"]=digest(candidate)
     before={"dependencies":sorted([noc,current],key=lambda x:x["lockId"]),"derivedState":before_state,"derivation":old_der,"hostSideEffects":{"domains":copy.deepcopy(causal["domains"]),"domainMemberships":copy.deepcopy(causal["domainMemberships"]),"attachments":copy.deepcopy(causal["attachments"]),"packageRelations":copy.deepcopy(causal["packageRelations"])},"hostIds":{"localRefToHostId":{}},"engineInvocationCount":0}
-    forward={"authorityPatch":authority,"applicationPatch":application,"tombstones":tombstones,"allocationOrder":allocation,"localRefToHostId":mapping,"targetDependencies":target_deps,"targetDerivation":target_der,"engineInvocations":[D["b"]]}
+    forward={"authorityPatch":authority,"applicationPatch":application,"tombstones":tombstones,"allocationOrder":allocation,"localRefToHostId":mapping,"targetDependencies":target_deps,"targetDerivation":target_der,"resultEngineInvocationCount":1,"engineInvocations":[]}
     after=apply_forward_authoring(before,forward)
     inverse={"restoreDependencies":copy.deepcopy(before["dependencies"]),"restoreDerivedState":copy.deepcopy(before["derivedState"]),"restoreDerivation":copy.deepcopy(before["derivation"]),"restoreHostSideEffects":copy.deepcopy(before["hostSideEffects"]),"restoreHostIds":copy.deepcopy(before["hostIds"]),"restoreEngineInvocationCount":before["engineInvocationCount"],"engineInvocations":[]}
-    return {"caseKind":"offered","action":"migrate","sourceBundleAvailable":True,"migration":migration,"applicability":app_value,"targetManifest":manifest("2.0.0","2"),"sideEffectInput":causal,"beforeSnapshot":before,"afterSnapshot":after,"candidate":candidate,"forwardTransaction":forward,"inverseTransaction":inverse}
+    return {"caseKind":"offered","action":"migrate","sourceBundleAvailable":True,"migration":migration,"applicability":app_value,"currentManifest":manifest(),"targetManifest":manifest("2.0.0","2"),"sideEffectInput":causal,"beforeSnapshot":before,"afterSnapshot":after,"candidate":candidate,"forwardTransaction":forward,"inverseTransaction":inverse,"migrationEngineInvocations":[D["b"]]}
 
 
 def make_migration_discovery_input()->dict:
     offered=make_migration_input(False);target_manifest=copy.deepcopy(offered["targetManifest"]);target_manifest["migrationFromCompatibilityVersions"]=["9"]
-    return {"caseKind":"discovery","currentDefaultEngineLock":copy.deepcopy(offered["migration"]["currentDefaultEngineLock"]),"targetDefaultEngineLock":copy.deepcopy(offered["migration"]["targetDefaultEngineLock"]),"targetManifest":target_manifest,"supportedEngineHostContracts":["ipcraft.engine-host.v1"],"supportedHostSideEffectContracts":["ipcraft.noc-side-effects.v1"],"currentPlatformAbi":"linux-x86_64-gnu-v1","currentSnapshot":copy.deepcopy(offered["beforeSnapshot"])}
+    return {"caseKind":"discovery","currentDefaultEngineLock":copy.deepcopy(offered["migration"]["currentDefaultEngineLock"]),"targetDefaultEngineLock":copy.deepcopy(offered["migration"]["targetDefaultEngineLock"]),"currentManifest":copy.deepcopy(offered["currentManifest"]),"targetManifest":target_manifest,"supportedEngineHostContracts":["ipcraft.engine-host.v1"],"supportedHostSideEffectContracts":["ipcraft.noc-side-effects.v1"],"currentPlatformAbi":"linux-x86_64-gnu-v1","currentSnapshot":copy.deepcopy(offered["beforeSnapshot"])}
 
 
 def side_cases()->list[dict]:

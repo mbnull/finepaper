@@ -159,7 +159,15 @@
                 "properties": {}
               }
             ],
-            "packageEntities": [],
+            "packageEntities": [
+              {
+                "id": "entity.a",
+                "typeKey": "endpoint",
+                "data": {
+                  "name": "entity.a"
+                }
+              }
+            ],
             "packageRelations": []
           },
           "domains": [
@@ -532,7 +540,15 @@
                 "properties": {}
               }
             ],
-            "packageEntities": [],
+            "packageEntities": [
+              {
+                "id": "entity.a",
+                "typeKey": "endpoint",
+                "data": {
+                  "name": "entity.a"
+                }
+              }
+            ],
             "packageRelations": []
           },
           "domains": [
@@ -966,7 +982,15 @@
                 "properties": {}
               }
             ],
-            "packageEntities": [],
+            "packageEntities": [
+              {
+                "id": "entity.a",
+                "typeKey": "endpoint",
+                "data": {
+                  "name": "entity.a"
+                }
+              }
+            ],
             "packageRelations": []
           },
           "domains": [
@@ -1239,7 +1263,15 @@
                 "properties": {}
               }
             ],
-            "packageEntities": [],
+            "packageEntities": [
+              {
+                "id": "entity.a",
+                "typeKey": "endpoint",
+                "data": {
+                  "name": "entity.a"
+                }
+              }
+            ],
             "packageRelations": []
           },
           "domains": [
@@ -1550,7 +1582,15 @@
                 "properties": {}
               }
             ],
-            "packageEntities": [],
+            "packageEntities": [
+              {
+                "id": "entity.a",
+                "typeKey": "endpoint",
+                "data": {
+                  "name": "entity.a"
+                }
+              }
+            ],
             "packageRelations": []
           },
           "domains": [
@@ -1851,7 +1891,15 @@
                 "properties": {}
               }
             ],
-            "packageEntities": [],
+            "packageEntities": [
+              {
+                "id": "entity.a",
+                "typeKey": "endpoint",
+                "data": {
+                  "name": "entity.a"
+                }
+              }
+            ],
             "packageRelations": []
           },
           "domains": [
@@ -2190,7 +2238,15 @@
                 "properties": {}
               }
             ],
-            "packageEntities": [],
+            "packageEntities": [
+              {
+                "id": "entity.a",
+                "typeKey": "endpoint",
+                "data": {
+                  "name": "entity.a"
+                }
+              }
+            ],
             "packageRelations": []
           },
           "domains": [
@@ -2555,7 +2611,15 @@
                 "properties": {}
               }
             ],
-            "packageEntities": [],
+            "packageEntities": [
+              {
+                "id": "entity.a",
+                "typeKey": "endpoint",
+                "data": {
+                  "name": "entity.a"
+                }
+              }
+            ],
             "packageRelations": []
           },
           "domains": [
@@ -2874,7 +2938,15 @@
                 "properties": {}
               }
             ],
-            "packageEntities": [],
+            "packageEntities": [
+              {
+                "id": "entity.a",
+                "typeKey": "endpoint",
+                "data": {
+                  "name": "entity.a"
+                }
+              }
+            ],
             "packageRelations": []
           },
           "domains": [
@@ -3117,7 +3189,15 @@
                 "properties": {}
               }
             ],
-            "packageEntities": [],
+            "packageEntities": [
+              {
+                "id": "entity.a",
+                "typeKey": "endpoint",
+                "data": {
+                  "name": "entity.a"
+                }
+              }
+            ],
             "packageRelations": []
           },
           "domains": [
@@ -3370,7 +3450,15 @@
                 "properties": {}
               }
             ],
-            "packageEntities": [],
+            "packageEntities": [
+              {
+                "id": "entity.a",
+                "typeKey": "endpoint",
+                "data": {
+                  "name": "entity.a"
+                }
+              }
+            ],
             "packageRelations": []
           },
           "domains": [
@@ -3617,7 +3705,15 @@
                 "properties": {}
               }
             ],
-            "packageEntities": [],
+            "packageEntities": [
+              {
+                "id": "entity.a",
+                "typeKey": "endpoint",
+                "data": {
+                  "name": "entity.a"
+                }
+              }
+            ],
             "packageRelations": []
           },
           "domains": [
@@ -3873,7 +3969,15 @@
                 "properties": {}
               }
             ],
-            "packageEntities": [],
+            "packageEntities": [
+              {
+                "id": "entity.a",
+                "typeKey": "endpoint",
+                "data": {
+                  "name": "entity.a"
+                }
+              }
+            ],
             "packageRelations": []
           },
           "domains": [
@@ -4159,7 +4263,15 @@
                 "properties": {}
               }
             ],
-            "packageEntities": [],
+            "packageEntities": [
+              {
+                "id": "entity.a",
+                "typeKey": "endpoint",
+                "data": {
+                  "name": "entity.a"
+                }
+              }
+            ],
             "packageRelations": []
           },
           "domains": [
