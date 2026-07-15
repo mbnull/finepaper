@@ -82,9 +82,17 @@ class FixtureCatalogHardeningTest(unittest.TestCase):
             )
 
     def test_schema_catalog_rejects_parent_traversal(self) -> None:
+        nfc = subject.load_unicode_normalization_data(CONTRACTS)
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             (root / "schemas").mkdir()
+            valid = root / "schemas/valid.schema.json"
+            valid.write_text(json.dumps({"$id": "valid"}))
+            (root / "schema-catalog.json").write_text(json.dumps({
+                "schema": "ipcraft.contract-schema-catalog.v1",
+                "items": [{"id": "valid", "path": "schemas/valid.schema.json", "freezeGate": "Gate 0"}],
+            }))
+            self.assertEqual(subject.catalog_ids(root, nfc), {"valid"})
             outside = root / "outside.schema.json"
             outside.write_text(json.dumps({"$id": "escape"}))
             catalog = {
@@ -92,8 +100,8 @@ class FixtureCatalogHardeningTest(unittest.TestCase):
                 "items": [{"id": "escape", "path": "schemas/../outside.schema.json", "freezeGate": "Gate 0"}],
             }
             (root / "schema-catalog.json").write_text(json.dumps(catalog))
-            with self.assertRaises(subject.VerificationError):
-                subject.catalog_ids(root)
+            with self.assertRaisesRegex(subject.VerificationError, "dot path segment"):
+                subject.catalog_ids(root, nfc)
 
     def test_schema_catalog_rejects_absolute_and_symlink_paths(self) -> None:
         nfc = subject.load_unicode_normalization_data(CONTRACTS)
