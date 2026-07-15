@@ -24,18 +24,6 @@ QString childPointer(const QString &parent, const QString &token) {
     return parent + QStringLiteral("/") + pointerToken(token);
 }
 
-QString wildcardPointer(QString pointer) {
-    const auto parts = pointer.split(QLatin1Char('/'));
-    QStringList normalized;
-    normalized.reserve(parts.size());
-    for (const auto &part : parts) {
-        bool isIndex = false;
-        part.toLongLong(&isIndex);
-        normalized.append(isIndex && !part.isEmpty() ? QStringLiteral("*") : part);
-    }
-    return normalized.join(QLatin1Char('/'));
-}
-
 QByteArray encodeString(const QString &value, const QString &location) {
     QByteArray result(1, '"');
     for (qsizetype index = 0; index < value.size(); ++index) {
@@ -77,24 +65,26 @@ class CanonicalWriter final {
 public:
     explicit CanonicalWriter(const CanonicalRuleSet &rules) : m_rules(rules) {}
 
-    QByteArray write(const QJsonValue &value, const QString &pointer = {}) const {
+    QByteArray write(const QJsonValue &value,
+                     const QString &instancePointer = {},
+                     const QString &rulePointer = {}) const {
         switch (value.type()) {
         case QJsonValue::Null:
             return QByteArrayLiteral("null");
         case QJsonValue::Bool:
             return value.toBool() ? QByteArrayLiteral("true") : QByteArrayLiteral("false");
         case QJsonValue::Double:
-            return writeNumber(value.toDouble(), displayPointer(pointer));
+            return writeNumber(value.toDouble(), displayPointer(instancePointer));
         case QJsonValue::String:
-            return encodeString(value.toString(), displayPointer(pointer));
+            return encodeString(value.toString(), displayPointer(instancePointer));
         case QJsonValue::Array:
-            return writeArray(value.toArray(), pointer);
+            return writeArray(value.toArray(), instancePointer, rulePointer);
         case QJsonValue::Object:
-            return writeObject(value.toObject(), pointer);
+            return writeObject(value.toObject(), instancePointer, rulePointer);
         case QJsonValue::Undefined:
-            fail(displayPointer(pointer) + QStringLiteral(": undefined is not JSON"));
+            fail(displayPointer(instancePointer) + QStringLiteral(": undefined is not JSON"));
         }
-        fail(displayPointer(pointer) + QStringLiteral(": unsupported JSON value"));
+        fail(displayPointer(instancePointer) + QStringLiteral(": unsupported JSON value"));
     }
 
 private:
@@ -174,7 +164,9 @@ private:
         return QByteArray::number(static_cast<qint64>(value));
     }
 
-    QByteArray writeObject(const QJsonObject &object, const QString &pointer) const {
+    QByteArray writeObject(const QJsonObject &object,
+                           const QString &instancePointer,
+                           const QString &rulePointer) const {
         QStringList keys = object.keys();
         std::sort(keys.begin(), keys.end(), [](const QString &left, const QString &right) {
             return QString::compare(left, right, Qt::CaseSensitive) < 0;
@@ -187,22 +179,22 @@ private:
                 result += ',';
             }
             first = false;
-            result += encodeString(key, displayPointer(pointer));
+            result += encodeString(key, displayPointer(instancePointer));
             result += ':';
-            result += write(object.value(key), childPointer(pointer, key));
+            result += write(object.value(key),
+                            childPointer(instancePointer, key),
+                            childPointer(rulePointer, key));
         }
         result += '}';
         return result;
     }
 
-    const CanonicalRuleSet::Rule &ruleFor(const QString &pointer) const {
+    const CanonicalRuleSet::Rule &ruleFor(const QString &rulePointer,
+                                          const QString &instancePointer) const {
         const auto &rules = m_rules.rules();
-        auto iterator = rules.constFind(pointer);
+        const auto iterator = rules.constFind(rulePointer);
         if (iterator == rules.cend()) {
-            iterator = rules.constFind(wildcardPointer(pointer));
-        }
-        if (iterator == rules.cend()) {
-            fail(displayPointer(pointer) +
+            fail(displayPointer(instancePointer) +
                  QStringLiteral(": array has no explicit canonical collection rule"));
         }
         return iterator.value();
@@ -210,19 +202,21 @@ private:
 
     QList<SortAtom> sortComponents(const QString &key,
                                    const QJsonValue &item,
-                                   const QString &itemPointer) const {
+                                   const QString &itemInstancePointer,
+                                   const QString &itemRulePointer) const {
         if (key == QStringLiteral("unicodeScalarValue")) {
             if (!item.isString()) {
-                fail(displayPointer(itemPointer) +
+                fail(displayPointer(itemInstancePointer) +
                      QStringLiteral(": unicodeScalarValue requires a string item"));
             }
             return {SortAtom::unicode(item.toString())};
         }
         if (key == QStringLiteral("canonicalJson")) {
-            return {SortAtom::canonical(write(item, itemPointer))};
+            return {SortAtom::canonical(
+                write(item, itemInstancePointer, itemRulePointer))};
         }
         if (!item.isObject()) {
-            fail(displayPointer(itemPointer) +
+            fail(displayPointer(itemInstancePointer) +
                  QStringLiteral(": object sort key requires an object item"));
         }
         const auto object = item.toObject();
@@ -232,7 +226,7 @@ private:
             const QString state = object.value(QStringLiteral("state")).toString();
             const bool resolved = state == QStringLiteral("resolved");
             if (!resolved && state != QStringLiteral("unresolved")) {
-                fail(displayPointer(itemPointer) +
+                fail(displayPointer(itemInstancePointer) +
                      QStringLiteral(": endpoint sort key requires resolved/unresolved state"));
             }
             const QString subjectProperty = resolved ? QStringLiteral("subject")
@@ -240,7 +234,7 @@ private:
             const auto subject = object.value(subjectProperty).toObject();
             const QString subjectKind = subject.value(QStringLiteral("kind")).toString();
             if (subjectKind.isEmpty()) {
-                fail(displayPointer(itemPointer) +
+                fail(displayPointer(itemInstancePointer) +
                      QStringLiteral(": endpoint sort key requires subject kind"));
             }
 
@@ -251,7 +245,7 @@ private:
                 if (reference.size() != 1 ||
                     (!reference.contains(QStringLiteral("id")) &&
                      !reference.contains(QStringLiteral("localRef")))) {
-                    fail(displayPointer(itemPointer) +
+                    fail(displayPointer(itemInstancePointer) +
                          QStringLiteral(": patch endpoint requires exactly id or localRef"));
                 }
                 referenceKind = reference.contains(QStringLiteral("id"))
@@ -259,14 +253,14 @@ private:
                                     : QStringLiteral("localRef");
                 referenceValue = reference.value(referenceKind).toString();
                 if (referenceValue.isEmpty()) {
-                    fail(displayPointer(itemPointer) +
+                    fail(displayPointer(itemInstancePointer) +
                          QStringLiteral(": patch endpoint reference must be a string"));
                 }
             } else {
                 referenceKind = QStringLiteral("id");
                 referenceValue = subject.value(QStringLiteral("id")).toString();
                 if (referenceValue.isEmpty()) {
-                    fail(displayPointer(itemPointer) +
+                    fail(displayPointer(itemInstancePointer) +
                          QStringLiteral(": persisted endpoint requires subject id"));
                 }
             }
@@ -278,7 +272,7 @@ private:
             if (!resolved) {
                 const QString reason = object.value(QStringLiteral("reasonCode")).toString();
                 if (reason.isEmpty()) {
-                    fail(displayPointer(itemPointer) +
+                    fail(displayPointer(itemInstancePointer) +
                          QStringLiteral(": unresolved endpoint requires reasonCode"));
                 }
                 tuple.append(SortAtom::unicode(reason));
@@ -291,15 +285,20 @@ private:
                                          ? QStringLiteral("subjects")
                                          : QStringLiteral("details");
             if (!object.contains(property)) {
-                fail(displayPointer(itemPointer) + QStringLiteral(": missing sort key ") + key);
+                fail(displayPointer(itemInstancePointer) +
+                     QStringLiteral(": missing sort key ") + key);
             }
             return {SortAtom::canonical(
-                write(object.value(property), childPointer(itemPointer, property)))};
+                write(object.value(property),
+                      childPointer(itemInstancePointer, property),
+                      childPointer(itemRulePointer, property)))};
         }
         if (!object.contains(key)) {
-            fail(displayPointer(itemPointer) + QStringLiteral(": missing sort key ") + key);
+            fail(displayPointer(itemInstancePointer) +
+                 QStringLiteral(": missing sort key ") + key);
         }
-        return {SortAtom::fromJson(object.value(key), displayPointer(itemPointer))};
+        return {SortAtom::fromJson(object.value(key),
+                                   displayPointer(itemInstancePointer))};
     }
 
     static int compareAtom(const SortAtom &left, const SortAtom &right) {
@@ -340,11 +339,12 @@ private:
     int compareItems(const QJsonValue &left,
                      const QJsonValue &right,
                      const QStringList &sortKeys,
-                     const QString &pointer) const {
+                     const QString &itemInstancePointer,
+                     const QString &itemRulePointer) const {
         for (const auto &key : sortKeys) {
             const int comparison = compareComponentLists(
-                sortComponents(key, left, pointer),
-                sortComponents(key, right, pointer));
+                sortComponents(key, left, itemInstancePointer, itemRulePointer),
+                sortComponents(key, right, itemInstancePointer, itemRulePointer));
             if (comparison != 0) {
                 return comparison;
             }
@@ -352,8 +352,10 @@ private:
         return 0;
     }
 
-    QByteArray writeArray(const QJsonArray &array, const QString &pointer) const {
-        const auto &rule = ruleFor(pointer);
+    QByteArray writeArray(const QJsonArray &array,
+                         const QString &instancePointer,
+                         const QString &rulePointer) const {
+        const auto &rule = ruleFor(rulePointer, instancePointer);
         QList<QJsonValue> values;
         values.reserve(array.size());
         for (const auto &value : array) {
@@ -362,25 +364,34 @@ private:
 
         if (rule.kind != CanonicalRuleSet::CollectionKind::Ordered) {
             if (rule.sortKey.isEmpty()) {
-                fail(displayPointer(pointer) + QStringLiteral(": sortable rule has no sort key"));
+                fail(displayPointer(instancePointer) +
+                     QStringLiteral(": sortable rule has no sort key"));
             }
+            const QString itemInstancePointer = instancePointer + QStringLiteral("/*");
+            const QString itemRulePointer = childPointer(rulePointer, QStringLiteral("*"));
             const auto less = [&](const QJsonValue &left, const QJsonValue &right) {
-                return compareItems(left, right, rule.sortKey, pointer + QStringLiteral("/*")) < 0;
+                return compareItems(left,
+                                    right,
+                                    rule.sortKey,
+                                    itemInstancePointer,
+                                    itemRulePointer) < 0;
             };
             QList<QJsonValue> sorted = values;
             std::stable_sort(sorted.begin(), sorted.end(), less);
             for (qsizetype index = 1; index < sorted.size(); ++index) {
                 if (compareItems(sorted.at(index - 1), sorted.at(index), rule.sortKey,
-                                 pointer + QStringLiteral("/*")) == 0) {
-                    fail(displayPointer(pointer) +
+                                 itemInstancePointer, itemRulePointer) == 0) {
+                    fail(displayPointer(instancePointer) +
                          QStringLiteral(": ambiguous or duplicate collection sort key"));
                 }
             }
             if (rule.kind == CanonicalRuleSet::CollectionKind::DerivedOrdered) {
                 for (qsizetype index = 0; index < values.size(); ++index) {
-                    if (write(values.at(index), childPointer(pointer, QString::number(index))) !=
-                        write(sorted.at(index), childPointer(pointer, QString::number(index)))) {
-                        fail(displayPointer(pointer) +
+                    const QString itemDisplayPointer =
+                        childPointer(instancePointer, QString::number(index));
+                    if (write(values.at(index), itemDisplayPointer, itemRulePointer) !=
+                        write(sorted.at(index), itemDisplayPointer, itemRulePointer)) {
+                        fail(displayPointer(instancePointer) +
                              QStringLiteral(": derived-ordered collection is not canonical"));
                     }
                 }
@@ -394,7 +405,9 @@ private:
             if (index != 0) {
                 result += ',';
             }
-            result += write(values.at(index), childPointer(pointer, QString::number(index)));
+            result += write(values.at(index),
+                            childPointer(instancePointer, QString::number(index)),
+                            childPointer(rulePointer, QStringLiteral("*")));
         }
         result += ']';
         return result;

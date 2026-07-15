@@ -356,6 +356,64 @@ void testEndpointSortKeysKeepOpaqueTupleComponentsDistinct() {
             QStringLiteral("patch endpoint tuples must compare component-by-component"));
 }
 
+void testCanonicalRuleWildcardsTrackArrayDescentOnly() {
+    const auto catalog = ContractArtifactLoader::loadObject(
+        QStringLiteral("docs/contracts/vectors/core-canonical-projection-v1.json"));
+    const QString setSchema = QStringLiteral("ipcraft.core-canonical-models.v1");
+    const QString setPointer =
+        QStringLiteral("/$defs/accessSlot/properties/allowedContracts/items/properties/roles");
+    const CanonicalRuleBinding wildcardSet{QStringLiteral("/*"),
+                                           setSchema,
+                                           setPointer};
+
+    const QJsonObject numericProperty{
+        {QStringLiteral("0"), QJsonArray{QStringLiteral("b"), QStringLiteral("a")}}};
+    const auto wildcardOnly = CanonicalRuleSet::fromCatalog(catalog, {wildcardSet});
+    requireThrowsWithPath(
+        [&] { canonicalJson(numericProperty, wildcardOnly); }, QStringLiteral("/0"));
+
+    const auto explicitNumericProperty = CanonicalRuleSet::fromCatalog(
+        catalog,
+        {{QStringLiteral("/0"), setSchema, setPointer}});
+    require(canonicalJson(numericProperty, explicitNumericProperty) ==
+                QByteArrayLiteral("{\"0\":[\"a\",\"b\"]}"),
+            QStringLiteral("explicit numeric object property rule must apply literally"));
+
+    const CanonicalRuleBinding rootOrdered{
+        QString(),
+        QStringLiteral("ipcraft.command-result.v1"),
+        QStringLiteral("/properties/diagnostics")};
+    const QJsonArray nestedNumericProperty{
+        QJsonObject{{QStringLiteral("0"),
+                     QJsonArray{QStringLiteral("b"), QStringLiteral("a")}}}};
+    const auto inferredNestedWildcard = CanonicalRuleSet::fromCatalog(
+        catalog,
+        {rootOrdered,
+         {QStringLiteral("/*/*"), setSchema, setPointer}});
+    requireThrowsWithPath(
+        [&] { canonicalJson(nestedNumericProperty, inferredNestedWildcard); },
+        QStringLiteral("/0/0"));
+
+    const auto explicitNestedNumeric = CanonicalRuleSet::fromCatalog(
+        catalog,
+        {rootOrdered,
+         {QStringLiteral("/*/0"), setSchema, setPointer}});
+    require(canonicalJson(nestedNumericProperty, explicitNestedNumeric) ==
+                QByteArrayLiteral("[{\"0\":[\"a\",\"b\"]}]"),
+            QStringLiteral("array wildcard plus literal numeric property must resolve"));
+
+    const QJsonArray ordinaryArrayItems{
+        QJsonObject{{QStringLiteral("roles"),
+                     QJsonArray{QStringLiteral("b"), QStringLiteral("a")}}}};
+    const auto ordinaryWildcard = CanonicalRuleSet::fromCatalog(
+        catalog,
+        {rootOrdered,
+         {QStringLiteral("/*/roles"), setSchema, setPointer}});
+    require(canonicalJson(ordinaryArrayItems, ordinaryWildcard) ==
+                QByteArrayLiteral("[{\"roles\":[\"a\",\"b\"]}]"),
+            QStringLiteral("ordinary array-item wildcard must remain supported"));
+}
+
 } // namespace
 
 int main(int argc, char **argv) {
@@ -372,6 +430,7 @@ int main(int argc, char **argv) {
         testCanonicalHelperSupportsFrozenSpecialSortKeys();
         testCanonicalHelperValidatesDerivedOrderAndAmbiguousBindings();
         testEndpointSortKeysKeepOpaqueTupleComponentsDistinct();
+        testCanonicalRuleWildcardsTrackArrayDescentOnly();
         std::cout << "noc_contract_schema_meta_test passed\n";
         return 0;
     } catch (const std::exception &error) {
