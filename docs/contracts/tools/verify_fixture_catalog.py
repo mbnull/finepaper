@@ -20,6 +20,10 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_CONTRACTS = ROOT / "docs" / "contracts"
+UNICODE_TABLE_PATH = Path("unicode/simple-case-folding-17.0.0.json")
+UNICODE_TABLE_FIELDS = {
+    "schema", "unicodeVersion", "source", "sourceUrl", "licenseName", "licenseUrl", "mappings"
+}
 ENTRY_FIELDS = {
     "path", "schemaId", "validationPhase", "expected", "errorCode", "behaviorEvidence"
 }
@@ -29,6 +33,7 @@ WINDOWS_RESERVED = {
     *(f"LPT{number}" for number in range(1, 10)),
 }
 EVIDENCE_RE = re.compile(r"^vectors/([^/]+\.json)#([A-Za-z0-9][A-Za-z0-9._-]*)$")
+CODE_POINT_RE = re.compile(r"^[0-9A-F]{4,6}$")
 
 
 class VerificationError(RuntimeError):
@@ -57,36 +62,77 @@ def require_exact_object(value: Any, fields: set[str], location: str) -> dict[st
     return value
 
 
-def simple_case_fold(text: str) -> str:
-    """Return Unicode simple-fold-like text without full-fold expansions.
+def code_point(value: Any, location: str) -> int:
+    if not isinstance(value, str) or CODE_POINT_RE.fullmatch(value) is None:
+        fail(f"{location} must be canonical uppercase code-point hex")
+    result = int(value, 16)
+    if result > 0x10FFFF or 0xD800 <= result <= 0xDFFF or f"{result:04X}" != value:
+        fail(f"{location} must encode exactly one Unicode scalar value")
+    return result
 
-    Gate 0 production implementations must use Unicode simple case folding,
-    not Python's full-string ``str.casefold()`` behavior.
+
+def load_simple_case_folding_table(contracts: Path) -> dict[int, int]:
+    location = str(contracts / UNICODE_TABLE_PATH)
+    document = require_exact_object(load_json(contracts / UNICODE_TABLE_PATH), UNICODE_TABLE_FIELDS, location)
+    expected_metadata = {
+        "schema": "ipcraft.unicode-simple-case-folding.v1",
+        "unicodeVersion": "17.0.0",
+        "source": "Unicode CaseFolding-17.0.0 C/S mappings",
+        "sourceUrl": "https://www.unicode.org/Public/17.0.0/ucd/CaseFolding.txt",
+        "licenseName": "Unicode License V3",
+        "licenseUrl": "https://www.unicode.org/license.txt",
+    }
+    for field, expected in expected_metadata.items():
+        if document[field] != expected:
+            fail(f"{location}.{field} must be exactly {expected!r}")
+    mappings = document["mappings"]
+    if not isinstance(mappings, list) or not mappings:
+        fail(f"{location}.mappings must be a non-empty sorted array")
+    result: dict[int, int] = {}
+    previous_source = -1
+    for index, raw in enumerate(mappings):
+        entry_location = f"{location}.mappings[{index}]"
+        entry = require_exact_object(raw, {"source", "target"}, entry_location)
+        source = code_point(entry["source"], f"{entry_location}.source")
+        target = code_point(entry["target"], f"{entry_location}.target")
+        if source <= previous_source:
+            fail(f"{location}.mappings must have unique sources sorted by code point")
+        previous_source = source
+        result[source] = target
+    return result
+
+
+def simple_case_fold(text: str, mappings: dict[int, int]) -> str:
+    """Fold with the committed Unicode 17.0.0 C/S mapping table only.
+
+    Gate 0 production implementations must use this version-pinned machine
+    source, never host Unicode data or full-fold/lowercase heuristics.
     """
-    folded: list[str] = []
-    for character in text:
-        casefolded = character.casefold()
-        if len(casefolded) == 1:
-            folded.append(casefolded)
-            continue
-        lowered = character.lower()
-        if len(lowered) == 1 and lowered != character:
-            folded.append(lowered)
-            continue
-        folded.append(character)
-    return "".join(folded)
+    return "".join(chr(mappings.get(ord(character), ord(character))) for character in text)
 
 
-def run_simple_case_fold_witnesses() -> None:
-    if simple_case_fold("Straße") != simple_case_fold("straße"):
+def run_simple_case_fold_witnesses(mappings: dict[int, int]) -> None:
+    required = {
+        0x0041: 0x0061,
+        0x03A3: 0x03C3,
+        0x03C2: 0x03C3,
+        0x1E9E: 0x00DF,
+        0xFB05: 0xFB06,
+    }
+    for source, target in required.items():
+        if mappings.get(source) != target:
+            fail(f"simple-fold table missing required U+{source:04X} -> U+{target:04X} mapping")
+    if simple_case_fold("Straße", mappings) != simple_case_fold("straße", mappings):
         fail("simple-fold self-check: ordinary case variants must collide")
-    if simple_case_fold("straße") == simple_case_fold("strasse"):
+    if simple_case_fold("straße", mappings) == simple_case_fold("strasse", mappings):
         fail("simple-fold self-check: sharp-s must not expand to ss")
-    if simple_case_fold("ẞ") != "ß" or simple_case_fold("ß") != "ß":
+    if simple_case_fold("ẞ", mappings) != "ß" or simple_case_fold("ß", mappings) != "ß":
         fail("simple-fold self-check: capital/lower sharp-s mapping is incorrect")
-    if simple_case_fold("Σ") != simple_case_fold("ς") or simple_case_fold("ς") != "σ":
+    if simple_case_fold("Σ", mappings) != simple_case_fold("ς", mappings) or simple_case_fold("ς", mappings) != "σ":
         fail("simple-fold self-check: Greek sigma variants must collide")
-    if simple_case_fold("ﬃ") == simple_case_fold("ffi"):
+    if simple_case_fold("ﬅ", mappings) != simple_case_fold("ﬆ", mappings):
+        fail("simple-fold self-check: U+FB05/U+FB06 must collide")
+    if simple_case_fold("ﬃ", mappings) == simple_case_fold("ffi", mappings):
         fail("simple-fold self-check: multi-code-point full-fold expansions are forbidden")
 
 
@@ -230,13 +276,15 @@ def verify(catalog_path: Path, contracts: Path, allow_empty: bool = False) -> tu
 
     known_schemas = catalog_ids(contracts)
     known_errors = error_codes(contracts)
+    folding_mappings = load_simple_case_folding_table(contracts)
+    run_simple_case_fold_witnesses(folding_mappings)
     paths: list[str] = []
     casefold_paths: set[str] = set()
     for index, raw in enumerate(items):
         location = f"fixture catalog items[{index}]"
         entry = require_exact_object(raw, ENTRY_FIELDS, location)
         path = portable_path(entry["path"], f"{location}.path")
-        collision_key = simple_case_fold(unicodedata.normalize("NFC", path))
+        collision_key = simple_case_fold(unicodedata.normalize("NFC", path), folding_mappings)
         if path in paths or collision_key in casefold_paths:
             fail(f"{location}.path is duplicate or portable-case-colliding")
         paths.append(path)
@@ -295,7 +343,6 @@ def main() -> int:
     contracts = args.contracts_root.resolve()
     catalog = args.catalog.resolve() if args.catalog else contracts / "fixture-catalog.json"
     try:
-        run_simple_case_fold_witnesses()
         fixture_count, schema_count, error_count = verify(catalog, contracts, args.allow_empty)
     except VerificationError as error:
         print(f"fixture catalog verification failed: {error}", file=sys.stderr)
