@@ -8,6 +8,8 @@
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QRegularExpression>
+#include <QTemporaryDir>
+#include <QFile>
 
 #include <iostream>
 
@@ -79,21 +81,52 @@ void verifyRelativeMarkdownLinks(const QStringList &paths) {
         const QString text = QString::fromUtf8(ContractArtifactLoader::loadBytes(path));
         auto match = link.globalMatch(text);
         while (match.hasNext()) {
-            QString target = match.next().captured(1).trimmed();
-            if (target.startsWith(QLatin1Char('<')) && target.endsWith(QLatin1Char('>'))) {
-                target = target.mid(1, target.size() - 2);
-            }
-            target = target.section(QLatin1Char('#'), 0, 0);
-            if (target.isEmpty() || target.startsWith(QLatin1Char('#')) ||
-                target.contains(QStringLiteral("://")) ||
-                target.startsWith(QStringLiteral("mailto:"))) {
-                continue;
-            }
-            const QString absolute = QDir(QFileInfo(root + QLatin1Char('/') + path).path())
-                                         .absoluteFilePath(target);
-            requireContract(QFileInfo::exists(absolute),
-                            path + QStringLiteral(": broken relative Markdown link ") + target);
+            validateFrozenMarkdownLink(root, path, match.next().captured(1),
+                                       QSet<QString>(paths.cbegin(), paths.cend()));
         }
+    }
+}
+
+void writeTestFile(const QString &path, const QByteArray &contents = {}) {
+    QFile file(path);
+    requireContract(file.open(QIODevice::WriteOnly), path + QStringLiteral(": test file open failed"));
+    file.write(contents);
+}
+
+void testFrozenMarkdownLinkBoundaryMutations() {
+    QTemporaryDir repository;
+    QTemporaryDir external;
+    requireContract(repository.isValid() && external.isValid(),
+                    QStringLiteral("temporary Markdown repositories must exist"));
+    QDir root(repository.path());
+    requireContract(root.mkpath(QStringLiteral("docs/spec")),
+                    QStringLiteral("temporary Markdown directory creation failed"));
+    writeTestFile(root.filePath(QStringLiteral("docs/spec/source.md")));
+    writeTestFile(root.filePath(QStringLiteral("docs/spec/frozen.md")));
+    writeTestFile(root.filePath(QStringLiteral("omitted.txt")));
+    writeTestFile(external.filePath(QStringLiteral("outside.md")));
+    requireContract(QFile::link(external.filePath(QStringLiteral("outside.md")),
+                                root.filePath(QStringLiteral("docs/spec/escape.md"))),
+                    QStringLiteral("temporary symlink escape creation failed"));
+    const QSet<QString> frozen{QStringLiteral("docs/spec/source.md"),
+                               QStringLiteral("docs/spec/frozen.md")};
+
+    validateFrozenMarkdownLink(repository.path(), QStringLiteral("docs/spec/source.md"),
+                               QStringLiteral("#same-document"), frozen);
+    validateFrozenMarkdownLink(repository.path(), QStringLiteral("docs/spec/source.md"),
+                               QStringLiteral("frozen.md?view=1#section"), frozen);
+    for (const QString &invalid : {QStringLiteral("../../../../etc/passwd"),
+                                   QStringLiteral("../../omitted.txt"),
+                                   QStringLiteral("escape.md"),
+                                   QStringLiteral("missing.md")}) {
+        bool rejected = false;
+        try {
+            validateFrozenMarkdownLink(repository.path(), QStringLiteral("docs/spec/source.md"),
+                                       invalid, frozen);
+        } catch (const std::runtime_error &) {
+            rejected = true;
+        }
+        requireContract(rejected, invalid + QStringLiteral(": unsafe Markdown link was accepted"));
     }
 }
 
@@ -154,6 +187,16 @@ void verifyStableErrorCatalog() {
     requireContract(entries.size() == 75,
                     QStringLiteral("error catalog must contain exactly 75 stable codes"));
     QStringList codes;
+    QHash<QString, QString> owners;
+    const QSet<QString> directOwnerPrefixes{
+        QStringLiteral("command"), QStringLiteral("contract"), QStringLiteral("dependency"),
+        QStringLiteral("diagnostic"), QStringLiteral("engine"), QStringLiteral("host"),
+        QStringLiteral("output"), QStringLiteral("package"), QStringLiteral("patch"),
+        QStringLiteral("pipeline"), QStringLiteral("project"), QStringLiteral("provider"),
+        QStringLiteral("recovery"), QStringLiteral("tool")};
+    const QSet<QString> sideEffectPrefixes{
+        QStringLiteral("attachment"), QStringLiteral("domain"),
+        QStringLiteral("engine_migration"), QStringLiteral("package_relation")};
     for (const auto &raw : entries) {
         const auto entry = raw.toObject();
         const QStringList keys = entry.keys();
@@ -163,6 +206,16 @@ void verifyStableErrorCatalog() {
                                           QStringLiteral("messageTemplate")},
                         QStringLiteral("error catalog entry must have exact V1 fields"));
         codes.append(entry.value(QStringLiteral("code")).toString());
+        const QString prefix = codes.constLast().section(QLatin1Char('.'), 0, 0);
+        const QString expectedOwner = sideEffectPrefixes.contains(prefix)
+                                          ? QStringLiteral("host-side-effects")
+                                      : directOwnerPrefixes.contains(prefix)
+                                          ? prefix
+                                          : QString();
+        requireContract(!expectedOwner.isEmpty() &&
+                            entry.value(QStringLiteral("owner")).toString() == expectedOwner,
+                        codes.constLast() + QStringLiteral(": owner violates the closed prefix policy"));
+        owners.insert(codes.constLast(), expectedOwner);
         requireContract(!entry.value(QStringLiteral("owner")).toString().isEmpty() &&
                             entry.value(QStringLiteral("blocking")).isBool() &&
                             !entry.value(QStringLiteral("messageTemplate")).toString().isEmpty(),
@@ -170,6 +223,17 @@ void verifyStableErrorCatalog() {
     }
     requireContract(codes == sortedUniqueStrings(codes, QStringLiteral("stable error codes")),
                     QStringLiteral("stable error codes must be sorted"));
+    for (auto expected : {
+             std::pair{QStringLiteral("command.pending_candidate_required"), QStringLiteral("command")},
+             std::pair{QStringLiteral("patch.schema_invalid"), QStringLiteral("patch")},
+             std::pair{QStringLiteral("project.locked"), QStringLiteral("project")},
+             std::pair{QStringLiteral("dependency.bundle_mismatch"), QStringLiteral("dependency")},
+             std::pair{QStringLiteral("tool.timed_out"), QStringLiteral("tool")},
+             std::pair{QStringLiteral("domain.disconnected"), QStringLiteral("host-side-effects")},
+             std::pair{QStringLiteral("provider.timeout"), QStringLiteral("provider")}}) {
+        requireContract(owners.value(expected.first) == expected.second,
+                        expected.first + QStringLiteral(": representative owner mismatch"));
+    }
 
     QString normativeText;
     for (const QString &path : {
@@ -204,6 +268,7 @@ void verifyStableErrorCatalog() {
 int main(int argc, char **argv) {
     QCoreApplication app(argc, argv);
     try {
+        testFrozenMarkdownLinkBoundaryMutations();
         verifyStableErrorCatalog();
         verifyFreezeManifest();
         std::cout << "noc_review_bundle_completeness_test passed\n";

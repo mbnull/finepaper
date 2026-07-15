@@ -11,6 +11,7 @@ from decimal import Decimal
 from pathlib import Path
 
 import verify_fixture_catalog as subject
+import generate_error_catalog as error_generator
 
 
 CONTRACTS = Path(__file__).resolve().parents[1]
@@ -115,6 +116,27 @@ class FixtureCatalogHardeningTest(unittest.TestCase):
             subject.verify_error_policy(
                 "ipcraft.project-design.v1", "schema", "generic-structure", "provider.timeout", allowed, "fixture"
             )
+
+    def test_error_catalog_rejects_wrong_independent_owner(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            document = json.loads((CONTRACTS / "error-codes-v1.json").read_text())
+            target = next(item for item in document["codes"] if item["code"] == "attachment.target_removed")
+            target["owner"] = "wrong-owner"
+            (root / "error-codes-v1.json").write_text(json.dumps(document))
+            with self.assertRaisesRegex(subject.VerificationError, "owner"):
+                subject.error_codes(root)
+
+    def test_error_catalog_generator_restores_independent_owner(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "error-codes-v1.json"
+            document = json.loads((CONTRACTS / "error-codes-v1.json").read_text())
+            target = next(item for item in document["codes"] if item["code"] == "attachment.target_removed")
+            target["owner"] = "wrong-owner"
+            path.write_text(json.dumps(document))
+            rendered = json.loads(error_generator.render(path))
+            restored = next(item for item in rendered["codes"] if item["code"] == "attachment.target_removed")
+            self.assertEqual(restored["owner"], "host-side-effects")
 
     def test_project_schema_failure_boundaries_are_not_interchangeable(self) -> None:
         allowed = subject.load_error_policy(CONTRACTS)

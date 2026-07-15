@@ -440,6 +440,11 @@ def error_codes(contracts: Path) -> set[str]:
     if not isinstance(document["codes"], list):
         fail("error catalog codes must be an array")
     result: set[str] = set()
+    direct_owner_prefixes = {
+        "command", "contract", "dependency", "diagnostic", "engine", "host",
+        "output", "package", "patch", "pipeline", "project", "provider", "recovery", "tool",
+    }
+    host_side_effect_prefixes = {"attachment", "domain", "engine_migration", "package_relation"}
     for index, raw in enumerate(document["codes"]):
         entry = require_exact_object(
             raw, {"code", "owner", "blocking", "messageTemplate"},
@@ -449,6 +454,15 @@ def error_codes(contracts: Path) -> set[str]:
                     for key in ("code", "owner", "messageTemplate"))
                 or not isinstance(entry["blocking"], bool)):
             fail(f"error catalog codes[{index}] members have invalid types")
+        prefix = entry["code"].split(".", 1)[0]
+        if prefix in host_side_effect_prefixes:
+            expected_owner = "host-side-effects"
+        elif prefix in direct_owner_prefixes:
+            expected_owner = prefix
+        else:
+            fail(f"error catalog codes[{index}] code has no closed owner rule")
+        if entry["owner"] != expected_owner:
+            fail(f"error catalog codes[{index}] owner must be {expected_owner!r}")
         if entry["code"] in result:
             fail(f"duplicate error code {entry['code']!r}")
         result.add(entry["code"])

@@ -16,7 +16,20 @@ NON_BLOCKING = {
     "engine_migration.dependency_replaced",
     "package_relation.endpoint_unresolved",
 }
-OWNER_ALIASES = {"impact": "host-side-effects"}
+DIRECT_OWNER_PREFIXES = {
+    "command", "contract", "dependency", "diagnostic", "engine", "host",
+    "output", "package", "patch", "pipeline", "project", "provider", "recovery", "tool",
+}
+HOST_SIDE_EFFECT_PREFIXES = {"attachment", "domain", "engine_migration", "package_relation"}
+
+
+def expected_owner(code: str) -> str:
+    prefix = code.split(".", 1)[0]
+    if prefix in HOST_SIDE_EFFECT_PREFIXES:
+        return "host-side-effects"
+    if prefix in DIRECT_OWNER_PREFIXES:
+        return prefix
+    raise SystemExit(f"error code has no closed owner rule: {code}")
 
 
 def message_template(code: str) -> str:
@@ -29,12 +42,9 @@ def render(source: Path) -> bytes:
     codes = []
     for raw in document["codes"]:
         code = raw["code"]
-        prefix = code.split(".", 1)[0]
-        owner = raw.get("owner", raw.get("category", prefix))
-        owner = OWNER_ALIASES.get(owner, owner)
         codes.append({
             "code": code,
-            "owner": owner,
+            "owner": expected_owner(code),
             "blocking": code not in NON_BLOCKING,
             "messageTemplate": message_template(code),
         })

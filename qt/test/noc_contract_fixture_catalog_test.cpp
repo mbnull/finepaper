@@ -65,6 +65,15 @@ void verifyFixtureSemanticsWithPinnedTools() {
         QStringLiteral("docs/contracts/tools/verify_contract_fixtures.py"), {},
         QStringLiteral("contract fixture verification passed: 98 valid, 262 invalid; "
                        "41 schema-phase, 221 core-semantic; 18 standalone schema roots"));
+    QDirIterator cacheIterator(ContractArtifactLoader::repositoryRoot(),
+                               QDir::Dirs | QDir::Files | QDir::NoDotAndDotDot,
+                               QDirIterator::Subdirectories);
+    while (cacheIterator.hasNext()) {
+        const QString path = cacheIterator.next();
+        requireContract(!path.contains(QStringLiteral("/__pycache__")) &&
+                            !path.endsWith(QStringLiteral(".pyc")),
+                        QStringLiteral("delegated verifier created Python bytecode: ") + path);
+    }
 }
 
 } // namespace

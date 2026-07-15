@@ -29,6 +29,19 @@ The error catalog is sorted by stable `code` and each entry contains exactly
 digest identities use the stable code and structured data, never localized or
 presentation messages. The review freeze manifest still hashes the complete
 catalog file as evidence, so wording changes remain visible to reviewers.
+Ownership is independently derived from a closed prefix policy: ordinary codes
+are owned by their command/contract/dependency/diagnostic/engine/host/output/
+package/patch/pipeline/project/provider/recovery/tool prefix, while attachment,
+domain, engine-migration, and package-relation impacts are owned by
+`host-side-effects`. The generator never copies an existing `owner` value.
+
+Every relative Markdown link in a frozen document must resolve, after strict URL
+decoding and query/anchor removal, to a regular non-symlink file in the same
+canonical repository and in the exact freeze-input set. Repository escapes,
+missing or omitted files, symlink traversal, absolute paths, and directory links
+are rejected. Same-document `#anchors` are allowed without filesystem lookup;
+only `http`, `https`, and `mailto` external schemes are exempt from freeze-set
+membership.
 
 Reproduce the two generated Gate 0 catalogs before running the executable checks:
 
@@ -41,8 +54,12 @@ IPCRAFT_CONTRACT_PYTHON="$(command -v python3)" xmake run -P qt noc_review_bundl
 
 `IPCRAFT_CONTRACT_PYTHON` is resolved to an absolute executable by xmake at
 configure/build time. The resulting test binary never searches `PATH` at run
-time. The Python scripts use only the standard library; the executable identity
-is authoring-test provenance rather than a persisted ProjectDesign dependency.
+time. Delegated verification uses `-B`, removes `PYTHONPATH`, `PYTHONHOME`,
+`PYTHONSTARTUP`, and `PYTHONUSERBASE`, disables user-site loading, and sets
+`PYTHONDONTWRITEBYTECODE=1`; creating `__pycache__` or `.pyc` anywhere in the
+repository fails the executable check. The Python scripts use only the standard
+library; the executable identity is authoring-test provenance rather than a
+persisted ProjectDesign dependency.
 
 The non-normative fixture authoring generator uses JSON `null` as the deterministic neutral sample for a `true` boolean schema. A `false` boolean schema is unsatisfiable and produces `UnsatisfiableSampleError`; it is never converted into a placeholder fixture.
 

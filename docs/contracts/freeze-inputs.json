@@ -255,7 +255,7 @@
     },
     {
       "path": "docs/contracts/README.md",
-      "sha256": "sha256:c94c265fe77609f050ee34844ee27ed8dd24ce5f6b17baeb2aaf7db7efa2c47f",
+      "sha256": "sha256:eddc59af50b176969d632ffab180ce0174a39322166f71413a183f18c272833a",
       "role": "normative-artifact"
     },
     {
@@ -2200,7 +2200,7 @@
     },
     {
       "path": "docs/contracts/tools/generate_error_catalog.py",
-      "sha256": "sha256:f111950cf4804292ffabdb152e55f2214598f5030064b981da78c26a0da04e21",
+      "sha256": "sha256:14ac95920af0c34a269d733462dc720fd1c73658241df506a638596e372f3251",
       "role": "authoring-tool"
     },
     {
@@ -2225,7 +2225,7 @@
     },
     {
       "path": "docs/contracts/tools/test_fixture_catalog_hardening.py",
-      "sha256": "sha256:fdd1d5960f64b82ada19b9ed736ec82a665aa5345e39c4a2973fd258f7e8e347",
+      "sha256": "sha256:d44e5084a1ce74b3fb47ba6b6e55fce56b64dc710ef5c55b5d11e4d6a0b4e547",
       "role": "authoring-tool"
     },
     {
@@ -2255,7 +2255,7 @@
     },
     {
       "path": "docs/contracts/tools/verify_fixture_catalog.py",
-      "sha256": "sha256:826857e3cbd966a64fcdb9b984ea000addcca66cddc50f0cfab79c822b1eec23",
+      "sha256": "sha256:eecb4e4060d20627334b7eb0e91dcd7c910d3d47ea19bcfc40de2de10e2ddc9d",
       "role": "authoring-tool"
     },
     {
