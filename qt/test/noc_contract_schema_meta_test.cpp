@@ -2,8 +2,12 @@
 #include "contractartifactloader.h"
 
 #include <QCoreApplication>
+#include <QDir>
+#include <QFile>
 #include <QJsonArray>
+#include <QJsonDocument>
 #include <QJsonObject>
+#include <QTemporaryDir>
 #include <QtTest/QTest>
 
 #include <functional>
@@ -74,6 +78,57 @@ void testArtifactLoaderEnforcesJsonRootType() {
 
     const QString objectPath = QStringLiteral("docs/contracts/schema-catalog.json");
     requireThrowsWithPath([&] { ContractArtifactLoader::loadArray(objectPath); }, objectPath);
+}
+
+void testRepositoryContainmentUsesNormalizedPathBoundaries() {
+    using contract_artifact_detail::isCanonicalPathWithinRepository;
+    using contract_artifact_detail::normalizedCanonicalPath;
+    const QString nativeSpelling =
+        QStringLiteral("root%1child").arg(QDir::separator());
+    require(normalizedCanonicalPath(nativeSpelling) == QStringLiteral("root/child"),
+            QStringLiteral("native separators must normalize to forward slashes"));
+    require(isCanonicalPathWithinRepository(QStringLiteral("C:/repo/root"),
+                                            QStringLiteral("C:/repo/root/file.json")),
+            QStringLiteral("repository child must be contained"));
+    require(isCanonicalPathWithinRepository(QStringLiteral("C:/repo/root"),
+                                            QStringLiteral("C:/repo/root")),
+            QStringLiteral("exact repository root must satisfy boundary comparison"));
+    require(!isCanonicalPathWithinRepository(QStringLiteral("C:/repo/root"),
+                                             QStringLiteral("C:/repo/root-sibling/file.json")),
+            QStringLiteral("prefix sibling must not be contained"));
+    require(!isCanonicalPathWithinRepository(QStringLiteral("C:/repo/root"),
+                                             QStringLiteral("C:/repo/rooted/file.json")),
+            QStringLiteral("shared text prefix must not bypass path boundary"));
+
+    const QString compiledRoot = ContractArtifactLoader::repositoryRoot();
+    require(compiledRoot == QDir::fromNativeSeparators(compiledRoot),
+            QStringLiteral("compiled repository root must use forward slashes"));
+    require(!compiledRoot.contains(QLatin1Char('\\')),
+            QStringLiteral("compiled repository root must contain no backslashes"));
+}
+
+void testArtifactLoaderRejectsSymlinkEscape() {
+    QTemporaryDir external;
+    require(external.isValid(), QStringLiteral("external temporary directory must exist"));
+    const QString externalFile = external.filePath(QStringLiteral("outside.json"));
+    QFile file(externalFile);
+    require(file.open(QIODevice::WriteOnly),
+            QStringLiteral("external test artifact must open"));
+    file.write("{}\n");
+    file.close();
+
+    QDir repository(ContractArtifactLoader::repositoryRoot());
+    require(repository.mkpath(QStringLiteral("build")),
+            QStringLiteral("repository build directory must exist"));
+    QTemporaryDir inside(repository.filePath(
+        QStringLiteral("build/noc-contract-symlink-test-XXXXXX")));
+    require(inside.isValid(), QStringLiteral("in-repository temporary directory must exist"));
+    const QString linkPath = inside.filePath(QStringLiteral("escape.json"));
+    require(QFile::link(externalFile, linkPath),
+            QStringLiteral("symlink escape fixture must be created"));
+    const QString relativeLink = repository.relativeFilePath(linkPath);
+    requireThrowsWithPath(
+        [&] { ContractArtifactLoader::loadBytes(relativeLink); }, relativeLink);
 }
 
 QJsonObject findCollectionCase(const QJsonArray &cases, const QString &kind) {
@@ -220,6 +275,87 @@ void testCanonicalHelperValidatesDerivedOrderAndAmbiguousBindings() {
         QStringLiteral("ambiguous"));
 }
 
+QJsonObject unresolvedPersistedEndpoint(const QString &id, const QString &reason) {
+    return QJsonObject{
+        {QStringLiteral("state"), QStringLiteral("unresolved")},
+        {QStringLiteral("intendedSubject"),
+         QJsonObject{{QStringLiteral("kind"), QStringLiteral("component")},
+                     {QStringLiteral("id"), id}}},
+        {QStringLiteral("reasonCode"), reason}};
+}
+
+QJsonObject unresolvedPatchEndpoint(const QString &referenceKind,
+                                    const QString &referenceValue,
+                                    const QString &reason) {
+    return QJsonObject{
+        {QStringLiteral("state"), QStringLiteral("unresolved")},
+        {QStringLiteral("intendedSubject"),
+         QJsonObject{{QStringLiteral("kind"), QStringLiteral("component")},
+                     {QStringLiteral("ref"),
+                      QJsonObject{{referenceKind, referenceValue}}}}},
+        {QStringLiteral("reasonCode"), reason}};
+}
+
+void testEndpointSortKeysKeepOpaqueTupleComponentsDistinct() {
+    const auto catalog = ContractArtifactLoader::loadObject(
+        QStringLiteral("docs/contracts/vectors/core-canonical-projection-v1.json"));
+    const QChar separator(0x001f);
+
+    const auto persistedRules = CanonicalRuleSet::fromCatalog(
+        catalog,
+        {{QString(),
+          QStringLiteral("ipcraft.core-canonical-models.v1"),
+          QStringLiteral("/$defs/packageRelation/properties/sources")}});
+    const auto persistedLongReference = unresolvedPersistedEndpoint(
+        QStringLiteral("b") + separator + QStringLiteral("c"),
+        QStringLiteral("d:tail"));
+    const auto persistedLongReason = unresolvedPersistedEndpoint(
+        QStringLiteral("b"),
+        QStringLiteral("c") + separator + QStringLiteral("d:tail"));
+    const QByteArray persistedCanonical = canonicalJson(
+        QJsonArray{persistedLongReference, persistedLongReason}, persistedRules);
+    const auto persistedSorted =
+        QJsonDocument::fromJson(persistedCanonical).array();
+    require(persistedSorted.size() == 2,
+            QStringLiteral("opaque persisted endpoint tuples must remain distinct"));
+    require(persistedSorted.first()
+                    .toObject()
+                    .value("intendedSubject")
+                    .toObject()
+                    .value("id")
+                    .toString() == QStringLiteral("b"),
+            QStringLiteral("persisted endpoint tuples must compare component-by-component"));
+
+    const auto patchRules = CanonicalRuleSet::fromCatalog(
+        catalog,
+        {{QString(),
+          QStringLiteral("ipcraft.core-canonical-models.v1"),
+          QStringLiteral("/$defs/patchPackageRelationValue/properties/sources")}});
+    const auto patchLongReference = unresolvedPatchEndpoint(
+        QStringLiteral("localRef"),
+        QStringLiteral("b") + separator + QStringLiteral("c") + QChar(0),
+        QStringLiteral("d:tail"));
+    const auto patchLongReason = unresolvedPatchEndpoint(
+        QStringLiteral("localRef"),
+        QStringLiteral("b"),
+        QStringLiteral("c") + QChar(0) + separator +
+            QStringLiteral("d:tail"));
+    const QByteArray patchCanonical =
+        canonicalJson(QJsonArray{patchLongReference, patchLongReason}, patchRules);
+    const auto patchSorted = QJsonDocument::fromJson(patchCanonical).array();
+    require(patchSorted.size() == 2,
+            QStringLiteral("opaque patch endpoint tuples must remain distinct"));
+    require(patchSorted.first()
+                    .toObject()
+                    .value("intendedSubject")
+                    .toObject()
+                    .value("ref")
+                    .toObject()
+                    .value("localRef")
+                    .toString() == QStringLiteral("b"),
+            QStringLiteral("patch endpoint tuples must compare component-by-component"));
+}
+
 } // namespace
 
 int main(int argc, char **argv) {
@@ -228,11 +364,14 @@ int main(int argc, char **argv) {
         testArtifactLoaderFindsCatalog();
         testArtifactLoaderRejectsUnsafePathsAndMalformedJson();
         testArtifactLoaderEnforcesJsonRootType();
+        testRepositoryContainmentUsesNormalizedPathBoundaries();
+        testArtifactLoaderRejectsSymlinkEscape();
         testCanonicalHelperMatchesCommittedSetVector();
         testCanonicalHelperPreservesExplicitOrderedArrays();
         testCanonicalHelperRejectsMissingRulesAndUnsafeNumbers();
         testCanonicalHelperSupportsFrozenSpecialSortKeys();
         testCanonicalHelperValidatesDerivedOrderAndAmbiguousBindings();
+        testEndpointSortKeysKeepOpaqueTupleComponentsDistinct();
         std::cout << "noc_contract_schema_meta_test passed\n";
         return 0;
     } catch (const std::exception &error) {

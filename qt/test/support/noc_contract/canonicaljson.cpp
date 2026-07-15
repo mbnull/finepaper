@@ -98,6 +98,65 @@ public:
     }
 
 private:
+    struct SortAtom final {
+        enum class Kind { Null, Boolean, Number, UnicodeString, CanonicalBytes };
+
+        Kind kind = Kind::Null;
+        bool boolean = false;
+        double number = 0;
+        QString string;
+        QByteArray bytes;
+
+        static SortAtom fromJson(const QJsonValue &value, const QString &location) {
+            SortAtom atom;
+            if (value.isNull()) {
+                return atom;
+            }
+            if (value.isBool()) {
+                atom.kind = Kind::Boolean;
+                atom.boolean = value.toBool();
+                return atom;
+            }
+            if (value.isDouble()) {
+                const double number = value.toDouble();
+                if (!std::isfinite(number) || std::trunc(number) != number ||
+                    std::abs(number) > 9007199254740991.0) {
+                    fail(location + QStringLiteral(": unsafe numeric sort component"));
+                }
+                atom.kind = Kind::Number;
+                atom.number = number;
+                return atom;
+            }
+            if (value.isString()) {
+                atom.kind = Kind::UnicodeString;
+                atom.string = value.toString();
+                return atom;
+            }
+            fail(location + QStringLiteral(": sort component must be scalar"));
+        }
+
+        static SortAtom unicode(QString value) {
+            SortAtom atom;
+            atom.kind = Kind::UnicodeString;
+            atom.string = std::move(value);
+            return atom;
+        }
+
+        static SortAtom integer(double value) {
+            SortAtom atom;
+            atom.kind = Kind::Number;
+            atom.number = value;
+            return atom;
+        }
+
+        static SortAtom canonical(QByteArray value) {
+            SortAtom atom;
+            atom.kind = Kind::CanonicalBytes;
+            atom.bytes = std::move(value);
+            return atom;
+        }
+    };
+
     static QString displayPointer(const QString &pointer) {
         return pointer.isEmpty() ? QStringLiteral("/") : pointer;
     }
@@ -149,18 +208,18 @@ private:
         return iterator.value();
     }
 
-    QJsonValue sortComponent(const QString &key,
-                             const QJsonValue &item,
-                             const QString &itemPointer) const {
+    QList<SortAtom> sortComponents(const QString &key,
+                                   const QJsonValue &item,
+                                   const QString &itemPointer) const {
         if (key == QStringLiteral("unicodeScalarValue")) {
             if (!item.isString()) {
                 fail(displayPointer(itemPointer) +
                      QStringLiteral(": unicodeScalarValue requires a string item"));
             }
-            return item;
+            return {SortAtom::unicode(item.toString())};
         }
         if (key == QStringLiteral("canonicalJson")) {
-            return QString::fromUtf8(write(item, itemPointer));
+            return {SortAtom::canonical(write(item, itemPointer))};
         }
         if (!item.isObject()) {
             fail(displayPointer(itemPointer) +
@@ -185,7 +244,8 @@ private:
                      QStringLiteral(": endpoint sort key requires subject kind"));
             }
 
-            QString referenceToken;
+            QString referenceKind;
+            QString referenceValue;
             if (patch) {
                 const auto reference = subject.value(QStringLiteral("ref")).toObject();
                 if (reference.size() != 1 ||
@@ -194,36 +254,36 @@ private:
                     fail(displayPointer(itemPointer) +
                          QStringLiteral(": patch endpoint requires exactly id or localRef"));
                 }
-                const QString referenceKind = reference.contains(QStringLiteral("id"))
-                                                  ? QStringLiteral("id")
-                                                  : QStringLiteral("localRef");
-                const QString referenceValue = reference.value(referenceKind).toString();
+                referenceKind = reference.contains(QStringLiteral("id"))
+                                    ? QStringLiteral("id")
+                                    : QStringLiteral("localRef");
+                referenceValue = reference.value(referenceKind).toString();
                 if (referenceValue.isEmpty()) {
                     fail(displayPointer(itemPointer) +
                          QStringLiteral(": patch endpoint reference must be a string"));
                 }
-                referenceToken = referenceKind + QLatin1Char(':') + referenceValue;
             } else {
-                const QString id = subject.value(QStringLiteral("id")).toString();
-                if (id.isEmpty()) {
+                referenceKind = QStringLiteral("id");
+                referenceValue = subject.value(QStringLiteral("id")).toString();
+                if (referenceValue.isEmpty()) {
                     fail(displayPointer(itemPointer) +
                          QStringLiteral(": persisted endpoint requires subject id"));
                 }
-                referenceToken = QStringLiteral("id:") + id;
             }
 
-            QStringList tuple{resolved ? QStringLiteral("0") : QStringLiteral("1"),
-                              subjectKind,
-                              referenceToken};
+            QList<SortAtom> tuple{SortAtom::integer(resolved ? 0 : 1),
+                                  SortAtom::unicode(subjectKind),
+                                  SortAtom::unicode(referenceKind),
+                                  SortAtom::unicode(referenceValue)};
             if (!resolved) {
                 const QString reason = object.value(QStringLiteral("reasonCode")).toString();
                 if (reason.isEmpty()) {
                     fail(displayPointer(itemPointer) +
                          QStringLiteral(": unresolved endpoint requires reasonCode"));
                 }
-                tuple.append(reason);
+                tuple.append(SortAtom::unicode(reason));
             }
-            return tuple.join(QChar(0x001f));
+            return tuple;
         }
         if (key == QStringLiteral("subjectsCanonicalJson") ||
             key == QStringLiteral("detailsCanonicalJson")) {
@@ -233,33 +293,48 @@ private:
             if (!object.contains(property)) {
                 fail(displayPointer(itemPointer) + QStringLiteral(": missing sort key ") + key);
             }
-            return QString::fromUtf8(
-                write(object.value(property), childPointer(itemPointer, property)));
+            return {SortAtom::canonical(
+                write(object.value(property), childPointer(itemPointer, property)))};
         }
         if (!object.contains(key)) {
             fail(displayPointer(itemPointer) + QStringLiteral(": missing sort key ") + key);
         }
-        return object.value(key);
+        return {SortAtom::fromJson(object.value(key), displayPointer(itemPointer))};
     }
 
-    static int compareScalar(const QJsonValue &left, const QJsonValue &right) {
-        if (left.type() != right.type()) {
-            return static_cast<int>(left.type()) < static_cast<int>(right.type()) ? -1 : 1;
+    static int compareAtom(const SortAtom &left, const SortAtom &right) {
+        if (left.kind != right.kind) {
+            return static_cast<int>(left.kind) < static_cast<int>(right.kind) ? -1 : 1;
         }
-        if (left.isString()) {
-            const QByteArray leftBytes = left.toString().toUtf8();
-            const QByteArray rightBytes = right.toString().toUtf8();
-            return leftBytes.compare(rightBytes);
-        }
-        if (left.isDouble()) {
-            if (left.toDouble() < right.toDouble()) return -1;
-            if (left.toDouble() > right.toDouble()) return 1;
+        switch (left.kind) {
+        case SortAtom::Kind::Null:
             return 0;
+        case SortAtom::Kind::Boolean:
+            return left.boolean == right.boolean ? 0 : (left.boolean ? 1 : -1);
+        case SortAtom::Kind::Number:
+            if (left.number < right.number) return -1;
+            if (left.number > right.number) return 1;
+            return 0;
+        case SortAtom::Kind::UnicodeString:
+            return left.string.toUtf8().compare(right.string.toUtf8());
+        case SortAtom::Kind::CanonicalBytes:
+            return left.bytes.compare(right.bytes);
         }
-        if (left.isBool()) {
-            return left.toBool() == right.toBool() ? 0 : (left.toBool() ? 1 : -1);
+        return 0;
+    }
+
+    static int compareComponentLists(const QList<SortAtom> &left,
+                                     const QList<SortAtom> &right) {
+        const qsizetype common = std::min(left.size(), right.size());
+        for (qsizetype index = 0; index < common; ++index) {
+            const int comparison = compareAtom(left.at(index), right.at(index));
+            if (comparison != 0) {
+                return comparison;
+            }
         }
-        return left == right ? 0 : -1;
+        if (left.size() < right.size()) return -1;
+        if (left.size() > right.size()) return 1;
+        return 0;
     }
 
     int compareItems(const QJsonValue &left,
@@ -267,9 +342,9 @@ private:
                      const QStringList &sortKeys,
                      const QString &pointer) const {
         for (const auto &key : sortKeys) {
-            const int comparison = compareScalar(
-                sortComponent(key, left, pointer),
-                sortComponent(key, right, pointer));
+            const int comparison = compareComponentLists(
+                sortComponents(key, left, pointer),
+                sortComponents(key, right, pointer));
             if (comparison != 0) {
                 return comparison;
             }

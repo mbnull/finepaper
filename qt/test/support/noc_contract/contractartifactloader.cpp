@@ -34,11 +34,13 @@ QString artifactPath(const QString &relativePath) {
     }
 
     const QFileInfo info(QDir(root).filePath(cleanPath));
-    const QString canonicalPath = info.canonicalFilePath();
+    const QString canonicalPath = contract_artifact_detail::normalizedCanonicalPath(
+        info.canonicalFilePath());
     if (canonicalPath.isEmpty() || !info.isFile()) {
         fail(relativePath, QStringLiteral("artifact is missing or not a regular file"));
     }
-    if (!canonicalPath.startsWith(root + QDir::separator())) {
+    if (!contract_artifact_detail::isCanonicalPathWithinRepository(root,
+                                                                   canonicalPath)) {
         fail(relativePath, QStringLiteral("artifact resolves outside repository root"));
     }
     return canonicalPath;
@@ -173,8 +175,28 @@ QJsonDocument loadDocument(const QString &relativePath) {
 
 } // namespace
 
+namespace contract_artifact_detail {
+
+QString normalizedCanonicalPath(const QString &path) {
+    return QDir::fromNativeSeparators(path);
+}
+
+bool isCanonicalPathWithinRepository(const QString &repositoryRoot,
+                                     const QString &candidatePath) {
+    QString normalizedRoot = normalizedCanonicalPath(repositoryRoot);
+    const QString normalizedCandidate = normalizedCanonicalPath(candidatePath);
+    while (normalizedRoot.size() > 1 && normalizedRoot.endsWith(QLatin1Char('/'))) {
+        normalizedRoot.chop(1);
+    }
+    return normalizedCandidate == normalizedRoot ||
+           normalizedCandidate.startsWith(normalizedRoot + QLatin1Char('/'));
+}
+
+} // namespace contract_artifact_detail
+
 QString ContractArtifactLoader::repositoryRoot() {
-    return QDir(QString::fromUtf8(IPCRAFT_REPOSITORY_ROOT)).canonicalPath();
+    return contract_artifact_detail::normalizedCanonicalPath(
+        QDir(QString::fromUtf8(IPCRAFT_REPOSITORY_ROOT)).canonicalPath());
 }
 
 QByteArray ContractArtifactLoader::loadBytes(const QString &relativePath) {

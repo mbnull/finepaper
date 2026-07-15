@@ -62,6 +62,11 @@ local function add_qt_test_target(name, source_files, extra_files, qt_rule)
         })
 end
 
+local noc_contract_repository_root = path.unix(path.absolute("..", os.projectdir()))
+local noc_contract_repository_root_define = noc_contract_repository_root
+    :gsub("\\", "\\\\")
+    :gsub('"', '\\"')
+
 target("noc_contract_test_support")
     add_rules("qt.static")
     set_kind("static")
@@ -71,7 +76,7 @@ target("noc_contract_test_support")
     add_files("test/support/noc_contract/*.cpp")
     add_headerfiles("test/support/noc_contract/*.h")
     add_includedirs("test/support/noc_contract", {public = true})
-    add_defines('IPCRAFT_REPOSITORY_ROOT="' .. path.absolute("..", os.projectdir()) .. '"')
+    add_defines('IPCRAFT_REPOSITORY_ROOT="' .. noc_contract_repository_root_define .. '"')
 
 target("noc_contract_schema_meta_test")
     add_rules("qt.console")
