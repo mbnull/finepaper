@@ -1,0 +1,125 @@
+{
+  "schema": "ipcraft.noc-package.v1",
+  "id": "simple-noc",
+  "name": "Simple Mesh NoC",
+  "version": "1.0.0",
+  "component": {
+    "typeKey": "mesh-noc",
+    "displayName": "Mesh NoC"
+  },
+  "defaultEngineRequirement": {
+    "engineHostContractVersion": "value",
+    "engineCompatibilityVersion": "value",
+    "hostSideEffectContractVersion": "value"
+  },
+  "structureAuthority": "default-engine",
+  "configuration": {
+    "global": {
+      "fields": [
+        {
+          "key": "columns",
+          "type": "int",
+          "label": "Columns",
+          "description": "Mesh dimension",
+          "default": 1,
+          "required": true,
+          "readOnly": false,
+          "minimum": 1,
+          "maximum": 64,
+          "unit": null,
+          "values": null,
+          "visibleWhen": null,
+          "enabledWhen": null,
+          "topologyDriving": true
+        },
+        {
+          "key": "rows",
+          "type": "int",
+          "label": "Rows",
+          "description": "Mesh dimension",
+          "default": 1,
+          "required": true,
+          "readOnly": false,
+          "minimum": 1,
+          "maximum": 64,
+          "unit": null,
+          "values": null,
+          "visibleWhen": null,
+          "enabledWhen": null,
+          "topologyDriving": true
+        }
+      ]
+    }
+  },
+  "topology": {
+    "kind": "mesh",
+    "rowField": "rows",
+    "columnField": "columns",
+    "routerTemplate": {
+      "stableKey": "value",
+      "identityCompatibilityVersion": 1,
+      "properties": {}
+    },
+    "linkTemplate": {
+      "stableKey": "value",
+      "identityCompatibilityVersion": 1,
+      "properties": {}
+    },
+    "slotTemplates": []
+  },
+  "interfaceTemplates": [],
+  "domainTypes": [
+    {
+      "key": "power",
+      "label": "Power",
+      "defaultName": "Default Power",
+      "visual": {
+        "fill": "#e8f1ff",
+        "border": "#3b6ea8",
+        "pattern": "solid"
+      },
+      "configuration": {
+        "fields": []
+      }
+    }
+  ],
+  "packageEntityTypes": [
+    {
+      "typeKey": "vendor.endpoint",
+      "ownership": "user",
+      "genericEditable": true,
+      "topologyDriving": false,
+      "schema": {
+        "type": "object"
+      }
+    }
+  ],
+  "packageRelationTypes": [
+    {
+      "typeKey": "vendor.route",
+      "ownership": "user",
+      "topologyDriving": false,
+      "sources": {
+        "kinds": [
+          "router"
+        ],
+        "minimum": 2,
+        "maximum": 1
+      },
+      "targets": {
+        "kinds": [
+          "package-entity"
+        ],
+        "minimum": 1,
+        "maximum": 1
+      },
+      "unresolvedAllowed": false,
+      "schema": {
+        "type": "object"
+      }
+    }
+  ],
+  "extensionProvider": null,
+  "tools": {},
+  "extensions": []
+}

@@ -1,0 +1,48 @@
+{
+  "schema": "ipcraft.patch.v1",
+  "transactionId": "value",
+  "patchId": "value",
+  "source": {
+    "kind": "application-reconcile",
+    "identity": "ipcraft.host",
+    "version": "1"
+  },
+  "causality": {
+    "sessionRevision": 0
+  },
+  "preconditions": [],
+  "operations": [
+    {
+      "op": "updateEntity",
+      "entityKind": "component",
+      "id": "component.noc",
+      "set": {
+        "config": {}
+      },
+      "unset": []
+    }
+  ],
+  "applicability": {
+    "schema": "ipcraft.reconcile-applicability.v1",
+    "groupId": "value",
+    "requestGeneration": 1,
+    "topologyInputRevision": 1,
+    "topologyInputDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "baseDerivedStateRevision": 0,
+    "baseDerivedStateDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "baseAuthoritativeDesignDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "structureAuthority": {
+      "kind": "default-engine",
+      "lockId": "value",
+      "identity": "ipcraft.default-noc-engine",
+      "version": "value",
+      "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "packageBundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "reconcileDependencySetDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "defaultEngineLockId": "value",
+    "defaultEngineBundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "engineHostContractVersion": "value",
+    "hostSideEffectContractVersion": "value"
+  }
+}

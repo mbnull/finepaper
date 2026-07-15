@@ -1,0 +1,43 @@
+{
+  "schema": "ipcraft.normalized-topology-input.v1",
+  "intent": {
+    "schema": "ipcraft.topology-intent.v1",
+    "componentId": "value",
+    "topologyId": "value",
+    "topologyKind": "mesh",
+    "globalConfig": {},
+    "packageEntities": [],
+    "packageRelations": []
+  },
+  "mesh": {
+    "rows": 1,
+    "columns": 1,
+    "routerTemplate": {
+      "stableKey": "value",
+      "identityCompatibilityVersion": 1,
+      "properties": {}
+    },
+    "linkTemplate": {
+      "stableKey": "value",
+      "identityCompatibilityVersion": 1,
+      "properties": {}
+    },
+    "slotTemplates": []
+  },
+  "dependencyContext": {
+    "nocPackageLockId": "value",
+    "nocPackageBundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "defaultEngineLockId": "value",
+    "defaultEngineBundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "engineHostContractVersion": "value",
+    "hostSideEffectContractVersion": "value",
+    "structureAuthority": {
+      "kind": "default-engine",
+      "lockId": "value",
+      "identity": "ipcraft.default-noc-engine",
+      "version": "value",
+      "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "reconcileDependencySetDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  }
+}

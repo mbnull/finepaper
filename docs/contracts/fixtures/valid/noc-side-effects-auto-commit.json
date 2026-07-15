@@ -1,0 +1,376 @@
+{
+  "schema": "ipcraft.noc-side-effects.v1",
+  "contractVersion": "ipcraft.noc-side-effects.v1",
+  "input": {
+    "domainTypes": [
+      {
+        "key": "clock",
+        "label": "Clock",
+        "defaultName": "clock-default",
+        "visual": {
+          "fill": "#123456",
+          "border": "#abcdef",
+          "pattern": "solid"
+        },
+        "configuration": {
+          "fields": []
+        }
+      },
+      {
+        "key": "power",
+        "label": "Power",
+        "defaultName": "power-default",
+        "visual": {
+          "fill": "#123456",
+          "border": "#abcdef",
+          "pattern": "solid"
+        },
+        "configuration": {
+          "fields": []
+        }
+      }
+    ],
+    "relationDeclarations": [
+      {
+        "typeKey": "route.allowed",
+        "ownership": "user",
+        "topologyDriving": false,
+        "sources": {
+          "kinds": [
+            "router"
+          ],
+          "minimum": 1,
+          "maximum": 1
+        },
+        "targets": {
+          "kinds": [
+            "package-entity"
+          ],
+          "minimum": 1,
+          "maximum": 1
+        },
+        "unresolvedAllowed": true,
+        "schema": {}
+      },
+      {
+        "typeKey": "route.blocked",
+        "ownership": "user",
+        "topologyDriving": false,
+        "sources": {
+          "kinds": [
+            "router"
+          ],
+          "minimum": 1,
+          "maximum": 1
+        },
+        "targets": {
+          "kinds": [
+            "package-entity"
+          ],
+          "minimum": 1,
+          "maximum": 1
+        },
+        "unresolvedAllowed": false,
+        "schema": {}
+      }
+    ],
+    "currentDerivedState": {
+      "schema": "ipcraft.derived-state.v1",
+      "topologyId": "topology.main",
+      "routers": [
+        {
+          "id": "router.a",
+          "templateKey": "mesh-router",
+          "identityCompatibilityVersion": 1,
+          "coordinate": {
+            "row": 0,
+            "column": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "router.b",
+          "templateKey": "mesh-router",
+          "identityCompatibilityVersion": 1,
+          "coordinate": {
+            "row": 0,
+            "column": 1
+          },
+          "properties": {}
+        },
+        {
+          "id": "router.c",
+          "templateKey": "mesh-router",
+          "identityCompatibilityVersion": 1,
+          "coordinate": {
+            "row": 0,
+            "column": 2
+          },
+          "properties": {}
+        }
+      ],
+      "structuralLinks": [
+        {
+          "id": "link.ab",
+          "templateKey": "mesh-link",
+          "identityCompatibilityVersion": 1,
+          "endpointA": "router.a",
+          "endpointB": "router.b",
+          "axis": "horizontal",
+          "properties": {}
+        },
+        {
+          "id": "link.bc",
+          "templateKey": "mesh-link",
+          "identityCompatibilityVersion": 1,
+          "endpointA": "router.b",
+          "endpointB": "router.c",
+          "axis": "horizontal",
+          "properties": {}
+        }
+      ],
+      "accessSlots": [
+        {
+          "id": "slot.a",
+          "routerId": "router.a",
+          "templateKey": "local-0",
+          "identityCompatibilityVersion": 1,
+          "displayOrder": 0,
+          "label": "Local 0",
+          "allowedContracts": [],
+          "properties": {}
+        },
+        {
+          "id": "slot.b",
+          "routerId": "router.b",
+          "templateKey": "local-0",
+          "identityCompatibilityVersion": 1,
+          "displayOrder": 0,
+          "label": "Local 0",
+          "allowedContracts": [],
+          "properties": {}
+        }
+      ],
+      "packageEntities": [
+        {
+          "id": "entity.a",
+          "typeKey": "endpoint",
+          "data": {
+            "name": "entity.a"
+          }
+        }
+      ],
+      "packageRelations": []
+    },
+    "domains": [
+      {
+        "id": "domain.clock.default",
+        "typeKey": "clock",
+        "name": "domain.clock.default",
+        "isDefault": true,
+        "config": {
+          "frequencyMHz": 100
+        }
+      },
+      {
+        "id": "domain.power.default",
+        "typeKey": "power",
+        "name": "domain.power.default",
+        "isDefault": true,
+        "config": {
+          "frequencyMHz": 100
+        }
+      }
+    ],
+    "domainMemberships": [
+      {
+        "id": "membership.ca",
+        "domainId": "domain.clock.default",
+        "routerId": "router.a"
+      },
+      {
+        "id": "membership.cb",
+        "domainId": "domain.clock.default",
+        "routerId": "router.b"
+      },
+      {
+        "id": "membership.cc",
+        "domainId": "domain.clock.default",
+        "routerId": "router.c"
+      },
+      {
+        "id": "membership.pa",
+        "domainId": "domain.power.default",
+        "routerId": "router.a"
+      },
+      {
+        "id": "membership.pb",
+        "domainId": "domain.power.default",
+        "routerId": "router.b"
+      },
+      {
+        "id": "membership.pc",
+        "domainId": "domain.power.default",
+        "routerId": "router.c"
+      }
+    ],
+    "attachments": [
+      {
+        "id": "attachment.a",
+        "interfaceId": "interface.a",
+        "state": "resolved",
+        "routerId": "router.a",
+        "slotId": "slot.a"
+      }
+    ],
+    "packageRelations": [
+      {
+        "id": "relation.allowed",
+        "typeKey": "route.allowed",
+        "sources": [
+          {
+            "state": "resolved",
+            "subject": {
+              "kind": "router",
+              "id": "router.a"
+            }
+          }
+        ],
+        "targets": [
+          {
+            "state": "resolved",
+            "subject": {
+              "kind": "package-entity",
+              "id": "entity.a"
+            }
+          }
+        ],
+        "data": {
+          "weight": 1
+        },
+        "extensions": []
+      },
+      {
+        "id": "relation.blocked",
+        "typeKey": "route.blocked",
+        "sources": [
+          {
+            "state": "resolved",
+            "subject": {
+              "kind": "router",
+              "id": "router.b"
+            }
+          }
+        ],
+        "targets": [
+          {
+            "state": "resolved",
+            "subject": {
+              "kind": "package-entity",
+              "id": "entity.a"
+            }
+          }
+        ],
+        "data": {
+          "weight": 2
+        },
+        "extensions": []
+      }
+    ],
+    "authorityPatch": {
+      "patchId": "patch.authority",
+      "source": {
+        "kind": "default-engine",
+        "identity": "ipcraft.default-noc-engine",
+        "version": "1.0.0",
+        "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "operations": [
+        {
+          "op": "createEntity",
+          "entityKind": "router",
+          "localRef": "authority:router-z",
+          "value": {
+            "templateKey": "mesh-router",
+            "identityCompatibilityVersion": 1,
+            "coordinate": {
+              "row": 1,
+              "column": 0
+            },
+            "properties": {}
+          }
+        },
+        {
+          "op": "createEntity",
+          "entityKind": "structural-link",
+          "localRef": "authority:link-z",
+          "value": {
+            "templateKey": "mesh-link",
+            "identityCompatibilityVersion": 1,
+            "endpointA": {
+              "id": "router.c"
+            },
+            "endpointB": {
+              "localRef": "authority:router-z"
+            },
+            "axis": "vertical",
+            "properties": {}
+          }
+        }
+      ]
+    }
+  },
+  "expected": {
+    "applicationPatch": {
+      "patchId": "patch.application",
+      "source": {
+        "kind": "application-reconcile",
+        "identity": "host",
+        "version": "1"
+      },
+      "operations": [
+        {
+          "op": "createRelation",
+          "relationKind": "domain-membership",
+          "localRef": "application:000001",
+          "value": {
+            "domainRef": {
+              "id": "domain.clock.default"
+            },
+            "routerRef": {
+              "localRef": "authority:router-z"
+            }
+          }
+        },
+        {
+          "op": "createRelation",
+          "relationKind": "domain-membership",
+          "localRef": "application:000002",
+          "value": {
+            "domainRef": {
+              "id": "domain.power.default"
+            },
+            "routerRef": {
+              "localRef": "authority:router-z"
+            }
+          }
+        }
+      ]
+    },
+    "tombstones": [],
+    "allocationOrder": [
+      "application:000001",
+      "application:000002",
+      "authority:link-z",
+      "authority:router-z"
+    ],
+    "impactReport": {
+      "schema": "ipcraft.topology-impact-report.v1",
+      "impacts": []
+    },
+    "coreDiagnostics": [],
+    "groupState": "auto-commit",
+    "requiresConfirmation": false,
+    "commitDisposition": "auto-commit"
+  }
+}

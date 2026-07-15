@@ -87,6 +87,32 @@ def _json_equal(left: Any, right: Any) -> bool:
     return type(left) is type(right) and left == right
 
 
+def _resolve_json_pointer(document: Any, pointer: str) -> Any:
+    if pointer == "":
+        return document
+    if not pointer.startswith("/"):
+        raise FixtureVerificationError(f"invalid RFC 6901 pointer {pointer!r}")
+    node = document
+    for raw in pointer[1:].split("/"):
+        if re.search(r"~(?:[^01]|$)", raw):
+            raise FixtureVerificationError(f"invalid RFC 6901 escape in {pointer!r}")
+        token = raw.replace("~1", "/").replace("~0", "~")
+        if isinstance(node, list):
+            if re.fullmatch(r"0|[1-9][0-9]*", token) is None:
+                raise FixtureVerificationError(f"invalid RFC 6901 array index {token!r}")
+            index = int(token)
+            if index >= len(node):
+                raise FixtureVerificationError(f"RFC 6901 array index out of range: {token!r}")
+            node = node[index]
+        elif isinstance(node, dict):
+            if token not in node:
+                raise FixtureVerificationError(f"RFC 6901 object member not found: {token!r}")
+            node = node[token]
+        else:
+            raise FixtureVerificationError(f"RFC 6901 pointer traverses a scalar at {token!r}")
+    return node
+
+
 class Draft202012Subset:
     def __init__(self, contracts: Path):
         self.contracts = contracts
@@ -112,9 +138,7 @@ class Draft202012Subset:
         if fragment:
             if not fragment.startswith("/"):
                 raise FixtureVerificationError(f"unsupported schema anchor {reference!r}")
-            for raw in fragment[1:].split("/"):
-                token = raw.replace("~1", "/").replace("~0", "~")
-                node = node[int(token)] if isinstance(node, list) else node[token]
+            node = _resolve_json_pointer(target, fragment)
         if not isinstance(node, (bool, dict)):
             raise FixtureVerificationError(f"schema reference {reference!r} does not resolve to a schema")
         return node, target, target_path
@@ -361,10 +385,8 @@ def audit_schema_keywords(contracts: Path) -> set[str]:
         node: Any = documents[target_schema_id]
         if separator and fragment:
             try:
-                for raw in fragment[1:].split("/"):
-                    token = raw.replace("~1", "/").replace("~0", "~")
-                    node = node[int(token)] if isinstance(node, list) else node[token]
-            except (KeyError, IndexError, TypeError, ValueError):
+                node = _resolve_json_pointer(node, fragment)
+            except FixtureVerificationError:
                 return False
         return isinstance(node, (bool, dict))
 
@@ -480,13 +502,7 @@ def audit_schema_keywords(contracts: Path) -> set[str]:
 
 
 def _pointer(document: Any, pointer: str) -> Any:
-    if pointer == "":
-        return document
-    node = document
-    for raw in pointer[1:].split("/"):
-        token = raw.replace("~1", "/").replace("~0", "~")
-        node = node[int(token)] if isinstance(node, list) else node[token]
-    return node
+    return _resolve_json_pointer(document, pointer)
 
 
 def _pointer_child(pointer: str, token: str) -> str:
@@ -866,6 +882,21 @@ def _portable_collisions(entries: list[dict[str, Any]]) -> bool:
     return len(paths) != len(set(paths))
 
 
+def _portable_paths_invalid(contracts: Path, paths: list[Any]) -> bool:
+    try:
+        normalization = verify_fixture_catalog.load_unicode_normalization_data(contracts)
+        folding = verify_fixture_catalog.load_simple_case_folding_table(contracts)
+        keys = [
+            verify_fixture_catalog.portable_collision_key(
+                path, f"manifest path[{index}]", normalization, folding
+            )
+            for index, path in enumerate(paths)
+        ]
+    except verify_fixture_catalog.VerificationError:
+        return True
+    return len(keys) != len(set(keys))
+
+
 def _declared_scalar_matches(kind: str, value: Any) -> bool:
     if value is None:
         return True
@@ -880,9 +911,110 @@ def _declared_scalar_matches(kind: str, value: Any) -> bool:
     return False
 
 
+def _field_declarations_invalid(fields: list[dict[str, Any]]) -> bool:
+    if _duplicates(fields, lambda item: item.get("key")):
+        return True
+    by_key = {item.get("key"): item for item in fields}
+    for field in fields:
+        kind = field.get("type")
+        default = field.get("default")
+        values = field.get("values")
+        minimum, maximum = field.get("minimum"), field.get("maximum")
+        if not _declared_scalar_matches(kind, default):
+            return True
+        if field.get("required") and default is None:
+            return True
+        if kind == "enum" and not values:
+            return True
+        if kind != "enum" and values is not None:
+            return True
+        if values is not None and (
+            any(not _declared_scalar_matches(kind, value) for value in values)
+            or not any(_json_equal(default, value) for value in values)
+        ):
+            return True
+        if minimum is not None and maximum is not None and minimum > maximum:
+            return True
+        if isinstance(default, (int, float, Decimal)) and not isinstance(default, bool):
+            if minimum is not None and default < minimum:
+                return True
+            if maximum is not None and default > maximum:
+                return True
+        for condition_name in ("visibleWhen", "enabledWhen"):
+            condition = field.get(condition_name)
+            if condition is None:
+                continue
+            dependency = by_key.get(condition.get("field"))
+            if dependency is None or not _declared_scalar_matches(dependency.get("type"), condition.get("equals")):
+                return True
+    return False
+
+
+def _package_declaration_invalid(contracts: Path, document: dict[str, Any]) -> bool:
+    provider = document.get("extensionProvider")
+    if provider is not None and _portable_paths_invalid(contracts, [provider.get("manifestPath")]):
+        return True
+
+    canonical_sets: list[tuple[list[dict[str, Any]], Any]] = [
+        (document.get("interfaceTemplates", []), lambda item: item.get("key")),
+        (document.get("domainTypes", []), lambda item: item.get("key")),
+        (document.get("packageEntityTypes", []), lambda item: item.get("typeKey")),
+        (document.get("packageRelationTypes", []), lambda item: item.get("typeKey")),
+        (document.get("extensions", []), lambda item: (item.get("ownerLockId"), item.get("schema"), item.get("version"))),
+        (document.get("topology", {}).get("slotTemplates", []), lambda item: item.get("stableKey")),
+    ]
+    for items, key in canonical_sets:
+        if _duplicates(items, key):
+            return True
+
+    field_scopes = [document.get("configuration", {}).get("global", {}).get("fields", [])]
+    field_scopes.extend(item.get("nocConfig", {}).get("fields", []) for item in document.get("interfaceTemplates", []))
+    field_scopes.extend(item.get("configuration", {}).get("fields", []) for item in document.get("domainTypes", []))
+    if any(_field_declarations_invalid(fields) for fields in field_scopes):
+        return True
+
+    global_fields = {
+        item.get("key"): item
+        for item in document.get("configuration", {}).get("global", {}).get("fields", [])
+    }
+    for member in ("rowField", "columnField"):
+        field = global_fields.get(document.get("topology", {}).get(member))
+        if not field or field.get("type") != "int" or field.get("topologyDriving") is not True:
+            return True
+
+    for slot in document.get("topology", {}).get("slotTemplates", []):
+        allowed = slot.get("allowedContracts", [])
+        if _duplicates(
+            allowed,
+            lambda item: (item.get("contractId"), item.get("version"), item.get("bundleManifestDigest")),
+        ):
+            return True
+
+    for template in document.get("interfaceTemplates", []):
+        fields = {item.get("key"): item for item in template.get("nocConfig", {}).get("fields", [])}
+        defaults = template.get("nocConfig", {}).get("defaults", {})
+        if set(defaults) - set(fields):
+            return True
+        if any(not _declared_scalar_matches(fields[key].get("type"), value) for key, value in defaults.items()):
+            return True
+
+    for relation in document.get("packageRelationTypes", []):
+        for endpoint_name in ("sources", "targets"):
+            endpoint = relation.get(endpoint_name, {})
+            if endpoint.get("minimum", 0) > endpoint.get("maximum", 0):
+                return True
+        if relation.get("ownership") == "engine" and relation.get("topologyDriving"):
+            return True
+    if any(item.get("ownership") == "engine" and item.get("topologyDriving") for item in document.get("packageEntityTypes", [])):
+        return True
+
+    return False
+
+
 def semantic_failure(
     schema_id: str, document: Any, validator: Draft202012Subset | None = None
 ) -> tuple[str, str] | None:
+    contracts = validator.contracts if validator is not None else Path(__file__).resolve().parents[1]
     if schema_id == "ipcraft.project-design.v1":
         groups = [document.get(name, []) for name in ("components", "interfaces", "topologies")]
         topology = document.get("topologies", [{}])[0] if document.get("topologies") else {}
@@ -902,6 +1034,7 @@ def semantic_failure(
         interfaces = {item["id"]: item for item in document.get("interfaces", [])}
         routers_by_id = {item["id"]: item for item in topology.get("routers", [])}
         slots_by_id = {item["id"]: item for item in topology.get("accessSlots", [])}
+        domains_by_id = {item["id"]: item for item in topology.get("domains", [])}
         if topology.get("ownerComponentId") not in components:
             return "project-reference", "project.unknown_reference"
         for component in components.values():
@@ -945,6 +1078,8 @@ def semantic_failure(
             if dependency.get("kind") == "runtime":
                 closure = dependency.get("runtimeClosure", {})
                 if dependency.get("bundleManifestDigest") != closure.get("runtimeDistributionBundleDigest"):
+                    return "project-invariant", "project.invariant_violation"
+                if _portable_paths_invalid(contracts, [closure.get("entrypoint")]):
                     return "project-invariant", "project.invariant_violation"
             if dependency.get("kind") in {"extension-provider", "drc-tool", "generator-tool"}:
                 runtime = dependencies.get(dependency.get("runtimeLockId"))
@@ -1014,7 +1149,7 @@ def semantic_failure(
                 if any(capabilities.get(key) != value for key, value in allowance["capabilityConstraints"].items()):
                     return "project-invariant", "project.invariant_violation"
         for membership in topology.get("domainMemberships", []):
-            if membership.get("routerId") not in known or membership.get("domainId") not in known:
+            if membership.get("routerId") not in routers_by_id or membership.get("domainId") not in domains_by_id:
                 return "project-reference", "project.unknown_reference"
         subject_kinds = {
             document["id"]: "project", **{item["id"]: "component" for item in components.values()},
@@ -1036,7 +1171,7 @@ def semantic_failure(
                         return "project-reference", "project.unknown_reference"
 
         routers = set(routers_by_id)
-        domains = {item.get("id"): item.get("typeKey") for item in topology.get("domains", [])}
+        domains = {item_id: item.get("typeKey") for item_id, item in domains_by_id.items()}
         domain_types = set(domains.values())
         for domain_type in domain_types:
             defaults = [item for item in topology.get("domains", []) if item["typeKey"] == domain_type and item["isDefault"]]
@@ -1070,7 +1205,7 @@ def semantic_failure(
                     return "project-invariant", "project.invariant_violation"
     elif schema_id in {"ipcraft.bundle-manifest.v1", "ipcraft.artifact-manifest.v1"}:
         member = "files" if "files" in document else "artifacts"
-        if _portable_collisions(document.get(member, [])):
+        if _portable_paths_invalid(contracts, [entry.get("path") for entry in document.get(member, [])]):
             return ("bundle-manifest", "dependency.manifest_invalid") if member == "files" else ("tool-artifact", "tool.artifact_invalid")
         if member == "files":
             digest_input = {key: value for key, value in document.items() if key != "manifestDigest"}
@@ -1111,15 +1246,11 @@ def semantic_failure(
                 if condition and condition.get("field") not in field_keys:
                     return "contract-declaration", "contract.invariant_violation"
     elif schema_id == "ipcraft.noc-package.v1":
-        for member, key in (("interfaceTemplates", "key"), ("domainTypes", "key"), ("packageEntityTypes", "typeKey"), ("packageRelationTypes", "typeKey")):
-            if _duplicates(document.get(member, []), lambda item: item.get(key)):
-                return "package-declaration", "package.invariant_violation"
-        global_fields = {item.get("key"): item for item in document.get("configuration", {}).get("global", {}).get("fields", [])}
-        for member in ("rowField", "columnField"):
-            field = global_fields.get(document.get("topology", {}).get(member))
-            if not field or field.get("type") != "int" or field.get("topologyDriving") is not True:
-                return "package-declaration", "package.invariant_violation"
+        if _package_declaration_invalid(contracts, document):
+            return "package-declaration", "package.invariant_violation"
     elif schema_id == "ipcraft.engine-bundle.v1":
+        if _portable_paths_invalid(contracts, [document.get("entrypoint")]):
+            return "engine-bundle-binding", "engine.bundle_mismatch"
         if document.get("engineHostContractVersion") != "ipcraft.engine-host.v1":
             return "engine-host-contract", "engine.host_contract_unsupported"
         if not any(value == "linux-x86_64-gnu-v1" for value in document.get("supportedPlatformAbis", [])):
@@ -1128,21 +1259,48 @@ def semantic_failure(
         if document.get("projectId") != document.get("authoritativeDesign", {}).get("id"):
             return "recovery-binding", "recovery.binding_mismatch"
     elif schema_id == "ipcraft.tool-input.v1":
+        tool_paths = [document.get(name) for name in ("projectDesignFile", "resultFile", "reportDirectory", "outputDirectory") if document.get(name) is not None]
+        if _portable_paths_invalid(contracts, tool_paths):
+            return "tool-input", "tool.input_invalid"
         if document.get("kind") == "generator" and document.get("snapshotDigest") != document.get("formallySavedProjectDigest"):
+            return "tool-input", "tool.input_invalid"
+        report_directory = document.get("reportDirectory")
+        project_file = document.get("projectDesignFile")
+        result_file = document.get("resultFile")
+        if project_file == result_file or report_directory == "inputs":
+            return "tool-input", "tool.input_invalid"
+        if not isinstance(report_directory, str) or not isinstance(result_file, str) or not result_file.startswith(report_directory + "/"):
+            return "tool-input", "tool.input_invalid"
+        if document.get("kind") == "semantic-drc" and document.get("outputDirectory") is not None:
+            return "tool-input", "tool.input_invalid"
+        if document.get("kind") == "generator" and document.get("outputDirectory") in {None, report_directory, "reports"}:
             return "tool-input", "tool.input_invalid"
         if _duplicates(document.get("dependencies", []), lambda item: item.get("lockId")):
             return "tool-input", "tool.input_invalid"
     elif schema_id == "ipcraft.tool-result.v1":
+        result_paths = [document.get(name) for name in ("diagnosticReport", "artifactManifest") if document.get(name) is not None]
+        if _portable_paths_invalid(contracts, result_paths):
+            return "runtime-result-binding", "tool.result_mismatch"
         if document.get("expectedInvocationId") and document.get("expectedInvocationId") != document.get("invocationId"):
             return "runtime-result-binding", "tool.result_mismatch"
     elif schema_id == "ipcraft.pipeline-result.v1":
+        if _portable_paths_invalid(contracts, [item.get("result") for item in document.get("steps", [])]):
+            return "pipeline-result", "pipeline.result_invalid"
         step_ids = {item.get("stepId") for item in document.get("steps", [])}
         if document.get("failedStepId") is not None and document.get("failedStepId") not in step_ids:
             return "pipeline-result", "pipeline.result_invalid"
     elif schema_id == "ipcraft.diagnostic-report.v1":
         if _duplicates(document.get("diagnostics", []), lambda item: json.dumps(item, sort_keys=True)):
             return "diagnostic-report", "diagnostic.report_invalid"
+    elif schema_id == "ipcraft.step-result.v1":
+        if document.get("toolResult") is not None and _portable_paths_invalid(contracts, [document["toolResult"]]):
+            return "generic-structure", "contract.schema_invalid"
     elif schema_id == "ipcraft.patch.v1":
+        patch_context = load_strict_json(contracts / "patch-validation-context-v1.json")
+        entity_type_ownership = patch_context.get("packageEntityTypes", {})
+        entity_subject_types = patch_context.get("packageEntitySubjects", {})
+        relation_type_ownership = patch_context.get("packageRelationTypes", {})
+        relation_subject_types = patch_context.get("packageRelationSubjects", {})
         source = document.get("source", {}).get("kind")
         operations = document.get("operations", [])
         local_refs: list[str] = []
@@ -1154,7 +1312,26 @@ def semantic_failure(
             return "local-reference", "patch.local_ref_invalid"
         if len(ids) != len(set(ids)):
             return "duplicate-id", "patch.duplicate_id"
+        visible_local_refs: set[str] = set()
+        for operation in operations:
+            referenced: list[str] = []
+            stack = [operation.get("value"), operation.get("set")]
+            while stack:
+                node = stack.pop()
+                if isinstance(node, dict):
+                    if set(node) == {"localRef"} and isinstance(node.get("localRef"), str):
+                        referenced.append(node["localRef"])
+                    else:
+                        stack.extend(node.values())
+                elif isinstance(node, list):
+                    stack.extend(node)
+            if any(reference not in visible_local_refs for reference in referenced):
+                return "local-reference", "patch.local_ref_invalid"
+            if "localRef" in operation:
+                visible_local_refs.add(operation["localRef"])
         required_properties = {
+            "project": {"name", "dependencies"},
+            "topology": {"derivation"},
             "component": {"kind", "name", "packageLockId", "typeKey", "config", "extensions"},
             "interface": {"ownerComponentId", "templateKey", "name", "contract", "capabilities", "contractConfig", "nocConfig", "extensions"},
             "router": {"templateKey", "identityCompatibilityVersion", "coordinate", "properties"},
@@ -1163,15 +1340,83 @@ def semantic_failure(
             "domain": {"typeKey", "name", "isDefault", "config"},
             "package-entity": {"typeKey", "data", "extensions"},
         }
+        required_relation_properties = {
+            "attachment": {"interfaceRef", "state"},
+            "domain-membership": {"domainRef", "routerRef"},
+            "package-relation": {"typeKey", "sources", "targets", "data", "extensions"},
+        }
         for operation in operations:
             if operation.get("op") in {"updateEntity", "updateRelation"} and set(operation.get("set", {})) & set(operation.get("unset", [])):
                 return "patch-invariant", "patch.invariant_violation"
             if operation.get("op") == "updateEntity" and set(operation.get("unset", [])) & required_properties.get(operation.get("entityKind"), set()):
                 return "patched-subject-schema", "patch.schema_violation"
-        if source == "user-command" and any(operation.get("entityKind") in {"router", "structural-link", "access-slot"} for operation in operations):
-            return "ownership", "patch.ownership_violation"
-        if source in {"default-engine", "extension-provider"} and any(operation.get("entityKind") in {"project", "interface", "domain"} for operation in operations):
-            return "ownership", "patch.ownership_violation"
+            if operation.get("op") == "updateRelation" and set(operation.get("unset", [])) & required_relation_properties.get(operation.get("relationKind"), set()):
+                return "patched-subject-schema", "patch.schema_violation"
+        for operation in operations:
+            entity_kind = operation.get("entityKind")
+            relation_kind = operation.get("relationKind")
+            changed = set(operation.get("set", {})) | set(operation.get("unset", []))
+            package_ownership: str | None = None
+            if entity_kind == "package-entity":
+                type_key = operation.get("value", {}).get("typeKey") if operation.get("op") == "createEntity" else entity_subject_types.get(operation.get("id"))
+                if type_key not in entity_type_ownership:
+                    return "reference", "patch.unknown_reference"
+                package_ownership = entity_type_ownership[type_key]
+            if relation_kind == "package-relation":
+                type_key = operation.get("value", {}).get("typeKey") if operation.get("op") == "createRelation" else relation_subject_types.get(operation.get("id"))
+                if type_key not in relation_type_ownership:
+                    return "reference", "patch.unknown_reference"
+                package_ownership = relation_type_ownership[type_key]
+            if source == "user-command":
+                if operation.get("op") == "deleteEntity" and entity_kind == "component":
+                    return "patch-invariant", "patch.invariant_violation"
+                if entity_kind in {"router", "structural-link", "access-slot", "topology"}:
+                    return "ownership", "patch.ownership_violation"
+                if entity_kind == "project" and changed - {"name"}:
+                    return "ownership", "patch.ownership_violation"
+                if entity_kind == "component" and changed & {"kind", "packageLockId", "typeKey"}:
+                    return "ownership", "patch.ownership_violation"
+                if package_ownership == "engine":
+                    return "ownership", "patch.ownership_violation"
+            elif source in {"default-engine", "extension-provider"}:
+                if entity_kind not in {None, "router", "structural-link", "access-slot", "package-entity"}:
+                    return "ownership", "patch.ownership_violation"
+                if relation_kind not in {None, "package-relation"}:
+                    return "ownership", "patch.ownership_violation"
+                if package_ownership == "user":
+                    return "ownership", "patch.ownership_violation"
+            elif source in {"application-reconcile", "application-migration"}:
+                if entity_kind in {"component", "interface", "router", "structural-link", "access-slot", "package-entity"}:
+                    return "ownership", "patch.ownership_violation"
+            if operation.get("op", "").startswith("create") and "localRef" in operation:
+                expected_prefix = "authority:" if source in {"default-engine", "extension-provider"} else "application:"
+                if not operation["localRef"].startswith(expected_prefix):
+                    return "local-reference", "patch.local_ref_invalid"
+        if source in {"application-reconcile", "application-migration"}:
+            derivation_updates = [
+                operation for operation in operations
+                if operation.get("op") == "updateEntity" and operation.get("entityKind") == "topology"
+                and set(operation.get("set", {})) == {"derivation"} and operation.get("unset") == []
+            ]
+            dependency_updates = [
+                operation for operation in operations
+                if operation.get("op") == "updateEntity" and operation.get("entityKind") == "project"
+                and set(operation.get("set", {})) == {"dependencies"} and operation.get("unset") == []
+            ]
+            if len(derivation_updates) != 1:
+                return "patch-invariant", "patch.invariant_violation"
+            if source == "application-reconcile" and dependency_updates:
+                return "patch-invariant", "patch.invariant_violation"
+            if source == "application-migration" and len(dependency_updates) != 1:
+                return "patch-invariant", "patch.invariant_violation"
+        if source in {"default-engine", "extension-provider"}:
+            authority = document.get("applicability", {}).get("structureAuthority", {})
+            source_envelope = document.get("source", {})
+            if any(
+                authority.get(member) != source_envelope.get(member)
+                for member in ("kind", "identity", "version", "bundleDigest")
+            ):
+                return "structure-authority", "patch.authority_conflict"
         existence = {(item.get("entityKind"), item.get("id")): item.get("kind") for item in document.get("preconditions", []) if item.get("kind") in {"entity-exists", "entity-absent"}}
         if any(
             {item.get("kind") for item in document.get("preconditions", []) if (item.get("entityKind"), item.get("id")) == key}
@@ -1221,6 +1466,111 @@ def load_catalog(contracts: Path) -> list[dict[str, Any]]:
     return load_strict_json(contracts / "fixture-catalog.json")["items"]
 
 
+def verify_authoring_coverage(contracts: Path, items: list[dict[str, Any]]) -> None:
+    coverage = load_strict_json(contracts / "fixture-coverage-v1.json")
+    if coverage.get("schema") != "ipcraft.fixture-coverage.v1" or not isinstance(coverage.get("roots"), dict):
+        raise FixtureVerificationError("fixture coverage envelope is invalid")
+    catalog_roots = {
+        item["id"] for item in load_strict_json(contracts / "schema-catalog.json")["items"]
+        if item["id"] != "ipcraft.fixture-catalog.v1"
+    }
+    if set(coverage["roots"]) != catalog_roots:
+        raise FixtureVerificationError("fixture coverage roots do not exactly match standalone schema roots")
+    by_path = {item["path"]: item for item in items}
+    loaded_by_path: dict[str, Any] = {}
+    for schema_id, tiers in coverage["roots"].items():
+        if set(tiers) != {"minimal", "representative", "maximumShape"}:
+            raise FixtureVerificationError(f"fixture coverage tiers are incomplete for {schema_id}")
+        for tier, paths in tiers.items():
+            if not isinstance(paths, list) or not paths:
+                raise FixtureVerificationError(f"fixture coverage {schema_id}/{tier} is empty")
+            for path in paths:
+                entry = by_path.get(path)
+                if entry is None or entry["schemaId"] != schema_id or entry["expected"] != "accept":
+                    raise FixtureVerificationError(f"fixture coverage path is not an accepted {schema_id}: {path}")
+                loaded_by_path[path] = load_strict_json(contracts / path)
+
+    requirements = coverage.get("requirements")
+    if not isinstance(requirements, dict) or set(requirements) != catalog_roots:
+        raise FixtureVerificationError("fixture coverage requirements do not exactly match standalone roots")
+
+    def values_at(node: Any, pointer: str) -> list[Any]:
+        nodes = [node]
+        for raw in pointer.removeprefix("/").split("/") if pointer else []:
+            token = raw.replace("~1", "/").replace("~0", "~")
+            next_nodes: list[Any] = []
+            for current in nodes:
+                if token == "*":
+                    if isinstance(current, list):
+                        next_nodes.extend(current)
+                    elif isinstance(current, dict):
+                        next_nodes.extend(current.values())
+                elif isinstance(current, list) and re.fullmatch(r"0|[1-9][0-9]*", token):
+                    index = int(token)
+                    if index < len(current):
+                        next_nodes.append(current[index])
+                elif isinstance(current, dict) and token in current:
+                    next_nodes.append(current[token])
+            nodes = next_nodes
+        return nodes
+
+    for schema_id, tier_requirements in requirements.items():
+        if not isinstance(tier_requirements, dict):
+            raise FixtureVerificationError(f"fixture coverage requirements malformed for {schema_id}")
+        for tier, predicates in tier_requirements.items():
+            if tier not in {"minimal", "representative", "maximumShape"} or not isinstance(predicates, dict):
+                raise FixtureVerificationError(f"fixture coverage predicate tier malformed for {schema_id}")
+            unknown_predicates = set(predicates) - {"minimumArrayLengths", "requiredPointers", "discriminatorCoverage"}
+            if unknown_predicates:
+                raise FixtureVerificationError(
+                    f"fixture coverage predicate keys unsupported for {schema_id}: {sorted(unknown_predicates)}"
+                )
+            if not isinstance(predicates.get("minimumArrayLengths", {}), dict):
+                raise FixtureVerificationError(f"fixture coverage minimumArrayLengths malformed for {schema_id}")
+            if not isinstance(predicates.get("requiredPointers", []), list):
+                raise FixtureVerificationError(f"fixture coverage requiredPointers malformed for {schema_id}")
+            if not isinstance(predicates.get("discriminatorCoverage", {}), dict):
+                raise FixtureVerificationError(f"fixture coverage discriminatorCoverage malformed for {schema_id}")
+            documents = [loaded_by_path[path] for path in coverage["roots"][schema_id][tier]]
+            for pointer, minimum in predicates.get("minimumArrayLengths", {}).items():
+                arrays = [value for document in documents for value in values_at(document, pointer) if isinstance(value, list)]
+                if not arrays or max(map(len, arrays)) < minimum:
+                    raise FixtureVerificationError(f"fixture coverage array predicate failed: {schema_id} {tier} {pointer}")
+            for pointer in predicates.get("requiredPointers", []):
+                if not any(values_at(document, pointer) for document in documents):
+                    raise FixtureVerificationError(f"fixture coverage required pointer missing: {schema_id} {tier} {pointer}")
+            for pointer, expected_values in predicates.get("discriminatorCoverage", {}).items():
+                observed = {
+                    value for document in documents for value in values_at(document, pointer)
+                    if isinstance(value, (str, int, bool))
+                }
+                if not set(expected_values) <= observed:
+                    raise FixtureVerificationError(
+                        f"fixture coverage discriminator predicate failed: {schema_id} {tier} {pointer}; "
+                        f"missing {sorted(set(expected_values) - observed)}"
+                    )
+
+    patch_context = load_strict_json(contracts / "patch-validation-context-v1.json")
+    if patch_context.get("schema") != "ipcraft.patch-validation-context.v1":
+        raise FixtureVerificationError("patch validation context envelope is invalid")
+    if set(patch_context.get("operationKinds", [])) != {
+        "createEntity", "updateEntity", "deleteEntity", "createRelation", "updateRelation", "deleteRelation"
+    }:
+        raise FixtureVerificationError("patch validation context operation matrix is incomplete")
+    if set(patch_context.get("sourceKinds", [])) != {
+        "user-command", "application-reconcile", "application-migration", "default-engine",
+        "extension-provider", "recovery", "undo-redo",
+    }:
+        raise FixtureVerificationError("patch validation context source matrix is incomplete")
+    if set(patch_context.get("authorityModes", [])) != {"default-engine", "extension-provider"}:
+        raise FixtureVerificationError("patch validation context authority modes are incomplete")
+    for source_kind in patch_context["sourceKinds"]:
+        path = f"fixtures/valid/patch-source-{source_kind}.json"
+        document = load_strict_json(contracts / path)
+        if document.get("source", {}).get("kind") != source_kind or not document.get("operations"):
+            raise FixtureVerificationError(f"patch source witness is not executable: {source_kind}")
+
+
 def copy_contract_tree(source: Path, destination: Path) -> None:
     shutil.copytree(source, destination)
 
@@ -1235,6 +1585,7 @@ def verify_all(contracts: Path) -> Summary:
     except verify_fixture_catalog.VerificationError as error:
         raise FixtureVerificationError(str(error)) from error
     items = load_catalog(contracts)
+    verify_authoring_coverage(contracts, items)
     valid = invalid = schema_phase = semantic_phase = 0
     for entry in items:
         document = load_strict_json(contracts / entry["path"])

@@ -1,0 +1,535 @@
+{
+  "schema": "ipcraft.fixture-coverage.v1",
+  "roots": {
+    "ipcraft.artifact-manifest.v1": {
+      "minimal": [
+        "fixtures/valid/artifact-manifest.json"
+      ],
+      "representative": [
+        "fixtures/valid/artifact-manifest-maximum.json"
+      ],
+      "maximumShape": [
+        "fixtures/valid/artifact-manifest-maximum.json"
+      ]
+    },
+    "ipcraft.bundle-manifest.v1": {
+      "minimal": [
+        "fixtures/valid/bundle-manifest.json"
+      ],
+      "representative": [
+        "fixtures/valid/bundle-manifest-maximum.json"
+      ],
+      "maximumShape": [
+        "fixtures/valid/bundle-manifest-maximum.json"
+      ]
+    },
+    "ipcraft.command-result.v1": {
+      "minimal": [
+        "fixtures/valid/command-result.json"
+      ],
+      "representative": [
+        "fixtures/valid/command-result-pending-topology.json"
+      ],
+      "maximumShape": [
+        "fixtures/valid/command-result.json",
+        "fixtures/valid/command-result-pending-topology.json",
+        "fixtures/valid/command-result-drafted.json",
+        "fixtures/valid/command-result-rejected.json"
+      ]
+    },
+    "ipcraft.core-canonical-models.v1": {
+      "minimal": [
+        "fixtures/valid/core-canonical-models.json"
+      ],
+      "representative": [
+        "fixtures/valid/core-normalizedTopologyInput.json"
+      ],
+      "maximumShape": [
+        "fixtures/valid/core-canonical-models.json",
+        "fixtures/valid/core-normalizedTopologyInput.json",
+        "fixtures/valid/core-derivedState.json",
+        "fixtures/valid/core-reconcileApplicability.json",
+        "fixtures/valid/core-patchBody.json",
+        "fixtures/valid/core-impactReport.json",
+        "fixtures/valid/core-candidateTransaction.json",
+        "fixtures/valid/core-pipelinePlan.json",
+        "fixtures/valid/core-outputManifest.json"
+      ]
+    },
+    "ipcraft.diagnostic-report.v1": {
+      "minimal": [
+        "fixtures/valid/diagnostic-report.json"
+      ],
+      "representative": [
+        "fixtures/valid/diagnostic-report-maximum.json"
+      ],
+      "maximumShape": [
+        "fixtures/valid/diagnostic-report-maximum.json"
+      ]
+    },
+    "ipcraft.engine-bundle.v1": {
+      "minimal": [
+        "fixtures/valid/engine-bundle.json"
+      ],
+      "representative": [
+        "fixtures/valid/engine-bundle-maximum.json"
+      ],
+      "maximumShape": [
+        "fixtures/valid/engine-bundle-maximum.json"
+      ]
+    },
+    "ipcraft.interface-contract.v1": {
+      "minimal": [
+        "fixtures/valid/interface-contract.json"
+      ],
+      "representative": [
+        "fixtures/valid/interface-contract-axi5.json"
+      ],
+      "maximumShape": [
+        "fixtures/valid/interface-contract-maximum.json"
+      ]
+    },
+    "ipcraft.noc-package.v1": {
+      "minimal": [
+        "fixtures/valid/noc-package.json"
+      ],
+      "representative": [
+        "fixtures/valid/noc-package.json"
+      ],
+      "maximumShape": [
+        "fixtures/valid/noc-package-maximum.json",
+        "fixtures/valid/noc-package-extension-authority.json"
+      ]
+    },
+    "ipcraft.noc-side-effects.v1": {
+      "minimal": [
+        "fixtures/valid/noc-side-effects.json"
+      ],
+      "representative": [
+        "fixtures/valid/noc-side-effects-ready-to-commit.json"
+      ],
+      "maximumShape": [
+        "fixtures/valid/noc-side-effects-auto-commit.json",
+        "fixtures/valid/noc-side-effects-ready-to-commit.json",
+        "fixtures/valid/noc-side-effects-blocked.json"
+      ]
+    },
+    "ipcraft.output-manifest.v1": {
+      "minimal": [
+        "fixtures/valid/output-manifest.json"
+      ],
+      "representative": [
+        "fixtures/valid/output-manifest.json"
+      ],
+      "maximumShape": [
+        "fixtures/valid/output-manifest.json"
+      ]
+    },
+    "ipcraft.patch.v1": {
+      "minimal": [
+        "fixtures/valid/patch.json"
+      ],
+      "representative": [
+        "fixtures/valid/patch-operation-updateEntity.json"
+      ],
+      "maximumShape": [
+        "fixtures/valid/patch-operation-createEntity.json",
+        "fixtures/valid/patch-operation-updateEntity.json",
+        "fixtures/valid/patch-operation-deleteEntity.json",
+        "fixtures/valid/patch-operation-createRelation.json",
+        "fixtures/valid/patch-operation-updateRelation.json",
+        "fixtures/valid/patch-operation-deleteRelation.json",
+        "fixtures/valid/patch-source-user-command.json",
+        "fixtures/valid/patch-source-application-reconcile.json",
+        "fixtures/valid/patch-source-application-migration.json",
+        "fixtures/valid/patch-source-default-engine.json",
+        "fixtures/valid/patch-source-extension-provider.json",
+        "fixtures/valid/patch-source-recovery.json",
+        "fixtures/valid/patch-source-undo-redo.json",
+        "fixtures/valid/patch-preconditions-all.json",
+        "fixtures/valid/patch-package-ownership-user-entity.json",
+        "fixtures/valid/patch-package-ownership-engine-entity.json",
+        "fixtures/valid/patch-package-ownership-user-relation.json",
+        "fixtures/valid/patch-package-ownership-engine-relation.json"
+      ]
+    },
+    "ipcraft.pipeline-plan.v1": {
+      "minimal": [
+        "fixtures/valid/pipeline-plan.json"
+      ],
+      "representative": [
+        "fixtures/valid/pipeline-plan-maximum.json"
+      ],
+      "maximumShape": [
+        "fixtures/valid/pipeline-plan-maximum.json"
+      ]
+    },
+    "ipcraft.pipeline-result.v1": {
+      "minimal": [
+        "fixtures/valid/pipeline-result.json"
+      ],
+      "representative": [
+        "fixtures/valid/pipeline-result-failed.json"
+      ],
+      "maximumShape": [
+        "fixtures/valid/pipeline-result.json",
+        "fixtures/valid/pipeline-result-failed.json",
+        "fixtures/valid/pipeline-result-cancelled.json",
+        "fixtures/valid/pipeline-result-timed-out.json"
+      ]
+    },
+    "ipcraft.project-design.v1": {
+      "minimal": [
+        "fixtures/valid/minimal-1x1.json"
+      ],
+      "representative": [
+        "fixtures/valid/mesh-2x2-attached.json"
+      ],
+      "maximumShape": [
+        "fixtures/valid/project-design-maximum.json"
+      ]
+    },
+    "ipcraft.recovery.v1": {
+      "minimal": [
+        "fixtures/valid/recovery.json"
+      ],
+      "representative": [
+        "fixtures/valid/recovery-maximum.json"
+      ],
+      "maximumShape": [
+        "fixtures/valid/recovery-maximum.json"
+      ]
+    },
+    "ipcraft.step-result.v1": {
+      "minimal": [
+        "fixtures/valid/step-result.json"
+      ],
+      "representative": [
+        "fixtures/valid/step-result-external-success.json"
+      ],
+      "maximumShape": [
+        "fixtures/valid/step-result.json",
+        "fixtures/valid/step-result-external-success.json",
+        "fixtures/valid/step-result-failed.json",
+        "fixtures/valid/step-result-cancelled.json",
+        "fixtures/valid/step-result-timed-out.json",
+        "fixtures/valid/step-result-skipped.json"
+      ]
+    },
+    "ipcraft.tool-input.v1": {
+      "minimal": [
+        "fixtures/valid/tool-input.json"
+      ],
+      "representative": [
+        "fixtures/valid/tool-input-maximum.json"
+      ],
+      "maximumShape": [
+        "fixtures/valid/tool-input.json",
+        "fixtures/valid/tool-input-maximum.json"
+      ]
+    },
+    "ipcraft.tool-result.v1": {
+      "minimal": [
+        "fixtures/valid/tool-result.json"
+      ],
+      "representative": [
+        "fixtures/valid/tool-result-failed.json"
+      ],
+      "maximumShape": [
+        "fixtures/valid/tool-result-maximum.json",
+        "fixtures/valid/tool-result-failed.json"
+      ]
+    }
+  },
+  "requirements": {
+    "ipcraft.artifact-manifest.v1": {
+      "representative": {
+        "minimumArrayLengths": {
+          "/artifacts": 1
+        }
+      },
+      "maximumShape": {
+        "minimumArrayLengths": {
+          "/artifacts": 2
+        }
+      }
+    },
+    "ipcraft.bundle-manifest.v1": {
+      "representative": {
+        "minimumArrayLengths": {
+          "/files": 1
+        }
+      },
+      "maximumShape": {
+        "minimumArrayLengths": {
+          "/files": 2
+        }
+      }
+    },
+    "ipcraft.command-result.v1": {
+      "maximumShape": {
+        "discriminatorCoverage": {
+          "/disposition": [
+            "accepted",
+            "pending-topology",
+            "drafted",
+            "rejected"
+          ]
+        }
+      }
+    },
+    "ipcraft.core-canonical-models.v1": {
+      "maximumShape": {
+        "discriminatorCoverage": {
+          "/schema": [
+            "ipcraft.topology-intent.v1",
+            "ipcraft.normalized-topology-input.v1",
+            "ipcraft.derived-state.v1",
+            "ipcraft.reconcile-applicability.v1",
+            "ipcraft.patch-body.v1",
+            "ipcraft.topology-impact-report.v1",
+            "ipcraft.candidate-transaction.v1",
+            "ipcraft.pipeline-plan.v1",
+            "ipcraft.output-manifest.v1"
+          ]
+        }
+      }
+    },
+    "ipcraft.diagnostic-report.v1": {
+      "representative": {
+        "minimumArrayLengths": {
+          "/diagnostics": 1
+        }
+      },
+      "maximumShape": {
+        "minimumArrayLengths": {
+          "/diagnostics": 3
+        },
+        "discriminatorCoverage": {
+          "/diagnostics/*/severity": [
+            "info",
+            "warning",
+            "error"
+          ]
+        }
+      }
+    },
+    "ipcraft.engine-bundle.v1": {
+      "maximumShape": {
+        "minimumArrayLengths": {
+          "/migrationFromCompatibilityVersions": 2,
+          "/supportedPlatformAbis": 2
+        }
+      }
+    },
+    "ipcraft.interface-contract.v1": {
+      "maximumShape": {
+        "minimumArrayLengths": {
+          "/roles": 2,
+          "/capabilities": 5,
+          "/fields": 5
+        },
+        "discriminatorCoverage": {
+          "/capabilities/*/type": [
+            "bool",
+            "int",
+            "double",
+            "string",
+            "enum"
+          ],
+          "/fields/*/type": [
+            "bool",
+            "int",
+            "double",
+            "string",
+            "enum"
+          ]
+        }
+      }
+    },
+    "ipcraft.noc-package.v1": {
+      "maximumShape": {
+        "minimumArrayLengths": {
+          "/topology/slotTemplates": 2,
+          "/packageEntityTypes": 2,
+          "/packageRelationTypes": 2,
+          "/extensions": 1
+        },
+        "requiredPointers": [
+          "/tools/drc",
+          "/tools/generate",
+          "/interfaceTemplates/0",
+          "/extensionProvider/protocol"
+        ],
+        "discriminatorCoverage": {
+          "/structureAuthority": [
+            "default-engine",
+            "extension-provider"
+          ]
+        }
+      }
+    },
+    "ipcraft.noc-side-effects.v1": {
+      "maximumShape": {
+        "discriminatorCoverage": {
+          "/expected/groupState": [
+            "auto-commit",
+            "ready-to-commit",
+            "blocked"
+          ]
+        }
+      }
+    },
+    "ipcraft.output-manifest.v1": {
+      "maximumShape": {
+        "requiredPointers": [
+          "/artifactManifestDigest",
+          "/defaultEngineBundleDigest",
+          "/hostSideEffectContractVersion"
+        ]
+      }
+    },
+    "ipcraft.patch.v1": {
+      "maximumShape": {
+        "discriminatorCoverage": {
+          "/operations/*/op": [
+            "createEntity",
+            "updateEntity",
+            "deleteEntity",
+            "createRelation",
+            "updateRelation",
+            "deleteRelation"
+          ],
+          "/source/kind": [
+            "user-command",
+            "application-reconcile",
+            "application-migration",
+            "default-engine",
+            "extension-provider",
+            "recovery",
+            "undo-redo"
+          ],
+          "/preconditions/*/kind": [
+            "entity-exists",
+            "entity-absent",
+            "property-equals",
+            "relation-exists",
+            "slot-unoccupied"
+          ]
+        }
+      }
+    },
+    "ipcraft.pipeline-plan.v1": {
+      "maximumShape": {
+        "minimumArrayLengths": {
+          "/steps": 5
+        },
+        "discriminatorCoverage": {
+          "/kind": [
+            "generate"
+          ],
+          "/steps/*/kind": [
+            "host",
+            "external-tool"
+          ]
+        }
+      }
+    },
+    "ipcraft.pipeline-result.v1": {
+      "maximumShape": {
+        "discriminatorCoverage": {
+          "/status": [
+            "succeeded",
+            "failed",
+            "cancelled",
+            "timed-out"
+          ]
+        }
+      }
+    },
+    "ipcraft.project-design.v1": {
+      "maximumShape": {
+        "minimumArrayLengths": {
+          "/dependencies": 7,
+          "/topologies/0/routers": 4
+        },
+        "requiredPointers": [
+          "/interfaces/0",
+          "/topologies/0/packageEntities/0",
+          "/topologies/0/packageRelations/0"
+        ],
+        "discriminatorCoverage": {
+          "/dependencies/*/kind": [
+            "default-engine",
+            "noc-package",
+            "interface-contract",
+            "extension-provider",
+            "drc-tool",
+            "generator-tool",
+            "runtime"
+          ]
+        }
+      }
+    },
+    "ipcraft.recovery.v1": {
+      "maximumShape": {
+        "minimumArrayLengths": {
+          "/draftOverlay": 1,
+          "/draftUndo": 1,
+          "/draftRedo": 1
+        },
+        "requiredPointers": [
+          "/pendingTopologyGroup/groupId"
+        ]
+      }
+    },
+    "ipcraft.step-result.v1": {
+      "maximumShape": {
+        "discriminatorCoverage": {
+          "/status": [
+            "succeeded",
+            "failed",
+            "cancelled",
+            "timed-out",
+            "skipped"
+          ],
+          "/stepKind": [
+            "host",
+            "external-tool"
+          ]
+        }
+      }
+    },
+    "ipcraft.tool-input.v1": {
+      "maximumShape": {
+        "minimumArrayLengths": {
+          "/dependencies": 2
+        },
+        "discriminatorCoverage": {
+          "/kind": [
+            "semantic-drc",
+            "generator"
+          ]
+        },
+        "requiredPointers": [
+          "/outputDirectory"
+        ]
+      }
+    },
+    "ipcraft.tool-result.v1": {
+      "maximumShape": {
+        "discriminatorCoverage": {
+          "/status": [
+            "succeeded",
+            "failed"
+          ]
+        },
+        "requiredPointers": [
+          "/diagnosticReport",
+          "/artifactManifest",
+          "/failure/code"
+        ]
+      }
+    }
+  }
+}

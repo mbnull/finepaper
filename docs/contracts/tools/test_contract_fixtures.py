@@ -46,6 +46,7 @@ class ContractFixtureTest(unittest.TestCase):
         "fixtures/invalid/project-duplicate-relation-source-key.json",
         "fixtures/invalid/project-duplicate-slot-allowed-contract-key.json",
         "fixtures/invalid/project-duplicate-slot-role-key.json",
+        "fixtures/invalid/project-domain-membership-wrong-kind.json",
     }
 
     def test_committed_fixture_catalog_is_complete_and_classifies_exactly(self) -> None:
@@ -104,6 +105,16 @@ class ContractFixtureTest(unittest.TestCase):
             "occupied-slot": lambda d: (d["interfaces"].append({**copy.deepcopy(d["interfaces"][0]), "id":"interface.second"}), d["topologies"][0]["attachments"].append({**copy.deepcopy(d["topologies"][0]["attachments"][0]), "id":"attachment.second", "interfaceId":"interface.second"})),
             "two-defaults": lambda d: d["topologies"][0]["domains"].append({**copy.deepcopy(d["topologies"][0]["domains"][0]), "id":"domain.power.second"}),
             "missing-topology-owner": lambda d: d["topologies"][0].__setitem__("ownerComponentId", "component.missing"),
+            "membership-domain-wrong-kind": lambda d: d["topologies"][0]["domainMemberships"][0].__setitem__("domainId", "interface.axi"),
+            "membership-router-wrong-kind": lambda d: d["topologies"][0]["domainMemberships"][0].__setitem__("routerId", "interface.axi"),
+            "slot-router-wrong-kind": lambda d: d["topologies"][0]["accessSlots"][0].__setitem__("routerId", "interface.axi"),
+            "link-endpoint-wrong-kind": lambda d: d["topologies"][0]["structuralLinks"][0].__setitem__("endpointA", "interface.axi"),
+            "attachment-interface-wrong-kind": lambda d: d["topologies"][0]["attachments"][0].__setitem__("interfaceId", "router.0.0"),
+            "attachment-router-wrong-kind": lambda d: d["topologies"][0]["attachments"][0].__setitem__("routerId", "interface.axi"),
+            "attachment-slot-wrong-kind": lambda d: d["topologies"][0]["attachments"][0].__setitem__("slotId", "router.0.0"),
+            "topology-owner-wrong-kind": lambda d: d["topologies"][0].__setitem__("ownerComponentId", "interface.axi"),
+            "component-package-wrong-kind": lambda d: d["components"][0].__setitem__("packageLockId", "dep.contract.axi5"),
+            "interface-contract-wrong-kind": lambda d: d["interfaces"][0]["contract"].__setitem__("lockId", "dep.noc.simple"),
         }
         for name, mutate in mutations.items():
             with self.subTest(name=name):
@@ -186,6 +197,13 @@ class ContractFixtureTest(unittest.TestCase):
             lambda schema: schema.__setitem__("$ref", "not a valid ref with spaces"),
             lambda schema: schema.__setitem__("$ref", "#/$defs/%ZZ"),
             lambda schema: schema.__setitem__("$ref", "#/$defs/id\n"),
+            lambda schema: schema.__setitem__("$ref", "ipcraft.project-design.v1.schema.json#/$defs/dependencyLock/oneOf/-1"),
+            lambda schema: schema.__setitem__("$ref", "ipcraft.project-design.v1.schema.json#/$defs/dependencyLock/oneOf/+1"),
+            lambda schema: schema.__setitem__("$ref", "ipcraft.project-design.v1.schema.json#/$defs/dependencyLock/oneOf/01"),
+            lambda schema: schema.__setitem__("$ref", "ipcraft.project-design.v1.schema.json#/$defs/dependencyLock/oneOf/-"),
+            lambda schema: schema.__setitem__("$ref", "ipcraft.project-design.v1.schema.json#/$defs/dependencyLock/oneOf/999999999999999999999999"),
+            lambda schema: schema.__setitem__("$ref", "#/$defs/~2bad"),
+            lambda schema: schema.__setitem__("$ref", "#/$defs/bad~"),
             lambda schema: schema.__setitem__("$comment", {}),
             lambda schema: schema.__setitem__("title", []),
             lambda schema: schema.__setitem__("description", 1),
@@ -276,6 +294,9 @@ class ContractFixtureTest(unittest.TestCase):
             schema["$id"] = "local.schema-v1"
             schema["properties"]["pipelineRunId"] = {
                 "$ref": "ipcraft.core-canonical-models.v1.schema.json#/$defs/id"
+            }
+            schema["$defs"]["validArrayReference"] = {
+                "$ref": "ipcraft.project-design.v1.schema.json#/$defs/dependencyLock/oneOf/0"
             }
             schema["properties"]["kind"]["pattern"] = r"^(?:validate|generate)$"
             schema_path.write_text(json.dumps(schema))
@@ -476,6 +497,211 @@ class ContractFixtureTest(unittest.TestCase):
             with self.assertRaises(subject.SchemaFailure):
                 validator._validate({"type": "number", "multipleOf": 0.1}, document["y"], root, root_path, "$")
 
+    def test_manifest_paths_use_pinned_portable_identity(self) -> None:
+        bundle_source = json.loads((CONTRACTS / "fixtures/valid/bundle-manifest.json").read_text())
+        artifact_source = json.loads((CONTRACTS / "fixtures/valid/artifact-manifest.json").read_text())
+        digest = "sha256:" + "a" * 64
+
+        def bundle_entry(path: str) -> dict:
+            return {"path": path, "size": 1, "digest": digest, "executable": False}
+
+        def artifact_entry(path: str) -> dict:
+            return {"path": path, "kind": "rtl", "mediaType": "text/plain", "size": 1, "digest": digest}
+
+        cases = (
+            ["A.txt", "a.txt"],
+            ["Σ.txt", "ς.txt"],
+            ["e\u0301.txt"],
+            ["CON.txt"],
+            ["trailing."],
+            ["../escape.txt"],
+        )
+        for paths in cases:
+            for schema_id, source, make_entry in (
+                ("ipcraft.bundle-manifest.v1", bundle_source, bundle_entry),
+                ("ipcraft.artifact-manifest.v1", artifact_source, artifact_entry),
+            ):
+                with self.subTest(schema_id=schema_id, paths=paths):
+                    document = copy.deepcopy(source)
+                    member = "files" if schema_id == "ipcraft.bundle-manifest.v1" else "artifacts"
+                    document[member] = [make_entry(path) for path in paths]
+                    self.assertIsNotNone(subject.classify_document(CONTRACTS, schema_id, document).phase)
+
+    def test_manifest_relative_pointer_paths_are_portable(self) -> None:
+        cases = (
+            ("ipcraft.tool-input.v1", "tool-input.json", "projectDesignFile"),
+            ("ipcraft.pipeline-result.v1", "pipeline-result.json", "step-result"),
+            ("ipcraft.step-result.v1", "step-result.json", "toolResult"),
+            ("ipcraft.tool-result.v1", "tool-result.json", "diagnosticReport"),
+        )
+        for schema_id, filename, member in cases:
+            with self.subTest(schema_id=schema_id):
+                document = json.loads((CONTRACTS / "fixtures/valid" / filename).read_text())
+                if member == "step-result":
+                    document["steps"][0]["result"] = "CON.txt"
+                else:
+                    document[member] = "CON.txt"
+                self.assertIsNotNone(subject.classify_document(CONTRACTS, schema_id, document).phase)
+
+        engine = json.loads((CONTRACTS / "fixtures/valid/engine-bundle.json").read_text())
+        engine["entrypoint"] = "CON.exe"
+        self.assertEqual(
+            subject.classify_document(CONTRACTS, "ipcraft.engine-bundle.v1", engine),
+            subject.Classification("core-semantic", "engine-bundle-binding", "engine.bundle_mismatch"),
+        )
+
+    def test_tool_input_path_roles_are_closed(self) -> None:
+        source = json.loads((CONTRACTS / "fixtures/valid/tool-input.json").read_text())
+        cases = {
+            "input-result-alias": lambda d: d.__setitem__("resultFile", d["projectDesignFile"]),
+            "result-outside-report": lambda d: d.__setitem__("resultFile", "other/tool-result.json"),
+            "report-is-input": lambda d: d.__setitem__("reportDirectory", "inputs"),
+        }
+        for name, mutate in cases.items():
+            with self.subTest(name=name):
+                document = copy.deepcopy(source)
+                mutate(document)
+                self.assertEqual(
+                    subject.classify_document(CONTRACTS, "ipcraft.tool-input.v1", document),
+                    subject.Classification("core-semantic", "tool-input", "tool.input_invalid"),
+                )
+
+    def test_noc_package_declaration_invariants_are_table_driven(self) -> None:
+        source = json.loads((CONTRACTS / "fixtures/valid/noc-package.json").read_text())
+        package_contained = json.loads((CONTRACTS / "fixtures/valid/noc-package-maximum.json").read_text())
+        package_contained["tools"]["drc"]["command"][0] = "--package-contained-mode"
+        self.assertIsNone(subject.classify_document(CONTRACTS, "ipcraft.noc-package.v1", package_contained).phase)
+
+        def duplicate_global(d):
+            d["configuration"]["global"]["fields"].append(copy.deepcopy(d["configuration"]["global"]["fields"][0]))
+
+        def bad_default(d):
+            d["configuration"]["global"]["fields"][0]["default"] = "not-an-int"
+
+        def bad_condition(d):
+            d["configuration"]["global"]["fields"][0]["visibleWhen"] = {"field": "missing", "equals": 1}
+
+        def bad_cardinality(d):
+            d["packageRelationTypes"][0]["sources"].update({"minimum": 2, "maximum": 1})
+
+        def duplicate_slot(d):
+            template = {
+                "stableKey": "local", "identityCompatibilityVersion": 1, "displayOrder": 0,
+                "label": "Local", "allowedContracts": [], "properties": {},
+            }
+            d["topology"]["slotTemplates"] = [template, copy.deepcopy(template)]
+
+        for name, mutate in {
+            "duplicate-global-field": duplicate_global,
+            "field-default-type": bad_default,
+            "condition-reference": bad_condition,
+            "relation-cardinality": bad_cardinality,
+            "duplicate-slot": duplicate_slot,
+        }.items():
+            with self.subTest(name=name):
+                document = copy.deepcopy(source)
+                mutate(document)
+                self.assertEqual(
+                    subject.classify_document(CONTRACTS, "ipcraft.noc-package.v1", document),
+                    subject.Classification("core-semantic", "package-declaration", "package.invariant_violation"),
+                )
+
+    def test_patch_operation_and_source_matrix_is_executable(self) -> None:
+        matrix = json.loads((CONTRACTS / "patch-validation-context-v1.json").read_text())
+        self.assertEqual(matrix["schema"], "ipcraft.patch-validation-context.v1")
+        self.assertEqual(set(matrix["operationKinds"]), {
+            "createEntity", "updateEntity", "deleteEntity",
+            "createRelation", "updateRelation", "deleteRelation",
+        })
+        self.assertEqual(set(matrix["sourceKinds"]), {
+            "user-command", "application-reconcile", "application-migration",
+            "default-engine", "extension-provider", "recovery", "undo-redo",
+        })
+        catalog = subject.load_catalog(CONTRACTS)
+        accepted = {
+            Path(item["path"]).stem for item in catalog
+            if item["schemaId"] == "ipcraft.patch.v1" and item["expected"] == "accept"
+        }
+        for operation in matrix["operationKinds"]:
+            self.assertIn(f"patch-operation-{operation}", accepted)
+        for source in matrix["sourceKinds"]:
+            self.assertIn(f"patch-source-{source}", accepted)
+
+    def test_valid_fixture_coverage_matrix_closes_all_roots_and_tiers(self) -> None:
+        matrix = json.loads((CONTRACTS / "fixture-coverage-v1.json").read_text())
+        self.assertEqual(matrix["schema"], "ipcraft.fixture-coverage.v1")
+        roots = {
+            item["id"] for item in json.loads((CONTRACTS / "schema-catalog.json").read_text())["items"]
+            if item["id"] != "ipcraft.fixture-catalog.v1"
+        }
+        self.assertEqual(set(matrix["roots"]), roots)
+        catalog = {item["path"]: item for item in subject.load_catalog(CONTRACTS)}
+        for schema_id, tiers in matrix["roots"].items():
+            self.assertEqual(set(tiers), {"minimal", "representative", "maximumShape"})
+            for tier, paths in tiers.items():
+                self.assertTrue(paths, f"{schema_id} {tier} must not be empty")
+                for path in paths:
+                    with self.subTest(schema_id=schema_id, tier=tier, path=path):
+                        self.assertEqual(catalog[path]["schemaId"], schema_id)
+                        self.assertEqual(catalog[path]["expected"], "accept")
+                        document = json.loads((CONTRACTS / path).read_text())
+                        self.assertIsNone(subject.classify_document(CONTRACTS, schema_id, document).phase)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "contracts"
+            subject.copy_contract_tree(CONTRACTS, root)
+            mutated = json.loads((root / "fixture-coverage-v1.json").read_text())
+            mutated["requirements"]["ipcraft.artifact-manifest.v1"]["maximumShape"]["minimumArrayLengths"]["/artifacts"] = 3
+            (root / "fixture-coverage-v1.json").write_text(json.dumps(mutated))
+            with self.assertRaisesRegex(subject.FixtureVerificationError, "coverage array predicate failed"):
+                subject.verify_all(root)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "contracts"
+            subject.copy_contract_tree(CONTRACTS, root)
+            mutated = json.loads((root / "fixture-coverage-v1.json").read_text())
+            mutated["requirements"]["ipcraft.bundle-manifest.v1"]["maximumShape"]["minimumArrayLenghts"] = {"/files": 999}
+            (root / "fixture-coverage-v1.json").write_text(json.dumps(mutated))
+            with self.assertRaisesRegex(subject.FixtureVerificationError, "predicate keys unsupported"):
+                subject.verify_all(root)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "contracts"
+            subject.copy_contract_tree(CONTRACTS, root)
+            mutated = json.loads((root / "fixture-coverage-v1.json").read_text())
+            mutated["roots"]["ipcraft.noc-package.v1"]["maximumShape"] = ["fixtures/valid/noc-package-maximum.json"]
+            (root / "fixture-coverage-v1.json").write_text(json.dumps(mutated))
+            with self.assertRaisesRegex(subject.FixtureVerificationError, "coverage (required pointer missing|discriminator predicate failed)"):
+                subject.verify_all(root)
+
+    def test_patch_authority_and_relation_lifecycle_fail_closed(self) -> None:
+        provider = json.loads((CONTRACTS / "fixtures/valid/patch-source-extension-provider.json").read_text())
+        authority = provider["applicability"]["structureAuthority"]
+        self.assertEqual(authority["kind"], "extension-provider")
+        self.assertEqual(authority["bundleDigest"], provider["source"]["bundleDigest"])
+        mismatch = copy.deepcopy(provider)
+        mismatch["applicability"]["structureAuthority"]["bundleDigest"] = "sha256:" + "a" * 64
+        self.assertEqual(
+            subject.classify_document(CONTRACTS, "ipcraft.patch.v1", mismatch),
+            subject.Classification("core-semantic", "structure-authority", "patch.authority_conflict"),
+        )
+        relation = json.loads((CONTRACTS / "fixtures/valid/patch-operation-updateRelation.json").read_text())
+        relation["operations"][0].update({"set": {}, "unset": ["domainRef"]})
+        self.assertEqual(
+            subject.classify_document(CONTRACTS, "ipcraft.patch.v1", relation),
+            subject.Classification("core-semantic", "patched-subject-schema", "patch.schema_violation"),
+        )
+        for filename in (
+            "patch-user-mutates-engine-package-entity.json",
+            "patch-authority-mutates-user-package-entity.json",
+            "patch-user-mutates-engine-package-relation.json",
+            "patch-authority-mutates-user-package-relation.json",
+        ):
+            with self.subTest(filename=filename):
+                document = json.loads((CONTRACTS / "fixtures/invalid" / filename).read_text())
+                self.assertEqual(
+                    subject.classify_document(CONTRACTS, "ipcraft.patch.v1", document),
+                    subject.Classification("core-semantic", "ownership", "patch.ownership_violation"),
+                )
+
     def test_wrong_catalog_expectation_boundary_and_code_are_rejected(self) -> None:
         catalog = subject.load_catalog(CONTRACTS)
         rejected = next(item for item in catalog if item["expected"] == "reject")
@@ -511,11 +737,11 @@ class ContractFixtureTest(unittest.TestCase):
             generate_contract_fixtures.generate(root)
             expected = {
                 path.relative_to(CONTRACTS).as_posix(): path.read_bytes()
-                for path in [CONTRACTS / "fixture-catalog.json", *sorted((CONTRACTS / "fixtures").rglob("*.json"))]
+                for path in [CONTRACTS / "fixture-catalog.json", CONTRACTS / "fixture-coverage-v1.json", *sorted((CONTRACTS / "fixtures").rglob("*.json"))]
             }
             actual = {
                 path.relative_to(root).as_posix(): path.read_bytes()
-                for path in [root / "fixture-catalog.json", *sorted((root / "fixtures").rglob("*.json"))]
+                for path in [root / "fixture-catalog.json", root / "fixture-coverage-v1.json", *sorted((root / "fixtures").rglob("*.json"))]
             }
             self.assertEqual(actual, expected)
         with tempfile.TemporaryDirectory() as temporary:

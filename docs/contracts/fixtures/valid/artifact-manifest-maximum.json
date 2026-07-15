@@ -1,0 +1,23 @@
+{
+  "schema": "ipcraft.artifact-manifest.v1",
+  "pipelineRunId": "value",
+  "stepId": "value",
+  "invocationId": "value",
+  "snapshotDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "artifacts": [
+    {
+      "path": "reports/design.json",
+      "kind": "report",
+      "mediaType": "application/json",
+      "size": 42,
+      "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "path": "rtl/noc.sv",
+      "kind": "rtl",
+      "mediaType": "text/x-systemverilog",
+      "size": 128,
+      "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    }
+  ]
+}

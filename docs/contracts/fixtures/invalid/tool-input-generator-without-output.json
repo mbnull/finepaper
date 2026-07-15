@@ -9,7 +9,7 @@
   "snapshotDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   "formallySavedProjectDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   "dependencies": [],
-  "projectDesignFile": "value",
-  "resultFile": "value",
-  "reportDirectory": "value"
+  "projectDesignFile": "inputs/project-design.json",
+  "resultFile": "reports/tool-result.json",
+  "reportDirectory": "reports"
 }

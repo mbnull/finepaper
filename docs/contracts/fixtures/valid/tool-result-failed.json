@@ -1,0 +1,17 @@
+{
+  "schema": "ipcraft.tool-result.v1",
+  "pipelineRunId": "value",
+  "stepId": "value",
+  "invocationId": "value",
+  "snapshotDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "dependencySetDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "status": "failed",
+  "diagnosticReport": null,
+  "metrics": {},
+  "failure": {
+    "code": "tool.failed",
+    "data": {
+      "reason": "tool failed"
+    }
+  }
+}

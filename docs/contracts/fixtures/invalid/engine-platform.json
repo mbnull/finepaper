@@ -9,5 +9,5 @@
   "supportedPlatformAbis": [
     "unsupported-abi"
   ],
-  "entrypoint": "value"
+  "entrypoint": "bin/default-noc-engine"
 }

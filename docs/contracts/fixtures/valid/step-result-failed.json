@@ -1,0 +1,12 @@
+{
+  "schema": "ipcraft.step-result.v1",
+  "pipelineRunId": "value",
+  "stepId": "value",
+  "stepKind": "host",
+  "status": "failed",
+  "toolResult": null,
+  "failure": {
+    "code": "step.failed",
+    "source": "host"
+  }
+}

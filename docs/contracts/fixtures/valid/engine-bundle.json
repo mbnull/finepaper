@@ -9,5 +9,5 @@
   "supportedPlatformAbis": [
     "linux-x86_64-gnu-v1"
   ],
-  "entrypoint": "value"
+  "entrypoint": "bin/default-noc-engine"
 }

@@ -321,7 +321,11 @@ def run_simple_case_fold_witnesses(mappings: dict[int, int]) -> None:
         fail("simple-fold self-check: multi-code-point full-fold expansions are forbidden")
 
 
-def portable_path(value: Any, location: str, normalization_tables: tuple[dict[int, tuple[int, ...]], dict[int, int], dict[tuple[int, int], int]]) -> str:
+def portable_relative_path(
+    value: Any, location: str,
+    normalization_tables: tuple[dict[int, tuple[int, ...]], dict[int, int], dict[tuple[int, int], int]],
+    required_suffix: str | None = None,
+) -> str:
     if not isinstance(value, str) or not value:
         fail(f"{location} must be a non-empty string")
     if nfc_normalize(value, normalization_tables) != value:
@@ -342,9 +346,22 @@ def portable_path(value: Any, location: str, normalization_tables: tuple[dict[in
                        for character in part.split(".", 1)[0])
         if stem in WINDOWS_RESERVED:
             fail(f"{location} uses reserved Windows device name {part!r}")
-    if not value.endswith(".json"):
-        fail(f"{location} must name a JSON file")
+    if required_suffix is not None and not value.endswith(required_suffix):
+        fail(f"{location} must end with {required_suffix!r}")
     return value
+
+
+def portable_path(value: Any, location: str, normalization_tables: tuple[dict[int, tuple[int, ...]], dict[int, int], dict[tuple[int, int], int]]) -> str:
+    return portable_relative_path(value, location, normalization_tables, ".json")
+
+
+def portable_collision_key(
+    value: Any, location: str,
+    normalization_tables: tuple[dict[int, tuple[int, ...]], dict[int, int], dict[tuple[int, int], int]],
+    folding_mappings: dict[int, int], required_suffix: str | None = None,
+) -> str:
+    normalized = portable_relative_path(value, location, normalization_tables, required_suffix)
+    return simple_case_fold(nfc_normalize(normalized, normalization_tables), folding_mappings)
 
 
 def catalog_ids(contracts: Path, normalization_tables=None, folding_mappings=None) -> set[str]:

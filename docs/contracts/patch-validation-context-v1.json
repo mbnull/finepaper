@@ -1,0 +1,65 @@
+{
+  "schema": "ipcraft.patch-validation-context.v1",
+  "authorityModes": [
+    "default-engine",
+    "extension-provider"
+  ],
+  "operationKinds": [
+    "createEntity",
+    "updateEntity",
+    "deleteEntity",
+    "createRelation",
+    "updateRelation",
+    "deleteRelation"
+  ],
+  "sourceKinds": [
+    "user-command",
+    "application-reconcile",
+    "application-migration",
+    "default-engine",
+    "extension-provider",
+    "recovery",
+    "undo-redo"
+  ],
+  "entityOwnership": {
+    "project": "host",
+    "component": "user",
+    "interface": "user",
+    "router": "structure-authority",
+    "structural-link": "structure-authority",
+    "access-slot": "structure-authority",
+    "domain": "user",
+    "package-entity:user": "user",
+    "package-entity:engine": "structure-authority"
+  },
+  "relationOwnership": {
+    "attachment": "user",
+    "domain-membership": "user",
+    "package-relation:user": "user",
+    "package-relation:engine": "structure-authority"
+  },
+  "packageEntityTypes": {
+    "vendor.engine-entity": "engine",
+    "vendor.user-entity": "user"
+  },
+  "packageEntitySubjects": {
+    "package-entity.engine": "vendor.engine-entity",
+    "package-entity.user": "vendor.user-entity"
+  },
+  "packageRelationTypes": {
+    "vendor.engine-relation": "engine",
+    "vendor.user-relation": "user"
+  },
+  "packageRelationSubjects": {
+    "package-relation.engine": "vendor.engine-relation",
+    "package-relation.user": "vendor.user-relation"
+  },
+  "hostSideEffectSources": [
+    "application-reconcile",
+    "application-migration"
+  ],
+  "trustedReplaySources": [
+    "recovery",
+    "undo-redo"
+  ]
+}

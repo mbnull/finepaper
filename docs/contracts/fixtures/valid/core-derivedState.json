@@ -1,0 +1,9 @@
+{
+  "schema": "ipcraft.derived-state.v1",
+  "topologyId": "value",
+  "routers": [],
+  "structuralLinks": [],
+  "accessSlots": [],
+  "packageEntities": [],
+  "packageRelations": []
+}

@@ -1,0 +1,47 @@
+{
+  "schema": "ipcraft.diagnostic-report.v1",
+  "pipelineRunId": "value",
+  "stepId": "value",
+  "invocationId": null,
+  "snapshotDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "diagnostics": [
+    {
+      "ruleId": "rule.info",
+      "severity": "info",
+      "message": "info",
+      "blocking": false,
+      "subjects": [],
+      "properties": []
+    },
+    {
+      "ruleId": "rule.warning",
+      "severity": "warning",
+      "message": "warning",
+      "blocking": false,
+      "subjects": [
+        {
+          "kind": "router",
+          "id": "router.0.0"
+        }
+      ],
+      "properties": [
+        "coordinate"
+      ]
+    },
+    {
+      "ruleId": "rule.error",
+      "severity": "error",
+      "message": "error",
+      "blocking": true,
+      "subjects": [
+        {
+          "kind": "domain",
+          "id": "domain.power"
+        }
+      ],
+      "properties": [
+        "membership"
+      ]
+    }
+  ]
+}

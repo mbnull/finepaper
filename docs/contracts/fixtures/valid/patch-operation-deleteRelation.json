@@ -1,0 +1,21 @@
+{
+  "schema": "ipcraft.patch.v1",
+  "transactionId": "value",
+  "patchId": "value",
+  "source": {
+    "kind": "user-command",
+    "identity": "ipcraft.host",
+    "version": "1"
+  },
+  "causality": {
+    "sessionRevision": 0
+  },
+  "preconditions": [],
+  "operations": [
+    {
+      "op": "deleteRelation",
+      "relationKind": "domain-membership",
+      "id": "membership.0"
+    }
+  ]
+}

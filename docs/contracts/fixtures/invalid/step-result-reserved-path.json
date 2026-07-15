@@ -1,0 +1,11 @@
+{
+  "schema": "ipcraft.step-result.v1",
+  "pipelineRunId": "value",
+  "stepId": "value",
+  "stepKind": "external-tool",
+  "status": "succeeded",
+  "toolResult": "CON.json",
+  "failure": null,
+  "invocationId": "invocation.1",
+  "toolLockId": "dep.tool"
+}

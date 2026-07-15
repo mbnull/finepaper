@@ -1,0 +1,288 @@
+{
+  "schema": "ipcraft.noc-package.v1",
+  "id": "rich-noc",
+  "name": "Rich Declarative Mesh NoC",
+  "version": "1.0.0",
+  "component": {
+    "typeKey": "mesh-noc",
+    "displayName": "Mesh NoC"
+  },
+  "defaultEngineRequirement": {
+    "engineHostContractVersion": "value",
+    "engineCompatibilityVersion": "value",
+    "hostSideEffectContractVersion": "value"
+  },
+  "structureAuthority": "default-engine",
+  "configuration": {
+    "global": {
+      "fields": [
+        {
+          "key": "columns",
+          "type": "int",
+          "label": "Columns",
+          "description": "Mesh dimension",
+          "default": 1,
+          "required": true,
+          "readOnly": false,
+          "minimum": 1,
+          "maximum": 64,
+          "unit": null,
+          "values": null,
+          "visibleWhen": null,
+          "enabledWhen": null,
+          "topologyDriving": true
+        },
+        {
+          "key": "rows",
+          "type": "int",
+          "label": "Rows",
+          "description": "Mesh dimension",
+          "default": 1,
+          "required": true,
+          "readOnly": false,
+          "minimum": 1,
+          "maximum": 64,
+          "unit": null,
+          "values": null,
+          "visibleWhen": null,
+          "enabledWhen": null,
+          "topologyDriving": true
+        }
+      ]
+    }
+  },
+  "topology": {
+    "kind": "mesh",
+    "rowField": "rows",
+    "columnField": "columns",
+    "routerTemplate": {
+      "stableKey": "mesh-router",
+      "identityCompatibilityVersion": 1,
+      "properties": {
+        "pipelineStages": 2
+      }
+    },
+    "linkTemplate": {
+      "stableKey": "mesh-link",
+      "identityCompatibilityVersion": 1,
+      "properties": {
+        "width": 256
+      }
+    },
+    "slotTemplates": [
+      {
+        "stableKey": "local-0",
+        "identityCompatibilityVersion": 1,
+        "displayOrder": 0,
+        "label": "Local 0",
+        "allowedContracts": [
+          {
+            "contractId": "amba.axi5",
+            "version": "1.0",
+            "bundleManifestDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "roles": [
+              "initiator"
+            ],
+            "capabilityConstraints": {
+              "dataWidth": 128
+            }
+          }
+        ],
+        "properties": {
+          "position": 0
+        }
+      },
+      {
+        "stableKey": "local-0",
+        "identityCompatibilityVersion": 1,
+        "displayOrder": 1,
+        "label": "Local 1",
+        "allowedContracts": [],
+        "properties": {
+          "position": 1
+        }
+      }
+    ]
+  },
+  "interfaceTemplates": [
+    {
+      "key": "axi-boundary",
+      "label": "AXI Boundary",
+      "contractId": "amba.axi5",
+      "contractVersion": "1.0",
+      "contractBundleManifestDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "role": "initiator",
+      "capabilityDefaults": {
+        "dataWidth": 128
+      },
+      "contractConfigDefaults": {
+        "addressWidth": 48
+      },
+      "nocConfig": {
+        "fields": [
+          {
+            "key": "interleave",
+            "type": "enum",
+            "label": "Interleave",
+            "description": "Placement policy",
+            "default": "none",
+            "required": true,
+            "readOnly": false,
+            "minimum": null,
+            "maximum": null,
+            "unit": null,
+            "values": [
+              "none",
+              "stripe"
+            ],
+            "visibleWhen": null,
+            "enabledWhen": null,
+            "topologyDriving": false
+          }
+        ],
+        "defaults": {
+          "interleave": "none"
+        }
+      }
+    }
+  ],
+  "domainTypes": [
+    {
+      "key": "power",
+      "label": "Power",
+      "defaultName": "Default Power",
+      "visual": {
+        "fill": "#e8f1ff",
+        "border": "#3b6ea8",
+        "pattern": "solid"
+      },
+      "configuration": {
+        "fields": [
+          {
+            "key": "voltage",
+            "type": "double",
+            "label": "Voltage",
+            "description": "Nominal voltage",
+            "default": 0.8,
+            "required": true,
+            "readOnly": false,
+            "minimum": 0.5,
+            "maximum": 1.2,
+            "unit": "V",
+            "values": null,
+            "visibleWhen": null,
+            "enabledWhen": null,
+            "topologyDriving": false
+          }
+        ]
+      }
+    }
+  ],
+  "packageEntityTypes": [
+    {
+      "typeKey": "vendor.endpoint",
+      "ownership": "user",
+      "genericEditable": true,
+      "topologyDriving": false,
+      "schema": {
+        "type": "object"
+      }
+    },
+    {
+      "typeKey": "vendor.route-state",
+      "ownership": "engine",
+      "genericEditable": false,
+      "topologyDriving": false,
+      "schema": {
+        "type": "object"
+      }
+    }
+  ],
+  "packageRelationTypes": [
+    {
+      "typeKey": "vendor.route",
+      "ownership": "user",
+      "topologyDriving": false,
+      "sources": {
+        "kinds": [
+          "router"
+        ],
+        "minimum": 1,
+        "maximum": 1
+      },
+      "targets": {
+        "kinds": [
+          "package-entity"
+        ],
+        "minimum": 1,
+        "maximum": 1
+      },
+      "unresolvedAllowed": false,
+      "schema": {
+        "type": "object"
+      }
+    },
+    {
+      "typeKey": "vendor.route-state-link",
+      "ownership": "engine",
+      "topologyDriving": false,
+      "sources": {
+        "kinds": [
+          "router"
+        ],
+        "minimum": 1,
+        "maximum": 1
+      },
+      "targets": {
+        "kinds": [
+          "package-entity"
+        ],
+        "minimum": 1,
+        "maximum": 2
+      },
+      "unresolvedAllowed": true,
+      "schema": {
+        "type": "object"
+      }
+    }
+  ],
+  "extensionProvider": null,
+  "tools": {
+    "drc": {
+      "id": "tool.drc",
+      "version": "1",
+      "protocol": "ipcraft.tool-input.v1",
+      "runtimeLockId": "dep.runtime",
+      "bundleManifestDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "requestedTimeoutSeconds": 30,
+      "environmentProfile": "isolated",
+      "networkPolicy": "prohibited",
+      "command": [
+        "tools/drc.py"
+      ]
+    },
+    "generate": {
+      "id": "tool.generate",
+      "version": "1",
+      "protocol": "ipcraft.tool-input.v1",
+      "runtimeLockId": "dep.runtime",
+      "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "requestedTimeoutSeconds": 60,
+      "environmentProfile": "isolated",
+      "networkPolicy": "prohibited",
+      "command": [
+        "tools/generate.py"
+      ]
+    }
+  },
+  "extensions": [
+    {
+      "ownerLockId": "dep.noc.rich",
+      "schema": "vendor.opaque.v1",
+      "version": "1",
+      "data": {
+        "mode": "preview"
+      }
+    }
+  ]
+}
