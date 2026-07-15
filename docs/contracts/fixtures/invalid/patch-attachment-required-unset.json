@@ -15,7 +15,7 @@
     {
       "op": "updateRelation",
       "relationKind": "attachment",
-      "id": "relation.attachment",
+      "id": "attachment.boundary",
       "set": {},
       "unset": [
         "interfaceRef"

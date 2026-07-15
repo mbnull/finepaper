@@ -14,13 +14,20 @@
   "preconditions": [],
   "operations": [
     {
-      "op": "updateRelation",
-      "relationKind": "package-relation",
-      "id": "package-relation.user",
-      "set": {
-        "data": {}
-      },
-      "unset": []
+      "op": "createEntity",
+      "entityKind": "access-slot",
+      "localRef": "authority:missing-slot",
+      "value": {
+        "routerRef": {
+          "id": "router.missing"
+        },
+        "templateKey": "local-x",
+        "identityCompatibilityVersion": 1,
+        "displayOrder": 2,
+        "label": "Missing",
+        "allowedContracts": [],
+        "properties": {}
+      }
     }
   ],
   "applicability": {

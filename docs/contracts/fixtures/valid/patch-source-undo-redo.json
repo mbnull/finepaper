@@ -1,7 +1,7 @@
 {
   "schema": "ipcraft.patch.v1",
   "transactionId": "value",
-  "patchId": "value",
+  "patchId": "trusted.undo-redo.1",
   "source": {
     "kind": "undo-redo",
     "identity": "ipcraft.host",

@@ -21,7 +21,7 @@
         "templateKey": "mesh-router",
         "identityCompatibilityVersion": 1,
         "coordinate": {
-          "row": 0,
+          "row": 1,
           "column": 0
         },
         "properties": {}
@@ -39,7 +39,7 @@
     "baseAuthoritativeDesignDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "structureAuthority": {
       "kind": "extension-provider",
-      "lockId": "value",
+      "lockId": "dep.provider",
       "identity": "vendor.provider",
       "version": "1",
       "bundleDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"

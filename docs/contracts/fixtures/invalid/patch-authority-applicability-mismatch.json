@@ -39,9 +39,9 @@
     "baseAuthoritativeDesignDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "structureAuthority": {
       "kind": "default-engine",
-      "lockId": "value",
+      "lockId": "dep.provider",
       "identity": "ipcraft.default-noc-engine",
-      "version": "1",
+      "version": "1.0.0",
       "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     },
     "packageBundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",

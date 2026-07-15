@@ -12,14 +12,13 @@
   },
   "preconditions": [
     {
-      "kind": "entity-exists",
-      "entityKind": "component",
-      "id": "component.noc"
+      "kind": "slot-unoccupied",
+      "slotId": "slot.free"
     },
     {
-      "kind": "entity-absent",
-      "entityKind": "interface",
-      "id": "interface.new"
+      "kind": "relation-exists",
+      "relationKind": "domain-membership",
+      "id": "membership.0"
     },
     {
       "kind": "property-equals",
@@ -29,13 +28,14 @@
       "value": "Mesh"
     },
     {
-      "kind": "relation-exists",
-      "relationKind": "domain-membership",
-      "id": "membership.0"
+      "kind": "entity-absent",
+      "entityKind": "interface",
+      "id": "interface.new"
     },
     {
-      "kind": "slot-unoccupied",
-      "slotId": "slot.free"
+      "kind": "entity-exists",
+      "entityKind": "component",
+      "id": "component.noc"
     }
   ],
   "operations": []

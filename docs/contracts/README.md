@@ -7,6 +7,8 @@ This directory contains machine-readable companions to the approved architecture
 - `vectors/core-canonical-projection-v1.json` records canonical JSON/digest and set-order examples.
 - `error-codes-v1.json` is the machine-readable stable Core/runtime error catalog candidate.
 - `fixture-error-policy-v1.json` closes the standalone fixture `(schemaId, validationPhase, failureBoundary)` classification to one exact stable error code per permitted V1 tuple.
+- `fixture-coverage-v1.json` freezes the exact 18-root, three-tier authoring requirements at `sha256:6128d13d3bb6bf26da98921743074d2731f91e12e447b6675d898d0cc0233edc` and the complete root/tier fixture mapping plus requirements at `sha256:a2d5e2b68ca4c0788dedbe1ae08a609383d04e1e3fcfd3a37701237ac5fbc1b3`; the verifier pins both digests in code.
+- `patch-validation-context-v1.json` freezes the deterministic Patch current-state, authority contexts, and exact trusted replay transaction digests at `sha256:ed92ef6923a1bf8b02315c060d8a0cca5967306f05ac97305419e01e47ff0d4c` for standalone precondition, ownership, reference, lifecycle, and transaction fixtures.
 - `unicode/` pins Unicode 17 NFC, simple C/S folding, the official normalization conformance source, source hashes, and the complete Unicode License V3 notice so portable path identity is host-independent.
 
 These files are Revision 4 contract candidates, not a completed Gate 0 freeze. The schema, fixture, vector, and error catalogs are populated; Gate 0 still requires the Qt executable checks, freeze-input manifest, review bundle, and `CORE-FREEZE.md` digests listed in Appendix E.

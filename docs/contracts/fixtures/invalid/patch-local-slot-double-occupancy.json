@@ -1,0 +1,71 @@
+{
+  "schema": "ipcraft.patch.v1",
+  "transactionId": "value",
+  "patchId": "trusted.recovery.1",
+  "source": {
+    "kind": "recovery",
+    "identity": "ipcraft.host",
+    "version": "1"
+  },
+  "causality": {
+    "sessionRevision": 0
+  },
+  "preconditions": [],
+  "operations": [
+    {
+      "op": "deleteRelation",
+      "relationKind": "attachment",
+      "id": "attachment.boundary"
+    },
+    {
+      "op": "createEntity",
+      "entityKind": "access-slot",
+      "localRef": "application:000020",
+      "value": {
+        "routerRef": {
+          "id": "router.0.0"
+        },
+        "templateKey": "local-new",
+        "identityCompatibilityVersion": 1,
+        "displayOrder": 2,
+        "label": "New",
+        "allowedContracts": [],
+        "properties": {}
+      }
+    },
+    {
+      "op": "createRelation",
+      "relationKind": "attachment",
+      "localRef": "application:000021",
+      "value": {
+        "interfaceRef": {
+          "id": "interface.boundary"
+        },
+        "state": "resolved",
+        "routerRef": {
+          "id": "router.0.0"
+        },
+        "slotRef": {
+          "localRef": "application:000020"
+        }
+      }
+    },
+    {
+      "op": "createRelation",
+      "relationKind": "attachment",
+      "localRef": "application:000022",
+      "value": {
+        "interfaceRef": {
+          "id": "interface.unattached"
+        },
+        "state": "resolved",
+        "routerRef": {
+          "id": "router.0.0"
+        },
+        "slotRef": {
+          "localRef": "application:000020"
+        }
+      }
+    }
+  ]
+}

@@ -10,16 +10,11 @@
   "causality": {
     "sessionRevision": 0
   },
-  "preconditions": [],
-  "operations": [
+  "preconditions": [
     {
-      "op": "updateRelation",
-      "relationKind": "domain-membership",
-      "id": "membership.0",
-      "set": {},
-      "unset": [
-        "domainRef"
-      ]
+      "kind": "slot-unoccupied",
+      "slotId": "slot.occupied"
     }
-  ]
+  ],
+  "operations": []
 }

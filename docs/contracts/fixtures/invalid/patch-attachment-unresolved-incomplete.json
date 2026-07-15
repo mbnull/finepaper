@@ -14,11 +14,14 @@
   "operations": [
     {
       "op": "updateRelation",
-      "relationKind": "domain-membership",
-      "id": "membership.0",
-      "set": {},
+      "relationKind": "attachment",
+      "id": "attachment.boundary",
+      "set": {
+        "state": "unresolved"
+      },
       "unset": [
-        "domainRef"
+        "routerRef",
+        "slotRef"
       ]
     }
   ]

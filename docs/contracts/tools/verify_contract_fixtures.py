@@ -9,6 +9,7 @@ Core-semantic checks whose stable boundary/code pairs are catalogued by Task 4A.
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import json
 import math
@@ -22,6 +23,11 @@ from pathlib import Path
 from typing import Any
 
 import verify_fixture_catalog
+
+
+FROZEN_COVERAGE_REQUIREMENTS_DIGEST = "sha256:6128d13d3bb6bf26da98921743074d2731f91e12e447b6675d898d0cc0233edc"
+FROZEN_COVERAGE_CONTRACT_DIGEST = "sha256:a2d5e2b68ca4c0788dedbe1ae08a609383d04e1e3fcfd3a37701237ac5fbc1b3"
+FROZEN_PATCH_CONTEXT_DIGEST = "sha256:ed92ef6923a1bf8b02315c060d8a0cca5967306f05ac97305419e01e47ff0d4c"
 
 
 class FixtureVerificationError(RuntimeError):
@@ -897,6 +903,28 @@ def _portable_paths_invalid(contracts: Path, paths: list[Any]) -> bool:
     return len(keys) != len(set(keys))
 
 
+def bundle_manifest_digest(contracts: Path, document: dict[str, Any]) -> str:
+    schema = load_strict_json(contracts / "schemas/ipcraft.bundle-manifest.v1.schema.json")
+    metadata = schema.get("properties", {}).get("files", {}).get("x-ipcraft-canonical")
+    if metadata != {"kind": "set", "sortKey": ["path"]}:
+        raise FixtureVerificationError("Bundle files canonical set rule drifted")
+    rule_index = load_strict_json(contracts / "vectors/core-canonical-projection-v1.json")
+    matching_rules = [
+        rule for rule in rule_index.get("canonicalCollections", [])
+        if rule.get("schemaId") == "ipcraft.bundle-manifest.v1"
+        and rule.get("schemaPointer") == "/properties/files"
+        and rule.get("kind") == "set"
+        and rule.get("sortKey") == ["path"]
+    ]
+    if len(matching_rules) != 1:
+        raise FixtureVerificationError("Bundle files canonical set rule missing from frozen index")
+    projected = copy.deepcopy(document)
+    projected.pop("manifestDigest", None)
+    projected["files"] = sorted(projected.get("files", []), key=lambda item: item["path"])
+    canonical = json.dumps(projected, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return "sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
 def _declared_scalar_matches(kind: str, value: Any) -> bool:
     if value is None:
         return True
@@ -1011,6 +1039,528 @@ def _package_declaration_invalid(contracts: Path, document: dict[str, Any]) -> b
     return False
 
 
+PATCH_ENTITY_DEFS = {
+    "component": "patchComponentValue", "interface": "patchInterfaceValue", "router": "patchRouterValue",
+    "structural-link": "patchStructuralLinkValue", "access-slot": "patchAccessSlotValue",
+    "domain": "patchDomainValue", "package-entity": "patchPackageEntityValue",
+}
+PATCH_RELATION_DEFS = {
+    "attachment": "patchAttachmentValue", "domain-membership": "patchDomainMembershipValue",
+    "package-relation": "patchPackageRelationValue",
+}
+
+
+def _patch_context_digest(document: dict[str, Any]) -> str:
+    projected = copy.deepcopy(document)
+    projected.pop("contextDigest", None)
+    canonical = json.dumps(projected, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return "sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _validate_patch_subject_schema(
+    validator: Draft202012Subset, kind: str, value: dict[str, Any], relation: bool,
+) -> bool:
+    core, core_path = validator.schemas["ipcraft.core-canonical-models.v1"]
+    if not relation and kind == "project":
+        if set(value) != {"name", "dependencies"}:
+            return False
+        schema = core["$defs"]["patchProjectUpdateSet"]
+    elif not relation and kind == "topology":
+        if set(value) != {"derivation"}:
+            return False
+        schema = core["$defs"]["patchTopologyUpdateSet"]
+    else:
+        definition = (PATCH_RELATION_DEFS if relation else PATCH_ENTITY_DEFS).get(kind)
+        if definition is None:
+            return False
+        schema = core["$defs"][definition]
+    return validator._is_valid(schema, value, core, core_path)
+
+
+def _patch_state_reference_failure(
+    entities: dict[tuple[str, str], dict[str, Any]],
+    relations: dict[tuple[str, str], dict[str, Any]],
+    local_bindings: dict[str, tuple[str, str, bool]],
+) -> tuple[str, str] | None:
+    def state_key(reference: Any, expected_kind: str, relation: bool = False) -> tuple[str, str] | None:
+        if not isinstance(reference, dict) or set(reference) not in ({"id"}, {"localRef"}):
+            return None
+        if "id" in reference:
+            return (expected_kind, reference["id"])
+        binding = local_bindings.get(reference["localRef"])
+        if binding != (expected_kind, "@" + reference["localRef"], relation):
+            return None
+        return (expected_kind, binding[1])
+
+    def reference_token(reference: Any, expected_kind: str, relation: bool = False) -> str | None:
+        key = state_key(reference, expected_kind, relation)
+        return None if key is None else f"{key[0]}:{key[1]}"
+
+    def extension_duplicate(value: dict[str, Any]) -> bool:
+        extensions = value.get("extensions", [])
+        keys = [(item.get("ownerLockId"), item.get("schema"), item.get("version")) for item in extensions]
+        return len(keys) != len(set(keys))
+
+    if any(extension_duplicate(value) for value in list(entities.values()) + list(relations.values())):
+        return "patch-invariant", "patch.invariant_violation"
+    coordinates = [
+        (value.get("coordinate", {}).get("row"), value.get("coordinate", {}).get("column"))
+        for (kind, _), value in entities.items() if kind == "router"
+    ]
+    if len(coordinates) != len(set(coordinates)):
+        return "patch-invariant", "patch.invariant_violation"
+    link_pairs: set[tuple[str, str]] = set()
+    for (kind, _), value in entities.items():
+        if kind != "structural-link":
+            continue
+        endpoint_a = state_key(value.get("endpointA"), "router")
+        endpoint_b = state_key(value.get("endpointB"), "router")
+        if endpoint_a is None or endpoint_b is None:
+            continue
+        if endpoint_a == endpoint_b:
+            return "patch-invariant", "patch.invariant_violation"
+        pair = tuple(sorted((endpoint_a[1], endpoint_b[1])))
+        if pair in link_pairs:
+            return "patch-invariant", "patch.invariant_violation"
+        link_pairs.add(pair)
+        left, right = entities.get(endpoint_a, {}).get("coordinate"), entities.get(endpoint_b, {}).get("coordinate")
+        if isinstance(left, dict) and isinstance(right, dict):
+            row_delta = abs(left.get("row", 0) - right.get("row", 0))
+            column_delta = abs(left.get("column", 0) - right.get("column", 0))
+            if row_delta + column_delta != 1:
+                return "patch-invariant", "patch.invariant_violation"
+            if value.get("axis") != ("vertical" if row_delta else "horizontal"):
+                return "patch-invariant", "patch.invariant_violation"
+    slot_keys: list[tuple[str, str]] = []
+    for (kind, _), value in entities.items():
+        if kind != "access-slot":
+            continue
+        router_ref = value.get("routerRef", {})
+        router_token = router_ref.get("id", "local:" + router_ref.get("localRef", ""))
+        slot_keys.append((router_token, value.get("templateKey")))
+        allowed = value.get("allowedContracts", [])
+        allowed_keys = [
+            (item.get("contractLockId"), json.dumps(item.get("capabilityConstraints", {}), sort_keys=True, separators=(",", ":")))
+            for item in allowed
+        ]
+        if len(allowed_keys) != len(set(allowed_keys)) or any(
+            len(item.get("roles", [])) != len(set(item.get("roles", []))) for item in allowed
+        ):
+            return "patch-invariant", "patch.invariant_violation"
+    if len(slot_keys) != len(set(slot_keys)):
+        return "patch-invariant", "patch.invariant_violation"
+    attached_interfaces: list[str] = []
+    for (kind, _), value in relations.items():
+        if kind == "attachment":
+            reference = value.get("interfaceRef", {})
+            attached_interfaces.append(reference.get("id", "local:" + reference.get("localRef", "")))
+        if kind == "package-relation":
+            for member in ("sources", "targets"):
+                keys = [json.dumps(item, ensure_ascii=False, sort_keys=True, separators=(",", ":")) for item in value.get(member, [])]
+                if len(keys) != len(set(keys)):
+                    return "patch-invariant", "patch.invariant_violation"
+    if len(attached_interfaces) != len(set(attached_interfaces)):
+        return "patch-invariant", "patch.invariant_violation"
+
+    def resolves(reference: Any, expected_kind: str, relation: bool = False) -> bool:
+        key = state_key(reference, expected_kind, relation)
+        return key in (relations if relation else entities) if key is not None else False
+
+    for (kind, _), value in entities.items():
+        if kind == "interface" and not resolves(value.get("ownerComponentRef"), "component"):
+            return "reference", "patch.unknown_reference"
+        if kind == "structural-link":
+            if not resolves(value.get("endpointA"), "router") or not resolves(value.get("endpointB"), "router"):
+                return "reference", "patch.unknown_reference"
+        if kind == "access-slot" and not resolves(value.get("routerRef"), "router"):
+            return "reference", "patch.unknown_reference"
+    occupied: set[str] = set()
+    for (kind, _), value in relations.items():
+        if kind == "attachment":
+            if not resolves(value.get("interfaceRef"), "interface"):
+                return "reference", "patch.unknown_reference"
+            if value.get("state") == "resolved":
+                if not resolves(value.get("routerRef"), "router") or not resolves(value.get("slotRef"), "access-slot"):
+                    return "reference", "patch.unknown_reference"
+                slot_key = state_key(value["slotRef"], "access-slot")
+                slot_token = reference_token(value["slotRef"], "access-slot")
+                if slot_key is not None and slot_token is not None:
+                    if slot_token in occupied:
+                        return "patch-invariant", "patch.invariant_violation"
+                    occupied.add(slot_token)
+                    slot = entities.get(slot_key, {})
+                    if reference_token(slot.get("routerRef"), "router") != reference_token(value.get("routerRef"), "router"):
+                        return "patch-invariant", "patch.invariant_violation"
+            elif value.get("state") == "unresolved":
+                target = value.get("intendedTarget", {})
+                if not all(isinstance(target.get(member), dict) and set(target[member]) in ({"id"}, {"localRef"}) for member in ("routerRef", "slotRef")):
+                    return "reference", "patch.unknown_reference"
+        elif kind == "domain-membership":
+            if not resolves(value.get("domainRef"), "domain") or not resolves(value.get("routerRef"), "router"):
+                return "reference", "patch.unknown_reference"
+        elif kind == "package-relation":
+            for endpoint in value.get("sources", []) + value.get("targets", []):
+                subject = endpoint.get("subject") if endpoint.get("state") == "resolved" else endpoint.get("intendedSubject")
+                if not isinstance(subject, dict):
+                    return "reference", "patch.unknown_reference"
+                expected_kind = subject.get("kind")
+                key = next(iter(subject.get("ref", {})), None)
+                if expected_kind is None or key is None:
+                    return "reference", "patch.unknown_reference"
+                is_relation = expected_kind in {"attachment", "domain-membership", "package-relation"}
+                if endpoint.get("state") == "resolved" and not resolves(subject.get("ref"), expected_kind, is_relation):
+                    return "reference", "patch.unknown_reference"
+    return None
+
+
+def _validate_patch_context(
+    contracts: Path, validator: Draft202012Subset,
+) -> tuple[dict[str, Any], dict[tuple[str, str], dict[str, Any]], dict[tuple[str, str], dict[str, Any]]]:
+    context = load_strict_json(contracts / "patch-validation-context-v1.json")
+    required = {
+        "schema", "version", "authorityContexts", "packageEntityTypes", "packageRelationTypes",
+        "trustedReplayTransactions", "entities", "relations", "occupiedSlots", "freeSlots", "contextDigest",
+    }
+    if set(context) != required or context.get("schema") != "ipcraft.patch-validation-context.v1" or context.get("version") != "1":
+        raise FixtureVerificationError("patch validation context envelope is not closed")
+    computed = _patch_context_digest(context)
+    if context.get("contextDigest") != computed or computed != FROZEN_PATCH_CONTEXT_DIGEST:
+        raise FixtureVerificationError("patch validation context digest differs from frozen contract")
+    authority_contexts = context.get("authorityContexts")
+    if not isinstance(authority_contexts, list) or [item.get("contextId") for item in authority_contexts] != ["authority.default", "authority.provider"]:
+        raise FixtureVerificationError("patch validation authority contexts are incomplete")
+    if [item.get("selectedAuthority", {}).get("kind") for item in authority_contexts] != ["default-engine", "extension-provider"]:
+        raise FixtureVerificationError("patch validation selected authorities are incomplete")
+    if any(set(item) != {"contextId", "selectedAuthority"} for item in authority_contexts):
+        raise FixtureVerificationError("patch validation authority context fields are not closed")
+    trusted_replay = context.get("trustedReplayTransactions")
+    if not isinstance(trusted_replay, list) or [item.get("sourceKind") for item in trusted_replay] != ["recovery", "undo-redo"]:
+        raise FixtureVerificationError("patch validation trusted replay registry is not closed")
+    if any(
+        set(item) != {"sourceKind", "patchId", "sourceIdentity", "sourceVersion", "patchDigest"}
+        or not re.fullmatch(r"sha256:[0-9a-f]{64}", item.get("patchDigest", ""))
+        for item in trusted_replay
+    ):
+        raise FixtureVerificationError("patch validation trusted replay entries are malformed")
+    entity_items = context.get("entities")
+    relation_items = context.get("relations")
+    if not isinstance(entity_items, list) or not isinstance(relation_items, list):
+        raise FixtureVerificationError("patch validation state collections are malformed")
+    entity_keys = [(item.get("kind"), item.get("id")) for item in entity_items]
+    relation_keys = [(item.get("kind"), item.get("id")) for item in relation_items]
+    if any(set(item) != {"kind", "id", "value"} for item in entity_items + relation_items):
+        raise FixtureVerificationError("patch validation subject wrapper fields are not closed")
+    if entity_keys != sorted(entity_keys) or len(entity_keys) != len(set(entity_keys)):
+        raise FixtureVerificationError("patch validation entity state is not canonical and unique")
+    if relation_keys != sorted(relation_keys) or len(relation_keys) != len(set(relation_keys)):
+        raise FixtureVerificationError("patch validation relation state is not canonical and unique")
+    if set(kind for kind, _ in entity_keys) != {"project", "topology", "component", "interface", "router", "structural-link", "access-slot", "domain", "package-entity"}:
+        raise FixtureVerificationError("patch validation context does not cover every entity kind")
+    if set(kind for kind, _ in relation_keys) != {"attachment", "domain-membership", "package-relation"}:
+        raise FixtureVerificationError("patch validation context does not cover every relation kind")
+    entities = {(item["kind"], item["id"]): copy.deepcopy(item["value"]) for item in entity_items}
+    relations = {(item["kind"], item["id"]): copy.deepcopy(item["value"]) for item in relation_items}
+    project_dependencies = {
+        item["lockId"]: item for item in entities.get(("project", "project.mesh"), {}).get("dependencies", [])
+    }
+    for authority_context in authority_contexts:
+        selected = authority_context["selectedAuthority"]
+        if set(selected) != {"kind", "lockId", "identity", "version", "bundleDigest"}:
+            raise FixtureVerificationError("patch validation selected authority fields are not closed")
+        dependency = project_dependencies.get(selected["lockId"])
+        if dependency is None or any((
+            dependency.get("kind") != selected["kind"], dependency.get("id") != selected["identity"],
+            dependency.get("version") != selected["version"],
+            dependency.get("bundleManifestDigest") != selected["bundleDigest"],
+        )):
+            raise FixtureVerificationError("patch validation selected authority does not match current dependencies")
+    for (kind, _), value in entities.items():
+        if not _validate_patch_subject_schema(validator, kind, value, False):
+            raise FixtureVerificationError(f"patch validation entity subject is invalid: {kind}")
+    for (kind, _), value in relations.items():
+        if not _validate_patch_subject_schema(validator, kind, value, True):
+            raise FixtureVerificationError(f"patch validation relation subject is invalid: {kind}")
+    for (kind, _), value in entities.items():
+        if kind == "package-entity" and context["packageEntityTypes"].get(value.get("typeKey")) not in {"user", "engine"}:
+            raise FixtureVerificationError("patch validation Package Entity ownership is unresolved")
+    for (kind, _), value in relations.items():
+        if kind == "package-relation" and context["packageRelationTypes"].get(value.get("typeKey")) not in {"user", "engine"}:
+            raise FixtureVerificationError("patch validation Package Relation ownership is unresolved")
+    reference_failure = _patch_state_reference_failure(entities, relations, {})
+    if reference_failure:
+        raise FixtureVerificationError(f"patch validation context references are invalid: {reference_failure}")
+    occupied = sorted(
+        value["slotRef"]["id"] for (kind, _), value in relations.items()
+        if kind == "attachment" and value.get("state") == "resolved" and set(value.get("slotRef", {})) == {"id"}
+    )
+    slots = sorted(item_id for kind, item_id in entities if kind == "access-slot")
+    if context.get("occupiedSlots") != occupied or context.get("freeSlots") != sorted(set(slots) - set(occupied)):
+        raise FixtureVerificationError("patch validation slot occupancy is inconsistent")
+    return context, entities, relations
+
+
+def _patch_transaction_failure(
+    contracts: Path, document: dict[str, Any], validator: Draft202012Subset,
+) -> tuple[str, str] | None:
+    context, entities, relations = _validate_patch_context(contracts, validator)
+    source = document.get("source", {}).get("kind")
+    source_envelope = document.get("source", {})
+    applicability = document.get("applicability", {})
+    trusted_replay = True
+    if source in {"recovery", "undo-redo"}:
+        signature_input = {
+            "patchId": document.get("patchId"), "source": document.get("source"),
+            "preconditions": document.get("preconditions"), "operations": document.get("operations"),
+        }
+        signature = "sha256:" + hashlib.sha256(
+            json.dumps(signature_input, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+        trusted_replay = any(
+            item.get("sourceKind") == source and item.get("patchId") == document.get("patchId")
+            and item.get("sourceIdentity") == document.get("source", {}).get("identity")
+            and item.get("sourceVersion") == document.get("source", {}).get("version")
+            and item.get("patchDigest") == signature
+            for item in context["trustedReplayTransactions"]
+        )
+    operation_ids = [item["id"] for item in document.get("operations", []) if "id" in item]
+    operation_local_refs = [item["localRef"] for item in document.get("operations", []) if "localRef" in item]
+    if len(operation_ids) != len(set(operation_ids)):
+        return "duplicate-id", "patch.duplicate_id"
+    if len(operation_local_refs) != len(set(operation_local_refs)):
+        return "local-reference", "patch.local_ref_invalid"
+    required_entity_members = {
+        "project":{"name","dependencies"}, "topology":{"derivation"},
+        "component":{"kind","name","packageLockId","typeKey","config","extensions"},
+        "interface":{"ownerComponentRef","templateKey","name","contract","capabilities","contractConfig","nocConfig","extensions"},
+        "router":{"templateKey","identityCompatibilityVersion","coordinate","properties"},
+        "structural-link":{"templateKey","identityCompatibilityVersion","endpointA","endpointB","axis","properties"},
+        "access-slot":{"routerRef","templateKey","identityCompatibilityVersion","displayOrder","label","allowedContracts","properties"},
+        "domain":{"typeKey","name","isDefault","config"}, "package-entity":{"typeKey","data","extensions"},
+    }
+    required_relation_members = {
+        "attachment":{"interfaceRef","state"}, "domain-membership":{"domainRef","routerRef"},
+        "package-relation":{"typeKey","sources","targets","data","extensions"},
+    }
+    for operation in document.get("operations", []):
+        set_members, unset_members = set(operation.get("set", {})), set(operation.get("unset", []))
+        if set_members & unset_members:
+            return "patch-invariant", "patch.invariant_violation"
+        if operation.get("op") == "updateEntity" and unset_members & required_entity_members.get(operation.get("entityKind"), set()):
+            return "patched-subject-schema", "patch.schema_violation"
+        if operation.get("op") == "updateRelation" and unset_members & required_relation_members.get(operation.get("relationKind"), set()):
+            return "patched-subject-schema", "patch.schema_violation"
+    if source in {"default-engine", "extension-provider"}:
+        selected = [
+            item["selectedAuthority"] for item in context["authorityContexts"]
+            if item["selectedAuthority"].get("kind") == source
+        ]
+        if len(selected) != 1 or any(
+            selected[0].get(member) != source_envelope.get(member)
+            for member in ("kind", "identity", "version", "bundleDigest")
+        ):
+            return "source-authority", "patch.source_not_allowed"
+        if any(
+            applicability.get("structureAuthority", {}).get(member) != selected[0].get(member)
+            for member in ("kind", "lockId", "identity", "version", "bundleDigest")
+        ):
+            return "structure-authority", "patch.authority_conflict"
+
+    preconditions = document.get("preconditions", [])
+    precondition_keys = [json.dumps(item, ensure_ascii=False, sort_keys=True, separators=(",", ":")) for item in preconditions]
+    if len(precondition_keys) != len(set(precondition_keys)) or precondition_keys != sorted(precondition_keys):
+        return "patch-invariant", "patch.invariant_violation"
+    occupied_slots = {
+        value["slotRef"]["id"] for (kind, _), value in relations.items()
+        if kind == "attachment" and value.get("state") == "resolved" and set(value.get("slotRef", {})) == {"id"}
+    }
+    for precondition in preconditions:
+        kind = precondition.get("kind")
+        if kind in {"entity-exists", "entity-absent", "property-equals"}:
+            key = (precondition.get("entityKind"), precondition.get("id"))
+            exists = key in entities
+            if kind == "entity-exists" and not exists:
+                return "precondition", "patch.precondition_failed"
+            if kind == "entity-absent" and exists:
+                return "precondition", "patch.precondition_failed"
+            if kind == "property-equals" and (
+                not exists
+                or precondition.get("property") not in entities[key]
+                or not _json_equal(entities[key][precondition["property"]], precondition.get("value"))
+            ):
+                return "precondition", "patch.precondition_failed"
+        elif kind == "relation-exists":
+            if (precondition.get("relationKind"), precondition.get("id")) not in relations:
+                return "precondition", "patch.precondition_failed"
+        elif kind == "slot-unoccupied":
+            slot_id = precondition.get("slotId")
+            if ("access-slot", slot_id) not in entities or slot_id in occupied_slots:
+                return "precondition", "patch.precondition_failed"
+
+    local_bindings: dict[str, tuple[str, str, bool]] = {}
+    entity_ownership = context["packageEntityTypes"]
+    relation_ownership = context["packageRelationTypes"]
+
+    def package_owner(operation: dict[str, Any], relation: bool) -> str | None:
+        kind_name = operation.get("relationKind" if relation else "entityKind")
+        if kind_name != ("package-relation" if relation else "package-entity"):
+            return None
+        collection = relations if relation else entities
+        ownership = relation_ownership if relation else entity_ownership
+        if operation.get("op", "").startswith("create"):
+            type_key = operation.get("value", {}).get("typeKey")
+        else:
+            type_key = collection.get((kind_name, operation.get("id")), {}).get("typeKey")
+        return ownership.get(type_key)
+
+    def source_allows(operation: dict[str, Any]) -> bool:
+        entity_kind = operation.get("entityKind")
+        relation_kind = operation.get("relationKind")
+        changed = set(operation.get("set", {})) | set(operation.get("unset", []))
+        owner = package_owner(operation, relation_kind is not None)
+        if source == "user-command":
+            if entity_kind in {"router", "structural-link", "access-slot", "topology"} or owner == "engine":
+                return False
+            if entity_kind == "project" and changed - {"name"}:
+                return False
+            if entity_kind == "component" and changed & {"kind", "packageLockId", "typeKey"}:
+                return False
+            return not (operation.get("op") == "deleteEntity" and entity_kind == "component")
+        if source in {"default-engine", "extension-provider"}:
+            return (
+                entity_kind in {None, "router", "structural-link", "access-slot", "package-entity"}
+                and relation_kind in {None, "package-relation"}
+                and owner != "user"
+            )
+        if source in {"application-reconcile", "application-migration"}:
+            if entity_kind == "topology":
+                return operation.get("op") == "updateEntity" and set(operation.get("set", {})) == {"derivation"} and operation.get("unset") == []
+            if entity_kind == "project":
+                return (
+                    source == "application-migration" and operation.get("op") == "updateEntity"
+                    and set(operation.get("set", {})) == {"dependencies"} and operation.get("unset") == []
+                )
+            if entity_kind is not None:
+                return entity_kind == "domain"
+            if relation_kind == "attachment":
+                existing = relations.get(("attachment", operation.get("id")))
+                changed = operation.get("set", {})
+                return (
+                    operation.get("op") == "updateRelation"
+                    and isinstance(existing, dict) and existing.get("state") == "resolved"
+                    and set(changed) == {"state", "intendedTarget", "reasonCode"}
+                    and changed.get("state") == "unresolved"
+                    and changed.get("reasonCode") == "attachment.target_removed"
+                    and operation.get("unset") == ["routerRef", "slotRef"]
+                    and changed.get("intendedTarget") == {
+                        "routerRef": existing.get("routerRef"), "slotRef": existing.get("slotRef")
+                    }
+                )
+            if relation_kind == "package-relation":
+                if owner != "user" or operation.get("op") != "updateRelation" or operation.get("unset") != []:
+                    return False
+                changed = operation.get("set", {})
+                if not changed or set(changed) - {"sources", "targets"}:
+                    return False
+                existing = relations.get(("package-relation", operation.get("id")), {})
+                converted = False
+                for member_name, replacement in changed.items():
+                    original = existing.get(member_name)
+                    if not isinstance(original, list) or not isinstance(replacement, list) or len(original) != len(replacement):
+                        return False
+                    for before, after in zip(original, replacement):
+                        if before == after:
+                            continue
+                        if not (
+                            before.get("state") == "resolved" and after.get("state") == "unresolved"
+                            and after.get("intendedSubject") == before.get("subject")
+                            and after.get("reasonCode") == "relation.target_removed"
+                        ):
+                            return False
+                        converted = True
+                return converted
+            return relation_kind == "domain-membership"
+        return source in {"recovery", "undo-redo"}
+
+    for operation in document.get("operations", []):
+        if source == "user-command" and operation.get("op") == "deleteEntity" and operation.get("entityKind") == "component":
+            return "patch-invariant", "patch.invariant_violation"
+        if not source_allows(operation):
+            return "ownership", "patch.ownership_violation"
+        op = operation.get("op")
+        relation = op in {"createRelation", "updateRelation", "deleteRelation"}
+        kind = operation.get("relationKind" if relation else "entityKind")
+        collection = relations if relation else entities
+        referenced_local_refs: list[str] = []
+        stack = [operation.get("value"), operation.get("set")]
+        while stack:
+            node = stack.pop()
+            if isinstance(node, dict):
+                if set(node) == {"localRef"} and isinstance(node.get("localRef"), str):
+                    referenced_local_refs.append(node["localRef"])
+                else:
+                    stack.extend(node.values())
+            elif isinstance(node, list):
+                stack.extend(node)
+        if any(reference not in local_bindings for reference in referenced_local_refs):
+            return "local-reference", "patch.local_ref_invalid"
+        if op in {"createEntity", "createRelation"}:
+            local_ref = operation.get("localRef")
+            if local_ref in local_bindings:
+                return "local-reference", "patch.local_ref_invalid"
+            synthetic_id = "@" + local_ref
+            key = (kind, synthetic_id)
+            value = copy.deepcopy(operation.get("value", {}))
+            if key in collection:
+                return "duplicate-id", "patch.duplicate_id"
+            local_bindings[local_ref] = (kind, synthetic_id, relation)
+            collection[key] = value
+        elif op in {"updateEntity", "updateRelation"}:
+            key = (kind, operation.get("id"))
+            if key not in collection:
+                return "reference", "patch.unknown_reference"
+            value = copy.deepcopy(collection[key])
+            for member in operation.get("unset", []):
+                value.pop(member, None)
+            value.update(copy.deepcopy(operation.get("set", {})))
+            collection[key] = value
+        else:
+            key = (kind, operation.get("id"))
+            if key not in collection:
+                return "reference", "patch.unknown_reference"
+            del collection[key]
+
+        current_value = collection.get(key)
+        if current_value is not None:
+            if kind == "access-slot":
+                allowed = current_value.get("allowedContracts", [])
+                contract_keys = [
+                    (item.get("contractLockId"), json.dumps(item.get("capabilityConstraints", {}), sort_keys=True, separators=(",", ":")))
+                    for item in allowed
+                ]
+                if len(contract_keys) != len(set(contract_keys)) or any(
+                    len(item.get("roles", [])) != len(set(item.get("roles", []))) for item in allowed
+                ):
+                    return "patch-invariant", "patch.invariant_violation"
+            if not _validate_patch_subject_schema(validator, kind, current_value, relation):
+                return "patched-subject-schema", "patch.schema_violation"
+        reference_failure = _patch_state_reference_failure(entities, relations, local_bindings)
+        if reference_failure:
+            return reference_failure
+
+    for (kind, _), value in entities.items():
+        if not _validate_patch_subject_schema(validator, kind, value, False):
+            return "patched-subject-schema", "patch.schema_violation"
+    for (kind, _), value in relations.items():
+        if not _validate_patch_subject_schema(validator, kind, value, True):
+            return "patched-subject-schema", "patch.schema_violation"
+    final_failure = _patch_state_reference_failure(entities, relations, local_bindings)
+    if final_failure:
+        return final_failure
+    if not trusted_replay:
+        return "source-authority", "patch.source_not_allowed"
+    return None
+
+
 def semantic_failure(
     schema_id: str, document: Any, validator: Draft202012Subset | None = None
 ) -> tuple[str, str] | None:
@@ -1049,18 +1599,26 @@ def semantic_failure(
                 return "project-reference", "project.unknown_reference"
         derivation = topology.get("derivation", {})
         engine_lock = dependencies.get(derivation.get("defaultEngineLockId"))
-        authority_lock = dependencies.get(derivation.get("structureAuthority", {}).get("lockId"))
-        if engine_lock is None or engine_lock.get("kind") != "default-engine" or authority_lock is not engine_lock:
+        authority = derivation.get("structureAuthority", {})
+        authority_lock = dependencies.get(authority.get("lockId"))
+        authority_kind = authority.get("kind")
+        if (
+            engine_lock is None
+            or engine_lock.get("kind") != "default-engine"
+            or authority_kind not in {"default-engine", "extension-provider"}
+            or authority_lock is None
+            or authority_lock.get("kind") != authority_kind
+            or (authority_kind == "default-engine" and authority.get("lockId") != derivation.get("defaultEngineLockId"))
+        ):
             return "project-reference", "project.unknown_reference"
         package_lock = dependencies.get(next(iter(components.values())).get("packageLockId")) if components else None
-        authority = derivation.get("structureAuthority", {})
         if (
             package_lock is None
             or derivation.get("packageBundleDigest") != package_lock.get("bundleManifestDigest")
             or derivation.get("defaultEngineBundleDigest") != engine_lock.get("bundleManifestDigest")
-            or authority.get("bundleDigest") != engine_lock.get("bundleManifestDigest")
-            or authority.get("identity") != engine_lock.get("id")
-            or authority.get("version") != engine_lock.get("version")
+            or authority.get("bundleDigest") != authority_lock.get("bundleManifestDigest")
+            or authority.get("identity") != authority_lock.get("id")
+            or authority.get("version") != authority_lock.get("version")
             or derivation.get("engineHostContractVersion") != engine_lock.get("engineHostContractVersion")
             or derivation.get("hostSideEffectContractVersion") != engine_lock.get("hostSideEffectContractVersion")
             or derivation.get("engineCompatibilityVersion") != engine_lock.get("engineCompatibilityVersion")
@@ -1208,9 +1766,7 @@ def semantic_failure(
         if _portable_paths_invalid(contracts, [entry.get("path") for entry in document.get(member, [])]):
             return ("bundle-manifest", "dependency.manifest_invalid") if member == "files" else ("tool-artifact", "tool.artifact_invalid")
         if member == "files":
-            digest_input = {key: value for key, value in document.items() if key != "manifestDigest"}
-            canonical = json.dumps(digest_input, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-            if document.get("manifestDigest") != "sha256:" + hashlib.sha256(canonical.encode()).hexdigest():
+            if document.get("manifestDigest") != bundle_manifest_digest(contracts, document):
                 return "bundle-manifest", "dependency.manifest_invalid"
     elif schema_id == "ipcraft.interface-contract.v1":
         for member in ("roles", "capabilities", "fields"):
@@ -1296,11 +1852,20 @@ def semantic_failure(
         if document.get("toolResult") is not None and _portable_paths_invalid(contracts, [document["toolResult"]]):
             return "generic-structure", "contract.schema_invalid"
     elif schema_id == "ipcraft.patch.v1":
+        transaction_failure = _patch_transaction_failure(contracts, document, validator)
+        if transaction_failure:
+            return transaction_failure
         patch_context = load_strict_json(contracts / "patch-validation-context-v1.json")
         entity_type_ownership = patch_context.get("packageEntityTypes", {})
-        entity_subject_types = patch_context.get("packageEntitySubjects", {})
+        entity_subject_types = {
+            item["id"]: item.get("value", {}).get("typeKey")
+            for item in patch_context.get("entities", []) if item.get("kind") == "package-entity"
+        }
         relation_type_ownership = patch_context.get("packageRelationTypes", {})
-        relation_subject_types = patch_context.get("packageRelationSubjects", {})
+        relation_subject_types = {
+            item["id"]: item.get("value", {}).get("typeKey")
+            for item in patch_context.get("relations", []) if item.get("kind") == "package-relation"
+        }
         source = document.get("source", {}).get("kind")
         operations = document.get("operations", [])
         local_refs: list[str] = []
@@ -1468,6 +2033,8 @@ def load_catalog(contracts: Path) -> list[dict[str, Any]]:
 
 def verify_authoring_coverage(contracts: Path, items: list[dict[str, Any]]) -> None:
     coverage = load_strict_json(contracts / "fixture-coverage-v1.json")
+    if set(coverage) != {"schema", "requirementsDigest", "coverageDigest", "roots", "requirements"}:
+        raise FixtureVerificationError("fixture coverage envelope fields are not closed")
     if coverage.get("schema") != "ipcraft.fixture-coverage.v1" or not isinstance(coverage.get("roots"), dict):
         raise FixtureVerificationError("fixture coverage envelope is invalid")
     catalog_roots = {
@@ -1493,6 +2060,18 @@ def verify_authoring_coverage(contracts: Path, items: list[dict[str, Any]]) -> N
     requirements = coverage.get("requirements")
     if not isinstance(requirements, dict) or set(requirements) != catalog_roots:
         raise FixtureVerificationError("fixture coverage requirements do not exactly match standalone roots")
+    requirements_digest = "sha256:" + hashlib.sha256(
+        json.dumps(requirements, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    if coverage.get("requirementsDigest") != requirements_digest:
+        raise FixtureVerificationError("fixture coverage requirements digest does not match content")
+    if requirements_digest != FROZEN_COVERAGE_REQUIREMENTS_DIGEST:
+        raise FixtureVerificationError("fixture coverage requirements differ from the frozen contract")
+    coverage_digest = "sha256:" + hashlib.sha256(
+        json.dumps({"roots": coverage["roots"], "requirements": requirements}, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    if coverage.get("coverageDigest") != coverage_digest or coverage_digest != FROZEN_COVERAGE_CONTRACT_DIGEST:
+        raise FixtureVerificationError("fixture coverage root/tier mapping differs from the frozen contract")
 
     def values_at(node: Any, pointer: str) -> list[Any]:
         nodes = [node]
@@ -1515,7 +2094,7 @@ def verify_authoring_coverage(contracts: Path, items: list[dict[str, Any]]) -> N
         return nodes
 
     for schema_id, tier_requirements in requirements.items():
-        if not isinstance(tier_requirements, dict):
+        if not isinstance(tier_requirements, dict) or set(tier_requirements) != {"minimal", "representative", "maximumShape"}:
             raise FixtureVerificationError(f"fixture coverage requirements malformed for {schema_id}")
         for tier, predicates in tier_requirements.items():
             if tier not in {"minimal", "representative", "maximumShape"} or not isinstance(predicates, dict):
@@ -1550,21 +2129,12 @@ def verify_authoring_coverage(contracts: Path, items: list[dict[str, Any]]) -> N
                         f"missing {sorted(set(expected_values) - observed)}"
                     )
 
-    patch_context = load_strict_json(contracts / "patch-validation-context-v1.json")
-    if patch_context.get("schema") != "ipcraft.patch-validation-context.v1":
-        raise FixtureVerificationError("patch validation context envelope is invalid")
-    if set(patch_context.get("operationKinds", [])) != {
-        "createEntity", "updateEntity", "deleteEntity", "createRelation", "updateRelation", "deleteRelation"
-    }:
-        raise FixtureVerificationError("patch validation context operation matrix is incomplete")
-    if set(patch_context.get("sourceKinds", [])) != {
+    validator = Draft202012Subset(contracts)
+    _validate_patch_context(contracts, validator)
+    for source_kind in (
         "user-command", "application-reconcile", "application-migration", "default-engine",
         "extension-provider", "recovery", "undo-redo",
-    }:
-        raise FixtureVerificationError("patch validation context source matrix is incomplete")
-    if set(patch_context.get("authorityModes", [])) != {"default-engine", "extension-provider"}:
-        raise FixtureVerificationError("patch validation context authority modes are incomplete")
-    for source_kind in patch_context["sourceKinds"]:
+    ):
         path = f"fixtures/valid/patch-source-{source_kind}.json"
         document = load_strict_json(contracts / path)
         if document.get("source", {}).get("kind") != source_kind or not document.get("operations"):

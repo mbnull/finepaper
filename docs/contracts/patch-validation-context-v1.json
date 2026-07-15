@@ -1,65 +1,388 @@
 {
   "schema": "ipcraft.patch-validation-context.v1",
-  "authorityModes": [
-    "default-engine",
-    "extension-provider"
+  "version": "1",
+  "authorityContexts": [
+    {
+      "contextId": "authority.default",
+      "selectedAuthority": {
+        "kind": "default-engine",
+        "lockId": "dep.engine.default",
+        "identity": "ipcraft.default-noc-engine",
+        "version": "1.0.0",
+        "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "contextId": "authority.provider",
+      "selectedAuthority": {
+        "kind": "extension-provider",
+        "lockId": "dep.provider",
+        "identity": "vendor.provider",
+        "version": "1",
+        "bundleDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      }
+    }
   ],
-  "operationKinds": [
-    "createEntity",
-    "updateEntity",
-    "deleteEntity",
-    "createRelation",
-    "updateRelation",
-    "deleteRelation"
-  ],
-  "sourceKinds": [
-    "user-command",
-    "application-reconcile",
-    "application-migration",
-    "default-engine",
-    "extension-provider",
-    "recovery",
-    "undo-redo"
-  ],
-  "entityOwnership": {
-    "project": "host",
-    "component": "user",
-    "interface": "user",
-    "router": "structure-authority",
-    "structural-link": "structure-authority",
-    "access-slot": "structure-authority",
-    "domain": "user",
-    "package-entity:user": "user",
-    "package-entity:engine": "structure-authority"
-  },
-  "relationOwnership": {
-    "attachment": "user",
-    "domain-membership": "user",
-    "package-relation:user": "user",
-    "package-relation:engine": "structure-authority"
-  },
   "packageEntityTypes": {
     "vendor.engine-entity": "engine",
     "vendor.user-entity": "user"
-  },
-  "packageEntitySubjects": {
-    "package-entity.engine": "vendor.engine-entity",
-    "package-entity.user": "vendor.user-entity"
   },
   "packageRelationTypes": {
     "vendor.engine-relation": "engine",
     "vendor.user-relation": "user"
   },
-  "packageRelationSubjects": {
-    "package-relation.engine": "vendor.engine-relation",
-    "package-relation.user": "vendor.user-relation"
-  },
-  "hostSideEffectSources": [
-    "application-reconcile",
-    "application-migration"
+  "trustedReplayTransactions": [
+    {
+      "sourceKind": "recovery",
+      "patchId": "trusted.recovery.1",
+      "sourceIdentity": "ipcraft.host",
+      "sourceVersion": "1",
+      "patchDigest": "sha256:09b7054c809650c145ed9bae717fc5c1103373d3123a07f55743eaf5b219f459"
+    },
+    {
+      "sourceKind": "undo-redo",
+      "patchId": "trusted.undo-redo.1",
+      "sourceIdentity": "ipcraft.host",
+      "sourceVersion": "1",
+      "patchDigest": "sha256:0b724e7ed8583feb9f790cd57e857f8790b0564743b3bf98aafd5f5734facee8"
+    }
   ],
-  "trustedReplaySources": [
-    "recovery",
-    "undo-redo"
-  ]
+  "entities": [
+    {
+      "kind": "access-slot",
+      "id": "slot.free",
+      "value": {
+        "routerRef": {
+          "id": "router.0.1"
+        },
+        "templateKey": "local-0",
+        "identityCompatibilityVersion": 1,
+        "displayOrder": 0,
+        "label": "Free",
+        "allowedContracts": [
+          {
+            "contractLockId": "dep.contract.axi5",
+            "roles": [
+              "initiator"
+            ],
+            "capabilityConstraints": {}
+          }
+        ],
+        "properties": {}
+      }
+    },
+    {
+      "kind": "access-slot",
+      "id": "slot.occupied",
+      "value": {
+        "routerRef": {
+          "id": "router.0.0"
+        },
+        "templateKey": "local-0",
+        "identityCompatibilityVersion": 1,
+        "displayOrder": 0,
+        "label": "Occupied",
+        "allowedContracts": [
+          {
+            "contractLockId": "dep.contract.axi5",
+            "roles": [
+              "initiator"
+            ],
+            "capabilityConstraints": {}
+          }
+        ],
+        "properties": {}
+      }
+    },
+    {
+      "kind": "component",
+      "id": "component.noc",
+      "value": {
+        "kind": "noc",
+        "name": "NoC",
+        "packageLockId": "dep.noc.simple",
+        "typeKey": "mesh-noc",
+        "config": {
+          "rows": 1,
+          "columns": 2
+        },
+        "extensions": []
+      }
+    },
+    {
+      "kind": "domain",
+      "id": "domain.default",
+      "value": {
+        "typeKey": "power",
+        "name": "Default Power",
+        "isDefault": true,
+        "config": {}
+      }
+    },
+    {
+      "kind": "interface",
+      "id": "interface.boundary",
+      "value": {
+        "ownerComponentRef": {
+          "id": "component.noc"
+        },
+        "templateKey": "axi-boundary",
+        "name": "AXI Boundary",
+        "contract": {
+          "lockId": "dep.contract.axi5",
+          "role": "initiator"
+        },
+        "capabilities": {},
+        "contractConfig": {},
+        "nocConfig": {},
+        "extensions": []
+      }
+    },
+    {
+      "kind": "interface",
+      "id": "interface.unattached",
+      "value": {
+        "ownerComponentRef": {
+          "id": "component.noc"
+        },
+        "templateKey": "axi-boundary",
+        "name": "Unattached",
+        "contract": {
+          "lockId": "dep.contract.axi5",
+          "role": "initiator"
+        },
+        "capabilities": {},
+        "contractConfig": {},
+        "nocConfig": {},
+        "extensions": []
+      }
+    },
+    {
+      "kind": "package-entity",
+      "id": "package-entity.engine",
+      "value": {
+        "typeKey": "vendor.engine-entity",
+        "data": {
+          "state": "derived"
+        },
+        "extensions": []
+      }
+    },
+    {
+      "kind": "package-entity",
+      "id": "package-entity.user",
+      "value": {
+        "typeKey": "vendor.user-entity",
+        "data": {
+          "label": "user"
+        },
+        "extensions": []
+      }
+    },
+    {
+      "kind": "project",
+      "id": "project.mesh",
+      "value": {
+        "name": "Mesh",
+        "dependencies": [
+          {
+            "lockId": "dep.contract.axi5",
+            "kind": "interface-contract",
+            "id": "amba.axi5",
+            "version": "1.0.0",
+            "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          },
+          {
+            "lockId": "dep.engine.default",
+            "kind": "default-engine",
+            "id": "ipcraft.default-noc-engine",
+            "version": "1.0.0",
+            "bundleManifestDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "engineHostContractVersion": "ipcraft.engine-host.v1",
+            "engineCompatibilityVersion": "1",
+            "hostSideEffectContractVersion": "ipcraft.noc-side-effects.v1",
+            "supportedPlatformAbis": [
+              "linux-x86_64-gnu-v1"
+            ]
+          },
+          {
+            "lockId": "dep.noc.simple",
+            "kind": "noc-package",
+            "id": "simple-noc",
+            "version": "1.0.0",
+            "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          },
+          {
+            "lockId": "dep.provider",
+            "kind": "extension-provider",
+            "id": "vendor.provider",
+            "version": "1",
+            "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "protocolVersion": "ipcraft.provider-protocol.v1",
+            "runtimeLockId": "dep.runtime.provider"
+          },
+          {
+            "lockId": "dep.runtime.provider",
+            "kind": "runtime",
+            "id": "provider-runtime",
+            "version": "1",
+            "bundleManifestDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "runtimeClosure": {
+              "closureKind": "package-contained",
+              "runtimeId": "provider-runtime",
+              "runtimeVersion": "1",
+              "runtimeDistributionBundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "entrypoint": "bin/provider-runtime",
+              "platformAbi": "linux-x86_64-gnu-v1",
+              "invocationProfile": "ipcraft.native-isolated.v1",
+              "moduleSearchPolicy": "runtime-and-tool-bundles-only",
+              "environmentProfile": "ipcraft.empty-utf8-utc.v1",
+              "networkPolicy": "prohibited"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "kind": "router",
+      "id": "router.0.0",
+      "value": {
+        "templateKey": "mesh-router",
+        "identityCompatibilityVersion": 1,
+        "coordinate": {
+          "row": 0,
+          "column": 0
+        },
+        "properties": {}
+      }
+    },
+    {
+      "kind": "router",
+      "id": "router.0.1",
+      "value": {
+        "templateKey": "mesh-router",
+        "identityCompatibilityVersion": 1,
+        "coordinate": {
+          "row": 0,
+          "column": 1
+        },
+        "properties": {}
+      }
+    },
+    {
+      "kind": "structural-link",
+      "id": "link.0.0-0.1",
+      "value": {
+        "templateKey": "mesh-link",
+        "identityCompatibilityVersion": 1,
+        "endpointA": {
+          "id": "router.0.0"
+        },
+        "endpointB": {
+          "id": "router.0.1"
+        },
+        "axis": "horizontal",
+        "properties": {}
+      }
+    },
+    {
+      "kind": "topology",
+      "id": "topology.mesh",
+      "value": {
+        "derivation": {
+          "topologyInputRevision": 1,
+          "topologyInputDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "derivedStateRevision": 0,
+          "derivedStateDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "packageBundleDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "reconcileDependencySetDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "defaultEngineLockId": "dep.engine.default",
+          "defaultEngineBundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "engineHostContractVersion": "ipcraft.engine-host.v1",
+          "hostSideEffectContractVersion": "ipcraft.noc-side-effects.v1",
+          "structureAuthority": {
+            "kind": "default-engine",
+            "lockId": "dep.engine.default",
+            "identity": "ipcraft.default-noc-engine",
+            "version": "1.0.0",
+            "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "engineCompatibilityVersion": "1"
+        }
+      }
+    }
+  ],
+  "relations": [
+    {
+      "kind": "attachment",
+      "id": "attachment.boundary",
+      "value": {
+        "interfaceRef": {
+          "id": "interface.boundary"
+        },
+        "state": "resolved",
+        "routerRef": {
+          "id": "router.0.0"
+        },
+        "slotRef": {
+          "id": "slot.occupied"
+        }
+      }
+    },
+    {
+      "kind": "domain-membership",
+      "id": "membership.0",
+      "value": {
+        "domainRef": {
+          "id": "domain.default"
+        },
+        "routerRef": {
+          "id": "router.0.0"
+        }
+      }
+    },
+    {
+      "kind": "package-relation",
+      "id": "package-relation.engine",
+      "value": {
+        "typeKey": "vendor.engine-relation",
+        "sources": [],
+        "targets": [],
+        "data": {
+          "state": "derived"
+        },
+        "extensions": []
+      }
+    },
+    {
+      "kind": "package-relation",
+      "id": "package-relation.user",
+      "value": {
+        "typeKey": "vendor.user-relation",
+        "sources": [
+          {
+            "state": "resolved",
+            "subject": {
+              "kind": "router",
+              "ref": {
+                "id": "router.0.0"
+              }
+            }
+          }
+        ],
+        "targets": [],
+        "data": {
+          "label": "user"
+        },
+        "extensions": []
+      }
+    }
+  ],
+  "occupiedSlots": [
+    "slot.occupied"
+  ],
+  "freeSlots": [
+    "slot.free"
+  ],
+  "contextDigest": "sha256:ed92ef6923a1bf8b02315c060d8a0cca5967306f05ac97305419e01e47ff0d4c"
 }

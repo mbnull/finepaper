@@ -15,7 +15,7 @@
     {
       "op": "updateRelation",
       "relationKind": "package-relation",
-      "id": "relation.package-relation",
+      "id": "package-relation.user",
       "set": {},
       "unset": [
         "sources"

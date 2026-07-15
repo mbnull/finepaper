@@ -3,7 +3,7 @@
   "transactionId": "value",
   "patchId": "value",
   "source": {
-    "kind": "application-migration",
+    "kind": "application-reconcile",
     "identity": "ipcraft.host",
     "version": "1"
   },
@@ -12,36 +12,6 @@
   },
   "preconditions": [],
   "operations": [
-    {
-      "op": "updateEntity",
-      "entityKind": "project",
-      "id": "project.mesh",
-      "set": {
-        "dependencies": [
-          {
-            "lockId": "dep.engine.default",
-            "kind": "default-engine",
-            "id": "ipcraft.default-noc-engine",
-            "version": "1.0.0",
-            "bundleManifestDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            "engineHostContractVersion": "ipcraft.engine-host.v1",
-            "engineCompatibilityVersion": "1",
-            "hostSideEffectContractVersion": "ipcraft.noc-side-effects.v1",
-            "supportedPlatformAbis": [
-              "linux-x86_64-gnu-v1"
-            ]
-          },
-          {
-            "lockId": "dep.noc.simple",
-            "kind": "noc-package",
-            "id": "simple-noc",
-            "version": "1.0.0",
-            "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-          }
-        ]
-      },
-      "unset": []
-    },
     {
       "op": "updateEntity",
       "entityKind": "topology",
@@ -67,6 +37,26 @@
           },
           "engineCompatibilityVersion": "1"
         }
+      },
+      "unset": []
+    },
+    {
+      "op": "updateRelation",
+      "relationKind": "package-relation",
+      "id": "package-relation.user",
+      "set": {
+        "sources": [
+          {
+            "state": "unresolved",
+            "intendedSubject": {
+              "kind": "router",
+              "ref": {
+                "id": "router.0.0"
+              }
+            },
+            "reasonCode": "relation.target_removed"
+          }
+        ]
       },
       "unset": []
     }

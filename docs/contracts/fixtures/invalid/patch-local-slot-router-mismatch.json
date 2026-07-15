@@ -1,0 +1,49 @@
+{
+  "schema": "ipcraft.patch.v1",
+  "transactionId": "value",
+  "patchId": "trusted.recovery.1",
+  "source": {
+    "kind": "recovery",
+    "identity": "ipcraft.host",
+    "version": "1"
+  },
+  "causality": {
+    "sessionRevision": 0
+  },
+  "preconditions": [],
+  "operations": [
+    {
+      "op": "createEntity",
+      "entityKind": "access-slot",
+      "localRef": "application:000023",
+      "value": {
+        "routerRef": {
+          "id": "router.0.0"
+        },
+        "templateKey": "local-new",
+        "identityCompatibilityVersion": 1,
+        "displayOrder": 2,
+        "label": "New",
+        "allowedContracts": [],
+        "properties": {}
+      }
+    },
+    {
+      "op": "createRelation",
+      "relationKind": "attachment",
+      "localRef": "application:000024",
+      "value": {
+        "interfaceRef": {
+          "id": "interface.unattached"
+        },
+        "state": "resolved",
+        "routerRef": {
+          "id": "router.0.1"
+        },
+        "slotRef": {
+          "localRef": "application:000023"
+        }
+      }
+    }
+  ]
+}

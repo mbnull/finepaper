@@ -13,12 +13,12 @@
   "preconditions": [],
   "operations": [
     {
-      "op": "updateRelation",
-      "relationKind": "domain-membership",
-      "id": "membership.0",
+      "op": "updateEntity",
+      "entityKind": "interface",
+      "id": "interface.boundary",
       "set": {},
       "unset": [
-        "domainRef"
+        "ownerComponentRef"
       ]
     }
   ]

@@ -1,23 +1,28 @@
 {
   "schema": "ipcraft.patch.v1",
   "transactionId": "value",
-  "patchId": "trusted.recovery.1",
+  "patchId": "value",
   "source": {
-    "kind": "recovery",
+    "kind": "user-command",
     "identity": "ipcraft.host",
     "version": "1"
   },
   "causality": {
     "sessionRevision": 0
   },
-  "preconditions": [],
+  "preconditions": [
+    {
+      "kind": "slot-unoccupied",
+      "slotId": "slot.free"
+    }
+  ],
   "operations": [
     {
       "op": "updateEntity",
       "entityKind": "project",
       "id": "project.mesh",
       "set": {
-        "name": "Restored"
+        "name": "Renamed"
       },
       "unset": []
     }

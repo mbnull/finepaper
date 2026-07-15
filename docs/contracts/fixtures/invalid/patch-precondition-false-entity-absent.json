@@ -10,16 +10,12 @@
   "causality": {
     "sessionRevision": 0
   },
-  "preconditions": [],
-  "operations": [
+  "preconditions": [
     {
-      "op": "updateRelation",
-      "relationKind": "domain-membership",
-      "id": "membership.0",
-      "set": {},
-      "unset": [
-        "domainRef"
-      ]
+      "kind": "entity-absent",
+      "entityKind": "component",
+      "id": "component.noc"
     }
-  ]
+  ],
+  "operations": []
 }

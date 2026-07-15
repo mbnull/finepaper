@@ -5,7 +5,7 @@
   "source": {
     "kind": "default-engine",
     "identity": "ipcraft.default-noc-engine",
-    "version": "1",
+    "version": "1.0.0",
     "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
   },
   "causality": {
@@ -37,9 +37,9 @@
     "baseAuthoritativeDesignDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "structureAuthority": {
       "kind": "default-engine",
-      "lockId": "value",
+      "lockId": "dep.engine.default",
       "identity": "ipcraft.default-noc-engine",
-      "version": "1",
+      "version": "1.0.0",
       "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     },
     "packageBundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",

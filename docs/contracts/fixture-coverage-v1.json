@@ -1,5 +1,7 @@
 {
   "schema": "ipcraft.fixture-coverage.v1",
+  "requirementsDigest": "sha256:6128d13d3bb6bf26da98921743074d2731f91e12e447b6675d898d0cc0233edc",
+  "coverageDigest": "sha256:a2d5e2b68ca4c0788dedbe1ae08a609383d04e1e3fcfd3a37701237ac5fbc1b3",
   "roots": {
     "ipcraft.artifact-manifest.v1": {
       "minimal": [
@@ -150,7 +152,9 @@
         "fixtures/valid/patch-package-ownership-user-entity.json",
         "fixtures/valid/patch-package-ownership-engine-entity.json",
         "fixtures/valid/patch-package-ownership-user-relation.json",
-        "fixtures/valid/patch-package-ownership-engine-relation.json"
+        "fixtures/valid/patch-package-ownership-engine-relation.json",
+        "fixtures/valid/patch-application-package-relation-unresolved.json",
+        "fixtures/valid/patch-application-attachment-unresolved.json"
       ]
     },
     "ipcraft.pipeline-plan.v1": {
@@ -186,7 +190,8 @@
         "fixtures/valid/mesh-2x2-attached.json"
       ],
       "maximumShape": [
-        "fixtures/valid/project-design-maximum.json"
+        "fixtures/valid/project-design-maximum.json",
+        "fixtures/valid/project-provider-authority.json"
       ]
     },
     "ipcraft.recovery.v1": {
@@ -243,6 +248,7 @@
   },
   "requirements": {
     "ipcraft.artifact-manifest.v1": {
+      "minimal": {},
       "representative": {
         "minimumArrayLengths": {
           "/artifacts": 1
@@ -255,6 +261,7 @@
       }
     },
     "ipcraft.bundle-manifest.v1": {
+      "minimal": {},
       "representative": {
         "minimumArrayLengths": {
           "/files": 1
@@ -267,6 +274,8 @@
       }
     },
     "ipcraft.command-result.v1": {
+      "minimal": {},
+      "representative": {},
       "maximumShape": {
         "discriminatorCoverage": {
           "/disposition": [
@@ -279,6 +288,8 @@
       }
     },
     "ipcraft.core-canonical-models.v1": {
+      "minimal": {},
+      "representative": {},
       "maximumShape": {
         "discriminatorCoverage": {
           "/schema": [
@@ -296,6 +307,7 @@
       }
     },
     "ipcraft.diagnostic-report.v1": {
+      "minimal": {},
       "representative": {
         "minimumArrayLengths": {
           "/diagnostics": 1
@@ -315,6 +327,8 @@
       }
     },
     "ipcraft.engine-bundle.v1": {
+      "minimal": {},
+      "representative": {},
       "maximumShape": {
         "minimumArrayLengths": {
           "/migrationFromCompatibilityVersions": 2,
@@ -323,6 +337,8 @@
       }
     },
     "ipcraft.interface-contract.v1": {
+      "minimal": {},
+      "representative": {},
       "maximumShape": {
         "minimumArrayLengths": {
           "/roles": 2,
@@ -348,6 +364,8 @@
       }
     },
     "ipcraft.noc-package.v1": {
+      "minimal": {},
+      "representative": {},
       "maximumShape": {
         "minimumArrayLengths": {
           "/topology/slotTemplates": 2,
@@ -370,6 +388,8 @@
       }
     },
     "ipcraft.noc-side-effects.v1": {
+      "minimal": {},
+      "representative": {},
       "maximumShape": {
         "discriminatorCoverage": {
           "/expected/groupState": [
@@ -381,6 +401,8 @@
       }
     },
     "ipcraft.output-manifest.v1": {
+      "minimal": {},
+      "representative": {},
       "maximumShape": {
         "requiredPointers": [
           "/artifactManifestDigest",
@@ -390,6 +412,8 @@
       }
     },
     "ipcraft.patch.v1": {
+      "minimal": {},
+      "representative": {},
       "maximumShape": {
         "discriminatorCoverage": {
           "/operations/*/op": [
@@ -420,6 +444,8 @@
       }
     },
     "ipcraft.pipeline-plan.v1": {
+      "minimal": {},
+      "representative": {},
       "maximumShape": {
         "minimumArrayLengths": {
           "/steps": 5
@@ -436,6 +462,8 @@
       }
     },
     "ipcraft.pipeline-result.v1": {
+      "minimal": {},
+      "representative": {},
       "maximumShape": {
         "discriminatorCoverage": {
           "/status": [
@@ -448,6 +476,8 @@
       }
     },
     "ipcraft.project-design.v1": {
+      "minimal": {},
+      "representative": {},
       "maximumShape": {
         "minimumArrayLengths": {
           "/dependencies": 7,
@@ -467,11 +497,17 @@
             "drc-tool",
             "generator-tool",
             "runtime"
+          ],
+          "/topologies/*/derivation/structureAuthority/kind": [
+            "default-engine",
+            "extension-provider"
           ]
         }
       }
     },
     "ipcraft.recovery.v1": {
+      "minimal": {},
+      "representative": {},
       "maximumShape": {
         "minimumArrayLengths": {
           "/draftOverlay": 1,
@@ -484,6 +520,8 @@
       }
     },
     "ipcraft.step-result.v1": {
+      "minimal": {},
+      "representative": {},
       "maximumShape": {
         "discriminatorCoverage": {
           "/status": [
@@ -501,6 +539,8 @@
       }
     },
     "ipcraft.tool-input.v1": {
+      "minimal": {},
+      "representative": {},
       "maximumShape": {
         "minimumArrayLengths": {
           "/dependencies": 2
@@ -517,6 +557,8 @@
       }
     },
     "ipcraft.tool-result.v1": {
+      "minimal": {},
+      "representative": {},
       "maximumShape": {
         "discriminatorCoverage": {
           "/status": [

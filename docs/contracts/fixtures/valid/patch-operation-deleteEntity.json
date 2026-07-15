@@ -15,7 +15,7 @@
     {
       "op": "deleteEntity",
       "entityKind": "interface",
-      "id": "interface.boundary"
+      "id": "interface.unattached"
     }
   ]
 }

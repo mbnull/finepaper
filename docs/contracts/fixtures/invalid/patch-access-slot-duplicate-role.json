@@ -14,13 +14,29 @@
   "preconditions": [],
   "operations": [
     {
-      "op": "updateRelation",
-      "relationKind": "package-relation",
-      "id": "package-relation.user",
-      "set": {
-        "data": {}
-      },
-      "unset": []
+      "op": "createEntity",
+      "entityKind": "access-slot",
+      "localRef": "authority:duplicate-role-slot",
+      "value": {
+        "routerRef": {
+          "id": "router.0.0"
+        },
+        "templateKey": "local-x",
+        "identityCompatibilityVersion": 1,
+        "displayOrder": 2,
+        "label": "Duplicate",
+        "allowedContracts": [
+          {
+            "contractLockId": "dep.contract.axi5",
+            "roles": [
+              "initiator",
+              "initiator"
+            ],
+            "capabilityConstraints": {}
+          }
+        ],
+        "properties": {}
+      }
     }
   ],
   "applicability": {

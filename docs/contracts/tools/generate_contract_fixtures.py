@@ -239,6 +239,61 @@ def package_extension_project(base: dict[str, Any]) -> dict[str, Any]:
     return project
 
 
+def patch_context_document(project: dict[str, Any]) -> dict[str, Any]:
+    derivation = copy.deepcopy(project["topologies"][0]["derivation"])
+    dependencies = copy.deepcopy(project["dependencies"])
+    dependencies.extend([
+        {"lockId":"dep.contract.axi5","kind":"interface-contract","id":"amba.axi5","version":"1.0.0","bundleManifestDigest":DIGEST_B},
+        {"lockId":"dep.runtime.provider","kind":"runtime","id":"provider-runtime","version":"1","bundleManifestDigest":DIGEST_A,"runtimeClosure":{"closureKind":"package-contained","runtimeId":"provider-runtime","runtimeVersion":"1","runtimeDistributionBundleDigest":DIGEST_A,"entrypoint":"bin/provider-runtime","platformAbi":"linux-x86_64-gnu-v1","invocationProfile":"ipcraft.native-isolated.v1","moduleSearchPolicy":"runtime-and-tool-bundles-only","environmentProfile":"ipcraft.empty-utf8-utc.v1","networkPolicy":"prohibited"}},
+        {"lockId":"dep.provider","kind":"extension-provider","id":"vendor.provider","version":"1","bundleManifestDigest":DIGEST_B,"protocolVersion":"ipcraft.provider-protocol.v1","runtimeLockId":"dep.runtime.provider"},
+    ])
+    dependencies.sort(key=lambda item: item["lockId"])
+    entities = [
+        {"kind":"access-slot","id":"slot.free","value":{"routerRef":{"id":"router.0.1"},"templateKey":"local-0","identityCompatibilityVersion":1,"displayOrder":0,"label":"Free","allowedContracts":[{"contractLockId":"dep.contract.axi5","roles":["initiator"],"capabilityConstraints":{}}],"properties":{}}},
+        {"kind":"access-slot","id":"slot.occupied","value":{"routerRef":{"id":"router.0.0"},"templateKey":"local-0","identityCompatibilityVersion":1,"displayOrder":0,"label":"Occupied","allowedContracts":[{"contractLockId":"dep.contract.axi5","roles":["initiator"],"capabilityConstraints":{}}],"properties":{}}},
+        {"kind":"component","id":"component.noc","value":{"kind":"noc","name":"NoC","packageLockId":"dep.noc.simple","typeKey":"mesh-noc","config":{"rows":1,"columns":2},"extensions":[]}},
+        {"kind":"domain","id":"domain.default","value":{"typeKey":"power","name":"Default Power","isDefault":True,"config":{}}},
+        {"kind":"interface","id":"interface.boundary","value":{"ownerComponentRef":{"id":"component.noc"},"templateKey":"axi-boundary","name":"AXI Boundary","contract":{"lockId":"dep.contract.axi5","role":"initiator"},"capabilities":{},"contractConfig":{},"nocConfig":{},"extensions":[]}},
+        {"kind":"interface","id":"interface.unattached","value":{"ownerComponentRef":{"id":"component.noc"},"templateKey":"axi-boundary","name":"Unattached","contract":{"lockId":"dep.contract.axi5","role":"initiator"},"capabilities":{},"contractConfig":{},"nocConfig":{},"extensions":[]}},
+        {"kind":"package-entity","id":"package-entity.engine","value":{"typeKey":"vendor.engine-entity","data":{"state":"derived"},"extensions":[]}},
+        {"kind":"package-entity","id":"package-entity.user","value":{"typeKey":"vendor.user-entity","data":{"label":"user"},"extensions":[]}},
+        {"kind":"project","id":"project.mesh","value":{"name":"Mesh","dependencies":dependencies}},
+        {"kind":"router","id":"router.0.0","value":{"templateKey":"mesh-router","identityCompatibilityVersion":1,"coordinate":{"row":0,"column":0},"properties":{}}},
+        {"kind":"router","id":"router.0.1","value":{"templateKey":"mesh-router","identityCompatibilityVersion":1,"coordinate":{"row":0,"column":1},"properties":{}}},
+        {"kind":"structural-link","id":"link.0.0-0.1","value":{"templateKey":"mesh-link","identityCompatibilityVersion":1,"endpointA":{"id":"router.0.0"},"endpointB":{"id":"router.0.1"},"axis":"horizontal","properties":{}}},
+        {"kind":"topology","id":"topology.mesh","value":{"derivation":derivation}},
+    ]
+    relations = [
+        {"kind":"attachment","id":"attachment.boundary","value":{"interfaceRef":{"id":"interface.boundary"},"state":"resolved","routerRef":{"id":"router.0.0"},"slotRef":{"id":"slot.occupied"}}},
+        {"kind":"domain-membership","id":"membership.0","value":{"domainRef":{"id":"domain.default"},"routerRef":{"id":"router.0.0"}}},
+        {"kind":"package-relation","id":"package-relation.engine","value":{"typeKey":"vendor.engine-relation","sources":[],"targets":[],"data":{"state":"derived"},"extensions":[]}},
+        {"kind":"package-relation","id":"package-relation.user","value":{"typeKey":"vendor.user-relation","sources":[{"state":"resolved","subject":{"kind":"router","ref":{"id":"router.0.0"}}}],"targets":[],"data":{"label":"user"},"extensions":[]}},
+    ]
+    replay_operation = {"op":"updateEntity","entityKind":"project","id":"project.mesh","set":{"name":"Restored"},"unset":[]}
+    trusted_replays = []
+    for source_kind in ("recovery", "undo-redo"):
+        source = {"kind":source_kind,"identity":"ipcraft.host","version":"1"}
+        patch_id = f"trusted.{source_kind}.1"
+        signature_input = {"patchId":patch_id,"source":source,"preconditions":[],"operations":[replay_operation]}
+        signature = "sha256:" + hashlib.sha256(json.dumps(signature_input, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+        trusted_replays.append({"sourceKind":source_kind,"patchId":patch_id,"sourceIdentity":"ipcraft.host","sourceVersion":"1","patchDigest":signature})
+    context = {
+        "schema":"ipcraft.patch-validation-context.v1", "version":"1",
+        "authorityContexts":[
+            {"contextId":"authority.default","selectedAuthority":{"kind":"default-engine","lockId":"dep.engine.default","identity":"ipcraft.default-noc-engine","version":"1.0.0","bundleDigest":DIGEST_A}},
+            {"contextId":"authority.provider","selectedAuthority":{"kind":"extension-provider","lockId":"dep.provider","identity":"vendor.provider","version":"1","bundleDigest":DIGEST_B}},
+        ],
+        "packageEntityTypes":{"vendor.engine-entity":"engine","vendor.user-entity":"user"},
+        "packageRelationTypes":{"vendor.engine-relation":"engine","vendor.user-relation":"user"},
+        "trustedReplayTransactions":trusted_replays,
+        "entities":entities, "relations":relations,
+        "occupiedSlots":["slot.occupied"], "freeSlots":["slot.free"],
+    }
+    canonical = json.dumps(context, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    context["contextDigest"] = "sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    return context
+
+
 def generate(contracts: Path) -> None:
     builder = SampleBuilder(contracts)
     fixtures_root = contracts / "fixtures"
@@ -263,9 +318,7 @@ def generate(contracts: Path) -> None:
     for schema_id in schema_ids:
         document = builder.root(schema_id, validate=False)
         if schema_id == "ipcraft.bundle-manifest.v1":
-            digest_input = {key: value for key, value in document.items() if key != "manifestDigest"}
-            canonical = json.dumps(digest_input, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-            document["manifestDigest"] = "sha256:" + hashlib.sha256(canonical.encode()).hexdigest()
+            document["manifestDigest"] = verifier.bundle_manifest_digest(contracts, document)
         if schema_id == "ipcraft.engine-bundle.v1":
             document["engineHostContractVersion"] = "ipcraft.engine-host.v1"
             document["hostSideEffectContractVersion"] = "ipcraft.noc-side-effects.v1"
@@ -312,6 +365,8 @@ def generate(contracts: Path) -> None:
         valid[schema_id] = document
         add(schema_id.removeprefix("ipcraft.").removesuffix(".v1").replace(".", "-"), schema_id,
             document, "accept", "schema", None, None)
+
+    write_json(contracts / "patch-validation-context-v1.json", patch_context_document(valid["ipcraft.project-design.v1"]))
 
     for protocol in ("axi5", "ace", "chi"):
         contract = copy.deepcopy(valid["ipcraft.interface-contract.v1"])
@@ -400,12 +455,15 @@ def generate(contracts: Path) -> None:
         patch = copy.deepcopy(valid["ipcraft.patch.v1"])
         patch["source"] = source
         patch["operations"] = operations
+        if source["kind"] in {"recovery", "undo-redo"}:
+            patch["patchId"] = f"trusted.{source['kind']}.1"
         if source["kind"] in {"default-engine", "extension-provider", "application-reconcile", "application-migration"}:
             patch["applicability"] = copy.deepcopy(applicability)
             if source["kind"] in {"default-engine", "extension-provider"}:
                 patch["applicability"]["structureAuthority"].update({
                     "kind": source["kind"], "identity": source["identity"],
                     "version": source["version"], "bundleDigest": source["bundleDigest"],
+                    "lockId": "dep.engine.default" if source["kind"] == "default-engine" else "dep.provider",
                 })
         else:
             patch.pop("applicability", None)
@@ -432,7 +490,7 @@ def generate(contracts: Path) -> None:
         if operation_name == "updateEntity":
             operation.update({"entityKind": "project", "id": "project.mesh", "set": {"name": "Renamed"}, "unset": []})
         elif operation_name == "deleteEntity":
-            operation.update({"entityKind": "interface", "id": "interface.boundary"})
+            operation.update({"entityKind": "interface", "id": "interface.unattached"})
         elif operation_name == "createRelation":
             operation.update({"relationKind": "domain-membership", "localRef": "application:000001", "value": {"domainRef": {"id":"domain.default"}, "routerRef": {"id":"router.0.0"}}})
         elif operation_name == "updateRelation":
@@ -445,7 +503,7 @@ def generate(contracts: Path) -> None:
         "user-command": {"kind":"user-command","identity":"ipcraft.host","version":"1"},
         "application-reconcile": {"kind":"application-reconcile","identity":"ipcraft.host","version":"1"},
         "application-migration": {"kind":"application-migration","identity":"ipcraft.host","version":"1"},
-        "default-engine": {"kind":"default-engine","identity":"ipcraft.default-noc-engine","version":"1","bundleDigest":DIGEST_A},
+        "default-engine": {"kind":"default-engine","identity":"ipcraft.default-noc-engine","version":"1.0.0","bundleDigest":DIGEST_A},
         "extension-provider": {"kind":"extension-provider","identity":"vendor.provider","version":"1","bundleDigest":DIGEST_B},
         "recovery": {"kind":"recovery","identity":"ipcraft.host","version":"1"},
         "undo-redo": {"kind":"undo-redo","identity":"ipcraft.host","version":"1"},
@@ -461,13 +519,13 @@ def generate(contracts: Path) -> None:
             })
         if source_name == "application-migration":
             source_operations.insert(0, {
-                "op":"updateEntity", "entityKind":"project", "id":valid["ipcraft.project-design.v1"]["id"],
+                "op":"updateEntity", "entityKind":"project", "id":"project.mesh",
                 "set":{"dependencies":copy.deepcopy(valid["ipcraft.project-design.v1"]["dependencies"])}, "unset":[],
             })
         if source_name in {"default-engine", "extension-provider"}:
             source_operations = [{
                 "op":"createEntity", "entityKind":"router", "localRef":"authority:router.0.0",
-                "value":{"templateKey":"mesh-router","identityCompatibilityVersion":1,"coordinate":{"row":0,"column":0},"properties":{}},
+                "value":{"templateKey":"mesh-router","identityCompatibilityVersion":1,"coordinate":{"row":1,"column":0},"properties":{}},
             }]
         if source_name in {"recovery", "undo-redo"}:
             source_operations = [{"op":"updateEntity","entityKind":"project","id":"project.mesh","set":{"name":"Restored"},"unset":[]}]
@@ -479,9 +537,14 @@ def generate(contracts: Path) -> None:
         {"kind":"entity-exists","entityKind":"component","id":"component.noc"},
         {"kind":"property-equals","entityKind":"project","id":"project.mesh","property":"name","value":"Mesh"},
         {"kind":"relation-exists","relationKind":"domain-membership","id":"membership.0"},
-        {"kind":"slot-unoccupied","slotId":"slot.0.0"},
+        {"kind":"slot-unoccupied","slotId":"slot.free"},
     ]
+    precondition_patch["preconditions"].sort(key=lambda item: json.dumps(item, ensure_ascii=False, sort_keys=True, separators=(",", ":")))
     add("patch-preconditions-all", "ipcraft.patch.v1", precondition_patch, "accept", "core-semantic", None, None)
+    for precondition in precondition_patch["preconditions"]:
+        witness = patch_with(sources["user-command"], [copy.deepcopy(json.loads((contracts / "fixtures/valid/patch-operation-updateEntity.json").read_text())["operations"][0])])
+        witness["preconditions"] = [copy.deepcopy(precondition)]
+        add(f"patch-precondition-{precondition['kind']}", "ipcraft.patch.v1", witness, "accept", "core-semantic", None, None)
     package_ownership_witnesses = {
         "user-entity": patch_with(sources["user-command"], [{"op":"createEntity","entityKind":"package-entity","localRef":"application:000010","value":{"typeKey":"vendor.user-entity","data":{},"extensions":[]}}]),
         "engine-entity": patch_with(sources["default-engine"], [{"op":"createEntity","entityKind":"package-entity","localRef":"authority:engine-entity","value":{"typeKey":"vendor.engine-entity","data":{},"extensions":[]}}]),
@@ -490,6 +553,19 @@ def generate(contracts: Path) -> None:
     }
     for name, witness in package_ownership_witnesses.items():
         add(f"patch-package-ownership-{name}", "ipcraft.patch.v1", witness, "accept", "core-semantic", None, None)
+    application_relation_side_effect = copy.deepcopy(json.loads((contracts / "fixtures/valid/patch-source-application-reconcile.json").read_text()))
+    application_relation_side_effect["operations"].append({
+        "op":"updateRelation","relationKind":"package-relation","id":"package-relation.user",
+        "set":{"sources":[{"state":"unresolved","intendedSubject":{"kind":"router","ref":{"id":"router.0.0"}},"reasonCode":"relation.target_removed"}]},"unset":[],
+    })
+    add("patch-application-package-relation-unresolved", "ipcraft.patch.v1", application_relation_side_effect, "accept", "core-semantic", None, None)
+    application_attachment_side_effect = copy.deepcopy(json.loads((contracts / "fixtures/valid/patch-source-application-reconcile.json").read_text()))
+    application_attachment_side_effect["operations"].append({
+        "op":"updateRelation","relationKind":"attachment","id":"attachment.boundary",
+        "set":{"state":"unresolved","intendedTarget":{"routerRef":{"id":"router.0.0"},"slotRef":{"id":"slot.occupied"}},"reasonCode":"attachment.target_removed"},
+        "unset":["routerRef","slotRef"],
+    })
+    add("patch-application-attachment-unresolved", "ipcraft.patch.v1", application_attachment_side_effect, "accept", "core-semantic", None, None)
 
     for definition in (
         "normalizedTopologyInput", "derivedState", "reconcileApplicability", "patchBody",
@@ -547,8 +623,7 @@ def generate(contracts: Path) -> None:
         {"path":"bin/engine","size":128,"digest":DIGEST_A,"executable":True},
         {"path":"share/schema.json","size":64,"digest":DIGEST_B,"executable":False},
     ]
-    digest_input = {key: value for key, value in bundle_max.items() if key != "manifestDigest"}
-    bundle_max["manifestDigest"] = "sha256:" + hashlib.sha256(json.dumps(digest_input, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    bundle_max["manifestDigest"] = verifier.bundle_manifest_digest(contracts, bundle_max)
     add("bundle-manifest-maximum", "ipcraft.bundle-manifest.v1", bundle_max, "accept", "core-semantic", None, None)
     diagnostic_max = copy.deepcopy(valid["ipcraft.diagnostic-report.v1"])
     diagnostic_max["diagnostics"] = [
@@ -667,6 +742,15 @@ def generate(contracts: Path) -> None:
         {"lockId":"dep.tool.generator","kind":"generator-tool","id":"vendor.generator","version":"1","bundleManifestDigest":DIGEST_B,"toolProtocolVersion":"ipcraft.tool-input.v1","runtimeLockId":"dep.runtime.python"},
     ])
     add("project-design-maximum", "ipcraft.project-design.v1", project_maximum, "accept", "core-semantic", None, None)
+    provider_authority_project = copy.deepcopy(project_maximum)
+    provider_authority_project.update({"id":"project.provider-authority","name":"Provider Authority Project"})
+    provider_dependency = next(item for item in provider_authority_project["dependencies"] if item["kind"] == "extension-provider")
+    provider_dependency["bundleManifestDigest"] = DIGEST_B
+    provider_authority_project["topologies"][0]["derivation"]["structureAuthority"] = {
+        "kind":"extension-provider", "lockId":provider_dependency["lockId"], "identity":provider_dependency["id"],
+        "version":provider_dependency["version"], "bundleDigest":provider_dependency["bundleManifestDigest"],
+    }
+    add("project-provider-authority", "ipcraft.project-design.v1", provider_authority_project, "accept", "core-semantic", None, None)
     degraded = copy.deepcopy(project); degraded["id"] = "project.degraded"; degraded["name"] = "Exact Engine Missing"
     add("project-exact-engine-unavailable", "ipcraft.project-design.v1", degraded, "accept", "core-semantic", None, None,
         "vectors/default-engine-lock-v1.json#engine-lock-missing")
@@ -768,6 +852,12 @@ def generate(contracts: Path) -> None:
     project_semantic_cases.append(("project-link-axis-mismatch", link_axis, "project-invariant"))
     link_duplicate = copy.deepcopy(project_2x2); link_duplicate["topologies"][0]["structuralLinks"].append({**copy.deepcopy(link_duplicate["topologies"][0]["structuralLinks"][0]), "id":"link.duplicate"})
     project_semantic_cases.append(("project-link-duplicate-pair", link_duplicate, "project-invariant"))
+    provider_missing = copy.deepcopy(provider_authority_project); provider_missing["topologies"][0]["derivation"]["structureAuthority"]["lockId"] = "dep.missing"
+    project_semantic_cases.append(("project-provider-authority-missing-lock", provider_missing, "project-reference"))
+    provider_wrong_kind = copy.deepcopy(provider_authority_project); provider_wrong_kind["topologies"][0]["derivation"]["structureAuthority"]["lockId"] = "dep.engine.default"
+    project_semantic_cases.append(("project-provider-authority-wrong-lock-kind", provider_wrong_kind, "project-reference"))
+    provider_mismatch = copy.deepcopy(provider_authority_project); provider_mismatch["topologies"][0]["derivation"]["structureAuthority"]["identity"] = "wrong.provider"
+    project_semantic_cases.append(("project-provider-authority-metadata-mismatch", provider_mismatch, "project-invariant"))
     for name, document, boundary in project_semantic_cases:
         code = "project.unknown_reference" if boundary == "project-reference" else "project.invariant_violation"
         add(name, "ipcraft.project-design.v1", document, "reject", "core-semantic", boundary, code)
@@ -859,6 +949,20 @@ def generate(contracts: Path) -> None:
         {"kind":"entity-exists","entityKind":"component","id":"component.noc"},
     ]
     semantic_cases.append(("patch-precondition-failed", "ipcraft.patch.v1", precondition, "precondition", "patch.precondition_failed"))
+    false_preconditions = {
+        "entity-exists":{"kind":"entity-exists","entityKind":"interface","id":"interface.missing"},
+        "entity-absent":{"kind":"entity-absent","entityKind":"component","id":"component.noc"},
+        "property-equals":{"kind":"property-equals","entityKind":"project","id":"project.mesh","property":"name","value":"Wrong"},
+        "relation-exists":{"kind":"relation-exists","relationKind":"domain-membership","id":"membership.missing"},
+        "slot-unoccupied":{"kind":"slot-unoccupied","slotId":"slot.occupied"},
+    }
+    for precondition_kind, false_precondition in false_preconditions.items():
+        failed = copy.deepcopy(patch); failed["preconditions"] = [false_precondition]
+        semantic_cases.append((f"patch-precondition-false-{precondition_kind}", "ipcraft.patch.v1", failed, "precondition", "patch.precondition_failed"))
+    duplicate_precondition = copy.deepcopy(precondition_patch); duplicate_precondition["preconditions"].append(copy.deepcopy(duplicate_precondition["preconditions"][0]))
+    semantic_cases.append(("patch-precondition-duplicate", "ipcraft.patch.v1", duplicate_precondition, "patch-invariant", "patch.invariant_violation"))
+    noncanonical_precondition = copy.deepcopy(precondition_patch); noncanonical_precondition["preconditions"].reverse()
+    semantic_cases.append(("patch-precondition-noncanonical", "ipcraft.patch.v1", noncanonical_precondition, "patch-invariant", "patch.invariant_violation"))
     local_ref = copy.deepcopy(patch); local_ref["operations"] = [
         {"op":"createEntity","entityKind":"package-entity","localRef":"application:000001","value":{"typeKey":"endpoint","data":{},"extensions":[]}},
         {"op":"createEntity","entityKind":"package-entity","localRef":"application:000001","value":{"typeKey":"endpoint","data":{},"extensions":[]}},
@@ -870,10 +974,60 @@ def generate(contracts: Path) -> None:
     semantic_cases.append(("patch-subject-schema", "ipcraft.patch.v1", subject, "patched-subject-schema", "patch.schema_violation"))
     component_identity = copy.deepcopy(patch); component_identity["operations"] = [{"op":"updateEntity","entityKind":"component","id":"component.noc","set":{"packageLockId":"dep.other"},"unset":[]}]
     semantic_cases.append(("patch-user-component-identity", "ipcraft.patch.v1", component_identity, "ownership", "patch.ownership_violation"))
-    authority_domain = patch_with({"kind":"default-engine","identity":"ipcraft.default-noc-engine","version":"1","bundleDigest":DIGEST_A}, [{"op":"updateEntity","entityKind":"domain","id":"domain.default","set":{"name":"Changed"},"unset":[]}])
+    authority_domain = patch_with({"kind":"default-engine","identity":"ipcraft.default-noc-engine","version":"1.0.0","bundleDigest":DIGEST_A}, [{"op":"updateEntity","entityKind":"domain","id":"domain.default","set":{"name":"Changed"},"unset":[]}])
     semantic_cases.append(("patch-authority-mutates-domain", "ipcraft.patch.v1", authority_domain, "ownership", "patch.ownership_violation"))
     reconcile_component = patch_with({"kind":"application-reconcile","identity":"ipcraft.host","version":"1"}, [{"op":"updateEntity","entityKind":"component","id":"component.noc","set":{"config":{}},"unset":[]}])
     semantic_cases.append(("patch-reconcile-mutates-component", "ipcraft.patch.v1", reconcile_component, "ownership", "patch.ownership_violation"))
+    attachment_transition = copy.deepcopy(patch); attachment_transition["operations"] = [{"op":"updateRelation","relationKind":"attachment","id":"attachment.boundary","set":{"state":"unresolved"},"unset":["routerRef","slotRef"]}]
+    semantic_cases.append(("patch-attachment-unresolved-incomplete", "ipcraft.patch.v1", attachment_transition, "patched-subject-schema", "patch.schema_violation"))
+    interface_owner_unset = copy.deepcopy(patch); interface_owner_unset["operations"] = [{"op":"updateEntity","entityKind":"interface","id":"interface.boundary","set":{},"unset":["ownerComponentRef"]}]
+    semantic_cases.append(("patch-interface-owner-unset", "ipcraft.patch.v1", interface_owner_unset, "patched-subject-schema", "patch.schema_violation"))
+    slot_missing_router = patch_with(sources["default-engine"], [{"op":"createEntity","entityKind":"access-slot","localRef":"authority:missing-slot","value":{"routerRef":{"id":"router.missing"},"templateKey":"local-x","identityCompatibilityVersion":1,"displayOrder":2,"label":"Missing","allowedContracts":[],"properties":{}}}])
+    semantic_cases.append(("patch-access-slot-missing-router", "ipcraft.patch.v1", slot_missing_router, "reference", "patch.unknown_reference"))
+    slot_duplicate_role = patch_with(sources["default-engine"], [{"op":"createEntity","entityKind":"access-slot","localRef":"authority:duplicate-role-slot","value":{"routerRef":{"id":"router.0.0"},"templateKey":"local-x","identityCompatibilityVersion":1,"displayOrder":2,"label":"Duplicate","allowedContracts":[{"contractLockId":"dep.contract.axi5","roles":["initiator","initiator"],"capabilityConstraints":{}}],"properties":{}}}])
+    semantic_cases.append(("patch-access-slot-duplicate-role", "ipcraft.patch.v1", slot_duplicate_role, "patch-invariant", "patch.invariant_violation"))
+    reconcile_rename = copy.deepcopy(json.loads((contracts / "fixtures/valid/patch-source-application-reconcile.json").read_text()))
+    reconcile_rename["operations"].append({"op":"updateEntity","entityKind":"project","id":"project.mesh","set":{"name":"Forbidden"},"unset":[]})
+    semantic_cases.append(("patch-reconcile-project-rename", "ipcraft.patch.v1", reconcile_rename, "ownership", "patch.ownership_violation"))
+    local_slot_occupied = patch_with(sources["recovery"], [
+        {"op":"deleteRelation","relationKind":"attachment","id":"attachment.boundary"},
+        {"op":"createEntity","entityKind":"access-slot","localRef":"application:000020","value":{"routerRef":{"id":"router.0.0"},"templateKey":"local-new","identityCompatibilityVersion":1,"displayOrder":2,"label":"New","allowedContracts":[],"properties":{}}},
+        {"op":"createRelation","relationKind":"attachment","localRef":"application:000021","value":{"interfaceRef":{"id":"interface.boundary"},"state":"resolved","routerRef":{"id":"router.0.0"},"slotRef":{"localRef":"application:000020"}}},
+        {"op":"createRelation","relationKind":"attachment","localRef":"application:000022","value":{"interfaceRef":{"id":"interface.unattached"},"state":"resolved","routerRef":{"id":"router.0.0"},"slotRef":{"localRef":"application:000020"}}},
+    ])
+    semantic_cases.append(("patch-local-slot-double-occupancy", "ipcraft.patch.v1", local_slot_occupied, "patch-invariant", "patch.invariant_violation"))
+    local_slot_router_mismatch = patch_with(sources["recovery"], [
+        {"op":"createEntity","entityKind":"access-slot","localRef":"application:000023","value":{"routerRef":{"id":"router.0.0"},"templateKey":"local-new","identityCompatibilityVersion":1,"displayOrder":2,"label":"New","allowedContracts":[],"properties":{}}},
+        {"op":"createRelation","relationKind":"attachment","localRef":"application:000024","value":{"interfaceRef":{"id":"interface.unattached"},"state":"resolved","routerRef":{"id":"router.0.1"},"slotRef":{"localRef":"application:000023"}}},
+    ])
+    semantic_cases.append(("patch-local-slot-router-mismatch", "ipcraft.patch.v1", local_slot_router_mismatch, "patch-invariant", "patch.invariant_violation"))
+    self_link = patch_with(sources["default-engine"], [{"op":"createEntity","entityKind":"structural-link","localRef":"authority:self-link","value":{"templateKey":"mesh-link","identityCompatibilityVersion":1,"endpointA":{"id":"router.0.0"},"endpointB":{"id":"router.0.0"},"axis":"horizontal","properties":{}}}])
+    semantic_cases.append(("patch-structural-link-self", "ipcraft.patch.v1", self_link, "patch-invariant", "patch.invariant_violation"))
+    for suffix, operation in {
+        "engine-update": {"op":"updateRelation","relationKind":"package-relation","id":"package-relation.engine","set":{"targets":[]},"unset":[]},
+        "engine-delete": {"op":"deleteRelation","relationKind":"package-relation","id":"package-relation.engine"},
+        "user-data": {"op":"updateRelation","relationKind":"package-relation","id":"package-relation.user","set":{"data":{"forbidden":True}},"unset":[]},
+    }.items():
+        illegal = copy.deepcopy(json.loads((contracts / "fixtures/valid/patch-source-application-reconcile.json").read_text()))
+        illegal["operations"].append(operation)
+        semantic_cases.append((f"patch-reconcile-package-relation-{suffix}", "ipcraft.patch.v1", illegal, "ownership", "patch.ownership_violation"))
+    for suffix, operation in {
+        "attachment-delete": {"op":"deleteRelation","relationKind":"attachment","id":"attachment.boundary"},
+        "attachment-create": {"op":"createRelation","relationKind":"attachment","localRef":"application:000030","value":{"interfaceRef":{"id":"interface.unattached"},"state":"resolved","routerRef":{"id":"router.0.1"},"slotRef":{"id":"slot.free"}}},
+        "attachment-reattach": {"op":"updateRelation","relationKind":"attachment","id":"attachment.boundary","set":{"routerRef":{"id":"router.0.1"},"slotRef":{"id":"slot.free"}},"unset":[]},
+    }.items():
+        illegal = copy.deepcopy(json.loads((contracts / "fixtures/valid/patch-source-application-reconcile.json").read_text()))
+        illegal["operations"].append(operation)
+        semantic_cases.append((f"patch-reconcile-{suffix}", "ipcraft.patch.v1", illegal, "ownership", "patch.ownership_violation"))
+    tampered_replay = copy.deepcopy(json.loads((contracts / "fixtures/valid/patch-source-recovery.json").read_text()))
+    tampered_replay["operations"][0]["set"]["name"] = "Tampered replay"
+    semantic_cases.append(("patch-recovery-tampered-replay", "ipcraft.patch.v1", tampered_replay, "source-authority", "patch.source_not_allowed"))
+    arbitrary_relation_reason = copy.deepcopy(application_relation_side_effect)
+    arbitrary_relation_reason["operations"][-1]["set"]["sources"][0]["reasonCode"] = "arbitrary"
+    semantic_cases.append(("patch-reconcile-package-relation-reason-code", "ipcraft.patch.v1", arbitrary_relation_reason, "ownership", "patch.ownership_violation"))
+    arbitrary_attachment_reason = copy.deepcopy(application_attachment_side_effect)
+    arbitrary_attachment_reason["operations"][-1]["set"]["reasonCode"] = "arbitrary"
+    semantic_cases.append(("patch-reconcile-attachment-reason-code", "ipcraft.patch.v1", arbitrary_attachment_reason, "ownership", "patch.ownership_violation"))
     reconcile_missing = patch_with({"kind":"application-reconcile","identity":"ipcraft.host","version":"1"}, [])
     semantic_cases.append(("patch-reconcile-missing-derivation", "ipcraft.patch.v1", reconcile_missing, "patch-invariant", "patch.invariant_violation"))
     migration_missing = patch_with({"kind":"application-migration","identity":"ipcraft.host","version":"1"}, [{
@@ -904,12 +1058,13 @@ def generate(contracts: Path) -> None:
         "value":{"templateKey":"mesh-router","identityCompatibilityVersion":1,"coordinate":{"row":0,"column":0},"properties":{}},
     }])
     authority_mismatch["applicability"]["structureAuthority"].update({
-        "kind":"default-engine","identity":"ipcraft.default-noc-engine","version":"1","bundleDigest":DIGEST_A,
+        "kind":"default-engine","identity":"ipcraft.default-noc-engine","version":"1.0.0","bundleDigest":DIGEST_A,
     })
     semantic_cases.append(("patch-authority-applicability-mismatch", "ipcraft.patch.v1", authority_mismatch, "structure-authority", "patch.authority_conflict"))
     for relation_kind, required_name in (("domain-membership", "domainRef"), ("package-relation", "sources"), ("attachment", "interfaceRef")):
         relation_unset = copy.deepcopy(patch)
-        relation_unset["operations"] = [{"op":"updateRelation","relationKind":relation_kind,"id":f"relation.{relation_kind}","set":{},"unset":[required_name]}]
+        relation_id = {"domain-membership":"membership.0","package-relation":"package-relation.user","attachment":"attachment.boundary"}[relation_kind]
+        relation_unset["operations"] = [{"op":"updateRelation","relationKind":relation_kind,"id":relation_id,"set":{},"unset":[required_name]}]
         semantic_cases.append((f"patch-{relation_kind}-required-unset", "ipcraft.patch.v1", relation_unset, "patched-subject-schema", "patch.schema_violation"))
 
     malformed_operation = copy.deepcopy(patch); malformed_operation["operations"] = [{"op":"createEntity","entityKind":"router","localRef":"application:000003"}]
@@ -944,7 +1099,7 @@ def generate(contracts: Path) -> None:
     coverage["ipcraft.project-design.v1"].update({
         "minimal": ["fixtures/valid/minimal-1x1.json"],
         "representative": ["fixtures/valid/mesh-2x2-attached.json"],
-        "maximumShape": ["fixtures/valid/project-design-maximum.json"],
+        "maximumShape": ["fixtures/valid/project-design-maximum.json", "fixtures/valid/project-provider-authority.json"],
     })
     coverage["ipcraft.core-canonical-models.v1"].update({
         "representative": ["fixtures/valid/core-normalizedTopologyInput.json"],
@@ -962,6 +1117,8 @@ def generate(contracts: Path) -> None:
             *[f"fixtures/valid/patch-source-{name}.json" for name in sources],
             "fixtures/valid/patch-preconditions-all.json",
             *[f"fixtures/valid/patch-package-ownership-{name}.json" for name in package_ownership_witnesses],
+            "fixtures/valid/patch-application-package-relation-unresolved.json",
+            "fixtures/valid/patch-application-attachment-unresolved.json",
         ],
     })
     coverage["ipcraft.command-result.v1"].update({
@@ -1022,13 +1179,27 @@ def generate(contracts: Path) -> None:
         "ipcraft.patch.v1": {"maximumShape":{"discriminatorCoverage":{"/operations/*/op":["createEntity","updateEntity","deleteEntity","createRelation","updateRelation","deleteRelation"],"/source/kind":["user-command","application-reconcile","application-migration","default-engine","extension-provider","recovery","undo-redo"],"/preconditions/*/kind":["entity-exists","entity-absent","property-equals","relation-exists","slot-unoccupied"]}}},
         "ipcraft.pipeline-plan.v1": {"maximumShape":{"minimumArrayLengths":{"/steps":5},"discriminatorCoverage":{"/kind":["generate"],"/steps/*/kind":["host","external-tool"]}}},
         "ipcraft.pipeline-result.v1": {"maximumShape":{"discriminatorCoverage":{"/status":["succeeded","failed","cancelled","timed-out"]}}},
-        "ipcraft.project-design.v1": {"maximumShape":{"minimumArrayLengths":{"/dependencies":7,"/topologies/0/routers":4},"requiredPointers":["/interfaces/0","/topologies/0/packageEntities/0","/topologies/0/packageRelations/0"],"discriminatorCoverage":{"/dependencies/*/kind":["default-engine","noc-package","interface-contract","extension-provider","drc-tool","generator-tool","runtime"]}}},
+        "ipcraft.project-design.v1": {"maximumShape":{"minimumArrayLengths":{"/dependencies":7,"/topologies/0/routers":4},"requiredPointers":["/interfaces/0","/topologies/0/packageEntities/0","/topologies/0/packageRelations/0"],"discriminatorCoverage":{"/dependencies/*/kind":["default-engine","noc-package","interface-contract","extension-provider","drc-tool","generator-tool","runtime"],"/topologies/*/derivation/structureAuthority/kind":["default-engine","extension-provider"]}}},
         "ipcraft.recovery.v1": {"maximumShape":{"minimumArrayLengths":{"/draftOverlay":1,"/draftUndo":1,"/draftRedo":1},"requiredPointers":["/pendingTopologyGroup/groupId"]}},
         "ipcraft.step-result.v1": {"maximumShape":{"discriminatorCoverage":{"/status":["succeeded","failed","cancelled","timed-out","skipped"],"/stepKind":["host","external-tool"]}}},
         "ipcraft.tool-input.v1": {"maximumShape":{"minimumArrayLengths":{"/dependencies":2},"discriminatorCoverage":{"/kind":["semantic-drc","generator"]},"requiredPointers":["/outputDirectory"]}},
         "ipcraft.tool-result.v1": {"maximumShape":{"discriminatorCoverage":{"/status":["succeeded","failed"]},"requiredPointers":["/diagnosticReport","/artifactManifest","/failure/code"]}}
     }
-    write_json(contracts / "fixture-coverage-v1.json", {"schema": "ipcraft.fixture-coverage.v1", "roots": coverage, "requirements": requirements})
+    requirements = {
+        schema_id: {tier: requirements[schema_id].get(tier, {}) for tier in ("minimal", "representative", "maximumShape")}
+        for schema_id in schema_ids
+    }
+    requirements_digest = "sha256:" + hashlib.sha256(
+        json.dumps(requirements, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    coverage_digest = "sha256:" + hashlib.sha256(
+        json.dumps({"roots": coverage, "requirements": requirements}, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    write_json(contracts / "fixture-coverage-v1.json", {
+        "schema": "ipcraft.fixture-coverage.v1", "requirementsDigest": requirements_digest,
+        "coverageDigest": coverage_digest,
+        "roots": coverage, "requirements": requirements,
+    })
 
 
 def main() -> None:

@@ -14,13 +14,21 @@
   "preconditions": [],
   "operations": [
     {
-      "op": "updateRelation",
-      "relationKind": "package-relation",
-      "id": "package-relation.user",
-      "set": {
-        "data": {}
-      },
-      "unset": []
+      "op": "createEntity",
+      "entityKind": "structural-link",
+      "localRef": "authority:self-link",
+      "value": {
+        "templateKey": "mesh-link",
+        "identityCompatibilityVersion": 1,
+        "endpointA": {
+          "id": "router.0.0"
+        },
+        "endpointB": {
+          "id": "router.0.0"
+        },
+        "axis": "horizontal",
+        "properties": {}
+      }
     }
   ],
   "applicability": {

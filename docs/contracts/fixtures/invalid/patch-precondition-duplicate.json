@@ -36,6 +36,11 @@
     {
       "kind": "slot-unoccupied",
       "slotId": "slot.free"
+    },
+    {
+      "kind": "entity-exists",
+      "entityKind": "component",
+      "id": "component.noc"
     }
   ],
   "operations": []

@@ -5,7 +5,7 @@
   "source": {
     "kind": "default-engine",
     "identity": "ipcraft.default-noc-engine",
-    "version": "1",
+    "version": "1.0.0",
     "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
   },
   "causality": {
@@ -21,7 +21,7 @@
         "templateKey": "mesh-router",
         "identityCompatibilityVersion": 1,
         "coordinate": {
-          "row": 0,
+          "row": 1,
           "column": 0
         },
         "properties": {}
@@ -39,9 +39,9 @@
     "baseAuthoritativeDesignDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "structureAuthority": {
       "kind": "default-engine",
-      "lockId": "value",
+      "lockId": "dep.engine.default",
       "identity": "ipcraft.default-noc-engine",
-      "version": "1",
+      "version": "1.0.0",
       "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     },
     "packageBundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
