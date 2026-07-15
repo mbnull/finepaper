@@ -82,7 +82,7 @@ def _json_equal(left: Any, right: Any) -> bool:
 class Draft202012Subset:
     def __init__(self, contracts: Path):
         self.contracts = contracts
-        self.schemas: dict[str, tuple[dict[str, Any], Path]] = {}
+        self.schemas: dict[str, tuple[Any, Path]] = {}
         for item in load_strict_json(contracts / "schema-catalog.json")["items"]:
             path = contracts / item["path"]
             self.schemas[item["id"]] = (load_strict_json(path), path)
@@ -91,7 +91,7 @@ class Draft202012Subset:
         root, path = self.schemas[schema_id]
         self._validate(root, instance, root, path, "$")
 
-    def _resolve(self, reference: str, root: dict[str, Any], root_path: Path) -> tuple[dict[str, Any], dict[str, Any], Path]:
+    def _resolve(self, reference: str, root: Any, root_path: Path) -> tuple[Any, Any, Path]:
         file_part, _, fragment = reference.partition("#")
         if file_part:
             target_path = (root_path.parent / file_part).resolve()
@@ -105,8 +105,8 @@ class Draft202012Subset:
             for raw in fragment[1:].split("/"):
                 token = raw.replace("~1", "/").replace("~0", "~")
                 node = node[int(token)] if isinstance(node, list) else node[token]
-        if not isinstance(node, dict):
-            raise FixtureVerificationError(f"schema reference {reference!r} does not resolve to an object")
+        if not isinstance(node, (bool, dict)):
+            raise FixtureVerificationError(f"schema reference {reference!r} does not resolve to a schema")
         return node, target, target_path
 
     @staticmethod
@@ -121,14 +121,20 @@ class Draft202012Subset:
             "object": isinstance(instance, dict),
         }[declared]
 
-    def _is_valid(self, schema: dict[str, Any], instance: Any, root: dict[str, Any], root_path: Path) -> bool:
+    def _is_valid(self, schema: Any, instance: Any, root: Any, root_path: Path) -> bool:
         try:
             self._validate(schema, instance, root, root_path, "$")
             return True
         except SchemaFailure:
             return False
 
-    def _validate(self, schema: dict[str, Any], instance: Any, root: dict[str, Any], root_path: Path, path: str) -> None:
+    def _validate(self, schema: Any, instance: Any, root: Any, root_path: Path, path: str) -> None:
+        if schema is True:
+            return
+        if schema is False:
+            raise SchemaFailure(path, "false schema rejected instance")
+        if not isinstance(schema, dict):
+            raise FixtureVerificationError(f"{root_path}: schema at {path} is neither an object nor a boolean")
         if "$ref" in schema:
             target, target_root, target_path = self._resolve(schema["$ref"], root, root_path)
             self._validate(target, instance, target_root, target_path, path)
@@ -167,7 +173,7 @@ class Draft202012Subset:
             if schema.get("uniqueItems"):
                 if any(_json_equal(instance[left], instance[right]) for left in range(len(instance)) for right in range(left + 1, len(instance))):
                     raise SchemaFailure(path, "duplicate array item")
-            if isinstance(schema.get("items"), dict):
+            if "items" in schema:
                 for index, value in enumerate(instance):
                     self._validate(schema["items"], value, root, root_path, f"{path}[{index}]")
             if "contains" in schema:
@@ -184,9 +190,7 @@ class Draft202012Subset:
             for member, value in instance.items():
                 if member in properties:
                     self._validate(properties[member], value, root, root_path, f"{path}.{member}")
-                elif schema.get("additionalProperties") is False:
-                    raise SchemaFailure(path, f"additional property {member}")
-                elif isinstance(schema.get("additionalProperties"), dict):
+                elif "additionalProperties" in schema:
                     self._validate(schema["additionalProperties"], value, root, root_path, f"{path}.{member}")
         for branch in schema.get("allOf", []):
             self._validate(branch, instance, root, root_path, path)
@@ -199,9 +203,9 @@ class Draft202012Subset:
         if "not" in schema and self._is_valid(schema["not"], instance, root, root_path):
             raise SchemaFailure(path, "not schema matched")
         if "if" in schema:
-            branch = schema.get("then") if self._is_valid(schema["if"], instance, root, root_path) else schema.get("else")
-            if isinstance(branch, dict):
-                self._validate(branch, instance, root, root_path, path)
+            branch_key = "then" if self._is_valid(schema["if"], instance, root, root_path) else "else"
+            if branch_key in schema:
+                self._validate(schema[branch_key], instance, root, root_path, path)
 
 
 SUPPORTED_SCHEMA_KEYWORDS = {
@@ -214,28 +218,128 @@ SUPPORTED_SCHEMA_KEYWORDS = {
 
 
 def audit_schema_keywords(contracts: Path) -> set[str]:
-    """Return schema keyword locations not understood by the stdlib validator."""
+    """Return unknown keywords and malformed supported-keyword locations."""
     unknown: set[str] = set()
 
+    schema_types = {"array", "boolean", "integer", "null", "number", "object", "string"}
+
+    def malformed(location: str, key: str) -> None:
+        unknown.add(f"{location}/{key}:invalid-shape")
+
+    def is_non_negative_integer(value: Any) -> bool:
+        return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+    def is_number(value: Any) -> bool:
+        return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+    def is_schema(value: Any) -> bool:
+        return isinstance(value, (bool, dict))
+
+    def json_values_are_unique(values: list[Any]) -> bool:
+        return not any(_json_equal(values[left], values[right]) for left in range(len(values)) for right in range(left + 1, len(values)))
+
     def walk(schema: Any, location: str) -> None:
+        if isinstance(schema, bool):
+            return
         if not isinstance(schema, dict):
+            unknown.add(f"{location}:invalid-schema")
             return
         for key in schema:
             if key not in SUPPORTED_SCHEMA_KEYWORDS:
                 unknown.add(f"{location}/{key}")
+
+        for key in ("$schema", "$id", "$ref", "$comment", "title", "description"):
+            if key in schema and not isinstance(schema[key], str):
+                malformed(location, key)
+        if "$schema" in schema and schema["$schema"] != "https://json-schema.org/draft/2020-12/schema":
+            malformed(location, "$schema")
+        if "$ref" in schema and schema["$ref"] == "":
+            malformed(location, "$ref")
+
+        if "type" in schema:
+            declared = schema["type"]
+            if isinstance(declared, str):
+                valid_type = declared in schema_types
+            elif isinstance(declared, list):
+                valid_type = (
+                    bool(declared)
+                    and all(isinstance(item, str) and item in schema_types for item in declared)
+                    and len(declared) == len(set(declared))
+                )
+            else:
+                valid_type = False
+            if not valid_type:
+                malformed(location, "type")
+        if "enum" in schema:
+            values = schema["enum"]
+            if not isinstance(values, list) or not values or not json_values_are_unique(values):
+                malformed(location, "enum")
+        if "required" in schema:
+            required = schema["required"]
+            if not isinstance(required, list) or not all(isinstance(item, str) for item in required) or len(required) != len(set(required)):
+                malformed(location, "required")
+
+        for key in ("minItems", "maxItems", "minContains", "maxContains", "minLength"):
+            if key in schema and not is_non_negative_integer(schema[key]):
+                malformed(location, key)
+        if "uniqueItems" in schema and not isinstance(schema["uniqueItems"], bool):
+            malformed(location, "uniqueItems")
+        for key in ("minimum", "maximum", "exclusiveMinimum"):
+            if key in schema and not is_number(schema[key]):
+                malformed(location, key)
+        if "pattern" in schema:
+            pattern = schema["pattern"]
+            if not isinstance(pattern, str):
+                malformed(location, "pattern")
+            else:
+                try:
+                    re.compile(pattern)
+                except re.error:
+                    malformed(location, "pattern")
+        if "format" in schema and schema["format"] != "date-time":
+            malformed(location, "format")
+
+        canonical = schema.get("x-ipcraft-canonical")
+        if "x-ipcraft-canonical" in schema:
+            if not isinstance(canonical, dict) or set(canonical) - {"kind", "sortKey"}:
+                malformed(location, "x-ipcraft-canonical")
+            elif canonical.get("kind") == "ordered":
+                if set(canonical) != {"kind"}:
+                    malformed(location, "x-ipcraft-canonical")
+            elif canonical.get("kind") in {"set", "derived-ordered"}:
+                sort_key = canonical.get("sortKey")
+                if not isinstance(sort_key, list) or not sort_key or not all(isinstance(item, str) and item for item in sort_key) or len(sort_key) != len(set(sort_key)):
+                    malformed(location, "x-ipcraft-canonical")
+            else:
+                malformed(location, "x-ipcraft-canonical")
+
         for member in ("properties", "$defs"):
-            values = schema.get(member, {})
-            if isinstance(values, dict):
+            if member not in schema:
+                continue
+            values = schema[member]
+            if not isinstance(values, dict):
+                malformed(location, member)
+            else:
                 for key, child in values.items():
+                    if not is_schema(child):
+                        malformed(f"{location}/{member}", key)
                     walk(child, f"{location}/{member}/{key}")
         for member in ("items", "additionalProperties", "contains", "not", "if", "then", "else"):
-            child = schema.get(member)
-            if isinstance(child, dict):
+            if member in schema:
+                child = schema[member]
+                if not is_schema(child):
+                    malformed(location, member)
                 walk(child, f"{location}/{member}")
         for member in ("allOf", "anyOf", "oneOf"):
-            children = schema.get(member, [])
-            if isinstance(children, list):
+            if member not in schema:
+                continue
+            children = schema[member]
+            if not isinstance(children, list) or not children:
+                malformed(location, member)
+            else:
                 for index, child in enumerate(children):
+                    if not is_schema(child):
+                        malformed(f"{location}/{member}", str(index))
                     walk(child, f"{location}/{member}/{index}")
 
     for item in load_strict_json(contracts / "schema-catalog.json")["items"]:

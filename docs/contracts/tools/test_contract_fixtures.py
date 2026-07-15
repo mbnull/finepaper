@@ -121,6 +121,124 @@ class ContractFixtureTest(unittest.TestCase):
             with self.assertRaisesRegex(subject.FixtureVerificationError, "unsupported JSON Schema keywords"):
                 subject.verify_all(root)
 
+    def test_reviewer_items_false_rejects_nonempty_pipeline_steps(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "contracts"
+            subject.copy_contract_tree(CONTRACTS, root)
+            schema_path = root / "schemas/ipcraft.pipeline-result.v1.schema.json"
+            schema = json.loads(schema_path.read_text())
+            schema["properties"]["steps"]["items"] = False
+            schema_path.write_text(json.dumps(schema))
+            self.assertEqual(subject.audit_schema_keywords(root), set())
+            with self.assertRaises(subject.FixtureVerificationError):
+                subject.verify_all(root)
+
+    def test_boolean_schemas_work_in_nested_schema_positions(self) -> None:
+        pipeline = json.loads((CONTRACTS / "fixtures/valid/pipeline-result.json").read_text())
+
+        def validate_with(mutate, should_pass: bool) -> None:
+            with tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary) / "contracts"
+                subject.copy_contract_tree(CONTRACTS, root)
+                schema_path = root / "schemas/ipcraft.pipeline-result.v1.schema.json"
+                schema = json.loads(schema_path.read_text())
+                instance = copy.deepcopy(pipeline)
+                mutate(schema, instance)
+                schema_path.write_text(json.dumps(schema))
+                self.assertEqual(subject.audit_schema_keywords(root), set())
+                validator = subject.Draft202012Subset(root)
+                if should_pass:
+                    validator.validate("ipcraft.pipeline-result.v1", instance)
+                else:
+                    with self.assertRaises(subject.SchemaFailure):
+                        validator.validate("ipcraft.pipeline-result.v1", instance)
+
+        cases = (
+            (lambda s, _i: s["properties"].__setitem__("pipelineRunId", True), True),
+            (lambda s, _i: s["properties"].__setitem__("pipelineRunId", False), False),
+            (lambda s, i: (s.__setitem__("additionalProperties", True), i.update({"extra": True})), True),
+            (lambda s, i: (s.__setitem__("additionalProperties", False), i.update({"extra": True})), False),
+            (lambda s, _i: s["properties"]["steps"].__setitem__("items", False), False),
+            (lambda s, i: (s["properties"]["steps"].__setitem__("items", True), i["steps"][0].__setitem__("extra", True)), True),
+            (lambda s, _i: s["allOf"].append(True), True),
+            (lambda s, _i: s["allOf"].append(False), False),
+            (lambda s, _i: s.__setitem__("if", True) or s.__setitem__("then", False), False),
+            (lambda s, _i: s.__setitem__("not", False), True),
+            (lambda s, _i: s["$defs"].__setitem__("id", False), False),
+        )
+        for index, (mutate, should_pass) in enumerate(cases):
+            with self.subTest(index=index):
+                validate_with(mutate, should_pass)
+
+    def test_schema_form_audit_rejects_recognized_keyword_with_unsupported_shape(self) -> None:
+        mutations = (
+            lambda schema: schema.__setitem__("$schema", 7),
+            lambda schema: schema.__setitem__("$id", False),
+            lambda schema: schema.__setitem__("$ref", []),
+            lambda schema: schema.__setitem__("$comment", {}),
+            lambda schema: schema.__setitem__("title", []),
+            lambda schema: schema.__setitem__("description", 1),
+            lambda schema: schema.__setitem__("type", "bytes"),
+            lambda schema: schema.__setitem__("type", []),
+            lambda schema: schema.__setitem__("type", ["object", "object"]),
+            lambda schema: schema.__setitem__("type", ["object", 1]),
+            lambda schema: schema.__setitem__("enum", "value"),
+            lambda schema: schema.__setitem__("enum", []),
+            lambda schema: schema.__setitem__("enum", [1, 1.0]),
+            lambda schema: schema.__setitem__("properties", []),
+            lambda schema: schema.__setitem__("properties", {"bad": 1}),
+            lambda schema: schema.__setitem__("$defs", {"bad": None}),
+            lambda schema: schema.__setitem__("required", "schema"),
+            lambda schema: schema.__setitem__("required", ["schema", 1]),
+            lambda schema: schema.__setitem__("required", ["schema", "schema"]),
+            lambda schema: schema.__setitem__("allOf", {}),
+            lambda schema: schema.__setitem__("allOf", []),
+            lambda schema: schema.__setitem__("anyOf", [1]),
+            lambda schema: schema.__setitem__("oneOf", [None]),
+            lambda schema: schema["properties"]["steps"].__setitem__("items", 7),
+            lambda schema: schema.__setitem__("additionalProperties", "false"),
+            lambda schema: schema.__setitem__("contains", 1),
+            lambda schema: schema.__setitem__("not", None),
+            lambda schema: schema.__setitem__("if", "true"),
+            lambda schema: schema.__setitem__("then", 0),
+            lambda schema: schema.__setitem__("else", []),
+            lambda schema: schema.__setitem__("minItems", -1),
+            lambda schema: schema.__setitem__("maxItems", 1.5),
+            lambda schema: schema.__setitem__("minContains", False),
+            lambda schema: schema.__setitem__("maxContains", -1),
+            lambda schema: schema.__setitem__("minLength", -1),
+            lambda schema: schema.__setitem__("uniqueItems", "true"),
+            lambda schema: schema.__setitem__("minimum", False),
+            lambda schema: schema.__setitem__("maximum", "1"),
+            lambda schema: schema.__setitem__("exclusiveMinimum", None),
+            lambda schema: schema.__setitem__("pattern", 1),
+            lambda schema: schema.__setitem__("pattern", "["),
+            lambda schema: schema.__setitem__("format", 1),
+            lambda schema: schema.__setitem__("format", "uuid"),
+            lambda schema: schema.__setitem__("x-ipcraft-canonical", []),
+        )
+        for mutate in mutations:
+            with self.subTest(mutate=mutate), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary) / "contracts"
+                subject.copy_contract_tree(CONTRACTS, root)
+                schema_path = root / "schemas/ipcraft.pipeline-result.v1.schema.json"
+                schema = json.loads(schema_path.read_text())
+                mutate(schema)
+                schema_path.write_text(json.dumps(schema))
+                self.assertTrue(subject.audit_schema_keywords(root))
+                with self.assertRaisesRegex(subject.FixtureVerificationError, "unsupported JSON Schema keywords"):
+                    subject.verify_all(root)
+
+    def test_schema_form_audit_accepts_empty_id_uri_reference(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "contracts"
+            subject.copy_contract_tree(CONTRACTS, root)
+            schema_path = root / "schemas/ipcraft.pipeline-result.v1.schema.json"
+            schema = json.loads(schema_path.read_text())
+            schema["$id"] = ""
+            schema_path.write_text(json.dumps(schema))
+            self.assertEqual(subject.audit_schema_keywords(root), set())
+
     def test_schema_validator_rejects_mutated_valid_fixture(self) -> None:
         catalog = subject.load_catalog(CONTRACTS)
         entry = next(item for item in catalog if item["expected"] == "accept")
