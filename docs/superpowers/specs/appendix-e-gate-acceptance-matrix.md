@@ -41,6 +41,33 @@ xmake run -P qt noc_default_engine_lock_contract_test
 xmake run -P qt noc_host_side_effect_contract_test
 ```
 
+### E2.1. Standalone Fixture Catalog and Error Classification
+
+`ipcraft.fixture-catalog.v1` catalogs only deterministic validation of one standalone JSON document by JSON Schema or by a Core-semantic validator. Its closed entries contain exactly `path`, `schemaId`, `validationPhase`, `expected`, `errorCode`, and `behaviorEvidence`; entries are sorted by portable normalized `path` and cover every physical file below `fixtures/valid/` and `fixtures/invalid/` exactly once. `schemaId` and non-null `errorCode` resolve the schema and error catalogs. Accept entries use the valid prefix, null `errorCode`, and may point to one exact committed vector case as `vectors/<file>.json#<case-id>`; reject entries use the invalid prefix, a non-null stable error, and null `behaviorEvidence`.
+
+The standalone catalog does not represent filesystem trees or resolver context. Bundle exhaustiveness/symlink/special-file checks, resolver availability, Provider manifest self-digest, degraded-inspect selection, and output freshness remain focused behavioral vectors or tool tests. A structurally valid Project with unavailable or unsupported exact dependency metadata is therefore a schema-accept fixture and may link to the exact degraded-inspect behavior vector; the fixture alone does not derive runtime state. Fixture coverage is one invalid fixture per named normative rule family or conditional, not one per repeated JSON Schema keyword occurrence. V1 has no fixture-context or filesystem-directory entry type.
+
+Stable standalone validation classification is exact:
+
+| Subject/failure boundary | Stable error code |
+|---|---|
+| Generic JSON Schema or root structural failure | `contract.schema_invalid` |
+| Project legacy root discrimination | `project.legacy_format_unsupported` |
+| Project duplicate IDs / unknown references / other Core invariant | `project.duplicate_id` / `project.unknown_reference` / `project.invariant_violation` |
+| Patch envelope or JSON Schema failure before dispatch | `patch.schema_invalid` |
+| Illegal Patch operation discriminant or required operation shape | `patch.operation_invalid` |
+| Structurally valid Patch operation produces a subject violating its subject schema | `patch.schema_violation` |
+| Patch cross-object invariant, ownership, reference, or other existing specialized failure | `patch.invariant_violation` or the existing exact Patch code |
+| Recovery JSON structure / saved-base binding | `contract.schema_invalid` / `recovery.binding_mismatch` |
+| NoC Package / Interface Contract semantic declaration | `package.invariant_violation` / `contract.invariant_violation` |
+| Engine migration semantic binding | `engine.migration_invalid` |
+| Tool Input structural or semantic manifest input | `tool.input_invalid` |
+| Command Result / Diagnostic Report / Output Manifest standalone artifact | `command.result_invalid` / `diagnostic.report_invalid` / `output.manifest_invalid` |
+| Contradictory Host side-effect result | `host.side_effect_result_invalid` |
+| Bundle Manifest standalone structure | `dependency.manifest_invalid` |
+
+Existing specialized Tool Result, Pipeline Result, and Artifact codes remain authoritative. Bundle filesystem/exhaustiveness disagreement remains behavioral `dependency.bundle_mismatch`, not a single-document fixture. Output stale reasons do not create validation error codes.
+
 Gate 0 exit requires `docs/contracts/CORE-FREEZE.md`. Core contract changes after this point require an unfreeze ADR, a new freeze digest, and rerunning every affected Gate. Provider reconcile ABI and confidential capability-specific extensions remain explicitly unfrozen until Gate D.
 
 ## E3. Gate A — Project Foundation

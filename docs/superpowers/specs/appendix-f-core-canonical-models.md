@@ -323,6 +323,7 @@ Each machine rule has exact `{schemaId, schemaPointer, kind, sortKey}` addressin
 | `ipcraft.diagnostic-report.v1` | `/properties/diagnostics` | ordered | `—` |
 | `ipcraft.engine-bundle.v1` | `/properties/migrationFromCompatibilityVersions` | set | `unicodeScalarValue` |
 | `ipcraft.engine-bundle.v1` | `/properties/supportedPlatformAbis` | set | `unicodeScalarValue` |
+| `ipcraft.fixture-catalog.v1` | `/properties/items` | set | `path` |
 | `ipcraft.interface-contract.v1` | `/$defs/capability/properties/values/oneOf/0` | set | `canonicalJson` |
 | `ipcraft.interface-contract.v1` | `/$defs/field/properties/values/oneOf/0` | set | `canonicalJson` |
 | `ipcraft.interface-contract.v1` | `/properties/capabilities` | set | `key` |
@@ -385,6 +386,8 @@ Each machine rule has exact `{schemaId, schemaPointer, kind, sortKey}` addressin
 | `ipcraft.recovery.v1` | `/properties/draftRedo` | ordered | `—` |
 | `ipcraft.recovery.v1` | `/properties/draftUndo` | ordered | `—` |
 | `ipcraft.tool-input.v1` | `/properties/dependencies` | set | `lockId` |
+
+The Gate 0 V1 table contains exactly 99 physical collection rules. The collection-permutation catalog contains exactly one case for each rule.
 
 Kind-specific Patch update-set schemas reuse the create-value property schemas for `allowedContracts`/nested `roles`, Package Relation `sources`/`targets`, and `extensions`. Their create and update permutations therefore resolve to the same physical locations above and cannot diverge in canonicalization. The only open update values are the explicitly Package/Contract-defined `data`, `config`, `properties`, `contractConfig`, `nocConfig`, and `capabilities` maps.
 

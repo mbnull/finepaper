@@ -5342,6 +5342,124 @@
       "expectedDigest": "sha256:a9875cefc33749db49166045d74b05d1766bf24bc8f8837998c1e6c70ba0613a"
     },
     {
+      "id": "fixture-catalog-items",
+      "schemaId": "ipcraft.fixture-catalog.v1",
+      "schemaPointer": "/properties/items",
+      "collectionKind": "set",
+      "sortKey": [
+        "path"
+      ],
+      "inputVariants": [
+        [
+          {
+            "path": "fixtures/valid/alpha.json",
+            "schemaId": "alpha-1",
+            "validationPhase": "schema",
+            "expected": "accept",
+            "errorCode": null,
+            "behaviorEvidence": null
+          },
+          {
+            "path": "fixtures/valid/mu.json",
+            "schemaId": "mu-2",
+            "validationPhase": "schema",
+            "expected": "accept",
+            "errorCode": null,
+            "behaviorEvidence": null
+          },
+          {
+            "path": "fixtures/valid/zeta.json",
+            "schemaId": "zeta-3",
+            "validationPhase": "schema",
+            "expected": "accept",
+            "errorCode": null,
+            "behaviorEvidence": null
+          }
+        ],
+        [
+          {
+            "path": "fixtures/valid/zeta.json",
+            "schemaId": "zeta-3",
+            "validationPhase": "schema",
+            "expected": "accept",
+            "errorCode": null,
+            "behaviorEvidence": null
+          },
+          {
+            "path": "fixtures/valid/mu.json",
+            "schemaId": "mu-2",
+            "validationPhase": "schema",
+            "expected": "accept",
+            "errorCode": null,
+            "behaviorEvidence": null
+          },
+          {
+            "path": "fixtures/valid/alpha.json",
+            "schemaId": "alpha-1",
+            "validationPhase": "schema",
+            "expected": "accept",
+            "errorCode": null,
+            "behaviorEvidence": null
+          }
+        ],
+        [
+          {
+            "path": "fixtures/valid/mu.json",
+            "schemaId": "mu-2",
+            "validationPhase": "schema",
+            "expected": "accept",
+            "errorCode": null,
+            "behaviorEvidence": null
+          },
+          {
+            "path": "fixtures/valid/zeta.json",
+            "schemaId": "zeta-3",
+            "validationPhase": "schema",
+            "expected": "accept",
+            "errorCode": null,
+            "behaviorEvidence": null
+          },
+          {
+            "path": "fixtures/valid/alpha.json",
+            "schemaId": "alpha-1",
+            "validationPhase": "schema",
+            "expected": "accept",
+            "errorCode": null,
+            "behaviorEvidence": null
+          }
+        ]
+      ],
+      "expectedRelation": "equal",
+      "expectedNormalized": [
+        {
+          "path": "fixtures/valid/alpha.json",
+          "schemaId": "alpha-1",
+          "validationPhase": "schema",
+          "expected": "accept",
+          "errorCode": null,
+          "behaviorEvidence": null
+        },
+        {
+          "path": "fixtures/valid/mu.json",
+          "schemaId": "mu-2",
+          "validationPhase": "schema",
+          "expected": "accept",
+          "errorCode": null,
+          "behaviorEvidence": null
+        },
+        {
+          "path": "fixtures/valid/zeta.json",
+          "schemaId": "zeta-3",
+          "validationPhase": "schema",
+          "expected": "accept",
+          "errorCode": null,
+          "behaviorEvidence": null
+        }
+      ],
+      "expectedCanonicalJson": "[{\"behaviorEvidence\":null,\"errorCode\":null,\"expected\":\"accept\",\"path\":\"fixtures/valid/alpha.json\",\"schemaId\":\"alpha-1\",\"validationPhase\":\"schema\"},{\"behaviorEvidence\":null,\"errorCode\":null,\"expected\":\"accept\",\"path\":\"fixtures/valid/mu.json\",\"schemaId\":\"mu-2\",\"validationPhase\":\"schema\"},{\"behaviorEvidence\":null,\"errorCode\":null,\"expected\":\"accept\",\"path\":\"fixtures/valid/zeta.json\",\"schemaId\":\"zeta-3\",\"validationPhase\":\"schema\"}]",
+      "expectedDigest": "sha256:22f3dc2c457adf8ee087e67423b9c158c78d9314741d366394ff87686185d026"
+    },
+    {
       "id": "interface-contract-capability-values-oneOf-0",
       "schemaId": "ipcraft.interface-contract.v1",
       "schemaPointer": "/$defs/capability/properties/values/oneOf/0",

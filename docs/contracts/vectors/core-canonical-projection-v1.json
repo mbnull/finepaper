@@ -319,6 +319,14 @@
       ]
     },
     {
+      "schemaId": "ipcraft.fixture-catalog.v1",
+      "schemaPointer": "/properties/items",
+      "kind": "set",
+      "sortKey": [
+        "path"
+      ]
+    },
+    {
       "schemaId": "ipcraft.interface-contract.v1",
       "schemaPointer": "/$defs/capability/properties/values/oneOf/0",
       "kind": "set",

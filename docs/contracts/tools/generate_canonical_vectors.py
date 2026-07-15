@@ -256,6 +256,8 @@ def set_keyed_sample(world: SchemaWorld, schema_id: str, node: dict[str, Any], i
             value[key] = bool(index % 2)
         elif 'digest' in key.lower():
             value[key] = [DIGEST_A, DIGEST_B, DIGEST_C][index]
+        elif schema_id == 'ipcraft.fixture-catalog.v1' and key == 'path':
+            value[key] = f'fixtures/valid/{label}.json'
         else:
             value[key] = label
     if keys == ['code', 'severity', 'dataLoss', 'subjectsCanonicalJson', 'detailsCanonicalJson', 'resolution']:
@@ -267,6 +269,13 @@ def set_keyed_sample(world: SchemaWorld, schema_id: str, node: dict[str, Any], i
         value.update({'code': code, 'severity': severity, 'dataLoss': data_loss,
                       'subjects': [{'kind': 'router', 'id': label}],
                       'details': {'rank': index + 1}, 'resolution': resolution})
+    if schema_id == 'ipcraft.fixture-catalog.v1':
+        value.update({
+            'validationPhase': 'schema',
+            'expected': 'accept',
+            'errorCode': None,
+            'behaviorEvidence': None,
+        })
     return value
 
 

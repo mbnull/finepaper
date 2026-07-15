@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ipcraft.fixture-catalog.v1",
+  "title": "Ipcraft Gate 0 Fixture Catalog V1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "items"],
+  "properties": {
+    "schema": { "const": "ipcraft.fixture-catalog.v1" },
+    "items": {
+      "type": "array",
+      "x-ipcraft-canonical": { "kind": "set", "sortKey": ["path"] },
+      "$comment": "Entries are a canonical set sorted by path. Path uniqueness, physical fixture totality, schema/error catalog resolution, and behaviorEvidence case resolution are semantic authoring checks.",
+      "items": { "$ref": "#/$defs/entry" }
+    }
+  },
+  "$defs": {
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "schemaId", "validationPhase", "expected", "errorCode", "behaviorEvidence"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^fixtures/(?:valid|invalid)/[^/]+(?:/[^/]+)*\\.json$",
+          "$comment": "The authoring verifier additionally enforces NFC, portable normalized path segments, Windows reserved-name/trailing-dot rules, and exact physical-file totality."
+        },
+        "schemaId": {
+          "type": "string",
+          "minLength": 1,
+          "not": { "const": "ipcraft.fixture-catalog.v1" }
+        },
+        "validationPhase": { "enum": ["schema", "core-semantic"] },
+        "expected": { "enum": ["accept", "reject"] },
+        "errorCode": {
+          "oneOf": [
+            { "type": "string", "minLength": 1 },
+            { "type": "null" }
+          ]
+        },
+        "behaviorEvidence": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^vectors/[^/]+\\.json#[A-Za-z0-9][A-Za-z0-9._-]*$"
+            },
+            { "type": "null" }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "expected": { "const": "accept" } }, "required": ["expected"] },
+          "then": {
+            "properties": {
+              "path": { "pattern": "^fixtures/valid/" },
+              "errorCode": { "type": "null" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "expected": { "const": "reject" } }, "required": ["expected"] },
+          "then": {
+            "properties": {
+              "path": { "pattern": "^fixtures/invalid/" },
+              "errorCode": { "type": "string", "minLength": 1 },
+              "behaviorEvidence": { "type": "null" }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

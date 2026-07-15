@@ -257,12 +257,43 @@ The stdlib-only generator writes both byte-stable catalogs to `--output-dir`. Th
 
 The Core vector catalog lists both behavioral catalogs. Appendix F records the closed formats, complete coverage, independent evaluation, and mutation requirements. Authoring verification regenerates to a temporary directory and byte-compares both committed files.
 
-## Task 4: Build the valid/invalid fixture catalog
+## Task 4A: Freeze the standalone fixture envelope and validation errors
 
 **Files:**
+- Create: `docs/contracts/schemas/ipcraft.fixture-catalog.v1.schema.json`
 - Create: `docs/contracts/fixture-catalog.json`
+- Create: `docs/contracts/tools/verify_fixture_catalog.py`
+- Modify: `docs/contracts/schema-catalog.json`
+- Modify: `docs/contracts/error-codes-v1.json`
+- Modify: `docs/contracts/vectors/core-canonical-projection-v1.json`
+- Modify: `docs/contracts/vectors/core-set-permutation-v1.json`
+- Modify: `docs/superpowers/specs/appendix-e-gate-acceptance-matrix.md`
+- Modify: `docs/superpowers/specs/appendix-f-core-canonical-models.md`
+
+- [x] **Step 1: Define the closed catalog root and entry**
+
+The root schema is exactly `ipcraft.fixture-catalog.v1` plus canonical-set `items` sorted by `path`. Each entry contains exactly `path`, `schemaId`, `validationPhase`, `expected`, `errorCode`, and `behaviorEvidence`. Paths are portable normalized JSON paths below `fixtures/valid/` or `fixtures/invalid/`; `validationPhase` is `schema` or `core-semantic`. Accept entries require the valid prefix and null error. Reject entries require the invalid prefix, a catalogued non-null error, and null behavior evidence. Optional accept evidence is exactly `vectors/<file>.json#<case-id>` and resolves an exact committed case.
+
+- [x] **Step 2: Freeze catalog scope and totality**
+
+The standalone catalog covers deterministic JSON Schema or Core-semantic validation of one JSON document. It excludes filesystem trees, resolver availability, Provider self-digest, degraded-inspect selection, and output freshness; those remain behavioral vectors/tool tests. A structurally valid Project with unavailable exact dependency metadata may be accepted and link to degraded-inspect behavior evidence without claiming that state from the JSON alone. V1 has no fixture-context/directory entry. Coverage means one invalid fixture per named normative rule family/conditional, not every repeated schema keyword. The authoring verifier enforces sorting, uniqueness, physical totality, and exact schema/error/evidence resolution; `--allow-empty` is temporary Task 4A support and default verification rejects empty.
+
+- [x] **Step 3: Freeze standalone error classification**
+
+Use `contract.schema_invalid` for generic JSON/root structure; `project.legacy_format_unsupported`, `project.duplicate_id`, `project.unknown_reference`, and `project.invariant_violation` for Project families; `recovery.binding_mismatch`; `package.invariant_violation`; `contract.invariant_violation`; `engine.migration_invalid`; `tool.input_invalid`; `command.result_invalid`; `diagnostic.report_invalid`; `output.manifest_invalid`; `host.side_effect_result_invalid`; and `dependency.manifest_invalid`. Existing specialized Tool Result/Pipeline Result/Artifact codes remain. `dependency.bundle_mismatch` stays behavioral and output stale reasons gain no codes.
+
+Patch classification is exact: envelope/JSON Schema failure before operation dispatch is `patch.schema_invalid`; an illegal operation discriminant or required operation shape is `patch.operation_invalid`; applying a structurally valid operation that produces a subject violating its subject schema is `patch.schema_violation`; a cross-object invariant is `patch.invariant_violation`. Existing ownership/reference/specialized codes retain their meanings.
+
+- [x] **Step 4: Integrate canonical evidence and verify mutations**
+
+Catalog `ipcraft.fixture-catalog.v1` as the nineteenth schema. Its `items` array is the ninety-ninth physical canonical rule and has one regenerated collection case. Verify JSON syntax, schema catalog sorting/references, canonical rule/vector regeneration, `verify_fixture_catalog.py --allow-empty`, entry-field/conditional/link/sort/uniqueness mutations, Python compilation, the existing Qt contract-example test, and `git diff --check`.
+
+## Task 4B: Build the valid/invalid fixture set
+
+**Files:**
 - Create: `docs/contracts/fixtures/valid/*.json`
 - Create: `docs/contracts/fixtures/invalid/*.json`
+- Modify: `docs/contracts/fixture-catalog.json`
 
 - [ ] **Step 1: Define a closed fixture entry**
 
@@ -270,20 +301,22 @@ The Core vector catalog lists both behavioral catalogs. Appendix F records the c
 {
   "path": "fixtures/invalid/project-duplicate-id.json",
   "schemaId": "ipcraft.project-design.v1",
+  "validationPhase": "core-semantic",
   "expected": "reject",
-  "errorCode": "project.duplicate_id"
+  "errorCode": "project.duplicate_id",
+  "behaviorEvidence": null
 }
 ```
 
 Sort by `path`; every fixture appears exactly once.
 
-- [ ] **Step 2: Add at least three valid fixtures per persisted root**
+- [ ] **Step 2: Add representative valid fixtures per persisted root**
 
-Use minimal, representative, and maximum-shape fixtures. The ProjectDesign set must include 1×1, 2×2 with Interface/Attachment/Domain, and degraded-inspect exact-lock missing metadata.
+Use minimal, representative, and maximum-shape fixtures. The ProjectDesign set must include 1×1, 2×2 with Interface/Attachment/Domain, and a structurally valid exact-lock unavailable witness linked by `behaviorEvidence` to the degraded-inspect vector.
 
-- [ ] **Step 3: Add one invalid fixture per schema rule and stable error**
+- [ ] **Step 3: Add one invalid fixture per named normative rule family/conditional and stable error**
 
-Include duplicate IDs, unresolved forbidden references, unknown legacy schema ID, illegal ownership source, bad applicability tuple, unlisted bundle file, symlink/special-file declaration, invalid runtime closure, output freshness mismatch, and Provider manifest self-digest.
+Include standalone duplicate-ID, forbidden-reference, legacy-root, ownership, applicability, declaration, and artifact-envelope families. Do not encode unlisted Bundle files, symlink/special-file trees, resolver/runtime availability, output freshness, or Provider self-digest as single-document fixtures; retain those in their focused behavioral vectors/tool tests.
 
 - [ ] **Step 4: Check catalog completeness**
 

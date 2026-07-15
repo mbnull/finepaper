@@ -7,6 +7,7 @@
     { "id": "ipcraft.core-canonical-models.v1", "path": "schemas/ipcraft.core-canonical-models.v1.schema.json", "freezeGate": "core" },
     { "id": "ipcraft.diagnostic-report.v1", "path": "schemas/ipcraft.diagnostic-report.v1.schema.json", "freezeGate": "core" },
     { "id": "ipcraft.engine-bundle.v1", "path": "schemas/ipcraft.engine-bundle.v1.schema.json", "freezeGate": "core" },
+    { "id": "ipcraft.fixture-catalog.v1", "path": "schemas/ipcraft.fixture-catalog.v1.schema.json", "freezeGate": "core" },
     { "id": "ipcraft.interface-contract.v1", "path": "schemas/ipcraft.interface-contract.v1.schema.json", "freezeGate": "core" },
     { "id": "ipcraft.noc-package.v1", "path": "schemas/ipcraft.noc-package.v1.schema.json", "freezeGate": "core" },
     { "id": "ipcraft.noc-side-effects.v1", "path": "schemas/ipcraft.noc-side-effects.v1.schema.json", "freezeGate": "core" },
