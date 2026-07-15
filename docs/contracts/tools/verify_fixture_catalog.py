@@ -57,6 +57,39 @@ def require_exact_object(value: Any, fields: set[str], location: str) -> dict[st
     return value
 
 
+def simple_case_fold(text: str) -> str:
+    """Return Unicode simple-fold-like text without full-fold expansions.
+
+    Gate 0 production implementations must use Unicode simple case folding,
+    not Python's full-string ``str.casefold()`` behavior.
+    """
+    folded: list[str] = []
+    for character in text:
+        casefolded = character.casefold()
+        if len(casefolded) == 1:
+            folded.append(casefolded)
+            continue
+        lowered = character.lower()
+        if len(lowered) == 1 and lowered != character:
+            folded.append(lowered)
+            continue
+        folded.append(character)
+    return "".join(folded)
+
+
+def run_simple_case_fold_witnesses() -> None:
+    if simple_case_fold("Straße") != simple_case_fold("straße"):
+        fail("simple-fold self-check: ordinary case variants must collide")
+    if simple_case_fold("straße") == simple_case_fold("strasse"):
+        fail("simple-fold self-check: sharp-s must not expand to ss")
+    if simple_case_fold("ẞ") != "ß" or simple_case_fold("ß") != "ß":
+        fail("simple-fold self-check: capital/lower sharp-s mapping is incorrect")
+    if simple_case_fold("Σ") != simple_case_fold("ς") or simple_case_fold("ς") != "σ":
+        fail("simple-fold self-check: Greek sigma variants must collide")
+    if simple_case_fold("ﬃ") == simple_case_fold("ffi"):
+        fail("simple-fold self-check: multi-code-point full-fold expansions are forbidden")
+
+
 def portable_path(value: Any, location: str) -> str:
     if not isinstance(value, str) or not value:
         fail(f"{location} must be a non-empty string")
@@ -203,10 +236,11 @@ def verify(catalog_path: Path, contracts: Path, allow_empty: bool = False) -> tu
         location = f"fixture catalog items[{index}]"
         entry = require_exact_object(raw, ENTRY_FIELDS, location)
         path = portable_path(entry["path"], f"{location}.path")
-        if path in paths or path.casefold() in casefold_paths:
+        collision_key = simple_case_fold(unicodedata.normalize("NFC", path))
+        if path in paths or collision_key in casefold_paths:
             fail(f"{location}.path is duplicate or portable-case-colliding")
         paths.append(path)
-        casefold_paths.add(path.casefold())
+        casefold_paths.add(collision_key)
 
         schema_id = entry["schemaId"]
         if not isinstance(schema_id, str) or schema_id not in known_schemas:
@@ -261,6 +295,7 @@ def main() -> int:
     contracts = args.contracts_root.resolve()
     catalog = args.catalog.resolve() if args.catalog else contracts / "fixture-catalog.json"
     try:
+        run_simple_case_fold_witnesses()
         fixture_count, schema_count, error_count = verify(catalog, contracts, args.allow_empty)
     except VerificationError as error:
         print(f"fixture catalog verification failed: {error}", file=sys.stderr)
