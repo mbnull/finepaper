@@ -19,9 +19,11 @@ The latest frozen input closure sequence is:
 The build was configured with compiler caching disabled and a dedicated output tree outside the repository:
 
 ```text
-env CCACHE_DISABLE=1 xmake config -P qt -c -o /tmp/finepaper-gate0-freeze-build --ccache=n
-env CCACHE_DISABLE=1 xmake build -P qt qt
-env CCACHE_DISABLE=1 xmake build -P qt <each Gate target and validation_test>
+repo="$(git rev-parse --show-toplevel)"
+build_dir="${GATE0_BUILD_DIR:-$repo/.gate0-build}"
+env CCACHE_DISABLE=1 xmake config -P "$repo/qt" -c -o "$build_dir" --ccache=n
+env CCACHE_DISABLE=1 xmake build -P "$repo/qt" qt
+env CCACHE_DISABLE=1 xmake build -P "$repo/qt" <each Gate target and validation_test>
 ```
 
 Result: full Qt target, all seven non-default Gate targets, and `validation_test` built successfully from the dedicated clean output tree.
@@ -31,40 +33,91 @@ Result: full Qt target, all seven non-default Gate targets, and `validation_test
 Each command exited `0` and printed its target name followed by `passed`:
 
 ```text
-env CCACHE_DISABLE=1 xmake run -P qt noc_contract_schema_meta_test
-env CCACHE_DISABLE=1 xmake run -P qt noc_canonical_digest_vectors_test
-env CCACHE_DISABLE=1 xmake run -P qt noc_contract_fixture_catalog_test
-env CCACHE_DISABLE=1 IPCRAFT_CONTRACT_PYTHON=/usr/bin/python3 xmake run -P qt noc_review_bundle_completeness_test
-env CCACHE_DISABLE=1 xmake run -P qt noc_core_canonical_models_schema_test
-env CCACHE_DISABLE=1 xmake run -P qt noc_default_engine_lock_contract_test
-env CCACHE_DISABLE=1 xmake run -P qt noc_host_side_effect_contract_test
+repo="$(git rev-parse --show-toplevel)"
+env CCACHE_DISABLE=1 xmake run -P "$repo/qt" noc_contract_schema_meta_test
+env CCACHE_DISABLE=1 xmake run -P "$repo/qt" noc_canonical_digest_vectors_test
+env CCACHE_DISABLE=1 xmake run -P "$repo/qt" noc_contract_fixture_catalog_test
+env CCACHE_DISABLE=1 IPCRAFT_CONTRACT_PYTHON="$(command -v python3)" xmake run -P "$repo/qt" noc_review_bundle_completeness_test
+env CCACHE_DISABLE=1 xmake run -P "$repo/qt" noc_core_canonical_models_schema_test
+env CCACHE_DISABLE=1 xmake run -P "$repo/qt" noc_default_engine_lock_contract_test
+env CCACHE_DISABLE=1 xmake run -P "$repo/qt" noc_host_side_effect_contract_test
 ```
 
 The existing validation regression also passed when run from its required repository-aware working directory:
 
 ```text
-env CCACHE_DISABLE=1 xmake run -P qt -w /home/bnl/dev/finepaper/.worktrees/noc-gate0-core-freeze/qt validation_test
+repo="$(git rev-parse --show-toplevel)"
+env CCACHE_DISABLE=1 xmake run -P "$repo/qt" -w "$repo/qt" validation_test
 ```
 
-The explicit working directory is necessary because this legacy test locates `ipcores/` by walking upward from its current directory. Xmake otherwise starts the binary from the external `/tmp` target directory. This is test-environment evidence, not a Core or product-code change.
+The explicit working directory is necessary because this legacy test locates `ipcores/` by walking upward from its current directory. Xmake otherwise starts the binary from the external build target directory. This is test-environment evidence, not a Core or product-code change.
 
-### Python authoring and regeneration checks
+### Required self-contained Python checks
 
-The following checks exited `0`; remaining archive-phase Python commands use `-B` or `PYTHONDONTWRITEBYTECODE=1`:
+These required checks use only files committed in the repository or carried in the review archive. In particular, `verify_fixture_catalog.py` verifies the pinned Unicode 17 NFC and simple-folding tables against the complete committed `NormalizationTest-17.0.0.txt`; the host Python Unicode database is not an input.
 
 ```text
-python3 docs/contracts/tools/verify_canonical_rules.py
-python3 docs/contracts/tools/verify_canonical_vectors.py
-python3 docs/contracts/tools/test_contract_fixtures.py
-python3 docs/contracts/tools/verify_contract_fixtures.py
-python3 docs/contracts/tools/test_fixture_catalog_hardening.py
-python3 docs/contracts/tools/verify_fixture_catalog.py
-python3 docs/contracts/tools/verify_engine_side_effect_contracts.py
-python3 docs/contracts/tools/verify_engine_side_effect_vectors.py
-python3 docs/contracts/tools/verify_unicode_regeneration.py --case-folding /usr/share/texlive/texmf-dist/tex/generic/unicode-data/CaseFolding.txt --unicode-data /usr/share/texlive/texmf-dist/tex/generic/unicode-data/UnicodeData.txt --composition-exclusions /tmp/CompositionExclusions-17.0.0.txt --normalization-test docs/contracts/unicode/NormalizationTest-17.0.0.txt
+repo="$(git rev-parse --show-toplevel)"
+cd "$repo"
+PYTHONDONTWRITEBYTECODE=1 python3 -B docs/contracts/tools/verify_canonical_rules.py
+PYTHONDONTWRITEBYTECODE=1 python3 -B docs/contracts/tools/verify_canonical_vectors.py
+PYTHONDONTWRITEBYTECODE=1 python3 -B docs/contracts/tools/test_contract_fixtures.py
+PYTHONDONTWRITEBYTECODE=1 python3 -B docs/contracts/tools/verify_contract_fixtures.py
+PYTHONDONTWRITEBYTECODE=1 python3 -B docs/contracts/tools/test_fixture_catalog_hardening.py
+PYTHONDONTWRITEBYTECODE=1 python3 -B docs/contracts/tools/verify_fixture_catalog.py
+PYTHONDONTWRITEBYTECODE=1 python3 -B docs/contracts/tools/verify_engine_side_effect_contracts.py
+PYTHONDONTWRITEBYTECODE=1 python3 -B docs/contracts/tools/verify_engine_side_effect_vectors.py
 ```
 
 Generator byte comparisons succeeded for canonical vectors, Default Engine/Host side-effect vectors, all contract fixtures and coverage data, the stable error catalog, Unicode 17 artifacts, and the 468-file freeze-input manifest. Strict JSON parsing of every `docs/contracts/**/*.json` file and `git diff --check` also passed.
+
+### Optional Unicode source-provenance audit
+
+This audit is optional and is not a hidden Gate replay prerequisite. It proves that the committed Unicode artifacts can be regenerated byte-for-byte from separately downloaded official Unicode 17.0.0 sources. Set `UNICODE_17_UCD_DIR` to a directory containing these exact files:
+
+| Official file | Official URL | Required SHA-256 |
+| --- | --- | --- |
+| `CaseFolding.txt` | `https://www.unicode.org/Public/17.0.0/ucd/CaseFolding.txt` | `ff8d8fefbf123574205085d6714c36149eb946d717a0c585c27f0f4ef58c4183` |
+| `UnicodeData.txt` | `https://www.unicode.org/Public/17.0.0/ucd/UnicodeData.txt` | `2e1efc1dcb59c575eedf5ccae60f95229f706ee6d031835247d843c11d96470c` |
+| `CompositionExclusions.txt` | `https://www.unicode.org/Public/17.0.0/ucd/CompositionExclusions.txt` | `2f239196ef3b5b61db5cc476e9bd80f534d15aa1b74e1be1dea5d042a344c85f` |
+| `NormalizationTest.txt` | `https://www.unicode.org/Public/17.0.0/ucd/NormalizationTest.txt` | `5019ffd530751a741900c849c0e010332f142a3612234639bd200b82138a87db` |
+
+```text
+repo="$(git rev-parse --show-toplevel)"
+ucd="${UNICODE_17_UCD_DIR:?set UNICODE_17_UCD_DIR to the official source directory}"
+cd "$repo"
+PYTHONDONTWRITEBYTECODE=1 python3 -B docs/contracts/tools/verify_unicode_regeneration.py \
+  --case-folding "$ucd/CaseFolding.txt" \
+  --unicode-data "$ucd/UnicodeData.txt" \
+  --composition-exclusions "$ucd/CompositionExclusions.txt" \
+  --normalization-test "$ucd/NormalizationTest.txt"
+```
+
+### Unpacked archive verification
+
+Archive verification does not require Git. Extract `docs.tar` into an empty directory, change into that directory, and run the contained verifiers directly:
+
+```text
+archive_root="$PWD"
+cd "$archive_root"
+PYTHONDONTWRITEBYTECODE=1 python3 -B docs/contracts/tools/verify_canonical_rules.py
+PYTHONDONTWRITEBYTECODE=1 python3 -B docs/contracts/tools/verify_canonical_vectors.py
+PYTHONDONTWRITEBYTECODE=1 python3 -B docs/contracts/tools/test_contract_fixtures.py
+PYTHONDONTWRITEBYTECODE=1 python3 -B docs/contracts/tools/verify_contract_fixtures.py
+PYTHONDONTWRITEBYTECODE=1 python3 -B docs/contracts/tools/test_fixture_catalog_hardening.py
+PYTHONDONTWRITEBYTECODE=1 python3 -B docs/contracts/tools/verify_fixture_catalog.py
+PYTHONDONTWRITEBYTECODE=1 python3 -B docs/contracts/tools/verify_engine_side_effect_contracts.py
+PYTHONDONTWRITEBYTECODE=1 python3 -B docs/contracts/tools/verify_engine_side_effect_vectors.py
+```
+
+Before accepting the archive, the release archive/link audit must also confirm:
+
+- the exact sorted member set derived from the external release copy of `freeze-inputs.json` plus the two freeze records;
+- safe relative paths, ustar metadata, `0644` mode, epoch `1784155668`, zero numeric ownership, and no symlinks or hard links;
+- every frozen raw digest, strict JSON parsing, and containment/membership of every relative Markdown link;
+- the placeholder-normalized `reviewArchiveContentDigest` in `CORE-FREEZE.md`.
+
+Repository-root `docs.tar.sha256` is the detached raw-byte identity. It is intentionally not an archive member; verify it before extraction with `sha256sum --check docs.tar.sha256`.
 
 ## Gate A — Headless Core Implementation
 

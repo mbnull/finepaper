@@ -10,13 +10,45 @@
 - Core Engine Host contract: `ipcraft.engine-host.v1`
 - Host side-effect contract: `ipcraft.noc-side-effects.v1`
 - Review archive member count: `470` (`468` frozen inputs plus this record and `GATE-STATUS.md`)
-- `reviewArchiveContentDigest`: `sha256:22fbff19f839f6f64cd83e0f7e4176b7b1c781c28faed39d2dc08cff63b649be`
+- `reviewArchiveContentDigest`: `sha256:8cb140ff3a42636e57f8a16765f17ffbdea4f1866ed6a6adcbe53d2d2e09080a`
 
-The frozen input commit is intentionally the parent of the record/archive commit. The record and archive cannot include or hash the commit that contains themselves without creating a recursive identity. The final record commit and raw `docs.tar` SHA-256 are release evidence reported outside this self-contained archive; they are not Core contract identities.
+The frozen input commit is intentionally the parent of the record/archive commit. The record and archive cannot include or hash the commit that contains themselves without creating a recursive identity. The final record commit is release evidence outside this self-contained archive; it is not a Core contract identity. The durable raw archive identity is stored separately at repository-root `docs.tar.sha256`, outside `docs.tar` to avoid recursion.
 
 The review archive content digest is non-self-referential. It is SHA-256 over UTF-8 lines sorted by portable repository-relative path, each line formatted as `<raw-file-sha256><two-spaces><path>\n`. All members use their raw bytes except this file: before hashing this member, the value on the `reviewArchiveContentDigest` line is replaced by exactly `sha256:` followed by 64 ASCII zeroes. The final digest is then written into that line. This rule makes the content identity independently reproducible without pretending that an archive can contain its own raw digest.
 
 `CORE-FREEZE.md` and `GATE-STATUS.md` are deliberate archive additions outside `freeze-inputs.json`. They record the approval outcome; they do not alter the frozen Core inputs. The pre-record candidate wording in `docs/contracts/README.md` describes the state before this record was produced; this file is the authoritative Gate 0 status record.
+
+## Exact deterministic archive construction
+
+The following GNU tar procedure is normative for rebuilding `docs.tar`. It derives the exact member set from the 468 `freeze-inputs.json` paths plus the two freeze records, sorts portable repository-relative names under the C locale, writes no directory entries, uses POSIX ustar rather than PAX, fixes the input-commit epoch, clears owner names through numeric ownership, and normalizes every regular-file mode to `0644`.
+
+```text
+repo="$(git rev-parse --show-toplevel)"
+work="${GATE0_ARCHIVE_WORKDIR:?set GATE0_ARCHIVE_WORKDIR to an empty writable directory}"
+epoch=1784155668
+
+mkdir -p "$work"
+jq -r '.files[].path, "docs/contracts/CORE-FREEZE.md", "docs/contracts/GATE-STATUS.md"' \
+  "$repo/docs/contracts/freeze-inputs.json" | LC_ALL=C sort > "$work/members.txt"
+test "$(wc -l < "$work/members.txt")" -eq 470
+
+TZ=UTC LC_ALL=C tar --create --file="$work/docs-a.tar" \
+  --format=ustar --sort=name --mtime="@$epoch" \
+  --owner=0 --group=0 --numeric-owner --mode=0644 --no-recursion \
+  -C "$repo" -T "$work/members.txt"
+TZ=UTC LC_ALL=C tar --create --file="$work/docs-b.tar" \
+  --format=ustar --sort=name --mtime="@$epoch" \
+  --owner=0 --group=0 --numeric-owner --mode=0644 --no-recursion \
+  -C "$repo" -T "$work/members.txt"
+
+cmp "$work/docs-a.tar" "$work/docs-b.tar"
+cp "$work/docs-a.tar" "$repo/docs.tar"
+cd "$repo"
+sha256sum docs.tar > docs.tar.sha256
+sha256sum --check docs.tar.sha256
+```
+
+The member list must not contain `.git`, build output, Python bytecode/cache files, `docs.tar`, `docs.tar.sha256`, or `freeze-inputs.json`. Ustar is required specifically to avoid variable PAX headers. `TZ=UTC`, `LC_ALL=C`, the fixed epoch, numeric zero ownership, empty stored owner/group names, `0644` modes, and sorted names make the output independent of the invoking account and local timezone.
 
 ## Frozen artifact digests
 
