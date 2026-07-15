@@ -88,6 +88,8 @@ Authority reconciliation Patches require the complete `applicability` object sho
 
 Patch source provenance is exact by source kind. `default-engine` and `extension-provider` sources MUST include `bundleDigest` equal to the selected Authority bundle digest. `user-command`, `application-reconcile`, `application-migration`, `recovery`, and `undo-redo` sources MUST omit it; Application/user provenance never invents an Authority digest.
 
+The Patch validation context freezes the current `sessionRevision`. Every ordinary `user-command`, recovery Patch, and ordinary non-topology `undo-redo` Patch MUST carry that exact revision or fail with `patch.revision_conflict`. Reconciliation and migration sources use their closed applicability/history provenance; reconciliation `sessionRevision` remains provenance and is not an applicability member.
+
 ## B3. Preconditions
 
 Supported V1 preconditions:
@@ -267,6 +269,8 @@ Draft Overlay has a separate local undo/redo stack. Undo routing is deterministi
 | `Create/Update/DeletePackageRelation` | type, endpoints, data | type user-owned and references valid | non-driving immediate; driving Group only until materialization | one accepted command or one causal topology group |
 
 UI must not call a Patch operation directly. Wizard creation is one compound Application use case; after successful initial reconciliation and project directory creation, its result is the baseline and is not part of normal undo history.
+
+The typed-command layer maps a proposed Interface change that would make its resolved Attachment illegal to `command.attachment_would_be_illegal`. The lower-level defensive Patch executor independently rechecks the final Interface contract lock, role, and capabilities against the selected Slot allowance and rejects an incompatible final transaction with `patch.invariant_violation`; callers must not expose that internal code as the command-level UX result.
 
 When no Pending Topology Group exists, non-topology commands are accepted immediately. While a Group exists, topology-bound commands are disabled and other user-owned edits become Draft Overlay proposals rather than accepted invocations of this catalog. Topology-bound means Attach/Detach/Reattach, deleting an attached Interface, Move/Split/Merge Domain membership, or any Package command whose references include Derived State. Safe drafts include names, scalar non-driving configuration, creating an unattached Interface, and edits whose user-owned subject may be revalidated after materialization. A topology-driving command opens or updates the one Group and enters this catalog/history only as part of successful materialization.
 
@@ -452,6 +456,8 @@ Draft Overlay entry:
 ```
 
 Draft sequences are strictly increasing and preserve proposed submission order. Allowed validation status: `unvalidated`, `valid`, `invalid`. `draftUndo`/`draftRedo` contain complete before/after overlay mutations, not formal Design Patches. Group `intentUndo`/`intentRedo` similarly affect only proposed topology intent and are persisted inside the Group for interaction recovery.
+
+Recovery V1 Draft Overlay is a closed safe subset: `RenameDesign`, `RenameInterface`, `RenameDomain`, and one self-contained `CreateInterfaceFromTemplate` entry with its final unattached Interface values. Each command has a closed parameter object in `ipcraft.recovery.v1`. Attach/Detach/Reattach, deleting an Interface, Domain membership Move/Split/Merge, topology intent, Package configuration, arbitrary configuration edits, and unknown command types are forbidden. Context-dependent topology-driving classification is never accepted from recovery data supplied by the file itself.
 
 V1 has no cross-entry Draft local-reference system. `CreateInterfaceFromTemplate` may exist as one mutable Draft entry containing its final name/capability/contractConfig/nocConfig values; later gestures edit that same entry by `draftId`. No other Draft entry may target the not-yet-created Interface. After materialization, the Create draft must be accepted and receive a Host ID before any separate command can reference it.
 

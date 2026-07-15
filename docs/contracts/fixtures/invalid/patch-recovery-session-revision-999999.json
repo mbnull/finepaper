@@ -1,0 +1,25 @@
+{
+  "schema": "ipcraft.patch.v1",
+  "transactionId": "value",
+  "patchId": "trusted.recovery.1",
+  "source": {
+    "kind": "recovery",
+    "identity": "ipcraft.host",
+    "version": "1"
+  },
+  "causality": {
+    "sessionRevision": 999999
+  },
+  "preconditions": [],
+  "operations": [
+    {
+      "op": "updateEntity",
+      "entityKind": "project",
+      "id": "project.mesh",
+      "set": {
+        "name": "Restored"
+      },
+      "unset": []
+    }
+  ]
+}

@@ -30,10 +30,53 @@
       "properties": {
         "draftId": { "$ref": "#/$defs/id" },
         "sequence": { "type": "integer", "minimum": 1 },
-        "commandType": { "$ref": "#/$defs/id" },
+        "commandType": { "enum": ["CreateInterfaceFromTemplate", "RenameDesign", "RenameDomain", "RenameInterface"] },
         "parameters": { "type": "object" },
         "validationStatus": { "enum": ["unvalidated", "valid", "invalid"] },
         "diagnostics": { "type": "array", "x-ipcraft-canonical": { "kind": "ordered" }, "items": { "$ref": "ipcraft.command-result.v1.schema.json#/$defs/issue" } }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "commandType": { "const": "RenameDesign" } }, "required": ["commandType"] },
+          "then": { "properties": { "parameters": { "$ref": "#/$defs/renameDesignParameters" } } }
+        },
+        {
+          "if": { "properties": { "commandType": { "const": "RenameInterface" } }, "required": ["commandType"] },
+          "then": { "properties": { "parameters": { "$ref": "#/$defs/renameInterfaceParameters" } } }
+        },
+        {
+          "if": { "properties": { "commandType": { "const": "RenameDomain" } }, "required": ["commandType"] },
+          "then": { "properties": { "parameters": { "$ref": "#/$defs/renameDomainParameters" } } }
+        },
+        {
+          "if": { "properties": { "commandType": { "const": "CreateInterfaceFromTemplate" } }, "required": ["commandType"] },
+          "then": { "properties": { "parameters": { "$ref": "#/$defs/createInterfaceParameters" } } }
+        }
+      ]
+    },
+    "renameDesignParameters": {
+      "type": "object", "additionalProperties": false, "required": ["name"],
+      "properties": { "name": { "type": "string", "minLength": 1 } }
+    },
+    "renameInterfaceParameters": {
+      "type": "object", "additionalProperties": false, "required": ["interfaceId", "name"],
+      "properties": { "interfaceId": { "$ref": "#/$defs/id" }, "name": { "type": "string", "minLength": 1 } }
+    },
+    "renameDomainParameters": {
+      "type": "object", "additionalProperties": false, "required": ["domainId", "name"],
+      "properties": { "domainId": { "$ref": "#/$defs/id" }, "name": { "type": "string", "minLength": 1 } }
+    },
+    "createInterfaceParameters": {
+      "type": "object", "additionalProperties": false,
+      "required": ["ownerComponentId", "templateKey", "name", "contract", "capabilities", "contractConfig", "nocConfig"],
+      "properties": {
+        "ownerComponentId": { "$ref": "#/$defs/id" }, "templateKey": { "$ref": "#/$defs/id" },
+        "name": { "type": "string", "minLength": 1 },
+        "contract": {
+          "type": "object", "additionalProperties": false, "required": ["lockId", "role"],
+          "properties": { "lockId": { "$ref": "#/$defs/id" }, "role": { "$ref": "#/$defs/id" } }
+        },
+        "capabilities": { "type": "object" }, "contractConfig": { "type": "object" }, "nocConfig": { "type": "object" }
       }
     },
     "draftOverlayMutation": {

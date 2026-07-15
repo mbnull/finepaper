@@ -1,6 +1,7 @@
 {
   "schema": "ipcraft.patch-validation-context.v1",
   "version": "1",
+  "currentSessionRevision": 0,
   "authorityContexts": [
     {
       "contextId": "authority.default",
@@ -76,6 +77,13 @@
       "id": "amba.axi5",
       "version": "1.0.0",
       "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    {
+      "lockId": "dep.contract.chi",
+      "kind": "interface-contract",
+      "id": "amba.chi",
+      "version": "1.0.0",
+      "bundleManifestDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     },
     {
       "lockId": "dep.engine.default",
@@ -292,7 +300,10 @@
                   "roles": [
                     "initiator"
                   ],
-                  "capabilityConstraints": {}
+                  "capabilityConstraints": {
+                    "coherent": false,
+                    "dataWidth": 128
+                  }
                 }
               ],
               "properties": {}
@@ -413,7 +424,10 @@
                   "roles": [
                     "initiator"
                   ],
-                  "capabilityConstraints": {}
+                  "capabilityConstraints": {
+                    "coherent": false,
+                    "dataWidth": 128
+                  }
                 }
               ],
               "properties": {}
@@ -457,8 +471,8 @@
         },
         "tombstones": []
       },
-      "forwardTransactionDigest": "sha256:599fec3619ab9fa522930c907ad68f929fd595fad911ab43d4c0733243ead009",
-      "inverseTransactionDigest": "sha256:119bf526bd06c5dd8631393e547e9b82eaeee842be7062d22e4ba5cc4e07125e",
+      "forwardTransactionDigest": "sha256:e6246041c6600e8d41ab6df56e693eee1c36659dfeb71c98398fb1b04bebb075",
+      "inverseTransactionDigest": "sha256:57683813048c2c5d30ea17596ce3372e6c97c1f8130541acf03f9d12e5b1ed8e",
       "affectedBeforeSubjects": [
         {
           "subjectKind": "entity",
@@ -478,7 +492,10 @@
                 "roles": [
                   "initiator"
                 ],
-                "capabilityConstraints": {}
+                "capabilityConstraints": {
+                  "coherent": false,
+                  "dataWidth": 128
+                }
               }
             ],
             "properties": {}
@@ -567,7 +584,10 @@
                 "roles": [
                   "initiator"
                 ],
-                "capabilityConstraints": {}
+                "capabilityConstraints": {
+                  "coherent": false,
+                  "dataWidth": 128
+                }
               }
             ],
             "properties": {}
@@ -641,13 +661,13 @@
           "derivedStateRevision": 1
         }
       },
-      "recordDigest": "sha256:81c8e01dc3d2efcac5edf1ad918603ad6848e18f044e5c5c8c55af0f55939c33"
+      "recordDigest": "sha256:6d78ede51b6e464ced5d3d047c721c30d9a43952c391a539cc474edd2c520836"
     },
     {
       "historyTransactionId": "history.migration.1",
       "kind": "default-engine-migration",
-      "beforeAuthoritativeDesignDigest": "sha256:fc066b3a6dd11bd162b5c05bb2fb71167afdded67e5f7612f3ff9d612bccdc33",
-      "afterAuthoritativeDesignDigest": "sha256:64c28390aa0f2bef865b32d8838b76a1ef5653504eb0f7dcdfcd47da78af1e9f",
+      "beforeAuthoritativeDesignDigest": "sha256:ad1a3235fee5ff51a5427d13c751d642f6bb4ffa486ab959715e461f1e193db2",
+      "afterAuthoritativeDesignDigest": "sha256:1430e159b36405e20b89f1d973fc5b35b5a5c96b6c221e1825895919f326efa0",
       "beforeTopologyInputDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "afterTopologyInputDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "beforeDerivedStateDigest": "sha256:886c5acb03d0e16090f584a47961fd697c01b3f72060b45e91bb8d9de019b423",
@@ -655,7 +675,7 @@
       "forwardTransactionBody": {
         "currentDefaultEngineLockId": "dep.engine.default",
         "targetDefaultEngineLockId": "dep.engine.target",
-        "dependencyLockDigest": "sha256:7780f99ec53e398d78e2acc1b890a5309b0660a1cfdc59aaf50f155b42e569b6",
+        "dependencyLockDigest": "sha256:65a3cb05f00c4b279b74ef6f8672b41ef16f84d4bf837daece12ffeeccb7e0fa",
         "authorityOperations": [],
         "applicationOperations": [
           {
@@ -670,6 +690,13 @@
                   "id": "amba.axi5",
                   "version": "1.0.0",
                   "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                },
+                {
+                  "lockId": "dep.contract.chi",
+                  "kind": "interface-contract",
+                  "id": "amba.chi",
+                  "version": "1.0.0",
+                  "bundleManifestDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
                 },
                 {
                   "lockId": "dep.engine.target",
@@ -776,7 +803,7 @@
       "inverseTransactionBody": {
         "currentDefaultEngineLockId": "dep.engine.target",
         "targetDefaultEngineLockId": "dep.engine.default",
-        "dependencyLockDigest": "sha256:7bed79e2e6327d5b1138dab920d3f45d7ace9a52bfbb39d3b2ea27477ddcabd5",
+        "dependencyLockDigest": "sha256:b3e32e10ceb4bc587792ab7fac2be1a5e169c99359b3897b80a2f10e40450c2f",
         "authorityOperations": [],
         "applicationOperations": [
           {
@@ -791,6 +818,13 @@
                   "id": "amba.axi5",
                   "version": "1.0.0",
                   "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                },
+                {
+                  "lockId": "dep.contract.chi",
+                  "kind": "interface-contract",
+                  "id": "amba.chi",
+                  "version": "1.0.0",
+                  "bundleManifestDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
                 },
                 {
                   "lockId": "dep.engine.default",
@@ -894,8 +928,8 @@
         "hostIdMap": {},
         "tombstones": []
       },
-      "forwardTransactionDigest": "sha256:5dcbfda97b73fea3ca1cad63b89c141082e4473370c985b56eb8cb9458d539f3",
-      "inverseTransactionDigest": "sha256:c622536b60ba248f258f15543d4a2a44477ab7f0ad53d8bea3aeef9cb26719f9",
+      "forwardTransactionDigest": "sha256:059a69d5eecf11b9742c4d201a9ddb862b7c0a23d3740a07f68e596e1b62f97c",
+      "inverseTransactionDigest": "sha256:9f16c98788105a62d4ea89f41e8b75c543ef121693164f711fec3456c801b78e",
       "affectedBeforeSubjects": [
         {
           "subjectKind": "entity",
@@ -910,6 +944,13 @@
                 "id": "amba.axi5",
                 "version": "1.0.0",
                 "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+              },
+              {
+                "lockId": "dep.contract.chi",
+                "kind": "interface-contract",
+                "id": "amba.chi",
+                "version": "1.0.0",
+                "bundleManifestDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
               },
               {
                 "lockId": "dep.engine.default",
@@ -1024,6 +1065,13 @@
                 "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
               },
               {
+                "lockId": "dep.contract.chi",
+                "kind": "interface-contract",
+                "id": "amba.chi",
+                "version": "1.0.0",
+                "bundleManifestDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              },
+              {
                 "lockId": "dep.engine.target",
                 "kind": "default-engine",
                 "id": "ipcraft.default-noc-engine",
@@ -1134,7 +1182,7 @@
           "derivedStateRevision": 1
         }
       },
-      "recordDigest": "sha256:f55945afbca957e2bcd20cc2845ef9ea46554e4e2349edad81adb9b83eba81b0"
+      "recordDigest": "sha256:1a3bdd25218eda816d3de9cd0200dabddd53ed587168f5a341d4326e47fc3ef6"
     }
   ],
   "applicationReconcileTransactions": [
@@ -1170,7 +1218,8 @@
           },
           "unset": []
         }
-      ]
+      ],
+      "expectedBlockingDiagnostics": []
     },
     {
       "transactionId": "txn.reconcile.base.provider",
@@ -1203,6 +1252,79 @@
             }
           },
           "unset": []
+        }
+      ],
+      "expectedBlockingDiagnostics": []
+    },
+    {
+      "transactionId": "txn.reconcile.disconnected",
+      "authorityOperations": [
+        {
+          "op": "createEntity",
+          "entityKind": "router",
+          "localRef": "authority:router.disconnected",
+          "value": {
+            "templateKey": "mesh-router",
+            "identityCompatibilityVersion": 1,
+            "coordinate": {
+              "row": 1,
+              "column": 0
+            },
+            "properties": {}
+          }
+        }
+      ],
+      "applicationOperations": [
+        {
+          "op": "updateEntity",
+          "entityKind": "topology",
+          "id": "topology.mesh",
+          "set": {
+            "derivation": {
+              "topologyInputRevision": 1,
+              "topologyInputDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "derivedStateRevision": 1,
+              "derivedStateDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "packageBundleDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "reconcileDependencySetDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "defaultEngineLockId": "dep.engine.default",
+              "defaultEngineBundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "engineHostContractVersion": "ipcraft.engine-host.v1",
+              "hostSideEffectContractVersion": "ipcraft.noc-side-effects.v1",
+              "structureAuthority": {
+                "kind": "default-engine",
+                "lockId": "dep.engine.default",
+                "identity": "ipcraft.default-noc-engine",
+                "version": "1.0.0",
+                "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              },
+              "engineCompatibilityVersion": "1"
+            }
+          },
+          "unset": []
+        },
+        {
+          "op": "createRelation",
+          "relationKind": "domain-membership",
+          "localRef": "application:000021",
+          "value": {
+            "domainRef": {
+              "id": "domain.default"
+            },
+            "routerRef": {
+              "localRef": "authority:router.disconnected"
+            }
+          }
+        }
+      ],
+      "expectedBlockingDiagnostics": [
+        {
+          "code": "domain.disconnected",
+          "blocking": true,
+          "domainRef": {
+            "id": "domain.default"
+          },
+          "behaviorEvidence": "vectors/host-side-effects-v1.json#side-effects-domain-disconnected-membership-placement"
         }
       ]
     },
@@ -1264,7 +1386,8 @@
           },
           "unset": []
         }
-      ]
+      ],
+      "expectedBlockingDiagnostics": []
     },
     {
       "transactionId": "txn.reconcile.router-create",
@@ -1359,7 +1482,8 @@
             }
           }
         }
-      ]
+      ],
+      "expectedBlockingDiagnostics": []
     },
     {
       "transactionId": "txn.reconcile.router-delete",
@@ -1439,7 +1563,8 @@
           },
           "unset": []
         }
-      ]
+      ],
+      "expectedBlockingDiagnostics": []
     },
     {
       "transactionId": "txn.reconcile.slot-delete",
@@ -1500,7 +1625,8 @@
             "slotRef"
           ]
         }
-      ]
+      ],
+      "expectedBlockingDiagnostics": []
     }
   ],
   "applicationMigrationTransactions": [
@@ -1519,6 +1645,13 @@
                 "id": "amba.axi5",
                 "version": "1.0.0",
                 "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+              },
+              {
+                "lockId": "dep.contract.chi",
+                "kind": "interface-contract",
+                "id": "amba.chi",
+                "version": "1.0.0",
+                "bundleManifestDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
               },
               {
                 "lockId": "dep.engine.target",
@@ -1644,7 +1777,8 @@
         "supportedPlatformAbis": [
           "linux-x86_64-gnu-v1"
         ]
-      }
+      },
+      "expectedBlockingDiagnostics": []
     }
   ],
   "entities": [
@@ -1665,7 +1799,10 @@
             "roles": [
               "initiator"
             ],
-            "capabilityConstraints": {}
+            "capabilityConstraints": {
+              "coherent": false,
+              "dataWidth": 128
+            }
           }
         ],
         "properties": {}
@@ -1688,7 +1825,10 @@
             "roles": [
               "initiator"
             ],
-            "capabilityConstraints": {}
+            "capabilityConstraints": {
+              "coherent": false,
+              "dataWidth": 128
+            }
           }
         ],
         "properties": {}
@@ -1721,6 +1861,16 @@
     },
     {
       "kind": "domain",
+      "id": "domain.isolated",
+      "value": {
+        "typeKey": "power",
+        "name": "Isolated Power",
+        "isDefault": false,
+        "config": {}
+      }
+    },
+    {
+      "kind": "domain",
       "id": "domain.secondary",
       "value": {
         "typeKey": "power",
@@ -1742,7 +1892,10 @@
           "lockId": "dep.contract.axi5",
           "role": "initiator"
         },
-        "capabilities": {},
+        "capabilities": {
+          "coherent": false,
+          "dataWidth": 128
+        },
         "contractConfig": {},
         "nocConfig": {},
         "extensions": []
@@ -1761,7 +1914,10 @@
           "lockId": "dep.contract.axi5",
           "role": "initiator"
         },
-        "capabilities": {},
+        "capabilities": {
+          "coherent": false,
+          "dataWidth": 128
+        },
         "contractConfig": {},
         "nocConfig": {},
         "extensions": []
@@ -1801,6 +1957,13 @@
             "id": "amba.axi5",
             "version": "1.0.0",
             "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          },
+          {
+            "lockId": "dep.contract.chi",
+            "kind": "interface-contract",
+            "id": "amba.chi",
+            "version": "1.0.0",
+            "bundleManifestDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
           },
           {
             "lockId": "dep.engine.default",
@@ -1898,6 +2061,19 @@
       }
     },
     {
+      "kind": "router",
+      "id": "router.isolated",
+      "value": {
+        "templateKey": "mesh-router",
+        "identityCompatibilityVersion": 1,
+        "coordinate": {
+          "row": 2,
+          "column": 2
+        },
+        "properties": {}
+      }
+    },
+    {
       "kind": "structural-link",
       "id": "link.0.0-0.1",
       "value": {
@@ -1982,6 +2158,18 @@
       }
     },
     {
+      "kind": "domain-membership",
+      "id": "membership.isolated",
+      "value": {
+        "domainRef": {
+          "id": "domain.isolated"
+        },
+        "routerRef": {
+          "id": "router.isolated"
+        }
+      }
+    },
+    {
       "kind": "package-relation",
       "id": "package-relation.engine",
       "value": {
@@ -2047,5 +2235,5 @@
   "freeSlots": [
     "slot.free"
   ],
-  "contextDigest": "sha256:8f7c03e73dc634220222442202b9cb7650c7251fd2edca69deb976230e3fa9a2"
+  "contextDigest": "sha256:a213f22e88d68adfd49fb84f1b416bf93055d9335ff468ea62b7ec2a90e629a3"
 }

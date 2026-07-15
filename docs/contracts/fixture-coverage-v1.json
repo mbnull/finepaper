@@ -1,7 +1,7 @@
 {
   "schema": "ipcraft.fixture-coverage.v1",
-  "requirementsDigest": "sha256:6128d13d3bb6bf26da98921743074d2731f91e12e447b6675d898d0cc0233edc",
-  "coverageDigest": "sha256:a2d5e2b68ca4c0788dedbe1ae08a609383d04e1e3fcfd3a37701237ac5fbc1b3",
+  "requirementsDigest": "sha256:a0fa30dd200104c4783f07e14eb8a345d5f3b4e0ff20bc2b4bdb82f4303ff0e4",
+  "coverageDigest": "sha256:5923528a78cd6d1addecad6c914786b9151e5157b4401da1383e9d8adfaf4eb4",
   "roots": {
     "ipcraft.artifact-manifest.v1": {
       "minimal": [
@@ -510,13 +510,21 @@
       "representative": {},
       "maximumShape": {
         "minimumArrayLengths": {
-          "/draftOverlay": 1,
+          "/draftOverlay": 4,
           "/draftUndo": 1,
           "/draftRedo": 1
         },
         "requiredPointers": [
           "/pendingTopologyGroup/groupId"
-        ]
+        ],
+        "discriminatorCoverage": {
+          "/draftOverlay/*/commandType": [
+            "CreateInterfaceFromTemplate",
+            "RenameDesign",
+            "RenameDomain",
+            "RenameInterface"
+          ]
+        }
       }
     },
     "ipcraft.step-result.v1": {

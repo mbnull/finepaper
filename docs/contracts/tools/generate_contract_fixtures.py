@@ -276,6 +276,7 @@ def patch_context_document(project: dict[str, Any]) -> dict[str, Any]:
         {"lockId":"dep.noc.simple","kind":"noc-package","id":"simple-noc","version":"1.0.0","bundleManifestDigest":DIGEST_B},
         {"lockId":"dep.engine.default","kind":"default-engine","id":"ipcraft.default-noc-engine","version":"1.0.0","bundleManifestDigest":DIGEST_A,"engineHostContractVersion":"ipcraft.engine-host.v1","engineCompatibilityVersion":"1","hostSideEffectContractVersion":"ipcraft.noc-side-effects.v1","supportedPlatformAbis":["linux-x86_64-gnu-v1"]},
         {"lockId":"dep.contract.axi5","kind":"interface-contract","id":"amba.axi5","version":"1.0.0","bundleManifestDigest":DIGEST_B},
+        {"lockId":"dep.contract.chi","kind":"interface-contract","id":"amba.chi","version":"1.0.0","bundleManifestDigest":DIGEST_A},
         {"lockId":"dep.runtime.provider","kind":"runtime","id":"provider-runtime","version":"1","bundleManifestDigest":DIGEST_A,"runtimeClosure":{"closureKind":"package-contained","runtimeId":"provider-runtime","runtimeVersion":"1","runtimeDistributionBundleDigest":DIGEST_A,"entrypoint":"bin/provider-runtime","platformAbi":"linux-x86_64-gnu-v1","invocationProfile":"ipcraft.native-isolated.v1","moduleSearchPolicy":"runtime-and-tool-bundles-only","environmentProfile":"ipcraft.empty-utf8-utc.v1","networkPolicy":"prohibited"}},
         {"lockId":"dep.provider","kind":"extension-provider","id":"vendor.provider","version":"1","bundleManifestDigest":DIGEST_B,"protocolVersion":"ipcraft.provider-protocol.v1","runtimeLockId":"dep.runtime.provider"},
         {"lockId":"dep.tool.drc","kind":"drc-tool","id":"vendor.drc","version":"1","bundleManifestDigest":DIGEST_B,"toolProtocolVersion":"ipcraft.tool-input.v1","runtimeLockId":"dep.runtime.provider"},
@@ -284,18 +285,20 @@ def patch_context_document(project: dict[str, Any]) -> dict[str, Any]:
     dependencies = list({item["lockId"]:item for item in dependencies}.values())
     dependencies.sort(key=lambda item: item["lockId"])
     entities = [
-        {"kind":"access-slot","id":"slot.free","value":{"routerRef":{"id":"router.0.1"},"templateKey":"local-0","identityCompatibilityVersion":1,"displayOrder":0,"label":"Free","allowedContracts":[{"contractLockId":"dep.contract.axi5","roles":["initiator"],"capabilityConstraints":{}}],"properties":{}}},
-        {"kind":"access-slot","id":"slot.occupied","value":{"routerRef":{"id":"router.0.0"},"templateKey":"local-0","identityCompatibilityVersion":1,"displayOrder":0,"label":"Occupied","allowedContracts":[{"contractLockId":"dep.contract.axi5","roles":["initiator"],"capabilityConstraints":{}}],"properties":{}}},
+        {"kind":"access-slot","id":"slot.free","value":{"routerRef":{"id":"router.0.1"},"templateKey":"local-0","identityCompatibilityVersion":1,"displayOrder":0,"label":"Free","allowedContracts":[{"contractLockId":"dep.contract.axi5","roles":["initiator"],"capabilityConstraints":{"coherent":False,"dataWidth":128}}],"properties":{}}},
+        {"kind":"access-slot","id":"slot.occupied","value":{"routerRef":{"id":"router.0.0"},"templateKey":"local-0","identityCompatibilityVersion":1,"displayOrder":0,"label":"Occupied","allowedContracts":[{"contractLockId":"dep.contract.axi5","roles":["initiator"],"capabilityConstraints":{"coherent":False,"dataWidth":128}}],"properties":{}}},
         {"kind":"component","id":"component.noc","value":{"kind":"noc","name":"NoC","packageLockId":"dep.noc.simple","typeKey":"mesh-noc","config":{"rows":1,"columns":2},"extensions":[]}},
         {"kind":"domain","id":"domain.default","value":{"typeKey":"power","name":"Default Power","isDefault":True,"config":{}}},
+        {"kind":"domain","id":"domain.isolated","value":{"typeKey":"power","name":"Isolated Power","isDefault":False,"config":{}}},
         {"kind":"domain","id":"domain.secondary","value":{"typeKey":"power","name":"Secondary Power","isDefault":False,"config":{}}},
-        {"kind":"interface","id":"interface.boundary","value":{"ownerComponentRef":{"id":"component.noc"},"templateKey":"axi-boundary","name":"AXI Boundary","contract":{"lockId":"dep.contract.axi5","role":"initiator"},"capabilities":{},"contractConfig":{},"nocConfig":{},"extensions":[]}},
-        {"kind":"interface","id":"interface.unattached","value":{"ownerComponentRef":{"id":"component.noc"},"templateKey":"axi-boundary","name":"Unattached","contract":{"lockId":"dep.contract.axi5","role":"initiator"},"capabilities":{},"contractConfig":{},"nocConfig":{},"extensions":[]}},
+        {"kind":"interface","id":"interface.boundary","value":{"ownerComponentRef":{"id":"component.noc"},"templateKey":"axi-boundary","name":"AXI Boundary","contract":{"lockId":"dep.contract.axi5","role":"initiator"},"capabilities":{"coherent":False,"dataWidth":128},"contractConfig":{},"nocConfig":{},"extensions":[]}},
+        {"kind":"interface","id":"interface.unattached","value":{"ownerComponentRef":{"id":"component.noc"},"templateKey":"axi-boundary","name":"Unattached","contract":{"lockId":"dep.contract.axi5","role":"initiator"},"capabilities":{"coherent":False,"dataWidth":128},"contractConfig":{},"nocConfig":{},"extensions":[]}},
         {"kind":"package-entity","id":"package-entity.engine","value":{"typeKey":"vendor.engine-entity","data":{"state":"derived"},"extensions":[]}},
         {"kind":"package-entity","id":"package-entity.user","value":{"typeKey":"vendor.user-entity","data":{"label":"user"},"extensions":[]}},
         {"kind":"project","id":"project.mesh","value":{"name":"Mesh","dependencies":dependencies}},
         {"kind":"router","id":"router.0.0","value":{"templateKey":"mesh-router","identityCompatibilityVersion":1,"coordinate":{"row":0,"column":0},"properties":{}}},
         {"kind":"router","id":"router.0.1","value":{"templateKey":"mesh-router","identityCompatibilityVersion":1,"coordinate":{"row":0,"column":1},"properties":{}}},
+        {"kind":"router","id":"router.isolated","value":{"templateKey":"mesh-router","identityCompatibilityVersion":1,"coordinate":{"row":2,"column":2},"properties":{}}},
         {"kind":"structural-link","id":"link.0.0-0.1","value":{"templateKey":"mesh-link","identityCompatibilityVersion":1,"endpointA":{"id":"router.0.0"},"endpointB":{"id":"router.0.1"},"axis":"horizontal","properties":{}}},
         {"kind":"topology","id":"topology.mesh","value":{"derivation":derivation}},
     ]
@@ -303,6 +306,7 @@ def patch_context_document(project: dict[str, Any]) -> dict[str, Any]:
         {"kind":"attachment","id":"attachment.boundary","value":{"interfaceRef":{"id":"interface.boundary"},"state":"resolved","routerRef":{"id":"router.0.0"},"slotRef":{"id":"slot.occupied"}}},
         {"kind":"domain-membership","id":"membership.0","value":{"domainRef":{"id":"domain.default"},"routerRef":{"id":"router.0.0"}}},
         {"kind":"domain-membership","id":"membership.1","value":{"domainRef":{"id":"domain.secondary"},"routerRef":{"id":"router.0.1"}}},
+        {"kind":"domain-membership","id":"membership.isolated","value":{"domainRef":{"id":"domain.isolated"},"routerRef":{"id":"router.isolated"}}},
         {"kind":"package-relation","id":"package-relation.engine","value":{"typeKey":"vendor.engine-relation","sources":[],"targets":[],"data":{"state":"derived"},"extensions":[]}},
         {"kind":"package-relation","id":"package-relation.resolved-only","value":{"typeKey":"vendor.user-resolved-only","sources":[{"state":"resolved","subject":{"kind":"router","ref":{"id":"router.0.0"}}}],"targets":[],"data":{"label":"resolved-only"},"extensions":[]}},
         {"kind":"package-relation","id":"package-relation.user","value":{"typeKey":"vendor.user-relation","sources":[{"state":"resolved","subject":{"kind":"structural-link","ref":{"id":"link.0.0-0.1"}}}],"targets":[],"data":{"label":"user"},"extensions":[]}},
@@ -468,6 +472,18 @@ def patch_context_document(project: dict[str, Any]) -> dict[str, Any]:
         "op":"updateRelation","relationKind":"package-relation","id":"package-relation.user",
         "set":{"sources":[{"state":"unresolved","intendedSubject":{"kind":"structural-link","ref":{"id":"link.0.0-0.1"}},"reasonCode":"relation.target_removed"}]}, "unset":[],
     }]
+    disconnected_authority = [{
+        "op":"createEntity","entityKind":"router","localRef":"authority:router.disconnected",
+        "value":{"templateKey":"mesh-router","identityCompatibilityVersion":1,"coordinate":{"row":1,"column":0},"properties":{}},
+    }]
+    disconnected_application = [copy.deepcopy(derivation_operation), {
+        "op":"createRelation","relationKind":"domain-membership","localRef":"application:000021",
+        "value":{"domainRef":{"id":"domain.default"},"routerRef":{"localRef":"authority:router.disconnected"}},
+    }]
+    disconnected_diagnostic = [{
+        "code":"domain.disconnected", "blocking":True, "domainRef":{"id":"domain.default"},
+        "behaviorEvidence":"vectors/host-side-effects-v1.json#side-effects-domain-disconnected-membership-placement",
+    }]
     target_engine_lock = copy.deepcopy(history_target_engine_lock)
     migration_dependencies = [copy.deepcopy(target_engine_lock) if item["kind"] == "default-engine" else copy.deepcopy(item) for item in dependencies]
     migration_dependencies.sort(key=lambda item:item["lockId"])
@@ -482,7 +498,7 @@ def patch_context_document(project: dict[str, Any]) -> dict[str, Any]:
         {"op":"updateEntity","entityKind":"topology","id":"topology.mesh","set":{"derivation":migration_derivation},"unset":[]},
     ]
     context = {
-        "schema":"ipcraft.patch-validation-context.v1", "version":"1",
+        "schema":"ipcraft.patch-validation-context.v1", "version":"1", "currentSessionRevision":0,
         "authorityContexts":[
             {"contextId":"authority.default","selectedAuthority":{"kind":"default-engine","lockId":"dep.engine.default","identity":"ipcraft.default-noc-engine","version":"1.0.0","bundleDigest":DIGEST_A},"expectedApplicability":frozen_reconcile_applicability("default-engine")},
             {"contextId":"authority.provider","selectedAuthority":{"kind":"extension-provider","lockId":"dep.provider","identity":"vendor.provider","version":"1","bundleDigest":DIGEST_B},"expectedApplicability":frozen_reconcile_applicability("extension-provider")},
@@ -497,17 +513,18 @@ def patch_context_document(project: dict[str, Any]) -> dict[str, Any]:
         "trustedOrdinaryPatchTransactions":trusted_replays,
         "formalHistoryRecords":formal_history,
         "applicationReconcileTransactions":[
-            {"transactionId":"txn.reconcile.base","authorityOperations":[],"applicationOperations":[copy.deepcopy(derivation_operation)]},
-            {"transactionId":"txn.reconcile.base.provider","authorityOperations":[],"applicationOperations":[copy.deepcopy(provider_derivation_operation)]},
-            {"transactionId":"txn.reconcile.relation-target-delete","authorityOperations":[{"op":"deleteEntity","entityKind":"structural-link","id":"link.0.0-0.1"}],"applicationOperations":relation_delete_application},
-            {"transactionId":"txn.reconcile.router-create","authorityOperations":router_create_authority,"applicationOperations":router_create_application},
-            {"transactionId":"txn.reconcile.router-delete","authorityOperations":router_delete_authority,"applicationOperations":router_delete_application},
-            {"transactionId":"txn.reconcile.slot-delete","authorityOperations":[{"op":"deleteEntity","entityKind":"access-slot","id":"slot.occupied"}],"applicationOperations":slot_delete_application},
+            {"transactionId":"txn.reconcile.base","authorityOperations":[],"applicationOperations":[copy.deepcopy(derivation_operation)],"expectedBlockingDiagnostics":[]},
+            {"transactionId":"txn.reconcile.base.provider","authorityOperations":[],"applicationOperations":[copy.deepcopy(provider_derivation_operation)],"expectedBlockingDiagnostics":[]},
+            {"transactionId":"txn.reconcile.disconnected","authorityOperations":disconnected_authority,"applicationOperations":disconnected_application,"expectedBlockingDiagnostics":disconnected_diagnostic},
+            {"transactionId":"txn.reconcile.relation-target-delete","authorityOperations":[{"op":"deleteEntity","entityKind":"structural-link","id":"link.0.0-0.1"}],"applicationOperations":relation_delete_application,"expectedBlockingDiagnostics":[]},
+            {"transactionId":"txn.reconcile.router-create","authorityOperations":router_create_authority,"applicationOperations":router_create_application,"expectedBlockingDiagnostics":[]},
+            {"transactionId":"txn.reconcile.router-delete","authorityOperations":router_delete_authority,"applicationOperations":router_delete_application,"expectedBlockingDiagnostics":[]},
+            {"transactionId":"txn.reconcile.slot-delete","authorityOperations":[{"op":"deleteEntity","entityKind":"access-slot","id":"slot.occupied"}],"applicationOperations":slot_delete_application,"expectedBlockingDiagnostics":[]},
         ],
         "applicationMigrationTransactions":[
             {"transactionId":"txn.migration.default-engine","applicationOperations":migration_application_operations,
              "currentDefaultEngineLock":copy.deepcopy(next(item for item in dependencies if item["kind"] == "default-engine")),
-             "targetDefaultEngineLock":copy.deepcopy(target_engine_lock)},
+             "targetDefaultEngineLock":copy.deepcopy(target_engine_lock),"expectedBlockingDiagnostics":[]},
         ],
         "entities":entities, "relations":relations,
         "occupiedSlots":["slot.occupied"], "freeSlots":["slot.free"],
@@ -755,6 +772,14 @@ def generate(contracts: Path) -> None:
     provider_application["transactionId"] = provider_transaction["transactionId"]
     provider_application["applicability"] = frozen_reconcile_applicability("extension-provider")
     add("patch-source-application-reconcile-provider-authority", "ipcraft.patch.v1", provider_application, "accept", "core-semantic", None, None)
+    disconnected_transaction = transaction_models["txn.reconcile.disconnected"]
+    disconnected_application_patch = patch_with(sources["application-reconcile"], copy.deepcopy(disconnected_transaction["applicationOperations"]))
+    disconnected_application_patch["transactionId"] = disconnected_transaction["transactionId"]
+    add(
+        "patch-application-domain-disconnected", "ipcraft.patch.v1", disconnected_application_patch,
+        "accept", "core-semantic", None, None,
+        "vectors/host-side-effects-v1.json#side-effects-domain-disconnected-membership-placement",
+    )
     for fixture_name, transaction_id in (
         ("patch-application-router-create-default-membership", "txn.reconcile.router-create"),
         ("patch-application-router-delete-membership", "txn.reconcile.router-delete"),
@@ -905,11 +930,32 @@ def generate(contracts: Path) -> None:
     recovery_schema, recovery_schema_path = builder.validator.schemas["ipcraft.recovery.v1"]
     recovery_max = copy.deepcopy(valid["ipcraft.recovery.v1"])
     recovery_max["pendingTopologyGroup"] = builder.build(recovery_schema["$defs"]["pendingTopologyGroup"], recovery_schema, recovery_schema_path)
-    draft_entry = builder.build(recovery_schema["$defs"]["draftEntry"], recovery_schema, recovery_schema_path)
-    recovery_max["draftOverlay"] = [draft_entry]
-    recovery_max["draftUndo"] = [{"before":[],"after":[copy.deepcopy(draft_entry)]}]
-    recovery_max["draftRedo"] = [{"before":[copy.deepcopy(draft_entry)],"after":[]}]
+    safe_drafts = {
+        "RenameDesign":{"name":"Recovered Mesh"},
+        "RenameInterface":{"interfaceId":"interface.boundary","name":"Recovered Interface"},
+        "RenameDomain":{"domainId":"domain.default","name":"Recovered Domain"},
+        "CreateInterfaceFromTemplate":{"ownerComponentId":"component.noc","templateKey":"axi-boundary","name":"Recovered Boundary","contract":{"lockId":"dep.contract.axi5","role":"initiator"},"capabilities":{"dataWidth":128},"contractConfig":{},"nocConfig":{}},
+    }
+    maximum_entries = [
+        {"draftId":f"draft.safe.{index}","sequence":index,"commandType":command_type,"parameters":copy.deepcopy(parameters),"validationStatus":"unvalidated","diagnostics":[]}
+        for index, (command_type, parameters) in enumerate(safe_drafts.items(), 1)
+    ]
+    recovery_max["draftOverlay"] = maximum_entries
+    recovery_max["draftUndo"] = [{"before":[],"after":[copy.deepcopy(maximum_entries[0])]}]
+    recovery_max["draftRedo"] = [{"before":[copy.deepcopy(maximum_entries[0])],"after":[]}]
     add("recovery-maximum", "ipcraft.recovery.v1", recovery_max, "accept", "core-semantic", None, None)
+    for index, (command_type, parameters) in enumerate(safe_drafts.items(), 1):
+        recovery = copy.deepcopy(valid["ipcraft.recovery.v1"])
+        entry = {"draftId":f"draft.safe.{index}","sequence":1,"commandType":command_type,"parameters":parameters,"validationStatus":"unvalidated","diagnostics":[]}
+        recovery["draftOverlay"] = [entry]
+        add(f"recovery-safe-{command_type}", "ipcraft.recovery.v1", recovery, "accept", "core-semantic", None, None)
+    for command_type in ("AttachInterface", "DeleteInterface", "MoveRoutersBetweenDomains", "ArbitraryCommand"):
+        recovery = copy.deepcopy(recovery_max)
+        recovery["draftOverlay"][0].update({"commandType":command_type,"parameters":{}})
+        add(f"recovery-draft-forbidden-{command_type}", "ipcraft.recovery.v1", recovery, "reject", "schema", "generic-structure", "contract.schema_invalid")
+    malformed_recovery = copy.deepcopy(recovery_max)
+    malformed_recovery["draftOverlay"][0].update({"commandType":"RenameInterface","parameters":{"interfaceId":"interface.boundary"}})
+    add("recovery-draft-parameters", "ipcraft.recovery.v1", malformed_recovery, "reject", "schema", "generic-structure", "contract.schema_invalid")
 
     tool_input_max = copy.deepcopy(generator_input)
     tool_input_max["dependencies"] = copy.deepcopy(valid["ipcraft.project-design.v1"]["dependencies"])
@@ -1381,6 +1427,39 @@ def generate(contracts: Path) -> None:
     for suffix, operation in domain_attacks.items():
         mutated = copy.deepcopy(domain_base); mutated["operations"].append(operation)
         semantic_cases.append((f"patch-reconcile-domain-{suffix}", "ipcraft.patch.v1", mutated, "ownership", "patch.ownership_violation"))
+    user_disconnect = patch_with(sources["user-command"], [
+        {"op":"deleteRelation","relationKind":"domain-membership","id":"membership.isolated"},
+        {"op":"deleteEntity","entityKind":"domain","id":"domain.isolated"},
+        {"op":"createRelation","relationKind":"domain-membership","localRef":"application:000040","value":{"domainRef":{"id":"domain.default"},"routerRef":{"id":"router.isolated"}}},
+    ])
+    semantic_cases.append(("patch-user-domain-disconnected", "ipcraft.patch.v1", user_disconnect, "patch-invariant", "patch.invariant_violation"))
+
+    interface_update_base = copy.deepcopy(json.loads((contracts / "fixtures/valid/patch-operation-updateEntity.json").read_text()))
+    attachment_attacks = {
+        "contract":{"contract":{"lockId":"dep.contract.chi","role":"initiator"}},
+        "role":{"contract":{"lockId":"dep.contract.axi5","role":"target"}},
+        "capability":{"capabilities":{"dataWidth":64}},
+        "numeric-type":{"capabilities":{"coherent":False,"dataWidth":128.0}},
+        "boolean-type":{"capabilities":{"coherent":0,"dataWidth":128}},
+    }
+    for suffix, replacement in attachment_attacks.items():
+        mutated = copy.deepcopy(interface_update_base)
+        mutated["operations"] = [{"op":"updateEntity","entityKind":"interface","id":"interface.boundary","set":replacement,"unset":[]}]
+        semantic_cases.append((f"patch-interface-attached-{suffix}-mismatch", "ipcraft.patch.v1", mutated, "patch-invariant", "patch.invariant_violation"))
+    duplicate_slot_contract = patch_with(sources["default-engine"], [{
+        "op":"updateEntity","entityKind":"access-slot","id":"slot.free","set":{"allowedContracts":[
+            {"contractLockId":"dep.contract.axi5","roles":["initiator"],"capabilityConstraints":{"dataWidth":64}},
+            {"contractLockId":"dep.contract.axi5","roles":["initiator"],"capabilityConstraints":{"dataWidth":128}},
+        ]},"unset":[],
+    }])
+    semantic_cases.append(("patch-slot-duplicate-contract-lock", "ipcraft.patch.v1", duplicate_slot_contract, "patch-invariant", "patch.invariant_violation"))
+
+    for source_name in ("user-command", "recovery", "undo-redo"):
+        base = copy.deepcopy(json.loads((contracts / f"fixtures/valid/patch-source-{source_name}.json").read_text()))
+        for revision in (1, 999999):
+            mutated = copy.deepcopy(base)
+            mutated["causality"]["sessionRevision"] = revision
+            semantic_cases.append((f"patch-{source_name}-session-revision-{revision}", "ipcraft.patch.v1", mutated, "session-revision", "patch.revision_conflict"))
     for relation_kind, required_name in (("domain-membership", "domainRef"), ("package-relation", "sources"), ("attachment", "interfaceRef")):
         relation_unset = copy.deepcopy(patch)
         relation_id = {"domain-membership":"membership.0","package-relation":"package-relation.user","attachment":"attachment.boundary"}[relation_kind]
@@ -1500,7 +1579,7 @@ def generate(contracts: Path) -> None:
         "ipcraft.pipeline-plan.v1": {"maximumShape":{"minimumArrayLengths":{"/steps":5},"discriminatorCoverage":{"/kind":["generate"],"/steps/*/kind":["host","external-tool"]}}},
         "ipcraft.pipeline-result.v1": {"maximumShape":{"discriminatorCoverage":{"/status":["succeeded","failed","cancelled","timed-out"]}}},
         "ipcraft.project-design.v1": {"maximumShape":{"minimumArrayLengths":{"/dependencies":7,"/topologies/0/routers":4},"requiredPointers":["/interfaces/0","/topologies/0/packageEntities/0","/topologies/0/packageRelations/0"],"discriminatorCoverage":{"/dependencies/*/kind":["default-engine","noc-package","interface-contract","extension-provider","drc-tool","generator-tool","runtime"],"/topologies/*/derivation/structureAuthority/kind":["default-engine","extension-provider"]}}},
-        "ipcraft.recovery.v1": {"maximumShape":{"minimumArrayLengths":{"/draftOverlay":1,"/draftUndo":1,"/draftRedo":1},"requiredPointers":["/pendingTopologyGroup/groupId"]}},
+        "ipcraft.recovery.v1": {"maximumShape":{"minimumArrayLengths":{"/draftOverlay":4,"/draftUndo":1,"/draftRedo":1},"requiredPointers":["/pendingTopologyGroup/groupId"],"discriminatorCoverage":{"/draftOverlay/*/commandType":["CreateInterfaceFromTemplate","RenameDesign","RenameDomain","RenameInterface"]}}},
         "ipcraft.step-result.v1": {"maximumShape":{"discriminatorCoverage":{"/status":["succeeded","failed","cancelled","timed-out","skipped"],"/stepKind":["host","external-tool"]}}},
         "ipcraft.tool-input.v1": {"maximumShape":{"minimumArrayLengths":{"/dependencies":2},"discriminatorCoverage":{"/kind":["semantic-drc","generator"]},"requiredPointers":["/outputDirectory"]}},
         "ipcraft.tool-result.v1": {"maximumShape":{"discriminatorCoverage":{"/status":["succeeded","failed"]},"requiredPointers":["/diagnosticReport","/artifactManifest","/failure/code"]}}

@@ -124,86 +124,11 @@
   },
   "sessionRevision": 0,
   "derivedStateRevision": 0,
-  "pendingTopologyGroup": {
-    "groupId": "value",
-    "kind": "topology-edit",
-    "topologyInputRevision": 1,
-    "requestGeneration": 1,
-    "baseAuthoritativeDesignDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    "baseDerivedStateRevision": 0,
-    "baseDerivedStateDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    "topologyIntent": {
-      "schema": "ipcraft.topology-intent.v1",
-      "componentId": "value",
-      "topologyId": "value",
-      "topologyKind": "mesh",
-      "globalConfig": {},
-      "packageEntities": [],
-      "packageRelations": []
-    },
-    "intentUndo": [],
-    "intentRedo": [],
-    "normalizedTopologyInput": {
-      "schema": "ipcraft.normalized-topology-input.v1",
-      "intent": {
-        "schema": "ipcraft.topology-intent.v1",
-        "componentId": "value",
-        "topologyId": "value",
-        "topologyKind": "mesh",
-        "globalConfig": {},
-        "packageEntities": [],
-        "packageRelations": []
-      },
-      "mesh": {
-        "rows": 1,
-        "columns": 1,
-        "routerTemplate": {
-          "stableKey": "value",
-          "identityCompatibilityVersion": 1,
-          "properties": {}
-        },
-        "linkTemplate": {
-          "stableKey": "value",
-          "identityCompatibilityVersion": 1,
-          "properties": {}
-        },
-        "slotTemplates": []
-      },
-      "dependencyContext": {
-        "nocPackageLockId": "value",
-        "nocPackageBundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "defaultEngineLockId": "value",
-        "defaultEngineBundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "engineHostContractVersion": "value",
-        "hostSideEffectContractVersion": "value",
-        "structureAuthority": {
-          "kind": "default-engine",
-          "lockId": "value",
-          "identity": "ipcraft.default-noc-engine",
-          "version": "value",
-          "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-        },
-        "reconcileDependencySetDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-      }
-    },
-    "topologyInputDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    "status": "drafting",
-    "candidate": null
-  },
+  "pendingTopologyGroup": null,
   "draftOverlay": [
     {
-      "draftId": "draft.safe.1",
-      "sequence": 1,
-      "commandType": "RenameDesign",
-      "parameters": {
-        "name": "Recovered Mesh"
-      },
-      "validationStatus": "unvalidated",
-      "diagnostics": []
-    },
-    {
       "draftId": "draft.safe.2",
-      "sequence": 2,
+      "sequence": 1,
       "commandType": "RenameInterface",
       "parameters": {
         "interfaceId": "interface.boundary",
@@ -211,72 +136,8 @@
       },
       "validationStatus": "unvalidated",
       "diagnostics": []
-    },
-    {
-      "draftId": "draft.safe.3",
-      "sequence": 3,
-      "commandType": "RenameDomain",
-      "parameters": {
-        "domainId": "domain.default",
-        "name": "Recovered Domain"
-      },
-      "validationStatus": "unvalidated",
-      "diagnostics": []
-    },
-    {
-      "draftId": "draft.safe.4",
-      "sequence": 4,
-      "commandType": "CreateInterfaceFromTemplate",
-      "parameters": {
-        "ownerComponentId": "component.noc",
-        "templateKey": "axi-boundary",
-        "name": "Recovered Boundary",
-        "contract": {
-          "lockId": "dep.contract.axi5",
-          "role": "initiator"
-        },
-        "capabilities": {
-          "dataWidth": 128
-        },
-        "contractConfig": {},
-        "nocConfig": {}
-      },
-      "validationStatus": "unvalidated",
-      "diagnostics": []
     }
   ],
-  "draftUndo": [
-    {
-      "before": [],
-      "after": [
-        {
-          "draftId": "draft.safe.1",
-          "sequence": 1,
-          "commandType": "RenameDesign",
-          "parameters": {
-            "name": "Recovered Mesh"
-          },
-          "validationStatus": "unvalidated",
-          "diagnostics": []
-        }
-      ]
-    }
-  ],
-  "draftRedo": [
-    {
-      "before": [
-        {
-          "draftId": "draft.safe.1",
-          "sequence": 1,
-          "commandType": "RenameDesign",
-          "parameters": {
-            "name": "Recovered Mesh"
-          },
-          "validationStatus": "unvalidated",
-          "diagnostics": []
-        }
-      ],
-      "after": []
-    }
-  ]
+  "draftUndo": [],
+  "draftRedo": []
 }

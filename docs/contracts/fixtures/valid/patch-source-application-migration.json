@@ -26,6 +26,13 @@
             "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
           },
           {
+            "lockId": "dep.contract.chi",
+            "kind": "interface-contract",
+            "id": "amba.chi",
+            "version": "1.0.0",
+            "bundleManifestDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          {
             "lockId": "dep.engine.target",
             "kind": "default-engine",
             "id": "ipcraft.default-noc-engine",

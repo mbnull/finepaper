@@ -992,6 +992,51 @@
       "behaviorEvidence": null
     },
     {
+      "path": "fixtures/invalid/patch-interface-attached-boolean-type-mismatch.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "patch-invariant",
+      "expected": "reject",
+      "errorCode": "patch.invariant_violation",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-interface-attached-capability-mismatch.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "patch-invariant",
+      "expected": "reject",
+      "errorCode": "patch.invariant_violation",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-interface-attached-contract-mismatch.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "patch-invariant",
+      "expected": "reject",
+      "errorCode": "patch.invariant_violation",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-interface-attached-numeric-type-mismatch.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "patch-invariant",
+      "expected": "reject",
+      "errorCode": "patch.invariant_violation",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-interface-attached-role-mismatch.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "patch-invariant",
+      "expected": "reject",
+      "errorCode": "patch.invariant_violation",
+      "behaviorEvidence": null
+    },
+    {
       "path": "fixtures/invalid/patch-interface-contract-lock-missing.json",
       "schemaId": "ipcraft.patch.v1",
       "validationPhase": "core-semantic",
@@ -1352,6 +1397,24 @@
       "behaviorEvidence": null
     },
     {
+      "path": "fixtures/invalid/patch-recovery-session-revision-1.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "session-revision",
+      "expected": "reject",
+      "errorCode": "patch.revision_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-recovery-session-revision-999999.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "session-revision",
+      "expected": "reject",
+      "errorCode": "patch.revision_conflict",
+      "behaviorEvidence": null
+    },
+    {
       "path": "fixtures/invalid/patch-recovery-tampered-replay.json",
       "schemaId": "ipcraft.patch.v1",
       "validationPhase": "core-semantic",
@@ -1385,6 +1448,15 @@
       "failureBoundary": "reference",
       "expected": "reject",
       "errorCode": "patch.unknown_reference",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-slot-duplicate-contract-lock.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "patch-invariant",
+      "expected": "reject",
+      "errorCode": "patch.invariant_violation",
       "behaviorEvidence": null
     },
     {
@@ -1442,12 +1514,57 @@
       "behaviorEvidence": null
     },
     {
+      "path": "fixtures/invalid/patch-undo-redo-session-revision-1.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "session-revision",
+      "expected": "reject",
+      "errorCode": "patch.revision_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-undo-redo-session-revision-999999.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "session-revision",
+      "expected": "reject",
+      "errorCode": "patch.revision_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-user-command-session-revision-1.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "session-revision",
+      "expected": "reject",
+      "errorCode": "patch.revision_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-user-command-session-revision-999999.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "session-revision",
+      "expected": "reject",
+      "errorCode": "patch.revision_conflict",
+      "behaviorEvidence": null
+    },
+    {
       "path": "fixtures/invalid/patch-user-component-identity.json",
       "schemaId": "ipcraft.patch.v1",
       "validationPhase": "core-semantic",
       "failureBoundary": "ownership",
       "expected": "reject",
       "errorCode": "patch.ownership_violation",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-user-domain-disconnected.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "patch-invariant",
+      "expected": "reject",
+      "errorCode": "patch.invariant_violation",
       "behaviorEvidence": null
     },
     {
@@ -1889,6 +2006,51 @@
       "failureBoundary": "recovery-binding",
       "expected": "reject",
       "errorCode": "recovery.binding_mismatch",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/recovery-draft-forbidden-ArbitraryCommand.json",
+      "schemaId": "ipcraft.recovery.v1",
+      "validationPhase": "schema",
+      "failureBoundary": "generic-structure",
+      "expected": "reject",
+      "errorCode": "contract.schema_invalid",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/recovery-draft-forbidden-AttachInterface.json",
+      "schemaId": "ipcraft.recovery.v1",
+      "validationPhase": "schema",
+      "failureBoundary": "generic-structure",
+      "expected": "reject",
+      "errorCode": "contract.schema_invalid",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/recovery-draft-forbidden-DeleteInterface.json",
+      "schemaId": "ipcraft.recovery.v1",
+      "validationPhase": "schema",
+      "failureBoundary": "generic-structure",
+      "expected": "reject",
+      "errorCode": "contract.schema_invalid",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/recovery-draft-forbidden-MoveRoutersBetweenDomains.json",
+      "schemaId": "ipcraft.recovery.v1",
+      "validationPhase": "schema",
+      "failureBoundary": "generic-structure",
+      "expected": "reject",
+      "errorCode": "contract.schema_invalid",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/recovery-draft-parameters.json",
+      "schemaId": "ipcraft.recovery.v1",
+      "validationPhase": "schema",
+      "failureBoundary": "generic-structure",
+      "expected": "reject",
+      "errorCode": "contract.schema_invalid",
       "behaviorEvidence": null
     },
     {
@@ -2468,6 +2630,15 @@
       "behaviorEvidence": null
     },
     {
+      "path": "fixtures/valid/patch-application-domain-disconnected.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": null,
+      "expected": "accept",
+      "errorCode": null,
+      "behaviorEvidence": "vectors/host-side-effects-v1.json#side-effects-domain-disconnected-membership-placement"
+    },
+    {
       "path": "fixtures/valid/patch-application-package-relation-unresolved.json",
       "schemaId": "ipcraft.patch.v1",
       "validationPhase": "core-semantic",
@@ -2811,6 +2982,42 @@
     },
     {
       "path": "fixtures/valid/recovery-maximum.json",
+      "schemaId": "ipcraft.recovery.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": null,
+      "expected": "accept",
+      "errorCode": null,
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/valid/recovery-safe-CreateInterfaceFromTemplate.json",
+      "schemaId": "ipcraft.recovery.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": null,
+      "expected": "accept",
+      "errorCode": null,
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/valid/recovery-safe-RenameDesign.json",
+      "schemaId": "ipcraft.recovery.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": null,
+      "expected": "accept",
+      "errorCode": null,
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/valid/recovery-safe-RenameDomain.json",
+      "schemaId": "ipcraft.recovery.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": null,
+      "expected": "accept",
+      "errorCode": null,
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/valid/recovery-safe-RenameInterface.json",
       "schemaId": "ipcraft.recovery.v1",
       "validationPhase": "core-semantic",
       "failureBoundary": null,

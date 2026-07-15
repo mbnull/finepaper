@@ -194,10 +194,8 @@
     {
       "draftId": "draft.safe.1",
       "sequence": 1,
-      "commandType": "RenameDesign",
-      "parameters": {
-        "name": "Recovered Mesh"
-      },
+      "commandType": "AttachInterface",
+      "parameters": {},
       "validationStatus": "unvalidated",
       "diagnostics": []
     },

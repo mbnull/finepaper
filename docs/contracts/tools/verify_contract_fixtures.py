@@ -25,9 +25,15 @@ from typing import Any
 import verify_fixture_catalog
 
 
-FROZEN_COVERAGE_REQUIREMENTS_DIGEST = "sha256:6128d13d3bb6bf26da98921743074d2731f91e12e447b6675d898d0cc0233edc"
-FROZEN_COVERAGE_CONTRACT_DIGEST = "sha256:a2d5e2b68ca4c0788dedbe1ae08a609383d04e1e3fcfd3a37701237ac5fbc1b3"
-FROZEN_PATCH_CONTEXT_DIGEST = "sha256:8f7c03e73dc634220222442202b9cb7650c7251fd2edca69deb976230e3fa9a2"
+FROZEN_COVERAGE_REQUIREMENTS_DIGEST = "sha256:a0fa30dd200104c4783f07e14eb8a345d5f3b4e0ff20bc2b4bdb82f4303ff0e4"
+FROZEN_COVERAGE_CONTRACT_DIGEST = "sha256:5923528a78cd6d1addecad6c914786b9151e5157b4401da1383e9d8adfaf4eb4"
+FROZEN_PATCH_CONTEXT_DIGEST = "sha256:a213f22e88d68adfd49fb84f1b416bf93055d9335ff468ea62b7ec2a90e629a3"
+DOMAIN_DISCONNECTED_EVIDENCE = {
+    "vectors/host-side-effects-v1.json#side-effects-domain-disconnected-router-delete",
+    "vectors/host-side-effects-v1.json#side-effects-domain-disconnected-link-delete",
+    "vectors/host-side-effects-v1.json#side-effects-domain-disconnected-link-update",
+    "vectors/host-side-effects-v1.json#side-effects-domain-disconnected-membership-placement",
+}
 
 
 class FixtureVerificationError(RuntimeError):
@@ -91,6 +97,16 @@ def _json_equal(left: Any, right: Any) -> bool:
     if isinstance(left, dict) and isinstance(right, dict):
         return set(left) == set(right) and all(_json_equal(left[key], right[key]) for key in left)
     return type(left) is type(right) and left == right
+
+
+def _json_typed_equal(left: Any, right: Any) -> bool:
+    if type(left) is not type(right):
+        return False
+    if isinstance(left, list):
+        return len(left) == len(right) and all(_json_typed_equal(a, b) for a, b in zip(left, right))
+    if isinstance(left, dict):
+        return set(left) == set(right) and all(_json_typed_equal(left[key], right[key]) for key in left)
+    return left == right
 
 
 def _resolve_json_pointer(document: Any, pointer: str) -> Any:
@@ -1144,10 +1160,7 @@ def _patch_state_reference_failure(
         router_token = router_ref.get("id", "local:" + router_ref.get("localRef", ""))
         slot_keys.append((router_token, value.get("templateKey")))
         allowed = value.get("allowedContracts", [])
-        allowed_keys = [
-            (item.get("contractLockId"), json.dumps(item.get("capabilityConstraints", {}), sort_keys=True, separators=(",", ":")))
-            for item in allowed
-        ]
+        allowed_keys = [item.get("contractLockId") for item in allowed]
         if len(allowed_keys) != len(set(allowed_keys)) or any(
             len(item.get("roles", [])) != len(set(item.get("roles", []))) for item in allowed
         ):
@@ -1271,6 +1284,7 @@ def _patch_dependency_reference_failure(
 def _patch_domain_invariant_failure(
     entities: dict[tuple[str, str], dict[str, Any]],
     relations: dict[tuple[str, str], dict[str, Any]],
+    enforce_connectivity: bool = True,
 ) -> tuple[str, str] | None:
     def token(reference: Any) -> str | None:
         if not isinstance(reference, dict):
@@ -1314,7 +1328,7 @@ def _patch_domain_invariant_failure(
         members = {router_id for member_domain, router_id in memberships if member_domain == domain_id}
         if not members and not domain.get("isDefault"):
             return "patch-invariant", "patch.invariant_violation"
-        if len(members) > 1:
+        if enforce_connectivity and len(members) > 1:
             reached: set[str] = set()
             frontier = [next(iter(members))]
             while frontier:
@@ -1326,6 +1340,118 @@ def _patch_domain_invariant_failure(
             if reached != members:
                 return "patch-invariant", "patch.invariant_violation"
     return None
+
+
+def _patch_attachment_compatibility_failure(
+    entities: dict[tuple[str, str], dict[str, Any]],
+    relations: dict[tuple[str, str], dict[str, Any]],
+    local_bindings: dict[str, tuple[str, str, bool]] | None = None,
+) -> tuple[str, str] | None:
+    bindings = local_bindings or {}
+
+    def entity_value(reference: Any, expected_kind: str) -> dict[str, Any]:
+        if not isinstance(reference, dict):
+            return {}
+        if set(reference) == {"id"}:
+            return entities.get((expected_kind, reference["id"]), {})
+        if set(reference) == {"localRef"}:
+            binding = bindings.get(reference["localRef"])
+            if binding == (expected_kind, "@" + reference["localRef"], False):
+                return entities.get((expected_kind, binding[1]), {})
+        return {}
+
+    for (kind, _), attachment in relations.items():
+        if kind != "attachment" or attachment.get("state") != "resolved":
+            continue
+        interface = entity_value(attachment.get("interfaceRef"), "interface")
+        slot = entity_value(attachment.get("slotRef"), "access-slot")
+        contract = interface.get("contract", {})
+        allowance = next((item for item in slot.get("allowedContracts", []) if item.get("contractLockId") == contract.get("lockId")), None)
+        if allowance is None or contract.get("role") not in allowance.get("roles", []):
+            return "patch-invariant", "patch.invariant_violation"
+        capabilities = interface.get("capabilities", {})
+        if any(key not in capabilities or not _json_typed_equal(capabilities[key], value) for key, value in allowance.get("capabilityConstraints", {}).items()):
+            return "patch-invariant", "patch.invariant_violation"
+    return None
+
+
+def _patch_disconnected_domain_ids(
+    entities: dict[tuple[str, str], dict[str, Any]],
+    relations: dict[tuple[str, str], dict[str, Any]],
+) -> set[str]:
+    def token(reference: Any) -> str | None:
+        if not isinstance(reference, dict):
+            return None
+        if set(reference) == {"id"}:
+            return reference["id"]
+        if set(reference) == {"localRef"}:
+            return "@" + reference["localRef"]
+        return None
+
+    routers = {item_id for kind, item_id in entities if kind == "router"}
+    adjacency = {router:set() for router in routers}
+    for (kind, _), value in entities.items():
+        if kind == "structural-link":
+            left, right = token(value.get("endpointA")), token(value.get("endpointB"))
+            if left in adjacency and right in adjacency:
+                adjacency[left].add(right)
+                adjacency[right].add(left)
+    memberships: dict[str, set[str]] = {}
+    for (kind, _), value in relations.items():
+        if kind == "domain-membership":
+            domain_id, router_id = token(value.get("domainRef")), token(value.get("routerRef"))
+            if domain_id is not None and router_id is not None:
+                memberships.setdefault(domain_id, set()).add(router_id)
+    disconnected: set[str] = set()
+    for domain_id, members in memberships.items():
+        if len(members) <= 1:
+            continue
+        reached: set[str] = set()
+        frontier = [next(iter(members))]
+        while frontier:
+            current = frontier.pop()
+            if current in reached:
+                continue
+            reached.add(current)
+            frontier.extend((adjacency.get(current, set()) & members) - reached)
+        if reached != members:
+            disconnected.add(domain_id)
+    return disconnected
+
+
+def _apply_context_transaction_operations(
+    base_entities: dict[tuple[str, str], dict[str, Any]],
+    base_relations: dict[tuple[str, str], dict[str, Any]],
+    transaction: dict[str, Any],
+) -> tuple[dict[tuple[str, str], dict[str, Any]], dict[tuple[str, str], dict[str, Any]]] | None:
+    entities, relations = copy.deepcopy(base_entities), copy.deepcopy(base_relations)
+    for operation in transaction.get("authorityOperations", []) + transaction.get("applicationOperations", []):
+        name = operation.get("op")
+        relation = name in {"createRelation", "updateRelation", "deleteRelation"}
+        kind = operation.get("relationKind" if relation else "entityKind")
+        collection = relations if relation else entities
+        if name in {"createEntity", "createRelation"}:
+            key = (kind, "@" + operation.get("localRef", ""))
+            if key in collection:
+                return None
+            collection[key] = copy.deepcopy(operation.get("value", {}))
+        elif name in {"updateEntity", "updateRelation"}:
+            key = (kind, operation.get("id"))
+            if key not in collection:
+                return None
+            value = copy.deepcopy(collection[key])
+            for member in operation.get("unset", []):
+                value.pop(member, None)
+            value.update(copy.deepcopy(operation.get("set", {})))
+            collection[key] = value
+        elif name in {"deleteEntity", "deleteRelation"}:
+            key = (kind, operation.get("id"))
+            if key not in collection:
+                return None
+            del collection[key]
+        else:
+            return None
+    return entities, relations
 
 
 def _patch_package_relation_declaration_failure(
@@ -1356,13 +1482,15 @@ def _validate_patch_context(
 ) -> tuple[dict[str, Any], dict[tuple[str, str], dict[str, Any]], dict[tuple[str, str], dict[str, Any]]]:
     context = load_strict_json(contracts / "patch-validation-context-v1.json")
     required = {
-        "schema", "version", "authorityContexts", "packageEntityTypes", "packageRelationTypes",
+        "schema", "version", "currentSessionRevision", "authorityContexts", "packageEntityTypes", "packageRelationTypes",
         "dependencyLocks", "trustedOrdinaryPatchTransactions", "formalHistoryRecords", "applicationReconcileTransactions",
         "applicationMigrationTransactions",
         "entities", "relations", "occupiedSlots", "freeSlots", "contextDigest",
     }
     if set(context) != required or context.get("schema") != "ipcraft.patch-validation-context.v1" or context.get("version") != "1":
         raise FixtureVerificationError("patch validation context envelope is not closed")
+    if not isinstance(context.get("currentSessionRevision"), int) or context["currentSessionRevision"] < 0:
+        raise FixtureVerificationError("patch validation current Session revision is invalid")
     computed = _patch_context_digest(context)
     if context.get("contextDigest") != computed or computed != FROZEN_PATCH_CONTEXT_DIGEST:
         raise FixtureVerificationError("patch validation context digest differs from frozen contract")
@@ -1461,6 +1589,9 @@ def _validate_patch_context(
     relation_declaration_failure = _patch_package_relation_declaration_failure(relations, context["packageRelationTypes"])
     if relation_declaration_failure:
         raise FixtureVerificationError(f"patch validation Package Relation declarations are invalid: {relation_declaration_failure}")
+    attachment_failure = _patch_attachment_compatibility_failure(entities, relations)
+    if attachment_failure:
+        raise FixtureVerificationError(f"patch validation Attachment compatibility is invalid: {attachment_failure}")
     occupied = sorted(
         value["slotRef"]["id"] for (kind, _), value in relations.items()
         if kind == "attachment" and value.get("state") == "resolved" and set(value.get("slotRef", {})) == {"id"}
@@ -1626,13 +1757,29 @@ def _validate_patch_context(
     reconcile_transactions = context.get("applicationReconcileTransactions")
     if not isinstance(reconcile_transactions, list) or [item.get("transactionId") for item in reconcile_transactions] != sorted(item.get("transactionId") for item in reconcile_transactions):
         raise FixtureVerificationError("patch validation reconcile transactions are not canonical")
-    if any(set(item) != {"transactionId", "authorityOperations", "applicationOperations"} for item in reconcile_transactions):
+    if any(set(item) != {"transactionId", "authorityOperations", "applicationOperations", "expectedBlockingDiagnostics"} for item in reconcile_transactions):
         raise FixtureVerificationError("patch validation reconcile transaction fields are not closed")
+    for item in reconcile_transactions:
+        diagnostics = item["expectedBlockingDiagnostics"]
+        if not isinstance(diagnostics, list) or any(
+            set(diagnostic) != {"code", "blocking", "domainRef", "behaviorEvidence"}
+            or diagnostic.get("code") != "domain.disconnected" or diagnostic.get("blocking") is not True
+            or not isinstance(diagnostic.get("domainRef"), dict) or set(diagnostic["domainRef"]) != {"id"}
+            or diagnostic.get("behaviorEvidence") not in DOMAIN_DISCONNECTED_EVIDENCE
+            for diagnostic in diagnostics
+        ):
+            raise FixtureVerificationError("patch validation reconcile diagnostics are malformed")
+        diagnostic_domain_ids = [diagnostic["domainRef"]["id"] for diagnostic in diagnostics]
+        if diagnostic_domain_ids != sorted(set(diagnostic_domain_ids)):
+            raise FixtureVerificationError("patch validation reconcile diagnostics are not canonical and unique")
+        materialized = _apply_context_transaction_operations(entities, relations, item)
+        if materialized is None or set(diagnostic_domain_ids) != _patch_disconnected_domain_ids(*materialized):
+            raise FixtureVerificationError("patch validation reconcile diagnostics do not match disconnected Domains")
     migration_transactions = context.get("applicationMigrationTransactions")
     if not isinstance(migration_transactions, list) or len(migration_transactions) != 1:
         raise FixtureVerificationError("patch validation migration transaction coverage is incomplete")
     migration = migration_transactions[0]
-    if set(migration) != {"transactionId", "applicationOperations", "currentDefaultEngineLock", "targetDefaultEngineLock"}:
+    if set(migration) != {"transactionId", "applicationOperations", "currentDefaultEngineLock", "targetDefaultEngineLock", "expectedBlockingDiagnostics"}:
         raise FixtureVerificationError("patch validation migration transaction fields are not closed")
     current_engine, target_engine = migration["currentDefaultEngineLock"], migration["targetDefaultEngineLock"]
     if current_engine.get("bundleManifestDigest") == target_engine.get("bundleManifestDigest"):
@@ -1699,6 +1846,8 @@ def _patch_transaction_failure(
     source = document.get("source", {}).get("kind")
     source_envelope = document.get("source", {})
     applicability = document.get("applicability", {})
+    if source in {"user-command", "recovery", "undo-redo"} and document.get("causality", {}).get("sessionRevision") != context["currentSessionRevision"]:
+        return "session-revision", "patch.revision_conflict"
     trusted_replay = True
     if source in {"recovery", "undo-redo"}:
         signature = _digest_json(document)
@@ -2028,10 +2177,7 @@ def _patch_transaction_failure(
         if current_value is not None:
             if kind == "access-slot":
                 allowed = current_value.get("allowedContracts", [])
-                contract_keys = [
-                    (item.get("contractLockId"), json.dumps(item.get("capabilityConstraints", {}), sort_keys=True, separators=(",", ":")))
-                    for item in allowed
-                ]
+                contract_keys = [item.get("contractLockId") for item in allowed]
                 if len(contract_keys) != len(set(contract_keys)) or any(
                     len(item.get("roles", [])) != len(set(item.get("roles", []))) for item in allowed
                 ):
@@ -2058,9 +2204,33 @@ def _patch_transaction_failure(
     dependency_failure = _patch_dependency_reference_failure(entities, relations)
     if dependency_failure:
         return dependency_failure
-    domain_failure = _patch_domain_invariant_failure(entities, relations)
+    attachment_failure = _patch_attachment_compatibility_failure(entities, relations, local_bindings)
+    if attachment_failure:
+        return attachment_failure
+    domain_failure = _patch_domain_invariant_failure(entities, relations, enforce_connectivity=False)
     if domain_failure:
         return domain_failure
+    connectivity_failure = _patch_domain_invariant_failure(entities, relations, enforce_connectivity=True)
+    expected_diagnostics = (
+        reconcile_transaction.get("expectedBlockingDiagnostics", []) if reconcile_transaction is not None
+        else migration_transaction.get("expectedBlockingDiagnostics", []) if migration_transaction is not None
+        else []
+    )
+    disconnected_domains = _patch_disconnected_domain_ids(entities, relations)
+    disconnected_diagnostics = [
+        item for item in expected_diagnostics
+        if item.get("code") == "domain.disconnected" and item.get("blocking") is True
+    ]
+    expected_disconnected_domains = {item.get("domainRef", {}).get("id") for item in disconnected_diagnostics}
+    if connectivity_failure:
+        if (
+            source not in {"application-reconcile", "application-migration"}
+            or expected_disconnected_domains != disconnected_domains
+            or len(disconnected_diagnostics) != len(disconnected_domains)
+        ):
+            return connectivity_failure
+    elif expected_disconnected_domains:
+        return "patch-invariant", "patch.invariant_violation"
     relation_declaration_failure = _patch_package_relation_declaration_failure(relations, context["packageRelationTypes"])
     if relation_declaration_failure:
         return relation_declaration_failure
@@ -2322,6 +2492,15 @@ def semantic_failure(
     elif schema_id == "ipcraft.recovery.v1":
         if document.get("projectId") != document.get("authoritativeDesign", {}).get("id"):
             return "recovery-binding", "recovery.binding_mismatch"
+        draft_collections = [document.get("draftOverlay", [])]
+        for history_name in ("draftUndo", "draftRedo"):
+            for mutation in document.get(history_name, []):
+                draft_collections.extend((mutation.get("before", []), mutation.get("after", [])))
+        for entries in draft_collections:
+            sequences = [item.get("sequence") for item in entries]
+            draft_ids = [item.get("draftId") for item in entries]
+            if sequences != sorted(sequences) or len(sequences) != len(set(sequences)) or len(draft_ids) != len(set(draft_ids)):
+                return "recovery-binding", "recovery.binding_mismatch"
     elif schema_id == "ipcraft.tool-input.v1":
         tool_paths = [document.get(name) for name in ("projectDesignFile", "resultFile", "reportDirectory", "outputDirectory") if document.get(name) is not None]
         if _portable_paths_invalid(contracts, tool_paths):

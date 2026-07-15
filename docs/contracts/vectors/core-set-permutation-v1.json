@@ -16318,8 +16318,19 @@
           {
             "draftId": "draftId-1",
             "sequence": 1,
-            "commandType": "alpha-1",
-            "parameters": {},
+            "commandType": "CreateInterfaceFromTemplate",
+            "parameters": {
+              "ownerComponentId": "alpha-1",
+              "templateKey": "alpha-1",
+              "name": "alpha-1",
+              "contract": {
+                "lockId": "alpha-1",
+                "role": "alpha-1"
+              },
+              "capabilities": {},
+              "contractConfig": {},
+              "nocConfig": {}
+            },
             "validationStatus": "unvalidated",
             "diagnostics": [
               {
@@ -16331,8 +16342,10 @@
           {
             "draftId": "draftId-2",
             "sequence": 2,
-            "commandType": "mu-2",
-            "parameters": {},
+            "commandType": "RenameDesign",
+            "parameters": {
+              "name": "mu-2"
+            },
             "validationStatus": "valid",
             "diagnostics": [
               {
@@ -16346,8 +16359,10 @@
           {
             "draftId": "draftId-2",
             "sequence": 2,
-            "commandType": "mu-2",
-            "parameters": {},
+            "commandType": "RenameDesign",
+            "parameters": {
+              "name": "mu-2"
+            },
             "validationStatus": "valid",
             "diagnostics": [
               {
@@ -16359,8 +16374,19 @@
           {
             "draftId": "draftId-1",
             "sequence": 1,
-            "commandType": "alpha-1",
-            "parameters": {},
+            "commandType": "CreateInterfaceFromTemplate",
+            "parameters": {
+              "ownerComponentId": "alpha-1",
+              "templateKey": "alpha-1",
+              "name": "alpha-1",
+              "contract": {
+                "lockId": "alpha-1",
+                "role": "alpha-1"
+              },
+              "capabilities": {},
+              "contractConfig": {},
+              "nocConfig": {}
+            },
             "validationStatus": "unvalidated",
             "diagnostics": [
               {
@@ -16377,8 +16403,19 @@
           {
             "draftId": "draftId-1",
             "sequence": 1,
-            "commandType": "alpha-1",
-            "parameters": {},
+            "commandType": "CreateInterfaceFromTemplate",
+            "parameters": {
+              "ownerComponentId": "alpha-1",
+              "templateKey": "alpha-1",
+              "name": "alpha-1",
+              "contract": {
+                "lockId": "alpha-1",
+                "role": "alpha-1"
+              },
+              "capabilities": {},
+              "contractConfig": {},
+              "nocConfig": {}
+            },
             "validationStatus": "unvalidated",
             "diagnostics": [
               {
@@ -16390,8 +16427,10 @@
           {
             "draftId": "draftId-2",
             "sequence": 2,
-            "commandType": "mu-2",
-            "parameters": {},
+            "commandType": "RenameDesign",
+            "parameters": {
+              "name": "mu-2"
+            },
             "validationStatus": "valid",
             "diagnostics": [
               {
@@ -16405,8 +16444,10 @@
           {
             "draftId": "draftId-2",
             "sequence": 2,
-            "commandType": "mu-2",
-            "parameters": {},
+            "commandType": "RenameDesign",
+            "parameters": {
+              "name": "mu-2"
+            },
             "validationStatus": "valid",
             "diagnostics": [
               {
@@ -16418,8 +16459,19 @@
           {
             "draftId": "draftId-1",
             "sequence": 1,
-            "commandType": "alpha-1",
-            "parameters": {},
+            "commandType": "CreateInterfaceFromTemplate",
+            "parameters": {
+              "ownerComponentId": "alpha-1",
+              "templateKey": "alpha-1",
+              "name": "alpha-1",
+              "contract": {
+                "lockId": "alpha-1",
+                "role": "alpha-1"
+              },
+              "capabilities": {},
+              "contractConfig": {},
+              "nocConfig": {}
+            },
             "validationStatus": "unvalidated",
             "diagnostics": [
               {
@@ -16431,12 +16483,12 @@
         ]
       ],
       "expectedCanonicalJson": [
-        "[{\"commandType\":\"alpha-1\",\"diagnostics\":[{\"code\":\"alpha-1\",\"path\":\"alpha-1\"}],\"draftId\":\"draftId-1\",\"parameters\":{},\"sequence\":1,\"validationStatus\":\"unvalidated\"},{\"commandType\":\"mu-2\",\"diagnostics\":[{\"code\":\"mu-2\",\"path\":\"mu-2\"}],\"draftId\":\"draftId-2\",\"parameters\":{},\"sequence\":2,\"validationStatus\":\"valid\"}]",
-        "[{\"commandType\":\"mu-2\",\"diagnostics\":[{\"code\":\"mu-2\",\"path\":\"mu-2\"}],\"draftId\":\"draftId-2\",\"parameters\":{},\"sequence\":2,\"validationStatus\":\"valid\"},{\"commandType\":\"alpha-1\",\"diagnostics\":[{\"code\":\"alpha-1\",\"path\":\"alpha-1\"}],\"draftId\":\"draftId-1\",\"parameters\":{},\"sequence\":1,\"validationStatus\":\"unvalidated\"}]"
+        "[{\"commandType\":\"CreateInterfaceFromTemplate\",\"diagnostics\":[{\"code\":\"alpha-1\",\"path\":\"alpha-1\"}],\"draftId\":\"draftId-1\",\"parameters\":{\"capabilities\":{},\"contract\":{\"lockId\":\"alpha-1\",\"role\":\"alpha-1\"},\"contractConfig\":{},\"name\":\"alpha-1\",\"nocConfig\":{},\"ownerComponentId\":\"alpha-1\",\"templateKey\":\"alpha-1\"},\"sequence\":1,\"validationStatus\":\"unvalidated\"},{\"commandType\":\"RenameDesign\",\"diagnostics\":[{\"code\":\"mu-2\",\"path\":\"mu-2\"}],\"draftId\":\"draftId-2\",\"parameters\":{\"name\":\"mu-2\"},\"sequence\":2,\"validationStatus\":\"valid\"}]",
+        "[{\"commandType\":\"RenameDesign\",\"diagnostics\":[{\"code\":\"mu-2\",\"path\":\"mu-2\"}],\"draftId\":\"draftId-2\",\"parameters\":{\"name\":\"mu-2\"},\"sequence\":2,\"validationStatus\":\"valid\"},{\"commandType\":\"CreateInterfaceFromTemplate\",\"diagnostics\":[{\"code\":\"alpha-1\",\"path\":\"alpha-1\"}],\"draftId\":\"draftId-1\",\"parameters\":{\"capabilities\":{},\"contract\":{\"lockId\":\"alpha-1\",\"role\":\"alpha-1\"},\"contractConfig\":{},\"name\":\"alpha-1\",\"nocConfig\":{},\"ownerComponentId\":\"alpha-1\",\"templateKey\":\"alpha-1\"},\"sequence\":1,\"validationStatus\":\"unvalidated\"}]"
       ],
       "expectedDigest": [
-        "sha256:e49e27b9c1b1b8d66417b009313c78ba0635d29e80bc25bbcb6e33b5d946b287",
-        "sha256:5542a488a1898c4be11d319d2afc9623e738b2142cf40319466ed1d864395f3e"
+        "sha256:9685f8043f2902a8f43dc6545d98ab79813600aef7ecb932e79c00ba87a8086d",
+        "sha256:f6877b99c71652bafd70d1884832ab11836ec95d752f3cd4e8b5ebc02056dd14"
       ]
     },
     {
@@ -16449,8 +16501,19 @@
           {
             "draftId": "draftId-1",
             "sequence": 1,
-            "commandType": "alpha-1",
-            "parameters": {},
+            "commandType": "CreateInterfaceFromTemplate",
+            "parameters": {
+              "ownerComponentId": "alpha-1",
+              "templateKey": "alpha-1",
+              "name": "alpha-1",
+              "contract": {
+                "lockId": "alpha-1",
+                "role": "alpha-1"
+              },
+              "capabilities": {},
+              "contractConfig": {},
+              "nocConfig": {}
+            },
             "validationStatus": "unvalidated",
             "diagnostics": [
               {
@@ -16462,8 +16525,10 @@
           {
             "draftId": "draftId-2",
             "sequence": 2,
-            "commandType": "mu-2",
-            "parameters": {},
+            "commandType": "RenameDesign",
+            "parameters": {
+              "name": "mu-2"
+            },
             "validationStatus": "valid",
             "diagnostics": [
               {
@@ -16477,8 +16542,10 @@
           {
             "draftId": "draftId-2",
             "sequence": 2,
-            "commandType": "mu-2",
-            "parameters": {},
+            "commandType": "RenameDesign",
+            "parameters": {
+              "name": "mu-2"
+            },
             "validationStatus": "valid",
             "diagnostics": [
               {
@@ -16490,8 +16557,19 @@
           {
             "draftId": "draftId-1",
             "sequence": 1,
-            "commandType": "alpha-1",
-            "parameters": {},
+            "commandType": "CreateInterfaceFromTemplate",
+            "parameters": {
+              "ownerComponentId": "alpha-1",
+              "templateKey": "alpha-1",
+              "name": "alpha-1",
+              "contract": {
+                "lockId": "alpha-1",
+                "role": "alpha-1"
+              },
+              "capabilities": {},
+              "contractConfig": {},
+              "nocConfig": {}
+            },
             "validationStatus": "unvalidated",
             "diagnostics": [
               {
@@ -16508,8 +16586,19 @@
           {
             "draftId": "draftId-1",
             "sequence": 1,
-            "commandType": "alpha-1",
-            "parameters": {},
+            "commandType": "CreateInterfaceFromTemplate",
+            "parameters": {
+              "ownerComponentId": "alpha-1",
+              "templateKey": "alpha-1",
+              "name": "alpha-1",
+              "contract": {
+                "lockId": "alpha-1",
+                "role": "alpha-1"
+              },
+              "capabilities": {},
+              "contractConfig": {},
+              "nocConfig": {}
+            },
             "validationStatus": "unvalidated",
             "diagnostics": [
               {
@@ -16521,8 +16610,10 @@
           {
             "draftId": "draftId-2",
             "sequence": 2,
-            "commandType": "mu-2",
-            "parameters": {},
+            "commandType": "RenameDesign",
+            "parameters": {
+              "name": "mu-2"
+            },
             "validationStatus": "valid",
             "diagnostics": [
               {
@@ -16536,8 +16627,10 @@
           {
             "draftId": "draftId-2",
             "sequence": 2,
-            "commandType": "mu-2",
-            "parameters": {},
+            "commandType": "RenameDesign",
+            "parameters": {
+              "name": "mu-2"
+            },
             "validationStatus": "valid",
             "diagnostics": [
               {
@@ -16549,8 +16642,19 @@
           {
             "draftId": "draftId-1",
             "sequence": 1,
-            "commandType": "alpha-1",
-            "parameters": {},
+            "commandType": "CreateInterfaceFromTemplate",
+            "parameters": {
+              "ownerComponentId": "alpha-1",
+              "templateKey": "alpha-1",
+              "name": "alpha-1",
+              "contract": {
+                "lockId": "alpha-1",
+                "role": "alpha-1"
+              },
+              "capabilities": {},
+              "contractConfig": {},
+              "nocConfig": {}
+            },
             "validationStatus": "unvalidated",
             "diagnostics": [
               {
@@ -16562,12 +16666,12 @@
         ]
       ],
       "expectedCanonicalJson": [
-        "[{\"commandType\":\"alpha-1\",\"diagnostics\":[{\"code\":\"alpha-1\",\"path\":\"alpha-1\"}],\"draftId\":\"draftId-1\",\"parameters\":{},\"sequence\":1,\"validationStatus\":\"unvalidated\"},{\"commandType\":\"mu-2\",\"diagnostics\":[{\"code\":\"mu-2\",\"path\":\"mu-2\"}],\"draftId\":\"draftId-2\",\"parameters\":{},\"sequence\":2,\"validationStatus\":\"valid\"}]",
-        "[{\"commandType\":\"mu-2\",\"diagnostics\":[{\"code\":\"mu-2\",\"path\":\"mu-2\"}],\"draftId\":\"draftId-2\",\"parameters\":{},\"sequence\":2,\"validationStatus\":\"valid\"},{\"commandType\":\"alpha-1\",\"diagnostics\":[{\"code\":\"alpha-1\",\"path\":\"alpha-1\"}],\"draftId\":\"draftId-1\",\"parameters\":{},\"sequence\":1,\"validationStatus\":\"unvalidated\"}]"
+        "[{\"commandType\":\"CreateInterfaceFromTemplate\",\"diagnostics\":[{\"code\":\"alpha-1\",\"path\":\"alpha-1\"}],\"draftId\":\"draftId-1\",\"parameters\":{\"capabilities\":{},\"contract\":{\"lockId\":\"alpha-1\",\"role\":\"alpha-1\"},\"contractConfig\":{},\"name\":\"alpha-1\",\"nocConfig\":{},\"ownerComponentId\":\"alpha-1\",\"templateKey\":\"alpha-1\"},\"sequence\":1,\"validationStatus\":\"unvalidated\"},{\"commandType\":\"RenameDesign\",\"diagnostics\":[{\"code\":\"mu-2\",\"path\":\"mu-2\"}],\"draftId\":\"draftId-2\",\"parameters\":{\"name\":\"mu-2\"},\"sequence\":2,\"validationStatus\":\"valid\"}]",
+        "[{\"commandType\":\"RenameDesign\",\"diagnostics\":[{\"code\":\"mu-2\",\"path\":\"mu-2\"}],\"draftId\":\"draftId-2\",\"parameters\":{\"name\":\"mu-2\"},\"sequence\":2,\"validationStatus\":\"valid\"},{\"commandType\":\"CreateInterfaceFromTemplate\",\"diagnostics\":[{\"code\":\"alpha-1\",\"path\":\"alpha-1\"}],\"draftId\":\"draftId-1\",\"parameters\":{\"capabilities\":{},\"contract\":{\"lockId\":\"alpha-1\",\"role\":\"alpha-1\"},\"contractConfig\":{},\"name\":\"alpha-1\",\"nocConfig\":{},\"ownerComponentId\":\"alpha-1\",\"templateKey\":\"alpha-1\"},\"sequence\":1,\"validationStatus\":\"unvalidated\"}]"
       ],
       "expectedDigest": [
-        "sha256:e49e27b9c1b1b8d66417b009313c78ba0635d29e80bc25bbcb6e33b5d946b287",
-        "sha256:5542a488a1898c4be11d319d2afc9623e738b2142cf40319466ed1d864395f3e"
+        "sha256:9685f8043f2902a8f43dc6545d98ab79813600aef7ecb932e79c00ba87a8086d",
+        "sha256:f6877b99c71652bafd70d1884832ab11836ec95d752f3cd4e8b5ebc02056dd14"
       ]
     },
     {
@@ -17946,8 +18050,19 @@
           {
             "draftId": "draftId-1",
             "sequence": 1,
-            "commandType": "alpha-1",
-            "parameters": {},
+            "commandType": "CreateInterfaceFromTemplate",
+            "parameters": {
+              "ownerComponentId": "alpha-1",
+              "templateKey": "alpha-1",
+              "name": "alpha-1",
+              "contract": {
+                "lockId": "alpha-1",
+                "role": "alpha-1"
+              },
+              "capabilities": {},
+              "contractConfig": {},
+              "nocConfig": {}
+            },
             "validationStatus": "unvalidated",
             "diagnostics": [
               {
@@ -17959,8 +18074,10 @@
           {
             "draftId": "draftId-2",
             "sequence": 2,
-            "commandType": "mu-2",
-            "parameters": {},
+            "commandType": "RenameDesign",
+            "parameters": {
+              "name": "mu-2"
+            },
             "validationStatus": "valid",
             "diagnostics": [
               {
@@ -17974,8 +18091,10 @@
           {
             "draftId": "draftId-2",
             "sequence": 2,
-            "commandType": "mu-2",
-            "parameters": {},
+            "commandType": "RenameDesign",
+            "parameters": {
+              "name": "mu-2"
+            },
             "validationStatus": "valid",
             "diagnostics": [
               {
@@ -17987,8 +18106,19 @@
           {
             "draftId": "draftId-1",
             "sequence": 1,
-            "commandType": "alpha-1",
-            "parameters": {},
+            "commandType": "CreateInterfaceFromTemplate",
+            "parameters": {
+              "ownerComponentId": "alpha-1",
+              "templateKey": "alpha-1",
+              "name": "alpha-1",
+              "contract": {
+                "lockId": "alpha-1",
+                "role": "alpha-1"
+              },
+              "capabilities": {},
+              "contractConfig": {},
+              "nocConfig": {}
+            },
             "validationStatus": "unvalidated",
             "diagnostics": [
               {
@@ -18005,8 +18135,19 @@
           {
             "draftId": "draftId-1",
             "sequence": 1,
-            "commandType": "alpha-1",
-            "parameters": {},
+            "commandType": "CreateInterfaceFromTemplate",
+            "parameters": {
+              "ownerComponentId": "alpha-1",
+              "templateKey": "alpha-1",
+              "name": "alpha-1",
+              "contract": {
+                "lockId": "alpha-1",
+                "role": "alpha-1"
+              },
+              "capabilities": {},
+              "contractConfig": {},
+              "nocConfig": {}
+            },
             "validationStatus": "unvalidated",
             "diagnostics": [
               {
@@ -18018,8 +18159,10 @@
           {
             "draftId": "draftId-2",
             "sequence": 2,
-            "commandType": "mu-2",
-            "parameters": {},
+            "commandType": "RenameDesign",
+            "parameters": {
+              "name": "mu-2"
+            },
             "validationStatus": "valid",
             "diagnostics": [
               {
@@ -18033,8 +18176,10 @@
           {
             "draftId": "draftId-2",
             "sequence": 2,
-            "commandType": "mu-2",
-            "parameters": {},
+            "commandType": "RenameDesign",
+            "parameters": {
+              "name": "mu-2"
+            },
             "validationStatus": "valid",
             "diagnostics": [
               {
@@ -18046,8 +18191,19 @@
           {
             "draftId": "draftId-1",
             "sequence": 1,
-            "commandType": "alpha-1",
-            "parameters": {},
+            "commandType": "CreateInterfaceFromTemplate",
+            "parameters": {
+              "ownerComponentId": "alpha-1",
+              "templateKey": "alpha-1",
+              "name": "alpha-1",
+              "contract": {
+                "lockId": "alpha-1",
+                "role": "alpha-1"
+              },
+              "capabilities": {},
+              "contractConfig": {},
+              "nocConfig": {}
+            },
             "validationStatus": "unvalidated",
             "diagnostics": [
               {
@@ -18059,12 +18215,12 @@
         ]
       ],
       "expectedCanonicalJson": [
-        "[{\"commandType\":\"alpha-1\",\"diagnostics\":[{\"code\":\"alpha-1\",\"path\":\"alpha-1\"}],\"draftId\":\"draftId-1\",\"parameters\":{},\"sequence\":1,\"validationStatus\":\"unvalidated\"},{\"commandType\":\"mu-2\",\"diagnostics\":[{\"code\":\"mu-2\",\"path\":\"mu-2\"}],\"draftId\":\"draftId-2\",\"parameters\":{},\"sequence\":2,\"validationStatus\":\"valid\"}]",
-        "[{\"commandType\":\"mu-2\",\"diagnostics\":[{\"code\":\"mu-2\",\"path\":\"mu-2\"}],\"draftId\":\"draftId-2\",\"parameters\":{},\"sequence\":2,\"validationStatus\":\"valid\"},{\"commandType\":\"alpha-1\",\"diagnostics\":[{\"code\":\"alpha-1\",\"path\":\"alpha-1\"}],\"draftId\":\"draftId-1\",\"parameters\":{},\"sequence\":1,\"validationStatus\":\"unvalidated\"}]"
+        "[{\"commandType\":\"CreateInterfaceFromTemplate\",\"diagnostics\":[{\"code\":\"alpha-1\",\"path\":\"alpha-1\"}],\"draftId\":\"draftId-1\",\"parameters\":{\"capabilities\":{},\"contract\":{\"lockId\":\"alpha-1\",\"role\":\"alpha-1\"},\"contractConfig\":{},\"name\":\"alpha-1\",\"nocConfig\":{},\"ownerComponentId\":\"alpha-1\",\"templateKey\":\"alpha-1\"},\"sequence\":1,\"validationStatus\":\"unvalidated\"},{\"commandType\":\"RenameDesign\",\"diagnostics\":[{\"code\":\"mu-2\",\"path\":\"mu-2\"}],\"draftId\":\"draftId-2\",\"parameters\":{\"name\":\"mu-2\"},\"sequence\":2,\"validationStatus\":\"valid\"}]",
+        "[{\"commandType\":\"RenameDesign\",\"diagnostics\":[{\"code\":\"mu-2\",\"path\":\"mu-2\"}],\"draftId\":\"draftId-2\",\"parameters\":{\"name\":\"mu-2\"},\"sequence\":2,\"validationStatus\":\"valid\"},{\"commandType\":\"CreateInterfaceFromTemplate\",\"diagnostics\":[{\"code\":\"alpha-1\",\"path\":\"alpha-1\"}],\"draftId\":\"draftId-1\",\"parameters\":{\"capabilities\":{},\"contract\":{\"lockId\":\"alpha-1\",\"role\":\"alpha-1\"},\"contractConfig\":{},\"name\":\"alpha-1\",\"nocConfig\":{},\"ownerComponentId\":\"alpha-1\",\"templateKey\":\"alpha-1\"},\"sequence\":1,\"validationStatus\":\"unvalidated\"}]"
       ],
       "expectedDigest": [
-        "sha256:e49e27b9c1b1b8d66417b009313c78ba0635d29e80bc25bbcb6e33b5d946b287",
-        "sha256:5542a488a1898c4be11d319d2afc9623e738b2142cf40319466ed1d864395f3e"
+        "sha256:9685f8043f2902a8f43dc6545d98ab79813600aef7ecb932e79c00ba87a8086d",
+        "sha256:f6877b99c71652bafd70d1884832ab11836ec95d752f3cd4e8b5ebc02056dd14"
       ]
     },
     {
@@ -18079,8 +18235,19 @@
               {
                 "draftId": "alpha-1",
                 "sequence": 1,
-                "commandType": "alpha-1",
-                "parameters": {},
+                "commandType": "CreateInterfaceFromTemplate",
+                "parameters": {
+                  "ownerComponentId": "alpha-1",
+                  "templateKey": "alpha-1",
+                  "name": "alpha-1",
+                  "contract": {
+                    "lockId": "alpha-1",
+                    "role": "alpha-1"
+                  },
+                  "capabilities": {},
+                  "contractConfig": {},
+                  "nocConfig": {}
+                },
                 "validationStatus": "unvalidated",
                 "diagnostics": [
                   {
@@ -18094,8 +18261,19 @@
               {
                 "draftId": "alpha-1",
                 "sequence": 1,
-                "commandType": "alpha-1",
-                "parameters": {},
+                "commandType": "CreateInterfaceFromTemplate",
+                "parameters": {
+                  "ownerComponentId": "alpha-1",
+                  "templateKey": "alpha-1",
+                  "name": "alpha-1",
+                  "contract": {
+                    "lockId": "alpha-1",
+                    "role": "alpha-1"
+                  },
+                  "capabilities": {},
+                  "contractConfig": {},
+                  "nocConfig": {}
+                },
                 "validationStatus": "unvalidated",
                 "diagnostics": [
                   {
@@ -18111,8 +18289,10 @@
               {
                 "draftId": "mu-2",
                 "sequence": 2,
-                "commandType": "mu-2",
-                "parameters": {},
+                "commandType": "RenameDesign",
+                "parameters": {
+                  "name": "mu-2"
+                },
                 "validationStatus": "valid",
                 "diagnostics": [
                   {
@@ -18126,8 +18306,10 @@
               {
                 "draftId": "mu-2",
                 "sequence": 2,
-                "commandType": "mu-2",
-                "parameters": {},
+                "commandType": "RenameDesign",
+                "parameters": {
+                  "name": "mu-2"
+                },
                 "validationStatus": "valid",
                 "diagnostics": [
                   {
@@ -18145,8 +18327,10 @@
               {
                 "draftId": "mu-2",
                 "sequence": 2,
-                "commandType": "mu-2",
-                "parameters": {},
+                "commandType": "RenameDesign",
+                "parameters": {
+                  "name": "mu-2"
+                },
                 "validationStatus": "valid",
                 "diagnostics": [
                   {
@@ -18160,8 +18344,10 @@
               {
                 "draftId": "mu-2",
                 "sequence": 2,
-                "commandType": "mu-2",
-                "parameters": {},
+                "commandType": "RenameDesign",
+                "parameters": {
+                  "name": "mu-2"
+                },
                 "validationStatus": "valid",
                 "diagnostics": [
                   {
@@ -18177,8 +18363,19 @@
               {
                 "draftId": "alpha-1",
                 "sequence": 1,
-                "commandType": "alpha-1",
-                "parameters": {},
+                "commandType": "CreateInterfaceFromTemplate",
+                "parameters": {
+                  "ownerComponentId": "alpha-1",
+                  "templateKey": "alpha-1",
+                  "name": "alpha-1",
+                  "contract": {
+                    "lockId": "alpha-1",
+                    "role": "alpha-1"
+                  },
+                  "capabilities": {},
+                  "contractConfig": {},
+                  "nocConfig": {}
+                },
                 "validationStatus": "unvalidated",
                 "diagnostics": [
                   {
@@ -18192,8 +18389,19 @@
               {
                 "draftId": "alpha-1",
                 "sequence": 1,
-                "commandType": "alpha-1",
-                "parameters": {},
+                "commandType": "CreateInterfaceFromTemplate",
+                "parameters": {
+                  "ownerComponentId": "alpha-1",
+                  "templateKey": "alpha-1",
+                  "name": "alpha-1",
+                  "contract": {
+                    "lockId": "alpha-1",
+                    "role": "alpha-1"
+                  },
+                  "capabilities": {},
+                  "contractConfig": {},
+                  "nocConfig": {}
+                },
                 "validationStatus": "unvalidated",
                 "diagnostics": [
                   {
@@ -18214,8 +18422,19 @@
               {
                 "draftId": "alpha-1",
                 "sequence": 1,
-                "commandType": "alpha-1",
-                "parameters": {},
+                "commandType": "CreateInterfaceFromTemplate",
+                "parameters": {
+                  "ownerComponentId": "alpha-1",
+                  "templateKey": "alpha-1",
+                  "name": "alpha-1",
+                  "contract": {
+                    "lockId": "alpha-1",
+                    "role": "alpha-1"
+                  },
+                  "capabilities": {},
+                  "contractConfig": {},
+                  "nocConfig": {}
+                },
                 "validationStatus": "unvalidated",
                 "diagnostics": [
                   {
@@ -18229,8 +18448,19 @@
               {
                 "draftId": "alpha-1",
                 "sequence": 1,
-                "commandType": "alpha-1",
-                "parameters": {},
+                "commandType": "CreateInterfaceFromTemplate",
+                "parameters": {
+                  "ownerComponentId": "alpha-1",
+                  "templateKey": "alpha-1",
+                  "name": "alpha-1",
+                  "contract": {
+                    "lockId": "alpha-1",
+                    "role": "alpha-1"
+                  },
+                  "capabilities": {},
+                  "contractConfig": {},
+                  "nocConfig": {}
+                },
                 "validationStatus": "unvalidated",
                 "diagnostics": [
                   {
@@ -18246,8 +18476,10 @@
               {
                 "draftId": "mu-2",
                 "sequence": 2,
-                "commandType": "mu-2",
-                "parameters": {},
+                "commandType": "RenameDesign",
+                "parameters": {
+                  "name": "mu-2"
+                },
                 "validationStatus": "valid",
                 "diagnostics": [
                   {
@@ -18261,8 +18493,10 @@
               {
                 "draftId": "mu-2",
                 "sequence": 2,
-                "commandType": "mu-2",
-                "parameters": {},
+                "commandType": "RenameDesign",
+                "parameters": {
+                  "name": "mu-2"
+                },
                 "validationStatus": "valid",
                 "diagnostics": [
                   {
@@ -18280,8 +18514,10 @@
               {
                 "draftId": "mu-2",
                 "sequence": 2,
-                "commandType": "mu-2",
-                "parameters": {},
+                "commandType": "RenameDesign",
+                "parameters": {
+                  "name": "mu-2"
+                },
                 "validationStatus": "valid",
                 "diagnostics": [
                   {
@@ -18295,8 +18531,10 @@
               {
                 "draftId": "mu-2",
                 "sequence": 2,
-                "commandType": "mu-2",
-                "parameters": {},
+                "commandType": "RenameDesign",
+                "parameters": {
+                  "name": "mu-2"
+                },
                 "validationStatus": "valid",
                 "diagnostics": [
                   {
@@ -18312,8 +18550,19 @@
               {
                 "draftId": "alpha-1",
                 "sequence": 1,
-                "commandType": "alpha-1",
-                "parameters": {},
+                "commandType": "CreateInterfaceFromTemplate",
+                "parameters": {
+                  "ownerComponentId": "alpha-1",
+                  "templateKey": "alpha-1",
+                  "name": "alpha-1",
+                  "contract": {
+                    "lockId": "alpha-1",
+                    "role": "alpha-1"
+                  },
+                  "capabilities": {},
+                  "contractConfig": {},
+                  "nocConfig": {}
+                },
                 "validationStatus": "unvalidated",
                 "diagnostics": [
                   {
@@ -18327,8 +18576,19 @@
               {
                 "draftId": "alpha-1",
                 "sequence": 1,
-                "commandType": "alpha-1",
-                "parameters": {},
+                "commandType": "CreateInterfaceFromTemplate",
+                "parameters": {
+                  "ownerComponentId": "alpha-1",
+                  "templateKey": "alpha-1",
+                  "name": "alpha-1",
+                  "contract": {
+                    "lockId": "alpha-1",
+                    "role": "alpha-1"
+                  },
+                  "capabilities": {},
+                  "contractConfig": {},
+                  "nocConfig": {}
+                },
                 "validationStatus": "unvalidated",
                 "diagnostics": [
                   {
@@ -18342,12 +18602,12 @@
         ]
       ],
       "expectedCanonicalJson": [
-        "[{\"after\":[{\"commandType\":\"alpha-1\",\"diagnostics\":[{\"code\":\"alpha-1\",\"path\":\"alpha-1\"}],\"draftId\":\"alpha-1\",\"parameters\":{},\"sequence\":1,\"validationStatus\":\"unvalidated\"}],\"before\":[{\"commandType\":\"alpha-1\",\"diagnostics\":[{\"code\":\"alpha-1\",\"path\":\"alpha-1\"}],\"draftId\":\"alpha-1\",\"parameters\":{},\"sequence\":1,\"validationStatus\":\"unvalidated\"}]},{\"after\":[{\"commandType\":\"mu-2\",\"diagnostics\":[{\"code\":\"mu-2\",\"path\":\"mu-2\"}],\"draftId\":\"mu-2\",\"parameters\":{},\"sequence\":2,\"validationStatus\":\"valid\"}],\"before\":[{\"commandType\":\"mu-2\",\"diagnostics\":[{\"code\":\"mu-2\",\"path\":\"mu-2\"}],\"draftId\":\"mu-2\",\"parameters\":{},\"sequence\":2,\"validationStatus\":\"valid\"}]}]",
-        "[{\"after\":[{\"commandType\":\"mu-2\",\"diagnostics\":[{\"code\":\"mu-2\",\"path\":\"mu-2\"}],\"draftId\":\"mu-2\",\"parameters\":{},\"sequence\":2,\"validationStatus\":\"valid\"}],\"before\":[{\"commandType\":\"mu-2\",\"diagnostics\":[{\"code\":\"mu-2\",\"path\":\"mu-2\"}],\"draftId\":\"mu-2\",\"parameters\":{},\"sequence\":2,\"validationStatus\":\"valid\"}]},{\"after\":[{\"commandType\":\"alpha-1\",\"diagnostics\":[{\"code\":\"alpha-1\",\"path\":\"alpha-1\"}],\"draftId\":\"alpha-1\",\"parameters\":{},\"sequence\":1,\"validationStatus\":\"unvalidated\"}],\"before\":[{\"commandType\":\"alpha-1\",\"diagnostics\":[{\"code\":\"alpha-1\",\"path\":\"alpha-1\"}],\"draftId\":\"alpha-1\",\"parameters\":{},\"sequence\":1,\"validationStatus\":\"unvalidated\"}]}]"
+        "[{\"after\":[{\"commandType\":\"CreateInterfaceFromTemplate\",\"diagnostics\":[{\"code\":\"alpha-1\",\"path\":\"alpha-1\"}],\"draftId\":\"alpha-1\",\"parameters\":{\"capabilities\":{},\"contract\":{\"lockId\":\"alpha-1\",\"role\":\"alpha-1\"},\"contractConfig\":{},\"name\":\"alpha-1\",\"nocConfig\":{},\"ownerComponentId\":\"alpha-1\",\"templateKey\":\"alpha-1\"},\"sequence\":1,\"validationStatus\":\"unvalidated\"}],\"before\":[{\"commandType\":\"CreateInterfaceFromTemplate\",\"diagnostics\":[{\"code\":\"alpha-1\",\"path\":\"alpha-1\"}],\"draftId\":\"alpha-1\",\"parameters\":{\"capabilities\":{},\"contract\":{\"lockId\":\"alpha-1\",\"role\":\"alpha-1\"},\"contractConfig\":{},\"name\":\"alpha-1\",\"nocConfig\":{},\"ownerComponentId\":\"alpha-1\",\"templateKey\":\"alpha-1\"},\"sequence\":1,\"validationStatus\":\"unvalidated\"}]},{\"after\":[{\"commandType\":\"RenameDesign\",\"diagnostics\":[{\"code\":\"mu-2\",\"path\":\"mu-2\"}],\"draftId\":\"mu-2\",\"parameters\":{\"name\":\"mu-2\"},\"sequence\":2,\"validationStatus\":\"valid\"}],\"before\":[{\"commandType\":\"RenameDesign\",\"diagnostics\":[{\"code\":\"mu-2\",\"path\":\"mu-2\"}],\"draftId\":\"mu-2\",\"parameters\":{\"name\":\"mu-2\"},\"sequence\":2,\"validationStatus\":\"valid\"}]}]",
+        "[{\"after\":[{\"commandType\":\"RenameDesign\",\"diagnostics\":[{\"code\":\"mu-2\",\"path\":\"mu-2\"}],\"draftId\":\"mu-2\",\"parameters\":{\"name\":\"mu-2\"},\"sequence\":2,\"validationStatus\":\"valid\"}],\"before\":[{\"commandType\":\"RenameDesign\",\"diagnostics\":[{\"code\":\"mu-2\",\"path\":\"mu-2\"}],\"draftId\":\"mu-2\",\"parameters\":{\"name\":\"mu-2\"},\"sequence\":2,\"validationStatus\":\"valid\"}]},{\"after\":[{\"commandType\":\"CreateInterfaceFromTemplate\",\"diagnostics\":[{\"code\":\"alpha-1\",\"path\":\"alpha-1\"}],\"draftId\":\"alpha-1\",\"parameters\":{\"capabilities\":{},\"contract\":{\"lockId\":\"alpha-1\",\"role\":\"alpha-1\"},\"contractConfig\":{},\"name\":\"alpha-1\",\"nocConfig\":{},\"ownerComponentId\":\"alpha-1\",\"templateKey\":\"alpha-1\"},\"sequence\":1,\"validationStatus\":\"unvalidated\"}],\"before\":[{\"commandType\":\"CreateInterfaceFromTemplate\",\"diagnostics\":[{\"code\":\"alpha-1\",\"path\":\"alpha-1\"}],\"draftId\":\"alpha-1\",\"parameters\":{\"capabilities\":{},\"contract\":{\"lockId\":\"alpha-1\",\"role\":\"alpha-1\"},\"contractConfig\":{},\"name\":\"alpha-1\",\"nocConfig\":{},\"ownerComponentId\":\"alpha-1\",\"templateKey\":\"alpha-1\"},\"sequence\":1,\"validationStatus\":\"unvalidated\"}]}]"
       ],
       "expectedDigest": [
-        "sha256:677b4dae01746b45be2c235cfbd395dfd01e050d511c77e88b871be6c2a803fa",
-        "sha256:6bbcdfc52ece867e1db1071a73832b9fbab3304f7915b9c3227ebed02410f40f"
+        "sha256:1d4d2fc274dbb3d25d04405259f42dc21a08355c55cc459b3e89b54448fd484e",
+        "sha256:cdbaef557282ca07b33a61738c24fdfdbd0d2a97ca34948090114d8962d2317d"
       ]
     },
     {
@@ -18362,8 +18622,19 @@
               {
                 "draftId": "alpha-1",
                 "sequence": 1,
-                "commandType": "alpha-1",
-                "parameters": {},
+                "commandType": "CreateInterfaceFromTemplate",
+                "parameters": {
+                  "ownerComponentId": "alpha-1",
+                  "templateKey": "alpha-1",
+                  "name": "alpha-1",
+                  "contract": {
+                    "lockId": "alpha-1",
+                    "role": "alpha-1"
+                  },
+                  "capabilities": {},
+                  "contractConfig": {},
+                  "nocConfig": {}
+                },
                 "validationStatus": "unvalidated",
                 "diagnostics": [
                   {
@@ -18377,8 +18648,19 @@
               {
                 "draftId": "alpha-1",
                 "sequence": 1,
-                "commandType": "alpha-1",
-                "parameters": {},
+                "commandType": "CreateInterfaceFromTemplate",
+                "parameters": {
+                  "ownerComponentId": "alpha-1",
+                  "templateKey": "alpha-1",
+                  "name": "alpha-1",
+                  "contract": {
+                    "lockId": "alpha-1",
+                    "role": "alpha-1"
+                  },
+                  "capabilities": {},
+                  "contractConfig": {},
+                  "nocConfig": {}
+                },
                 "validationStatus": "unvalidated",
                 "diagnostics": [
                   {
@@ -18394,8 +18676,10 @@
               {
                 "draftId": "mu-2",
                 "sequence": 2,
-                "commandType": "mu-2",
-                "parameters": {},
+                "commandType": "RenameDesign",
+                "parameters": {
+                  "name": "mu-2"
+                },
                 "validationStatus": "valid",
                 "diagnostics": [
                   {
@@ -18409,8 +18693,10 @@
               {
                 "draftId": "mu-2",
                 "sequence": 2,
-                "commandType": "mu-2",
-                "parameters": {},
+                "commandType": "RenameDesign",
+                "parameters": {
+                  "name": "mu-2"
+                },
                 "validationStatus": "valid",
                 "diagnostics": [
                   {
@@ -18428,8 +18714,10 @@
               {
                 "draftId": "mu-2",
                 "sequence": 2,
-                "commandType": "mu-2",
-                "parameters": {},
+                "commandType": "RenameDesign",
+                "parameters": {
+                  "name": "mu-2"
+                },
                 "validationStatus": "valid",
                 "diagnostics": [
                   {
@@ -18443,8 +18731,10 @@
               {
                 "draftId": "mu-2",
                 "sequence": 2,
-                "commandType": "mu-2",
-                "parameters": {},
+                "commandType": "RenameDesign",
+                "parameters": {
+                  "name": "mu-2"
+                },
                 "validationStatus": "valid",
                 "diagnostics": [
                   {
@@ -18460,8 +18750,19 @@
               {
                 "draftId": "alpha-1",
                 "sequence": 1,
-                "commandType": "alpha-1",
-                "parameters": {},
+                "commandType": "CreateInterfaceFromTemplate",
+                "parameters": {
+                  "ownerComponentId": "alpha-1",
+                  "templateKey": "alpha-1",
+                  "name": "alpha-1",
+                  "contract": {
+                    "lockId": "alpha-1",
+                    "role": "alpha-1"
+                  },
+                  "capabilities": {},
+                  "contractConfig": {},
+                  "nocConfig": {}
+                },
                 "validationStatus": "unvalidated",
                 "diagnostics": [
                   {
@@ -18475,8 +18776,19 @@
               {
                 "draftId": "alpha-1",
                 "sequence": 1,
-                "commandType": "alpha-1",
-                "parameters": {},
+                "commandType": "CreateInterfaceFromTemplate",
+                "parameters": {
+                  "ownerComponentId": "alpha-1",
+                  "templateKey": "alpha-1",
+                  "name": "alpha-1",
+                  "contract": {
+                    "lockId": "alpha-1",
+                    "role": "alpha-1"
+                  },
+                  "capabilities": {},
+                  "contractConfig": {},
+                  "nocConfig": {}
+                },
                 "validationStatus": "unvalidated",
                 "diagnostics": [
                   {
@@ -18497,8 +18809,19 @@
               {
                 "draftId": "alpha-1",
                 "sequence": 1,
-                "commandType": "alpha-1",
-                "parameters": {},
+                "commandType": "CreateInterfaceFromTemplate",
+                "parameters": {
+                  "ownerComponentId": "alpha-1",
+                  "templateKey": "alpha-1",
+                  "name": "alpha-1",
+                  "contract": {
+                    "lockId": "alpha-1",
+                    "role": "alpha-1"
+                  },
+                  "capabilities": {},
+                  "contractConfig": {},
+                  "nocConfig": {}
+                },
                 "validationStatus": "unvalidated",
                 "diagnostics": [
                   {
@@ -18512,8 +18835,19 @@
               {
                 "draftId": "alpha-1",
                 "sequence": 1,
-                "commandType": "alpha-1",
-                "parameters": {},
+                "commandType": "CreateInterfaceFromTemplate",
+                "parameters": {
+                  "ownerComponentId": "alpha-1",
+                  "templateKey": "alpha-1",
+                  "name": "alpha-1",
+                  "contract": {
+                    "lockId": "alpha-1",
+                    "role": "alpha-1"
+                  },
+                  "capabilities": {},
+                  "contractConfig": {},
+                  "nocConfig": {}
+                },
                 "validationStatus": "unvalidated",
                 "diagnostics": [
                   {
@@ -18529,8 +18863,10 @@
               {
                 "draftId": "mu-2",
                 "sequence": 2,
-                "commandType": "mu-2",
-                "parameters": {},
+                "commandType": "RenameDesign",
+                "parameters": {
+                  "name": "mu-2"
+                },
                 "validationStatus": "valid",
                 "diagnostics": [
                   {
@@ -18544,8 +18880,10 @@
               {
                 "draftId": "mu-2",
                 "sequence": 2,
-                "commandType": "mu-2",
-                "parameters": {},
+                "commandType": "RenameDesign",
+                "parameters": {
+                  "name": "mu-2"
+                },
                 "validationStatus": "valid",
                 "diagnostics": [
                   {
@@ -18563,8 +18901,10 @@
               {
                 "draftId": "mu-2",
                 "sequence": 2,
-                "commandType": "mu-2",
-                "parameters": {},
+                "commandType": "RenameDesign",
+                "parameters": {
+                  "name": "mu-2"
+                },
                 "validationStatus": "valid",
                 "diagnostics": [
                   {
@@ -18578,8 +18918,10 @@
               {
                 "draftId": "mu-2",
                 "sequence": 2,
-                "commandType": "mu-2",
-                "parameters": {},
+                "commandType": "RenameDesign",
+                "parameters": {
+                  "name": "mu-2"
+                },
                 "validationStatus": "valid",
                 "diagnostics": [
                   {
@@ -18595,8 +18937,19 @@
               {
                 "draftId": "alpha-1",
                 "sequence": 1,
-                "commandType": "alpha-1",
-                "parameters": {},
+                "commandType": "CreateInterfaceFromTemplate",
+                "parameters": {
+                  "ownerComponentId": "alpha-1",
+                  "templateKey": "alpha-1",
+                  "name": "alpha-1",
+                  "contract": {
+                    "lockId": "alpha-1",
+                    "role": "alpha-1"
+                  },
+                  "capabilities": {},
+                  "contractConfig": {},
+                  "nocConfig": {}
+                },
                 "validationStatus": "unvalidated",
                 "diagnostics": [
                   {
@@ -18610,8 +18963,19 @@
               {
                 "draftId": "alpha-1",
                 "sequence": 1,
-                "commandType": "alpha-1",
-                "parameters": {},
+                "commandType": "CreateInterfaceFromTemplate",
+                "parameters": {
+                  "ownerComponentId": "alpha-1",
+                  "templateKey": "alpha-1",
+                  "name": "alpha-1",
+                  "contract": {
+                    "lockId": "alpha-1",
+                    "role": "alpha-1"
+                  },
+                  "capabilities": {},
+                  "contractConfig": {},
+                  "nocConfig": {}
+                },
                 "validationStatus": "unvalidated",
                 "diagnostics": [
                   {
@@ -18625,12 +18989,12 @@
         ]
       ],
       "expectedCanonicalJson": [
-        "[{\"after\":[{\"commandType\":\"alpha-1\",\"diagnostics\":[{\"code\":\"alpha-1\",\"path\":\"alpha-1\"}],\"draftId\":\"alpha-1\",\"parameters\":{},\"sequence\":1,\"validationStatus\":\"unvalidated\"}],\"before\":[{\"commandType\":\"alpha-1\",\"diagnostics\":[{\"code\":\"alpha-1\",\"path\":\"alpha-1\"}],\"draftId\":\"alpha-1\",\"parameters\":{},\"sequence\":1,\"validationStatus\":\"unvalidated\"}]},{\"after\":[{\"commandType\":\"mu-2\",\"diagnostics\":[{\"code\":\"mu-2\",\"path\":\"mu-2\"}],\"draftId\":\"mu-2\",\"parameters\":{},\"sequence\":2,\"validationStatus\":\"valid\"}],\"before\":[{\"commandType\":\"mu-2\",\"diagnostics\":[{\"code\":\"mu-2\",\"path\":\"mu-2\"}],\"draftId\":\"mu-2\",\"parameters\":{},\"sequence\":2,\"validationStatus\":\"valid\"}]}]",
-        "[{\"after\":[{\"commandType\":\"mu-2\",\"diagnostics\":[{\"code\":\"mu-2\",\"path\":\"mu-2\"}],\"draftId\":\"mu-2\",\"parameters\":{},\"sequence\":2,\"validationStatus\":\"valid\"}],\"before\":[{\"commandType\":\"mu-2\",\"diagnostics\":[{\"code\":\"mu-2\",\"path\":\"mu-2\"}],\"draftId\":\"mu-2\",\"parameters\":{},\"sequence\":2,\"validationStatus\":\"valid\"}]},{\"after\":[{\"commandType\":\"alpha-1\",\"diagnostics\":[{\"code\":\"alpha-1\",\"path\":\"alpha-1\"}],\"draftId\":\"alpha-1\",\"parameters\":{},\"sequence\":1,\"validationStatus\":\"unvalidated\"}],\"before\":[{\"commandType\":\"alpha-1\",\"diagnostics\":[{\"code\":\"alpha-1\",\"path\":\"alpha-1\"}],\"draftId\":\"alpha-1\",\"parameters\":{},\"sequence\":1,\"validationStatus\":\"unvalidated\"}]}]"
+        "[{\"after\":[{\"commandType\":\"CreateInterfaceFromTemplate\",\"diagnostics\":[{\"code\":\"alpha-1\",\"path\":\"alpha-1\"}],\"draftId\":\"alpha-1\",\"parameters\":{\"capabilities\":{},\"contract\":{\"lockId\":\"alpha-1\",\"role\":\"alpha-1\"},\"contractConfig\":{},\"name\":\"alpha-1\",\"nocConfig\":{},\"ownerComponentId\":\"alpha-1\",\"templateKey\":\"alpha-1\"},\"sequence\":1,\"validationStatus\":\"unvalidated\"}],\"before\":[{\"commandType\":\"CreateInterfaceFromTemplate\",\"diagnostics\":[{\"code\":\"alpha-1\",\"path\":\"alpha-1\"}],\"draftId\":\"alpha-1\",\"parameters\":{\"capabilities\":{},\"contract\":{\"lockId\":\"alpha-1\",\"role\":\"alpha-1\"},\"contractConfig\":{},\"name\":\"alpha-1\",\"nocConfig\":{},\"ownerComponentId\":\"alpha-1\",\"templateKey\":\"alpha-1\"},\"sequence\":1,\"validationStatus\":\"unvalidated\"}]},{\"after\":[{\"commandType\":\"RenameDesign\",\"diagnostics\":[{\"code\":\"mu-2\",\"path\":\"mu-2\"}],\"draftId\":\"mu-2\",\"parameters\":{\"name\":\"mu-2\"},\"sequence\":2,\"validationStatus\":\"valid\"}],\"before\":[{\"commandType\":\"RenameDesign\",\"diagnostics\":[{\"code\":\"mu-2\",\"path\":\"mu-2\"}],\"draftId\":\"mu-2\",\"parameters\":{\"name\":\"mu-2\"},\"sequence\":2,\"validationStatus\":\"valid\"}]}]",
+        "[{\"after\":[{\"commandType\":\"RenameDesign\",\"diagnostics\":[{\"code\":\"mu-2\",\"path\":\"mu-2\"}],\"draftId\":\"mu-2\",\"parameters\":{\"name\":\"mu-2\"},\"sequence\":2,\"validationStatus\":\"valid\"}],\"before\":[{\"commandType\":\"RenameDesign\",\"diagnostics\":[{\"code\":\"mu-2\",\"path\":\"mu-2\"}],\"draftId\":\"mu-2\",\"parameters\":{\"name\":\"mu-2\"},\"sequence\":2,\"validationStatus\":\"valid\"}]},{\"after\":[{\"commandType\":\"CreateInterfaceFromTemplate\",\"diagnostics\":[{\"code\":\"alpha-1\",\"path\":\"alpha-1\"}],\"draftId\":\"alpha-1\",\"parameters\":{\"capabilities\":{},\"contract\":{\"lockId\":\"alpha-1\",\"role\":\"alpha-1\"},\"contractConfig\":{},\"name\":\"alpha-1\",\"nocConfig\":{},\"ownerComponentId\":\"alpha-1\",\"templateKey\":\"alpha-1\"},\"sequence\":1,\"validationStatus\":\"unvalidated\"}],\"before\":[{\"commandType\":\"CreateInterfaceFromTemplate\",\"diagnostics\":[{\"code\":\"alpha-1\",\"path\":\"alpha-1\"}],\"draftId\":\"alpha-1\",\"parameters\":{\"capabilities\":{},\"contract\":{\"lockId\":\"alpha-1\",\"role\":\"alpha-1\"},\"contractConfig\":{},\"name\":\"alpha-1\",\"nocConfig\":{},\"ownerComponentId\":\"alpha-1\",\"templateKey\":\"alpha-1\"},\"sequence\":1,\"validationStatus\":\"unvalidated\"}]}]"
       ],
       "expectedDigest": [
-        "sha256:677b4dae01746b45be2c235cfbd395dfd01e050d511c77e88b871be6c2a803fa",
-        "sha256:6bbcdfc52ece867e1db1071a73832b9fbab3304f7915b9c3227ebed02410f40f"
+        "sha256:1d4d2fc274dbb3d25d04405259f42dc21a08355c55cc459b3e89b54448fd484e",
+        "sha256:cdbaef557282ca07b33a61738c24fdfdbd0d2a97ca34948090114d8962d2317d"
       ]
     },
     {
