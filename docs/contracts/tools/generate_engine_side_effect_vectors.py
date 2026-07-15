@@ -107,9 +107,11 @@ def migration_cases() -> list[dict]:
     def c(i,d,base=None,mut=None,exp=None):
         x=copy.deepcopy(base or migration_record()); (mut or (lambda _:None))(x)
         return {"id":i,"description":d,"input":x,"expected":exp or {"offered":True,"groupState":"ready-to-commit","requiresConfirmation":True,"atomicCommit":True,"engineExecutions":[D["b"]]}}
+    def atomic_prior_count(x):
+        x["beforeSnapshot"]["engineInvocationCount"]=3;x["inverseTransaction"]["restoreEngineInvocationCount"]=3;x["forwardTransaction"]["resultEngineInvocationCount"]=4;x["afterSnapshot"]["engineInvocationCount"]=4
     return [c("engine-migration-compatible-target-offered","Target declares source compatibility."),
             c("engine-migration-incompatible-target-not-offered","Target omits source compatibility; discovery retains only unchanged current state.",base=make_migration_discovery_input(),exp={"offered":False,"diagnosticCode":"engine.migration_incompatible","engineExecutions":[]}),
-            c("engine-migration-atomic-commit","Lock, Derived State, side effects, mapping, and provenance commit atomically."),
+            c("engine-migration-atomic-commit","Lock, Derived State, side effects, mapping, and provenance commit atomically.",mut=atomic_prior_count),
             c("engine-migration-blocked-by-package-relation","Universal relation blocking priority is derived from the causal relation endpoint.",base=make_migration_input(True),exp={"offered":True,"groupState":"blocked","requiresConfirmation":False,"atomicCommit":False,"engineExecutions":[D["b"]]}),
             c("engine-migration-undo-exact-inverse","Undo restores the exact stored inverse without Engine execution.",mut=lambda x:x.update(action="undo"),exp={"offered":True,"restoredSnapshot":"beforeSnapshot","stableHostIds":True,"engineExecutions":[],"resultMode":"normal"}),
             c("engine-migration-undo-source-missing-degraded","Undo restores exact state then degrades if the source Bundle is missing.",mut=lambda x:x.update(action="undo",sourceBundleAvailable=False),exp={"offered":True,"restoredSnapshot":"beforeSnapshot","stableHostIds":True,"engineExecutions":[],"resultMode":"degraded-inspect","diagnosticCode":"engine.bundle_missing"})]

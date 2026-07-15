@@ -3721,7 +3721,7 @@
           "hostIds": {
             "localRefToHostId": {}
           },
-          "engineInvocationCount": 0
+          "engineInvocationCount": 3
         },
         "afterSnapshot": {
           "dependencies": [
@@ -3946,7 +3946,7 @@
               "authority:slot-d": "host-slot-d"
             }
           },
-          "engineInvocationCount": 1
+          "engineInvocationCount": 4
         },
         "candidate": {
           "schema": "ipcraft.candidate-transaction.v1",
@@ -4649,7 +4649,7 @@
             },
             "engineCompatibilityVersion": "2"
           },
-          "resultEngineInvocationCount": 1,
+          "resultEngineInvocationCount": 4,
           "engineInvocations": []
         },
         "inverseTransaction": {
@@ -4860,7 +4860,7 @@
           "restoreHostIds": {
             "localRefToHostId": {}
           },
-          "restoreEngineInvocationCount": 0,
+          "restoreEngineInvocationCount": 3,
           "engineInvocations": []
         },
         "migrationEngineInvocations": [

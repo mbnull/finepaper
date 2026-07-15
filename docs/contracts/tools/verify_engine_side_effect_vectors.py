@@ -11,6 +11,7 @@ import argparse
 import copy
 import hashlib
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -31,12 +32,38 @@ def load(path:Path)->Any:
     except Exception as e: fail(f"cannot load {path}: {e}")
 def cj(v:Any)->str:return json.dumps(v,ensure_ascii=False,sort_keys=True,separators=(",",":"))
 def dg(v:Any)->str:return "sha256:"+hashlib.sha256(cj(v).encode()).hexdigest()
+DIGEST_RE=re.compile(r"^sha256:[0-9a-f]{64}$")
+
+
+def typed(value:Any,expected:type,path:str)->None:
+    if type(value) is not expected:fail(f"{path}: type mismatch expected={expected.__name__} actual={type(value).__name__}")
+
+
+def string(value:Any,path:str)->None:typed(value,str,path)
+def boolean(value:Any,path:str)->None:typed(value,bool,path)
+def integer(value:Any,path:str)->None:typed(value,int,path)
+def array(value:Any,path:str)->None:typed(value,list,path)
+def object_(value:Any,path:str)->None:typed(value,dict,path)
+def enum(value:Any,allowed:set[Any],path:str)->None:
+    if value not in allowed:fail(f"{path}: enum mismatch expected={sorted(allowed,key=lambda item:str(item))} actual={value!r}")
+def digest(value:Any,path:str)->None:
+    string(value,path)
+    if not DIGEST_RE.fullmatch(value):fail(f"{path}: digest mismatch expected='sha256:'+64 lowercase hex actual={value!r}")
+def string_array(value:Any,path:str)->None:
+    array(value,path)
+    for index,item in enumerate(value):string(item,f"{path}[{index}]")
+def digest_array(value:Any,path:str)->None:
+    array(value,path)
+    for index,item in enumerate(value):digest(item,f"{path}[{index}]")
 def exact_keys(v:dict,keys:set[str],where:str)->None:
+    object_(v,where)
     if set(v)!=keys: fail(f"{where}: fields {sorted(set(v))}, expected {sorted(keys)}")
 def ids(cases:list[dict],required:set[str],field:str,where:str)->dict[str,dict]:
+    array(cases,where)
     out={}
     for i,c in enumerate(cases):
-        if not isinstance(c,dict) or not isinstance(c.get(field),str): fail(f"{where}[{i}] lacks {field}")
+        object_(c,f"{where}[{i}]")
+        if type(c.get(field)) is not str:fail(f"{where}[{i}].{field}: type mismatch expected=str actual={type(c.get(field)).__name__}")
         if c[field] in out: fail(f"duplicate {field} {c[field]}")
         out[c[field]]=c
     if required!=set(out): fail(f"{where}: ID set mismatch; missing {sorted(required-set(out))}, extra {sorted(set(out)-required)}")
@@ -399,6 +426,249 @@ FRESH_INPUT={"currentAuthoritativeDesignDigest","formallySavedProjectDigest","cu
 PROMOTED_FIELDS={"snapshotDigest","dependencySetDigest","defaultEngineBundleDigest","engineHostContractVersion","hostSideEffectContractVersion"}
 
 
+def validate_dependency_array(value:Any,path:str,world:SchemaWorld)->None:
+    array(value,path);schema=world.documents["ipcraft.project-design.v1"]["$defs"]["dependencyLock"]
+    for index,item in enumerate(value):
+        object_(item,f"{path}[{index}]");world.validate("ipcraft.project-design.v1",schema,item,f"{path}[{index}]")
+
+
+def validate_host_ids(value:Any,path:str)->None:
+    exact_keys(value,{"localRefToHostId"},path);mapping=value["localRefToHostId"];object_(mapping,path+".localRefToHostId")
+    for local_ref,host_id in mapping.items():string(local_ref,path+".localRefToHostId key");string(host_id,path+f".localRefToHostId[{local_ref!r}]")
+
+
+def validate_host_effects(value:Any,path:str,world:SchemaWorld)->None:
+    exact_keys(value,HOST_EFFECT_FIELDS,path);project=world.documents["ipcraft.project-design.v1"]["$defs"]
+    for collection,definition in (("domains","domain"),("domainMemberships","domainMembership"),("attachments","attachment"),("packageRelations","packageRelation")):
+        values=value[collection];array(values,path+"."+collection)
+        for index,item in enumerate(values):object_(item,f"{path}.{collection}[{index}]");world.validate("ipcraft.project-design.v1",project[definition],item,f"{path}.{collection}[{index}]")
+
+
+def validate_snapshot(value:Any,path:str,world:SchemaWorld)->None:
+    exact_keys(value,SNAPSHOT_FIELDS,path);validate_dependency_array(value["dependencies"],path+".dependencies",world)
+    object_(value["derivedState"],path+".derivedState");world.validate("ipcraft.core-canonical-models.v1",world.documents["ipcraft.core-canonical-models.v1"]["$defs"]["derivedState"],value["derivedState"],path+".derivedState")
+    object_(value["derivation"],path+".derivation");world.validate("ipcraft.project-design.v1",world.documents["ipcraft.project-design.v1"]["$defs"]["derivation"],value["derivation"],path+".derivation")
+    validate_host_effects(value["hostSideEffects"],path+".hostSideEffects",world);validate_host_ids(value["hostIds"],path+".hostIds");integer(value["engineInvocationCount"],path+".engineInvocationCount")
+
+
+def validate_bundle_record(value:Any,path:str,world:SchemaWorld)->None:
+    exact_keys(value,BUNDLE_FIELDS,path);digest(value["bundleManifestDigest"],path+".bundleManifestDigest");digest(value["verifiedBundleManifestDigest"],path+".verifiedBundleManifestDigest")
+    for field in ("installed","revoked","contentVerified"):boolean(value[field],path+"."+field)
+    string(value["source"],path+".source");enum(value["source"],{"store","builtin"},path+".source");validate_manifest_envelope(value["manifest"],path+".manifest")
+
+
+def validate_manifest_envelope(value:Any,path:str)->None:
+    fields={"schema","id","version","engineHostContractVersion","engineCompatibilityVersion","hostSideEffectContractVersion","migrationFromCompatibilityVersions","supportedPlatformAbis","entrypoint"};exact_keys(value,fields,path)
+    for field in ("schema","id","version","engineHostContractVersion","engineCompatibilityVersion","hostSideEffectContractVersion","entrypoint"):string(value[field],path+"."+field)
+    if value["schema"]!="ipcraft.engine-bundle.v1":fail(f"{path}.schema: constant mismatch expected='ipcraft.engine-bundle.v1' actual={value['schema']!r}")
+    string_array(value["migrationFromCompatibilityVersions"],path+".migrationFromCompatibilityVersions");string_array(value["supportedPlatformAbis"],path+".supportedPlatformAbis")
+
+
+def validate_resolution_types(case:dict,world:SchemaWorld)->None:
+    cid=case["id"];inp=case["input"];expected=case["expected"];exact_keys(inp,RES_INPUT,cid+" input");exact_keys(expected,RES_EXPECTED,cid+" expected")
+    object_(inp["projectLock"],cid+" input.projectLock");world.validate("ipcraft.project-design.v1",world.documents["ipcraft.project-design.v1"]["$defs"]["defaultEngineDependencyLock"],inp["projectLock"],cid+" input.projectLock")
+    for field in ("installedBundles","alternativeBundles"):
+        values=inp[field];array(values,cid+" input."+field)
+        for index,item in enumerate(values):validate_bundle_record(item,f"{cid} input.{field}[{index}]",world)
+    string(inp["currentPlatformAbi"],cid+" input.currentPlatformAbi");string_array(inp["supportedEngineHostContracts"],cid+" input.supportedEngineHostContracts");string_array(inp["supportedHostSideEffectContracts"],cid+" input.supportedHostSideEffectContracts")
+    string(expected["outcome"],cid+" expected.outcome");enum(expected["outcome"],{"exact","degraded-inspect"},cid+" expected.outcome")
+    if expected["selectedBundleManifestDigest"] is not None:digest(expected["selectedBundleManifestDigest"],cid+" expected.selectedBundleManifestDigest")
+    if expected["diagnosticCode"] is not None:
+        string(expected["diagnosticCode"],cid+" expected.diagnosticCode");enum(expected["diagnosticCode"],{"engine.bundle_missing","engine.bundle_revoked","engine.bundle_mismatch","engine.platform_unsupported","engine.host_contract_unsupported","host.side_effect_contract_unsupported"},cid+" expected.diagnosticCode")
+    boolean(expected["upgradeAvailable"],cid+" expected.upgradeAvailable");boolean(expected["retainedInContentAddressedStore"],cid+" expected.retainedInContentAddressedStore")
+
+
+def validate_forward_transaction(value:Any,path:str,world:SchemaWorld)->None:
+    exact_keys(value,FORWARD_FIELDS,path);core=world.documents["ipcraft.core-canonical-models.v1"]["$defs"];project=world.documents["ipcraft.project-design.v1"]["$defs"]
+    for field in ("authorityPatch","applicationPatch"):object_(value[field],path+"."+field);world.validate("ipcraft.core-canonical-models.v1",core["sourcePatch"],value[field],path+"."+field)
+    array(value["tombstones"],path+".tombstones")
+    for index,item in enumerate(value["tombstones"]):object_(item,f"{path}.tombstones[{index}]");world.validate("ipcraft.core-canonical-models.v1",core["tombstone"],item,f"{path}.tombstones[{index}]")
+    string_array(value["allocationOrder"],path+".allocationOrder");object_(value["localRefToHostId"],path+".localRefToHostId")
+    for local_ref,host_id in value["localRefToHostId"].items():string(local_ref,path+".localRefToHostId key");string(host_id,path+f".localRefToHostId[{local_ref!r}]")
+    validate_dependency_array(value["targetDependencies"],path+".targetDependencies",world);object_(value["targetDerivation"],path+".targetDerivation");world.validate("ipcraft.project-design.v1",project["derivation"],value["targetDerivation"],path+".targetDerivation")
+    integer(value["resultEngineInvocationCount"],path+".resultEngineInvocationCount");digest_array(value["engineInvocations"],path+".engineInvocations")
+
+
+def validate_inverse_transaction(value:Any,path:str,world:SchemaWorld)->None:
+    exact_keys(value,INVERSE_FIELDS,path);project=world.documents["ipcraft.project-design.v1"]["$defs"];core=world.documents["ipcraft.core-canonical-models.v1"]["$defs"]
+    validate_dependency_array(value["restoreDependencies"],path+".restoreDependencies",world);object_(value["restoreDerivedState"],path+".restoreDerivedState");world.validate("ipcraft.core-canonical-models.v1",core["derivedState"],value["restoreDerivedState"],path+".restoreDerivedState")
+    object_(value["restoreDerivation"],path+".restoreDerivation");world.validate("ipcraft.project-design.v1",project["derivation"],value["restoreDerivation"],path+".restoreDerivation");validate_host_effects(value["restoreHostSideEffects"],path+".restoreHostSideEffects",world);validate_host_ids(value["restoreHostIds"],path+".restoreHostIds")
+    integer(value["restoreEngineInvocationCount"],path+".restoreEngineInvocationCount");digest_array(value["engineInvocations"],path+".engineInvocations")
+
+
+def validate_migration_types(case:dict,world:SchemaWorld)->None:
+    cid=case["id"];inp=case["input"];expected=case["expected"]
+    if cid=="engine-migration-incompatible-target-not-offered":
+        exact_keys(inp,MIG_DISCOVERY_INPUT,cid+" input");object_(inp["currentDefaultEngineLock"],cid+" input.currentDefaultEngineLock");object_(inp["targetDefaultEngineLock"],cid+" input.targetDefaultEngineLock")
+        string(inp["caseKind"],cid+" input.caseKind")
+        for label in ("currentDefaultEngineLock","targetDefaultEngineLock"):world.validate("ipcraft.project-design.v1",world.documents["ipcraft.project-design.v1"]["$defs"]["defaultEngineDependencyLock"],inp[label],cid+" input."+label)
+        for label in ("currentManifest","targetManifest"):object_(inp[label],cid+" input."+label);world.validate("ipcraft.engine-bundle.v1",world.documents["ipcraft.engine-bundle.v1"],inp[label],cid+" input."+label)
+        string_array(inp["supportedEngineHostContracts"],cid+" input.supportedEngineHostContracts");string_array(inp["supportedHostSideEffectContracts"],cid+" input.supportedHostSideEffectContracts");string(inp["currentPlatformAbi"],cid+" input.currentPlatformAbi");validate_snapshot(inp["currentSnapshot"],cid+" input.currentSnapshot",world)
+        exact_keys(expected,{"offered","diagnosticCode","engineExecutions"},cid+" expected");boolean(expected["offered"],cid+" expected.offered");string(expected["diagnosticCode"],cid+" expected.diagnosticCode");enum(expected["diagnosticCode"],{"engine.migration_incompatible"},cid+" expected.diagnosticCode");digest_array(expected["engineExecutions"],cid+" expected.engineExecutions");return
+    exact_keys(inp,MIG_INPUT,cid+" input");string(inp["caseKind"],cid+" input.caseKind");string(inp["action"],cid+" input.action");boolean(inp["sourceBundleAvailable"],cid+" input.sourceBundleAvailable");object_(inp["migration"],cid+" input.migration")
+    for label in ("currentManifest","targetManifest"):object_(inp[label],cid+" input."+label);world.validate("ipcraft.engine-bundle.v1",world.documents["ipcraft.engine-bundle.v1"],inp[label],cid+" input."+label)
+    object_(inp["applicability"],cid+" input.applicability");world.validate("ipcraft.core-canonical-models.v1",world.documents["ipcraft.core-canonical-models.v1"]["$defs"]["reconcileApplicability"],inp["applicability"],cid+" input.applicability")
+    object_(inp["sideEffectInput"],cid+" input.sideEffectInput");world.validate("ipcraft.noc-side-effects.v1",world.documents["ipcraft.noc-side-effects.v1"]["properties"]["input"],inp["sideEffectInput"],cid+" input.sideEffectInput");validate_snapshot(inp["beforeSnapshot"],cid+" input.beforeSnapshot",world);validate_snapshot(inp["afterSnapshot"],cid+" input.afterSnapshot",world)
+    object_(inp["candidate"],cid+" input.candidate");world.validate("ipcraft.core-canonical-models.v1",world.documents["ipcraft.core-canonical-models.v1"]["$defs"]["candidateTransaction"],inp["candidate"],cid+" input.candidate")
+    validate_forward_transaction(inp["forwardTransaction"],cid+" input.forwardTransaction",world);validate_inverse_transaction(inp["inverseTransaction"],cid+" input.inverseTransaction",world);digest_array(inp["migrationEngineInvocations"],cid+" input.migrationEngineInvocations")
+    if inp["action"]=="undo":exact_keys(expected,{"offered","restoredSnapshot","stableHostIds","engineExecutions","resultMode"}|({"diagnosticCode"} if expected.get("resultMode")=="degraded-inspect" else set()),cid+" expected")
+    else:exact_keys(expected,{"offered","groupState","requiresConfirmation","atomicCommit","engineExecutions"},cid+" expected")
+    boolean(expected["offered"],cid+" expected.offered");digest_array(expected["engineExecutions"],cid+" expected.engineExecutions")
+    if inp["action"]=="undo":
+        string(expected["restoredSnapshot"],cid+" expected.restoredSnapshot");boolean(expected["stableHostIds"],cid+" expected.stableHostIds");string(expected["resultMode"],cid+" expected.resultMode");enum(expected["resultMode"],{"normal","degraded-inspect"},cid+" expected.resultMode")
+        if "diagnosticCode" in expected:string(expected["diagnosticCode"],cid+" expected.diagnosticCode");enum(expected["diagnosticCode"],{"engine.bundle_missing"},cid+" expected.diagnosticCode")
+    else:
+        string(expected["groupState"],cid+" expected.groupState");enum(expected["groupState"],{"ready-to-commit","blocked"},cid+" expected.groupState");boolean(expected["requiresConfirmation"],cid+" expected.requiresConfirmation");boolean(expected["atomicCommit"],cid+" expected.atomicCommit")
+
+
+def validate_freshness_types(case:dict)->None:
+    cid=case["id"];inp=case["input"];expected=case["expected"];exact_keys(inp,FRESH_INPUT,cid+" input");exact_keys(expected,{"state","staleReasons"},cid+" expected")
+    for field in ("currentAuthoritativeDesignDigest","formallySavedProjectDigest","currentDependencySetDigest","currentDefaultEngineBundleDigest"):digest(inp[field],cid+" input."+field)
+    string(inp["currentEngineHostContractVersion"],cid+" input.currentEngineHostContractVersion");string(inp["currentHostSideEffectContractVersion"],cid+" input.currentHostSideEffectContractVersion");boolean(inp["pendingTopologyGroup"],cid+" input.pendingTopologyGroup");integer(inp["draftOverlayCount"],cid+" input.draftOverlayCount")
+    if inp["promotedManifest"] is not None:
+        exact_keys(inp["promotedManifest"],PROMOTED_FIELDS,cid+" input.promotedManifest")
+        for field in ("snapshotDigest","dependencySetDigest","defaultEngineBundleDigest"):digest(inp["promotedManifest"][field],cid+" input.promotedManifest."+field)
+        string(inp["promotedManifest"]["engineHostContractVersion"],cid+" input.promotedManifest.engineHostContractVersion");string(inp["promotedManifest"]["hostSideEffectContractVersion"],cid+" input.promotedManifest.hostSideEffectContractVersion")
+    string(expected["state"],cid+" expected.state");enum(expected["state"],{"none","current-canonical","last-successful-stale"},cid+" expected.state");string_array(expected["staleReasons"],cid+" expected.staleReasons")
+    for index,reason in enumerate(expected["staleReasons"]):enum(reason,{"authoritative-design-changed","not-formally-saved","dependency-changed","pending-topology","draft-overlay"},f"{cid} expected.staleReasons[{index}]")
+
+
+def validate_engine_case_types(case:dict,kind:str,world:SchemaWorld)->None:
+    exact_keys(case,{"id","description","input","expected"},case.get("id","case") if type(case) is dict else "case");string(case["id"],case["id"]+" id");string(case["description"],case["id"]+" description");object_(case["input"],case["id"]+" input");object_(case["expected"],case["id"]+" expected")
+    if kind=="resolution":validate_resolution_types(case,world)
+    elif kind=="migration":validate_migration_types(case,world)
+    else:validate_freshness_types(case)
+
+
+def promised(condition:bool,case_id:str,label:str,expected:Any,actual:Any)->None:
+    def shown(value:Any)->str:
+        try:return cj(value)
+        except TypeError:return repr(value)
+    if not condition:fail(f"{case_id}: promised {label} mismatch expected={shown(expected)} actual={shown(actual)}")
+
+
+def one(values:list,path:str)->dict:
+    if len(values)!=1:fail(f"{path}: cardinality mismatch expected=1 actual={len(values)}")
+    return values[0]
+
+
+RESOLUTION_PROMISES={
+ "engine-lock-exact-available":("exact",None,False,False),"engine-lock-missing":("degraded-inspect","engine.bundle_missing",False,False),"engine-lock-revoked":("degraded-inspect","engine.bundle_revoked",False,False),"engine-lock-corrupt":("degraded-inspect","engine.bundle_mismatch",False,False),"engine-lock-digest-mismatch":("degraded-inspect","engine.bundle_mismatch",False,False),"engine-lock-same-compatibility-different-digest":("degraded-inspect","engine.bundle_missing",False,False),"engine-lock-no-builtin-fallback":("degraded-inspect","engine.bundle_missing",False,False),"engine-lock-newer-target-discovered":("exact",None,True,False),"unsupported-but-valid-bundle-retained":("degraded-inspect","engine.platform_unsupported",False,True),"engine-lock-manifest-metadata-mismatch":("degraded-inspect","engine.bundle_mismatch",False,False),"engine-lock-manifest-id-mismatch":("degraded-inspect","engine.bundle_mismatch",False,False),"engine-lock-manifest-host-mismatch":("degraded-inspect","engine.bundle_mismatch",False,False),"engine-lock-manifest-side-effect-mismatch":("degraded-inspect","engine.bundle_mismatch",False,False),"engine-lock-manifest-compatibility-mismatch":("degraded-inspect","engine.bundle_mismatch",False,False),"engine-lock-manifest-platform-metadata-mismatch":("degraded-inspect","engine.bundle_mismatch",False,False),"engine-lock-platform-incompatible":("degraded-inspect","engine.platform_unsupported",False,False),"engine-lock-host-abi-incompatible":("degraded-inspect","engine.host_contract_unsupported",False,False),"engine-lock-side-effect-contract-incompatible":("degraded-inspect","host.side_effect_contract_unsupported",False,False),
+}
+
+
+def validate_resolution_promise(case:dict)->None:
+    cid=case["id"];inp=case["input"];lock=inp["projectLock"];expected=case["expected"];promise=RESOLUTION_PROMISES[cid]
+    actual_expected=(expected["outcome"],expected["diagnosticCode"],expected["upgradeAvailable"],expected["retainedInContentAddressedStore"])
+    promised(actual_expected==promise,cid,"expected outcome/code/flags",promise,actual_expected)
+    promised(expected["selectedBundleManifestDigest"]==(lock["bundleManifestDigest"] if promise[0]=="exact" else None),cid,"selected exact digest",lock["bundleManifestDigest"] if promise[0]=="exact" else None,expected["selectedBundleManifestDigest"])
+    installed,alternatives=inp["installedBundles"],inp["alternativeBundles"]
+    if cid=="engine-lock-missing":promised(not installed and not alternatives,cid,"missing exact Bundle",[0,0],[len(installed),len(alternatives)]);return
+    if cid in {"engine-lock-same-compatibility-different-digest","engine-lock-no-builtin-fallback"}:
+        promised(not installed and len(alternatives)==1,cid,"alternative-only inventory",[0,1],[len(installed),len(alternatives)]);alt=one(alternatives,cid+" alternatives")
+        promised(alt["bundleManifestDigest"]!=lock["bundleManifestDigest"],cid,"different alternative digest",True,alt["bundleManifestDigest"]!=lock["bundleManifestDigest"])
+        promised(alt["manifest"]["engineCompatibilityVersion"]==lock["engineCompatibilityVersion"],cid,"same compatibility alternative",lock["engineCompatibilityVersion"],alt["manifest"]["engineCompatibilityVersion"])
+        promised(alt["installed"] and not alt["revoked"] and alt["contentVerified"] and alt["verifiedBundleManifestDigest"]==alt["bundleManifestDigest"],cid,"verified alternative record",[True,False,True,alt["bundleManifestDigest"]],[alt["installed"],alt["revoked"],alt["contentVerified"],alt["verifiedBundleManifestDigest"]])
+        source="builtin" if cid=="engine-lock-no-builtin-fallback" else "store";promised(alt["source"]==source,cid,"alternative source",source,alt["source"]);return
+    exact=one(installed,cid+" installedBundles");promised(exact["bundleManifestDigest"]==lock["bundleManifestDigest"] and exact["installed"],cid,"installed exact digest",[lock["bundleManifestDigest"],True],[exact["bundleManifestDigest"],exact["installed"]])
+    metadata=("id","version","engineCompatibilityVersion","engineHostContractVersion","hostSideEffectContractVersion","supportedPlatformAbis")
+    differences={field for field in metadata if exact["manifest"][field]!=lock[field]}
+    mismatch_fields={"engine-lock-manifest-metadata-mismatch":"version","engine-lock-manifest-id-mismatch":"id","engine-lock-manifest-host-mismatch":"engineHostContractVersion","engine-lock-manifest-side-effect-mismatch":"hostSideEffectContractVersion","engine-lock-manifest-compatibility-mismatch":"engineCompatibilityVersion","engine-lock-manifest-platform-metadata-mismatch":"supportedPlatformAbis"}
+    if cid in mismatch_fields:
+        promised(not exact["revoked"] and exact["contentVerified"] and exact["verifiedBundleManifestDigest"]==lock["bundleManifestDigest"],cid,"verified bytes under mismatched manifest",[False,True,lock["bundleManifestDigest"]],[exact["revoked"],exact["contentVerified"],exact["verifiedBundleManifestDigest"]]);promised(differences=={mismatch_fields[cid]},cid,"single manifest tuple mismatch",{mismatch_fields[cid]},differences);return
+    promised(not differences,cid,"manifest tuple equals lock",set(),differences)
+    if cid=="engine-lock-revoked":promised(exact["revoked"] and exact["contentVerified"] and exact["verifiedBundleManifestDigest"]==lock["bundleManifestDigest"],cid,"revoked otherwise-valid exact Bundle",[True,True,lock["bundleManifestDigest"]],[exact["revoked"],exact["contentVerified"],exact["verifiedBundleManifestDigest"]]);return
+    if cid=="engine-lock-corrupt":promised(not exact["revoked"] and not exact["contentVerified"] and exact["verifiedBundleManifestDigest"]==lock["bundleManifestDigest"],cid,"content-only verification failure",[False,False,lock["bundleManifestDigest"]],[exact["revoked"],exact["contentVerified"],exact["verifiedBundleManifestDigest"]]);return
+    if cid=="engine-lock-digest-mismatch":promised(not exact["revoked"] and exact["contentVerified"] and exact["verifiedBundleManifestDigest"]!=lock["bundleManifestDigest"],cid,"verified bytes digest mismatch",[False,True,"different"],[exact["revoked"],exact["contentVerified"],exact["verifiedBundleManifestDigest"]]);return
+    promised(not exact["revoked"] and exact["contentVerified"] and exact["verifiedBundleManifestDigest"]==lock["bundleManifestDigest"],cid,"verified non-revoked exact bytes",[False,True,lock["bundleManifestDigest"]],[exact["revoked"],exact["contentVerified"],exact["verifiedBundleManifestDigest"]])
+    if cid=="engine-lock-platform-incompatible":promised(inp["currentPlatformAbi"] not in exact["manifest"]["supportedPlatformAbis"],cid,"unsupported current platform",True,False)
+    elif cid=="engine-lock-host-abi-incompatible":promised(exact["manifest"]["engineHostContractVersion"] not in inp["supportedEngineHostContracts"],cid,"unsupported Host contract",True,False)
+    elif cid=="engine-lock-side-effect-contract-incompatible":promised(exact["manifest"]["hostSideEffectContractVersion"] not in inp["supportedHostSideEffectContracts"],cid,"unsupported side-effect contract",True,False)
+    elif cid=="unsupported-but-valid-bundle-retained":promised(inp["currentPlatformAbi"] not in exact["manifest"]["supportedPlatformAbis"],cid,"retained unsupported exact Bundle",True,False)
+    elif cid=="engine-lock-newer-target-discovered":
+        alt=one(alternatives,cid+" alternatives");promised(lock["engineCompatibilityVersion"] in alt["manifest"]["migrationFromCompatibilityVersions"] and alt["bundleManifestDigest"]!=lock["bundleManifestDigest"],cid,"compatible upgrade overlay",True,False)
+    else:promised(not alternatives,cid,"no alternative overlay",0,len(alternatives))
+
+
+MIGRATION_PROMISES={
+ "engine-migration-compatible-target-offered":{"offered":True,"groupState":"ready-to-commit","requiresConfirmation":True,"atomicCommit":True,"engineExecutions":None},
+ "engine-migration-incompatible-target-not-offered":{"offered":False,"diagnosticCode":"engine.migration_incompatible","engineExecutions":[]},
+ "engine-migration-atomic-commit":{"offered":True,"groupState":"ready-to-commit","requiresConfirmation":True,"atomicCommit":True,"engineExecutions":None},
+ "engine-migration-blocked-by-package-relation":{"offered":True,"groupState":"blocked","requiresConfirmation":False,"atomicCommit":False,"engineExecutions":None},
+ "engine-migration-undo-exact-inverse":{"offered":True,"restoredSnapshot":"beforeSnapshot","stableHostIds":True,"engineExecutions":[],"resultMode":"normal"},
+ "engine-migration-undo-source-missing-degraded":{"offered":True,"restoredSnapshot":"beforeSnapshot","stableHostIds":True,"engineExecutions":[],"resultMode":"degraded-inspect","diagnosticCode":"engine.bundle_missing"},
+}
+
+
+def validate_migration_promise(case:dict)->None:
+    cid=case["id"];inp=case["input"];expected=case["expected"];promise=copy.deepcopy(MIGRATION_PROMISES[cid])
+    if promise.get("engineExecutions") is None:promise["engineExecutions"]=[inp["targetDefaultEngineLock"]["bundleManifestDigest"]] if inp["caseKind"]=="discovery" else [inp["migration"]["targetDefaultEngineLock"]["bundleManifestDigest"]]
+    promised(expected==promise,cid,"expected migration result",promise,expected)
+    if cid=="engine-migration-incompatible-target-not-offered":
+        current=inp["currentDefaultEngineLock"];promised(inp["caseKind"]=="discovery" and current["engineCompatibilityVersion"] not in inp["targetManifest"]["migrationFromCompatibilityVersions"],cid,"incompatible discovery",["discovery",False],[inp["caseKind"],current["engineCompatibilityVersion"] in inp["targetManifest"]["migrationFromCompatibilityVersions"]]);return
+    current=inp["migration"]["currentDefaultEngineLock"];compatible=current["engineCompatibilityVersion"] in inp["targetManifest"]["migrationFromCompatibilityVersions"]
+    promised(inp["caseKind"]=="offered" and compatible,cid,"offered compatible migration",["offered",True],[inp["caseKind"],compatible])
+    if cid=="engine-migration-compatible-target-offered":promised(inp["action"]=="migrate" and inp["beforeSnapshot"]["engineInvocationCount"]==0,cid,"compatibility offer baseline",["migrate",0],[inp["action"],inp["beforeSnapshot"]["engineInvocationCount"]])
+    elif cid=="engine-migration-atomic-commit":promised(inp["action"]=="migrate" and inp["beforeSnapshot"]["engineInvocationCount"]>0 and inp["afterSnapshot"]["engineInvocationCount"]==inp["beforeSnapshot"]["engineInvocationCount"]+1,cid,"atomic transaction count",["migrate","prior>0","+1"],[inp["action"],inp["beforeSnapshot"]["engineInvocationCount"],inp["afterSnapshot"]["engineInvocationCount"]])
+    elif cid=="engine-migration-blocked-by-package-relation":
+        blocked=any(r["typeKey"]=="route.blocked" for r in inp["sideEffectInput"]["packageRelations"]);promised(inp["action"]=="migrate" and blocked,cid,"blocking package relation cause",["migrate",True],[inp["action"],blocked])
+    elif cid=="engine-migration-undo-exact-inverse":promised(inp["action"]=="undo" and inp["sourceBundleAvailable"],cid,"exact inverse with source",["undo",True],[inp["action"],inp["sourceBundleAvailable"]])
+    else:promised(inp["action"]=="undo" and not inp["sourceBundleAvailable"],cid,"exact inverse with missing source",["undo",False],[inp["action"],inp["sourceBundleAvailable"]])
+
+
+def freshness_dimensions(inp:dict)->tuple:
+    promoted=inp["promotedManifest"]
+    if promoted is None:return (True,False,False,False,False,False,inp["pendingTopologyGroup"],inp["draftOverlayCount"])
+    return (False,promoted["snapshotDigest"]!=inp["currentAuthoritativeDesignDigest"],inp["currentAuthoritativeDesignDigest"]!=inp["formallySavedProjectDigest"],promoted["dependencySetDigest"]!=inp["currentDependencySetDigest"],promoted["defaultEngineBundleDigest"]!=inp["currentDefaultEngineBundleDigest"],promoted["engineHostContractVersion"]!=inp["currentEngineHostContractVersion"] or promoted["hostSideEffectContractVersion"]!=inp["currentHostSideEffectContractVersion"],inp["pendingTopologyGroup"],inp["draftOverlayCount"])
+
+
+FRESHNESS_PROMISES={
+ "output-freshness-saved-current-equal":((False,False,False,False,False,False,False,0),{"state":"current-canonical","staleReasons":[]}),
+ "output-freshness-accepted-unsaved-edit":((False,True,True,False,False,False,False,0),{"state":"last-successful-stale","staleReasons":["authoritative-design-changed","not-formally-saved"]}),
+ "output-freshness-pending-topology":((False,False,False,False,False,False,True,0),{"state":"last-successful-stale","staleReasons":["pending-topology"]}),
+ "output-freshness-draft-overlay":((False,False,False,False,False,False,False,2),{"state":"last-successful-stale","staleReasons":["draft-overlay"]}),
+ "output-freshness-engine-digest-mismatch":((False,False,False,False,True,False,False,0),{"state":"last-successful-stale","staleReasons":["dependency-changed"]}),
+ "output-freshness-engine-host-contract-mismatch":((False,False,False,False,False,True,False,0),{"state":"last-successful-stale","staleReasons":["dependency-changed"]}),
+ "output-freshness-side-effect-contract-mismatch":((False,False,False,False,False,True,False,0),{"state":"last-successful-stale","staleReasons":["dependency-changed"]}),
+ "output-freshness-no-promotion":((True,False,False,False,False,False,False,0),{"state":"none","staleReasons":[]}),
+}
+
+
+def validate_freshness_promise(case:dict)->None:
+    cid=case["id"];dimensions,expected=FRESHNESS_PROMISES[cid];actual=freshness_dimensions(case["input"]);promised(actual==dimensions,cid,"freshness causal dimensions",dimensions,actual);promised(case["expected"]==expected,cid,"freshness expected result",expected,case["expected"])
+    if cid=="output-freshness-engine-host-contract-mismatch":promised(case["input"]["promotedManifest"]["engineHostContractVersion"]!=case["input"]["currentEngineHostContractVersion"] and case["input"]["promotedManifest"]["hostSideEffectContractVersion"]==case["input"]["currentHostSideEffectContractVersion"],cid,"Host-only contract mismatch",True,False)
+    if cid=="output-freshness-side-effect-contract-mismatch":promised(case["input"]["promotedManifest"]["hostSideEffectContractVersion"]!=case["input"]["currentHostSideEffectContractVersion"] and case["input"]["promotedManifest"]["engineHostContractVersion"]==case["input"]["currentEngineHostContractVersion"],cid,"side-effect-only contract mismatch",True,False)
+
+
+def authority_signature(inp:dict)->tuple:
+    return tuple((op["op"],op.get("entityKind",op.get("relationKind")),op.get("id",op.get("localRef"))) for op in inp["authorityPatch"]["operations"])
+
+
+SIDE_PROMISES={
+ "side-effects-created-router-default-memberships":(("createEntity","router","authority:router-z"),("createEntity","structural-link","authority:link-z")),
+ "side-effects-created-routers-membership-order":(("createEntity","router","authority:router-z"),("createEntity","router","authority:router-a"),("createEntity","structural-link","authority:link-a"),("createEntity","structural-link","authority:link-z")),
+ "side-effects-deleted-router-memberships":(("deleteEntity","router","router.c"),),"side-effects-deleted-router-attachment-unresolved":(("deleteEntity","router","router.a"),),"side-effects-deleted-slot-attachment-unresolved":(("deleteEntity","access-slot","slot.a"),),"side-effects-package-relation-endpoint-unresolved":(("deleteEntity","router","router.a"),),"side-effects-package-relation-endpoint-blocked":(("deleteEntity","router","router.b"),),"side-effects-empty-non-default-domain-tombstone":(("deleteEntity","router","router.a"),),"side-effects-empty-default-domain-preserved":(("deleteEntity","router","router.a"),("deleteEntity","router","router.b"),("deleteEntity","router","router.c")),"side-effects-domain-disconnected-router-delete":(("deleteEntity","router","router.b"),),"side-effects-domain-disconnected-link-delete":(("deleteEntity","structural-link","link.ab"),),"side-effects-domain-disconnected-link-update":(("updateEntity","structural-link","link.bc"),),"side-effects-domain-disconnected-membership-placement":(("createEntity","router","authority:router-isolated"),),"side-effects-combined-deterministic-order":(("createEntity","router","authority:router-z"),("createEntity","structural-link","authority:link-z"),("deleteEntity","router","router.a"),("deleteEntity","access-slot","slot.a"),("deleteEntity","structural-link","link.bc")),
+}
+
+
+def validate_side_promise(case:dict)->None:
+    cid=case["caseId"];doc=case["document"];inp=doc["input"];expected=doc["expected"];signature=authority_signature(inp);promised(signature==SIDE_PROMISES[cid],cid,"Authority causal operations",SIDE_PROMISES[cid],signature)
+    impacts=[item["code"] for item in expected["impactReport"]["impacts"]];application=[(op["op"],op.get("entityKind",op.get("relationKind"))) for op in expected["applicationPatch"]["operations"]];diag=len(expected["coreDiagnostics"])
+    if cid=="side-effects-created-router-default-memberships":promised(application.count(("createRelation","domain-membership"))==2 and not impacts and expected["groupState"]=="auto-commit",cid,"two default memberships",[2,[],"auto-commit"],[application.count(("createRelation","domain-membership")),impacts,expected["groupState"]])
+    elif cid=="side-effects-created-routers-membership-order":promised(application.count(("createRelation","domain-membership"))==4 and expected["allocationOrder"]==sorted(expected["allocationOrder"]),cid,"four ordered memberships",[4,"sorted"],[application.count(("createRelation","domain-membership")),expected["allocationOrder"]])
+    elif cid=="side-effects-deleted-router-memberships":promised(application.count(("deleteRelation","domain-membership"))==2 and len(inp["attachments"])==1 and not inp["packageRelations"] and "attachment.target_removed" not in impacts,cid,"router membership-only deletion",[2,1,0,False],[application.count(("deleteRelation","domain-membership")),len(inp["attachments"]),len(inp["packageRelations"]),"attachment.target_removed" in impacts])
+    elif cid in {"side-effects-deleted-router-attachment-unresolved","side-effects-deleted-slot-attachment-unresolved"}:promised("attachment.target_removed" in impacts and ("updateRelation","attachment") in application,cid,"attachment unresolved effect",True,[impacts,application])
+    elif cid=="side-effects-package-relation-endpoint-unresolved":promised(len(inp["packageRelations"])==1 and inp["packageRelations"][0]["typeKey"]=="route.allowed" and "package_relation.endpoint_unresolved" in impacts and ("updateRelation","package-relation") in application,cid,"unresolved-allowed relation",True,[inp["packageRelations"],impacts,application])
+    elif cid=="side-effects-package-relation-endpoint-blocked":promised(any(r["typeKey"]=="route.blocked" for r in inp["packageRelations"]) and "package_relation.endpoint_blocks_candidate" in impacts and expected["groupState"]=="blocked" and diag>0,cid,"blocking relation disposition",True,[impacts,expected["groupState"],diag])
+    elif cid=="side-effects-empty-non-default-domain-tombstone":promised(any(not d["isDefault"] for d in inp["domains"]) and "domain.non_default_deleted" in impacts and expected["tombstones"] and expected["commitDisposition"]=="confirmation-required",cid,"non-default empty domain tombstone",True,[inp["domains"],impacts,expected["tombstones"],expected["commitDisposition"]])
+    elif cid=="side-effects-empty-default-domain-preserved":promised(all(d["isDefault"] for d in inp["domains"]) and not expected["tombstones"] and "domain.non_default_deleted" not in impacts,cid,"default domain preservation",True,[inp["domains"],expected["tombstones"],impacts])
+    elif cid in {"side-effects-domain-disconnected-router-delete","side-effects-domain-disconnected-link-delete","side-effects-domain-disconnected-link-update","side-effects-domain-disconnected-membership-placement"}:
+        promised(impacts==["domain.disconnected"] and diag==1 and expected["groupState"]=="auto-commit",cid,"isolated connectivity diagnostic",[["domain.disconnected"],1,"auto-commit"],[impacts,diag,expected["groupState"]])
+        if cid=="side-effects-domain-disconnected-link-update":
+            operation=inp["authorityPatch"]["operations"][0];promised(operation["set"]=={"endpointA":{"id":"router.a"},"endpointB":{"id":"router.b"}} and operation["unset"]==[],cid,"link update endpoints",{"endpointA":{"id":"router.a"},"endpointB":{"id":"router.b"}},operation)
+    else:promised({"attachment.target_removed","package_relation.endpoint_unresolved","domain.disconnected"}<=set(impacts) and diag==2 and expected["allocationOrder"]==sorted(expected["allocationOrder"]),cid,"combined deterministic effects",True,[impacts,diag,expected["allocationOrder"]])
+
+
 def validate_closed_engine_case(case:dict,kind:str)->None:
     exact_keys(case,{"id","description","input","expected"},case.get("id","case"));inp=case["input"];expected=case["expected"]
     if kind=="resolution":
@@ -422,6 +692,21 @@ def validate_closed_engine_case(case:dict,kind:str)->None:
         if inp["promotedManifest"] is not None:exact_keys(inp["promotedManifest"],PROMOTED_FIELDS,case["id"]+" promotedManifest")
 
 
+def reject_duplicate_bodies(cases:dict[str,dict],fields:tuple[str,...],where:str)->None:
+    seen={}
+    for case_id,case in cases.items():
+        for field in fields:
+            if field not in case:fail(f"{where} {case_id}: missing behavioral body field expected={field!r} actual={sorted(case)}")
+        signature=dg({field:case[field] for field in fields})
+        if signature in seen:fail(f"{where}: duplicate behavioral dimensions expected unique actual IDs={seen[signature]!r},{case_id!r}")
+        seen[signature]=case_id
+
+
+def validate_promise_tables()->None:
+    for label,actual,expected in (("resolution",set(RESOLUTION_PROMISES),REQUIRED_RES),("migration",set(MIGRATION_PROMISES),REQUIRED_MIG),("freshness",set(FRESHNESS_PROMISES),REQUIRED_FRESH),("side-effect",set(SIDE_PROMISES),REQUIRED_SIDE)):
+        if actual!=expected:fail(f"{label} promise table ID mismatch expected={sorted(expected)} actual={sorted(actual)}")
+
+
 def validate_nested_migration_envelopes(case_id:str,inp:dict,world:SchemaWorld)->None:
     project=world.documents["ipcraft.project-design.v1"]["$defs"]
     if inp["caseKind"]=="discovery":
@@ -440,11 +725,17 @@ def validate_nested_migration_envelopes(case_id:str,inp:dict,world:SchemaWorld)-
 
 def verify_engine(doc:dict,world:SchemaWorld|None=None)->tuple[int,int,int]:
     world=world or SchemaWorld(CONTRACTS)
+    validate_promise_tables()
+    object_(doc,"Engine catalog")
     exact_keys(doc,{"schema","canonicalization","resolutionCases","migrationCases","freshnessCases"},"Engine catalog")
-    if doc["schema"]!="ipcraft.default-engine-behavior-vectors.v1" or doc["canonicalization"]!="RFC8785-after-Appendix-F-set-projection":fail("wrong Engine catalog identity/canonicalization")
+    string(doc["schema"],"Engine catalog.schema");string(doc["canonicalization"],"Engine catalog.canonicalization")
+    if doc["schema"]!="ipcraft.default-engine-behavior-vectors.v1" or doc["canonicalization"]!="RFC8785-after-Appendix-F-set-projection":fail(f"Engine catalog identity mismatch expected schema='ipcraft.default-engine-behavior-vectors.v1', canonicalization='RFC8785-after-Appendix-F-set-projection' actual schema={doc['schema']!r}, canonicalization={doc['canonicalization']!r}")
     rs=ids(doc["resolutionCases"],REQUIRED_RES,"id","resolutionCases");ms=ids(doc["migrationCases"],REQUIRED_MIG,"id","migrationCases");fs=ids(doc["freshnessCases"],REQUIRED_FRESH,"id","freshnessCases")
+    reject_duplicate_bodies(rs,("input","expected"),"resolutionCases");reject_duplicate_bodies(ms,("input","expected"),"migrationCases");reject_duplicate_bodies(fs,("input","expected"),"freshnessCases")
     for cid,c in rs.items():
+        validate_engine_case_types(c,"resolution",world)
         validate_closed_engine_case(c,"resolution")
+        validate_resolution_promise(c)
         world.validate("ipcraft.project-design.v1",world.documents["ipcraft.project-design.v1"]["$defs"]["defaultEngineDependencyLock"],c["input"]["projectLock"],cid+" lock")
         for b in c["input"]["installedBundles"]+c["input"]["alternativeBundles"]:
             valid=world.is_valid("ipcraft.engine-bundle.v1",world.documents["ipcraft.engine-bundle.v1"],b["manifest"],cid+" manifest")
@@ -453,8 +744,10 @@ def verify_engine(doc:dict,world:SchemaWorld|None=None)->tuple[int,int,int]:
         if got!=c["expected"]:fail(f"{cid}: resolution mismatch\n{got}\n{c['expected']}")
         if got["selectedBundleManifestDigest"] not in (None,c["input"]["projectLock"]["bundleManifestDigest"]):fail(f"{cid}: selected a different digest")
     for cid,c in ms.items():
+        validate_engine_case_types(c,"migration",world)
         validate_closed_engine_case(c,"migration")
         validate_nested_migration_envelopes(cid,c["input"],world)
+        validate_migration_promise(c)
         if c["input"]["caseKind"]=="discovery":
             validate_migration_discovery(c["input"],world)
             got=eval_migration(c["input"])
@@ -467,19 +760,25 @@ def verify_engine(doc:dict,world:SchemaWorld|None=None)->tuple[int,int,int]:
         if got!=c["expected"]:fail(f"{cid}: migration mismatch expected={cj(c['expected'])} actual={cj(got)}")
         if c["input"].get("action") in ("undo","redo") and got["engineExecutions"]:fail(f"{cid}: Undo/Redo invoked Engine")
     for cid,c in fs.items():
-        validate_closed_engine_case(c,"freshness");got=eval_fresh(c["input"])
+        validate_engine_case_types(c,"freshness",world)
+        validate_closed_engine_case(c,"freshness");validate_freshness_promise(c);got=eval_fresh(c["input"])
         if got!=c["expected"]:fail(f"{cid}: freshness mismatch {got} != {c['expected']}")
     return len(rs),len(ms),len(fs)
 
 
 def verify_side(doc:dict,world:SchemaWorld)->int:
+    validate_promise_tables()
+    object_(doc,"side-effect catalog")
     exact_keys(doc,{"schema","contractVersion","canonicalization","cases"},"side-effect catalog")
-    if doc["schema"]!="ipcraft.host-side-effect-behavior-vectors.v1" or doc["contractVersion"]!="ipcraft.noc-side-effects.v1" or doc["canonicalization"]!="RFC8785-after-Appendix-F-set-projection":fail("wrong side-effect catalog identity/canonicalization")
+    for field in ("schema","contractVersion","canonicalization"):string(doc[field],"side-effect catalog."+field)
+    if doc["schema"]!="ipcraft.host-side-effect-behavior-vectors.v1" or doc["contractVersion"]!="ipcraft.noc-side-effects.v1" or doc["canonicalization"]!="RFC8785-after-Appendix-F-set-projection":fail(f"side-effect catalog identity mismatch expected schema='ipcraft.host-side-effect-behavior-vectors.v1', contractVersion='ipcraft.noc-side-effects.v1', canonicalization='RFC8785-after-Appendix-F-set-projection' actual schema={doc['schema']!r}, contractVersion={doc['contractVersion']!r}, canonicalization={doc['canonicalization']!r}")
     cases=ids(doc["cases"],REQUIRED_SIDE,"caseId","side-effect cases")
+    reject_duplicate_bodies(cases,("document","expectedCanonicalDigest"),"side-effect cases")
     schema=world.documents["ipcraft.noc-side-effects.v1"]
     core=world.documents["ipcraft.core-canonical-models.v1"]["$defs"]
     for cid,c in cases.items():
-        exact_keys(c,{"caseId","description","document","expectedCanonicalDigest"},cid);world.validate("ipcraft.noc-side-effects.v1",schema,c["document"],cid)
+        exact_keys(c,{"caseId","description","document","expectedCanonicalDigest"},cid);string(c["caseId"],cid+" caseId");string(c["description"],cid+" description");object_(c["document"],cid+" document");digest(c["expectedCanonicalDigest"],cid+" expectedCanonicalDigest");world.validate("ipcraft.noc-side-effects.v1",schema,c["document"],cid+" document")
+        validate_side_promise(c)
         got=evaluate_side(c["document"]["input"])
         if got!=c["document"]["expected"]:fail(f"{cid}: causal side-effect mismatch expected={cj(c['document']['expected'])} actual={cj(got)}")
         actual_digest=dg(got)
@@ -565,6 +864,42 @@ def mutation_tests(engine:dict,side:dict)->int:
     for evidence in ("candidate","afterSnapshot","forwardTransaction","engineInvocations"):
         x=copy.deepcopy(discovery);x["input"][evidence]={} if evidence!="engineInvocations" else ["sha256:"+"b"*64];tests.append((f"discovery carries {evidence} evidence",lambda x=x:verify_engine(engine_case("migrationCases",x))))
     x=copy.deepcopy(discovery);x["expected"]["engineExecutions"]=["sha256:"+"b"*64];tests.append(("discovery expected target execution",lambda x=x:verify_engine(engine_case("migrationCases",x))))
+    # Every promised ID rejects another valid case body relabeled under that ID.
+    for section,case_map in (("resolutionCases",r),("migrationCases",m),("freshnessCases",f)):
+        ordered=list(case_map.values())
+        for index,original in enumerate(ordered):
+            donor=ordered[(index+1)%len(ordered)];x=copy.deepcopy(original);x["input"]=copy.deepcopy(donor["input"]);x["expected"]=copy.deepcopy(donor["expected"]);tests.append((f"{original['id']} relabeled {donor['id']} body",lambda x=x,section=section:verify_engine(engine_case(section,x))))
+    ordered=list(s.values())
+    for index,original in enumerate(ordered):
+        donor=ordered[(index+1)%len(ordered)];x=copy.deepcopy(original);x["document"]=copy.deepcopy(donor["document"]);x["expectedCanonicalDigest"]=donor["expectedCanonicalDigest"];tests.append((f"{original['caseId']} relabeled {donor['caseId']} body",lambda x=x:verify_side(side_case(x),SchemaWorld(CONTRACTS))))
+    # Recursive type/envelope mutations must fail without raw Python exceptions.
+    for field,value in (("installed","true"),("revoked",1),("contentVerified",None),("source","remote")):
+        x=copy.deepcopy(r["engine-lock-exact-available"]);x["input"]["installedBundles"][0][field]=value;tests.append((f"resolution bundle {field} invalid type/value",lambda x=x:verify_engine(engine_case("resolutionCases",x))))
+    x=copy.deepcopy(r["engine-lock-exact-available"]);x["input"]["installedBundles"][0]["source"]=7;tests.append(("resolution bundle source integer",lambda x=x:verify_engine(engine_case("resolutionCases",x))))
+    x=copy.deepcopy(r["engine-lock-exact-available"]);x["input"]["installedBundles"]=None;tests.append(("resolution installedBundles null",lambda x=x:verify_engine(engine_case("resolutionCases",x))))
+    x=copy.deepcopy(r["engine-lock-exact-available"]);x["input"]["installedBundles"][0]["manifest"]["version"]=1;tests.append(("resolution manifest version integer",lambda x=x:verify_engine(engine_case("resolutionCases",x))))
+    x=copy.deepcopy(r["engine-lock-exact-available"]);x["expected"]["outcome"]="other";tests.append(("resolution expected outcome enum",lambda x=x:verify_engine(engine_case("resolutionCases",x))))
+    x=copy.deepcopy(r["engine-lock-exact-available"]);x["expected"]["selectedBundleManifestDigest"]=7;tests.append(("resolution expected digest integer",lambda x=x:verify_engine(engine_case("resolutionCases",x))))
+    x=copy.deepcopy(m["engine-migration-atomic-commit"]);x["input"]["migrationEngineInvocations"]=None;tests.append(("migration invocation array null",lambda x=x:verify_engine(engine_case("migrationCases",x))))
+    x=copy.deepcopy(m["engine-migration-atomic-commit"]);x["input"]["forwardTransaction"]["engineInvocations"]=None;tests.append(("forward invocation array null",lambda x=x:verify_engine(engine_case("migrationCases",x))))
+    x=copy.deepcopy(m["engine-migration-atomic-commit"]);x["input"]["beforeSnapshot"]["dependencies"]=None;tests.append(("snapshot dependencies null",lambda x=x:verify_engine(engine_case("migrationCases",x))))
+    x=copy.deepcopy(m["engine-migration-atomic-commit"]);x["input"]["beforeSnapshot"]["engineInvocationCount"]=True;tests.append(("snapshot bool-as-int count",lambda x=x:verify_engine(engine_case("migrationCases",x))))
+    x=copy.deepcopy(m["engine-migration-atomic-commit"]);x["input"]["forwardTransaction"]["resultEngineInvocationCount"]=True;tests.append(("forward bool-as-int count",lambda x=x:verify_engine(engine_case("migrationCases",x))))
+    x=copy.deepcopy(m["engine-migration-atomic-commit"]);x["input"]["caseKind"]=False;tests.append(("migration caseKind boolean",lambda x=x:verify_engine(engine_case("migrationCases",x))))
+    x=copy.deepcopy(m["engine-migration-atomic-commit"]);x["expected"]["groupState"]="other";tests.append(("migration expected groupState enum",lambda x=x:verify_engine(engine_case("migrationCases",x))))
+    x=copy.deepcopy(f["output-freshness-saved-current-equal"]);x["input"]["draftOverlayCount"]=True;tests.append(("freshness bool-as-int draft count",lambda x=x:verify_engine(engine_case("freshnessCases",x))))
+    x=copy.deepcopy(f["output-freshness-pending-topology"]);x["input"]["pendingTopologyGroup"]=1;tests.append(("freshness pending flag integer",lambda x=x:verify_engine(engine_case("freshnessCases",x))))
+    x=copy.deepcopy(f["output-freshness-saved-current-equal"]);x["expected"]["state"]="other";tests.append(("freshness expected state enum",lambda x=x:verify_engine(engine_case("freshnessCases",x))))
+    x=copy.deepcopy(f["output-freshness-pending-topology"]);x["expected"]["staleReasons"]=[7];tests.append(("freshness reason integer",lambda x=x:verify_engine(engine_case("freshnessCases",x))))
+    x=copy.deepcopy(engine);x["canonicalization"]=7;tests.append(("Engine canonicalization integer",lambda x=x:verify_engine(x)))
+    x=copy.deepcopy(engine);x.pop("canonicalization");tests.append(("Engine catalog missing field",lambda x=x:verify_engine(x)))
+    x=copy.deepcopy(r["engine-lock-exact-available"]);x.pop("description");tests.append(("resolution case missing field",lambda x=x:verify_engine(engine_case("resolutionCases",x))))
+    x=copy.deepcopy(r["engine-lock-exact-available"]);x["description"]=None;tests.append(("resolution description null",lambda x=x:verify_engine(engine_case("resolutionCases",x))))
+    x=copy.deepcopy(side);x["canonicalization"]=False;tests.append(("side canonicalization boolean",lambda x=x:verify_side(x,SchemaWorld(CONTRACTS))))
+    x=copy.deepcopy(side);x["contractVersion"]=1;tests.append(("side contractVersion integer",lambda x=x:verify_side(x,SchemaWorld(CONTRACTS))))
+    x=copy.deepcopy(side);x.pop("contractVersion");tests.append(("side catalog missing field",lambda x=x:verify_side(x,SchemaWorld(CONTRACTS))))
+    x=copy.deepcopy(s["side-effects-created-router-default-memberships"]);x["description"]=None;tests.append(("side description null",lambda x=x:verify_side(side_case(x),SchemaWorld(CONTRACTS))))
+    x=copy.deepcopy(s["side-effects-created-router-default-memberships"]);x["expectedCanonicalDigest"]=1;tests.append(("side expected digest integer",lambda x=x:verify_side(side_case(x),SchemaWorld(CONTRACTS))))
     # Exact ID-set rejection for every behavior section/catalog.
     for section in ("resolutionCases","migrationCases","freshnessCases"):
         missing=copy.deepcopy(engine);missing[section]=missing[section][1:];tests.append((section+" missing ID",lambda x=missing:verify_engine(x)))
