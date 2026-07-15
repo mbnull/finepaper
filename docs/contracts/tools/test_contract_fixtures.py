@@ -686,7 +686,9 @@ class ContractFixtureTest(unittest.TestCase):
             subject.Classification("core-semantic", "structure-authority", "patch.authority_conflict"),
         )
         relation = json.loads((CONTRACTS / "fixtures/valid/patch-operation-updateRelation.json").read_text())
-        relation["operations"][0].update({"set": {}, "unset": ["domainRef"]})
+        relation["operations"][0].update({
+            "relationKind":"domain-membership", "id":"membership.0", "set":{}, "unset":["domainRef"],
+        })
         self.assertEqual(
             subject.classify_document(CONTRACTS, "ipcraft.patch.v1", relation),
             subject.Classification("core-semantic", "patched-subject-schema", "patch.schema_violation"),
@@ -795,11 +797,344 @@ class ContractFixtureTest(unittest.TestCase):
                 subject.Classification("core-semantic", "ownership", "patch.ownership_violation"),
             )
         replay = json.loads((CONTRACTS / "fixtures/valid/patch-source-recovery.json").read_text())
-        replay["operations"][0]["set"]["name"] = "Tampered replay"
-        self.assertEqual(
-            subject.classify_document(CONTRACTS, "ipcraft.patch.v1", replay),
-            subject.Classification("core-semantic", "source-authority", "patch.source_not_allowed"),
+        for name, mutate in {
+            "operation": lambda d: d["operations"][0]["set"].__setitem__("name", "Tampered replay"),
+            "transaction": lambda d: d.__setitem__("transactionId", "forged.transaction"),
+            "causality": lambda d: d["causality"].__setitem__("sessionRevision", d["causality"]["sessionRevision"] + 1),
+        }.items():
+            with self.subTest(replay_mutation=name):
+                forged = copy.deepcopy(replay)
+                mutate(forged)
+                self.assertEqual(
+                    subject.classify_document(CONTRACTS, "ipcraft.patch.v1", forged),
+                    subject.Classification("core-semantic", "source-authority", "patch.source_not_allowed"),
+                )
+
+    def test_topology_sources_bind_the_complete_frozen_applicability_tuple(self) -> None:
+        context = json.loads((CONTRACTS / "patch-validation-context-v1.json").read_text())
+        authority_contexts = {item["selectedAuthority"]["kind"]: item for item in context["authorityContexts"]}
+        self.assertTrue(all("expectedApplicability" in item for item in authority_contexts.values()))
+        source_files = {
+            "default-engine": "patch-source-default-engine.json",
+            "extension-provider": "patch-source-extension-provider.json",
+            "application-reconcile": "patch-source-application-reconcile.json",
+            "application-migration": "patch-source-application-migration.json",
+        }
+        scalar_members = (
+            "groupId", "requestGeneration", "topologyInputRevision", "topologyInputDigest",
+            "baseDerivedStateRevision", "baseDerivedStateDigest", "baseAuthoritativeDesignDigest",
+            "packageBundleDigest", "reconcileDependencySetDigest", "defaultEngineLockId",
+            "defaultEngineBundleDigest", "engineHostContractVersion", "hostSideEffectContractVersion",
         )
+        for source_kind, filename in source_files.items():
+            with self.subTest(source=source_kind, member="baseline"):
+                document = json.loads((CONTRACTS / "fixtures/valid" / filename).read_text())
+                expected_kind = "extension-provider" if source_kind == "extension-provider" else "default-engine"
+                self.assertEqual(document["applicability"], authority_contexts[expected_kind]["expectedApplicability"])
+            for member in scalar_members:
+                with self.subTest(source=source_kind, member=member):
+                    mutated = copy.deepcopy(document)
+                    value = mutated["applicability"][member]
+                    mutated["applicability"][member] = value + 1 if isinstance(value, int) else (
+                        "sha256:" + "f" * 64 if str(value).startswith("sha256:") else "wrong"
+                    )
+                    observed = subject.classify_document(CONTRACTS, "ipcraft.patch.v1", mutated)
+                    self.assertIsNotNone(observed.phase)
+                    if observed.phase == "core-semantic":
+                        self.assertEqual(observed, subject.Classification("core-semantic", "structure-authority", "patch.authority_conflict"))
+
+            for member in ("kind", "lockId", "identity", "version", "bundleDigest"):
+                with self.subTest(source=source_kind, authority_member=member):
+                    mutated = copy.deepcopy(document)
+                    value = mutated["applicability"]["structureAuthority"][member]
+                    mutated["applicability"]["structureAuthority"][member] = (
+                        "sha256:" + "f" * 64 if str(value).startswith("sha256:") else "wrong"
+                    )
+                    observed = subject.classify_document(CONTRACTS, "ipcraft.patch.v1", mutated)
+                    self.assertIsNotNone(observed.phase)
+                    if observed.phase == "core-semantic":
+                        self.assertEqual(observed, subject.Classification("core-semantic", "structure-authority", "patch.authority_conflict"))
+
+        provider_application = json.loads((CONTRACTS / "fixtures/valid/patch-source-application-reconcile-provider-authority.json").read_text())
+        self.assertEqual(provider_application["applicability"], authority_contexts["extension-provider"]["expectedApplicability"])
+        self.assertIsNone(subject.classify_document(CONTRACTS, "ipcraft.patch.v1", provider_application).phase)
+
+    def test_patch_typed_references_are_dependency_kind_checked(self) -> None:
+        context = json.loads((CONTRACTS / "patch-validation-context-v1.json").read_text())
+        dependency_kinds = {item["kind"] for item in context["dependencyLocks"]}
+        self.assertEqual(dependency_kinds, {
+            "noc-package", "interface-contract", "default-engine", "extension-provider",
+            "runtime", "drc-tool", "generator-tool",
+        })
+        interface = json.loads((CONTRACTS / "fixtures/valid/patch-source-user-command.json").read_text())
+        slot = json.loads((CONTRACTS / "fixtures/valid/patch-source-default-engine.json").read_text())
+        cases = {
+            "interface-missing-contract": (interface, lambda d: d["operations"][0]["value"]["contract"].__setitem__("lockId", "dep.missing")),
+            "interface-wrong-kind-contract": (interface, lambda d: d["operations"][0]["value"]["contract"].__setitem__("lockId", "dep.noc.simple")),
+            "slot-missing-contract": (slot, lambda d: d["operations"].__setitem__(0, {
+                "op":"createEntity", "entityKind":"access-slot", "localRef":"authority:slot.contract",
+                "value":{"routerRef":{"id":"router.0.0"}, "templateKey":"typed-ref", "identityCompatibilityVersion":1,
+                         "displayOrder":3, "label":"Typed", "allowedContracts":[{"contractLockId":"dep.missing", "roles":["initiator"], "capabilityConstraints":{}}], "properties":{}},
+            })),
+            "extension-missing-owner": (interface, lambda d: d["operations"][0]["value"]["extensions"].append({"ownerLockId":"dep.missing", "schema":"vendor.x.v1", "version":"1", "data":{}})),
+            "extension-wrong-kind-owner": (interface, lambda d: d["operations"][0]["value"]["extensions"].append({"ownerLockId":"dep.runtime.provider", "schema":"vendor.x.v1", "version":"1", "data":{}})),
+            "component-missing-package": (interface, lambda d: d["operations"].__setitem__(0, {
+                "op":"createEntity", "entityKind":"component", "localRef":"application:000030",
+                "value":{"kind":"noc", "name":"Other", "packageLockId":"dep.missing", "typeKey":"mesh-noc", "config":{}, "extensions":[]},
+            })),
+            "component-wrong-kind-package": (interface, lambda d: d["operations"].__setitem__(0, {
+                "op":"createEntity", "entityKind":"component", "localRef":"application:000031",
+                "value":{"kind":"noc", "name":"Other", "packageLockId":"dep.contract.axi5", "typeKey":"mesh-noc", "config":{}, "extensions":[]},
+            })),
+        }
+        for name, (base, mutate) in cases.items():
+            with self.subTest(name=name):
+                document = copy.deepcopy(base)
+                mutate(document)
+                self.assertEqual(
+                    subject.classify_document(CONTRACTS, "ipcraft.patch.v1", document),
+                    subject.Classification("core-semantic", "reference", "patch.unknown_reference"),
+                )
+        migration = json.loads((CONTRACTS / "fixtures/valid/patch-source-application-migration.json").read_text())
+        migration_cases = {
+            "remove-live-contract": lambda deps: deps.__setitem__(slice(None), [item for item in deps if item["kind"] != "interface-contract"]),
+            "provider-runtime-wrong-kind": lambda deps: next(item for item in deps if item["kind"] == "extension-provider").__setitem__("runtimeLockId", "dep.noc.simple"),
+            "tool-runtime-missing": lambda deps: next(item for item in deps if item["kind"] == "drc-tool").__setitem__("runtimeLockId", "dep.missing"),
+        }
+        for name, mutate in migration_cases.items():
+            with self.subTest(migration=name):
+                document = copy.deepcopy(migration)
+                mutate(document["operations"][0]["set"]["dependencies"])
+                self.assertEqual(
+                    subject.classify_document(CONTRACTS, "ipcraft.patch.v1", document),
+                    subject.Classification("core-semantic", "engine-migration-binding", "engine.migration_invalid"),
+                )
+
+    def test_package_type_key_is_immutable_and_cannot_launder_ownership(self) -> None:
+        bases = {
+            "user-entity-to-engine": ("patch-operation-updateEntity.json", "user-command", "package-entity", "package-entity.user", "vendor.engine-entity"),
+            "engine-entity-to-user": ("patch-source-default-engine.json", "default-engine", "package-entity", "package-entity.engine", "vendor.user-entity"),
+            "user-relation-to-engine": ("patch-operation-updateRelation.json", "user-command", "package-relation", "package-relation.user", "vendor.engine-relation"),
+            "engine-relation-to-user": ("patch-source-default-engine.json", "default-engine", "package-relation", "package-relation.engine", "vendor.user-relation"),
+        }
+        for name, (filename, source_kind, kind, subject_id, target_type) in bases.items():
+            with self.subTest(name=name):
+                document = json.loads((CONTRACTS / "fixtures/valid" / filename).read_text())
+                document["source"] = {
+                    "kind": source_kind,
+                    "identity": "ipcraft.default-noc-engine" if source_kind == "default-engine" else "ipcraft.host",
+                    "version": "1.0.0" if source_kind == "default-engine" else "1",
+                    **({"bundleDigest": "sha256:" + "a" * 64} if source_kind == "default-engine" else {}),
+                }
+                if source_kind == "default-engine":
+                    context = json.loads((CONTRACTS / "patch-validation-context-v1.json").read_text())
+                    document["applicability"] = copy.deepcopy(context["authorityContexts"][0]["expectedApplicability"])
+                else:
+                    document.pop("applicability", None)
+                relation = kind == "package-relation"
+                document["operations"] = [{
+                    "op": "updateRelation" if relation else "updateEntity",
+                    "relationKind" if relation else "entityKind": kind,
+                    "id": subject_id, "set": {"typeKey": target_type}, "unset": [],
+                }]
+                self.assertEqual(
+                    subject.classify_document(CONTRACTS, "ipcraft.patch.v1", document),
+                    subject.Classification("core-semantic", "ownership", "patch.ownership_violation"),
+                )
+        create_fixtures = (
+            "patch-package-ownership-user-entity.json", "patch-package-ownership-engine-entity.json",
+            "patch-package-ownership-user-relation.json", "patch-package-ownership-engine-relation.json",
+        )
+        for filename in create_fixtures:
+            with self.subTest(undeclared=filename):
+                document = json.loads((CONTRACTS / "fixtures/valid" / filename).read_text())
+                document["operations"][0]["value"]["typeKey"] = "vendor.undeclared"
+                self.assertEqual(
+                    subject.classify_document(CONTRACTS, "ipcraft.patch.v1", document),
+                    subject.Classification("core-semantic", "reference", "patch.unknown_reference"),
+                )
+
+    def test_reconcile_derivation_and_relation_declarations_are_executable(self) -> None:
+        context = json.loads((CONTRACTS / "patch-validation-context-v1.json").read_text())
+        self.assertTrue(context["packageRelationTypes"]["vendor.user-relation"]["unresolvedAllowed"])
+        self.assertFalse(context["packageRelationTypes"]["vendor.user-resolved-only"]["unresolvedAllowed"])
+        for filename in (
+            "patch-source-application-reconcile.json",
+            "patch-application-router-create-default-membership.json",
+            "patch-application-router-delete-membership.json",
+            "patch-application-attachment-unresolved.json",
+            "patch-application-package-relation-unresolved.json",
+        ):
+            with self.subTest(filename=filename):
+                document = json.loads((CONTRACTS / "fixtures/valid" / filename).read_text())
+                derivation = document["operations"][0]["set"]["derivation"]
+                self.assertGreater(derivation["derivedStateRevision"], document["applicability"]["baseDerivedStateRevision"])
+                self.assertNotEqual(derivation["derivedStateDigest"], document["applicability"]["baseDerivedStateDigest"])
+        forbidden = json.loads((CONTRACTS / "fixtures/valid/patch-operation-updateRelation.json").read_text())
+        forbidden["operations"] = [{
+            "op":"updateRelation", "relationKind":"package-relation", "id":"package-relation.resolved-only",
+            "set":{"sources":[{"state":"unresolved","intendedSubject":{"kind":"router","ref":{"id":"router.0.0"}},"reasonCode":"relation.target_removed"}]}, "unset":[],
+        }]
+        self.assertEqual(
+            subject.classify_document(CONTRACTS, "ipcraft.patch.v1", forbidden),
+            subject.Classification("core-semantic", "patch-invariant", "patch.invariant_violation"),
+        )
+
+    def test_engine_migration_patch_is_exact_not_arbitrary_dependency_rewrite(self) -> None:
+        migration = json.loads((CONTRACTS / "fixtures/valid/patch-source-application-migration.json").read_text())
+        dependencies = migration["operations"][0]["set"]["dependencies"]
+        current = next(item for item in json.loads((CONTRACTS / "patch-validation-context-v1.json").read_text())["dependencyLocks"] if item["kind"] == "default-engine")
+        target = next(item for item in dependencies if item["kind"] == "default-engine")
+        self.assertNotEqual(target["bundleManifestDigest"], current["bundleManifestDigest"])
+        self.assertIsNone(subject.classify_document(CONTRACTS, "ipcraft.patch.v1", migration).phase)
+        mutated = copy.deepcopy(migration)
+        next(item for item in mutated["operations"][0]["set"]["dependencies"] if item["kind"] == "generator-tool")["bundleManifestDigest"] = "sha256:" + "f" * 64
+        self.assertEqual(
+            subject.classify_document(CONTRACTS, "ipcraft.patch.v1", mutated),
+            subject.Classification("core-semantic", "engine-migration-binding", "engine.migration_invalid"),
+        )
+
+    def test_application_domain_side_effects_are_exact_and_final_domain_invariants_hold(self) -> None:
+        for filename in (
+            "patch-application-router-create-default-membership.json",
+            "patch-application-router-delete-membership.json",
+            "patch-application-delete-emptied-nondefault-domain.json",
+        ):
+            with self.subTest(valid=filename):
+                document = json.loads((CONTRACTS / "fixtures/valid" / filename).read_text())
+                self.assertIsNone(subject.classify_document(CONTRACTS, "ipcraft.patch.v1", document).phase)
+        base = json.loads((CONTRACTS / "fixtures/valid/patch-source-application-reconcile.json").read_text())
+        attacks = {
+            "rename-domain": {"op":"updateEntity", "entityKind":"domain", "id":"domain.power.default", "set":{"name":"Changed"}, "unset":[]},
+            "delete-default": {"op":"deleteEntity", "entityKind":"domain", "id":"domain.power.default"},
+            "create-second-default": {"op":"createEntity", "entityKind":"domain", "localRef":"application:000099", "value":{"typeKey":"power", "name":"Second", "isDefault":True, "config":{}}},
+            "arbitrary-membership-move": {"op":"updateRelation", "relationKind":"domain-membership", "id":"membership.power.0.0", "set":{"routerRef":{"id":"router.0.1"}}, "unset":[]},
+        }
+        for name, operation in attacks.items():
+            with self.subTest(name=name):
+                document = copy.deepcopy(base)
+                document["operations"].append(operation)
+                self.assertEqual(
+                    subject.classify_document(CONTRACTS, "ipcraft.patch.v1", document),
+                    subject.Classification("core-semantic", "ownership", "patch.ownership_violation"),
+                )
+
+    def test_formal_history_replay_is_separate_exact_and_unforgeable(self) -> None:
+        context = json.loads((CONTRACTS / "patch-validation-context-v1.json").read_text())
+        records = context["formalHistoryRecords"]
+        self.assertEqual({item["kind"] for item in records}, {"topology", "default-engine-migration"})
+        for record in records:
+            increment = record["revisions"]["replayIncrement"]
+            undo_current = copy.deepcopy(record["revisions"]["committed"])
+            undo_next = {member:undo_current[member] + increment[member] for member in increment}
+            redo_current = copy.deepcopy(undo_next)
+            redo_next = {member:redo_current[member] + increment[member] for member in increment}
+            for direction in ("undo", "redo"):
+                current_revisions = undo_current if direction == "undo" else redo_current
+                next_revisions = undo_next if direction == "undo" else redo_next
+                request = {
+                    "historyTransactionId": record["historyTransactionId"],
+                    "recordDigest": record["recordDigest"],
+                    "direction": direction,
+                    "transactionBodyDigest": record["inverseTransactionDigest" if direction == "undo" else "forwardTransactionDigest"],
+                    "currentAuthoritativeDesignDigest": record["afterAuthoritativeDesignDigest" if direction == "undo" else "beforeAuthoritativeDesignDigest"],
+                    "currentTopologyInputDigest": record["afterTopologyInputDigest" if direction == "undo" else "beforeTopologyInputDigest"],
+                    "currentDerivedStateDigest": record["afterDerivedStateDigest" if direction == "undo" else "beforeDerivedStateDigest"],
+                    "currentRevisions": copy.deepcopy(current_revisions),
+                    "nextRevisions": copy.deepcopy(next_revisions),
+                }
+                with self.subTest(kind=record["kind"], direction=direction):
+                    self.assertIsNone(subject.validate_history_replay_request(CONTRACTS, request))
+                    plan = subject.history_replay_plan(CONTRACTS, request)
+                    self.assertEqual(plan["transactionBody"], record["inverseTransactionBody" if direction == "undo" else "forwardTransactionBody"])
+                    self.assertEqual(plan["nextRevisions"], next_revisions)
+                mutations = {
+                    "id": lambda d: d.__setitem__("historyTransactionId", "missing.history"),
+                    "record": lambda d: d.__setitem__("recordDigest", "sha256:" + "f" * 64),
+                    "body": lambda d: d.__setitem__("transactionBodyDigest", "sha256:" + "f" * 64),
+                    "direction": lambda d: d.__setitem__("direction", "redo" if direction == "undo" else "undo"),
+                    "before-state": lambda d: d.__setitem__("currentDerivedStateDigest", "sha256:" + "e" * 64),
+                    "revisions": lambda d: d["nextRevisions"].__setitem__("derivedStateRevision", d["nextRevisions"]["derivedStateRevision"] + 1),
+                    "current-revisions": lambda d: d["currentRevisions"].__setitem__("sessionRevision", d["currentRevisions"]["sessionRevision"] + 1),
+                }
+                for name, mutate in mutations.items():
+                    with self.subTest(kind=record["kind"], direction=direction, mutation=name):
+                        forged = copy.deepcopy(request)
+                        mutate(forged)
+                        self.assertEqual(subject.validate_history_replay_request(CONTRACTS, forged), ("history-replay", "patch.source_not_allowed"))
+            repeated_undo_current = copy.deepcopy(redo_next)
+            repeated_undo_next = {member:repeated_undo_current[member] + increment[member] for member in increment}
+            repeated_undo = {
+                "historyTransactionId":record["historyTransactionId"], "recordDigest":record["recordDigest"], "direction":"undo",
+                "transactionBodyDigest":record["inverseTransactionDigest"],
+                "currentAuthoritativeDesignDigest":record["afterAuthoritativeDesignDigest"],
+                "currentTopologyInputDigest":record["afterTopologyInputDigest"],
+                "currentDerivedStateDigest":record["afterDerivedStateDigest"],
+                "currentRevisions":repeated_undo_current, "nextRevisions":repeated_undo_next,
+            }
+            self.assertIsNone(subject.validate_history_replay_request(CONTRACTS, repeated_undo))
+        ordinary = json.loads((CONTRACTS / "fixtures/valid/patch-source-undo-redo.json").read_text())
+        ordinary["operations"] = [{
+            "op":"updateEntity", "entityKind":"topology", "id":"topology.mesh",
+            "set":{"derivation":copy.deepcopy(context["entities"][-1]["value"]["derivation"])}, "unset":[],
+        }]
+        self.assertNotEqual(subject.classify_document(CONTRACTS, "ipcraft.patch.v1", ordinary).phase, None)
+
+    def test_formal_history_record_tombstones_ids_and_symmetry_fail_closed(self) -> None:
+        mutations = {
+            "tombstone-value": lambda r: r["tombstones"][0]["value"].__setitem__("corrupt", True),
+            "duplicate-host-id": lambda r: r["localRefToHostId"].__setitem__("authority:router.0.1", r["localRefToHostId"]["authority:slot.free"]),
+            "inverse-body": lambda r: r["inverseTransactionBody"]["authorityOperations"][0]["value"].__setitem__("corrupt", True),
+            "mapping-correspondence": lambda r: r["inverseTransactionBody"]["authorityOperations"][0].__setitem__("localRef", "authority:wrong"),
+            "affected-snapshot": lambda r: r["affectedBeforeSubjects"][0]["value"].__setitem__("corrupt", True),
+            "forward-subject": lambda r: r["forwardTransactionBody"]["authorityOperations"][0].__setitem__("id", "slot.missing"),
+            "topology-intent": lambda r: r["forwardTransactionBody"]["topologyIntent"].__setitem__("rows", 99),
+        }
+        for name, mutate in mutations.items():
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary) / "contracts"
+                subject.copy_contract_tree(CONTRACTS, root)
+                context_path = root / "patch-validation-context-v1.json"
+                context = json.loads(context_path.read_text())
+                record = next(item for item in context["formalHistoryRecords"] if item["kind"] == "topology")
+                mutate(record)
+                record["forwardTransactionDigest"] = subject._digest_json(record["forwardTransactionBody"])
+                record["inverseTransactionDigest"] = subject._digest_json(record["inverseTransactionBody"])
+                record["recordDigest"] = subject._digest_json({key:value for key,value in record.items() if key != "recordDigest"})
+                context["contextDigest"] = subject._patch_context_digest(context)
+                context_path.write_text(json.dumps(context))
+                previous = subject.FROZEN_PATCH_CONTEXT_DIGEST
+                subject.FROZEN_PATCH_CONTEXT_DIGEST = context["contextDigest"]
+                try:
+                    with self.assertRaises(subject.FixtureVerificationError):
+                        subject._validate_patch_context(root, subject.Draft202012Subset(root))
+                finally:
+                    subject.FROZEN_PATCH_CONTEXT_DIGEST = previous
+        migration_mutations = {
+            "authority-operation": lambda r: r["forwardTransactionBody"]["authorityOperations"].append({"op":"deleteEntity","entityKind":"router","id":"router.0.0"}),
+            "application-operation": lambda r: r["forwardTransactionBody"]["applicationOperations"].append({"op":"updateEntity","entityKind":"project","id":"project.mesh","set":{"name":"Wrong"},"unset":[]}),
+            "affected-id": lambda r: r["affectedAfterSubjects"][0].__setitem__("id", "project.wrong"),
+        }
+        for name, mutate in migration_mutations.items():
+            with self.subTest(migration=name), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary) / "contracts"
+                subject.copy_contract_tree(CONTRACTS, root)
+                context_path = root / "patch-validation-context-v1.json"
+                context = json.loads(context_path.read_text())
+                record = next(item for item in context["formalHistoryRecords"] if item["kind"] == "default-engine-migration")
+                mutate(record)
+                record["forwardTransactionDigest"] = subject._digest_json(record["forwardTransactionBody"])
+                record["inverseTransactionDigest"] = subject._digest_json(record["inverseTransactionBody"])
+                record["recordDigest"] = subject._digest_json({key:value for key,value in record.items() if key != "recordDigest"})
+                context["contextDigest"] = subject._patch_context_digest(context)
+                context_path.write_text(json.dumps(context))
+                previous = subject.FROZEN_PATCH_CONTEXT_DIGEST
+                subject.FROZEN_PATCH_CONTEXT_DIGEST = context["contextDigest"]
+                try:
+                    with self.assertRaises(subject.FixtureVerificationError):
+                        subject._validate_patch_context(root, subject.Draft202012Subset(root))
+                finally:
+                    subject.FROZEN_PATCH_CONTEXT_DIGEST = previous
 
     def test_bundle_manifest_digest_is_set_order_independent(self) -> None:
         document = json.loads((CONTRACTS / "fixtures/valid/bundle-manifest-maximum.json").read_text())

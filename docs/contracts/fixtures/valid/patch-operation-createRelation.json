@@ -14,15 +14,16 @@
   "operations": [
     {
       "op": "createRelation",
-      "relationKind": "domain-membership",
+      "relationKind": "package-relation",
       "localRef": "application:000001",
       "value": {
-        "domainRef": {
-          "id": "domain.default"
+        "typeKey": "vendor.user-relation",
+        "sources": [],
+        "targets": [],
+        "data": {
+          "created": true
         },
-        "routerRef": {
-          "id": "router.0.0"
-        }
+        "extensions": []
       }
     }
   ]

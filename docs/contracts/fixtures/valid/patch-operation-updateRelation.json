@@ -14,11 +14,11 @@
   "operations": [
     {
       "op": "updateRelation",
-      "relationKind": "domain-membership",
-      "id": "membership.0",
+      "relationKind": "package-relation",
+      "id": "package-relation.user",
       "set": {
-        "routerRef": {
-          "id": "router.0.1"
+        "data": {
+          "label": "updated"
         }
       },
       "unset": []

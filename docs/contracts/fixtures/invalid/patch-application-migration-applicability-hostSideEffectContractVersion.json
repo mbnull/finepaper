@@ -1,0 +1,150 @@
+{
+  "schema": "ipcraft.patch.v1",
+  "transactionId": "txn.migration.default-engine",
+  "patchId": "value",
+  "source": {
+    "kind": "application-migration",
+    "identity": "ipcraft.host",
+    "version": "1"
+  },
+  "causality": {
+    "sessionRevision": 0
+  },
+  "preconditions": [],
+  "operations": [
+    {
+      "op": "updateEntity",
+      "entityKind": "project",
+      "id": "project.mesh",
+      "set": {
+        "dependencies": [
+          {
+            "lockId": "dep.contract.axi5",
+            "kind": "interface-contract",
+            "id": "amba.axi5",
+            "version": "1.0.0",
+            "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          },
+          {
+            "lockId": "dep.engine.target",
+            "kind": "default-engine",
+            "id": "ipcraft.default-noc-engine",
+            "version": "2.0.0",
+            "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "engineHostContractVersion": "ipcraft.engine-host.v1",
+            "engineCompatibilityVersion": "2",
+            "hostSideEffectContractVersion": "ipcraft.noc-side-effects.v1",
+            "supportedPlatformAbis": [
+              "linux-x86_64-gnu-v1"
+            ]
+          },
+          {
+            "lockId": "dep.noc.simple",
+            "kind": "noc-package",
+            "id": "simple-noc",
+            "version": "1.0.0",
+            "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          },
+          {
+            "lockId": "dep.provider",
+            "kind": "extension-provider",
+            "id": "vendor.provider",
+            "version": "1",
+            "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "protocolVersion": "ipcraft.provider-protocol.v1",
+            "runtimeLockId": "dep.runtime.provider"
+          },
+          {
+            "lockId": "dep.runtime.provider",
+            "kind": "runtime",
+            "id": "provider-runtime",
+            "version": "1",
+            "bundleManifestDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "runtimeClosure": {
+              "closureKind": "package-contained",
+              "runtimeId": "provider-runtime",
+              "runtimeVersion": "1",
+              "runtimeDistributionBundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "entrypoint": "bin/provider-runtime",
+              "platformAbi": "linux-x86_64-gnu-v1",
+              "invocationProfile": "ipcraft.native-isolated.v1",
+              "moduleSearchPolicy": "runtime-and-tool-bundles-only",
+              "environmentProfile": "ipcraft.empty-utf8-utc.v1",
+              "networkPolicy": "prohibited"
+            }
+          },
+          {
+            "lockId": "dep.tool.drc",
+            "kind": "drc-tool",
+            "id": "vendor.drc",
+            "version": "1",
+            "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "toolProtocolVersion": "ipcraft.tool-input.v1",
+            "runtimeLockId": "dep.runtime.provider"
+          },
+          {
+            "lockId": "dep.tool.generator",
+            "kind": "generator-tool",
+            "id": "vendor.generator",
+            "version": "1",
+            "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "toolProtocolVersion": "ipcraft.tool-input.v1",
+            "runtimeLockId": "dep.runtime.provider"
+          }
+        ]
+      },
+      "unset": []
+    },
+    {
+      "op": "updateEntity",
+      "entityKind": "topology",
+      "id": "topology.mesh",
+      "set": {
+        "derivation": {
+          "topologyInputRevision": 1,
+          "topologyInputDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "derivedStateRevision": 1,
+          "derivedStateDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "packageBundleDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "reconcileDependencySetDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "defaultEngineLockId": "dep.engine.target",
+          "defaultEngineBundleDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "engineHostContractVersion": "ipcraft.engine-host.v1",
+          "hostSideEffectContractVersion": "ipcraft.noc-side-effects.v1",
+          "structureAuthority": {
+            "kind": "default-engine",
+            "lockId": "dep.engine.target",
+            "identity": "ipcraft.default-noc-engine",
+            "version": "2.0.0",
+            "bundleDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          },
+          "engineCompatibilityVersion": "2"
+        }
+      },
+      "unset": []
+    }
+  ],
+  "applicability": {
+    "schema": "ipcraft.reconcile-applicability.v1",
+    "groupId": "group.topology.1",
+    "requestGeneration": 1,
+    "topologyInputRevision": 1,
+    "topologyInputDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "baseDerivedStateRevision": 0,
+    "baseDerivedStateDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "baseAuthoritativeDesignDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "structureAuthority": {
+      "kind": "default-engine",
+      "lockId": "dep.engine.default",
+      "identity": "ipcraft.default-noc-engine",
+      "version": "1.0.0",
+      "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "packageBundleDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "reconcileDependencySetDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "defaultEngineLockId": "dep.engine.default",
+    "defaultEngineBundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "engineHostContractVersion": "ipcraft.engine-host.v1",
+    "hostSideEffectContractVersion": "wrong"
+  }
+}

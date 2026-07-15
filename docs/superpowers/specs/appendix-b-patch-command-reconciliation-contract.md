@@ -26,6 +26,8 @@
 
 An Extension Provider cannot mutate user-owned Component config, Interface, Attachment, Domain, or user-owned Package Entity/Relation. It can mutate core Derived State only when the Package selects `structureAuthority: extension-provider`. Application-generated Domain, Attachment, and permitted unresolved Package-Relation side effects are appended after Authority Patch validation and committed with topology intent in the same transaction.
 
+Package Entity and Package Relation `typeKey` is immutable after creation in V1. Creation and every final-state validation resolve the key through the selected Package declaration; an unknown key is a reference failure, and an update cannot cross or evade the declared user/engine owner. Package Relation validation also applies the frozen declaration's `unresolvedAllowed`, source/target kind, and cardinality constraints after the complete atomic transaction. Application may perform a resolved-to-unresolved conversion only for a declared user-owned relation type whose `unresolvedAllowed` is true and only when the same registered candidate Authority operations remove that exact target.
+
 ## B2. Patch Envelope
 
 ```json
@@ -174,7 +176,7 @@ domain-membership
 package-relation
 ```
 
-`project` is a singleton Patch subject with ID equal to ProjectDesign root `id`. Ordinary user Patch permits only `updateEntity(project)` of `name`; create/delete Project and mutation of schema/profile/dependencies are forbidden. `topology` is update-only with ID equal to the TopologyDocument ID and a closed set containing only complete `derivation` replacement; V1 has no create/delete topology operation. The schemas structurally enforce that only `application-migration` may replace exact `dependencies`, and only `application-reconcile` or `application-migration` may replace topology `derivation`. Authority, user, recovery, and fresh undo-redo Patch envelopes reject those Application-owned mutations. A confirmed Engine Migration candidate contains exactly one dependencies-only Project update and one derivation-only Topology update, both with empty `unset`, plus the migration confirmation impact in the same atomic transaction.
+`project` is a singleton Patch subject with ID equal to ProjectDesign root `id`. Ordinary user Patch permits only `updateEntity(project)` of `name`; create/delete Project and mutation of schema/profile/dependencies are forbidden. `topology` is update-only with ID equal to the TopologyDocument ID and a closed set containing only complete `derivation` replacement; V1 has no create/delete topology operation. The schemas structurally enforce that only `application-migration` may replace exact `dependencies`, and only `application-reconcile` or `application-migration` may replace topology `derivation`. Authority, user, recovery, and ordinary `undo-redo` Patch envelopes reject those Application-owned mutations. An ordinary `undo-redo` Patch represents only the inverse or forward mutation of a non-topology formal command. Formal-history Undo/Redo of a materialized topology or Engine-migration transaction is instead a separate trusted Host replay of the exact stored transaction record; it is not a newly authored Patch envelope and never invokes an Engine or Provider. A confirmed Engine Migration candidate contains exactly one dependencies-only Project update and one derivation-only Topology update, both with empty `unset`, plus the migration confirmation impact in the same atomic transaction.
 
 ## B5. Operation Ordering and Atomicity
 
@@ -222,16 +224,20 @@ Undo history is Session-local and not part of `.nocproj`.
 A user command record contains:
 
 ```text
+immutable history-entry ID and complete-record digest
 command type and parameters
-forward internal Patch
-inverse internal Patch
+forward and inverse transaction bodies with source attribution
 full tombstones for deleted entities/relations
 causal Authority reconciliation Patch when topology-driving
 Application Domain/Attachment/Package-Relation side-effect Patch
-revision/digest effects
+complete localRef → Host-ID allocation map
+before/after authoritative-design, topology-input, and Derived-State digests
+committed revision values and the exact monotonic revision effects for replay
 ```
 
-Undo/Redo is a new monotonic Session event: counters never decrement. Every formal Undo/Redo increments `sessionRevision`. If it restores/reapplies a materialized topology transaction, it also allocates a new `topologyInputRevision`, recomputes `topologyInputDigest`, increments `derivedStateRevision`, and recomputes `derivedStateDigest`; it restores content/Host IDs from tombstones without ordinary reconciliation. Undo/Redo of a non-topology command changes only `sessionRevision` and affected authoritative content. Clone/Migrate starts a new Session with empty formal and draft history.
+Every replay request is bound to the immutable history-entry ID, complete-record digest, direction (`undo` or `redo`), selected stored transaction body, full tombstones, complete localRef-to-Host-ID map, and expected current/result content-state digests. Undo is applicable whenever the current authoritative/topology/Derived content equals the record's after-state; Redo is applicable whenever it equals the before-state, regardless of how far the live monotonic counters have advanced. The request supplies the live current revision tuple, and each affected next revision MUST equal that current value plus the V1 recorded increment of one. This makes repeated Undo/Redo cycles and intervening Session events that leave the required content-state digests unchanged valid without permitting a counter to decrement or reuse an absolute historical revision. Any mismatch rejects replay without mutation. These values are supplied through an internal trusted Host history capability, never accepted as authority merely because an external Patch claims source `undo-redo`.
+
+Undo/Redo is a new monotonic Session event: counters never decrement. Every formal Undo/Redo increments `sessionRevision`. Formal-history Undo/Redo of a materialized topology or Engine-migration transaction replays the exact stored inverse/forward record, restores the recorded content and Host IDs, allocates a new `topologyInputRevision`, recomputes `topologyInputDigest`, increments `derivedStateRevision`, and recomputes `derivedStateDigest`; it performs no ordinary reconciliation and never loads or executes the original Engine or Provider. Undo/Redo of a non-topology command uses an ordinary internally authored `undo-redo` Patch, changes only `sessionRevision` and affected authoritative content, and remains prohibited from replacing Project `dependencies` or Topology `derivation`. Clone/Migrate starts a new Session with empty formal and draft history.
 
 Draft Overlay has a separate local undo/redo stack. Undo routing is deterministic: active widget gesture, then Draft Overlay, then edits inside the open Pending Topology Group, then formal history. Undoing the last topology edit discards the Group; changing an open Group increments `requestGeneration` and supersedes its active request.
 

@@ -1,0 +1,29 @@
+{
+  "schema": "ipcraft.patch.v1",
+  "transactionId": "value",
+  "patchId": "value",
+  "source": {
+    "kind": "user-command",
+    "identity": "ipcraft.host",
+    "version": "1"
+  },
+  "causality": {
+    "sessionRevision": 0
+  },
+  "preconditions": [],
+  "operations": [
+    {
+      "op": "createEntity",
+      "entityKind": "component",
+      "localRef": "application:000030",
+      "value": {
+        "kind": "noc",
+        "name": "Other",
+        "packageLockId": "dep.contract.axi5",
+        "typeKey": "mesh-noc",
+        "config": {},
+        "extensions": []
+      }
+    }
+  ]
+}

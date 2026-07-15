@@ -254,6 +254,321 @@
       "behaviorEvidence": null
     },
     {
+      "path": "fixtures/invalid/patch-application-migration-applicability-authority-bundleDigest.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-application-migration-applicability-authority-lockId.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-application-migration-applicability-authority-version.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-application-migration-applicability-baseAuthoritativeDesignDigest.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-application-migration-applicability-baseDerivedStateDigest.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-application-migration-applicability-baseDerivedStateRevision.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-application-migration-applicability-defaultEngineBundleDigest.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-application-migration-applicability-defaultEngineLockId.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-application-migration-applicability-engineHostContractVersion.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-application-migration-applicability-groupId.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-application-migration-applicability-hostSideEffectContractVersion.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-application-migration-applicability-packageBundleDigest.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-application-migration-applicability-reconcileDependencySetDigest.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-application-migration-applicability-requestGeneration.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-application-migration-applicability-topologyInputDigest.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-application-migration-applicability-topologyInputRevision.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-application-reconcile-applicability-authority-bundleDigest.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-application-reconcile-applicability-authority-lockId.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-application-reconcile-applicability-authority-version.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-application-reconcile-applicability-baseAuthoritativeDesignDigest.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-application-reconcile-applicability-baseDerivedStateDigest.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-application-reconcile-applicability-baseDerivedStateRevision.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-application-reconcile-applicability-defaultEngineBundleDigest.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-application-reconcile-applicability-defaultEngineLockId.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-application-reconcile-applicability-engineHostContractVersion.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-application-reconcile-applicability-groupId.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-application-reconcile-applicability-hostSideEffectContractVersion.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-application-reconcile-applicability-packageBundleDigest.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-application-reconcile-applicability-reconcileDependencySetDigest.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-application-reconcile-applicability-requestGeneration.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-application-reconcile-applicability-topologyInputDigest.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-application-reconcile-applicability-topologyInputRevision.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-application-reconcile-provider-applicability-defaultEngineBundleDigest.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-application-reconcile-provider-applicability-hostSideEffectContractVersion.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-application-reconcile-provider-applicability-topologyInputDigest.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
       "path": "fixtures/invalid/patch-attachment-required-unset.json",
       "schemaId": "ipcraft.patch.v1",
       "validationPhase": "core-semantic",
@@ -326,6 +641,168 @@
       "behaviorEvidence": null
     },
     {
+      "path": "fixtures/invalid/patch-component-package-lock-missing.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "reference",
+      "expected": "reject",
+      "errorCode": "patch.unknown_reference",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-component-package-lock-wrong-kind.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "reference",
+      "expected": "reject",
+      "errorCode": "patch.unknown_reference",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-default-engine-applicability-authority-bundleDigest.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-default-engine-applicability-authority-lockId.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-default-engine-applicability-authority-version.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-default-engine-applicability-baseAuthoritativeDesignDigest.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-default-engine-applicability-baseDerivedStateDigest.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-default-engine-applicability-baseDerivedStateRevision.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-default-engine-applicability-defaultEngineBundleDigest.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-default-engine-applicability-defaultEngineLockId.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-default-engine-applicability-engineHostContractVersion.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-default-engine-applicability-groupId.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-default-engine-applicability-hostSideEffectContractVersion.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-default-engine-applicability-packageBundleDigest.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-default-engine-applicability-reconcileDependencySetDigest.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-default-engine-applicability-requestGeneration.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-default-engine-applicability-topologyInputDigest.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-default-engine-applicability-topologyInputRevision.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
       "path": "fixtures/invalid/patch-domain-membership-required-unset.json",
       "schemaId": "ipcraft.patch.v1",
       "validationPhase": "core-semantic",
@@ -350,6 +827,186 @@
       "failureBoundary": "local-reference",
       "expected": "reject",
       "errorCode": "patch.local_ref_invalid",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-extension-owner-missing.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "reference",
+      "expected": "reject",
+      "errorCode": "patch.unknown_reference",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-extension-owner-wrong-kind.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "reference",
+      "expected": "reject",
+      "errorCode": "patch.unknown_reference",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-extension-provider-applicability-authority-bundleDigest.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-extension-provider-applicability-authority-lockId.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-extension-provider-applicability-authority-version.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-extension-provider-applicability-baseAuthoritativeDesignDigest.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-extension-provider-applicability-baseDerivedStateDigest.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-extension-provider-applicability-baseDerivedStateRevision.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-extension-provider-applicability-defaultEngineBundleDigest.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-extension-provider-applicability-defaultEngineLockId.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-extension-provider-applicability-engineHostContractVersion.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-extension-provider-applicability-groupId.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-extension-provider-applicability-hostSideEffectContractVersion.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-extension-provider-applicability-packageBundleDigest.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-extension-provider-applicability-reconcileDependencySetDigest.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-extension-provider-applicability-requestGeneration.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-extension-provider-applicability-topologyInputDigest.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-extension-provider-applicability-topologyInputRevision.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "structure-authority",
+      "expected": "reject",
+      "errorCode": "patch.authority_conflict",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-interface-contract-lock-missing.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "reference",
+      "expected": "reject",
+      "errorCode": "patch.unknown_reference",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-interface-contract-lock-wrong-kind.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "reference",
+      "expected": "reject",
+      "errorCode": "patch.unknown_reference",
       "behaviorEvidence": null
     },
     {
@@ -392,9 +1049,36 @@
       "path": "fixtures/invalid/patch-migration-missing-dependencies.json",
       "schemaId": "ipcraft.patch.v1",
       "validationPhase": "core-semantic",
-      "failureBoundary": "patch-invariant",
+      "failureBoundary": "engine-migration-binding",
       "expected": "reject",
-      "errorCode": "patch.invariant_violation",
+      "errorCode": "engine.migration_invalid",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-migration-provider-runtime-wrong-kind.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "engine-migration-binding",
+      "expected": "reject",
+      "errorCode": "engine.migration_invalid",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-migration-removes-live-contract.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "engine-migration-binding",
+      "expected": "reject",
+      "errorCode": "engine.migration_invalid",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-migration-tool-runtime-missing.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "engine-migration-binding",
+      "expected": "reject",
+      "errorCode": "engine.migration_invalid",
       "behaviorEvidence": null
     },
     {
@@ -413,6 +1097,51 @@
       "failureBoundary": "patched-subject-schema",
       "expected": "reject",
       "errorCode": "patch.schema_violation",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-package-relation-unresolved-forbidden.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "patch-invariant",
+      "expected": "reject",
+      "errorCode": "patch.invariant_violation",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-package-undeclared-type-engine-entity.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "reference",
+      "expected": "reject",
+      "errorCode": "patch.unknown_reference",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-package-undeclared-type-engine-relation.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "reference",
+      "expected": "reject",
+      "errorCode": "patch.unknown_reference",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-package-undeclared-type-user-entity.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "reference",
+      "expected": "reject",
+      "errorCode": "patch.unknown_reference",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-package-undeclared-type-user-relation.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "reference",
+      "expected": "reject",
+      "errorCode": "patch.unknown_reference",
       "behaviorEvidence": null
     },
     {
@@ -524,12 +1253,48 @@
       "behaviorEvidence": null
     },
     {
+      "path": "fixtures/invalid/patch-reconcile-domain-delete-default.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "ownership",
+      "expected": "reject",
+      "errorCode": "patch.ownership_violation",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-reconcile-domain-membership-move.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "ownership",
+      "expected": "reject",
+      "errorCode": "patch.ownership_violation",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-reconcile-domain-rename.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "ownership",
+      "expected": "reject",
+      "errorCode": "patch.ownership_violation",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-reconcile-domain-second-default.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "ownership",
+      "expected": "reject",
+      "errorCode": "patch.ownership_violation",
+      "behaviorEvidence": null
+    },
+    {
       "path": "fixtures/invalid/patch-reconcile-missing-derivation.json",
       "schemaId": "ipcraft.patch.v1",
       "validationPhase": "core-semantic",
-      "failureBoundary": "patch-invariant",
+      "failureBoundary": "ownership",
       "expected": "reject",
-      "errorCode": "patch.invariant_violation",
+      "errorCode": "patch.ownership_violation",
       "behaviorEvidence": null
     },
     {
@@ -605,6 +1370,24 @@
       "behaviorEvidence": null
     },
     {
+      "path": "fixtures/invalid/patch-slot-contract-lock-missing.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "reference",
+      "expected": "reject",
+      "errorCode": "patch.unknown_reference",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-slot-contract-lock-wrong-kind.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "reference",
+      "expected": "reject",
+      "errorCode": "patch.unknown_reference",
+      "behaviorEvidence": null
+    },
+    {
       "path": "fixtures/invalid/patch-structural-link-self.json",
       "schemaId": "ipcraft.patch.v1",
       "validationPhase": "core-semantic",
@@ -620,6 +1403,42 @@
       "failureBoundary": "patched-subject-schema",
       "expected": "reject",
       "errorCode": "patch.schema_violation",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-type-key-engine-entity-to-user.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "ownership",
+      "expected": "reject",
+      "errorCode": "patch.ownership_violation",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-type-key-engine-relation-to-user.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "ownership",
+      "expected": "reject",
+      "errorCode": "patch.ownership_violation",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-type-key-user-entity-to-engine.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "ownership",
+      "expected": "reject",
+      "errorCode": "patch.ownership_violation",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-type-key-user-relation-to-engine.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "ownership",
+      "expected": "reject",
+      "errorCode": "patch.ownership_violation",
       "behaviorEvidence": null
     },
     {
@@ -1640,7 +2459,34 @@
       "behaviorEvidence": null
     },
     {
+      "path": "fixtures/valid/patch-application-delete-emptied-nondefault-domain.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": null,
+      "expected": "accept",
+      "errorCode": null,
+      "behaviorEvidence": null
+    },
+    {
       "path": "fixtures/valid/patch-application-package-relation-unresolved.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": null,
+      "expected": "accept",
+      "errorCode": null,
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/valid/patch-application-router-create-default-membership.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": null,
+      "expected": "accept",
+      "errorCode": null,
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/valid/patch-application-router-delete-membership.json",
       "schemaId": "ipcraft.patch.v1",
       "validationPhase": "core-semantic",
       "failureBoundary": null,
@@ -1794,6 +2640,15 @@
     },
     {
       "path": "fixtures/valid/patch-source-application-migration.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": null,
+      "expected": "accept",
+      "errorCode": null,
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/valid/patch-source-application-reconcile-provider-authority.json",
       "schemaId": "ipcraft.patch.v1",
       "validationPhase": "core-semantic",
       "failureBoundary": null,

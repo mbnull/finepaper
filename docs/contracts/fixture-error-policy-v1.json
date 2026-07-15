@@ -2,7 +2,7 @@
   "schema": "ipcraft.fixture-error-policy.v1",
   "version": "1",
   "boundariesSha256": "e9d3101858f0cc6459b243e0c6a1ce6ae161de23516f4c017b016b67cf205565",
-  "rulesSha256": "f42e7f6cfa3caedfb67f3b08d885fd24c2d18e35c6f3ddbd4e987ec8c3def7d2",
+  "rulesSha256": "0cfd170ba69482fe219777d4501bcb72a5579e0e19dae586604c463470674935",
   "boundaries": [
     { "failureBoundary": "authoritative-design-base", "errorCode": "patch.authoritative_design_base_conflict" },
     { "failureBoundary": "bundle-manifest", "errorCode": "dependency.manifest_invalid" },
@@ -69,7 +69,7 @@
     { "schemaId": "ipcraft.output-manifest.v1", "validationPhase": "schema", "allowedFailureBoundaries": ["output-manifest"] },
     { "schemaId": "ipcraft.output-manifest.v1", "validationPhase": "core-semantic", "allowedFailureBoundaries": ["output-manifest"] },
     { "schemaId": "ipcraft.patch.v1", "validationPhase": "schema", "allowedFailureBoundaries": ["operation-shape", "patch-envelope"] },
-    { "schemaId": "ipcraft.patch.v1", "validationPhase": "core-semantic", "allowedFailureBoundaries": ["authoritative-design-base", "candidate-digest", "derived-state-base", "duplicate-id", "entity-kind", "local-reference", "operation-shape", "ownership", "patch-invariant", "patched-subject-schema", "pending-group", "precondition", "reference", "relation-kind", "request-generation", "session-revision", "source-authority", "structure-authority", "topology-input-base"] },
+    { "schemaId": "ipcraft.patch.v1", "validationPhase": "core-semantic", "allowedFailureBoundaries": ["authoritative-design-base", "candidate-digest", "derived-state-base", "duplicate-id", "engine-migration-binding", "entity-kind", "local-reference", "operation-shape", "ownership", "patch-invariant", "patched-subject-schema", "pending-group", "precondition", "reference", "relation-kind", "request-generation", "session-revision", "source-authority", "structure-authority", "topology-input-base"] },
     { "schemaId": "ipcraft.pipeline-plan.v1", "validationPhase": "schema", "allowedFailureBoundaries": ["generic-structure"] },
     { "schemaId": "ipcraft.pipeline-plan.v1", "validationPhase": "core-semantic", "allowedFailureBoundaries": ["generic-structure"] },
     { "schemaId": "ipcraft.pipeline-result.v1", "validationPhase": "schema", "allowedFailureBoundaries": ["pipeline-result"] },

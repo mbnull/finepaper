@@ -14,8 +14,8 @@
   "operations": [
     {
       "op": "deleteRelation",
-      "relationKind": "domain-membership",
-      "id": "membership.0"
+      "relationKind": "package-relation",
+      "id": "package-relation.user"
     }
   ]
 }

@@ -27,7 +27,7 @@ import verify_fixture_catalog
 
 FROZEN_COVERAGE_REQUIREMENTS_DIGEST = "sha256:6128d13d3bb6bf26da98921743074d2731f91e12e447b6675d898d0cc0233edc"
 FROZEN_COVERAGE_CONTRACT_DIGEST = "sha256:a2d5e2b68ca4c0788dedbe1ae08a609383d04e1e3fcfd3a37701237ac5fbc1b3"
-FROZEN_PATCH_CONTEXT_DIGEST = "sha256:ed92ef6923a1bf8b02315c060d8a0cca5967306f05ac97305419e01e47ff0d4c"
+FROZEN_PATCH_CONTEXT_DIGEST = "sha256:8f7c03e73dc634220222442202b9cb7650c7251fd2edca69deb976230e3fa9a2"
 
 
 class FixtureVerificationError(RuntimeError):
@@ -1057,6 +1057,11 @@ def _patch_context_digest(document: dict[str, Any]) -> str:
     return "sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
+def _digest_json(value: Any) -> str:
+    canonical = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return "sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
 def _validate_patch_subject_schema(
     validator: Draft202012Subset, kind: str, value: dict[str, Any], relation: bool,
 ) -> bool:
@@ -1213,13 +1218,148 @@ def _patch_state_reference_failure(
     return None
 
 
+def _patch_dependency_reference_failure(
+    entities: dict[tuple[str, str], dict[str, Any]],
+    relations: dict[tuple[str, str], dict[str, Any]],
+) -> tuple[str, str] | None:
+    project = next((value for (kind, _), value in entities.items() if kind == "project"), None)
+    if not isinstance(project, dict):
+        return "reference", "patch.unknown_reference"
+    dependencies = {item.get("lockId"):item for item in project.get("dependencies", []) if isinstance(item, dict)}
+    if len(dependencies) != len(project.get("dependencies", [])):
+        return "reference", "patch.unknown_reference"
+
+    def is_kind(lock_id: Any, kinds: set[str]) -> bool:
+        return isinstance(lock_id, str) and dependencies.get(lock_id, {}).get("kind") in kinds
+
+    extension_owner_kinds = {"noc-package", "interface-contract", "extension-provider"}
+    extension_values: list[dict[str, Any]] = []
+    for (kind, _), value in entities.items():
+        if kind == "component" and not is_kind(value.get("packageLockId"), {"noc-package"}):
+            return "reference", "patch.unknown_reference"
+        if kind == "interface" and not is_kind(value.get("contract", {}).get("lockId"), {"interface-contract"}):
+            return "reference", "patch.unknown_reference"
+        if kind == "access-slot" and any(not is_kind(item.get("contractLockId"), {"interface-contract"}) for item in value.get("allowedContracts", [])):
+            return "reference", "patch.unknown_reference"
+        if kind == "topology":
+            derivation = value.get("derivation", {})
+            engine = dependencies.get(derivation.get("defaultEngineLockId"), {})
+            authority = derivation.get("structureAuthority", {})
+            authority_lock = dependencies.get(authority.get("lockId"), {})
+            if engine.get("kind") != "default-engine" or authority_lock.get("kind") != authority.get("kind"):
+                return "reference", "patch.unknown_reference"
+            if any((
+                derivation.get("defaultEngineBundleDigest") != engine.get("bundleManifestDigest"),
+                derivation.get("engineHostContractVersion") != engine.get("engineHostContractVersion"),
+                derivation.get("hostSideEffectContractVersion") != engine.get("hostSideEffectContractVersion"),
+                authority.get("identity") != authority_lock.get("id"),
+                authority.get("version") != authority_lock.get("version"),
+                authority.get("bundleDigest") != authority_lock.get("bundleManifestDigest"),
+            )):
+                return "reference", "patch.unknown_reference"
+        extension_values.extend(value.get("extensions", []) if isinstance(value.get("extensions"), list) else [])
+    for value in relations.values():
+        extension_values.extend(value.get("extensions", []) if isinstance(value.get("extensions"), list) else [])
+    if any(not is_kind(item.get("ownerLockId"), extension_owner_kinds) for item in extension_values):
+        return "reference", "patch.unknown_reference"
+    for dependency in dependencies.values():
+        if dependency.get("kind") in {"extension-provider", "drc-tool", "generator-tool"} and not is_kind(dependency.get("runtimeLockId"), {"runtime"}):
+            return "reference", "patch.unknown_reference"
+    return None
+
+
+def _patch_domain_invariant_failure(
+    entities: dict[tuple[str, str], dict[str, Any]],
+    relations: dict[tuple[str, str], dict[str, Any]],
+) -> tuple[str, str] | None:
+    def token(reference: Any) -> str | None:
+        if not isinstance(reference, dict):
+            return None
+        if set(reference) == {"id"}:
+            return reference["id"]
+        if set(reference) == {"localRef"}:
+            return "@" + reference["localRef"]
+        return None
+
+    routers = {item_id for kind, item_id in entities if kind == "router"}
+    domains = {item_id:value for (kind, item_id), value in entities.items() if kind == "domain"}
+    domain_types = {value.get("typeKey") for value in domains.values()}
+    if routers and not domain_types:
+        return "patch-invariant", "patch.invariant_violation"
+    for domain_type in domain_types:
+        defaults = [item_id for item_id, value in domains.items() if value.get("typeKey") == domain_type and value.get("isDefault")]
+        if len(defaults) != 1:
+            return "patch-invariant", "patch.invariant_violation"
+    memberships: list[tuple[str, str]] = []
+    for (kind, _), value in relations.items():
+        if kind == "domain-membership":
+            domain_id, router_id = token(value.get("domainRef")), token(value.get("routerRef"))
+            if domain_id is None or router_id is None:
+                return "patch-invariant", "patch.invariant_violation"
+            memberships.append((domain_id, router_id))
+    for router_id in routers:
+        for domain_type in domain_types:
+            count = sum(1 for domain_id, member_router in memberships if member_router == router_id and domains.get(domain_id, {}).get("typeKey") == domain_type)
+            if count != 1:
+                return "patch-invariant", "patch.invariant_violation"
+    adjacency = {router_id:set() for router_id in routers}
+    for (kind, _), value in entities.items():
+        if kind != "structural-link":
+            continue
+        endpoint_a, endpoint_b = token(value.get("endpointA")), token(value.get("endpointB"))
+        if endpoint_a in adjacency and endpoint_b in adjacency:
+            adjacency[endpoint_a].add(endpoint_b)
+            adjacency[endpoint_b].add(endpoint_a)
+    for domain_id, domain in domains.items():
+        members = {router_id for member_domain, router_id in memberships if member_domain == domain_id}
+        if not members and not domain.get("isDefault"):
+            return "patch-invariant", "patch.invariant_violation"
+        if len(members) > 1:
+            reached: set[str] = set()
+            frontier = [next(iter(members))]
+            while frontier:
+                current = frontier.pop()
+                if current in reached:
+                    continue
+                reached.add(current)
+                frontier.extend((adjacency[current] & members) - reached)
+            if reached != members:
+                return "patch-invariant", "patch.invariant_violation"
+    return None
+
+
+def _patch_package_relation_declaration_failure(
+    relations: dict[tuple[str, str], dict[str, Any]], declarations: dict[str, Any],
+) -> tuple[str, str] | None:
+    for (kind, _), value in relations.items():
+        if kind != "package-relation":
+            continue
+        declaration = declarations.get(value.get("typeKey"))
+        if not isinstance(declaration, dict):
+            return "reference", "patch.unknown_reference"
+        for member in ("sources", "targets"):
+            constraint = declaration.get(member, {})
+            endpoints = value.get(member, [])
+            if not (constraint.get("minimum", 0) <= len(endpoints) <= constraint.get("maximum", 0)):
+                return "patch-invariant", "patch.invariant_violation"
+            for endpoint in endpoints:
+                if endpoint.get("state") == "unresolved" and not declaration.get("unresolvedAllowed"):
+                    return "patch-invariant", "patch.invariant_violation"
+                subject = endpoint.get("subject") if endpoint.get("state") == "resolved" else endpoint.get("intendedSubject")
+                if not isinstance(subject, dict) or subject.get("kind") not in constraint.get("kinds", []):
+                    return "patch-invariant", "patch.invariant_violation"
+    return None
+
+
 def _validate_patch_context(
     contracts: Path, validator: Draft202012Subset,
 ) -> tuple[dict[str, Any], dict[tuple[str, str], dict[str, Any]], dict[tuple[str, str], dict[str, Any]]]:
     context = load_strict_json(contracts / "patch-validation-context-v1.json")
     required = {
         "schema", "version", "authorityContexts", "packageEntityTypes", "packageRelationTypes",
-        "trustedReplayTransactions", "entities", "relations", "occupiedSlots", "freeSlots", "contextDigest",
+        "dependencyLocks", "trustedOrdinaryPatchTransactions", "formalHistoryRecords", "applicationReconcileTransactions",
+        "applicationMigrationTransactions",
+        "entities", "relations", "occupiedSlots", "freeSlots", "contextDigest",
     }
     if set(context) != required or context.get("schema") != "ipcraft.patch-validation-context.v1" or context.get("version") != "1":
         raise FixtureVerificationError("patch validation context envelope is not closed")
@@ -1231,9 +1371,18 @@ def _validate_patch_context(
         raise FixtureVerificationError("patch validation authority contexts are incomplete")
     if [item.get("selectedAuthority", {}).get("kind") for item in authority_contexts] != ["default-engine", "extension-provider"]:
         raise FixtureVerificationError("patch validation selected authorities are incomplete")
-    if any(set(item) != {"contextId", "selectedAuthority"} for item in authority_contexts):
+    if any(set(item) != {"contextId", "selectedAuthority", "expectedApplicability"} for item in authority_contexts):
         raise FixtureVerificationError("patch validation authority context fields are not closed")
-    trusted_replay = context.get("trustedReplayTransactions")
+    for item in authority_contexts:
+        applicability = item["expectedApplicability"]
+        core_schema, core_path = validator.schemas["ipcraft.core-canonical-models.v1"]
+        try:
+            validator._validate(core_schema["$defs"]["reconcileApplicability"], applicability, core_schema, core_path, "$")
+        except SchemaFailure:
+            raise FixtureVerificationError("patch validation expected applicability is invalid")
+        if applicability.get("structureAuthority") != item["selectedAuthority"]:
+            raise FixtureVerificationError("patch validation expected applicability authority differs")
+    trusted_replay = context.get("trustedOrdinaryPatchTransactions")
     if not isinstance(trusted_replay, list) or [item.get("sourceKind") for item in trusted_replay] != ["recovery", "undo-redo"]:
         raise FixtureVerificationError("patch validation trusted replay registry is not closed")
     if any(
@@ -1263,6 +1412,15 @@ def _validate_patch_context(
     project_dependencies = {
         item["lockId"]: item for item in entities.get(("project", "project.mesh"), {}).get("dependencies", [])
     }
+    dependency_locks = context.get("dependencyLocks")
+    if not isinstance(dependency_locks, list) or dependency_locks != sorted(dependency_locks, key=lambda item: item.get("lockId", "")):
+        raise FixtureVerificationError("patch validation dependency locks are not canonical")
+    if {item.get("kind") for item in dependency_locks} != {
+        "noc-package", "interface-contract", "default-engine", "extension-provider", "runtime", "drc-tool", "generator-tool",
+    } or {item.get("lockId") for item in dependency_locks} != set(project_dependencies):
+        raise FixtureVerificationError("patch validation dependency lock kinds are incomplete")
+    if any(project_dependencies[item["lockId"]] != item for item in dependency_locks):
+        raise FixtureVerificationError("patch validation dependency locks differ from current Project")
     for authority_context in authority_contexts:
         selected = authority_context["selectedAuthority"]
         if set(selected) != {"kind", "lockId", "identity", "version", "bundleDigest"}:
@@ -1284,11 +1442,25 @@ def _validate_patch_context(
         if kind == "package-entity" and context["packageEntityTypes"].get(value.get("typeKey")) not in {"user", "engine"}:
             raise FixtureVerificationError("patch validation Package Entity ownership is unresolved")
     for (kind, _), value in relations.items():
-        if kind == "package-relation" and context["packageRelationTypes"].get(value.get("typeKey")) not in {"user", "engine"}:
+        if kind == "package-relation" and context["packageRelationTypes"].get(value.get("typeKey"), {}).get("ownership") not in {"user", "engine"}:
             raise FixtureVerificationError("patch validation Package Relation ownership is unresolved")
+    for type_key, declaration in context["packageRelationTypes"].items():
+        if set(declaration) != {"ownership", "unresolvedAllowed", "sources", "targets"} or declaration.get("ownership") not in {"user", "engine"} or not isinstance(declaration.get("unresolvedAllowed"), bool):
+            raise FixtureVerificationError(f"patch validation Package Relation declaration is malformed: {type_key}")
+        if any(set(declaration[member]) != {"kinds", "minimum", "maximum"} for member in ("sources", "targets")):
+            raise FixtureVerificationError(f"patch validation Package Relation endpoint declaration is malformed: {type_key}")
     reference_failure = _patch_state_reference_failure(entities, relations, {})
     if reference_failure:
         raise FixtureVerificationError(f"patch validation context references are invalid: {reference_failure}")
+    dependency_failure = _patch_dependency_reference_failure(entities, relations)
+    if dependency_failure:
+        raise FixtureVerificationError(f"patch validation context dependency references are invalid: {dependency_failure}")
+    domain_failure = _patch_domain_invariant_failure(entities, relations)
+    if domain_failure:
+        raise FixtureVerificationError(f"patch validation context Domain state is invalid: {domain_failure}")
+    relation_declaration_failure = _patch_package_relation_declaration_failure(relations, context["packageRelationTypes"])
+    if relation_declaration_failure:
+        raise FixtureVerificationError(f"patch validation Package Relation declarations are invalid: {relation_declaration_failure}")
     occupied = sorted(
         value["slotRef"]["id"] for (kind, _), value in relations.items()
         if kind == "attachment" and value.get("state") == "resolved" and set(value.get("slotRef", {})) == {"id"}
@@ -1296,7 +1468,228 @@ def _validate_patch_context(
     slots = sorted(item_id for kind, item_id in entities if kind == "access-slot")
     if context.get("occupiedSlots") != occupied or context.get("freeSlots") != sorted(set(slots) - set(occupied)):
         raise FixtureVerificationError("patch validation slot occupancy is inconsistent")
+    history_records = context.get("formalHistoryRecords")
+    if not isinstance(history_records, list) or [item.get("kind") for item in history_records] != ["topology", "default-engine-migration"]:
+        raise FixtureVerificationError("patch validation formal history coverage is incomplete")
+    history_required = {
+        "historyTransactionId", "kind", "recordDigest", "beforeAuthoritativeDesignDigest", "afterAuthoritativeDesignDigest",
+        "beforeTopologyInputDigest", "afterTopologyInputDigest", "beforeDerivedStateDigest", "afterDerivedStateDigest",
+        "forwardTransactionBody", "inverseTransactionBody",
+        "forwardTransactionDigest", "inverseTransactionDigest", "affectedBeforeSubjects", "affectedAfterSubjects",
+        "localRefToHostId", "tombstones", "revisions",
+    }
+    for record in history_records:
+        if set(record) != history_required:
+            raise FixtureVerificationError("patch validation formal history record is not closed")
+        normalized = {key:value for key,value in record.items() if key != "recordDigest"}
+        if record["recordDigest"] != _digest_json(normalized):
+            raise FixtureVerificationError("patch validation formal history record digest differs")
+        if record["forwardTransactionDigest"] != _digest_json(record["forwardTransactionBody"]) or record["inverseTransactionDigest"] != _digest_json(record["inverseTransactionBody"]):
+            raise FixtureVerificationError("patch validation formal history transaction digest differs")
+        revisions = record.get("revisions", {})
+        if set(revisions) != {"committed", "replayIncrement"} or any(set(item) != {"sessionRevision", "topologyInputRevision", "derivedStateRevision"} for item in revisions.values()):
+            raise FixtureVerificationError("patch validation formal history revision effects are not closed")
+        if any(revisions["replayIncrement"].get(member) != 1 for member in ("sessionRevision", "topologyInputRevision", "derivedStateRevision")):
+            raise FixtureVerificationError("patch validation formal history replay increments are not V1")
+        if record["kind"] == "topology":
+            mapping = record.get("localRefToHostId")
+            tombstones = record.get("tombstones")
+            if not isinstance(mapping, dict) or not mapping or len(set(mapping.values())) != len(mapping) or not isinstance(tombstones, list) or not tombstones:
+                raise FixtureVerificationError("patch validation topology history identity evidence is incomplete")
+            if record.get("affectedBeforeSubjects") != tombstones or record.get("affectedAfterSubjects") != []:
+                raise FixtureVerificationError("patch validation topology history affected snapshots differ from tombstones")
+            forward_intent = record["forwardTransactionBody"].get("topologyIntent")
+            inverse_intent = record["inverseTransactionBody"].get("topologyIntent")
+            if any(
+                not isinstance(intent, dict) or set(intent) != {"rows", "columns"}
+                or not all(isinstance(intent[member], int) and intent[member] >= 1 for member in ("rows", "columns"))
+                for intent in (forward_intent, inverse_intent)
+            ) or forward_intent == inverse_intent:
+                raise FixtureVerificationError("patch validation topology history intent transition is invalid")
+            if record.get("beforeTopologyInputDigest") != _digest_json(inverse_intent) or record.get("afterTopologyInputDigest") != _digest_json(forward_intent):
+                raise FixtureVerificationError("patch validation topology history intent digests differ")
+            if any(set(item) != {"subjectKind", "kind", "id", "value"} for item in tombstones):
+                raise FixtureVerificationError("patch validation topology history tombstone is not complete")
+            tombstone_by_id = {item["id"]:item for item in tombstones}
+            if len(tombstone_by_id) != len(tombstones) or set(mapping.values()) != set(tombstone_by_id):
+                raise FixtureVerificationError("patch validation topology history Host-ID map differs from tombstones")
+            forward_deletes = [
+                operation for member in ("authorityOperations", "applicationOperations")
+                for operation in record["forwardTransactionBody"].get(member, []) if operation.get("op") in {"deleteEntity", "deleteRelation"}
+            ]
+            inverse_creates = [
+                operation for member in ("authorityOperations", "applicationOperations")
+                for operation in record["inverseTransactionBody"].get(member, []) if operation.get("op") in {"createEntity", "createRelation"}
+            ]
+            if {item.get("id") for item in forward_deletes} != set(tombstone_by_id) or {item.get("hostId") for item in inverse_creates} != set(tombstone_by_id):
+                raise FixtureVerificationError("patch validation topology history forward/inverse subjects are not symmetric")
+            for operation in inverse_creates:
+                if mapping.get(operation.get("localRef")) != operation.get("hostId"):
+                    raise FixtureVerificationError("patch validation topology history localRef/Host-ID correspondence differs")
+                tombstone = tombstone_by_id[operation["hostId"]]
+                expected_subject_kind = "relation" if operation["op"] == "createRelation" else "entity"
+                expected_kind = operation.get("relationKind" if expected_subject_kind == "relation" else "entityKind")
+                if tombstone["subjectKind"] != expected_subject_kind or tombstone["kind"] != expected_kind or tombstone["value"] != operation.get("value"):
+                    raise FixtureVerificationError("patch validation topology history restore body differs from tombstone")
+            if record["forwardTransactionBody"].get("hostIdMap") != mapping or record["inverseTransactionBody"].get("hostIdMap") != mapping:
+                raise FixtureVerificationError("patch validation topology history body mapping differs from record")
+
+            def affected_state(items: list[dict[str, Any]]) -> dict[tuple[str, str, str], dict[str, Any]]:
+                return {(item["subjectKind"], item["kind"], item["id"]):copy.deepcopy(item["value"]) for item in items}
+
+            def apply_affected(body: dict[str, Any], state: dict[tuple[str, str, str], dict[str, Any]]) -> dict[tuple[str, str, str], dict[str, Any]] | None:
+                result = copy.deepcopy(state)
+                for member in ("authorityOperations", "applicationOperations"):
+                    for operation in body.get(member, []):
+                        relation = operation.get("op") in {"createRelation", "updateRelation", "deleteRelation"}
+                        subject_kind = "relation" if relation else "entity"
+                        kind = operation.get("relationKind" if relation else "entityKind")
+                        operation_name = operation.get("op")
+                        item_id = operation.get("hostId") if operation_name in {"createEntity", "createRelation"} else operation.get("id")
+                        key = (subject_kind, kind, item_id)
+                        if operation_name in {"createEntity", "createRelation"}:
+                            if key in result:
+                                return None
+                            result[key] = copy.deepcopy(operation.get("value"))
+                        elif operation_name in {"deleteEntity", "deleteRelation"}:
+                            if key not in result:
+                                return None
+                            del result[key]
+                        else:
+                            if key not in result:
+                                return None
+                            value = copy.deepcopy(result[key])
+                            for field in operation.get("unset", []):
+                                value.pop(field, None)
+                            value.update(copy.deepcopy(operation.get("set", {})))
+                            result[key] = value
+                return result
+
+            before_state = affected_state(record["affectedBeforeSubjects"])
+            after_state = affected_state(record["affectedAfterSubjects"])
+            if apply_affected(record["forwardTransactionBody"], before_state) != after_state or apply_affected(record["inverseTransactionBody"], after_state) != before_state:
+                raise FixtureVerificationError("patch validation topology history forward/inverse execution differs from affected snapshots")
+        else:
+            if record.get("localRefToHostId") != {} or record.get("tombstones") != []:
+                raise FixtureVerificationError("patch validation migration history must not invent Host IDs")
+            forward, inverse = record["forwardTransactionBody"], record["inverseTransactionBody"]
+            if any((
+                forward.get("currentDefaultEngineLockId") != inverse.get("targetDefaultEngineLockId"),
+                forward.get("targetDefaultEngineLockId") != inverse.get("currentDefaultEngineLockId"),
+                forward.get("dependencyLockDigest") == inverse.get("dependencyLockDigest"),
+                record.get("affectedBeforeSubjects") == record.get("affectedAfterSubjects"),
+            )):
+                raise FixtureVerificationError("patch validation migration history is not symmetric")
+            if forward.get("authorityOperations") != [] or inverse.get("authorityOperations") != []:
+                raise FixtureVerificationError("patch validation migration history cannot contain Authority operations")
+            before_subjects, after_subjects = record.get("affectedBeforeSubjects"), record.get("affectedAfterSubjects")
+            if not isinstance(before_subjects, list) or not isinstance(after_subjects, list) or len(before_subjects) != 2 or len(after_subjects) != 2:
+                raise FixtureVerificationError("patch validation migration affected snapshots are incomplete")
+            if any(set(item) != {"subjectKind", "kind", "id", "value"} or item.get("subjectKind") != "entity" for item in before_subjects + after_subjects):
+                raise FixtureVerificationError("patch validation migration affected snapshot is malformed")
+            before_state = {(item["kind"],item["id"]):copy.deepcopy(item["value"]) for item in before_subjects}
+            after_state = {(item["kind"],item["id"]):copy.deepcopy(item["value"]) for item in after_subjects}
+
+            def apply_migration(body: dict[str, Any], state: dict[tuple[str, str], dict[str, Any]]) -> dict[tuple[str, str], dict[str, Any]] | None:
+                result = copy.deepcopy(state)
+                operations = body.get("applicationOperations")
+                if not isinstance(operations, list) or len(operations) != 2:
+                    return None
+                for operation in operations:
+                    if operation.get("op") != "updateEntity" or operation.get("entityKind") not in {"project", "topology"} or operation.get("unset") != []:
+                        return None
+                    key = (operation["entityKind"], operation.get("id"))
+                    if key not in result:
+                        return None
+                    expected_member = "dependencies" if operation["entityKind"] == "project" else "derivation"
+                    if set(operation.get("set", {})) != {expected_member}:
+                        return None
+                    result[key][expected_member] = copy.deepcopy(operation["set"][expected_member])
+                return result
+
+            if apply_migration(forward, before_state) != after_state or apply_migration(inverse, after_state) != before_state:
+                raise FixtureVerificationError("patch validation migration forward/inverse execution differs from affected snapshots")
+            before_project = before_state.get(("project", "project.mesh"), {})
+            after_project = after_state.get(("project", "project.mesh"), {})
+            before_topology = before_state.get(("topology", "topology.mesh"), {})
+            after_topology = after_state.get(("topology", "topology.mesh"), {})
+            if any((
+                forward.get("dependencyLockDigest") != _digest_json(after_project.get("dependencies")),
+                inverse.get("dependencyLockDigest") != _digest_json(before_project.get("dependencies")),
+                record.get("beforeAuthoritativeDesignDigest") != _digest_json(before_subjects),
+                record.get("afterAuthoritativeDesignDigest") != _digest_json(after_subjects),
+                record.get("beforeDerivedStateDigest") != _digest_json(before_topology.get("derivation")),
+                record.get("afterDerivedStateDigest") != _digest_json(after_topology.get("derivation")),
+                record.get("beforeTopologyInputDigest") != record.get("afterTopologyInputDigest"),
+            )):
+                raise FixtureVerificationError("patch validation migration evidence digests differ")
+    reconcile_transactions = context.get("applicationReconcileTransactions")
+    if not isinstance(reconcile_transactions, list) or [item.get("transactionId") for item in reconcile_transactions] != sorted(item.get("transactionId") for item in reconcile_transactions):
+        raise FixtureVerificationError("patch validation reconcile transactions are not canonical")
+    if any(set(item) != {"transactionId", "authorityOperations", "applicationOperations"} for item in reconcile_transactions):
+        raise FixtureVerificationError("patch validation reconcile transaction fields are not closed")
+    migration_transactions = context.get("applicationMigrationTransactions")
+    if not isinstance(migration_transactions, list) or len(migration_transactions) != 1:
+        raise FixtureVerificationError("patch validation migration transaction coverage is incomplete")
+    migration = migration_transactions[0]
+    if set(migration) != {"transactionId", "applicationOperations", "currentDefaultEngineLock", "targetDefaultEngineLock"}:
+        raise FixtureVerificationError("patch validation migration transaction fields are not closed")
+    current_engine, target_engine = migration["currentDefaultEngineLock"], migration["targetDefaultEngineLock"]
+    if current_engine.get("bundleManifestDigest") == target_engine.get("bundleManifestDigest"):
+        raise FixtureVerificationError("patch validation migration must change the exact Engine bundle")
+    if project_dependencies.get(current_engine.get("lockId")) != current_engine:
+        raise FixtureVerificationError("patch validation migration current Engine differs from Project")
     return context, entities, relations
+
+
+def validate_history_replay_request(contracts: Path, request: dict[str, Any]) -> tuple[str, str] | None:
+    validator = Draft202012Subset(contracts)
+    context, _, _ = _validate_patch_context(contracts, validator)
+    required = {
+        "historyTransactionId", "recordDigest", "direction", "transactionBodyDigest",
+        "currentAuthoritativeDesignDigest", "currentTopologyInputDigest", "currentDerivedStateDigest",
+        "currentRevisions", "nextRevisions",
+    }
+    if set(request) != required or request.get("direction") not in {"undo", "redo"}:
+        return "history-replay", "patch.source_not_allowed"
+    record = next((item for item in context["formalHistoryRecords"] if item["historyTransactionId"] == request.get("historyTransactionId")), None)
+    if record is None or request.get("recordDigest") != record.get("recordDigest"):
+        return "history-replay", "patch.source_not_allowed"
+    expected = record["inverseTransactionDigest" if request["direction"] == "undo" else "forwardTransactionDigest"]
+    if request.get("transactionBodyDigest") != expected:
+        return "history-replay", "patch.source_not_allowed"
+    current_prefix = "after" if request["direction"] == "undo" else "before"
+    if any((
+        request.get("currentAuthoritativeDesignDigest") != record[f"{current_prefix}AuthoritativeDesignDigest"],
+        request.get("currentTopologyInputDigest") != record[f"{current_prefix}TopologyInputDigest"],
+        request.get("currentDerivedStateDigest") != record[f"{current_prefix}DerivedStateDigest"],
+    )):
+        return "history-replay", "patch.source_not_allowed"
+    current_revisions, next_revisions = request.get("currentRevisions"), request.get("nextRevisions")
+    revision_members = {"sessionRevision", "topologyInputRevision", "derivedStateRevision"}
+    if not isinstance(current_revisions, dict) or not isinstance(next_revisions, dict) or set(current_revisions) != revision_members or set(next_revisions) != revision_members:
+        return "history-replay", "patch.source_not_allowed"
+    committed = record["revisions"]["committed"]
+    increment = record["revisions"]["replayIncrement"]
+    if any(current_revisions[member] < committed[member] or next_revisions[member] != current_revisions[member] + increment[member] for member in revision_members):
+        return "history-replay", "patch.source_not_allowed"
+    return None
+
+
+def history_replay_plan(contracts: Path, request: dict[str, Any]) -> dict[str, Any] | None:
+    if validate_history_replay_request(contracts, request) is not None:
+        return None
+    context = load_strict_json(contracts / "patch-validation-context-v1.json")
+    record = next(item for item in context["formalHistoryRecords"] if item["historyTransactionId"] == request["historyTransactionId"])
+    direction = request["direction"]
+    result_prefix = "before" if direction == "undo" else "after"
+    return {
+        "transactionBody":copy.deepcopy(record["inverseTransactionBody" if direction == "undo" else "forwardTransactionBody"]),
+        "nextRevisions":copy.deepcopy(request["nextRevisions"]),
+        "resultAuthoritativeDesignDigest":record[f"{result_prefix}AuthoritativeDesignDigest"],
+        "resultTopologyInputDigest":record[f"{result_prefix}TopologyInputDigest"],
+        "resultDerivedStateDigest":record[f"{result_prefix}DerivedStateDigest"],
+    }
 
 
 def _patch_transaction_failure(
@@ -1308,19 +1701,13 @@ def _patch_transaction_failure(
     applicability = document.get("applicability", {})
     trusted_replay = True
     if source in {"recovery", "undo-redo"}:
-        signature_input = {
-            "patchId": document.get("patchId"), "source": document.get("source"),
-            "preconditions": document.get("preconditions"), "operations": document.get("operations"),
-        }
-        signature = "sha256:" + hashlib.sha256(
-            json.dumps(signature_input, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
-        ).hexdigest()
+        signature = _digest_json(document)
         trusted_replay = any(
             item.get("sourceKind") == source and item.get("patchId") == document.get("patchId")
             and item.get("sourceIdentity") == document.get("source", {}).get("identity")
             and item.get("sourceVersion") == document.get("source", {}).get("version")
             and item.get("patchDigest") == signature
-            for item in context["trustedReplayTransactions"]
+            for item in context["trustedOrdinaryPatchTransactions"]
         )
     operation_ids = [item["id"] for item in document.get("operations", []) if "id" in item]
     operation_local_refs = [item["localRef"] for item in document.get("operations", []) if "localRef" in item]
@@ -1349,20 +1736,27 @@ def _patch_transaction_failure(
             return "patched-subject-schema", "patch.schema_violation"
         if operation.get("op") == "updateRelation" and unset_members & required_relation_members.get(operation.get("relationKind"), set()):
             return "patched-subject-schema", "patch.schema_violation"
-    if source in {"default-engine", "extension-provider"}:
-        selected = [
-            item["selectedAuthority"] for item in context["authorityContexts"]
-            if item["selectedAuthority"].get("kind") == source
+    if source in {"default-engine", "extension-provider", "application-reconcile", "application-migration"}:
+        expected_authority_kind = (
+            source if source in {"default-engine", "extension-provider"}
+            else applicability.get("structureAuthority", {}).get("kind")
+        )
+        if expected_authority_kind not in {"default-engine", "extension-provider"}:
+            return "structure-authority", "patch.authority_conflict"
+        selected_contexts = [
+            item for item in context["authorityContexts"]
+            if item["selectedAuthority"].get("kind") == expected_authority_kind
         ]
-        if len(selected) != 1 or any(
-            selected[0].get(member) != source_envelope.get(member)
+        if len(selected_contexts) != 1:
+            return "structure-authority", "patch.authority_conflict"
+        selected_context = selected_contexts[0]
+        selected = selected_context["selectedAuthority"]
+        if source in {"default-engine", "extension-provider"} and any(
+            selected.get(member) != source_envelope.get(member)
             for member in ("kind", "identity", "version", "bundleDigest")
         ):
             return "source-authority", "patch.source_not_allowed"
-        if any(
-            applicability.get("structureAuthority", {}).get(member) != selected[0].get(member)
-            for member in ("kind", "lockId", "identity", "version", "bundleDigest")
-        ):
+        if applicability != selected_context["expectedApplicability"]:
             return "structure-authority", "patch.authority_conflict"
 
     preconditions = document.get("preconditions", [])
@@ -1400,6 +1794,92 @@ def _patch_transaction_failure(
     entity_ownership = context["packageEntityTypes"]
     relation_ownership = context["packageRelationTypes"]
 
+    reconcile_transaction = None
+    if source == "application-reconcile":
+        reconcile_transaction = next(
+            (item for item in context["applicationReconcileTransactions"] if item["transactionId"] == document.get("transactionId")), None
+        )
+        if reconcile_transaction is None or document.get("operations") != reconcile_transaction.get("applicationOperations"):
+            return "ownership", "patch.ownership_violation"
+        for authority_operation in reconcile_transaction["authorityOperations"]:
+            op = authority_operation.get("op")
+            relation = op in {"createRelation", "updateRelation", "deleteRelation"}
+            kind = authority_operation.get("relationKind" if relation else "entityKind")
+            collection = relations if relation else entities
+            if op in {"createEntity", "createRelation"}:
+                local_ref = authority_operation["localRef"]
+                synthetic_id = "@" + local_ref
+                local_bindings[local_ref] = (kind, synthetic_id, relation)
+                collection[(kind, synthetic_id)] = copy.deepcopy(authority_operation["value"])
+            elif op in {"updateEntity", "updateRelation"}:
+                key = (kind, authority_operation["id"])
+                if key not in collection:
+                    return "reference", "patch.unknown_reference"
+                value = copy.deepcopy(collection[key])
+                for member in authority_operation.get("unset", []):
+                    value.pop(member, None)
+                value.update(copy.deepcopy(authority_operation.get("set", {})))
+                collection[key] = value
+            else:
+                key = (kind, authority_operation["id"])
+                if key not in collection:
+                    return "reference", "patch.unknown_reference"
+                del collection[key]
+    migration_transaction = None
+    if source == "application-migration":
+        migration_transaction = next(
+            (item for item in context["applicationMigrationTransactions"] if item["transactionId"] == document.get("transactionId")), None
+        )
+        if migration_transaction is None or document.get("operations") != migration_transaction.get("applicationOperations"):
+            return "engine-migration-binding", "engine.migration_invalid"
+        derivation_updates = [
+            operation for operation in document.get("operations", [])
+            if operation.get("op") == "updateEntity" and operation.get("entityKind") == "topology"
+            and set(operation.get("set", {})) == {"derivation"} and operation.get("unset") == []
+        ]
+        dependency_updates = [
+            operation for operation in document.get("operations", [])
+            if operation.get("op") == "updateEntity" and operation.get("entityKind") == "project"
+            and set(operation.get("set", {})) == {"dependencies"} and operation.get("unset") == []
+        ]
+        if len(derivation_updates) != 1 or len(dependency_updates) != 1:
+            return "patch-invariant", "patch.invariant_violation"
+    if source in {"application-reconcile", "application-migration"}:
+        derivation_operation = next(
+            operation for operation in document["operations"]
+            if operation.get("op") == "updateEntity" and operation.get("entityKind") == "topology"
+        )
+        result_derivation = derivation_operation["set"]["derivation"]
+        causal_invalid = any((
+            result_derivation.get("topologyInputRevision") != applicability.get("topologyInputRevision"),
+            result_derivation.get("topologyInputDigest") != applicability.get("topologyInputDigest"),
+            result_derivation.get("derivedStateRevision") != applicability.get("baseDerivedStateRevision", -1) + 1,
+            result_derivation.get("derivedStateDigest") == applicability.get("baseDerivedStateDigest"),
+            result_derivation.get("hostSideEffectContractVersion") != applicability.get("hostSideEffectContractVersion"),
+        ))
+        if source == "application-reconcile":
+            causal_invalid = causal_invalid or any((
+                result_derivation.get("defaultEngineLockId") != applicability.get("defaultEngineLockId"),
+                result_derivation.get("defaultEngineBundleDigest") != applicability.get("defaultEngineBundleDigest"),
+                result_derivation.get("engineHostContractVersion") != applicability.get("engineHostContractVersion"),
+                result_derivation.get("structureAuthority") != applicability.get("structureAuthority"),
+            ))
+        else:
+            target = migration_transaction["targetDefaultEngineLock"]
+            causal_invalid = causal_invalid or any((
+                result_derivation.get("defaultEngineLockId") != target.get("lockId"),
+                result_derivation.get("defaultEngineBundleDigest") != target.get("bundleManifestDigest"),
+                result_derivation.get("engineHostContractVersion") != target.get("engineHostContractVersion"),
+                result_derivation.get("hostSideEffectContractVersion") != target.get("hostSideEffectContractVersion"),
+                result_derivation.get("engineCompatibilityVersion") != target.get("engineCompatibilityVersion"),
+                result_derivation.get("structureAuthority") != {
+                    "kind":"default-engine", "lockId":target.get("lockId"), "identity":target.get("id"),
+                    "version":target.get("version"), "bundleDigest":target.get("bundleManifestDigest"),
+                },
+            ))
+        if causal_invalid:
+            return ("engine-migration-binding", "engine.migration_invalid") if source == "application-migration" else ("patch-invariant", "patch.invariant_violation")
+
     def package_owner(operation: dict[str, Any], relation: bool) -> str | None:
         kind_name = operation.get("relationKind" if relation else "entityKind")
         if kind_name != ("package-relation" if relation else "package-entity"):
@@ -1410,7 +1890,8 @@ def _patch_transaction_failure(
             type_key = operation.get("value", {}).get("typeKey")
         else:
             type_key = collection.get((kind_name, operation.get("id")), {}).get("typeKey")
-        return ownership.get(type_key)
+        declaration = ownership.get(type_key)
+        return declaration.get("ownership") if relation and isinstance(declaration, dict) else declaration
 
     def source_allows(operation: dict[str, Any]) -> bool:
         entity_kind = operation.get("entityKind")
@@ -1439,6 +1920,8 @@ def _patch_transaction_failure(
                     source == "application-migration" and operation.get("op") == "updateEntity"
                     and set(operation.get("set", {})) == {"dependencies"} and operation.get("unset") == []
                 )
+            if source == "application-migration":
+                return False
             if entity_kind is not None:
                 return entity_kind == "domain"
             if relation_kind == "attachment":
@@ -1456,12 +1939,13 @@ def _patch_transaction_failure(
                     }
                 )
             if relation_kind == "package-relation":
-                if owner != "user" or operation.get("op") != "updateRelation" or operation.get("unset") != []:
+                existing = relations.get(("package-relation", operation.get("id")), {})
+                declaration = relation_ownership.get(existing.get("typeKey"), {})
+                if owner != "user" or not declaration.get("unresolvedAllowed") or operation.get("op") != "updateRelation" or operation.get("unset") != []:
                     return False
                 changed = operation.get("set", {})
                 if not changed or set(changed) - {"sources", "targets"}:
                     return False
-                existing = relations.get(("package-relation", operation.get("id")), {})
                 converted = False
                 for member_name, replacement in changed.items():
                     original = existing.get(member_name)
@@ -1484,11 +1968,22 @@ def _patch_transaction_failure(
     for operation in document.get("operations", []):
         if source == "user-command" and operation.get("op") == "deleteEntity" and operation.get("entityKind") == "component":
             return "patch-invariant", "patch.invariant_violation"
+        operation_relation = operation.get("relationKind") is not None
+        operation_subject_kind = operation.get("relationKind" if operation_relation else "entityKind")
+        if operation_subject_kind in {"package-entity", "package-relation"} and package_owner(operation, operation_relation) is None:
+            return "reference", "patch.unknown_reference"
         if not source_allows(operation):
             return "ownership", "patch.ownership_violation"
         op = operation.get("op")
+        if op in {"createEntity", "createRelation"}:
+            expected_prefix = "authority:" if source in {"default-engine", "extension-provider"} else "application:"
+            if not operation.get("localRef", "").startswith(expected_prefix):
+                return "local-reference", "patch.local_ref_invalid"
         relation = op in {"createRelation", "updateRelation", "deleteRelation"}
         kind = operation.get("relationKind" if relation else "entityKind")
+        if op in {"updateEntity", "updateRelation"} and kind in {"package-entity", "package-relation"}:
+            if "typeKey" in operation.get("set", {}) or "typeKey" in operation.get("unset", []):
+                return "ownership", "patch.ownership_violation"
         collection = relations if relation else entities
         referenced_local_refs: list[str] = []
         stack = [operation.get("value"), operation.get("set")]
@@ -1543,9 +2038,13 @@ def _patch_transaction_failure(
                     return "patch-invariant", "patch.invariant_violation"
             if not _validate_patch_subject_schema(validator, kind, current_value, relation):
                 return "patched-subject-schema", "patch.schema_violation"
-        reference_failure = _patch_state_reference_failure(entities, relations, local_bindings)
-        if reference_failure:
-            return reference_failure
+        if source not in {"application-reconcile", "application-migration"}:
+            reference_failure = _patch_state_reference_failure(entities, relations, local_bindings)
+            if reference_failure:
+                return reference_failure
+            dependency_failure = _patch_dependency_reference_failure(entities, relations)
+            if dependency_failure:
+                return dependency_failure
 
     for (kind, _), value in entities.items():
         if not _validate_patch_subject_schema(validator, kind, value, False):
@@ -1556,6 +2055,15 @@ def _patch_transaction_failure(
     final_failure = _patch_state_reference_failure(entities, relations, local_bindings)
     if final_failure:
         return final_failure
+    dependency_failure = _patch_dependency_reference_failure(entities, relations)
+    if dependency_failure:
+        return dependency_failure
+    domain_failure = _patch_domain_invariant_failure(entities, relations)
+    if domain_failure:
+        return domain_failure
+    relation_declaration_failure = _patch_package_relation_declaration_failure(relations, context["packageRelationTypes"])
+    if relation_declaration_failure:
+        return relation_declaration_failure
     if not trusted_replay:
         return "source-authority", "patch.source_not_allowed"
     return None
@@ -1855,6 +2363,7 @@ def semantic_failure(
         transaction_failure = _patch_transaction_failure(contracts, document, validator)
         if transaction_failure:
             return transaction_failure
+        return None
         patch_context = load_strict_json(contracts / "patch-validation-context-v1.json")
         entity_type_ownership = patch_context.get("packageEntityTypes", {})
         entity_subject_types = {

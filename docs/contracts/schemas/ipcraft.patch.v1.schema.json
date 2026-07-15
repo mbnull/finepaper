@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "ipcraft.patch.v1",
   "title": "Ipcraft Trusted Host Patch Envelope V1",
-  "$comment": "Canonical collection sorting, canonical precondition uniqueness, source/operation ownership, and cross-operation localRef/reference validation require the semantic validator in addition to this schema.",
+  "$comment": "Canonical collection sorting, canonical precondition uniqueness, source/operation ownership, and cross-operation localRef/reference validation require the semantic validator in addition to this schema. The undo-redo source represents only internally authored inverses/forwards for non-topology formal commands and remains prohibited from replacing Project dependencies or Topology derivation. Formal-history Undo/Redo of materialized topology or Engine-migration transactions is a separate trusted Host replay of the exact stored history record, bound to its immutable entry ID and digest, direction, transaction body, tombstones, Host-ID map, before/after digests, and monotonic revision effects; it is not a re-authored ipcraft.patch.v1 envelope and never reruns an Engine or Provider.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema", "transactionId", "patchId", "source", "causality", "preconditions", "operations"],

@@ -25,7 +25,7 @@ UNICODE_NFC_PATH = Path("unicode/nfc-normalization-17.0.0.json")
 UNICODE_NORMALIZATION_TEST_PATH = Path("unicode/NormalizationTest-17.0.0.txt")
 ERROR_POLICY_PATH = Path("fixture-error-policy-v1.json")
 ERROR_POLICY_BOUNDARIES_SHA256 = "e9d3101858f0cc6459b243e0c6a1ce6ae161de23516f4c017b016b67cf205565"
-ERROR_POLICY_RULES_SHA256 = "f42e7f6cfa3caedfb67f3b08d885fd24c2d18e35c6f3ddbd4e987ec8c3def7d2"
+ERROR_POLICY_RULES_SHA256 = "0cfd170ba69482fe219777d4501bcb72a5579e0e19dae586604c463470674935"
 UNICODE_TABLE_FIELDS = {
     "schema", "unicodeVersion", "source", "sourceUrl", "sourceSha256", "licenseName", "licenseUrl",
     "licenseFile", "mappingCount", "mappingsSha256", "mappings"
