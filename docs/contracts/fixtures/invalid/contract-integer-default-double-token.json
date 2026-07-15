@@ -1,0 +1,150 @@
+{
+  "schema": "ipcraft.interface-contract.v1",
+  "id": "contract.maximum",
+  "name": "Maximum Contract",
+  "version": "1",
+  "roles": [
+    {
+      "key": "initiator",
+      "label": "Initiator"
+    },
+    {
+      "key": "target",
+      "label": "Target"
+    }
+  ],
+  "capabilities": [
+    {
+      "key": "aBool",
+      "type": "bool",
+      "default": true,
+      "required": true,
+      "editable": false,
+      "values": null
+    },
+    {
+      "key": "bDouble",
+      "type": "double",
+      "default": 1.5,
+      "required": true,
+      "editable": true,
+      "values": [
+        1.0,
+        1.5
+      ]
+    },
+    {
+      "key": "cEnum",
+      "type": "enum",
+      "default": "a",
+      "required": true,
+      "editable": true,
+      "values": [
+        "a",
+        "b"
+      ]
+    },
+    {
+      "key": "dInt",
+      "type": "int",
+      "default": 8,
+      "required": true,
+      "editable": true,
+      "values": [
+        4,
+        8
+      ]
+    },
+    {
+      "key": "eString",
+      "type": "string",
+      "default": "value",
+      "required": false,
+      "editable": true,
+      "values": null
+    }
+  ],
+  "fields": [
+    {
+      "key": "aBool",
+      "type": "bool",
+      "label": "aBool",
+      "description": "maximum field",
+      "default": true,
+      "required": true,
+      "readOnly": false,
+      "minimum": null,
+      "maximum": null,
+      "unit": null,
+      "values": null,
+      "visibleWhen": null,
+      "enabledWhen": null
+    },
+    {
+      "key": "bDouble",
+      "type": "double",
+      "label": "bDouble",
+      "description": "maximum field",
+      "default": 1.5,
+      "required": true,
+      "readOnly": false,
+      "minimum": 0,
+      "maximum": 64,
+      "unit": "bits",
+      "values": null,
+      "visibleWhen": null,
+      "enabledWhen": null
+    },
+    {
+      "key": "cEnum",
+      "type": "enum",
+      "label": "cEnum",
+      "description": "maximum field",
+      "default": "a",
+      "required": true,
+      "readOnly": false,
+      "minimum": null,
+      "maximum": null,
+      "unit": null,
+      "values": [
+        "a",
+        "b"
+      ],
+      "visibleWhen": {
+        "field": "aBool",
+        "equals": true
+      },
+      "enabledWhen": null
+    },
+    {
+      "key": "dInt",
+      "type": "int",
+      "label": "dInt",
+      "description": "maximum field",
+      "default": 8.0,
+      "required": true,
+      "readOnly": false,
+      "minimum": 0,
+      "maximum": 64,
+      "unit": "bits",
+      "values": null,
+      "visibleWhen": null,
+      "enabledWhen": null
+    },
+    {
+      "key": "eString",
+      "type": "string",
+      "label": "eString",
+      "description": "maximum field",
+      "default": "value",
+      "required": true,
+      "readOnly": false,
+      "minimum": null,
+      "maximum": null,
+      "unit": null,
+      "values": null,
+      "visibleWhen": null,
+      "enabledWhen": null
+    }
+  ]
+}

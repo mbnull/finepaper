@@ -908,6 +908,11 @@ def generate(contracts: Path) -> None:
         contract_field("dInt","int",8), contract_field("eString","string","value"),
     ]
     add("interface-contract-maximum", "ipcraft.interface-contract.v1", interface_max, "accept", "core-semantic", None, None)
+    for suffix, default, values in (("enum-integer-exact", 1, [1]), ("enum-boolean-exact", True, [True])):
+        exact_enum = copy.deepcopy(interface_max)
+        enum_capability = next(item for item in exact_enum["capabilities"] if item["type"] == "enum")
+        enum_capability.update({"default": default, "values": values})
+        add(f"interface-contract-{suffix}", "ipcraft.interface-contract.v1", exact_enum, "accept", "core-semantic", None, None)
 
     side_effect_vectors = json.loads((contracts / "vectors/host-side-effects-v1.json").read_text())["cases"]
     by_group_state: dict[str, dict[str, Any]] = {}
@@ -1076,6 +1081,10 @@ def generate(contracts: Path) -> None:
     project_semantic_cases.append(("project-attachment-role-mismatch", role_mismatch, "project-invariant"))
     capability_mismatch = copy.deepcopy(project_2x2); capability_mismatch["interfaces"][0]["capabilities"]["dataWidth"] = 64
     project_semantic_cases.append(("project-attachment-capability-mismatch", capability_mismatch, "project-invariant"))
+    capability_boolean_type = copy.deepcopy(project_2x2); capability_boolean_type["interfaces"][0]["capabilities"]["coherent"] = 0
+    project_semantic_cases.append(("project-attachment-capability-boolean-type-mismatch", capability_boolean_type, "project-invariant"))
+    capability_numeric_type = copy.deepcopy(project_2x2); capability_numeric_type["interfaces"][0]["capabilities"]["dataWidth"] = 128.0
+    project_semantic_cases.append(("project-attachment-capability-numeric-type-mismatch", capability_numeric_type, "project-invariant"))
     duplicate_coordinate = copy.deepcopy(project_2x2); duplicate_coordinate["topologies"][0]["routers"][1]["coordinate"] = copy.deepcopy(duplicate_coordinate["topologies"][0]["routers"][0]["coordinate"])
     project_semantic_cases.append(("project-duplicate-router-coordinate", duplicate_coordinate, "project-invariant"))
     duplicate_slot_key = copy.deepcopy(project_2x2); duplicate_slot_key["topologies"][0]["accessSlots"][1].update({"routerId":"router.0.0","templateKey":"local-0"})
@@ -1157,6 +1166,17 @@ def generate(contracts: Path) -> None:
     rich_contract = json.loads((contracts / "fixtures/valid/interface-contract-axi5.json").read_text())
     capability_type = copy.deepcopy(rich_contract); capability_type["capabilities"][0]["default"] = "128"
     semantic_cases.append(("contract-capability-default-type", "ipcraft.interface-contract.v1", capability_type, "contract-declaration", "contract.invariant_violation"))
+    for suffix, default, values in (("integer-versus-boolean", 1, [True]), ("boolean-versus-integer", True, [1])):
+        enum_membership = copy.deepcopy(interface_max)
+        enum_capability = next(item for item in enum_membership["capabilities"] if item["type"] == "enum")
+        enum_capability.update({"default": default, "values": values})
+        semantic_cases.append((f"contract-enum-default-{suffix}", "ipcraft.interface-contract.v1", enum_membership, "contract-declaration", "contract.invariant_violation"))
+    integer_as_double = copy.deepcopy(interface_max)
+    next(item for item in integer_as_double["fields"] if item["type"] == "int")["default"] = 8.0
+    semantic_cases.append(("contract-integer-default-double-token", "ipcraft.interface-contract.v1", integer_as_double, "contract-declaration", "contract.invariant_violation"))
+    double_as_integer = copy.deepcopy(interface_max)
+    next(item for item in double_as_integer["fields"] if item["type"] == "double")["default"] = 1
+    semantic_cases.append(("contract-double-default-integer-token", "ipcraft.interface-contract.v1", double_as_integer, "contract-declaration", "contract.invariant_violation"))
     field_range = copy.deepcopy(rich_contract); field_range["fields"][0].update({"minimum":64,"maximum":32})
     semantic_cases.append(("contract-field-range", "ipcraft.interface-contract.v1", field_range, "contract-declaration", "contract.invariant_violation"))
     condition_reference = copy.deepcopy(rich_contract); condition_reference["fields"][0]["visibleWhen"] = {"field":"missingField","equals":True}
@@ -1236,6 +1256,12 @@ def generate(contracts: Path) -> None:
         semantic_cases.append((f"patch-precondition-false-{precondition_kind}", "ipcraft.patch.v1", failed, "precondition", "patch.precondition_failed"))
     duplicate_precondition = copy.deepcopy(precondition_patch); duplicate_precondition["preconditions"].append(copy.deepcopy(duplicate_precondition["preconditions"][0]))
     semantic_cases.append(("patch-precondition-duplicate", "ipcraft.patch.v1", duplicate_precondition, "patch-invariant", "patch.invariant_violation"))
+    numeric_duplicate_precondition = copy.deepcopy(patch)
+    numeric_duplicate_precondition["preconditions"] = [
+        {"kind":"property-equals","entityKind":"component","id":"component.noc","property":"config","value":1},
+        {"kind":"property-equals","entityKind":"component","id":"component.noc","property":"config","value":1.0},
+    ]
+    semantic_cases.append(("patch-precondition-canonical-numeric-duplicate", "ipcraft.patch.v1", numeric_duplicate_precondition, "patch-invariant", "patch.invariant_violation"))
     noncanonical_precondition = copy.deepcopy(precondition_patch); noncanonical_precondition["preconditions"].reverse()
     semantic_cases.append(("patch-precondition-noncanonical", "ipcraft.patch.v1", noncanonical_precondition, "patch-invariant", "patch.invariant_violation"))
     local_ref = copy.deepcopy(patch); local_ref["operations"] = [
@@ -1312,6 +1338,16 @@ def generate(contracts: Path) -> None:
     semantic_cases.append(("patch-migration-missing-dependencies", "ipcraft.patch.v1", migration_missing, "engine-migration-binding", "engine.migration_invalid"))
     component_delete = copy.deepcopy(patch); component_delete["operations"] = [{"op":"deleteEntity","entityKind":"component","id":"component.noc"}]
     semantic_cases.append(("patch-component-delete-forbidden", "ipcraft.patch.v1", component_delete, "patch-invariant", "patch.invariant_violation"))
+    for suffix, value in (
+        ("boolean-type", {"coherent":0,"dataWidth":128}),
+        ("numeric-type", {"coherent":False,"dataWidth":128.0}),
+    ):
+        precondition_type = copy.deepcopy(patch)
+        precondition_type["preconditions"] = [{
+            "kind":"property-equals", "entityKind":"interface", "id":"interface.boundary",
+            "property":"capabilities", "value":value,
+        }]
+        semantic_cases.append((f"patch-precondition-{suffix}-mismatch", "ipcraft.patch.v1", precondition_type, "precondition", "patch.precondition_failed"))
     forward_ref = copy.deepcopy(patch); forward_ref["operations"] = [
         {"op":"createEntity","entityKind":"interface","localRef":"application:000001","value":{
             "ownerComponentRef":{"localRef":"application:000002"},"templateKey":"axi-boundary","name":"AXI",

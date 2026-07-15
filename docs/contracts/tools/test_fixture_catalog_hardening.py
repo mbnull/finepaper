@@ -7,6 +7,7 @@ import json
 import os
 import tempfile
 import unittest
+from decimal import Decimal
 from pathlib import Path
 
 import verify_fixture_catalog as subject
@@ -16,6 +17,40 @@ CONTRACTS = Path(__file__).resolve().parents[1]
 
 
 class FixtureCatalogHardeningTest(unittest.TestCase):
+    def test_normative_json_loader_rejects_duplicate_members_at_every_depth(self) -> None:
+        cases = {
+            "fixture-error-policy-top-level.json": '{"schema":"a","schema":"b"}',
+            "error-codes-nested.json": '{"codes":[{"code":"a","code":"b"}]}',
+            "unicode-metadata.json": '{"unicodeVersion":"17.0.0","unicodeVersion":"18.0.0"}',
+            "unicode-mapping.json": '{"mappings":[{"source":"0041","source":"0042"}]}',
+            "recognized-vector-envelope.json": '{"schema":"a","schema":"b","cases":[]}',
+            "recognized-vector-case.json": '{"schema":"a","cases":[{"id":"a","id":"b"}]}',
+            "schema-catalog.json": '{"schema":"a","items":[{"id":"a","id":"b"}]}',
+        }
+        for filename, payload in cases.items():
+            with self.subTest(filename=filename), tempfile.TemporaryDirectory() as temporary:
+                path = Path(temporary) / filename
+                path.write_text(payload)
+                with self.assertRaisesRegex(subject.VerificationError, "duplicate JSON object member"):
+                    subject.load_json(path)
+
+    def test_normative_json_loader_rejects_non_finite_constants(self) -> None:
+        for constant in ("NaN", "Infinity", "-Infinity"):
+            with self.subTest(constant=constant), tempfile.TemporaryDirectory() as temporary:
+                path = Path(temporary) / "normative.json"
+                path.write_text('{"value":' + constant + '}')
+                with self.assertRaisesRegex(subject.VerificationError, "non-JSON numeric constant"):
+                    subject.load_json(path)
+
+    def test_normative_json_loader_preserves_integer_and_decimal_tokens(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "normative.json"
+            path.write_text('{"integer":1,"decimal":1.0,"fraction":0.1}')
+            document = subject.load_json(path)
+            self.assertIs(type(document["integer"]), int)
+            self.assertEqual(document["decimal"], Decimal("1.0"))
+            self.assertEqual(document["fraction"], Decimal("0.1"))
+
     def test_case_fold_table_rejects_arbitrary_mutation(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

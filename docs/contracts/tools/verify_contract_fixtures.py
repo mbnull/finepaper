@@ -100,6 +100,16 @@ def _json_equal(left: Any, right: Any) -> bool:
 
 
 def _json_typed_equal(left: Any, right: Any) -> bool:
+    if isinstance(left, bool) or isinstance(right, bool):
+        return isinstance(left, bool) and isinstance(right, bool) and left == right
+    if type(left) is int or type(right) is int:
+        return type(left) is int and type(right) is int and left == right
+    if isinstance(left, (float, Decimal)) or isinstance(right, (float, Decimal)):
+        if not isinstance(left, (float, Decimal)) or not isinstance(right, (float, Decimal)):
+            return False
+        left_decimal = left if isinstance(left, Decimal) else Decimal(str(left))
+        right_decimal = right if isinstance(right, Decimal) else Decimal(str(right))
+        return left_decimal.is_finite() and right_decimal.is_finite() and left_decimal == right_decimal
     if type(left) is not type(right):
         return False
     if isinstance(left, list):
@@ -107,6 +117,53 @@ def _json_typed_equal(left: Any, right: Any) -> bool:
     if isinstance(left, dict):
         return set(left) == set(right) and all(_json_typed_equal(left[key], right[key]) for key in left)
     return left == right
+
+
+def _canonical_json_number(value: int | float | Decimal) -> str:
+    decimal = value if isinstance(value, Decimal) else Decimal(str(value))
+    if not decimal.is_finite():
+        raise FixtureVerificationError("non-finite number in canonical JSON key")
+    if decimal.is_zero():
+        return "0"
+    number_tuple = decimal.as_tuple()
+    sign = "-" if number_tuple.sign else ""
+    digits_list = list(number_tuple.digits)
+    exponent = number_tuple.exponent
+    while len(digits_list) > 1 and digits_list[-1] == 0:
+        digits_list.pop()
+        exponent += 1
+    digits = "".join(str(digit) for digit in digits_list)
+    adjusted = len(digits) + exponent - 1
+    if -6 <= adjusted < 21:
+        point = len(digits) + exponent
+        if point <= 0:
+            body = "0." + "0" * (-point) + digits
+        elif point >= len(digits):
+            body = digits + "0" * (point - len(digits))
+        else:
+            body = digits[:point] + "." + digits[point:]
+        return sign + body
+    mantissa = digits[0] + (("." + digits[1:]) if len(digits) > 1 else "")
+    exponent_text = f"+{adjusted}" if adjusted >= 0 else str(adjusted)
+    return f"{sign}{mantissa}e{exponent_text}"
+
+
+def _json_canonical_key(value: Any) -> str:
+    """Return normalized JSON text for canonical set identity and ordering."""
+    if value is None or isinstance(value, (str, bool)):
+        return json.dumps(value, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
+    if isinstance(value, (int, float, Decimal)) and not isinstance(value, bool):
+        return _canonical_json_number(value)
+    if isinstance(value, list):
+        return "[" + ",".join(_json_canonical_key(item) for item in value) + "]"
+    if isinstance(value, dict):
+        if not all(isinstance(key, str) for key in value):
+            raise FixtureVerificationError("non-string object member in canonical JSON key")
+        return "{" + ",".join(
+            json.dumps(key, ensure_ascii=False) + ":" + _json_canonical_key(value[key])
+            for key in sorted(value)
+        ) + "}"
+    raise FixtureVerificationError(f"unsupported {type(value).__name__} in canonical JSON key")
 
 
 def _resolve_json_pointer(document: Any, pointer: str) -> Any:
@@ -798,7 +855,7 @@ class ProjectCanonicalSetVerifier:
 
     @staticmethod
     def _canonical_json(value: Any) -> str:
-        return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        return _json_canonical_key(value)
 
     def _key(self, sort_keys: list[str], item: Any) -> tuple[Any, ...]:
         result: list[Any] = []
@@ -947,9 +1004,9 @@ def _declared_scalar_matches(kind: str, value: Any) -> bool:
     if kind == "bool":
         return isinstance(value, bool)
     if kind == "int":
-        return Draft202012Subset._matches_type(value, "integer")
+        return type(value) is int
     if kind == "double":
-        return Draft202012Subset._matches_type(value, "number")
+        return type(value) in {float, Decimal}
     if kind in {"string", "enum"}:
         return isinstance(value, str) if kind == "string" else True
     return False
@@ -974,7 +1031,7 @@ def _field_declarations_invalid(fields: list[dict[str, Any]]) -> bool:
             return True
         if values is not None and (
             any(not _declared_scalar_matches(kind, value) for value in values)
-            or not any(_json_equal(default, value) for value in values)
+            or not any(_json_typed_equal(default, value) for value in values)
         ):
             return True
         if minimum is not None and maximum is not None and minimum > maximum:
@@ -989,7 +1046,13 @@ def _field_declarations_invalid(fields: list[dict[str, Any]]) -> bool:
             if condition is None:
                 continue
             dependency = by_key.get(condition.get("field"))
-            if dependency is None or not _declared_scalar_matches(dependency.get("type"), condition.get("equals")):
+            condition_value = condition.get("equals")
+            if dependency is None or not _declared_scalar_matches(dependency.get("type"), condition_value):
+                return True
+            dependency_values = dependency.get("values")
+            if dependency_values is not None and not any(
+                _json_typed_equal(condition_value, value) for value in dependency_values
+            ):
                 return True
     return False
 
@@ -1909,7 +1972,7 @@ def _patch_transaction_failure(
             return "structure-authority", "patch.authority_conflict"
 
     preconditions = document.get("preconditions", [])
-    precondition_keys = [json.dumps(item, ensure_ascii=False, sort_keys=True, separators=(",", ":")) for item in preconditions]
+    precondition_keys = [_json_canonical_key(item) for item in preconditions]
     if len(precondition_keys) != len(set(precondition_keys)) or precondition_keys != sorted(precondition_keys):
         return "patch-invariant", "patch.invariant_violation"
     occupied_slots = {
@@ -1928,7 +1991,7 @@ def _patch_transaction_failure(
             if kind == "property-equals" and (
                 not exists
                 or precondition.get("property") not in entities[key]
-                or not _json_equal(entities[key][precondition["property"]], precondition.get("value"))
+                or not _json_typed_equal(entities[key][precondition["property"]], precondition.get("value"))
             ):
                 return "precondition", "patch.precondition_failed"
         elif kind == "relation-exists":
@@ -2382,7 +2445,10 @@ def semantic_failure(
                 if allowance is None or interface["contract"]["role"] not in allowance["roles"]:
                     return "project-invariant", "project.invariant_violation"
                 capabilities = interface.get("capabilities", {})
-                if any(capabilities.get(key) != value for key, value in allowance["capabilityConstraints"].items()):
+                if any(
+                    key not in capabilities or not _json_typed_equal(capabilities[key], value)
+                    for key, value in allowance["capabilityConstraints"].items()
+                ):
                     return "project-invariant", "project.invariant_violation"
         for membership in topology.get("domainMemberships", []):
             if membership.get("routerId") not in routers_by_id or membership.get("domainId") not in domains_by_id:
@@ -2450,7 +2516,6 @@ def semantic_failure(
         for member in ("roles", "capabilities", "fields"):
             if _duplicates(document.get(member, []), lambda item: item.get("key")):
                 return "contract-declaration", "contract.invariant_violation"
-        field_keys = {item.get("key") for item in document.get("fields", [])}
         for capability in document.get("capabilities", []):
             default = capability.get("default")
             values = capability.get("values")
@@ -2458,7 +2523,10 @@ def semantic_failure(
                 return "contract-declaration", "contract.invariant_violation"
             if capability.get("required") and default is None:
                 return "contract-declaration", "contract.invariant_violation"
-            if values is not None and (any(not _declared_scalar_matches(capability.get("type"), value) for value in values) or default not in values):
+            if values is not None and (
+                any(not _declared_scalar_matches(capability.get("type"), value) for value in values)
+                or not any(_json_typed_equal(default, value) for value in values)
+            ):
                 return "contract-declaration", "contract.invariant_violation"
         for field in document.get("fields", []):
             default = field.get("default")
@@ -2473,12 +2541,26 @@ def semantic_failure(
                 if minimum is not None and default < minimum or maximum is not None and default > maximum:
                     return "contract-declaration", "contract.invariant_violation"
             values = field.get("values")
-            if values is not None and (any(not _declared_scalar_matches(field.get("type"), value) for value in values) or default not in values):
+            if values is not None and (
+                any(not _declared_scalar_matches(field.get("type"), value) for value in values)
+                or not any(_json_typed_equal(default, value) for value in values)
+            ):
                 return "contract-declaration", "contract.invariant_violation"
             for condition_name in ("visibleWhen", "enabledWhen"):
                 condition = field.get(condition_name)
-                if condition and condition.get("field") not in field_keys:
-                    return "contract-declaration", "contract.invariant_violation"
+                if condition:
+                    dependency = next(
+                        (item for item in document.get("fields", []) if item.get("key") == condition.get("field")),
+                        None,
+                    )
+                    condition_value = condition.get("equals")
+                    if dependency is None or not _declared_scalar_matches(dependency.get("type"), condition_value):
+                        return "contract-declaration", "contract.invariant_violation"
+                    dependency_values = dependency.get("values")
+                    if dependency_values is not None and not any(
+                        _json_typed_equal(condition_value, value) for value in dependency_values
+                    ):
+                        return "contract-declaration", "contract.invariant_violation"
     elif schema_id == "ipcraft.noc-package.v1":
         if _package_declaration_invalid(contracts, document):
             return "package-declaration", "package.invariant_violation"
@@ -2543,140 +2625,6 @@ def semantic_failure(
         if transaction_failure:
             return transaction_failure
         return None
-        patch_context = load_strict_json(contracts / "patch-validation-context-v1.json")
-        entity_type_ownership = patch_context.get("packageEntityTypes", {})
-        entity_subject_types = {
-            item["id"]: item.get("value", {}).get("typeKey")
-            for item in patch_context.get("entities", []) if item.get("kind") == "package-entity"
-        }
-        relation_type_ownership = patch_context.get("packageRelationTypes", {})
-        relation_subject_types = {
-            item["id"]: item.get("value", {}).get("typeKey")
-            for item in patch_context.get("relations", []) if item.get("kind") == "package-relation"
-        }
-        source = document.get("source", {}).get("kind")
-        operations = document.get("operations", [])
-        local_refs: list[str] = []
-        ids: list[str] = []
-        for operation in operations:
-            if "localRef" in operation: local_refs.append(operation["localRef"])
-            if "id" in operation: ids.append(operation["id"])
-        if len(local_refs) != len(set(local_refs)):
-            return "local-reference", "patch.local_ref_invalid"
-        if len(ids) != len(set(ids)):
-            return "duplicate-id", "patch.duplicate_id"
-        visible_local_refs: set[str] = set()
-        for operation in operations:
-            referenced: list[str] = []
-            stack = [operation.get("value"), operation.get("set")]
-            while stack:
-                node = stack.pop()
-                if isinstance(node, dict):
-                    if set(node) == {"localRef"} and isinstance(node.get("localRef"), str):
-                        referenced.append(node["localRef"])
-                    else:
-                        stack.extend(node.values())
-                elif isinstance(node, list):
-                    stack.extend(node)
-            if any(reference not in visible_local_refs for reference in referenced):
-                return "local-reference", "patch.local_ref_invalid"
-            if "localRef" in operation:
-                visible_local_refs.add(operation["localRef"])
-        required_properties = {
-            "project": {"name", "dependencies"},
-            "topology": {"derivation"},
-            "component": {"kind", "name", "packageLockId", "typeKey", "config", "extensions"},
-            "interface": {"ownerComponentId", "templateKey", "name", "contract", "capabilities", "contractConfig", "nocConfig", "extensions"},
-            "router": {"templateKey", "identityCompatibilityVersion", "coordinate", "properties"},
-            "structural-link": {"templateKey", "identityCompatibilityVersion", "endpointA", "endpointB", "axis", "properties"},
-            "access-slot": {"routerId", "templateKey", "identityCompatibilityVersion", "displayOrder", "label", "allowedContracts", "properties"},
-            "domain": {"typeKey", "name", "isDefault", "config"},
-            "package-entity": {"typeKey", "data", "extensions"},
-        }
-        required_relation_properties = {
-            "attachment": {"interfaceRef", "state"},
-            "domain-membership": {"domainRef", "routerRef"},
-            "package-relation": {"typeKey", "sources", "targets", "data", "extensions"},
-        }
-        for operation in operations:
-            if operation.get("op") in {"updateEntity", "updateRelation"} and set(operation.get("set", {})) & set(operation.get("unset", [])):
-                return "patch-invariant", "patch.invariant_violation"
-            if operation.get("op") == "updateEntity" and set(operation.get("unset", [])) & required_properties.get(operation.get("entityKind"), set()):
-                return "patched-subject-schema", "patch.schema_violation"
-            if operation.get("op") == "updateRelation" and set(operation.get("unset", [])) & required_relation_properties.get(operation.get("relationKind"), set()):
-                return "patched-subject-schema", "patch.schema_violation"
-        for operation in operations:
-            entity_kind = operation.get("entityKind")
-            relation_kind = operation.get("relationKind")
-            changed = set(operation.get("set", {})) | set(operation.get("unset", []))
-            package_ownership: str | None = None
-            if entity_kind == "package-entity":
-                type_key = operation.get("value", {}).get("typeKey") if operation.get("op") == "createEntity" else entity_subject_types.get(operation.get("id"))
-                if type_key not in entity_type_ownership:
-                    return "reference", "patch.unknown_reference"
-                package_ownership = entity_type_ownership[type_key]
-            if relation_kind == "package-relation":
-                type_key = operation.get("value", {}).get("typeKey") if operation.get("op") == "createRelation" else relation_subject_types.get(operation.get("id"))
-                if type_key not in relation_type_ownership:
-                    return "reference", "patch.unknown_reference"
-                package_ownership = relation_type_ownership[type_key]
-            if source == "user-command":
-                if operation.get("op") == "deleteEntity" and entity_kind == "component":
-                    return "patch-invariant", "patch.invariant_violation"
-                if entity_kind in {"router", "structural-link", "access-slot", "topology"}:
-                    return "ownership", "patch.ownership_violation"
-                if entity_kind == "project" and changed - {"name"}:
-                    return "ownership", "patch.ownership_violation"
-                if entity_kind == "component" and changed & {"kind", "packageLockId", "typeKey"}:
-                    return "ownership", "patch.ownership_violation"
-                if package_ownership == "engine":
-                    return "ownership", "patch.ownership_violation"
-            elif source in {"default-engine", "extension-provider"}:
-                if entity_kind not in {None, "router", "structural-link", "access-slot", "package-entity"}:
-                    return "ownership", "patch.ownership_violation"
-                if relation_kind not in {None, "package-relation"}:
-                    return "ownership", "patch.ownership_violation"
-                if package_ownership == "user":
-                    return "ownership", "patch.ownership_violation"
-            elif source in {"application-reconcile", "application-migration"}:
-                if entity_kind in {"component", "interface", "router", "structural-link", "access-slot", "package-entity"}:
-                    return "ownership", "patch.ownership_violation"
-            if operation.get("op", "").startswith("create") and "localRef" in operation:
-                expected_prefix = "authority:" if source in {"default-engine", "extension-provider"} else "application:"
-                if not operation["localRef"].startswith(expected_prefix):
-                    return "local-reference", "patch.local_ref_invalid"
-        if source in {"application-reconcile", "application-migration"}:
-            derivation_updates = [
-                operation for operation in operations
-                if operation.get("op") == "updateEntity" and operation.get("entityKind") == "topology"
-                and set(operation.get("set", {})) == {"derivation"} and operation.get("unset") == []
-            ]
-            dependency_updates = [
-                operation for operation in operations
-                if operation.get("op") == "updateEntity" and operation.get("entityKind") == "project"
-                and set(operation.get("set", {})) == {"dependencies"} and operation.get("unset") == []
-            ]
-            if len(derivation_updates) != 1:
-                return "patch-invariant", "patch.invariant_violation"
-            if source == "application-reconcile" and dependency_updates:
-                return "patch-invariant", "patch.invariant_violation"
-            if source == "application-migration" and len(dependency_updates) != 1:
-                return "patch-invariant", "patch.invariant_violation"
-        if source in {"default-engine", "extension-provider"}:
-            authority = document.get("applicability", {}).get("structureAuthority", {})
-            source_envelope = document.get("source", {})
-            if any(
-                authority.get(member) != source_envelope.get(member)
-                for member in ("kind", "identity", "version", "bundleDigest")
-            ):
-                return "structure-authority", "patch.authority_conflict"
-        existence = {(item.get("entityKind"), item.get("id")): item.get("kind") for item in document.get("preconditions", []) if item.get("kind") in {"entity-exists", "entity-absent"}}
-        if any(
-            {item.get("kind") for item in document.get("preconditions", []) if (item.get("entityKind"), item.get("id")) == key}
-            == {"entity-exists", "entity-absent"}
-            for key in existence
-        ):
-            return "precondition", "patch.precondition_failed"
     elif schema_id == "ipcraft.core-canonical-models.v1":
         if document.get("schema") == "ipcraft.candidate-transaction.v1":
             if document.get("kind") == "default-engine-migration":

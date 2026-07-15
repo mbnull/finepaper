@@ -1,0 +1,30 @@
+{
+  "schema": "ipcraft.patch.v1",
+  "transactionId": "value",
+  "patchId": "value",
+  "source": {
+    "kind": "user-command",
+    "identity": "value",
+    "version": "value"
+  },
+  "causality": {
+    "sessionRevision": 0
+  },
+  "preconditions": [
+    {
+      "kind": "property-equals",
+      "entityKind": "component",
+      "id": "component.noc",
+      "property": "config",
+      "value": 1
+    },
+    {
+      "kind": "property-equals",
+      "entityKind": "component",
+      "id": "component.noc",
+      "property": "config",
+      "value": 1.0
+    }
+  ],
+  "operations": []
+}

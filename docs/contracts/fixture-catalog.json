@@ -74,6 +74,15 @@
       "behaviorEvidence": null
     },
     {
+      "path": "fixtures/invalid/contract-double-default-integer-token.json",
+      "schemaId": "ipcraft.interface-contract.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "contract-declaration",
+      "expected": "reject",
+      "errorCode": "contract.invariant_violation",
+      "behaviorEvidence": null
+    },
+    {
       "path": "fixtures/invalid/contract-duplicate-role.json",
       "schemaId": "ipcraft.interface-contract.v1",
       "validationPhase": "core-semantic",
@@ -83,7 +92,34 @@
       "behaviorEvidence": null
     },
     {
+      "path": "fixtures/invalid/contract-enum-default-boolean-versus-integer.json",
+      "schemaId": "ipcraft.interface-contract.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "contract-declaration",
+      "expected": "reject",
+      "errorCode": "contract.invariant_violation",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/contract-enum-default-integer-versus-boolean.json",
+      "schemaId": "ipcraft.interface-contract.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "contract-declaration",
+      "expected": "reject",
+      "errorCode": "contract.invariant_violation",
+      "behaviorEvidence": null
+    },
+    {
       "path": "fixtures/invalid/contract-field-range.json",
+      "schemaId": "ipcraft.interface-contract.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "contract-declaration",
+      "expected": "reject",
+      "errorCode": "contract.invariant_violation",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/contract-integer-default-double-token.json",
       "schemaId": "ipcraft.interface-contract.v1",
       "validationPhase": "core-semantic",
       "failureBoundary": "contract-declaration",
@@ -1190,6 +1226,24 @@
       "behaviorEvidence": null
     },
     {
+      "path": "fixtures/invalid/patch-precondition-boolean-type-mismatch.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "precondition",
+      "expected": "reject",
+      "errorCode": "patch.precondition_failed",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-precondition-canonical-numeric-duplicate.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "patch-invariant",
+      "expected": "reject",
+      "errorCode": "patch.invariant_violation",
+      "behaviorEvidence": null
+    },
+    {
       "path": "fixtures/invalid/patch-precondition-duplicate.json",
       "schemaId": "ipcraft.patch.v1",
       "validationPhase": "core-semantic",
@@ -1259,6 +1313,15 @@
       "failureBoundary": "patch-invariant",
       "expected": "reject",
       "errorCode": "patch.invariant_violation",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-precondition-numeric-type-mismatch.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "precondition",
+      "expected": "reject",
+      "errorCode": "patch.precondition_failed",
       "behaviorEvidence": null
     },
     {
@@ -1622,7 +1685,25 @@
       "behaviorEvidence": null
     },
     {
+      "path": "fixtures/invalid/project-attachment-capability-boolean-type-mismatch.json",
+      "schemaId": "ipcraft.project-design.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "project-invariant",
+      "expected": "reject",
+      "errorCode": "project.invariant_violation",
+      "behaviorEvidence": null
+    },
+    {
       "path": "fixtures/invalid/project-attachment-capability-mismatch.json",
+      "schemaId": "ipcraft.project-design.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "project-invariant",
+      "expected": "reject",
+      "errorCode": "project.invariant_violation",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/project-attachment-capability-numeric-type-mismatch.json",
       "schemaId": "ipcraft.project-design.v1",
       "validationPhase": "core-semantic",
       "failureBoundary": "project-invariant",
@@ -2487,6 +2568,24 @@
     },
     {
       "path": "fixtures/valid/interface-contract-chi.json",
+      "schemaId": "ipcraft.interface-contract.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": null,
+      "expected": "accept",
+      "errorCode": null,
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/valid/interface-contract-enum-boolean-exact.json",
+      "schemaId": "ipcraft.interface-contract.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": null,
+      "expected": "accept",
+      "errorCode": null,
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/valid/interface-contract-enum-integer-exact.json",
       "schemaId": "ipcraft.interface-contract.v1",
       "validationPhase": "core-semantic",
       "failureBoundary": null,

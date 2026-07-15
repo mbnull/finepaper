@@ -14,6 +14,7 @@ import json
 import os
 import re
 import sys
+from decimal import Decimal
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -72,9 +73,24 @@ def fail(message: str) -> None:
 
 
 def load_json(path: Path) -> Any:
+    def object_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        for key, value in pairs:
+            if key in result:
+                fail(f"{path}: duplicate JSON object member {key!r}")
+            result[key] = value
+        return result
+
+    def non_json_constant(value: str) -> Any:
+        fail(f"{path}: non-JSON numeric constant {value}")
+
     try:
-        with path.open("r", encoding="utf-8") as stream:
-            return json.load(stream)
+        return json.loads(
+            path.read_text(encoding="utf-8"),
+            object_pairs_hook=object_pairs,
+            parse_float=Decimal,
+            parse_constant=non_json_constant,
+        )
     except (OSError, UnicodeError, json.JSONDecodeError) as error:
         fail(f"cannot load {path}: {error}")
 
