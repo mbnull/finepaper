@@ -1,0 +1,14 @@
+{
+  "pipelineRunId": "value",
+  "stepId": "value",
+  "invocationId": "value",
+  "toolLockId": "value",
+  "kind": "semantic-drc",
+  "snapshotSessionRevision": 0,
+  "snapshotDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "formallySavedProjectDigest": null,
+  "dependencies": [],
+  "projectDesignFile": "value",
+  "resultFile": "value",
+  "reportDirectory": "value"
+}

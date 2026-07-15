@@ -1,0 +1,51 @@
+{
+  "contractVersion": "ipcraft.noc-side-effects.v1",
+  "input": {
+    "domainTypes": [],
+    "relationDeclarations": [],
+    "currentDerivedState": {
+      "schema": "ipcraft.derived-state.v1",
+      "topologyId": "value",
+      "routers": [],
+      "structuralLinks": [],
+      "accessSlots": [],
+      "packageEntities": [],
+      "packageRelations": []
+    },
+    "domains": [],
+    "domainMemberships": [],
+    "attachments": [],
+    "packageRelations": [],
+    "authorityPatch": {
+      "patchId": "value",
+      "source": {
+        "kind": "default-engine",
+        "identity": "ipcraft.default-noc-engine",
+        "version": "value",
+        "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "operations": []
+    }
+  },
+  "expected": {
+    "applicationPatch": {
+      "patchId": "value",
+      "source": {
+        "kind": "application-reconcile",
+        "identity": "ipcraft.host",
+        "version": "1"
+      },
+      "operations": []
+    },
+    "tombstones": [],
+    "allocationOrder": [],
+    "impactReport": {
+      "schema": "ipcraft.topology-impact-report.v1",
+      "impacts": []
+    },
+    "coreDiagnostics": [],
+    "groupState": "auto-commit",
+    "requiresConfirmation": false,
+    "commitDisposition": "auto-commit"
+  }
+}

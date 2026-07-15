@@ -1,0 +1,18 @@
+{
+  "schema": "ipcraft.interface-contract.v1",
+  "id": "amba.axi5",
+  "name": "AXI5",
+  "version": "1.0",
+  "roles": [
+    {
+      "key": "initiator",
+      "label": "Initiator"
+    },
+    {
+      "key": "target",
+      "label": "Target"
+    }
+  ],
+  "capabilities": [],
+  "fields": []
+}

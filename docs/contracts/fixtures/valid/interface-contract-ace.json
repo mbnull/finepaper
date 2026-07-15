@@ -1,0 +1,18 @@
+{
+  "schema": "ipcraft.interface-contract.v1",
+  "id": "amba.ace",
+  "name": "ACE",
+  "version": "1.0",
+  "roles": [
+    {
+      "key": "initiator",
+      "label": "Initiator"
+    },
+    {
+      "key": "target",
+      "label": "Target"
+    }
+  ],
+  "capabilities": [],
+  "fields": []
+}

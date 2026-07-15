@@ -1,0 +1,26 @@
+{
+  "schema": "ipcraft.patch.v1",
+  "transactionId": "value",
+  "patchId": "value",
+  "source": {
+    "kind": "user-command",
+    "identity": "value",
+    "version": "value"
+  },
+  "causality": {
+    "sessionRevision": 0
+  },
+  "preconditions": [],
+  "operations": [
+    {
+      "op": "deleteEntity",
+      "entityKind": "component",
+      "id": "component.same"
+    },
+    {
+      "op": "deleteEntity",
+      "entityKind": "component",
+      "id": "component.same"
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "schema": "ipcraft.topology-intent.v1",
+  "componentId": "value",
+  "topologyId": "value",
+  "topologyKind": "mesh",
+  "globalConfig": {},
+  "packageEntities": [],
+  "packageRelations": []
+}

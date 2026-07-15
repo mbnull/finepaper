@@ -1,0 +1,119 @@
+{
+  "schema": "ipcraft.project-design.v1",
+  "profile": {
+    "id": "ipcraft.profile.noc",
+    "version": "1"
+  },
+  "id": "project.mesh-1x1",
+  "name": "Mesh 1x1",
+  "dependencies": [
+    {
+      "lockId": "dep.engine.default",
+      "kind": "default-engine",
+      "id": "ipcraft.default-noc-engine",
+      "version": "1.0.0",
+      "bundleManifestDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "engineHostContractVersion": "ipcraft.engine-host.v1",
+      "engineCompatibilityVersion": "1",
+      "hostSideEffectContractVersion": "ipcraft.noc-side-effects.v1",
+      "supportedPlatformAbis": [
+        "linux-x86_64-gnu-v1"
+      ]
+    },
+    {
+      "lockId": "dep.noc.simple",
+      "kind": "noc-package",
+      "id": "simple-noc",
+      "version": "1.0.0",
+      "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    }
+  ],
+  "components": [
+    {
+      "id": "component.noc",
+      "kind": "noc",
+      "name": "value",
+      "packageLockId": "dep.noc.simple",
+      "typeKey": "value",
+      "config": {},
+      "extensions": []
+    }
+  ],
+  "interfaces": [],
+  "connections": [],
+  "topologies": [
+    {
+      "id": "component.noc",
+      "ownerComponentId": "component.noc",
+      "kind": "mesh",
+      "templateKey": "value",
+      "derivation": {
+        "topologyInputRevision": 1,
+        "topologyInputDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "derivedStateRevision": 0,
+        "derivedStateDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "packageBundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "reconcileDependencySetDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "defaultEngineLockId": "dep.engine.default",
+        "defaultEngineBundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "engineHostContractVersion": "ipcraft.engine-host.v1",
+        "hostSideEffectContractVersion": "ipcraft.noc-side-effects.v1",
+        "structureAuthority": {
+          "kind": "default-engine",
+          "lockId": "dep.engine.default",
+          "identity": "ipcraft.default-noc-engine",
+          "version": "value",
+          "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "engineCompatibilityVersion": "value"
+      },
+      "routers": [
+        {
+          "id": "router.0.0",
+          "templateKey": "mesh-router",
+          "identityCompatibilityVersion": 1,
+          "coordinate": {
+            "row": 0,
+            "column": 0
+          },
+          "properties": {}
+        }
+      ],
+      "structuralLinks": [],
+      "accessSlots": [
+        {
+          "id": "slot.0.0",
+          "routerId": "router.0.0",
+          "templateKey": "local-0",
+          "identityCompatibilityVersion": 1,
+          "displayOrder": 0,
+          "label": "Local 0",
+          "allowedContracts": [],
+          "properties": {}
+        }
+      ],
+      "attachments": [],
+      "domains": [
+        {
+          "id": "domain.power.default",
+          "typeKey": "power",
+          "name": "Default Power",
+          "isDefault": true,
+          "config": {}
+        }
+      ],
+      "domainMemberships": [
+        {
+          "id": "membership.router.0.0",
+          "domainId": "domain.power.default",
+          "routerId": "router.0.0"
+        }
+      ],
+      "packageEntities": [],
+      "packageRelations": [],
+      "extensions": []
+    }
+  ],
+  "views": [],
+  "extensions": []
+}

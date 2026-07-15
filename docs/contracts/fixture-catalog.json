@@ -1,4 +1,671 @@
 {
   "schema": "ipcraft.fixture-catalog.v1",
-  "items": []
+  "items": [
+    {
+      "path": "fixtures/invalid/artifact-duplicate-path.json",
+      "schemaId": "ipcraft.artifact-manifest.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "tool-artifact",
+      "expected": "reject",
+      "errorCode": "tool.artifact_invalid",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/bundle-duplicate-path.json",
+      "schemaId": "ipcraft.bundle-manifest.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "bundle-manifest",
+      "expected": "reject",
+      "errorCode": "dependency.manifest_invalid",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/bundle-manifest-digest.json",
+      "schemaId": "ipcraft.bundle-manifest.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "bundle-manifest",
+      "expected": "reject",
+      "errorCode": "dependency.manifest_invalid",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/command-pending-without-group.json",
+      "schemaId": "ipcraft.command-result.v1",
+      "validationPhase": "schema",
+      "failureBoundary": "command-result",
+      "expected": "reject",
+      "errorCode": "command.result_invalid",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/contract-duplicate-role.json",
+      "schemaId": "ipcraft.interface-contract.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "contract-declaration",
+      "expected": "reject",
+      "errorCode": "contract.invariant_violation",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/diagnostic-blocking-warning.json",
+      "schemaId": "ipcraft.diagnostic-report.v1",
+      "validationPhase": "schema",
+      "failureBoundary": "diagnostic-report",
+      "expected": "reject",
+      "errorCode": "diagnostic.report_invalid",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/diagnostic-report-duplicate-entry.json",
+      "schemaId": "ipcraft.diagnostic-report.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "diagnostic-report",
+      "expected": "reject",
+      "errorCode": "diagnostic.report_invalid",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/engine-host-contract.json",
+      "schemaId": "ipcraft.engine-bundle.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "engine-host-contract",
+      "expected": "reject",
+      "errorCode": "engine.host_contract_unsupported",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/engine-migration-same-bundle.json",
+      "schemaId": "ipcraft.core-canonical-models.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "engine-migration-binding",
+      "expected": "reject",
+      "errorCode": "engine.migration_invalid",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/engine-platform.json",
+      "schemaId": "ipcraft.engine-bundle.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "engine-platform",
+      "expected": "reject",
+      "errorCode": "engine.platform_unsupported",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/package-duplicate-domain-type.json",
+      "schemaId": "ipcraft.noc-package.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "package-declaration",
+      "expected": "reject",
+      "errorCode": "package.invariant_violation",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/package-engine-relation-topology-driving.json",
+      "schemaId": "ipcraft.noc-package.v1",
+      "validationPhase": "schema",
+      "failureBoundary": "generic-structure",
+      "expected": "reject",
+      "errorCode": "contract.schema_invalid",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-authority-without-applicability.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "schema",
+      "failureBoundary": "patch-envelope",
+      "expected": "reject",
+      "errorCode": "patch.schema_invalid",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-duplicate-id.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "duplicate-id",
+      "expected": "reject",
+      "errorCode": "patch.duplicate_id",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-duplicate-local-ref.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "local-reference",
+      "expected": "reject",
+      "errorCode": "patch.local_ref_invalid",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-operation-shape.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "schema",
+      "failureBoundary": "operation-shape",
+      "expected": "reject",
+      "errorCode": "patch.operation_invalid",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-precondition-failed.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "precondition",
+      "expected": "reject",
+      "errorCode": "patch.precondition_failed",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-set-unset-overlap.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "patch-invariant",
+      "expected": "reject",
+      "errorCode": "patch.invariant_violation",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-subject-schema.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "patched-subject-schema",
+      "expected": "reject",
+      "errorCode": "patch.schema_violation",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/patch-user-owned-router.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "ownership",
+      "expected": "reject",
+      "errorCode": "patch.ownership_violation",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/pipeline-failed-step-binding.json",
+      "schemaId": "ipcraft.pipeline-result.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "pipeline-result",
+      "expected": "reject",
+      "errorCode": "pipeline.result_invalid",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/pipeline-failed-without-step.json",
+      "schemaId": "ipcraft.pipeline-result.v1",
+      "validationPhase": "schema",
+      "failureBoundary": "pipeline-result",
+      "expected": "reject",
+      "errorCode": "pipeline.result_invalid",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/project-disconnected-domain.json",
+      "schemaId": "ipcraft.project-design.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "project-invariant",
+      "expected": "reject",
+      "errorCode": "project.invariant_violation",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/project-duplicate-id.json",
+      "schemaId": "ipcraft.project-design.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "project-duplicate-id",
+      "expected": "reject",
+      "errorCode": "project.duplicate_id",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/project-incomplete-domain-coverage.json",
+      "schemaId": "ipcraft.project-design.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "project-invariant",
+      "expected": "reject",
+      "errorCode": "project.invariant_violation",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/project-legacy-root.json",
+      "schemaId": "ipcraft.project-design.v1",
+      "validationPhase": "schema",
+      "failureBoundary": "legacy-project-root",
+      "expected": "reject",
+      "errorCode": "project.legacy_format_unsupported",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/project-unknown-attachment-slot.json",
+      "schemaId": "ipcraft.project-design.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "project-reference",
+      "expected": "reject",
+      "errorCode": "project.unknown_reference",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/recovery-binding.json",
+      "schemaId": "ipcraft.recovery.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "recovery-binding",
+      "expected": "reject",
+      "errorCode": "recovery.binding_mismatch",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/schema-missing-artifact-manifest.json",
+      "schemaId": "ipcraft.artifact-manifest.v1",
+      "validationPhase": "schema",
+      "failureBoundary": "tool-artifact",
+      "expected": "reject",
+      "errorCode": "tool.artifact_invalid",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/schema-missing-bundle-manifest.json",
+      "schemaId": "ipcraft.bundle-manifest.v1",
+      "validationPhase": "schema",
+      "failureBoundary": "bundle-manifest",
+      "expected": "reject",
+      "errorCode": "dependency.manifest_invalid",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/schema-missing-command-result.json",
+      "schemaId": "ipcraft.command-result.v1",
+      "validationPhase": "schema",
+      "failureBoundary": "command-result",
+      "expected": "reject",
+      "errorCode": "command.result_invalid",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/schema-missing-core-canonical-models.json",
+      "schemaId": "ipcraft.core-canonical-models.v1",
+      "validationPhase": "schema",
+      "failureBoundary": "generic-structure",
+      "expected": "reject",
+      "errorCode": "contract.schema_invalid",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/schema-missing-diagnostic-report.json",
+      "schemaId": "ipcraft.diagnostic-report.v1",
+      "validationPhase": "schema",
+      "failureBoundary": "diagnostic-report",
+      "expected": "reject",
+      "errorCode": "diagnostic.report_invalid",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/schema-missing-engine-bundle.json",
+      "schemaId": "ipcraft.engine-bundle.v1",
+      "validationPhase": "schema",
+      "failureBoundary": "generic-structure",
+      "expected": "reject",
+      "errorCode": "contract.schema_invalid",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/schema-missing-interface-contract.json",
+      "schemaId": "ipcraft.interface-contract.v1",
+      "validationPhase": "schema",
+      "failureBoundary": "generic-structure",
+      "expected": "reject",
+      "errorCode": "contract.schema_invalid",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/schema-missing-noc-package.json",
+      "schemaId": "ipcraft.noc-package.v1",
+      "validationPhase": "schema",
+      "failureBoundary": "generic-structure",
+      "expected": "reject",
+      "errorCode": "contract.schema_invalid",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/schema-missing-noc-side-effects.json",
+      "schemaId": "ipcraft.noc-side-effects.v1",
+      "validationPhase": "schema",
+      "failureBoundary": "host-side-effect-result",
+      "expected": "reject",
+      "errorCode": "host.side_effect_result_invalid",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/schema-missing-output-manifest.json",
+      "schemaId": "ipcraft.output-manifest.v1",
+      "validationPhase": "schema",
+      "failureBoundary": "output-manifest",
+      "expected": "reject",
+      "errorCode": "output.manifest_invalid",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/schema-missing-patch.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "schema",
+      "failureBoundary": "patch-envelope",
+      "expected": "reject",
+      "errorCode": "patch.schema_invalid",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/schema-missing-pipeline-plan.json",
+      "schemaId": "ipcraft.pipeline-plan.v1",
+      "validationPhase": "schema",
+      "failureBoundary": "generic-structure",
+      "expected": "reject",
+      "errorCode": "contract.schema_invalid",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/schema-missing-pipeline-result.json",
+      "schemaId": "ipcraft.pipeline-result.v1",
+      "validationPhase": "schema",
+      "failureBoundary": "pipeline-result",
+      "expected": "reject",
+      "errorCode": "pipeline.result_invalid",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/schema-missing-project-design.json",
+      "schemaId": "ipcraft.project-design.v1",
+      "validationPhase": "schema",
+      "failureBoundary": "generic-structure",
+      "expected": "reject",
+      "errorCode": "contract.schema_invalid",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/schema-missing-recovery.json",
+      "schemaId": "ipcraft.recovery.v1",
+      "validationPhase": "schema",
+      "failureBoundary": "generic-structure",
+      "expected": "reject",
+      "errorCode": "contract.schema_invalid",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/schema-missing-step-result.json",
+      "schemaId": "ipcraft.step-result.v1",
+      "validationPhase": "schema",
+      "failureBoundary": "generic-structure",
+      "expected": "reject",
+      "errorCode": "contract.schema_invalid",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/schema-missing-tool-input.json",
+      "schemaId": "ipcraft.tool-input.v1",
+      "validationPhase": "schema",
+      "failureBoundary": "tool-input",
+      "expected": "reject",
+      "errorCode": "tool.input_invalid",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/schema-missing-tool-result.json",
+      "schemaId": "ipcraft.tool-result.v1",
+      "validationPhase": "schema",
+      "failureBoundary": "tool-result",
+      "expected": "reject",
+      "errorCode": "tool.result_invalid",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/step-external-without-invocation.json",
+      "schemaId": "ipcraft.step-result.v1",
+      "validationPhase": "schema",
+      "failureBoundary": "generic-structure",
+      "expected": "reject",
+      "errorCode": "contract.schema_invalid",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/tool-input-generator-snapshot-binding.json",
+      "schemaId": "ipcraft.tool-input.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "tool-input",
+      "expected": "reject",
+      "errorCode": "tool.input_invalid",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/tool-input-generator-without-output.json",
+      "schemaId": "ipcraft.tool-input.v1",
+      "validationPhase": "schema",
+      "failureBoundary": "tool-input",
+      "expected": "reject",
+      "errorCode": "tool.input_invalid",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/tool-result-failed-without-failure.json",
+      "schemaId": "ipcraft.tool-result.v1",
+      "validationPhase": "schema",
+      "failureBoundary": "tool-result",
+      "expected": "reject",
+      "errorCode": "tool.result_invalid",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/valid/artifact-manifest.json",
+      "schemaId": "ipcraft.artifact-manifest.v1",
+      "validationPhase": "schema",
+      "failureBoundary": null,
+      "expected": "accept",
+      "errorCode": null,
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/valid/bundle-manifest.json",
+      "schemaId": "ipcraft.bundle-manifest.v1",
+      "validationPhase": "schema",
+      "failureBoundary": null,
+      "expected": "accept",
+      "errorCode": null,
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/valid/command-result.json",
+      "schemaId": "ipcraft.command-result.v1",
+      "validationPhase": "schema",
+      "failureBoundary": null,
+      "expected": "accept",
+      "errorCode": null,
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/valid/core-canonical-models.json",
+      "schemaId": "ipcraft.core-canonical-models.v1",
+      "validationPhase": "schema",
+      "failureBoundary": null,
+      "expected": "accept",
+      "errorCode": null,
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/valid/diagnostic-report.json",
+      "schemaId": "ipcraft.diagnostic-report.v1",
+      "validationPhase": "schema",
+      "failureBoundary": null,
+      "expected": "accept",
+      "errorCode": null,
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/valid/engine-bundle.json",
+      "schemaId": "ipcraft.engine-bundle.v1",
+      "validationPhase": "schema",
+      "failureBoundary": null,
+      "expected": "accept",
+      "errorCode": null,
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/valid/interface-contract-ace.json",
+      "schemaId": "ipcraft.interface-contract.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": null,
+      "expected": "accept",
+      "errorCode": null,
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/valid/interface-contract-axi5.json",
+      "schemaId": "ipcraft.interface-contract.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": null,
+      "expected": "accept",
+      "errorCode": null,
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/valid/interface-contract-chi.json",
+      "schemaId": "ipcraft.interface-contract.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": null,
+      "expected": "accept",
+      "errorCode": null,
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/valid/interface-contract.json",
+      "schemaId": "ipcraft.interface-contract.v1",
+      "validationPhase": "schema",
+      "failureBoundary": null,
+      "expected": "accept",
+      "errorCode": null,
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/valid/noc-package.json",
+      "schemaId": "ipcraft.noc-package.v1",
+      "validationPhase": "schema",
+      "failureBoundary": null,
+      "expected": "accept",
+      "errorCode": null,
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/valid/noc-side-effects.json",
+      "schemaId": "ipcraft.noc-side-effects.v1",
+      "validationPhase": "schema",
+      "failureBoundary": null,
+      "expected": "accept",
+      "errorCode": null,
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/valid/output-manifest.json",
+      "schemaId": "ipcraft.output-manifest.v1",
+      "validationPhase": "schema",
+      "failureBoundary": null,
+      "expected": "accept",
+      "errorCode": null,
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/valid/patch.json",
+      "schemaId": "ipcraft.patch.v1",
+      "validationPhase": "schema",
+      "failureBoundary": null,
+      "expected": "accept",
+      "errorCode": null,
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/valid/pipeline-plan.json",
+      "schemaId": "ipcraft.pipeline-plan.v1",
+      "validationPhase": "schema",
+      "failureBoundary": null,
+      "expected": "accept",
+      "errorCode": null,
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/valid/pipeline-result.json",
+      "schemaId": "ipcraft.pipeline-result.v1",
+      "validationPhase": "schema",
+      "failureBoundary": null,
+      "expected": "accept",
+      "errorCode": null,
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/valid/project-design.json",
+      "schemaId": "ipcraft.project-design.v1",
+      "validationPhase": "schema",
+      "failureBoundary": null,
+      "expected": "accept",
+      "errorCode": null,
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/valid/project-exact-engine-unavailable.json",
+      "schemaId": "ipcraft.project-design.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": null,
+      "expected": "accept",
+      "errorCode": null,
+      "behaviorEvidence": "vectors/default-engine-lock-v1.json#engine-lock-missing"
+    },
+    {
+      "path": "fixtures/valid/project-mesh-1x1.json",
+      "schemaId": "ipcraft.project-design.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": null,
+      "expected": "accept",
+      "errorCode": null,
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/valid/project-mesh-2x2-interface-attachment-domain.json",
+      "schemaId": "ipcraft.project-design.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": null,
+      "expected": "accept",
+      "errorCode": null,
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/valid/recovery.json",
+      "schemaId": "ipcraft.recovery.v1",
+      "validationPhase": "schema",
+      "failureBoundary": null,
+      "expected": "accept",
+      "errorCode": null,
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/valid/step-result.json",
+      "schemaId": "ipcraft.step-result.v1",
+      "validationPhase": "schema",
+      "failureBoundary": null,
+      "expected": "accept",
+      "errorCode": null,
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/valid/tool-input.json",
+      "schemaId": "ipcraft.tool-input.v1",
+      "validationPhase": "schema",
+      "failureBoundary": null,
+      "expected": "accept",
+      "errorCode": null,
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/valid/tool-result.json",
+      "schemaId": "ipcraft.tool-result.v1",
+      "validationPhase": "schema",
+      "failureBoundary": null,
+      "expected": "accept",
+      "errorCode": null,
+      "behaviorEvidence": null
+    }
+  ]
 }

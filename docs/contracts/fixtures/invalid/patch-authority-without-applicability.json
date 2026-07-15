@@ -1,0 +1,16 @@
+{
+  "schema": "ipcraft.patch.v1",
+  "transactionId": "value",
+  "patchId": "value",
+  "source": {
+    "kind": "default-engine",
+    "identity": "ipcraft.default-noc-engine",
+    "version": "1",
+    "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "causality": {
+    "sessionRevision": 0
+  },
+  "preconditions": [],
+  "operations": []
+}

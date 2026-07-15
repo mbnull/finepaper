@@ -9,4 +9,4 @@ This directory contains machine-readable companions to the approved architecture
 - `fixture-error-policy-v1.json` closes the standalone fixture `(schemaId, validationPhase, failureBoundary)` classification to one exact stable error code per permitted V1 tuple.
 - `unicode/` pins Unicode 17 NFC, simple C/S folding, the official normalization conformance source, source hashes, and the complete Unicode License V3 notice so portable path identity is host-independent.
 
-These files are Revision 4 contract candidates, not a completed Gate 0 freeze. Gate 0 still requires the remaining schemas/fixtures, full vector catalog, error catalog, automated validators, and `CORE-FREEZE.md` digests listed in Appendix E.
+These files are Revision 4 contract candidates, not a completed Gate 0 freeze. The schema, fixture, vector, and error catalogs are populated; Gate 0 still requires the Qt executable checks, freeze-input manifest, review bundle, and `CORE-FREEZE.md` digests listed in Appendix E.

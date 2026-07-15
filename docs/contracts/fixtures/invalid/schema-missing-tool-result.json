@@ -1,0 +1,11 @@
+{
+  "pipelineRunId": "value",
+  "stepId": "value",
+  "invocationId": "value",
+  "snapshotDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "dependencySetDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "status": "succeeded",
+  "diagnosticReport": null,
+  "metrics": {},
+  "failure": null
+}

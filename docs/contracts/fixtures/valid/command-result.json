@@ -1,0 +1,9 @@
+{
+  "schema": "ipcraft.command-result.v1",
+  "commandId": "value",
+  "disposition": "accepted",
+  "sessionRevision": 0,
+  "pendingGroupId": null,
+  "draftId": null,
+  "diagnostics": []
+}
