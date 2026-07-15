@@ -41,7 +41,7 @@
       "kind": "noc",
       "name": "value",
       "packageLockId": "dep.noc.simple",
-      "typeKey": "value",
+      "typeKey": "mesh-noc",
       "config": {},
       "extensions": []
     }
@@ -56,8 +56,14 @@
         "lockId": "dep.contract.axi5",
         "role": "initiator"
       },
-      "capabilities": {},
-      "contractConfig": {},
+      "capabilities": {
+        "dataWidth": 128,
+        "coherent": false
+      },
+      "contractConfig": {
+        "addressWidth": 48,
+        "idWidth": 8
+      },
       "nocConfig": {},
       "extensions": []
     }
@@ -74,7 +80,7 @@
         "topologyInputDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "derivedStateRevision": 0,
         "derivedStateDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "packageBundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "packageBundleDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         "reconcileDependencySetDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "defaultEngineLockId": "dep.engine.default",
         "defaultEngineBundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -84,10 +90,10 @@
           "kind": "default-engine",
           "lockId": "dep.engine.default",
           "identity": "ipcraft.default-noc-engine",
-          "version": "value",
+          "version": "1.0.0",
           "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         },
-        "engineCompatibilityVersion": "value"
+        "engineCompatibilityVersion": "1"
       },
       "routers": [
         {
@@ -137,7 +143,7 @@
           "templateKey": "mesh-link",
           "identityCompatibilityVersion": 1,
           "endpointA": "router.0.0",
-          "endpointB": "router.0.1",
+          "endpointB": "router.1.1",
           "axis": "horizontal",
           "properties": {}
         },
@@ -177,7 +183,18 @@
           "identityCompatibilityVersion": 1,
           "displayOrder": 0,
           "label": "Local 0",
-          "allowedContracts": [],
+          "allowedContracts": [
+            {
+              "contractLockId": "dep.contract.axi5",
+              "roles": [
+                "initiator"
+              ],
+              "capabilityConstraints": {
+                "dataWidth": 128,
+                "coherent": false
+              }
+            }
+          ],
           "properties": {}
         },
         {
@@ -217,7 +234,7 @@
           "interfaceId": "interface.axi",
           "state": "resolved",
           "routerId": "router.0.0",
-          "slotId": "slot.missing"
+          "slotId": "slot.0.0"
         }
       ],
       "domains": [

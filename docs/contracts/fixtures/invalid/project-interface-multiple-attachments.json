@@ -148,6 +148,24 @@
           "properties": {}
         },
         {
+          "id": "link.v.0.0",
+          "templateKey": "mesh-link",
+          "identityCompatibilityVersion": 1,
+          "endpointA": "router.0.0",
+          "endpointB": "router.1.0",
+          "axis": "vertical",
+          "properties": {}
+        },
+        {
+          "id": "link.v.0.1",
+          "templateKey": "mesh-link",
+          "identityCompatibilityVersion": 1,
+          "endpointA": "router.0.1",
+          "endpointB": "router.1.1",
+          "axis": "vertical",
+          "properties": {}
+        },
+        {
           "id": "link.h.1.0",
           "templateKey": "mesh-link",
           "identityCompatibilityVersion": 1,
@@ -186,7 +204,18 @@
           "identityCompatibilityVersion": 1,
           "displayOrder": 0,
           "label": "Local 0",
-          "allowedContracts": [],
+          "allowedContracts": [
+            {
+              "contractLockId": "dep.contract.axi5",
+              "roles": [
+                "initiator"
+              ],
+              "capabilityConstraints": {
+                "dataWidth": 128,
+                "coherent": false
+              }
+            }
+          ],
           "properties": {}
         },
         {
@@ -217,6 +246,13 @@
           "state": "resolved",
           "routerId": "router.0.0",
           "slotId": "slot.0.0"
+        },
+        {
+          "id": "attachment.second",
+          "interfaceId": "interface.axi",
+          "state": "resolved",
+          "routerId": "router.0.1",
+          "slotId": "slot.0.1"
         }
       ],
       "domains": [

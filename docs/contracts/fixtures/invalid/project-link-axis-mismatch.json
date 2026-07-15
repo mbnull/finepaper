@@ -144,7 +144,25 @@
           "identityCompatibilityVersion": 1,
           "endpointA": "router.0.0",
           "endpointB": "router.0.1",
-          "axis": "horizontal",
+          "axis": "vertical",
+          "properties": {}
+        },
+        {
+          "id": "link.v.0.0",
+          "templateKey": "mesh-link",
+          "identityCompatibilityVersion": 1,
+          "endpointA": "router.0.0",
+          "endpointB": "router.1.0",
+          "axis": "vertical",
+          "properties": {}
+        },
+        {
+          "id": "link.v.0.1",
+          "templateKey": "mesh-link",
+          "identityCompatibilityVersion": 1,
+          "endpointA": "router.0.1",
+          "endpointB": "router.1.1",
+          "axis": "vertical",
           "properties": {}
         },
         {

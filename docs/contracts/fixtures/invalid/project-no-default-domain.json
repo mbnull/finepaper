@@ -148,6 +148,24 @@
           "properties": {}
         },
         {
+          "id": "link.v.0.0",
+          "templateKey": "mesh-link",
+          "identityCompatibilityVersion": 1,
+          "endpointA": "router.0.0",
+          "endpointB": "router.1.0",
+          "axis": "vertical",
+          "properties": {}
+        },
+        {
+          "id": "link.v.0.1",
+          "templateKey": "mesh-link",
+          "identityCompatibilityVersion": 1,
+          "endpointA": "router.0.1",
+          "endpointB": "router.1.1",
+          "axis": "vertical",
+          "properties": {}
+        },
+        {
           "id": "link.h.1.0",
           "templateKey": "mesh-link",
           "identityCompatibilityVersion": 1,
@@ -224,7 +242,7 @@
           "id": "domain.power.default",
           "typeKey": "power",
           "name": "Default Power",
-          "isDefault": true,
+          "isDefault": false,
           "config": {}
         }
       ],

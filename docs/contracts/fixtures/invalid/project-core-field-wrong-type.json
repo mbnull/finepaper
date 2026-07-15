@@ -4,8 +4,8 @@
     "id": "ipcraft.profile.noc",
     "version": "1"
   },
-  "id": "project.degraded",
-  "name": "Exact Engine Missing",
+  "id": "project.mesh-1x1",
+  "name": "Mesh 1x1",
   "dependencies": [
     {
       "lockId": "dep.engine.default",
@@ -73,7 +73,7 @@
           "templateKey": "mesh-router",
           "identityCompatibilityVersion": 1,
           "coordinate": {
-            "row": 0,
+            "row": "zero",
             "column": 0
           },
           "properties": {}

@@ -1,10 +1,10 @@
 {
-  "id": "value",
-  "name": "value",
-  "version": "value",
+  "id": "simple-noc",
+  "name": "Simple Mesh NoC",
+  "version": "1.0.0",
   "component": {
-    "typeKey": "value",
-    "displayName": "value"
+    "typeKey": "mesh-noc",
+    "displayName": "Mesh NoC"
   },
   "defaultEngineRequirement": {
     "engineHostContractVersion": "value",
@@ -67,9 +67,57 @@
     "slotTemplates": []
   },
   "interfaceTemplates": [],
-  "domainTypes": [],
-  "packageEntityTypes": [],
-  "packageRelationTypes": [],
+  "domainTypes": [
+    {
+      "key": "power",
+      "label": "Power",
+      "defaultName": "Default Power",
+      "visual": {
+        "fill": "#e8f1ff",
+        "border": "#3b6ea8",
+        "pattern": "solid"
+      },
+      "configuration": {
+        "fields": []
+      }
+    }
+  ],
+  "packageEntityTypes": [
+    {
+      "typeKey": "vendor.endpoint",
+      "ownership": "user",
+      "genericEditable": true,
+      "topologyDriving": false,
+      "schema": {
+        "type": "object"
+      }
+    }
+  ],
+  "packageRelationTypes": [
+    {
+      "typeKey": "vendor.route",
+      "ownership": "user",
+      "topologyDriving": false,
+      "sources": {
+        "kinds": [
+          "router"
+        ],
+        "minimum": 1,
+        "maximum": 1
+      },
+      "targets": {
+        "kinds": [
+          "package-entity"
+        ],
+        "minimum": 1,
+        "maximum": 1
+      },
+      "unresolvedAllowed": false,
+      "schema": {
+        "type": "object"
+      }
+    }
+  ],
   "extensionProvider": null,
   "tools": {},
   "extensions": []

@@ -1,11 +1,11 @@
 {
   "schema": "ipcraft.noc-package.v1",
-  "id": "value",
-  "name": "value",
-  "version": "value",
+  "id": "simple-noc",
+  "name": "Simple Mesh NoC",
+  "version": "1.0.0",
   "component": {
-    "typeKey": "value",
-    "displayName": "value"
+    "typeKey": "mesh-noc",
+    "displayName": "Mesh NoC"
   },
   "defaultEngineRequirement": {
     "engineHostContractVersion": "value",
@@ -96,8 +96,42 @@
       }
     }
   ],
-  "packageEntityTypes": [],
-  "packageRelationTypes": [],
+  "packageEntityTypes": [
+    {
+      "typeKey": "vendor.endpoint",
+      "ownership": "user",
+      "genericEditable": true,
+      "topologyDriving": false,
+      "schema": {
+        "type": "object"
+      }
+    }
+  ],
+  "packageRelationTypes": [
+    {
+      "typeKey": "vendor.route",
+      "ownership": "user",
+      "topologyDriving": false,
+      "sources": {
+        "kinds": [
+          "router"
+        ],
+        "minimum": 1,
+        "maximum": 1
+      },
+      "targets": {
+        "kinds": [
+          "package-entity"
+        ],
+        "minimum": 1,
+        "maximum": 1
+      },
+      "unresolvedAllowed": false,
+      "schema": {
+        "type": "object"
+      }
+    }
+  ],
   "extensionProvider": null,
   "tools": {},
   "extensions": []

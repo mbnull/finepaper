@@ -66,6 +66,26 @@
       },
       "nocConfig": {},
       "extensions": []
+    },
+    {
+      "id": "interface.second",
+      "ownerComponentId": "component.noc",
+      "templateKey": "axi-boundary",
+      "name": "AXI Boundary",
+      "contract": {
+        "lockId": "dep.contract.axi5",
+        "role": "initiator"
+      },
+      "capabilities": {
+        "dataWidth": 128,
+        "coherent": false
+      },
+      "contractConfig": {
+        "addressWidth": 48,
+        "idWidth": 8
+      },
+      "nocConfig": {},
+      "extensions": []
     }
   ],
   "connections": [],
@@ -148,6 +168,24 @@
           "properties": {}
         },
         {
+          "id": "link.v.0.0",
+          "templateKey": "mesh-link",
+          "identityCompatibilityVersion": 1,
+          "endpointA": "router.0.0",
+          "endpointB": "router.1.0",
+          "axis": "vertical",
+          "properties": {}
+        },
+        {
+          "id": "link.v.0.1",
+          "templateKey": "mesh-link",
+          "identityCompatibilityVersion": 1,
+          "endpointA": "router.0.1",
+          "endpointB": "router.1.1",
+          "axis": "vertical",
+          "properties": {}
+        },
+        {
           "id": "link.h.1.0",
           "templateKey": "mesh-link",
           "identityCompatibilityVersion": 1,
@@ -214,6 +252,13 @@
         {
           "id": "attachment.axi",
           "interfaceId": "interface.axi",
+          "state": "resolved",
+          "routerId": "router.0.0",
+          "slotId": "slot.0.0"
+        },
+        {
+          "id": "attachment.second",
+          "interfaceId": "interface.second",
           "state": "resolved",
           "routerId": "router.0.0",
           "slotId": "slot.0.0"

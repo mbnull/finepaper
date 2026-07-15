@@ -38,7 +38,34 @@
       "behaviorEvidence": null
     },
     {
+      "path": "fixtures/invalid/contract-capability-default-type.json",
+      "schemaId": "ipcraft.interface-contract.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "contract-declaration",
+      "expected": "reject",
+      "errorCode": "contract.invariant_violation",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/contract-condition-reference.json",
+      "schemaId": "ipcraft.interface-contract.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "contract-declaration",
+      "expected": "reject",
+      "errorCode": "contract.invariant_violation",
+      "behaviorEvidence": null
+    },
+    {
       "path": "fixtures/invalid/contract-duplicate-role.json",
+      "schemaId": "ipcraft.interface-contract.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "contract-declaration",
+      "expected": "reject",
+      "errorCode": "contract.invariant_violation",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/contract-field-range.json",
       "schemaId": "ipcraft.interface-contract.v1",
       "validationPhase": "core-semantic",
       "failureBoundary": "contract-declaration",
@@ -200,6 +227,87 @@
       "behaviorEvidence": null
     },
     {
+      "path": "fixtures/invalid/project-attachment-capability-mismatch.json",
+      "schemaId": "ipcraft.project-design.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "project-invariant",
+      "expected": "reject",
+      "errorCode": "project.invariant_violation",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/project-attachment-contract-mismatch.json",
+      "schemaId": "ipcraft.project-design.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "project-invariant",
+      "expected": "reject",
+      "errorCode": "project.invariant_violation",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/project-attachment-missing-slot.json",
+      "schemaId": "ipcraft.project-design.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "project-reference",
+      "expected": "reject",
+      "errorCode": "project.unknown_reference",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/project-attachment-occupied-slot.json",
+      "schemaId": "ipcraft.project-design.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "project-invariant",
+      "expected": "reject",
+      "errorCode": "project.invariant_violation",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/project-attachment-role-mismatch.json",
+      "schemaId": "ipcraft.project-design.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "project-invariant",
+      "expected": "reject",
+      "errorCode": "project.invariant_violation",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/project-attachment-router-slot-mismatch.json",
+      "schemaId": "ipcraft.project-design.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "project-invariant",
+      "expected": "reject",
+      "errorCode": "project.invariant_violation",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/project-component-package-missing.json",
+      "schemaId": "ipcraft.project-design.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "project-reference",
+      "expected": "reject",
+      "errorCode": "project.unknown_reference",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/project-core-field-wrong-type.json",
+      "schemaId": "ipcraft.project-design.v1",
+      "validationPhase": "schema",
+      "failureBoundary": "generic-structure",
+      "expected": "reject",
+      "errorCode": "contract.schema_invalid",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/project-derivation-engine-lock-mismatch.json",
+      "schemaId": "ipcraft.project-design.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "project-invariant",
+      "expected": "reject",
+      "errorCode": "project.invariant_violation",
+      "behaviorEvidence": null
+    },
+    {
       "path": "fixtures/invalid/project-disconnected-domain.json",
       "schemaId": "ipcraft.project-design.v1",
       "validationPhase": "core-semantic",
@@ -218,7 +326,34 @@
       "behaviorEvidence": null
     },
     {
-      "path": "fixtures/invalid/project-incomplete-domain-coverage.json",
+      "path": "fixtures/invalid/project-duplicate-router-coordinate.json",
+      "schemaId": "ipcraft.project-design.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "project-invariant",
+      "expected": "reject",
+      "errorCode": "project.invariant_violation",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/project-duplicate-slot-key.json",
+      "schemaId": "ipcraft.project-design.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "project-invariant",
+      "expected": "reject",
+      "errorCode": "project.invariant_violation",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/project-extension-owner-missing.json",
+      "schemaId": "ipcraft.project-design.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "project-reference",
+      "expected": "reject",
+      "errorCode": "project.unknown_reference",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/project-interface-multiple-attachments.json",
       "schemaId": "ipcraft.project-design.v1",
       "validationPhase": "core-semantic",
       "failureBoundary": "project-invariant",
@@ -236,12 +371,165 @@
       "behaviorEvidence": null
     },
     {
-      "path": "fixtures/invalid/project-unknown-attachment-slot.json",
+      "path": "fixtures/invalid/project-link-axis-mismatch.json",
+      "schemaId": "ipcraft.project-design.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "project-invariant",
+      "expected": "reject",
+      "errorCode": "project.invariant_violation",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/project-link-duplicate-pair.json",
+      "schemaId": "ipcraft.project-design.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "project-invariant",
+      "expected": "reject",
+      "errorCode": "project.invariant_violation",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/project-link-missing-endpoint.json",
       "schemaId": "ipcraft.project-design.v1",
       "validationPhase": "core-semantic",
       "failureBoundary": "project-reference",
       "expected": "reject",
       "errorCode": "project.unknown_reference",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/project-link-nonadjacent.json",
+      "schemaId": "ipcraft.project-design.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "project-invariant",
+      "expected": "reject",
+      "errorCode": "project.invariant_violation",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/project-link-self.json",
+      "schemaId": "ipcraft.project-design.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "project-invariant",
+      "expected": "reject",
+      "errorCode": "project.invariant_violation",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/project-missing-domain-membership.json",
+      "schemaId": "ipcraft.project-design.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "project-invariant",
+      "expected": "reject",
+      "errorCode": "project.invariant_violation",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/project-missing-noc-profile.json",
+      "schemaId": "ipcraft.project-design.v1",
+      "validationPhase": "schema",
+      "failureBoundary": "generic-structure",
+      "expected": "reject",
+      "errorCode": "contract.schema_invalid",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/project-no-default-domain.json",
+      "schemaId": "ipcraft.project-design.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "project-invariant",
+      "expected": "reject",
+      "errorCode": "project.invariant_violation",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/project-nonempty-connections.json",
+      "schemaId": "ipcraft.project-design.v1",
+      "validationPhase": "schema",
+      "failureBoundary": "generic-structure",
+      "expected": "reject",
+      "errorCode": "contract.schema_invalid",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/project-opaque-outside-extension.json",
+      "schemaId": "ipcraft.project-design.v1",
+      "validationPhase": "schema",
+      "failureBoundary": "generic-structure",
+      "expected": "reject",
+      "errorCode": "contract.schema_invalid",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/project-runtime-lock-incomplete.json",
+      "schemaId": "ipcraft.project-design.v1",
+      "validationPhase": "schema",
+      "failureBoundary": "generic-structure",
+      "expected": "reject",
+      "errorCode": "contract.schema_invalid",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/project-slot-contract-lock-missing.json",
+      "schemaId": "ipcraft.project-design.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "project-reference",
+      "expected": "reject",
+      "errorCode": "project.unknown_reference",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/project-slot-missing-router.json",
+      "schemaId": "ipcraft.project-design.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "project-reference",
+      "expected": "reject",
+      "errorCode": "project.unknown_reference",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/project-topology-owner-missing.json",
+      "schemaId": "ipcraft.project-design.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "project-reference",
+      "expected": "reject",
+      "errorCode": "project.unknown_reference",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/project-two-components.json",
+      "schemaId": "ipcraft.project-design.v1",
+      "validationPhase": "schema",
+      "failureBoundary": "generic-structure",
+      "expected": "reject",
+      "errorCode": "contract.schema_invalid",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/project-two-default-domains.json",
+      "schemaId": "ipcraft.project-design.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "project-invariant",
+      "expected": "reject",
+      "errorCode": "project.invariant_violation",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/project-wrong-schema-id.json",
+      "schemaId": "ipcraft.project-design.v1",
+      "validationPhase": "schema",
+      "failureBoundary": "generic-structure",
+      "expected": "reject",
+      "errorCode": "contract.schema_invalid",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/project-zero-components.json",
+      "schemaId": "ipcraft.project-design.v1",
+      "validationPhase": "schema",
+      "failureBoundary": "generic-structure",
+      "expected": "reject",
+      "errorCode": "contract.schema_invalid",
       "behaviorEvidence": null
     },
     {
@@ -542,6 +830,33 @@
       "behaviorEvidence": null
     },
     {
+      "path": "fixtures/valid/mesh-2x2-attached.json",
+      "schemaId": "ipcraft.project-design.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": null,
+      "expected": "accept",
+      "errorCode": null,
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/valid/mesh-2x2-package-extension.json",
+      "schemaId": "ipcraft.project-design.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": null,
+      "expected": "accept",
+      "errorCode": null,
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/valid/minimal-1x1.json",
+      "schemaId": "ipcraft.project-design.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": null,
+      "expected": "accept",
+      "errorCode": null,
+      "behaviorEvidence": null
+    },
+    {
       "path": "fixtures/valid/noc-package.json",
       "schemaId": "ipcraft.noc-package.v1",
       "validationPhase": "schema",
@@ -612,24 +927,6 @@
       "expected": "accept",
       "errorCode": null,
       "behaviorEvidence": "vectors/default-engine-lock-v1.json#engine-lock-missing"
-    },
-    {
-      "path": "fixtures/valid/project-mesh-1x1.json",
-      "schemaId": "ipcraft.project-design.v1",
-      "validationPhase": "core-semantic",
-      "failureBoundary": null,
-      "expected": "accept",
-      "errorCode": null,
-      "behaviorEvidence": null
-    },
-    {
-      "path": "fixtures/valid/project-mesh-2x2-interface-attachment-domain.json",
-      "schemaId": "ipcraft.project-design.v1",
-      "validationPhase": "core-semantic",
-      "failureBoundary": null,
-      "expected": "accept",
-      "errorCode": null,
-      "behaviorEvidence": null
     },
     {
       "path": "fixtures/valid/recovery.json",

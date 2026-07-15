@@ -4,8 +4,8 @@
     "id": "ipcraft.profile.noc",
     "version": "1"
   },
-  "id": "project.mesh-2x2",
-  "name": "Mesh 2x2",
+  "id": "project.mesh-2x2-package-extension",
+  "name": "Mesh 2x2 Package Extension",
   "dependencies": [
     {
       "lockId": "dep.engine.default",
@@ -26,13 +26,6 @@
       "id": "simple-noc",
       "version": "1.0.0",
       "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-    },
-    {
-      "lockId": "dep.contract.axi5",
-      "kind": "interface-contract",
-      "id": "amba.axi5",
-      "version": "1.0.0",
-      "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     }
   ],
   "components": [
@@ -46,28 +39,7 @@
       "extensions": []
     }
   ],
-  "interfaces": [
-    {
-      "id": "interface.axi",
-      "ownerComponentId": "component.noc",
-      "templateKey": "axi-boundary",
-      "name": "AXI Boundary",
-      "contract": {
-        "lockId": "dep.contract.axi5",
-        "role": "initiator"
-      },
-      "capabilities": {
-        "dataWidth": 128,
-        "coherent": false
-      },
-      "contractConfig": {
-        "addressWidth": 48,
-        "idWidth": 8
-      },
-      "nocConfig": {},
-      "extensions": []
-    }
-  ],
+  "interfaces": [],
   "connections": [],
   "topologies": [
     {
@@ -148,6 +120,24 @@
           "properties": {}
         },
         {
+          "id": "link.v.0.0",
+          "templateKey": "mesh-link",
+          "identityCompatibilityVersion": 1,
+          "endpointA": "router.0.0",
+          "endpointB": "router.1.0",
+          "axis": "vertical",
+          "properties": {}
+        },
+        {
+          "id": "link.v.0.1",
+          "templateKey": "mesh-link",
+          "identityCompatibilityVersion": 1,
+          "endpointA": "router.0.1",
+          "endpointB": "router.1.1",
+          "axis": "vertical",
+          "properties": {}
+        },
+        {
           "id": "link.h.1.0",
           "templateKey": "mesh-link",
           "identityCompatibilityVersion": 1,
@@ -165,18 +155,7 @@
           "identityCompatibilityVersion": 1,
           "displayOrder": 0,
           "label": "Local 0",
-          "allowedContracts": [
-            {
-              "contractLockId": "dep.contract.axi5",
-              "roles": [
-                "initiator"
-              ],
-              "capabilityConstraints": {
-                "dataWidth": 128,
-                "coherent": false
-              }
-            }
-          ],
+          "allowedContracts": [],
           "properties": {}
         },
         {
@@ -210,15 +189,7 @@
           "properties": {}
         }
       ],
-      "attachments": [
-        {
-          "id": "attachment.axi",
-          "interfaceId": "interface.axi",
-          "state": "resolved",
-          "routerId": "router.0.0",
-          "slotId": "slot.0.0"
-        }
-      ],
+      "attachments": [],
       "domains": [
         {
           "id": "domain.power.default",
@@ -250,11 +221,58 @@
           "routerId": "router.1.1"
         }
       ],
-      "packageEntities": [],
-      "packageRelations": [],
+      "packageEntities": [
+        {
+          "id": "package-entity.endpoint",
+          "typeKey": "vendor.endpoint",
+          "data": {
+            "label": "Endpoint"
+          },
+          "extensions": []
+        }
+      ],
+      "packageRelations": [
+        {
+          "id": "package-relation.route",
+          "typeKey": "vendor.route",
+          "sources": [
+            {
+              "state": "resolved",
+              "subject": {
+                "kind": "router",
+                "id": "router.0.0"
+              }
+            }
+          ],
+          "targets": [
+            {
+              "state": "resolved",
+              "subject": {
+                "kind": "package-entity",
+                "id": "package-entity.endpoint"
+              }
+            }
+          ],
+          "data": {
+            "enabled": true
+          },
+          "extensions": []
+        }
+      ],
       "extensions": []
     }
   ],
   "views": [],
-  "extensions": []
+  "extensions": [
+    {
+      "ownerLockId": "dep.noc.simple",
+      "schema": "vendor.extension.v1",
+      "version": "1",
+      "data": {
+        "opaque": {
+          "mode": "preview"
+        }
+      }
+    }
+  ]
 }

@@ -4,8 +4,8 @@
     "id": "ipcraft.profile.noc",
     "version": "1"
   },
-  "id": "project.mesh-2x2",
-  "name": "Mesh 2x2",
+  "id": "project.mesh-2x2-package-extension",
+  "name": "Mesh 2x2 Package Extension",
   "dependencies": [
     {
       "lockId": "dep.engine.default",
@@ -26,13 +26,6 @@
       "id": "simple-noc",
       "version": "1.0.0",
       "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-    },
-    {
-      "lockId": "dep.contract.axi5",
-      "kind": "interface-contract",
-      "id": "amba.axi5",
-      "version": "1.0.0",
-      "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     }
   ],
   "components": [
@@ -41,27 +34,12 @@
       "kind": "noc",
       "name": "value",
       "packageLockId": "dep.noc.simple",
-      "typeKey": "value",
+      "typeKey": "mesh-noc",
       "config": {},
       "extensions": []
     }
   ],
-  "interfaces": [
-    {
-      "id": "interface.axi",
-      "ownerComponentId": "component.noc",
-      "templateKey": "axi-boundary",
-      "name": "AXI Boundary",
-      "contract": {
-        "lockId": "dep.contract.axi5",
-        "role": "initiator"
-      },
-      "capabilities": {},
-      "contractConfig": {},
-      "nocConfig": {},
-      "extensions": []
-    }
-  ],
+  "interfaces": [],
   "connections": [],
   "topologies": [
     {
@@ -74,7 +52,7 @@
         "topologyInputDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "derivedStateRevision": 0,
         "derivedStateDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "packageBundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "packageBundleDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         "reconcileDependencySetDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "defaultEngineLockId": "dep.engine.default",
         "defaultEngineBundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -84,10 +62,10 @@
           "kind": "default-engine",
           "lockId": "dep.engine.default",
           "identity": "ipcraft.default-noc-engine",
-          "version": "value",
+          "version": "1.0.0",
           "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         },
-        "engineCompatibilityVersion": "value"
+        "engineCompatibilityVersion": "1"
       },
       "routers": [
         {
@@ -211,15 +189,7 @@
           "properties": {}
         }
       ],
-      "attachments": [
-        {
-          "id": "attachment.axi",
-          "interfaceId": "interface.axi",
-          "state": "resolved",
-          "routerId": "router.0.0",
-          "slotId": "slot.0.0"
-        }
-      ],
+      "attachments": [],
       "domains": [
         {
           "id": "domain.power.default",
@@ -244,13 +214,65 @@
           "id": "membership.router.1.0",
           "domainId": "domain.power.default",
           "routerId": "router.1.0"
+        },
+        {
+          "id": "membership.router.1.1",
+          "domainId": "domain.power.default",
+          "routerId": "router.1.1"
         }
       ],
-      "packageEntities": [],
-      "packageRelations": [],
+      "packageEntities": [
+        {
+          "id": "package-entity.endpoint",
+          "typeKey": "vendor.endpoint",
+          "data": {
+            "label": "Endpoint"
+          },
+          "extensions": []
+        }
+      ],
+      "packageRelations": [
+        {
+          "id": "package-relation.route",
+          "typeKey": "vendor.route",
+          "sources": [
+            {
+              "state": "resolved",
+              "subject": {
+                "kind": "router",
+                "id": "router.0.0"
+              }
+            }
+          ],
+          "targets": [
+            {
+              "state": "resolved",
+              "subject": {
+                "kind": "package-entity",
+                "id": "package-entity.endpoint"
+              }
+            }
+          ],
+          "data": {
+            "enabled": true
+          },
+          "extensions": []
+        }
+      ],
       "extensions": []
     }
   ],
   "views": [],
-  "extensions": []
+  "extensions": [
+    {
+      "ownerLockId": "dep.missing",
+      "schema": "vendor.extension.v1",
+      "version": "1",
+      "data": {
+        "opaque": {
+          "mode": "preview"
+        }
+      }
+    }
+  ]
 }

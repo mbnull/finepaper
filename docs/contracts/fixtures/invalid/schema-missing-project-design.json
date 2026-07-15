@@ -3,8 +3,8 @@
     "id": "ipcraft.profile.noc",
     "version": "1"
   },
-  "id": "value",
-  "name": "value",
+  "id": "project.mesh-1x1",
+  "name": "Mesh 1x1",
   "dependencies": [
     {
       "lockId": "dep.engine.default",
@@ -33,7 +33,7 @@
       "kind": "noc",
       "name": "value",
       "packageLockId": "dep.noc.simple",
-      "typeKey": "value",
+      "typeKey": "mesh-noc",
       "config": {},
       "extensions": []
     }
@@ -51,7 +51,7 @@
         "topologyInputDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "derivedStateRevision": 0,
         "derivedStateDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "packageBundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "packageBundleDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         "reconcileDependencySetDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "defaultEngineLockId": "dep.engine.default",
         "defaultEngineBundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -61,17 +61,53 @@
           "kind": "default-engine",
           "lockId": "dep.engine.default",
           "identity": "ipcraft.default-noc-engine",
-          "version": "value",
+          "version": "1.0.0",
           "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         },
-        "engineCompatibilityVersion": "value"
+        "engineCompatibilityVersion": "1"
       },
-      "routers": [],
+      "routers": [
+        {
+          "id": "router.0.0",
+          "templateKey": "mesh-router",
+          "identityCompatibilityVersion": 1,
+          "coordinate": {
+            "row": 0,
+            "column": 0
+          },
+          "properties": {}
+        }
+      ],
       "structuralLinks": [],
-      "accessSlots": [],
+      "accessSlots": [
+        {
+          "id": "slot.0.0",
+          "routerId": "router.0.0",
+          "templateKey": "local-0",
+          "identityCompatibilityVersion": 1,
+          "displayOrder": 0,
+          "label": "Local 0",
+          "allowedContracts": [],
+          "properties": {}
+        }
+      ],
       "attachments": [],
-      "domains": [],
-      "domainMemberships": [],
+      "domains": [
+        {
+          "id": "domain.power.default",
+          "typeKey": "power",
+          "name": "Default Power",
+          "isDefault": true,
+          "config": {}
+        }
+      ],
+      "domainMemberships": [
+        {
+          "id": "membership.router.0.0",
+          "domainId": "domain.power.default",
+          "routerId": "router.0.0"
+        }
+      ],
       "packageEntities": [],
       "packageRelations": [],
       "extensions": []

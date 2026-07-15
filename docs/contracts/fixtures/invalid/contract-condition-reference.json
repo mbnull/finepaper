@@ -48,7 +48,10 @@
       "maximum": 64,
       "unit": "bits",
       "values": null,
-      "visibleWhen": null,
+      "visibleWhen": {
+        "field": "missingField",
+        "equals": true
+      },
       "enabledWhen": null
     },
     {

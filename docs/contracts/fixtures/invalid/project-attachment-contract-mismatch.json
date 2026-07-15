@@ -33,6 +33,13 @@
       "id": "amba.axi5",
       "version": "1.0.0",
       "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    {
+      "lockId": "dep.contract.chi",
+      "kind": "interface-contract",
+      "id": "amba.chi",
+      "version": "1.0.0",
+      "bundleManifestDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     }
   ],
   "components": [
@@ -53,7 +60,7 @@
       "templateKey": "axi-boundary",
       "name": "AXI Boundary",
       "contract": {
-        "lockId": "dep.contract.axi5",
+        "lockId": "dep.contract.chi",
         "role": "initiator"
       },
       "capabilities": {
@@ -145,6 +152,24 @@
           "endpointA": "router.0.0",
           "endpointB": "router.0.1",
           "axis": "horizontal",
+          "properties": {}
+        },
+        {
+          "id": "link.v.0.0",
+          "templateKey": "mesh-link",
+          "identityCompatibilityVersion": 1,
+          "endpointA": "router.0.0",
+          "endpointB": "router.1.0",
+          "axis": "vertical",
+          "properties": {}
+        },
+        {
+          "id": "link.v.0.1",
+          "templateKey": "mesh-link",
+          "identityCompatibilityVersion": 1,
+          "endpointA": "router.0.1",
+          "endpointB": "router.1.1",
+          "axis": "vertical",
           "properties": {}
         },
         {

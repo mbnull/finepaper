@@ -1,11 +1,11 @@
 {
-  "schema": "ipcraft.project-design.v1",
+  "schema": "ipcraft.project-design.v0",
   "profile": {
     "id": "ipcraft.profile.noc",
     "version": "1"
   },
-  "id": "project.degraded",
-  "name": "Exact Engine Missing",
+  "id": "project.mesh-1x1",
+  "name": "Mesh 1x1",
   "dependencies": [
     {
       "lockId": "dep.engine.default",

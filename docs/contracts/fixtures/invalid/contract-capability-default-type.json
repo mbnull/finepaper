@@ -17,7 +17,7 @@
     {
       "key": "dataWidth",
       "type": "int",
-      "default": 128,
+      "default": "128",
       "required": true,
       "editable": true,
       "values": [

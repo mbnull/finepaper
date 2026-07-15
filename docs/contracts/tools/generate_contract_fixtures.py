@@ -130,8 +130,25 @@ def mesh_project(base: dict[str, Any], rows: int, columns: int, with_interface: 
     topology.update({"routers":routers,"structuralLinks":links,"accessSlots":slots,"domains":[domain],"domainMemberships":memberships})
     if with_interface:
         project["dependencies"].append({"lockId":"dep.contract.axi5","kind":"interface-contract","id":"amba.axi5","version":"1.0.0","bundleManifestDigest":DIGEST_B})
-        project["interfaces"] = [{"id":"interface.axi","ownerComponentId":"component.noc","templateKey":"axi-boundary","name":"AXI Boundary","contract":{"lockId":"dep.contract.axi5","role":"initiator"},"capabilities":{},"contractConfig":{},"nocConfig":{},"extensions":[]}]
+        project["interfaces"] = [{"id":"interface.axi","ownerComponentId":"component.noc","templateKey":"axi-boundary","name":"AXI Boundary","contract":{"lockId":"dep.contract.axi5","role":"initiator"},"capabilities":{"dataWidth":128,"coherent":False},"contractConfig":{"addressWidth":48,"idWidth":8},"nocConfig":{},"extensions":[]}]
+        slots[0]["allowedContracts"] = [{"contractLockId":"dep.contract.axi5","roles":["initiator"],"capabilityConstraints":{"dataWidth":128,"coherent":False}}]
         topology["attachments"] = [{"id":"attachment.axi","interfaceId":"interface.axi","state":"resolved","routerId":"router.0.0","slotId":"slot.0.0"}]
+    return project
+
+
+def package_extension_project(base: dict[str, Any]) -> dict[str, Any]:
+    project = mesh_project(base, 2, 2, False)
+    project["id"] = "project.mesh-2x2-package-extension"
+    project["name"] = "Mesh 2x2 Package Extension"
+    topology = project["topologies"][0]
+    topology["packageEntities"] = [{"id":"package-entity.endpoint","typeKey":"vendor.endpoint","data":{"label":"Endpoint"},"extensions":[]}]
+    topology["packageRelations"] = [{
+        "id":"package-relation.route","typeKey":"vendor.route",
+        "sources":[{"state":"resolved","subject":{"kind":"router","id":"router.0.0"}}],
+        "targets":[{"state":"resolved","subject":{"kind":"package-entity","id":"package-entity.endpoint"}}],
+        "data":{"enabled":True},"extensions":[],
+    }]
+    project["extensions"] = [{"ownerLockId":"dep.noc.simple","schema":"vendor.extension.v1","version":"1","data":{"opaque":{"mode":"preview"}}}]
     return project
 
 
@@ -168,26 +185,25 @@ def generate(contracts: Path) -> None:
             def dimension_field(key: str) -> dict[str, Any]:
                 return {"key":key,"type":"int","label":key.title(),"description":"Mesh dimension","default":1,"required":True,"readOnly":False,"minimum":1,"maximum":64,"unit":None,"values":None,"visibleWhen":None,"enabledWhen":None,"topologyDriving":True}
             document["configuration"]["global"]["fields"] = [dimension_field("columns"), dimension_field("rows")]
+            document.update({"id":"simple-noc","name":"Simple Mesh NoC","version":"1.0.0"})
+            document["component"].update({"typeKey":"mesh-noc","displayName":"Mesh NoC"})
             document["topology"].update({"rowField":"rows","columnField":"columns"})
+            document["packageEntityTypes"] = [{"typeKey":"vendor.endpoint","ownership":"user","genericEditable":True,"topologyDriving":False,"schema":{"type":"object"}}]
+            document["packageRelationTypes"] = [{"typeKey":"vendor.route","ownership":"user","topologyDriving":False,"sources":{"kinds":["router"],"minimum":1,"maximum":1},"targets":{"kinds":["package-entity"],"minimum":1,"maximum":1},"unresolvedAllowed":False,"schema":{"type":"object"}}]
+            document["domainTypes"] = [{"key":"power","label":"Power","defaultName":"Default Power","visual":{"fill":"#e8f1ff","border":"#3b6ea8","pattern":"solid"},"configuration":{"fields":[]}}]
         if schema_id == "ipcraft.project-design.v1":
             document["dependencies"] = [
                 {"lockId":"dep.engine.default","kind":"default-engine","id":"ipcraft.default-noc-engine","version":"1.0.0","bundleManifestDigest":DIGEST_A,"engineHostContractVersion":"ipcraft.engine-host.v1","engineCompatibilityVersion":"1","hostSideEffectContractVersion":"ipcraft.noc-side-effects.v1","supportedPlatformAbis":["linux-x86_64-gnu-v1"]},
                 {"lockId":"dep.noc.simple","kind":"noc-package","id":"simple-noc","version":"1.0.0","bundleManifestDigest":DIGEST_B},
             ]
-            document["components"][0].update({"id":"component.noc","packageLockId":"dep.noc.simple"})
+            document["components"][0].update({"id":"component.noc","packageLockId":"dep.noc.simple","typeKey":"mesh-noc"})
             document["topologies"][0].update({"id":"topology.mesh","ownerComponentId":"component.noc"})
             derivation = document["topologies"][0]["derivation"]
-            derivation.update({"defaultEngineLockId":"dep.engine.default","defaultEngineBundleDigest":DIGEST_A,"engineHostContractVersion":"ipcraft.engine-host.v1","hostSideEffectContractVersion":"ipcraft.noc-side-effects.v1"})
-            derivation["structureAuthority"].update({"lockId":"dep.engine.default","identity":"ipcraft.default-noc-engine","bundleDigest":DIGEST_A})
+            derivation.update({"packageBundleDigest":DIGEST_B,"defaultEngineLockId":"dep.engine.default","defaultEngineBundleDigest":DIGEST_A,"engineHostContractVersion":"ipcraft.engine-host.v1","hostSideEffectContractVersion":"ipcraft.noc-side-effects.v1","engineCompatibilityVersion":"1"})
+            derivation["structureAuthority"].update({"lockId":"dep.engine.default","identity":"ipcraft.default-noc-engine","version":"1.0.0","bundleDigest":DIGEST_A})
+            document = mesh_project(document, 1, 1, False)
         if schema_id == "ipcraft.recovery.v1":
-            project = builder.root("ipcraft.project-design.v1")
-            project["dependencies"] = [
-                {"lockId":"dep.engine.default","kind":"default-engine","id":"ipcraft.default-noc-engine","version":"1.0.0","bundleManifestDigest":DIGEST_A,"engineHostContractVersion":"ipcraft.engine-host.v1","engineCompatibilityVersion":"1","hostSideEffectContractVersion":"ipcraft.noc-side-effects.v1","supportedPlatformAbis":["linux-x86_64-gnu-v1"]},
-                {"lockId":"dep.noc.simple","kind":"noc-package","id":"simple-noc","version":"1.0.0","bundleManifestDigest":DIGEST_B},
-            ]
-            project["components"][0].update({"id":"component.noc","packageLockId":"dep.noc.simple"})
-            project["topologies"][0].update({"id":"topology.mesh","ownerComponentId":"component.noc"})
-            project["topologies"][0]["derivation"]["structureAuthority"].update({"lockId":"dep.engine.default","identity":"ipcraft.default-noc-engine","bundleDigest":DIGEST_A})
+            project = copy.deepcopy(valid["ipcraft.project-design.v1"])
             document["authoritativeDesign"] = project
             document["projectId"] = project["id"]
         if schema_id == "ipcraft.noc-side-effects.v1":
@@ -200,7 +216,20 @@ def generate(contracts: Path) -> None:
     for protocol in ("axi5", "ace", "chi"):
         contract = copy.deepcopy(valid["ipcraft.interface-contract.v1"])
         contract.update({"id":f"amba.{protocol}","name":protocol.upper(),"version":"1.0"})
-        contract["roles"] = [{"key":"initiator","label":"Initiator"},{"key":"target","label":"Target"}]
+        roles = {
+            "axi5": [{"key":"initiator","label":"Initiator"},{"key":"target","label":"Target"}],
+            "ace": [{"key":"coherent-manager","label":"Coherent Manager"},{"key":"coherent-subordinate","label":"Coherent Subordinate"}],
+            "chi": [{"key":"requester","label":"Requester"},{"key":"home","label":"Home"},{"key":"subordinate","label":"Subordinate"}],
+        }
+        contract["roles"] = roles[protocol]
+        contract["capabilities"] = [
+            {"key":"dataWidth","type":"int","default":128,"required":True,"editable":True,"values":[64,128,256]},
+            {"key":"coherent","type":"bool","default":protocol != "axi5","required":True,"editable":False,"values":None},
+        ]
+        contract["fields"] = [
+            {"key":"addressWidth","type":"int","label":"Address Width","description":"Address channel width","default":48,"required":True,"readOnly":False,"minimum":32,"maximum":64,"unit":"bits","values":None,"visibleWhen":None,"enabledWhen":None},
+            {"key":"idWidth","type":"int","label":"ID Width","description":"Transaction ID width","default":8,"required":True,"readOnly":False,"minimum":1,"maximum":32,"unit":"bits","values":None,"visibleWhen":None,"enabledWhen":None},
+        ]
         add(f"interface-contract-{protocol}", "ipcraft.interface-contract.v1", contract, "accept", "core-semantic", None, None)
 
     # A schema-phase witness for every standalone root.
@@ -234,23 +263,95 @@ def generate(contracts: Path) -> None:
 
     # ProjectDesign representative and semantic boundaries.
     project = mesh_project(valid["ipcraft.project-design.v1"], 1, 1, False)
-    add("project-mesh-1x1", "ipcraft.project-design.v1", project, "accept", "core-semantic", None, None)
+    add("minimal-1x1", "ipcraft.project-design.v1", project, "accept", "core-semantic", None, None)
     project_2x2 = mesh_project(valid["ipcraft.project-design.v1"], 2, 2, True)
-    add("project-mesh-2x2-interface-attachment-domain", "ipcraft.project-design.v1", project_2x2, "accept", "core-semantic", None, None)
+    add("mesh-2x2-attached", "ipcraft.project-design.v1", project_2x2, "accept", "core-semantic", None, None)
+    add("mesh-2x2-package-extension", "ipcraft.project-design.v1", package_extension_project(valid["ipcraft.project-design.v1"]), "accept", "core-semantic", None, None)
     degraded = copy.deepcopy(project); degraded["id"] = "project.degraded"; degraded["name"] = "Exact Engine Missing"
     add("project-exact-engine-unavailable", "ipcraft.project-design.v1", degraded, "accept", "core-semantic", None, None,
         "vectors/default-engine-lock-v1.json#engine-lock-missing")
     duplicate = copy.deepcopy(project); duplicate["topologies"][0]["id"] = duplicate["components"][0]["id"]
     add("project-duplicate-id", "ipcraft.project-design.v1", duplicate, "reject", "core-semantic", "project-duplicate-id", "project.duplicate_id")
-    unknown = copy.deepcopy(project_2x2); unknown["topologies"][0]["attachments"][0]["slotId"] = "slot.missing"
-    add("project-unknown-attachment-slot", "ipcraft.project-design.v1", unknown, "reject", "core-semantic", "project-reference", "project.unknown_reference")
+    wrong_schema = copy.deepcopy(project); wrong_schema["schema"] = "ipcraft.project-design.v0"
+    add("project-wrong-schema-id", "ipcraft.project-design.v1", wrong_schema, "reject", "schema", "generic-structure", "contract.schema_invalid")
     uncovered = copy.deepcopy(project_2x2); uncovered["topologies"][0]["domainMemberships"].pop()
-    add("project-incomplete-domain-coverage", "ipcraft.project-design.v1", uncovered, "reject", "core-semantic", "project-invariant", "project.invariant_violation")
+    add("project-missing-domain-membership", "ipcraft.project-design.v1", uncovered, "reject", "core-semantic", "project-invariant", "project.invariant_violation")
     disconnected = copy.deepcopy(project_2x2)
     disconnected["topologies"][0]["structuralLinks"] = [link for link in disconnected["topologies"][0]["structuralLinks"] if link["axis"] == "horizontal"]
     add("project-disconnected-domain", "ipcraft.project-design.v1", disconnected, "reject", "core-semantic", "project-invariant", "project.invariant_violation")
     legacy = {"project": {"id": "legacy"}, "instances": []}
     add("project-legacy-root", "ipcraft.project-design.v1", legacy, "reject", "schema", "legacy-project-root", "project.legacy_format_unsupported")
+
+    project_schema_cases: list[tuple[str, dict[str, Any]]] = []
+    missing_profile = copy.deepcopy(project); missing_profile.pop("profile")
+    project_schema_cases.append(("project-missing-noc-profile", missing_profile))
+    zero_components = copy.deepcopy(project); zero_components["components"] = []
+    project_schema_cases.append(("project-zero-components", zero_components))
+    two_components = copy.deepcopy(project); two_components["components"].append({**copy.deepcopy(two_components["components"][0]), "id":"component.second"})
+    project_schema_cases.append(("project-two-components", two_components))
+    connections = copy.deepcopy(project); connections["connections"] = [{"id":"connection.forbidden"}]
+    project_schema_cases.append(("project-nonempty-connections", connections))
+    wrong_type = copy.deepcopy(project); wrong_type["topologies"][0]["routers"][0]["coordinate"]["row"] = "zero"
+    project_schema_cases.append(("project-core-field-wrong-type", wrong_type))
+    opaque = copy.deepcopy(project); opaque["vendorOpaque"] = {"mode":"forbidden"}
+    project_schema_cases.append(("project-opaque-outside-extension", opaque))
+    runtime = copy.deepcopy(project); runtime["dependencies"].append({"lockId":"dep.runtime.python","kind":"runtime","id":"python-runtime","version":"3.12.4","bundleManifestDigest":DIGEST_A,"runtimeClosure":{"closureKind":"host-managed"}})
+    project_schema_cases.append(("project-runtime-lock-incomplete", runtime))
+    for name, document in project_schema_cases:
+        add(name, "ipcraft.project-design.v1", document, "reject", "schema", "generic-structure", "contract.schema_invalid")
+
+    project_semantic_cases: list[tuple[str, dict[str, Any], str]] = []
+    slot_missing_router = copy.deepcopy(project_2x2); slot_missing_router["topologies"][0]["accessSlots"][1]["routerId"] = "router.missing"
+    project_semantic_cases.append(("project-slot-missing-router", slot_missing_router, "project-reference"))
+    attachment_missing_slot = copy.deepcopy(project_2x2); attachment_missing_slot["topologies"][0]["attachments"][0]["slotId"] = "slot.missing"
+    project_semantic_cases.append(("project-attachment-missing-slot", attachment_missing_slot, "project-reference"))
+    occupied = copy.deepcopy(project_2x2)
+    occupied["interfaces"].append({**copy.deepcopy(occupied["interfaces"][0]), "id":"interface.second"})
+    occupied["topologies"][0]["attachments"].append({**copy.deepcopy(occupied["topologies"][0]["attachments"][0]), "id":"attachment.second", "interfaceId":"interface.second"})
+    project_semantic_cases.append(("project-attachment-occupied-slot", occupied, "project-invariant"))
+    contract_mismatch = copy.deepcopy(project_2x2)
+    contract_mismatch["dependencies"].append({"lockId":"dep.contract.chi","kind":"interface-contract","id":"amba.chi","version":"1.0.0","bundleManifestDigest":DIGEST_A})
+    contract_mismatch["interfaces"][0]["contract"]["lockId"] = "dep.contract.chi"
+    project_semantic_cases.append(("project-attachment-contract-mismatch", contract_mismatch, "project-invariant"))
+    role_mismatch = copy.deepcopy(project_2x2); role_mismatch["interfaces"][0]["contract"]["role"] = "target"
+    project_semantic_cases.append(("project-attachment-role-mismatch", role_mismatch, "project-invariant"))
+    capability_mismatch = copy.deepcopy(project_2x2); capability_mismatch["interfaces"][0]["capabilities"]["dataWidth"] = 64
+    project_semantic_cases.append(("project-attachment-capability-mismatch", capability_mismatch, "project-invariant"))
+    duplicate_coordinate = copy.deepcopy(project_2x2); duplicate_coordinate["topologies"][0]["routers"][1]["coordinate"] = copy.deepcopy(duplicate_coordinate["topologies"][0]["routers"][0]["coordinate"])
+    project_semantic_cases.append(("project-duplicate-router-coordinate", duplicate_coordinate, "project-invariant"))
+    duplicate_slot_key = copy.deepcopy(project_2x2); duplicate_slot_key["topologies"][0]["accessSlots"][1].update({"routerId":"router.0.0","templateKey":"local-0"})
+    project_semantic_cases.append(("project-duplicate-slot-key", duplicate_slot_key, "project-invariant"))
+    router_slot_mismatch = copy.deepcopy(project_2x2); router_slot_mismatch["topologies"][0]["attachments"][0]["routerId"] = "router.0.1"
+    project_semantic_cases.append(("project-attachment-router-slot-mismatch", router_slot_mismatch, "project-invariant"))
+    multiple_attachments = copy.deepcopy(project_2x2); multiple_attachments["topologies"][0]["accessSlots"][1]["allowedContracts"] = copy.deepcopy(multiple_attachments["topologies"][0]["accessSlots"][0]["allowedContracts"]); multiple_attachments["topologies"][0]["attachments"].append({"id":"attachment.second","interfaceId":"interface.axi","state":"resolved","routerId":"router.0.1","slotId":"slot.0.1"})
+    project_semantic_cases.append(("project-interface-multiple-attachments", multiple_attachments, "project-invariant"))
+    two_defaults = copy.deepcopy(project_2x2); two_defaults["topologies"][0]["domains"].append({**copy.deepcopy(two_defaults["topologies"][0]["domains"][0]), "id":"domain.power.second"})
+    project_semantic_cases.append(("project-two-default-domains", two_defaults, "project-invariant"))
+    no_default = copy.deepcopy(project_2x2); no_default["topologies"][0]["domains"][0]["isDefault"] = False
+    project_semantic_cases.append(("project-no-default-domain", no_default, "project-invariant"))
+    missing_owner = copy.deepcopy(project_2x2); missing_owner["topologies"][0]["ownerComponentId"] = "component.missing"
+    project_semantic_cases.append(("project-topology-owner-missing", missing_owner, "project-reference"))
+    missing_package = copy.deepcopy(project_2x2); missing_package["components"][0]["packageLockId"] = "dep.noc.missing"
+    project_semantic_cases.append(("project-component-package-missing", missing_package, "project-reference"))
+    missing_slot_contract = copy.deepcopy(project_2x2); missing_slot_contract["topologies"][0]["accessSlots"][0]["allowedContracts"][0]["contractLockId"] = "dep.contract.missing"
+    project_semantic_cases.append(("project-slot-contract-lock-missing", missing_slot_contract, "project-reference"))
+    missing_extension_owner = package_extension_project(valid["ipcraft.project-design.v1"]); missing_extension_owner["extensions"][0]["ownerLockId"] = "dep.missing"
+    project_semantic_cases.append(("project-extension-owner-missing", missing_extension_owner, "project-reference"))
+    derivation_mismatch = copy.deepcopy(project_2x2); derivation_mismatch["topologies"][0]["derivation"]["defaultEngineBundleDigest"] = DIGEST_B
+    project_semantic_cases.append(("project-derivation-engine-lock-mismatch", derivation_mismatch, "project-invariant"))
+    link_missing = copy.deepcopy(project_2x2); link_missing["topologies"][0]["structuralLinks"][0]["endpointB"] = "router.missing"
+    project_semantic_cases.append(("project-link-missing-endpoint", link_missing, "project-reference"))
+    link_self = copy.deepcopy(project_2x2); link_self["topologies"][0]["structuralLinks"][0]["endpointB"] = link_self["topologies"][0]["structuralLinks"][0]["endpointA"]
+    project_semantic_cases.append(("project-link-self", link_self, "project-invariant"))
+    link_nonadjacent = copy.deepcopy(project_2x2); link_nonadjacent["topologies"][0]["structuralLinks"][0].update({"endpointA":"router.0.0","endpointB":"router.1.1"})
+    project_semantic_cases.append(("project-link-nonadjacent", link_nonadjacent, "project-invariant"))
+    link_axis = copy.deepcopy(project_2x2); link_axis["topologies"][0]["structuralLinks"][0]["axis"] = "vertical"
+    project_semantic_cases.append(("project-link-axis-mismatch", link_axis, "project-invariant"))
+    link_duplicate = copy.deepcopy(project_2x2); link_duplicate["topologies"][0]["structuralLinks"].append({**copy.deepcopy(link_duplicate["topologies"][0]["structuralLinks"][0]), "id":"link.duplicate"})
+    project_semantic_cases.append(("project-link-duplicate-pair", link_duplicate, "project-invariant"))
+    for name, document, boundary in project_semantic_cases:
+        code = "project.unknown_reference" if boundary == "project-reference" else "project.invariant_violation"
+        add(name, "ipcraft.project-design.v1", document, "reject", "core-semantic", boundary, code)
 
     # Generic semantic mutations with document-owned evidence.
     semantic_cases: list[tuple[str, str, Any, str, str]] = []
@@ -262,6 +363,13 @@ def generate(contracts: Path) -> None:
     semantic_cases.append(("artifact-duplicate-path", "ipcraft.artifact-manifest.v1", artifact, "tool-artifact", "tool.artifact_invalid"))
     contract = copy.deepcopy(valid["ipcraft.interface-contract.v1"]); contract["roles"] = [{"key":"initiator","label":"Initiator"}]*2
     semantic_cases.append(("contract-duplicate-role", "ipcraft.interface-contract.v1", contract, "contract-declaration", "contract.invariant_violation"))
+    rich_contract = json.loads((contracts / "fixtures/valid/interface-contract-axi5.json").read_text())
+    capability_type = copy.deepcopy(rich_contract); capability_type["capabilities"][0]["default"] = "128"
+    semantic_cases.append(("contract-capability-default-type", "ipcraft.interface-contract.v1", capability_type, "contract-declaration", "contract.invariant_violation"))
+    field_range = copy.deepcopy(rich_contract); field_range["fields"][0].update({"minimum":64,"maximum":32})
+    semantic_cases.append(("contract-field-range", "ipcraft.interface-contract.v1", field_range, "contract-declaration", "contract.invariant_violation"))
+    condition_reference = copy.deepcopy(rich_contract); condition_reference["fields"][0]["visibleWhen"] = {"field":"missingField","equals":True}
+    semantic_cases.append(("contract-condition-reference", "ipcraft.interface-contract.v1", condition_reference, "contract-declaration", "contract.invariant_violation"))
     package = copy.deepcopy(valid["ipcraft.noc-package.v1"]); package["domainTypes"] = [copy.deepcopy(package["domainTypes"][0])]*2 if package["domainTypes"] else []
     domain_type = builder.build(package_schema["$defs"]["domainType"], package_schema, package_path)
     package["domainTypes"] = [domain_type, copy.deepcopy(domain_type)]

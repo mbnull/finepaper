@@ -49,7 +49,33 @@ class SchemaFailure(RuntimeError):
         self.message = message
 
 
+def load_strict_json(path: Path) -> Any:
+    def object_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        for key, value in pairs:
+            if key in result:
+                raise FixtureVerificationError(f"{path}: duplicate JSON object member {key!r}")
+            result[key] = value
+        return result
+
+    def non_json_constant(value: str) -> Any:
+        raise FixtureVerificationError(f"{path}: non-JSON numeric constant {value}")
+
+    try:
+        return json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=object_pairs, parse_constant=non_json_constant)
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise FixtureVerificationError(f"cannot load strict JSON {path}: {error}") from error
+
+
 def _json_equal(left: Any, right: Any) -> bool:
+    if isinstance(left, bool) or isinstance(right, bool):
+        return isinstance(left, bool) and isinstance(right, bool) and left == right
+    if isinstance(left, (int, float)) and isinstance(right, (int, float)):
+        return left == right
+    if isinstance(left, list) and isinstance(right, list):
+        return len(left) == len(right) and all(_json_equal(a, b) for a, b in zip(left, right))
+    if isinstance(left, dict) and isinstance(right, dict):
+        return set(left) == set(right) and all(_json_equal(left[key], right[key]) for key in left)
     return type(left) is type(right) and left == right
 
 
@@ -57,9 +83,9 @@ class Draft202012Subset:
     def __init__(self, contracts: Path):
         self.contracts = contracts
         self.schemas: dict[str, tuple[dict[str, Any], Path]] = {}
-        for item in json.loads((contracts / "schema-catalog.json").read_text())["items"]:
+        for item in load_strict_json(contracts / "schema-catalog.json")["items"]:
             path = contracts / item["path"]
-            self.schemas[item["id"]] = (json.loads(path.read_text()), path)
+            self.schemas[item["id"]] = (load_strict_json(path), path)
 
     def validate(self, schema_id: str, instance: Any) -> None:
         root, path = self.schemas[schema_id]
@@ -69,7 +95,7 @@ class Draft202012Subset:
         file_part, _, fragment = reference.partition("#")
         if file_part:
             target_path = (root_path.parent / file_part).resolve()
-            target = json.loads(target_path.read_text())
+            target = load_strict_json(target_path)
         else:
             target_path, target = root_path, root
         node: Any = target
@@ -120,6 +146,8 @@ class Draft202012Subset:
             if "pattern" in schema and re.search(schema["pattern"], instance) is None:
                 raise SchemaFailure(path, "pattern mismatch")
             if schema.get("format") == "date-time":
+                if re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})", instance) is None:
+                    raise SchemaFailure(path, "invalid RFC 3339 date-time")
                 try:
                     datetime.fromisoformat(instance.replace("Z", "+00:00"))
                 except ValueError as error:
@@ -137,8 +165,7 @@ class Draft202012Subset:
             if "maxItems" in schema and len(instance) > schema["maxItems"]:
                 raise SchemaFailure(path, "too many items")
             if schema.get("uniqueItems"):
-                encodings = [json.dumps(value, sort_keys=True, separators=(",", ":")) for value in instance]
-                if len(encodings) != len(set(encodings)):
+                if any(_json_equal(instance[left], instance[right]) for left in range(len(instance)) for right in range(left + 1, len(instance))):
                     raise SchemaFailure(path, "duplicate array item")
             if isinstance(schema.get("items"), dict):
                 for index, value in enumerate(instance):
@@ -177,6 +204,45 @@ class Draft202012Subset:
                 self._validate(branch, instance, root, root_path, path)
 
 
+SUPPORTED_SCHEMA_KEYWORDS = {
+    "$schema", "$id", "$ref", "$defs", "$comment", "title", "description", "default",
+    "type", "const", "enum", "required", "properties", "additionalProperties",
+    "items", "minItems", "maxItems", "uniqueItems", "contains", "minContains", "maxContains",
+    "minLength", "pattern", "format", "minimum", "maximum", "exclusiveMinimum",
+    "allOf", "anyOf", "oneOf", "not", "if", "then", "else", "x-ipcraft-canonical",
+}
+
+
+def audit_schema_keywords(contracts: Path) -> set[str]:
+    """Return schema keyword locations not understood by the stdlib validator."""
+    unknown: set[str] = set()
+
+    def walk(schema: Any, location: str) -> None:
+        if not isinstance(schema, dict):
+            return
+        for key in schema:
+            if key not in SUPPORTED_SCHEMA_KEYWORDS:
+                unknown.add(f"{location}/{key}")
+        for member in ("properties", "$defs"):
+            values = schema.get(member, {})
+            if isinstance(values, dict):
+                for key, child in values.items():
+                    walk(child, f"{location}/{member}/{key}")
+        for member in ("items", "additionalProperties", "contains", "not", "if", "then", "else"):
+            child = schema.get(member)
+            if isinstance(child, dict):
+                walk(child, f"{location}/{member}")
+        for member in ("allOf", "anyOf", "oneOf"):
+            children = schema.get(member, [])
+            if isinstance(children, list):
+                for index, child in enumerate(children):
+                    walk(child, f"{location}/{member}/{index}")
+
+    for item in load_strict_json(contracts / "schema-catalog.json")["items"]:
+        walk(load_strict_json(contracts / item["path"]), item["id"])
+    return unknown
+
+
 SCHEMA_BOUNDARY = {
     "ipcraft.artifact-manifest.v1": ("tool-artifact", "tool.artifact_invalid"),
     "ipcraft.bundle-manifest.v1": ("bundle-manifest", "dependency.manifest_invalid"),
@@ -201,32 +267,176 @@ def _portable_collisions(entries: list[dict[str, Any]]) -> bool:
     return len(paths) != len(set(paths))
 
 
+def _declared_scalar_matches(kind: str, value: Any) -> bool:
+    if value is None:
+        return True
+    if kind == "bool":
+        return isinstance(value, bool)
+    if kind == "int":
+        return isinstance(value, int) and not isinstance(value, bool)
+    if kind == "double":
+        return isinstance(value, (int, float)) and not isinstance(value, bool)
+    if kind in {"string", "enum"}:
+        return isinstance(value, str) if kind == "string" else True
+    return False
+
+
 def semantic_failure(schema_id: str, document: Any) -> tuple[str, str] | None:
     if schema_id == "ipcraft.project-design.v1":
         groups = [document.get(name, []) for name in ("components", "interfaces", "topologies")]
         topology = document.get("topologies", [{}])[0] if document.get("topologies") else {}
         groups += [topology.get(name, []) for name in ("routers", "structuralLinks", "accessSlots", "attachments", "domains", "domainMemberships", "packageEntities", "packageRelations")]
-        ids = [item.get("id") for group in groups for item in group if isinstance(item, dict)]
+        ids = [document.get("id")]
+        ids += [item.get("id") for group in groups for item in group if isinstance(item, dict)]
         ids += [item.get("lockId") for item in document.get("dependencies", []) if isinstance(item, dict)]
         if len(ids) != len(set(ids)):
             return "project-duplicate-id", "project.duplicate_id"
         known = set(ids)
-        for attachment in topology.get("attachments", []):
-            for key in ("interfaceId", "slotId"):
-                if attachment.get(key) not in known:
+        components = {item["id"]: item for item in document.get("components", [])}
+        dependencies = {item["lockId"]: item for item in document.get("dependencies", [])}
+        interfaces = {item["id"]: item for item in document.get("interfaces", [])}
+        routers_by_id = {item["id"]: item for item in topology.get("routers", [])}
+        slots_by_id = {item["id"]: item for item in topology.get("accessSlots", [])}
+        if topology.get("ownerComponentId") not in components:
+            return "project-reference", "project.unknown_reference"
+        for component in components.values():
+            dependency = dependencies.get(component.get("packageLockId"))
+            if dependency is None or dependency.get("kind") != "noc-package":
+                return "project-reference", "project.unknown_reference"
+        for interface in interfaces.values():
+            if interface.get("ownerComponentId") not in components:
+                return "project-reference", "project.unknown_reference"
+            dependency = dependencies.get(interface.get("contract", {}).get("lockId"))
+            if dependency is None or dependency.get("kind") != "interface-contract":
+                return "project-reference", "project.unknown_reference"
+        derivation = topology.get("derivation", {})
+        engine_lock = dependencies.get(derivation.get("defaultEngineLockId"))
+        authority_lock = dependencies.get(derivation.get("structureAuthority", {}).get("lockId"))
+        if engine_lock is None or engine_lock.get("kind") != "default-engine" or authority_lock is not engine_lock:
+            return "project-reference", "project.unknown_reference"
+        package_lock = dependencies.get(next(iter(components.values())).get("packageLockId")) if components else None
+        authority = derivation.get("structureAuthority", {})
+        if (
+            package_lock is None
+            or derivation.get("packageBundleDigest") != package_lock.get("bundleManifestDigest")
+            or derivation.get("defaultEngineBundleDigest") != engine_lock.get("bundleManifestDigest")
+            or authority.get("bundleDigest") != engine_lock.get("bundleManifestDigest")
+            or authority.get("identity") != engine_lock.get("id")
+            or authority.get("version") != engine_lock.get("version")
+            or derivation.get("engineHostContractVersion") != engine_lock.get("engineHostContractVersion")
+            or derivation.get("hostSideEffectContractVersion") != engine_lock.get("hostSideEffectContractVersion")
+            or derivation.get("engineCompatibilityVersion") != engine_lock.get("engineCompatibilityVersion")
+        ):
+            return "project-invariant", "project.invariant_violation"
+        extension_owners = document.get("extensions", []) + topology.get("extensions", [])
+        extension_owners += [extension for item in components.values() for extension in item.get("extensions", [])]
+        extension_owners += [extension for item in interfaces.values() for extension in item.get("extensions", [])]
+        extension_owners += [extension for item in topology.get("packageEntities", []) for extension in item.get("extensions", [])]
+        extension_owners += [extension for item in topology.get("packageRelations", []) for extension in item.get("extensions", [])]
+        for extension in extension_owners:
+            if extension.get("ownerLockId") not in dependencies:
+                return "project-reference", "project.unknown_reference"
+        for dependency in dependencies.values():
+            if dependency.get("kind") == "runtime":
+                closure = dependency.get("runtimeClosure", {})
+                if dependency.get("bundleManifestDigest") != closure.get("runtimeDistributionBundleDigest"):
+                    return "project-invariant", "project.invariant_violation"
+            if dependency.get("kind") in {"extension-provider", "drc-tool", "generator-tool"}:
+                runtime = dependencies.get(dependency.get("runtimeLockId"))
+                if runtime is None or runtime.get("kind") != "runtime":
                     return "project-reference", "project.unknown_reference"
+
+        coordinates = [(item["coordinate"]["row"], item["coordinate"]["column"]) for item in routers_by_id.values()]
+        if len(coordinates) != len(set(coordinates)):
+            return "project-invariant", "project.invariant_violation"
+        unordered_links: set[tuple[str, str]] = set()
+        for link in topology.get("structuralLinks", []):
+            endpoint_a, endpoint_b = link.get("endpointA"), link.get("endpointB")
+            if endpoint_a not in routers_by_id or endpoint_b not in routers_by_id:
+                return "project-reference", "project.unknown_reference"
+            if endpoint_a == endpoint_b:
+                return "project-invariant", "project.invariant_violation"
+            pair = tuple(sorted((endpoint_a, endpoint_b)))
+            if pair in unordered_links:
+                return "project-invariant", "project.invariant_violation"
+            unordered_links.add(pair)
+            left, right = routers_by_id[endpoint_a]["coordinate"], routers_by_id[endpoint_b]["coordinate"]
+            row_delta, column_delta = abs(left["row"] - right["row"]), abs(left["column"] - right["column"])
+            if row_delta + column_delta != 1:
+                return "project-invariant", "project.invariant_violation"
+            expected_axis = "vertical" if row_delta else "horizontal"
+            if link.get("axis") != expected_axis:
+                return "project-invariant", "project.invariant_violation"
+
+        slot_keys: set[tuple[str, str]] = set()
+        for slot in slots_by_id.values():
+            if slot.get("routerId") not in routers_by_id:
+                return "project-reference", "project.unknown_reference"
+            key = (slot["routerId"], slot["templateKey"])
+            if key in slot_keys:
+                return "project-invariant", "project.invariant_violation"
+            slot_keys.add(key)
+            allowed_contract_ids = [item["contractLockId"] for item in slot["allowedContracts"]]
+            if len(allowed_contract_ids) != len(set(allowed_contract_ids)):
+                return "project-invariant", "project.invariant_violation"
+            if any(dependencies.get(lock_id, {}).get("kind") != "interface-contract" for lock_id in allowed_contract_ids):
+                return "project-reference", "project.unknown_reference"
+
+        interface_attachments: set[str] = set()
+        occupied_slots: set[str] = set()
+        for attachment in topology.get("attachments", []):
+            interface_id = attachment.get("interfaceId")
+            if interface_id not in interfaces:
+                return "project-reference", "project.unknown_reference"
+            if interface_id in interface_attachments:
+                return "project-invariant", "project.invariant_violation"
+            interface_attachments.add(interface_id)
+            if attachment.get("state") == "resolved":
+                slot = slots_by_id.get(attachment.get("slotId"))
+                if slot is None or attachment.get("routerId") not in routers_by_id:
+                    return "project-reference", "project.unknown_reference"
+                if slot["routerId"] != attachment.get("routerId"):
+                    return "project-invariant", "project.invariant_violation"
+                if slot["id"] in occupied_slots:
+                    return "project-invariant", "project.invariant_violation"
+                occupied_slots.add(slot["id"])
+                interface = interfaces[interface_id]
+                contract_lock = interface["contract"]["lockId"]
+                allowance = next((item for item in slot["allowedContracts"] if item["contractLockId"] == contract_lock), None)
+                if allowance is None or interface["contract"]["role"] not in allowance["roles"]:
+                    return "project-invariant", "project.invariant_violation"
+                capabilities = interface.get("capabilities", {})
+                if any(capabilities.get(key) != value for key, value in allowance["capabilityConstraints"].items()):
+                    return "project-invariant", "project.invariant_violation"
         for membership in topology.get("domainMemberships", []):
             if membership.get("routerId") not in known or membership.get("domainId") not in known:
                 return "project-reference", "project.unknown_reference"
-        for link in topology.get("structuralLinks", []):
-            if link.get("endpointA") not in known or link.get("endpointB") not in known:
-                return "project-reference", "project.unknown_reference"
-        for slot in topology.get("accessSlots", []):
-            if slot.get("routerId") not in known:
-                return "project-reference", "project.unknown_reference"
-        routers = {item.get("id") for item in topology.get("routers", [])}
+        subject_kinds = {
+            document["id"]: "project", **{item["id"]: "component" for item in components.values()},
+            **{item["id"]: "interface" for item in interfaces.values()},
+            **{item["id"]: "router" for item in routers_by_id.values()},
+            **{item["id"]: "structural-link" for item in topology.get("structuralLinks", [])},
+            **{item["id"]: "access-slot" for item in slots_by_id.values()},
+            **{item["id"]: "attachment" for item in topology.get("attachments", [])},
+            **{item["id"]: "domain" for item in topology.get("domains", [])},
+            **{item["id"]: "domain-membership" for item in topology.get("domainMemberships", [])},
+            **{item["id"]: "package-entity" for item in topology.get("packageEntities", [])},
+            **{item["id"]: "package-relation" for item in topology.get("packageRelations", [])},
+        }
+        for relation in topology.get("packageRelations", []):
+            for endpoint in relation.get("sources", []) + relation.get("targets", []):
+                if endpoint.get("state") == "resolved":
+                    subject = endpoint["subject"]
+                    if subject_kinds.get(subject["id"]) != subject["kind"]:
+                        return "project-reference", "project.unknown_reference"
+
+        routers = set(routers_by_id)
         domains = {item.get("id"): item.get("typeKey") for item in topology.get("domains", [])}
         domain_types = set(domains.values())
+        for domain_type in domain_types:
+            defaults = [item for item in topology.get("domains", []) if item["typeKey"] == domain_type and item["isDefault"]]
+            if len(defaults) != 1:
+                return "project-invariant", "project.invariant_violation"
         counts = {(router, domain_type): 0 for router in routers for domain_type in domain_types}
         for membership in topology.get("domainMemberships", []):
             key = (membership.get("routerId"), domains.get(membership.get("domainId")))
@@ -239,6 +449,9 @@ def semantic_failure(schema_id: str, document: Any) -> tuple[str, str] | None:
             adjacency[link["endpointB"]].add(link["endpointA"])
         for domain_id in domains:
             members = {item["routerId"] for item in topology.get("domainMemberships", []) if item["domainId"] == domain_id}
+            domain = next(item for item in topology.get("domains", []) if item["id"] == domain_id)
+            if not members and not domain["isDefault"]:
+                return "project-invariant", "project.invariant_violation"
             if len(members) > 1:
                 reached: set[str] = set()
                 frontier = [next(iter(members))]
@@ -264,7 +477,30 @@ def semantic_failure(schema_id: str, document: Any) -> tuple[str, str] | None:
             if _duplicates(document.get(member, []), lambda item: item.get("key")):
                 return "contract-declaration", "contract.invariant_violation"
         field_keys = {item.get("key") for item in document.get("fields", [])}
+        for capability in document.get("capabilities", []):
+            default = capability.get("default")
+            values = capability.get("values")
+            if not _declared_scalar_matches(capability.get("type"), default):
+                return "contract-declaration", "contract.invariant_violation"
+            if capability.get("required") and default is None:
+                return "contract-declaration", "contract.invariant_violation"
+            if values is not None and (any(not _declared_scalar_matches(capability.get("type"), value) for value in values) or default not in values):
+                return "contract-declaration", "contract.invariant_violation"
         for field in document.get("fields", []):
+            default = field.get("default")
+            if not _declared_scalar_matches(field.get("type"), default):
+                return "contract-declaration", "contract.invariant_violation"
+            if field.get("required") and default is None:
+                return "contract-declaration", "contract.invariant_violation"
+            minimum, maximum = field.get("minimum"), field.get("maximum")
+            if minimum is not None and maximum is not None and minimum > maximum:
+                return "contract-declaration", "contract.invariant_violation"
+            if isinstance(default, (int, float)) and not isinstance(default, bool):
+                if minimum is not None and default < minimum or maximum is not None and default > maximum:
+                    return "contract-declaration", "contract.invariant_violation"
+            values = field.get("values")
+            if values is not None and (any(not _declared_scalar_matches(field.get("type"), value) for value in values) or default not in values):
+                return "contract-declaration", "contract.invariant_violation"
             for condition_name in ("visibleWhen", "enabledWhen"):
                 condition = field.get(condition_name)
                 if condition and condition.get("field") not in field_keys:
@@ -377,7 +613,7 @@ def classify_document(contracts: Path, schema_id: str, document: Any) -> Classif
 
 
 def load_catalog(contracts: Path) -> list[dict[str, Any]]:
-    return json.loads((contracts / "fixture-catalog.json").read_text())["items"]
+    return load_strict_json(contracts / "fixture-catalog.json")["items"]
 
 
 def copy_contract_tree(source: Path, destination: Path) -> None:
@@ -385,6 +621,9 @@ def copy_contract_tree(source: Path, destination: Path) -> None:
 
 
 def verify_all(contracts: Path) -> Summary:
+    unsupported = audit_schema_keywords(contracts)
+    if unsupported:
+        raise FixtureVerificationError(f"unsupported JSON Schema keywords: {sorted(unsupported)}")
     try:
         fixture_count, schema_count, _ = verify_fixture_catalog.verify(contracts / "fixture-catalog.json", contracts)
     except verify_fixture_catalog.VerificationError as error:
@@ -392,7 +631,7 @@ def verify_all(contracts: Path) -> Summary:
     items = load_catalog(contracts)
     valid = invalid = schema_phase = semantic_phase = 0
     for entry in items:
-        document = json.loads((contracts / entry["path"]).read_text())
+        document = load_strict_json(contracts / entry["path"])
         observed = classify_document(contracts, entry["schemaId"], document)
         if entry["expected"] == "accept":
             valid += 1

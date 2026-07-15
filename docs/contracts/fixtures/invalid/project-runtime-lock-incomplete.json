@@ -26,6 +26,16 @@
       "id": "simple-noc",
       "version": "1.0.0",
       "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    {
+      "lockId": "dep.runtime.python",
+      "kind": "runtime",
+      "id": "python-runtime",
+      "version": "3.12.4",
+      "bundleManifestDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "runtimeClosure": {
+        "closureKind": "host-managed"
+      }
     }
   ],
   "components": [
@@ -34,7 +44,7 @@
       "kind": "noc",
       "name": "value",
       "packageLockId": "dep.noc.simple",
-      "typeKey": "value",
+      "typeKey": "mesh-noc",
       "config": {},
       "extensions": []
     }
@@ -52,7 +62,7 @@
         "topologyInputDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "derivedStateRevision": 0,
         "derivedStateDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "packageBundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "packageBundleDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         "reconcileDependencySetDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "defaultEngineLockId": "dep.engine.default",
         "defaultEngineBundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -62,10 +72,10 @@
           "kind": "default-engine",
           "lockId": "dep.engine.default",
           "identity": "ipcraft.default-noc-engine",
-          "version": "value",
+          "version": "1.0.0",
           "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         },
-        "engineCompatibilityVersion": "value"
+        "engineCompatibilityVersion": "1"
       },
       "routers": [
         {

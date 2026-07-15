@@ -4,8 +4,8 @@
     "id": "ipcraft.profile.noc",
     "version": "1"
   },
-  "id": "project.degraded",
-  "name": "Exact Engine Missing",
+  "id": "project.mesh-1x1",
+  "name": "Mesh 1x1",
   "dependencies": [
     {
       "lockId": "dep.engine.default",
@@ -31,6 +31,15 @@
   "components": [
     {
       "id": "component.noc",
+      "kind": "noc",
+      "name": "value",
+      "packageLockId": "dep.noc.simple",
+      "typeKey": "mesh-noc",
+      "config": {},
+      "extensions": []
+    },
+    {
+      "id": "component.second",
       "kind": "noc",
       "name": "value",
       "packageLockId": "dep.noc.simple",
