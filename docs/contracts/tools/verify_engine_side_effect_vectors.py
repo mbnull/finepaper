@@ -422,6 +422,22 @@ def validate_closed_engine_case(case:dict,kind:str)->None:
         if inp["promotedManifest"] is not None:exact_keys(inp["promotedManifest"],PROMOTED_FIELDS,case["id"]+" promotedManifest")
 
 
+def validate_nested_migration_envelopes(case_id:str,inp:dict,world:SchemaWorld)->None:
+    project=world.documents["ipcraft.project-design.v1"]["$defs"]
+    if inp["caseKind"]=="discovery":
+        world.validate("ipcraft.project-design.v1",project["derivation"],inp["currentSnapshot"]["derivation"],case_id+" input.currentSnapshot.derivation")
+        return
+    core=world.documents["ipcraft.core-canonical-models.v1"]["$defs"]
+    world.validate("ipcraft.core-canonical-models.v1",core["migrationContext"],inp["migration"],case_id+" input.migration")
+    for path,value in (
+      ("input.beforeSnapshot.derivation",inp["beforeSnapshot"]["derivation"]),
+      ("input.afterSnapshot.derivation",inp["afterSnapshot"]["derivation"]),
+      ("input.forwardTransaction.targetDerivation",inp["forwardTransaction"]["targetDerivation"]),
+      ("input.inverseTransaction.restoreDerivation",inp["inverseTransaction"]["restoreDerivation"]),
+    ):
+        world.validate("ipcraft.project-design.v1",project["derivation"],value,case_id+" "+path)
+
+
 def verify_engine(doc:dict,world:SchemaWorld|None=None)->tuple[int,int,int]:
     world=world or SchemaWorld(CONTRACTS)
     exact_keys(doc,{"schema","canonicalization","resolutionCases","migrationCases","freshnessCases"},"Engine catalog")
@@ -438,6 +454,7 @@ def verify_engine(doc:dict,world:SchemaWorld|None=None)->tuple[int,int,int]:
         if got["selectedBundleManifestDigest"] not in (None,c["input"]["projectLock"]["bundleManifestDigest"]):fail(f"{cid}: selected a different digest")
     for cid,c in ms.items():
         validate_closed_engine_case(c,"migration")
+        validate_nested_migration_envelopes(cid,c["input"],world)
         if c["input"]["caseKind"]=="discovery":
             validate_migration_discovery(c["input"],world)
             got=eval_migration(c["input"])
@@ -567,6 +584,12 @@ def mutation_tests(engine:dict,side:dict)->int:
     for location in ("case","document"):
         x=copy.deepcopy(s["side-effects-created-router-default-memberships"]);(x if location=="case" else x["document"])["extra"]=True;tests.append((f"side {location} extra field",lambda x=x:verify_side(side_case(x),SchemaWorld(CONTRACTS))))
     x=copy.deepcopy(r["engine-lock-exact-available"]);x["input"]["installedBundles"][0]["extra"]=True;tests.append(("resolution bundle extra field",lambda x=x:verify_engine(engine_case("resolutionCases",x))))
+    x=copy.deepcopy(m["engine-migration-atomic-commit"]);x["input"]["migration"]["extra"]=True;tests.append(("migration context extra field",lambda x=x:verify_engine(engine_case("migrationCases",x))))
+    for location in ("beforeSnapshot","afterSnapshot"):
+        x=copy.deepcopy(m["engine-migration-atomic-commit"]);x["input"][location]["derivation"]["extra"]=True;tests.append((f"migration {location} derivation extra field",lambda x=x:verify_engine(engine_case("migrationCases",x))))
+    x=copy.deepcopy(m["engine-migration-atomic-commit"]);x["input"]["forwardTransaction"]["targetDerivation"]["extra"]=True;tests.append(("migration forward derivation extra field",lambda x=x:verify_engine(engine_case("migrationCases",x))))
+    x=copy.deepcopy(m["engine-migration-atomic-commit"]);x["input"]["inverseTransaction"]["restoreDerivation"]["extra"]=True;tests.append(("migration inverse restoreDerivation extra field",lambda x=x:verify_engine(engine_case("migrationCases",x))))
+    x=copy.deepcopy(m["engine-migration-incompatible-target-not-offered"]);x["input"]["currentSnapshot"]["derivation"]["extra"]=True;tests.append(("migration current derivation extra field",lambda x=x:verify_engine(engine_case("migrationCases",x))))
     for location in ("beforeSnapshot","forwardTransaction","inverseTransaction"):
         x=copy.deepcopy(m["engine-migration-atomic-commit"]);x["input"][location]["extra"]=True;tests.append((f"migration {location} extra field",lambda x=x:verify_engine(engine_case("migrationCases",x))))
     x=copy.deepcopy(f["output-freshness-saved-current-equal"]);x["input"]["promotedManifest"]["extra"]=True;tests.append(("freshness promoted manifest extra field",lambda x=x:verify_engine(engine_case("freshnessCases",x))))
