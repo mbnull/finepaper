@@ -1,0 +1,2347 @@
+{
+  "schema": "ipcraft.core-freeze-inputs.v1",
+  "normativeRevision": 4,
+  "selfExclusion": "docs/contracts/freeze-inputs.json is intentionally omitted to avoid recursive self-digest",
+  "files": [
+    {
+      "path": "CONTEXT.md",
+      "sha256": "sha256:c57a53bbcb2aa018cc259b6792e5ec5c0ce94e450ad7fe5c58e1075287c62a5b",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/adr/0001-one-noc-per-system-design.md",
+      "sha256": "sha256:9bbf05206f21b612903f57f2e8af9832585d0576b8128cb5bf60315dcb4a56f3",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/adr/0002-noc-centered-product-boundary.md",
+      "sha256": "sha256:5f6ce95dcc41b743066f958bf0fffac143bfd64204b9b084f098eb6b76b29ff9",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/adr/0003-versioned-interface-contract-packages.md",
+      "sha256": "sha256:74cc173707df60d442d28ff4475cc7b639b1929b5db7d9eff491e9b0ff5bbfd1",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/adr/0004-keep-internal-transport-opaque.md",
+      "sha256": "sha256:e8867a4427bb5edb5d9d1a75050a26c6b07ee8ac42b8020a2c322b4517f4ef12",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/adr/0005-explicit-stable-access-slots.md",
+      "sha256": "sha256:8ef14809080bd24205737cd0b092ffb4eadcca6779b20d21581cf89daff3f2df",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/adr/0007-standardize-drc-results-not-rule-execution.md",
+      "sha256": "sha256:05aca03b331f530dda3e8db04fcd96419b3cca0e03b9cf8a5c164a9e40ba0cae",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/adr/0008-declarative-packages-with-optional-design-providers.md",
+      "sha256": "sha256:a6c4a87d26e051c557d3c8c0db399284488db1148706fb7d7f46353c170f8269",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/adr/0009-out-of-process-providers-return-patches.md",
+      "sha256": "sha256:0b406add66e5e2af7654144f27be20dc39c0e1c7e0b78b8618ff943e14a373ac",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/adr/0010-schema-defined-entities-and-generic-patches.md",
+      "sha256": "sha256:80ef83a9cec5c823bccfac5006e5663b387fd27c76769ed29a87fb4a762c7979",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/adr/0011-keep-microarchitecture-analysis-ip-owned.md",
+      "sha256": "sha256:c01a3c3d3f47f6f5644194b29894083cba062eb0ff7b0f3b946a9fd24c468eff",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/adr/0012-persist-engine-managed-topology-identity.md",
+      "sha256": "sha256:13c9088e81ab02766b47dfce2611034aa2ffe8e42b79db6c3b7bc3095c7edf18",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/adr/0015-create-the-noc-through-a-focused-wizard.md",
+      "sha256": "sha256:617013ced27bdae42afa93a915e9aa75ff33ce785850f46d649e6b79903a948e",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/adr/0017-use-a-three-pane-noc-design-workbench.md",
+      "sha256": "sha256:eb410c484e68567ac34bbee79ab8cffe1af646f773b461913b4a8a486a5a6092",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/adr/0018-create-interfaces-by-dragging-protocol-templates.md",
+      "sha256": "sha256:f1f4da228de7398928a2810716e41a4de2f4b15c11f2912f01ac474b5601077a",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/adr/0019-select-access-slots-with-an-anchored-picker.md",
+      "sha256": "sha256:d0607120ad73e4ba6bc0553b9569ef1c7131f95dcce5f2290ed46f84153637d1",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/adr/0020-edit-connected-domains-by-growing-from-a-router-seed.md",
+      "sha256": "sha256:81ac39487283c4d45c7df0802e593d2374134d7b73d46635f1fcdacdaf9ef023",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/adr/0021-use-a-project-directory-with-a-single-entry-file.md",
+      "sha256": "sha256:99fc273114addfeff98da8a79cfaae6c9b284f2f6b894df39f2f639c4ff17d67",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/adr/0022-replace-the-split-state-architecture-with-one-design-session.md",
+      "sha256": "sha256:d8ba76bbb17536817632aaaac362b2295a71e7802017b76ce6a0c67fa977e134",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/adr/0023-keep-the-domain-independent-of-ui-files-and-processes.md",
+      "sha256": "sha256:aad0af54f892827ca84aac4b232d37889f0e187af349aed08499cb55382c1747",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/adr/0024-save-only-current-designs-and-recover-incomplete-work-separately.md",
+      "sha256": "sha256:ab594fe57ab0ff2e42a12092deebf3a774aa76301e94e372c1cb5ea166c8ac4f",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/adr/0025-provide-common-noc-capabilities-in-the-default-engine.md",
+      "sha256": "sha256:67511536f85adbaf72568496a0492ebaa96719669c51ea452fd3337fc8eb402a",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/adr/0026-run-ip-tools-asynchronously-through-staging.md",
+      "sha256": "sha256:eb811d5dce3739ed8cd5eed305fd958a91b81388f4c97a26a13ec0ab3c64da4f",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/adr/0027-use-a-noc-profile-on-the-generic-project-design-foundation.md",
+      "sha256": "sha256:86af92488d53475610be9e8ce62dd08d36d1b3d10be26761e91d8aeeda4c14c9",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/adr/0029-preserve-structure-identity-through-explicit-id-based-diffs.md",
+      "sha256": "sha256:aad743d5d5d54b4df9ba092a861a7d83a51f86cc0ac8b5a3a4b0032c12987d55",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/adr/0030-pin-package-contract-provider-and-tool-identities.md",
+      "sha256": "sha256:3f23c1528dcf1d1c4516a62d0cc24401ab2eb2b62e2a754031cce6ebd0c6647e",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/adr/0031-spike-complex-capabilities-before-freeze-and-blind-test-after.md",
+      "sha256": "sha256:53fe8684d84c2d7a9f2f0bddf4aa08995745679312b91f9c4ff141fe1f349e9b",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/adr/0032-fix-v1-domain-semantics-to-total-exclusive-connected-coverage.md",
+      "sha256": "sha256:e53701caeb79ee1df4f32e8a9b30decede38e62f998e642928d6cbe7cb2c2d8e",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/adr/0033-limit-v1-configuration-runtime-to-used-scopes.md",
+      "sha256": "sha256:e37b5c603ca8283c9a61f46f228dbb5a74c953c2e77feeadbdf0d815a882a8b1",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/adr/0034-use-typed-application-commands-over-an-internal-patch-ir.md",
+      "sha256": "sha256:4b5da7927066f03d96551dfd970425bd058c37df80b8d0ee74156d164c5d3c26",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/adr/0035-make-v1-access-slots-single-occupancy-design-resources.md",
+      "sha256": "sha256:b4b65aa6c147850ba036fa220b20a6773df58b8b0d48d29e724883e78a8f2466",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/adr/0036-limit-v1-protocol-support-to-contract-level-integration.md",
+      "sha256": "sha256:f1bfb0b6e8c8cdbbf899da0d6cf51f6d795859e102334b2255a02968c56b5e72",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/adr/0037-fix-the-project-design-v1-noc-profile-mapping.md",
+      "sha256": "sha256:9faac03c01f93a0089375e143d2e246294c954f14c3fee7ba0f1002dcd43afd8",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/adr/0038-isolate-legacy-and-next-paths-until-gate-g-cutover.md",
+      "sha256": "sha256:19a4a008460dd44573fb6f5bec62194874c261faac1d6b02c0b225eccdd41151",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/adr/0039-show-the-ip-library-only-in-the-wizard-and-developer-mode.md",
+      "sha256": "sha256:534224fef978c3b4386092b0fdaf779e2d9c4d9a8a735eccdd24cc16933386d4",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/adr/0040-use-a-new-unambiguous-project-design-v1-schema-id.md",
+      "sha256": "sha256:09908f808cb8669300d4fdb8009374eac34341a170c039409e0d93b3c722b32a",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/adr/0041-let-undo-restore-deleted-structure-identities.md",
+      "sha256": "sha256:b20b508aa58ad36f3c2e592c8f6189d0305281d4e2d05e168796e151828734e9",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/adr/0042-fix-domain-side-effects-during-topology-reconciliation.md",
+      "sha256": "sha256:ac2f9d54d1ba889090fd1190af628a422fad9d5c7212732340b4a6c54776cfa6",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/adr/0044-fix-v1-mesh-identity-retention-by-coordinate-and-template.md",
+      "sha256": "sha256:653d1e218a8bb164675e951d69c8b639a26727eadd866a225255955f1ed3ebda",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/adr/0045-route-unknown-package-capabilities-through-generic-or-opaque-fallback.md",
+      "sha256": "sha256:012cb3dd4897613873ece4ba91ae553df4dc05dca8ab31285a421bda9090d740",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/adr/0046-use-a-new-noc-package-v1-envelope.md",
+      "sha256": "sha256:85ea6bfe3db42377c26e9d85e9b220c19cc1198b642e138a82216b73cf0640a9",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/adr/0047-use-one-pending-topology-group-and-an-independent-draft-overlay.md",
+      "sha256": "sha256:b2eed4065b033411ab4e6dc417a9daa008ad57ef4074dacf6c5772c63235971c",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/adr/0048-bind-reconciliation-to-one-derived-state-applicability-tuple.md",
+      "sha256": "sha256:609882e8eeec24a916af9a1a983ee83beaca837fce3b4e189a92623586f289e4",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/adr/0049-select-exactly-one-structure-authority-per-package.md",
+      "sha256": "sha256:cad73a3d7abe6af9bc9f550a43df5b37727061af290fb7f73caac10c077fb3ca",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/adr/0050-lock-dependency-bundles-and-declared-runtimes.md",
+      "sha256": "sha256:64de9d97e442b53f9ec1309bbb9d28a08407e2f26251f0166149e5a0bfc9beee",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/adr/0051-run-generation-as-one-saved-snapshot-tool-pipeline.md",
+      "sha256": "sha256:952ced8e79021dac24a76d52a82b2af75c665e491e47f04a57187fe4774ccb9e",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/adr/0052-freeze-core-contracts-at-gate-0-and-extension-abi-at-gate-d.md",
+      "sha256": "sha256:31f370555843f02d6fee3833be778eb9aa140b5a9f9b5bc9400b6c80da948bbe",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/adr/0053-confirm-only-destructive-topology-candidates-by-digest.md",
+      "sha256": "sha256:643e38c76e03fa96d7689431b66ff007a89a30b32ff33a4aa8b9d0a87b0d1ad6",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/adr/0054-lock-default-engine-as-an-installable-exact-bundle.md",
+      "sha256": "sha256:e0cfdfbbc59fc32df0939315887d15606ee0e82ca9398233409ef70d16ec47d5",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/adr/0055-use-portable-normalized-path-identifiers.md",
+      "sha256": "sha256:7218deabf773cb113fdcc0d8383908fe44efde20ebad6ed73f3478974ef123d1",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/contracts/README.md",
+      "sha256": "sha256:c94c265fe77609f050ee34844ee27ed8dd24ce5f6b17baeb2aaf7db7efa2c47f",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/contracts/error-codes-v1.json",
+      "sha256": "sha256:cfd1cde2a02c86ab7be6d5ace9e31f6d02ea85be5bea714f7b18c8f170b0a504",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/contracts/fixture-catalog.json",
+      "sha256": "sha256:62c5aee95e2e7025231dcbf504ec2767f835e92ea422ec98f64f8fed93504a6b",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/contracts/fixture-coverage-v1.json",
+      "sha256": "sha256:9e39c372fc176e48cba7dfedcba31fc137840569835be7318ae034a9ca5bcbae",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/contracts/fixture-error-policy-v1.json",
+      "sha256": "sha256:f2c541580f0fce6d3c8f22c647d95bf590378406daf8def1f5add501532f6352",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/artifact-duplicate-path.json",
+      "sha256": "sha256:c0524047b3bb1fee7f946d1dd8f094e9e2ed934d3940b522c57c859a66895f0b",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/artifact-fold-collision.json",
+      "sha256": "sha256:858cdbcddd2a04d0056bb1524c78f58adac36e0a0180f5736410b287de4eea93",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/bundle-duplicate-path.json",
+      "sha256": "sha256:36c7f17d2e868c04cceea3e06c3291747be25b14313ea4636e25f74112ffc812",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/bundle-manifest-digest.json",
+      "sha256": "sha256:36832bb1c7b7cbd1e65bd139ca9ca59624b5edd9096f1cc3e91b0ab653c36605",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/bundle-reserved-path.json",
+      "sha256": "sha256:786686a58ecfdae89b795ac83483a9e5810a551186b250e70d29b1ee72564732",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/command-pending-without-group.json",
+      "sha256": "sha256:7345394f7eabf985469f5ba337d4516ebbbf71c3d567e2efbeb321b6d4757241",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/contract-capability-default-type.json",
+      "sha256": "sha256:956df4a6387a66d932be02bdacba6682ed28a41e55fdeb280cef3b4147a5a17e",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/contract-condition-reference.json",
+      "sha256": "sha256:85a9b278ba050a8f1cfcc410b64764c1a823a78a26d6efc3c89b905b0f6ef3a6",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/contract-double-default-integer-token.json",
+      "sha256": "sha256:e55f4ce55050241b0ee3689859a3ff3b2d0c00d176895489e22f957920ec9aa0",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/contract-duplicate-role.json",
+      "sha256": "sha256:5796b81658811e742513ac21081f781d256b2074cbeb221a26d0b5ddd90c00e9",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/contract-enum-default-boolean-versus-integer.json",
+      "sha256": "sha256:e44eca6b55cb227c946540662e4fcb303c4d28902a41128015b1d0e0ada912be",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/contract-enum-default-integer-versus-boolean.json",
+      "sha256": "sha256:37ccf2a31e50392c869006b375876ab4fc001fdd0aad3ee3285fcc28bdceaf8b",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/contract-field-range.json",
+      "sha256": "sha256:137826e74cf7b4cab735bd112e04facf09c70044960548590a7286b64640d08a",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/contract-integer-default-double-token.json",
+      "sha256": "sha256:e62b1a94277e820c839dff21f3da21ac7997ed2a8b5a20a75c11573ff8c5ba43",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/diagnostic-blocking-warning.json",
+      "sha256": "sha256:cdce0c162f865634f4c0472280ad3f9c708efbf65ee629943d681da929dea9f7",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/diagnostic-report-duplicate-entry.json",
+      "sha256": "sha256:0a4f63b06d1ccc8320330c402f09e246e92c915bd4ee71bc3f88c781bf8af57d",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/engine-entrypoint-path.json",
+      "sha256": "sha256:7650ded9dd975233d803562427f90db613dd6c8139c3b63095d6e3a3717930bb",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/engine-host-contract.json",
+      "sha256": "sha256:5cf978ec7b9d3cd192c024ec423f71e6017d98751293ca76ccdf7939d8cc1c72",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/engine-migration-same-bundle.json",
+      "sha256": "sha256:3b4506af3806d7f4d364ae6610cf1877a4f97135de49f8a2b5b7f48f4f4e85d3",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/engine-platform.json",
+      "sha256": "sha256:4500f9c11910c744a975e252595ef34b5fd6ed7a5dd8af7b16be060140ac72e1",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/package-duplicate-allowed-contract.json",
+      "sha256": "sha256:3337dd5867a2a2c4ef70356c5c844ab742978224202cc059a573f7470a20ff00",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/package-duplicate-domain-type.json",
+      "sha256": "sha256:4c8fde645fed438a90f93ca2513e11727ad651f9d0634b236ee99e6e6e518d04",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/package-duplicate-extension.json",
+      "sha256": "sha256:bb84343f80c582b66a3b320f51c5423b4c4ca0f394ccf30551b2632b38cf0e04",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/package-duplicate-global-field.json",
+      "sha256": "sha256:84f413814b460162e6b5411c3a43f514c3e0266f61105b9e3a6e989a7a3e454a",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/package-duplicate-slot-template.json",
+      "sha256": "sha256:84a4c87213b5aa2920a74fc94e9712d878ba2cff8c1234bb651671dddc7e516a",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/package-engine-relation-topology-driving.json",
+      "sha256": "sha256:eee3fe04f45d8f74b2b403f3560334e384bc0cd39f2ddb0d322e3ddf2e5b268e",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/package-field-condition-reference.json",
+      "sha256": "sha256:4fd33cf9123e749b5d557a740d99602003a5e9b85e4033e745e701f9f79c8e5f",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/package-field-default-type.json",
+      "sha256": "sha256:0ec322f24ba108bd1eb91d8bd08191e994c44d9556d1ec7098d80dbeec72edd5",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/package-interface-noc-default-unknown.json",
+      "sha256": "sha256:986fec35b782bbbcf851534652e9872e4101963a94372ba1b97584ec3f5acd93",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/package-relation-cardinality.json",
+      "sha256": "sha256:92b1587515e958245f929b68cde556548812989cc1e6d3132a02b6489c3f21ab",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-access-slot-duplicate-role.json",
+      "sha256": "sha256:d2a763016509eb552b7547adf13ccf3ac9825b5f53e521799556e84a6128ea41",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-access-slot-missing-router.json",
+      "sha256": "sha256:1a4f0550300132658a1b3ff1803fe31c555b90e4c3394e37f63b1ff8a0371d37",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-application-migration-applicability-authority-bundleDigest.json",
+      "sha256": "sha256:5256529595dff5a817a5e8884aedfd0413c1b236f2dfc41cdbc313c8752fef74",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-application-migration-applicability-authority-lockId.json",
+      "sha256": "sha256:54eb40dd374cd6a662f6b0c0c957f9bcd9aa6ab6a23d49df5b5555c70d3477ab",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-application-migration-applicability-authority-version.json",
+      "sha256": "sha256:0a91f4993e54c77dc924f8b1a922ab87fc8583caf9b5e926d4ed80705a31c889",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-application-migration-applicability-baseAuthoritativeDesignDigest.json",
+      "sha256": "sha256:3698a67f9bbc97f829b6f764d9b701b9d39a93aa6798728599144cbee15a6d02",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-application-migration-applicability-baseDerivedStateDigest.json",
+      "sha256": "sha256:e36187c9b3c9c0af0bc7a8d332083b9cab0677e8f9c154d6ecd6dd8d4508f1ed",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-application-migration-applicability-baseDerivedStateRevision.json",
+      "sha256": "sha256:c5576c20b86b239b15d98c41f6d2d765c75ca8b3360c2c69ada06546ce34da3c",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-application-migration-applicability-defaultEngineBundleDigest.json",
+      "sha256": "sha256:dffcfa45f91b4269eb41a954fbd4095c3730763590025d88cc838663cd716b40",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-application-migration-applicability-defaultEngineLockId.json",
+      "sha256": "sha256:17672cb67cea283f5da8c2ebebfaa16c70325c068de8346df92ce0cba25811b0",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-application-migration-applicability-engineHostContractVersion.json",
+      "sha256": "sha256:c09b05c93185617f9dcbd2ffd2c40fb07c7d53dc6cb9d536cc0766ec87862671",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-application-migration-applicability-groupId.json",
+      "sha256": "sha256:fd6d80d551fc9363bb290114db551eefa2fb9f9aad7bd62a8d6779bc80911cd0",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-application-migration-applicability-hostSideEffectContractVersion.json",
+      "sha256": "sha256:c112cc0aa59a4aee7f08bac9089b4ebed4fb8cefedf505c2ac5374cd8884bb13",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-application-migration-applicability-packageBundleDigest.json",
+      "sha256": "sha256:6cd7a4d27d3f1919d95e1b2779e2db6185952f801b274d5ac5119ed9e27428e5",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-application-migration-applicability-reconcileDependencySetDigest.json",
+      "sha256": "sha256:a74764ef739a6d44782e8d467ef2799d820cbf9e098f1d4f8c4d59e010ffed00",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-application-migration-applicability-requestGeneration.json",
+      "sha256": "sha256:a7d53ec770454e8c72845e13301fac81813312fe095608d7841ba8fedf4f4739",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-application-migration-applicability-topologyInputDigest.json",
+      "sha256": "sha256:2d249672f1a44395c95ebf9927df3b4415ecbae167dc7f1cd9916047b649f4c0",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-application-migration-applicability-topologyInputRevision.json",
+      "sha256": "sha256:c99aeac2678c8ae07e9bf0d0b969b0435e610a3b29a45a2c0cbbeddbadf94b6a",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-application-reconcile-applicability-authority-bundleDigest.json",
+      "sha256": "sha256:0737ddc228a0e4f1869aef658094b236e9a52557ffceca99014f5bf4e12a6a08",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-application-reconcile-applicability-authority-lockId.json",
+      "sha256": "sha256:32c3bc40bee84975d91c9ba73b91144c6426dc2c85e2db6c35bab31add77b81f",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-application-reconcile-applicability-authority-version.json",
+      "sha256": "sha256:5bb0b3a62f19de549d56552acca2bd5f486a7247f3ab08aa4547a0deaab53d02",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-application-reconcile-applicability-baseAuthoritativeDesignDigest.json",
+      "sha256": "sha256:9627b08ea2de42af70fc63d3e9d5b47ff4a04590cf0567eac18c72c745848445",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-application-reconcile-applicability-baseDerivedStateDigest.json",
+      "sha256": "sha256:4acda4f7c8c0530d340c573329424ec8c37ea0eaef9715378e7db0725889e047",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-application-reconcile-applicability-baseDerivedStateRevision.json",
+      "sha256": "sha256:3c84d204552a39961ff06675d693a0b50923189080159b0c1111c5345d8397bb",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-application-reconcile-applicability-defaultEngineBundleDigest.json",
+      "sha256": "sha256:11120b9e1793eaf06db2f422f2c8cc0af90e9d1514a288c29bc02091660ca076",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-application-reconcile-applicability-defaultEngineLockId.json",
+      "sha256": "sha256:c3db8cfe5d081334753905faceab9831ed86606be88c07369ae0cdac85640eac",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-application-reconcile-applicability-engineHostContractVersion.json",
+      "sha256": "sha256:253787ad4173e91104e1389753f306fdb62ba9da739a4ee8151494bbed36ccbd",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-application-reconcile-applicability-groupId.json",
+      "sha256": "sha256:fe4ebfe849aebf78e8dfa27269ba626d4322348a18b057bae847ce2bc8b48ab5",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-application-reconcile-applicability-hostSideEffectContractVersion.json",
+      "sha256": "sha256:224bcf546595c2e58c95d13538f486d913aad4aacad6a51ffccd54d76151e1ba",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-application-reconcile-applicability-packageBundleDigest.json",
+      "sha256": "sha256:15f42ad35f5f79b677f0cd6e1975d4cbb0ea1757c03bd404af34d60ca6833364",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-application-reconcile-applicability-reconcileDependencySetDigest.json",
+      "sha256": "sha256:7d1146982f961d980de38a52637676532927316e24edadc3d69b16e2649d2651",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-application-reconcile-applicability-requestGeneration.json",
+      "sha256": "sha256:c7155e774133b5fcecff0371bcdd00e03343eec82f59c7d4c120a31a54f91e04",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-application-reconcile-applicability-topologyInputDigest.json",
+      "sha256": "sha256:2830a667b13db2a2809896ec8dd00ec9c788c371ae45a662771fe2c386aec773",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-application-reconcile-applicability-topologyInputRevision.json",
+      "sha256": "sha256:2780d36aad55e6dffaf64f219160cefb7674c7213220a71f07b04c05f3bc1112",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-application-reconcile-provider-applicability-defaultEngineBundleDigest.json",
+      "sha256": "sha256:709a074a4d10694efdca640ecb2e852c5e0c522e94ebd2aa6fec98c27dcae5e3",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-application-reconcile-provider-applicability-hostSideEffectContractVersion.json",
+      "sha256": "sha256:8bb954413bb733b04e8b4d338978f9925804aeb651fcbef853aaab0240f40725",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-application-reconcile-provider-applicability-topologyInputDigest.json",
+      "sha256": "sha256:64a5a88c7b9efc38bf45051608c36fd9acba0f3f581b2f39e51e8e9105cde9ab",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-attachment-required-unset.json",
+      "sha256": "sha256:59890fc78d19362be3bb213b9497336078045f5c5c9199b288897d62ba5f661c",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-attachment-unresolved-incomplete.json",
+      "sha256": "sha256:733cfee6f3efbfc6715e1b765ed9c2fd34ed0ff45560a34af943debc7248d65c",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-authority-applicability-mismatch.json",
+      "sha256": "sha256:114ac72ff4e4316636f8727a3fc00bc2ad94bd5bfdc8f415e73fee04dae33143",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-authority-mutates-domain.json",
+      "sha256": "sha256:f341f2e7d6c4aae628e178091925f403a67eb47e17a32510e396fbd1873c17a8",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-authority-mutates-user-package-entity.json",
+      "sha256": "sha256:e8dc9f17f9ad2a9855becca14c564498c231471bac66dcf44f238cceb02e82ba",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-authority-mutates-user-package-relation.json",
+      "sha256": "sha256:825ec27abc88c2f5510a15bfb1791c512e0c7ae788cabc48c06a5e16bd725a51",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-authority-without-applicability.json",
+      "sha256": "sha256:00e1688d69df1b47d97b9cebff91dd190919d231c4e07b3b355bef71be028337",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-component-delete-forbidden.json",
+      "sha256": "sha256:df1741f8b9846bc1184fdbd73115caa323b4a0dadc6a97e6876c48b4768335ba",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-component-package-lock-missing.json",
+      "sha256": "sha256:9caaaa0e077d2e8e2da38a8928aa5662df943342dd4fc9f5824dd67be1bdb1ca",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-component-package-lock-wrong-kind.json",
+      "sha256": "sha256:f3852aea3476ada77f65bbd15dc1437eeea7023b8b5f691be35d7139035bfbf0",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-default-engine-applicability-authority-bundleDigest.json",
+      "sha256": "sha256:2d087fc2de6bf5da52e05ae663c826707c01e1123a51d6552ea4ca143caca25a",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-default-engine-applicability-authority-lockId.json",
+      "sha256": "sha256:8354b70e48281b7c9b60fe5b4dc63b09bff392b6b8cfef44cb1522b8861b3a27",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-default-engine-applicability-authority-version.json",
+      "sha256": "sha256:6ac4c39528994467efe827d18962feb68a3fa4de3d158fc761cf9c5b5b940c88",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-default-engine-applicability-baseAuthoritativeDesignDigest.json",
+      "sha256": "sha256:f6434dd3684eeb371ec3a9b9312ab9a60441655d7f8c4e181ab6bab395ddd470",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-default-engine-applicability-baseDerivedStateDigest.json",
+      "sha256": "sha256:04914d8b0a71a6e81b5a58addba57d19210fc623230f118a034dd280c0d5e179",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-default-engine-applicability-baseDerivedStateRevision.json",
+      "sha256": "sha256:388db3a979131535589d71c31ae547b5d2011125dfd08d5403d7ac341d7b6765",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-default-engine-applicability-defaultEngineBundleDigest.json",
+      "sha256": "sha256:f7a35df8d448fb11cecd1ec93e8154167c5d344d4b6651ad52499aaaab405c43",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-default-engine-applicability-defaultEngineLockId.json",
+      "sha256": "sha256:0d225fa0daab8b43d49fb64dc25fcd1525135c1a645d195990be1976bf833e6a",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-default-engine-applicability-engineHostContractVersion.json",
+      "sha256": "sha256:d66f6c6aeadb0e9b45f8b7a60f2c71a66eb7401e729020aae27b36e09ceea79c",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-default-engine-applicability-groupId.json",
+      "sha256": "sha256:9a26f50e3d324d2d0265b0e8b2cbab04e189fe41f34c67e59b13968b8b82f83d",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-default-engine-applicability-hostSideEffectContractVersion.json",
+      "sha256": "sha256:abe1270f4504aae8be85f0a45cc8082e3016f832ba0ae7dedad2fa0fde58f552",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-default-engine-applicability-packageBundleDigest.json",
+      "sha256": "sha256:e79d425dbf11ab57edab8b668181709aaf6feed3e7f041fffb82deee667b833a",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-default-engine-applicability-reconcileDependencySetDigest.json",
+      "sha256": "sha256:6feea88b704715d0df447742c05d944c4ff56784b196108af8bcedec467ef47d",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-default-engine-applicability-requestGeneration.json",
+      "sha256": "sha256:daeceac19cd36b5d7ed841fe6ee19eabd596524bb0b93d2a714186420924d612",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-default-engine-applicability-topologyInputDigest.json",
+      "sha256": "sha256:ea89f880763278f2d06187b6cb10243bbca5a0f0997931e29e9f2bf3be65a1aa",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-default-engine-applicability-topologyInputRevision.json",
+      "sha256": "sha256:6e4c268bf2b7c356a780cde0c5734859e066498129ba717d32cd7a36105da6ed",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-domain-membership-required-unset.json",
+      "sha256": "sha256:90437a466fa12bdc8881cdb4b46eb25359be7cecb2f556754a18c30d694ce355",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-duplicate-id.json",
+      "sha256": "sha256:40f02364e0f6a30dd974884e6738f090e218ecece9a5b95a84c10011516ed186",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-duplicate-local-ref.json",
+      "sha256": "sha256:11af55a6356ac576df131d32941c772ca13e96eefe989d728865a2e2524c3a6b",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-extension-owner-missing.json",
+      "sha256": "sha256:2bae8888d3842d90dced5db00251730222fe5642d21ecb1ec6f698c5de02e38a",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-extension-owner-wrong-kind.json",
+      "sha256": "sha256:b5137ad36e3a3fbb5727b854adbdab7539282171aa804778b3af68eabdbf3e96",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-extension-provider-applicability-authority-bundleDigest.json",
+      "sha256": "sha256:6723162279ebceaec0d45ceae247144c0180d76918a42e8049c96740a64b98c9",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-extension-provider-applicability-authority-lockId.json",
+      "sha256": "sha256:47999cc4742a81fc0870dd4c1cf8caa47a941c8aa343c41a06d4f7943f9ef6cc",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-extension-provider-applicability-authority-version.json",
+      "sha256": "sha256:4cc52c8c8756e37a094784f1190187634acec25e2e71fad7c38adbd83d7852b8",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-extension-provider-applicability-baseAuthoritativeDesignDigest.json",
+      "sha256": "sha256:c7f24cc996c498d366c0b05896b34f4b6cfa67f3b54c80cad5915ff700cdf59b",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-extension-provider-applicability-baseDerivedStateDigest.json",
+      "sha256": "sha256:7d0e6298dc49fe2c09eb25082e0041293892a489e1e8a475b859c4c8745322de",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-extension-provider-applicability-baseDerivedStateRevision.json",
+      "sha256": "sha256:4effa9e72d9163dd7e7806cf3d6a656e18fb35d78f30d679ddb8f003905560cb",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-extension-provider-applicability-defaultEngineBundleDigest.json",
+      "sha256": "sha256:4389c136c2e14322aaa835698e99372c018c115ebfae9a98cd7ccd2a9798b9ae",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-extension-provider-applicability-defaultEngineLockId.json",
+      "sha256": "sha256:64fa611a3b3c05d4152f009fdd80d1d043be03920ae33570bf1587f44e4a17e8",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-extension-provider-applicability-engineHostContractVersion.json",
+      "sha256": "sha256:16eb1b3a6e9b9ff4f93fbd5a2f549fb746a8a30a909c16c4893715b58efa5562",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-extension-provider-applicability-groupId.json",
+      "sha256": "sha256:30518d4eb6c63aee14ad8c1b6de179c3f017a69bdde88290cfd7dc46503c0274",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-extension-provider-applicability-hostSideEffectContractVersion.json",
+      "sha256": "sha256:67d98f3ec20ea280615b6468600d74312cc236bcf694214e2c5bc0395b8e81be",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-extension-provider-applicability-packageBundleDigest.json",
+      "sha256": "sha256:a1bdcf81b94b11e72becc90e1c87da1b58c17c65716d9537d9b64b3000f50379",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-extension-provider-applicability-reconcileDependencySetDigest.json",
+      "sha256": "sha256:b27711d2c8ea204f282786dd3eeb1ce1ae2faaa02345682b716775b1765c9d17",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-extension-provider-applicability-requestGeneration.json",
+      "sha256": "sha256:dbc27ad5b621046b62330a87153066eae4ceb430b4a27f4ae18dc46425ac6f6f",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-extension-provider-applicability-topologyInputDigest.json",
+      "sha256": "sha256:711df6dfc38df6e3fdeda8c37f15933d551ccf0fb2cd915157558ae5eb4946f3",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-extension-provider-applicability-topologyInputRevision.json",
+      "sha256": "sha256:fd34c810a555cd496e923882aa9561d8fd162df072fd879bbc3694d231a90fe4",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-interface-attached-boolean-type-mismatch.json",
+      "sha256": "sha256:f2ff95642a0836d1981f08602c048d15f9b68cedddee3b7a5775640271a18593",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-interface-attached-capability-mismatch.json",
+      "sha256": "sha256:a776f3fdd4c5f0e8cc4ae2f1e098c9ec41c5305634d0433ccfe008b7f17951fc",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-interface-attached-contract-mismatch.json",
+      "sha256": "sha256:285cc5ce79daba8c96f20e869102c86e3716c93d1068716cb44b7e0047fe9fbf",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-interface-attached-numeric-type-mismatch.json",
+      "sha256": "sha256:7ddb26de2ebf9fcbb83f2777b1186ace569673d1b2fda53ff96a3d4cec2cb2ff",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-interface-attached-role-mismatch.json",
+      "sha256": "sha256:7defbfbe1c906ff1326cf291fa40545e530aced9255d77955d94878763fa7537",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-interface-contract-lock-missing.json",
+      "sha256": "sha256:e91e2726c869ab7a32b2b21672b2d24e5735f0e25336422bb684a93c583d6d80",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-interface-contract-lock-wrong-kind.json",
+      "sha256": "sha256:d0f3c3fb958c111666c9848cc5b062da0313a921350e912d0ead0c82c1a6192d",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-interface-owner-unset.json",
+      "sha256": "sha256:0a51398c2b684e135c0177ad851cd476a5ccb103820dfc23943a7935b9d3e3aa",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-local-ref-forward.json",
+      "sha256": "sha256:a0c2518ba572bd9b118f7af5216e5b11fe6379d33648b84a38d89d75c8e9575d",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-local-slot-double-occupancy.json",
+      "sha256": "sha256:b621de2bcb11ca90c71a370af7de167eddbfc4018e089f7fce4e478d466bc6a2",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-local-slot-router-mismatch.json",
+      "sha256": "sha256:68879ed9906f8a7882f05a8217406b05421fcff650adc873ddcba9cd00da95a8",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-migration-missing-dependencies.json",
+      "sha256": "sha256:6bdcb028b4c320109f4afedb056c63b062211f91e295914372d90b3ce95ebf2e",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-migration-provider-runtime-wrong-kind.json",
+      "sha256": "sha256:f121eaad1df7cc15e28a911fcf6108edba30b2d70766d9cbd386592040be9aaf",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-migration-removes-live-contract.json",
+      "sha256": "sha256:53b65590557dfd37e106e6837a3600c07f7563f29533174873a82e43141e25fa",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-migration-tool-runtime-missing.json",
+      "sha256": "sha256:f4d67025769def4db63dc61f2b7c5b8d6f107a36b620b7ac5305ed02aa9b73ea",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-operation-shape.json",
+      "sha256": "sha256:de6e71898cabbd02a4c4bf6fb21fa839ede49f3d9910641ff5250f3d33936ae1",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-package-relation-required-unset.json",
+      "sha256": "sha256:f08b40c7455d6470d4bd701c4f7a7b44309133b653da3e1d6596157255daab15",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-package-relation-unresolved-forbidden.json",
+      "sha256": "sha256:5b9e66d293d74f3832848b9453aa07cd69d713705f2132791e79b903672fb950",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-package-undeclared-type-engine-entity.json",
+      "sha256": "sha256:e0a888bf49628d451e4b919c3b52183015ce06f71a015e80a9e6fcd401a62ef4",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-package-undeclared-type-engine-relation.json",
+      "sha256": "sha256:60b9d99342a7fd1d1d4b5229e54a232d2836232c071583bfa5ad78f3c2585453",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-package-undeclared-type-user-entity.json",
+      "sha256": "sha256:efebb891d2c6a1aebdc0183cebc3d524f8fa73815ba5425cf17ab136164822e7",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-package-undeclared-type-user-relation.json",
+      "sha256": "sha256:1ad701e60d22da0ec9800e1cff9aa70b2adc66b977aa66822cb07fd48c4876f3",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-precondition-boolean-type-mismatch.json",
+      "sha256": "sha256:31eefd49ce8c48322dda6a81d51fb145bde2a3988db78dd39aee6bf95c3ae6c6",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-precondition-canonical-numeric-duplicate.json",
+      "sha256": "sha256:a73768f89c7795901a529f331adef57fd0eab376dd946a40c057acd239e6f623",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-precondition-duplicate.json",
+      "sha256": "sha256:29935ad0f6a73b39e9d6b3b6535789faa304b0f6fb0630e17db95251e6442030",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-precondition-failed.json",
+      "sha256": "sha256:e403b2dbb73bb107b970fb8cfc435d3f60083d75e9d1dcf97f90044a76cd115d",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-precondition-false-entity-absent.json",
+      "sha256": "sha256:adb17a6c39f821f2dfb03916127a3da75d795007512c1e67c2031baf4d7a96f3",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-precondition-false-entity-exists.json",
+      "sha256": "sha256:1280ec583709016fdabd33bd6f7f97f1ed0b96d45e5c4d4229ce64dd41135e73",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-precondition-false-property-equals.json",
+      "sha256": "sha256:2a7058c66ce35b7e6975016424a12ebc07b43c620a346be79d4b39bf89326fba",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-precondition-false-relation-exists.json",
+      "sha256": "sha256:e181d650f397918c2890be9b664903314cf0a00b66e1f79dc5ca445b37aea9d7",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-precondition-false-slot-unoccupied.json",
+      "sha256": "sha256:a60267124e6bea2c5275177cc0c42c7aa8da4eaa23b1874f2d0bb5985f7667a6",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-precondition-noncanonical.json",
+      "sha256": "sha256:8ebcf3acc805decef510abdc956f10d11fe42491ec36946ed8c8c80562dd92d2",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-precondition-numeric-type-mismatch.json",
+      "sha256": "sha256:ed4f68feeb92e65b9905a1b1ed96170f46e277f64dbe515d82499598f6da50fc",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-reconcile-attachment-create.json",
+      "sha256": "sha256:8c8928b0f8a4923e0138c76a70ef96ab8f977ca0769509b47d339f782b753ce3",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-reconcile-attachment-delete.json",
+      "sha256": "sha256:3c8f133eeae01bea7a4dfb65d3d200ff515d897a2204886474e260635ba785b8",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-reconcile-attachment-reason-code.json",
+      "sha256": "sha256:c8cc86e2e09220933a5feb1a07fda8e6c5f9e69b014382c84ec352d4d90a78bd",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-reconcile-attachment-reattach.json",
+      "sha256": "sha256:2f6b748662b8ec25c65ae49386f8fd3a787ded78afc3f5812ca4db595cefadc6",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-reconcile-domain-delete-default.json",
+      "sha256": "sha256:c834439fe4c26956a601f7ac1ced3c88c00b2a7659f2ec7293dc4b037feba0b1",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-reconcile-domain-membership-move.json",
+      "sha256": "sha256:fe374914700c51dbde7b2617dc4bdd9fdf42ca377d87b3ee31e58f9001044c82",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-reconcile-domain-rename.json",
+      "sha256": "sha256:7834a141953c9372f33fb75a94200dba75fcec3b4e1dcfb6b62c711e2a3996cd",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-reconcile-domain-second-default.json",
+      "sha256": "sha256:6eefede57d6bdf7dee0897bcb72675c15301982f92d7addeeba3445037e29eb5",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-reconcile-missing-derivation.json",
+      "sha256": "sha256:8597398e9eb55abc4b87cd24d0bc85d52cdf65fbf859350059963a4d85b9108f",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-reconcile-mutates-component.json",
+      "sha256": "sha256:d4bb393dc6928ce38121868f550baac36b7293a64623bacdbde057b00d3b0494",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-reconcile-package-relation-engine-delete.json",
+      "sha256": "sha256:0315dd25a012b0e27e3da1e1ebd5a39ebbf5bc3f76ac54f9dcae3212a08eb2b9",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-reconcile-package-relation-engine-update.json",
+      "sha256": "sha256:5572c13fb72b42fa612db542c747f61d90cb1739929fab13b71aef9b72daff48",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-reconcile-package-relation-reason-code.json",
+      "sha256": "sha256:0ece271b77ddf6b7d3d121688c52726b8d43879e6e4ae051b18ab93596fdc5fa",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-reconcile-package-relation-user-data.json",
+      "sha256": "sha256:71153a110423bc180ec5a373d00e0a8d32c315eaaee74fa0ec4f9f4751003911",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-reconcile-project-rename.json",
+      "sha256": "sha256:d318b5d73e01042a9b7c3e0cbfca005fb3ee5573be5bd06383b87d9c8d070f20",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-recovery-session-revision-1.json",
+      "sha256": "sha256:bb82497ad349e43d1ce5e426be29912dde4003b30f80aa6d6aceadfc5e49189e",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-recovery-session-revision-999999.json",
+      "sha256": "sha256:1fecd2d59243bf5e7b5fe5147620a9aa98667fd925572aa9edb64807eceed4b2",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-recovery-tampered-replay.json",
+      "sha256": "sha256:ad3fbd94afac8b6b0bc1d2e97543fbac0bdfb2727445f6dd4e9320911ac14c98",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-set-unset-overlap.json",
+      "sha256": "sha256:80a455771c9035b69276ae3b99e402b36d673084f0ee5579236cad6733d7182e",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-slot-contract-lock-missing.json",
+      "sha256": "sha256:1ebb79f5a435d388be7dedd7d0712949689405027ba64cfffb87f05a3351162d",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-slot-contract-lock-wrong-kind.json",
+      "sha256": "sha256:bf3480c2910c1350e39a8748f1e750713fb3dc789faef8b3a9de9baac550e3d8",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-slot-duplicate-contract-lock.json",
+      "sha256": "sha256:edadffaab1adb64ff226a69ef990145c5f25c2fe005ddb080d333be35f3a5f84",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-structural-link-self.json",
+      "sha256": "sha256:cf25d5acd1ea507eadadbf2924d9b86926c640e0ad836a7b642fc1c4bc1c7c21",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-subject-schema.json",
+      "sha256": "sha256:e46387800cec449812db9f3622d27688bdcc1edfe6acaa77e2290d226f53ec51",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-type-key-engine-entity-to-user.json",
+      "sha256": "sha256:c99ed14bf383bbad432578cde539f334914e384a05c301c61fa7454a2eb400a0",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-type-key-engine-relation-to-user.json",
+      "sha256": "sha256:8a269049c0af2469ed400111b470a7287fab937f314d55047cef2d60334f266b",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-type-key-user-entity-to-engine.json",
+      "sha256": "sha256:d46cfeaee234ad8cce9d02089b28c9f7c86e897cfa60e059b8e73d8ba96388ee",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-type-key-user-relation-to-engine.json",
+      "sha256": "sha256:c6803cafe958a49fe3dbae6534b7200bf46a9c6687d3b0fadd45baf87f98d50b",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-undo-redo-session-revision-1.json",
+      "sha256": "sha256:504667ebfafeb2c84e95d6a31787bb38ed341d03839e9456699b0ae215b52181",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-undo-redo-session-revision-999999.json",
+      "sha256": "sha256:7813321001e02d055b1a61c6dfa1df877528e27ce7e38c169edaa7ca622031fc",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-user-command-session-revision-1.json",
+      "sha256": "sha256:539dfaa275f3f94c9575136fcba12a7a2430585e88af32375ebffee476f9c601",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-user-command-session-revision-999999.json",
+      "sha256": "sha256:7131a230c3d7cadf1add271b3aec8de8b2174ce0ae7c64070ddc483c086edb71",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-user-component-identity.json",
+      "sha256": "sha256:b540375e338f63ba2081e8c6dfdd09f5d761a241de37f1809daadc797bba8ffb",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-user-domain-disconnected.json",
+      "sha256": "sha256:c935700b8fc26e1c8f2ad24bf5525b3dddd7232e770d3bca3b7e83b4431e73f4",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-user-mutates-engine-package-entity.json",
+      "sha256": "sha256:8c9943b259eff718043a89d0b4bf8440ef60ecef5a303340309335edca500385",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-user-mutates-engine-package-relation.json",
+      "sha256": "sha256:099e3c95bad8e510868ff8f845b457216fc50a58551ec4bcf000efd01ce26e6b",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/patch-user-owned-router.json",
+      "sha256": "sha256:f254033fc2cdf13e6b3a59f53574f646f0f764018ca6a497f93b09e6d0ed3350",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/pipeline-failed-step-binding.json",
+      "sha256": "sha256:5e74f3a389da0b50f7e554bc8b2524d96477bd01386e2380ac1eafee8f261a36",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/pipeline-failed-without-step.json",
+      "sha256": "sha256:c2f24db7becfc420b434ba50299aed957bd1c4f77d4e60e4810a218c969c8a7c",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/pipeline-result-reserved-path.json",
+      "sha256": "sha256:aac3ac228f2225472d59fdf383cfdeefb9a2af4bcf24afef16e7d775eabca116",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/project-attachment-capability-boolean-type-mismatch.json",
+      "sha256": "sha256:55a5f379abac7979005d272bedbe87d00e7cbed91f68bda9447b7357429e1a85",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/project-attachment-capability-mismatch.json",
+      "sha256": "sha256:b280433ea2f2ca974105aa93c3ad4c5468130747f230543c964855fd235e16c3",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/project-attachment-capability-numeric-type-mismatch.json",
+      "sha256": "sha256:5ec547e9cac3abf6ef3b90fb15e938744837a27a28592a9b22c8a6b313be9b5f",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/project-attachment-contract-mismatch.json",
+      "sha256": "sha256:d52910a30b7a11eec61c2928cc9e38fda22df7722caa290c5c89550786408a41",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/project-attachment-missing-slot.json",
+      "sha256": "sha256:382836440a2680fa25ccd2f18e5f66f1f58d399e5932f1e0303e119d560c6f68",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/project-attachment-occupied-slot.json",
+      "sha256": "sha256:305bd400093430471c91afd343f90fd1761a8f454103a1b69214ca6802010365",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/project-attachment-role-mismatch.json",
+      "sha256": "sha256:25175f6d163970a5867db4009ef6eff3e3183d592cca74f5ecf2159bd11ff048",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/project-attachment-router-slot-mismatch.json",
+      "sha256": "sha256:7b98d2bd91704efdbfa35d1b97a6559e66136c57d0880d89e95dfaae0bdfac99",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/project-component-package-missing.json",
+      "sha256": "sha256:99eb5c6f28b07e0094ea49d01dc2fe1e40ddb5fa93d618be6d9323ab2613e36a",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/project-core-field-wrong-type.json",
+      "sha256": "sha256:bf3bf2ada04c667279ceb7fd0752957b4d1064af2d0ed3dd644f68f864b00a75",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/project-derivation-engine-lock-mismatch.json",
+      "sha256": "sha256:04ae356f38fcb4a7f296e5be52b8ad362726c3aec6a2a310a2ad8831a9bfa698",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/project-disconnected-domain.json",
+      "sha256": "sha256:1519eb2b6a3861185f5f06c528fa801756e3ce84f603278c66724c6ffac1fb20",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/project-domain-membership-wrong-kind.json",
+      "sha256": "sha256:5326819c26664eea66ea80510676556bbfeba0584fced1b5afe50c79d2ea8fab",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/project-duplicate-id.json",
+      "sha256": "sha256:9a59bb738a52de3d3f9c62eb1406ad342187717ea1e9c8ac1cde761d1855d48f",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/project-duplicate-relation-source-key.json",
+      "sha256": "sha256:e66c419804461fe90ff369730101a345c6e7cb01e890c567522bb6cab21cc321",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/project-duplicate-root-extension-key.json",
+      "sha256": "sha256:147c8aeba9a5767b90944444f5d1ad4a98540183aac2a76d75b194107db9f800",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/project-duplicate-router-coordinate.json",
+      "sha256": "sha256:930d92f09a4f1a5dd4751f81c6550ece8799f5c296ef602eeed7a34a055ef007",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/project-duplicate-slot-allowed-contract-key.json",
+      "sha256": "sha256:ea7fb77f3c3a0b5c4a887d05e7861e8c9b42d6febf430519c2f5fbbbf8b8c086",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/project-duplicate-slot-key.json",
+      "sha256": "sha256:b7ba0b6994c32ea6328a277f57b6869c0b7b80529d649b2b1df5c8ac91b322d1",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/project-duplicate-slot-role-key.json",
+      "sha256": "sha256:19b29b8cc532b5418a598548f23e2946b74ae1033733c702e0893713c8039423",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/project-extension-owner-missing.json",
+      "sha256": "sha256:fb074f23aaa9bd7669c629a3124fcdd2e29be80215104c2de75db882ba31b199",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/project-interface-multiple-attachments.json",
+      "sha256": "sha256:b7253ad17b4cc9216a98796cbb16ec7fa178ada5e18dd425a394eeb6f700e6d1",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/project-legacy-root.json",
+      "sha256": "sha256:0ab7c1a1d3a4df8884d630c040365120840f9ece578348ac3afa941174fb2653",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/project-link-axis-mismatch.json",
+      "sha256": "sha256:216c6a9098c114be84a83114b4fc82256210430de85935e4a7598001b9590b82",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/project-link-duplicate-pair.json",
+      "sha256": "sha256:3d24899cbab3a2ea399bfe2f0fdb80c1516407f03ebf36f82fe80a80781e4993",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/project-link-missing-endpoint.json",
+      "sha256": "sha256:aa240ece6bf686d9365982b8683abf5f5c1d7f1e36a439287f7287bc602b8118",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/project-link-nonadjacent.json",
+      "sha256": "sha256:cc0566387bc4adb2eebadcc822f3750c884a2c0ad8504f81208d2b06be14ba5a",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/project-link-self.json",
+      "sha256": "sha256:e8c5f26ebe0714ab1be205c241832874e382087be5a650fc942b33ff1f240bd5",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/project-missing-domain-membership.json",
+      "sha256": "sha256:d77e9e0b60826f3e651b10e50de389d448183d6f9f60b72d74e24efad6e92f93",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/project-missing-noc-profile.json",
+      "sha256": "sha256:fbf65179fe26e14756b0ae1918e1f1c7952575b882d40d68ea1ac1c4a75b17c3",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/project-no-default-domain.json",
+      "sha256": "sha256:d6c8fc9e771a0048782e5119465aaa3d3c7c0066d14a5f35672c35df6dcf3a91",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/project-nonempty-connections.json",
+      "sha256": "sha256:2f76185c16c173f4906d9efe04f2465111c0ff1f5c809300d5d56c26a5b242d4",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/project-opaque-outside-extension.json",
+      "sha256": "sha256:65950b9c1517273c3eb2577a567052eec86feb92ac9b769ffa180a36c19f4cdb",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/project-provider-authority-metadata-mismatch.json",
+      "sha256": "sha256:540a7b9b44576db4e80af42b6729a88c0fa76a3a98479dda36ed2830b6e93b94",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/project-provider-authority-missing-lock.json",
+      "sha256": "sha256:e6c55ae420948341f3647c4126086be13d611c195952dff07d8f090a8671983f",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/project-provider-authority-wrong-lock-kind.json",
+      "sha256": "sha256:4673b56195cd8d4606aea408a4abb17922f7b1f91112f4f30bec8afeb9e0a274",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/project-runtime-lock-incomplete.json",
+      "sha256": "sha256:d1237e83052e2ea53cc903d6b96d52a8df3db0f650c10db0fc42a5423599e985",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/project-slot-contract-lock-missing.json",
+      "sha256": "sha256:bb6abe23109263072e5e9351f189b51cd29411e2bda61b7cb53ad16e05890406",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/project-slot-missing-router.json",
+      "sha256": "sha256:9bbc5f0aa8132040fa89061ab5eff498f20216d13feabffdd477d86b843da9a0",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/project-topology-owner-missing.json",
+      "sha256": "sha256:5650e2984b167b3647bfa9529999e9c5f983ef06c74569b446a824b32c0bf131",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/project-two-components.json",
+      "sha256": "sha256:705a942e8c8c4b342c38966a321994e5036123ee1f3e266838ac4587774a7e48",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/project-two-default-domains.json",
+      "sha256": "sha256:a8bfcbb60f7dc70403954f071a4a4e3fd6fbd424b3164aaefa15b2b81fb0f16e",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/project-wrong-schema-id.json",
+      "sha256": "sha256:5136fe65821508cf16755fe1b65ab85c4ef0f8aa33c08103947ae0c1ff96ca74",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/project-zero-components.json",
+      "sha256": "sha256:60485d9a696dd98dc71f51ea56491031337bd0aa3427ade5b49e95e02c2b8bb9",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/recovery-binding.json",
+      "sha256": "sha256:1c955505906399f599347becdf68a998c3949ec6ca83f788480b45b2660fb556",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/recovery-draft-forbidden-ArbitraryCommand.json",
+      "sha256": "sha256:ef57d5ef472ad8379cfb74a729a34e4fa43d903b49ac7e2f1d8f210d101b0e04",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/recovery-draft-forbidden-AttachInterface.json",
+      "sha256": "sha256:d71429e2e05e6ffb990825e83fd3f4c47da13d255d2ec56a2f62402930de0033",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/recovery-draft-forbidden-DeleteInterface.json",
+      "sha256": "sha256:7ed0c8a0c35de9f6906d96647b03fa8d545cc219d50d88b3546a1f2e467fb186",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/recovery-draft-forbidden-MoveRoutersBetweenDomains.json",
+      "sha256": "sha256:d537586d1f473bc5fda7d035d33f138a895d35b67b5d548c7cbf6d5d21734a45",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/recovery-draft-parameters.json",
+      "sha256": "sha256:63f38c2fdbbc05c926d406b4f1dee1ae74c97746b468968067255146c3c8e1ce",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/schema-missing-artifact-manifest.json",
+      "sha256": "sha256:17a8d705b05984e7babffc595310e06d00d1c4d3e2a27ca8392a989dc6495ba1",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/schema-missing-bundle-manifest.json",
+      "sha256": "sha256:71756ea78b64bf3594474b7c2c4299858aeb941734d21a9e706a32c6cf79538b",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/schema-missing-command-result.json",
+      "sha256": "sha256:4beada583ab8bdee414ecb09d76fc7aa0a49eed05c15997613ef1635deb9b72e",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/schema-missing-core-canonical-models.json",
+      "sha256": "sha256:fca51cf9508e5caa60e26145b183650c35dd892e2535c91ca02c5baf1980600d",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/schema-missing-diagnostic-report.json",
+      "sha256": "sha256:35cada27aafe09bb6c40f85c528a50848e76548aafbf1ed6a31ad931cdfd7931",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/schema-missing-engine-bundle.json",
+      "sha256": "sha256:04c685dd1f0238898e1fb376c31de2e53e3c89c82012909ec5bfae3622dc7b18",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/schema-missing-interface-contract.json",
+      "sha256": "sha256:d629040b8a968deee9fdf8eb1735ed682c031d4ffce02d8c12e7ed06102554ef",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/schema-missing-noc-package.json",
+      "sha256": "sha256:7f4de495a92996439dac9f882f0a914c9245aa055d025546221313673963195d",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/schema-missing-noc-side-effects.json",
+      "sha256": "sha256:2f2bd3a4717403d53c44b54d08a375d68e3b8eb70ce1f93d225558c9382f2d73",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/schema-missing-output-manifest.json",
+      "sha256": "sha256:8c5518efb8a8dd8e7889430183e1b406937ca1fa8aa8c00570aa44da16155a74",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/schema-missing-patch.json",
+      "sha256": "sha256:eb93c7a16b091b785029a2ce1cf4c96d8e393dae80ae895493753d8c7dbc81dd",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/schema-missing-pipeline-plan.json",
+      "sha256": "sha256:e2d059d857e2c938b54fe17e14f2fed1a5ef2ead19d641d8110a0665ae579508",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/schema-missing-pipeline-result.json",
+      "sha256": "sha256:0c92ca4e0628a981610e5b8c98afb87da018b5eb9addc10c60cd8b05e8288834",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/schema-missing-project-design.json",
+      "sha256": "sha256:0d50c037acff6db544de766df371ccd9bc2a52931fbaa84a2439be2b37bd985d",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/schema-missing-recovery.json",
+      "sha256": "sha256:ea2f7fe514071b3fedc268b428fa243661cd022e870ff915e701b0f2dc85623e",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/schema-missing-step-result.json",
+      "sha256": "sha256:216f05328dea553f07415914addaabe0187a760adaf74df03ec0470fc3b07d70",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/schema-missing-tool-input.json",
+      "sha256": "sha256:666fe2f4b8e0de9f22fb4e1b85b7c3bc7afee88eed8d279f6d063f0c7143ee82",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/schema-missing-tool-result.json",
+      "sha256": "sha256:55eb775b577afeeda4f3eb92d12af5893163bfccc6af16f6591cc675099837b7",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/step-external-without-invocation.json",
+      "sha256": "sha256:29427d89b41148892e7cacf44ccabc27626143f3797a798d0a5fe8592caaad62",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/step-result-reserved-path.json",
+      "sha256": "sha256:b368eec1e34f66a8f04844817d172e136cd1e4aabe8ecf2099a8e392ebf028e9",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/tool-input-generator-snapshot-binding.json",
+      "sha256": "sha256:a75c980bcdb1e8850b360712b5f2bb251962b00dd2d80c63f0fffed55811f338",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/tool-input-generator-without-output.json",
+      "sha256": "sha256:659e1b871d3250878cfcbcd3ed30e8400a2e4baaacf22c74db040d7036b02002",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/tool-input-path-alias.json",
+      "sha256": "sha256:e3d9a604f4039a01e969e7dba270fe167b76a8a310cd608ad642eb1d981360ea",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/tool-result-failed-without-failure.json",
+      "sha256": "sha256:c34e507ae24c0aeeb64e7f2245d8b6e7ded38219b1bd89abbd0b33e0f47868dc",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/tool-result-reserved-path.json",
+      "sha256": "sha256:307bb97e80f5cd4001b352eabc03130d47f9fced4f34c24b536e078e0280e8c4",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/artifact-manifest-maximum.json",
+      "sha256": "sha256:270256087f243bdfccd4bb431aacdceeb27f655b32cf41a6ef0110059d04e97f",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/artifact-manifest.json",
+      "sha256": "sha256:92ec2afa1ba949b470394d25fe88abb3524adc69a6832da7c52318eb63942a1c",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/bundle-manifest-maximum.json",
+      "sha256": "sha256:618d4a28d273bdc3c28c4cb7a511beb9e8a284fe59a6ba70e82347a04699a2e6",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/bundle-manifest.json",
+      "sha256": "sha256:78bf59a78005ea38000b1a33bd122a46d820aa17da9c26e1b066f7bc192ec4b5",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/command-result-drafted.json",
+      "sha256": "sha256:03f9440dbee240cbea3d397ee3a3483e5b132d16feee809787e0b1031589a47b",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/command-result-pending-topology.json",
+      "sha256": "sha256:f8cb9942a92abf4f0a71478706ad0c6c3e505008381a0962b8c7d1ca64a7c896",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/command-result-rejected.json",
+      "sha256": "sha256:f9eee37c2a75694d1e79351e03bd1c9edd1877389c32a5432eb25807387dcc35",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/command-result.json",
+      "sha256": "sha256:a802a5d6bc47a3c287fb2d02d794140ec97a5c3d5d4001b5aca265f1ced75c02",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/core-candidateTransaction.json",
+      "sha256": "sha256:a1f038d0ed8c864922e1f53bd836cd28b25f60b43b10a26679a065cf29d3ed22",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/core-canonical-models.json",
+      "sha256": "sha256:664fb86a2719729706a8a42e85586629779ad7c0d441ea97c3cdf9de9be5260b",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/core-derivedState.json",
+      "sha256": "sha256:678734f911e5ec06ffb678e6772d32ecbfaeaa04b8e06f3f126d4f8c1706aae8",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/core-impactReport.json",
+      "sha256": "sha256:1af07a796d7d9a95019415297451e1e2db4c2d5de820389f1bc0a9dbc5bdf8c4",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/core-normalizedTopologyInput.json",
+      "sha256": "sha256:78f3663907ce24c59b6be8d0a4072dfea30cc55d8c9eec04bf999f141c95edc5",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/core-outputManifest.json",
+      "sha256": "sha256:bf2396afb4d363654b1e24b449175b2f7e58ddf1dc7327363eeaf458e311d08c",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/core-patchBody.json",
+      "sha256": "sha256:7b59027084092d678b7612e96823df1a55b12c3c095c28ddf5b66a619876a043",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/core-pipelinePlan.json",
+      "sha256": "sha256:5724f3fc457a2299691037d431b59bae793fca9c51bed3da03f5cb0ffeed70ce",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/core-reconcileApplicability.json",
+      "sha256": "sha256:1876ee93b230a299ddc54f45420137383f59ae1809eaf95824b8356d776b0278",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/diagnostic-report-maximum.json",
+      "sha256": "sha256:b604155863d92aa95cda38e79a7fdf6011f9e1e02c2470a72be4642a9d4fc05b",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/diagnostic-report.json",
+      "sha256": "sha256:14699c43f40a98d8509d4c60b471cabbd960b87a3ae492102e56870bcf2ab43a",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/engine-bundle-maximum.json",
+      "sha256": "sha256:4de52fa92bd297a7d4b28feeaa51095147af91278f2e615deb74edaaae740ee5",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/engine-bundle.json",
+      "sha256": "sha256:876a861a85d5021e4e995cf1cacfe0990bbe6b104d9f46c5eb5ca81ab4c8716e",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/interface-contract-ace.json",
+      "sha256": "sha256:26fa689825691b97a2a26f9236d4549bf3054e97c19a18d52deddedfd363382c",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/interface-contract-axi5.json",
+      "sha256": "sha256:c5ac842b4f177badb2f27c7f8ea7a62595f6f18406a8e186fc067b20ef34a86e",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/interface-contract-chi.json",
+      "sha256": "sha256:46ff2960dacebf56033bcd80b5514975e3bf62f2e09d3a52c914437378cda044",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/interface-contract-enum-boolean-exact.json",
+      "sha256": "sha256:dc2bcfd49cfb8218d9659945b24d3ffbbcf42084d36dbcf6068d7fa35ef77715",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/interface-contract-enum-integer-exact.json",
+      "sha256": "sha256:3861c0890d7a2b4b8cdf823986d0e5c91d20ecfcdf7a0a47f1d9edff3a22f9b1",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/interface-contract-maximum.json",
+      "sha256": "sha256:01cadd53028d3d995cb242e7772b206deceeb6548a5ae366080f6027787f9d89",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/interface-contract.json",
+      "sha256": "sha256:866a9049bf026ebf0927876b856942acbed6c8c15ef1e7be9dea3b6277b5d638",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/mesh-2x2-attached.json",
+      "sha256": "sha256:2bddf89753f66bf5ec3c3c4a5561bfd00d06e602855de68ecf1ed77c0dfe30b3",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/mesh-2x2-package-extension.json",
+      "sha256": "sha256:13bccf0b42bb411700702bba977ce2162bad1b02e3a97195bff0388ba4206ab4",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/minimal-1x1.json",
+      "sha256": "sha256:b8e0b2cf097f1bef5b65155b3112f504099580af24089a599920762e4ee26992",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/noc-package-extension-authority.json",
+      "sha256": "sha256:60be121dcacdb481068282eed5b8109bb47dc53908f492bdba5a34379bca05f6",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/noc-package-maximum.json",
+      "sha256": "sha256:3d46ccaee2928fddd86b265c43ada926c23ff4b40079bb8814749167c9deb15e",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/noc-package.json",
+      "sha256": "sha256:6e31bdbd964c50222344029f1e80c6a90a7a6f2b011404d61910c2362c8b207f",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/noc-side-effects-auto-commit.json",
+      "sha256": "sha256:8b918dccc5210f8e6b2f8328a45a19b8a39e09c2412cb632711465c0020e1836",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/noc-side-effects-blocked.json",
+      "sha256": "sha256:dbf5c5533e9603b0e8143361739773f50ee265ca86c3bfe832c9a8b646ac1fce",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/noc-side-effects-ready-to-commit.json",
+      "sha256": "sha256:a947e8f219ffaf69ca2b4f31b86655ad93b12a101c40acdd1c1b10d74f6699d4",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/noc-side-effects.json",
+      "sha256": "sha256:9af1bfb355aca96cbfbe2bb33fa0ee173c457e85fd5f2957e80b5d615ad0f27f",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/output-manifest.json",
+      "sha256": "sha256:bf2396afb4d363654b1e24b449175b2f7e58ddf1dc7327363eeaf458e311d08c",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/patch-application-attachment-unresolved.json",
+      "sha256": "sha256:7fabd33a3d10d3055e78d0fffe403f809b78045bb6116868f5163f484ecf8635",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/patch-application-delete-emptied-nondefault-domain.json",
+      "sha256": "sha256:8e27c887208a781639bba989387caa20ee9e2fc518979ece47f40e06b86f8b7e",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/patch-application-domain-disconnected.json",
+      "sha256": "sha256:a8350e496e94a08be0b0e5a4fe664721b17bdc94ef5eaa70c532d715a8d33c49",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/patch-application-package-relation-unresolved.json",
+      "sha256": "sha256:e027b1369e9ee8a74b7dbdbe73a021233c9c8ed7d97077f5f8f9e3dca44e847f",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/patch-application-router-create-default-membership.json",
+      "sha256": "sha256:5448ecbb003d903e2689a9485e1c44a16c688f8dccd3dfabe8dc31ec589aced6",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/patch-application-router-delete-membership.json",
+      "sha256": "sha256:8e27c887208a781639bba989387caa20ee9e2fc518979ece47f40e06b86f8b7e",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/patch-operation-createEntity.json",
+      "sha256": "sha256:0c5725c8d6c9860db5f4d18817bdf205ff240e6faa88cc7381621de04f1bd3cc",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/patch-operation-createRelation.json",
+      "sha256": "sha256:5cb7dafa335dd9d8803be35f723c5af60c51d3440e0c691a0b4a015e65b18c40",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/patch-operation-deleteEntity.json",
+      "sha256": "sha256:23f7fcc3d03cc18f114e188abb353a730d5f569d85214b3b374886677975b5a6",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/patch-operation-deleteRelation.json",
+      "sha256": "sha256:5ab324a4f7aaeab6433ba80c956a12745a75261cb4f2bdf2787993f391554d3c",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/patch-operation-updateEntity.json",
+      "sha256": "sha256:1cd6f9b44a141ce0036f9a6e11501fb00db36e3bc3040cc93808c9a414c112f9",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/patch-operation-updateRelation.json",
+      "sha256": "sha256:0f781c2162cb7d61f625335c552e9cfa13d74ffb448eaf0eddacc5d38c05ef23",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/patch-package-ownership-engine-entity.json",
+      "sha256": "sha256:f9b13e25a017e2a968616ffdd3926f087c1c4d63776e53136a4e2811f9b31c6d",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/patch-package-ownership-engine-relation.json",
+      "sha256": "sha256:4c08785153528937caf730605bcd7108d12f1bbce47c2cf76088d326e06ac9e3",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/patch-package-ownership-user-entity.json",
+      "sha256": "sha256:1d711a7fb6e824502b49b11232ad0546d9e8a2aee5fe765814e5e8d1aa6eac3a",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/patch-package-ownership-user-relation.json",
+      "sha256": "sha256:20388e086fd3dc7eb67d44e993278de24ddd785c8ba89d923a62ad145efe1462",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/patch-precondition-entity-absent.json",
+      "sha256": "sha256:6837991f88205116ec90dc267a5f6b7c6f434b63078a01ea22d4623975b2fc62",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/patch-precondition-entity-exists.json",
+      "sha256": "sha256:f9865223bd9efe712e36e8566980bae01c6f05c816594b3fa7545381b6fed4b8",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/patch-precondition-property-equals.json",
+      "sha256": "sha256:b41efa4fa7f6936e8a5e66ca9905e467fbc58a6954ccd81a8422f7c1744a4919",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/patch-precondition-relation-exists.json",
+      "sha256": "sha256:1f6eb02da9933dc9457defe28b870e54d22a550e98f4d3dd405d25d1f71c3eb4",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/patch-precondition-slot-unoccupied.json",
+      "sha256": "sha256:39c57ada2a0c0d70a215dade3a793c3b884c88407bedaa8531e3306b1d9c4f7a",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/patch-preconditions-all.json",
+      "sha256": "sha256:aa398a1ca499ff539058e3096172d9986923c4cef93c7866e7cb677ed5f82f9b",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/patch-source-application-migration.json",
+      "sha256": "sha256:be588fef57ea88714eb75d13e44858eeec2dd5b05388923f609f115c5e271673",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/patch-source-application-reconcile-provider-authority.json",
+      "sha256": "sha256:4a9a01f7d10ef59373139d22d9a09c3886946980dc885ea73ee1a60cc629ae73",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/patch-source-application-reconcile.json",
+      "sha256": "sha256:084a94790732fa155db0f2ceb3f57d7d08f0fb3e70c0cceaed2eed8de07ef3d7",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/patch-source-default-engine.json",
+      "sha256": "sha256:0718d903045e6c8da7a2a2298ec754a5f57d022e2da251abd192dfc4b3817534",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/patch-source-extension-provider.json",
+      "sha256": "sha256:f0530c73eb86754188d819a78957a63dabd05ac3a7edf188e88ca93b30214b43",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/patch-source-recovery.json",
+      "sha256": "sha256:254733bde886296ab24d0dcd9addd257c24cfed16bff102841a8660ee985be60",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/patch-source-undo-redo.json",
+      "sha256": "sha256:dd2770a8475254a0e527cdd523ddd32309c0291256259507b17639e9d27e60d3",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/patch-source-user-command.json",
+      "sha256": "sha256:0c5725c8d6c9860db5f4d18817bdf205ff240e6faa88cc7381621de04f1bd3cc",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/patch.json",
+      "sha256": "sha256:cca11160fcba1fbe4c5f2cd8b7e815aea3960f608bffa889edd6b9066b376985",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/pipeline-plan-maximum.json",
+      "sha256": "sha256:40df81d05dca11800211f72fc64551860a11938cf93a0d8616f41446d0ba4854",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/pipeline-plan.json",
+      "sha256": "sha256:5724f3fc457a2299691037d431b59bae793fca9c51bed3da03f5cb0ffeed70ce",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/pipeline-result-cancelled.json",
+      "sha256": "sha256:46653823ab485eb0f5e42f276f1b42cb1524e3af1dee53538fa1094a08f96f5f",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/pipeline-result-failed.json",
+      "sha256": "sha256:7390509346c49566ee6d96246886463dfbefbd0630d2620817336886f7336b4b",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/pipeline-result-timed-out.json",
+      "sha256": "sha256:39e044aedefdcd595e368a6ef12e57d1cec02c034a5b24f0550b6095874566f6",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/pipeline-result.json",
+      "sha256": "sha256:2fad2a41376b551b02ff9735996fbd958550e5438fd540fcfc363bf4ee530932",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/project-design-maximum.json",
+      "sha256": "sha256:ad07f30603fe496997b5a4f58e465ede8c808b661785d42385de27fe12f2642c",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/project-design.json",
+      "sha256": "sha256:b8e0b2cf097f1bef5b65155b3112f504099580af24089a599920762e4ee26992",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/project-exact-engine-unavailable.json",
+      "sha256": "sha256:f00373c2eaa30a25d464681c3d692c8d9a2727467d3c39f6cd292eca2487f5c8",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/project-provider-authority.json",
+      "sha256": "sha256:7041d379688948f8d0ef0fc6f276ff2c185e9062ca3221a341ce42f329cf3509",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/recovery-maximum.json",
+      "sha256": "sha256:c07a24455d593d40ffbc076f2ad6475b25a4f04fb9170af0a3490330e56061f5",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/recovery-safe-CreateInterfaceFromTemplate.json",
+      "sha256": "sha256:4914f72e5a1c8591287b07ad118a199548b9c8c900a0a703f498c671e46ffb27",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/recovery-safe-RenameDesign.json",
+      "sha256": "sha256:c065d7fe62dfff74bd381ca34df10acad722f4e040330b4533579471725991a8",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/recovery-safe-RenameDomain.json",
+      "sha256": "sha256:7aa5ee2b5f709b4f95df83de902701a598ec5478017a46110ae1a0b84a6c306f",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/recovery-safe-RenameInterface.json",
+      "sha256": "sha256:f4d822cb15901161903137707d29e2041f779bb91c0fd79275eb83c4d8c87d7f",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/recovery.json",
+      "sha256": "sha256:28edbd26718775aadd49c853fc012e0a6adc7e597d5b2eccb98b4971b48aab5f",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/step-result-cancelled.json",
+      "sha256": "sha256:0f53127adced731843d350c66041a73fed54304e3be4e42df3da9fc0fce62d33",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/step-result-external-success.json",
+      "sha256": "sha256:59c272599826e8c8ea4d9274f8707ce8f00e9b54eeb8c4f93f2d34079f53c349",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/step-result-failed.json",
+      "sha256": "sha256:8deaa33ab2eeb4bf67b9996de5890bf28174289ed6aa8ebfe4567028e5e8e3ff",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/step-result-skipped.json",
+      "sha256": "sha256:6b9d0d8b906280875762fb3c1ba4d95b5693a7e4f4538306ebfd373e90d5b3e6",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/step-result-timed-out.json",
+      "sha256": "sha256:3c34230b7ce338c1fc246e0e02a2a23286b9507a522837a97848cdbd9af59633",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/step-result.json",
+      "sha256": "sha256:f7958f7da186d4b1bec70c214d8df7cee55a2c87b8da7a39be193af814be9ff5",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/tool-input-generator.json",
+      "sha256": "sha256:994181d11c9c8f31a7ef2fa8a89c15d930b983848a4d42d5cb5c245043f5b01d",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/tool-input-maximum.json",
+      "sha256": "sha256:e3a8ffedfa5cf4e296eb00c89a93e9ae9454361bd9162e55b0366b575d7bd0ed",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/tool-input.json",
+      "sha256": "sha256:9a74855ebc92928f3e10f13d340bbe71c13caffe1699c8275ad1d5b4485f48d9",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/tool-result-failed.json",
+      "sha256": "sha256:58d7069c136a8416545120b6b6e2bb3efed0f6b28025c0559e8ee88f957756ca",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/tool-result-maximum.json",
+      "sha256": "sha256:5a926b2e7ecf66efa7816be27f57c299cb58a7c6ac2e148e47ded89772ca175c",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/valid/tool-result.json",
+      "sha256": "sha256:58442b8299a690b598f77daea6de7abb9ba497c8b035232ee273b10563f92f49",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/patch-validation-context-v1.json",
+      "sha256": "sha256:d591c93b0773129c51398c88d6be7846745fcb78b1ae798f81f2eaf1ae54ba76",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/contracts/schema-catalog.json",
+      "sha256": "sha256:07ba313df120030eaaaf8e900528fc053e6dcb83e6d12df112159ccb3de52252",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/contracts/schemas/ipcraft.artifact-manifest.v1.schema.json",
+      "sha256": "sha256:5f072edd06bf7db6010a8082b054f2c4dd7158ed32f1adcb0105460ec7df61ca",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/contracts/schemas/ipcraft.bundle-manifest.v1.schema.json",
+      "sha256": "sha256:c54a404ad26039499fdc0412ce0fdc38f94793ca6b54860b934a56de1298f4d6",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/contracts/schemas/ipcraft.command-result.v1.schema.json",
+      "sha256": "sha256:1145ddb917d84a7da8368eb5d038d1a721d0aa0cd4176078dc34a3a4a86014e0",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/contracts/schemas/ipcraft.core-canonical-models.v1.schema.json",
+      "sha256": "sha256:4e2908d7b9afa2fc1dd47cfa065c63a8e214be9e7997f8aa89a2921c29327784",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/contracts/schemas/ipcraft.diagnostic-report.v1.schema.json",
+      "sha256": "sha256:99c3891be3301b3677d6c1e49a5074d9af28b5369b9b1254a148263a3ed1420c",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/contracts/schemas/ipcraft.engine-bundle.v1.schema.json",
+      "sha256": "sha256:73066c81893e9b4be407b980093d761096a89f0e7878eb46b13e8b982ae2fc60",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/contracts/schemas/ipcraft.fixture-catalog.v1.schema.json",
+      "sha256": "sha256:5c0e3bd66522892dbead09e6d538b1dbb5a271cb6e8ac8e233ea64a763bab9f0",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/contracts/schemas/ipcraft.interface-contract.v1.schema.json",
+      "sha256": "sha256:f873522f500688fbbaa13fa0b41ff0790b07e5303fbe9c476aee5312bc2d10ab",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/contracts/schemas/ipcraft.noc-package.v1.schema.json",
+      "sha256": "sha256:f6b7fc0fe8510d1f5f21508dbf040074b7448e90bc4d6768ad91ac2d86f2ca79",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/contracts/schemas/ipcraft.noc-side-effects.v1.schema.json",
+      "sha256": "sha256:d81f99f544a2695ac71960c9a95f3af7383cab87582f9dcb64243fd327d016ae",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/contracts/schemas/ipcraft.output-manifest.v1.schema.json",
+      "sha256": "sha256:d6dcab7f49cb0e9b29872ad4d71adb4aef20233f35756682571ac8439a655940",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/contracts/schemas/ipcraft.patch.v1.schema.json",
+      "sha256": "sha256:2337d4b76698afd0b096e680159a9a4743ec9656617658f0e8ee8cc4a9778dc2",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/contracts/schemas/ipcraft.pipeline-plan.v1.schema.json",
+      "sha256": "sha256:9ac5c32d93c9524af3368630374c7e53e7cc0d4fa4761520017c46767d0ba7bf",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/contracts/schemas/ipcraft.pipeline-result.v1.schema.json",
+      "sha256": "sha256:0ec9452e35aefda09b31117311549d5a5e07e36eb4f77bb72795b8e2ccbce909",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/contracts/schemas/ipcraft.project-design.v1.schema.json",
+      "sha256": "sha256:9f9a5baca81b0e528ad132079401264201c978ebc9e140514b3c6bb63d435bcb",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/contracts/schemas/ipcraft.recovery.v1.schema.json",
+      "sha256": "sha256:9b053bab46c5bdb64a4e5189b015397c834a58f4bba3cac713a9caa6904d4de9",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/contracts/schemas/ipcraft.step-result.v1.schema.json",
+      "sha256": "sha256:3512aa07c900659ebae1cb7c98f394fec67e2b05190c7754536f75a163bd7f86",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/contracts/schemas/ipcraft.tool-input.v1.schema.json",
+      "sha256": "sha256:130b1effe46ed48cdc28a998f20fe7ba6f2adb8ad2dc62bf4eff95b67e5a1617",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/contracts/schemas/ipcraft.tool-result.v1.schema.json",
+      "sha256": "sha256:25e8855cd15847d36012819ff36cc198eddfeb7bd63a85aef8261589e3293d8d",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/contracts/tools/generate_canonical_vectors.py",
+      "sha256": "sha256:583276197a96d548e8026f4baf9f29643eb65456631129c83019c9e4bf377abe",
+      "role": "authoring-tool"
+    },
+    {
+      "path": "docs/contracts/tools/generate_contract_fixtures.py",
+      "sha256": "sha256:fcfe95cde0e4af89b0e8e835a0e442cc974552009ef60052829b6fbba40e65a3",
+      "role": "authoring-tool"
+    },
+    {
+      "path": "docs/contracts/tools/generate_engine_side_effect_vectors.py",
+      "sha256": "sha256:88c693227f00654cd93e46fbbd749a8216b722d7ce23cb2d5e903c04265ef35a",
+      "role": "authoring-tool"
+    },
+    {
+      "path": "docs/contracts/tools/generate_error_catalog.py",
+      "sha256": "sha256:f111950cf4804292ffabdb152e55f2214598f5030064b981da78c26a0da04e21",
+      "role": "authoring-tool"
+    },
+    {
+      "path": "docs/contracts/tools/generate_freeze_inputs.py",
+      "sha256": "sha256:3c745288a76bf7cbf72633769e8390bc5924f37a89208197841747129d1bfb16",
+      "role": "authoring-tool"
+    },
+    {
+      "path": "docs/contracts/tools/generate_unicode_nfc_data.py",
+      "sha256": "sha256:bf088ab57a611ba493f3ba1c783c2effc8f021996ce20ca66bd00d325bdf6347",
+      "role": "authoring-tool"
+    },
+    {
+      "path": "docs/contracts/tools/generate_unicode_simple_case_folding.py",
+      "sha256": "sha256:2618d1dfc83d2d1adee4ff5ec0bea7f297ecb7929a5929c5b99993e711fc7577",
+      "role": "authoring-tool"
+    },
+    {
+      "path": "docs/contracts/tools/test_contract_fixtures.py",
+      "sha256": "sha256:749966e9bf8dcb80966d6514e59cb2c532a1d29f6f23651402becbcc4ab5532c",
+      "role": "authoring-tool"
+    },
+    {
+      "path": "docs/contracts/tools/test_fixture_catalog_hardening.py",
+      "sha256": "sha256:fdd1d5960f64b82ada19b9ed736ec82a665aa5345e39c4a2973fd258f7e8e347",
+      "role": "authoring-tool"
+    },
+    {
+      "path": "docs/contracts/tools/verify_canonical_rules.py",
+      "sha256": "sha256:0cec885874e69fe54747280d8f9853937b5ba19354f6ca63890ae7b882e7c8b4",
+      "role": "authoring-tool"
+    },
+    {
+      "path": "docs/contracts/tools/verify_canonical_vectors.py",
+      "sha256": "sha256:11cae17fa2a357e467043ebf8d739358465455eefcf85df80e7dc198da417912",
+      "role": "authoring-tool"
+    },
+    {
+      "path": "docs/contracts/tools/verify_contract_fixtures.py",
+      "sha256": "sha256:376000c29d6b1bf3a9d88044339bee3dc27720e74f95bbadb0baf9982f5fc90d",
+      "role": "authoring-tool"
+    },
+    {
+      "path": "docs/contracts/tools/verify_engine_side_effect_contracts.py",
+      "sha256": "sha256:e6a8498c7bbe554882a61c3b54ecbe5ad6769dd6cb8a5b991356c0bdd3c52c91",
+      "role": "authoring-tool"
+    },
+    {
+      "path": "docs/contracts/tools/verify_engine_side_effect_vectors.py",
+      "sha256": "sha256:62247db06901e1604264f643d7abd77b2f563d1b3069cf74f9b40773c2fc7895",
+      "role": "authoring-tool"
+    },
+    {
+      "path": "docs/contracts/tools/verify_fixture_catalog.py",
+      "sha256": "sha256:826857e3cbd966a64fcdb9b984ea000addcca66cddc50f0cfab79c822b1eec23",
+      "role": "authoring-tool"
+    },
+    {
+      "path": "docs/contracts/tools/verify_unicode_regeneration.py",
+      "sha256": "sha256:a4ea40644c9cc3d7a866237726593a605aa8dcd667d6c3175d62f428efa624f8",
+      "role": "authoring-tool"
+    },
+    {
+      "path": "docs/contracts/unicode/NormalizationTest-17.0.0.txt",
+      "sha256": "sha256:5019ffd530751a741900c849c0e010332f142a3612234639bd200b82138a87db",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/contracts/unicode/UNICODE-LICENSE.txt",
+      "sha256": "sha256:e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/contracts/unicode/nfc-normalization-17.0.0.json",
+      "sha256": "sha256:e7da73453c09c52eef83e05d8fba54a50e2c589fbbdfdefb76d683785c99704c",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/contracts/unicode/simple-case-folding-17.0.0.json",
+      "sha256": "sha256:2699a1a96e6710dca5a5b49025b614b2f669f31260628390c83f69258faf9ca2",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/contracts/vectors/candidate-local-ref-v1.json",
+      "sha256": "sha256:8de0ba093da10867d8864bec4526c10db3474d354b70cb7dfbd5292777d712ef",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/contracts/vectors/core-canonical-projection-v1.json",
+      "sha256": "sha256:bf570f7a18cc99f58fb3d50a94ccc2598c9285a85976da0235ec3c82c95e4e44",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/contracts/vectors/core-set-permutation-v1.json",
+      "sha256": "sha256:bd4b90728a5c5fce67a1bf5a653b294364cdb7e118eaec3e252967cfcc34b638",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/contracts/vectors/default-engine-lock-v1.json",
+      "sha256": "sha256:24fa76edfdbf48c26be68ae0b31247879f846c87d82479aa3bc01a4c6a5fffb9",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/contracts/vectors/host-side-effects-v1.json",
+      "sha256": "sha256:6ca6cbbe2daff2589f86c13ed877e7accee39a1aa95390996ce7d7877fbb7c79",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/superpowers/specs/2026-07-12-default-noc-design-engine-workbench-design.md",
+      "sha256": "sha256:cbcf56b60298b583750f03488e933eea2f90a5dd21c6f0ea36f1643b6e37195c",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/superpowers/specs/appendix-a-project-design-v1-contract.md",
+      "sha256": "sha256:3008f0d1a191fb9cf614045de43184ce6d701ab97dddff3e594ae2df41b984c1",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/superpowers/specs/appendix-b-patch-command-reconciliation-contract.md",
+      "sha256": "sha256:7bd233af01f5f324d059409d384b598e598e92657dc6f86db655d930a4a0d8f3",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/superpowers/specs/appendix-c-package-contract-provider-tool-contract.md",
+      "sha256": "sha256:5b8f16e79d9af17dcca24350641e027b623c0ffbf691ef3dc13566427f133727",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/superpowers/specs/appendix-d-current-to-target-cutover-map.md",
+      "sha256": "sha256:dc48d0787fe8604c67e3bacbdf07747a932f563b4ae14ed85a0cfc06de97a205",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/superpowers/specs/appendix-e-gate-acceptance-matrix.md",
+      "sha256": "sha256:233b3c52d40a06f92440613fbabce55a6c2a5bfff504a624393690b2d1126945",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/superpowers/specs/appendix-f-core-canonical-models.md",
+      "sha256": "sha256:6e9ea8431d710e16500efba331531d55f33fd803478e6a20dd7de3ff432c08d6",
+      "role": "normative-artifact"
+    }
+  ]
+}

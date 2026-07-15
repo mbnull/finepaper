@@ -441,9 +441,14 @@ def error_codes(contracts: Path) -> set[str]:
         fail("error catalog codes must be an array")
     result: set[str] = set()
     for index, raw in enumerate(document["codes"]):
-        entry = require_exact_object(raw, {"code", "category"}, f"error catalog codes[{index}]")
-        if not all(isinstance(entry[key], str) and entry[key] for key in entry):
-            fail(f"error catalog codes[{index}] members must be non-empty strings")
+        entry = require_exact_object(
+            raw, {"code", "owner", "blocking", "messageTemplate"},
+            f"error catalog codes[{index}]",
+        )
+        if (not all(isinstance(entry[key], str) and entry[key]
+                    for key in ("code", "owner", "messageTemplate"))
+                or not isinstance(entry["blocking"], bool)):
+            fail(f"error catalog codes[{index}] members have invalid types")
         if entry["code"] in result:
             fail(f"duplicate error code {entry['code']!r}")
         result.add(entry["code"])

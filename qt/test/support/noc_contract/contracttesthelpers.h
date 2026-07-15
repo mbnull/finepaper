@@ -9,4 +9,3 @@ QStringList sortedUniqueStrings(const QStringList &values, const QString &locati
 QString runContractPythonVerifier(const QString &relativeScript,
                                   const QStringList &arguments,
                                   const QString &requiredOutputFragment);
-
