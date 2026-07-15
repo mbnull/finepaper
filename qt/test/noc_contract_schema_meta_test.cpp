@@ -1,5 +1,6 @@
 #include "canonicaljson.h"
 #include "contractartifactloader.h"
+#include "contracttesthelpers.h"
 
 #include <QCoreApplication>
 #include <QDir>
@@ -414,6 +415,179 @@ void testCanonicalRuleWildcardsTrackArrayDescentOnly() {
             QStringLiteral("ordinary array-item wildcard must remain supported"));
 }
 
+QJsonValue resolveJsonPointer(const QJsonValue &document,
+                              const QString &pointer,
+                              const QString &location) {
+    require(pointer.isEmpty() || pointer.startsWith(QLatin1Char('/')),
+            location + QStringLiteral(": fragment must be an RFC 6901 pointer"));
+    QJsonValue current = document;
+    if (pointer.isEmpty()) {
+        return current;
+    }
+    for (const auto &rawToken : pointer.mid(1).split(QLatin1Char('/'))) {
+        for (qsizetype index = 0; index < rawToken.size(); ++index) {
+            if (rawToken.at(index) == QLatin1Char('~')) {
+                require(index + 1 < rawToken.size() &&
+                            (rawToken.at(index + 1) == QLatin1Char('0') ||
+                             rawToken.at(index + 1) == QLatin1Char('1')),
+                        location + QStringLiteral(": invalid RFC 6901 escape"));
+                ++index;
+            }
+        }
+        QString token = rawToken;
+        token.replace(QStringLiteral("~1"), QStringLiteral("/"));
+        token.replace(QStringLiteral("~0"), QStringLiteral("~"));
+        if (current.isObject()) {
+            const auto object = current.toObject();
+            require(object.contains(token),
+                    location + QStringLiteral(": unresolved object token ") + token);
+            current = object.value(token);
+        } else if (current.isArray()) {
+            bool ok = false;
+            const int arrayIndex = token.toInt(&ok);
+            require(ok && QString::number(arrayIndex) == token && arrayIndex >= 0 &&
+                        arrayIndex < current.toArray().size(),
+                    location + QStringLiteral(": unresolved array token ") + token);
+            current = current.toArray().at(arrayIndex);
+        } else {
+            require(false, location + QStringLiteral(": pointer descends through scalar"));
+        }
+    }
+    return current;
+}
+
+void collectAndResolveReferences(const QJsonValue &value,
+                                 const QString &currentSchemaPath,
+                                 const QHash<QString, QString> &schemaPaths,
+                                 const QHash<QString, QJsonObject> &schemas,
+                                 const QString &location) {
+    if (value.isArray()) {
+        const auto array = value.toArray();
+        for (qsizetype index = 0; index < array.size(); ++index) {
+            collectAndResolveReferences(array.at(index), currentSchemaPath, schemaPaths,
+                                        schemas,
+                                        location + QStringLiteral("/") + QString::number(index));
+        }
+        return;
+    }
+    if (!value.isObject()) {
+        return;
+    }
+    const auto object = value.toObject();
+    if (object.contains(QStringLiteral("$ref"))) {
+        const QString reference = object.value(QStringLiteral("$ref")).toString();
+        require(!reference.isEmpty(), location + QStringLiteral(": $ref must be a string"));
+        const qsizetype hash = reference.indexOf(QLatin1Char('#'));
+        const QString targetName = hash < 0 ? reference : reference.left(hash);
+        const QString fragment = hash < 0 ? QString() : reference.mid(hash + 1);
+        QString targetPath = currentSchemaPath;
+        if (!targetName.isEmpty()) {
+            require(!targetName.contains(QLatin1Char('/')) &&
+                        targetName.endsWith(QStringLiteral(".schema.json")),
+                    location + QStringLiteral(": non-local schema reference"));
+            targetPath = QStringLiteral("schemas/") + targetName;
+        }
+        require(schemaPaths.values().contains(targetPath),
+                location + QStringLiteral(": referenced schema is not catalogued: ") + targetPath);
+        const QString targetId = schemaPaths.key(targetPath);
+        resolveJsonPointer(schemas.value(targetId), fragment,
+                           location + QStringLiteral(": ") + reference);
+    }
+    for (auto iterator = object.begin(); iterator != object.end(); ++iterator) {
+        collectAndResolveReferences(iterator.value(), currentSchemaPath, schemaPaths, schemas,
+                                    location + QLatin1Char('/') + iterator.key());
+    }
+}
+
+void requireClosedRootReference(const QString &reference,
+                                const QString &currentSchemaPath,
+                                const QHash<QString, QString> &schemaPaths,
+                                const QHash<QString, QJsonObject> &schemas,
+                                const QString &location) {
+    const qsizetype hash = reference.indexOf(QLatin1Char('#'));
+    const QString targetName = hash < 0 ? reference : reference.left(hash);
+    const QString fragment = hash < 0 ? QString() : reference.mid(hash + 1);
+    const QString targetPath = targetName.isEmpty()
+                                   ? currentSchemaPath
+                                   : QStringLiteral("schemas/") + targetName;
+    const QString targetId = schemaPaths.key(targetPath);
+    require(!targetId.isEmpty(), location + QStringLiteral(": root reference is not catalogued"));
+    const auto target = resolveJsonPointer(schemas.value(targetId), fragment, location).toObject();
+    require(target.value(QStringLiteral("type")).toString() == QStringLiteral("object") &&
+                target.value(QStringLiteral("additionalProperties")) == QJsonValue(false),
+            location + QStringLiteral(": referenced root target must be a closed object"));
+}
+
+void testSchemaCatalogAndReferencesAreClosed() {
+    const auto catalog = ContractArtifactLoader::loadObject(
+        QStringLiteral("docs/contracts/schema-catalog.json"));
+    const QStringList catalogKeys = catalog.keys();
+    require(QSet<QString>(catalogKeys.cbegin(), catalogKeys.cend()) ==
+                QSet<QString>{QStringLiteral("schema"), QStringLiteral("items")},
+            QStringLiteral("schema catalog root must be closed"));
+    require(catalog.value(QStringLiteral("schema")).toString() ==
+                QStringLiteral("ipcraft.contract-schema-catalog.v1"),
+            QStringLiteral("schema catalog identity mismatch"));
+    const auto items = catalog.value(QStringLiteral("items")).toArray();
+    require(items.size() == 19, QStringLiteral("Gate 0 must catalog exactly 19 schemas"));
+
+    QStringList ids;
+    QStringList paths;
+    QHash<QString, QString> schemaPaths;
+    QHash<QString, QJsonObject> schemas;
+    for (const auto &raw : items) {
+        const auto item = raw.toObject();
+        const QStringList itemKeys = item.keys();
+        require(QSet<QString>(itemKeys.cbegin(), itemKeys.cend()) ==
+                    QSet<QString>{QStringLiteral("id"), QStringLiteral("path"),
+                                  QStringLiteral("freezeGate")},
+                QStringLiteral("schema catalog item must be closed"));
+        const QString id = item.value(QStringLiteral("id")).toString();
+        const QString path = item.value(QStringLiteral("path")).toString();
+        require(item.value(QStringLiteral("freezeGate")).toString() == QStringLiteral("core"),
+                id + QStringLiteral(": freeze gate must be core"));
+        ids.append(id);
+        paths.append(path);
+        const auto schema = ContractArtifactLoader::loadObject(
+            QStringLiteral("docs/contracts/") + path);
+        require(schema.value(QStringLiteral("$schema")).toString() ==
+                    QStringLiteral("https://json-schema.org/draft/2020-12/schema"),
+                id + QStringLiteral(": Draft 2020-12 identity mismatch"));
+        require(schema.value(QStringLiteral("$id")).toString() == id,
+                id + QStringLiteral(": $id mismatch"));
+        const bool directlyClosed =
+            schema.value(QStringLiteral("type")).toString() == QStringLiteral("object") &&
+            schema.value(QStringLiteral("additionalProperties")) == QJsonValue(false);
+        const bool closedByReference = schema.value(QStringLiteral("$ref")).isString();
+        const bool closedUnion = id == QStringLiteral("ipcraft.core-canonical-models.v1") &&
+                                 !schema.value(QStringLiteral("oneOf")).toArray().isEmpty();
+        require(directlyClosed || closedByReference || closedUnion,
+                id + QStringLiteral(": root must be closed directly or by catalogued reference"));
+        schemaPaths.insert(id, path);
+        schemas.insert(id, schema);
+    }
+    require(ids == sortedUniqueStrings(ids, QStringLiteral("schema IDs")),
+            QStringLiteral("schema catalog must be sorted by ID"));
+    sortedUniqueStrings(paths, QStringLiteral("schema paths"));
+    for (auto iterator = schemas.begin(); iterator != schemas.end(); ++iterator) {
+        collectAndResolveReferences(iterator.value(), schemaPaths.value(iterator.key()),
+                                    schemaPaths, schemas, iterator.key());
+        const auto schema = iterator.value();
+        if (schema.value(QStringLiteral("$ref")).isString()) {
+            requireClosedRootReference(schema.value(QStringLiteral("$ref")).toString(),
+                                       schemaPaths.value(iterator.key()), schemaPaths, schemas,
+                                       iterator.key());
+        }
+        for (const auto &raw : schema.value(QStringLiteral("oneOf")).toArray()) {
+            const QString reference = raw.toObject().value(QStringLiteral("$ref")).toString();
+            require(!reference.isEmpty(),
+                    iterator.key() + QStringLiteral(": root oneOf branches must be references"));
+            requireClosedRootReference(reference, schemaPaths.value(iterator.key()), schemaPaths,
+                                       schemas, iterator.key());
+        }
+    }
+}
+
 } // namespace
 
 int main(int argc, char **argv) {
@@ -431,6 +605,7 @@ int main(int argc, char **argv) {
         testCanonicalHelperValidatesDerivedOrderAndAmbiguousBindings();
         testEndpointSortKeysKeepOpaqueTupleComponentsDistinct();
         testCanonicalRuleWildcardsTrackArrayDescentOnly();
+        testSchemaCatalogAndReferencesAreClosed();
         std::cout << "noc_contract_schema_meta_test passed\n";
         return 0;
     } catch (const std::exception &error) {

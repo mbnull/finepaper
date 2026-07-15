@@ -77,6 +77,16 @@ target("noc_contract_test_support")
     add_headerfiles("test/support/noc_contract/*.h")
     add_includedirs("test/support/noc_contract", {public = true})
     add_defines('IPCRAFT_REPOSITORY_ROOT="' .. noc_contract_repository_root_define .. '"')
+    on_load(function (target)
+        local find_tool = import("lib.detect.find_tool")
+        local requested = os.getenv("IPCRAFT_CONTRACT_PYTHON") or "python3"
+        local python = assert(find_tool(requested),
+            "Gate 0 contract tests require Python 3; set IPCRAFT_CONTRACT_PYTHON to an absolute executable")
+        local executable = path.unix(path.absolute(python.program))
+            :gsub("\\", "\\\\")
+            :gsub('"', '\\"')
+        target:add("defines", 'IPCRAFT_CONTRACT_PYTHON="' .. executable .. '"')
+    end)
 
 target("noc_contract_schema_meta_test")
     add_rules("qt.console")
@@ -91,6 +101,29 @@ target("noc_contract_schema_meta_test")
         trim_output = true,
         pass_outputs = "noc_contract_schema_meta_test passed"
     })
+
+local function add_noc_contract_test_target(name)
+    target(name)
+        add_rules("qt.console")
+        add_frameworks("QtTest")
+        set_kind("binary")
+        set_group("test")
+        set_default(false)
+        set_languages("c++23")
+        add_deps("noc_contract_test_support")
+        add_files("test/" .. name .. ".cpp")
+        add_tests("default", {
+            trim_output = true,
+            pass_outputs = name .. " passed"
+        })
+end
+
+add_noc_contract_test_target("noc_canonical_digest_vectors_test")
+add_noc_contract_test_target("noc_contract_fixture_catalog_test")
+add_noc_contract_test_target("noc_review_bundle_completeness_test")
+add_noc_contract_test_target("noc_core_canonical_models_schema_test")
+add_noc_contract_test_target("noc_default_engine_lock_contract_test")
+add_noc_contract_test_target("noc_host_side_effect_contract_test")
 
 add_qt_test_target("graph_test", "test/graph_test.cpp", {
     "src/connection/connectionruleservice.cpp",
