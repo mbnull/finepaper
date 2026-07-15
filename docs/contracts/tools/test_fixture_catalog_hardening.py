@@ -78,11 +78,38 @@ class FixtureCatalogHardeningTest(unittest.TestCase):
         allowed = subject.load_error_policy(CONTRACTS)
         with self.assertRaises(subject.VerificationError):
             subject.verify_error_policy(
-                "ipcraft.project-design.v1", "schema", "provider.timeout", allowed, "fixture"
+                "ipcraft.project-design.v1", "schema", "generic-structure", "provider.timeout", allowed, "fixture"
             )
+
+    def test_project_schema_failure_boundaries_are_not_interchangeable(self) -> None:
+        allowed = subject.load_error_policy(CONTRACTS)
+        subject.verify_error_policy(
+            "ipcraft.project-design.v1", "schema", "generic-structure",
+            "contract.schema_invalid", allowed, "fixture",
+        )
+        subject.verify_error_policy(
+            "ipcraft.project-design.v1", "schema", "legacy-project-root",
+            "project.legacy_format_unsupported", allowed, "fixture",
+        )
+        with self.assertRaises(subject.VerificationError):
+            subject.verify_error_policy(
+                "ipcraft.project-design.v1", "schema", "legacy-project-root",
+                "contract.schema_invalid", allowed, "fixture",
+            )
+        with self.assertRaises(subject.VerificationError):
+            subject.verify_error_policy(
+                "ipcraft.project-design.v1", "schema", "generic-structure",
+                "project.legacy_format_unsupported", allowed, "fixture",
+            )
+
+    def test_fixture_schema_requires_failure_boundary(self) -> None:
+        schema = json.loads((CONTRACTS / "schemas/ipcraft.fixture-catalog.v1.schema.json").read_text())
+        self.assertIn("failureBoundary", schema["$defs"]["entry"]["required"])
+        self.assertEqual(schema["$defs"]["entry"]["allOf"][0]["then"]["properties"]["failureBoundary"], {"type": "null"})
 
     def test_schema_catalog_rejects_parent_traversal(self) -> None:
         nfc = subject.load_unicode_normalization_data(CONTRACTS)
+        folding = subject.load_simple_case_folding_table(CONTRACTS)
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             (root / "schemas").mkdir()
@@ -92,7 +119,7 @@ class FixtureCatalogHardeningTest(unittest.TestCase):
                 "schema": "ipcraft.contract-schema-catalog.v1",
                 "items": [{"id": "valid", "path": "schemas/valid.schema.json", "freezeGate": "Gate 0"}],
             }))
-            self.assertEqual(subject.catalog_ids(root, nfc), {"valid"})
+            self.assertEqual(subject.catalog_ids(root, nfc, folding), {"valid"})
             outside = root / "outside.schema.json"
             outside.write_text(json.dumps({"$id": "escape"}))
             catalog = {
@@ -101,10 +128,11 @@ class FixtureCatalogHardeningTest(unittest.TestCase):
             }
             (root / "schema-catalog.json").write_text(json.dumps(catalog))
             with self.assertRaisesRegex(subject.VerificationError, "dot path segment"):
-                subject.catalog_ids(root, nfc)
+                subject.catalog_ids(root, nfc, folding)
 
     def test_schema_catalog_rejects_absolute_and_symlink_paths(self) -> None:
         nfc = subject.load_unicode_normalization_data(CONTRACTS)
+        folding = subject.load_simple_case_folding_table(CONTRACTS)
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             (root / "schemas").mkdir()
@@ -123,7 +151,30 @@ class FixtureCatalogHardeningTest(unittest.TestCase):
                     }
                     (root / "schema-catalog.json").write_text(json.dumps(catalog))
                     with self.assertRaises(subject.VerificationError):
-                        subject.catalog_ids(root, nfc)
+                        subject.catalog_ids(root, nfc, folding)
+
+    def test_schema_catalog_rejects_ascii_and_unicode_simple_fold_collisions(self) -> None:
+        nfc = subject.load_unicode_normalization_data(CONTRACTS)
+        folding = subject.load_simple_case_folding_table(CONTRACTS)
+        for names in (("Alpha.schema.json", "alpha.schema.json"), ("Σ.schema.json", "ς.schema.json")):
+            with self.subTest(names=names), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                (root / "schemas").mkdir()
+                items = []
+                for index, name in enumerate(names):
+                    schema_id = f"schema-{index}"
+                    (root / "schemas" / name).write_text(json.dumps({"$id": schema_id}))
+                    items.append({"id": schema_id, "path": f"schemas/{name}", "freezeGate": "Gate 0"})
+                    if index == 0:
+                        (root / "schema-catalog.json").write_text(json.dumps({
+                            "schema": "ipcraft.contract-schema-catalog.v1", "items": list(items),
+                        }))
+                        self.assertEqual(subject.catalog_ids(root, nfc, folding), {"schema-0"})
+                (root / "schema-catalog.json").write_text(json.dumps({
+                    "schema": "ipcraft.contract-schema-catalog.v1", "items": items,
+                }))
+                with self.assertRaisesRegex(subject.VerificationError, "portable-case-colliding"):
+                    subject.catalog_ids(root, nfc, folding)
 
     def test_unicode17_nfc_reorders_new_combining_mark(self) -> None:
         tables = subject.load_unicode_normalization_data(CONTRACTS)

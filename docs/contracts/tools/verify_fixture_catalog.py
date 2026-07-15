@@ -24,13 +24,14 @@ UNICODE_CASE_FOLD_PATH = Path("unicode/simple-case-folding-17.0.0.json")
 UNICODE_NFC_PATH = Path("unicode/nfc-normalization-17.0.0.json")
 UNICODE_NORMALIZATION_TEST_PATH = Path("unicode/NormalizationTest-17.0.0.txt")
 ERROR_POLICY_PATH = Path("fixture-error-policy-v1.json")
-ERROR_POLICY_RULES_SHA256 = "170504c680d673256a70be4d6a3a0f94646060d99f34c2a726b8a98f64b5d577"
+ERROR_POLICY_BOUNDARIES_SHA256 = "e9d3101858f0cc6459b243e0c6a1ce6ae161de23516f4c017b016b67cf205565"
+ERROR_POLICY_RULES_SHA256 = "f42e7f6cfa3caedfb67f3b08d885fd24c2d18e35c6f3ddbd4e987ec8c3def7d2"
 UNICODE_TABLE_FIELDS = {
     "schema", "unicodeVersion", "source", "sourceUrl", "sourceSha256", "licenseName", "licenseUrl",
     "licenseFile", "mappingCount", "mappingsSha256", "mappings"
 }
 ENTRY_FIELDS = {
-    "path", "schemaId", "validationPhase", "expected", "errorCode", "behaviorEvidence"
+    "path", "schemaId", "validationPhase", "failureBoundary", "expected", "errorCode", "behaviorEvidence"
 }
 WINDOWS_RESERVED = {
     "CON", "PRN", "AUX", "NUL",
@@ -52,7 +53,7 @@ NFC_ARRAY_IDENTITIES = {
 }
 RECOGNIZED_VECTORS = {
     "core-canonical-projection-v1.json": ("ipcraft.core-canonical-vectors.v1", None, ("vectors",), "bf570f7a18cc99f58fb3d50a94ccc2598c9285a85976da0235ec3c82c95e4e44"),
-    "core-set-permutation-v1.json": ("ipcraft.canonical-vector-catalog.v1", "collection-permutation", ("cases",), "79366d15bcf0b46903bc8457aef03a0f94c129a2062c68fe8839b813b65d8483"),
+    "core-set-permutation-v1.json": ("ipcraft.canonical-vector-catalog.v1", "collection-permutation", ("cases",), "0ae46f1968eb03807e013be14acc3340b5434d71b3dd31828ff22847ac799fb7"),
     "candidate-local-ref-v1.json": ("ipcraft.canonical-vector-catalog.v1", "candidate-causality", ("cases",), "8de0ba093da10867d8864bec4526c10db3474d354b70cb7dfbd5292777d712ef"),
     "default-engine-lock-v1.json": (
         "ipcraft.default-engine-behavior-vectors.v1", None,
@@ -337,7 +338,8 @@ def portable_path(value: Any, location: str, normalization_tables: tuple[dict[in
     for part in parts:
         if part.endswith((" ", ".")):
             fail(f"{location} has a segment ending in dot or space")
-        stem = part.split(".", 1)[0].upper()
+        stem = "".join(chr(ord(character) - 32) if "a" <= character <= "z" else character
+                       for character in part.split(".", 1)[0])
         if stem in WINDOWS_RESERVED:
             fail(f"{location} uses reserved Windows device name {part!r}")
     if not value.endswith(".json"):
@@ -345,9 +347,11 @@ def portable_path(value: Any, location: str, normalization_tables: tuple[dict[in
     return value
 
 
-def catalog_ids(contracts: Path, normalization_tables=None) -> set[str]:
+def catalog_ids(contracts: Path, normalization_tables=None, folding_mappings=None) -> set[str]:
     if normalization_tables is None:
         normalization_tables = load_unicode_normalization_data(contracts)
+    if folding_mappings is None:
+        folding_mappings = load_simple_case_folding_table(contracts)
     document = require_exact_object(
         load_json(contracts / "schema-catalog.json"), {"schema", "items"}, "schema catalog"
     )
@@ -358,6 +362,7 @@ def catalog_ids(contracts: Path, normalization_tables=None) -> set[str]:
         fail("schema catalog items must be an array")
     ids: list[str] = []
     paths: set[str] = set()
+    casefold_paths: set[str] = set()
     for index, raw in enumerate(items):
         entry = require_exact_object(raw, {"id", "path", "freezeGate"}, f"schema catalog items[{index}]")
         if not all(isinstance(entry[key], str) and entry[key] for key in entry):
@@ -365,6 +370,9 @@ def catalog_ids(contracts: Path, normalization_tables=None) -> set[str]:
         if entry["id"] in ids or entry["path"] in paths:
             fail(f"schema catalog duplicate id/path at items[{index}]")
         catalog_path = portable_path(entry["path"], f"schema catalog items[{index}].path", normalization_tables)
+        collision_key = simple_case_fold(nfc_normalize(catalog_path, normalization_tables), folding_mappings)
+        if collision_key in casefold_paths:
+            fail(f"schema catalog items[{index}].path is portable-case-colliding")
         if (len(PurePosixPath(catalog_path).parts) != 2 or not catalog_path.startswith("schemas/")
                 or not catalog_path.endswith(".schema.json")):
             fail(f"schema catalog items[{index}].path must match schemas/*.schema.json")
@@ -384,6 +392,7 @@ def catalog_ids(contracts: Path, normalization_tables=None) -> set[str]:
             fail(f"schema catalog items[{index}] does not resolve to its exact $id")
         ids.append(entry["id"])
         paths.add(entry["path"])
+        casefold_paths.add(collision_key)
     if ids != sorted(ids):
         fail("schema catalog items must be sorted by id")
     return set(ids)
@@ -474,29 +483,69 @@ def physical_fixtures(contracts: Path, normalization_tables) -> set[str]:
     return result
 
 
-def load_error_policy(contracts: Path) -> dict[tuple[str, str], set[str]]:
+def load_error_policy(contracts: Path) -> dict[tuple[str, str, str], set[str]]:
     document = require_exact_object(
-        load_json(contracts / ERROR_POLICY_PATH), {"schema", "version", "rulesSha256", "rules"}, "error policy"
+        load_json(contracts / ERROR_POLICY_PATH),
+        {"schema", "version", "boundariesSha256", "rulesSha256", "boundaries", "rules"}, "error policy"
     )
     if document["schema"] != "ipcraft.fixture-error-policy.v1" or document["version"] != "1":
         fail("error policy has the wrong identity/version")
+    if (document["boundariesSha256"] != ERROR_POLICY_BOUNDARIES_SHA256
+            or canonical_digest(document["boundaries"]) != ERROR_POLICY_BOUNDARIES_SHA256):
+        fail("error policy boundaries do not match the frozen Gate 0 mapping")
     if document["rulesSha256"] != ERROR_POLICY_RULES_SHA256 or canonical_digest(document["rules"]) != ERROR_POLICY_RULES_SHA256:
         fail("error policy rules do not match the frozen Gate 0 mapping")
-    result = {}
+    boundary_codes = {}
+    for index, raw in enumerate(document["boundaries"]):
+        entry = require_exact_object(raw, {"failureBoundary", "errorCode"}, f"error policy boundaries[{index}]")
+        boundary = entry["failureBoundary"]
+        code = entry["errorCode"]
+        if not isinstance(boundary, str) or not boundary or boundary in boundary_codes or not isinstance(code, str) or not code:
+            fail(f"error policy boundaries[{index}] must be a unique non-empty boundary/code pair")
+        boundary_codes[boundary] = code
+    if list(boundary_codes) != sorted(boundary_codes):
+        fail("error policy boundaries must be sorted by failureBoundary")
+    fixture_schema = load_json(contracts / "schemas/ipcraft.fixture-catalog.v1.schema.json")
+    try:
+        schema_boundaries = fixture_schema["$defs"]["failureBoundary"]["enum"]
+    except (KeyError, TypeError):
+        fail("fixture schema does not expose the closed failureBoundary enum")
+    if not isinstance(schema_boundaries, list) or schema_boundaries != sorted(boundary_codes):
+        fail("fixture schema failureBoundary enum differs from the frozen error policy")
+    known_errors = error_codes(contracts)
+    unknown_codes = sorted(set(boundary_codes.values()) - known_errors)
+    if unknown_codes:
+        fail(f"error policy boundaries reference unknown stable error codes {unknown_codes}")
+    result: dict[tuple[str, str, str], set[str]] = {}
     for index, raw in enumerate(document["rules"]):
-        entry = require_exact_object(raw, {"schemaId", "validationPhase", "allowedErrorCodes"}, f"error policy rules[{index}]")
-        key = (entry["schemaId"], entry["validationPhase"])
-        codes = entry["allowedErrorCodes"]
-        if key in result or not isinstance(codes, list) or not codes or codes != sorted(set(codes)):
-            fail(f"error policy rules[{index}] must be unique with sorted unique codes")
-        result[key] = set(codes)
+        entry = require_exact_object(raw, {"schemaId", "validationPhase", "allowedFailureBoundaries"}, f"error policy rules[{index}]")
+        pair = (entry["schemaId"], entry["validationPhase"])
+        boundaries = entry["allowedFailureBoundaries"]
+        if not isinstance(boundaries, list) or not boundaries or boundaries != sorted(set(boundaries)):
+            fail(f"error policy rules[{index}] must contain sorted unique failure boundaries")
+        if any(key[:2] == pair for key in result):
+            fail(f"error policy rules[{index}] duplicates schema/phase")
+        for boundary in boundaries:
+            if boundary not in boundary_codes:
+                fail(f"error policy rules[{index}] references unknown failure boundary {boundary!r}")
+            result[(pair[0], pair[1], boundary)] = {boundary_codes[boundary]}
+    schema_catalog = load_json(contracts / "schema-catalog.json")
+    catalog_ids_for_policy = {
+        entry["id"] for entry in schema_catalog.get("items", [])
+        if isinstance(entry, dict) and isinstance(entry.get("id"), str) and entry["id"] != "ipcraft.fixture-catalog.v1"
+    }
+    expected_pairs = {(schema_id, phase) for schema_id in catalog_ids_for_policy for phase in ("schema", "core-semantic")}
+    actual_pairs = {key[:2] for key in result}
+    if actual_pairs != expected_pairs:
+        fail(f"error policy schema/phase coverage mismatch; missing={sorted(expected_pairs-actual_pairs)}, extra={sorted(actual_pairs-expected_pairs)}")
     return result
 
 
-def verify_error_policy(schema_id: str, phase: str, code: str, policy: dict[tuple[str, str], set[str]], location: str) -> None:
-    allowed = policy.get((schema_id, phase))
+def verify_error_policy(schema_id: str, phase: str, boundary: str, code: str,
+                        policy: dict[tuple[str, str, str], set[str]], location: str) -> None:
+    allowed = policy.get((schema_id, phase, boundary))
     if allowed is None or code not in allowed:
-        fail(f"{location}.errorCode {code!r} is not allowed for ({schema_id}, {phase})")
+        fail(f"{location}.errorCode {code!r} is not allowed for ({schema_id}, {phase}, {boundary})")
 
 
 def verify(catalog_path: Path, contracts: Path, allow_empty: bool = False) -> tuple[int, int, int]:
@@ -511,11 +560,11 @@ def verify(catalog_path: Path, contracts: Path, allow_empty: bool = False) -> tu
 
     normalization_tables = load_unicode_normalization_data(contracts)
     verify_normalization_conformance(contracts, normalization_tables)
-    known_schemas = catalog_ids(contracts, normalization_tables)
-    known_errors = error_codes(contracts)
-    error_policy = load_error_policy(contracts)
     folding_mappings = load_simple_case_folding_table(contracts)
     run_simple_case_fold_witnesses(folding_mappings)
+    known_schemas = catalog_ids(contracts, normalization_tables, folding_mappings)
+    known_errors = error_codes(contracts)
+    error_policy = load_error_policy(contracts)
     paths: list[str] = []
     casefold_paths: set[str] = set()
     for index, raw in enumerate(items):
@@ -537,6 +586,7 @@ def verify(catalog_path: Path, contracts: Path, allow_empty: bool = False) -> tu
             fail(f"{location}.validationPhase must be schema or core-semantic")
 
         expected = entry["expected"]
+        failure_boundary = entry["failureBoundary"]
         error_code = entry["errorCode"]
         evidence = entry["behaviorEvidence"]
         if expected == "accept":
@@ -544,6 +594,8 @@ def verify(catalog_path: Path, contracts: Path, allow_empty: bool = False) -> tu
                 fail(f"{location}.path prefix disagrees with expected=accept")
             if error_code is not None:
                 fail(f"{location}.errorCode must be null for expected=accept")
+            if failure_boundary is not None:
+                fail(f"{location}.failureBoundary must be null for expected=accept")
             if evidence is not None:
                 if not isinstance(evidence, str):
                     fail(f"{location}.behaviorEvidence must be a string or null")
@@ -553,6 +605,8 @@ def verify(catalog_path: Path, contracts: Path, allow_empty: bool = False) -> tu
                 fail(f"{location}.path prefix disagrees with expected=reject")
             if not isinstance(error_code, str) or not error_code:
                 fail(f"{location}.errorCode must be non-null for expected=reject")
+            if not isinstance(failure_boundary, str) or not failure_boundary:
+                fail(f"{location}.failureBoundary must be non-null for expected=reject")
             if evidence is not None:
                 fail(f"{location}.behaviorEvidence is forbidden for expected=reject")
         else:
@@ -560,7 +614,7 @@ def verify(catalog_path: Path, contracts: Path, allow_empty: bool = False) -> tu
         if error_code is not None and error_code not in known_errors:
             fail(f"{location}.errorCode does not resolve in the error catalog")
         if error_code is not None:
-            verify_error_policy(schema_id, entry["validationPhase"], error_code, error_policy, location)
+            verify_error_policy(schema_id, entry["validationPhase"], failure_boundary, error_code, error_policy, location)
 
     if paths != sorted(paths):
         fail("fixture catalog items must be sorted by path")

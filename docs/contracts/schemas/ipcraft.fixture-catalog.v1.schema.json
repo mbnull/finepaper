@@ -10,7 +10,7 @@
     "items": {
       "type": "array",
       "x-ipcraft-canonical": { "kind": "set", "sortKey": ["path"] },
-      "$comment": "Entries are a canonical set sorted by path. Path uniqueness, physical fixture totality, schema/error catalog resolution, and behaviorEvidence case resolution are semantic authoring checks.",
+      "$comment": "Entries are a canonical set sorted by path. Portable collision uniqueness, physical fixture totality, exact schema/phase/failureBoundary error-policy resolution, and behaviorEvidence case resolution are semantic authoring checks.",
       "items": { "$ref": "#/$defs/entry" }
     }
   },
@@ -18,7 +18,7 @@
     "entry": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["path", "schemaId", "validationPhase", "expected", "errorCode", "behaviorEvidence"],
+      "required": ["path", "schemaId", "validationPhase", "failureBoundary", "expected", "errorCode", "behaviorEvidence"],
       "properties": {
         "path": {
           "type": "string",
@@ -31,6 +31,12 @@
           "not": { "const": "ipcraft.fixture-catalog.v1" }
         },
         "validationPhase": { "enum": ["schema", "core-semantic"] },
+        "failureBoundary": {
+          "oneOf": [
+            { "$ref": "#/$defs/failureBoundary" },
+            { "type": "null" }
+          ]
+        },
         "expected": { "enum": ["accept", "reject"] },
         "errorCode": {
           "oneOf": [
@@ -54,6 +60,7 @@
           "then": {
             "properties": {
               "path": { "pattern": "^fixtures/valid/" },
+              "failureBoundary": { "type": "null" },
               "errorCode": { "type": "null" }
             }
           }
@@ -63,11 +70,26 @@
           "then": {
             "properties": {
               "path": { "pattern": "^fixtures/invalid/" },
+              "failureBoundary": { "$ref": "#/$defs/failureBoundary" },
               "errorCode": { "type": "string", "minLength": 1 },
               "behaviorEvidence": { "type": "null" }
             }
           }
         }
+      ]
+    },
+    "failureBoundary": {
+      "enum": [
+        "authoritative-design-base", "bundle-manifest", "candidate-digest", "command-result",
+        "contract-declaration", "derived-state-base", "diagnostic-report", "duplicate-id",
+        "engine-bundle-binding", "engine-host-contract", "engine-migration-binding", "engine-platform",
+        "entity-kind", "generic-structure", "host-side-effect-result", "legacy-project-root",
+        "local-reference", "operation-shape", "output-manifest", "ownership", "package-declaration",
+        "patch-envelope", "patch-invariant", "patched-subject-schema", "pending-group", "pipeline-result",
+        "precondition", "project-duplicate-id", "project-invariant", "project-reference", "recovery-binding",
+        "reference", "relation-kind", "request-generation", "runtime-result-binding", "session-revision",
+        "source-authority", "structure-authority", "tool-artifact", "tool-input", "tool-result",
+        "topology-input-base"
       ]
     }
   }

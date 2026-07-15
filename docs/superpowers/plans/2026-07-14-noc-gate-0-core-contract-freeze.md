@@ -272,15 +272,17 @@ The Core vector catalog lists both behavioral catalogs. Appendix F records the c
 
 - [x] **Step 1: Define the closed catalog root and entry**
 
-The root schema is exactly `ipcraft.fixture-catalog.v1` plus canonical-set `items` sorted by `path`. Each entry contains exactly `path`, `schemaId`, `validationPhase`, `expected`, `errorCode`, and `behaviorEvidence`. Paths are portable normalized JSON paths below `fixtures/valid/` or `fixtures/invalid/`; `validationPhase` is `schema` or `core-semantic`. Accept entries require the valid prefix and null error. Reject entries require the invalid prefix, a catalogued non-null error, and null behavior evidence. Optional accept evidence is exactly `vectors/<file>.json#<case-id>` and resolves an exact committed case.
+The root schema is exactly `ipcraft.fixture-catalog.v1` plus canonical-set `items` sorted by `path`. Each entry contains exactly `path`, `schemaId`, `validationPhase`, `failureBoundary`, `expected`, `errorCode`, and `behaviorEvidence`. Paths are portable normalized JSON paths below `fixtures/valid/` or `fixtures/invalid/`; `validationPhase` is `schema` or `core-semantic`. Accept entries require the valid prefix plus null boundary/error. Reject entries require the invalid prefix, an explicit closed failure boundary, its exact catalogued non-null error, and null behavior evidence. Optional accept evidence is exactly `vectors/<file>.json#<case-id>` and resolves an exact committed case.
 
 - [x] **Step 2: Freeze catalog scope and totality**
 
-The standalone catalog covers deterministic JSON Schema or Core-semantic validation of one JSON document. It excludes filesystem trees, resolver availability, Provider self-digest, degraded-inspect selection, and output freshness; those remain behavioral vectors/tool tests. A structurally valid Project with unavailable exact dependency metadata may be accepted and link to degraded-inspect behavior evidence without claiming that state from the JSON alone. V1 has no fixture-context/directory entry. Coverage means one invalid fixture per named normative rule family/conditional, not every repeated schema keyword. The authoring verifier enforces sorting, uniqueness, physical totality, and exact schema/error/evidence resolution; `--allow-empty` is temporary Task 4A support and default verification rejects empty.
+The standalone catalog covers deterministic JSON Schema or Core-semantic validation of one JSON document. It excludes filesystem trees, resolver availability, Provider self-digest, degraded-inspect selection, and output freshness; those remain behavioral vectors/tool tests. A structurally valid Project with unavailable exact dependency metadata may be accepted and link to degraded-inspect behavior evidence without claiming that state from the JSON alone. V1 has no fixture-context/directory entry. Coverage means one invalid fixture per named normative rule family/conditional, not every repeated schema keyword. The authoring verifier enforces sorting, Unicode 17 NFC/simple-fold collision uniqueness for fixture and schema catalog paths, physical totality, exact behavior evidence, and exact `(schemaId, validationPhase, failureBoundary) -> errorCode` resolution; `--allow-empty` is temporary Task 4A support and default verification rejects empty.
 
 - [x] **Step 3: Freeze standalone error classification**
 
 Use `contract.schema_invalid` for generic JSON/root structure; `project.legacy_format_unsupported`, `project.duplicate_id`, `project.unknown_reference`, and `project.invariant_violation` for Project families; `recovery.binding_mismatch`; `package.invariant_violation`; `contract.invariant_violation`; `engine.migration_invalid`; `tool.input_invalid`; `command.result_invalid`; `diagnostic.report_invalid`; `output.manifest_invalid`; `host.side_effect_result_invalid`; and `dependency.manifest_invalid`. Existing specialized Tool Result/Pipeline Result/Artifact codes remain. `dependency.bundle_mismatch` stays behavioral and output stale reasons gain no codes.
+
+The machine policy assigns each closed `failureBoundary` name one stable error code, then permits it only for explicit schema/phase pairs. Every reject fixture must match the exact triple; codes that share a schema/phase remain non-interchangeable, including Project `generic-structure` versus `legacy-project-root`.
 
 Patch classification is exact: envelope/JSON Schema failure before operation dispatch is `patch.schema_invalid`; an illegal operation discriminant or required operation shape is `patch.operation_invalid`; applying a structurally valid operation that produces a subject violating its subject schema is `patch.schema_violation`; a cross-object invariant is `patch.invariant_violation`. Existing ownership/reference/specialized codes retain their meanings.
 
@@ -302,6 +304,7 @@ Catalog `ipcraft.fixture-catalog.v1` as the nineteenth schema. Its `items` array
   "path": "fixtures/invalid/project-duplicate-id.json",
   "schemaId": "ipcraft.project-design.v1",
   "validationPhase": "core-semantic",
+  "failureBoundary": "project-duplicate-id",
   "expected": "reject",
   "errorCode": "project.duplicate_id",
   "behaviorEvidence": null

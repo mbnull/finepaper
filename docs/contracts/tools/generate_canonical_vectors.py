@@ -272,6 +272,7 @@ def set_keyed_sample(world: SchemaWorld, schema_id: str, node: dict[str, Any], i
     if schema_id == 'ipcraft.fixture-catalog.v1':
         value.update({
             'validationPhase': 'schema',
+            'failureBoundary': None,
             'expected': 'accept',
             'errorCode': None,
             'behaviorEvidence': None,

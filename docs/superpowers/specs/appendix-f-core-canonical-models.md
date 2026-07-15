@@ -271,6 +271,10 @@ engine_migration.dependency_replaced
 
 Freshness is computed against all exact fields plus current authoritative/saved design and Group/Draft state; it is not stored in this manifest. Engine Host or Host-side-effect contract mismatch uses the existing stale reason `dependency-changed`.
 
+### F9.1. Fixture failure-boundary identity
+
+`ipcraft.fixture-catalog.v1` reject entries carry an explicit `failureBoundary`. The frozen `fixture-error-policy-v1.json` first maps each boundary name to one stable error code, then permits boundary names only for exact `(schemaId, validationPhase)` pairs. The executable lookup key is therefore `(schemaId, validationPhase, failureBoundary)` and resolves to exactly one V1 error code. Accept entries use null boundary/error. Boundary identity is authored explicitly and is never inferred from a fixture filename. The policy boundary vocabulary, boundary-to-code table, pair permissions, and their cycle-free digests are normative Core contract data.
+
 ## F10. Canonical Collection Rules
 
 Every reachable explicit array schema frozen at Gate 0 carries `x-ipcraft-canonical`. Its value has one consistent shape:
