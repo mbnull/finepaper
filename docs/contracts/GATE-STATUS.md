@@ -2,17 +2,19 @@
 
 ## Gate 0 — Core Contract Freeze
 
-- Status: **Unfrozen for Revision 5 correction**
-- Normative revision: **Revision 5 in progress**
-- Frozen input commit: `70f69c2a493205269966b25564e4d9e101bd71fd`
+- Status: **Frozen**
+- Normative revision: **Revision 5**
+- Frozen input commit: `e43341ba013d6761a9c88bd6f86686c77c813a3a`
 - Scope: schemas, canonical models and digests, fixtures and error policy, exact Default Engine lock, versioned Host side effects, recovery/history contracts, and review evidence only
 - Product implementation: **not included**
 
-The latest frozen input closure sequence is:
+The Revision 5 frozen input closure sequence is:
 
 - `70f69c2` — harden Gate 0 review evidence
 - `f2a5a31` — finalize Gate 0 freeze inputs
 - `3e0cbfd` — enforce Gate 0 Core contracts
+- `a3f7014` — define Revision 5 validation modes
+- `e43341b` — close Revision 5 canonicalization, strict admission, recovery, and evidence contracts
 
 ### Clean build evidence
 
@@ -26,9 +28,9 @@ env CCACHE_DISABLE=1 xmake build -P "$repo/qt" qt
 env CCACHE_DISABLE=1 xmake build -P "$repo/qt" <each Gate target and validation_test>
 ```
 
-Result: full Qt target, all seven non-default Gate targets, and `validation_test` built successfully from the dedicated clean output tree.
+Result: full Qt target, all eight non-default Gate targets, and `validation_test` built successfully from the dedicated clean output tree.
 
-### Seven required Gate 0 executable checks
+### Eight required Gate 0 executable checks
 
 Each command exited `0` and printed its target name followed by `passed`:
 
@@ -41,6 +43,7 @@ env CCACHE_DISABLE=1 IPCRAFT_CONTRACT_PYTHON="$(command -v python3)" xmake run -
 env CCACHE_DISABLE=1 xmake run -P "$repo/qt" noc_core_canonical_models_schema_test
 env CCACHE_DISABLE=1 xmake run -P "$repo/qt" noc_default_engine_lock_contract_test
 env CCACHE_DISABLE=1 xmake run -P "$repo/qt" noc_host_side_effect_contract_test
+env CCACHE_DISABLE=1 xmake run -P "$repo/qt" noc_strict_json_test
 ```
 
 The existing validation regression also passed when run from its required repository-aware working directory:
@@ -69,7 +72,7 @@ PYTHONDONTWRITEBYTECODE=1 python3 -B docs/contracts/tools/verify_engine_side_eff
 PYTHONDONTWRITEBYTECODE=1 python3 -B docs/contracts/tools/verify_engine_side_effect_vectors.py
 ```
 
-Generator byte comparisons succeeded for canonical vectors, Default Engine/Host side-effect vectors, all contract fixtures and coverage data, the stable error catalog, Unicode 17 artifacts, and the 468-file freeze-input manifest. Strict JSON parsing of every `docs/contracts/**/*.json` file and `git diff --check` also passed.
+Generator byte comparisons succeeded for canonical vectors, Default Engine/Host side-effect vectors, all contract fixtures and coverage data, the stable error catalog, Unicode 17 artifacts, and the 469-file freeze-input manifest. Strict JSON parsing of every `docs/contracts/**/*.json` file and `git diff --check` also passed. The independent RFC 8785 vector suite and Qt strict JSON target cover duplicate keys, surrogate validity, UTF-16 property order, finite binary64 numbers, and ECMAScript number boundaries.
 
 ### Optional Unicode source-provenance audit
 
@@ -113,7 +116,7 @@ PYTHONDONTWRITEBYTECODE=1 python3 -B docs/contracts/tools/verify_engine_side_eff
 Before accepting the archive, the release archive/link audit must also confirm:
 
 - the exact sorted member set derived from the external release copy of `freeze-inputs.json` plus the two freeze records;
-- safe relative paths, ustar metadata, `0644` mode, epoch `1784155668`, zero numeric ownership, and no symlinks or hard links;
+- safe relative paths, ustar metadata, `0644` mode, epoch `1784206263`, zero numeric ownership, and no symlinks or hard links;
 - every frozen raw digest, strict JSON parsing, and containment/membership of every relative Markdown link;
 - the placeholder-normalized `reviewArchiveContentDigest` in `CORE-FREEZE.md`.
 
