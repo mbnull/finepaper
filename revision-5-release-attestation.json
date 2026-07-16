@@ -1,0 +1,21 @@
+{
+  "schema": "ipcraft.release-attestation.v1",
+  "status": "unsigned-integrity-record",
+  "normativeRevision": 5,
+  "contractCommit": "e43341ba013d6761a9c88bd6f86686c77c813a3a",
+  "rawArchive": {
+    "path": "docs.tar",
+    "sha256": "sha256:1deb93a0118755bb924ce7f1a272f06466dfac5357bc91b8be8792fd602987f8"
+  },
+  "reviewArchiveContentDigest": "sha256:d66b949c916fe15187d69d91b3f370ae219107b89a22d7d455823c959641feae",
+  "freezeInputCount": 469,
+  "archiveMemberCount": 471,
+  "toolchain": {
+    "python": "Python 3.14.6",
+    "qt": "6.11.1",
+    "xmake": "3.0.7+HEAD.77d94ad",
+    "compiler": "GCC 16.1.1 20260515 (Red Hat 16.1.1-2)"
+  },
+  "signature": null,
+  "note": "SHA-256 proves byte integrity only. This local attestation is not a cryptographic statement of release provenance until signed by the publishing authority."
+}

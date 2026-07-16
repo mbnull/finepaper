@@ -10,7 +10,7 @@
 - Core Engine Host contract: `ipcraft.engine-host.v1`
 - Host side-effect contract: `ipcraft.noc-side-effects.v1`
 - Review archive member count: `471` (`469` frozen inputs plus this record and `GATE-STATUS.md`)
-- `reviewArchiveContentDigest`: `sha256:08cedd761b5136bb7b2b859069ef09b711bb1d0e8b00201ccedd5509b57fa986`
+- `reviewArchiveContentDigest`: `sha256:d66b949c916fe15187d69d91b3f370ae219107b89a22d7d455823c959641feae`
 
 Revision 4 was unfrozen by `docs/contracts/UNFREEZE-REV4-ADR.md` after review
 found that its declared RFC 8785 digest contract was not implemented
@@ -76,7 +76,7 @@ All values below are raw-file SHA-256 digests.
 | `docs/contracts/patch-validation-context-v1.json` | `d591c93b0773129c51398c88d6be7846745fcb78b1ae798f81f2eaf1ae54ba76` |
 | `docs/contracts/freeze-inputs.json` | `3560ce5a788a8b42826bc32e67cc83e0c84a765ebbe90ee516d7502e620a3526` |
 | `docs/contracts/unicode/simple-case-folding-17.0.0.json` | `2699a1a96e6710dca5a5b49025b614b2f669f31260628390c83f69258faf9ca2` |
-| `docs/contracts/unicode/nfc-normalization-17.0.0.json` | `e7da73453c09c52eef83e05d8fba54a50e2c589fbbdfdefb76d683785c99704c` |
+| `docs/contracts/unicode/nfc-normalization-17.0.0.json` | `b449d36f2c9ff24adccacad9ceca86e9620c1df4f0e710d4491eaa0b989fe915` |
 | `docs/contracts/unicode/NormalizationTest-17.0.0.txt` | `5019ffd530751a741900c849c0e010332f142a3612234639bd200b82138a87db` |
 | `docs/contracts/unicode/UNICODE-LICENSE.txt` | `e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96` |
 
