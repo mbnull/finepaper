@@ -21,6 +21,10 @@
     {
       "path": "vectors/host-side-effects-v1.json",
       "purpose": "Causal Host side-effect Application Patch, impact, tombstone, diagnostic, allocation-order, and disposition golden vectors."
+    },
+    {
+      "path": "vectors/rfc8785-conformance-v1.json",
+      "purpose": "Independent RFC 8785 numeric, UTF-16 key-order, duplicate-key, and surrogate conformance vectors."
     }
   ],
   "canonicalCollections": [
@@ -764,6 +768,11 @@
     {
       "schemaId": "ipcraft.recovery.v1",
       "schemaPointer": "/$defs/pendingTopologyGroup/properties/intentUndo",
+      "kind": "ordered"
+    },
+    {
+      "schemaId": "ipcraft.recovery.v1",
+      "schemaPointer": "/properties/authoritativeDiagnostics",
       "kind": "ordered"
     },
     {

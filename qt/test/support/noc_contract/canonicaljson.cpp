@@ -4,9 +4,12 @@
 #include <QJsonArray>
 
 #include <algorithm>
+#include <array>
+#include <charconv>
 #include <cmath>
 #include <limits>
 #include <stdexcept>
+#include <string>
 
 namespace {
 
@@ -89,7 +92,14 @@ public:
 
 private:
     struct SortAtom final {
-        enum class Kind { Null, Boolean, Number, UnicodeString, CanonicalBytes };
+        enum class Kind {
+            Null,
+            Boolean,
+            Number,
+            UnicodeString,
+            UnicodeScalarString,
+            CanonicalBytes,
+        };
 
         Kind kind = Kind::Null;
         bool boolean = false;
@@ -109,9 +119,8 @@ private:
             }
             if (value.isDouble()) {
                 const double number = value.toDouble();
-                if (!std::isfinite(number) || std::trunc(number) != number ||
-                    std::abs(number) > 9007199254740991.0) {
-                    fail(location + QStringLiteral(": unsafe numeric sort component"));
+                if (!std::isfinite(number)) {
+                    fail(location + QStringLiteral(": non-finite numeric sort component"));
                 }
                 atom.kind = Kind::Number;
                 atom.number = number;
@@ -128,6 +137,13 @@ private:
         static SortAtom unicode(QString value) {
             SortAtom atom;
             atom.kind = Kind::UnicodeString;
+            atom.string = std::move(value);
+            return atom;
+        }
+
+        static SortAtom unicodeScalar(QString value) {
+            SortAtom atom;
+            atom.kind = Kind::UnicodeScalarString;
             atom.string = std::move(value);
             return atom;
         }
@@ -152,16 +168,75 @@ private:
     }
 
     static QByteArray writeNumber(double value, const QString &location) {
-        constexpr double maximumSafeInteger = 9007199254740991.0;
-        if (!std::isfinite(value) || std::trunc(value) != value ||
-            std::abs(value) > maximumSafeInteger) {
-            fail(location +
-                 QStringLiteral(": number is outside the frozen safe-integer JSON domain"));
+        if (!std::isfinite(value)) {
+            fail(location + QStringLiteral(": number is not finite binary64"));
         }
         if (value == 0.0) {
             return QByteArrayLiteral("0");
         }
-        return QByteArray::number(static_cast<qint64>(value));
+
+        std::array<char, 128> buffer{};
+        const auto conversion = std::to_chars(buffer.data(), buffer.data() + buffer.size(),
+                                               value, std::chars_format::general);
+        if (conversion.ec != std::errc{}) {
+            fail(location + QStringLiteral(": binary64 number cannot be serialized"));
+        }
+        QByteArray token(buffer.data(), static_cast<qsizetype>(conversion.ptr - buffer.data()));
+        token = token.toLower();
+        const qsizetype exponentMarker = token.indexOf('e');
+        if (exponentMarker < 0) {
+            return token;
+        }
+
+        const QByteArray mantissa = token.left(exponentMarker);
+        const int exponent = token.mid(exponentMarker + 1).toInt();
+        QByteArray digits = mantissa;
+        const bool negative = digits.startsWith('-');
+        if (negative) {
+            digits.remove(0, 1);
+        }
+        const qsizetype decimalPoint = digits.indexOf('.');
+        const qsizetype point = decimalPoint < 0 ? digits.size() + exponent
+                                                 : decimalPoint + exponent;
+        digits.remove(decimalPoint, 1);
+        const int adjustedExponent = static_cast<int>(point) - 1;
+
+        if (adjustedExponent >= -6 && adjustedExponent < 21) {
+            QByteArray result;
+            if (negative) {
+                result += '-';
+            }
+            if (point <= 0) {
+                result += "0.";
+                result += QByteArray(point == 0 ? 0 : -point, '0');
+                result += digits;
+            } else if (point >= digits.size()) {
+                result += digits;
+                result += QByteArray(point - digits.size(), '0');
+            } else {
+                result += digits.left(point);
+                result += '.';
+                result += digits.mid(point);
+            }
+            return result;
+        }
+
+        QByteArray normalizedMantissa = digits.left(1);
+        if (digits.size() > 1) {
+            normalizedMantissa += '.';
+            normalizedMantissa += digits.mid(1);
+        }
+        QByteArray result;
+        if (negative) {
+            result += '-';
+        }
+        result += normalizedMantissa;
+        result += 'e';
+        if (adjustedExponent >= 0) {
+            result += '+';
+        }
+        result += QByteArray::number(adjustedExponent);
+        return result;
     }
 
     QByteArray writeObject(const QJsonObject &object,
@@ -209,7 +284,7 @@ private:
                 fail(displayPointer(itemInstancePointer) +
                      QStringLiteral(": unicodeScalarValue requires a string item"));
             }
-            return {SortAtom::unicode(item.toString())};
+            return {SortAtom::unicodeScalar(item.toString())};
         }
         if (key == QStringLiteral("canonicalJson")) {
             return {SortAtom::canonical(
@@ -316,6 +391,29 @@ private:
             return 0;
         case SortAtom::Kind::UnicodeString:
             return left.string.toUtf8().compare(right.string.toUtf8());
+        case SortAtom::Kind::UnicodeScalarString: {
+            const auto codePointAt = [](const QString &value, qsizetype &index) -> uint {
+                const ushort high = value.at(index).unicode();
+                if (QChar::isHighSurrogate(high) && index + 1 < value.size()) {
+                    const ushort low = value.at(++index).unicode();
+                    return QChar::surrogateToUcs4(high, low);
+                }
+                return high;
+            };
+            qsizetype leftIndex = 0;
+            qsizetype rightIndex = 0;
+            while (leftIndex < left.string.size() && rightIndex < right.string.size()) {
+                const uint leftPoint = codePointAt(left.string, leftIndex);
+                const uint rightPoint = codePointAt(right.string, rightIndex);
+                if (leftPoint < rightPoint) return -1;
+                if (leftPoint > rightPoint) return 1;
+                ++leftIndex;
+                ++rightIndex;
+            }
+            if (leftIndex < left.string.size()) return 1;
+            if (rightIndex < right.string.size()) return -1;
+            return 0;
+        }
         case SortAtom::Kind::CanonicalBytes:
             return left.bytes.compare(right.bytes);
         }

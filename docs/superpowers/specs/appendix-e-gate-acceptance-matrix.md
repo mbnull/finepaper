@@ -1,6 +1,6 @@
 # Appendix E — Gate Acceptance Matrix
 
-**Normative status:** V1 Revision 4 baseline; Gate 0 freezes Core contracts and Gate D freezes Extension ABI.
+**Normative status:** V1 Revision 5 Core contract; Gate 0 Core contracts are frozen, and Gate D freezes Extension ABI.
 
 ## E1. General Gate Rules
 

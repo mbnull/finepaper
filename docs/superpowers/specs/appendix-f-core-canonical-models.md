@@ -1,7 +1,7 @@
 # Appendix F — Gate 0 Core Canonical Models and Projections
 
-**Normative status:** V1 Revision 5 correction in progress; these Core models
-freeze only with the Revision 5 Gate 0 record.
+**Normative status:** V1 Revision 5 Core contract; these Core models are frozen
+by the Gate 0 Revision 5 record.
 **Rule:** Engine Host and Extension Provider envelopes may wrap these models but may not redefine their fields, identity, projection, or canonicalization.
 
 Machine-readable companion artifacts:
@@ -9,6 +9,7 @@ Machine-readable companion artifacts:
 - [Core canonical models schema](../../contracts/schemas/ipcraft.core-canonical-models.v1.schema.json)
 - [Default Engine Bundle schema](../../contracts/schemas/ipcraft.engine-bundle.v1.schema.json)
 - [Core projection/digest vectors](../../contracts/vectors/core-canonical-projection-v1.json)
+- [RFC 8785 conformance vectors](../../contracts/vectors/rfc8785-conformance-v1.json)
 - [Core collection permutation vectors](../../contracts/vectors/core-set-permutation-v1.json)
 - [Candidate/local-reference vectors](../../contracts/vectors/candidate-local-ref-v1.json)
 - [Default Engine behavior vectors](../../contracts/vectors/default-engine-lock-v1.json)
@@ -46,6 +47,9 @@ Machine-readable Gate 0 schemas use these exact IDs or `$defs` with identical na
 - A reference object contains exactly one of `id` or `localRef`.
 - The object-reference comparison token is the UTF-8 string `id:` + X for `{id:X}` and `localRef:` + X for `{localRef:X}`. Tokens compare by Unicode scalar-value order. Every `routerRef` or other object reference in a sort key uses this token.
 - Composite canonical values compare by the UTF-8 bytes of their RFC 8785 canonical JSON after recursively applying this Appendix's nested set normalization.
+- Schema resolution is performed through the logical-ID/file registry in
+  `docs/contracts/schema-catalog.json`; relative `$ref` basenames are catalog
+  lookups, not ambient filesystem resolution.
 - Random final Host IDs never enter candidate digest input.
 
 ## F3. Topology Intent
@@ -395,7 +399,7 @@ Each machine rule has exact `{schemaId, schemaPointer, kind, sortKey}` addressin
 | `ipcraft.recovery.v1` | `/properties/draftUndo` | ordered | `—` |
 | `ipcraft.tool-input.v1` | `/properties/dependencies` | set | `lockId` |
 
-The Gate 0 V1 table contains exactly 99 physical collection rules. The collection-permutation catalog contains exactly one case for each rule.
+The Gate 0 V1 table contains exactly 100 physical collection rules. The collection-permutation catalog contains exactly one case for each rule.
 
 Kind-specific Patch update-set schemas reuse the create-value property schemas for `allowedContracts`/nested `roles`, Package Relation `sources`/`targets`, and `extensions`. Their create and update permutations therefore resolve to the same physical locations above and cannot diverge in canonicalization. The only open update values are the explicitly Package/Contract-defined `data`, `config`, `properties`, `contractConfig`, `nocConfig`, and `capabilities` maps.
 

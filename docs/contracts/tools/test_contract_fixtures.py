@@ -11,7 +11,6 @@ import json
 import math
 import tempfile
 import unittest
-from decimal import Decimal
 from pathlib import Path
 
 import verify_contract_fixtures as subject
@@ -53,38 +52,35 @@ class ContractFixtureTest(unittest.TestCase):
         "fixtures/invalid/project-domain-membership-wrong-kind.json",
     }
 
-    def test_typed_json_equality_uses_json_number_kinds_not_parser_classes(self) -> None:
-        self.assertTrue(subject._json_typed_equal(1.5, Decimal("1.5")))
-        self.assertTrue(subject._json_typed_equal(Decimal("1.5"), 1.5))
-        self.assertFalse(subject._json_typed_equal(128, Decimal("128.0")))
+    def test_json_number_equality_uses_binary64_numeric_semantics(self) -> None:
+        self.assertTrue(subject._json_typed_equal(1.5, 1.5))
+        self.assertTrue(subject._json_typed_equal(128, 128.0))
         self.assertFalse(subject._json_typed_equal(False, 0))
-        self.assertEqual(subject._json_canonical_key(1.5), subject._json_canonical_key(Decimal("1.5")))
-        self.assertEqual(subject._json_canonical_key(128), subject._json_canonical_key(Decimal("128")))
-        self.assertEqual(subject._json_canonical_key(Decimal("1.0")), subject._json_canonical_key(Decimal("1.00")))
-        self.assertEqual(subject._json_canonical_key(Decimal("1E+2")), subject._json_canonical_key(Decimal("100.0")))
-        self.assertEqual(subject._json_canonical_key(Decimal("-0.0")), subject._json_canonical_key(0))
+        self.assertEqual(subject._json_canonical_key(1.0), subject._json_canonical_key(1))
+        self.assertEqual(subject._json_canonical_key(100.0), subject._json_canonical_key(1e2))
+        self.assertEqual(subject._json_canonical_key(-0.0), subject._json_canonical_key(0))
 
     def test_canonical_json_number_spelling_covers_thresholds_and_nesting(self) -> None:
         cases = {
-            Decimal("0.000001"): "0.000001",
-            Decimal("0.0000001"): "1e-7",
-            Decimal("999999999999999999999"): "999999999999999999999",
-            Decimal("1e21"): "1e+21",
-            Decimal("-1e21"): "-1e+21",
-            Decimal("123456789012345678901234567890.00"): "1.2345678901234567890123456789e+29",
+            0.000001: "0.000001",
+            0.0000001: "1e-7",
+            1e20: "100000000000000000000",
+            1e21: "1e+21",
+            -1e21: "-1e+21",
+            1.2345678901234567e29: "1.2345678901234568e+29",
         }
         for value, expected in cases.items():
             with self.subTest(value=value):
                 self.assertEqual(subject._json_canonical_key(value), expected)
-        nested = {"b": Decimal("1E+21"), "a": [Decimal("1.00"), Decimal("-0.0")]}
+        nested = {"b": 1e21, "a": [1.0, -0.0]}
         self.assertEqual(subject._json_canonical_key(nested), '{"a":[1,0],"b":1e+21}')
 
     def test_patch_preconditions_use_canonical_numeric_identity_and_order(self) -> None:
         source = json.loads((CONTRACTS / "fixtures/valid/patch-operation-updateEntity.json").read_text())
         for left, right in (
-            (Decimal("1.0"), Decimal("1.00")),
-            (Decimal("1E+2"), Decimal("100.0")),
-            (Decimal("-0.0"), 0),
+            (1.0, 1.00),
+            (1e2, 100.0),
+            (-0.0, 0),
         ):
             with self.subTest(left=left, right=right):
                 duplicate = copy.deepcopy(source)
@@ -138,7 +134,7 @@ class ContractFixtureTest(unittest.TestCase):
     def test_project_attachment_capabilities_use_typed_json_equality(self) -> None:
         source = json.loads((CONTRACTS / "fixtures/valid/mesh-2x2-attached.json").read_text())
         self.assertIsNone(subject.classify_document(CONTRACTS, "ipcraft.project-design.v1", source).phase)
-        for name, value in (("boolean", 0), ("numeric", 128.0)):
+        for name, value in (("boolean", 0),):
             with self.subTest(name=name):
                 document = copy.deepcopy(source)
                 key = "coherent" if name == "boolean" else "dataWidth"
@@ -147,6 +143,12 @@ class ContractFixtureTest(unittest.TestCase):
                     subject.classify_document(CONTRACTS, "ipcraft.project-design.v1", document),
                     subject.Classification("core-semantic", "project-invariant", "project.invariant_violation"),
                 )
+
+        numeric_equivalent = copy.deepcopy(source)
+        numeric_equivalent["interfaces"][0]["capabilities"]["dataWidth"] = 128.0
+        self.assertIsNone(
+            subject.classify_document(CONTRACTS, "ipcraft.project-design.v1", numeric_equivalent).phase
+        )
 
     def test_interface_contract_enum_defaults_use_typed_json_membership(self) -> None:
         source = json.loads((CONTRACTS / "fixtures/valid/interface-contract-maximum.json").read_text())
@@ -166,7 +168,7 @@ class ContractFixtureTest(unittest.TestCase):
                     expected_phase,
                 )
 
-    def test_declared_integer_and_double_values_preserve_json_number_kind(self) -> None:
+    def test_declared_integer_and_double_values_use_numeric_semantics(self) -> None:
         contract = json.loads((CONTRACTS / "fixtures/valid/interface-contract-maximum.json").read_text())
         mutations = {
             "integer-as-double": lambda document: next(
@@ -180,16 +182,15 @@ class ContractFixtureTest(unittest.TestCase):
             with self.subTest(name=name):
                 document = copy.deepcopy(contract)
                 mutate(document)
-                self.assertEqual(
-                    subject.classify_document(CONTRACTS, "ipcraft.interface-contract.v1", document).phase,
-                    "core-semantic",
+                self.assertIsNone(
+                    subject.classify_document(CONTRACTS, "ipcraft.interface-contract.v1", document).phase
                 )
 
         package = json.loads((CONTRACTS / "fixtures/valid/noc-package-maximum.json").read_text())
         package["configuration"]["global"]["fields"][0]["default"] = 1.0
         self.assertEqual(
             subject.classify_document(CONTRACTS, "ipcraft.noc-package.v1", package).phase,
-            "core-semantic",
+            None,
         )
 
     def test_declarative_conditions_use_typed_json_values(self) -> None:
@@ -221,7 +222,7 @@ class ContractFixtureTest(unittest.TestCase):
             "core-semantic",
         )
 
-    def test_patch_property_precondition_uses_typed_json_equality(self) -> None:
+    def test_patch_property_precondition_uses_numeric_json_equality(self) -> None:
         source = json.loads((CONTRACTS / "fixtures/valid/patch-operation-updateEntity.json").read_text())
         exact = copy.deepcopy(source)
         exact["preconditions"] = [{
@@ -229,7 +230,7 @@ class ContractFixtureTest(unittest.TestCase):
             "property": "capabilities", "value": {"coherent": False, "dataWidth": 128},
         }]
         self.assertIsNone(subject.classify_document(CONTRACTS, "ipcraft.patch.v1", exact).phase)
-        for value in ({"coherent": 0, "dataWidth": 128}, {"coherent": False, "dataWidth": 128.0}):
+        for value in ({"coherent": 0, "dataWidth": 128},):
             with self.subTest(value=value):
                 document = copy.deepcopy(exact)
                 document["preconditions"][0]["value"] = value
@@ -237,6 +238,9 @@ class ContractFixtureTest(unittest.TestCase):
                     subject.classify_document(CONTRACTS, "ipcraft.patch.v1", document),
                     subject.Classification("core-semantic", "precondition", "patch.precondition_failed"),
                 )
+        numeric_equivalent = copy.deepcopy(exact)
+        numeric_equivalent["preconditions"][0]["value"] = {"coherent": False, "dataWidth": 128.0}
+        self.assertIsNone(subject.classify_document(CONTRACTS, "ipcraft.patch.v1", numeric_equivalent).phase)
 
     def test_semantic_failure_has_no_statements_after_unconditional_return(self) -> None:
         tree = ast.parse(inspect.getsource(subject.semantic_failure))
@@ -669,16 +673,15 @@ class ContractFixtureTest(unittest.TestCase):
                 with self.assertRaises(subject.FixtureVerificationError):
                     subject.load_strict_json(path)
 
-    def test_strict_json_preserves_exact_numeric_tokens(self) -> None:
+    def test_strict_json_uses_binary64_numeric_semantics(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "exact.json"
             path.write_text('{"x":1e-400,"y":0.3000000000000000000000001}')
             document = subject.load_strict_json(path)
-            self.assertFalse(subject.Draft202012Subset._matches_type(document["x"], "integer"))
+            self.assertTrue(subject.Draft202012Subset._matches_type(document["x"], "number"))
             validator = subject.Draft202012Subset(CONTRACTS)
             root, root_path = validator.schemas["ipcraft.pipeline-result.v1"]
-            with self.assertRaises(subject.SchemaFailure):
-                validator._validate({"type": "number", "multipleOf": 0.1}, document["y"], root, root_path, "$")
+            validator._validate({"type": "number", "multipleOf": 0.1}, document["y"], root, root_path, "$")
 
     def test_manifest_paths_use_pinned_portable_identity(self) -> None:
         bundle_source = json.loads((CONTRACTS / "fixtures/valid/bundle-manifest.json").read_text())
@@ -1122,7 +1125,6 @@ class ContractFixtureTest(unittest.TestCase):
             "contract": {"contract":{"lockId":"dep.contract.chi","role":"initiator"}},
             "role": {"contract":{"lockId":"dep.contract.axi5","role":"target"}},
             "capability": {"capabilities":{"dataWidth":64}},
-            "numeric-type": {"capabilities":{"coherent":False,"dataWidth":128.0}},
             "boolean-type": {"capabilities":{"coherent":0,"dataWidth":128}},
         }
         for name, replacement in attacks.items():
@@ -1133,6 +1135,9 @@ class ContractFixtureTest(unittest.TestCase):
                     subject.classify_document(CONTRACTS, "ipcraft.patch.v1", mutated),
                     subject.Classification("core-semantic", "patch-invariant", "patch.invariant_violation"),
                 )
+        numeric_equivalent = copy.deepcopy(base)
+        numeric_equivalent["operations"] = [{"op":"updateEntity","entityKind":"interface","id":"interface.boundary","set":{"capabilities":{"coherent":False,"dataWidth":128.0}},"unset":[]}]
+        self.assertIsNone(subject.classify_document(CONTRACTS, "ipcraft.patch.v1", numeric_equivalent).phase)
         local_attachment = copy.deepcopy(base)
         local_attachment["operations"] = [
             {"op":"createEntity","entityKind":"interface","localRef":"application:000050","value":{"ownerComponentRef":{"id":"component.noc"},"templateKey":"chi-boundary","name":"CHI","contract":{"lockId":"dep.contract.chi","role":"initiator"},"capabilities":{"coherent":False,"dataWidth":128},"contractConfig":{},"nocConfig":{},"extensions":[]}},

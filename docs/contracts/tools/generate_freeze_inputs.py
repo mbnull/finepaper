@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the cycle-free Revision 4 Gate 0 review input manifest."""
+"""Generate the cycle-free Revision 5 Gate 0 review input manifest."""
 
 from __future__ import annotations
 
@@ -64,7 +64,7 @@ def main() -> int:
         })
     document = {
         "schema": "ipcraft.core-freeze-inputs.v1",
-        "normativeRevision": 4,
+        "normativeRevision": 5,
         "selfExclusion": SELF_EXCLUSION,
         "files": items,
     }

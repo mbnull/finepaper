@@ -48,8 +48,8 @@ void verifyCanonicalSchemaAgreement() {
     const auto catalog = ContractArtifactLoader::loadObject(
         QStringLiteral("docs/contracts/vectors/core-canonical-projection-v1.json"));
     const auto rules = catalog.value(QStringLiteral("canonicalCollections")).toArray();
-    requireContract(rules.size() == 99,
-                    QStringLiteral("canonical contract must contain 99 physical rules"));
+    requireContract(rules.size() == 100,
+                    QStringLiteral("canonical contract must contain 100 physical rules"));
     QStringList identities;
     for (const auto &raw : rules) {
         const auto rule = raw.toObject();
@@ -107,7 +107,7 @@ int main(int argc, char **argv) {
         verifyCanonicalSchemaAgreement();
         runContractPythonVerifier(
             QStringLiteral("docs/contracts/tools/verify_canonical_rules.py"), {},
-            QStringLiteral("99 Core array locations"));
+            QStringLiteral("100 Core array locations"));
         std::cout << "noc_core_canonical_models_schema_test passed\n";
         return 0;
     } catch (const std::exception &error) {

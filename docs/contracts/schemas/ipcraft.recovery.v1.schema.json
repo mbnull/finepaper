@@ -5,7 +5,7 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "schema", "projectId", "savedProjectDigest", "updatedAt", "authoritativeDesign",
+    "schema", "projectId", "savedProjectDigest", "updatedAt", "authoritativeDesign", "authoritativeDiagnostics",
     "sessionRevision", "derivedStateRevision", "pendingTopologyGroup", "draftOverlay", "draftUndo", "draftRedo"
   ],
   "properties": {
@@ -14,6 +14,7 @@
     "savedProjectDigest": { "$ref": "#/$defs/digest" },
     "updatedAt": { "type": "string", "format": "date-time" },
     "authoritativeDesign": { "$ref": "ipcraft.project-design.v1.schema.json" },
+    "authoritativeDiagnostics": { "type": "array", "x-ipcraft-canonical": { "kind": "ordered" }, "items": { "$ref": "ipcraft.command-result.v1.schema.json#/$defs/issue" } },
     "sessionRevision": { "type": "integer", "minimum": 0 },
     "derivedStateRevision": { "type": "integer", "minimum": 0 },
     "pendingTopologyGroup": { "oneOf": [{ "$ref": "#/$defs/pendingTopologyGroup" }, { "type": "null" }] },

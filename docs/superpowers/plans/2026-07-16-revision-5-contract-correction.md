@@ -105,7 +105,7 @@
 - [ ] **Step 5: Run fixture and schema tests.**
   Update catalog counts and error policy, then run the focused fixture tests. Commit with `fix: separate working and save validation modes`.
 
-### Task 5: Make schema resolution and ordering names explicit
+### Task 5: Make schema catalog resolution and ordering names explicit
 
 **Files:**
 - Modify: `docs/contracts/schema-catalog.json`
@@ -115,10 +115,10 @@
 - Modify: `docs/contracts/tools/verify_fixture_catalog.py`
 - Modify: `docs/superpowers/specs/appendix-f-core-canonical-models.md`
 
-- [ ] **Step 1: Assign stable absolute URN `$id` values.**
-  Use `urn:ipcraft:schema:<name>:v1` for Schema `$id`; preserve business discriminator strings separately.
+- [ ] **Step 1: Freeze the logical-ID retrieval registry.**
+  Preserve the public logical schema IDs used by existing ProjectDesign discriminators, and make `schema-catalog.json` the normative ID-to-file/retrieval registry. A generic validator must install this registry before resolving `$ref`.
 - [ ] **Step 2: Define catalog resolution.**
-  Make URN-to-file resolution and relative `$ref` resolution normative and test it with a fresh validator instance, not only the custom authoring loader.
+  Make logical-ID and relative `$ref` resolution normative and test it with a fresh validator instance, not only the custom authoring loader.
 - [ ] **Step 3: Label every ordering rule.**
   Distinguish RFC 8785 UTF-16 property order, Unicode scalar order, and UTF-8 byte order in Appendix F and the canonical rule metadata.
 - [ ] **Step 4: Add non-ASCII and ordering vectors.**

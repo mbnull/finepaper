@@ -1,7 +1,7 @@
 # Default NoC Design Engine and Workbench Design
 
-**Status:** Architecture Approved — V1 Normative Revision 4; wire contracts not frozen
-**Revision 4 approved for review:** 2026-07-14
+**Status:** Architecture Approved — V1 Normative Revision 5; Core contracts freeze with the Gate 0 record
+**Revision 5 correction approved for freeze:** 2026-07-16
 **Original date:** 2026-07-12
 
 ## 0. Normative Document Set

@@ -8,12 +8,12 @@ from __future__ import annotations
 
 import argparse
 import copy
-import hashlib
-import json
 import re
 import sys
 from pathlib import Path
 from typing import Any
+
+from rfc8785 import CanonicalizationError, canonical_json as _rfc8785_json, loads as _rfc8785_loads, sha256_digest as _rfc8785_digest
 
 
 VECTOR_SCHEMA = "ipcraft.canonical-vector-catalog.v1"
@@ -55,34 +55,23 @@ def fail(message: str) -> None:
 
 def load_json(path: Path) -> Any:
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as error:
+        return _rfc8785_loads(path.read_bytes())
+    except (OSError, CanonicalizationError) as error:
         fail(f"cannot load {path}: {error}")
 
 
 def canonical_json(value: Any) -> str:
-    def check(item: Any, location: str) -> None:
-        if item is None or isinstance(item, (str, bool, int)):
-            return
-        if isinstance(item, float):
-            fail(f"{location}: floating-point values are outside the supported vector domain")
-        if isinstance(item, list):
-            for index, child in enumerate(item):
-                check(child, f"{location}[{index}]")
-            return
-        if isinstance(item, dict):
-            if not all(isinstance(key, str) for key in item):
-                fail(f"{location}: object keys must be strings")
-            for key, child in item.items():
-                check(child, f"{location}.{key}")
-            return
-        fail(f"{location}: unsupported JSON value type {type(item).__name__}")
-    check(value, "canonical input")
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    try:
+        return _rfc8785_json(value)
+    except CanonicalizationError as error:
+        fail(str(error))
 
 
 def sha256_digest(value: Any) -> str:
-    return "sha256:" + hashlib.sha256(canonical_json(value).encode("utf-8")).hexdigest()
+    try:
+        return _rfc8785_digest(value)
+    except CanonicalizationError as error:
+        fail(str(error))
 
 
 def decode_pointer_token(raw: str, pointer: str) -> str:

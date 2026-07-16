@@ -13,6 +13,7 @@
 
 #include <functional>
 #include <iostream>
+#include <limits>
 #include <stdexcept>
 
 namespace {
@@ -198,13 +199,14 @@ void testCanonicalHelperPreservesExplicitOrderedArrays() {
             QStringLiteral("ordered variants must remain distinct"));
 }
 
-void testCanonicalHelperRejectsMissingRulesAndUnsafeNumbers() {
+void testCanonicalHelperRejectsMissingRulesAndNonFiniteNumbers() {
     requireThrowsWithPath(
         [] { canonicalJson(QJsonArray{1, 2}, CanonicalRuleSet{}); },
         QStringLiteral("/"));
     requireThrowsWithPath(
         [] {
-            canonicalJson(QJsonValue(9007199254740992.0), CanonicalRuleSet{});
+            canonicalJson(QJsonValue(std::numeric_limits<double>::infinity()),
+                          CanonicalRuleSet{});
         },
         QStringLiteral("number"));
 }
@@ -600,7 +602,7 @@ int main(int argc, char **argv) {
         testArtifactLoaderRejectsSymlinkEscape();
         testCanonicalHelperMatchesCommittedSetVector();
         testCanonicalHelperPreservesExplicitOrderedArrays();
-        testCanonicalHelperRejectsMissingRulesAndUnsafeNumbers();
+        testCanonicalHelperRejectsMissingRulesAndNonFiniteNumbers();
         testCanonicalHelperSupportsFrozenSpecialSortKeys();
         testCanonicalHelperValidatesDerivedOrderAndAmbiguousBindings();
         testEndpointSortKeysKeepOpaqueTupleComponentsDistinct();

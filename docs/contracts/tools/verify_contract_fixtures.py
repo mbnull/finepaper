@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import argparse
 import copy
-import hashlib
 import json
 import math
 import re
@@ -23,6 +22,7 @@ from pathlib import Path
 from typing import Any
 
 import verify_fixture_catalog
+from rfc8785 import CanonicalizationError, canonical_json as _rfc8785_json, loads as _rfc8785_loads, sha256_digest as _rfc8785_digest
 
 
 FROZEN_COVERAGE_REQUIREMENTS_DIGEST = "sha256:a0fa30dd200104c4783f07e14eb8a345d5f3b4e0ff20bc2b4bdb82f4303ff0e4"
@@ -64,23 +64,9 @@ class SchemaFailure(RuntimeError):
 
 
 def load_strict_json(path: Path) -> Any:
-    def object_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-        result: dict[str, Any] = {}
-        for key, value in pairs:
-            if key in result:
-                raise FixtureVerificationError(f"{path}: duplicate JSON object member {key!r}")
-            result[key] = value
-        return result
-
-    def non_json_constant(value: str) -> Any:
-        raise FixtureVerificationError(f"{path}: non-JSON numeric constant {value}")
-
     try:
-        return json.loads(
-            path.read_text(encoding="utf-8"), object_pairs_hook=object_pairs,
-            parse_float=Decimal, parse_constant=non_json_constant,
-        )
-    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        return _rfc8785_loads(path.read_bytes())
+    except (OSError, UnicodeError, CanonicalizationError) as error:
         raise FixtureVerificationError(f"cannot load strict JSON {path}: {error}") from error
 
 
@@ -102,14 +88,9 @@ def _json_equal(left: Any, right: Any) -> bool:
 def _json_typed_equal(left: Any, right: Any) -> bool:
     if isinstance(left, bool) or isinstance(right, bool):
         return isinstance(left, bool) and isinstance(right, bool) and left == right
-    if type(left) is int or type(right) is int:
-        return type(left) is int and type(right) is int and left == right
-    if isinstance(left, (float, Decimal)) or isinstance(right, (float, Decimal)):
-        if not isinstance(left, (float, Decimal)) or not isinstance(right, (float, Decimal)):
-            return False
-        left_decimal = left if isinstance(left, Decimal) else Decimal(str(left))
-        right_decimal = right if isinstance(right, Decimal) else Decimal(str(right))
-        return left_decimal.is_finite() and right_decimal.is_finite() and left_decimal == right_decimal
+    if (isinstance(left, (int, float, Decimal)) and not isinstance(left, bool) and
+            isinstance(right, (int, float, Decimal)) and not isinstance(right, bool)):
+        return float(left) == float(right)
     if type(left) is not type(right):
         return False
     if isinstance(left, list):
@@ -119,51 +100,12 @@ def _json_typed_equal(left: Any, right: Any) -> bool:
     return left == right
 
 
-def _canonical_json_number(value: int | float | Decimal) -> str:
-    decimal = value if isinstance(value, Decimal) else Decimal(str(value))
-    if not decimal.is_finite():
-        raise FixtureVerificationError("non-finite number in canonical JSON key")
-    if decimal.is_zero():
-        return "0"
-    number_tuple = decimal.as_tuple()
-    sign = "-" if number_tuple.sign else ""
-    digits_list = list(number_tuple.digits)
-    exponent = number_tuple.exponent
-    while len(digits_list) > 1 and digits_list[-1] == 0:
-        digits_list.pop()
-        exponent += 1
-    digits = "".join(str(digit) for digit in digits_list)
-    adjusted = len(digits) + exponent - 1
-    if -6 <= adjusted < 21:
-        point = len(digits) + exponent
-        if point <= 0:
-            body = "0." + "0" * (-point) + digits
-        elif point >= len(digits):
-            body = digits + "0" * (point - len(digits))
-        else:
-            body = digits[:point] + "." + digits[point:]
-        return sign + body
-    mantissa = digits[0] + (("." + digits[1:]) if len(digits) > 1 else "")
-    exponent_text = f"+{adjusted}" if adjusted >= 0 else str(adjusted)
-    return f"{sign}{mantissa}e{exponent_text}"
-
-
 def _json_canonical_key(value: Any) -> str:
     """Return normalized JSON text for canonical set identity and ordering."""
-    if value is None or isinstance(value, (str, bool)):
-        return json.dumps(value, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
-    if isinstance(value, (int, float, Decimal)) and not isinstance(value, bool):
-        return _canonical_json_number(value)
-    if isinstance(value, list):
-        return "[" + ",".join(_json_canonical_key(item) for item in value) + "]"
-    if isinstance(value, dict):
-        if not all(isinstance(key, str) for key in value):
-            raise FixtureVerificationError("non-string object member in canonical JSON key")
-        return "{" + ",".join(
-            json.dumps(key, ensure_ascii=False) + ":" + _json_canonical_key(value[key])
-            for key in sorted(value)
-        ) + "}"
-    raise FixtureVerificationError(f"unsupported {type(value).__name__} in canonical JSON key")
+    try:
+        return _rfc8785_json(value)
+    except CanonicalizationError as error:
+        raise FixtureVerificationError(str(error)) from error
 
 
 def _resolve_json_pointer(document: Any, pointer: str) -> Any:
@@ -994,8 +936,10 @@ def bundle_manifest_digest(contracts: Path, document: dict[str, Any]) -> str:
     projected = copy.deepcopy(document)
     projected.pop("manifestDigest", None)
     projected["files"] = sorted(projected.get("files", []), key=lambda item: item["path"])
-    canonical = json.dumps(projected, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-    return "sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    try:
+        return _rfc8785_digest(projected)
+    except CanonicalizationError as error:
+        raise FixtureVerificationError(str(error)) from error
 
 
 def _declared_scalar_matches(kind: str, value: Any) -> bool:
@@ -1004,9 +948,15 @@ def _declared_scalar_matches(kind: str, value: Any) -> bool:
     if kind == "bool":
         return isinstance(value, bool)
     if kind == "int":
-        return type(value) is int
+        return (
+            isinstance(value, (int, float, Decimal)) and not isinstance(value, bool)
+            and math.isfinite(float(value)) and float(value).is_integer()
+        )
     if kind == "double":
-        return type(value) in {float, Decimal}
+        return (
+            isinstance(value, (int, float, Decimal)) and not isinstance(value, bool)
+            and math.isfinite(float(value))
+        )
     if kind in {"string", "enum"}:
         return isinstance(value, str) if kind == "string" else True
     return False
@@ -1132,13 +1082,17 @@ PATCH_RELATION_DEFS = {
 def _patch_context_digest(document: dict[str, Any]) -> str:
     projected = copy.deepcopy(document)
     projected.pop("contextDigest", None)
-    canonical = json.dumps(projected, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-    return "sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    try:
+        return _rfc8785_digest(projected)
+    except CanonicalizationError as error:
+        raise FixtureVerificationError(str(error)) from error
 
 
 def _digest_json(value: Any) -> str:
-    canonical = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-    return "sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    try:
+        return _rfc8785_digest(value)
+    except CanonicalizationError as error:
+        raise FixtureVerificationError(str(error)) from error
 
 
 def _validate_patch_subject_schema(
@@ -1237,7 +1191,7 @@ def _patch_state_reference_failure(
             attached_interfaces.append(reference.get("id", "local:" + reference.get("localRef", "")))
         if kind == "package-relation":
             for member in ("sources", "targets"):
-                keys = [json.dumps(item, ensure_ascii=False, sort_keys=True, separators=(",", ":")) for item in value.get(member, [])]
+                keys = [_json_canonical_key(item) for item in value.get(member, [])]
                 if len(keys) != len(set(keys)):
                     return "patch-invariant", "patch.invariant_violation"
     if len(attached_interfaces) != len(set(attached_interfaces)):
@@ -2303,7 +2257,9 @@ def _patch_transaction_failure(
 
 
 def semantic_failure(
-    schema_id: str, document: Any, validator: Draft202012Subset | None = None
+    schema_id: str, document: Any, validator: Draft202012Subset | None = None,
+    validation_mode: str = "save-eligible",
+    allowed_disconnected_domains: set[str] | None = None,
 ) -> tuple[str, str] | None:
     contracts = validator.contracts if validator is not None else Path(__file__).resolve().parents[1]
     if schema_id == "ipcraft.project-design.v1":
@@ -2504,7 +2460,8 @@ def semantic_failure(
                     reached.add(router)
                     frontier.extend((adjacency[router] & members) - reached)
                 if reached != members:
-                    return "project-invariant", "project.invariant_violation"
+                    if validation_mode != "well-formed" or domain_id not in (allowed_disconnected_domains or set()):
+                        return "project-invariant", "project.invariant_violation"
     elif schema_id in {"ipcraft.bundle-manifest.v1", "ipcraft.artifact-manifest.v1"}:
         member = "files" if "files" in document else "artifacts"
         if _portable_paths_invalid(contracts, [entry.get("path") for entry in document.get(member, [])]):
@@ -2574,6 +2531,23 @@ def semantic_failure(
     elif schema_id == "ipcraft.recovery.v1":
         if document.get("projectId") != document.get("authoritativeDesign", {}).get("id"):
             return "recovery-binding", "recovery.binding_mismatch"
+        diagnostics = document.get("authoritativeDiagnostics", [])
+        disconnected_domains = {
+            item.get("subject", {}).get("id")
+            for item in diagnostics
+            if item.get("code") == "domain.disconnected"
+            and isinstance(item.get("subject"), dict)
+            and item["subject"].get("kind") == "domain"
+        }
+        design_failure = semantic_failure(
+            "ipcraft.project-design.v1",
+            document.get("authoritativeDesign", {}),
+            validator,
+            validation_mode="well-formed",
+            allowed_disconnected_domains=disconnected_domains,
+        )
+        if design_failure:
+            return "recovery-binding", "recovery.binding_mismatch"
         draft_collections = [document.get("draftOverlay", [])]
         for history_name in ("draftUndo", "draftRedo"):
             for mutation in document.get(history_name, []):
@@ -2615,7 +2589,7 @@ def semantic_failure(
         if document.get("failedStepId") is not None and document.get("failedStepId") not in step_ids:
             return "pipeline-result", "pipeline.result_invalid"
     elif schema_id == "ipcraft.diagnostic-report.v1":
-        if _duplicates(document.get("diagnostics", []), lambda item: json.dumps(item, sort_keys=True)):
+        if _duplicates(document.get("diagnostics", []), _json_canonical_key):
             return "diagnostic-report", "diagnostic.report_invalid"
     elif schema_id == "ipcraft.step-result.v1":
         if document.get("toolResult") is not None and _portable_paths_invalid(contracts, [document["toolResult"]]):
@@ -2696,16 +2670,12 @@ def verify_authoring_coverage(contracts: Path, items: list[dict[str, Any]]) -> N
     requirements = coverage.get("requirements")
     if not isinstance(requirements, dict) or set(requirements) != catalog_roots:
         raise FixtureVerificationError("fixture coverage requirements do not exactly match standalone roots")
-    requirements_digest = "sha256:" + hashlib.sha256(
-        json.dumps(requirements, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    ).hexdigest()
+    requirements_digest = _digest_json(requirements)
     if coverage.get("requirementsDigest") != requirements_digest:
         raise FixtureVerificationError("fixture coverage requirements digest does not match content")
     if requirements_digest != FROZEN_COVERAGE_REQUIREMENTS_DIGEST:
         raise FixtureVerificationError("fixture coverage requirements differ from the frozen contract")
-    coverage_digest = "sha256:" + hashlib.sha256(
-        json.dumps({"roots": coverage["roots"], "requirements": requirements}, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    ).hexdigest()
+    coverage_digest = _digest_json({"roots": coverage["roots"], "requirements": requirements})
     if coverage.get("coverageDigest") != coverage_digest or coverage_digest != FROZEN_COVERAGE_CONTRACT_DIGEST:
         raise FixtureVerificationError("fixture coverage root/tier mapping differs from the frozen contract")
 

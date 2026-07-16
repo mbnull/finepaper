@@ -9,13 +9,12 @@ from __future__ import annotations
 
 import argparse
 import copy
-import hashlib
-import json
 import re
 from pathlib import Path
 from typing import Any
 
 from verify_canonical_vectors import SchemaViolation, SchemaWorld, VerificationError, normalize, normalize_candidate, sha256_digest
+from rfc8785 import CanonicalizationError, canonical_json, loads as strict_loads, sha256_digest as rfc_sha256_digest
 
 ROOT=Path(__file__).resolve().parents[3]
 CONTRACTS=ROOT/"docs/contracts"
@@ -28,10 +27,15 @@ REQUIRED_SIDE={"side-effects-created-router-default-memberships","side-effects-c
 
 def fail(msg:str)->None: raise VerificationError(msg)
 def load(path:Path)->Any:
-    try:return json.loads(path.read_text(encoding="utf-8"))
-    except Exception as e: fail(f"cannot load {path}: {e}")
-def cj(v:Any)->str:return json.dumps(v,ensure_ascii=False,sort_keys=True,separators=(",",":"))
-def dg(v:Any)->str:return "sha256:"+hashlib.sha256(cj(v).encode()).hexdigest()
+    try:return strict_loads(path.read_bytes())
+    except (OSError, CanonicalizationError) as e: fail(f"cannot load {path}: {e}")
+def _json_value(v:Any)->Any:
+    if isinstance(v, tuple): return [_json_value(item) for item in v]
+    if isinstance(v, list): return [_json_value(item) for item in v]
+    if isinstance(v, dict): return {key: _json_value(value) for key, value in v.items()}
+    return v
+def cj(v:Any)->str:return canonical_json(_json_value(v))
+def dg(v:Any)->str:return rfc_sha256_digest(_json_value(v))
 DIGEST_RE=re.compile(r"^sha256:[0-9a-f]{64}$")
 
 

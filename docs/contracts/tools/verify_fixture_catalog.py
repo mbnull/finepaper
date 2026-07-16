@@ -14,9 +14,10 @@ import json
 import os
 import re
 import sys
-from decimal import Decimal
 from pathlib import Path, PurePosixPath
 from typing import Any
+
+from rfc8785 import CanonicalizationError, loads as strict_loads, sha256_digest as _rfc_sha256_digest
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -25,8 +26,8 @@ UNICODE_CASE_FOLD_PATH = Path("unicode/simple-case-folding-17.0.0.json")
 UNICODE_NFC_PATH = Path("unicode/nfc-normalization-17.0.0.json")
 UNICODE_NORMALIZATION_TEST_PATH = Path("unicode/NormalizationTest-17.0.0.txt")
 ERROR_POLICY_PATH = Path("fixture-error-policy-v1.json")
-ERROR_POLICY_BOUNDARIES_SHA256 = "e9d3101858f0cc6459b243e0c6a1ce6ae161de23516f4c017b016b67cf205565"
-ERROR_POLICY_RULES_SHA256 = "0cfd170ba69482fe219777d4501bcb72a5579e0e19dae586604c463470674935"
+ERROR_POLICY_BOUNDARIES_SHA256 = "3aa75f2db88490ff9aeb0159b15b7f1e19a8326f292ddb98082165b560a86bdc"
+ERROR_POLICY_RULES_SHA256 = "4dc1e650cf7f1945c88731eab54efb4cef03109f45f39339ecec2d3f8135558b"
 UNICODE_TABLE_FIELDS = {
     "schema", "unicodeVersion", "source", "sourceUrl", "sourceSha256", "licenseName", "licenseUrl",
     "licenseFile", "mappingCount", "mappingsSha256", "mappings"
@@ -49,8 +50,8 @@ NORMALIZATION_TEST_SHA256 = "5019ffd530751a741900c849c0e010332f142a3612234639bd2
 UNICODE_LICENSE_SHA256 = "e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96"
 NFC_ARRAY_IDENTITIES = {
     "decompositions": (2081, "85fc2687c3fabab6bfe7f711374fdd35f92165d411b7e8da079ada27e590dc08"),
-    "combiningClasses": (968, "e96a0ef8091026c67939f5037e1e8e3e4be2ec0ea5c7dae3db252fe06343c652"),
-    "compositions": (961, "03965ad919c780b3b2d877b240d7f4148d23608fe13f47fe1a19726b7cde0f31"),
+    "combiningClasses": (968, "f5524e25eadc9978db6298e2ea97c3f6e8311456583c52e8b75ba6679fc55a33"),
+    "compositions": (961, "6d72e140782589d1ac07642f3ad6c9377de450651855944c0794b8c5bd08d4d2"),
 }
 RECOGNIZED_VECTORS = {
     "core-canonical-projection-v1.json": ("ipcraft.core-canonical-vectors.v1", None, ("vectors",), "bf570f7a18cc99f58fb3d50a94ccc2598c9285a85976da0235ec3c82c95e4e44"),
@@ -73,30 +74,14 @@ def fail(message: str) -> None:
 
 
 def load_json(path: Path) -> Any:
-    def object_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-        result: dict[str, Any] = {}
-        for key, value in pairs:
-            if key in result:
-                fail(f"{path}: duplicate JSON object member {key!r}")
-            result[key] = value
-        return result
-
-    def non_json_constant(value: str) -> Any:
-        fail(f"{path}: non-JSON numeric constant {value}")
-
     try:
-        return json.loads(
-            path.read_text(encoding="utf-8"),
-            object_pairs_hook=object_pairs,
-            parse_float=Decimal,
-            parse_constant=non_json_constant,
-        )
-    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        return strict_loads(path.read_bytes())
+    except (OSError, UnicodeError, CanonicalizationError) as error:
         fail(f"cannot load {path}: {error}")
 
 
 def canonical_digest(value: object) -> str:
-    return hashlib.sha256(json.dumps(value, ensure_ascii=True, separators=(",", ":")).encode()).hexdigest()
+    return _rfc_sha256_digest(value).removeprefix("sha256:")
 
 
 def require_exact_object(value: Any, fields: set[str], location: str) -> dict[str, Any]:

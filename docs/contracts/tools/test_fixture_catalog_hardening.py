@@ -7,7 +7,6 @@ import json
 import os
 import tempfile
 import unittest
-from decimal import Decimal
 from pathlib import Path
 
 import verify_fixture_catalog as subject
@@ -43,14 +42,16 @@ class FixtureCatalogHardeningTest(unittest.TestCase):
                 with self.assertRaisesRegex(subject.VerificationError, "non-JSON numeric constant"):
                     subject.load_json(path)
 
-    def test_normative_json_loader_preserves_integer_and_decimal_tokens(self) -> None:
+    def test_normative_json_loader_uses_binary64_numeric_semantics(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "normative.json"
             path.write_text('{"integer":1,"decimal":1.0,"fraction":0.1}')
             document = subject.load_json(path)
             self.assertIs(type(document["integer"]), int)
-            self.assertEqual(document["decimal"], Decimal("1.0"))
-            self.assertEqual(document["fraction"], Decimal("0.1"))
+            self.assertIs(type(document["decimal"]), float)
+            self.assertIs(type(document["fraction"]), float)
+            self.assertEqual(document["decimal"], 1.0)
+            self.assertEqual(document["fraction"], 0.1)
 
     def test_case_fold_table_rejects_arbitrary_mutation(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

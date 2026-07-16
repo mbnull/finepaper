@@ -38,8 +38,8 @@ private:
 
 };
 
-// Gate 0's Qt JSON domain is intentionally lossless: null, booleans, strings,
-// objects, explicitly catalogued arrays, and integers in [-2^53+1, 2^53-1].
-// Fractional/non-finite/unsafe doubles are rejected rather than rounded.
+// Gate 0's Qt JSON domain is strict UTF-8 JSON represented by null, booleans,
+// strings, objects, explicitly catalogued arrays, and finite IEEE-754 binary64
+// numbers. Number spelling is semantic rather than lexical.
 QByteArray canonicalJson(const QJsonValue &value, const CanonicalRuleSet &rules);
 QString sha256Digest(QByteArrayView bytes);

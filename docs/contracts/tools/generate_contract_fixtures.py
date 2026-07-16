@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 import verify_contract_fixtures as verifier
+from rfc8785 import canonical_json as rfc_canonical_json, sha256_digest as rfc_sha256_digest
 
 
 CONTRACTS = Path(__file__).resolve().parents[1]
@@ -265,8 +266,7 @@ def frozen_reconcile_applicability(authority_kind: str) -> dict[str, Any]:
 
 
 def digest_json(value: Any) -> str:
-    canonical = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-    return "sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    return rfc_sha256_digest(value)
 
 
 def patch_context_document(project: dict[str, Any]) -> dict[str, Any]:
@@ -529,8 +529,7 @@ def patch_context_document(project: dict[str, Any]) -> dict[str, Any]:
         "entities":entities, "relations":relations,
         "occupiedSlots":["slot.occupied"], "freeSlots":["slot.free"],
     }
-    canonical = json.dumps(context, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-    context["contextDigest"] = "sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    context["contextDigest"] = rfc_sha256_digest(context)
     return context
 
 
@@ -798,7 +797,7 @@ def generate(contracts: Path) -> None:
         {"kind":"relation-exists","relationKind":"domain-membership","id":"membership.0"},
         {"kind":"slot-unoccupied","slotId":"slot.free"},
     ]
-    precondition_patch["preconditions"].sort(key=lambda item: json.dumps(item, ensure_ascii=False, sort_keys=True, separators=(",", ":")))
+    precondition_patch["preconditions"].sort(key=rfc_canonical_json)
     add("patch-preconditions-all", "ipcraft.patch.v1", precondition_patch, "accept", "core-semantic", None, None)
     for precondition in precondition_patch["preconditions"]:
         witness = patch_with(sources["user-command"], [copy.deepcopy(json.loads((contracts / "fixtures/valid/patch-operation-updateEntity.json").read_text())["operations"][0])])
@@ -949,6 +948,23 @@ def generate(contracts: Path) -> None:
     recovery_max["draftUndo"] = [{"before":[],"after":[copy.deepcopy(maximum_entries[0])]}]
     recovery_max["draftRedo"] = [{"before":[copy.deepcopy(maximum_entries[0])],"after":[]}]
     add("recovery-maximum", "ipcraft.recovery.v1", recovery_max, "accept", "core-semantic", None, None)
+    disconnected_recovery = copy.deepcopy(recovery_max)
+    disconnected_design = mesh_project(copy.deepcopy(valid["ipcraft.project-design.v1"]), 2, 2, True)
+    disconnected_design["topologies"][0]["structuralLinks"] = [
+        link for link in disconnected_design["topologies"][0]["structuralLinks"]
+        if link["axis"] == "horizontal"
+    ]
+    disconnected_recovery["authoritativeDesign"] = disconnected_design
+    disconnected_recovery["projectId"] = disconnected_design["id"]
+    disconnected_recovery["authoritativeDiagnostics"] = [{
+        "code": "domain.disconnected",
+        "path": "/topologies/0/domains/domain.power.default",
+        "subject": {"kind": "domain", "id": "domain.power.default"},
+    }]
+    add("recovery-disconnected-domain-working-state", "ipcraft.recovery.v1", disconnected_recovery, "accept", "core-semantic", None, None)
+    missing_disconnected_diagnostic = copy.deepcopy(disconnected_recovery)
+    missing_disconnected_diagnostic["authoritativeDiagnostics"] = []
+    add("recovery-missing-disconnected-diagnostic", "ipcraft.recovery.v1", missing_disconnected_diagnostic, "reject", "core-semantic", "recovery-binding", "recovery.binding_mismatch")
     for index, (command_type, parameters) in enumerate(safe_drafts.items(), 1):
         recovery = copy.deepcopy(valid["ipcraft.recovery.v1"])
         entry = {"draftId":f"draft.safe.{index}","sequence":1,"commandType":command_type,"parameters":parameters,"validationStatus":"unvalidated","diagnostics":[]}
@@ -1083,8 +1099,6 @@ def generate(contracts: Path) -> None:
     project_semantic_cases.append(("project-attachment-capability-mismatch", capability_mismatch, "project-invariant"))
     capability_boolean_type = copy.deepcopy(project_2x2); capability_boolean_type["interfaces"][0]["capabilities"]["coherent"] = 0
     project_semantic_cases.append(("project-attachment-capability-boolean-type-mismatch", capability_boolean_type, "project-invariant"))
-    capability_numeric_type = copy.deepcopy(project_2x2); capability_numeric_type["interfaces"][0]["capabilities"]["dataWidth"] = 128.0
-    project_semantic_cases.append(("project-attachment-capability-numeric-type-mismatch", capability_numeric_type, "project-invariant"))
     duplicate_coordinate = copy.deepcopy(project_2x2); duplicate_coordinate["topologies"][0]["routers"][1]["coordinate"] = copy.deepcopy(duplicate_coordinate["topologies"][0]["routers"][0]["coordinate"])
     project_semantic_cases.append(("project-duplicate-router-coordinate", duplicate_coordinate, "project-invariant"))
     duplicate_slot_key = copy.deepcopy(project_2x2); duplicate_slot_key["topologies"][0]["accessSlots"][1].update({"routerId":"router.0.0","templateKey":"local-0"})
@@ -1171,12 +1185,6 @@ def generate(contracts: Path) -> None:
         enum_capability = next(item for item in enum_membership["capabilities"] if item["type"] == "enum")
         enum_capability.update({"default": default, "values": values})
         semantic_cases.append((f"contract-enum-default-{suffix}", "ipcraft.interface-contract.v1", enum_membership, "contract-declaration", "contract.invariant_violation"))
-    integer_as_double = copy.deepcopy(interface_max)
-    next(item for item in integer_as_double["fields"] if item["type"] == "int")["default"] = 8.0
-    semantic_cases.append(("contract-integer-default-double-token", "ipcraft.interface-contract.v1", integer_as_double, "contract-declaration", "contract.invariant_violation"))
-    double_as_integer = copy.deepcopy(interface_max)
-    next(item for item in double_as_integer["fields"] if item["type"] == "double")["default"] = 1
-    semantic_cases.append(("contract-double-default-integer-token", "ipcraft.interface-contract.v1", double_as_integer, "contract-declaration", "contract.invariant_violation"))
     field_range = copy.deepcopy(rich_contract); field_range["fields"][0].update({"minimum":64,"maximum":32})
     semantic_cases.append(("contract-field-range", "ipcraft.interface-contract.v1", field_range, "contract-declaration", "contract.invariant_violation"))
     condition_reference = copy.deepcopy(rich_contract); condition_reference["fields"][0]["visibleWhen"] = {"field":"missingField","equals":True}
@@ -1340,7 +1348,6 @@ def generate(contracts: Path) -> None:
     semantic_cases.append(("patch-component-delete-forbidden", "ipcraft.patch.v1", component_delete, "patch-invariant", "patch.invariant_violation"))
     for suffix, value in (
         ("boolean-type", {"coherent":0,"dataWidth":128}),
-        ("numeric-type", {"coherent":False,"dataWidth":128.0}),
     ):
         precondition_type = copy.deepcopy(patch)
         precondition_type["preconditions"] = [{
@@ -1475,7 +1482,6 @@ def generate(contracts: Path) -> None:
         "contract":{"contract":{"lockId":"dep.contract.chi","role":"initiator"}},
         "role":{"contract":{"lockId":"dep.contract.axi5","role":"target"}},
         "capability":{"capabilities":{"dataWidth":64}},
-        "numeric-type":{"capabilities":{"coherent":False,"dataWidth":128.0}},
         "boolean-type":{"capabilities":{"coherent":0,"dataWidth":128}},
     }
     for suffix, replacement in attachment_attacks.items():
@@ -1624,12 +1630,8 @@ def generate(contracts: Path) -> None:
         schema_id: {tier: requirements[schema_id].get(tier, {}) for tier in ("minimal", "representative", "maximumShape")}
         for schema_id in schema_ids
     }
-    requirements_digest = "sha256:" + hashlib.sha256(
-        json.dumps(requirements, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    ).hexdigest()
-    coverage_digest = "sha256:" + hashlib.sha256(
-        json.dumps({"roots": coverage, "requirements": requirements}, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    ).hexdigest()
+    requirements_digest = rfc_sha256_digest(requirements)
+    coverage_digest = rfc_sha256_digest({"roots": coverage, "requirements": requirements})
     write_json(contracts / "fixture-coverage-v1.json", {
         "schema": "ipcraft.fixture-coverage.v1", "requirementsDigest": requirements_digest,
         "coverageDigest": coverage_digest,

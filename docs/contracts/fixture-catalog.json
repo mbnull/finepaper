@@ -74,15 +74,6 @@
       "behaviorEvidence": null
     },
     {
-      "path": "fixtures/invalid/contract-double-default-integer-token.json",
-      "schemaId": "ipcraft.interface-contract.v1",
-      "validationPhase": "core-semantic",
-      "failureBoundary": "contract-declaration",
-      "expected": "reject",
-      "errorCode": "contract.invariant_violation",
-      "behaviorEvidence": null
-    },
-    {
       "path": "fixtures/invalid/contract-duplicate-role.json",
       "schemaId": "ipcraft.interface-contract.v1",
       "validationPhase": "core-semantic",
@@ -111,15 +102,6 @@
     },
     {
       "path": "fixtures/invalid/contract-field-range.json",
-      "schemaId": "ipcraft.interface-contract.v1",
-      "validationPhase": "core-semantic",
-      "failureBoundary": "contract-declaration",
-      "expected": "reject",
-      "errorCode": "contract.invariant_violation",
-      "behaviorEvidence": null
-    },
-    {
-      "path": "fixtures/invalid/contract-integer-default-double-token.json",
       "schemaId": "ipcraft.interface-contract.v1",
       "validationPhase": "core-semantic",
       "failureBoundary": "contract-declaration",
@@ -1055,15 +1037,6 @@
       "behaviorEvidence": null
     },
     {
-      "path": "fixtures/invalid/patch-interface-attached-numeric-type-mismatch.json",
-      "schemaId": "ipcraft.patch.v1",
-      "validationPhase": "core-semantic",
-      "failureBoundary": "patch-invariant",
-      "expected": "reject",
-      "errorCode": "patch.invariant_violation",
-      "behaviorEvidence": null
-    },
-    {
       "path": "fixtures/invalid/patch-interface-attached-role-mismatch.json",
       "schemaId": "ipcraft.patch.v1",
       "validationPhase": "core-semantic",
@@ -1313,15 +1286,6 @@
       "failureBoundary": "patch-invariant",
       "expected": "reject",
       "errorCode": "patch.invariant_violation",
-      "behaviorEvidence": null
-    },
-    {
-      "path": "fixtures/invalid/patch-precondition-numeric-type-mismatch.json",
-      "schemaId": "ipcraft.patch.v1",
-      "validationPhase": "core-semantic",
-      "failureBoundary": "precondition",
-      "expected": "reject",
-      "errorCode": "patch.precondition_failed",
       "behaviorEvidence": null
     },
     {
@@ -1695,15 +1659,6 @@
     },
     {
       "path": "fixtures/invalid/project-attachment-capability-mismatch.json",
-      "schemaId": "ipcraft.project-design.v1",
-      "validationPhase": "core-semantic",
-      "failureBoundary": "project-invariant",
-      "expected": "reject",
-      "errorCode": "project.invariant_violation",
-      "behaviorEvidence": null
-    },
-    {
-      "path": "fixtures/invalid/project-attachment-capability-numeric-type-mismatch.json",
       "schemaId": "ipcraft.project-design.v1",
       "validationPhase": "core-semantic",
       "failureBoundary": "project-invariant",
@@ -2132,6 +2087,15 @@
       "failureBoundary": "generic-structure",
       "expected": "reject",
       "errorCode": "contract.schema_invalid",
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/invalid/recovery-missing-disconnected-diagnostic.json",
+      "schemaId": "ipcraft.recovery.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": "recovery-binding",
+      "expected": "reject",
+      "errorCode": "recovery.binding_mismatch",
       "behaviorEvidence": null
     },
     {
@@ -3073,6 +3037,15 @@
     {
       "path": "fixtures/valid/project-provider-authority.json",
       "schemaId": "ipcraft.project-design.v1",
+      "validationPhase": "core-semantic",
+      "failureBoundary": null,
+      "expected": "accept",
+      "errorCode": null,
+      "behaviorEvidence": null
+    },
+    {
+      "path": "fixtures/valid/recovery-disconnected-domain-working-state.json",
+      "schemaId": "ipcraft.recovery.v1",
       "validationPhase": "core-semantic",
       "failureBoundary": null,
       "expected": "accept",

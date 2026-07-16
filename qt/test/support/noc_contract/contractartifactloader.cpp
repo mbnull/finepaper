@@ -1,4 +1,5 @@
 #include "contractartifactloader.h"
+#include "strictjson.h"
 
 #include <QDir>
 #include <QFile>
@@ -6,7 +7,6 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonParseError>
-#include <QSet>
 
 #include <stdexcept>
 
@@ -46,117 +46,6 @@ QString artifactPath(const QString &relativePath) {
     return canonicalPath;
 }
 
-class DuplicateKeyScanner final {
-public:
-    explicit DuplicateKeyScanner(QByteArrayView bytes) : m_bytes(bytes) {}
-
-    bool hasDuplicateKey() {
-        skipWhitespace();
-        scanValue();
-        skipWhitespace();
-        return m_duplicate;
-    }
-
-private:
-    void skipWhitespace() {
-        while (m_position < m_bytes.size()) {
-            const char character = m_bytes[m_position];
-            if (character != ' ' && character != '\t' && character != '\r' &&
-                character != '\n') {
-                return;
-            }
-            ++m_position;
-        }
-    }
-
-    void scanValue() {
-        skipWhitespace();
-        if (m_position >= m_bytes.size()) {
-            return;
-        }
-        switch (m_bytes[m_position]) {
-        case '{':
-            scanObject();
-            return;
-        case '[':
-            scanArray();
-            return;
-        case '"':
-            scanString();
-            return;
-        default:
-            while (m_position < m_bytes.size() &&
-                   QByteArrayView(",]} \t\r\n").indexOf(m_bytes[m_position]) < 0) {
-                ++m_position;
-            }
-        }
-    }
-
-    QString scanString() {
-        const qsizetype begin = m_position++;
-        bool escaped = false;
-        while (m_position < m_bytes.size()) {
-            const char character = m_bytes[m_position++];
-            if (escaped) {
-                escaped = false;
-            } else if (character == '\\') {
-                escaped = true;
-            } else if (character == '"') {
-                const QByteArray token(m_bytes.sliced(begin, m_position - begin));
-                const auto parsed = QJsonDocument::fromJson("[" + token + "]");
-                return parsed.array().first().toString();
-            }
-        }
-        return {};
-    }
-
-    void scanObject() {
-        ++m_position;
-        QSet<QString> keys;
-        skipWhitespace();
-        while (m_position < m_bytes.size() && m_bytes[m_position] != '}') {
-            const QString key = scanString();
-            if (keys.contains(key)) {
-                m_duplicate = true;
-            }
-            keys.insert(key);
-            skipWhitespace();
-            if (m_position < m_bytes.size() && m_bytes[m_position] == ':') {
-                ++m_position;
-            }
-            scanValue();
-            skipWhitespace();
-            if (m_position < m_bytes.size() && m_bytes[m_position] == ',') {
-                ++m_position;
-                skipWhitespace();
-            }
-        }
-        if (m_position < m_bytes.size()) {
-            ++m_position;
-        }
-    }
-
-    void scanArray() {
-        ++m_position;
-        skipWhitespace();
-        while (m_position < m_bytes.size() && m_bytes[m_position] != ']') {
-            scanValue();
-            skipWhitespace();
-            if (m_position < m_bytes.size() && m_bytes[m_position] == ',') {
-                ++m_position;
-                skipWhitespace();
-            }
-        }
-        if (m_position < m_bytes.size()) {
-            ++m_position;
-        }
-    }
-
-    QByteArrayView m_bytes;
-    qsizetype m_position = 0;
-    bool m_duplicate = false;
-};
-
 QJsonDocument loadDocument(const QString &relativePath) {
     const QByteArray bytes = ContractArtifactLoader::loadBytes(relativePath);
     QJsonParseError error;
@@ -167,8 +56,9 @@ QJsonDocument loadDocument(const QString &relativePath) {
                  .arg(error.offset)
                  .arg(error.errorString()));
     }
-    if (DuplicateKeyScanner(bytes).hasDuplicateKey()) {
-        fail(relativePath, QStringLiteral("duplicate JSON object key"));
+    QString strictError;
+    if (!noc_contract::validateStrictJson(bytes, &strictError)) {
+        fail(relativePath, strictError);
     }
     return document;
 }

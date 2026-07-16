@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import argparse
 import copy
-import hashlib
 import json
 from pathlib import Path
+
+from rfc8785 import canonical_json as _rfc8785_json, sha256_digest as _rfc8785_digest
 
 ROOT = Path(__file__).resolve().parents[3]
 VECTORS = ROOT / "docs/contracts/vectors"
@@ -19,11 +20,11 @@ def dump(path: Path, value: object) -> None:
 
 
 def cj(value: object) -> str:
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return _rfc8785_json(value)
 
 
 def digest(value: object) -> str:
-    return "sha256:" + hashlib.sha256(cj(value).encode()).hexdigest()
+    return _rfc8785_digest(value)
 
 
 def lock(d: str = D["a"], version: str = "1.0.0", compat: str = "1") -> dict:

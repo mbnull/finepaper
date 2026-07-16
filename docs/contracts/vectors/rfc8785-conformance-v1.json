@@ -1,0 +1,17 @@
+{
+  "schema": "ipcraft.rfc8785-conformance.v1",
+  "cases": [
+    {"id": "one-point-zero", "input": "1.0", "expected": "1"},
+    {"id": "negative-zero", "input": "-0.0", "expected": "0"},
+    {"id": "small-exponent", "input": "1e-7", "expected": "1e-7"},
+    {"id": "fixed-lower-bound", "input": "1e-6", "expected": "0.000001"},
+    {"id": "fixed-upper-bound", "input": "1e20", "expected": "100000000000000000000"},
+    {"id": "exponent-upper-bound", "input": "1e21", "expected": "1e+21"},
+    {"id": "shortest-binary64", "input": "1.2345678901234567", "expected": "1.2345678901234567"},
+    {"id": "utf16-property-order", "input": "{\"\\ue000\":1,\"😀\":2}", "expected": "{\"😀\":2,\"\":1}"},
+    {"id": "duplicate-key-rejected", "input": "{\"a\":1,\"a\":2}", "expectedError": "duplicate"},
+    {"id": "escaped-duplicate-key-rejected", "input": "{\"a\":1,\"\\u0061\":2}", "expectedError": "duplicate"},
+    {"id": "lone-surrogate-rejected", "input": "\"\\ud800\"", "expectedError": "surrogate"},
+    {"id": "inexact-integer-rejected", "input": "9007199254740993", "expectedError": "binary64"}
+  ]
+}

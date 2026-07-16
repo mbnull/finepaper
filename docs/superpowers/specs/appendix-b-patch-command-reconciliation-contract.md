@@ -1,6 +1,6 @@
 # Appendix B — Patch, Command, Ownership, and Reconciliation Contract
 
-**Normative status:** V1 Revision 4 baseline; Core wire contract freezes at Gate 0.
+**Normative status:** V1 Revision 5 Core contract; frozen by the Gate 0 Revision 5 record.
 **Normative schemas:** `ipcraft.patch.v1`, `ipcraft.command-result.v1`
 **Rule:** UI uses typed commands. Generic Patch is internal and is also the only state-change payload accepted from an Extension Provider.
 
@@ -456,6 +456,7 @@ Recovery schema: `ipcraft.recovery.v1`.
   "savedProjectDigest": "sha256:...",
   "updatedAt": "2026-07-13T00:00:00Z",
   "authoritativeDesign": {},
+  "authoritativeDiagnostics": [],
   "sessionRevision": 12,
   "derivedStateRevision": 7,
   "pendingTopologyGroup": null,
@@ -486,7 +487,12 @@ V1 has no cross-entry Draft local-reference system. `CreateInterfaceFromTemplate
 
 Rules:
 
-- `authoritativeDesign` is the last materialized ProjectDesign; pending topology intent is stored only in `pendingTopologyGroup`.
+- `authoritativeDesign` is the last materialized ProjectDesign and is evaluated
+  as `ProjectDesignWellFormed` on recovery. `authoritativeDiagnostics` is the
+  session-owned structured diagnostic projection needed to explain a working
+  state such as `domain.disconnected`; it is not part of ProjectDesign and is
+  never treated as a second authority. Pending topology intent is stored only
+  in `pendingTopologyGroup`.
 - Recovery serializes `pendingTopologyGroup.candidate` as JSON `null`; validated candidates, impact confirmations, provisional allocation plans, and candidate digests are never trusted across process lifetime.
 - A recovered `default-engine-migration` Group stores the shared complete Appendix F `migration` context with exact current and target locks; no parallel partial digest/version fields exist. A `topology-edit` Group forbids `migration`.
 - Recovery persists Draft Overlay and its local undo/redo because drafts are not formal commands. It does not persist formal undo/redo history, Provider process state, active request/process IDs, DRC/Generate jobs, or staging paths.

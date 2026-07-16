@@ -8,11 +8,12 @@ from __future__ import annotations
 
 import argparse
 import copy
-import hashlib
 import json
 import random
 from pathlib import Path
 from typing import Any
+
+from rfc8785 import canonical_json as _rfc8785_json, loads as _rfc8785_loads, sha256_digest as _rfc8785_digest
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -27,11 +28,11 @@ ORDER_VALUES = ['alpha', 'mu', 'zeta']
 
 
 def canonical_json(value: Any) -> str:
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
+    return _rfc8785_json(value)
 
 
 def digest(value: Any) -> str:
-    return 'sha256:' + hashlib.sha256(canonical_json(value).encode('utf-8')).hexdigest()
+    return _rfc8785_digest(value)
 
 
 def pointer(document: Any, value: str) -> Any:
@@ -45,11 +46,11 @@ def pointer(document: Any, value: str) -> Any:
 
 class SchemaWorld:
     def __init__(self) -> None:
-        catalog = json.loads((CONTRACTS / 'schema-catalog.json').read_text())
+        catalog = _rfc8785_loads((CONTRACTS / 'schema-catalog.json').read_bytes())
         self.docs = {}
         self.files = {}
         for entry in catalog['items']:
-            doc = json.loads((CONTRACTS / entry['path']).read_text())
+            doc = _rfc8785_loads((CONTRACTS / entry['path']).read_bytes())
             self.docs[entry['id']] = doc
             self.files[Path(entry['path']).name] = entry['id']
 
@@ -603,7 +604,7 @@ def make_candidate_catalog(world: SchemaWorld) -> dict[str, Any]:
     cases.append(candidate_case(world, 'localized-impact-presentation-excluded', [a, b], 'equal', ['candidate.impactReport.impacts'], ['impactPresentation']))
 
     a = copy.deepcopy(base)
-    b = json.loads(json.dumps(base, ensure_ascii=False, sort_keys=True))
+    b = {key: base[key] for key in reversed(list(base))}
     cases.append(candidate_case(world, 'object-key-order-permutation', [a, b], 'equal', ['entire candidate projection']))
 
     a, b = copy.deepcopy(base), copy.deepcopy(base)

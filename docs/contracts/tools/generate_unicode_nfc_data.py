@@ -9,6 +9,8 @@ import json
 import re
 from pathlib import Path
 
+from rfc8785 import sha256_digest as rfc_sha256_digest
+
 
 UNICODE_VERSION = "17.0.0"
 SOURCE_SHA256 = {
@@ -20,7 +22,7 @@ HEX_RE = re.compile(r"^[0-9A-F]{4,6}$")
 
 
 def digest_json(value: object) -> str:
-    return hashlib.sha256(json.dumps(value, ensure_ascii=True, separators=(",", ":")).encode()).hexdigest()
+    return rfc_sha256_digest(value).removeprefix("sha256:")
 
 
 def checked_source(path: Path, name: str) -> bytes:

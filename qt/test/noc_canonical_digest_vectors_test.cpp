@@ -7,41 +7,8 @@
 #include <QJsonObject>
 
 #include <iostream>
-#include <cmath>
 
 namespace {
-
-void requireSafeIntegerJsonDomain(const QJsonValue &value, const QString &location) {
-    if (value.isDouble()) {
-        const double number = value.toDouble();
-        requireContract(std::isfinite(number) && std::trunc(number) == number &&
-                            std::abs(number) <= 9007199254740991.0,
-                        location + QStringLiteral(": vector number is outside Qt safe-integer domain"));
-    } else if (value.isArray()) {
-        const auto array = value.toArray();
-        for (qsizetype index = 0; index < array.size(); ++index) {
-            requireSafeIntegerJsonDomain(array.at(index),
-                                         location + QLatin1Char('/') + QString::number(index));
-        }
-    } else if (value.isObject()) {
-        const auto object = value.toObject();
-        for (auto iterator = object.begin(); iterator != object.end(); ++iterator) {
-            requireSafeIntegerJsonDomain(iterator.value(),
-                                         location + QLatin1Char('/') + iterator.key());
-        }
-    }
-}
-
-void verifyNoVectorIsSilentlyOutsideQtNumericDomain() {
-    for (const QString &path : {
-             QStringLiteral("docs/contracts/vectors/core-canonical-projection-v1.json"),
-             QStringLiteral("docs/contracts/vectors/core-set-permutation-v1.json"),
-             QStringLiteral("docs/contracts/vectors/candidate-local-ref-v1.json"),
-             QStringLiteral("docs/contracts/vectors/default-engine-lock-v1.json"),
-             QStringLiteral("docs/contracts/vectors/host-side-effects-v1.json")}) {
-        requireSafeIntegerJsonDomain(ContractArtifactLoader::loadObject(path), path);
-    }
-}
 
 void verifyCollectionCatalogInCpp() {
     const auto rules = ContractArtifactLoader::loadObject(
@@ -49,9 +16,9 @@ void verifyCollectionCatalogInCpp() {
     const auto casesDocument = ContractArtifactLoader::loadObject(
         QStringLiteral("docs/contracts/vectors/core-set-permutation-v1.json"));
     const auto cases = casesDocument.value(QStringLiteral("cases")).toArray();
-    requireContract(rules.value(QStringLiteral("canonicalCollections")).toArray().size() == 99,
-                    QStringLiteral("exactly 99 physical canonical rules are frozen"));
-    requireContract(cases.size() == 99,
+    requireContract(rules.value(QStringLiteral("canonicalCollections")).toArray().size() == 100,
+                    QStringLiteral("exactly 100 physical canonical rules are frozen"));
+    requireContract(cases.size() == 100,
                     QStringLiteral("every physical rule needs one collection case"));
 
     QStringList ids;
@@ -79,9 +46,8 @@ void verifyCollectionCatalogInCpp() {
     requireContract(equal > 0 && different > 0 && invalid > 0,
                     QStringLiteral("set, ordered, and derived-order outcomes must all be covered"));
 
-    // Exercise the frozen Qt safe-integer domain directly. The complete catalog,
-    // including nested projections and any Decimal cases outside Qt's lossless
-    // domain, is checked by the pinned independent Python verifier below.
+    // Exercise the complete catalog through the strict Qt canonicalizer. The
+    // independent Python verifier supplies the cross-language implementation.
     const auto first = cases.first().toObject();
     const auto ruleSet = CanonicalRuleSet::fromCatalog(
         rules, {{QString(), first.value(QStringLiteral("schemaId")).toString(),
@@ -98,14 +64,14 @@ void verifyCollectionCatalogInCpp() {
 void verifyFullCatalogWithAuthoritativeVerifier() {
     const QString output = runContractPythonVerifier(
         QStringLiteral("docs/contracts/tools/verify_canonical_vectors.py"), {},
-        QStringLiteral("canonical vector verification passed: 134 digests, 1014 collection items, "
+                       QStringLiteral("canonical vector verification passed: 136 digests, 1018 collection items, "
                        "25 valid candidate/model inputs, 4 schema negatives, 4 semantic negatives"));
     requireContract(output.count(QStringLiteral("canonical vector verification passed:")) == 1,
                     QStringLiteral("canonical verifier must emit exactly one result summary"));
     runContractPythonVerifier(
         QStringLiteral("docs/contracts/tools/verify_canonical_rules.py"), {},
-        QStringLiteral("canonical rule verification passed: 99 Core array locations, "
-                       "10 deferred extension display paths, 99 collection cases, 21 candidate cases"));
+        QStringLiteral("canonical rule verification passed: 100 Core array locations, "
+                       "10 deferred extension display paths, 100 collection cases, 21 candidate cases"));
 }
 
 } // namespace
@@ -113,7 +79,6 @@ void verifyFullCatalogWithAuthoritativeVerifier() {
 int main(int argc, char **argv) {
     QCoreApplication app(argc, argv);
     try {
-        verifyNoVectorIsSilentlyOutsideQtNumericDomain();
         verifyCollectionCatalogInCpp();
         verifyFullCatalogWithAuthoritativeVerifier();
         std::cout << "noc_canonical_digest_vectors_test passed\n";

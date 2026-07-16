@@ -1,6 +1,6 @@
 # Appendix C — NoC Package, Contract, Provider, Tool, and Diagnostic Contracts
 
-**Normative status:** V1 Revision 4 baseline; Core schemas freeze at Gate 0 and Extension ABI freezes at Gate D.
+**Normative status:** V1 Revision 5 Core contract; Core schemas frozen by the Gate 0 Revision 5 record. Extension ABI freezes at Gate D.
 
 ## C1. Normative Schema IDs
 

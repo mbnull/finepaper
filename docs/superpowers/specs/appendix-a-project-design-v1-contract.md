@@ -1,6 +1,6 @@
 # Appendix A — ProjectDesign V1 Contract
 
-**Normative status:** V1 Revision 5 correction in progress; Core schema freezes only after the Revision 5 Gate 0 record.
+**Normative status:** V1 Revision 5 Core contract; frozen by the Gate 0 Revision 5 record.
 **Root schema:** `ipcraft.project-design.v1`
 **Required profile:** `ipcraft.profile.noc`, version `1`
 
@@ -20,6 +20,11 @@
   and canonicalize identically. Exact large integers or exact decimals that
   cannot be represented by the intended binary64 value MUST be strings.
 - Unknown enum values in core fields are errors. Unknown namespaced extension schemas are preserved as opaque content.
+- Schema `$id` values and relative `$ref` basenames are resolved through the
+  machine-readable `docs/contracts/schema-catalog.json` registry. The catalog
+  maps each logical schema ID to one regular file and defines the retrieval URI
+  used by every implementation; a validator must not rely on its process
+  working directory or an implicit filesystem basename search.
 - Before digesting, every canonical collection follows the exhaustive per-path table in Appendix F. Undirected Link endpoints are stored/hash-normalized by Appendix F's object-reference comparison token. Only arrays explicitly declared ordered retain source order.
 
 ## A2. Root Object

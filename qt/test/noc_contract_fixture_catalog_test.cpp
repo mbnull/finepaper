@@ -33,8 +33,8 @@ void verifyCatalogTotalityInCpp() {
                         QStringLiteral("ipcraft.fixture-catalog.v1"),
                     QStringLiteral("fixture catalog identity mismatch"));
     const auto items = catalog.value(QStringLiteral("items")).toArray();
-    requireContract(items.size() == 360,
-                    QStringLiteral("fixture catalog must contain exactly 360 fixtures"));
+    requireContract(items.size() == 357,
+                    QStringLiteral("fixture catalog must contain exactly 357 fixtures"));
 
     QStringList catalogPaths;
     int accept = 0;
@@ -48,8 +48,8 @@ void verifyCatalogTotalityInCpp() {
         reject += expected == QStringLiteral("reject");
         ContractArtifactLoader::loadObject(QStringLiteral("docs/contracts/") + path);
     }
-    requireContract(accept == 98 && reject == 262,
-                    QStringLiteral("fixture accept/reject totals must be 98/262"));
+    requireContract(accept == 99 && reject == 258,
+                    QStringLiteral("fixture accept/reject totals must be 99/258"));
     requireContract(catalogPaths == sortedUniqueStrings(catalogPaths,
                                                         QStringLiteral("fixture catalog paths")),
                     QStringLiteral("fixture catalog paths must be sorted"));
@@ -60,11 +60,11 @@ void verifyCatalogTotalityInCpp() {
 void verifyFixtureSemanticsWithPinnedTools() {
     runContractPythonVerifier(
         QStringLiteral("docs/contracts/tools/verify_fixture_catalog.py"), {},
-        QStringLiteral("fixture catalog verification passed: 360 fixtures, 19 schemas, 75 error codes"));
+        QStringLiteral("fixture catalog verification passed: 357 fixtures, 19 schemas, 75 error codes"));
     runContractPythonVerifier(
         QStringLiteral("docs/contracts/tools/verify_contract_fixtures.py"), {},
-        QStringLiteral("contract fixture verification passed: 98 valid, 262 invalid; "
-                       "41 schema-phase, 221 core-semantic; 18 standalone schema roots"));
+        QStringLiteral("contract fixture verification passed: 99 valid, 258 invalid; "
+                       "41 schema-phase, 217 core-semantic; 18 standalone schema roots"));
     QDirIterator cacheIterator(ContractArtifactLoader::repositoryRoot(),
                                QDir::Dirs | QDir::Files | QDir::NoDotAndDotDot,
                                QDirIterator::Subdirectories);

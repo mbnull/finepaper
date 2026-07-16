@@ -122,6 +122,7 @@
     "views": [],
     "extensions": []
   },
+  "authoritativeDiagnostics": [],
   "sessionRevision": 0,
   "derivedStateRevision": 0,
   "pendingTopologyGroup": {

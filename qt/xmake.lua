@@ -124,6 +124,7 @@ add_noc_contract_test_target("noc_review_bundle_completeness_test")
 add_noc_contract_test_target("noc_core_canonical_models_schema_test")
 add_noc_contract_test_target("noc_default_engine_lock_contract_test")
 add_noc_contract_test_target("noc_host_side_effect_contract_test")
+add_noc_contract_test_target("noc_strict_json_test")
 
 add_qt_test_target("graph_test", "test/graph_test.cpp", {
     "src/connection/connectionruleservice.cpp",

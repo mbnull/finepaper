@@ -1,11 +1,11 @@
 {
   "schema": "ipcraft.core-freeze-inputs.v1",
-  "normativeRevision": 4,
+  "normativeRevision": 5,
   "selfExclusion": "docs/contracts/freeze-inputs.json is intentionally omitted to avoid recursive self-digest",
   "files": [
     {
       "path": "CONTEXT.md",
-      "sha256": "sha256:c57a53bbcb2aa018cc259b6792e5ec5c0ce94e450ad7fe5c58e1075287c62a5b",
+      "sha256": "sha256:b1d244949fbec7a86cc540f31ea699b25ad16589dba5d87b51b29e930b484ffd",
       "role": "normative-artifact"
     },
     {
@@ -255,7 +255,12 @@
     },
     {
       "path": "docs/contracts/README.md",
-      "sha256": "sha256:eddc59af50b176969d632ffab180ce0174a39322166f71413a183f18c272833a",
+      "sha256": "sha256:d63f35b081c4f09bbb82f6a4fd5011e0f0058bda2f492cf7928f11c46a9b55ad",
+      "role": "normative-artifact"
+    },
+    {
+      "path": "docs/contracts/UNFREEZE-REV4-ADR.md",
+      "sha256": "sha256:370cf72fcfbc9c56e57aace6a0cf9e3c74975de3ed7701c426cedcc333bd1e74",
       "role": "normative-artifact"
     },
     {
@@ -265,7 +270,7 @@
     },
     {
       "path": "docs/contracts/fixture-catalog.json",
-      "sha256": "sha256:62c5aee95e2e7025231dcbf504ec2767f835e92ea422ec98f64f8fed93504a6b",
+      "sha256": "sha256:d397625da499fa96d525d02fafc90b381479addd6d2f8c2cee9ab85a667cdd4f",
       "role": "normative-artifact"
     },
     {
@@ -275,7 +280,7 @@
     },
     {
       "path": "docs/contracts/fixture-error-policy-v1.json",
-      "sha256": "sha256:f2c541580f0fce6d3c8f22c647d95bf590378406daf8def1f5add501532f6352",
+      "sha256": "sha256:d11a018ad2ddba78ff2cc25f9e5561f2642bc97e6a6b9093c44458423b7af85e",
       "role": "normative-artifact"
     },
     {
@@ -319,11 +324,6 @@
       "role": "generated-fixture"
     },
     {
-      "path": "docs/contracts/fixtures/invalid/contract-double-default-integer-token.json",
-      "sha256": "sha256:e55f4ce55050241b0ee3689859a3ff3b2d0c00d176895489e22f957920ec9aa0",
-      "role": "generated-fixture"
-    },
-    {
       "path": "docs/contracts/fixtures/invalid/contract-duplicate-role.json",
       "sha256": "sha256:5796b81658811e742513ac21081f781d256b2074cbeb221a26d0b5ddd90c00e9",
       "role": "generated-fixture"
@@ -341,11 +341,6 @@
     {
       "path": "docs/contracts/fixtures/invalid/contract-field-range.json",
       "sha256": "sha256:137826e74cf7b4cab735bd112e04facf09c70044960548590a7286b64640d08a",
-      "role": "generated-fixture"
-    },
-    {
-      "path": "docs/contracts/fixtures/invalid/contract-integer-default-double-token.json",
-      "sha256": "sha256:e62b1a94277e820c839dff21f3da21ac7997ed2a8b5a20a75c11573ff8c5ba43",
       "role": "generated-fixture"
     },
     {
@@ -864,11 +859,6 @@
       "role": "generated-fixture"
     },
     {
-      "path": "docs/contracts/fixtures/invalid/patch-interface-attached-numeric-type-mismatch.json",
-      "sha256": "sha256:7ddb26de2ebf9fcbb83f2777b1186ace569673d1b2fda53ff96a3d4cec2cb2ff",
-      "role": "generated-fixture"
-    },
-    {
       "path": "docs/contracts/fixtures/invalid/patch-interface-attached-role-mismatch.json",
       "sha256": "sha256:7defbfbe1c906ff1326cf291fa40545e530aced9255d77955d94878763fa7537",
       "role": "generated-fixture"
@@ -1006,11 +996,6 @@
     {
       "path": "docs/contracts/fixtures/invalid/patch-precondition-noncanonical.json",
       "sha256": "sha256:8ebcf3acc805decef510abdc956f10d11fe42491ec36946ed8c8c80562dd92d2",
-      "role": "generated-fixture"
-    },
-    {
-      "path": "docs/contracts/fixtures/invalid/patch-precondition-numeric-type-mismatch.json",
-      "sha256": "sha256:ed4f68feeb92e65b9905a1b1ed96170f46e277f64dbe515d82499598f6da50fc",
       "role": "generated-fixture"
     },
     {
@@ -1224,11 +1209,6 @@
       "role": "generated-fixture"
     },
     {
-      "path": "docs/contracts/fixtures/invalid/project-attachment-capability-numeric-type-mismatch.json",
-      "sha256": "sha256:5ec547e9cac3abf6ef3b90fb15e938744837a27a28592a9b22c8a6b313be9b5f",
-      "role": "generated-fixture"
-    },
-    {
       "path": "docs/contracts/fixtures/invalid/project-attachment-contract-mismatch.json",
       "sha256": "sha256:d52910a30b7a11eec61c2928cc9e38fda22df7722caa290c5c89550786408a41",
       "role": "generated-fixture"
@@ -1435,32 +1415,37 @@
     },
     {
       "path": "docs/contracts/fixtures/invalid/recovery-binding.json",
-      "sha256": "sha256:1c955505906399f599347becdf68a998c3949ec6ca83f788480b45b2660fb556",
+      "sha256": "sha256:09a94663705b5c21f1d8cfdffb89093723704447bba5c5a76cb184f14282b9f7",
       "role": "generated-fixture"
     },
     {
       "path": "docs/contracts/fixtures/invalid/recovery-draft-forbidden-ArbitraryCommand.json",
-      "sha256": "sha256:ef57d5ef472ad8379cfb74a729a34e4fa43d903b49ac7e2f1d8f210d101b0e04",
+      "sha256": "sha256:38b1b4ac9550956f1372c5c438c58356b1a098b6ea1418b7543013c8b6417ce7",
       "role": "generated-fixture"
     },
     {
       "path": "docs/contracts/fixtures/invalid/recovery-draft-forbidden-AttachInterface.json",
-      "sha256": "sha256:d71429e2e05e6ffb990825e83fd3f4c47da13d255d2ec56a2f62402930de0033",
+      "sha256": "sha256:6913a896b9ba70b46b4c49568099e03de5a46c3a63d3d530cccf73e3ae4f3324",
       "role": "generated-fixture"
     },
     {
       "path": "docs/contracts/fixtures/invalid/recovery-draft-forbidden-DeleteInterface.json",
-      "sha256": "sha256:7ed0c8a0c35de9f6906d96647b03fa8d545cc219d50d88b3546a1f2e467fb186",
+      "sha256": "sha256:7a9cec72693452e73854b9eb3f830309e7e67c5749b9bafb5e21d19c0982e5de",
       "role": "generated-fixture"
     },
     {
       "path": "docs/contracts/fixtures/invalid/recovery-draft-forbidden-MoveRoutersBetweenDomains.json",
-      "sha256": "sha256:d537586d1f473bc5fda7d035d33f138a895d35b67b5d548c7cbf6d5d21734a45",
+      "sha256": "sha256:3199a9b5becd9d4e424fe1f2c1e2b638891da9882ada5f9aa3b25841631a05c8",
       "role": "generated-fixture"
     },
     {
       "path": "docs/contracts/fixtures/invalid/recovery-draft-parameters.json",
-      "sha256": "sha256:63f38c2fdbbc05c926d406b4f1dee1ae74c97746b468968067255146c3c8e1ce",
+      "sha256": "sha256:bf676476bf2559d78c7104a10785ab97e494b5875549e9b27cea5f22e5fa8466",
+      "role": "generated-fixture"
+    },
+    {
+      "path": "docs/contracts/fixtures/invalid/recovery-missing-disconnected-diagnostic.json",
+      "sha256": "sha256:8122841fae12ec11f6aa72e2280e41400d151387f71483ccff4f0df1110aaa2e",
       "role": "generated-fixture"
     },
     {
@@ -1535,7 +1520,7 @@
     },
     {
       "path": "docs/contracts/fixtures/invalid/schema-missing-recovery.json",
-      "sha256": "sha256:ea2f7fe514071b3fedc268b428fa243661cd022e870ff915e701b0f2dc85623e",
+      "sha256": "sha256:ccf82ed71d707b43996bc8bc0af4b6e4044cf65af68a49667eff529d67bd4a0f",
       "role": "generated-fixture"
     },
     {
@@ -1989,33 +1974,38 @@
       "role": "generated-fixture"
     },
     {
+      "path": "docs/contracts/fixtures/valid/recovery-disconnected-domain-working-state.json",
+      "sha256": "sha256:213299c900f1fcd71d38fbc8d6ca78f6ffd075e03a8d24345798e9a17e10da36",
+      "role": "generated-fixture"
+    },
+    {
       "path": "docs/contracts/fixtures/valid/recovery-maximum.json",
-      "sha256": "sha256:c07a24455d593d40ffbc076f2ad6475b25a4f04fb9170af0a3490330e56061f5",
+      "sha256": "sha256:047d37e5b0cc425ce737c65d32eb41c1e443df54342d1f77393e6f19b021813c",
       "role": "generated-fixture"
     },
     {
       "path": "docs/contracts/fixtures/valid/recovery-safe-CreateInterfaceFromTemplate.json",
-      "sha256": "sha256:4914f72e5a1c8591287b07ad118a199548b9c8c900a0a703f498c671e46ffb27",
+      "sha256": "sha256:ba5b77588e569cc1d687699438abb06b10ee0168386b7ed85859c4229a6afa00",
       "role": "generated-fixture"
     },
     {
       "path": "docs/contracts/fixtures/valid/recovery-safe-RenameDesign.json",
-      "sha256": "sha256:c065d7fe62dfff74bd381ca34df10acad722f4e040330b4533579471725991a8",
+      "sha256": "sha256:d13ae2bd37721053e5fad9d7f546c3b185a80416efb2418ff96f276d0a8f646e",
       "role": "generated-fixture"
     },
     {
       "path": "docs/contracts/fixtures/valid/recovery-safe-RenameDomain.json",
-      "sha256": "sha256:7aa5ee2b5f709b4f95df83de902701a598ec5478017a46110ae1a0b84a6c306f",
+      "sha256": "sha256:2b00a9418408b8451208494ce836673f9683df227f48f5e9a0388f00197de7bd",
       "role": "generated-fixture"
     },
     {
       "path": "docs/contracts/fixtures/valid/recovery-safe-RenameInterface.json",
-      "sha256": "sha256:f4d822cb15901161903137707d29e2041f779bb91c0fd79275eb83c4d8c87d7f",
+      "sha256": "sha256:fed22cd4a46086cd87a1b7a9fb763d573915576a741a0e734dd891fe9698ad7e",
       "role": "generated-fixture"
     },
     {
       "path": "docs/contracts/fixtures/valid/recovery.json",
-      "sha256": "sha256:28edbd26718775aadd49c853fc012e0a6adc7e597d5b2eccb98b4971b48aab5f",
+      "sha256": "sha256:2f7b459d57e6f287076d1fa5c8a158476541b2dbbe0dfcf6fd311c23b68dfcdb",
       "role": "generated-fixture"
     },
     {
@@ -2165,7 +2155,7 @@
     },
     {
       "path": "docs/contracts/schemas/ipcraft.recovery.v1.schema.json",
-      "sha256": "sha256:9b053bab46c5bdb64a4e5189b015397c834a58f4bba3cac713a9caa6904d4de9",
+      "sha256": "sha256:11a9f275fd2023fe2566b89ab28e1104d50e27e01536609cf48050e525e7b8f2",
       "role": "normative-artifact"
     },
     {
@@ -2185,17 +2175,17 @@
     },
     {
       "path": "docs/contracts/tools/generate_canonical_vectors.py",
-      "sha256": "sha256:583276197a96d548e8026f4baf9f29643eb65456631129c83019c9e4bf377abe",
+      "sha256": "sha256:a0e2e17661ae1d4be708afe21e102882235e67936af8105954d125e6dc0874e5",
       "role": "authoring-tool"
     },
     {
       "path": "docs/contracts/tools/generate_contract_fixtures.py",
-      "sha256": "sha256:fcfe95cde0e4af89b0e8e835a0e442cc974552009ef60052829b6fbba40e65a3",
+      "sha256": "sha256:5307ddd6d28bc29c24f9c8e69826914205ed0975153eb287144ba5f3b6c3eb8d",
       "role": "authoring-tool"
     },
     {
       "path": "docs/contracts/tools/generate_engine_side_effect_vectors.py",
-      "sha256": "sha256:88c693227f00654cd93e46fbbd749a8216b722d7ce23cb2d5e903c04265ef35a",
+      "sha256": "sha256:09d4f5e0a4fc142a230b839409fa2501d807311d70b51b3707df8b6f1bd61520",
       "role": "authoring-tool"
     },
     {
@@ -2205,27 +2195,37 @@
     },
     {
       "path": "docs/contracts/tools/generate_freeze_inputs.py",
-      "sha256": "sha256:3c745288a76bf7cbf72633769e8390bc5924f37a89208197841747129d1bfb16",
+      "sha256": "sha256:343e2ef1ead0108f99e725b7b3336c63cb38f2eb8e3f81f34a48830ae2978dc8",
       "role": "authoring-tool"
     },
     {
       "path": "docs/contracts/tools/generate_unicode_nfc_data.py",
-      "sha256": "sha256:bf088ab57a611ba493f3ba1c783c2effc8f021996ce20ca66bd00d325bdf6347",
+      "sha256": "sha256:6fe5abdf5145f9cf4b1c9b2812b6373f69e518b378eb261f1bb85de0510aa9da",
       "role": "authoring-tool"
     },
     {
       "path": "docs/contracts/tools/generate_unicode_simple_case_folding.py",
-      "sha256": "sha256:2618d1dfc83d2d1adee4ff5ec0bea7f297ecb7929a5929c5b99993e711fc7577",
+      "sha256": "sha256:61869331ac9887e8695d867ebcadd44e527d2f9bf3ea1cab306c440b1f59f32e",
+      "role": "authoring-tool"
+    },
+    {
+      "path": "docs/contracts/tools/rfc8785.py",
+      "sha256": "sha256:fdf585cf560abeb1cec15dc45e28970611713ffe61bff18e3fcac88785b21154",
       "role": "authoring-tool"
     },
     {
       "path": "docs/contracts/tools/test_contract_fixtures.py",
-      "sha256": "sha256:749966e9bf8dcb80966d6514e59cb2c532a1d29f6f23651402becbcc4ab5532c",
+      "sha256": "sha256:46bd8ad90de08c819b3a0870a14f607fd160951c187529e989f199720943f8f9",
       "role": "authoring-tool"
     },
     {
       "path": "docs/contracts/tools/test_fixture_catalog_hardening.py",
-      "sha256": "sha256:d44e5084a1ce74b3fb47ba6b6e55fce56b64dc710ef5c55b5d11e4d6a0b4e547",
+      "sha256": "sha256:e248f0033521f98cbd721074718df2bd7a2c2fca7095e6fb36f2aadbefe1c77b",
+      "role": "authoring-tool"
+    },
+    {
+      "path": "docs/contracts/tools/test_rfc8785.py",
+      "sha256": "sha256:392035d5bc432f06375a642023b9837eeac4df335fa4535c21a15bf62df69afd",
       "role": "authoring-tool"
     },
     {
@@ -2235,12 +2235,12 @@
     },
     {
       "path": "docs/contracts/tools/verify_canonical_vectors.py",
-      "sha256": "sha256:11cae17fa2a357e467043ebf8d739358465455eefcf85df80e7dc198da417912",
+      "sha256": "sha256:f4feff98ade519211293d7dfb7381d2dc38d373ae84563630b9abca364d88371",
       "role": "authoring-tool"
     },
     {
       "path": "docs/contracts/tools/verify_contract_fixtures.py",
-      "sha256": "sha256:376000c29d6b1bf3a9d88044339bee3dc27720e74f95bbadb0baf9982f5fc90d",
+      "sha256": "sha256:b4286a2d5c430f3ec5b1832da5c994c0db9261adeeb54492d70a51e460bbb680",
       "role": "authoring-tool"
     },
     {
@@ -2250,12 +2250,12 @@
     },
     {
       "path": "docs/contracts/tools/verify_engine_side_effect_vectors.py",
-      "sha256": "sha256:62247db06901e1604264f643d7abd77b2f563d1b3069cf74f9b40773c2fc7895",
+      "sha256": "sha256:a836f6b37147d6f92cb98c5efe9b3a58f007a593fa5b39e4e41d39e8cac9274e",
       "role": "authoring-tool"
     },
     {
       "path": "docs/contracts/tools/verify_fixture_catalog.py",
-      "sha256": "sha256:eecb4e4060d20627334b7eb0e91dcd7c910d3d47ea19bcfc40de2de10e2ddc9d",
+      "sha256": "sha256:e99ad67fa6da2d3577d1630b2cfcfeffa3db8c224c69a3c07c65a1fbf022395f",
       "role": "authoring-tool"
     },
     {
@@ -2275,7 +2275,7 @@
     },
     {
       "path": "docs/contracts/unicode/nfc-normalization-17.0.0.json",
-      "sha256": "sha256:e7da73453c09c52eef83e05d8fba54a50e2c589fbbdfdefb76d683785c99704c",
+      "sha256": "sha256:b449d36f2c9ff24adccacad9ceca86e9620c1df4f0e710d4491eaa0b989fe915",
       "role": "normative-artifact"
     },
     {
@@ -2285,17 +2285,17 @@
     },
     {
       "path": "docs/contracts/vectors/candidate-local-ref-v1.json",
-      "sha256": "sha256:8de0ba093da10867d8864bec4526c10db3474d354b70cb7dfbd5292777d712ef",
+      "sha256": "sha256:76a2f55830072ee7ab49524bd03476865520afdbedc9e8a480b11cfd7eff6e61",
       "role": "normative-artifact"
     },
     {
       "path": "docs/contracts/vectors/core-canonical-projection-v1.json",
-      "sha256": "sha256:bf570f7a18cc99f58fb3d50a94ccc2598c9285a85976da0235ec3c82c95e4e44",
+      "sha256": "sha256:6a06c9ac0a29180d9259f8f5eb991603938fd5d1376415cb34664b43f3d532a3",
       "role": "normative-artifact"
     },
     {
       "path": "docs/contracts/vectors/core-set-permutation-v1.json",
-      "sha256": "sha256:bd4b90728a5c5fce67a1bf5a653b294364cdb7e118eaec3e252967cfcc34b638",
+      "sha256": "sha256:8f37ad019678f644f10255ff23f956a2576c64aa48918121baf6aaecbfeae3d2",
       "role": "normative-artifact"
     },
     {
@@ -2309,38 +2309,43 @@
       "role": "normative-artifact"
     },
     {
+      "path": "docs/contracts/vectors/rfc8785-conformance-v1.json",
+      "sha256": "sha256:09fe247e3f619648b1c15d6c9af042f83e78fb03fade72cdd7dd98cd4df6c035",
+      "role": "normative-artifact"
+    },
+    {
       "path": "docs/superpowers/specs/2026-07-12-default-noc-design-engine-workbench-design.md",
-      "sha256": "sha256:cbcf56b60298b583750f03488e933eea2f90a5dd21c6f0ea36f1643b6e37195c",
+      "sha256": "sha256:0ced914b0e1032e0bf17deaba17f524fb1aca5b7690ca41332118b25d391b629",
       "role": "normative-artifact"
     },
     {
       "path": "docs/superpowers/specs/appendix-a-project-design-v1-contract.md",
-      "sha256": "sha256:3008f0d1a191fb9cf614045de43184ce6d701ab97dddff3e594ae2df41b984c1",
+      "sha256": "sha256:835b13cee85bf32ffdd49453ef1aef74f2e4e5971274fbf909bfc023ca7e361e",
       "role": "normative-artifact"
     },
     {
       "path": "docs/superpowers/specs/appendix-b-patch-command-reconciliation-contract.md",
-      "sha256": "sha256:7bd233af01f5f324d059409d384b598e598e92657dc6f86db655d930a4a0d8f3",
+      "sha256": "sha256:7391d813597340c5c852ced029ee4acaac8b89c5e16ab739a25357027f1882de",
       "role": "normative-artifact"
     },
     {
       "path": "docs/superpowers/specs/appendix-c-package-contract-provider-tool-contract.md",
-      "sha256": "sha256:5b8f16e79d9af17dcca24350641e027b623c0ffbf691ef3dc13566427f133727",
+      "sha256": "sha256:90cd03e8be0d0307ce76074acedea43ebfb259a7f5aebf9288375b3f67bb1e9c",
       "role": "normative-artifact"
     },
     {
       "path": "docs/superpowers/specs/appendix-d-current-to-target-cutover-map.md",
-      "sha256": "sha256:dc48d0787fe8604c67e3bacbdf07747a932f563b4ae14ed85a0cfc06de97a205",
+      "sha256": "sha256:4d979efb857e620d838cd7890138604c60f8167045857754a92847a8b109b3c0",
       "role": "normative-artifact"
     },
     {
       "path": "docs/superpowers/specs/appendix-e-gate-acceptance-matrix.md",
-      "sha256": "sha256:233b3c52d40a06f92440613fbabce55a6c2a5bfff504a624393690b2d1126945",
+      "sha256": "sha256:c47e284bde7f1ceaac92573f6d99285d5ce76837151bffb9c29d6a4d5509ae6e",
       "role": "normative-artifact"
     },
     {
       "path": "docs/superpowers/specs/appendix-f-core-canonical-models.md",
-      "sha256": "sha256:6e9ea8431d710e16500efba331531d55f33fd803478e6a20dd7de3ff432c08d6",
+      "sha256": "sha256:36715e5076c109fd2b61a5491757215dd4fcd0a367084b409cfbf42e43aa5ec5",
       "role": "normative-artifact"
     }
   ]

@@ -18041,6 +18041,65 @@
       ]
     },
     {
+      "id": "recovery-authoritativeDiagnostics",
+      "schemaId": "ipcraft.recovery.v1",
+      "schemaPointer": "/properties/authoritativeDiagnostics",
+      "collectionKind": "ordered",
+      "inputVariants": [
+        [
+          {
+            "code": "code-1",
+            "path": "alpha-1"
+          },
+          {
+            "code": "code-2",
+            "path": "mu-2"
+          }
+        ],
+        [
+          {
+            "code": "code-2",
+            "path": "mu-2"
+          },
+          {
+            "code": "code-1",
+            "path": "alpha-1"
+          }
+        ]
+      ],
+      "expectedRelation": "different",
+      "expectedNormalized": [
+        [
+          {
+            "code": "code-1",
+            "path": "alpha-1"
+          },
+          {
+            "code": "code-2",
+            "path": "mu-2"
+          }
+        ],
+        [
+          {
+            "code": "code-2",
+            "path": "mu-2"
+          },
+          {
+            "code": "code-1",
+            "path": "alpha-1"
+          }
+        ]
+      ],
+      "expectedCanonicalJson": [
+        "[{\"code\":\"code-1\",\"path\":\"alpha-1\"},{\"code\":\"code-2\",\"path\":\"mu-2\"}]",
+        "[{\"code\":\"code-2\",\"path\":\"mu-2\"},{\"code\":\"code-1\",\"path\":\"alpha-1\"}]"
+      ],
+      "expectedDigest": [
+        "sha256:b96c665f100b18283e16e9b176b9a385125b136a99a174c586917144e72e2e39",
+        "sha256:2fb7ad00525d1c00785cfa76ed54ac99426d8dcef603d9b442fd554c12cda876"
+      ]
+    },
+    {
       "id": "recovery-draftOverlay",
       "schemaId": "ipcraft.recovery.v1",
       "schemaPointer": "/properties/draftOverlay",

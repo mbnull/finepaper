@@ -135,7 +135,7 @@ void verifyFreezeManifest() {
         QStringLiteral("docs/contracts/freeze-inputs.json"));
     requireContract(manifest.value(QStringLiteral("schema")).toString() ==
                         QStringLiteral("ipcraft.core-freeze-inputs.v1") &&
-                        manifest.value(QStringLiteral("normativeRevision")).toInt() == 4,
+                        manifest.value(QStringLiteral("normativeRevision")).toInt() == 5,
                     QStringLiteral("freeze input identity/revision mismatch"));
     requireContract(manifest.value(QStringLiteral("selfExclusion")).toString() ==
                         QStringLiteral("docs/contracts/freeze-inputs.json is intentionally omitted "

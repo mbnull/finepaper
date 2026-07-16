@@ -13,6 +13,8 @@ import json
 import re
 from pathlib import Path
 
+from rfc8785 import sha256_digest as rfc_sha256_digest
+
 
 UNICODE_VERSION = "17.0.0"
 SOURCE_HEADER = f"# CaseFolding-{UNICODE_VERSION}.txt"
@@ -68,9 +70,7 @@ def generate(input_path: Path) -> dict[str, object]:
     ]
     if len(mappings) != EXPECTED_MAPPING_COUNT:
         raise ValueError(f"expected {EXPECTED_MAPPING_COUNT} simple mappings, got {len(mappings)}")
-    mappings_sha256 = hashlib.sha256(
-        json.dumps(mappings, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
-    ).hexdigest()
+    mappings_sha256 = rfc_sha256_digest(mappings).removeprefix("sha256:")
     return {
         "schema": "ipcraft.unicode-simple-case-folding.v1",
         "unicodeVersion": UNICODE_VERSION,
