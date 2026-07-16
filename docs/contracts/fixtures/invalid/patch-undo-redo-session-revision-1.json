@@ -1,0 +1,25 @@
+{
+  "schema": "ipcraft.patch.v1",
+  "transactionId": "value",
+  "patchId": "trusted.undo-redo.1",
+  "source": {
+    "kind": "undo-redo",
+    "identity": "ipcraft.host",
+    "version": "1"
+  },
+  "causality": {
+    "sessionRevision": 1
+  },
+  "preconditions": [],
+  "operations": [
+    {
+      "op": "updateEntity",
+      "entityKind": "project",
+      "id": "project.mesh",
+      "set": {
+        "name": "Restored"
+      },
+      "unset": []
+    }
+  ]
+}

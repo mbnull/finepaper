@@ -1,19 +1,31 @@
 # Appendix A — ProjectDesign V1 Contract
 
-**Normative status:** V1 Revision 4 baseline; Core schema freezes at Gate 0.
+**Normative status:** V1 Revision 5 Core contract; frozen by the Gate 0 Revision 5 record.
 **Root schema:** `ipcraft.project-design.v1`
 **Required profile:** `ipcraft.profile.noc`, version `1`
 
 ## A1. JSON Rules
 
-- Encoding MUST be UTF-8 JSON without duplicate object keys.
+- Input MUST pass the strict UTF-8 JSON admission contract before any Qt JSON
+  value is constructed. Duplicate object keys after JSON string decoding,
+  malformed UTF-8, unpaired surrogates, non-finite numbers, and numbers that
+  cannot be admitted as finite IEEE-754 binary64 values are invalid.
 - Core envelopes use `additionalProperties: false` semantics.
 - Package-private opaque content is allowed only inside an `extensions[]` block. Schema-declared Package Entity/Relation `data`, `config`, `contractConfig`, `nocConfig`, and `capabilities` are known typed fields rather than opaque extension storage.
 - IDs are non-empty opaque strings and MUST be globally unique across every entity and relation in one ProjectDesign.
 - References use IDs; array positions are never identity.
-- Digests use `sha256:<64 lowercase hexadecimal characters>` over RFC 8785 canonical JSON unless a field explicitly says otherwise.
+- Digests use `sha256:<64 lowercase hexadecimal characters>` over RFC 8785
+  canonical JSON after the Appendix F collection projection. JSON number token
+  spelling has no semantic type: `1`, `1.0`, and `1e0` are equal numeric values
+  and canonicalize identically. Exact large integers or exact decimals that
+  cannot be represented by the intended binary64 value MUST be strings.
 - Unknown enum values in core fields are errors. Unknown namespaced extension schemas are preserved as opaque content.
-- Before digesting, every ID-keyed set is sorted by Unicode scalar-value order of its ID; dependency locks sort by `lockId`, declarations by `key`/`typeKey`, and undirected Link endpoints are stored/hash-normalized with the smaller Router ID first. Only arrays explicitly declared ordered retain source order.
+- Schema `$id` values and relative `$ref` basenames are resolved through the
+  machine-readable `docs/contracts/schema-catalog.json` registry. The catalog
+  maps each logical schema ID to one regular file and defines the retrieval URI
+  used by every implementation; a validator must not rely on its process
+  working directory or an implicit filesystem basename search.
+- Before digesting, every canonical collection follows the exhaustive per-path table in Appendix F. Undirected Link endpoints are stored/hash-normalized by Appendix F's object-reference comparison token. Only arrays explicitly declared ordered retain source order.
 
 ## A2. Root Object
 
@@ -76,18 +88,36 @@ Additional required fields:
 
 | Kind | Additional fields |
 |---|---|
-| `default-engine` | `engineHostContractVersion`, `engineCompatibilityVersion`, `supportedPlatformAbis` |
+| `default-engine` | `engineHostContractVersion`, `engineCompatibilityVersion`, `hostSideEffectContractVersion`, `supportedPlatformAbis` |
 | `extension-provider` | `protocolVersion`, `runtimeLockId` |
 | `drc-tool` | `toolProtocolVersion`, `runtimeLockId` |
 | `generator-tool` | `toolProtocolVersion`, `runtimeLockId` |
 | `runtime` | `runtimeClosure` |
+
+Exact Default Engine lock:
+
+```json
+{
+  "lockId": "dep.default-engine",
+  "kind": "default-engine",
+  "id": "ipcraft.default-noc-engine",
+  "version": "1.0.0",
+  "bundleManifestDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "engineCompatibilityVersion": "1",
+  "engineHostContractVersion": "ipcraft.engine-host.v1",
+  "hostSideEffectContractVersion": "ipcraft.noc-side-effects.v1",
+  "supportedPlatformAbis": ["linux-x86_64-gnu-v1"]
+}
+```
 
 Rules:
 
 - `lockId` is project-global and is the value used by all references.
 - Exactly one `noc-package` lock exists.
 - Exactly one `default-engine` lock exists. Its `bundleManifestDigest` is the sole exact Engine implementation identity; `id` and `version` are display metadata, and `engineCompatibilityVersion` is migration classification only.
+- The Default Engine metadata type ID is exactly `ipcraft.default-noc-engine` in both lock and Bundle manifest. This constant identifies the artifact type; it never permits substitution because exact execution identity remains only `bundleManifestDigest`.
 - Resolved Engine Bundle manifest ID/version/Host contract/compatibility metadata must equal the lock metadata, but equality of those metadata never compensates for a digest mismatch. The Host supports only explicitly registered `engineHostContractVersion` and `hostSideEffectContractVersion` values.
+- Engine Host and Host side-effect version fields are structurally non-empty IDs, not schema constants. Unsupported values parse through Core validation and resolve to degraded inspect rather than making the project schema-invalid.
 - At least one Contract lock exists for every Contract referenced by an Interface template or instance.
 - Provider and tool locks exist only when the selected Package declares those dependencies.
 - `bundleManifestDigest` follows Appendix C's Package Bundle Contract rather than hashing an arbitrary directory directly.
@@ -117,7 +147,8 @@ Rules:
 
 - `closureKind` is `host-managed` or `package-contained`. Common `bundleManifestDigest` and `runtimeClosure.runtimeDistributionBundleDigest` MUST be identical.
 - Any exact dependency/runtime mismatch produces degraded inspect mode; the reader still parses core fields and preserves opaque extensions without fallback.
-- A missing, revoked, digest-mismatched, Host-ABI-incompatible, or platform-incompatible Default Engine lock produces degraded inspect mode. The Host MUST NOT substitute its current Engine implementation, even when ID/version or compatibility version match.
+- A missing, revoked, corrupt, digest-mismatched, Host-ABI-incompatible, Host-side-effect-incompatible, or platform-incompatible Default Engine lock produces degraded inspect mode. Corruption and manifest/content disagreement use `engine.bundle_mismatch`. The Host MUST NOT substitute its current Engine implementation, even when ID/version or compatibility version match.
+- A structurally valid unsupported-platform Bundle may remain installed in the content-addressed store but cannot resolve for execution. `upgrade-available` is only an informational overlay on an exact normal resolution and never selects a digest.
 
 ## A4. NoC Component
 
@@ -205,7 +236,7 @@ Rules:
   "structureAuthority": {
     "kind": "default-engine",
     "lockId": "dep.default-engine",
-    "identity": "ipcraft.default-engine",
+    "identity": "ipcraft.default-noc-engine",
     "version": "1",
     "bundleDigest": "sha256:..."
   },
@@ -256,6 +287,7 @@ Rules:
 
 - `axis` is `horizontal` or `vertical`.
 - Endpoints exist, differ, and are orthogonally adjacent.
+- Persisted/Core endpoints are string Host IDs and compare as tokens `id:` + ID. Candidate Patch link values use `{id:X}` or `{localRef:X}` object-reference envelopes and compare by Appendix F's object-reference token.
 - Exactly one Link exists per unordered endpoint pair.
 - Link directionality of private transport is not represented.
 
@@ -386,6 +418,7 @@ Relation:
 Allowed `SubjectRef.kind` values:
 
 ```text
+project
 component
 interface
 router

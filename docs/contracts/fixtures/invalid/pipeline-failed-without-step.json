@@ -1,0 +1,17 @@
+{
+  "schema": "ipcraft.pipeline-result.v1",
+  "pipelineRunId": "value",
+  "kind": "validate",
+  "snapshotDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "dependencySetDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "status": "failed",
+  "failedStepId": null,
+  "steps": [
+    {
+      "stepId": "value",
+      "result": "steps/value/step-result.json"
+    }
+  ],
+  "startedAt": "2026-07-14T00:00:00Z",
+  "completedAt": "2026-07-14T00:00:00Z"
+}

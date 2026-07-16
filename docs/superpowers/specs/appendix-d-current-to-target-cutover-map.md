@@ -1,6 +1,6 @@
 # Appendix D — Current-to-Target Migration and Cutover Map
 
-**Normative status:** V1 Revision 4 baseline; cutover boundary freezes at Gate 0.
+**Normative status:** V1 Revision 5 Core contract; cutover boundary frozen by the Gate 0 Revision 5 record.
 
 ## D1. Migration Strategy
 

@@ -1,0 +1,305 @@
+{
+  "schema": "ipcraft.project-design.v1",
+  "profile": {
+    "id": "ipcraft.profile.noc",
+    "version": "1"
+  },
+  "id": "project.mesh-2x2",
+  "name": "Mesh 2x2",
+  "dependencies": [
+    {
+      "lockId": "dep.engine.default",
+      "kind": "default-engine",
+      "id": "ipcraft.default-noc-engine",
+      "version": "1.0.0",
+      "bundleManifestDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "engineHostContractVersion": "ipcraft.engine-host.v1",
+      "engineCompatibilityVersion": "1",
+      "hostSideEffectContractVersion": "ipcraft.noc-side-effects.v1",
+      "supportedPlatformAbis": [
+        "linux-x86_64-gnu-v1"
+      ]
+    },
+    {
+      "lockId": "dep.noc.simple",
+      "kind": "noc-package",
+      "id": "simple-noc",
+      "version": "1.0.0",
+      "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    {
+      "lockId": "dep.contract.axi5",
+      "kind": "interface-contract",
+      "id": "amba.axi5",
+      "version": "1.0.0",
+      "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    }
+  ],
+  "components": [
+    {
+      "id": "component.noc",
+      "kind": "noc",
+      "name": "value",
+      "packageLockId": "dep.noc.simple",
+      "typeKey": "mesh-noc",
+      "config": {},
+      "extensions": []
+    }
+  ],
+  "interfaces": [
+    {
+      "id": "interface.axi",
+      "ownerComponentId": "component.noc",
+      "templateKey": "axi-boundary",
+      "name": "AXI Boundary",
+      "contract": {
+        "lockId": "dep.contract.axi5",
+        "role": "initiator"
+      },
+      "capabilities": {
+        "dataWidth": 128,
+        "coherent": false
+      },
+      "contractConfig": {
+        "addressWidth": 48,
+        "idWidth": 8
+      },
+      "nocConfig": {},
+      "extensions": []
+    },
+    {
+      "id": "interface.second",
+      "ownerComponentId": "component.noc",
+      "templateKey": "axi-boundary",
+      "name": "AXI Boundary",
+      "contract": {
+        "lockId": "dep.contract.axi5",
+        "role": "initiator"
+      },
+      "capabilities": {
+        "dataWidth": 128,
+        "coherent": false
+      },
+      "contractConfig": {
+        "addressWidth": 48,
+        "idWidth": 8
+      },
+      "nocConfig": {},
+      "extensions": []
+    }
+  ],
+  "connections": [],
+  "topologies": [
+    {
+      "id": "topology.mesh",
+      "ownerComponentId": "component.noc",
+      "kind": "mesh",
+      "templateKey": "value",
+      "derivation": {
+        "topologyInputRevision": 1,
+        "topologyInputDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "derivedStateRevision": 0,
+        "derivedStateDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "packageBundleDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "reconcileDependencySetDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "defaultEngineLockId": "dep.engine.default",
+        "defaultEngineBundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "engineHostContractVersion": "ipcraft.engine-host.v1",
+        "hostSideEffectContractVersion": "ipcraft.noc-side-effects.v1",
+        "structureAuthority": {
+          "kind": "default-engine",
+          "lockId": "dep.engine.default",
+          "identity": "ipcraft.default-noc-engine",
+          "version": "1.0.0",
+          "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "engineCompatibilityVersion": "1"
+      },
+      "routers": [
+        {
+          "id": "router.0.0",
+          "templateKey": "mesh-router",
+          "identityCompatibilityVersion": 1,
+          "coordinate": {
+            "row": 0,
+            "column": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "router.0.1",
+          "templateKey": "mesh-router",
+          "identityCompatibilityVersion": 1,
+          "coordinate": {
+            "row": 0,
+            "column": 1
+          },
+          "properties": {}
+        },
+        {
+          "id": "router.1.0",
+          "templateKey": "mesh-router",
+          "identityCompatibilityVersion": 1,
+          "coordinate": {
+            "row": 1,
+            "column": 0
+          },
+          "properties": {}
+        },
+        {
+          "id": "router.1.1",
+          "templateKey": "mesh-router",
+          "identityCompatibilityVersion": 1,
+          "coordinate": {
+            "row": 1,
+            "column": 1
+          },
+          "properties": {}
+        }
+      ],
+      "structuralLinks": [
+        {
+          "id": "link.h.0.0",
+          "templateKey": "mesh-link",
+          "identityCompatibilityVersion": 1,
+          "endpointA": "router.0.0",
+          "endpointB": "router.0.1",
+          "axis": "horizontal",
+          "properties": {}
+        },
+        {
+          "id": "link.v.0.0",
+          "templateKey": "mesh-link",
+          "identityCompatibilityVersion": 1,
+          "endpointA": "router.0.0",
+          "endpointB": "router.1.0",
+          "axis": "vertical",
+          "properties": {}
+        },
+        {
+          "id": "link.v.0.1",
+          "templateKey": "mesh-link",
+          "identityCompatibilityVersion": 1,
+          "endpointA": "router.0.1",
+          "endpointB": "router.1.1",
+          "axis": "vertical",
+          "properties": {}
+        },
+        {
+          "id": "link.h.1.0",
+          "templateKey": "mesh-link",
+          "identityCompatibilityVersion": 1,
+          "endpointA": "router.1.0",
+          "endpointB": "router.1.1",
+          "axis": "horizontal",
+          "properties": {}
+        }
+      ],
+      "accessSlots": [
+        {
+          "id": "slot.0.0",
+          "routerId": "router.0.0",
+          "templateKey": "local-0",
+          "identityCompatibilityVersion": 1,
+          "displayOrder": 0,
+          "label": "Local 0",
+          "allowedContracts": [
+            {
+              "contractLockId": "dep.contract.axi5",
+              "roles": [
+                "initiator"
+              ],
+              "capabilityConstraints": {
+                "dataWidth": 128,
+                "coherent": false
+              }
+            }
+          ],
+          "properties": {}
+        },
+        {
+          "id": "slot.0.1",
+          "routerId": "router.0.1",
+          "templateKey": "local-0",
+          "identityCompatibilityVersion": 1,
+          "displayOrder": 0,
+          "label": "Local 0",
+          "allowedContracts": [],
+          "properties": {}
+        },
+        {
+          "id": "slot.1.0",
+          "routerId": "router.1.0",
+          "templateKey": "local-0",
+          "identityCompatibilityVersion": 1,
+          "displayOrder": 0,
+          "label": "Local 0",
+          "allowedContracts": [],
+          "properties": {}
+        },
+        {
+          "id": "slot.1.1",
+          "routerId": "router.1.1",
+          "templateKey": "local-0",
+          "identityCompatibilityVersion": 1,
+          "displayOrder": 0,
+          "label": "Local 0",
+          "allowedContracts": [],
+          "properties": {}
+        }
+      ],
+      "attachments": [
+        {
+          "id": "attachment.axi",
+          "interfaceId": "interface.axi",
+          "state": "resolved",
+          "routerId": "router.0.0",
+          "slotId": "slot.0.0"
+        },
+        {
+          "id": "attachment.second",
+          "interfaceId": "interface.second",
+          "state": "resolved",
+          "routerId": "router.0.0",
+          "slotId": "slot.0.0"
+        }
+      ],
+      "domains": [
+        {
+          "id": "domain.power.default",
+          "typeKey": "power",
+          "name": "Default Power",
+          "isDefault": true,
+          "config": {}
+        }
+      ],
+      "domainMemberships": [
+        {
+          "id": "membership.router.0.0",
+          "domainId": "domain.power.default",
+          "routerId": "router.0.0"
+        },
+        {
+          "id": "membership.router.0.1",
+          "domainId": "domain.power.default",
+          "routerId": "router.0.1"
+        },
+        {
+          "id": "membership.router.1.0",
+          "domainId": "domain.power.default",
+          "routerId": "router.1.0"
+        },
+        {
+          "id": "membership.router.1.1",
+          "domainId": "domain.power.default",
+          "routerId": "router.1.1"
+        }
+      ],
+      "packageEntities": [],
+      "packageRelations": [],
+      "extensions": []
+    }
+  ],
+  "views": [],
+  "extensions": []
+}

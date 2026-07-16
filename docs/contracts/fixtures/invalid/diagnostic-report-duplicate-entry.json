@@ -1,0 +1,25 @@
+{
+  "schema": "ipcraft.diagnostic-report.v1",
+  "pipelineRunId": "value",
+  "stepId": "value",
+  "invocationId": null,
+  "snapshotDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "diagnostics": [
+    {
+      "ruleId": "rule.duplicate",
+      "severity": "warning",
+      "message": "duplicate",
+      "blocking": false,
+      "subjects": [],
+      "properties": []
+    },
+    {
+      "ruleId": "rule.duplicate",
+      "severity": "warning",
+      "message": "duplicate",
+      "blocking": false,
+      "subjects": [],
+      "properties": []
+    }
+  ]
+}

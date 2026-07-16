@@ -1,0 +1,8 @@
+{
+  "schema": "ipcraft.diagnostic-report.v1",
+  "pipelineRunId": "value",
+  "stepId": "value",
+  "invocationId": null,
+  "snapshotDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "diagnostics": []
+}

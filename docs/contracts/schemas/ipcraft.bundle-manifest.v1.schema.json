@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ipcraft.bundle-manifest.v1",
+  "title": "Ipcraft Bundle Manifest V1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "bundleId", "bundleVersion", "files", "manifestDigest"],
+  "properties": {
+    "schema": { "const": "ipcraft.bundle-manifest.v1" },
+    "bundleId": { "type": "string", "minLength": 1 },
+    "bundleVersion": { "type": "string", "minLength": 1 },
+    "files": {
+      "type": "array",
+      "x-ipcraft-canonical": { "kind": "set", "sortKey": ["path"] },
+      "$comment": "Path uniqueness, portable-path collision checks, exhaustive membership, and sorting are semantic-validator rules.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "size", "digest", "executable"],
+        "properties": {
+          "path": { "$ref": "#/$defs/path" },
+          "size": { "type": "integer", "minimum": 0 },
+          "digest": { "$ref": "#/$defs/digest" },
+          "executable": { "type": "boolean" }
+        }
+      }
+    },
+    "manifestDigest": { "$ref": "#/$defs/digest" }
+  },
+  "$defs": {
+    "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "path": {
+      "type": "string",
+      "$comment": "Semantic validation MUST enforce NFC, Windows reserved device names and trailing-dot/space rules, Unicode simple-case-fold collision detection, and exhaustive filesystem containment because JSON Schema regex cannot prove them.",
+      "pattern": "^(?!.*[\\u0000-\\u001F\\u007F:])(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$))[^/]+(?:/[^/]+)*$"
+    }
+  }
+}

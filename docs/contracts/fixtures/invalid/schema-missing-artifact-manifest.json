@@ -1,0 +1,7 @@
+{
+  "pipelineRunId": "value",
+  "stepId": "value",
+  "invocationId": "value",
+  "snapshotDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "artifacts": []
+}

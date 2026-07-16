@@ -1,0 +1,31 @@
+{
+  "schema": "ipcraft.patch.v1",
+  "transactionId": "value",
+  "patchId": "value",
+  "source": {
+    "kind": "user-command",
+    "identity": "ipcraft.host",
+    "version": "1"
+  },
+  "causality": {
+    "sessionRevision": 0
+  },
+  "preconditions": [
+    {
+      "kind": "entity-exists",
+      "entityKind": "component",
+      "id": "component.noc"
+    }
+  ],
+  "operations": [
+    {
+      "op": "updateEntity",
+      "entityKind": "project",
+      "id": "project.mesh",
+      "set": {
+        "name": "Renamed"
+      },
+      "unset": []
+    }
+  ]
+}

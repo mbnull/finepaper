@@ -1,0 +1,13 @@
+{
+  "schema": "ipcraft.engine-bundle.v1",
+  "id": "ipcraft.default-noc-engine",
+  "version": "value",
+  "engineHostContractVersion": "ipcraft.engine-host.v999",
+  "engineCompatibilityVersion": "value",
+  "hostSideEffectContractVersion": "ipcraft.noc-side-effects.v1",
+  "migrationFromCompatibilityVersions": [],
+  "supportedPlatformAbis": [
+    "linux-x86_64-gnu-v1"
+  ],
+  "entrypoint": "bin/default-noc-engine"
+}

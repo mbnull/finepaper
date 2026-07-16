@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ipcraft.diagnostic-report.v1",
+  "title": "Ipcraft Diagnostic Report V1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "pipelineRunId", "stepId", "invocationId", "snapshotDigest", "diagnostics"],
+  "properties": {
+    "schema": { "const": "ipcraft.diagnostic-report.v1" },
+    "pipelineRunId": { "$ref": "#/$defs/id" },
+    "stepId": { "$ref": "#/$defs/id" },
+    "invocationId": { "oneOf": [{ "$ref": "#/$defs/id" }, { "type": "null" }] },
+    "snapshotDigest": { "$ref": "#/$defs/digest" },
+    "diagnostics": {
+      "type": "array",
+      "x-ipcraft-canonical": { "kind": "ordered" },
+      "items": { "$ref": "#/$defs/diagnostic" }
+    }
+  },
+  "$defs": {
+    "id": { "type": "string", "minLength": 1 },
+    "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "diagnostic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ruleId", "severity", "message", "blocking", "subjects", "properties"],
+      "properties": {
+        "ruleId": { "$ref": "#/$defs/id" },
+        "severity": { "enum": ["info", "warning", "error"] },
+        "message": { "type": "string" },
+        "blocking": { "type": "boolean" },
+        "subjects": {
+          "type": "array",
+          "x-ipcraft-canonical": { "kind": "set", "sortKey": ["kind", "id"] },
+          "items": { "$ref": "ipcraft.core-canonical-models.v1.schema.json#/$defs/subjectRef" }
+        },
+        "properties": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["unicodeScalarValue"] }, "items": { "$ref": "#/$defs/id" }, "uniqueItems": true }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "blocking": { "const": true } }, "required": ["blocking"] },
+          "then": { "properties": { "severity": { "const": "error" } } }
+        },
+        {
+          "if": { "properties": { "severity": { "enum": ["info", "warning"] } }, "required": ["severity"] },
+          "then": { "properties": { "blocking": { "const": false } } }
+        }
+      ]
+    }
+  }
+}

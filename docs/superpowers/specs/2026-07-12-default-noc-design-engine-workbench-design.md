@@ -1,7 +1,7 @@
 # Default NoC Design Engine and Workbench Design
 
-**Status:** Architecture Approved — V1 Normative Revision 4; wire contracts not frozen
-**Revision 4 approved for review:** 2026-07-14
+**Status:** Architecture Approved — V1 Normative Revision 5; Core contracts freeze with the Gate 0 record
+**Revision 5 correction approved for freeze:** 2026-07-16
 **Original date:** 2026-07-12
 
 ## 0. Normative Document Set
@@ -178,7 +178,7 @@ Schema-driven forms support type, default, range, enum, unit, required/read-only
 
 Before the first stable `1.0` baseline, Package, Contract, engine, tool, and project-format compatibility may be broken without an importer. Starting at `1.0`, every project pins exact Package, Contract, Default Engine, Runtime, Provider, and IP Core Tool dependency bundle digests plus required Host/Engine contracts. Stable dependencies are never silently upgraded. V1 promises verifiable replay under the same locked bundles, runtime closure, platform ABI class, invocation/environment profiles, Host side-effect contract, and tool input; it does not claim cross-OS bit-for-bit output identity.
 
-Default Engine is itself an immutable installable Bundle and an exact Project dependency. Its `bundleManifestDigest` is the sole implementation identity; ID/version are metadata and `engineCompatibilityVersion` only classifies explicit migrations. `engineHostContractVersion` versions the Engine/Host ABI. Missing, revoked, corrupt, digest-mismatched, Host-incompatible, or platform-incompatible Engine opens degraded inspect mode with no fallback to the current application Engine. Host-owned candidate side effects are separately pinned by `hostSideEffectContractVersion`; V1 Hosts may not reinterpret that behavior silently.
+Default Engine is itself an immutable installable Bundle and an exact Project dependency. Its `bundleManifestDigest` is the sole implementation identity; fixed metadata type ID `ipcraft.default-noc-engine` and version are metadata and `engineCompatibilityVersion` only classifies explicit migrations. `engineHostContractVersion` versions the Engine/Host ABI. Missing, revoked, corrupt, digest-mismatched, Host-incompatible, or platform-incompatible Engine opens degraded inspect mode with no fallback to the current application Engine. Host-owned candidate side effects are separately pinned by `hostSideEffectContractVersion`; V1 Hosts may not reinterpret that behavior silently.
 
 ### 6.2 Native Mesh Topology
 
@@ -434,7 +434,7 @@ my-noc/
 └── reports/
 ```
 
-`.nocproj` is one formatted JSON serialization of the new unified `ProjectDesign V1` under the NoC Profile. It is parsed with standard Qt JSON APIs and atomically saved with `QSaveFile`. It does not serialize QObject or Qt-private types and must not introduce a second NoC-only persistence model. The existing pre-release V1 schema is replaced rather than treated as a compatibility baseline.
+`.nocproj` is one formatted JSON serialization of the new unified `ProjectDesign V1` under the NoC Profile. It passes the strict UTF-8/token admission layer before Qt JSON APIs construct the semantic value model, then passes Schema and Core semantic validation, and is atomically saved with `QSaveFile`. Standard Qt JSON parsing is not the duplicate-key, surrogate, or numeric-admission boundary. It does not serialize QObject or Qt-private types and must not introduce a second NoC-only persistence model. The existing pre-release V1 schema is replaced rather than treated as a compatibility baseline.
 
 The root schema ID is `ipcraft.project-design.v1` and the profile marker is `ipcraft.profile.noc` version `1`. The new reader accepts only that root for `.nocproj`; legacy `ipcraft.project.v1` roots return `project.legacy_format_unsupported` and are never inferred or imported by field shape.
 
@@ -446,15 +446,15 @@ One host process holds an exclusive project-level mutation lock for Save, recove
 
 Providers and IP tools never directly read or write the project directory. Tool inputs are emitted into controlled staging by the application.
 
-Dependency availability has three states:
+Dependency execution availability has two states, with a separate informational upgrade overlay:
 
 - `exact`: all pinned identities, versions, and digests match; normal operation is allowed.
 - `degraded-inspect`: an exact dependency/Engine/runtime/Host contract is missing, revoked, mismatched, or incompatible; the project exposes persisted data with no fallback and disables normal editing/reconciliation/Save/DRC/Generate. The only possible mutation is an explicitly supported target-Engine migration candidate that does not execute the missing source Engine.
-- `upgrade-available`: a newer version exists but is never selected automatically.
+- `upgrade-available`: informational only on an otherwise `exact` resolution; it is not a mutually exclusive availability state and never selects a digest.
 
 Package identity and version cannot change in place. After the stable `1.0` baseline, `Clone and Migrate` creates a new project using target-Package migration steps, reconciles it, and requires Core Structural DRC before its first formal Save. Failure discards the incomplete clone and leaves the original reproducible project unchanged. Before `1.0`, old Contracts, schemas, cores, tools, and projects may be discarded without migration support.
 
-Default Engine migration is a distinct explicit candidate transaction and may update the existing design. It runs the exact target Engine Bundle through its declared Host contract, always requires candidate confirmation, and atomically replaces the Engine dependency lock, Derived State, Host side effects, and provenance. Undo applies the saved inverse transaction and ID mapping without executing either Engine; it may return the Session to degraded inspect mode if the restored Bundle is unavailable. Different Engine digests are never selected automatically merely because compatibility versions match.
+Default Engine migration is a distinct explicit candidate transaction and may update the existing design. Normal applicability still describes the current base; separate migration provenance carries complete current and target exact locks. It runs the exact target Engine Bundle through its declared Host contract, always requires candidate confirmation, and atomically replaces the Engine dependency lock, Derived State, Host side effects, and provenance. Undo applies the saved inverse transaction and ID mapping without executing either Engine; it may return the Session to degraded inspect mode if the restored Bundle is unavailable. Different Engine digests are never selected automatically merely because compatibility versions match.
 
 ## 12. V1 UI/UX
 

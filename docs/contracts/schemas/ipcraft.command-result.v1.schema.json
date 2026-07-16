@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ipcraft.command-result.v1",
+  "title": "Ipcraft Typed Command Result V1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "commandId", "disposition", "sessionRevision", "pendingGroupId", "draftId", "diagnostics"],
+  "properties": {
+    "schema": { "const": "ipcraft.command-result.v1" },
+    "commandId": { "$ref": "#/$defs/id" },
+    "disposition": { "enum": ["accepted", "pending-topology", "drafted", "rejected"] },
+    "sessionRevision": { "type": "integer", "minimum": 0 },
+    "pendingGroupId": { "oneOf": [{ "$ref": "#/$defs/id" }, { "type": "null" }] },
+    "draftId": { "oneOf": [{ "$ref": "#/$defs/id" }, { "type": "null" }] },
+    "diagnostics": { "type": "array", "x-ipcraft-canonical": { "kind": "ordered" }, "items": { "$ref": "#/$defs/issue" } }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "disposition": { "const": "pending-topology" } }, "required": ["disposition"] },
+      "then": { "properties": { "pendingGroupId": { "$ref": "#/$defs/id" }, "draftId": { "type": "null" } } }
+    },
+    {
+      "if": { "properties": { "disposition": { "const": "drafted" } }, "required": ["disposition"] },
+      "then": { "properties": { "pendingGroupId": { "type": "null" }, "draftId": { "$ref": "#/$defs/id" } } }
+    },
+    {
+      "if": { "properties": { "disposition": { "enum": ["accepted", "rejected"] } }, "required": ["disposition"] },
+      "then": { "properties": { "pendingGroupId": { "type": "null" }, "draftId": { "type": "null" } } }
+    }
+  ],
+  "$defs": {
+    "id": { "type": "string", "minLength": 1 },
+    "issue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "path"],
+      "properties": {
+        "code": { "$ref": "#/$defs/id" },
+        "path": { "type": "string" },
+        "patchId": { "$ref": "#/$defs/id" },
+        "operationIndex": { "type": "integer", "minimum": 0 },
+        "subject": { "$ref": "ipcraft.core-canonical-models.v1.schema.json#/$defs/subjectRef" },
+        "data": { "type": "object" }
+      }
+    }
+  }
+}

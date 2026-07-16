@@ -88,6 +88,24 @@ _Avoid_: Package-private topology logic, unversioned application behavior, UI pr
 A restricted project-open state used when an exact required dependency, Engine Host Contract, Host Side-effect Contract, Runtime Closure, or platform compatibility is unavailable; it preserves/displays data and permits only an explicitly supported, digest-confirmed Engine migration recovery action, not normal editing, saving, validation, generation, or silent substitution.
 _Avoid_: Best-effort fallback, automatic migration, editable degraded project
 
+**ProjectDesignWellFormed**:
+A readable authoritative working or recovery design that passes strict JSON,
+schema, identity, and reference checks; it may contain a disconnected Domain
+with a matching blocking diagnostic.
+_Avoid_: Save-eligible design, invalid unreadable document
+
+**ProjectDesignCommitValid**:
+A working design that may be installed by one atomic command or topology
+materialization transaction; a disconnected Domain is allowed only when the
+same transaction produces the stable blocking diagnostic.
+_Avoid_: Formal save checkpoint, unrestricted invalid state
+
+**ProjectDesignSaveEligible**:
+A current design with connected Domains, resolved Attachments, current locked
+dependencies/Derived State, and no blocking diagnostics; only this predicate
+permits formal save, Validate, or Generate.
+_Avoid_: Any parseable working state
+
 **Pending Topology Group**:
 The sole open, uncommitted V1 topology transaction proposal containing the latest topology intent and reconciliation generation; it enters authoritative design and formal history only when intent, Derived Patch, invariant side effects, tombstones, and Host IDs materialize atomically.
 _Avoid_: Accepted stale command, queue of topology transactions, saved intermediate revision

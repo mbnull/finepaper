@@ -1,0 +1,281 @@
+{
+  "schema": "ipcraft.recovery.v1",
+  "projectId": "project.mesh-1x1",
+  "savedProjectDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "updatedAt": "2026-07-14T00:00:00Z",
+  "authoritativeDesign": {
+    "schema": "ipcraft.project-design.v1",
+    "profile": {
+      "id": "ipcraft.profile.noc",
+      "version": "1"
+    },
+    "id": "project.mesh-1x1",
+    "name": "Mesh 1x1",
+    "dependencies": [
+      {
+        "lockId": "dep.engine.default",
+        "kind": "default-engine",
+        "id": "ipcraft.default-noc-engine",
+        "version": "1.0.0",
+        "bundleManifestDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "engineHostContractVersion": "ipcraft.engine-host.v1",
+        "engineCompatibilityVersion": "1",
+        "hostSideEffectContractVersion": "ipcraft.noc-side-effects.v1",
+        "supportedPlatformAbis": [
+          "linux-x86_64-gnu-v1"
+        ]
+      },
+      {
+        "lockId": "dep.noc.simple",
+        "kind": "noc-package",
+        "id": "simple-noc",
+        "version": "1.0.0",
+        "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      }
+    ],
+    "components": [
+      {
+        "id": "component.noc",
+        "kind": "noc",
+        "name": "value",
+        "packageLockId": "dep.noc.simple",
+        "typeKey": "mesh-noc",
+        "config": {},
+        "extensions": []
+      }
+    ],
+    "interfaces": [],
+    "connections": [],
+    "topologies": [
+      {
+        "id": "topology.mesh",
+        "ownerComponentId": "component.noc",
+        "kind": "mesh",
+        "templateKey": "value",
+        "derivation": {
+          "topologyInputRevision": 1,
+          "topologyInputDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "derivedStateRevision": 0,
+          "derivedStateDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "packageBundleDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "reconcileDependencySetDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "defaultEngineLockId": "dep.engine.default",
+          "defaultEngineBundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "engineHostContractVersion": "ipcraft.engine-host.v1",
+          "hostSideEffectContractVersion": "ipcraft.noc-side-effects.v1",
+          "structureAuthority": {
+            "kind": "default-engine",
+            "lockId": "dep.engine.default",
+            "identity": "ipcraft.default-noc-engine",
+            "version": "1.0.0",
+            "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "engineCompatibilityVersion": "1"
+        },
+        "routers": [
+          {
+            "id": "router.0.0",
+            "templateKey": "mesh-router",
+            "identityCompatibilityVersion": 1,
+            "coordinate": {
+              "row": 0,
+              "column": 0
+            },
+            "properties": {}
+          }
+        ],
+        "structuralLinks": [],
+        "accessSlots": [
+          {
+            "id": "slot.0.0",
+            "routerId": "router.0.0",
+            "templateKey": "local-0",
+            "identityCompatibilityVersion": 1,
+            "displayOrder": 0,
+            "label": "Local 0",
+            "allowedContracts": [],
+            "properties": {}
+          }
+        ],
+        "attachments": [],
+        "domains": [
+          {
+            "id": "domain.power.default",
+            "typeKey": "power",
+            "name": "Default Power",
+            "isDefault": true,
+            "config": {}
+          }
+        ],
+        "domainMemberships": [
+          {
+            "id": "membership.router.0.0",
+            "domainId": "domain.power.default",
+            "routerId": "router.0.0"
+          }
+        ],
+        "packageEntities": [],
+        "packageRelations": [],
+        "extensions": []
+      }
+    ],
+    "views": [],
+    "extensions": []
+  },
+  "authoritativeDiagnostics": [],
+  "sessionRevision": 0,
+  "derivedStateRevision": 0,
+  "pendingTopologyGroup": {
+    "groupId": "value",
+    "kind": "topology-edit",
+    "topologyInputRevision": 1,
+    "requestGeneration": 1,
+    "baseAuthoritativeDesignDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "baseDerivedStateRevision": 0,
+    "baseDerivedStateDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "topologyIntent": {
+      "schema": "ipcraft.topology-intent.v1",
+      "componentId": "value",
+      "topologyId": "value",
+      "topologyKind": "mesh",
+      "globalConfig": {},
+      "packageEntities": [],
+      "packageRelations": []
+    },
+    "intentUndo": [],
+    "intentRedo": [],
+    "normalizedTopologyInput": {
+      "schema": "ipcraft.normalized-topology-input.v1",
+      "intent": {
+        "schema": "ipcraft.topology-intent.v1",
+        "componentId": "value",
+        "topologyId": "value",
+        "topologyKind": "mesh",
+        "globalConfig": {},
+        "packageEntities": [],
+        "packageRelations": []
+      },
+      "mesh": {
+        "rows": 1,
+        "columns": 1,
+        "routerTemplate": {
+          "stableKey": "value",
+          "identityCompatibilityVersion": 1,
+          "properties": {}
+        },
+        "linkTemplate": {
+          "stableKey": "value",
+          "identityCompatibilityVersion": 1,
+          "properties": {}
+        },
+        "slotTemplates": []
+      },
+      "dependencyContext": {
+        "nocPackageLockId": "value",
+        "nocPackageBundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "defaultEngineLockId": "value",
+        "defaultEngineBundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "engineHostContractVersion": "value",
+        "hostSideEffectContractVersion": "value",
+        "structureAuthority": {
+          "kind": "default-engine",
+          "lockId": "value",
+          "identity": "ipcraft.default-noc-engine",
+          "version": "value",
+          "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "reconcileDependencySetDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    "topologyInputDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "status": "drafting",
+    "candidate": null
+  },
+  "draftOverlay": [
+    {
+      "draftId": "draft.safe.1",
+      "sequence": 1,
+      "commandType": "AttachInterface",
+      "parameters": {},
+      "validationStatus": "unvalidated",
+      "diagnostics": []
+    },
+    {
+      "draftId": "draft.safe.2",
+      "sequence": 2,
+      "commandType": "RenameInterface",
+      "parameters": {
+        "interfaceId": "interface.boundary",
+        "name": "Recovered Interface"
+      },
+      "validationStatus": "unvalidated",
+      "diagnostics": []
+    },
+    {
+      "draftId": "draft.safe.3",
+      "sequence": 3,
+      "commandType": "RenameDomain",
+      "parameters": {
+        "domainId": "domain.default",
+        "name": "Recovered Domain"
+      },
+      "validationStatus": "unvalidated",
+      "diagnostics": []
+    },
+    {
+      "draftId": "draft.safe.4",
+      "sequence": 4,
+      "commandType": "CreateInterfaceFromTemplate",
+      "parameters": {
+        "ownerComponentId": "component.noc",
+        "templateKey": "axi-boundary",
+        "name": "Recovered Boundary",
+        "contract": {
+          "lockId": "dep.contract.axi5",
+          "role": "initiator"
+        },
+        "capabilities": {
+          "dataWidth": 128
+        },
+        "contractConfig": {},
+        "nocConfig": {}
+      },
+      "validationStatus": "unvalidated",
+      "diagnostics": []
+    }
+  ],
+  "draftUndo": [
+    {
+      "before": [],
+      "after": [
+        {
+          "draftId": "draft.safe.1",
+          "sequence": 1,
+          "commandType": "RenameDesign",
+          "parameters": {
+            "name": "Recovered Mesh"
+          },
+          "validationStatus": "unvalidated",
+          "diagnostics": []
+        }
+      ]
+    }
+  ],
+  "draftRedo": [
+    {
+      "before": [
+        {
+          "draftId": "draft.safe.1",
+          "sequence": 1,
+          "commandType": "RenameDesign",
+          "parameters": {
+            "name": "Recovered Mesh"
+          },
+          "validationStatus": "unvalidated",
+          "diagnostics": []
+        }
+      ],
+      "after": []
+    }
+  ]
+}

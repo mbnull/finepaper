@@ -1,0 +1,76 @@
+{
+  "schema": "ipcraft.patch.v1",
+  "transactionId": "txn.reconcile.base",
+  "patchId": "value",
+  "source": {
+    "kind": "application-reconcile",
+    "identity": "ipcraft.host",
+    "version": "1"
+  },
+  "causality": {
+    "sessionRevision": 0
+  },
+  "preconditions": [],
+  "operations": [
+    {
+      "op": "updateEntity",
+      "entityKind": "topology",
+      "id": "topology.mesh",
+      "set": {
+        "derivation": {
+          "topologyInputRevision": 1,
+          "topologyInputDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "derivedStateRevision": 1,
+          "derivedStateDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "packageBundleDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "reconcileDependencySetDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "defaultEngineLockId": "dep.engine.default",
+          "defaultEngineBundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "engineHostContractVersion": "ipcraft.engine-host.v1",
+          "hostSideEffectContractVersion": "ipcraft.noc-side-effects.v1",
+          "structureAuthority": {
+            "kind": "default-engine",
+            "lockId": "dep.engine.default",
+            "identity": "ipcraft.default-noc-engine",
+            "version": "1.0.0",
+            "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "engineCompatibilityVersion": "1"
+        }
+      },
+      "unset": []
+    },
+    {
+      "op": "updateEntity",
+      "entityKind": "project",
+      "id": "project.mesh",
+      "set": {
+        "name": "Forbidden"
+      },
+      "unset": []
+    }
+  ],
+  "applicability": {
+    "schema": "ipcraft.reconcile-applicability.v1",
+    "groupId": "group.topology.1",
+    "requestGeneration": 1,
+    "topologyInputRevision": 1,
+    "topologyInputDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "baseDerivedStateRevision": 0,
+    "baseDerivedStateDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "baseAuthoritativeDesignDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "structureAuthority": {
+      "kind": "default-engine",
+      "lockId": "dep.engine.default",
+      "identity": "ipcraft.default-noc-engine",
+      "version": "1.0.0",
+      "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "packageBundleDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "reconcileDependencySetDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "defaultEngineLockId": "dep.engine.default",
+    "defaultEngineBundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "engineHostContractVersion": "ipcraft.engine-host.v1",
+    "hostSideEffectContractVersion": "ipcraft.noc-side-effects.v1"
+  }
+}

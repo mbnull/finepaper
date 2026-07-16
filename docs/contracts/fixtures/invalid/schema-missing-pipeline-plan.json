@@ -1,0 +1,17 @@
+{
+  "pipelineRunId": "value",
+  "kind": "validate",
+  "snapshotSessionRevision": 0,
+  "snapshotDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "formallySavedProjectDigest": null,
+  "dependencySetDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "defaultEngineBundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "engineHostContractVersion": "value",
+  "hostSideEffectContractVersion": "value",
+  "steps": [
+    {
+      "stepId": "value",
+      "kind": "host"
+    }
+  ]
+}

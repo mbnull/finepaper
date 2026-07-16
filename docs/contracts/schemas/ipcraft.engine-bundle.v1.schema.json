@@ -10,31 +10,35 @@
     "version",
     "engineHostContractVersion",
     "engineCompatibilityVersion",
+    "hostSideEffectContractVersion",
     "migrationFromCompatibilityVersions",
     "supportedPlatformAbis",
     "entrypoint"
   ],
   "properties": {
     "schema": { "const": "ipcraft.engine-bundle.v1" },
-    "id": { "type": "string", "minLength": 1 },
+    "id": { "const": "ipcraft.default-noc-engine" },
     "version": { "type": "string", "minLength": 1 },
-    "engineHostContractVersion": { "const": "ipcraft.engine-host.v1" },
+    "engineHostContractVersion": { "type": "string", "minLength": 1 },
     "engineCompatibilityVersion": { "type": "string", "minLength": 1 },
+    "hostSideEffectContractVersion": { "type": "string", "minLength": 1 },
     "migrationFromCompatibilityVersions": {
       "type": "array",
+      "x-ipcraft-canonical": { "kind": "set", "sortKey": ["unicodeScalarValue"] },
       "items": { "type": "string", "minLength": 1 },
       "uniqueItems": true
     },
     "supportedPlatformAbis": {
       "type": "array",
+      "x-ipcraft-canonical": { "kind": "set", "sortKey": ["unicodeScalarValue"] },
       "items": { "type": "string", "minLength": 1 },
       "minItems": 1,
       "uniqueItems": true
     },
     "entrypoint": {
       "type": "string",
-      "minLength": 1,
-      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).+$"
+      "$comment": "Semantic validation MUST enforce NFC, Windows reserved device names and trailing-dot/space rules, Unicode simple-case-fold collision detection, and exhaustive filesystem containment because JSON Schema regex cannot prove them.",
+      "pattern": "^(?!.*[\\u0000-\\u001F\\u007F:])(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$))[^/]+(?:/[^/]+)*$"
     }
   }
 }

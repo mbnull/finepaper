@@ -108,27 +108,30 @@ git commit -m "docs: define Gate 0 contract schema roots"
 **Files:**
 - Modify: `docs/contracts/schemas/ipcraft.core-canonical-models.v1.schema.json`
 - Modify: `docs/contracts/vectors/core-canonical-projection-v1.json`
+- Create: `docs/contracts/tools/verify_canonical_rules.py`
 - Create: `docs/contracts/vectors/core-set-permutation-v1.json`
 - Create: `docs/contracts/vectors/candidate-local-ref-v1.json`
 
-- [ ] **Step 1: Add an explicit canonical collection table to the vector document**
+- [ ] **Step 1: Add an explicit schema-addressed canonical collection table to the vector document**
 
-Represent every set-valued array with its exact sort key:
+Represent every physical frozen array schema node with its catalogued schema ID, exact RFC 6901 schema pointer, kind, and sort key. Resolve `$ref` reuse to the defining node rather than duplicating display aliases:
 
 ```json
 {
-  "path": "derivedState.routers",
+  "schemaId": "ipcraft.core-canonical-models.v1",
+  "schemaPointer": "/$defs/derivedState/properties/routers",
   "kind": "set",
   "sortKey": ["id"]
 },
 {
-  "path": "normalizedTopologyInput.slotTemplates[].allowedContracts",
+  "schemaId": "ipcraft.core-canonical-models.v1",
+  "schemaPointer": "/$defs/slotTemplate/properties/allowedContracts",
   "kind": "set",
   "sortKey": ["contractId", "version", "bundleManifestDigest"]
 }
 ```
 
-Include dependencies, domains, memberships, package entities, package relations, relation endpoint sets, roles, extensions, Routers, Links, Slots, and allowed contracts. Mark only pipeline steps, display order, and other explicitly semantic sequences as ordered.
+Include dependencies, domains, memberships, package entities, package relations, relation endpoint sets, roles, extensions, Routers, Links, Slots, allowed contracts, update-set reuse, and all other reachable catalogued arrays. Mark only pipeline steps, operation order, and other explicitly semantic sequences as ordered. Keep prose-only Provider ABI collections in `deferredExtensionCollections` with `freezeGate: extension`; they are not Gate 0 Core-completeness entries.
 
 - [ ] **Step 2: Freeze transaction-wide local references**
 
@@ -148,13 +151,21 @@ Add vectors proving that Authority and Application operations share one candidat
       "target": { "id": "domain.default" }
     }]
   },
-  "allocationOrder": ["authority:router-0", "application:000001"]
+  "allocationOrder": ["application:000001", "authority:router-0"]
 }
 ```
 
-- [ ] **Step 3: Add permutation pairs**
+- [ ] **Step 3: Add complete collection permutation cases**
 
-For each set-valued array, store two inputs with different source order and one expected canonical JSON/digest. For ordered arrays, store a counter-vector whose digest must differ.
+For each set-valued array, store canonical, reverse, and fixed-seed shuffled inputs containing the same non-empty values and one expected normalized array/canonical JSON/digest. For ordered arrays, store a counter-vector whose canonical JSON and digest differ. For derived-ordered arrays, store the valid derived order and a noncanonical supplied order with its stable error code.
+
+Run the stdlib-only authoring verifier before computing vector digests:
+
+```bash
+python3 docs/contracts/tools/verify_canonical_rules.py
+```
+
+It must prove one rule per reachable physical annotated array schema node, exact schema/table metadata equality, valid RFC 6901 locations, and exclusion of deferred Gate D display paths from Core completeness.
 
 - [ ] **Step 4: Recompute vector digests with one reference implementation**
 
@@ -170,12 +181,16 @@ git commit -m "docs: freeze Core canonical projection vectors"
 ## Task 3: Close exact Default Engine and Host side-effect contracts
 
 **Files:**
+- Modify: `docs/contracts/schemas/ipcraft.project-design.v1.schema.json`
+- Modify: `docs/contracts/schemas/ipcraft.core-canonical-models.v1.schema.json`
 - Modify: `docs/contracts/schemas/ipcraft.engine-bundle.v1.schema.json`
-- Create: `docs/contracts/vectors/default-engine-lock-v1.json`
-- Create: `docs/contracts/vectors/host-side-effects-v1.json`
-- Create: `docs/contracts/fixtures/invalid/engine-lock-fallback.json`
-- Create: `docs/contracts/fixtures/invalid/engine-host-contract-mismatch.json`
-- Create: `docs/contracts/fixtures/invalid/host-side-effect-contract-mismatch.json`
+- Create: `docs/contracts/schemas/ipcraft.noc-side-effects.v1.schema.json`
+- Modify: `docs/contracts/schema-catalog.json`
+- Modify: `docs/contracts/vectors/core-canonical-projection-v1.json`
+- Regenerate: `docs/contracts/vectors/core-set-permutation-v1.json`
+- Regenerate: `docs/contracts/vectors/candidate-local-ref-v1.json`
+
+Task 3A closes schema and normative contracts only. Full Default Engine resolution/migration and Host side-effect behavioral vector catalogs remain in the later Task 3 vector pass. Engine Host/side-effect mismatch fixtures are structurally valid degraded-inspect witnesses, not schema-invalid fixtures.
 
 - [ ] **Step 1: Make the exact digest the sole implementation identity**
 
@@ -185,42 +200,102 @@ Require this dependency lock shape:
 {
   "lockId": "dep.engine.default",
   "kind": "default-engine",
-  "id": "ipcraft.default-mesh-engine",
+  "id": "ipcraft.default-noc-engine",
   "version": "1.0.0",
   "bundleManifestDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-  "engineCompatibilityVersion": 1,
+  "engineCompatibilityVersion": "1",
   "engineHostContractVersion": "ipcraft.engine-host.v1",
-  "hostSideEffectContractVersion": "ipcraft.noc-side-effects.v1"
+  "hostSideEffectContractVersion": "ipcraft.noc-side-effects.v1",
+  "supportedPlatformAbis": ["linux-x86_64-gnu-v1"]
 }
 ```
 
 `id`, `version`, and `engineCompatibilityVersion` never satisfy exact resolution when the digest differs.
 
-- [ ] **Step 2: Add resolver outcome vectors**
+- [ ] **Step 2: Close resolver outcome semantics**
 
-Cover exact available, missing, revoked, platform incompatible, Host ABI incompatible, side-effect contract incompatible, and different-digest/same-compatibility-version. Every non-exact case expects degraded inspect and no fallback.
+Specify and witness exact available, missing, revoked, corrupt/mismatch, platform incompatible, Host ABI incompatible, side-effect contract incompatible, and different-digest/same-compatibility-version. Every non-exact case expects degraded inspect and no fallback; full behavioral vectors are deferred to the Task 3 vector pass.
 
-- [ ] **Step 3: Add migration transaction vectors**
+- [ ] **Step 3: Close migration transaction schema**
 
 The candidate must atomically contain dependency-lock update, Derived State Patch, Host side effects, and provenance. Its inverse must restore all four without invoking an Engine.
 
 - [ ] **Step 4: Version Host-owned side effects**
 
-Vectors for `ipcraft.noc-side-effects.v1` must cover Default Domain membership creation, membership deletion, Attachment unresolved conversion, Package Relation unresolved/blocking behavior, empty non-Default Domain tombstoning, and connectivity diagnostics.
+The closed `ipcraft.noc-side-effects.v1` root defines inputs and expected outputs for Default Domain membership creation, membership deletion, Attachment unresolved conversion, Package Relation unresolved/blocking behavior, empty non-Default Domain tombstoning, and connectivity diagnostics. Add only minimal collection-permutation cases required by canonical completeness; behavioral scenarios remain in the Task 3 vector pass.
 
 - [ ] **Step 5: Commit Engine and side-effect contracts**
 
 ```bash
-git add docs/contracts/schemas/ipcraft.engine-bundle.v1.schema.json docs/contracts/vectors docs/contracts/fixtures/invalid
-git commit -m "docs: lock Default Engine and Host side effects"
+git add docs/contracts docs/adr/0054-lock-default-engine-as-an-installable-exact-bundle.md docs/superpowers/specs docs/superpowers/plans/2026-07-14-noc-gate-0-core-contract-freeze.md
+git commit -m "docs: close exact Default Engine and side-effect contracts"
 ```
 
-## Task 4: Build the valid/invalid fixture catalog
+### Task 3B: Complete Engine and Host side-effect behavioral vectors
 
 **Files:**
+- Create: `docs/contracts/vectors/default-engine-lock-v1.json`
+- Create: `docs/contracts/vectors/host-side-effects-v1.json`
+- Create: `docs/contracts/tools/generate_engine_side_effect_vectors.py`
+- Create: `docs/contracts/tools/verify_engine_side_effect_vectors.py`
+- Modify: `docs/contracts/vectors/core-canonical-projection-v1.json`
+- Modify: `docs/superpowers/specs/appendix-f-core-canonical-models.md`
+
+- [x] **Step 1: Close exact resolution, migration, and freshness catalogs**
+
+Cover the exact committed set of 18 resolution IDs with no fallback, every stable degraded diagnostic, metadata mismatch dimensions, upgrade-only discovery, and retained unsupported Bundles; six migration IDs whose offered variants carry complete before/after Snapshots, causal side effects, normalized candidate digests, forward/inverse application, exact Host IDs/provenance, and zero-Engine Undo/Redo, while the incompatible discovery-only variant forbids transaction/after/execution evidence; and eight computed freshness IDs. Every migration Snapshot Derived State is canonically hashed, bound to derivation, and the before revision/digest is repeated exactly in applicability.
+
+- [x] **Step 2: Close causal Host side-effect vectors**
+
+Use exactly 14 complete non-empty `ipcraft.noc-side-effects.v1` documents. Derive Application operations, impacts, tombstones, diagnostics, allocation order, and disposition from current state plus Authority Patch. Connectivity materializes Router/Structural-Link/Slot creates, updates, and deletes plus generated Membership operations before evaluating the post-candidate undirected graph; isolated vectors cover Router deletion, Link deletion, Link endpoint update, and new-Router Default-membership placement.
+
+- [x] **Step 3: Require generator/verifier independence and mutations**
+
+The stdlib-only generator writes both byte-stable catalogs to `--output-dir`. The independent verifier imports neither generator nor smoke witness, validates closed envelopes and the catalogued schema subset, recomputes transitions/behavior/digests/order, requires exact ID sets, and rejects causal, inverse-state, provenance, identity, ordering, ID-set, and extra-field corruptions.
+
+- [x] **Step 4: Register behavior catalogs and verify regeneration**
+
+The Core vector catalog lists both behavioral catalogs. Appendix F records the closed formats, complete coverage, independent evaluation, and mutation requirements. Authoring verification regenerates to a temporary directory and byte-compares both committed files.
+
+## Task 4A: Freeze the standalone fixture envelope and validation errors
+
+**Files:**
+- Create: `docs/contracts/schemas/ipcraft.fixture-catalog.v1.schema.json`
 - Create: `docs/contracts/fixture-catalog.json`
+- Create: `docs/contracts/tools/verify_fixture_catalog.py`
+- Modify: `docs/contracts/schema-catalog.json`
+- Modify: `docs/contracts/error-codes-v1.json`
+- Modify: `docs/contracts/vectors/core-canonical-projection-v1.json`
+- Modify: `docs/contracts/vectors/core-set-permutation-v1.json`
+- Modify: `docs/superpowers/specs/appendix-e-gate-acceptance-matrix.md`
+- Modify: `docs/superpowers/specs/appendix-f-core-canonical-models.md`
+
+- [x] **Step 1: Define the closed catalog root and entry**
+
+The root schema is exactly `ipcraft.fixture-catalog.v1` plus canonical-set `items` sorted by `path`. Each entry contains exactly `path`, `schemaId`, `validationPhase`, `failureBoundary`, `expected`, `errorCode`, and `behaviorEvidence`. Paths are portable normalized JSON paths below `fixtures/valid/` or `fixtures/invalid/`; `validationPhase` is `schema` or `core-semantic`. Accept entries require the valid prefix plus null boundary/error. Reject entries require the invalid prefix, an explicit closed failure boundary, its exact catalogued non-null error, and null behavior evidence. Optional accept evidence is exactly `vectors/<file>.json#<case-id>` and resolves an exact committed case.
+
+- [x] **Step 2: Freeze catalog scope and totality**
+
+The standalone catalog covers deterministic JSON Schema or Core-semantic validation of one JSON document. It excludes filesystem trees, resolver availability, Provider self-digest, degraded-inspect selection, and output freshness; those remain behavioral vectors/tool tests. A structurally valid Project with unavailable exact dependency metadata may be accepted and link to degraded-inspect behavior evidence without claiming that state from the JSON alone. V1 has no fixture-context/directory entry. Coverage means one invalid fixture per named normative rule family/conditional, not every repeated schema keyword. The authoring verifier enforces sorting, Unicode 17 NFC/simple-fold collision uniqueness for fixture and schema catalog paths, physical totality, exact behavior evidence, and exact `(schemaId, validationPhase, failureBoundary) -> errorCode` resolution; `--allow-empty` is temporary Task 4A support and default verification rejects empty.
+
+- [x] **Step 3: Freeze standalone error classification**
+
+Use `contract.schema_invalid` for generic JSON/root structure; `project.legacy_format_unsupported`, `project.duplicate_id`, `project.unknown_reference`, and `project.invariant_violation` for Project families; `recovery.binding_mismatch`; `package.invariant_violation`; `contract.invariant_violation`; `engine.migration_invalid`; `tool.input_invalid`; `command.result_invalid`; `diagnostic.report_invalid`; `output.manifest_invalid`; `host.side_effect_result_invalid`; and `dependency.manifest_invalid`. Existing specialized Tool Result/Pipeline Result/Artifact codes remain. `dependency.bundle_mismatch` stays behavioral and output stale reasons gain no codes.
+
+The machine policy assigns each closed `failureBoundary` name one stable error code, then permits it only for explicit schema/phase pairs. Every reject fixture must match the exact triple; codes that share a schema/phase remain non-interchangeable, including Project `generic-structure` versus `legacy-project-root`.
+
+Patch classification is exact: envelope/JSON Schema failure before operation dispatch is `patch.schema_invalid`; an illegal operation discriminant or required operation shape is `patch.operation_invalid`; applying a structurally valid operation that produces a subject violating its subject schema is `patch.schema_violation`; a cross-object invariant is `patch.invariant_violation`. Existing ownership/reference/specialized codes retain their meanings.
+
+- [x] **Step 4: Integrate canonical evidence and verify mutations**
+
+Catalog `ipcraft.fixture-catalog.v1` as the nineteenth schema. Its `items` array is the ninety-ninth physical canonical rule and has one regenerated collection case. Verify JSON syntax, schema catalog sorting/references, canonical rule/vector regeneration, `verify_fixture_catalog.py --allow-empty`, entry-field/conditional/link/sort/uniqueness mutations, Python compilation, the existing Qt contract-example test, and `git diff --check`.
+
+## Task 4B: Build the valid/invalid fixture set
+
+**Files:**
 - Create: `docs/contracts/fixtures/valid/*.json`
 - Create: `docs/contracts/fixtures/invalid/*.json`
+- Modify: `docs/contracts/fixture-catalog.json`
 
 - [ ] **Step 1: Define a closed fixture entry**
 
@@ -228,20 +303,23 @@ git commit -m "docs: lock Default Engine and Host side effects"
 {
   "path": "fixtures/invalid/project-duplicate-id.json",
   "schemaId": "ipcraft.project-design.v1",
+  "validationPhase": "core-semantic",
+  "failureBoundary": "project-duplicate-id",
   "expected": "reject",
-  "errorCode": "project.duplicate_id"
+  "errorCode": "project.duplicate_id",
+  "behaviorEvidence": null
 }
 ```
 
 Sort by `path`; every fixture appears exactly once.
 
-- [ ] **Step 2: Add at least three valid fixtures per persisted root**
+- [ ] **Step 2: Add representative valid fixtures per persisted root**
 
-Use minimal, representative, and maximum-shape fixtures. The ProjectDesign set must include 1×1, 2×2 with Interface/Attachment/Domain, and degraded-inspect exact-lock missing metadata.
+Use minimal, representative, and maximum-shape fixtures. The ProjectDesign set must include 1×1, 2×2 with Interface/Attachment/Domain, and a structurally valid exact-lock unavailable witness linked by `behaviorEvidence` to the degraded-inspect vector.
 
-- [ ] **Step 3: Add one invalid fixture per schema rule and stable error**
+- [ ] **Step 3: Add one invalid fixture per named normative rule family/conditional and stable error**
 
-Include duplicate IDs, unresolved forbidden references, unknown legacy schema ID, illegal ownership source, bad applicability tuple, unlisted bundle file, symlink/special-file declaration, invalid runtime closure, output freshness mismatch, and Provider manifest self-digest.
+Include standalone duplicate-ID, forbidden-reference, legacy-root, ownership, applicability, declaration, and artifact-envelope families. Do not encode unlisted Bundle files, symlink/special-file trees, resolver/runtime availability, output freshness, or Provider self-digest as single-document fixtures; retain those in their focused behavioral vectors/tool tests.
 
 - [ ] **Step 4: Check catalog completeness**
 

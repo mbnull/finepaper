@@ -1,0 +1,14 @@
+{
+  "schema": "ipcraft.bundle-manifest.v1",
+  "bundleId": "value",
+  "bundleVersion": "value",
+  "files": [
+    {
+      "path": "CON.txt",
+      "size": 0,
+      "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "executable": false
+    }
+  ],
+  "manifestDigest": "sha256:a6c9aeec12366271ba30bfaccb500a905349e81ec4f1db5d5539a371fccb7abd"
+}

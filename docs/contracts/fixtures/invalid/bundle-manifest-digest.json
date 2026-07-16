@@ -1,0 +1,7 @@
+{
+  "schema": "ipcraft.bundle-manifest.v1",
+  "bundleId": "value",
+  "bundleVersion": "value",
+  "files": [],
+  "manifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+}

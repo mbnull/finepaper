@@ -1,0 +1,65 @@
+{
+  "schema": "ipcraft.patch.v1",
+  "transactionId": "value",
+  "patchId": "value",
+  "source": {
+    "kind": "default-engine",
+    "identity": "ipcraft.default-noc-engine",
+    "version": "1.0.0",
+    "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "causality": {
+    "sessionRevision": 0
+  },
+  "preconditions": [],
+  "operations": [
+    {
+      "op": "createEntity",
+      "entityKind": "access-slot",
+      "localRef": "authority:duplicate-role-slot",
+      "value": {
+        "routerRef": {
+          "id": "router.0.0"
+        },
+        "templateKey": "local-x",
+        "identityCompatibilityVersion": 1,
+        "displayOrder": 2,
+        "label": "Duplicate",
+        "allowedContracts": [
+          {
+            "contractLockId": "dep.contract.axi5",
+            "roles": [
+              "initiator",
+              "initiator"
+            ],
+            "capabilityConstraints": {}
+          }
+        ],
+        "properties": {}
+      }
+    }
+  ],
+  "applicability": {
+    "schema": "ipcraft.reconcile-applicability.v1",
+    "groupId": "group.topology.1",
+    "requestGeneration": 1,
+    "topologyInputRevision": 1,
+    "topologyInputDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "baseDerivedStateRevision": 0,
+    "baseDerivedStateDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "baseAuthoritativeDesignDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "structureAuthority": {
+      "kind": "default-engine",
+      "lockId": "dep.engine.default",
+      "identity": "ipcraft.default-noc-engine",
+      "version": "1.0.0",
+      "bundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "packageBundleDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "reconcileDependencySetDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "defaultEngineLockId": "dep.engine.default",
+    "defaultEngineBundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "engineHostContractVersion": "ipcraft.engine-host.v1",
+    "hostSideEffectContractVersion": "ipcraft.noc-side-effects.v1"
+  }
+}

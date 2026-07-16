@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ipcraft.step-result.v1",
+  "title": "Ipcraft Normalized Pipeline Step Result V1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "pipelineRunId", "stepId", "stepKind", "status", "toolResult", "failure"],
+  "properties": {
+    "schema": { "const": "ipcraft.step-result.v1" },
+    "pipelineRunId": { "$ref": "#/$defs/id" },
+    "stepId": { "$ref": "#/$defs/id" },
+    "stepKind": { "enum": ["host", "external-tool"] },
+    "invocationId": { "$ref": "#/$defs/id" },
+    "status": { "enum": ["succeeded", "failed", "cancelled", "timed-out", "skipped"] },
+    "toolLockId": { "$ref": "#/$defs/id" },
+    "toolResult": { "oneOf": [{ "$ref": "#/$defs/path" }, { "type": "null" }] },
+    "failure": { "oneOf": [{ "$ref": "#/$defs/failure" }, { "type": "null" }] }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "stepKind": { "const": "external-tool" } }, "required": ["stepKind"] },
+      "then": {
+        "required": ["invocationId", "toolLockId"],
+        "allOf": [
+          {
+            "if": { "properties": { "status": { "const": "succeeded" } }, "required": ["status"] },
+            "then": {
+              "required": ["toolResult"],
+              "properties": { "toolResult": { "$ref": "#/$defs/path" } }
+            }
+          }
+        ]
+      },
+      "else": {
+        "properties": { "toolResult": { "type": "null" } },
+        "allOf": [
+          { "not": { "required": ["invocationId"] } },
+          { "not": { "required": ["toolLockId"] } }
+        ]
+      }
+    },
+    {
+      "if": { "properties": { "status": { "const": "succeeded" } }, "required": ["status"] },
+      "then": { "properties": { "failure": { "type": "null" } } },
+      "else": { "properties": { "failure": { "$ref": "#/$defs/failure" } } }
+    }
+  ],
+  "$defs": {
+    "id": { "type": "string", "minLength": 1 },
+    "path": {
+      "type": "string",
+      "$comment": "Semantic validation MUST enforce NFC, Windows reserved device names and trailing-dot/space rules, Unicode simple-case-fold collision detection, and exhaustive filesystem containment because JSON Schema regex cannot prove them.",
+      "pattern": "^(?!.*[\\u0000-\\u001F\\u007F:])(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$))[^/]+(?:/[^/]+)*$"
+    },
+    "failure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "source"],
+      "properties": {
+        "code": { "$ref": "#/$defs/id" },
+        "source": { "enum": ["host", "tool"] }
+      }
+    }
+  }
+}

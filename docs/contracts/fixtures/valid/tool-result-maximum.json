@@ -1,0 +1,16 @@
+{
+  "schema": "ipcraft.tool-result.v1",
+  "pipelineRunId": "value",
+  "stepId": "value",
+  "invocationId": "value",
+  "snapshotDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "dependencySetDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "status": "succeeded",
+  "diagnosticReport": "reports/diagnostics.json",
+  "metrics": {
+    "elapsedMs": 10,
+    "artifacts": 2
+  },
+  "failure": null,
+  "artifactManifest": "reports/artifact-manifest.json"
+}

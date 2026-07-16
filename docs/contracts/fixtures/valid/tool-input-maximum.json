@@ -1,0 +1,37 @@
+{
+  "schema": "ipcraft.tool-input.v1",
+  "pipelineRunId": "value",
+  "stepId": "value",
+  "invocationId": "value",
+  "toolLockId": "value",
+  "kind": "generator",
+  "snapshotSessionRevision": 0,
+  "snapshotDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "formallySavedProjectDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "dependencies": [
+    {
+      "lockId": "dep.engine.default",
+      "kind": "default-engine",
+      "id": "ipcraft.default-noc-engine",
+      "version": "1.0.0",
+      "bundleManifestDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "engineHostContractVersion": "ipcraft.engine-host.v1",
+      "engineCompatibilityVersion": "1",
+      "hostSideEffectContractVersion": "ipcraft.noc-side-effects.v1",
+      "supportedPlatformAbis": [
+        "linux-x86_64-gnu-v1"
+      ]
+    },
+    {
+      "lockId": "dep.noc.simple",
+      "kind": "noc-package",
+      "id": "simple-noc",
+      "version": "1.0.0",
+      "bundleManifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    }
+  ],
+  "projectDesignFile": "inputs/project-design.json",
+  "resultFile": "reports/tool-result.json",
+  "reportDirectory": "reports",
+  "outputDirectory": "artifacts"
+}

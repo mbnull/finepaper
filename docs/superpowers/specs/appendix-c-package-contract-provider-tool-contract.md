@@ -1,6 +1,6 @@
 # Appendix C — NoC Package, Contract, Provider, Tool, and Diagnostic Contracts
 
-**Normative status:** V1 Revision 4 baseline; Core schemas freeze at Gate 0 and Extension ABI freezes at Gate D.
+**Normative status:** V1 Revision 5 Core contract; Core schemas frozen by the Gate 0 Revision 5 record. Extension ABI freezes at Gate D.
 
 ## C1. Normative Schema IDs
 
@@ -247,6 +247,8 @@ Relation declaration:
 
 V1 endpoint cardinalities are non-negative integers with `maximum >= minimum`. Relation instances use Appendix A resolved/unresolved endpoint envelopes. Unresolved endpoints are legal only when the declaration opts in.
 
+Each declaration's `sources.kinds[]` and `targets.kinds[]` is a set sorted by literal Unicode scalar-value order; duplicates are invalid.
+
 ## C3. Unknown Capability Fallback
 
 Processing order:
@@ -322,17 +324,20 @@ Default Engine is an independently installable, immutable Bundle resolved exclus
   "version": "1.0.0",
   "engineHostContractVersion": "ipcraft.engine-host.v1",
   "engineCompatibilityVersion": "1",
+  "hostSideEffectContractVersion": "ipcraft.noc-side-effects.v1",
   "migrationFromCompatibilityVersions": ["1"],
   "supportedPlatformAbis": ["linux-x86_64-gnu-v1"],
   "entrypoint": "lib/libipcraft_noc_engine.so"
 }
 ```
 
-The Engine manifest is inside its Bundle and therefore does not contain its own bundle digest. `id`/`version` are display metadata. `engineCompatibilityVersion` classifies whether explicit migration may be offered; it never authorizes replacement. A different digest is always a different exact Engine implementation.
+The Engine manifest is inside its content-addressed installable Bundle and therefore does not contain its own bundle digest. Its metadata type `id` is exactly `ipcraft.default-noc-engine`; `version` is display metadata. The ID constant identifies the artifact type and never authorizes replacement. `engineCompatibilityVersion` classifies whether explicit migration may be offered; it never authorizes replacement. Engine/side-effect version fields are structurally open non-empty IDs so unsupported installed Bundles still parse. A different digest is always a different exact Engine implementation.
 
 `ipcraft.engine-host.v1` is a C-compatible function-table ABI with no Qt or C++ standard-library types across the boundary. The shared library exports exactly `ipcraft_engine_host_v1_get_api`. It returns a size-versioned table containing `create`, `reconcile`, `release_buffer`, and `destroy`. `create` receives size-versioned Host allocator/log callbacks and returns an opaque Engine handle. `reconcile` is serialized per handle, accepts canonical UTF-8 JSON `normalizedTopologyInput`, `currentDerivedState`, and `reconcileApplicability` byte spans, and returns one canonical UTF-8 JSON `ipcraft.patch-body.v1` byte span plus optional structured diagnostics. Engine-owned output buffers remain valid until `release_buffer`; nonzero ABI status returns no Patch body. `destroy` releases the handle after outstanding calls finish. No callback supplies project paths, Qt objects, files, environment, clock, randomness, or network. The Host injects source identity, Session provenance, transaction ID, and Host IDs. Platform ABI or function-table size/version mismatch prevents loading.
 
-The Host verifies exact Engine Bundle bytes before loading and records bundle digest and `engineHostContractVersion` in applicability, derivation, Pipeline provenance, and output freshness. A missing, revoked, corrupt, incompatible, or unsupported-platform Engine Bundle opens the project in degraded inspect mode. The Host MUST NOT fall back to another installed/built-in Engine with matching ID/version or compatibility class.
+The Host verifies exact Engine Bundle bytes before loading and records bundle digest and `engineHostContractVersion` in applicability, derivation, Pipeline provenance, and output freshness. A missing, revoked, corrupt, incompatible, or unsupported-platform Engine Bundle opens the project in degraded inspect mode; corruption uses `engine.bundle_mismatch`. A structurally valid Bundle unsupported by the current platform/Host ABI may be installed and retained in the content-addressed store but cannot resolve for execution. The Host MUST NOT fall back to another installed/built-in Engine with matching ID/version or compatibility class.
+
+`upgrade-available` is an informational overlay on an exact normal resolution. It neither changes availability nor selects a digest. Engine Host or Host-side-effect freshness mismatch uses the existing output stale reason `dependency-changed`.
 
 Host-owned invariant side effects use `hostSideEffectContractVersion: ipcraft.noc-side-effects.v1`. V1 fixes Router-created Default Membership, Router/Slot removal Attachment handling, Domain cleanup/connectivity evaluation, Package Relation unresolved/blocking handling, impact codes, and canonical side-effect localRef/order semantics in Appendix F. A Host that does not support the persisted side-effect contract opens degraded inspect mode; it cannot silently reinterpret an old project.
 
@@ -361,7 +366,10 @@ Every resolved Package, Contract, Provider, and Tool sub-bundle has an `ipcraft.
 
 Rules:
 
-- Paths are UTF-8 NFC, `/`-separated, relative, non-empty, case-sensitive identifiers with no `.`, `..`, absolute prefix, drive prefix, NUL, backslash, or duplicate after normalization. A bundle is also rejected when two normalized paths collide under Unicode simple case folding, so it remains installable on case-insensitive hosts.
+- V1 paths are portable normalized relative identifiers: UTF-8 NFC, `/`-separated, relative, case-sensitive, and composed of non-empty segments. They contain no C0 control (`U+0000`–`U+001F`), DEL (`U+007F`), colon, backslash, absolute or drive prefix, empty segment, `.` segment, or `..` segment.
+- Semantic path validation rejects Windows reserved device names, segments ending in dot or space, duplicate normalized paths, Unicode simple-case-fold collisions, and any path escape. This portable contract intentionally rejects some filenames that are legal on a particular host so locked Bundles and execution views have one cross-platform identity.
+- V1 NFC is pinned to Unicode 17.0.0 by [nfc-normalization-17.0.0.json](../../contracts/unicode/nfc-normalization-17.0.0.json): recursive canonical decomposition, canonical combining-class ordering, canonical composition excluding the pinned composition exclusions, and algorithmic Hangul decomposition/composition. [NormalizationTest-17.0.0.txt](../../contracts/unicode/NormalizationTest-17.0.0.txt) is the official committed conformance source. Normative validation never uses the host language's Unicode normalization database.
+- V1 Unicode simple folding is pinned to Unicode 17.0.0 C/S mappings. The committed [simple-case-folding-17.0.0.json](../../contracts/unicode/simple-case-folding-17.0.0.json) table is the machine source: after pinned NFC validation, replace each code point only by its exact table target, leaving unlisted code points unchanged. Full/Turkic mappings, multi-code-point expansions, host language `casefold`/lowercase behavior, and silently newer host Unicode data are forbidden. Both Unicode artifacts pin official-source SHA-256 identities, counts, and full-array digests; Gate authoring regenerates and byte-compares them. The complete redistribution notice is [Unicode License V3](../../contracts/unicode/UNICODE-LICENSE.txt). A later Unicode version requires an explicit data/version migration and affected contract re-verification.
 - Entries sort by normalized path before canonicalization. Regular files only; symlinks, hard-link aliases, devices, sockets, and other special files are rejected.
 - `files[]` is exhaustive: it enumerates every regular file visible under that Bundle root except the Bundle Manifest document itself. Any unlisted entry, directory containing unlisted descendants, duplicate normalized path, Unicode/case-fold collision, link, special file, or path escape rejects installation/launch.
 - Package, Contract, Engine, Provider, Runtime, and Tool sub-bundle roots are non-overlapping content-addressed roots. A process receives separate read-only execution views for only the exact locked roots declared in its dependency set; parent Bundle files are not implicitly visible to a child and child files are not included in a parent digest.
@@ -423,6 +431,7 @@ The reproducibility claim is limited to verifiable replay with identical canonic
 Rules:
 
 - Command elements are literal argv entries; shell interpolation is forbidden.
+- `command[]` is ordered and retains argv order. `capabilities[]`, `ownedEntityTypes[]`, and `ownedRelationTypes[]` are literal-string sets sorted by Unicode scalar-value order with duplicates invalid. Provider capability strings are not Package/Contract declaration objects and are not runtime capability values.
 - Relative executable/script paths resolve under the immutable Provider sub-bundle root.
 - The Provider manifest MUST NOT contain its own Provider bundle digest. The external project dependency lock plus Package `providerLockId`/`manifestPath` binds it to the verified bundle; the host carries that digest in launch context, handshake checks, applicability, transaction provenance, and diagnostics.
 - The host verifies the externally locked Provider bundle and runtime closure before every launch.
@@ -511,6 +520,8 @@ Request:
 
 The abbreviated `applicability`, `normalizedTopologyInput`, and `currentDerivedState` objects above MUST validate against the exact Appendix F machine models; `{}` is editorial elision, not an open object. Provider ABI may wrap but cannot extend them.
 
+`dependencyLocks[]` is a set sorted by `lockId`. `capabilities[]` contains runtime capability values and sorts by the UTF-8 bytes of each value's RFC 8785 canonical JSON after nested set normalization. This is distinct from Package/Contract capability declarations sorted by `key` and Provider/Tool declared capability string lists sorted literally.
+
 Progress event:
 
 ```json
@@ -594,6 +605,8 @@ Package tool declaration:
 ```
 
 These declarations live in the parent NoC Package manifest, outside each locked Tool sub-bundle, so their `bundleManifestDigest` fields do not hash a file that contains the same digest. Only documented literal placeholders are substituted. Shell execution and arbitrary environment expansion are forbidden. Manifest runtime/environment/network declarations must equal the referenced Runtime Lock/profile; a mismatch rejects launch.
+
+Each Tool `command[]` is an ordered argv sequence. Any Tool manifest capability declaration string list is a set sorted by literal Unicode scalar-value order; it does not use the Package/Contract declaration-key or runtime capability-value comparator.
 
 ## C11. Tool Input Manifest
 
@@ -727,13 +740,14 @@ Allowed severity: `info`, `warning`, `error`. `blocking: true` is authoritative 
 
 Rules:
 
-- Paths are normalized relative paths without `..`, absolute roots, drive prefixes, NUL, or platform escape.
+- Artifact paths are portable normalized relative identifiers under the C6 path contract: UTF-8 NFC, `/`-separated, with no C0/DEL controls, colon, backslash, absolute or drive prefix, empty segment, `.` segment, or `..` segment.
+- Semantic validation rejects Windows reserved device names, trailing dot/space segments, Unicode simple-case-fold collisions, and any filesystem containment escape. This intentionally excludes some host-native legal filenames to preserve one cross-platform artifact and report identity.
 - Artifact files must be regular files under staging; symlinks and special files are rejected.
 - `artifacts[]` is exhaustive for the promoted output: every entry under execution `artifacts/` must appear exactly once. Unlisted files/directories, hard links, duplicate normalized paths, Unicode/case-fold collisions, symlinks, special files, and escapes reject verification.
 - Host policy defines maximum entry count, per-file size, and total size; exceeding policy rejects promotion with stable diagnostics.
 - Every manifest size/digest is verified before promotion.
 - The Host builds a new clean promotion tree by copying only verified manifest entries in canonical path order. It never renames or promotes the arbitrary tool-written `artifacts/` directory itself.
-- `diagnosticReport`, `artifactManifest`, Tool Input paths, and Tool Result pointer paths use the same normalized-relative-path and containment checks, relative to the invocation execution root.
+- `diagnosticReport`, `artifactManifest`, Tool Input paths, Tool Result pointer paths, and archive-relative paths use the same C6 portable normalized-relative-path and containment checks, relative to their declared execution or report root.
 
 ## C15. Run, Pipeline, and Output Ownership
 

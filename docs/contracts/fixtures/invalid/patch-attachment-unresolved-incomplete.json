@@ -1,0 +1,28 @@
+{
+  "schema": "ipcraft.patch.v1",
+  "transactionId": "value",
+  "patchId": "value",
+  "source": {
+    "kind": "user-command",
+    "identity": "value",
+    "version": "value"
+  },
+  "causality": {
+    "sessionRevision": 0
+  },
+  "preconditions": [],
+  "operations": [
+    {
+      "op": "updateRelation",
+      "relationKind": "attachment",
+      "id": "attachment.boundary",
+      "set": {
+        "state": "unresolved"
+      },
+      "unset": [
+        "routerRef",
+        "slotRef"
+      ]
+    }
+  ]
+}

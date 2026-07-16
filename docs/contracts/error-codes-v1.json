@@ -2,60 +2,455 @@
   "schema": "ipcraft.error-catalog.v1",
   "version": "1",
   "codes": [
-    { "code": "patch.schema_invalid", "category": "patch" },
-    { "code": "patch.source_not_allowed", "category": "patch" },
-    { "code": "patch.revision_conflict", "category": "patch" },
-    { "code": "patch.topology_input_conflict", "category": "patch" },
-    { "code": "patch.group_conflict", "category": "patch" },
-    { "code": "patch.request_generation_conflict", "category": "patch" },
-    { "code": "patch.derived_state_base_conflict", "category": "patch" },
-    { "code": "patch.authority_conflict", "category": "patch" },
-    { "code": "patch.authoritative_design_base_conflict", "category": "patch" },
-    { "code": "patch.candidate_conflict", "category": "patch" },
-    { "code": "patch.precondition_failed", "category": "patch" },
-    { "code": "patch.ownership_violation", "category": "patch" },
-    { "code": "patch.unknown_entity_kind", "category": "patch" },
-    { "code": "patch.unknown_relation_kind", "category": "patch" },
-    { "code": "patch.duplicate_id", "category": "patch" },
-    { "code": "patch.unknown_reference", "category": "patch" },
-    { "code": "patch.schema_violation", "category": "patch" },
-    { "code": "patch.invariant_violation", "category": "patch" },
-    { "code": "patch.local_ref_invalid", "category": "patch" },
-    { "code": "patch.operation_invalid", "category": "patch" },
-    { "code": "command.attachment_would_be_illegal", "category": "command" },
-    { "code": "command.pending_candidate_required", "category": "command" },
-    { "code": "command.pending_candidate_blocked", "category": "command" },
-    { "code": "command.pending_candidate_digest_mismatch", "category": "command" },
-    { "code": "dependency.bundle_mismatch", "category": "dependency" },
-    { "code": "dependency.runtime_mismatch", "category": "dependency" },
-    { "code": "engine.bundle_missing", "category": "engine" },
-    { "code": "engine.bundle_revoked", "category": "engine" },
-    { "code": "engine.bundle_mismatch", "category": "engine" },
-    { "code": "engine.host_contract_unsupported", "category": "engine" },
-    { "code": "engine.platform_unsupported", "category": "engine" },
-    { "code": "host.side_effect_contract_unsupported", "category": "host" },
-    { "code": "provider.handshake_failed", "category": "provider" },
-    { "code": "provider.message_too_large", "category": "provider" },
-    { "code": "provider.protocol_invalid", "category": "provider" },
-    { "code": "provider.timeout", "category": "provider" },
-    { "code": "provider.crashed", "category": "provider" },
-    { "code": "provider.request_invalid", "category": "provider" },
-    { "code": "tool.result_missing", "category": "tool" },
-    { "code": "tool.result_invalid", "category": "tool" },
-    { "code": "tool.result_mismatch", "category": "tool" },
-    { "code": "tool.exit_nonzero", "category": "tool" },
-    { "code": "tool.cancelled", "category": "tool" },
-    { "code": "tool.timed_out", "category": "tool" },
-    { "code": "tool.stdout_limit_exceeded", "category": "tool" },
-    { "code": "tool.stderr_limit_exceeded", "category": "tool" },
-    { "code": "tool.artifact_invalid", "category": "tool" },
-    { "code": "tool.output_filesystem_unsupported", "category": "tool" },
-    { "code": "pipeline.step_failed", "category": "pipeline" },
-    { "code": "pipeline.cancelled", "category": "pipeline" },
-    { "code": "pipeline.timed_out", "category": "pipeline" },
-    { "code": "pipeline.result_invalid", "category": "pipeline" },
-    { "code": "project.locked", "category": "project" },
-    { "code": "project.concurrent_modification", "category": "project" },
-    { "code": "project.legacy_format_unsupported", "category": "project" }
+    {
+      "code": "attachment.target_removed",
+      "owner": "host-side-effects",
+      "blocking": false,
+      "messageTemplate": "Attachment target removed."
+    },
+    {
+      "code": "command.attachment_would_be_illegal",
+      "owner": "command",
+      "blocking": true,
+      "messageTemplate": "Command attachment would be illegal."
+    },
+    {
+      "code": "command.pending_candidate_blocked",
+      "owner": "command",
+      "blocking": true,
+      "messageTemplate": "Command pending candidate blocked."
+    },
+    {
+      "code": "command.pending_candidate_digest_mismatch",
+      "owner": "command",
+      "blocking": true,
+      "messageTemplate": "Command pending candidate digest mismatch."
+    },
+    {
+      "code": "command.pending_candidate_required",
+      "owner": "command",
+      "blocking": true,
+      "messageTemplate": "Command pending candidate required."
+    },
+    {
+      "code": "command.result_invalid",
+      "owner": "command",
+      "blocking": true,
+      "messageTemplate": "Command result invalid."
+    },
+    {
+      "code": "contract.invariant_violation",
+      "owner": "contract",
+      "blocking": true,
+      "messageTemplate": "Contract invariant violation."
+    },
+    {
+      "code": "contract.schema_invalid",
+      "owner": "contract",
+      "blocking": true,
+      "messageTemplate": "Contract schema invalid."
+    },
+    {
+      "code": "dependency.bundle_mismatch",
+      "owner": "dependency",
+      "blocking": true,
+      "messageTemplate": "Dependency bundle mismatch."
+    },
+    {
+      "code": "dependency.manifest_invalid",
+      "owner": "dependency",
+      "blocking": true,
+      "messageTemplate": "Dependency manifest invalid."
+    },
+    {
+      "code": "dependency.runtime_mismatch",
+      "owner": "dependency",
+      "blocking": true,
+      "messageTemplate": "Dependency runtime mismatch."
+    },
+    {
+      "code": "diagnostic.report_invalid",
+      "owner": "diagnostic",
+      "blocking": true,
+      "messageTemplate": "Diagnostic report invalid."
+    },
+    {
+      "code": "domain.disconnected",
+      "owner": "host-side-effects",
+      "blocking": true,
+      "messageTemplate": "Domain disconnected."
+    },
+    {
+      "code": "domain.non_default_deleted",
+      "owner": "host-side-effects",
+      "blocking": false,
+      "messageTemplate": "Domain non default deleted."
+    },
+    {
+      "code": "engine.bundle_mismatch",
+      "owner": "engine",
+      "blocking": true,
+      "messageTemplate": "Engine bundle mismatch."
+    },
+    {
+      "code": "engine.bundle_missing",
+      "owner": "engine",
+      "blocking": true,
+      "messageTemplate": "Engine bundle missing."
+    },
+    {
+      "code": "engine.bundle_revoked",
+      "owner": "engine",
+      "blocking": true,
+      "messageTemplate": "Engine bundle revoked."
+    },
+    {
+      "code": "engine.host_contract_unsupported",
+      "owner": "engine",
+      "blocking": true,
+      "messageTemplate": "Engine host contract unsupported."
+    },
+    {
+      "code": "engine.migration_invalid",
+      "owner": "engine",
+      "blocking": true,
+      "messageTemplate": "Engine migration invalid."
+    },
+    {
+      "code": "engine.platform_unsupported",
+      "owner": "engine",
+      "blocking": true,
+      "messageTemplate": "Engine platform unsupported."
+    },
+    {
+      "code": "engine_migration.dependency_replaced",
+      "owner": "host-side-effects",
+      "blocking": false,
+      "messageTemplate": "Engine migration dependency replaced."
+    },
+    {
+      "code": "host.side_effect_contract_unsupported",
+      "owner": "host",
+      "blocking": true,
+      "messageTemplate": "Host side effect contract unsupported."
+    },
+    {
+      "code": "host.side_effect_result_invalid",
+      "owner": "host",
+      "blocking": true,
+      "messageTemplate": "Host side effect result invalid."
+    },
+    {
+      "code": "output.manifest_invalid",
+      "owner": "output",
+      "blocking": true,
+      "messageTemplate": "Output manifest invalid."
+    },
+    {
+      "code": "package.invariant_violation",
+      "owner": "package",
+      "blocking": true,
+      "messageTemplate": "Package invariant violation."
+    },
+    {
+      "code": "package_relation.endpoint_blocks_candidate",
+      "owner": "host-side-effects",
+      "blocking": true,
+      "messageTemplate": "Package relation endpoint blocks candidate."
+    },
+    {
+      "code": "package_relation.endpoint_unresolved",
+      "owner": "host-side-effects",
+      "blocking": false,
+      "messageTemplate": "Package relation endpoint unresolved."
+    },
+    {
+      "code": "patch.authoritative_design_base_conflict",
+      "owner": "patch",
+      "blocking": true,
+      "messageTemplate": "Patch authoritative design base conflict."
+    },
+    {
+      "code": "patch.authority_conflict",
+      "owner": "patch",
+      "blocking": true,
+      "messageTemplate": "Patch authority conflict."
+    },
+    {
+      "code": "patch.candidate_conflict",
+      "owner": "patch",
+      "blocking": true,
+      "messageTemplate": "Patch candidate conflict."
+    },
+    {
+      "code": "patch.derived_state_base_conflict",
+      "owner": "patch",
+      "blocking": true,
+      "messageTemplate": "Patch derived state base conflict."
+    },
+    {
+      "code": "patch.duplicate_id",
+      "owner": "patch",
+      "blocking": true,
+      "messageTemplate": "Patch duplicate id."
+    },
+    {
+      "code": "patch.group_conflict",
+      "owner": "patch",
+      "blocking": true,
+      "messageTemplate": "Patch group conflict."
+    },
+    {
+      "code": "patch.invariant_violation",
+      "owner": "patch",
+      "blocking": true,
+      "messageTemplate": "Patch invariant violation."
+    },
+    {
+      "code": "patch.local_ref_invalid",
+      "owner": "patch",
+      "blocking": true,
+      "messageTemplate": "Patch local ref invalid."
+    },
+    {
+      "code": "patch.operation_invalid",
+      "owner": "patch",
+      "blocking": true,
+      "messageTemplate": "Patch operation invalid."
+    },
+    {
+      "code": "patch.ownership_violation",
+      "owner": "patch",
+      "blocking": true,
+      "messageTemplate": "Patch ownership violation."
+    },
+    {
+      "code": "patch.precondition_failed",
+      "owner": "patch",
+      "blocking": true,
+      "messageTemplate": "Patch precondition failed."
+    },
+    {
+      "code": "patch.request_generation_conflict",
+      "owner": "patch",
+      "blocking": true,
+      "messageTemplate": "Patch request generation conflict."
+    },
+    {
+      "code": "patch.revision_conflict",
+      "owner": "patch",
+      "blocking": true,
+      "messageTemplate": "Patch revision conflict."
+    },
+    {
+      "code": "patch.schema_invalid",
+      "owner": "patch",
+      "blocking": true,
+      "messageTemplate": "Patch schema invalid."
+    },
+    {
+      "code": "patch.schema_violation",
+      "owner": "patch",
+      "blocking": true,
+      "messageTemplate": "Patch schema violation."
+    },
+    {
+      "code": "patch.source_not_allowed",
+      "owner": "patch",
+      "blocking": true,
+      "messageTemplate": "Patch source not allowed."
+    },
+    {
+      "code": "patch.topology_input_conflict",
+      "owner": "patch",
+      "blocking": true,
+      "messageTemplate": "Patch topology input conflict."
+    },
+    {
+      "code": "patch.unknown_entity_kind",
+      "owner": "patch",
+      "blocking": true,
+      "messageTemplate": "Patch unknown entity kind."
+    },
+    {
+      "code": "patch.unknown_reference",
+      "owner": "patch",
+      "blocking": true,
+      "messageTemplate": "Patch unknown reference."
+    },
+    {
+      "code": "patch.unknown_relation_kind",
+      "owner": "patch",
+      "blocking": true,
+      "messageTemplate": "Patch unknown relation kind."
+    },
+    {
+      "code": "pipeline.cancelled",
+      "owner": "pipeline",
+      "blocking": true,
+      "messageTemplate": "Pipeline cancelled."
+    },
+    {
+      "code": "pipeline.result_invalid",
+      "owner": "pipeline",
+      "blocking": true,
+      "messageTemplate": "Pipeline result invalid."
+    },
+    {
+      "code": "pipeline.step_failed",
+      "owner": "pipeline",
+      "blocking": true,
+      "messageTemplate": "Pipeline step failed."
+    },
+    {
+      "code": "pipeline.timed_out",
+      "owner": "pipeline",
+      "blocking": true,
+      "messageTemplate": "Pipeline timed out."
+    },
+    {
+      "code": "project.concurrent_modification",
+      "owner": "project",
+      "blocking": true,
+      "messageTemplate": "Project concurrent modification."
+    },
+    {
+      "code": "project.duplicate_id",
+      "owner": "project",
+      "blocking": true,
+      "messageTemplate": "Project duplicate id."
+    },
+    {
+      "code": "project.invariant_violation",
+      "owner": "project",
+      "blocking": true,
+      "messageTemplate": "Project invariant violation."
+    },
+    {
+      "code": "project.legacy_format_unsupported",
+      "owner": "project",
+      "blocking": true,
+      "messageTemplate": "Project legacy format unsupported."
+    },
+    {
+      "code": "project.locked",
+      "owner": "project",
+      "blocking": true,
+      "messageTemplate": "Project locked."
+    },
+    {
+      "code": "project.unknown_reference",
+      "owner": "project",
+      "blocking": true,
+      "messageTemplate": "Project unknown reference."
+    },
+    {
+      "code": "provider.crashed",
+      "owner": "provider",
+      "blocking": true,
+      "messageTemplate": "Provider crashed."
+    },
+    {
+      "code": "provider.handshake_failed",
+      "owner": "provider",
+      "blocking": true,
+      "messageTemplate": "Provider handshake failed."
+    },
+    {
+      "code": "provider.message_too_large",
+      "owner": "provider",
+      "blocking": true,
+      "messageTemplate": "Provider message too large."
+    },
+    {
+      "code": "provider.protocol_invalid",
+      "owner": "provider",
+      "blocking": true,
+      "messageTemplate": "Provider protocol invalid."
+    },
+    {
+      "code": "provider.request_invalid",
+      "owner": "provider",
+      "blocking": true,
+      "messageTemplate": "Provider request invalid."
+    },
+    {
+      "code": "provider.timeout",
+      "owner": "provider",
+      "blocking": true,
+      "messageTemplate": "Provider timeout."
+    },
+    {
+      "code": "recovery.binding_mismatch",
+      "owner": "recovery",
+      "blocking": true,
+      "messageTemplate": "Recovery binding mismatch."
+    },
+    {
+      "code": "tool.artifact_invalid",
+      "owner": "tool",
+      "blocking": true,
+      "messageTemplate": "Tool artifact invalid."
+    },
+    {
+      "code": "tool.cancelled",
+      "owner": "tool",
+      "blocking": true,
+      "messageTemplate": "Tool cancelled."
+    },
+    {
+      "code": "tool.exit_nonzero",
+      "owner": "tool",
+      "blocking": true,
+      "messageTemplate": "Tool exit nonzero."
+    },
+    {
+      "code": "tool.input_invalid",
+      "owner": "tool",
+      "blocking": true,
+      "messageTemplate": "Tool input invalid."
+    },
+    {
+      "code": "tool.output_filesystem_unsupported",
+      "owner": "tool",
+      "blocking": true,
+      "messageTemplate": "Tool output filesystem unsupported."
+    },
+    {
+      "code": "tool.result_invalid",
+      "owner": "tool",
+      "blocking": true,
+      "messageTemplate": "Tool result invalid."
+    },
+    {
+      "code": "tool.result_mismatch",
+      "owner": "tool",
+      "blocking": true,
+      "messageTemplate": "Tool result mismatch."
+    },
+    {
+      "code": "tool.result_missing",
+      "owner": "tool",
+      "blocking": true,
+      "messageTemplate": "Tool result missing."
+    },
+    {
+      "code": "tool.stderr_limit_exceeded",
+      "owner": "tool",
+      "blocking": true,
+      "messageTemplate": "Tool stderr limit exceeded."
+    },
+    {
+      "code": "tool.stdout_limit_exceeded",
+      "owner": "tool",
+      "blocking": true,
+      "messageTemplate": "Tool stdout limit exceeded."
+    },
+    {
+      "code": "tool.timed_out",
+      "owner": "tool",
+      "blocking": true,
+      "messageTemplate": "Tool timed out."
+    }
   ]
 }

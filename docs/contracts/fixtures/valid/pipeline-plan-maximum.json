@@ -1,0 +1,36 @@
+{
+  "schema": "ipcraft.pipeline-plan.v1",
+  "pipelineRunId": "value",
+  "kind": "generate",
+  "snapshotSessionRevision": 0,
+  "snapshotDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "formallySavedProjectDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "dependencySetDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "defaultEngineBundleDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "engineHostContractVersion": "value",
+  "hostSideEffectContractVersion": "value",
+  "steps": [
+    {
+      "stepId": "structural-drc",
+      "kind": "host"
+    },
+    {
+      "stepId": "semantic-drc",
+      "kind": "external-tool",
+      "toolLockId": "dep.tool.drc"
+    },
+    {
+      "stepId": "generator",
+      "kind": "external-tool",
+      "toolLockId": "dep.tool.generate"
+    },
+    {
+      "stepId": "artifact-verify",
+      "kind": "host"
+    },
+    {
+      "stepId": "promotion",
+      "kind": "host"
+    }
+  ]
+}

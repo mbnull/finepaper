@@ -1,0 +1,18 @@
+{
+  "schema": "ipcraft.interface-contract.v1",
+  "id": "value",
+  "name": "value",
+  "version": "value",
+  "roles": [
+    {
+      "key": "initiator",
+      "label": "Initiator"
+    },
+    {
+      "key": "initiator",
+      "label": "Initiator"
+    }
+  ],
+  "capabilities": [],
+  "fields": []
+}

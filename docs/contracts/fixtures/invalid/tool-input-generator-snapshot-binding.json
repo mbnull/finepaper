@@ -1,0 +1,16 @@
+{
+  "schema": "ipcraft.tool-input.v1",
+  "pipelineRunId": "value",
+  "stepId": "value",
+  "invocationId": "value",
+  "toolLockId": "value",
+  "kind": "generator",
+  "snapshotSessionRevision": 0,
+  "snapshotDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "formallySavedProjectDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "dependencies": [],
+  "projectDesignFile": "inputs/project-design.json",
+  "resultFile": "reports/tool-result.json",
+  "reportDirectory": "reports",
+  "outputDirectory": "output"
+}

@@ -1,0 +1,70 @@
+{
+  "schema": "ipcraft.interface-contract.v1",
+  "id": "amba.axi5",
+  "name": "AXI5",
+  "version": "1.0",
+  "roles": [
+    {
+      "key": "initiator",
+      "label": "Initiator"
+    },
+    {
+      "key": "target",
+      "label": "Target"
+    }
+  ],
+  "capabilities": [
+    {
+      "key": "dataWidth",
+      "type": "int",
+      "default": 128,
+      "required": true,
+      "editable": true,
+      "values": [
+        64,
+        128,
+        256
+      ]
+    },
+    {
+      "key": "coherent",
+      "type": "bool",
+      "default": false,
+      "required": true,
+      "editable": false,
+      "values": null
+    }
+  ],
+  "fields": [
+    {
+      "key": "addressWidth",
+      "type": "int",
+      "label": "Address Width",
+      "description": "Address channel width",
+      "default": 48,
+      "required": true,
+      "readOnly": false,
+      "minimum": 32,
+      "maximum": 64,
+      "unit": "bits",
+      "values": null,
+      "visibleWhen": null,
+      "enabledWhen": null
+    },
+    {
+      "key": "idWidth",
+      "type": "int",
+      "label": "ID Width",
+      "description": "Transaction ID width",
+      "default": 8,
+      "required": true,
+      "readOnly": false,
+      "minimum": 1,
+      "maximum": 32,
+      "unit": "bits",
+      "values": null,
+      "visibleWhen": null,
+      "enabledWhen": null
+    }
+  ]
+}

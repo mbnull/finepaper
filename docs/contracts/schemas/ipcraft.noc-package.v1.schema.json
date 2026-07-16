@@ -1,0 +1,266 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ipcraft.noc-package.v1",
+  "title": "Ipcraft NoC Package V1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema", "id", "name", "version", "component", "defaultEngineRequirement",
+    "structureAuthority", "configuration", "topology", "interfaceTemplates", "domainTypes",
+    "packageEntityTypes", "packageRelationTypes", "extensionProvider", "tools", "extensions"
+  ],
+  "properties": {
+    "schema": { "const": "ipcraft.noc-package.v1" },
+    "id": { "$ref": "#/$defs/id" },
+    "name": { "type": "string", "minLength": 1 },
+    "version": { "$ref": "#/$defs/id" },
+    "component": { "$ref": "#/$defs/component" },
+    "defaultEngineRequirement": { "$ref": "#/$defs/defaultEngineRequirement" },
+    "structureAuthority": { "enum": ["default-engine", "extension-provider"] },
+    "configuration": { "$ref": "#/$defs/configuration" },
+    "topology": { "$ref": "#/$defs/topology" },
+    "interfaceTemplates": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["key"] }, "items": { "$ref": "#/$defs/interfaceTemplate" } },
+    "domainTypes": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["key"] }, "items": { "$ref": "#/$defs/domainType" } },
+    "packageEntityTypes": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["typeKey"] }, "items": { "$ref": "#/$defs/entityType" } },
+    "packageRelationTypes": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["typeKey"] }, "items": { "$ref": "#/$defs/relationType" } },
+    "extensionProvider": { "oneOf": [{ "$ref": "#/$defs/extensionProvider" }, { "type": "null" }] },
+    "tools": { "$ref": "#/$defs/tools" },
+    "extensions": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["ownerLockId", "schema", "version"] }, "$comment": "Composite-key uniqueness and sorting are semantic-validator rules.", "items": { "$ref": "#/$defs/extension" } }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "structureAuthority": { "const": "extension-provider" } }, "required": ["structureAuthority"] },
+      "then": { "properties": { "extensionProvider": { "$ref": "#/$defs/extensionProvider" } } }
+    }
+  ],
+  "$defs": {
+    "id": { "type": "string", "minLength": 1 },
+    "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "path": {
+      "type": "string",
+      "$comment": "Semantic validation MUST enforce NFC, Windows reserved device names and trailing-dot/space rules, Unicode simple-case-fold collision detection, and exhaustive filesystem containment because JSON Schema regex cannot prove them.",
+      "pattern": "^(?!.*[\\u0000-\\u001F\\u007F:])(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$))[^/]+(?:/[^/]+)*$"
+    },
+    "component": {
+      "type": "object", "additionalProperties": false, "required": ["typeKey", "displayName"],
+      "properties": { "typeKey": { "$ref": "#/$defs/id" }, "displayName": { "type": "string", "minLength": 1 } }
+    },
+    "defaultEngineRequirement": {
+      "type": "object", "additionalProperties": false,
+      "required": ["engineHostContractVersion", "engineCompatibilityVersion", "hostSideEffectContractVersion"],
+      "properties": {
+        "engineHostContractVersion": { "$ref": "#/$defs/id" },
+        "engineCompatibilityVersion": { "$ref": "#/$defs/id" },
+        "hostSideEffectContractVersion": { "$ref": "#/$defs/id" }
+      }
+    },
+    "condition": {
+      "type": "object", "additionalProperties": false, "required": ["field", "equals"],
+      "properties": { "field": { "$ref": "#/$defs/id" }, "equals": { "$ref": "#/$defs/scalar" } }
+    },
+    "field": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "key", "type", "label", "description", "default", "required", "readOnly", "minimum",
+        "maximum", "unit", "values", "visibleWhen", "enabledWhen", "topologyDriving"
+      ],
+      "properties": {
+        "key": { "$ref": "#/$defs/id" },
+        "type": { "enum": ["bool", "int", "double", "string", "enum"] },
+        "label": { "type": "string", "minLength": 1 },
+        "description": { "type": "string" },
+        "default": { "$ref": "#/$defs/scalarOrNull" },
+        "required": { "type": "boolean" },
+        "readOnly": { "type": "boolean" },
+        "minimum": { "oneOf": [{ "type": "number" }, { "type": "null" }] },
+        "maximum": { "oneOf": [{ "type": "number" }, { "type": "null" }] },
+        "unit": { "oneOf": [{ "type": "string" }, { "type": "null" }] },
+        "values": { "oneOf": [{ "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["canonicalJson"] }, "$comment": "Capability/config enum values compare by RFC 8785 canonical JSON bytes after nested normalization.", "items": { "$ref": "#/$defs/scalar" }, "uniqueItems": true }, { "type": "null" }] },
+        "visibleWhen": { "oneOf": [{ "$ref": "#/$defs/condition" }, { "type": "null" }] },
+        "enabledWhen": { "oneOf": [{ "$ref": "#/$defs/condition" }, { "type": "null" }] },
+        "topologyDriving": { "type": "boolean" }
+      }
+    },
+    "configuration": {
+      "type": "object", "additionalProperties": false, "required": ["global"],
+      "properties": {
+        "global": {
+          "type": "object", "additionalProperties": false, "required": ["fields"],
+          "properties": { "fields": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["key"] }, "items": { "$ref": "#/$defs/field" } } }
+        }
+      }
+    },
+    "template": {
+      "type": "object", "additionalProperties": false,
+      "required": ["stableKey", "identityCompatibilityVersion", "properties"],
+      "properties": {
+        "stableKey": { "$ref": "#/$defs/id" },
+        "identityCompatibilityVersion": { "type": "integer", "minimum": 1 },
+        "properties": { "type": "object" }
+      }
+    },
+    "allowedContract": {
+      "type": "object", "additionalProperties": false,
+      "required": ["contractId", "version", "bundleManifestDigest", "roles", "capabilityConstraints"],
+      "properties": {
+        "contractId": { "$ref": "#/$defs/id" },
+        "version": { "$ref": "#/$defs/id" },
+        "bundleManifestDigest": { "$ref": "#/$defs/digest" },
+        "roles": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["unicodeScalarValue"] }, "items": { "$ref": "#/$defs/id" }, "uniqueItems": true },
+        "capabilityConstraints": { "type": "object", "$comment": "Any Contract-declared capability-value array nested here is a canonicalJson set under Appendix F; semantic validation supplies its item schema." }
+      }
+    },
+    "slotTemplate": {
+      "type": "object", "additionalProperties": false,
+      "required": ["stableKey", "identityCompatibilityVersion", "displayOrder", "label", "allowedContracts", "properties"],
+      "properties": {
+        "stableKey": { "$ref": "#/$defs/id" },
+        "identityCompatibilityVersion": { "type": "integer", "minimum": 1 },
+        "displayOrder": { "type": "integer", "minimum": 0 },
+        "label": { "type": "string", "minLength": 1 },
+        "allowedContracts": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["contractId", "version", "bundleManifestDigest"] }, "$comment": "Composite-key uniqueness and sorting are semantic-validator rules.", "items": { "$ref": "#/$defs/allowedContract" } },
+        "properties": { "type": "object" }
+      }
+    },
+    "topology": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "rowField", "columnField", "routerTemplate", "linkTemplate", "slotTemplates"],
+      "properties": {
+        "kind": { "const": "mesh" },
+        "rowField": { "$ref": "#/$defs/id" },
+        "columnField": { "$ref": "#/$defs/id" },
+        "routerTemplate": { "$ref": "#/$defs/template" },
+        "linkTemplate": { "$ref": "#/$defs/template" },
+        "slotTemplates": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["stableKey"] }, "items": { "$ref": "#/$defs/slotTemplate" } }
+      }
+    },
+    "interfaceTemplate": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "key", "label", "contractId", "contractVersion", "contractBundleManifestDigest", "role",
+        "capabilityDefaults", "contractConfigDefaults", "nocConfig"
+      ],
+      "properties": {
+        "key": { "$ref": "#/$defs/id" },
+        "label": { "type": "string", "minLength": 1 },
+        "contractId": { "$ref": "#/$defs/id" },
+        "contractVersion": { "$ref": "#/$defs/id" },
+        "contractBundleManifestDigest": { "$ref": "#/$defs/digest" },
+        "role": { "$ref": "#/$defs/id" },
+        "capabilityDefaults": { "type": "object", "$comment": "Any Contract-declared capability-value array nested here is a canonicalJson set under Appendix F; semantic validation supplies its item schema." },
+        "contractConfigDefaults": { "type": "object" },
+        "nocConfig": {
+          "type": "object", "additionalProperties": false, "required": ["fields", "defaults"],
+          "properties": {
+            "fields": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["key"] }, "items": { "$ref": "#/$defs/field" } },
+            "defaults": { "type": "object" }
+          }
+        }
+      }
+    },
+    "domainType": {
+      "type": "object", "additionalProperties": false,
+      "required": ["key", "label", "defaultName", "visual", "configuration"],
+      "properties": {
+        "key": { "$ref": "#/$defs/id" },
+        "label": { "type": "string", "minLength": 1 },
+        "defaultName": { "type": "string", "minLength": 1 },
+        "visual": {
+          "type": "object", "additionalProperties": false, "required": ["fill", "border", "pattern"],
+          "properties": {
+            "fill": { "type": "string", "minLength": 1 },
+            "border": { "type": "string", "minLength": 1 },
+            "pattern": { "$ref": "#/$defs/id" }
+          }
+        },
+        "configuration": {
+          "type": "object", "additionalProperties": false, "required": ["fields"],
+          "properties": { "fields": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["key"] }, "items": { "$ref": "#/$defs/field" } } }
+        }
+      }
+    },
+    "entityType": {
+      "type": "object", "additionalProperties": false,
+      "required": ["typeKey", "ownership", "genericEditable", "topologyDriving", "schema"],
+      "properties": {
+        "typeKey": { "$ref": "#/$defs/id" },
+        "ownership": { "enum": ["user", "engine"] },
+        "genericEditable": { "type": "boolean" },
+        "topologyDriving": { "type": "boolean" },
+        "schema": { "type": "object" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "ownership": { "const": "engine" } }, "required": ["ownership"] },
+          "then": { "properties": { "topologyDriving": { "const": false } } }
+        }
+      ]
+    },
+    "endpointDeclaration": {
+      "type": "object", "additionalProperties": false, "required": ["kinds", "minimum", "maximum"],
+      "properties": {
+        "kinds": { "type": "array", "x-ipcraft-canonical": { "kind": "set", "sortKey": ["unicodeScalarValue"] }, "items": { "enum": ["project", "component", "interface", "router", "structural-link", "access-slot", "attachment", "domain", "domain-membership", "package-entity", "package-relation"] }, "minItems": 1, "uniqueItems": true },
+        "minimum": { "type": "integer", "minimum": 0 },
+        "maximum": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "relationType": {
+      "type": "object", "additionalProperties": false,
+      "required": ["typeKey", "ownership", "topologyDriving", "sources", "targets", "unresolvedAllowed", "schema"],
+      "properties": {
+        "typeKey": { "$ref": "#/$defs/id" },
+        "ownership": { "enum": ["user", "engine"] },
+        "topologyDriving": { "type": "boolean" },
+        "sources": { "$ref": "#/$defs/endpointDeclaration" },
+        "targets": { "$ref": "#/$defs/endpointDeclaration" },
+        "unresolvedAllowed": { "type": "boolean" },
+        "schema": { "type": "object" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "ownership": { "const": "engine" } }, "required": ["ownership"] },
+          "then": { "properties": { "topologyDriving": { "const": false } } }
+        }
+      ]
+    },
+    "extensionProvider": {
+      "type": "object", "additionalProperties": false, "required": ["protocol", "providerLockId", "manifestPath"],
+      "properties": {
+        "protocol": { "const": "ipcraft.provider-protocol.v1" },
+        "providerLockId": { "$ref": "#/$defs/id" },
+        "manifestPath": { "$ref": "#/$defs/path" }
+      }
+    },
+    "tool": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "version", "protocol", "runtimeLockId", "bundleManifestDigest", "requestedTimeoutSeconds", "environmentProfile", "networkPolicy", "command"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "version": { "$ref": "#/$defs/id" },
+        "protocol": { "const": "ipcraft.tool-input.v1" },
+        "runtimeLockId": { "$ref": "#/$defs/id" },
+        "bundleManifestDigest": { "$ref": "#/$defs/digest" },
+        "requestedTimeoutSeconds": { "type": "integer", "minimum": 1 },
+        "environmentProfile": { "$ref": "#/$defs/id" },
+        "networkPolicy": { "const": "prohibited" },
+        "command": { "type": "array", "x-ipcraft-canonical": { "kind": "ordered" }, "items": { "type": "string", "minLength": 1 }, "minItems": 1 }
+      }
+    },
+    "tools": {
+      "type": "object", "additionalProperties": false,
+      "properties": { "drc": { "$ref": "#/$defs/tool" }, "generate": { "$ref": "#/$defs/tool" } }
+    },
+    "extension": {
+      "type": "object", "additionalProperties": false,
+      "required": ["ownerLockId", "schema", "version", "data"],
+      "properties": {
+        "ownerLockId": { "$ref": "#/$defs/id" },
+        "schema": { "$ref": "#/$defs/id" },
+        "version": { "$ref": "#/$defs/id" },
+        "data": { "type": "object" }
+      }
+    },
+    "scalar": { "type": ["boolean", "integer", "number", "string"] },
+    "scalarOrNull": { "type": ["boolean", "integer", "number", "string", "null"] }
+  }
+}

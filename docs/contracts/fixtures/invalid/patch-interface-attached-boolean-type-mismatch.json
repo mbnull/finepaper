@@ -1,0 +1,28 @@
+{
+  "schema": "ipcraft.patch.v1",
+  "transactionId": "value",
+  "patchId": "value",
+  "source": {
+    "kind": "user-command",
+    "identity": "ipcraft.host",
+    "version": "1"
+  },
+  "causality": {
+    "sessionRevision": 0
+  },
+  "preconditions": [],
+  "operations": [
+    {
+      "op": "updateEntity",
+      "entityKind": "interface",
+      "id": "interface.boundary",
+      "set": {
+        "capabilities": {
+          "coherent": 0,
+          "dataWidth": 128
+        }
+      },
+      "unset": []
+    }
+  ]
+}

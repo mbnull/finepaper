@@ -1,0 +1,42 @@
+{
+  "schema": "ipcraft.patch.v1",
+  "transactionId": "value",
+  "patchId": "value",
+  "source": {
+    "kind": "user-command",
+    "identity": "ipcraft.host",
+    "version": "1"
+  },
+  "causality": {
+    "sessionRevision": 0
+  },
+  "preconditions": [
+    {
+      "kind": "slot-unoccupied",
+      "slotId": "slot.free"
+    },
+    {
+      "kind": "relation-exists",
+      "relationKind": "domain-membership",
+      "id": "membership.0"
+    },
+    {
+      "kind": "property-equals",
+      "entityKind": "project",
+      "id": "project.mesh",
+      "property": "name",
+      "value": "Mesh"
+    },
+    {
+      "kind": "entity-absent",
+      "entityKind": "interface",
+      "id": "interface.new"
+    },
+    {
+      "kind": "entity-exists",
+      "entityKind": "component",
+      "id": "component.noc"
+    }
+  ],
+  "operations": []
+}

@@ -1,0 +1,262 @@
+#!/usr/bin/env python3
+"""Regression tests for Gate 0 fixture-catalog hardening."""
+
+from __future__ import annotations
+
+import json
+import os
+import tempfile
+import unittest
+from pathlib import Path
+
+import verify_fixture_catalog as subject
+import generate_error_catalog as error_generator
+
+
+CONTRACTS = Path(__file__).resolve().parents[1]
+
+
+class FixtureCatalogHardeningTest(unittest.TestCase):
+    def test_normative_json_loader_rejects_duplicate_members_at_every_depth(self) -> None:
+        cases = {
+            "fixture-error-policy-top-level.json": '{"schema":"a","schema":"b"}',
+            "error-codes-nested.json": '{"codes":[{"code":"a","code":"b"}]}',
+            "unicode-metadata.json": '{"unicodeVersion":"17.0.0","unicodeVersion":"18.0.0"}',
+            "unicode-mapping.json": '{"mappings":[{"source":"0041","source":"0042"}]}',
+            "recognized-vector-envelope.json": '{"schema":"a","schema":"b","cases":[]}',
+            "recognized-vector-case.json": '{"schema":"a","cases":[{"id":"a","id":"b"}]}',
+            "schema-catalog.json": '{"schema":"a","items":[{"id":"a","id":"b"}]}',
+        }
+        for filename, payload in cases.items():
+            with self.subTest(filename=filename), tempfile.TemporaryDirectory() as temporary:
+                path = Path(temporary) / filename
+                path.write_text(payload)
+                with self.assertRaisesRegex(subject.VerificationError, "duplicate JSON object member"):
+                    subject.load_json(path)
+
+    def test_normative_json_loader_rejects_non_finite_constants(self) -> None:
+        for constant in ("NaN", "Infinity", "-Infinity"):
+            with self.subTest(constant=constant), tempfile.TemporaryDirectory() as temporary:
+                path = Path(temporary) / "normative.json"
+                path.write_text('{"value":' + constant + '}')
+                with self.assertRaisesRegex(subject.VerificationError, "non-JSON numeric constant"):
+                    subject.load_json(path)
+
+    def test_normative_json_loader_uses_binary64_numeric_semantics(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "normative.json"
+            path.write_text('{"integer":1,"decimal":1.0,"fraction":0.1}')
+            document = subject.load_json(path)
+            self.assertIs(type(document["integer"]), int)
+            self.assertIs(type(document["decimal"]), float)
+            self.assertIs(type(document["fraction"]), float)
+            self.assertEqual(document["decimal"], 1.0)
+            self.assertEqual(document["fraction"], 0.1)
+
+    def test_case_fold_table_rejects_arbitrary_mutation(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "unicode").mkdir()
+            document = json.loads((CONTRACTS / subject.UNICODE_CASE_FOLD_PATH).read_text())
+            document["mappings"][700]["target"] = "0061"
+            document["mappingsSha256"] = subject.canonical_digest(document["mappings"])
+            (root / subject.UNICODE_CASE_FOLD_PATH).write_text(json.dumps(document))
+            with self.assertRaises(subject.VerificationError):
+                subject.load_simple_case_folding_table(root)
+
+    def test_case_fold_table_rejects_deletion_and_insertion(self) -> None:
+        source = json.loads((CONTRACTS / subject.UNICODE_CASE_FOLD_PATH).read_text())
+        for mutate in (lambda values: values.pop(900), lambda values: values.insert(900, {"source": "10FFFF", "target": "0061"})):
+            with self.subTest(mutate=mutate):
+                with tempfile.TemporaryDirectory() as temporary:
+                    root = Path(temporary)
+                    (root / "unicode").mkdir()
+                    document = json.loads(json.dumps(source))
+                    mutate(document["mappings"])
+                    (root / subject.UNICODE_CASE_FOLD_PATH).write_text(json.dumps(document))
+                    with self.assertRaises(subject.VerificationError):
+                        subject.load_simple_case_folding_table(root)
+
+    def test_vector_evidence_rejects_unlisted_fabricated_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "vectors").mkdir()
+            (root / "vectors/fake.json").write_text(json.dumps({"cases": [{"id": "fabricated"}]}))
+            with self.assertRaises(subject.VerificationError):
+                subject.verify_evidence("vectors/fake.json#fabricated", root, "evidence")
+
+    def test_vector_evidence_accepts_frozen_recognized_case(self) -> None:
+        subject.verify_evidence(
+            "vectors/default-engine-lock-v1.json#engine-lock-exact-available", CONTRACTS, "evidence"
+        )
+
+    def test_vector_evidence_rejects_wrong_envelope_and_case_array(self) -> None:
+        filename = "host-side-effects-v1.json"
+        source = json.loads((CONTRACTS / "vectors" / filename).read_text())
+        case_id = source["cases"][0]["caseId"]
+        for mutate in (
+            lambda document: document.__setitem__("schema", "fabricated.vector.v1"),
+            lambda document: document.__setitem__("cases", {"caseId": case_id}),
+        ):
+            with self.subTest(mutate=mutate):
+                with tempfile.TemporaryDirectory() as temporary:
+                    root = Path(temporary)
+                    (root / "vectors").mkdir()
+                    document = json.loads(json.dumps(source))
+                    mutate(document)
+                    (root / "vectors" / filename).write_text(json.dumps(document))
+                    with self.assertRaises(subject.VerificationError):
+                        subject.verify_evidence(
+                            f"vectors/{filename}#{case_id}", root, "evidence"
+                        )
+
+    def test_wrong_known_error_code_is_rejected(self) -> None:
+        self.assertIn("provider.timeout", subject.error_codes(CONTRACTS))
+        allowed = subject.load_error_policy(CONTRACTS)
+        with self.assertRaises(subject.VerificationError):
+            subject.verify_error_policy(
+                "ipcraft.project-design.v1", "schema", "generic-structure", "provider.timeout", allowed, "fixture"
+            )
+
+    def test_error_catalog_rejects_wrong_independent_owner(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            document = json.loads((CONTRACTS / "error-codes-v1.json").read_text())
+            target = next(item for item in document["codes"] if item["code"] == "attachment.target_removed")
+            target["owner"] = "wrong-owner"
+            (root / "error-codes-v1.json").write_text(json.dumps(document))
+            with self.assertRaisesRegex(subject.VerificationError, "owner"):
+                subject.error_codes(root)
+
+    def test_error_catalog_generator_restores_independent_owner(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "error-codes-v1.json"
+            document = json.loads((CONTRACTS / "error-codes-v1.json").read_text())
+            target = next(item for item in document["codes"] if item["code"] == "attachment.target_removed")
+            target["owner"] = "wrong-owner"
+            path.write_text(json.dumps(document))
+            rendered = json.loads(error_generator.render(path))
+            restored = next(item for item in rendered["codes"] if item["code"] == "attachment.target_removed")
+            self.assertEqual(restored["owner"], "host-side-effects")
+
+    def test_project_schema_failure_boundaries_are_not_interchangeable(self) -> None:
+        allowed = subject.load_error_policy(CONTRACTS)
+        subject.verify_error_policy(
+            "ipcraft.project-design.v1", "schema", "generic-structure",
+            "contract.schema_invalid", allowed, "fixture",
+        )
+        subject.verify_error_policy(
+            "ipcraft.project-design.v1", "schema", "legacy-project-root",
+            "project.legacy_format_unsupported", allowed, "fixture",
+        )
+        with self.assertRaises(subject.VerificationError):
+            subject.verify_error_policy(
+                "ipcraft.project-design.v1", "schema", "legacy-project-root",
+                "contract.schema_invalid", allowed, "fixture",
+            )
+        with self.assertRaises(subject.VerificationError):
+            subject.verify_error_policy(
+                "ipcraft.project-design.v1", "schema", "generic-structure",
+                "project.legacy_format_unsupported", allowed, "fixture",
+            )
+
+    def test_fixture_schema_requires_failure_boundary(self) -> None:
+        schema = json.loads((CONTRACTS / "schemas/ipcraft.fixture-catalog.v1.schema.json").read_text())
+        self.assertIn("failureBoundary", schema["$defs"]["entry"]["required"])
+        self.assertEqual(schema["$defs"]["entry"]["allOf"][0]["then"]["properties"]["failureBoundary"], {"type": "null"})
+
+    def test_schema_catalog_rejects_parent_traversal(self) -> None:
+        nfc = subject.load_unicode_normalization_data(CONTRACTS)
+        folding = subject.load_simple_case_folding_table(CONTRACTS)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "schemas").mkdir()
+            valid = root / "schemas/valid.schema.json"
+            valid.write_text(json.dumps({"$id": "valid"}))
+            (root / "schema-catalog.json").write_text(json.dumps({
+                "schema": "ipcraft.contract-schema-catalog.v1",
+                "items": [{"id": "valid", "path": "schemas/valid.schema.json", "freezeGate": "Gate 0"}],
+            }))
+            self.assertEqual(subject.catalog_ids(root, nfc, folding), {"valid"})
+            outside = root / "outside.schema.json"
+            outside.write_text(json.dumps({"$id": "escape"}))
+            catalog = {
+                "schema": "ipcraft.contract-schema-catalog.v1",
+                "items": [{"id": "escape", "path": "schemas/../outside.schema.json", "freezeGate": "Gate 0"}],
+            }
+            (root / "schema-catalog.json").write_text(json.dumps(catalog))
+            with self.assertRaisesRegex(subject.VerificationError, "dot path segment"):
+                subject.catalog_ids(root, nfc, folding)
+
+    def test_schema_catalog_rejects_absolute_and_symlink_paths(self) -> None:
+        nfc = subject.load_unicode_normalization_data(CONTRACTS)
+        folding = subject.load_simple_case_folding_table(CONTRACTS)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "schemas").mkdir()
+            target = root / "outside.schema.json"
+            target.write_text(json.dumps({"$id": "escape"}))
+            for catalog_path in (str(target), "schemas/escape.schema.json"):
+                with self.subTest(path=catalog_path):
+                    link = root / "schemas/escape.schema.json"
+                    if link.exists() or link.is_symlink():
+                        link.unlink()
+                    if catalog_path.startswith("schemas/"):
+                        os.symlink(target, link)
+                    catalog = {
+                        "schema": "ipcraft.contract-schema-catalog.v1",
+                        "items": [{"id": "escape", "path": catalog_path, "freezeGate": "Gate 0"}],
+                    }
+                    (root / "schema-catalog.json").write_text(json.dumps(catalog))
+                    with self.assertRaises(subject.VerificationError):
+                        subject.catalog_ids(root, nfc, folding)
+
+    def test_schema_catalog_rejects_ascii_and_unicode_simple_fold_collisions(self) -> None:
+        nfc = subject.load_unicode_normalization_data(CONTRACTS)
+        folding = subject.load_simple_case_folding_table(CONTRACTS)
+        for names in (("Alpha.schema.json", "alpha.schema.json"), ("Σ.schema.json", "ς.schema.json")):
+            with self.subTest(names=names), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                (root / "schemas").mkdir()
+                items = []
+                for index, name in enumerate(names):
+                    schema_id = f"schema-{index}"
+                    (root / "schemas" / name).write_text(json.dumps({"$id": schema_id}))
+                    items.append({"id": schema_id, "path": f"schemas/{name}", "freezeGate": "Gate 0"})
+                    if index == 0:
+                        (root / "schema-catalog.json").write_text(json.dumps({
+                            "schema": "ipcraft.contract-schema-catalog.v1", "items": list(items),
+                        }))
+                        self.assertEqual(subject.catalog_ids(root, nfc, folding), {"schema-0"})
+                (root / "schema-catalog.json").write_text(json.dumps({
+                    "schema": "ipcraft.contract-schema-catalog.v1", "items": items,
+                }))
+                with self.assertRaisesRegex(subject.VerificationError, "portable-case-colliding"):
+                    subject.catalog_ids(root, nfc, folding)
+
+    def test_unicode17_nfc_reorders_new_combining_mark(self) -> None:
+        tables = subject.load_unicode_normalization_data(CONTRACTS)
+        original = "a\u1acf\u0323"
+        self.assertEqual(subject.nfc_normalize(original, tables), "\u1ea1\u1acf")
+
+    def test_unicode17_nfc_composes_hangul(self) -> None:
+        tables = subject.load_unicode_normalization_data(CONTRACTS)
+        self.assertEqual(subject.nfc_normalize("\u1100\u1161\u11a8", tables), "\uac01")
+
+    def test_unicode17_nfc_data_rejects_rehashed_mutation(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "unicode").mkdir()
+            document = json.loads((CONTRACTS / subject.UNICODE_NFC_PATH).read_text())
+            document["combiningClasses"][500]["class"] = 1
+            document["combiningClassesSha256"] = subject.canonical_digest(document["combiningClasses"])
+            (root / subject.UNICODE_NFC_PATH).write_text(json.dumps(document))
+            (root / "unicode/UNICODE-LICENSE.txt").write_bytes(
+                (CONTRACTS / "unicode/UNICODE-LICENSE.txt").read_bytes()
+            )
+            with self.assertRaises(subject.VerificationError):
+                subject.load_unicode_normalization_data(root)
+
+
+if __name__ == "__main__":
+    unittest.main()

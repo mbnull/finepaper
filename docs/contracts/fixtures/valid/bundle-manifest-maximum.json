@@ -1,0 +1,20 @@
+{
+  "schema": "ipcraft.bundle-manifest.v1",
+  "bundleId": "value",
+  "bundleVersion": "value",
+  "files": [
+    {
+      "path": "bin/engine",
+      "size": 128,
+      "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "executable": true
+    },
+    {
+      "path": "share/schema.json",
+      "size": 64,
+      "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "executable": false
+    }
+  ],
+  "manifestDigest": "sha256:a37c016c2c56be80e2277da85ea526c2655ad572fdbd51702ee4e1770f01c9ba"
+}
