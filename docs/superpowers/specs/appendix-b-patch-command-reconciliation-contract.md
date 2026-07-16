@@ -400,7 +400,12 @@ Editing topology intent, local Group Undo/Redo, Retry, dependency/Authority chan
 
 ## B10. Digest Canonicalization
 
-- Canonical JSON: RFC 8785.
+- Canonical JSON: RFC 8785 over the strict JSON admission model in Appendix A.
+- The Host performs byte-level strict JSON admission before Qt JSON parsing.
+- Object property order is RFC 8785 UTF-16 code-unit order. Appendix F
+  collection sort keys explicitly name whether they use RFC 8785 property order,
+  Unicode scalar-value order, or UTF-8 byte order; implementations MUST NOT
+  infer an order from a field name.
 - Hash: SHA-256.
 - String: `sha256:` plus lowercase hexadecimal.
 - Objects use canonical key ordering.
@@ -411,6 +416,24 @@ Editing topology intent, local Group Undo/Redo, Retry, dependency/Authority chan
 - Derived State digest includes Router/Link/Slot IDs and properties, ownership=`engine` Package Entities/Relations, and every Authority-owned property affecting generation or later reconciliation.
 - User-owned intent, Draft Overlay, Attachments, Domains, Views, diagnostics, and runs are excluded from Derived State digest.
 - Random permutation of any set-valued persisted array MUST produce the same normalized digest.
+
+## B13. Validation Modes
+
+The same authoritative ProjectDesign is evaluated under three explicit modes:
+
+- `ProjectDesignWellFormed` admits a readable working/recovery state, including
+  a disconnected non-empty Domain, and requires matching structural diagnostics
+  when such a state is present.
+- `ProjectDesignCommitValid` admits an atomic materialization into the
+  authoritative working design. A disconnected Domain is legal only with the
+  stable blocking `domain.disconnected` diagnostic produced by that transaction.
+- `ProjectDesignSaveEligible` is required for formal `.nocproj` Save, Validate,
+  and Generate. It rejects disconnected Domains, unresolved Attachments, stale
+  Derived State, and blocking diagnostics.
+
+Recovery stores the WellFormed working design and its provenance. On reopen the
+Host re-runs the Core checks and does not treat persisted diagnostics as a
+second design authority.
 
 ## B11. Scheduling
 

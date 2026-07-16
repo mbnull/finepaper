@@ -2,8 +2,8 @@
 
 ## Freeze identity
 
-- Status: **Approved / Frozen**
-- Normative revision: **Revision 4**
+- Status: **Unfrozen / Revision 5 in progress**
+- Normative revision: **Revision 5 (not yet frozen)**
 - Freeze date: **2026-07-16**
 - Frozen input Git commit: `70f69c2a493205269966b25564e4d9e101bd71fd`
 - Frozen input commit timestamp / archive epoch: `1784155668` (`2026-07-16T06:47:48+08:00`)
@@ -11,6 +11,11 @@
 - Host side-effect contract: `ipcraft.noc-side-effects.v1`
 - Review archive member count: `470` (`468` frozen inputs plus this record and `GATE-STATUS.md`)
 - `reviewArchiveContentDigest`: `sha256:8cb140ff3a42636e57f8a16765f17ffbdea4f1866ed6a6adcbe53d2d2e09080a`
+
+Revision 4 was unfrozen by `docs/contracts/UNFREEZE-REV4-ADR.md` after review
+found that its declared RFC 8785 digest contract was not implemented
+consistently by the Python and Qt canonicalizers. The Revision 4 archive remains
+a reproducibility artifact, not an approved public wire contract.
 
 The frozen input commit is intentionally the parent of the record/archive commit. The record and archive cannot include or hash the commit that contains themselves without creating a recursive identity. The final record commit is release evidence outside this self-contained archive; it is not a Core contract identity. The durable raw archive identity is stored separately at repository-root `docs.tar.sha256`, outside `docs.tar` to avoid recursion.
 
@@ -98,4 +103,7 @@ Any change to a frozen Core schema, canonical projection, stable error, fixture 
 4. replay of the complete Gate 0 verification suite;
 5. replay of every downstream gate whose evidence depends on the changed Core contract.
 
-Gate A product implementation is not part of this freeze record.
+Gate A product implementation is not part of this Revision 5 correction record.
+Gate A remains blocked until the Revision 5 canonicalization, strict JSON
+admission, validation-mode, schema-resolution, and regenerated-evidence checks
+are complete.

@@ -434,7 +434,7 @@ my-noc/
 └── reports/
 ```
 
-`.nocproj` is one formatted JSON serialization of the new unified `ProjectDesign V1` under the NoC Profile. It is parsed with standard Qt JSON APIs and atomically saved with `QSaveFile`. It does not serialize QObject or Qt-private types and must not introduce a second NoC-only persistence model. The existing pre-release V1 schema is replaced rather than treated as a compatibility baseline.
+`.nocproj` is one formatted JSON serialization of the new unified `ProjectDesign V1` under the NoC Profile. It passes the strict UTF-8/token admission layer before Qt JSON APIs construct the semantic value model, then passes Schema and Core semantic validation, and is atomically saved with `QSaveFile`. Standard Qt JSON parsing is not the duplicate-key, surrogate, or numeric-admission boundary. It does not serialize QObject or Qt-private types and must not introduce a second NoC-only persistence model. The existing pre-release V1 schema is replaced rather than treated as a compatibility baseline.
 
 The root schema ID is `ipcraft.project-design.v1` and the profile marker is `ipcraft.profile.noc` version `1`. The new reader accepts only that root for `.nocproj`; legacy `ipcraft.project.v1` roots return `project.legacy_format_unsupported` and are never inferred or imported by field shape.
 

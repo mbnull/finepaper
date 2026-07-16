@@ -2,8 +2,8 @@
 
 ## Gate 0 — Core Contract Freeze
 
-- Status: **Complete / Frozen**
-- Normative revision: **Revision 4**
+- Status: **Unfrozen for Revision 5 correction**
+- Normative revision: **Revision 5 in progress**
 - Frozen input commit: `70f69c2a493205269966b25564e4d9e101bd71fd`
 - Scope: schemas, canonical models and digests, fixtures and error policy, exact Default Engine lock, versioned Host side effects, recovery/history contracts, and review evidence only
 - Product implementation: **not included**
@@ -122,7 +122,7 @@ Repository-root `docs.tar.sha256` is the detached raw-byte identity. It is inten
 ## Gate A — Headless Core Implementation
 
 - Status: **Not started**
-- Authorization condition: Gate A may start only from this frozen Revision 4 Core contract and must not silently change any frozen input.
+- Authorization condition: Gate A may start only from a frozen Revision 5 Core contract and must not silently change any frozen input.
 - Current record contains no Gate A product implementation.
 
-Gate D remains the separate Extension ABI freeze; this Gate 0 record does not freeze the Provider wire ABI.
+Gate D remains the separate Extension ABI freeze; this Gate 0 correction does not freeze the Provider wire ABI.

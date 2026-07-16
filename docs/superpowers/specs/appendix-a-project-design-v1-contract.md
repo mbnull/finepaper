@@ -1,17 +1,24 @@
 # Appendix A — ProjectDesign V1 Contract
 
-**Normative status:** V1 Revision 4 baseline; Core schema freezes at Gate 0.
+**Normative status:** V1 Revision 5 correction in progress; Core schema freezes only after the Revision 5 Gate 0 record.
 **Root schema:** `ipcraft.project-design.v1`
 **Required profile:** `ipcraft.profile.noc`, version `1`
 
 ## A1. JSON Rules
 
-- Encoding MUST be UTF-8 JSON without duplicate object keys.
+- Input MUST pass the strict UTF-8 JSON admission contract before any Qt JSON
+  value is constructed. Duplicate object keys after JSON string decoding,
+  malformed UTF-8, unpaired surrogates, non-finite numbers, and numbers that
+  cannot be admitted as finite IEEE-754 binary64 values are invalid.
 - Core envelopes use `additionalProperties: false` semantics.
 - Package-private opaque content is allowed only inside an `extensions[]` block. Schema-declared Package Entity/Relation `data`, `config`, `contractConfig`, `nocConfig`, and `capabilities` are known typed fields rather than opaque extension storage.
 - IDs are non-empty opaque strings and MUST be globally unique across every entity and relation in one ProjectDesign.
 - References use IDs; array positions are never identity.
-- Digests use `sha256:<64 lowercase hexadecimal characters>` over RFC 8785 canonical JSON unless a field explicitly says otherwise.
+- Digests use `sha256:<64 lowercase hexadecimal characters>` over RFC 8785
+  canonical JSON after the Appendix F collection projection. JSON number token
+  spelling has no semantic type: `1`, `1.0`, and `1e0` are equal numeric values
+  and canonicalize identically. Exact large integers or exact decimals that
+  cannot be represented by the intended binary64 value MUST be strings.
 - Unknown enum values in core fields are errors. Unknown namespaced extension schemas are preserved as opaque content.
 - Before digesting, every canonical collection follows the exhaustive per-path table in Appendix F. Undirected Link endpoints are stored/hash-normalized by Appendix F's object-reference comparison token. Only arrays explicitly declared ordered retain source order.
 

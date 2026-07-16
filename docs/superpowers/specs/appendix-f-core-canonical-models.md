@@ -1,6 +1,7 @@
 # Appendix F — Gate 0 Core Canonical Models and Projections
 
-**Normative status:** V1 Revision 4 candidate; these Core models freeze at Gate 0.
+**Normative status:** V1 Revision 5 correction in progress; these Core models
+freeze only with the Revision 5 Gate 0 record.
 **Rule:** Engine Host and Extension Provider envelopes may wrap these models but may not redefine their fields, identity, projection, or canonicalization.
 
 Machine-readable companion artifacts:
@@ -32,7 +33,10 @@ Machine-readable Gate 0 schemas use these exact IDs or `$defs` with identical na
 
 ## F2. Canonical Scalar and Reference Rules
 
-- JSON is UTF-8, duplicate-key-free, and normalized with RFC 8785 after the array/set projections in F10.
+- JSON is admitted by the strict UTF-8 scanner, is duplicate-key-free, and is
+  normalized with RFC 8785 after the array/set projections in F10. Numbers use
+  finite IEEE-754 binary64 semantics; field declarations, not lexical number
+  spelling, distinguish `int` from `double`.
 - Digests are `sha256:` plus lowercase SHA-256 hex of canonical bytes.
 - IDs are opaque non-empty strings.
 - Host references are `{ "id": "host-id" }`.

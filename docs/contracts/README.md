@@ -11,7 +11,11 @@ This directory contains machine-readable companions to the approved architecture
 - `patch-validation-context-v1.json` freezes the deterministic Patch current-state, current Session revision, complete reconcile applicability, dependency locks, resolved Attachment compatibility, source-specific Domain diagnostics, closed Host side effects, ordinary trusted Patch digests, and formal topology/migration history replay records at `sha256:a213f22e88d68adfd49fb84f1b416bf93055d9335ff468ea62b7ec2a90e629a3` for standalone precondition, ownership, reference, lifecycle, and transaction fixtures.
 - `unicode/` pins Unicode 17 NFC, simple C/S folding, the official normalization conformance source, source hashes, and the complete Unicode License V3 notice so portable path identity is host-independent.
 
-These files are Revision 4 contract candidates, not a completed Gate 0 freeze. The schema, fixture, vector, and error catalogs are populated; Gate 0 still requires the Qt executable checks, freeze-input manifest, review bundle, and `CORE-FREEZE.md` digests listed in Appendix E.
+These files were Revision 4 contract candidates. Revision 4 was unfrozen for
+the Revision 5 canonicalization and validation correction recorded in
+`UNFREEZE-REV4-ADR.md`. `CORE-FREEZE.md` is the authoritative status record;
+the directory is not a frozen public contract until it explicitly says
+Revision 5 is frozen.
 
 ## Revision 4 freeze input set
 
