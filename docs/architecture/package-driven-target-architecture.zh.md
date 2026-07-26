@@ -114,6 +114,7 @@ Finepaper 不要求复制这些软件的内部对象模型，也不把它们的�
 | NocDesign | 用户保存的 NoC 设计意图 | Finepaper |
 | PackageDefinition | Package 提供的拓扑、参数、Endpoint 和执行能力描述 | NoC Package |
 | TopologyProjection | 根据 N×M 派生的 Router、Link 和显示数据 | Finepaper |
+| NoC NodeEditor | NoC 工作台的核心画布和直接编辑交互 | Finepaper GUI |
 | FinepaperApplication | GUI、CLI、API 共用的应用用例入口 | Finepaper |
 | PackageCatalog | 运行时发现和索引 Package | Finepaper |
 | Generator | 将设计转换为 RTL 和其他交付物 | NoC Package |
@@ -1070,59 +1071,69 @@ output-root/
 
 ## 18. GUI 架构
 
-GUI 是 FinepaperApplication 的一个适配器，不拥有独立业务模型。
+GUI 是 FinepaperApplication 的一个适配器，不拥有独立业务模型；但 **NoC NodeEditor 是 GUI 的核心组件**，不能退化为只读的 Topology 页面或表单附属图。
 
-推荐固定页面：
+GUI 使用可停靠的 NoC 工作台，而不是把创建、编辑、检查和生成割裂为六个页面：
 
 ~~~text
-GUI
-├── Start / Package Selection
-├── Overview
-├── Topology
-├── Parameters
-├── Validate
-└── Generate
+NoC Workbench
+├── Toolbar: New / Open / Save / Undo / Redo / Validate / Generate
+├── Left Dock: Package 安装、已加载 Package、Endpoint Palette
+├── Center View Tabs
+│   ├── NoC NodeEditor（默认且常驻的核心编辑页）
+│   ├── Performance Analysis
+│   ├── Problem Report
+│   └── Package 提供的受控分析/报告页
+├── Right Dock: Design / Router / Endpoint Inspector
+└── Bottom Dock Tabs
+    ├── DRC Problems
+    ├── Activity Log
+    └── Generation Outputs
 ~~~
 
-### 18.1 创建流程
+用户可以移动、浮动、关闭和重新打开 Dock；布局、中央当前页和底部当前页只写入本机 Workspace 设置。NodeEditor 缩放与选择属于会话状态，不进入 `NocDesign`；是否跨会话恢复由实际使用体验决定。`NocDesign` 仍是唯一持久化设计事实。
 
-创建向导：
+中央视图由一个小型 `WorkbenchViewRegistry` 集中管理。NodeEditor 是不可移除的默认视图；性能分析、问题报告和未来 Package 视图按实际能力注册。第一阶段 Registry 只管理页面身份、标题、实例和顺序；图标、延迟创建或可见性只有出现真实需求时再加入，不发展为通用插件框架。
 
-1. 选择 Package；
-2. 选择 preset 或空白设计；
-3. 设置 Mesh 的 N×M；
-4. 设置全局参数；
-5. 添加 Endpoint；
-6. 指定 Endpoint 挂载的 Router；
-7. 创建 NocDesign。
+底部区域使用固定的结果分类：DRC Problems 展示结构化诊断并可定位到 NodeEditor 元素；Activity Log 展示运行过程和用户操作；Generation Outputs 展示本次运行目录、stdout/stderr 与 artifact 清单。三者不混成一个纯文本日志框。
 
-Endpoint 可以通过以下方式配置：
+### 18.1 NoC NodeEditor
 
-- 从 Palette 拖到 Router；
-- 选择 Router 后添加；
-- 使用表格批量编辑；
-- 从 JSON 或 CSV 导入；
-- 创建向导中一次性指定。
+NodeEditor 负责直接操作 NoC，而不是承载通用 IP 图编辑器：
 
-### 18.2 Workspace
+- Mesh Router 和 Router Link 从 `TopologyProjection` 派生并在画布上稳定显示；
+- Router 与 Router Link 不可任意创建、删除或连接；
+- Endpoint Palette 中的类型可拖到 Router，映射为 `FinepaperApplication::addEndpoint`；
+- 已有 Endpoint 可从一个 Router 拖到另一个 Router，映射为 `moveEndpoint`；
+- 选择 Endpoint 或 Router 会驱动右侧 Inspector；
+- 右键菜单仅提供当前 NoC 语义允许的动作，例如添加、移除、移动 Endpoint；
+- 画布支持缩放、平移、框选、自动布局/聚焦和多 Dock 工作流；
+- NodeEditor 不保存第二份 Graph，也不允许 Endpoint-to-Endpoint 任意连线。
 
-GUI Workspace 只保存交互状态：
+可复用已有 NodeEditor/QtNodes 的画布、拖拽、缩放、选择和布局能力；不复用其旧的通用 `Graph`、`Module`、任意 Port 连线或 connection-rule 业务绑定。新 NodeEditor 是 `NocDesign` 的专用投影和手势适配器。
 
-- 当前 NocDesign；
-- 文件路径；
-- dirty 状态；
-- undo/redo；
+### 18.2 创建流程
+
+创建从一个轻量对话框开始：选择或安装 Package、选择 preset 或空白设计、设置 N×M 和少量初始参数。创建完成后立即进入 NodeEditor 工作台；Endpoint 的主要配置路径是 Palette 到 Router 的直接拖放，表格/导入仅作为批量操作补充。
+
+### 18.3 Workspace
+
+GUI Workspace 保存：
+
+- 当前 NocDesign 和文件路径；
+- dirty 状态与 undo/redo；
 - 当前选择项；
-- 页面和缩放状态；
+- NodeEditor 缩放、平移和临时选中状态；
+- Dock 布局和可见性；
 - 正在运行的操作。
 
 保存文件时只写 NocDesign。窗口布局和本机偏好写入用户设置，不进入设计语义。
 
-### 18.3 页面扩展
+### 18.4 页面扩展
 
 核心页面由 Finepaper 提供。阶段一至阶段三不实现 Package 特殊页面，也不提供 packageData 编辑器。
 
-只有真实复杂 Package 证明通用页面不足后，阶段五才考虑把 Package 特殊页面放入 pages 目录，并由 GUI 的 PackagePageHost 运行时加载。优先考虑的声明式页面类型是：
+只有真实复杂 Package 证明通用页面不足后，阶段五才考虑把 Package 特殊页面注册到中央 View Tabs，并由 GUI 的 PackagePageHost 运行时加载。优先考虑的声明式页面类型是：
 
 - form；
 - table；
@@ -1614,14 +1625,16 @@ generate real RTL
 
 这一阶段首先证明 CI/脚本能够批量创建并生成 NoC。
 
-### 阶段 2：通用 GUI
+### 阶段 2：NodeEditor 工作台
 
-- Package 选择；
-- N×M 创建；
-- TopologyProjection；
-- Endpoint 挂载；
-- 参数页面；
-- Validate 和 Generate 页面；
+- 保留原工作台式布局和可停靠的 Package Palette、Inspector、底部结果区；
+- NodeEditor 作为中央交互组件；
+- 中央视图可切换 NodeEditor、性能分析和问题报告；
+- 底部结果区可切换 DRC Problems、Activity Log 和 Generation Outputs；
+- N×M 创建和 TopologyProjection；
+- Endpoint Palette → Router 的拖放和 Router 间移动；
+- Inspector 中的参数编辑；
+- Validate 和 Generate 的工具栏与结果 Dock；
 - GUI 调用同一个 FinepaperApplication。
 
 ### 阶段 3：多个运行时 Package

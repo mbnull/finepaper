@@ -2,33 +2,38 @@
 
 #include "application/application.h"
 #include "application/runtime_settings.h"
-#include "gui/workspace_pages.h"
+#include "gui/noc_node_editor.h"
+#include "gui/workbench_view_registry.h"
 
 #include <QJsonValue>
 #include <QMainWindow>
-#include <QStringList>
 #include <QVector>
 
 #include <optional>
 
+class QCloseEvent;
 class QComboBox;
+class QDockWidget;
 class QFormLayout;
-class QGraphicsScene;
-class QGraphicsView;
+class QLabel;
 class QLineEdit;
 class QListWidget;
-class QLabel;
+class QPlainTextEdit;
 class QSpinBox;
-class QStackedWidget;
+class QTabWidget;
 class QTableWidget;
-class QTextEdit;
 class QWidget;
 
 namespace finepaper {
 
+class EndpointPaletteList;
+
 class FinepaperMainWindow final : public QMainWindow {
 public:
     explicit FinepaperMainWindow(RuntimeLocations locations, QWidget* parent = nullptr);
+
+protected:
+    void closeEvent(QCloseEvent* event) override;
 
 private:
     struct ParameterControl {
@@ -37,60 +42,76 @@ private:
     };
 
     void createUi();
+    void createActions();
+    void createCentralViews();
+    void createPackageDock();
+    void createInspectorDock();
+    void createResultsDock();
+    void restoreWorkbenchState();
     void loadInstalledPackageRoots();
     void reloadPackages();
     void installPackage();
-    void updateStartPackages();
-    void updateStartMeshBounds();
-    void showPage(WorkspacePage page);
+    void updatePackageControls();
+    void updateMeshBounds();
+    void updateEndpointPalette();
     void createDesign();
     void openDesign();
     void saveDesign();
     void validateDesign();
     void generateDesign();
-    void addEndpoint();
-    void moveSelectedEndpoint();
+    void addEndpoint(const QString& endpointType, RouterPosition router);
+    void moveEndpoint(const QString& endpointId, RouterPosition router);
     void removeSelectedEndpoint();
     void applyParameters();
-    void updateEndpointInputsFromSelection();
-    void updateSelectedRouterFromTopology();
+    void updateInspector(const NocEditorSelection& selection);
     void adoptDesignResult(const DesignResult& result, const QString& action);
     void refreshDesignViews();
-    void refreshTopology();
-    void refreshEndpointTable();
     void rebuildParameterEditors();
+    void populateDiagnostics(const QVector<Diagnostic>& diagnostics);
+    void populateGenerationOutputs(const GenerationResult& result);
     void showDiagnostics(const QVector<Diagnostic>& diagnostics,
                          const QString& title,
                          bool modalOnError = true);
+    void appendActivity(const QString& message);
+    void selectCenterView(const QString& id);
 
-    const PackageDefinition* selectedStartPackage() const;
+    const PackageDefinition* selectedPackage() const;
     const PackageDefinition* packageForDesign() const;
     QJsonValue valueFromControl(const ParameterControl& control) const;
+    QString nextEndpointId(const QString& endpointType) const;
 
     FinepaperApplication m_application;
     RuntimeLocations m_locations;
     std::optional<NocDesign> m_design;
     QString m_designPath;
+    QString m_selectedEndpointId;
     QVector<ParameterControl> m_parameterControls;
 
-    QListWidget* m_navigation = nullptr;
-    QStackedWidget* m_pages = nullptr;
-    QComboBox* m_startPackage = nullptr;
-    QLineEdit* m_startName = nullptr;
-    QSpinBox* m_startRows = nullptr;
-    QSpinBox* m_startColumns = nullptr;
-    QLabel* m_overview = nullptr;
-    QGraphicsScene* m_topologyScene = nullptr;
-    QGraphicsView* m_topologyView = nullptr;
-    QTableWidget* m_endpoints = nullptr;
-    QLineEdit* m_endpointId = nullptr;
-    QComboBox* m_endpointType = nullptr;
-    QSpinBox* m_endpointX = nullptr;
-    QSpinBox* m_endpointY = nullptr;
+    QTabWidget* m_centerViews = nullptr;
+    std::optional<WorkbenchViewRegistry> m_viewRegistry;
+    NocNodeEditor* m_nodeEditor = nullptr;
+    QLabel* m_performanceSummary = nullptr;
+    QPlainTextEdit* m_problemReport = nullptr;
+
+    QDockWidget* m_packageDock = nullptr;
+    QComboBox* m_packageSelector = nullptr;
+    QLineEdit* m_designName = nullptr;
+    QSpinBox* m_rows = nullptr;
+    QSpinBox* m_columns = nullptr;
+    EndpointPaletteList* m_endpointPalette = nullptr;
+
+    QDockWidget* m_inspectorDock = nullptr;
+    QLabel* m_designOverview = nullptr;
+    QLabel* m_selectionSummary = nullptr;
     QFormLayout* m_parameterForm = nullptr;
-    QTextEdit* m_validationReport = nullptr;
+
+    QDockWidget* m_resultsDock = nullptr;
+    QTabWidget* m_resultTabs = nullptr;
+    QTableWidget* m_drcTable = nullptr;
+    QPlainTextEdit* m_activityLog = nullptr;
     QLineEdit* m_outputRoot = nullptr;
-    QTextEdit* m_generationReport = nullptr;
+    QTableWidget* m_artifactTable = nullptr;
+    QPlainTextEdit* m_generationDetails = nullptr;
 };
 
 } // namespace finepaper
