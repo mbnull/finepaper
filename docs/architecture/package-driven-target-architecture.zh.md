@@ -1105,9 +1105,10 @@ Activity Bar 始终保留一组紧凑图标，用于独立收折或展开左侧 
 NodeEditor 负责直接操作 NoC，而不是承载通用 IP 图编辑器：
 
 - Mesh Router 和 Router Link 从 `TopologyProjection` 派生并在画布上稳定显示；
-- Router 的 Mesh 身份与连接关系固定，但其画布位置允许用户拖动调整；位置只保存到本机 Workspace 布局，不写入 `NocDesign`；
+- Router 使用可展开/收起的方形设备外观，并明确显示 North、East、South、West 四个拓扑方向端口；Mesh 链路分别从 East→West、South→North 连接，不使用无方向含义的通用连线；
+- Router 的 Mesh 身份与连接关系固定，但其画布位置允许用户自由拖动调整；位置与收起状态只保存到本机 Workspace 布局，不写入 `NocDesign`；
 - Router 与 Router Link 不可任意创建、删除或连接；
-- Endpoint Palette 中的类型可拖到 Router，映射为 `FinepaperApplication::addEndpoint`；
+- Endpoint Palette 中的类型可拖到 Router；也可先选择或右键 Router，再从菜单/Palette 显式挂载。所有入口都映射为同一个 `FinepaperApplication::addEndpoint`；Endpoint 使用独立 EP 挂载端口，不占用 North/East/South/West 拓扑端口；
 - 已有 Endpoint 可从一个 Router 拖到另一个 Router，映射为 `moveEndpoint`；
 - 选择 Endpoint 或 Router 会驱动右侧 Inspector；
 - 右键菜单仅提供当前 NoC 语义允许的动作，例如添加、移除、移动 Endpoint；

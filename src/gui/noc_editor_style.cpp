@@ -4,10 +4,25 @@
 
 namespace finepaper {
 
-QPainterPath orthogonalConnectionPath(QPointF source, QPointF target) {
+const NocEditorMetrics& nocEditorMetrics() {
+    static const NocEditorMetrics metrics;
+    return metrics;
+}
+
+QPainterPath orthogonalConnectionPath(QPointF source,
+                                       QPointF target,
+                                       OrthogonalRouteAxis axis) {
     QPainterPath path(source);
     if (std::abs(source.x() - target.x()) <= 0.5
         || std::abs(source.y() - target.y()) <= 0.5) {
+        path.lineTo(target);
+        return path;
+    }
+
+    if (axis == OrthogonalRouteAxis::Vertical) {
+        const qreal middleY = (source.y() + target.y()) / 2.0;
+        path.lineTo(source.x(), middleY);
+        path.lineTo(target.x(), middleY);
         path.lineTo(target);
         return path;
     }

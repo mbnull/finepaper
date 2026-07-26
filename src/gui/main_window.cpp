@@ -9,6 +9,7 @@
 #include <QCheckBox>
 #include <QCloseEvent>
 #include <QComboBox>
+#include <QCursor>
 #include <QDateTime>
 #include <QDir>
 #include <QDockWidget>
@@ -190,6 +191,9 @@ void FinepaperMainWindow::createCentralViews() {
                                                   RouterPosition router) {
         moveEndpoint(endpointId, router);
     };
+    m_nodeEditor->endpointAttachmentRequested = [this](RouterPosition router) {
+        showEndpointAttachmentMenu(router);
+    };
     m_nodeEditor->selectionChanged = [this](const NocEditorSelection& selection) {
         updateInspector(selection);
     };
@@ -244,7 +248,7 @@ void FinepaperMainWindow::createPackageDock() {
     paletteHeading->setFont(paletteFont);
     layout->addWidget(paletteHeading);
     layout->addWidget(new QLabel(
-        QStringLiteral("Drag an Endpoint type onto a Router in the NoC Editor.")));
+        QStringLiteral("Drag onto a Router, or select a Router and double-click a type.")));
     m_endpointPalette = new EndpointPaletteList;
     m_endpointPalette->setObjectName(QStringLiteral("finepaper.endpointPalette"));
     m_endpointPalette->setDragEnabled(true);
@@ -262,6 +266,19 @@ void FinepaperMainWindow::createPackageDock() {
         updateMeshBounds();
         updateEndpointPalette();
     });
+    connect(m_endpointPalette, &QListWidget::itemDoubleClicked,
+            this, [this](QListWidgetItem* item) {
+                if (!item) {
+                    return;
+                }
+                if (!m_selectedRouter) {
+                    statusBar()->showMessage(
+                        QStringLiteral("Select a Router before double-clicking an Endpoint type."),
+                        5000);
+                    return;
+                }
+                addEndpoint(item->data(Qt::UserRole).toString(), *m_selectedRouter);
+            });
 }
 
 void FinepaperMainWindow::createInspectorDock() {
@@ -282,8 +299,12 @@ void FinepaperMainWindow::createInspectorDock() {
     m_selectionSummary = new QLabel(QStringLiteral("Nothing selected."));
     m_selectionSummary->setWordWrap(true);
     m_selectionSummary->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    m_attachEndpoint = new QPushButton(QStringLiteral("Attach Endpoint to selected Router…"));
+    m_attachEndpoint->setObjectName(QStringLiteral("finepaper.attachEndpoint"));
+    m_attachEndpoint->setEnabled(false);
     auto* removeEndpoint = new QPushButton(QStringLiteral("Remove selected Endpoint"));
     selectionLayout->addWidget(m_selectionSummary);
+    selectionLayout->addWidget(m_attachEndpoint);
     selectionLayout->addWidget(removeEndpoint);
     layout->addWidget(selectionGroup);
 
@@ -305,6 +326,11 @@ void FinepaperMainWindow::createInspectorDock() {
 
     connect(removeEndpoint, &QPushButton::clicked,
             this, &FinepaperMainWindow::removeSelectedEndpoint);
+    connect(m_attachEndpoint, &QPushButton::clicked, this, [this] {
+        if (m_selectedRouter) {
+            showEndpointAttachmentMenu(*m_selectedRouter);
+        }
+    });
     connect(applyButton, &QPushButton::clicked,
             this, &FinepaperMainWindow::applyParameters);
 }
@@ -636,7 +662,7 @@ void FinepaperMainWindow::updateEndpointPalette() {
     for (const EndpointTypeDefinition& type : package->endpointTypes) {
         auto* item = new QListWidgetItem(type.label, m_endpointPalette);
         item->setData(Qt::UserRole, type.id);
-        item->setToolTip(QStringLiteral("%1\nDrag onto a Router to create an Endpoint.")
+        item->setToolTip(QStringLiteral("%1\nDrag onto a Router, or double-click after selecting one.")
                              .arg(type.id));
     }
 }
@@ -795,6 +821,31 @@ void FinepaperMainWindow::addEndpoint(const QString& endpointType, RouterPositio
                       QStringLiteral("Add Endpoint %1").arg(endpoint.id));
 }
 
+void FinepaperMainWindow::showEndpointAttachmentMenu(RouterPosition router) {
+    const PackageDefinition* package = packageForDesign();
+    if (!m_design || !package) {
+        statusBar()->showMessage(
+            QStringLiteral("Create a design with an available NoC Package first."), 5000);
+        return;
+    }
+
+    QMenu menu(this);
+    menu.setTitle(QStringLiteral("Attach Endpoint"));
+    for (const EndpointTypeDefinition& type : package->endpointTypes) {
+        QAction* action = menu.addAction(type.label);
+        action->setToolTip(type.id);
+        connect(action, &QAction::triggered, this, [this, type, router] {
+            addEndpoint(type.id, router);
+        });
+    }
+    if (menu.actions().isEmpty()) {
+        statusBar()->showMessage(
+            QStringLiteral("This NoC Package does not declare any Endpoint types."), 5000);
+        return;
+    }
+    menu.exec(QCursor::pos());
+}
+
 void FinepaperMainWindow::moveEndpoint(const QString& endpointId, RouterPosition router) {
     if (!m_design) {
         return;
@@ -846,10 +897,16 @@ void FinepaperMainWindow::applyParameters() {
 
 void FinepaperMainWindow::updateInspector(const NocEditorSelection& selection) {
     m_selectedEndpointId.clear();
+    m_selectedRouter.reset();
+    m_attachEndpoint->setEnabled(false);
     if (selection.kind == NocEditorSelection::Kind::Router && selection.router) {
+        m_selectedRouter = selection.router;
+        m_attachEndpoint->setEnabled(true);
         m_selectionSummary->setText(
             QStringLiteral("<b>Router %1</b><br>Column x: %2<br>Row y: %3<br>"
-                           "Router identity and links are derived from the Mesh.")
+                           "Drag to arrange this workspace. Use +/− to collapse or expand. "
+                           "Right-click to attach an Endpoint. Router identity and links "
+                           "remain derived from the Mesh.")
                 .arg(selection.id)
                 .arg(selection.router->x)
                 .arg(selection.router->y));

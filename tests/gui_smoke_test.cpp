@@ -20,7 +20,10 @@
 #include <QToolBar>
 
 #include <QtNodes/AbstractGraphModel>
+#include <QtNodes/BasicGraphicsScene>
 #include <QtNodes/internal/NodeGraphicsObject.hpp>
+
+#include <optional>
 
 namespace {
 
@@ -40,6 +43,36 @@ QAction* actionWithText(QWidget& widget, const QString& text) {
         }
     }
     return nullptr;
+}
+
+std::optional<QtNodes::NodeId> nodeIdWithCaption(
+    QtNodes::BasicGraphicsScene* scene,
+    const QString& caption) {
+    if (!scene) {
+        return std::nullopt;
+    }
+    for (QtNodes::NodeId nodeId : scene->graphModel().allNodeIds()) {
+        if (scene->graphModel().nodeData(
+                nodeId, QtNodes::NodeRole::Caption).toString() == caption) {
+            return nodeId;
+        }
+    }
+    return std::nullopt;
+}
+
+std::optional<QtNodes::NodeId> nodeIdWithCaptionPrefix(
+    QtNodes::BasicGraphicsScene* scene,
+    const QString& prefix) {
+    if (!scene) {
+        return std::nullopt;
+    }
+    for (QtNodes::NodeId nodeId : scene->graphModel().allNodeIds()) {
+        if (scene->graphModel().nodeData(
+                nodeId, QtNodes::NodeRole::Caption).toString().startsWith(prefix)) {
+            return nodeId;
+        }
+    }
+    return std::nullopt;
 }
 
 } // namespace
@@ -163,6 +196,9 @@ int main(int argc, char** argv) {
     auto* editorWidget = window.findChild<QWidget*>(QStringLiteral("finepaper.nodeEditor"));
     auto* nodeEditor = dynamic_cast<finepaper::NocNodeEditor*>(editorWidget);
     auto* graphicsView = nodeEditor ? nodeEditor->findChild<QGraphicsView*>() : nullptr;
+    auto* graphicsScene = graphicsView
+        ? dynamic_cast<QtNodes::BasicGraphicsScene*>(graphicsView->scene())
+        : nullptr;
     check(graphicsView && graphicsView->scene() && !graphicsView->scene()->items().isEmpty(),
           QStringLiteral("created Mesh is projected into the QtNodes editor"));
 
@@ -179,6 +215,59 @@ int main(int argc, char** argv) {
     }
     check(!containsBezierCurve,
           QStringLiteral("NoC connection routing contains no Bezier curve elements"));
+
+    const QPainterPath verticalPath = finepaper::orthogonalConnectionPath(
+        QPointF(0.0, 0.0), QPointF(120.0, 80.0),
+        finepaper::OrthogonalRouteAxis::Vertical);
+    check(verticalPath.elementCount() == 4
+              && verticalPath.elementAt(1).y == 40.0
+              && verticalPath.elementAt(2).y == 40.0,
+          QStringLiteral("vertical NoC links route through a stable horizontal middle segment"));
+
+    const auto router00 = nodeIdWithCaption(graphicsScene, QStringLiteral("r-0-0"));
+    const auto router10 = nodeIdWithCaption(graphicsScene, QStringLiteral("r-1-0"));
+    const auto router01 = nodeIdWithCaption(graphicsScene, QStringLiteral("r-0-1"));
+    check(router00 && router10 && router01,
+          QStringLiteral("Mesh Router identities are present in the editor projection"));
+    if (graphicsScene && router00) {
+        const QSize routerSize = graphicsScene->nodeGeometry().size(*router00);
+        check(routerSize.width() == routerSize.height(),
+              QStringLiteral("Router is rendered as a square device"));
+        check(graphicsScene->nodeGeometry().portPosition(
+                  *router00, QtNodes::PortType::In,
+                  finepaper::portIndex(finepaper::RouterInputPort::West))
+                  == QPointF(0.0, routerSize.height() / 2.0),
+              QStringLiteral("Router west input is fixed on the west edge"));
+        check(graphicsScene->nodeGeometry().portPosition(
+                  *router00, QtNodes::PortType::In,
+                  finepaper::portIndex(finepaper::RouterInputPort::North))
+                  == QPointF(routerSize.width() / 2.0, 0.0),
+              QStringLiteral("Router north input is fixed on the north edge"));
+        check(graphicsScene->nodeGeometry().portPosition(
+                  *router00, QtNodes::PortType::Out,
+                  finepaper::portIndex(finepaper::RouterOutputPort::East))
+                  == QPointF(routerSize.width(), routerSize.height() / 2.0),
+              QStringLiteral("Router east output is fixed on the east edge"));
+        check(graphicsScene->nodeGeometry().portPosition(
+                  *router00, QtNodes::PortType::Out,
+                  finepaper::portIndex(finepaper::RouterOutputPort::South))
+                  == QPointF(routerSize.width() / 2.0, routerSize.height()),
+              QStringLiteral("Router south output is fixed on the south edge"));
+    }
+    if (graphicsScene && router00 && router10 && router01) {
+        check(graphicsScene->graphModel().connectionExists(
+                  {*router00,
+                   finepaper::portIndex(finepaper::RouterOutputPort::East),
+                   *router10,
+                   finepaper::portIndex(finepaper::RouterInputPort::West)}),
+              QStringLiteral("horizontal Mesh link connects east output to west input"));
+        check(graphicsScene->graphModel().connectionExists(
+                  {*router00,
+                   finepaper::portIndex(finepaper::RouterOutputPort::South),
+                   *router01,
+                   finepaper::portIndex(finepaper::RouterInputPort::North)}),
+              QStringLiteral("vertical Mesh link connects south output to north input"));
+    }
 
     QtNodes::NodeGraphicsObject* routerNode = nullptr;
     if (graphicsView && graphicsView->scene()) {
@@ -205,16 +294,56 @@ int main(int argc, char** argv) {
                             == std::optional<QPointF>(movedRouterPosition),
           QStringLiteral("Router remains at its user-arranged workspace position"));
 
-    const qsizetype itemsBeforeEndpoint = graphicsView && graphicsView->scene()
-        ? graphicsView->scene()->items().size() : 0;
-    if (nodeEditor && nodeEditor->endpointTypeDropped) {
-        nodeEditor->endpointTypeDropped(QStringLiteral("master"), finepaper::RouterPosition{0, 0});
+    const std::size_t nodesBeforeEndpoint = graphicsScene
+        ? graphicsScene->graphModel().allNodeIds().size() : 0;
+    if (nodeEditor && nodeEditor->selectionChanged) {
+        nodeEditor->selectionChanged({finepaper::NocEditorSelection::Kind::Router,
+                                      QStringLiteral("r-0-0"),
+                                      finepaper::RouterPosition{0, 0}});
         application.processEvents();
     }
-    const qsizetype itemsAfterEndpoint = graphicsView && graphicsView->scene()
-        ? graphicsView->scene()->items().size() : 0;
-    check(itemsAfterEndpoint > itemsBeforeEndpoint,
-          QStringLiteral("Endpoint drop callback updates NocDesign and rebuilds the NodeEditor"));
+    auto* attachEndpoint = window.findChild<QPushButton*>(
+        QStringLiteral("finepaper.attachEndpoint"));
+    check(attachEndpoint && attachEndpoint->isEnabled(),
+          QStringLiteral("selecting a Router enables its explicit Endpoint attach action"));
+    if (endpointPalette && endpointPalette->count() > 0) {
+        endpointPalette->itemDoubleClicked(endpointPalette->item(0));
+        application.processEvents();
+    }
+    const std::size_t nodesAfterEndpoint = graphicsScene
+        ? graphicsScene->graphModel().allNodeIds().size() : 0;
+    check(nodesAfterEndpoint == nodesBeforeEndpoint + 1,
+          QStringLiteral("double-clicking an Endpoint type attaches it to the selected Router"));
+
+    const auto attachedEndpoint = nodeIdWithCaptionPrefix(
+        graphicsScene, QStringLiteral("master"));
+    const auto currentRouter00 = nodeIdWithCaption(graphicsScene, QStringLiteral("r-0-0"));
+    check(attachedEndpoint && currentRouter00
+              && graphicsScene->graphModel().connectionExists(
+                  {*attachedEndpoint,
+                   finepaper::portIndex(finepaper::EndpointOutputPort::Attachment),
+                   *currentRouter00,
+                   finepaper::portIndex(finepaper::RouterInputPort::Endpoint)}),
+          QStringLiteral("Endpoint uses the Router's dedicated EP attachment port"));
+
+    check(nodeEditor && nodeEditor->setRouterCollapsed(QStringLiteral("r-0-0"), true),
+          QStringLiteral("Router can be collapsed from the workspace"));
+    const auto collapsedRouter00 = nodeIdWithCaption(graphicsScene, QStringLiteral("r-0-0"));
+    check(nodeEditor && nodeEditor->routerCollapsed(QStringLiteral("r-0-0")),
+          QStringLiteral("Router collapsed state is tracked independently of NocDesign"));
+    if (graphicsScene && collapsedRouter00) {
+        const QSize collapsedSize = graphicsScene->nodeGeometry().size(*collapsedRouter00);
+        check(collapsedSize.width() == collapsedSize.height()
+                  && collapsedSize.width()
+                         < finepaper::nocEditorMetrics().expandedRouterSize.width(),
+              QStringLiteral("collapsed Router remains square and becomes compact"));
+    }
+    check(!nodeIdWithCaptionPrefix(graphicsScene, QStringLiteral("master")),
+          QStringLiteral("collapsed Router hides its Endpoint projection"));
+    check(nodeEditor && nodeEditor->setRouterCollapsed(QStringLiteral("r-0-0"), false),
+          QStringLiteral("Router can be expanded again"));
+    check(nodeIdWithCaptionPrefix(graphicsScene, QStringLiteral("master")).has_value(),
+          QStringLiteral("expanding Router restores its Endpoint projection"));
 
     QAction* validateAction = actionWithText(window, QStringLiteral("Validate / DRC"));
     check(validateAction != nullptr, QStringLiteral("shared validation action is available"));
@@ -246,6 +375,9 @@ int main(int argc, char** argv) {
         packagePanelAction->trigger();
         application.processEvents();
     }
+    if (nodeEditor) {
+        nodeEditor->setRouterCollapsed(QStringLiteral("r-0-0"), true);
+    }
     window.close();
     application.processEvents();
 
@@ -269,6 +401,9 @@ int main(int argc, char** argv) {
               && restoredNodeEditor->routerVisualPosition(QStringLiteral("r-0-0"))
                      == std::optional<QPointF>(movedRouterPosition),
           QStringLiteral("Router workspace placement is restored in the next session"));
+    check(restoredNodeEditor
+              && restoredNodeEditor->routerCollapsed(QStringLiteral("r-0-0")),
+          QStringLiteral("Router collapsed state is restored in the next session"));
     restoredWindow.close();
 
     QTextStream(stdout) << (failures == 0 ? "finepaper-gui-smoke passed"

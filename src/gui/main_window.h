@@ -19,6 +19,7 @@ class QLabel;
 class QLineEdit;
 class QListWidget;
 class QPlainTextEdit;
+class QPushButton;
 class QSpinBox;
 class QTabWidget;
 class QTableWidget;
@@ -60,6 +61,7 @@ private:
     void validateDesign();
     void generateDesign();
     void addEndpoint(const QString& endpointType, RouterPosition router);
+    void showEndpointAttachmentMenu(RouterPosition router);
     void moveEndpoint(const QString& endpointId, RouterPosition router);
     void removeSelectedEndpoint();
     void applyParameters();
@@ -85,6 +87,7 @@ private:
     std::optional<NocDesign> m_design;
     QString m_designPath;
     QString m_selectedEndpointId;
+    std::optional<RouterPosition> m_selectedRouter;
     QVector<ParameterControl> m_parameterControls;
 
     QTabWidget* m_centerViews = nullptr;
@@ -103,6 +106,7 @@ private:
     QDockWidget* m_inspectorDock = nullptr;
     QLabel* m_designOverview = nullptr;
     QLabel* m_selectionSummary = nullptr;
+    QPushButton* m_attachEndpoint = nullptr;
     QFormLayout* m_parameterForm = nullptr;
 
     QDockWidget* m_resultsDock = nullptr;

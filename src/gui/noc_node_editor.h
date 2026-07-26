@@ -4,6 +4,7 @@
 
 #include <QHash>
 #include <QPointF>
+#include <QSet>
 #include <QWidget>
 
 #include <functional>
@@ -40,10 +41,13 @@ public:
     void setDesign(const NocDesign* design);
     bool setRouterVisualPosition(const QString& routerId, QPointF position);
     std::optional<QPointF> routerVisualPosition(const QString& routerId) const;
+    bool setRouterCollapsed(const QString& routerId, bool collapsed);
+    bool routerCollapsed(const QString& routerId) const;
     void zoomToFit();
 
     std::function<void(const QString&, RouterPosition)> endpointTypeDropped;
     std::function<void(const QString&, RouterPosition)> endpointMoveRequested;
+    std::function<void(RouterPosition)> endpointAttachmentRequested;
     std::function<void(const NocEditorSelection&)> selectionChanged;
 
 private:
@@ -58,7 +62,8 @@ private:
     void loadRouterLayout();
     void saveRouterLayout() const;
     void handleNodeSelection(QtNodes::NodeId nodeId);
-    void handlePointerReleased();
+    void handlePointerReleased(const QPoint& viewportPosition);
+    void handleNodeContextMenu(QtNodes::NodeId nodeId);
     bool handleEndpointDrop(const QString& endpointType, const QPoint& viewportPosition);
     std::optional<RouterPosition> nearestRouter(const QPointF& scenePosition) const;
     std::optional<QtNodes::NodeId> nodeAt(const QPoint& viewportPosition) const;
@@ -71,6 +76,7 @@ private:
     QHash<QtNodes::NodeId, NodeMetadata> m_metadata;
     QHash<QString, QtNodes::NodeId> m_routerNodes;
     QHash<QString, QPointF> m_routerLayout;
+    QSet<QString> m_collapsedRouters;
     QString m_layoutKey;
 };
 

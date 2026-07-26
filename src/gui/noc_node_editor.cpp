@@ -12,6 +12,7 @@
 #include <QtNodes/NodeDelegateModel>
 #include <QtNodes/NodeDelegateModelRegistry>
 #include <QtNodes/StyleCollection>
+#include <QtNodes/internal/AbstractNodeGeometry.hpp>
 #include <QtNodes/internal/ConnectionGraphicsObject.hpp>
 #include <QtNodes/internal/NodeGraphicsObject.hpp>
 
@@ -36,10 +37,12 @@
 namespace finepaper {
 namespace {
 
-constexpr qreal kRouterHorizontalSpacing = 340.0;
-constexpr qreal kRouterVerticalSpacing = 300.0;
-constexpr qreal kEndpointHorizontalOffset = 140.0;
-constexpr qreal kEndpointVerticalSpacing = 72.0;
+constexpr QtNodes::PortIndex kRouterWestInPort = portIndex(RouterInputPort::West);
+constexpr QtNodes::PortIndex kRouterNorthInPort = portIndex(RouterInputPort::North);
+constexpr QtNodes::PortIndex kRouterEndpointInPort = portIndex(RouterInputPort::Endpoint);
+constexpr QtNodes::PortIndex kRouterEastOutPort = portIndex(RouterOutputPort::East);
+constexpr QtNodes::PortIndex kRouterSouthOutPort = portIndex(RouterOutputPort::South);
+constexpr QtNodes::PortIndex kEndpointOutPort = portIndex(EndpointOutputPort::Attachment);
 
 class NocNodeModel final : public QtNodes::NodeDelegateModel {
 public:
@@ -47,7 +50,10 @@ public:
     QString caption() const override { return m_caption; }
 
     unsigned int nPorts(QtNodes::PortType type) const override {
-        return type == QtNodes::PortType::In ? m_inputPorts : m_outputPorts;
+        if (m_router) {
+            return type == QtNodes::PortType::In ? 3U : 2U;
+        }
+        return type == QtNodes::PortType::Out ? 1U : 0U;
     }
 
     QtNodes::NodeDataType dataType(QtNodes::PortType, QtNodes::PortIndex) const override {
@@ -64,12 +70,28 @@ public:
     QWidget* embeddedWidget() override { return nullptr; }
 
     bool isRouter() const { return m_router; }
+    bool isCollapsed() const { return m_collapsed; }
 
-    void configure(QString caption, bool router) {
+    QString portCaption(QtNodes::PortType type, QtNodes::PortIndex index) const override {
+        if (!m_router) {
+            return QStringLiteral("EP");
+        }
+        if (type == QtNodes::PortType::In) {
+            if (index == kRouterWestInPort) return QStringLiteral("W");
+            if (index == kRouterNorthInPort) return QStringLiteral("N");
+            return QStringLiteral("EP");
+        }
+        return index == kRouterEastOutPort ? QStringLiteral("E") : QStringLiteral("S");
+    }
+
+    bool portCaptionVisible(QtNodes::PortType, QtNodes::PortIndex) const override {
+        return true;
+    }
+
+    void configure(QString caption, bool router, bool collapsed) {
         m_caption = std::move(caption);
         m_router = router;
-        m_inputPorts = 1;
-        m_outputPorts = 1;
+        m_collapsed = router && collapsed;
         QtNodes::NodeStyle style = nodeStyle();
         style.ShadowEnabled = false;
         style.NormalBoundaryColor = QColor(QStringLiteral("#334155"));
@@ -88,9 +110,90 @@ public:
 
 private:
     QString m_caption;
-    unsigned int m_inputPorts = 0;
-    unsigned int m_outputPorts = 0;
     bool m_router = false;
+    bool m_collapsed = false;
+};
+
+class NocNodeGeometry final : public QtNodes::AbstractNodeGeometry {
+public:
+    explicit NocNodeGeometry(QtNodes::AbstractGraphModel& graphModel)
+        : QtNodes::AbstractNodeGeometry(graphModel) {}
+
+    QRectF boundingRect(QtNodes::NodeId nodeId) const override {
+        const QSize nodeSize = size(nodeId);
+        constexpr qreal margin = 14.0;
+        return QRectF(-margin, -margin,
+                      nodeSize.width() + margin * 2.0,
+                      nodeSize.height() + margin * 2.0);
+    }
+
+    QSize size(QtNodes::NodeId nodeId) const override {
+        const NocNodeModel* model = modelFor(nodeId);
+        if (!model || !model->isRouter()) {
+            return nocEditorMetrics().endpointSize;
+        }
+        return model->isCollapsed() ? nocEditorMetrics().collapsedRouterSize
+                                    : nocEditorMetrics().expandedRouterSize;
+    }
+
+    void recomputeSize(QtNodes::NodeId) const override {}
+
+    QPointF portPosition(QtNodes::NodeId nodeId,
+                         QtNodes::PortType type,
+                         QtNodes::PortIndex index) const override {
+        const NocNodeModel* model = modelFor(nodeId);
+        const QSize nodeSize = size(nodeId);
+        const qreal width = nodeSize.width();
+        const qreal height = nodeSize.height();
+        if (!model || !model->isRouter()) {
+            return QPointF(width, height / 2.0);
+        }
+        if (type == QtNodes::PortType::In) {
+            if (index == kRouterWestInPort) return QPointF(0.0, height / 2.0);
+            if (index == kRouterNorthInPort) return QPointF(width / 2.0, 0.0);
+            return QPointF(0.0, height - 32.0);
+        }
+        if (index == kRouterEastOutPort) return QPointF(width, height / 2.0);
+        return QPointF(width / 2.0, height);
+    }
+
+    QPointF portTextPosition(QtNodes::NodeId nodeId,
+                             QtNodes::PortType type,
+                             QtNodes::PortIndex index) const override {
+        const QPointF port = portPosition(nodeId, type, index);
+        const QSize nodeSize = size(nodeId);
+        if (type == QtNodes::PortType::In && index == kRouterNorthInPort) {
+            return QPointF(port.x() - 6.0, 18.0);
+        }
+        if (type == QtNodes::PortType::Out && index == kRouterSouthOutPort) {
+            return QPointF(port.x() - 6.0, nodeSize.height() - 10.0);
+        }
+        return QPointF(port.x() <= nodeSize.width() / 2.0 ? 12.0
+                                                           : nodeSize.width() - 22.0,
+                       port.y() + 4.0);
+    }
+
+    QPointF captionPosition(QtNodes::NodeId) const override {
+        return QPointF(28.0, 22.0);
+    }
+
+    QRectF captionRect(QtNodes::NodeId nodeId) const override {
+        const QSize nodeSize = size(nodeId);
+        return QRectF(26.0, 8.0, nodeSize.width() - 52.0, 24.0);
+    }
+
+    QPointF widgetPosition(QtNodes::NodeId) const override { return {}; }
+    QRect resizeHandleRect(QtNodes::NodeId) const override { return {}; }
+
+    static QRectF collapseButtonRect(QSize nodeSize) {
+        return QRectF(nodeSize.width() - 24.0, 7.0, 17.0, 17.0);
+    }
+
+private:
+    const NocNodeModel* modelFor(QtNodes::NodeId nodeId) const {
+        auto* graphModel = dynamic_cast<QtNodes::DataFlowGraphModel*>(&_graphModel);
+        return graphModel ? graphModel->delegateModel<NocNodeModel>(nodeId) : nullptr;
+    }
 };
 
 class NocBlockNodePainter final : public QtNodes::AbstractNodePainter {
@@ -114,7 +217,7 @@ public:
         painter->setBrush(background);
         painter->drawRect(body);
 
-        const qreal headerHeight = qMin<qreal>(28.0, body.height());
+        const qreal headerHeight = qMin<qreal>(32.0, body.height());
         painter->setPen(Qt::NoPen);
         painter->setBrush(model && model->isRouter()
                               ? QColor(QStringLiteral("#93c5fd"))
@@ -123,17 +226,31 @@ public:
 
         painter->setPen(QColor(QStringLiteral("#0f172a")));
         painter->setFont(QFont(QStringLiteral("Sans Serif"), 9, QFont::DemiBold));
-        painter->drawText(body.adjusted(10.0, 4.0, -10.0, -4.0),
+        const QRectF captionRect = model && model->isRouter()
+            ? (model->isCollapsed()
+                   ? body.adjusted(18.0, 32.0, -18.0, -18.0)
+                   : body.adjusted(38.0, 38.0, -38.0, -38.0))
+            : body.adjusted(12.0, 7.0, -12.0, -7.0);
+        painter->drawText(captionRect,
                           Qt::AlignCenter | Qt::TextWordWrap,
                           model ? model->caption() : QString());
 
-        drawPorts(painter, node, geometry, QtNodes::PortType::In);
-        drawPorts(painter, node, geometry, QtNodes::PortType::Out);
+        if (model && model->isRouter()) {
+            drawCollapseButton(painter, *model, size);
+            painter->setPen(QPen(QColor(QStringLiteral("#64748b")), 1.0));
+            painter->setBrush(Qt::NoBrush);
+            const qreal inset = model->isCollapsed() ? 26.0 : 42.0;
+            painter->drawRect(body.adjusted(inset, inset, -inset, -inset));
+        }
+
+        drawPorts(painter, node, model, geometry, QtNodes::PortType::In);
+        drawPorts(painter, node, model, geometry, QtNodes::PortType::Out);
     }
 
 private:
     static void drawPorts(QPainter* painter,
                           QtNodes::NodeGraphicsObject& node,
+                          const NocNodeModel* model,
                           QtNodes::AbstractNodeGeometry const& geometry,
                           QtNodes::PortType type) {
         const auto count = node.graphModel().nodeData<unsigned int>(
@@ -143,9 +260,54 @@ private:
         painter->setPen(QPen(QColor(QStringLiteral("#0f172a")), 1.0));
         painter->setBrush(QColor(QStringLiteral("#475569")));
         for (unsigned int index = 0; index < count; ++index) {
+            if (model && model->isRouter() && model->isCollapsed()
+                && type == QtNodes::PortType::In
+                && index == kRouterEndpointInPort) {
+                continue;
+            }
             const QPointF center = geometry.portPosition(node.nodeId(), type, index);
             painter->drawRect(QRectF(center.x() - 4.0, center.y() - 4.0, 8.0, 8.0));
+
+            const QString label = model ? model->portCaption(type, index) : QString();
+            if (label.isEmpty()) {
+                continue;
+            }
+            painter->setPen(QColor(QStringLiteral("#0f172a")));
+            painter->setFont(QFont(QStringLiteral("Sans Serif"), 7, QFont::Bold));
+            QRectF labelRect;
+            const QSize nodeSize = geometry.size(node.nodeId());
+            if (center.y() <= 0.5) {
+                labelRect = QRectF(center.x() - 12.0, 8.0, 24.0, 16.0);
+            } else if (center.y() >= nodeSize.height() - 0.5) {
+                labelRect = QRectF(center.x() - 12.0,
+                                   nodeSize.height() - 24.0,
+                                   24.0,
+                                   16.0);
+            } else if (center.x() <= 0.5) {
+                labelRect = QRectF(8.0, center.y() - 8.0, 28.0, 16.0);
+            } else {
+                labelRect = QRectF(nodeSize.width() - 36.0,
+                                   center.y() - 8.0,
+                                   28.0,
+                                   16.0);
+            }
+            painter->drawText(labelRect, Qt::AlignCenter, label);
+            painter->setPen(QPen(QColor(QStringLiteral("#0f172a")), 1.0));
+            painter->setBrush(QColor(QStringLiteral("#475569")));
         }
+    }
+
+    static void drawCollapseButton(QPainter* painter,
+                                   const NocNodeModel& model,
+                                   QSize nodeSize) {
+        const QRectF button = NocNodeGeometry::collapseButtonRect(nodeSize);
+        painter->setPen(QPen(QColor(QStringLiteral("#334155")), 1.0));
+        painter->setBrush(QColor(QStringLiteral("#f8fafc")));
+        painter->drawRect(button);
+        painter->setPen(QColor(QStringLiteral("#0f172a")));
+        painter->setFont(QFont(QStringLiteral("Sans Serif"), 8, QFont::Bold));
+        painter->drawText(button, Qt::AlignCenter,
+                          model.isCollapsed() ? QStringLiteral("+") : QStringLiteral("−"));
     }
 };
 
@@ -167,7 +329,8 @@ public:
         painter->setRenderHint(QPainter::Antialiasing, false);
         painter->setPen(pen);
         painter->setBrush(Qt::NoBrush);
-        painter->drawPath(orthogonalConnectionPath(connection.out(), connection.in()));
+        painter->drawPath(orthogonalConnectionPath(
+            connection.out(), connection.in(), routeAxis(connection)));
     }
 
     QPainterPath getPainterStroke(
@@ -178,7 +341,22 @@ public:
         stroker.setCapStyle(Qt::SquareCap);
         stroker.setJoinStyle(Qt::MiterJoin);
         return stroker.createStroke(
-            orthogonalConnectionPath(connection.out(), connection.in()));
+            orthogonalConnectionPath(
+                connection.out(), connection.in(), routeAxis(connection)));
+    }
+
+private:
+    static OrthogonalRouteAxis routeAxis(
+        QtNodes::ConnectionGraphicsObject const& connection) {
+        auto* graphModel = dynamic_cast<QtNodes::DataFlowGraphModel*>(
+            &connection.graphModel());
+        const QtNodes::ConnectionId id = connection.connectionId();
+        auto* source = graphModel
+            ? graphModel->delegateModel<NocNodeModel>(id.outNodeId)
+            : nullptr;
+        return source && source->isRouter() && id.outPortIndex == kRouterSouthOutPort
+            ? OrthogonalRouteAxis::Vertical
+            : OrthogonalRouteAxis::Horizontal;
     }
 };
 
@@ -201,11 +379,14 @@ public:
         return QtNodes::DataFlowGraphModel::deleteNode(nodeId);
     }
 
-    QtNodes::NodeId addProjectedNode(QString caption, QPointF position, bool router) {
+    QtNodes::NodeId addProjectedNode(QString caption,
+                                     QPointF position,
+                                     bool router,
+                                     bool collapsed = false) {
         const QtNodes::NodeId nodeId = QtNodes::DataFlowGraphModel::addNode(
             QStringLiteral("FinepaperNoCNode"));
         if (auto* model = delegateModel<NocNodeModel>(nodeId)) {
-            model->configure(std::move(caption), router);
+            model->configure(std::move(caption), router, collapsed);
         }
         setNodeData(nodeId, QtNodes::NodeRole::Position, position);
         return nodeId;
@@ -244,7 +425,7 @@ public:
     }
 
     std::function<bool(const QString&, const QPoint&)> endpointDrop;
-    std::function<void()> pointerReleased;
+    std::function<void(const QPoint&)> pointerReleased;
 
 protected:
     void dragEnterEvent(QDragEnterEvent* event) override {
@@ -278,14 +459,14 @@ protected:
     void mouseReleaseEvent(QMouseEvent* event) override {
         QtNodes::GraphicsView::mouseReleaseEvent(event);
         if (pointerReleased) {
-            pointerReleased();
+            pointerReleased(event->position().toPoint());
         }
     }
 };
 
 QPointF routerScenePosition(RouterPosition position) {
-    return QPointF(position.x * kRouterHorizontalSpacing,
-                   position.y * kRouterVerticalSpacing);
+    return QPointF(position.x * nocEditorMetrics().routerHorizontalSpacing,
+                   position.y * nocEditorMetrics().routerVerticalSpacing);
 }
 
 } // namespace
@@ -298,6 +479,7 @@ NocNodeEditor::NocNodeEditor(QWidget* parent)
 
     m_scene = new NocGraphicsScene(
         static_cast<NocGraphModel&>(*m_graphModel), this);
+    m_scene->setNodeGeometry(std::make_unique<NocNodeGeometry>(*m_graphModel));
     m_scene->setNodePainter(std::make_unique<NocBlockNodePainter>());
     m_scene->setConnectionPainter(std::make_unique<NocOrthogonalConnectionPainter>());
     auto* view = new NocGraphicsView(m_scene, this);
@@ -311,7 +493,9 @@ NocNodeEditor::NocNodeEditor(QWidget* parent)
     view->endpointDrop = [this](const QString& endpointType, const QPoint& position) {
         return handleEndpointDrop(endpointType, position);
     };
-    view->pointerReleased = [this] { handlePointerReleased(); };
+    view->pointerReleased = [this](const QPoint& position) {
+        handlePointerReleased(position);
+    };
 
     connect(m_scene, &QtNodes::BasicGraphicsScene::nodeSelected,
             this, [this](QtNodes::NodeId nodeId) { handleNodeSelection(nodeId); });
@@ -320,6 +504,10 @@ NocNodeEditor::NocNodeEditor(QWidget* parent)
             selectionChanged({});
         }
     });
+    connect(m_scene, &QtNodes::BasicGraphicsScene::nodeContextMenu,
+            this, [this](QtNodes::NodeId nodeId, QPointF) {
+                handleNodeContextMenu(nodeId);
+            });
 }
 
 NocNodeEditor::~NocNodeEditor() {
@@ -362,6 +550,24 @@ std::optional<QPointF> NocNodeEditor::routerVisualPosition(const QString& router
         iterator.value(), QtNodes::NodeRole::Position).toPointF();
 }
 
+bool NocNodeEditor::setRouterCollapsed(const QString& routerId, bool collapsed) {
+    if (!m_routerNodes.contains(routerId)) {
+        return false;
+    }
+    if (collapsed) {
+        m_collapsedRouters.insert(routerId);
+    } else {
+        m_collapsedRouters.remove(routerId);
+    }
+    saveRouterLayout();
+    rebuildGraph(false);
+    return true;
+}
+
+bool NocNodeEditor::routerCollapsed(const QString& routerId) const {
+    return m_collapsedRouters.contains(routerId);
+}
+
 void NocNodeEditor::zoomToFit() {
     if (m_view) {
         m_view->zoomFitAll();
@@ -380,12 +586,17 @@ void NocNodeEditor::rebuildGraph(bool zoomToContents) {
 
     const TopologyProjection projection = projectTopology(*m_design);
     QSet<QString> projectedRouterIds;
+    QHash<QString, RouterPosition> routerPositions;
     for (const RouterView& router : projection.routers) {
         projectedRouterIds.insert(router.id);
+        routerPositions.insert(router.id, router.position);
         const QPointF visualPosition = m_routerLayout.value(
             router.id, routerScenePosition(router.position));
         const QtNodes::NodeId nodeId = graphModel.addProjectedNode(
-            router.id, visualPosition, true);
+            router.id,
+            visualPosition,
+            true,
+            m_collapsedRouters.contains(router.id));
         m_routerNodes.insert(router.id, nodeId);
         m_metadata.insert(nodeId, NodeMetadata{
             NocEditorSelection::Kind::Router,
@@ -400,26 +611,45 @@ void NocNodeEditor::rebuildGraph(bool zoomToContents) {
             ++iterator;
         }
     }
+    for (auto iterator = m_collapsedRouters.begin(); iterator != m_collapsedRouters.end();) {
+        if (!projectedRouterIds.contains(*iterator)) {
+            iterator = m_collapsedRouters.erase(iterator);
+        } else {
+            ++iterator;
+        }
+    }
 
     for (const LinkView& link : projection.links) {
-        graphModel.addProjectedConnection({
-            m_routerNodes.value(link.fromRouter), 0,
-            m_routerNodes.value(link.toRouter), 0});
+        const RouterPosition from = routerPositions.value(link.fromRouter);
+        const RouterPosition to = routerPositions.value(link.toRouter);
+        if (to.x > from.x) {
+            graphModel.addProjectedConnection({
+                m_routerNodes.value(link.fromRouter), kRouterEastOutPort,
+                m_routerNodes.value(link.toRouter), kRouterWestInPort});
+        } else {
+            graphModel.addProjectedConnection({
+                m_routerNodes.value(link.fromRouter), kRouterSouthOutPort,
+                m_routerNodes.value(link.toRouter), kRouterNorthInPort});
+        }
     }
 
     QHash<QString, int> endpointOffsets;
     for (const EndpointView& endpoint : projection.endpoints) {
+        if (m_collapsedRouters.contains(endpoint.routerId)) {
+            continue;
+        }
         const int offset = endpointOffsets[endpoint.routerId]++;
         const QtNodes::NodeId routerNode = m_routerNodes.value(endpoint.routerId);
         const QPointF routerPosition = graphModel.nodeData(
             routerNode, QtNodes::NodeRole::Position).toPointF();
         const QPointF endpointPosition(
-            routerPosition.x() + kEndpointHorizontalOffset,
-            routerPosition.y() + offset * kEndpointVerticalSpacing);
+            routerPosition.x() - nocEditorMetrics().endpointHorizontalOffset,
+            routerPosition.y() + nocEditorMetrics().endpointTopOffset
+                + offset * nocEditorMetrics().endpointVerticalSpacing);
         const QString caption = QStringLiteral("%1\n%2 · slot %3")
                                     .arg(endpoint.id, endpoint.type, endpoint.slot);
         const QtNodes::NodeId endpointNode = graphModel.addProjectedNode(
-            caption, endpointPosition, false);
+            caption, endpointPosition, false, false);
         RouterPosition router;
         for (const EndpointInstance& instance : m_design->endpoints) {
             if (instance.id == endpoint.id) {
@@ -432,7 +662,9 @@ void NocNodeEditor::rebuildGraph(bool zoomToContents) {
             endpoint.id,
             router,
             endpointPosition});
-        graphModel.addProjectedConnection({endpointNode, 0, routerNode, 0});
+        graphModel.addProjectedConnection({
+            endpointNode, kEndpointOutPort,
+            routerNode, kRouterEndpointInPort});
     }
 
     if (zoomToContents) {
@@ -450,10 +682,34 @@ void NocNodeEditor::handleNodeSelection(QtNodes::NodeId nodeId) {
                          : NocEditorSelection{iterator->kind, iterator->id, iterator->router});
 }
 
-void NocNodeEditor::handlePointerReleased() {
+void NocNodeEditor::handlePointerReleased(const QPoint& viewportPosition) {
     if (!m_scene) {
         return;
     }
+
+    const std::optional<QtNodes::NodeId> hitNodeId = nodeAt(viewportPosition);
+    if (hitNodeId) {
+        const auto hitMetadata = m_metadata.constFind(*hitNodeId);
+        auto* node = m_scene->nodeGraphicsObject(*hitNodeId);
+        if (hitMetadata != m_metadata.constEnd()
+            && hitMetadata->kind == NocEditorSelection::Kind::Router
+            && node) {
+            const QPointF currentPosition = m_graphModel->nodeData(
+                *hitNodeId, QtNodes::NodeRole::Position).toPointF();
+            const bool nodeMoved = QLineF(
+                currentPosition, hitMetadata->projectedPosition).length() >= 4.0;
+            const QPointF scenePosition = m_view->mapToScene(viewportPosition);
+            const QPointF localPosition = node->mapFromScene(scenePosition);
+            const QSize nodeSize = m_scene->nodeGeometry().size(*hitNodeId);
+            if (!nodeMoved
+                && NocNodeGeometry::collapseButtonRect(nodeSize).contains(localPosition)) {
+                setRouterCollapsed(hitMetadata->id,
+                                   !routerCollapsed(hitMetadata->id));
+                return;
+            }
+        }
+    }
+
     const std::vector<QtNodes::NodeId> selected = m_scene->selectedNodes();
     if (selected.size() != 1) {
         return;
@@ -486,8 +742,22 @@ void NocNodeEditor::handlePointerReleased() {
     }
 }
 
+void NocNodeEditor::handleNodeContextMenu(QtNodes::NodeId nodeId) {
+    if (!endpointAttachmentRequested) {
+        return;
+    }
+    const auto metadata = m_metadata.constFind(nodeId);
+    if (metadata == m_metadata.constEnd()
+        || metadata->kind != NocEditorSelection::Kind::Router
+        || !metadata->router) {
+        return;
+    }
+    endpointAttachmentRequested(*metadata->router);
+}
+
 void NocNodeEditor::loadRouterLayout() {
     m_routerLayout.clear();
+    m_collapsedRouters.clear();
     if (m_layoutKey.isEmpty()) {
         return;
     }
@@ -498,6 +768,12 @@ void NocNodeEditor::loadRouterLayout() {
         if (iterator.value().canConvert<QPointF>()) {
             m_routerLayout.insert(iterator.key(), iterator.value().toPointF());
         }
+    }
+    const QVariantMap collapsedLayouts = settings.value(
+        workbench::collapsedRoutersSetting).toMap();
+    const QStringList collapsed = collapsedLayouts.value(m_layoutKey).toStringList();
+    for (const QString& routerId : collapsed) {
+        m_collapsedRouters.insert(routerId);
     }
 }
 
@@ -513,6 +789,17 @@ void NocNodeEditor::saveRouterLayout() const {
     QVariantMap layouts = settings.value(workbench::routerLayoutsSetting).toMap();
     layouts.insert(m_layoutKey, layout);
     settings.setValue(workbench::routerLayoutsSetting, layouts);
+
+    QVariantMap collapsedLayouts = settings.value(
+        workbench::collapsedRoutersSetting).toMap();
+    QStringList collapsed;
+    collapsed.reserve(m_collapsedRouters.size());
+    for (const QString& routerId : m_collapsedRouters) {
+        collapsed.append(routerId);
+    }
+    collapsed.sort();
+    collapsedLayouts.insert(m_layoutKey, collapsed);
+    settings.setValue(workbench::collapsedRoutersSetting, collapsedLayouts);
 }
 
 bool NocNodeEditor::handleEndpointDrop(const QString& endpointType,
