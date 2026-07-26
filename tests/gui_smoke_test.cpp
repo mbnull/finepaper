@@ -16,6 +16,7 @@
 #include <QTableWidget>
 #include <QTemporaryDir>
 #include <QTextStream>
+#include <QToolBar>
 
 namespace {
 
@@ -40,21 +41,23 @@ QAction* actionWithText(QWidget& widget, const QString& text) {
 } // namespace
 
 int main(int argc, char** argv) {
-    QApplication application(argc, argv);
-    QCoreApplication::setOrganizationName(QStringLiteral("FinepaperTest"));
-    QCoreApplication::setApplicationName(QStringLiteral("finepaper-gui-smoke"));
-
     QTemporaryDir configRoot(QStringLiteral("/tmp/finepaper-gui-config-XXXXXX"));
     QTemporaryDir outputRoot(QStringLiteral("/tmp/finepaper-gui-output-XXXXXX"));
     check(configRoot.isValid(), QStringLiteral("temporary GUI settings root is available"));
     check(outputRoot.isValid(), QStringLiteral("temporary GUI output root is available"));
     qputenv("XDG_CONFIG_HOME", configRoot.path().toUtf8());
 
+    QApplication application(argc, argv);
+    QCoreApplication::setOrganizationName(QStringLiteral("FinepaperTest"));
+    QCoreApplication::setApplicationName(QStringLiteral("finepaper-gui-smoke"));
+
     const QString projectRoot = QString::fromUtf8(FINEPAPER_SOURCE_DIR);
     finepaper::RuntimeLocations locations{
         QStringList{QDir(projectRoot).filePath(QStringLiteral("packages/finepaper-noc"))},
         outputRoot.path()};
     finepaper::FinepaperMainWindow window(locations);
+    window.show();
+    application.processEvents();
 
     auto* centerViews = qobject_cast<QTabWidget*>(window.centralWidget());
     check(centerViews && centerViews->count() == 3,
@@ -77,6 +80,55 @@ int main(int argc, char** argv) {
           QStringLiteral("Inspector is docked on the right"));
     check(resultsDock && window.dockWidgetArea(resultsDock) == Qt::BottomDockWidgetArea,
           QStringLiteral("diagnostics and outputs are docked at the bottom"));
+
+    auto* activityBar = window.findChild<QToolBar*>(finepaper::workbench::activityBarName);
+    QAction* packagePanelAction = window.findChild<QAction*>(
+        finepaper::workbench::packageToggleActionName);
+    QAction* inspectorPanelAction = window.findChild<QAction*>(
+        finepaper::workbench::inspectorToggleActionName);
+    QAction* resultsPanelAction = window.findChild<QAction*>(
+        finepaper::workbench::resultsToggleActionName);
+    check(activityBar && activityBar->orientation() == Qt::Vertical,
+          QStringLiteral("a persistent vertical Activity Bar controls workbench panels"));
+    check(packagePanelAction && packagePanelAction->shortcut() == QKeySequence(QStringLiteral("Ctrl+B")),
+          QStringLiteral("left Package panel has the VS Code style Ctrl+B shortcut"));
+    check(inspectorPanelAction
+              && inspectorPanelAction->shortcut() == QKeySequence(QStringLiteral("Ctrl+Shift+B")),
+          QStringLiteral("right Inspector panel has a direct collapse shortcut"));
+    check(resultsPanelAction
+              && resultsPanelAction->shortcut() == QKeySequence(QStringLiteral("Ctrl+J")),
+          QStringLiteral("bottom results panel has the VS Code style Ctrl+J shortcut"));
+
+    if (packagePanelAction && packageDock) {
+        packagePanelAction->trigger();
+        application.processEvents();
+        check(!packageDock->isVisible() && !packagePanelAction->isChecked(),
+              QStringLiteral("Activity Bar collapses the left Package panel"));
+        packagePanelAction->trigger();
+        application.processEvents();
+        check(packageDock->isVisible() && packagePanelAction->isChecked(),
+              QStringLiteral("Activity Bar restores the left Package panel"));
+    }
+    if (inspectorPanelAction && inspectorDock) {
+        inspectorPanelAction->trigger();
+        application.processEvents();
+        check(!inspectorDock->isVisible(),
+              QStringLiteral("Activity Bar collapses the right Inspector panel"));
+        inspectorPanelAction->trigger();
+        application.processEvents();
+        check(inspectorDock->isVisible(),
+              QStringLiteral("Activity Bar restores the right Inspector panel"));
+    }
+    if (resultsPanelAction && resultsDock) {
+        resultsPanelAction->trigger();
+        application.processEvents();
+        check(!resultsDock->isVisible(),
+              QStringLiteral("Activity Bar collapses the bottom diagnostics panel"));
+        resultsPanelAction->trigger();
+        application.processEvents();
+        check(resultsDock->isVisible(),
+              QStringLiteral("Activity Bar restores the bottom diagnostics panel"));
+    }
 
     auto* resultTabs = resultsDock ? qobject_cast<QTabWidget*>(resultsDock->widget()) : nullptr;
     check(resultTabs && resultTabs->count() == 3,
@@ -146,6 +198,22 @@ int main(int argc, char** argv) {
         const QString artifactPath = artifacts->item(0, 2)->text();
         check(!artifactPath.isEmpty(), QStringLiteral("reported GUI artifact has a path"));
     }
+
+    if (packagePanelAction) {
+        packagePanelAction->trigger();
+        application.processEvents();
+    }
+    window.close();
+    application.processEvents();
+
+    finepaper::FinepaperMainWindow restoredWindow(locations);
+    restoredWindow.show();
+    application.processEvents();
+    auto* restoredPackageDock = restoredWindow.findChild<QDockWidget*>(
+        finepaper::workbench::packageDockName);
+    check(restoredPackageDock && !restoredPackageDock->isVisible(),
+          QStringLiteral("collapsed panel state is restored in the next workbench session"));
+    restoredWindow.close();
 
     QTextStream(stdout) << (failures == 0 ? "finepaper-gui-smoke passed"
                                           : "finepaper-gui-smoke failed")

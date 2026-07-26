@@ -19,6 +19,7 @@
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QJsonDocument>
+#include <QIcon>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
@@ -408,6 +409,32 @@ void FinepaperMainWindow::createActions() {
     connect(generateAction, &QAction::triggered, this, &FinepaperMainWindow::generateDesign);
     connect(fitAction, &QAction::triggered, m_nodeEditor, &NocNodeEditor::zoomToFit);
 
+    QAction* packagePanelAction = m_packageDock->toggleViewAction();
+    packagePanelAction->setObjectName(workbench::packageToggleActionName);
+    packagePanelAction->setText(QStringLiteral("Package && Endpoint Library"));
+    packagePanelAction->setIcon(QIcon::fromTheme(
+        QStringLiteral("folder-symbolic"), style()->standardIcon(QStyle::SP_DirIcon)));
+    packagePanelAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+B")));
+    packagePanelAction->setStatusTip(QStringLiteral("Show or hide the left Package panel"));
+
+    QAction* inspectorPanelAction = m_inspectorDock->toggleViewAction();
+    inspectorPanelAction->setObjectName(workbench::inspectorToggleActionName);
+    inspectorPanelAction->setText(QStringLiteral("Inspector"));
+    inspectorPanelAction->setIcon(QIcon::fromTheme(
+        QStringLiteral("view-list-details-symbolic"),
+        style()->standardIcon(QStyle::SP_FileDialogDetailedView)));
+    inspectorPanelAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+B")));
+    inspectorPanelAction->setStatusTip(QStringLiteral("Show or hide the right Inspector panel"));
+
+    QAction* resultsPanelAction = m_resultsDock->toggleViewAction();
+    resultsPanelAction->setObjectName(workbench::resultsToggleActionName);
+    resultsPanelAction->setText(QStringLiteral("Diagnostics && Output"));
+    resultsPanelAction->setIcon(QIcon::fromTheme(
+        QStringLiteral("dialog-warning-symbolic"),
+        style()->standardIcon(QStyle::SP_MessageBoxWarning)));
+    resultsPanelAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+J")));
+    resultsPanelAction->setStatusTip(QStringLiteral("Show or hide the bottom diagnostics panel"));
+
     QMenu* fileMenu = menuBar()->addMenu(QStringLiteral("&File"));
     fileMenu->addAction(newAction);
     fileMenu->addAction(openAction);
@@ -434,9 +461,10 @@ void FinepaperMainWindow::createActions() {
         });
     }
     viewMenu->addSeparator();
-    viewMenu->addAction(m_packageDock->toggleViewAction());
-    viewMenu->addAction(m_inspectorDock->toggleViewAction());
-    viewMenu->addAction(m_resultsDock->toggleViewAction());
+    auto* panelsMenu = viewMenu->addMenu(QStringLiteral("Panels"));
+    panelsMenu->addAction(packagePanelAction);
+    panelsMenu->addAction(inspectorPanelAction);
+    panelsMenu->addAction(resultsPanelAction);
     viewMenu->addSeparator();
     viewMenu->addAction(fitAction);
     connect(m_centerViews, &QTabWidget::currentChanged, this, [this, viewGroup](int index) {
@@ -458,6 +486,19 @@ void FinepaperMainWindow::createActions() {
     toolbar->addAction(generateAction);
     toolbar->addSeparator();
     toolbar->addAction(fitAction);
+
+    QToolBar* activityBar = new QToolBar(QStringLiteral("Workbench Panels"), this);
+    activityBar->setObjectName(workbench::activityBarName);
+    activityBar->setMovable(false);
+    activityBar->setFloatable(false);
+    activityBar->setOrientation(Qt::Vertical);
+    activityBar->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    activityBar->setIconSize(QSize(24, 24));
+    activityBar->addAction(packagePanelAction);
+    activityBar->addAction(inspectorPanelAction);
+    activityBar->addSeparator();
+    activityBar->addAction(resultsPanelAction);
+    addToolBar(Qt::LeftToolBarArea, activityBar);
 }
 
 void FinepaperMainWindow::restoreWorkbenchState() {

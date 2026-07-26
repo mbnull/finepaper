@@ -1078,6 +1078,7 @@ GUI 使用可停靠的 NoC 工作台，而不是把创建、编辑、检查和�
 ~~~text
 NoC Workbench
 ├── Toolbar: New / Open / Save / Undo / Redo / Validate / Generate
+├── Activity Bar: 左侧、右侧和底部面板的常驻收折开关
 ├── Left Dock: Package 安装、已加载 Package、Endpoint Palette
 ├── Center View Tabs
 │   ├── NoC NodeEditor（默认且常驻的核心编辑页）
@@ -1092,6 +1093,8 @@ NoC Workbench
 ~~~
 
 用户可以移动、浮动、关闭和重新打开 Dock；布局、中央当前页和底部当前页只写入本机 Workspace 设置。NodeEditor 缩放与选择属于会话状态，不进入 `NocDesign`；是否跨会话恢复由实际使用体验决定。`NocDesign` 仍是唯一持久化设计事实。
+
+Activity Bar 始终保留一组紧凑图标，用于独立收折或展开左侧 Package、右侧 Inspector 和底部 Diagnostics 面板。它与 Dock 标题栏关闭按钮、View 菜单和快捷键复用同一个显示状态；默认快捷键为 `Ctrl+B`、`Ctrl+Shift+B` 和 `Ctrl+J`。当三个面板全部收折时，NodeEditor 自动占满工作区。
 
 中央视图由一个小型 `WorkbenchViewRegistry` 集中管理。NodeEditor 是不可移除的默认视图；性能分析、问题报告和未来 Package 视图按实际能力注册。第一阶段 Registry 只管理页面身份、标题、实例和顺序；图标、延迟创建或可见性只有出现真实需求时再加入，不发展为通用插件框架。
 

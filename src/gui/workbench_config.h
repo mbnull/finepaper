@@ -15,6 +15,11 @@ inline const QString resultTabSetting = QStringLiteral("workbench/resultTab");
 inline const QString packageDockName = QStringLiteral("finepaper.packageDock");
 inline const QString inspectorDockName = QStringLiteral("finepaper.inspectorDock");
 inline const QString resultsDockName = QStringLiteral("finepaper.resultsDock");
+inline const QString activityBarName = QStringLiteral("finepaper.activityBar");
+
+inline const QString packageToggleActionName = QStringLiteral("finepaper.togglePackagePanel");
+inline const QString inspectorToggleActionName = QStringLiteral("finepaper.toggleInspectorPanel");
+inline const QString resultsToggleActionName = QStringLiteral("finepaper.toggleResultsPanel");
 
 inline const QString editorViewId = QStringLiteral("noc-editor");
 inline const QString performanceViewId = QStringLiteral("performance-analysis");
