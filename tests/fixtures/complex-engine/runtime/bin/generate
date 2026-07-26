@@ -1,0 +1,35 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require 'fileutils'
+require 'json'
+require 'optparse'
+
+options = {}
+command = ARGV.shift
+OptionParser.new do |parser|
+  parser.on('--design PATH') { |value| options[:design] = value }
+  parser.on('--output PATH') { |value| options[:output] = value }
+  parser.on('--result PATH') { |value| options[:result] = value }
+end.parse!
+
+abort 'generate is the only supported command' unless command == 'generate'
+design = JSON.parse(File.read(options.fetch(:design)))
+output = options.fetch(:output)
+FileUtils.mkdir_p(output)
+artifact = File.join(output, 'complex_top.sv')
+File.write(artifact, "module complex_top; endmodule\n")
+File.write(options.fetch(:result), JSON.generate(
+                                     'success' => true,
+                                     'artifacts' => [{
+                                       'id' => 'complex-top',
+                                       'type' => 'rtl',
+                                       'path' => 'complex_top.sv',
+                                       'primary' => true
+                                     }],
+                                     'diagnostics' => [{
+                                       'severity' => 'info',
+                                       'code' => 'mock.generator_used',
+                                       'message' => "Generated #{design.fetch('name')}"
+                                     }]
+                                   ))

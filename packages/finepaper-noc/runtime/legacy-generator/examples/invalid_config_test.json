@@ -1,0 +1,50 @@
+{
+  "schema": "finepaper-ipcore-graph-v1",
+  "name": "invalid_config_test",
+  "ipcore": "finepaper.noc",
+  "instance": "noc_0",
+  "ipcore_state": [
+    {
+      "ipcore": "finepaper.noc",
+      "instance": "noc_0",
+      "state": {
+        "global_parameters": {
+          "data_width": 64
+        }
+      }
+    }
+  ],
+  "modules": [
+    {
+      "id": "xp_0_0",
+      "ipcore": "finepaper.noc",
+      "instance": "noc_0",
+      "type": "XP",
+      "parameters": {
+        "mesh_col": 0,
+        "mesh_row": 0,
+        "routing_algorithm": "invalid_algo",
+        "vc_count": 10
+      }
+    },
+    {
+      "id": "ep_cpu0",
+      "ipcore": "finepaper.noc",
+      "instance": "noc_0",
+      "type": "Endpoint",
+      "parameters": {
+        "type": "master",
+        "protocol": "axi4",
+        "data_width": 64,
+        "buffer_depth": 0
+      }
+    }
+  ],
+  "connections": [
+    {
+      "id": "ep_cpu0_to_xp_0_0_local0",
+      "source": { "module": "ep_cpu0", "port": "noc" },
+      "target": { "module": "xp_0_0", "port": "local0" }
+    }
+  ]
+}

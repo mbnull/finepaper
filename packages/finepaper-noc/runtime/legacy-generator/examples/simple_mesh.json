@@ -1,0 +1,119 @@
+{
+  "schema": "finepaper-ipcore-graph-v1",
+  "name": "my_noc",
+  "ipcore": "finepaper.noc",
+  "instance": "noc_0",
+  "ipcore_state": [
+    {
+      "ipcore": "finepaper.noc",
+      "instance": "noc_0",
+      "state": {
+        "global_parameters": {
+          "data_width": 64,
+          "flit_width": 128,
+          "addr_width": 32
+        }
+      }
+    }
+  ],
+  "modules": [
+    {
+      "id": "xp_0_0",
+      "ipcore": "finepaper.noc",
+      "instance": "noc_0",
+      "type": "XP",
+      "parameters": { "mesh_col": 0, "mesh_row": 0 }
+    },
+    {
+      "id": "xp_1_0",
+      "ipcore": "finepaper.noc",
+      "instance": "noc_0",
+      "type": "XP",
+      "parameters": { "mesh_col": 1, "mesh_row": 0 }
+    },
+    {
+      "id": "xp_0_1",
+      "ipcore": "finepaper.noc",
+      "instance": "noc_0",
+      "type": "XP",
+      "parameters": { "mesh_col": 0, "mesh_row": 1 }
+    },
+    {
+      "id": "xp_1_1",
+      "ipcore": "finepaper.noc",
+      "instance": "noc_0",
+      "type": "XP",
+      "parameters": { "mesh_col": 1, "mesh_row": 1 }
+    },
+    {
+      "id": "ep_cpu0",
+      "ipcore": "finepaper.noc",
+      "instance": "noc_0",
+      "type": "Endpoint",
+      "parameters": { "type": "master", "protocol": "axi4", "data_width": 64 }
+    },
+    {
+      "id": "ep_cpu1",
+      "ipcore": "finepaper.noc",
+      "instance": "noc_0",
+      "type": "Endpoint",
+      "parameters": { "type": "master", "protocol": "axi4", "data_width": 64 }
+    },
+    {
+      "id": "ep_mem0",
+      "ipcore": "finepaper.noc",
+      "instance": "noc_0",
+      "type": "Endpoint",
+      "parameters": { "type": "slave", "protocol": "axi4", "data_width": 128 }
+    },
+    {
+      "id": "ep_mem1",
+      "ipcore": "finepaper.noc",
+      "instance": "noc_0",
+      "type": "Endpoint",
+      "parameters": { "type": "slave", "protocol": "axi4", "data_width": 128 }
+    }
+  ],
+  "connections": [
+    {
+      "id": "xp_0_0_east_to_xp_1_0_west",
+      "source": { "module": "xp_0_0", "port": "east" },
+      "target": { "module": "xp_1_0", "port": "west" }
+    },
+    {
+      "id": "xp_0_0_south_to_xp_0_1_north",
+      "source": { "module": "xp_0_0", "port": "south" },
+      "target": { "module": "xp_0_1", "port": "north" }
+    },
+    {
+      "id": "xp_1_0_south_to_xp_1_1_north",
+      "source": { "module": "xp_1_0", "port": "south" },
+      "target": { "module": "xp_1_1", "port": "north" }
+    },
+    {
+      "id": "xp_0_1_east_to_xp_1_1_west",
+      "source": { "module": "xp_0_1", "port": "east" },
+      "target": { "module": "xp_1_1", "port": "west" }
+    },
+    {
+      "id": "ep_cpu0_to_xp_0_0_local0",
+      "source": { "module": "ep_cpu0", "port": "noc" },
+      "target": { "module": "xp_0_0", "port": "local0" }
+    },
+    {
+      "id": "ep_cpu1_to_xp_1_0_local0",
+      "source": { "module": "ep_cpu1", "port": "noc" },
+      "target": { "module": "xp_1_0", "port": "local0" }
+    },
+    {
+      "id": "ep_mem0_to_xp_0_1_local0",
+      "source": { "module": "ep_mem0", "port": "noc" },
+      "target": { "module": "xp_0_1", "port": "local0" }
+    },
+    {
+      "id": "ep_mem1_to_xp_1_1_local0",
+      "source": { "module": "ep_mem1", "port": "noc" },
+      "target": { "module": "xp_1_1", "port": "local0" }
+    }
+  ]
+}

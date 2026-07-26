@@ -1,0 +1,1246 @@
+# ProjectDesign input plus migration-only legacy schema handling.
+$LOAD_PATH.unshift File.join(__dir__, '..', 'src', 'ruby')
+
+require 'minitest/autorun'
+require 'open3'
+require 'rbconfig'
+require 'tempfile'
+require 'fileutils'
+require 'parser/json_parser'
+require 'parser/verilog_parser'
+require 'topology/topology_expander'
+require 'drc/drc_runner'
+require 'model/noc_config'
+require 'model/xp'
+require 'generator/rtl_generator'
+
+EXAMPLE = File.join(__dir__, '..', 'examples', 'simple_mesh.json')
+DRC_BIN = File.join(__dir__, '..', 'bin', 'drc')
+GEN_BIN = File.join(__dir__, '..', 'bin', 'generate')
+MESH_3X3 = File.join(__dir__, '..', 'examples', 'mesh_3x3.json')
+MULTI_EP = File.join(__dir__, '..', 'examples', 'multi_endpoint.json')
+STUB_TEMPLATES = Dir[File.join(__dir__, '..', 'template', 'stubs', '*.sv')].sort
+IPCORE_GRAPH = {
+  'schema' => 'finepaper-ipcore-graph-v1',
+  'name' => 'ipcore_noc',
+  'ipcore' => 'finepaper.noc',
+  'instance' => 'noc_0',
+  'ipcore_state' => [
+    {
+      'ipcore' => 'finepaper.noc',
+      'instance' => 'noc_0',
+      'state' => {
+        'global_parameters' => {
+          'data_width' => 64,
+          'flit_width' => 128,
+          'addr_width' => 32
+        }
+      }
+    }
+  ],
+  'modules' => [
+    {
+      'id' => 'xp_0_0',
+      'ipcore' => 'finepaper.noc',
+      'instance' => 'noc_0',
+      'type' => 'XP',
+      'parameters' => {
+        'mesh_col' => 0,
+        'mesh_row' => 0,
+        'routing_algorithm' => 'xy',
+        'vc_count' => 2,
+        'buffer_depth' => 8
+      }
+    },
+    {
+      'id' => 'xp_0_1',
+      'ipcore' => 'finepaper.noc',
+      'instance' => 'noc_0',
+      'type' => 'XP',
+      'parameters' => {
+        'mesh_col' => 1,
+        'mesh_row' => 0,
+        'routing_algorithm' => 'xy',
+        'vc_count' => 2,
+        'buffer_depth' => 8
+      }
+    },
+    {
+      'id' => 'ep_cpu0',
+      'ipcore' => 'finepaper.noc',
+      'instance' => 'noc_0',
+      'type' => 'Endpoint',
+      'parameters' => {
+        'type' => 'master',
+        'protocol' => 'axi4',
+        'data_width' => 64,
+        'buffer_depth' => 16,
+        'qos_enabled' => false
+      }
+    }
+  ],
+  'connections' => [
+    {
+      'id' => 'xp_0_0_east_to_xp_0_1_west',
+      'source' => { 'module' => 'xp_0_0', 'port' => 'east' },
+      'target' => { 'module' => 'xp_0_1', 'port' => 'west' }
+    },
+    {
+      'id' => 'ep_cpu0_to_xp_0_0_local0',
+      'source' => { 'module' => 'ep_cpu0', 'port' => 'noc' },
+      'target' => { 'module' => 'xp_0_0', 'port' => 'local0' }
+    }
+  ]
+}.freeze
+
+def ipcore_graph_json(name:, modules: [], connections: [], parameters: {})
+  JSON.generate({
+    'schema' => 'finepaper-ipcore-graph-v1',
+    'name' => name,
+    'ipcore' => 'finepaper.noc',
+    'instance' => 'noc_0',
+    'ipcore_state' => [
+      {
+        'ipcore' => 'finepaper.noc',
+        'instance' => 'noc_0',
+        'state' => {
+          'global_parameters' => parameters
+        }
+      }
+    ],
+    'modules' => modules,
+    'connections' => connections
+  })
+end
+
+def ipcore_module(id, type, parameters = {})
+  {
+    'id' => id,
+    'ipcore' => 'finepaper.noc',
+    'instance' => 'noc_0',
+    'type' => type,
+    'parameters' => parameters
+  }
+end
+
+def ipcraft_project_from_ipcore_graph(graph)
+  legacy = JSON.parse(JSON.generate(graph))
+  package = legacy.fetch('ipcore', 'finepaper.noc')
+  state = legacy.fetch('ipcore_state', []).find { |record| record['ipcore'] == package } || {}
+  port_ids_by_module = Hash.new { |hash, key| hash[key] = [] }
+
+  legacy.fetch('connections', []).each do |connection|
+    %w[source target].each do |endpoint|
+      ref = connection.fetch(endpoint)
+      port_ids_by_module[ref.fetch('module')] << ref.fetch('port')
+    end
+  end
+
+  {
+    'schema' => 'ipcraft.noc.project.v1',
+    'package' => package,
+    'graph' => { 'name' => legacy.fetch('name') },
+    'project' => {
+      'name' => legacy.fetch('name'),
+      'instance' => {
+        'id' => state.fetch('instance', legacy.fetch('instance', 'noc_0')),
+        'package' => package,
+        'schema' => state.fetch('schema', 'finepaper.noc-project-state-v1'),
+        'state' => state.fetch('state', {})
+      }
+    },
+    'instances' => legacy.fetch('modules', []).map do |mod|
+      {
+        'id' => mod.fetch('id'),
+        'module' => mod.fetch('type'),
+        'parameters' => mod.fetch('parameters', {}),
+        'interfaces' => port_ids_by_module[mod.fetch('id')].uniq.map do |port|
+          { 'id' => "if_#{port}", 'port' => port }
+        end
+      }
+    end,
+    'connections' => legacy.fetch('connections', []).map do |connection|
+      {
+        'id' => connection.fetch('id'),
+        'class' => 'router_link',
+        'status' => 'valid',
+        'interfaces' => %w[source target].map do |endpoint|
+          ref = connection.fetch(endpoint)
+          { 'instance' => ref.fetch('module'), 'interface' => "if_#{ref.fetch('port')}" }
+        end
+      }
+    end
+  }
+end
+
+def project_design_from_ipcore_graph(graph)
+  legacy = JSON.parse(JSON.generate(graph))
+  package = legacy.fetch('ipcore', 'finepaper.noc')
+  state = legacy.fetch('ipcore_state', []).find { |record| record['ipcore'] == package } || {}
+  global_parameters = state.fetch('state', {}).fetch('global_parameters', {})
+  port_ids_by_module = Hash.new { |hash, key| hash[key] = [] }
+
+  legacy.fetch('connections', []).each do |connection|
+    %w[source target].each do |endpoint|
+      ref = connection.fetch(endpoint)
+      port_ids_by_module[ref.fetch('module')] << ref.fetch('port')
+    end
+  end
+
+  {
+    'schema' => 'ipcraft.project.v1',
+    'id' => legacy.fetch('instance', 'noc_0'),
+    'name' => legacy.fetch('name'),
+    'packages' => [
+      { 'id' => package, 'version' => legacy.fetch('version', '1.0') }
+    ],
+    'metadata' => {
+      package => {
+        'parameters' => global_parameters
+      }
+    },
+    'components' => legacy.fetch('modules', []).map do |mod|
+      parameters = mod.fetch('parameters', {}).dup
+      component = {
+        'id' => mod.fetch('id'),
+        'type' => mod.fetch('type'),
+        'packageRef' => "#{package}@#{legacy.fetch('version', '1.0')}",
+        'identity' => { 'label' => mod.fetch('id') }
+      }
+      if mod.fetch('type') == 'Endpoint'
+        parameters['buffer_depth'] = 32
+        component['extensionData'] = { package => { 'parameters' => parameters } }
+      else
+        component['config'] = { 'parameters' => parameters }
+      end
+      component
+    end,
+    'interfaces' => port_ids_by_module.flat_map do |module_id, ports|
+      ports.uniq.map do |port|
+        {
+          'id' => "if_#{port}",
+          'ownerComponentId' => module_id,
+          'type' => 'finepaper.noc.port',
+          'role' => 'peer',
+          'direction' => 'bidirectional',
+          'protocol' => 'finepaper.noc',
+          'metadata' => { package => { 'port' => port } }
+        }
+      end
+    end,
+    'connections' => legacy.fetch('connections', []).map do |connection|
+      {
+        'id' => connection.fetch('id'),
+        'kind' => 'interface',
+        'from' => {
+          'component' => connection.fetch('source').fetch('module'),
+          'interface' => "if_#{connection.fetch('source').fetch('port')}"
+        },
+        'to' => {
+          'component' => connection.fetch('target').fetch('module'),
+          'interface' => "if_#{connection.fetch('target').fetch('port')}"
+        },
+        'metadata' => { 'class' => connection.fetch('id').include?('_local') ? 'ni_link' : 'router_link' }
+      }
+    end,
+    'topologies' => [
+      {
+        'id' => 'fabric.explicit',
+        'schema' => 'ipcraft.topology.graph.v1',
+        'kind' => 'explicit_graph',
+        'family' => 'mesh',
+        'nodes' => legacy.fetch('modules', []).select { |mod| mod.fetch('type') == 'XP' }.map do |mod|
+          { 'id' => mod.fetch('id'), 'componentRef' => mod.fetch('id') }
+        end,
+        'links' => legacy.fetch('connections', []).select { |conn| conn.fetch('source').fetch('port') != 'noc' }.map do |conn|
+          {
+            'id' => conn.fetch('id'),
+            'from' => conn.fetch('source').fetch('module'),
+            'to' => conn.fetch('target').fetch('module')
+          }
+        end,
+        'metadata' => { package => { 'source' => 'test_fixture' } }
+      }
+    ],
+    'extensions' => [
+      {
+        'ownerPackageId' => package,
+        'schemaId' => "#{package}.project.v1",
+        'version' => 1,
+        'data' => { 'parameters' => {} }
+      }
+    ]
+  }
+end
+
+def project_design_parametric_mesh
+  {
+    'schema' => 'ipcraft.project.v1',
+    'id' => 'mesh_project',
+    'name' => 'mesh_project',
+    'packages' => [
+      { 'id' => 'finepaper.noc', 'version' => '1.0' }
+    ],
+    'components' => [
+      {
+        'id' => 'ep_cpu0',
+        'type' => 'Endpoint',
+        'packageRef' => 'finepaper.noc@1.0',
+        'config' => {
+          'parameters' => {
+            'type' => 'master',
+            'protocol' => 'axi4',
+            'data_width' => 64
+          }
+        }
+      }
+    ],
+    'interfaces' => [
+      {
+        'id' => 'noc',
+        'ownerComponentId' => 'ep_cpu0',
+        'type' => 'finepaper.noc.endpoint',
+        'role' => 'initiator',
+        'direction' => 'bidirectional',
+        'protocol' => 'finepaper.noc'
+      }
+    ],
+    'connections' => [],
+    'topologies' => [
+      {
+        'id' => 'fabric.mesh',
+        'schema' => 'ipcraft.topology.parametric.v1',
+        'kind' => 'parametric',
+        'family' => 'mesh',
+        'parameters' => {
+          'dimensions' => [2, 1]
+        },
+        'attachments' => [
+          {
+            'id' => 'attach_cpu0',
+            'componentRef' => 'ep_cpu0',
+            'interfaceRef' => 'noc',
+            'attachmentPoint' => {
+              'tile' => [0, 0],
+              'slot' => 'local0'
+            }
+          }
+        ]
+      }
+    ],
+    'metadata' => {
+      'finepaper.noc' => {
+        'parameters' => {
+          'data_width' => 64,
+          'flit_width' => 128,
+          'addr_width' => 32
+        }
+      }
+    }
+  }
+end
+
+class TestJsonParser < Minitest::Test
+  def test_parses_noc
+    noc = JsonParser.parse(EXAMPLE)
+    assert_equal 'my_noc', noc.name
+    assert_equal 4, noc.xps.size
+    assert_equal 4, noc.connections.size
+    assert_equal 4, noc.endpoints.size
+  end
+
+  def test_parses_ipcore_graph
+    f = Tempfile.new(['ipcore_graph', '.json'])
+    f.write(JSON.generate(IPCORE_GRAPH))
+    f.close
+
+    noc = JsonParser.parse(f.path)
+
+    assert_equal 'ipcore_noc', noc.name
+    assert_equal 2, noc.xps.size
+    assert_equal 1, noc.connections.size
+    assert_equal 1, noc.endpoints.size
+    assert_equal ['ep_cpu0'], noc.xps.find { |xp| xp.id == 'xp_0_0' }.endpoints
+  ensure
+    f&.unlink
+  end
+
+  def test_parses_project_design_schema
+    f = Tempfile.new(['project_design', '.json'])
+    f.write(JSON.generate(project_design_from_ipcore_graph(IPCORE_GRAPH)))
+    f.close
+
+    noc = JsonParser.parse(f.path)
+
+    assert_equal 'ipcore_noc', noc.name
+    assert_equal 2, noc.xps.size
+    assert_equal 1, noc.connections.size
+    assert_equal 1, noc.endpoints.size
+    assert_equal 128, noc.parameters['flit_width']
+    assert_equal 'east', noc.connections.first.dir
+    assert_equal ['ep_cpu0'], noc.xps.find { |xp| xp.id == 'xp_0_0' }.endpoints
+    assert_equal 32, noc.endpoints.find { |ep| ep.id == 'ep_cpu0' }.config[:buffer_depth]
+  ensure
+    f&.unlink
+  end
+
+  def test_parses_project_design_parametric_mesh_topology
+    f = Tempfile.new(['project_design_mesh', '.json'])
+    f.write(JSON.generate(project_design_parametric_mesh))
+    f.close
+
+    noc = JsonParser.parse(f.path)
+    expanded = TopologyExpander.expand(noc)
+
+    assert_equal 'mesh_project', noc.name
+    assert_equal 2, expanded.xps.size
+    assert_equal 1, expanded.connections.size
+    assert_equal ['ep_cpu0'], expanded.xps.find { |xp| xp.id == 'xp_0_0' }.endpoints
+  ensure
+    f&.unlink
+  end
+
+  def test_parses_legacy_ipcraft_project_schema
+    f = Tempfile.new(['ipcraft_project', '.json'])
+    f.write(JSON.generate(ipcraft_project_from_ipcore_graph(IPCORE_GRAPH)))
+    f.close
+
+    noc = JsonParser.parse(f.path)
+
+    assert_equal 'ipcore_noc', noc.name
+    assert_equal 2, noc.xps.size
+    assert_equal 1, noc.connections.size
+    assert_equal 1, noc.endpoints.size
+    assert_equal ['ep_cpu0'], noc.xps.find { |xp| xp.id == 'xp_0_0' }.endpoints
+  ensure
+    f&.unlink
+  end
+
+  def test_applies_parameter_defaults
+    require 'tempfile'
+    f = Tempfile.new(['minimal', '.json'])
+    f.write('{"schema":"finepaper-ipcore-graph-v1","name":"test","ipcore":"finepaper.noc","instance":"noc_0","modules":[],"connections":[]}')
+    f.close
+    noc = JsonParser.parse(f.path)
+    assert_equal 64, noc.parameters['data_width']
+    assert_equal 128, noc.parameters['flit_width']
+    assert_equal 32, noc.parameters['addr_width']
+  ensure
+    f&.unlink
+  end
+
+  def test_validates_required_fields
+    require 'tempfile'
+    f = Tempfile.new(['invalid', '.json'])
+    f.write('{"schema":"finepaper-ipcore-graph-v1","version":"1.0"}')
+    f.close
+    assert_raises(RuntimeError) { JsonParser.parse(f.path) }
+  ensure
+    f&.unlink
+  end
+
+  def test_rejects_standalone_legacy_config
+    f = Tempfile.new(['legacy_standalone', '.json'])
+    f.write('{"name":"legacy","version":"1.0"}')
+    f.close
+
+    error = assert_raises(RuntimeError) { JsonParser.parse(f.path) }
+    assert_match(/expected schema ipcraft\.project\.v1.*ipcraft\.noc\.project\.v1.*finepaper-ipcore-graph-v1/m, error.message)
+  ensure
+    f&.unlink
+  end
+
+  def test_rejects_old_plugin_graph_schema
+    f = Tempfile.new(['legacy_plugin_graph', '.json'])
+    f.write('{"schema":"finepaper-' + 'plugin-graph-v1","name":"legacy"}')
+    f.close
+
+    error = assert_raises(RuntimeError) { JsonParser.parse(f.path) }
+    assert_match(/expected schema ipcraft\.project\.v1.*ipcraft\.noc\.project\.v1.*finepaper-ipcore-graph-v1/m, error.message)
+  ensure
+    f&.unlink
+  end
+end
+
+class TestTopologyExpander < Minitest::Test
+  def test_passthrough_when_xps_present
+    noc = JsonParser.parse(EXAMPLE)
+    assert_same noc, TopologyExpander.expand(noc)
+  end
+
+  def test_expands_mesh
+    noc = NocConfig.new('t', '1', { 'mesh' => { 'width' => 2, 'height' => 2 } }, [], [], [])
+    expanded = TopologyExpander.expand(noc)
+    assert_equal 4, expanded.xps.size
+    assert_equal 4, expanded.connections.size
+  end
+
+  def test_expands_3x3_mesh
+    noc = JsonParser.parse(MESH_3X3)
+    expanded = TopologyExpander.expand(noc)
+    assert_equal 9, expanded.xps.size
+    assert_equal 12, expanded.connections.size
+    center = expanded.xps.find { |xp| xp.x == 1 && xp.y == 1 }
+    assert_equal 4, center.neighbors(expanded).size
+  end
+
+  def test_raises_without_topology
+    noc = NocConfig.new('t', '1', {}, [], [], [])
+    assert_raises(RuntimeError) { TopologyExpander.expand(noc) }
+  end
+end
+
+class TestDrcRunner < Minitest::Test
+  def test_passes_unique_ids
+    DrcRunner.new.run(JsonParser.parse(EXAMPLE))
+  end
+
+  def test_raises_on_duplicate_id
+    xp = Xp.new('xp_0_0', 0, 0, [])
+    noc = NocConfig.new('t', '1', {}, [xp, xp], [], [])
+    assert_raises(RuntimeError) { DrcRunner.new.run(noc) }
+  end
+
+  def test_raises_on_duplicate_endpoint_id
+    require 'model/endpoint'
+    ep = Endpoint.new('ep1', 'master', 'axi4', 64)
+    noc = NocConfig.new('t', '1', {}, [], [], [ep, ep])
+    assert_raises(RuntimeError) { DrcRunner.new.run(noc) }
+  end
+
+  def test_raises_on_connection_with_missing_xp
+    require 'model/connection'
+    xp = Xp.new('xp0', 0, 0, [])
+    noc = NocConfig.new('t', '1', {}, [xp], [Connection.new('xp0', 'missing', 'east')], [])
+
+    err = assert_raises(RuntimeError) { DrcRunner.new.run(noc) }
+    assert_match(/unknown target XP 'missing'/, err.message)
+  end
+
+  def test_raises_on_invalid_buffer_depth
+    require 'model/endpoint'
+    ep = Endpoint.new('ep1', 'master', 'axi4', 64, { buffer_depth: 0 })
+    noc = NocConfig.new('t', '1', {}, [], [], [ep])
+    assert_raises(RuntimeError) { DrcRunner.new.run(noc) }
+  end
+
+  def test_raises_on_invalid_routing_algorithm
+    xp = Xp.new('xp1', 0, 0, [], { routing_algorithm: 'invalid' })
+    noc = NocConfig.new('t', '1', {}, [xp], [], [])
+    assert_raises(RuntimeError) { DrcRunner.new.run(noc) }
+  end
+
+  def test_raises_on_invalid_vc_count
+    xp = Xp.new('xp1', 0, 0, [], { vc_count: 10 })
+    noc = NocConfig.new('t', '1', {}, [xp], [], [])
+    assert_raises(RuntimeError) { DrcRunner.new.run(noc) }
+  end
+
+  def test_drc_script_passes_valid_example
+    stdout, stderr, status = Open3.capture3(RbConfig.ruby, DRC_BIN, '-i', EXAMPLE)
+
+    assert status.success?, stderr
+    assert_includes stdout, 'DRC passed for my_noc'
+  end
+
+  def test_drc_script_accepts_ipcore_graph
+    f = Tempfile.new(['ipcore_graph', '.json'])
+    f.write(JSON.generate(IPCORE_GRAPH))
+    f.close
+
+    stdout, stderr, status = Open3.capture3(RbConfig.ruby, DRC_BIN, '-i', f.path)
+
+    assert status.success?, stderr
+    assert_includes stdout, 'DRC passed for ipcore_noc'
+  ensure
+    f&.unlink
+  end
+
+  def test_drc_script_accepts_project_design_schema
+    f = Tempfile.new(['project_design', '.json'])
+    f.write(JSON.generate(project_design_from_ipcore_graph(IPCORE_GRAPH)))
+    f.close
+
+    stdout, stderr, status = Open3.capture3(RbConfig.ruby, DRC_BIN, '-i', f.path)
+
+    assert status.success?, stderr
+    assert_includes stdout, 'DRC passed for ipcore_noc'
+  ensure
+    f&.unlink
+  end
+
+  def test_drc_script_accepts_legacy_ipcraft_project_schema
+    f = Tempfile.new(['ipcraft_project', '.json'])
+    f.write(JSON.generate(ipcraft_project_from_ipcore_graph(IPCORE_GRAPH)))
+    f.close
+
+    stdout, stderr, status = Open3.capture3(RbConfig.ruby, DRC_BIN, '-i', f.path)
+
+    assert status.success?, stderr
+    assert_includes stdout, 'DRC passed for ipcore_noc'
+  ensure
+    f&.unlink
+  end
+
+  def test_generator_accepts_project_design_schema
+    f = Tempfile.new(['project_design', '.json'])
+    f.write(JSON.generate(project_design_from_ipcore_graph(IPCORE_GRAPH)))
+    f.close
+    out = Dir.mktmpdir
+
+    stdout, stderr, status = Open3.capture3(RbConfig.ruby,
+                                            GEN_BIN,
+                                            '-i', f.path,
+                                            '-o', out,
+                                            '-t', File.join(__dir__, '..', 'template'))
+
+    assert status.success?, stderr
+    assert_includes stdout, 'Generated'
+    assert File.exist?(File.join(out, 'ipcore_noc_top.v'))
+  ensure
+    f&.unlink
+    FileUtils.rm_rf(out)
+  end
+
+  def test_generator_accepts_legacy_ipcraft_project_schema
+    f = Tempfile.new(['ipcraft_project', '.json'])
+    f.write(JSON.generate(ipcraft_project_from_ipcore_graph(IPCORE_GRAPH)))
+    f.close
+    out = Dir.mktmpdir
+
+    stdout, stderr, status = Open3.capture3(RbConfig.ruby,
+                                            GEN_BIN,
+                                            '-i', f.path,
+                                            '-o', out,
+                                            '-t', File.join(__dir__, '..', 'template'))
+
+    assert status.success?, stderr
+    assert_includes stdout, 'Generated'
+    assert File.exist?(File.join(out, 'ipcore_noc_top.v'))
+  ensure
+    f&.unlink
+    FileUtils.rm_rf(out)
+  end
+end
+
+class TestVerilogParser < Minitest::Test
+  def test_parses_ports
+    f = Tempfile.new(['test', '.sv'])
+    f.write("module foo(input wire [7:0] a, output logic b);")
+    f.close
+    iface = VerilogParser.parse(f.path)
+    assert_equal 'foo', iface.name
+    assert_equal 2, iface.ports.size
+    assert_equal 'input',  iface.ports[0].dir
+    assert_equal '[7:0]',  iface.ports[0].width
+    assert_equal 'a',      iface.ports[0].name
+    assert_nil             iface.ports[1].width
+  ensure
+    f&.unlink
+  end
+end
+
+class TestNocConfig < Minitest::Test
+  def test_catalog
+    cat = JsonParser.parse(EXAMPLE).catalog
+    assert_equal 2, cat[:masters].size
+    assert_equal 2, cat[:slaves].size
+    assert cat[:by_protocol].key?('axi4')
+  end
+end
+
+class TestXp < Minitest::Test
+  def test_node_id
+    noc = JsonParser.parse(EXAMPLE)
+    xp  = noc.xps.find { |x| x.x == 1 && x.y == 1 }
+    assert_equal 3, xp.node_id(noc)
+  end
+end
+
+class TestConfigSchema < Minitest::Test
+  def test_endpoint_schema_reflection
+    schema = Endpoint.config_schema
+    assert_equal :integer, schema[:buffer_depth][:type]
+    assert_equal 16, schema[:buffer_depth][:default]
+    assert_equal :boolean, schema[:qos_enabled][:type]
+    assert_equal false, schema[:qos_enabled][:default]
+  end
+
+  def test_xp_schema_reflection
+    schema = Xp.config_schema
+    assert_equal :string, schema[:routing_algorithm][:type]
+    assert_equal 'xy', schema[:routing_algorithm][:default]
+    assert_equal :integer, schema[:vc_count][:type]
+    assert_equal 2, schema[:vc_count][:default]
+  end
+
+  def test_endpoint_applies_defaults
+    ep = Endpoint.new('ep1', 'master', 'axi4', 64)
+    assert_equal 16, ep.config[:buffer_depth]
+    assert_equal false, ep.config[:qos_enabled]
+  end
+
+  def test_endpoint_merges_custom_config
+    ep = Endpoint.new('ep1', 'master', 'axi4', 64, { buffer_depth: 32, qos_enabled: true })
+    assert_equal 32, ep.config[:buffer_depth]
+    assert_equal true, ep.config[:qos_enabled]
+  end
+
+  def test_xp_applies_defaults
+    xp = Xp.new('xp1', 0, 0, [])
+    assert_equal 'xy', xp.config[:routing_algorithm]
+    assert_equal 2, xp.config[:vc_count]
+    assert_equal 8, xp.config[:buffer_depth]
+  end
+
+  def test_xp_merges_custom_config
+    xp = Xp.new('xp1', 0, 0, [], { routing_algorithm: 'yx', vc_count: 4 })
+    assert_equal 'yx', xp.config[:routing_algorithm]
+    assert_equal 4, xp.config[:vc_count]
+    assert_equal 8, xp.config[:buffer_depth]
+  end
+
+  def test_parser_validates_type
+    f = Tempfile.new(['type_err', '.json'])
+    f.write(ipcore_graph_json(
+      name: 't',
+      modules: [
+        ipcore_module('ep1', 'Endpoint', {
+          'type' => 'master',
+          'protocol' => 'axi4',
+          'data_width' => 64,
+          'buffer_depth' => 'invalid'
+        })
+      ]
+    ))
+    f.close
+    assert_raises(RuntimeError) { JsonParser.parse(f.path) }
+  ensure
+    f&.unlink
+  end
+
+  def test_parser_ignores_unknown_editor_parameter
+    f = Tempfile.new(['unknown', '.json'])
+    f.write(ipcore_graph_json(
+      name: 't',
+      modules: [
+        ipcore_module('ep1', 'Endpoint', {
+          'type' => 'master',
+          'protocol' => 'axi4',
+          'data_width' => 64,
+          'unknown_editor_field' => 123
+        })
+      ]
+    ))
+    f.close
+    noc = JsonParser.parse(f.path)
+    refute_includes noc.endpoints[0].config.keys, :unknown_editor_field
+  ensure
+    f&.unlink
+  end
+
+  def test_parser_accepts_editor_saved_xp_collapsed_state
+    f = Tempfile.new(['editor_xp_config', '.json'])
+    f.write(ipcore_graph_json(
+      name: 't',
+      modules: [
+        ipcore_module('xp1', 'XP', {
+          'x' => 0,
+          'y' => 0,
+          'routing_algorithm' => 'xy',
+          'collapsed' => true
+        })
+      ]
+    ))
+    f.close
+    noc = JsonParser.parse(f.path)
+    assert_equal 'xy', noc.xps[0].config[:routing_algorithm]
+    refute_includes noc.xps[0].config.keys, :collapsed
+  ensure
+    f&.unlink
+  end
+
+  def test_parser_handles_missing_config
+    f = Tempfile.new(['no_cfg', '.json'])
+    f.write(ipcore_graph_json(
+      name: 't',
+      modules: [
+        ipcore_module('ep1', 'Endpoint', {
+          'type' => 'master',
+          'protocol' => 'axi4',
+          'data_width' => 64
+        })
+      ]
+    ))
+    f.close
+    noc = JsonParser.parse(f.path)
+    assert_equal 16, noc.endpoints[0].config[:buffer_depth]
+  ensure
+    f&.unlink
+  end
+end
+
+class TestRtlGenerator < Minitest::Test
+  def test_renders_xp_template
+    noc = JsonParser.parse(EXAMPLE)
+    noc.instance_variable_set(:@xp, noc.xps.first)
+    out = Dir.mktmpdir
+    RtlGenerator.new(noc, File.join(__dir__, '..', 'template'))
+                .render('xp.sv.erb', File.join(out, 'out.sv'))
+    content = File.read(File.join(out, 'out.sv'))
+    assert_match(/module xp_router_xp_0_0/, content)
+    assert_match(/SMXP: Synthetic Mesh Cross Point/, content)
+    assert_match(/Mesh Port: E/, content)
+    assert_match(/Protocol Channel Placeholders/, content)
+    assert_match(/Internal Signals - Automatic Declarations/, content)
+  ensure
+    FileUtils.rm_rf(out)
+  end
+
+  def test_renders_ni_template
+    noc = JsonParser.parse(EXAMPLE)
+    xp = noc.xps.find { |x| x.endpoints.any? }
+    noc.instance_variable_set(:@xp, xp)
+    out = Dir.mktmpdir
+    RtlGenerator.new(noc, File.join(__dir__, '..', 'template'))
+                .render('ni.sv.erb', File.join(out, "ni_xp_#{xp.id}.sv"))
+    content = File.read(File.join(out, "ni_xp_#{xp.id}.sv"))
+    assert_match(/module ni_xp_#{xp.id}/, content)
+    assert_match(/NUM_ENDPOINTS/, content)
+    assert_match(/Endpoint Bridge Configuration/, content)
+    assert_match(/Protocol Adapter Placeholders/, content)
+    assert_match(/Credit and Flow Control/, content)
+  ensure
+    FileUtils.rm_rf(out)
+  end
+
+  def test_renders_top_template
+    noc = JsonParser.parse(EXAMPLE)
+    out = Dir.mktmpdir
+    RtlGenerator.new(noc, File.join(__dir__, '..', 'template'))
+                .render('top.v.erb', File.join(out, 'top.v'))
+    content = File.read(File.join(out, 'top.v'))
+    assert_match(/module my_noc_top/, content)
+    assert_match(/xp_router_xp_0_0/, content)
+    assert_match(/link_xp_0_0_to_xp_1_0_flit/, content)
+    assert_match(/ni_xp_/, content)
+    assert_match(/Topology Summary/, content)
+    assert_match(/Global Configuration Parameters/, content)
+    assert_match(/XP Inventory/, content)
+    assert_match(/Mesh Link Bundle Declarations/, content)
+  ensure
+    FileUtils.rm_rf(out)
+  end
+
+  def test_partitioned_generation_writes_direction_folders
+    noc = JsonParser.parse(EXAMPLE)
+    out = Dir.mktmpdir
+    RtlGenerator.new(noc, File.join(__dir__, '..', 'template')).generate_partitioned(out)
+
+    assert_empty Dir[File.join(out, 'xp_*', 'XP.v')]
+    %w[xp_e00s xp_0w0s xp_e0n0 xp_0wn0].each do |dir|
+      assert File.exist?(File.join(out, dir, "my_noc_#{dir}.v")), "missing #{dir}/my_noc_#{dir}.v"
+    end
+
+    xp = File.read(File.join(out, 'xp_e00s', 'my_noc_xp_e00s.v'))
+    assert_match(/module xp_router_e00s/, xp)
+    assert_match(/flit_in_e/, xp)
+    assert_match(/flit_out_s/, xp)
+    assert_match(/local0_flit_in/, xp)
+
+    top = File.read(File.join(out, 'my_noc_top.v'))
+    assert_match(/xp_router_e00s #\(/, top)
+    assert_match(/\.flit_out_e\(link_xp_0_0_to_xp_1_0_flit\)/, top)
+    assert_match(/\.flit_in_s\(link_xp_0_1_to_xp_0_0_flit\)/, top)
+    assert_match(/\.local0_flit_in\(ni_ep_cpu0_to_router_flit\)/, top)
+  ensure
+    FileUtils.rm_rf(out)
+  end
+
+  def test_partitioned_generation_writes_filelist
+    noc = JsonParser.parse(EXAMPLE)
+    out = Dir.mktmpdir
+    RtlGenerator.new(noc, File.join(__dir__, '..', 'template')).generate_partitioned(out)
+
+    filelist_path = File.join(out, 'filelist.f')
+    assert File.exist?(filelist_path), 'missing filelist.f'
+
+    lines = File.readlines(filelist_path, chomp: true)
+    stub_dir = File.expand_path(File.join(out, 'stubs'))
+    source_lines = lines.reject { |line| line.start_with?('+incdir+') || line.start_with?('-y ') }
+
+    refute_empty lines
+    assert_equal lines.uniq, lines
+    assert_includes lines, "+incdir+#{stub_dir}"
+    assert_includes lines, "-y #{stub_dir}"
+    assert_equal File.expand_path(File.join(out, 'my_noc_top.v')), lines.last
+    assert_includes source_lines, File.expand_path(File.join(out, 'xp_e00s', 'my_noc_xp_e00s.v'))
+    assert_includes source_lines, File.expand_path(File.join(out, 'ni_axi4_m64_feat_prscoe', 'my_noc_ni_axi4_m64_feat_prscoe.v'))
+    refute source_lines.any? { |line| line.include?('/stubs/') }, 'stubs should be a -y library, not direct source files'
+
+    source_lines.each do |line|
+      assert_match(%r{\A/}, line)
+      assert File.exist?(line), "listed file does not exist: #{line}"
+    end
+
+    generated_direct_rtl = (
+      Dir[File.join(out, 'xp_*', '*.v')] +
+      Dir[File.join(out, 'ni_*', '*.v')] +
+      [File.join(out, 'my_noc_top.v')]
+    ).sort.map do |path|
+      File.expand_path(path)
+    end
+    assert_equal generated_direct_rtl, source_lines.sort
+  ensure
+    FileUtils.rm_rf(out)
+  end
+
+  def test_filelist_lints_without_uninstantiated_stub_multitops
+    skip 'verilator not found' unless system('which verilator > /dev/null 2>&1')
+
+    noc = JsonParser.parse(EXAMPLE)
+    out = Dir.mktmpdir
+    RtlGenerator.new(noc, File.join(__dir__, '..', 'template')).generate_partitioned(out)
+
+    assert system("verilator --lint-only --sv -f #{File.join(out, 'filelist.f')} 2>/dev/null"),
+           'filelist lint should not report inactive stubs as top modules'
+  ensure
+    FileUtils.rm_rf(out)
+  end
+
+  def test_partitioned_generation_reuses_3x3_variants
+    noc = TopologyExpander.expand(JsonParser.parse(MESH_3X3))
+    out = Dir.mktmpdir
+    RtlGenerator.new(noc, File.join(__dir__, '..', 'template')).generate_partitioned(out)
+
+    assert_equal 9, Dir[File.join(out, 'xp_*', 'mesh_3x3_xp_*.v')].size
+    assert File.exist?(File.join(out, 'xp_ewns', 'mesh_3x3_xp_ewns.v'))
+    assert_equal 2, Dir[File.join(out, 'ni_*', 'mesh_3x3_ni_*.v')].size
+    assert File.exist?(File.join(out, 'ni_axi4_m64_feat_prscoe', 'mesh_3x3_ni_axi4_m64_feat_prscoe.v'))
+    assert File.exist?(File.join(out, 'ni_axi4_s128_feat_prscoe', 'mesh_3x3_ni_axi4_s128_feat_prscoe.v'))
+
+    top = File.read(File.join(out, 'mesh_3x3_top.v'))
+    assert_match(/xp_router_ewns #\(/, top)
+    assert_match(/ni_bridge_axi4_m64_feat_prscoe #\(/, top)
+    assert_match(/\.ep0_flit_in\(ep_0_flit_in\)/, top)
+    assert_match(/\.ep0_router_flit_in\(ni_ep_0_to_router_flit\)/, top)
+    assert_match(/u_xp_1_1/, top)
+  ensure
+    FileUtils.rm_rf(out)
+  end
+
+  def test_partitioned_generation_keeps_endpoint_count_in_variant_key
+    noc = JsonParser.parse(MULTI_EP)
+    out = Dir.mktmpdir
+    RtlGenerator.new(noc, File.join(__dir__, '..', 'template')).generate_partitioned(out)
+
+    assert File.exist?(File.join(out, 'xp_e000_ep3', 'multi_ep_noc_xp_e000_ep3.v'))
+    assert File.exist?(File.join(out, 'xp_0w00_ep2', 'multi_ep_noc_xp_0w00_ep2.v'))
+    assert File.exist?(File.join(out, 'ni_axi4_m64_axi4_m64_axi4_m128_feat_prscoe', 'multi_ep_noc_ni_axi4_m64_axi4_m64_axi4_m128_feat_prscoe.v'))
+    assert File.exist?(File.join(out, 'ni_axi4_s128_axi4_s128_feat_prscoe', 'multi_ep_noc_ni_axi4_s128_axi4_s128_feat_prscoe.v'))
+    xp = File.read(File.join(out, 'xp_e000_ep3', 'multi_ep_noc_xp_e000_ep3.v'))
+    assert_match(/module xp_router_e000_ep3/, xp)
+    assert_match(/local2_flit_out/, xp)
+  ensure
+    FileUtils.rm_rf(out)
+  end
+
+  def test_partitioned_generation_masks_disabled_ni_features
+    params = {
+      'data_width' => 64,
+      'flit_width' => 128,
+      'addr_width' => 32,
+      'ni_features' => {
+        'credit_flow' => false,
+        'qos' => false,
+        'trace' => false
+      }
+    }
+    ep = Endpoint.new('ep_cpu0', 'master', 'axi4', 64)
+    xp = Xp.new('xp0', 0, 0, ['ep_cpu0'])
+    noc = NocConfig.new('masked_ni', '1.0', params, [xp], [], [ep])
+    out = Dir.mktmpdir
+
+    RtlGenerator.new(noc, File.join(__dir__, '..', 'template')).generate_partitioned(out)
+
+    ni = File.read(Dir[File.join(out, 'ni_*', 'masked_ni_ni_*.v')].first)
+    top = File.read(File.join(out, 'masked_ni_top.v'))
+    assert_match(/fp_ni_protocol_decode/, ni)
+    refute_match(/fp_ni_credit_flow/, ni)
+    refute_match(/fp_ni_qos_classifier/, ni)
+    refute_match(/fp_ni_trace_probe/, ni)
+    refute_match(/ni_ep_cpu0_qos_class/, top)
+    refute_match(/ni_ep_cpu0_tx_credit_valid/, top)
+  ensure
+    FileUtils.rm_rf(out)
+  end
+
+  def test_framework_stub_templates_are_available_for_generated_instances
+    expected = %w[
+      fp_ni_credit_flow.sv
+      fp_ni_error_check.sv
+      fp_ni_protocol_decode.sv
+      fp_ni_qos_classifier.sv
+      fp_ni_request_queue.sv
+      fp_ni_response_queue.sv
+      fp_ni_trace_probe.sv
+      fp_xp_channel_switch.sv
+      fp_xp_credit_accounting.sv
+      fp_xp_route_decode.sv
+    ]
+
+    assert_equal expected, STUB_TEMPLATES.map { |path| File.basename(path) }
+  end
+
+  def test_partitioned_generation_emits_framework_stubs
+    noc = JsonParser.parse(EXAMPLE)
+    out = Dir.mktmpdir
+    RtlGenerator.new(noc, File.join(__dir__, '..', 'template')).generate_partitioned(out)
+
+    assert_equal STUB_TEMPLATES.map { |path| File.basename(path) },
+                 Dir[File.join(out, 'stubs', '*.sv')].sort.map { |path| File.basename(path) }
+  ensure
+    FileUtils.rm_rf(out)
+  end
+
+  def test_partitioned_generation_disambiguates_same_direction_ports
+    xps = [
+      Xp.new('xp0', 0, 0, []),
+      Xp.new('xp1', 1, 0, []),
+      Xp.new('xp2', 2, 0, [])
+    ]
+    connections = [
+      Connection.new('xp0', 'xp1', 'east'),
+      Connection.new('xp0', 'xp2', 'east')
+    ]
+    params = { 'data_width' => 64, 'flit_width' => 128, 'addr_width' => 32 }
+    noc = NocConfig.new('same_dir', '1.0', params, xps, connections, [])
+    out = Dir.mktmpdir
+
+    RtlGenerator.new(noc, File.join(__dir__, '..', 'template')).generate_partitioned(out)
+
+    xp = File.read(File.join(out, 'xp_e2000_ep0', 'same_dir_xp_e2000_ep0.v'))
+    assert_match(/flit_in_e0/, xp)
+    assert_match(/flit_out_e0/, xp)
+    assert_match(/flit_in_e1/, xp)
+    assert_match(/flit_out_e1/, xp)
+    assert_equal 1, xp.scan(/flit_in_e0/).size
+    assert_equal 1, xp.scan(/flit_in_e1/).size
+
+    top = File.read(File.join(out, 'same_dir_top.v'))
+    assert_match(/\.flit_out_e0\(link_xp0_to_xp1_flit\)/, top)
+    assert_match(/\.flit_in_e0\(link_xp1_to_xp0_flit\)/, top)
+    assert_match(/\.flit_out_e1\(link_xp0_to_xp2_flit\)/, top)
+    assert_match(/\.flit_in_e1\(link_xp2_to_xp0_flit\)/, top)
+  ensure
+    FileUtils.rm_rf(out)
+  end
+end
+
+# NI multi-endpoint structural tests
+class TestNiMultiEndpoint < Minitest::Test
+  def setup
+    # Build a minimal NocConfig with one XP carrying 3 endpoints
+    require 'model/endpoint'
+    eps = [
+      Endpoint.new('ep_a', 'master', 'axi4', 64),
+      Endpoint.new('ep_b', 'slave',  'axi4', 128),
+      Endpoint.new('ep_c', 'master', 'axi4', 64)
+    ]
+    xp = Xp.new('xp_0_0', 0, 0, ['ep_a', 'ep_b', 'ep_c'])
+    params = { 'data_width' => 64, 'flit_width' => 128, 'addr_width' => 32 }
+    @noc = NocConfig.new('multi_ep_test', '1.0', params, [xp], [], eps)
+    @noc.instance_variable_set(:@xp, xp)
+    @out  = Dir.mktmpdir
+    @file = File.join(@out, 'ni_xp_0_0.sv')
+    RtlGenerator.new(@noc, File.join(__dir__, '..', 'template'))
+                .render('ni.sv.erb', @file)
+    @content = File.read(@file)
+  end
+
+  def teardown = FileUtils.rm_rf(@out)
+
+  def test_num_endpoints_parameter
+    assert_match(/NUM_ENDPOINTS = 3/, @content)
+  end
+
+  def test_all_endpoint_flit_in_ports_present
+    assert_match(/ep_a_flit_in/, @content)
+    assert_match(/ep_b_flit_in/, @content)
+    assert_match(/ep_c_flit_in/, @content)
+  end
+
+  def test_all_endpoint_flit_out_ports_present
+    assert_match(/ep_a_flit_out/, @content)
+    assert_match(/ep_b_flit_out/, @content)
+    assert_match(/ep_c_flit_out/, @content)
+  end
+
+  def test_all_router_side_ports_present
+    assert_match(/ep_a_router_flit_in/, @content)
+    assert_match(/ep_b_router_flit_in/, @content)
+    assert_match(/ep_c_router_flit_in/, @content)
+  end
+
+  def test_passthrough_assigns_for_each_endpoint
+    assert_match(/assign ep_a_router_flit_in = ep_a_flit_in/, @content)
+    assert_match(/assign ep_b_router_flit_in = ep_b_flit_in/, @content)
+    assert_match(/assign ep_c_router_flit_in = ep_c_flit_in/, @content)
+    assert_match(/assign ep_a_flit_out = ep_a_router_flit_out/, @content)
+    assert_match(/assign ep_b_flit_out = ep_b_router_flit_out/, @content)
+    assert_match(/assign ep_c_flit_out = ep_c_router_flit_out/, @content)
+  end
+
+  def test_verilator_lint_clean
+    skip 'verilator not found' unless system('which verilator > /dev/null 2>&1')
+    files = ([ @file ] + STUB_TEMPLATES).join(' ')
+    assert system("verilator --lint-only --sv -Wno-MULTITOP #{files} 2>/dev/null"), "lint failed on multi-endpoint NI"
+  end
+end
+
+# Multi-endpoint example integration test
+class TestMultiEndpointExample < Minitest::Test
+  def test_generates_multi_endpoint_ni
+    noc = JsonParser.parse(MULTI_EP)
+    out = Dir.mktmpdir
+    gen = RtlGenerator.new(noc, File.join(__dir__, '..', 'template'))
+    noc.xps.each do |xp|
+      noc.instance_variable_set(:@xp, xp)
+      gen.render('xp.sv.erb', File.join(out, "xp_router_#{xp.id}.sv"))
+    end
+    noc.xps.each do |xp|
+      next if xp.endpoints.empty?
+      noc.instance_variable_set(:@xp, xp)
+      gen.render('ni.sv.erb', File.join(out, "ni_xp_#{xp.id}.sv"))
+    end
+    gen.render('top.v.erb', File.join(out, "#{noc.name}_top.v"))
+
+    ni_3ep = File.read(File.join(out, "ni_xp_xp_0_0.sv"))
+    assert_match(/NUM_ENDPOINTS = 3/, ni_3ep)
+    assert_match(/ep_cpu0_flit_in/, ni_3ep)
+    assert_match(/ep_cpu1_flit_in/, ni_3ep)
+    assert_match(/ep_dma0_flit_in/, ni_3ep)
+
+    ni_2ep = File.read(File.join(out, "ni_xp_xp_1_0.sv"))
+    assert_match(/NUM_ENDPOINTS = 2/, ni_2ep)
+    assert_match(/ep_mem0_flit_in/, ni_2ep)
+    assert_match(/ep_mem1_flit_in/, ni_2ep)
+  ensure
+    FileUtils.rm_rf(out)
+  end
+end
+
+# Structural: generated ports match topology
+class TestGeneratorStructure < Minitest::Test
+  def setup
+    noc = JsonParser.parse(EXAMPLE)
+    noc.instance_variable_set(:@xp, noc.xps.first)
+    @out = Dir.mktmpdir
+    @sv  = File.join(@out, 'out.sv')
+    RtlGenerator.new(noc, File.join(__dir__, '..', 'template')).render('xp.sv.erb', @sv)
+    @content = File.read(@sv)
+  end
+
+  def teardown = FileUtils.rm_rf(@out)
+
+  def test_flit_ports_match_neighbor_count
+    # xp_0_0 has 2 neighbors (east, south) → 2 flit_in + 2 flit_out
+    assert_equal 2, @content.scan(/flit_in_xp/).size
+    assert_equal 2, @content.scan(/flit_out_xp/).size
+  end
+
+  def test_contains_parameters
+    assert_match(/DATA_WIDTH/, @content)
+    assert_match(/FLIT_WIDTH/, @content)
+  end
+end
+
+# Regression: output matches golden file
+class TestGoldenFile < Minitest::Test
+  GOLDEN_DIR = File.join(__dir__, 'expected')
+
+  def test_matches_golden
+    noc = JsonParser.parse(EXAMPLE)
+    out = Dir.mktmpdir
+    gen = RtlGenerator.new(noc, File.join(__dir__, '..', 'template'))
+    noc.xps.each do |xp|
+      noc.instance_variable_set(:@xp, xp)
+      gen.render('xp.sv.erb', File.join(out, "#{xp.id}.sv"))
+    end
+    gen.render('top.v.erb', File.join(out, "#{noc.name}_top.v"))
+    noc.xps.each do |xp|
+      assert_equal File.read(File.join(GOLDEN_DIR, "simple_mesh", "#{xp.id}.sv")),
+                   File.read(File.join(out, "#{xp.id}.sv")),
+                   "#{xp.id}.sv differs from golden"
+    end
+    assert_equal File.read(File.join(GOLDEN_DIR, "simple_mesh", "#{noc.name}_top.v")),
+                 File.read(File.join(out, "#{noc.name}_top.v")),
+                 "#{noc.name}_top.v differs from golden"
+  ensure
+    FileUtils.rm_rf(out)
+  end
+
+  def test_matches_golden_3x3
+    noc = JsonParser.parse(MESH_3X3)
+    noc = TopologyExpander.expand(noc)
+    out = Dir.mktmpdir
+    gen = RtlGenerator.new(noc, File.join(__dir__, '..', 'template'))
+    noc.xps.each do |xp|
+      noc.instance_variable_set(:@xp, xp)
+      gen.render('xp.sv.erb', File.join(out, "xp_router_#{xp.id}.sv"))
+    end
+    noc.xps.each do |xp|
+      next if xp.endpoints.empty?
+      noc.instance_variable_set(:@xp, xp)
+      gen.render('ni.sv.erb', File.join(out, "ni_xp_#{xp.id}.sv"))
+    end
+    gen.render('top.v.erb', File.join(out, "#{noc.name}_top.v"))
+    assert_equal 9, Dir[File.join(out, "ni_xp_*.sv")].size, "Expected 9 NI modules"
+    assert_equal File.read(File.join(GOLDEN_DIR, "mesh_3x3", "#{noc.name}_top.v")),
+                 File.read(File.join(out, "#{noc.name}_top.v")),
+                 "3x3 top differs from golden"
+  ensure
+    FileUtils.rm_rf(out)
+  end
+end
+
+# Syntax: verilator lint on generated output
+class TestVerilatorLint < Minitest::Test
+  def test_lint_clean
+    skip 'verilator not found' unless system('which verilator > /dev/null 2>&1')
+    noc = JsonParser.parse(EXAMPLE)
+    out = Dir.mktmpdir
+    gen = RtlGenerator.new(noc, File.join(__dir__, '..', 'template'))
+    noc.xps.each do |xp|
+      noc.instance_variable_set(:@xp, xp)
+      gen.render('xp.sv.erb', File.join(out, "#{xp.id}.sv"))
+    end
+    Dir[File.join(out, '*.sv')].each do |f|
+      files = ([ f ] + STUB_TEMPLATES).join(' ')
+      assert system("verilator --lint-only --sv -Wno-MULTITOP #{files} 2>/dev/null"), "lint failed: #{File.basename(f)}"
+    end
+  ensure
+    FileUtils.rm_rf(out)
+  end
+
+  def test_top_lint_clean
+    skip 'verilator not found' unless system('which verilator > /dev/null 2>&1')
+    noc = JsonParser.parse(EXAMPLE)
+    out = Dir.mktmpdir
+    gen = RtlGenerator.new(noc, File.join(__dir__, '..', 'template'))
+    noc.xps.each do |xp|
+      noc.instance_variable_set(:@xp, xp)
+      gen.render('xp.sv.erb', File.join(out, "xp_router_#{xp.id}.sv"))
+    end
+    noc.xps.each do |xp|
+      next if xp.endpoints.empty?
+      noc.instance_variable_set(:@xp, xp)
+      gen.render('ni.sv.erb', File.join(out, "ni_xp_#{xp.id}.sv"))
+    end
+    gen.render('top.v.erb', File.join(out, 'top.v'))
+    files = (Dir[File.join(out, '*.{sv,v}')] + STUB_TEMPLATES).join(' ')
+    assert system("verilator --lint-only -Wno-UNUSEDSIGNAL -Wno-UNUSEDPARAM -Wno-MULTITOP #{files} 2>&1 | grep -v Warning"), "top lint failed"
+  ensure
+    FileUtils.rm_rf(out)
+  end
+end

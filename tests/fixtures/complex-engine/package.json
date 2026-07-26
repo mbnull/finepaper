@@ -1,0 +1,30 @@
+{
+  "format": "finepaper.noc-package",
+  "formatVersion": 1,
+  "id": "test.complex-engine",
+  "name": "Complex Package Engine Fixture",
+  "version": "1.0.0",
+  "mesh": {
+    "rows": { "min": 1, "max": 4, "default": 2 },
+    "columns": { "min": 1, "max": 4, "default": 2 }
+  },
+  "parameters": [
+    { "id": "mode", "type": "enum", "default": "demo", "values": ["demo"] }
+  ],
+  "endpointTypes": [
+    { "id": "client", "label": "Client endpoint", "parameters": [] }
+  ],
+  "attachment": { "maxPerRouter": 2, "slotMode": "automatic" },
+  "generator": {
+    "name": "complex-fixture-generator",
+    "version": "1.0.0",
+    "executable": "runtime/bin/generate",
+    "supportsValidate": false,
+    "timeoutSeconds": 10
+  },
+  "engine": {
+    "executable": "engine/bin/validate",
+    "providesValidation": true,
+    "timeoutSeconds": 10
+  }
+}

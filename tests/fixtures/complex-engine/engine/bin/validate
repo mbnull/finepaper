@@ -1,0 +1,24 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require 'json'
+require 'optparse'
+
+options = {}
+OptionParser.new do |parser|
+  parser.on('--design PATH') { |value| options[:design] = value }
+  parser.on('--result PATH') { |value| options[:result] = value }
+end.parse!
+
+design = JSON.parse(File.read(options.fetch(:design)))
+failure = design.dig('packageData', 'forceEngineError') == true
+diagnostic = if failure
+               { 'severity' => 'error', 'code' => 'mock.engine_rejected', 'message' => 'Engine rejected packageData' }
+             else
+               { 'severity' => 'info', 'code' => 'mock.engine_used', 'message' => 'Engine validated packageData' }
+             end
+File.write(options.fetch(:result), JSON.generate(
+                                     'success' => !failure,
+                                     'diagnostics' => [diagnostic]
+                                   ))
+exit(failure ? 1 : 0)

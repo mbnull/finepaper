@@ -1,0 +1,32 @@
+{
+  "schema": "finepaper-ipcore-graph-v1",
+  "name": "type_error_test",
+  "ipcore": "finepaper.noc",
+  "instance": "noc_0",
+  "ipcore_state": [
+    {
+      "ipcore": "finepaper.noc",
+      "instance": "noc_0",
+      "state": {
+        "global_parameters": {
+          "data_width": 64
+        }
+      }
+    }
+  ],
+  "modules": [
+    {
+      "id": "ep_cpu0",
+      "ipcore": "finepaper.noc",
+      "instance": "noc_0",
+      "type": "Endpoint",
+      "parameters": {
+        "type": "master",
+        "protocol": "axi4",
+        "data_width": 64,
+        "buffer_depth": "not_a_number"
+      }
+    }
+  ],
+  "connections": []
+}

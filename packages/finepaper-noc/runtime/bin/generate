@@ -1,0 +1,186 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# The Finepaper Package process contract is intentionally small. This adapter
+# translates the NocDesign passed by Finepaper into the legacy generator input;
+# Core never needs to know about that graph schema or its DRC classes.
+
+require 'fileutils'
+require 'json'
+require 'open3'
+require 'optparse'
+require 'tmpdir'
+
+def write_result(path, success:, artifacts: [], diagnostics: [])
+  FileUtils.mkdir_p(File.dirname(path))
+  File.write(path, JSON.pretty_generate(
+                     'success' => success,
+                     'artifacts' => artifacts,
+                     'diagnostics' => diagnostics
+                   ) + "\n")
+end
+
+def fail_operation(message, result_path)
+  warn "error: #{message}"
+  write_result(result_path,
+               success: false,
+               diagnostics: [{
+                 'severity' => 'error',
+                 'code' => 'finepaper_noc.adapter_failed',
+                 'message' => message,
+                 'source' => 'finepaper.noc'
+               }]) if result_path
+  exit 1
+end
+
+def number_parameter(values, id, fallback)
+  value = values[id]
+  value.is_a?(Numeric) ? value : fallback
+end
+
+def endpoint_slot_key(endpoint)
+  slot = endpoint.dig('attachment', 'slot').to_s
+  return [0, slot.to_i, endpoint.fetch('id')] if slot.match?(/\A\d+\z/)
+
+  [1, slot, endpoint.fetch('id')]
+end
+
+def legacy_input(design)
+  raise 'design format must be finepaper.noc-design' unless design['format'] == 'finepaper.noc-design'
+  raise 'only mesh topology is supported' unless design.dig('topology', 'type') == 'mesh'
+
+  rows = design.dig('topology', 'rows')
+  columns = design.dig('topology', 'columns')
+  unless rows.is_a?(Integer) && columns.is_a?(Integer) && rows.positive? && columns.positive?
+    raise 'mesh rows and columns must be positive integers'
+  end
+
+  parameters = design.fetch('parameters', {})
+  endpoints = design.fetch('endpoints', [])
+  raise 'endpoints must be an array' unless endpoints.is_a?(Array)
+
+  endpoint_map = Hash.new { |map, key| map[key] = [] }
+  endpoint_modules = endpoints.sort_by { |endpoint| endpoint.fetch('id') }.map do |endpoint|
+    id = endpoint.fetch('id')
+    type = endpoint.fetch('type')
+    endpoint_parameters = endpoint.fetch('parameters', {})
+    router = endpoint.dig('attachment', 'router')
+    raise "endpoint #{id} has no router attachment" unless router.is_a?(Hash)
+
+    x = router['x']
+    y = router['y']
+    unless x.is_a?(Integer) && y.is_a?(Integer) && x.between?(0, columns - 1) && y.between?(0, rows - 1)
+      raise "endpoint #{id} attaches outside the mesh"
+    end
+
+    endpoint_map["xp_#{x}_#{y}"] << endpoint
+    {
+      'id' => id,
+      'ipcore' => 'finepaper.noc',
+      'instance' => 'noc_0',
+      'type' => 'Endpoint',
+      'parameters' => {
+        'type' => type,
+        'protocol' => endpoint_parameters.fetch('protocol', 'axi4'),
+        'data_width' => number_parameter(endpoint_parameters, 'dataWidth', 64),
+        'buffer_depth' => number_parameter(endpoint_parameters, 'bufferDepth', 16),
+        'qos_enabled' => endpoint_parameters.fetch('qosEnabled', false)
+      }
+    }
+  end
+
+  endpoint_map.transform_values! do |router_endpoints|
+    router_endpoints.sort_by { |endpoint| endpoint_slot_key(endpoint) }.map { |endpoint| endpoint.fetch('id') }
+  end
+
+  {
+    'schema' => 'finepaper-ipcore-graph-v1',
+    'name' => design.fetch('name'),
+    'ipcore' => 'finepaper.noc',
+    'instance' => 'noc_0',
+    'version' => design.dig('package', 'version') || '1.0.0',
+    'ipcore_state' => [{
+      'ipcore' => 'finepaper.noc',
+      'instance' => 'noc_0',
+      'state' => {
+        'global_parameters' => {
+          'data_width' => number_parameter(parameters, 'dataWidth', 64),
+          'flit_width' => number_parameter(parameters, 'flitWidth', 128),
+          'addr_width' => number_parameter(parameters, 'addrWidth', 32),
+          'mesh' => {
+            'width' => columns,
+            'height' => rows,
+            'endpoint_map' => endpoint_map
+          }
+        }
+      }
+    }],
+    'modules' => endpoint_modules,
+    'connections' => []
+  }
+end
+
+def artifact_list(output_dir, design_name)
+  files = Dir.glob(File.join(output_dir, '**', '*')).select { |path| File.file?(path) }.sort
+  files.map.with_index do |path, index|
+    relative = path.delete_prefix(output_dir + File::SEPARATOR)
+    type = if File.basename(path) == 'filelist.f'
+             'filelist'
+           elsif %w[.v .sv].include?(File.extname(path).downcase)
+             'rtl'
+           else
+             'generated'
+           end
+    {
+      'id' => format('artifact-%03d', index + 1),
+      'type' => type,
+      'path' => relative,
+      'primary' => File.basename(path) == "#{design_name}_top.v"
+    }
+  end
+end
+
+options = {}
+parser = OptionParser.new do |opts|
+  opts.banner = 'Usage: generate (validate|generate) --design DESIGN --result RESULT [--output OUTPUT]'
+  opts.on('--design PATH') { |value| options[:design] = value }
+  opts.on('--output PATH') { |value| options[:output] = value }
+  opts.on('--result PATH') { |value| options[:result] = value }
+end
+
+command = ARGV.shift
+parser.parse!
+unless %w[validate generate].include?(command)
+  fail_operation('first argument must be validate or generate', options[:result])
+end
+fail_operation('--design is required', options[:result]) unless options[:design]
+fail_operation('--result is required', options[:result]) unless options[:result]
+fail_operation('--output is required for generate', options[:result]) if command == 'generate' && !options[:output]
+
+begin
+  design = JSON.parse(File.read(options[:design]))
+  legacy_root = File.expand_path('../legacy-generator', __dir__)
+  legacy_program = File.join(legacy_root, 'bin', command == 'validate' ? 'drc' : 'generate')
+  raise 'legacy generator is missing from this Package' unless File.file?(legacy_program)
+
+  Dir.mktmpdir('finepaper-noc-adapter-') do |temporary_directory|
+    input_path = File.join(temporary_directory, 'legacy-input.json')
+    File.write(input_path, JSON.generate(legacy_input(design)))
+    arguments = ['ruby', legacy_program, '-i', input_path]
+    if command == 'generate'
+      FileUtils.mkdir_p(options[:output])
+      arguments.concat(['-o', File.expand_path(options[:output]), '-t', File.join(legacy_root, 'template')])
+    end
+    stdout, stderr, status = Open3.capture3(*arguments, chdir: legacy_root)
+    $stdout.write(stdout)
+    $stderr.write(stderr)
+    raise(stderr.strip.empty? ? "legacy #{command} failed" : stderr.strip) unless status.success?
+  end
+
+  artifacts = command == 'generate' ? artifact_list(File.expand_path(options[:output]), design.fetch('name')) : []
+  raise 'legacy generator did not produce any artifacts' if command == 'generate' && artifacts.empty?
+
+  write_result(options[:result], success: true, artifacts: artifacts)
+rescue StandardError => error
+  fail_operation(error.message, options[:result])
+end

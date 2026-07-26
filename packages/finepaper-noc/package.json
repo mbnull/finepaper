@@ -1,0 +1,46 @@
+{
+  "format": "finepaper.noc-package",
+  "formatVersion": 1,
+  "id": "finepaper.noc",
+  "name": "Finepaper Mesh NoC",
+  "version": "1.0.0",
+  "mesh": {
+    "rows": { "min": 1, "max": 16, "default": 2 },
+    "columns": { "min": 1, "max": 16, "default": 2 }
+  },
+  "parameters": [
+    { "id": "dataWidth", "label": "Data width", "type": "integer", "default": 64, "minimum": 8, "maximum": 512 },
+    { "id": "flitWidth", "label": "Flit width", "type": "integer", "default": 128, "minimum": 8, "maximum": 1024 },
+    { "id": "addrWidth", "label": "Address width", "type": "integer", "default": 32, "minimum": 8, "maximum": 64 }
+  ],
+  "endpointTypes": [
+    {
+      "id": "master",
+      "label": "Master endpoint",
+      "parameters": [
+        { "id": "protocol", "label": "Protocol", "type": "enum", "default": "axi4", "values": ["axi4"] },
+        { "id": "dataWidth", "label": "Data width", "type": "integer", "default": 64, "minimum": 8, "maximum": 512 },
+        { "id": "bufferDepth", "label": "Buffer depth", "type": "integer", "default": 16, "minimum": 1, "maximum": 1024 },
+        { "id": "qosEnabled", "label": "Enable QoS", "type": "boolean", "default": false }
+      ]
+    },
+    {
+      "id": "slave",
+      "label": "Slave endpoint",
+      "parameters": [
+        { "id": "protocol", "label": "Protocol", "type": "enum", "default": "axi4", "values": ["axi4"] },
+        { "id": "dataWidth", "label": "Data width", "type": "integer", "default": 64, "minimum": 8, "maximum": 512 },
+        { "id": "bufferDepth", "label": "Buffer depth", "type": "integer", "default": 16, "minimum": 1, "maximum": 1024 },
+        { "id": "qosEnabled", "label": "Enable QoS", "type": "boolean", "default": false }
+      ]
+    }
+  ],
+  "attachment": { "maxPerRouter": 4, "slotMode": "automatic" },
+  "generator": {
+    "name": "finepaper-noc-ruby",
+    "version": "1.0.0",
+    "executable": "runtime/bin/generate",
+    "supportsValidate": true,
+    "timeoutSeconds": 300
+  }
+}

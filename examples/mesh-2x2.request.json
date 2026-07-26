@@ -1,0 +1,11 @@
+{
+  "name": "demo_mesh",
+  "package": { "id": "finepaper.noc", "version": "1.0.0" },
+  "topology": { "type": "mesh", "rows": 2, "columns": 2 },
+  "endpoints": [
+    { "id": "cpu0", "type": "master", "router": [0, 0] },
+    { "id": "cpu1", "type": "master", "router": [1, 0] },
+    { "id": "mem0", "type": "slave", "router": [0, 1], "parameters": { "dataWidth": 128 } },
+    { "id": "peripheral0", "type": "slave", "router": [1, 1], "parameters": { "bufferDepth": 32 } }
+  ]
+}
