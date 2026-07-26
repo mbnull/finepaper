@@ -33,6 +33,11 @@ xmake build finepaper-tests
 ./build/linux/x86_64/release/finepaper-tests
 ```
 
+In the GUI, use **Package → Install Package Directory…** and select the
+directory that contains a Package `package.json`. Finepaper validates it,
+adds it to the active catalog, selects it for creation, and remembers that
+directory for later GUI sessions.
+
 Every generation creates a separate `runs/op-*` directory below the chosen
 output root. The input design is copied and normalized there; the generator may
 not modify the original design.

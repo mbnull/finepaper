@@ -18,6 +18,7 @@ QStringList explicitPackageRoots(const QStringList& arguments) {
 
 int main(int argc, char** argv) {
     QApplication application(argc, argv);
+    QCoreApplication::setOrganizationName(QStringLiteral("Finepaper"));
     QCoreApplication::setApplicationName(QStringLiteral("finepaper"));
     finepaper::FinepaperMainWindow window(
         finepaper::resolveRuntimeLocations(explicitPackageRoots(QCoreApplication::arguments())));

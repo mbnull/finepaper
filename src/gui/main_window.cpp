@@ -26,6 +26,7 @@
 #include <QMessageBox>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QSettings>
 #include <QSpinBox>
 #include <QStackedWidget>
 #include <QSplitter>
@@ -36,6 +37,8 @@
 
 namespace finepaper {
 namespace {
+
+constexpr auto kInstalledPackageRootsKey = "runtime/installedPackageRoots";
 
 QString diagnosticText(const QVector<Diagnostic>& diagnostics) {
     QStringList lines;
@@ -66,6 +69,7 @@ QTableWidgetItem* readOnlyItem(const QString& text) {
 FinepaperMainWindow::FinepaperMainWindow(RuntimeLocations locations, QWidget* parent)
     : QMainWindow(parent),
       m_locations(std::move(locations)) {
+    loadInstalledPackageRoots();
     createUi();
     reloadPackages();
     statusBar()->showMessage(QStringLiteral("Choose a Package and create a Mesh NoC."));
@@ -79,12 +83,14 @@ void FinepaperMainWindow::createUi() {
     auto* openAction = new QAction(QStringLiteral("Open…"), this);
     auto* saveAction = new QAction(QStringLiteral("Save"), this);
     auto* reloadAction = new QAction(QStringLiteral("Reload Packages"), this);
+    auto* installAction = new QAction(QStringLiteral("Install Package Directory…"), this);
     auto* validateAction = new QAction(QStringLiteral("Validate"), this);
     auto* generateAction = new QAction(QStringLiteral("Generate RTL"), this);
     connect(newAction, &QAction::triggered, this, &FinepaperMainWindow::createDesign);
     connect(openAction, &QAction::triggered, this, &FinepaperMainWindow::openDesign);
     connect(saveAction, &QAction::triggered, this, &FinepaperMainWindow::saveDesign);
     connect(reloadAction, &QAction::triggered, this, &FinepaperMainWindow::reloadPackages);
+    connect(installAction, &QAction::triggered, this, &FinepaperMainWindow::installPackage);
     connect(validateAction, &QAction::triggered, this, &FinepaperMainWindow::validateDesign);
     connect(generateAction, &QAction::triggered, this, &FinepaperMainWindow::generateDesign);
 
@@ -93,6 +99,7 @@ void FinepaperMainWindow::createUi() {
     fileMenu->addAction(openAction);
     fileMenu->addAction(saveAction);
     QMenu* packageMenu = menuBar()->addMenu(QStringLiteral("&Package"));
+    packageMenu->addAction(installAction);
     packageMenu->addAction(reloadAction);
     QMenu* runMenu = menuBar()->addMenu(QStringLiteral("&Run"));
     runMenu->addAction(validateAction);
@@ -257,6 +264,12 @@ void FinepaperMainWindow::createUi() {
     showPage(WorkspacePage::Start);
 }
 
+void FinepaperMainWindow::loadInstalledPackageRoots() {
+    QSettings settings;
+    appendPackageRoots(m_locations,
+                       settings.value(QLatin1String(kInstalledPackageRootsKey)).toStringList());
+}
+
 void FinepaperMainWindow::reloadPackages() {
     const QVector<Diagnostic> diagnostics = m_application.reloadPackages(m_locations.packageRoots);
     updateStartPackages();
@@ -264,6 +277,39 @@ void FinepaperMainWindow::reloadPackages() {
     if (!containsErrors(diagnostics)) {
         statusBar()->showMessage(QStringLiteral("Loaded %1 runtime Package(s).").arg(m_application.packages().size()));
     }
+}
+
+void FinepaperMainWindow::installPackage() {
+    const QString directory = QFileDialog::getExistingDirectory(
+        this,
+        QStringLiteral("Select a NoC Package directory"),
+        QDir::currentPath(),
+        QFileDialog::ShowDirsOnly);
+    if (directory.isEmpty()) {
+        return;
+    }
+
+    const PackageLoadResult package = loadPackage(directory);
+    if (!package.success || !package.package) {
+        showDiagnostics(package.diagnostics, QStringLiteral("Install Package"));
+        return;
+    }
+
+    appendPackageRoots(m_locations, QStringList{directory});
+    QSettings settings;
+    QStringList installed = settings.value(QLatin1String(kInstalledPackageRootsKey)).toStringList();
+    if (!installed.contains(directory)) {
+        installed.append(directory);
+        settings.setValue(QLatin1String(kInstalledPackageRootsKey), installed);
+    }
+
+    reloadPackages();
+    const int packageIndex = m_startPackage->findData(package.package->key());
+    if (packageIndex >= 0) {
+        m_startPackage->setCurrentIndex(packageIndex);
+    }
+    showPage(WorkspacePage::Start);
+    statusBar()->showMessage(QStringLiteral("Installed Package %1.").arg(package.package->key()));
 }
 
 void FinepaperMainWindow::updateStartPackages() {

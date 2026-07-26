@@ -37,7 +37,9 @@ private:
     };
 
     void createUi();
+    void loadInstalledPackageRoots();
     void reloadPackages();
+    void installPackage();
     void updateStartPackages();
     void updateStartMeshBounds();
     void showPage(WorkspacePage page);

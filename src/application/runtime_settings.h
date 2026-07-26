@@ -16,4 +16,8 @@ RuntimeLocations resolveRuntimeLocations(
     const QStringList& explicitPackageRoots = {},
     const QString& workingDirectory = QString());
 
+void appendPackageRoots(RuntimeLocations& locations,
+                        const QStringList& additionalPackageRoots,
+                        const QString& workingDirectory = QString());
+
 } // namespace finepaper

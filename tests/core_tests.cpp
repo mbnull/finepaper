@@ -105,6 +105,12 @@ int main(int argc, char** argv) {
           QStringLiteral("explicit Package roots use the shared runtime resolver"));
     check(locations.defaultOutputRoot == QDir(projectRoot).filePath(QStringLiteral("output")),
           QStringLiteral("default output root comes from the shared runtime resolver"));
+    RuntimeLocations installedLocations = locations;
+    const QString fixtureRoot = QDir(projectRoot).filePath(QStringLiteral("tests/fixtures"));
+    appendPackageRoots(installedLocations, QStringList{fixtureRoot, fixtureRoot}, projectRoot);
+    check(installedLocations.packageRoots.size() == 2 &&
+              installedLocations.packageRoots.contains(fixtureRoot),
+          QStringLiteral("manually added Package roots merge centrally without duplicates"));
 
     FinepaperApplication finepaper;
     const QVector<Diagnostic> packageDiagnostics = finepaper.reloadPackages(

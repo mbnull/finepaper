@@ -49,4 +49,15 @@ RuntimeLocations resolveRuntimeLocations(const QStringList& explicitPackageRoots
     return locations;
 }
 
+void appendPackageRoots(RuntimeLocations& locations,
+                        const QStringList& additionalPackageRoots,
+                        const QString& workingDirectory) {
+    const QString basePath = workingDirectory.isEmpty()
+        ? QDir::currentPath()
+        : QFileInfo(workingDirectory).absoluteFilePath();
+    const QDir baseDirectory(basePath);
+    locations.packageRoots = normalizedPaths(
+        locations.packageRoots + additionalPackageRoots, baseDirectory);
+}
+
 } // namespace finepaper
