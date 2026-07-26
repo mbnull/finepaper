@@ -6,6 +6,8 @@
 
 namespace finepaper {
 
+inline constexpr int relatedHighlightDataRole = 0x464e01;
+
 enum class OrthogonalRouteAxis {
     Horizontal,
     Vertical

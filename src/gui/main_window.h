@@ -37,6 +37,11 @@ protected:
     void closeEvent(QCloseEvent* event) override;
 
 private:
+    struct AttachmentSlotChoice {
+        bool accepted = false;
+        std::optional<QString> slot;
+    };
+
     struct ParameterControl {
         ParameterDefinition definition;
         QWidget* editor = nullptr;
@@ -62,7 +67,8 @@ private:
     void generateDesign();
     void addEndpoint(const QString& endpointType, RouterPosition router);
     void showEndpointAttachmentMenu(RouterPosition router);
-    void moveEndpoint(const QString& endpointId, RouterPosition router);
+    bool moveEndpoint(const QString& endpointId, RouterPosition router);
+    void removeEndpoint(const QString& endpointId);
     void removeSelectedEndpoint();
     void applyParameters();
     void updateInspector(const NocEditorSelection& selection);
@@ -81,6 +87,9 @@ private:
     const PackageDefinition* packageForDesign() const;
     QJsonValue valueFromControl(const ParameterControl& control) const;
     QString nextEndpointId(const QString& endpointType) const;
+    AttachmentSlotChoice chooseAttachmentSlot(
+        RouterPosition router,
+        const QString& ignoredEndpointId = {});
 
     FinepaperApplication m_application;
     RuntimeLocations m_locations;

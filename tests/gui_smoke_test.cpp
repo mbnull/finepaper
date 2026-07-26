@@ -8,22 +8,30 @@
 #include <QComboBox>
 #include <QDir>
 #include <QDockWidget>
+#include <QDragEnterEvent>
+#include <QDropEvent>
 #include <QFileInfo>
 #include <QGraphicsView>
+#include <QInputDialog>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QMenu>
+#include <QMimeData>
 #include <QPushButton>
 #include <QTabWidget>
 #include <QTableWidget>
 #include <QTemporaryDir>
 #include <QTextStream>
 #include <QToolBar>
+#include <QTimer>
 
 #include <QtNodes/AbstractGraphModel>
 #include <QtNodes/BasicGraphicsScene>
+#include <QtNodes/internal/ConnectionGraphicsObject.hpp>
 #include <QtNodes/internal/NodeGraphicsObject.hpp>
 
 #include <optional>
+#include <memory>
 
 namespace {
 
@@ -73,6 +81,22 @@ std::optional<QtNodes::NodeId> nodeIdWithCaptionPrefix(
         }
     }
     return std::nullopt;
+}
+
+void chooseInputDialogItem(int index) {
+    QTimer::singleShot(0, [index] {
+        for (QWidget* widget : QApplication::topLevelWidgets()) {
+            auto* dialog = qobject_cast<QInputDialog*>(widget);
+            if (!dialog) {
+                continue;
+            }
+            if (auto* combo = dialog->findChild<QComboBox*>()) {
+                combo->setCurrentIndex(index);
+            }
+            dialog->accept();
+            return;
+        }
+    });
 }
 
 } // namespace
@@ -227,7 +251,8 @@ int main(int argc, char** argv) {
     const auto router00 = nodeIdWithCaption(graphicsScene, QStringLiteral("r-0-0"));
     const auto router10 = nodeIdWithCaption(graphicsScene, QStringLiteral("r-1-0"));
     const auto router01 = nodeIdWithCaption(graphicsScene, QStringLiteral("r-0-1"));
-    check(router00 && router10 && router01,
+    const auto router11 = nodeIdWithCaption(graphicsScene, QStringLiteral("r-1-1"));
+    check(router00 && router10 && router01 && router11,
           QStringLiteral("Mesh Router identities are present in the editor projection"));
     if (graphicsScene && router00) {
         const QSize routerSize = graphicsScene->nodeGeometry().size(*router00);
@@ -269,6 +294,41 @@ int main(int argc, char** argv) {
               QStringLiteral("vertical Mesh link connects south output to north input"));
     }
 
+    if (graphicsScene && router00 && router10 && router01 && router11) {
+        auto* selectedRouter = graphicsScene->nodeGraphicsObject(*router00);
+        selectedRouter->setSelected(true);
+        graphicsScene->nodeSelected(*router00);
+        application.processEvents();
+        check(graphicsScene->nodeGraphicsObject(*router10)
+                  ->data(finepaper::relatedHighlightDataRole).toBool()
+                  && graphicsScene->nodeGraphicsObject(*router01)
+                         ->data(finepaper::relatedHighlightDataRole).toBool(),
+              QStringLiteral("selecting a Router highlights directly connected Routers"));
+        check(!graphicsScene->nodeGraphicsObject(*router11)
+                   ->data(finepaper::relatedHighlightDataRole).toBool(),
+              QStringLiteral("selection highlight does not spread beyond one hop"));
+        const QtNodes::ConnectionId eastLink{
+            *router00,
+            finepaper::portIndex(finepaper::RouterOutputPort::East),
+            *router10,
+            finepaper::portIndex(finepaper::RouterInputPort::West)};
+        const QtNodes::ConnectionId southLink{
+            *router00,
+            finepaper::portIndex(finepaper::RouterOutputPort::South),
+            *router01,
+            finepaper::portIndex(finepaper::RouterInputPort::North)};
+        check(graphicsScene->connectionGraphicsObject(eastLink)
+                  ->data(finepaper::relatedHighlightDataRole).toBool()
+                  && graphicsScene->connectionGraphicsObject(southLink)
+                         ->data(finepaper::relatedHighlightDataRole).toBool(),
+              QStringLiteral("selecting a Router highlights all directly connected lines"));
+        graphicsScene->clearSelection();
+        application.processEvents();
+        check(!graphicsScene->nodeGraphicsObject(*router10)
+                   ->data(finepaper::relatedHighlightDataRole).toBool(),
+              QStringLiteral("clearing selection clears connected-element highlights"));
+    }
+
     QtNodes::NodeGraphicsObject* routerNode = nullptr;
     if (graphicsView && graphicsView->scene()) {
         for (QGraphicsItem* item : graphicsView->scene()->items()) {
@@ -296,24 +356,50 @@ int main(int argc, char** argv) {
 
     const std::size_t nodesBeforeEndpoint = graphicsScene
         ? graphicsScene->graphModel().allNodeIds().size() : 0;
-    if (nodeEditor && nodeEditor->selectionChanged) {
-        nodeEditor->selectionChanged({finepaper::NocEditorSelection::Kind::Router,
-                                      QStringLiteral("r-0-0"),
-                                      finepaper::RouterPosition{0, 0}});
+    const auto arrangedRouter00 = nodeIdWithCaption(graphicsScene, QStringLiteral("r-0-0"));
+    if (graphicsScene && arrangedRouter00) {
+        graphicsScene->nodeGraphicsObject(*arrangedRouter00)->setSelected(true);
+        graphicsScene->nodeSelected(*arrangedRouter00);
         application.processEvents();
     }
     auto* attachEndpoint = window.findChild<QPushButton*>(
         QStringLiteral("finepaper.attachEndpoint"));
     check(attachEndpoint && attachEndpoint->isEnabled(),
           QStringLiteral("selecting a Router enables its explicit Endpoint attach action"));
+    std::unique_ptr<QMimeData> endpointMime;
     if (endpointPalette && endpointPalette->count() > 0) {
-        endpointPalette->itemDoubleClicked(endpointPalette->item(0));
+        endpointMime.reset(endpointPalette->model()->mimeData(
+            {endpointPalette->model()->index(0, 0)}));
+    }
+    check(endpointMime
+              && endpointMime->hasFormat(finepaper::workbench::endpointTypeMime)
+              && QString::fromUtf8(endpointMime->data(
+                     finepaper::workbench::endpointTypeMime)) == QStringLiteral("master"),
+          QStringLiteral("Endpoint Palette exports a runtime Endpoint MIME payload"));
+    if (graphicsView && graphicsScene && arrangedRouter00 && endpointMime) {
+        const QPoint dropPosition = graphicsView->mapFromScene(
+            graphicsScene->nodeGraphicsObject(*arrangedRouter00)
+                ->sceneBoundingRect().center());
+        QDragEnterEvent dragEnter(dropPosition,
+                                  Qt::CopyAction,
+                                  endpointMime.get(),
+                                  Qt::LeftButton,
+                                  Qt::NoModifier);
+        QApplication::sendEvent(graphicsView->viewport(), &dragEnter);
+        QDropEvent drop(QPointF(dropPosition),
+                        Qt::CopyAction,
+                        endpointMime.get(),
+                        Qt::LeftButton,
+                        Qt::NoModifier);
+        QApplication::sendEvent(graphicsView->viewport(), &drop);
         application.processEvents();
+        check(dragEnter.isAccepted() && drop.isAccepted(),
+              QStringLiteral("Endpoint MIME can be dragged from the Palette onto a Router"));
     }
     const std::size_t nodesAfterEndpoint = graphicsScene
         ? graphicsScene->graphModel().allNodeIds().size() : 0;
     check(nodesAfterEndpoint == nodesBeforeEndpoint + 1,
-          QStringLiteral("double-clicking an Endpoint type attaches it to the selected Router"));
+          QStringLiteral("dropping an Endpoint type attaches it to the target Router"));
 
     const auto attachedEndpoint = nodeIdWithCaptionPrefix(
         graphicsScene, QStringLiteral("master"));
@@ -325,6 +411,37 @@ int main(int argc, char** argv) {
                    *currentRouter00,
                    finepaper::portIndex(finepaper::RouterInputPort::Endpoint)}),
           QStringLiteral("Endpoint uses the Router's dedicated EP attachment port"));
+
+    if (graphicsScene && attachedEndpoint) {
+        graphicsScene->nodeContextMenu(*attachedEndpoint, QPointF());
+        application.processEvents();
+    }
+    auto* endpointMenu = nodeEditor ? nodeEditor->findChild<QMenu*>(
+        finepaper::workbench::endpointContextMenuName) : nullptr;
+    QAction* deleteEndpoint = endpointMenu ? endpointMenu->findChild<QAction*>(
+        finepaper::workbench::deleteEndpointActionName) : nullptr;
+    check(endpointMenu && deleteEndpoint,
+          QStringLiteral("Endpoint right-click menu exposes a delete action"));
+    if (deleteEndpoint) {
+        deleteEndpoint->trigger();
+        application.processEvents();
+    }
+    check(!nodeIdWithCaptionPrefix(graphicsScene, QStringLiteral("master")),
+          QStringLiteral("Endpoint right-click delete removes it through the application layer"));
+
+    const auto routerForSecondEndpoint = nodeIdWithCaption(
+        graphicsScene, QStringLiteral("r-0-0"));
+    if (graphicsScene && routerForSecondEndpoint) {
+        graphicsScene->nodeGraphicsObject(*routerForSecondEndpoint)->setSelected(true);
+        graphicsScene->nodeSelected(*routerForSecondEndpoint);
+        application.processEvents();
+    }
+    if (endpointPalette && endpointPalette->count() > 0) {
+        endpointPalette->itemDoubleClicked(endpointPalette->item(0));
+        application.processEvents();
+    }
+    check(nodeIdWithCaptionPrefix(graphicsScene, QStringLiteral("master")).has_value(),
+          QStringLiteral("selected-Router double-click remains available as an attach shortcut"));
 
     check(nodeEditor && nodeEditor->setRouterCollapsed(QStringLiteral("r-0-0"), true),
           QStringLiteral("Router can be collapsed from the workspace"));
@@ -405,6 +522,73 @@ int main(int argc, char** argv) {
               && restoredNodeEditor->routerCollapsed(QStringLiteral("r-0-0")),
           QStringLiteral("Router collapsed state is restored in the next session"));
     restoredWindow.close();
+
+    finepaper::RuntimeLocations explicitLocations{
+        QStringList{QDir(projectRoot).filePath(
+            QStringLiteral("tests/fixtures/explicit-package"))},
+        outputRoot.path()};
+    finepaper::FinepaperMainWindow explicitWindow(explicitLocations);
+    explicitWindow.show();
+    application.processEvents();
+    auto* explicitPackageSelector = explicitWindow.findChild<QComboBox*>(
+        QStringLiteral("finepaper.packageSelector"));
+    check(explicitPackageSelector && explicitPackageSelector->count() == 1,
+          QStringLiteral("explicit-slot Package fixture loads at runtime"));
+    auto* explicitCreate = explicitWindow.findChild<QPushButton*>(
+        QStringLiteral("finepaper.createDesign"));
+    if (explicitCreate) {
+        explicitCreate->click();
+        application.processEvents();
+    }
+    auto* explicitEditor = dynamic_cast<finepaper::NocNodeEditor*>(
+        explicitWindow.findChild<QWidget*>(QStringLiteral("finepaper.nodeEditor")));
+    auto* explicitView = explicitEditor
+        ? explicitEditor->findChild<QGraphicsView*>() : nullptr;
+    auto* explicitScene = explicitView
+        ? dynamic_cast<QtNodes::BasicGraphicsScene*>(explicitView->scene()) : nullptr;
+    auto* explicitPalette = explicitWindow.findChild<QListWidget*>(
+        QStringLiteral("finepaper.endpointPalette"));
+    const auto explicitRouter00 = nodeIdWithCaption(
+        explicitScene, QStringLiteral("r-0-0"));
+    if (explicitScene && explicitRouter00) {
+        explicitScene->nodeGraphicsObject(*explicitRouter00)->setSelected(true);
+        explicitScene->nodeSelected(*explicitRouter00);
+        application.processEvents();
+    }
+    chooseInputDialogItem(1);
+    if (explicitPalette && explicitPalette->count() > 0) {
+        explicitPalette->itemDoubleClicked(explicitPalette->item(0));
+        application.processEvents();
+    }
+    const auto explicitEndpoint = nodeIdWithCaptionPrefix(
+        explicitScene, QStringLiteral("device_0"));
+    check(explicitEndpoint
+              && explicitScene->graphModel().nodeData(
+                     *explicitEndpoint, QtNodes::NodeRole::Caption)
+                     .toString().contains(QStringLiteral("slot local1")),
+          QStringLiteral("explicit Package lets the user choose the Endpoint attachment slot"));
+
+    chooseInputDialogItem(0);
+    const bool explicitMove = explicitEditor && explicitEditor->endpointMoveRequested
+        ? explicitEditor->endpointMoveRequested(
+              QStringLiteral("device_0"), finepaper::RouterPosition{1, 0})
+        : false;
+    application.processEvents();
+    const auto movedExplicitEndpoint = nodeIdWithCaptionPrefix(
+        explicitScene, QStringLiteral("device_0"));
+    const auto explicitRouter10 = nodeIdWithCaption(
+        explicitScene, QStringLiteral("r-1-0"));
+    check(explicitMove && movedExplicitEndpoint && explicitRouter10
+              && explicitScene->graphModel().nodeData(
+                     *movedExplicitEndpoint, QtNodes::NodeRole::Caption)
+                     .toString().contains(QStringLiteral("slot local0"))
+              && explicitScene->graphModel().connectionExists(
+                  {*movedExplicitEndpoint,
+                   finepaper::portIndex(finepaper::EndpointOutputPort::Attachment),
+                   *explicitRouter10,
+                   finepaper::portIndex(finepaper::RouterInputPort::Endpoint)}),
+          QStringLiteral("moving an explicit Endpoint chooses a new free slot on its Router"));
+    explicitWindow.close();
 
     QTextStream(stdout) << (failures == 0 ? "finepaper-gui-smoke passed"
                                           : "finepaper-gui-smoke failed")

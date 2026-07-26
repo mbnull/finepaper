@@ -374,7 +374,8 @@ DesignResult FinepaperApplication::addEndpoint(const NocDesign& design,
 
 DesignResult FinepaperApplication::moveEndpoint(const NocDesign& design,
                                                  const QString& endpointId,
-                                                 RouterPosition router) const {
+                                                 RouterPosition router,
+                                                 std::optional<QString> slot) const {
     NocDesign edited = design;
     const auto it = std::find_if(edited.endpoints.begin(), edited.endpoints.end(),
                                  [&](const EndpointInstance& endpoint) {
@@ -391,6 +392,9 @@ DesignResult FinepaperApplication::moveEndpoint(const NocDesign& design,
         return result;
     }
     it->attachment.router = router;
+    if (slot) {
+        it->attachment.slot = std::move(slot);
+    }
     return validateEditedDesign(edited);
 }
 
@@ -485,6 +489,19 @@ QVector<Diagnostic> FinepaperApplication::validateAgainstPackage(
                                  QStringLiteral("error"),
                                  QStringLiteral("endpoint.slot_required"),
                                  QStringLiteral("this Package requires an explicit slot"),
+                                 base + QStringLiteral("/attachment/slot"),
+                                 QStringLiteral("package"));
+            } else if (!package.attachment.positions.isEmpty()
+                       && std::none_of(
+                           package.attachment.positions.cbegin(),
+                           package.attachment.positions.cend(),
+                           [&](const AttachmentSlotDefinition& position) {
+                               return position.id == *endpoint.attachment.slot;
+                           })) {
+                appendDiagnostic(diagnostics,
+                                 QStringLiteral("error"),
+                                 QStringLiteral("endpoint.unknown_slot"),
+                                 QStringLiteral("slot is not declared by the Package"),
                                  base + QStringLiteral("/attachment/slot"),
                                  QStringLiteral("package"));
             } else if (slotsByRouter[router].contains(*endpoint.attachment.slot)) {

@@ -93,6 +93,29 @@ QJsonObject complexRequest() {
     };
 }
 
+QJsonObject explicitSlotRequest() {
+    return QJsonObject{
+        {QStringLiteral("name"), QStringLiteral("explicit_slot_demo")},
+        {QStringLiteral("package"), QJsonObject{
+            {QStringLiteral("id"), QStringLiteral("test.explicit-slots")},
+            {QStringLiteral("version"), QStringLiteral("1.0.0")}
+        }},
+        {QStringLiteral("topology"), QJsonObject{
+            {QStringLiteral("type"), QStringLiteral("mesh")},
+            {QStringLiteral("rows"), 2},
+            {QStringLiteral("columns"), 2}
+        }},
+        {QStringLiteral("endpoints"), QJsonArray{
+            QJsonObject{
+                {QStringLiteral("id"), QStringLiteral("device_0")},
+                {QStringLiteral("type"), QStringLiteral("device")},
+                {QStringLiteral("router"), QJsonArray{0, 0}},
+                {QStringLiteral("slot"), QStringLiteral("local1")}
+            }
+        }}
+    };
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -201,8 +224,38 @@ int main(int argc, char** argv) {
         });
     check(!hasErrors(multiPackageDiagnostics),
           QStringLiteral("multiple Package roots load without a shared build step"));
-    check(multiPackageApplication.packages().size() == 2,
-          QStringLiteral("catalog exposes simple and Engine-backed Packages together"));
+    check(multiPackageApplication.packages().size() == 3,
+          QStringLiteral("catalog exposes automatic, explicit-slot and Engine-backed Packages together"));
+    const auto explicitPackage = std::find_if(
+        multiPackageApplication.packages().cbegin(),
+        multiPackageApplication.packages().cend(),
+        [](const PackageDefinition& package) {
+            return package.id == QStringLiteral("test.explicit-slots");
+        });
+    check(explicitPackage != multiPackageApplication.packages().cend()
+              && explicitPackage->attachment.slotMode == QStringLiteral("explicit")
+              && explicitPackage->attachment.positions.size() == 2
+              && explicitPackage->attachment.positions.at(1).id == QStringLiteral("local1"),
+          QStringLiteral("explicit Package exposes centrally declared attachment positions"));
+    const DesignResult explicitDesign = multiPackageApplication.createDesign(
+        explicitSlotRequest());
+    check(explicitDesign.success
+              && explicitDesign.design.endpoints.at(0).attachment.slot
+                     == QStringLiteral("local1"),
+          QStringLiteral("explicit attachment position persists in NocDesign"));
+    QJsonObject invalidExplicitRequest = explicitSlotRequest();
+    QJsonArray invalidEndpoints = invalidExplicitRequest.value(
+        QStringLiteral("endpoints")).toArray();
+    QJsonObject invalidEndpoint = invalidEndpoints.at(0).toObject();
+    invalidEndpoint.insert(QStringLiteral("slot"), QStringLiteral("undeclared"));
+    invalidEndpoints[0] = invalidEndpoint;
+    invalidExplicitRequest.insert(QStringLiteral("endpoints"), invalidEndpoints);
+    const DesignResult invalidExplicitDesign = multiPackageApplication.createDesign(
+        invalidExplicitRequest);
+    check(!invalidExplicitDesign.success
+              && hasDiagnosticCode(invalidExplicitDesign.diagnostics,
+                                   QStringLiteral("endpoint.unknown_slot")),
+          QStringLiteral("shared application validation rejects undeclared explicit slots"));
 
 #ifdef Q_OS_UNIX
     QTemporaryDir processOutput(QStringLiteral("/tmp/finepaper-process-test-XXXXXX"));

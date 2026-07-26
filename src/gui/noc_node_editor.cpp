@@ -19,6 +19,8 @@
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QGraphicsItem>
+#include <QCursor>
+#include <QMenu>
 #include <QMimeData>
 #include <QMouseEvent>
 #include <QSet>
@@ -211,9 +213,13 @@ public:
             : QColor(QStringLiteral("#e2e8f0"));
 
         painter->setRenderHint(QPainter::Antialiasing, false);
-        painter->setPen(QPen(node.isSelected() ? QColor(QStringLiteral("#f97316"))
-                                               : QColor(QStringLiteral("#334155")),
-                             node.isSelected() ? 2.5 : 1.5));
+        const bool relatedHighlighted = node.data(relatedHighlightDataRole).toBool();
+        painter->setPen(QPen(node.isSelected()
+                                 ? QColor(QStringLiteral("#f97316"))
+                                 : relatedHighlighted
+                                       ? QColor(QStringLiteral("#2563eb"))
+                                       : QColor(QStringLiteral("#334155")),
+                             node.isSelected() || relatedHighlighted ? 2.5 : 1.5));
         painter->setBrush(background);
         painter->drawRect(body);
 
@@ -317,13 +323,18 @@ public:
                QtNodes::ConnectionGraphicsObject const& connection) const override {
         auto const& style = QtNodes::StyleCollection::connectionStyle();
         QColor color = style.normalColor();
-        if (connection.isSelected()) {
+        const bool relatedHighlighted = connection.data(
+            relatedHighlightDataRole).toBool();
+        if (relatedHighlighted) {
+            color = QColor(QStringLiteral("#f97316"));
+        } else if (connection.isSelected()) {
             color = style.selectedColor();
         } else if (connection.connectionState().hovered()) {
             color = style.hoveredColor();
         }
-        QPen pen(color, connection.isSelected() ? style.lineWidth() + 1.5
-                                                 : style.lineWidth());
+        QPen pen(color, relatedHighlighted || connection.isSelected()
+                            ? style.lineWidth() + 2.0
+                            : style.lineWidth());
         pen.setCapStyle(Qt::SquareCap);
         pen.setJoinStyle(Qt::MiterJoin);
         painter->setRenderHint(QPainter::Antialiasing, false);
@@ -500,7 +511,11 @@ NocNodeEditor::NocNodeEditor(QWidget* parent)
     connect(m_scene, &QtNodes::BasicGraphicsScene::nodeSelected,
             this, [this](QtNodes::NodeId nodeId) { handleNodeSelection(nodeId); });
     connect(m_scene, &QGraphicsScene::selectionChanged, this, [this] {
-        if (m_scene->selectedItems().isEmpty() && selectionChanged) {
+        if (!m_scene->selectedItems().isEmpty()) {
+            return;
+        }
+        clearNeighborhoodHighlight();
+        if (selectionChanged) {
             selectionChanged({});
         }
     });
@@ -673,6 +688,7 @@ void NocNodeEditor::rebuildGraph(bool zoomToContents) {
 }
 
 void NocNodeEditor::handleNodeSelection(QtNodes::NodeId nodeId) {
+    highlightNeighborhood(nodeId);
     if (!selectionChanged) {
         return;
     }
@@ -736,23 +752,73 @@ void NocNodeEditor::handlePointerReleased(const QPoint& viewportPosition) {
     }
     const std::optional<RouterPosition> router = nearestRouter(position);
     if (router && (!metadata->router || *router != *metadata->router)) {
-        endpointMoveRequested(metadata->id, *router);
+        if (!endpointMoveRequested(metadata->id, *router)) {
+            rebuildGraph(false);
+        }
     } else {
         rebuildGraph(false);
     }
 }
 
 void NocNodeEditor::handleNodeContextMenu(QtNodes::NodeId nodeId) {
-    if (!endpointAttachmentRequested) {
-        return;
-    }
     const auto metadata = m_metadata.constFind(nodeId);
-    if (metadata == m_metadata.constEnd()
-        || metadata->kind != NocEditorSelection::Kind::Router
-        || !metadata->router) {
+    if (metadata == m_metadata.constEnd()) {
         return;
     }
-    endpointAttachmentRequested(*metadata->router);
+    if (metadata->kind == NocEditorSelection::Kind::Router
+        && metadata->router
+        && endpointAttachmentRequested) {
+        endpointAttachmentRequested(*metadata->router);
+        return;
+    }
+    if (metadata->kind != NocEditorSelection::Kind::Endpoint
+        || !endpointRemovalRequested) {
+        return;
+    }
+
+    auto* menu = new QMenu(this);
+    menu->setObjectName(workbench::endpointContextMenuName);
+    menu->setAttribute(Qt::WA_DeleteOnClose);
+    QAction* remove = menu->addAction(QStringLiteral("Delete Endpoint"));
+    remove->setObjectName(workbench::deleteEndpointActionName);
+    const QString endpointId = metadata->id;
+    connect(remove, &QAction::triggered, this, [this, endpointId] {
+        endpointRemovalRequested(endpointId);
+    });
+    menu->popup(QCursor::pos());
+}
+
+void NocNodeEditor::highlightNeighborhood(QtNodes::NodeId nodeId) {
+    clearNeighborhoodHighlight();
+    if (!m_scene || !m_graphModel->nodeExists(nodeId)) {
+        return;
+    }
+    for (const QtNodes::ConnectionId& connectionId
+         : m_graphModel->allConnectionIds(nodeId)) {
+        if (auto* connection = m_scene->connectionGraphicsObject(connectionId)) {
+            connection->setData(relatedHighlightDataRole, true);
+            connection->update();
+        }
+        const QtNodes::NodeId relatedNodeId = connectionId.outNodeId == nodeId
+            ? connectionId.inNodeId
+            : connectionId.outNodeId;
+        if (auto* relatedNode = m_scene->nodeGraphicsObject(relatedNodeId)) {
+            relatedNode->setData(relatedHighlightDataRole, true);
+            relatedNode->update();
+        }
+    }
+}
+
+void NocNodeEditor::clearNeighborhoodHighlight() {
+    if (!m_scene) {
+        return;
+    }
+    for (QGraphicsItem* item : m_scene->items()) {
+        if (item->data(relatedHighlightDataRole).toBool()) {
+            item->setData(relatedHighlightDataRole, false);
+            item->update();
+        }
+    }
 }
 
 void NocNodeEditor::loadRouterLayout() {

@@ -703,6 +703,8 @@ package.json 的职责是告诉 Finepaper：
 
 第一阶段不应继续向 package.json 加入条件表达式、工作流 DAG、任意 action、UI 布局语言或跨字段规则 DSL。一个字段如果没有当前 GUI、CLI、验证或生成流程的实际消费者，就不进入 Package 格式。
 
+当 `attachment.slotMode` 为 `explicit` 时，Package 可以在 `attachment.slots` 中集中声明可选挂载位，例如 `[{"id":"local0","label":"Local port 0"}]`。GUI 在新增或移动 Endpoint 时只显示目标 Router 上尚未占用的位置，并把选择的 `id` 保存到 `EndpointAttachment.slot`。未声明 `slots` 的旧 Package 按 `0..maxPerRouter-1` 提供兼容位置，不把位置规则硬编码到各个入口。
+
 ### 12.1 不提供 connectionRules
 
 Finepaper Core 只理解固定的挂载语义：
@@ -714,6 +716,7 @@ Finepaper Core 只理解固定的挂载语义：
 - maxPerRouter 不能被超过；
 - slotMode 只允许 automatic 或 explicit；
 - explicit 模式要求每个 Endpoint 保存非空且唯一的 slot；
+- explicit Package 声明 `attachment.slots` 时，设计中的 slot 必须来自该列表；
 - 参数必须满足声明的类型和范围。
 
 其他产品特定限制由 Package 的 validate 或 IP Engine 判断，不再发明通用连接规则语言。
@@ -1110,8 +1113,9 @@ NodeEditor 负责直接操作 NoC，而不是承载通用 IP 图编辑器：
 - Router 与 Router Link 不可任意创建、删除或连接；
 - Endpoint Palette 中的类型可拖到 Router；也可先选择或右键 Router，再从菜单/Palette 显式挂载。所有入口都映射为同一个 `FinepaperApplication::addEndpoint`；Endpoint 使用独立 EP 挂载端口，不占用 North/East/South/West 拓扑端口；
 - 已有 Endpoint 可从一个 Router 拖到另一个 Router，映射为 `moveEndpoint`；
-- 选择 Endpoint 或 Router 会驱动右侧 Inspector；
-- 右键菜单仅提供当前 NoC 语义允许的动作，例如添加、移除、移动 Endpoint；
+- `explicit` slot Package 在新增或移动 Endpoint 时要求用户选择目标 Router 上的空闲挂载位；`automatic` 模式不弹出该选择；
+- 选择 Endpoint 或 Router 会驱动右侧 Inspector，并高亮与该节点直接相连的线和一跳邻接节点；
+- Router 右键菜单用于添加 Endpoint，Endpoint 右键菜单提供删除动作；这些动作仍通过共享应用层执行；
 - 节点使用无圆角方块显示，Router Link 和 Endpoint 挂载线使用水平/垂直直角折线，不使用贝塞尔曲线；
 - 画布支持缩放、平移、框选、Router 摆放、自动布局/聚焦和多 Dock 工作流；
 - NodeEditor 不保存第二份 Graph，也不允许 Endpoint-to-Endpoint 任意连线。

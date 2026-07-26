@@ -69,7 +69,8 @@ public:
     DesignResult addEndpoint(const NocDesign& design, EndpointInstance endpoint) const;
     DesignResult moveEndpoint(const NocDesign& design,
                               const QString& endpointId,
-                              RouterPosition router) const;
+                              RouterPosition router,
+                              std::optional<QString> slot = std::nullopt) const;
     DesignResult removeEndpoint(const NocDesign& design, const QString& endpointId) const;
     DesignResult updateParameters(const NocDesign& design,
                                   const QJsonObject& parameters) const;

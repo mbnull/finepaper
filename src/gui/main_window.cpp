@@ -19,6 +19,7 @@
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QHeaderView>
+#include <QInputDialog>
 #include <QJsonDocument>
 #include <QIcon>
 #include <QLabel>
@@ -32,6 +33,7 @@
 #include <QPushButton>
 #include <QRegularExpression>
 #include <QScrollArea>
+#include <QSet>
 #include <QSettings>
 #include <QSignalBlocker>
 #include <QSpinBox>
@@ -95,19 +97,34 @@ public:
     using QListWidget::QListWidget;
 
 protected:
-    void startDrag(Qt::DropActions) override {
-        QListWidgetItem* item = currentItem();
-        if (!item) {
-            return;
+    QStringList mimeTypes() const override {
+        return {workbench::endpointTypeMime};
+    }
+
+    QMimeData* mimeData(const QList<QListWidgetItem*>& items) const override {
+        if (items.isEmpty()) {
+            return nullptr;
         }
-        const QString endpointType = item->data(Qt::UserRole).toString();
+        const QString endpointType = items.front()->data(Qt::UserRole).toString();
         if (endpointType.isEmpty()) {
-            return;
+            return nullptr;
         }
         auto* mimeData = new QMimeData;
         mimeData->setData(workbench::endpointTypeMime, endpointType.toUtf8());
+        return mimeData;
+    }
+
+    Qt::DropActions supportedDropActions() const override {
+        return Qt::CopyAction;
+    }
+
+    void startDrag(Qt::DropActions) override {
+        QMimeData* payload = mimeData(selectedItems());
+        if (!payload) {
+            return;
+        }
         auto* drag = new QDrag(this);
-        drag->setMimeData(mimeData);
+        drag->setMimeData(payload);
         drag->setPixmap(style()->standardIcon(QStyle::SP_ArrowRight).pixmap(32, 32));
         drag->exec(Qt::CopyAction);
     }
@@ -189,7 +206,10 @@ void FinepaperMainWindow::createCentralViews() {
     };
     m_nodeEditor->endpointMoveRequested = [this](const QString& endpointId,
                                                   RouterPosition router) {
-        moveEndpoint(endpointId, router);
+        return moveEndpoint(endpointId, router);
+    };
+    m_nodeEditor->endpointRemovalRequested = [this](const QString& endpointId) {
+        removeEndpoint(endpointId);
     };
     m_nodeEditor->endpointAttachmentRequested = [this](RouterPosition router) {
         showEndpointAttachmentMenu(router);
@@ -252,6 +272,8 @@ void FinepaperMainWindow::createPackageDock() {
     m_endpointPalette = new EndpointPaletteList;
     m_endpointPalette->setObjectName(QStringLiteral("finepaper.endpointPalette"));
     m_endpointPalette->setDragEnabled(true);
+    m_endpointPalette->setDragDropMode(QAbstractItemView::DragOnly);
+    m_endpointPalette->setDefaultDropAction(Qt::CopyAction);
     m_endpointPalette->setSelectionMode(QAbstractItemView::SingleSelection);
     m_endpointPalette->setAlternatingRowColors(true);
     layout->addWidget(m_endpointPalette, 1);
@@ -661,6 +683,7 @@ void FinepaperMainWindow::updateEndpointPalette() {
     }
     for (const EndpointTypeDefinition& type : package->endpointTypes) {
         auto* item = new QListWidgetItem(type.label, m_endpointPalette);
+        item->setFlags(item->flags() | Qt::ItemIsDragEnabled);
         item->setData(Qt::UserRole, type.id);
         item->setToolTip(QStringLiteral("%1\nDrag onto a Router, or double-click after selecting one.")
                              .arg(type.id));
@@ -813,10 +836,15 @@ void FinepaperMainWindow::addEndpoint(const QString& endpointType, RouterPositio
                                  QStringLiteral("Create or open a NoC design first."));
         return;
     }
+    const AttachmentSlotChoice slotChoice = chooseAttachmentSlot(router);
+    if (!slotChoice.accepted) {
+        return;
+    }
     EndpointInstance endpoint;
     endpoint.id = nextEndpointId(endpointType);
     endpoint.type = endpointType;
     endpoint.attachment.router = router;
+    endpoint.attachment.slot = slotChoice.slot;
     adoptDesignResult(m_application.addEndpoint(*m_design, endpoint),
                       QStringLiteral("Add Endpoint %1").arg(endpoint.id));
 }
@@ -829,29 +857,48 @@ void FinepaperMainWindow::showEndpointAttachmentMenu(RouterPosition router) {
         return;
     }
 
-    QMenu menu(this);
-    menu.setTitle(QStringLiteral("Attach Endpoint"));
+    auto* menu = new QMenu(this);
+    menu->setObjectName(workbench::routerContextMenuName);
+    menu->setAttribute(Qt::WA_DeleteOnClose);
+    menu->setTitle(QStringLiteral("Attach Endpoint"));
     for (const EndpointTypeDefinition& type : package->endpointTypes) {
-        QAction* action = menu.addAction(type.label);
+        QAction* action = menu->addAction(type.label);
         action->setToolTip(type.id);
         connect(action, &QAction::triggered, this, [this, type, router] {
             addEndpoint(type.id, router);
         });
     }
-    if (menu.actions().isEmpty()) {
+    if (menu->actions().isEmpty()) {
+        menu->deleteLater();
         statusBar()->showMessage(
             QStringLiteral("This NoC Package does not declare any Endpoint types."), 5000);
         return;
     }
-    menu.exec(QCursor::pos());
+    menu->popup(QCursor::pos());
 }
 
-void FinepaperMainWindow::moveEndpoint(const QString& endpointId, RouterPosition router) {
+bool FinepaperMainWindow::moveEndpoint(const QString& endpointId, RouterPosition router) {
     if (!m_design) {
+        return false;
+    }
+    const AttachmentSlotChoice slotChoice = chooseAttachmentSlot(router, endpointId);
+    if (!slotChoice.accepted) {
+        m_nodeEditor->setDesign(&*m_design);
+        return false;
+    }
+    const DesignResult result = m_application.moveEndpoint(
+        *m_design, endpointId, router, slotChoice.slot);
+    adoptDesignResult(result,
+                      QStringLiteral("Move Endpoint %1").arg(endpointId));
+    return result.success;
+}
+
+void FinepaperMainWindow::removeEndpoint(const QString& endpointId) {
+    if (!m_design || endpointId.isEmpty()) {
         return;
     }
-    adoptDesignResult(m_application.moveEndpoint(*m_design, endpointId, router),
-                      QStringLiteral("Move Endpoint %1").arg(endpointId));
+    adoptDesignResult(m_application.removeEndpoint(*m_design, endpointId),
+                      QStringLiteral("Remove Endpoint %1").arg(endpointId));
 }
 
 void FinepaperMainWindow::removeSelectedEndpoint() {
@@ -861,8 +908,86 @@ void FinepaperMainWindow::removeSelectedEndpoint() {
         return;
     }
     const QString endpointId = m_selectedEndpointId;
-    adoptDesignResult(m_application.removeEndpoint(*m_design, endpointId),
-                      QStringLiteral("Remove Endpoint %1").arg(endpointId));
+    removeEndpoint(endpointId);
+}
+
+FinepaperMainWindow::AttachmentSlotChoice FinepaperMainWindow::chooseAttachmentSlot(
+    RouterPosition router,
+    const QString& ignoredEndpointId) {
+    const PackageDefinition* package = packageForDesign();
+    if (!m_design || !package) {
+        return {};
+    }
+
+    QSet<QString> occupiedSlots;
+    int attachedEndpointCount = 0;
+    for (const EndpointInstance& endpoint : m_design->endpoints) {
+        if (endpoint.id == ignoredEndpointId
+            || endpoint.attachment.router != router) {
+            continue;
+        }
+        ++attachedEndpointCount;
+        if (endpoint.attachment.slot) {
+            occupiedSlots.insert(*endpoint.attachment.slot);
+        }
+    }
+    if (attachedEndpointCount >= package->attachment.maxPerRouter) {
+        QMessageBox::information(
+            this,
+            QStringLiteral("No available attachment position"),
+            QStringLiteral("Router (%1, %2) has reached its Endpoint capacity.")
+                .arg(router.x)
+                .arg(router.y));
+        return {};
+    }
+    if (package->attachment.slotMode == QStringLiteral("automatic")) {
+        return {true, std::nullopt};
+    }
+
+    QVector<AttachmentSlotDefinition> declaredSlots = package->attachment.positions;
+    if (declaredSlots.isEmpty()) {
+        declaredSlots.reserve(package->attachment.maxPerRouter);
+        for (int index = 0; index < package->attachment.maxPerRouter; ++index) {
+            const QString slot = QString::number(index);
+            declaredSlots.append({slot, QStringLiteral("Local port %1").arg(index)});
+        }
+    }
+
+    QStringList labels;
+    QVector<QString> slotIds;
+    for (const AttachmentSlotDefinition& slot : declaredSlots) {
+        if (occupiedSlots.contains(slot.id)) {
+            continue;
+        }
+        labels.append(slot.label == slot.id
+                          ? slot.id
+                          : QStringLiteral("%1 — %2").arg(slot.label, slot.id));
+        slotIds.append(slot.id);
+    }
+    if (slotIds.isEmpty()) {
+        QMessageBox::information(
+            this,
+            QStringLiteral("No available attachment position"),
+            QStringLiteral("Router (%1, %2) has no free explicit Endpoint slot.")
+                .arg(router.x)
+                .arg(router.y));
+        return {};
+    }
+
+    bool accepted = false;
+    const QString selected = QInputDialog::getItem(
+        this,
+        QStringLiteral("Choose Endpoint attachment position"),
+        QStringLiteral("Router (%1, %2) slot").arg(router.x).arg(router.y),
+        labels,
+        0,
+        false,
+        &accepted);
+    const int selectedIndex = labels.indexOf(selected);
+    if (!accepted || selectedIndex < 0) {
+        return {};
+    }
+    return {true, slotIds.at(selectedIndex)};
 }
 
 QJsonValue FinepaperMainWindow::valueFromControl(const ParameterControl& control) const {
@@ -918,10 +1043,12 @@ void FinepaperMainWindow::updateInspector(const NocEditorSelection& selection) {
                 m_selectedEndpointId = endpoint.id;
                 m_selectionSummary->setText(
                     QStringLiteral("<b>Endpoint %1</b><br>Type: %2<br>Router: (%3, %4)<br>"
-                                   "Drag this node onto another Router to move it.")
+                                   "Slot: %5<br>Drag this node onto another Router to move it. "
+                                   "Right-click it to delete it.")
                         .arg(endpoint.id, endpoint.type)
                         .arg(endpoint.attachment.router.x)
-                        .arg(endpoint.attachment.router.y));
+                        .arg(endpoint.attachment.router.y)
+                        .arg(endpoint.attachment.slot.value_or(QStringLiteral("automatic"))));
                 return;
             }
         }

@@ -5,7 +5,7 @@ reads only `package.json` for generic information:
 
 - identity and Mesh bounds;
 - global parameters and Endpoint types;
-- Endpoint-to-Router attachment capacity and slot mode;
+- Endpoint-to-Router attachment capacity, slot mode, and optional named explicit positions;
 - executable paths for the required Generator and optional IP Engine.
 
 A Generator is an executable process with these commands:

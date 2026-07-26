@@ -1,0 +1,30 @@
+{
+  "format": "finepaper.noc-package",
+  "formatVersion": 1,
+  "id": "test.explicit-slots",
+  "name": "Explicit Slot Package Fixture",
+  "version": "1.0.0",
+  "mesh": {
+    "rows": { "min": 1, "max": 4, "default": 2 },
+    "columns": { "min": 1, "max": 4, "default": 2 }
+  },
+  "parameters": [],
+  "endpointTypes": [
+    { "id": "device", "label": "Device endpoint", "parameters": [] }
+  ],
+  "attachment": {
+    "maxPerRouter": 2,
+    "slotMode": "explicit",
+    "slots": [
+      { "id": "local0", "label": "Local port 0" },
+      { "id": "local1", "label": "Local port 1" }
+    ]
+  },
+  "generator": {
+    "name": "explicit-slot-fixture",
+    "version": "1.0.0",
+    "executable": "runtime/bin/generate",
+    "supportsValidate": false,
+    "timeoutSeconds": 10
+  }
+}

@@ -18,6 +18,9 @@ inline const QString packageDockName = QStringLiteral("finepaper.packageDock");
 inline const QString inspectorDockName = QStringLiteral("finepaper.inspectorDock");
 inline const QString resultsDockName = QStringLiteral("finepaper.resultsDock");
 inline const QString activityBarName = QStringLiteral("finepaper.activityBar");
+inline const QString endpointContextMenuName = QStringLiteral("finepaper.endpointContextMenu");
+inline const QString deleteEndpointActionName = QStringLiteral("finepaper.deleteEndpointAction");
+inline const QString routerContextMenuName = QStringLiteral("finepaper.routerContextMenu");
 
 inline const QString packageToggleActionName = QStringLiteral("finepaper.togglePackagePanel");
 inline const QString inspectorToggleActionName = QStringLiteral("finepaper.toggleInspectorPanel");

@@ -46,7 +46,8 @@ public:
     void zoomToFit();
 
     std::function<void(const QString&, RouterPosition)> endpointTypeDropped;
-    std::function<void(const QString&, RouterPosition)> endpointMoveRequested;
+    std::function<bool(const QString&, RouterPosition)> endpointMoveRequested;
+    std::function<void(const QString&)> endpointRemovalRequested;
     std::function<void(RouterPosition)> endpointAttachmentRequested;
     std::function<void(const NocEditorSelection&)> selectionChanged;
 
@@ -67,6 +68,8 @@ private:
     bool handleEndpointDrop(const QString& endpointType, const QPoint& viewportPosition);
     std::optional<RouterPosition> nearestRouter(const QPointF& scenePosition) const;
     std::optional<QtNodes::NodeId> nodeAt(const QPoint& viewportPosition) const;
+    void highlightNeighborhood(QtNodes::NodeId nodeId);
+    void clearNeighborhoodHighlight();
 
     std::optional<NocDesign> m_design;
     std::shared_ptr<QtNodes::NodeDelegateModelRegistry> m_registry;

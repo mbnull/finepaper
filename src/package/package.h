@@ -29,6 +29,11 @@ struct EndpointTypeDefinition {
     QVector<ParameterDefinition> parameters;
 };
 
+struct AttachmentSlotDefinition {
+    QString id;
+    QString label;
+};
+
 struct MeshDefinition {
     int minimumRows = 1;
     int maximumRows = 1;
@@ -41,6 +46,7 @@ struct MeshDefinition {
 struct AttachmentDefinition {
     int maxPerRouter = 1;
     QString slotMode = QStringLiteral("automatic");
+    QVector<AttachmentSlotDefinition> positions;
 };
 
 struct GeneratorDefinition {

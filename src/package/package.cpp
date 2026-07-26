@@ -344,6 +344,43 @@ PackageLoadResult loadPackage(const QString& packageRoot) {
                          QStringLiteral("slotMode must be automatic or explicit"),
                          QStringLiteral("/attachment/slotMode"));
     }
+    const QJsonValue attachmentSlots = attachment.value(QStringLiteral("slots"));
+    if (!attachmentSlots.isUndefined() && !attachmentSlots.isArray()) {
+        appendDiagnostic(result.diagnostics,
+                         QStringLiteral("error"),
+                         QStringLiteral("package.invalid_attachment_slots"),
+                         QStringLiteral("attachment slots must be an array"),
+                         QStringLiteral("/attachment/slots"));
+    } else {
+        const QJsonArray slotArray = attachmentSlots.toArray();
+        QSet<QString> slotIds;
+        for (qsizetype index = 0; index < slotArray.size(); ++index) {
+            const QString base = QStringLiteral("/attachment/slots/%1").arg(index);
+            if (!slotArray.at(index).isObject()) {
+                appendDiagnostic(result.diagnostics,
+                                 QStringLiteral("error"),
+                                 QStringLiteral("package.invalid_attachment_slot"),
+                                 QStringLiteral("attachment slot must be an object"),
+                                 base);
+                continue;
+            }
+            const QJsonObject object = slotArray.at(index).toObject();
+            AttachmentSlotDefinition definition;
+            definition.id = requiredString(
+                object, QStringLiteral("id"), base, result.diagnostics);
+            definition.label = object.value(QStringLiteral("label"))
+                                   .toString(definition.id);
+            if (!definition.id.isEmpty() && slotIds.contains(definition.id)) {
+                appendDiagnostic(result.diagnostics,
+                                 QStringLiteral("error"),
+                                 QStringLiteral("package.duplicate_attachment_slot"),
+                                 QStringLiteral("attachment slot id is duplicated"),
+                                 base + QStringLiteral("/id"));
+            }
+            slotIds.insert(definition.id);
+            package.attachment.positions.append(std::move(definition));
+        }
+    }
 
     const QJsonObject generator = rootObject->value(QStringLiteral("generator")).toObject();
     package.generator.name = requiredString(generator,
