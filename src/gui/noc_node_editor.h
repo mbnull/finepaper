@@ -5,6 +5,7 @@
 #include <QHash>
 #include <QPointF>
 #include <QSet>
+#include <QVector>
 #include <QWidget>
 
 #include <functional>
@@ -16,8 +17,11 @@ class DataFlowGraphModel;
 class DataFlowGraphicsScene;
 class GraphicsView;
 class NodeDelegateModelRegistry;
+struct ConnectionId;
 using NodeId = unsigned int;
 }
+
+class QEvent;
 
 namespace finepaper {
 
@@ -25,12 +29,18 @@ struct NocEditorSelection {
     enum class Kind {
         None,
         Router,
-        Endpoint
+        Endpoint,
+        PendingEndpoint
     };
 
     Kind kind = Kind::None;
     QString id;
     std::optional<RouterPosition> router;
+};
+
+struct NocEndpointTypeItem {
+    QString id;
+    QString label;
 };
 
 class NocNodeEditor final : public QWidget {
@@ -39,17 +49,20 @@ public:
     ~NocNodeEditor() override;
 
     void setDesign(const NocDesign* design);
+    void setEndpointTypes(QVector<NocEndpointTypeItem> endpointTypes);
     bool setRouterVisualPosition(const QString& routerId, QPointF position);
     std::optional<QPointF> routerVisualPosition(const QString& routerId) const;
     bool setRouterCollapsed(const QString& routerId, bool collapsed);
     bool routerCollapsed(const QString& routerId) const;
     void zoomToFit();
 
-    std::function<void(const QString&, RouterPosition)> endpointTypeDropped;
+    std::function<bool(const QString&, RouterPosition)> endpointTypeDropped;
     std::function<bool(const QString&, RouterPosition)> endpointMoveRequested;
     std::function<void(const QString&)> endpointRemovalRequested;
-    std::function<void(RouterPosition)> endpointAttachmentRequested;
     std::function<void(const NocEditorSelection&)> selectionChanged;
+
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
     struct NodeMetadata {
@@ -57,6 +70,13 @@ private:
         QString id;
         std::optional<RouterPosition> router;
         QPointF projectedPosition;
+        QString endpointType;
+    };
+
+    struct PendingEndpoint {
+        QString id;
+        QString type;
+        QPointF scenePosition;
     };
 
     void rebuildGraph(bool zoomToContents = true);
@@ -64,8 +84,13 @@ private:
     void saveRouterLayout() const;
     void handleNodeSelection(QtNodes::NodeId nodeId);
     void handlePointerReleased(const QPoint& viewportPosition);
-    void handleNodeContextMenu(QtNodes::NodeId nodeId);
+    void handleConnectionCreated(QtNodes::ConnectionId connectionId);
     bool handleEndpointDrop(const QString& endpointType, const QPoint& viewportPosition);
+    void addPendingEndpoint(const QString& endpointType, QPointF scenePosition);
+    bool attachNodeToRouter(QtNodes::NodeId nodeId, RouterPosition router);
+    void showContextMenu(const QPoint& viewportPosition, const QPoint& globalPosition);
+    void showCanvasCreateMenu(QPointF scenePosition, const QPoint& globalPosition);
+    void showNodeContextMenu(QtNodes::NodeId nodeId, const QPoint& globalPosition);
     std::optional<RouterPosition> nearestRouter(const QPointF& scenePosition) const;
     std::optional<QtNodes::NodeId> nodeAt(const QPoint& viewportPosition) const;
     void highlightNeighborhood(QtNodes::NodeId nodeId);
@@ -80,6 +105,9 @@ private:
     QHash<QString, QtNodes::NodeId> m_routerNodes;
     QHash<QString, QPointF> m_routerLayout;
     QSet<QString> m_collapsedRouters;
+    QVector<NocEndpointTypeItem> m_endpointTypes;
+    QHash<QString, PendingEndpoint> m_pendingEndpoints;
+    int m_nextPendingEndpoint = 0;
     QString m_layoutKey;
 };
 

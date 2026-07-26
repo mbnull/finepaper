@@ -123,10 +123,10 @@ protected:
         if (!payload) {
             return;
         }
-        auto* drag = new QDrag(this);
-        drag->setMimeData(payload);
-        drag->setPixmap(style()->standardIcon(QStyle::SP_ArrowRight).pixmap(32, 32));
-        drag->exec(Qt::CopyAction);
+        QDrag drag(this);
+        drag.setMimeData(payload);
+        drag.setPixmap(style()->standardIcon(QStyle::SP_ArrowRight).pixmap(32, 32));
+        drag.exec(Qt::CopyAction);
     }
 };
 
@@ -202,7 +202,7 @@ void FinepaperMainWindow::createCentralViews() {
 
     m_nodeEditor->endpointTypeDropped = [this](const QString& endpointType,
                                                 RouterPosition router) {
-        addEndpoint(endpointType, router);
+        return addEndpoint(endpointType, router);
     };
     m_nodeEditor->endpointMoveRequested = [this](const QString& endpointId,
                                                   RouterPosition router) {
@@ -210,9 +210,6 @@ void FinepaperMainWindow::createCentralViews() {
     };
     m_nodeEditor->endpointRemovalRequested = [this](const QString& endpointId) {
         removeEndpoint(endpointId);
-    };
-    m_nodeEditor->endpointAttachmentRequested = [this](RouterPosition router) {
-        showEndpointAttachmentMenu(router);
     };
     m_nodeEditor->selectionChanged = [this](const NocEditorSelection& selection) {
         updateInspector(selection);
@@ -268,7 +265,8 @@ void FinepaperMainWindow::createPackageDock() {
     paletteHeading->setFont(paletteFont);
     layout->addWidget(paletteHeading);
     layout->addWidget(new QLabel(
-        QStringLiteral("Drag onto a Router, or select a Router and double-click a type.")));
+        QStringLiteral("Drag onto the canvas. Drop on a Router to attach immediately, "
+                       "or connect the new Endpoint afterward.")));
     m_endpointPalette = new EndpointPaletteList;
     m_endpointPalette->setObjectName(QStringLiteral("finepaper.endpointPalette"));
     m_endpointPalette->setDragEnabled(true);
@@ -679,15 +677,21 @@ void FinepaperMainWindow::updateEndpointPalette() {
         package = selectedPackage();
     }
     if (!package) {
+        m_nodeEditor->setEndpointTypes({});
         return;
     }
+    QVector<NocEndpointTypeItem> editorTypes;
+    editorTypes.reserve(package->endpointTypes.size());
     for (const EndpointTypeDefinition& type : package->endpointTypes) {
         auto* item = new QListWidgetItem(type.label, m_endpointPalette);
         item->setFlags(item->flags() | Qt::ItemIsDragEnabled);
         item->setData(Qt::UserRole, type.id);
-        item->setToolTip(QStringLiteral("%1\nDrag onto a Router, or double-click after selecting one.")
+        item->setToolTip(QStringLiteral("%1\nDrag anywhere onto the canvas, then connect it to a Router. "
+                                        "Dropping directly on a Router attaches immediately.")
                              .arg(type.id));
+        editorTypes.append({type.id, type.label});
     }
+    m_nodeEditor->setEndpointTypes(std::move(editorTypes));
 }
 
 const PackageDefinition* FinepaperMainWindow::selectedPackage() const {
@@ -830,23 +834,25 @@ void FinepaperMainWindow::generateDesign() {
     }
 }
 
-void FinepaperMainWindow::addEndpoint(const QString& endpointType, RouterPosition router) {
+bool FinepaperMainWindow::addEndpoint(const QString& endpointType, RouterPosition router) {
     if (!m_design) {
         QMessageBox::information(this, QStringLiteral("Add Endpoint"),
                                  QStringLiteral("Create or open a NoC design first."));
-        return;
+        return false;
     }
     const AttachmentSlotChoice slotChoice = chooseAttachmentSlot(router);
     if (!slotChoice.accepted) {
-        return;
+        return false;
     }
     EndpointInstance endpoint;
     endpoint.id = nextEndpointId(endpointType);
     endpoint.type = endpointType;
     endpoint.attachment.router = router;
     endpoint.attachment.slot = slotChoice.slot;
-    adoptDesignResult(m_application.addEndpoint(*m_design, endpoint),
+    const DesignResult result = m_application.addEndpoint(*m_design, endpoint);
+    adoptDesignResult(result,
                       QStringLiteral("Add Endpoint %1").arg(endpoint.id));
+    return result.success;
 }
 
 void FinepaperMainWindow::showEndpointAttachmentMenu(RouterPosition router) {
@@ -1052,6 +1058,14 @@ void FinepaperMainWindow::updateInspector(const NocEditorSelection& selection) {
                 return;
             }
         }
+    }
+    if (selection.kind == NocEditorSelection::Kind::PendingEndpoint) {
+        m_selectionSummary->setText(
+            QStringLiteral("<b>Unattached Endpoint</b><br>Type: %1<br>"
+                           "Drag its EP port to a Router, or right-click it and choose "
+                           "Connect to Router.")
+                .arg(selection.id));
+        return;
     }
     m_selectionSummary->setText(QStringLiteral("Nothing selected."));
 }

@@ -1111,11 +1111,12 @@ NodeEditor 负责直接操作 NoC，而不是承载通用 IP 图编辑器：
 - Router 使用可展开/收起的方形设备外观，并明确显示 North、East、South、West 四个拓扑方向端口；Mesh 链路分别从 East→West、South→North 连接，不使用无方向含义的通用连线；
 - Router 的 Mesh 身份与连接关系固定，但其画布位置允许用户自由拖动调整；位置与收起状态只保存到本机 Workspace 布局，不写入 `NocDesign`；
 - Router 与 Router Link 不可任意创建、删除或连接；
-- Endpoint Palette 中的类型可拖到 Router；也可先选择或右键 Router，再从菜单/Palette 显式挂载。所有入口都映射为同一个 `FinepaperApplication::addEndpoint`；Endpoint 使用独立 EP 挂载端口，不占用 North/East/South/West 拓扑端口；
-- 已有 Endpoint 可从一个 Router 拖到另一个 Router，映射为 `moveEndpoint`；
+- Endpoint Palette 中的类型既可直接拖到 Router 完成立即创建和挂载，也可拖到画布空白处形成“未挂载 Endpoint”工作区草稿；草稿不是 `NocDesign` 的第二事实源，只有通过端口连接或菜单选择 Router 后才调用 `FinepaperApplication::addEndpoint` 并成为持久设计事实；
+- Endpoint 使用独立 EP 挂载端口，不占用 North/East/South/West 拓扑端口。用户可以从 Endpoint 的 EP 输出方口拖到 Router 的 EP 输入方口；NodeEditor 只接受这一种人工连线语义，Router-to-Router、Endpoint-to-Endpoint 和任意端口连线仍被拒绝；
+- 已有 Endpoint 可拖到另一个 Router，或从 EP 方口重新连接、从右键菜单选择目标 Router，统一映射为 `moveEndpoint`；
 - `explicit` slot Package 在新增或移动 Endpoint 时要求用户选择目标 Router 上的空闲挂载位；`automatic` 模式不弹出该选择；
 - 选择 Endpoint 或 Router 会驱动右侧 Inspector，并高亮与该节点直接相连的线和一跳邻接节点；
-- Router 右键菜单用于添加 Endpoint，Endpoint 右键菜单提供删除动作；这些动作仍通过共享应用层执行；
+- 画布空白处右键可创建未挂载 Endpoint；Router 右键菜单可按 Package 类型添加 Endpoint；Endpoint 右键菜单可连接/移动到指定 Router 或删除。创建和修改仍通过共享应用层执行，只有未挂载草稿及其画布位置属于临时 GUI 状态；
 - 节点使用无圆角方块显示，Router Link 和 Endpoint 挂载线使用水平/垂直直角折线，不使用贝塞尔曲线；
 - 画布支持缩放、平移、框选、Router 摆放、自动布局/聚焦和多 Dock 工作流；
 - NodeEditor 不保存第二份 Graph，也不允许 Endpoint-to-Endpoint 任意连线。
@@ -1124,7 +1125,7 @@ NodeEditor 负责直接操作 NoC，而不是承载通用 IP 图编辑器：
 
 ### 18.2 创建流程
 
-创建从一个轻量对话框开始：选择或安装 Package、选择 preset 或空白设计、设置 N×M 和少量初始参数。创建完成后立即进入 NodeEditor 工作台；Endpoint 的主要配置路径是 Palette 到 Router 的直接拖放，表格/导入仅作为批量操作补充。
+创建从一个轻量对话框开始：选择或安装 Package、选择 preset 或空白设计、设置 N×M 和少量初始参数。创建完成后立即进入 NodeEditor 工作台；Endpoint 的主要配置路径包括 Palette 直接拖到 Router、Palette 拖到画布后手工连接，以及画布/节点右键菜单。先选择 Router 再添加只保留为快捷方式，不是前置条件；表格/导入仅作为批量操作补充。
 
 ### 18.3 Workspace
 
@@ -1642,7 +1643,7 @@ generate real RTL
 - 中央视图可切换 NodeEditor、性能分析和问题报告；
 - 底部结果区可切换 DRC Problems、Activity Log 和 Generation Outputs；
 - N×M 创建和 TopologyProjection；
-- Endpoint Palette → Router 的拖放和 Router 间移动；
+- Endpoint Palette → Router 的直接拖放、空白画布草稿、受限 EP→Router 端口连接、右键创建/连接/删除和 Router 间移动；
 - Inspector 中的参数编辑；
 - Validate 和 Generate 的工具栏与结果 Dock；
 - GUI 调用同一个 FinepaperApplication。

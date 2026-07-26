@@ -65,7 +65,7 @@ private:
     void saveDesign();
     void validateDesign();
     void generateDesign();
-    void addEndpoint(const QString& endpointType, RouterPosition router);
+    bool addEndpoint(const QString& endpointType, RouterPosition router);
     void showEndpointAttachmentMenu(RouterPosition router);
     bool moveEndpoint(const QString& endpointId, RouterPosition router);
     void removeEndpoint(const QString& endpointId);

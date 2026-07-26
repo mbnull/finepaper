@@ -6,6 +6,7 @@
 #include <QAction>
 #include <QApplication>
 #include <QComboBox>
+#include <QContextMenuEvent>
 #include <QDir>
 #include <QDockWidget>
 #include <QDragEnterEvent>
@@ -81,6 +82,107 @@ std::optional<QtNodes::NodeId> nodeIdWithCaptionPrefix(
         }
     }
     return std::nullopt;
+}
+
+std::optional<QtNodes::NodeId> endpointAttachedToRouter(
+    QtNodes::BasicGraphicsScene* scene,
+    const QString& routerCaption) {
+    const auto router = nodeIdWithCaption(scene, routerCaption);
+    if (!scene || !router) {
+        return std::nullopt;
+    }
+    for (const QtNodes::ConnectionId& connection
+         : scene->graphModel().allConnectionIds(*router)) {
+        if (connection.inNodeId == *router
+            && connection.inPortIndex
+                   == finepaper::portIndex(finepaper::RouterInputPort::Endpoint)) {
+            return connection.outNodeId;
+        }
+    }
+    return std::nullopt;
+}
+
+QPoint blankViewportPosition(QGraphicsView* view) {
+    if (!view || !view->viewport()) {
+        return {};
+    }
+    for (int y = 24; y < view->viewport()->height() - 24; y += 32) {
+        for (int x = 24; x < view->viewport()->width() - 24; x += 32) {
+            QGraphicsItem* item = view->itemAt(QPoint(x, y));
+            bool overNode = false;
+            while (item) {
+                if (qgraphicsitem_cast<QtNodes::NodeGraphicsObject*>(item)) {
+                    overNode = true;
+                    break;
+                }
+                item = item->parentItem();
+            }
+            if (!overNode) {
+                return QPoint(x, y);
+            }
+        }
+    }
+    return QPoint(8, 8);
+}
+
+void sendContextMenu(QGraphicsView* view, const QPoint& viewportPosition) {
+    if (!view || !view->viewport()) {
+        return;
+    }
+    QContextMenuEvent event(QContextMenuEvent::Mouse,
+                            viewportPosition,
+                            view->viewport()->mapToGlobal(viewportPosition));
+    QApplication::sendEvent(view->viewport(), &event);
+}
+
+void dragPortConnection(QGraphicsView* view,
+                        QtNodes::BasicGraphicsScene* scene,
+                        QtNodes::NodeId sourceNode,
+                        QtNodes::PortIndex sourcePort,
+                        QtNodes::NodeId targetNode,
+                        QtNodes::PortIndex targetPort) {
+    if (!view || !scene || !view->viewport()) {
+        return;
+    }
+    auto* sourceGraphics = scene->nodeGraphicsObject(sourceNode);
+    auto* targetGraphics = scene->nodeGraphicsObject(targetNode);
+    if (!sourceGraphics || !targetGraphics) {
+        return;
+    }
+    const QPointF sourceScene = sourceGraphics->mapToScene(
+        scene->nodeGeometry().portPosition(
+            sourceNode, QtNodes::PortType::Out, sourcePort));
+    const QPointF targetScene = targetGraphics->mapToScene(
+        scene->nodeGeometry().portPosition(
+            targetNode, QtNodes::PortType::In, targetPort));
+    const QPoint source = view->mapFromScene(sourceScene);
+    const QPoint target = view->mapFromScene(targetScene);
+    QWidget* viewport = view->viewport();
+
+    QMouseEvent press(QEvent::MouseButtonPress,
+                      QPointF(source),
+                      QPointF(viewport->mapToGlobal(source)),
+                      Qt::LeftButton,
+                      Qt::LeftButton,
+                      Qt::NoModifier);
+    QApplication::sendEvent(viewport, &press);
+    for (int step = 1; step <= 5; ++step) {
+        const QPoint position = source + (target - source) * step / 5;
+        QMouseEvent move(QEvent::MouseMove,
+                         QPointF(position),
+                         QPointF(viewport->mapToGlobal(position)),
+                         Qt::NoButton,
+                         Qt::LeftButton,
+                         Qt::NoModifier);
+        QApplication::sendEvent(viewport, &move);
+    }
+    QMouseEvent release(QEvent::MouseButtonRelease,
+                        QPointF(target),
+                        QPointF(viewport->mapToGlobal(target)),
+                        Qt::LeftButton,
+                        Qt::NoButton,
+                        Qt::NoModifier);
+    QApplication::sendEvent(viewport, &release);
 }
 
 void chooseInputDialogItem(int index) {
@@ -412,22 +514,198 @@ int main(int argc, char** argv) {
                    finepaper::portIndex(finepaper::RouterInputPort::Endpoint)}),
           QStringLiteral("Endpoint uses the Router's dedicated EP attachment port"));
 
-    if (graphicsScene && attachedEndpoint) {
-        graphicsScene->nodeContextMenu(*attachedEndpoint, QPointF());
+    if (graphicsView && graphicsScene && currentRouter00) {
+        const QPoint routerPosition = graphicsView->mapFromScene(
+            graphicsScene->nodeGraphicsObject(*currentRouter00)
+                ->sceneBoundingRect().center());
+        sendContextMenu(graphicsView, routerPosition);
+        application.processEvents();
+    }
+    auto* routerMenu = nodeEditor ? nodeEditor->findChild<QMenu*>(
+        finepaper::workbench::routerContextMenuName) : nullptr;
+    auto* createEndpointMenu = routerMenu ? routerMenu->findChild<QMenu*>(
+        finepaper::workbench::createEndpointMenuName) : nullptr;
+    check(routerMenu && createEndpointMenu && createEndpointMenu->actions().size() == 2,
+          QStringLiteral("Router right-click menu creates any Package Endpoint type without selection"));
+    if (routerMenu) {
+        routerMenu->close();
+        application.processEvents();
+    }
+
+    if (graphicsView && graphicsScene && attachedEndpoint) {
+        const QPoint endpointPosition = graphicsView->mapFromScene(
+            graphicsScene->nodeGraphicsObject(*attachedEndpoint)
+                ->sceneBoundingRect().center());
+        sendContextMenu(graphicsView, endpointPosition);
         application.processEvents();
     }
     auto* endpointMenu = nodeEditor ? nodeEditor->findChild<QMenu*>(
         finepaper::workbench::endpointContextMenuName) : nullptr;
+    auto* connectRouterMenu = endpointMenu ? endpointMenu->findChild<QMenu*>(
+        finepaper::workbench::connectRouterMenuName) : nullptr;
     QAction* deleteEndpoint = endpointMenu ? endpointMenu->findChild<QAction*>(
         finepaper::workbench::deleteEndpointActionName) : nullptr;
-    check(endpointMenu && deleteEndpoint,
-          QStringLiteral("Endpoint right-click menu exposes a delete action"));
+    check(endpointMenu && connectRouterMenu
+              && connectRouterMenu->actions().size() == 4
+              && deleteEndpoint,
+          QStringLiteral("Endpoint right-click menu exposes connect and delete actions"));
     if (deleteEndpoint) {
         deleteEndpoint->trigger();
+        if (endpointMenu) {
+            endpointMenu->close();
+        }
         application.processEvents();
     }
     check(!nodeIdWithCaptionPrefix(graphicsScene, QStringLiteral("master")),
           QStringLiteral("Endpoint right-click delete removes it through the application layer"));
+
+    const std::size_t nodesBeforePending = graphicsScene
+        ? graphicsScene->graphModel().allNodeIds().size() : 0;
+    const QPoint blankDropPosition = blankViewportPosition(graphicsView);
+    if (graphicsView && endpointMime) {
+        QDragEnterEvent dragEnter(blankDropPosition,
+                                  Qt::CopyAction,
+                                  endpointMime.get(),
+                                  Qt::LeftButton,
+                                  Qt::NoModifier);
+        QApplication::sendEvent(graphicsView->viewport(), &dragEnter);
+        QDropEvent drop(QPointF(blankDropPosition),
+                        Qt::CopyAction,
+                        endpointMime.get(),
+                        Qt::LeftButton,
+                        Qt::NoModifier);
+        QApplication::sendEvent(graphicsView->viewport(), &drop);
+        application.processEvents();
+        check(dragEnter.isAccepted() && drop.isAccepted(),
+              QStringLiteral("real viewport drag/drop accepts an Endpoint on blank canvas"));
+    }
+    const auto pendingEndpoint = nodeIdWithCaptionPrefix(
+        graphicsScene, QStringLiteral("Unattached\nMaster endpoint"));
+    check(pendingEndpoint
+              && graphicsScene->graphModel().allNodeIds().size() == nodesBeforePending + 1,
+          QStringLiteral("blank-canvas drop creates a movable unattached Endpoint"));
+
+    const auto connectionRouter = nodeIdWithCaption(
+        graphicsScene, QStringLiteral("r-1-0"));
+    const QtNodes::ConnectionId pendingAttachment{
+        pendingEndpoint.value_or(0),
+        finepaper::portIndex(finepaper::EndpointOutputPort::Attachment),
+        connectionRouter.value_or(0),
+        finepaper::portIndex(finepaper::RouterInputPort::Endpoint)};
+    check(pendingEndpoint && connectionRouter
+              && graphicsScene->graphModel().connectionPossible(pendingAttachment),
+          QStringLiteral("manual connection allows only Endpoint EP to Router EP"));
+    const auto routerForConnectionRule = nodeIdWithCaption(
+        graphicsScene, QStringLiteral("r-0-0"));
+    check(routerForConnectionRule && connectionRouter
+              && !graphicsScene->graphModel().connectionPossible({
+                  *routerForConnectionRule,
+                  finepaper::portIndex(finepaper::RouterOutputPort::East),
+                  *connectionRouter,
+                  finepaper::portIndex(finepaper::RouterInputPort::West)}),
+          QStringLiteral("manual connection cannot edit derived Router topology links"));
+    if (pendingEndpoint && connectionRouter) {
+        dragPortConnection(
+            graphicsView,
+            graphicsScene,
+            *pendingEndpoint,
+            finepaper::portIndex(finepaper::EndpointOutputPort::Attachment),
+            *connectionRouter,
+            finepaper::portIndex(finepaper::RouterInputPort::Endpoint));
+        application.processEvents();
+        application.processEvents();
+    }
+    check(!nodeIdWithCaptionPrefix(
+               graphicsScene, QStringLiteral("Unattached\nMaster endpoint")),
+          QStringLiteral("connecting a draft consumes the temporary canvas node"));
+    const auto manuallyAttachedEndpoint = nodeIdWithCaptionPrefix(
+        graphicsScene, QStringLiteral("master"));
+    const auto currentRouter10 = nodeIdWithCaption(
+        graphicsScene, QStringLiteral("r-1-0"));
+    check(manuallyAttachedEndpoint && currentRouter10
+              && graphicsScene->graphModel().connectionExists({
+                  *manuallyAttachedEndpoint,
+                  finepaper::portIndex(finepaper::EndpointOutputPort::Attachment),
+                  *currentRouter10,
+                  finepaper::portIndex(finepaper::RouterInputPort::Endpoint)}),
+          QStringLiteral("mouse-dragged EP-to-Router connection becomes a durable design attachment"));
+
+    if (graphicsView && graphicsScene && manuallyAttachedEndpoint) {
+        const QPoint endpointPosition = graphicsView->mapFromScene(
+            graphicsScene->nodeGraphicsObject(*manuallyAttachedEndpoint)
+                ->sceneBoundingRect().center());
+        sendContextMenu(graphicsView, endpointPosition);
+        application.processEvents();
+    }
+    auto* moveEndpointMenu = nodeEditor ? nodeEditor->findChild<QMenu*>(
+        finepaper::workbench::endpointContextMenuName) : nullptr;
+    auto* moveRouterMenu = moveEndpointMenu ? moveEndpointMenu->findChild<QMenu*>(
+        finepaper::workbench::connectRouterMenuName) : nullptr;
+    QAction* moveToRouter11 = nullptr;
+    if (moveRouterMenu) {
+        for (QAction* action : moveRouterMenu->actions()) {
+            if (action->data().toString() == QStringLiteral("r-1-1")) {
+                moveToRouter11 = action;
+                break;
+            }
+        }
+    }
+    check(moveToRouter11 != nullptr,
+          QStringLiteral("Endpoint context menu lists concrete Router connection targets"));
+    if (moveToRouter11) {
+        moveToRouter11->trigger();
+        if (moveEndpointMenu) {
+            moveEndpointMenu->close();
+        }
+        application.processEvents();
+    }
+    check(endpointAttachedToRouter(graphicsScene, QStringLiteral("r-1-1")).has_value()
+              && !endpointAttachedToRouter(graphicsScene, QStringLiteral("r-1-0")),
+          QStringLiteral("right-click Connect to Router moves the Endpoint through the application layer"));
+
+    const QPoint canvasMenuPosition = blankViewportPosition(graphicsView);
+    if (graphicsView) {
+        sendContextMenu(graphicsView, canvasMenuPosition);
+        application.processEvents();
+    }
+    auto* canvasMenu = nodeEditor ? nodeEditor->findChild<QMenu*>(
+        finepaper::workbench::canvasContextMenuName) : nullptr;
+    check(canvasMenu && canvasMenu->actions().size() == 2,
+          QStringLiteral("blank-canvas right-click menu creates Package Endpoint types"));
+    if (canvasMenu && !canvasMenu->actions().isEmpty()) {
+        canvasMenu->actions().first()->trigger();
+        canvasMenu->close();
+        application.processEvents();
+    }
+    const auto contextPendingEndpoint = nodeIdWithCaptionPrefix(
+        graphicsScene, QStringLiteral("Unattached\nMaster endpoint"));
+    check(contextPendingEndpoint.has_value(),
+          QStringLiteral("canvas right-click create does not require a selected Router"));
+    if (graphicsView && graphicsScene && contextPendingEndpoint) {
+        const QPoint pendingPosition = graphicsView->mapFromScene(
+            graphicsScene->nodeGraphicsObject(*contextPendingEndpoint)
+                ->sceneBoundingRect().center());
+        sendContextMenu(graphicsView, pendingPosition);
+        application.processEvents();
+    }
+    auto* pendingMenu = nodeEditor ? nodeEditor->findChild<QMenu*>(
+        finepaper::workbench::endpointContextMenuName) : nullptr;
+    QAction* deletePending = pendingMenu ? pendingMenu->findChild<QAction*>(
+        finepaper::workbench::deleteEndpointActionName) : nullptr;
+    check(pendingMenu && pendingMenu->findChild<QMenu*>(
+                              finepaper::workbench::connectRouterMenuName)
+              && deletePending,
+          QStringLiteral("unattached Endpoint right-click menu supports connect and delete"));
+    if (deletePending) {
+        deletePending->trigger();
+        if (pendingMenu) {
+            pendingMenu->close();
+        }
+        application.processEvents();
+    }
+    check(!nodeIdWithCaptionPrefix(
+               graphicsScene, QStringLiteral("Unattached\nMaster endpoint")),
+          QStringLiteral("right-click delete removes an unattached Endpoint draft"));
 
     const auto routerForSecondEndpoint = nodeIdWithCaption(
         graphicsScene, QStringLiteral("r-0-0"));
@@ -442,6 +720,8 @@ int main(int argc, char** argv) {
     }
     check(nodeIdWithCaptionPrefix(graphicsScene, QStringLiteral("master")).has_value(),
           QStringLiteral("selected-Router double-click remains available as an attach shortcut"));
+    check(endpointAttachedToRouter(graphicsScene, QStringLiteral("r-0-0")).has_value(),
+          QStringLiteral("selected-Router shortcut attaches specifically to that Router"));
 
     check(nodeEditor && nodeEditor->setRouterCollapsed(QStringLiteral("r-0-0"), true),
           QStringLiteral("Router can be collapsed from the workspace"));
@@ -455,11 +735,11 @@ int main(int argc, char** argv) {
                          < finepaper::nocEditorMetrics().expandedRouterSize.width(),
               QStringLiteral("collapsed Router remains square and becomes compact"));
     }
-    check(!nodeIdWithCaptionPrefix(graphicsScene, QStringLiteral("master")),
+    check(!endpointAttachedToRouter(graphicsScene, QStringLiteral("r-0-0")),
           QStringLiteral("collapsed Router hides its Endpoint projection"));
     check(nodeEditor && nodeEditor->setRouterCollapsed(QStringLiteral("r-0-0"), false),
           QStringLiteral("Router can be expanded again"));
-    check(nodeIdWithCaptionPrefix(graphicsScene, QStringLiteral("master")).has_value(),
+    check(endpointAttachedToRouter(graphicsScene, QStringLiteral("r-0-0")).has_value(),
           QStringLiteral("expanding Router restores its Endpoint projection"));
 
     QAction* validateAction = actionWithText(window, QStringLiteral("Validate / DRC"));

@@ -21,6 +21,9 @@ inline const QString activityBarName = QStringLiteral("finepaper.activityBar");
 inline const QString endpointContextMenuName = QStringLiteral("finepaper.endpointContextMenu");
 inline const QString deleteEndpointActionName = QStringLiteral("finepaper.deleteEndpointAction");
 inline const QString routerContextMenuName = QStringLiteral("finepaper.routerContextMenu");
+inline const QString canvasContextMenuName = QStringLiteral("finepaper.canvasContextMenu");
+inline const QString createEndpointMenuName = QStringLiteral("finepaper.createEndpointMenu");
+inline const QString connectRouterMenuName = QStringLiteral("finepaper.connectRouterMenu");
 
 inline const QString packageToggleActionName = QStringLiteral("finepaper.togglePackagePanel");
 inline const QString inspectorToggleActionName = QStringLiteral("finepaper.toggleInspectorPanel");
