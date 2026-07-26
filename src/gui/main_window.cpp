@@ -1,4 +1,5 @@
 #include "gui/main_window.h"
+#include "gui/workspace_pages.h"
 
 #include "storage/json.h"
 
@@ -62,9 +63,9 @@ QTableWidgetItem* readOnlyItem(const QString& text) {
 
 } // namespace
 
-FinepaperMainWindow::FinepaperMainWindow(QStringList packageRoots, QWidget* parent)
+FinepaperMainWindow::FinepaperMainWindow(RuntimeLocations locations, QWidget* parent)
     : QMainWindow(parent),
-      m_packageRoots(std::move(packageRoots)) {
+      m_locations(std::move(locations)) {
     createUi();
     reloadPackages();
     statusBar()->showMessage(QStringLiteral("Choose a Package and create a Mesh NoC."));
@@ -100,14 +101,7 @@ void FinepaperMainWindow::createUi() {
     auto* splitter = new QSplitter(this);
     m_navigation = new QListWidget(splitter);
     m_navigation->setFixedWidth(170);
-    m_navigation->addItems({
-        QStringLiteral("Start"),
-        QStringLiteral("Overview"),
-        QStringLiteral("Topology"),
-        QStringLiteral("Parameters"),
-        QStringLiteral("Validate"),
-        QStringLiteral("Generate")
-    });
+    m_navigation->addItems(workspacePageLabels());
     m_pages = new QStackedWidget(splitter);
     splitter->addWidget(m_navigation);
     splitter->addWidget(m_pages);
@@ -139,6 +133,8 @@ void FinepaperMainWindow::createUi() {
     startForm->addRow(QStringLiteral("Design name"), m_startName);
     startForm->addRow(QStringLiteral("Mesh rows"), m_startRows);
     startForm->addRow(QStringLiteral("Mesh columns"), m_startColumns);
+    connect(m_startPackage, &QComboBox::currentIndexChanged, this,
+            [this](int) { updateStartMeshBounds(); });
     startLayout->addLayout(startForm);
     auto* createButton = new QPushButton(QStringLiteral("Create Mesh NoC"));
     createButton->setDefault(true);
@@ -237,7 +233,7 @@ void FinepaperMainWindow::createUi() {
     auto* generatePage = new QWidget;
     auto* generateLayout = new QVBoxLayout(generatePage);
     auto* outputLayout = new QHBoxLayout;
-    m_outputRoot = new QLineEdit(QDir::current().filePath(QStringLiteral("output")));
+    m_outputRoot = new QLineEdit(m_locations.defaultOutputRoot);
     auto* browseOutput = new QPushButton(QStringLiteral("Choose output…"));
     auto* generateButton = new QPushButton(QStringLiteral("Validate and generate RTL"));
     outputLayout->addWidget(new QLabel(QStringLiteral("Output root")));
@@ -258,11 +254,11 @@ void FinepaperMainWindow::createUi() {
     connect(generateButton, &QPushButton::clicked, this, &FinepaperMainWindow::generateDesign);
     m_pages->addWidget(generatePage);
 
-    m_navigation->setCurrentRow(0);
+    showPage(WorkspacePage::Start);
 }
 
 void FinepaperMainWindow::reloadPackages() {
-    const QVector<Diagnostic> diagnostics = m_application.reloadPackages(m_packageRoots);
+    const QVector<Diagnostic> diagnostics = m_application.reloadPackages(m_locations.packageRoots);
     updateStartPackages();
     showDiagnostics(diagnostics, QStringLiteral("Package discovery"), false);
     if (!containsErrors(diagnostics)) {
@@ -280,6 +276,24 @@ void FinepaperMainWindow::updateStartPackages() {
     if (previousIndex >= 0) {
         m_startPackage->setCurrentIndex(previousIndex);
     }
+    updateStartMeshBounds();
+}
+
+void FinepaperMainWindow::updateStartMeshBounds() {
+    const PackageDefinition* package = selectedStartPackage();
+    if (!package) {
+        m_startRows->setRange(1, 1);
+        m_startColumns->setRange(1, 1);
+        return;
+    }
+    m_startRows->setRange(package->mesh.minimumRows, package->mesh.maximumRows);
+    m_startColumns->setRange(package->mesh.minimumColumns, package->mesh.maximumColumns);
+    m_startRows->setValue(package->mesh.defaultRows);
+    m_startColumns->setValue(package->mesh.defaultColumns);
+}
+
+void FinepaperMainWindow::showPage(WorkspacePage page) {
+    m_navigation->setCurrentRow(workspacePageIndex(page));
 }
 
 const PackageDefinition* FinepaperMainWindow::selectedStartPackage() const {
@@ -374,7 +388,7 @@ void FinepaperMainWindow::validateDesign() {
     }
     const ValidationResult result = m_application.validate(*m_design, true);
     m_validationReport->setPlainText(diagnosticText(result.diagnostics));
-    m_navigation->setCurrentRow(4);
+    showPage(WorkspacePage::Validate);
     statusBar()->showMessage(result.success ? QStringLiteral("Design is valid.")
                                             : QStringLiteral("Validation found errors."));
     if (!result.success) {
@@ -397,7 +411,7 @@ void FinepaperMainWindow::generateDesign() {
     const GenerationResult result = m_application.generate(*m_design, GenerationOptions{root});
     m_generationReport->setPlainText(QJsonDocument(generationResultToJson(result))
                                          .toJson(QJsonDocument::Indented));
-    m_navigation->setCurrentRow(5);
+    showPage(WorkspacePage::Generate);
     statusBar()->showMessage(result.success ? QStringLiteral("RTL generated.")
                                             : QStringLiteral("RTL generation failed."));
     if (!result.success) {

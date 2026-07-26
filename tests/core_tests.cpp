@@ -1,4 +1,5 @@
 #include "application/application.h"
+#include "application/runtime_settings.h"
 #include "execution/process.h"
 #include "noc/model.h"
 #include "storage/json.h"
@@ -98,6 +99,13 @@ int main(int argc, char** argv) {
     QCoreApplication application(argc, argv);
     const QString projectRoot = QString::fromUtf8(FINEPAPER_SOURCE_DIR);
 
+    const RuntimeLocations locations = resolveRuntimeLocations(
+        QStringList{QDir(projectRoot).filePath(QStringLiteral("packages"))}, projectRoot);
+    check(locations.packageRoots == QStringList{QDir(projectRoot).filePath(QStringLiteral("packages"))},
+          QStringLiteral("explicit Package roots use the shared runtime resolver"));
+    check(locations.defaultOutputRoot == QDir(projectRoot).filePath(QStringLiteral("output")),
+          QStringLiteral("default output root comes from the shared runtime resolver"));
+
     FinepaperApplication finepaper;
     const QVector<Diagnostic> packageDiagnostics = finepaper.reloadPackages(
         QStringList{QDir(projectRoot).filePath(QStringLiteral("packages"))});
@@ -178,6 +186,17 @@ int main(int argc, char** argv) {
         check(complexGeneration.artifacts.size() == 1 && complexGeneration.artifacts.at(0).primary,
               QStringLiteral("complex Generator returns a contained primary artifact"));
     }
+
+    FinepaperApplication multiPackageApplication;
+    const QVector<Diagnostic> multiPackageDiagnostics = multiPackageApplication.reloadPackages(
+        QStringList{
+            QDir(projectRoot).filePath(QStringLiteral("packages")),
+            QDir(projectRoot).filePath(QStringLiteral("tests/fixtures"))
+        });
+    check(!hasErrors(multiPackageDiagnostics),
+          QStringLiteral("multiple Package roots load without a shared build step"));
+    check(multiPackageApplication.packages().size() == 2,
+          QStringLiteral("catalog exposes simple and Engine-backed Packages together"));
 
 #ifdef Q_OS_UNIX
     QTemporaryDir processOutput(QStringLiteral("/tmp/finepaper-process-test-XXXXXX"));

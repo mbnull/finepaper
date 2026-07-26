@@ -1,6 +1,8 @@
 #pragma once
 
 #include "application/application.h"
+#include "application/runtime_settings.h"
+#include "gui/workspace_pages.h"
 
 #include <QJsonValue>
 #include <QMainWindow>
@@ -26,7 +28,7 @@ namespace finepaper {
 
 class FinepaperMainWindow final : public QMainWindow {
 public:
-    explicit FinepaperMainWindow(QStringList packageRoots, QWidget* parent = nullptr);
+    explicit FinepaperMainWindow(RuntimeLocations locations, QWidget* parent = nullptr);
 
 private:
     struct ParameterControl {
@@ -37,6 +39,8 @@ private:
     void createUi();
     void reloadPackages();
     void updateStartPackages();
+    void updateStartMeshBounds();
+    void showPage(WorkspacePage page);
     void createDesign();
     void openDesign();
     void saveDesign();
@@ -62,7 +66,7 @@ private:
     QJsonValue valueFromControl(const ParameterControl& control) const;
 
     FinepaperApplication m_application;
-    QStringList m_packageRoots;
+    RuntimeLocations m_locations;
     std::optional<NocDesign> m_design;
     QString m_designPath;
     QVector<ParameterControl> m_parameterControls;

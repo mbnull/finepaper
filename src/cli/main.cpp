@@ -1,4 +1,5 @@
 #include "application/application.h"
+#include "application/runtime_settings.h"
 #include "package/package.h"
 #include "storage/json.h"
 
@@ -47,17 +48,7 @@ bool hasOption(const QStringList& arguments, const QString& option) {
 }
 
 QStringList packageRoots(const QStringList& arguments) {
-    QStringList roots = optionValues(arguments, QStringLiteral("--package-root"));
-    if (roots.isEmpty()) {
-        const QString environment = qEnvironmentVariable("FINEPAPER_PACKAGE_PATH");
-        if (!environment.isEmpty()) {
-            roots += environment.split(QDir::listSeparator(), Qt::SkipEmptyParts);
-        }
-    }
-    if (roots.isEmpty()) {
-        roots.append(QDir::current().filePath(QStringLiteral("packages")));
-    }
-    return roots;
+    return resolveRuntimeLocations(optionValues(arguments, QStringLiteral("--package-root"))).packageRoots;
 }
 
 void printJson(const QJsonObject& object) {
