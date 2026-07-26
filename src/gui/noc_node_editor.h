@@ -38,6 +38,8 @@ public:
     ~NocNodeEditor() override;
 
     void setDesign(const NocDesign* design);
+    bool setRouterVisualPosition(const QString& routerId, QPointF position);
+    std::optional<QPointF> routerVisualPosition(const QString& routerId) const;
     void zoomToFit();
 
     std::function<void(const QString&, RouterPosition)> endpointTypeDropped;
@@ -52,7 +54,9 @@ private:
         QPointF projectedPosition;
     };
 
-    void rebuildGraph();
+    void rebuildGraph(bool zoomToContents = true);
+    void loadRouterLayout();
+    void saveRouterLayout() const;
     void handleNodeSelection(QtNodes::NodeId nodeId);
     void handlePointerReleased();
     bool handleEndpointDrop(const QString& endpointType, const QPoint& viewportPosition);
@@ -66,6 +70,8 @@ private:
     QtNodes::GraphicsView* m_view = nullptr;
     QHash<QtNodes::NodeId, NodeMetadata> m_metadata;
     QHash<QString, QtNodes::NodeId> m_routerNodes;
+    QHash<QString, QPointF> m_routerLayout;
+    QString m_layoutKey;
 };
 
 } // namespace finepaper

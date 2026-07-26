@@ -1105,12 +1105,14 @@ Activity Bar 始终保留一组紧凑图标，用于独立收折或展开左侧 
 NodeEditor 负责直接操作 NoC，而不是承载通用 IP 图编辑器：
 
 - Mesh Router 和 Router Link 从 `TopologyProjection` 派生并在画布上稳定显示；
+- Router 的 Mesh 身份与连接关系固定，但其画布位置允许用户拖动调整；位置只保存到本机 Workspace 布局，不写入 `NocDesign`；
 - Router 与 Router Link 不可任意创建、删除或连接；
 - Endpoint Palette 中的类型可拖到 Router，映射为 `FinepaperApplication::addEndpoint`；
 - 已有 Endpoint 可从一个 Router 拖到另一个 Router，映射为 `moveEndpoint`；
 - 选择 Endpoint 或 Router 会驱动右侧 Inspector；
 - 右键菜单仅提供当前 NoC 语义允许的动作，例如添加、移除、移动 Endpoint；
-- 画布支持缩放、平移、框选、自动布局/聚焦和多 Dock 工作流；
+- 节点使用无圆角方块显示，Router Link 和 Endpoint 挂载线使用水平/垂直直角折线，不使用贝塞尔曲线；
+- 画布支持缩放、平移、框选、Router 摆放、自动布局/聚焦和多 Dock 工作流；
 - NodeEditor 不保存第二份 Graph，也不允许 Endpoint-to-Endpoint 任意连线。
 
 可复用已有 NodeEditor/QtNodes 的画布、拖拽、缩放、选择和布局能力；不复用其旧的通用 `Graph`、`Module`、任意 Port 连线或 connection-rule 业务绑定。新 NodeEditor 是 `NocDesign` 的专用投影和手势适配器。

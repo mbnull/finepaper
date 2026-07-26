@@ -1,4 +1,5 @@
 #include "gui/main_window.h"
+#include "gui/noc_editor_style.h"
 #include "gui/noc_node_editor.h"
 #include "gui/workbench_config.h"
 
@@ -17,6 +18,9 @@
 #include <QTemporaryDir>
 #include <QTextStream>
 #include <QToolBar>
+
+#include <QtNodes/AbstractGraphModel>
+#include <QtNodes/internal/NodeGraphicsObject.hpp>
 
 namespace {
 
@@ -162,6 +166,45 @@ int main(int argc, char** argv) {
     check(graphicsView && graphicsView->scene() && !graphicsView->scene()->items().isEmpty(),
           QStringLiteral("created Mesh is projected into the QtNodes editor"));
 
+    const QPainterPath orthogonalPath = finepaper::orthogonalConnectionPath(
+        QPointF(0.0, 0.0), QPointF(120.0, 80.0));
+    check(orthogonalPath.elementCount() == 4,
+          QStringLiteral("NoC connections use a three-segment orthogonal route"));
+    bool containsBezierCurve = false;
+    for (int index = 0; index < orthogonalPath.elementCount(); ++index) {
+        const QPainterPath::Element element = orthogonalPath.elementAt(index);
+        containsBezierCurve = containsBezierCurve
+            || element.type == QPainterPath::CurveToElement
+            || element.type == QPainterPath::CurveToDataElement;
+    }
+    check(!containsBezierCurve,
+          QStringLiteral("NoC connection routing contains no Bezier curve elements"));
+
+    QtNodes::NodeGraphicsObject* routerNode = nullptr;
+    if (graphicsView && graphicsView->scene()) {
+        for (QGraphicsItem* item : graphicsView->scene()->items()) {
+            auto* node = qgraphicsitem_cast<QtNodes::NodeGraphicsObject*>(item);
+            if (node && node->graphModel().nodeData(
+                            node->nodeId(), QtNodes::NodeRole::Caption).toString()
+                            == QStringLiteral("r-0-0")) {
+                routerNode = node;
+                break;
+            }
+        }
+    }
+    check(routerNode
+              && !routerNode->graphModel().nodeFlags(routerNode->nodeId())
+                      .testFlag(QtNodes::NodeFlag::Locked),
+          QStringLiteral("Router nodes are draggable rather than locked"));
+    const QPointF movedRouterPosition(525.0, 415.0);
+    check(nodeEditor
+              && nodeEditor->setRouterVisualPosition(
+                  QStringLiteral("r-0-0"), movedRouterPosition),
+          QStringLiteral("Router visual position can be changed without editing topology"));
+    check(nodeEditor && nodeEditor->routerVisualPosition(QStringLiteral("r-0-0"))
+                            == std::optional<QPointF>(movedRouterPosition),
+          QStringLiteral("Router remains at its user-arranged workspace position"));
+
     const qsizetype itemsBeforeEndpoint = graphicsView && graphicsView->scene()
         ? graphicsView->scene()->items().size() : 0;
     if (nodeEditor && nodeEditor->endpointTypeDropped) {
@@ -213,6 +256,19 @@ int main(int argc, char** argv) {
         finepaper::workbench::packageDockName);
     check(restoredPackageDock && !restoredPackageDock->isVisible(),
           QStringLiteral("collapsed panel state is restored in the next workbench session"));
+    auto* restoredCreateButton = restoredWindow.findChild<QPushButton*>(
+        QStringLiteral("finepaper.createDesign"));
+    if (restoredCreateButton) {
+        restoredCreateButton->click();
+        application.processEvents();
+    }
+    auto* restoredEditorWidget = restoredWindow.findChild<QWidget*>(
+        QStringLiteral("finepaper.nodeEditor"));
+    auto* restoredNodeEditor = dynamic_cast<finepaper::NocNodeEditor*>(restoredEditorWidget);
+    check(restoredNodeEditor
+              && restoredNodeEditor->routerVisualPosition(QStringLiteral("r-0-0"))
+                     == std::optional<QPointF>(movedRouterPosition),
+          QStringLiteral("Router workspace placement is restored in the next session"));
     restoredWindow.close();
 
     QTextStream(stdout) << (failures == 0 ? "finepaper-gui-smoke passed"

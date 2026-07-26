@@ -11,6 +11,7 @@ inline const QString geometrySetting = QStringLiteral("workbench/geometry");
 inline const QString windowStateSetting = QStringLiteral("workbench/windowState");
 inline const QString centerViewSetting = QStringLiteral("workbench/centerView");
 inline const QString resultTabSetting = QStringLiteral("workbench/resultTab");
+inline const QString routerLayoutsSetting = QStringLiteral("workbench/routerLayouts");
 
 inline const QString packageDockName = QStringLiteral("finepaper.packageDock");
 inline const QString inspectorDockName = QStringLiteral("finepaper.inspectorDock");
