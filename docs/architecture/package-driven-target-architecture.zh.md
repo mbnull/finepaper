@@ -1108,20 +1108,20 @@ Activity Bar 始终保留一组紧凑图标，用于独立收折或展开左侧 
 NodeEditor 负责直接操作 NoC，而不是承载通用 IP 图编辑器：
 
 - Mesh Router 和 Router Link 从 `TopologyProjection` 派生并在画布上稳定显示；
-- Router 使用可展开/收起的方形设备外观，并明确显示 North、East、South、West 四个拓扑方向端口；Mesh 链路分别从 East→West、South→North 连接，不使用无方向含义的通用连线；
-- Router 的 Mesh 身份与连接关系固定，但其画布位置允许用户自由拖动调整；位置与收起状态只保存到本机 Workspace 布局，不写入 `NocDesign`；
+- Router 使用可展开/收起的方形设备外观，并明确显示 North、East、South、West 四个拓扑方向端口；新设计默认以收起状态打开，Mesh 链路分别从 East→West、South→North 连接，不使用无方向含义的通用连线；
+- Router 的 Mesh 身份与连接关系固定，但其画布位置允许用户自由拖动调整；位置与收起状态只保存到本机 Workspace 布局，不写入 `NocDesign`；工具栏提供“规整化布局”，按 N×M 派生位置重排 Router 与 Endpoint，而不是只缩放视图；
 - Router 与 Router Link 不可任意创建、删除或连接；
 - Endpoint Palette 中的类型既可直接拖到 Router 完成立即创建和挂载，也可拖到画布空白处形成“未挂载 Endpoint”工作区草稿；草稿不是 `NocDesign` 的第二事实源，只有把节点拖到 Router 主体或从菜单选择 Router 后才调用 `FinepaperApplication::addEndpoint` 并成为持久设计事实；
-- Endpoint 使用独立 EP 挂载端口，不占用 North/East/South/West 拓扑端口，但这些端口只负责表达和绘制连接，不作为要求精准命中的人工交互控件。NodeEditor 禁止从任何端口手工拉线，Router-to-Router、Endpoint-to-Endpoint 和任意端口连线均被拒绝；
+- Endpoint 使用独立 EP 挂载端口，不占用 North/East/South/West 拓扑端口。只有 Endpoint EP 与 Router EP 可以作为人工拖线起点；释放到对应 EP 或目标节点主体都会映射为 Endpoint→Router 挂载。North/East/South/West 始终只是派生 Mesh 链路的显示方向，不能手工拖线、创建或删除。Router-to-Router 和 Endpoint-to-Endpoint 的任意人工连线均被拒绝；
 - 已有 Endpoint 的画布位置可以自由调整且不改变挂载关系；只有将 Endpoint 节点主体拖到另一个 Router 主体，或从右键菜单选择目标 Router，才映射为 `moveEndpoint`；Endpoint 画布位置与 Router 画布位置一样属于本机 Workspace 布局，不写入 `NocDesign`；
 - `explicit` slot Package 在新增或移动 Endpoint 时要求用户选择目标 Router 上的空闲挂载位；`automatic` 模式不弹出该选择；
-- 选择 Endpoint 或 Router 会驱动右侧 Inspector，并高亮与该节点直接相连的线和一跳邻接节点；
+- 选择 Endpoint 或 Router 会驱动右侧 Inspector，并高亮与该节点直接相连的线和一跳邻接节点；节点拖动、自由摆放、重建投影和规整化不会取消该选择，只有选择另一节点或点击画布空白处才会改变选择；
 - 画布空白处右键可创建未挂载 Endpoint；Router 右键菜单可按 Package 类型添加 Endpoint；Endpoint 右键菜单可连接/移动到指定 Router 或删除。右侧 Inspector 只展示选择对象的属性与参数，不放置挂载、连线或删除工具。创建和修改仍通过共享应用层执行，只有未挂载草稿及节点画布位置属于 GUI Workspace 状态；
 - 节点使用无圆角方块显示，Router Link 和 Endpoint 挂载线使用水平/垂直直角折线，不使用贝塞尔曲线；
-- 画布支持缩放、平移、框选、Router 摆放、自动布局/聚焦和多 Dock 工作流；
+- 从 Endpoint Palette 拖入时，画布显示复用的动态拖放辅助层，明确提示当前将挂载到 Router 或作为自由草稿放置；画布支持缩放、平移、框选、Router 摆放、规整化布局/聚焦和多 Dock 工作流；
 - NodeEditor 不保存第二份 Graph，也不允许 Endpoint-to-Endpoint 任意连线。
 
-可复用已有 NodeEditor/QtNodes 的画布、拖拽、缩放、选择和布局能力；不复用其旧的通用 `Graph`、`Module`、任意 Port 连线或 connection-rule 业务绑定。新 NodeEditor 是 `NocDesign` 的专用投影和手势适配器。
+可直接复用原有 NodeEditor 的独立画布能力，包括动态拖放辅助、拖拽、缩放、选择和布局；不复用其旧的通用 `Graph`、`Module`、任意 Port 连线或 connection-rule 业务绑定。新 NodeEditor 是 `NocDesign` 的专用投影和手势适配器。
 
 ### 18.2 创建流程
 

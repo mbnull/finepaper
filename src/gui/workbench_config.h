@@ -30,6 +30,7 @@ inline const QString connectRouterMenuName = QStringLiteral("finepaper.connectRo
 inline const QString packageToggleActionName = QStringLiteral("finepaper.togglePackagePanel");
 inline const QString inspectorToggleActionName = QStringLiteral("finepaper.toggleInspectorPanel");
 inline const QString resultsToggleActionName = QStringLiteral("finepaper.toggleResultsPanel");
+inline const QString regularizeActionName = QStringLiteral("finepaper.regularizeLayout");
 
 inline const QString editorViewId = QStringLiteral("noc-editor");
 inline const QString performanceViewId = QStringLiteral("performance-analysis");

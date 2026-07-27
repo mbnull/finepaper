@@ -435,6 +435,13 @@ void FinepaperMainWindow::createActions() {
     validateAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+V")));
     auto* generateAction = new QAction(QStringLiteral("Generate RTL"), this);
     generateAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+G")));
+    auto* regularizeAction = new QAction(
+        style()->standardIcon(QStyle::SP_BrowserReload),
+        QStringLiteral("Regularize Layout"), this);
+    regularizeAction->setObjectName(workbench::regularizeActionName);
+    regularizeAction->setShortcut(QKeySequence(QStringLiteral("R")));
+    regularizeAction->setStatusTip(
+        QStringLiteral("Restore Router and Endpoint positions to the topology layout"));
     auto* fitAction = new QAction(QStringLiteral("Fit NoC in View"), this);
     fitAction->setShortcut(QKeySequence(QStringLiteral("F")));
 
@@ -445,6 +452,8 @@ void FinepaperMainWindow::createActions() {
     connect(reloadAction, &QAction::triggered, this, &FinepaperMainWindow::reloadPackages);
     connect(validateAction, &QAction::triggered, this, &FinepaperMainWindow::validateDesign);
     connect(generateAction, &QAction::triggered, this, &FinepaperMainWindow::generateDesign);
+    connect(regularizeAction, &QAction::triggered,
+            m_nodeEditor, &NocNodeEditor::regularizeLayout);
     connect(fitAction, &QAction::triggered, m_nodeEditor, &NocNodeEditor::zoomToFit);
 
     QAction* packagePanelAction = m_packageDock->toggleViewAction();
@@ -504,6 +513,7 @@ void FinepaperMainWindow::createActions() {
     panelsMenu->addAction(inspectorPanelAction);
     panelsMenu->addAction(resultsPanelAction);
     viewMenu->addSeparator();
+    viewMenu->addAction(regularizeAction);
     viewMenu->addAction(fitAction);
     connect(m_centerViews, &QTabWidget::currentChanged, this, [this, viewGroup](int index) {
         Q_UNUSED(index);
@@ -523,7 +533,7 @@ void FinepaperMainWindow::createActions() {
     toolbar->addAction(validateAction);
     toolbar->addAction(generateAction);
     toolbar->addSeparator();
-    toolbar->addAction(fitAction);
+    toolbar->addAction(regularizeAction);
 
     QToolBar* activityBar = new QToolBar(QStringLiteral("Workbench Panels"), this);
     activityBar->setObjectName(workbench::activityBarName);

@@ -13,16 +13,20 @@
 #include <optional>
 
 namespace QtNodes {
+class ConnectionGraphicsObject;
 class DataFlowGraphModel;
 class DataFlowGraphicsScene;
-class GraphicsView;
 class NodeDelegateModelRegistry;
+struct ConnectionId;
 using NodeId = unsigned int;
 }
 
 class QEvent;
+class QGraphicsPathItem;
 
 namespace finepaper {
+
+class AnimatedGraphicsView;
 
 struct NocEditorSelection {
     enum class Kind {
@@ -54,6 +58,7 @@ public:
     std::optional<QPointF> endpointVisualPosition(const QString& endpointId) const;
     bool setRouterCollapsed(const QString& routerId, bool collapsed);
     bool routerCollapsed(const QString& routerId) const;
+    void regularizeLayout();
     void zoomToFit();
 
     std::function<bool(const QString&, RouterPosition)> endpointTypeDropped;
@@ -79,11 +84,25 @@ private:
         QPointF scenePosition;
     };
 
+    struct RouterEndpointDraft {
+        QtNodes::NodeId routerNode = 0;
+        RouterPosition router;
+        QPointF startScenePosition;
+        QGraphicsPathItem* graphicsItem = nullptr;
+    };
+
     void rebuildGraph(bool zoomToContents = true);
     void loadWorkspaceLayout();
     void saveWorkspaceLayout() const;
     void handleNodeSelection(QtNodes::NodeId nodeId);
     void handlePointerReleased(const QPoint& viewportPosition);
+    void handleConnectionCreated(QtNodes::ConnectionId connectionId);
+    bool tryCompleteDraftConnection(const QPoint& viewportPosition);
+    QtNodes::ConnectionGraphicsObject* findDraftConnection() const;
+    bool beginRouterEndpointDraft(const QPoint& viewportPosition);
+    void updateRouterEndpointDraft(const QPoint& viewportPosition);
+    bool completeRouterEndpointDraft(const QPoint& viewportPosition);
+    void clearRouterEndpointDraft();
     bool handleEndpointDrop(const QString& endpointType, const QPoint& viewportPosition);
     void addPendingEndpoint(const QString& endpointType, QPointF scenePosition);
     bool attachNodeToRouter(QtNodes::NodeId nodeId, RouterPosition router);
@@ -92,7 +111,12 @@ private:
     void showNodeContextMenu(QtNodes::NodeId nodeId, const QPoint& globalPosition);
     std::optional<RouterPosition> routerAt(const QPointF& scenePosition) const;
     std::optional<QtNodes::NodeId> nodeAt(const QPoint& viewportPosition) const;
-    bool portAt(const QPoint& viewportPosition) const;
+    std::optional<QtNodes::NodeId> nodeAtScene(
+        const QPointF& scenePosition,
+        std::optional<QtNodes::NodeId> ignoredNode = std::nullopt) const;
+    bool blockedPortAt(const QPoint& viewportPosition) const;
+    QString endpointTypeLabel(const QString& endpointType) const;
+    void restoreSelection();
     void highlightNeighborhood(QtNodes::NodeId nodeId);
     void clearNeighborhoodHighlight();
 
@@ -100,7 +124,7 @@ private:
     std::shared_ptr<QtNodes::NodeDelegateModelRegistry> m_registry;
     std::unique_ptr<QtNodes::DataFlowGraphModel> m_graphModel;
     QtNodes::DataFlowGraphicsScene* m_scene = nullptr;
-    QtNodes::GraphicsView* m_view = nullptr;
+    AnimatedGraphicsView* m_view = nullptr;
     QHash<QtNodes::NodeId, NodeMetadata> m_metadata;
     QHash<QString, QtNodes::NodeId> m_routerNodes;
     QHash<QString, QPointF> m_routerLayout;
@@ -108,7 +132,11 @@ private:
     QSet<QString> m_collapsedRouters;
     QVector<NocEndpointTypeItem> m_endpointTypes;
     QHash<QString, PendingEndpoint> m_pendingEndpoints;
+    std::optional<RouterEndpointDraft> m_routerEndpointDraft;
     int m_nextPendingEndpoint = 0;
+    NocEditorSelection::Kind m_selectedKind = NocEditorSelection::Kind::None;
+    QString m_selectedId;
+    bool m_hasStoredCollapsedLayout = false;
     QString m_layoutKey;
 };
 
