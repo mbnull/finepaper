@@ -12,12 +12,14 @@ inline const QString windowStateSetting = QStringLiteral("workbench/windowState"
 inline const QString centerViewSetting = QStringLiteral("workbench/centerView");
 inline const QString resultTabSetting = QStringLiteral("workbench/resultTab");
 inline const QString routerLayoutsSetting = QStringLiteral("workbench/routerLayouts");
+inline const QString endpointLayoutsSetting = QStringLiteral("workbench/endpointLayouts");
 inline const QString collapsedRoutersSetting = QStringLiteral("workbench/collapsedRouters");
 
 inline const QString packageDockName = QStringLiteral("finepaper.packageDock");
 inline const QString inspectorDockName = QStringLiteral("finepaper.inspectorDock");
 inline const QString resultsDockName = QStringLiteral("finepaper.resultsDock");
 inline const QString activityBarName = QStringLiteral("finepaper.activityBar");
+inline const QString selectionInspectorName = QStringLiteral("finepaper.selectionInspector");
 inline const QString endpointContextMenuName = QStringLiteral("finepaper.endpointContextMenu");
 inline const QString deleteEndpointActionName = QStringLiteral("finepaper.deleteEndpointAction");
 inline const QString routerContextMenuName = QStringLiteral("finepaper.routerContextMenu");

@@ -66,10 +66,8 @@ private:
     void validateDesign();
     void generateDesign();
     bool addEndpoint(const QString& endpointType, RouterPosition router);
-    void showEndpointAttachmentMenu(RouterPosition router);
     bool moveEndpoint(const QString& endpointId, RouterPosition router);
     void removeEndpoint(const QString& endpointId);
-    void removeSelectedEndpoint();
     void applyParameters();
     void updateInspector(const NocEditorSelection& selection);
     void adoptDesignResult(const DesignResult& result, const QString& action);
@@ -95,7 +93,6 @@ private:
     RuntimeLocations m_locations;
     std::optional<NocDesign> m_design;
     QString m_designPath;
-    QString m_selectedEndpointId;
     std::optional<RouterPosition> m_selectedRouter;
     QVector<ParameterControl> m_parameterControls;
 
@@ -115,7 +112,6 @@ private:
     QDockWidget* m_inspectorDock = nullptr;
     QLabel* m_designOverview = nullptr;
     QLabel* m_selectionSummary = nullptr;
-    QPushButton* m_attachEndpoint = nullptr;
     QFormLayout* m_parameterForm = nullptr;
 
     QDockWidget* m_resultsDock = nullptr;
