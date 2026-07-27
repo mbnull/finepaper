@@ -5,6 +5,8 @@
 #include "app/startupflow.h"
 #include "app/uiscale.h"
 #include <QApplication>
+#include <QPixmap>
+#include <QTimer>
 #include <QDir>
 #include <QFile>
 #include <QMessageLogContext>
@@ -107,5 +109,15 @@ int main(int argc, char *argv[]) {
     }
 
     w.show();
+
+    if (qgetenv("FINEPAPER_SCREENSHOT") == "1") {
+        QTimer::singleShot(3000, [&]() {
+            QPixmap pixmap = w.grab();
+            pixmap.save("/tmp/finepaper_ui.png");
+            fprintf(stderr, "Screenshot saved to /tmp/finepaper_ui.png\n");
+            a.quit();
+        });
+    }
+
     return a.exec();
 }

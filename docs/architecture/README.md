@@ -6,6 +6,7 @@
 
 | 文档 | 作用 |
 |------|------|
+| `package-driven-target-architecture.zh.md` | 全新 NoC 软件目标架构：运行时 Package、通用 NoC 模型、可选 IP Engine，以及 GUI/CLI/API 共享应用层。 |
 | `current-architecture-design-report.zh.md` | 汇报型总览：当前架构定位、分层、核心模型和主要流程。 |
 | `internal-architecture-report.zh.md` | 实现型说明：代码目录、模块职责、内部依赖方向和开发判断准则。 |
 | `v1-core-architecture.md` | 公开架构契约：schema、CLI、diagnostics、security、migration 和 audit contract。 |
@@ -14,6 +15,8 @@
 | `plugin-architecture-completion-report.md` | 最终完成报告：hard cutoff verdict、Phases 2-10、三类 IP、V1 schema、qt-cpp-review、最终验证和残余风险。 |
 | `v1-refactor-overview.zh.md` | 重构总览：为什么从 Graph-centric 架构切换到 project/package contract 架构。 |
 | `ipcraft-architecture-deletion-map.md` | 删除与适配边界：哪些旧概念要 delete、replace 或 adapter only。 |
+
+`package-driven-target-architecture.zh.md` 是当前全新软件方向的目标架构讨论基线；其余文档主要描述当前 V1 实现、现有公开契约和历史迁移边界，不作为新架构必须继承的设计约束。
 
 ## 当前架构口径
 
