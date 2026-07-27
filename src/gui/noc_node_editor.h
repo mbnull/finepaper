@@ -46,6 +46,13 @@ struct NocEndpointTypeItem {
     QString label;
 };
 
+struct NocRouterAttachmentPortItem {
+    QString id;
+    QString label;
+
+    bool operator==(const NocRouterAttachmentPortItem&) const = default;
+};
+
 class NocNodeEditor final : public QWidget {
 public:
     explicit NocNodeEditor(QWidget* parent = nullptr);
@@ -53,6 +60,7 @@ public:
 
     void setDesign(const NocDesign* design);
     void setEndpointTypes(QVector<NocEndpointTypeItem> endpointTypes);
+    void setRouterAttachmentPorts(QVector<NocRouterAttachmentPortItem> ports);
     bool setRouterVisualPosition(const QString& routerId, QPointF position);
     std::optional<QPointF> routerVisualPosition(const QString& routerId) const;
     std::optional<QPointF> endpointVisualPosition(const QString& endpointId) const;
@@ -63,6 +71,7 @@ public:
 
     std::function<bool(const QString&, RouterPosition)> endpointTypeDropped;
     std::function<bool(const QString&, RouterPosition)> endpointMoveRequested;
+    std::function<bool(const EndpointInstance&, RouterPosition)> detachedEndpointDropped;
     std::function<void(const QString&)> endpointRemovalRequested;
     std::function<void(const NocEditorSelection&)> selectionChanged;
 
@@ -82,11 +91,19 @@ private:
         QString id;
         QString type;
         QPointF scenePosition;
+        std::optional<EndpointInstance> detachedEndpoint;
     };
 
     struct RouterEndpointDraft {
         QtNodes::NodeId routerNode = 0;
         RouterPosition router;
+        unsigned int portIndex = 0;
+        QPointF startScenePosition;
+        QGraphicsPathItem* graphicsItem = nullptr;
+    };
+
+    struct EndpointAttachmentDraft {
+        QtNodes::NodeId endpointNode = 0;
         QPointF startScenePosition;
         QGraphicsPathItem* graphicsItem = nullptr;
     };
@@ -103,9 +120,14 @@ private:
     void updateRouterEndpointDraft(const QPoint& viewportPosition);
     bool completeRouterEndpointDraft(const QPoint& viewportPosition);
     void clearRouterEndpointDraft();
+    bool beginEndpointAttachmentDraft(const QPoint& viewportPosition);
+    void updateEndpointAttachmentDraft(const QPoint& viewportPosition);
+    bool completeEndpointAttachmentDraft(const QPoint& viewportPosition);
+    void clearEndpointAttachmentDraft();
     bool handleEndpointDrop(const QString& endpointType, const QPoint& viewportPosition);
     void addPendingEndpoint(const QString& endpointType, QPointF scenePosition);
     bool attachNodeToRouter(QtNodes::NodeId nodeId, RouterPosition router);
+    void detachEndpoint(QtNodes::NodeId nodeId);
     void showContextMenu(const QPoint& viewportPosition, const QPoint& globalPosition);
     void showCanvasCreateMenu(QPointF scenePosition, const QPoint& globalPosition);
     void showNodeContextMenu(QtNodes::NodeId nodeId, const QPoint& globalPosition);
@@ -115,6 +137,13 @@ private:
         const QPointF& scenePosition,
         std::optional<QtNodes::NodeId> ignoredNode = std::nullopt) const;
     bool blockedPortAt(const QPoint& viewportPosition) const;
+    bool isRouterAttachmentPort(unsigned int portIndex) const;
+    bool attachmentPortAvailable(QtNodes::NodeId routerNode,
+                                 unsigned int portIndex,
+                                 std::optional<QtNodes::NodeId> ignoredEndpoint = std::nullopt) const;
+    std::optional<unsigned int> firstAvailableAttachmentPort(
+        QtNodes::NodeId routerNode,
+        std::optional<QtNodes::NodeId> ignoredEndpoint = std::nullopt) const;
     QString endpointTypeLabel(const QString& endpointType) const;
     void restoreSelection();
     void highlightNeighborhood(QtNodes::NodeId nodeId);
@@ -131,8 +160,11 @@ private:
     QHash<QString, QPointF> m_endpointLayout;
     QSet<QString> m_collapsedRouters;
     QVector<NocEndpointTypeItem> m_endpointTypes;
+    QVector<NocRouterAttachmentPortItem> m_routerAttachmentPorts{{
+        QStringLiteral("0"), QStringLiteral("EP")}};
     QHash<QString, PendingEndpoint> m_pendingEndpoints;
     std::optional<RouterEndpointDraft> m_routerEndpointDraft;
+    std::optional<EndpointAttachmentDraft> m_endpointAttachmentDraft;
     int m_nextPendingEndpoint = 0;
     NocEditorSelection::Kind m_selectedKind = NocEditorSelection::Kind::None;
     QString m_selectedId;

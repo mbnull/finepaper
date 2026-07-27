@@ -212,6 +212,23 @@ void FinepaperMainWindow::createCentralViews() {
                                                   RouterPosition router) {
         return moveEndpoint(endpointId, router);
     };
+    m_nodeEditor->detachedEndpointDropped = [this](const EndpointInstance& detached,
+                                                    RouterPosition router) {
+        if (!m_design) {
+            return false;
+        }
+        const AttachmentSlotChoice slotChoice = chooseAttachmentSlot(router);
+        if (!slotChoice.accepted) {
+            return false;
+        }
+        EndpointInstance endpoint = detached;
+        endpoint.attachment.router = router;
+        endpoint.attachment.slot = slotChoice.slot;
+        const DesignResult result = m_application.addEndpoint(*m_design, endpoint);
+        adoptDesignResult(result,
+                          QStringLiteral("Reconnect Endpoint %1").arg(endpoint.id));
+        return result.success;
+    };
     m_nodeEditor->endpointRemovalRequested = [this](const QString& endpointId) {
         removeEndpoint(endpointId);
     };
@@ -680,9 +697,28 @@ void FinepaperMainWindow::updateEndpointPalette() {
     }
     if (!package) {
         m_nodeEditor->setEndpointTypes({});
+        m_nodeEditor->setRouterAttachmentPorts({});
         return;
     }
     QVector<NocEndpointTypeItem> editorTypes;
+    QVector<NocRouterAttachmentPortItem> attachmentPorts;
+    if (package->attachment.slotMode == QStringLiteral("explicit")
+        && !package->attachment.positions.isEmpty()) {
+        attachmentPorts.reserve(package->attachment.positions.size());
+        for (const AttachmentSlotDefinition& slot : package->attachment.positions) {
+            attachmentPorts.append({slot.id,
+                                    slot.label.trimmed().isEmpty() ? slot.id : slot.label});
+        }
+    } else {
+        attachmentPorts.reserve(package->attachment.maxPerRouter);
+        for (int index = 0; index < package->attachment.maxPerRouter; ++index) {
+            const QString id = QString::number(index);
+            attachmentPorts.append({id,
+                                    package->attachment.maxPerRouter == 1
+                                        ? QStringLiteral("EP")
+                                        : QStringLiteral("EP%1").arg(index)});
+        }
+    }
     editorTypes.reserve(package->endpointTypes.size());
     for (const EndpointTypeDefinition& type : package->endpointTypes) {
         auto* item = new QListWidgetItem(type.label, m_endpointPalette);
@@ -694,6 +730,7 @@ void FinepaperMainWindow::updateEndpointPalette() {
         editorTypes.append({type.id, type.label});
     }
     m_nodeEditor->setEndpointTypes(std::move(editorTypes));
+    m_nodeEditor->setRouterAttachmentPorts(std::move(attachmentPorts));
 }
 
 const PackageDefinition* FinepaperMainWindow::selectedPackage() const {
