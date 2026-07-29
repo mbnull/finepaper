@@ -264,10 +264,40 @@ int main(int argc, char** argv) {
           QStringLiteral("manually added Package roots merge centrally without duplicates"));
 
     FinepaperApplication finepaper;
+    const QString bundledPackageRoot = QDir(projectRoot).filePath(
+        QStringLiteral("packages"));
+    const QString bundledPackagePath = QDir(projectRoot).filePath(
+        QStringLiteral("packages/finepaper-noc"));
     const QVector<Diagnostic> packageDiagnostics = finepaper.reloadPackages(
-        QStringList{QDir(projectRoot).filePath(QStringLiteral("packages"))});
+        QStringList{bundledPackageRoot});
     check(!hasErrors(packageDiagnostics), QStringLiteral("reference Package loads"));
     check(finepaper.packages().size() == 1, QStringLiteral("exactly one reference Package loads"));
+
+    QTemporaryDir duplicatePackageFixture(
+        QStringLiteral("/tmp/finepaper-duplicate-package-XXXXXX"));
+    check(referenceManifest.success && duplicatePackageFixture.isValid()
+              && preparePackageFixture(duplicatePackageFixture.path(),
+                                       generatorSource,
+                                       referenceManifest.object),
+          QStringLiteral("duplicate Package fixture is prepared"));
+    if (duplicatePackageFixture.isValid()) {
+        FinepaperApplication resilientCatalog;
+        const QString missingPackageRoot = QDir(duplicatePackageFixture.path()).filePath(
+            QStringLiteral("missing-root"));
+        const QVector<Diagnostic> discoveryDiagnostics = resilientCatalog.reloadPackages(
+            QStringList{bundledPackageRoot,
+                        bundledPackagePath,
+                        duplicatePackageFixture.path(),
+                        missingPackageRoot});
+        check(!hasErrors(discoveryDiagnostics)
+                  && resilientCatalog.packages().size() == 1
+                  && resilientCatalog.packages().at(0).id == QStringLiteral("finepaper.noc")
+                  && hasDiagnosticCode(discoveryDiagnostics,
+                                       QStringLiteral("package.duplicate_ignored"))
+                  && hasDiagnosticCode(discoveryDiagnostics,
+                                       QStringLiteral("package.root_missing")),
+              QStringLiteral("duplicate and missing roots do not hide valid NoC Packages"));
+    }
     if (manifestFixture.isValid()) {
         const QVector<Diagnostic> failedReload = finepaper.reloadPackages(
             QStringList{manifestFixture.path()});

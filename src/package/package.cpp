@@ -3,6 +3,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QHash>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -874,18 +875,22 @@ QVector<Diagnostic> PackageCatalog::reload(const QStringList& roots) {
     QVector<Diagnostic> diagnostics;
     QVector<PackageDefinition> loaded;
     QSet<QString> keys;
+    QSet<QString> discoveredPackagePaths;
+    QHash<QString, QString> packagePathByKey;
+    bool foundUsableRoot = false;
 
     for (const QString& rootValue : roots) {
         const QString rootPath = QDir::cleanPath(QFileInfo(rootValue).absoluteFilePath());
         const QFileInfo rootInfo(rootPath);
         if (!rootInfo.isDir()) {
             appendDiagnostic(diagnostics,
-                             QStringLiteral("error"),
+                             QStringLiteral("warning"),
                              QStringLiteral("package.root_missing"),
-                             QStringLiteral("package root does not exist"),
+                             QStringLiteral("package root does not exist and was skipped"),
                              rootPath);
             continue;
         }
+        foundUsableRoot = true;
 
         QStringList packagePaths;
         if (QFileInfo(QDir(rootPath).filePath(QStringLiteral("package.json"))).isFile()) {
@@ -903,28 +908,51 @@ QVector<Diagnostic> PackageCatalog::reload(const QStringList& roots) {
         }
 
         for (const QString& packagePath : packagePaths) {
-            PackageLoadResult loadResult = loadPackage(packagePath);
+            const QFileInfo packageInfo(packagePath);
+            const QString canonicalPath = packageInfo.canonicalFilePath();
+            const QString canonicalPackagePath = canonicalPath.isEmpty()
+                ? QDir::cleanPath(packageInfo.absoluteFilePath())
+                : canonicalPath;
+            if (discoveredPackagePaths.contains(canonicalPackagePath)) {
+                continue;
+            }
+            discoveredPackagePaths.insert(canonicalPackagePath);
+
+            PackageLoadResult loadResult = loadPackage(canonicalPackagePath);
             diagnostics += loadResult.diagnostics;
             if (!loadResult.success || !loadResult.package) {
                 continue;
             }
             if (keys.contains(loadResult.package->key())) {
                 appendDiagnostic(diagnostics,
-                                 QStringLiteral("error"),
-                                 QStringLiteral("package.duplicate"),
-                                 QStringLiteral("duplicate Package %1").arg(loadResult.package->key()),
-                                 packagePath);
+                                 QStringLiteral("warning"),
+                                 QStringLiteral("package.duplicate_ignored"),
+                                 QStringLiteral("Package %1 from %2 was ignored; the same id and "
+                                                "version are already loaded from %3")
+                                     .arg(loadResult.package->key(),
+                                          canonicalPackagePath,
+                                          packagePathByKey.value(loadResult.package->key())),
+                                 canonicalPackagePath);
                 continue;
             }
             keys.insert(loadResult.package->key());
+            packagePathByKey.insert(loadResult.package->key(), canonicalPackagePath);
             loaded.append(std::move(*loadResult.package));
         }
+    }
+
+    if (!roots.isEmpty() && !foundUsableRoot) {
+        appendDiagnostic(diagnostics,
+                         QStringLiteral("error"),
+                         QStringLiteral("package.no_usable_roots"),
+                         QStringLiteral("none of the configured Package roots are available"),
+                         QString());
     }
 
     std::sort(loaded.begin(), loaded.end(), [](const auto& lhs, const auto& rhs) {
         return lhs.key() < rhs.key();
     });
-    if (!hasErrors(diagnostics)) {
+    if (!hasErrors(diagnostics) && (foundUsableRoot || roots.isEmpty())) {
         m_packages = std::move(loaded);
     }
     return diagnostics;

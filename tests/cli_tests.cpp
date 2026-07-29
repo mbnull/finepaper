@@ -112,6 +112,31 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    const QString missingPackageRoot = QDir(temporaryDirectory.path()).filePath(
+        QStringLiteral("missing-package-root"));
+    const CommandResult packageListResult = runCommand(
+        executable,
+        QStringList{
+            QStringLiteral("package"),
+            QStringLiteral("list"),
+            QStringLiteral("--package-root"),
+            packageRoot,
+            QStringLiteral("--package-root"),
+            QDir(packageRoot).filePath(QStringLiteral("finepaper-noc")),
+            QStringLiteral("--package-root"),
+            missingPackageRoot,
+            QStringLiteral("--json")
+        });
+    const QJsonObject packageList = parseJsonOutput(
+        packageListResult, QStringLiteral("resilient Package list"));
+    check(packageListResult.started && packageListResult.finished
+              && packageListResult.exitStatus == QProcess::NormalExit
+              && packageListResult.exitCode == 0
+              && packageList.value(QStringLiteral("success")).toBool()
+              && packageList.value(QStringLiteral("packages")).toArray().size() == 1
+              && hasDiagnosticCode(packageList, QStringLiteral("package.root_missing")),
+          QStringLiteral("CLI keeps valid Packages selectable when roots overlap or go missing"));
+
     const QString blockingParent = QDir(temporaryDirectory.path()).filePath(
         QStringLiteral("blocking-parent"));
     QFile blockingFile(blockingParent);
