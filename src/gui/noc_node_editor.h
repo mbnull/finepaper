@@ -122,6 +122,8 @@ private:
     void handleNodeSelection(QtNodes::NodeId nodeId);
     void handlePointerReleased(const QPoint& viewportPosition);
     void handleConnectionCreated(QtNodes::ConnectionId connectionId);
+    void handleConnectionDeleted(QtNodes::ConnectionId connectionId);
+    bool isEndpointAttachmentConnection(QtNodes::ConnectionId connectionId) const;
     bool tryCompleteDraftConnection(const QPoint& viewportPosition);
     QtNodes::ConnectionGraphicsObject* findDraftConnection() const;
     bool beginRouterEndpointDraft(const QPoint& viewportPosition);
@@ -135,15 +137,22 @@ private:
     bool handleEndpointDrop(const QString& endpointType, const QPoint& viewportPosition);
     void addPendingEndpoint(const QString& endpointType, QPointF scenePosition);
     bool attachNodeToRouter(QtNodes::NodeId nodeId, NocAttachmentTarget target);
-    void detachEndpoint(QtNodes::NodeId nodeId);
+    bool detachEndpoint(QtNodes::NodeId nodeId,
+                        bool restoreProjectionOnFailure = false);
     void showContextMenu(const QPoint& viewportPosition, const QPoint& globalPosition);
+    void showConnectionContextMenu(QtNodes::ConnectionId connectionId,
+                                   const QPoint& globalPosition);
     void showCanvasCreateMenu(QPointF scenePosition, const QPoint& globalPosition);
     void showNodeContextMenu(QtNodes::NodeId nodeId, const QPoint& globalPosition);
     std::optional<RouterPosition> routerAt(const QPointF& scenePosition) const;
+    std::optional<QtNodes::NodeId> routerNodeAt(
+        const QPointF& scenePosition) const;
     std::optional<QtNodes::NodeId> nodeAt(const QPoint& viewportPosition) const;
     std::optional<QtNodes::NodeId> nodeAtScene(
         const QPointF& scenePosition,
         std::optional<QtNodes::NodeId> ignoredNode = std::nullopt) const;
+    QtNodes::ConnectionGraphicsObject* connectionAt(
+        const QPoint& viewportPosition) const;
     bool blockedPortAt(const QPoint& viewportPosition) const;
     bool isRouterAttachmentPort(unsigned int portIndex) const;
     std::optional<QString> exactSlotForPort(unsigned int portIndex) const;
@@ -174,6 +183,7 @@ private:
     QHash<QString, PendingEndpoint> m_pendingEndpoints;
     std::optional<RouterEndpointDraft> m_routerEndpointDraft;
     std::optional<EndpointAttachmentDraft> m_endpointAttachmentDraft;
+    QSet<QString> m_pendingConnectionDetachments;
     int m_nextPendingEndpoint = 0;
     NocEditorSelection::Kind m_selectedKind = NocEditorSelection::Kind::None;
     QString m_selectedId;
