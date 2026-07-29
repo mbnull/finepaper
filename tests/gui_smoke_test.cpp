@@ -10,6 +10,8 @@
 #include <QComboBox>
 #include <QContextMenuEvent>
 #include <QDir>
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QDockWidget>
 #include <QDoubleSpinBox>
 #include <QDragEnterEvent>
@@ -26,12 +28,15 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QKeyEvent>
+#include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QMenu>
 #include <QMessageBox>
 #include <QMimeData>
 #include <QPushButton>
+#include <QSettings>
+#include <QSpinBox>
 #include <QStatusBar>
 #include <QTabWidget>
 #include <QTableWidget>
@@ -354,8 +359,8 @@ void chooseInputDialogItem(int index) {
     });
 }
 
-void chooseMessageBoxButton(QMessageBox::StandardButton button) {
-    QTimer::singleShot(0, [button] {
+void chooseMessageBoxButton(QMessageBox::StandardButton button, int attempts = 100) {
+    QTimer::singleShot(0, [button, attempts] {
         for (QWidget* widget : QApplication::topLevelWidgets()) {
             auto* messageBox = qobject_cast<QMessageBox*>(widget);
             if (!messageBox) {
@@ -366,7 +371,76 @@ void chooseMessageBoxButton(QMessageBox::StandardButton button) {
             }
             return;
         }
+        if (attempts > 1) {
+            QTimer::singleShot(
+                10, [button, attempts] { chooseMessageBoxButton(button, attempts - 1); });
+        }
     });
+}
+
+void respondToNewDesignDialog(
+    const QString& packageKey = {},
+    const QString& designName = {},
+    std::optional<int> rows = std::nullopt,
+    std::optional<int> columns = std::nullopt,
+    bool accept = true) {
+    QTimer::singleShot(0, [packageKey, designName, rows, columns, accept] {
+        for (QWidget* widget : QApplication::topLevelWidgets()) {
+            auto* dialog = qobject_cast<QDialog*>(widget);
+            if (!dialog
+                || dialog->objectName() != QStringLiteral("finepaper.newDesignDialog")) {
+                continue;
+            }
+            auto* selector = dialog->findChild<QComboBox*>(
+                QStringLiteral("finepaper.newDesignPackageSelector"));
+            check(selector && selector->count() > 0,
+                  QStringLiteral("New NoC Design dialog exposes selectable NoC IP Packages"));
+            if (selector && !packageKey.isEmpty()) {
+                const int index = selector->findData(packageKey);
+                check(index >= 0,
+                      QStringLiteral("requested NoC IP is selectable in the creation dialog"));
+                if (index >= 0) {
+                    selector->setCurrentIndex(index);
+                }
+            }
+            if (auto* name = dialog->findChild<QLineEdit*>(
+                    QStringLiteral("finepaper.newDesignName"));
+                name && !designName.isEmpty()) {
+                name->setText(designName);
+            }
+            if (auto* rowEditor = dialog->findChild<QSpinBox*>(
+                    QStringLiteral("finepaper.newDesignRows"));
+                rowEditor && rows) {
+                rowEditor->setValue(*rows);
+            }
+            if (auto* columnEditor = dialog->findChild<QSpinBox*>(
+                    QStringLiteral("finepaper.newDesignColumns"));
+                columnEditor && columns) {
+                columnEditor->setValue(*columns);
+            }
+            if (auto* buttons = dialog->findChild<QDialogButtonBox*>()) {
+                if (QAbstractButton* button = buttons->button(
+                        accept ? QDialogButtonBox::Ok : QDialogButtonBox::Cancel)) {
+                    button->click();
+                }
+            }
+            return;
+        }
+    });
+}
+
+void createDesignThroughDialog(
+    QWidget& window,
+    const QString& packageKey = {},
+    const QString& designName = {},
+    std::optional<int> rows = std::nullopt,
+    std::optional<int> columns = std::nullopt) {
+    respondToNewDesignDialog(packageKey, designName, rows, columns, true);
+    if (auto* createButton = window.findChild<QPushButton*>(
+            QStringLiteral("finepaper.createDesign"))) {
+        createButton->click();
+    }
+    QApplication::processEvents();
 }
 
 void closeDiscarding(QWidget& window) {
@@ -486,7 +560,14 @@ int main(int argc, char** argv) {
     finepaper::RuntimeLocations locations{
         QStringList{QDir(projectRoot).filePath(QStringLiteral("packages/finepaper-noc"))},
         outputRoot.path()};
+    QSettings pollutedSettings;
+    pollutedSettings.setValue(
+        finepaper::workbench::packageRootsSetting,
+        QStringList{
+            locations.packageRoots.front(),
+            QDir(configRoot.path()).filePath(QStringLiteral("missing-installed-package"))});
     finepaper::FinepaperMainWindow window(locations);
+    pollutedSettings.remove(finepaper::workbench::packageRootsSetting);
     window.show();
     application.processEvents();
 
@@ -573,12 +654,19 @@ int main(int argc, char** argv) {
               QStringLiteral("bottom generation page is present"));
     }
 
-    auto* packageSelector = window.findChild<QComboBox*>(QStringLiteral("finepaper.packageSelector"));
+    auto* activePackage = window.findChild<QLabel*>(
+        QStringLiteral("finepaper.activePackage"));
+    auto* availablePackages = window.findChild<QLabel*>(
+        QStringLiteral("finepaper.availablePackages"));
     auto* endpointPalette = window.findChild<QListWidget*>(QStringLiteral("finepaper.endpointPalette"));
-    check(packageSelector && packageSelector->count() == 1,
-          QStringLiteral("runtime NoC Package is loaded into the workbench"));
-    check(endpointPalette && endpointPalette->count() == 2,
-          QStringLiteral("Package Endpoint types populate the drag palette"));
+    check(availablePackages
+              && availablePackages->text().startsWith(QStringLiteral("1 NoC IP Package")),
+          QStringLiteral("runtime NoC IP availability is summarized in the workbench"));
+    check(activePackage
+              && activePackage->text().contains(QStringLiteral("No design is open")),
+          QStringLiteral("the workbench does not imply an active IP before design creation"));
+    check(endpointPalette && endpointPalette->count() == 0,
+          QStringLiteral("Endpoint types are shown only for the active design Package"));
     QAction* initialSaveAction = actionWithText(window, QStringLiteral("Save"));
     QAction* saveAsAction = actionWithText(window, QStringLiteral("Save As…"));
     QAction* initialValidateAction = actionWithText(
@@ -598,19 +686,20 @@ int main(int argc, char** argv) {
           QStringLiteral("parameter application is disabled without a design"));
 
     auto* createButton = window.findChild<QPushButton*>(QStringLiteral("finepaper.createDesign"));
-    check(createButton != nullptr, QStringLiteral("Mesh create action is available in the Package dock"));
-    if (createButton) {
-        createButton->click();
-        application.processEvents();
-    }
+    check(createButton && createButton->isEnabled(),
+          QStringLiteral("stale or overlapping installed roots do not block NoC IP selection"));
+    createDesignThroughDialog(window, QStringLiteral("finepaper.noc@1.0.0"));
     check(window.isWindowModified(),
           QStringLiteral("creating a design marks the workbench dirty"));
-    check(endpointPalette && endpointPalette->isEnabled()
+    check(activePackage
+              && activePackage->text().contains(QStringLiteral("finepaper.noc@1.0.0"))
+              && endpointPalette && endpointPalette->count() == 2
+              && endpointPalette->isEnabled()
               && initialSaveAction && initialSaveAction->isEnabled()
               && saveAsAction && saveAsAction->isEnabled()
               && initialValidateAction && initialValidateAction->isEnabled()
               && initialGenerateAction && initialGenerateAction->isEnabled(),
-          QStringLiteral("design actions and Endpoint Palette enable for an editable design"));
+          QStringLiteral("active NoC IP, design actions and Endpoint Palette stay aligned"));
     check(applyParameters && applyParameters->isEnabled(),
           QStringLiteral("Package parameters become editable with a design"));
 
@@ -623,8 +712,9 @@ int main(int argc, char** argv) {
         : nullptr;
     check(graphicsView && graphicsView->scene() && !graphicsView->scene()->items().isEmpty(),
           QStringLiteral("created Mesh is projected into the QtNodes editor"));
-    QAction* newAction = actionWithText(window, QStringLiteral("New Mesh…"));
+    QAction* newAction = actionWithText(window, QStringLiteral("New NoC Design…"));
     if (newAction) {
+        respondToNewDesignDialog(QStringLiteral("finepaper.noc@1.0.0"));
         chooseMessageBoxButton(QMessageBox::Cancel);
         newAction->trigger();
         application.processEvents();
@@ -794,20 +884,20 @@ int main(int argc, char** argv) {
     check(draggedRouterPosition
               && QLineF(*draggedRouterPosition, movedRouterPosition).length() < 0.5,
           QStringLiteral("dragging a Router changes its user-arranged workspace position"));
-    auto* designNameInput = window.findChild<QLineEdit*>(
-        QStringLiteral("finepaper.designName"));
-    if (designNameInput) {
-        designNameInput->setFocus();
-        designNameInput->setCursorPosition(designNameInput->text().size());
+    auto* shortcutTextInput = window.findChild<QLineEdit*>(
+        QStringLiteral("finepaper.outputRoot"));
+    if (shortcutTextInput) {
+        shortcutTextInput->setFocus();
+        shortcutTextInput->setCursorPosition(shortcutTextInput->text().size());
         QKeyEvent pressR(QEvent::KeyPress, Qt::Key_R, Qt::NoModifier, QStringLiteral("r"));
         QKeyEvent releaseR(QEvent::KeyRelease, Qt::Key_R, Qt::NoModifier, QStringLiteral("r"));
-        QApplication::sendEvent(designNameInput, &pressR);
-        QApplication::sendEvent(designNameInput, &releaseR);
+        QApplication::sendEvent(shortcutTextInput, &pressR);
+        QApplication::sendEvent(shortcutTextInput, &releaseR);
         application.processEvents();
     }
     const std::optional<QPointF> routerAfterTextInput = nodeEditor
         ? nodeEditor->routerVisualPosition(QStringLiteral("r-0-0")) : std::nullopt;
-    check(designNameInput && designNameInput->text().endsWith(QLatin1Char('r'))
+    check(shortcutTextInput && shortcutTextInput->text().endsWith(QLatin1Char('r'))
               && routerAfterTextInput
               && QLineF(*routerAfterTextInput, movedRouterPosition).length() < 0.5,
           QStringLiteral("single-key canvas shortcuts do not fire while editing text"));
@@ -1370,10 +1460,10 @@ int main(int argc, char** argv) {
           QStringLiteral("collapsed panel state is restored in the next workbench session"));
     auto* restoredCreateButton = restoredWindow.findChild<QPushButton*>(
         QStringLiteral("finepaper.createDesign"));
-    if (restoredCreateButton) {
-        restoredCreateButton->click();
-        application.processEvents();
-    }
+    check(restoredCreateButton != nullptr,
+          QStringLiteral("restored workbench keeps New NoC Design available"));
+    createDesignThroughDialog(
+        restoredWindow, QStringLiteral("finepaper.noc@1.0.0"));
     auto* restoredEditorWidget = restoredWindow.findChild<QWidget*>(
         QStringLiteral("finepaper.nodeEditor"));
     auto* restoredNodeEditor = dynamic_cast<finepaper::NocNodeEditor*>(restoredEditorWidget);
@@ -1393,16 +1483,18 @@ int main(int argc, char** argv) {
     finepaper::FinepaperMainWindow explicitWindow(explicitLocations);
     explicitWindow.show();
     application.processEvents();
-    auto* explicitPackageSelector = explicitWindow.findChild<QComboBox*>(
-        QStringLiteral("finepaper.packageSelector"));
-    check(explicitPackageSelector && explicitPackageSelector->count() == 1,
+    auto* explicitAvailablePackages = explicitWindow.findChild<QLabel*>(
+        QStringLiteral("finepaper.availablePackages"));
+    check(explicitAvailablePackages
+              && explicitAvailablePackages->text().startsWith(
+                  QStringLiteral("1 NoC IP Package")),
           QStringLiteral("explicit-slot Package fixture loads at runtime"));
     auto* explicitCreate = explicitWindow.findChild<QPushButton*>(
         QStringLiteral("finepaper.createDesign"));
-    if (explicitCreate) {
-        explicitCreate->click();
-        application.processEvents();
-    }
+    check(explicitCreate != nullptr,
+          QStringLiteral("explicit-slot workbench can open the creation dialog"));
+    createDesignThroughDialog(
+        explicitWindow, QStringLiteral("test.explicit-slots@1.0.0"));
     auto* explicitEditor = dynamic_cast<finepaper::NocNodeEditor*>(
         explicitWindow.findChild<QWidget*>(QStringLiteral("finepaper.nodeEditor")));
     auto* explicitView = explicitEditor
@@ -1559,6 +1651,61 @@ int main(int argc, char** argv) {
                   standardPackageRoot, numberPackageRoot.path()),
           QStringLiteral("number-parameter Package fixture is created at runtime"));
 
+    finepaper::RuntimeLocations multiPackageLocations{
+        QStringList{standardPackageRoot, numberPackageRoot.path()}, outputRoot.path()};
+    finepaper::FinepaperMainWindow multiPackageWindow(multiPackageLocations);
+    multiPackageWindow.show();
+    application.processEvents();
+    auto* multiAvailablePackages = multiPackageWindow.findChild<QLabel*>(
+        QStringLiteral("finepaper.availablePackages"));
+    auto* multiActivePackage = multiPackageWindow.findChild<QLabel*>(
+        QStringLiteral("finepaper.activePackage"));
+    auto* multiCreate = multiPackageWindow.findChild<QPushButton*>(
+        QStringLiteral("finepaper.createDesign"));
+    check(multiAvailablePackages
+              && multiAvailablePackages->text().startsWith(
+                  QStringLiteral("2 NoC IP Package"))
+              && multiPackageWindow.findChild<QComboBox*>(
+                     QStringLiteral("finepaper.packageSelector")) == nullptr,
+          QStringLiteral("workbench separates Package availability from active design state"));
+    createDesignThroughDialog(
+        multiPackageWindow,
+        QStringLiteral("test.number-parameter@1.0.0"),
+        QStringLiteral("number_design"),
+        3,
+        4);
+    check(multiActivePackage
+              && multiActivePackage->text().contains(
+                  QStringLiteral("test.number-parameter@1.0.0"))
+              && multiPackageWindow.findChild<QDoubleSpinBox*>(
+                  QStringLiteral("finepaper.parameter.frequencyScale")),
+          QStringLiteral("creation dialog selects the NoC IP that owns the active design"));
+
+    respondToNewDesignDialog(
+        QStringLiteral("finepaper.noc@1.0.0"), {}, std::nullopt, std::nullopt, false);
+    if (multiCreate) {
+        multiCreate->click();
+        application.processEvents();
+    }
+    check(multiActivePackage
+              && multiActivePackage->text().contains(
+                  QStringLiteral("test.number-parameter@1.0.0")),
+          QStringLiteral("cancelling creation leaves the active design Package unchanged"));
+
+    respondToNewDesignDialog(QStringLiteral("finepaper.noc@1.0.0"));
+    chooseMessageBoxButton(QMessageBox::Discard);
+    if (multiCreate) {
+        multiCreate->click();
+        application.processEvents();
+    }
+    check(multiActivePackage
+              && multiActivePackage->text().contains(
+                  QStringLiteral("finepaper.noc@1.0.0"))
+              && !multiPackageWindow.findChild<QDoubleSpinBox*>(
+                  QStringLiteral("finepaper.parameter.frequencyScale")),
+          QStringLiteral("confirmed replacement switches active Package without split-brain UI"));
+    closeDiscarding(multiPackageWindow);
+
     finepaper::RuntimeLocations numberLocations{
         QStringList{numberPackageRoot.path()}, outputRoot.path()};
     finepaper::FinepaperMainWindow numberWindow(numberLocations);
@@ -1566,10 +1713,10 @@ int main(int argc, char** argv) {
     application.processEvents();
     auto* numberCreate = numberWindow.findChild<QPushButton*>(
         QStringLiteral("finepaper.createDesign"));
-    if (numberCreate) {
-        numberCreate->click();
-        application.processEvents();
-    }
+    check(numberCreate != nullptr,
+          QStringLiteral("number-parameter Package can start design creation"));
+    createDesignThroughDialog(
+        numberWindow, QStringLiteral("test.number-parameter@1.0.0"));
     auto* numberEditor = numberWindow.findChild<QDoubleSpinBox*>(
         QStringLiteral("finepaper.parameter.frequencyScale"));
     check(numberEditor && qAbs(numberEditor->value() - 1.25) < 0.000001,
@@ -1607,8 +1754,10 @@ int main(int argc, char** argv) {
         application.processEvents();
     }
 
-    auto* retainedSelector = numberWindow.findChild<QComboBox*>(
-        QStringLiteral("finepaper.packageSelector"));
+    auto* retainedActivePackage = numberWindow.findChild<QLabel*>(
+        QStringLiteral("finepaper.activePackage"));
+    auto* retainedAvailablePackages = numberWindow.findChild<QLabel*>(
+        QStringLiteral("finepaper.availablePackages"));
     auto* retainedPalette = numberWindow.findChild<QListWidget*>(
         QStringLiteral("finepaper.endpointPalette"));
     auto* retainedApply = numberWindow.findChild<QPushButton*>(
@@ -1619,13 +1768,23 @@ int main(int argc, char** argv) {
         numberWindow, QStringLiteral("Validate / DRC"));
     QAction* retainedGenerate = actionWithText(
         numberWindow, QStringLiteral("Generate RTL"));
-    check(retainedSelector && retainedSelector->count() == 1
-              && retainedSelector->currentIndex() == 0
+    QAction* retainedNew = actionWithText(
+        numberWindow, QStringLiteral("New NoC Design…"));
+    check(retainedActivePackage
+              && retainedActivePackage->text().contains(
+                  QStringLiteral("test.number-parameter@1.0.0"))
+              && retainedActivePackage->text().contains(
+                  QStringLiteral("runtime unavailable"))
+              && retainedAvailablePackages
+              && retainedAvailablePackages->text().startsWith(
+                  QStringLiteral("No runnable NoC IP Package"))
               && retainedPalette && retainedPalette->isEnabled()
               && retainedApply && retainedApply->isEnabled()
-              && retainedValidate && retainedValidate->isEnabled()
-              && retainedGenerate && retainedGenerate->isEnabled(),
-          QStringLiteral("failed Package reload preserves the previous catalog snapshot"));
+              && retainedValidate && !retainedValidate->isEnabled()
+              && retainedGenerate && !retainedGenerate->isEnabled()
+              && retainedNew && !retainedNew->isEnabled()
+              && numberCreate && !numberCreate->isEnabled(),
+          QStringLiteral("failed reload retains editing metadata without claiming runtime availability"));
     check(numberResultsDock && numberResultsDock->isVisible()
               && reloadErrorDrc && reloadErrorDrc->rowCount() > 0,
           QStringLiteral("Package reload errors automatically expose structured diagnostics"));
@@ -1633,11 +1792,36 @@ int main(int argc, char** argv) {
               QStringLiteral("Package reload failed:")),
           QStringLiteral("Package reload errors produce a clear status summary"));
 
+    const bool recoveredPackage = packageMoved
+        && numberWindow.installPackageDirectory(unavailablePackagePath);
+    application.processEvents();
+    const QStringList installedPackageRoots = QSettings()
+        .value(finepaper::workbench::packageRootsSetting)
+        .toStringList();
+    check(recoveredPackage && installedPackageRoots.contains(unavailablePackagePath),
+          QStringLiteral("a stale same-key Package can be transactionally rebound to a valid directory"));
+    check(reloadErrorDrc && reloadErrorDrc->rowCount() == 0
+              && numberWindow.statusBar()->currentMessage().startsWith(
+                  QStringLiteral("Installed NoC IP test.number-parameter@1.0.0"))
+              && retainedActivePackage
+              && retainedActivePackage->text().contains(
+                  QStringLiteral("test.number-parameter@1.0.0"))
+              && !retainedActivePackage->text().contains(
+                  QStringLiteral("runtime unavailable"))
+              && retainedAvailablePackages
+              && retainedAvailablePackages->text().startsWith(
+                  QStringLiteral("1 NoC IP Package"))
+              && retainedValidate && retainedValidate->isEnabled()
+              && retainedGenerate && retainedGenerate->isEnabled()
+              && retainedNew && retainedNew->isEnabled()
+              && numberCreate && numberCreate->isEnabled(),
+          QStringLiteral("successful Package repair clears stale errors and restores runtime actions"));
+    closeDiscarding(numberWindow);
+    QSettings().remove(finepaper::workbench::packageRootsSetting);
     if (packageMoved) {
         check(QDir().rename(unavailablePackagePath, numberPackageRoot.path()),
-              QStringLiteral("runtime Package root is restored after reload testing"));
+              QStringLiteral("runtime Package fixture is restored after repair testing"));
     }
-    closeDiscarding(numberWindow);
 
     QTemporaryDir missingPackageRoot(
         QStringLiteral("/tmp/finepaper-missing-package-XXXXXX"));
@@ -1647,8 +1831,22 @@ int main(int argc, char** argv) {
         QStringLiteral("missing-package.fpnoc"));
     check(writeMissingPackageDesign(missingDesignPath),
           QStringLiteral("design referencing a never-loaded Package is created"));
-    finepaper::RuntimeLocations missingLocations{
+    finepaper::RuntimeLocations zeroPackageLocations{
         QStringList{missingPackageRoot.path()}, outputRoot.path()};
+    finepaper::FinepaperMainWindow zeroPackageWindow(zeroPackageLocations);
+    zeroPackageWindow.show();
+    application.processEvents();
+    auto* missingCreate = zeroPackageWindow.findChild<QPushButton*>(
+        QStringLiteral("finepaper.createDesign"));
+    QAction* missingNew = actionWithText(
+        zeroPackageWindow, QStringLiteral("New NoC Design…"));
+    check(missingCreate && !missingCreate->isEnabled()
+              && missingNew && !missingNew->isEnabled(),
+          QStringLiteral("zero-Package startup disables every New Design entry point consistently"));
+    closeDiscarding(zeroPackageWindow);
+
+    finepaper::RuntimeLocations missingLocations{
+        QStringList{standardPackageRoot}, outputRoot.path()};
     finepaper::FinepaperMainWindow missingWindow(missingLocations);
     missingWindow.show();
     application.processEvents();
@@ -1657,8 +1855,10 @@ int main(int argc, char** argv) {
     application.processEvents();
     application.processEvents();
 
-    auto* missingSelector = missingWindow.findChild<QComboBox*>(
-        QStringLiteral("finepaper.packageSelector"));
+    auto* missingActivePackage = missingWindow.findChild<QLabel*>(
+        QStringLiteral("finepaper.activePackage"));
+    auto* missingAvailablePackages = missingWindow.findChild<QLabel*>(
+        QStringLiteral("finepaper.availablePackages"));
     auto* missingPalette = missingWindow.findChild<QListWidget*>(
         QStringLiteral("finepaper.endpointPalette"));
     auto* missingApply = missingWindow.findChild<QPushButton*>(
@@ -1675,8 +1875,15 @@ int main(int argc, char** argv) {
         ? missingEditor->findChild<QGraphicsView*>() : nullptr;
     auto* missingScene = missingView
         ? dynamic_cast<QtNodes::BasicGraphicsScene*>(missingView->scene()) : nullptr;
-    check(missingSelector && missingSelector->currentIndex() == -1,
-          QStringLiteral("never-loaded design Package does not select an unrelated Package"));
+    check(missingActivePackage
+              && missingActivePackage->text().contains(
+                  QStringLiteral("test.never-loaded@1.0.0"))
+              && missingActivePackage->text().contains(
+                  QStringLiteral("Package not loaded"))
+              && missingAvailablePackages
+              && missingAvailablePackages->text().startsWith(
+                  QStringLiteral("1 NoC IP Package")),
+          QStringLiteral("missing active Package is not replaced by an unrelated available IP"));
     check(missingPalette && missingPalette->count() == 0
               && !missingPalette->isEnabled(),
           QStringLiteral("never-loaded design Package clears and disables the Endpoint Palette"));

@@ -8,13 +8,13 @@
 #include <QJsonValue>
 #include <QFutureWatcher>
 #include <QMainWindow>
+#include <QSet>
 #include <QVector>
 
 #include <optional>
 
 class QAction;
 class QCloseEvent;
-class QComboBox;
 class QDockWidget;
 class QFormLayout;
 class QGroupBox;
@@ -24,7 +24,6 @@ class QListWidget;
 class QPlainTextEdit;
 class QProgressBar;
 class QPushButton;
-class QSpinBox;
 class QTabWidget;
 class QTableWidget;
 class QWidget;
@@ -37,6 +36,7 @@ class FinepaperMainWindow final : public QMainWindow {
 public:
     explicit FinepaperMainWindow(RuntimeLocations locations, QWidget* parent = nullptr);
     bool openDesignFile(const QString& path);
+    bool installPackageDirectory(const QString& directory);
     bool operationBusy() const;
 
 protected:
@@ -64,7 +64,6 @@ private:
     void reloadPackages();
     void installPackage();
     void updatePackageControls();
-    void updateMeshBounds();
     void updateEndpointPalette();
     void updateUiState();
     void setOperationBusy(bool busy, const QString& message = {});
@@ -95,8 +94,11 @@ private:
     void appendActivity(const QString& message);
     void selectCenterView(const QString& id);
 
-    const PackageDefinition* selectedPackage() const;
+    const PackageDefinition* packageByKey(const QString& key) const;
     const PackageDefinition* packageForDesign() const;
+    const PackageDefinition* runtimePackageByKey(const QString& key) const;
+    const PackageDefinition* runtimePackageForDesign() const;
+    QVector<PackageDefinition> runtimePackages() const;
     QJsonValue valueFromControl(const ParameterControl& control) const;
     QString nextEndpointId(const QString& endpointType) const;
     AttachmentSlotChoice chooseAttachmentSlot(
@@ -109,6 +111,7 @@ private:
     QString m_designPath;
     bool m_dirty = false;
     bool m_operationBusy = false;
+    QSet<QString> m_runtimeAvailablePackageKeys;
     std::optional<RouterPosition> m_selectedRouter;
     QVector<ParameterControl> m_parameterControls;
 
@@ -133,10 +136,8 @@ private:
     QPlainTextEdit* m_problemReport = nullptr;
 
     QDockWidget* m_packageDock = nullptr;
-    QComboBox* m_packageSelector = nullptr;
-    QLineEdit* m_designName = nullptr;
-    QSpinBox* m_rows = nullptr;
-    QSpinBox* m_columns = nullptr;
+    QLabel* m_activePackageLabel = nullptr;
+    QLabel* m_availablePackagesLabel = nullptr;
     QPushButton* m_createDesignButton = nullptr;
     QPushButton* m_installPackageButton = nullptr;
     QPushButton* m_reloadPackagesButton = nullptr;
