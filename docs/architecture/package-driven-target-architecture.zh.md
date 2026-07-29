@@ -867,7 +867,7 @@ packageData 是受限逃生口，不应被简单 Package 用来重复保存 topo
 - 全局、MXP 和不同设备类别的大量参数；
 - 厂商 Ruby `cmn_create` API、DRC 与 YAML/HTML 导出。
 
-因此 CMN700 不能被压缩为通用 Endpoint 表格或通用 connection rule，也不应将 YAML 的节点图复制到 Finepaper Core。未来的 `cmn700` Package 应保留通用的 Package 引用、Mesh 尺寸和少量公共摘要；厂商 YAML/DSL、专有 DRC、导入导出及 RTL 调用由其进程外 Engine 负责。实际厂商交付不进入普通 CI，Core 只用 mock Engine 验证该进程边界。
+因此 CMN700 不能被压缩为通用 Endpoint 表格或通用 connection rule，也不应将 YAML 的节点图复制到 Finepaper Core。clock、power 等跨 Package 都需要的 Domain 定义、节点归属和 crossing 应进入 Finepaper 的 typed 公共模型；DTC/DN 约束、异步级数量、连通形状和专有节点覆盖仍由 Package/IP Engine 解释。具体下一阶段模型见 [多 Domain 设计基线](domain-model-next.zh.md)。未来的 `cmn700` Package 应保留通用的 Package 引用、Mesh 尺寸和公共 Domain 摘要；厂商 YAML/DSL、专有 DRC、导入导出及 RTL 调用由其进程外 Engine 负责。实际厂商交付不进入普通 CI，Core 只用 mock Engine 验证该进程边界。
 
 ## 15. Generator 与 IP Engine 调用
 
