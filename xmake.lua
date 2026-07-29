@@ -49,6 +49,18 @@ target("finepaper-tests")
         trim_output = true
     })
 
+target("finepaper-cli-tests")
+    add_rules("qt.console")
+    set_kind("binary")
+    set_group("test")
+    set_default(false)
+    add_deps("finepaper")
+    add_files("tests/cli_tests.cpp")
+    add_defines('FINEPAPER_SOURCE_DIR="' .. path.unix(os.projectdir()) .. '"')
+    add_tests("default", {
+        trim_output = true
+    })
+
 target("finepaper-gui-smoke")
     add_rules("qt.widgetapp")
     set_kind("binary")

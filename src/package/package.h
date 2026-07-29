@@ -11,9 +11,26 @@
 
 namespace finepaper {
 
+inline constexpr int kMaximumPackageTimeoutSeconds = 86'400;
+
+enum class ParameterType {
+    Invalid,
+    Integer,
+    Number,
+    Boolean,
+    String,
+    Enumeration
+};
+
+enum class AttachmentSlotMode {
+    Invalid,
+    Automatic,
+    Explicit
+};
+
 struct ParameterDefinition {
     QString id;
-    QString type;
+    ParameterType type = ParameterType::Invalid;
     QString label;
     bool hasDefault = false;
     QJsonValue defaultValue;
@@ -45,7 +62,7 @@ struct MeshDefinition {
 
 struct AttachmentDefinition {
     int maxPerRouter = 1;
-    QString slotMode = QStringLiteral("automatic");
+    AttachmentSlotMode slotMode = AttachmentSlotMode::Automatic;
     QVector<AttachmentSlotDefinition> positions;
 };
 

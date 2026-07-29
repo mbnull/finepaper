@@ -9,6 +9,11 @@
 
 namespace finepaper {
 
+// Operational safety limits for projections loaded from untrusted or damaged
+// design files. Runtime Packages may impose much smaller product limits.
+inline constexpr int kMaximumMeshDimension = 4096;
+inline constexpr qint64 kMaximumProjectedRouterCount = 1'000'000;
+
 struct Diagnostic {
     QString severity;
     QString code;
@@ -75,6 +80,7 @@ struct LinkView {
 struct EndpointView {
     QString id;
     QString type;
+    RouterPosition router;
     QString routerId;
     QString slot;
 };

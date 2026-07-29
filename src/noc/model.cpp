@@ -83,11 +83,19 @@ TopologyProjection projectTopology(const NocDesign& design) {
     TopologyProjection projection;
     if (design.topology.type != QStringLiteral("mesh") ||
         design.topology.rows <= 0 ||
-        design.topology.columns <= 0) {
+        design.topology.columns <= 0 ||
+        design.topology.rows > kMaximumMeshDimension ||
+        design.topology.columns > kMaximumMeshDimension) {
         return projection;
     }
 
-    projection.routers.reserve(design.topology.rows * design.topology.columns);
+    const qint64 routerCount = static_cast<qint64>(design.topology.rows)
+        * static_cast<qint64>(design.topology.columns);
+    if (routerCount > kMaximumProjectedRouterCount) {
+        return projection;
+    }
+
+    projection.routers.reserve(static_cast<qsizetype>(routerCount));
     for (int y = 0; y < design.topology.rows; ++y) {
         for (int x = 0; x < design.topology.columns; ++x) {
             const RouterPosition current{x, y};
@@ -119,6 +127,7 @@ TopologyProjection projectTopology(const NocDesign& design) {
         projection.endpoints.append(EndpointView{
             endpoint.id,
             endpoint.type,
+            endpoint.attachment.router,
             routerId(endpoint.attachment.router),
             endpoint.attachment.slot.value_or(QString())
         });
@@ -175,6 +184,17 @@ QVector<Diagnostic> validateDesignStructure(const NocDesign& design) {
                     QStringLiteral("topology.invalid_columns"),
                     QStringLiteral("columns must be greater than zero"),
                     QStringLiteral("/topology/columns"));
+    }
+    if (design.topology.rows > kMaximumMeshDimension ||
+        design.topology.columns > kMaximumMeshDimension ||
+        (design.topology.rows > 0 && design.topology.columns > 0 &&
+         static_cast<qint64>(design.topology.rows)
+                 * static_cast<qint64>(design.topology.columns)
+             > kMaximumProjectedRouterCount)) {
+        appendError(diagnostics,
+                    QStringLiteral("topology.projection_too_large"),
+                    QStringLiteral("topology exceeds Finepaper's safe projection limit"),
+                    QStringLiteral("/topology"));
     }
 
     QSet<QString> endpointIds;

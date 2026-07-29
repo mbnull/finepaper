@@ -17,6 +17,8 @@
 #include <QUuid>
 
 #include <algorithm>
+#include <cmath>
+#include <limits>
 
 namespace finepaper {
 namespace {
@@ -32,35 +34,98 @@ void appendDiagnostic(QVector<Diagnostic>& diagnostics,
 
 QString designIdFromName(const QString& name) {
     QString id = name.trimmed().toLower();
-    id.replace(QRegularExpression(QStringLiteral("[^a-z0-9_-]+")), QStringLiteral("_"));
+    id.replace(QRegularExpression(QStringLiteral("[^a-z0-9_]+")), QStringLiteral("_"));
     id.remove(QRegularExpression(QStringLiteral("^_+|_+$")));
-    return id.isEmpty() ? QStringLiteral("noc") : id;
+    if (id.isEmpty()) {
+        return QStringLiteral("noc");
+    }
+    if (!QRegularExpression(QStringLiteral("^[a-z_]")).match(id).hasMatch()) {
+        id.prepend(QStringLiteral("noc_"));
+    }
+    return id;
+}
+
+std::optional<int> requestInteger(const QJsonValue& value,
+                                  const QString& path,
+                                  QVector<Diagnostic>& diagnostics) {
+    if (!value.isDouble() ||
+        !std::isfinite(value.toDouble()) ||
+        std::floor(value.toDouble()) != value.toDouble() ||
+        value.toDouble() < static_cast<double>(std::numeric_limits<int>::min()) ||
+        value.toDouble() > static_cast<double>(std::numeric_limits<int>::max())) {
+        appendDiagnostic(diagnostics,
+                         QStringLiteral("error"),
+                         QStringLiteral("create.expected_integer"),
+                         QStringLiteral("value must be an integer"),
+                         path);
+        return std::nullopt;
+    }
+    return value.toInt();
+}
+
+QString requestString(const QJsonObject& object,
+                      const QString& key,
+                      const QString& path,
+                      const QString& fallback,
+                      QVector<Diagnostic>& diagnostics) {
+    if (!object.contains(key)) {
+        return fallback;
+    }
+    const QJsonValue value = object.value(key);
+    if (!value.isString()) {
+        appendDiagnostic(diagnostics,
+                         QStringLiteral("error"),
+                         QStringLiteral("create.expected_string"),
+                         QStringLiteral("%1 must be a string").arg(key),
+                         path + QLatin1Char('/') + key);
+        return fallback;
+    }
+    return value.toString();
 }
 
 std::optional<RouterPosition> requestRouter(const QJsonObject& endpoint,
                                             const QString& path,
                                             QVector<Diagnostic>& diagnostics) {
     QJsonValue value = endpoint.value(QStringLiteral("router"));
-    if (endpoint.value(QStringLiteral("attachment")).isObject()) {
-        value = endpoint.value(QStringLiteral("attachment"))
-                    .toObject()
-                    .value(QStringLiteral("router"));
+    if (endpoint.contains(QStringLiteral("attachment"))) {
+        const QJsonValue attachmentValue = endpoint.value(QStringLiteral("attachment"));
+        if (!attachmentValue.isObject()) {
+            appendDiagnostic(diagnostics,
+                             QStringLiteral("error"),
+                             QStringLiteral("create.expected_object"),
+                             QStringLiteral("attachment must be an object"),
+                             path.left(path.lastIndexOf(QLatin1Char('/'))) +
+                                 QStringLiteral("/attachment"));
+        } else {
+            const QJsonObject attachment = attachmentValue.toObject();
+            if (attachment.contains(QStringLiteral("router"))) {
+                value = attachment.value(QStringLiteral("router"));
+            }
+        }
     }
     if (value.isArray()) {
         const QJsonArray values = value.toArray();
-        if (values.size() == 2 && values.at(0).isDouble() && values.at(1).isDouble()) {
-            return RouterPosition{values.at(0).toInt(), values.at(1).toInt()};
+        if (values.size() == 2) {
+            const auto x = requestInteger(values.at(0), path + QStringLiteral("/0"), diagnostics);
+            const auto y = requestInteger(values.at(1), path + QStringLiteral("/1"), diagnostics);
+            if (x && y) {
+                return RouterPosition{*x, *y};
+            }
+            return std::nullopt;
         }
     }
     if (value.isObject()) {
         const QJsonObject object = value.toObject();
-        if (object.value(QStringLiteral("x")).isDouble() &&
-            object.value(QStringLiteral("y")).isDouble()) {
-            return RouterPosition{
-                object.value(QStringLiteral("x")).toInt(),
-                object.value(QStringLiteral("y")).toInt()
-            };
+        const auto x = requestInteger(object.value(QStringLiteral("x")),
+                                      path + QStringLiteral("/x"),
+                                      diagnostics);
+        const auto y = requestInteger(object.value(QStringLiteral("y")),
+                                      path + QStringLiteral("/y"),
+                                      diagnostics);
+        if (x && y) {
+            return RouterPosition{*x, *y};
         }
+        return std::nullopt;
     }
     appendDiagnostic(diagnostics,
                      QStringLiteral("error"),
@@ -120,26 +185,6 @@ bool writeTextFile(const QString& path,
     return true;
 }
 
-QVector<Diagnostic> diagnosticsFromResult(const QJsonObject& object,
-                                          const QString& defaultSource) {
-    QVector<Diagnostic> diagnostics;
-    const QJsonArray values = object.value(QStringLiteral("diagnostics")).toArray();
-    for (const QJsonValue& value : values) {
-        if (!value.isObject()) {
-            continue;
-        }
-        const QJsonObject diagnostic = value.toObject();
-        diagnostics.append(Diagnostic{
-            diagnostic.value(QStringLiteral("severity")).toString(QStringLiteral("error")),
-            diagnostic.value(QStringLiteral("code")).toString(QStringLiteral("package.error")),
-            diagnostic.value(QStringLiteral("message")).toString(QStringLiteral("Package operation failed")),
-            diagnostic.value(QStringLiteral("path")).toString(),
-            diagnostic.value(QStringLiteral("source")).toString(defaultSource)
-        });
-    }
-    return diagnostics;
-}
-
 QJsonObject packageReferenceToJson(const PackageReference& package) {
     return QJsonObject{
         {QStringLiteral("id"), package.id},
@@ -194,11 +239,38 @@ const QVector<PackageDefinition>& FinepaperApplication::packages() const {
 
 DesignResult FinepaperApplication::createDesign(const QJsonObject& request) const {
     DesignResult result;
-    const QJsonObject packageObject = request.value(QStringLiteral("package")).toObject();
+    const QJsonValue packageValue = request.value(QStringLiteral("package"));
+    if (!packageValue.isObject()) {
+        appendDiagnostic(result.diagnostics,
+                         QStringLiteral("error"),
+                         QStringLiteral("create.expected_object"),
+                         QStringLiteral("package must be an object"),
+                         QStringLiteral("/package"));
+        return result;
+    }
+    const QJsonObject packageObject = packageValue.toObject();
     PackageReference reference{
-        packageObject.value(QStringLiteral("id")).toString(),
-        packageObject.value(QStringLiteral("version")).toString()
+        requestString(packageObject,
+                      QStringLiteral("id"),
+                      QStringLiteral("/package"),
+                      QString(),
+                      result.diagnostics).trimmed(),
+        requestString(packageObject,
+                      QStringLiteral("version"),
+                      QStringLiteral("/package"),
+                      QString(),
+                      result.diagnostics).trimmed()
     };
+    if (reference.id.isEmpty() || reference.version.isEmpty()) {
+        appendDiagnostic(result.diagnostics,
+                         QStringLiteral("error"),
+                         QStringLiteral("create.missing_package"),
+                         QStringLiteral("package id and version are required"),
+                         QStringLiteral("/package"));
+    }
+    if (hasErrors(result.diagnostics)) {
+        return result;
+    }
     const auto package = m_catalog.resolve(reference);
     if (!package) {
         appendDiagnostic(result.diagnostics,
@@ -211,26 +283,82 @@ DesignResult FinepaperApplication::createDesign(const QJsonObject& request) cons
 
     NocDesign design;
     design.package = reference;
-    design.name = request.value(QStringLiteral("name")).toString().trimmed();
-    design.id = request.value(QStringLiteral("id")).toString().trimmed();
+    design.name = requestString(request,
+                                QStringLiteral("name"),
+                                QString(),
+                                QString(),
+                                result.diagnostics).trimmed();
+    design.id = requestString(request,
+                              QStringLiteral("id"),
+                              QString(),
+                              QString(),
+                              result.diagnostics).trimmed();
     if (design.id.isEmpty()) {
         design.id = designIdFromName(design.name);
     }
 
-    const QJsonObject topology = request.value(QStringLiteral("topology")).toObject();
-    design.topology.type = topology.value(QStringLiteral("type"))
-                               .toString(QStringLiteral("mesh"));
-    design.topology.rows = topology.value(QStringLiteral("rows"))
-                               .toInt(package->mesh.defaultRows);
-    design.topology.columns = topology.value(QStringLiteral("columns"))
-                                  .toInt(package->mesh.defaultColumns);
-
-    design.parameters = defaultsFor(package->parameters);
-    if (request.value(QStringLiteral("parameters")).isObject()) {
-        mergeValues(design.parameters, request.value(QStringLiteral("parameters")).toObject());
+    QJsonObject topology;
+    if (request.contains(QStringLiteral("topology"))) {
+        if (!request.value(QStringLiteral("topology")).isObject()) {
+            appendDiagnostic(result.diagnostics,
+                             QStringLiteral("error"),
+                             QStringLiteral("create.expected_object"),
+                             QStringLiteral("topology must be an object"),
+                             QStringLiteral("/topology"));
+        } else {
+            topology = request.value(QStringLiteral("topology")).toObject();
+        }
+    }
+    design.topology.type = requestString(topology,
+                                         QStringLiteral("type"),
+                                         QStringLiteral("/topology"),
+                                         QStringLiteral("mesh"),
+                                         result.diagnostics);
+    design.topology.rows = package->mesh.defaultRows;
+    if (topology.contains(QStringLiteral("rows"))) {
+        const auto rows = requestInteger(topology.value(QStringLiteral("rows")),
+                                         QStringLiteral("/topology/rows"),
+                                         result.diagnostics);
+        if (rows) {
+            design.topology.rows = *rows;
+        }
+    }
+    design.topology.columns = package->mesh.defaultColumns;
+    if (topology.contains(QStringLiteral("columns"))) {
+        const auto columns = requestInteger(topology.value(QStringLiteral("columns")),
+                                            QStringLiteral("/topology/columns"),
+                                            result.diagnostics);
+        if (columns) {
+            design.topology.columns = *columns;
+        }
     }
 
-    const QJsonArray endpoints = request.value(QStringLiteral("endpoints")).toArray();
+    design.parameters = defaultsFor(package->parameters);
+    if (request.contains(QStringLiteral("parameters"))) {
+        if (!request.value(QStringLiteral("parameters")).isObject()) {
+            appendDiagnostic(result.diagnostics,
+                             QStringLiteral("error"),
+                             QStringLiteral("create.expected_object"),
+                             QStringLiteral("parameters must be an object"),
+                             QStringLiteral("/parameters"));
+        } else {
+            mergeValues(design.parameters,
+                        request.value(QStringLiteral("parameters")).toObject());
+        }
+    }
+
+    QJsonArray endpoints;
+    if (request.contains(QStringLiteral("endpoints"))) {
+        if (!request.value(QStringLiteral("endpoints")).isArray()) {
+            appendDiagnostic(result.diagnostics,
+                             QStringLiteral("error"),
+                             QStringLiteral("create.expected_array"),
+                             QStringLiteral("endpoints must be an array"),
+                             QStringLiteral("/endpoints"));
+        } else {
+            endpoints = request.value(QStringLiteral("endpoints")).toArray();
+        }
+    }
     for (qsizetype index = 0; index < endpoints.size(); ++index) {
         const QString base = QStringLiteral("/endpoints/%1").arg(index);
         if (!endpoints.at(index).isObject()) {
@@ -243,15 +371,31 @@ DesignResult FinepaperApplication::createDesign(const QJsonObject& request) cons
         }
         const QJsonObject object = endpoints.at(index).toObject();
         EndpointInstance endpoint;
-        endpoint.id = object.value(QStringLiteral("id")).toString();
-        endpoint.type = object.value(QStringLiteral("type")).toString();
+        endpoint.id = requestString(object,
+                                    QStringLiteral("id"),
+                                    base,
+                                    QString(),
+                                    result.diagnostics).trimmed();
+        endpoint.type = requestString(object,
+                                      QStringLiteral("type"),
+                                      base,
+                                      QString(),
+                                      result.diagnostics).trimmed();
         const auto type = package->endpointType(endpoint.type);
         if (type) {
             endpoint.parameters = defaultsFor(type->parameters);
         }
-        if (object.value(QStringLiteral("parameters")).isObject()) {
-            mergeValues(endpoint.parameters,
-                        object.value(QStringLiteral("parameters")).toObject());
+        if (object.contains(QStringLiteral("parameters"))) {
+            if (!object.value(QStringLiteral("parameters")).isObject()) {
+                appendDiagnostic(result.diagnostics,
+                                 QStringLiteral("error"),
+                                 QStringLiteral("create.expected_object"),
+                                 QStringLiteral("parameters must be an object"),
+                                 base + QStringLiteral("/parameters"));
+            } else {
+                mergeValues(endpoint.parameters,
+                            object.value(QStringLiteral("parameters")).toObject());
+            }
         }
         const auto router = requestRouter(object,
                                           base + QStringLiteral("/router"),
@@ -259,18 +403,37 @@ DesignResult FinepaperApplication::createDesign(const QJsonObject& request) cons
         if (router) {
             endpoint.attachment.router = *router;
         }
-        const QJsonObject attachment = object.value(QStringLiteral("attachment")).toObject();
-        const QJsonValue slot = attachment.contains(QStringLiteral("slot"))
-            ? attachment.value(QStringLiteral("slot"))
-            : object.value(QStringLiteral("slot"));
-        if (slot.isString() && !slot.toString().isEmpty()) {
-            endpoint.attachment.slot = slot.toString();
+        QJsonValue slot = object.value(QStringLiteral("slot"));
+        if (object.value(QStringLiteral("attachment")).isObject()) {
+            const QJsonObject attachment = object.value(QStringLiteral("attachment")).toObject();
+            if (attachment.contains(QStringLiteral("slot"))) {
+                slot = attachment.value(QStringLiteral("slot"));
+            }
+        }
+        if (!slot.isUndefined()) {
+            if (!slot.isString()) {
+                appendDiagnostic(result.diagnostics,
+                                 QStringLiteral("error"),
+                                 QStringLiteral("create.expected_string"),
+                                 QStringLiteral("slot must be a string"),
+                                 base + QStringLiteral("/attachment/slot"));
+            } else if (!slot.toString().isEmpty()) {
+                endpoint.attachment.slot = slot.toString();
+            }
         }
         design.endpoints.append(std::move(endpoint));
     }
 
-    if (request.value(QStringLiteral("packageData")).isObject()) {
-        design.packageData = request.value(QStringLiteral("packageData")).toObject();
+    if (request.contains(QStringLiteral("packageData"))) {
+        if (!request.value(QStringLiteral("packageData")).isObject()) {
+            appendDiagnostic(result.diagnostics,
+                             QStringLiteral("error"),
+                             QStringLiteral("create.expected_object"),
+                             QStringLiteral("packageData must be an object"),
+                             QStringLiteral("/packageData"));
+        } else {
+            design.packageData = request.value(QStringLiteral("packageData")).toObject();
+        }
     }
 
     result.diagnostics += validateDesignStructure(design);
@@ -392,9 +555,7 @@ DesignResult FinepaperApplication::moveEndpoint(const NocDesign& design,
         return result;
     }
     it->attachment.router = router;
-    if (slot) {
-        it->attachment.slot = std::move(slot);
-    }
+    it->attachment.slot = std::move(slot);
     return validateEditedDesign(edited);
 }
 
@@ -465,12 +626,12 @@ QVector<Diagnostic> FinepaperApplication::validateAgainstPackage(
                              QStringLiteral("endpoint type is not declared by the Package"),
                              base + QStringLiteral("/type"),
                              QStringLiteral("package"));
-            continue;
+        } else {
+            diagnostics += validateParameterObject(endpoint.parameters,
+                                                   type->parameters,
+                                                   base + QStringLiteral("/parameters"),
+                                                   QStringLiteral("package"));
         }
-        diagnostics += validateParameterObject(endpoint.parameters,
-                                               type->parameters,
-                                               base + QStringLiteral("/parameters"),
-                                               QStringLiteral("package"));
 
         const QString router = routerKey(endpoint.attachment.router);
         endpointCounts[router] += 1;
@@ -483,8 +644,32 @@ QVector<Diagnostic> FinepaperApplication::validateAgainstPackage(
                              QStringLiteral("package"));
         }
 
-        if (package.attachment.slotMode == QStringLiteral("explicit")) {
-            if (!endpoint.attachment.slot || endpoint.attachment.slot->isEmpty()) {
+        const bool hasSlot = endpoint.attachment.slot &&
+            !endpoint.attachment.slot->isEmpty();
+        if (hasSlot) {
+            if (slotsByRouter[router].contains(*endpoint.attachment.slot)) {
+                appendDiagnostic(diagnostics,
+                                 QStringLiteral("error"),
+                                 QStringLiteral("endpoint.duplicate_slot"),
+                                 QStringLiteral("slot is duplicated on the Router"),
+                                 base + QStringLiteral("/attachment/slot"),
+                                 QStringLiteral("package"));
+            } else {
+                slotsByRouter[router].insert(*endpoint.attachment.slot);
+            }
+        }
+
+        if (package.attachment.slotMode == AttachmentSlotMode::Automatic && hasSlot) {
+            appendDiagnostic(diagnostics,
+                             QStringLiteral("error"),
+                             QStringLiteral("endpoint.automatic_slot_persisted"),
+                             QStringLiteral("automatic Package slots are derived and must not be persisted"),
+                             base + QStringLiteral("/attachment/slot"),
+                             QStringLiteral("package"));
+        }
+
+        if (package.attachment.slotMode == AttachmentSlotMode::Explicit) {
+            if (!hasSlot) {
                 appendDiagnostic(diagnostics,
                                  QStringLiteral("error"),
                                  QStringLiteral("endpoint.slot_required"),
@@ -504,15 +689,6 @@ QVector<Diagnostic> FinepaperApplication::validateAgainstPackage(
                                  QStringLiteral("slot is not declared by the Package"),
                                  base + QStringLiteral("/attachment/slot"),
                                  QStringLiteral("package"));
-            } else if (slotsByRouter[router].contains(*endpoint.attachment.slot)) {
-                appendDiagnostic(diagnostics,
-                                 QStringLiteral("error"),
-                                 QStringLiteral("endpoint.duplicate_slot"),
-                                 QStringLiteral("slot is duplicated on the Router"),
-                                 base + QStringLiteral("/attachment/slot"),
-                                 QStringLiteral("package"));
-            } else {
-                slotsByRouter[router].insert(*endpoint.attachment.slot);
             }
         }
     }
@@ -593,26 +769,34 @@ QVector<Diagnostic> FinepaperApplication::runPackageValidation(
                          source);
         return diagnostics;
     }
-    if (process.crashed || process.exitCode != 0) {
-        appendDiagnostic(diagnostics,
-                         QStringLiteral("error"),
-                         QStringLiteral("operation.failed"),
-                         process.standardError.trimmed().isEmpty()
-                             ? QStringLiteral("Package validation failed")
-                             : process.standardError.trimmed(),
-                         executable,
-                         source);
-        return diagnostics;
+    const JsonObjectLoadResult rawResult = loadJsonObject(resultPath);
+    diagnostics += rawResult.diagnostics;
+    std::optional<PackageOperationResult> operationResult;
+    if (rawResult.success) {
+        operationResult = parsePackageOperationResult(
+            rawResult.object, resultPath, source, ArtifactResultPolicy::Optional);
+        diagnostics += operationResult->diagnostics;
     }
 
-    const JsonObjectLoadResult result = loadJsonObject(resultPath);
-    diagnostics += result.diagnostics;
-    if (!result.success) {
+    if (process.crashed || process.exitCode != 0) {
+        const bool structuredError = operationResult
+            && hasErrors(operationResult->diagnostics);
+        if (!structuredError) {
+            appendDiagnostic(diagnostics,
+                             QStringLiteral("error"),
+                             QStringLiteral("operation.failed"),
+                             process.standardError.trimmed().isEmpty()
+                                 ? QStringLiteral("Package validation failed")
+                                 : process.standardError.trimmed(),
+                             executable,
+                             source);
+        }
         return diagnostics;
     }
-    diagnostics += diagnosticsFromResult(result.object, source);
-    if (!result.object.value(QStringLiteral("success")).toBool(false) &&
-        !hasErrors(diagnostics)) {
+    if (!rawResult.success || !operationResult || !operationResult->protocolValid) {
+        return diagnostics;
+    }
+    if (!operationResult->success && !hasErrors(operationResult->diagnostics)) {
         appendDiagnostic(diagnostics,
                          QStringLiteral("error"),
                          QStringLiteral("operation.failed"),
@@ -732,27 +916,38 @@ GenerationResult FinepaperApplication::generate(
                          QStringLiteral("generator"));
         return result;
     }
-    if (process.crashed || process.exitCode != 0) {
-        appendDiagnostic(result.diagnostics,
-                         QStringLiteral("error"),
-                         QStringLiteral("operation.failed"),
-                         process.standardError.trimmed().isEmpty()
-                             ? QStringLiteral("Generator failed")
-                             : process.standardError.trimmed(),
-                         executable,
-                         QStringLiteral("generator"));
-        return result;
-    }
-
     const JsonObjectLoadResult rawResult = loadJsonObject(resultPath);
     result.diagnostics += rawResult.diagnostics;
-    if (!rawResult.success) {
+    std::optional<PackageOperationResult> operationResult;
+    if (rawResult.success) {
+        operationResult = parsePackageOperationResult(
+            rawResult.object,
+            resultPath,
+            QStringLiteral("generator"),
+            ArtifactResultPolicy::Required);
+        result.diagnostics += operationResult->diagnostics;
+    }
+
+    if (process.crashed || process.exitCode != 0) {
+        const bool structuredError = operationResult
+            && hasErrors(operationResult->diagnostics);
+        if (!structuredError) {
+            appendDiagnostic(result.diagnostics,
+                             QStringLiteral("error"),
+                             QStringLiteral("operation.failed"),
+                             process.standardError.trimmed().isEmpty()
+                                 ? QStringLiteral("Generator failed")
+                                 : process.standardError.trimmed(),
+                             executable,
+                             QStringLiteral("generator"));
+        }
         return result;
     }
-    result.diagnostics += diagnosticsFromResult(rawResult.object,
-                                                QStringLiteral("generator"));
-    if (!rawResult.object.value(QStringLiteral("success")).toBool(false)) {
-        if (!hasErrors(result.diagnostics)) {
+    if (!rawResult.success || !operationResult || !operationResult->protocolValid) {
+        return result;
+    }
+    if (!operationResult->success) {
+        if (!hasErrors(operationResult->diagnostics)) {
             appendDiagnostic(result.diagnostics,
                              QStringLiteral("error"),
                              QStringLiteral("operation.failed"),
@@ -763,35 +958,9 @@ GenerationResult FinepaperApplication::generate(
         return result;
     }
 
-    const QJsonArray artifacts = rawResult.object.value(QStringLiteral("artifacts")).toArray();
-    QSet<QString> artifactIds;
-    for (qsizetype index = 0; index < artifacts.size(); ++index) {
+    for (qsizetype index = 0; index < operationResult->artifacts.size(); ++index) {
         const QString base = QStringLiteral("/artifacts/%1").arg(index);
-        if (!artifacts.at(index).isObject()) {
-            appendDiagnostic(result.diagnostics,
-                             QStringLiteral("error"),
-                             QStringLiteral("artifact.invalid"),
-                             QStringLiteral("artifact must be an object"),
-                             base,
-                             QStringLiteral("generator"));
-            continue;
-        }
-        const QJsonObject object = artifacts.at(index).toObject();
-        Artifact artifact{
-            object.value(QStringLiteral("id")).toString(),
-            object.value(QStringLiteral("type")).toString(),
-            object.value(QStringLiteral("path")).toString(),
-            object.value(QStringLiteral("primary")).toBool(false)
-        };
-        if (artifact.id.isEmpty() || artifactIds.contains(artifact.id)) {
-            appendDiagnostic(result.diagnostics,
-                             QStringLiteral("error"),
-                             QStringLiteral("artifact.invalid_id"),
-                             QStringLiteral("artifact id is missing or duplicated"),
-                             base + QStringLiteral("/id"),
-                             QStringLiteral("generator"));
-            continue;
-        }
+        Artifact artifact = operationResult->artifacts.at(index);
         QString absolutePath;
         if (!artifactPathIsContained(result.outputDirectory,
                                      artifact.path,
@@ -804,7 +973,6 @@ GenerationResult FinepaperApplication::generate(
                              QStringLiteral("generator"));
             continue;
         }
-        artifactIds.insert(artifact.id);
         result.artifacts.append(std::move(artifact));
     }
 

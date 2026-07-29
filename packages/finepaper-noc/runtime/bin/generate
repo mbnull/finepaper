@@ -11,6 +11,8 @@ require 'open3'
 require 'optparse'
 require 'tmpdir'
 
+HDL_IDENTIFIER = /\A[A-Za-z_][A-Za-z0-9_]*\z/
+
 def write_result(path, success:, artifacts: [], diagnostics: [])
   FileUtils.mkdir_p(File.dirname(path))
   File.write(path, JSON.pretty_generate(
@@ -38,6 +40,14 @@ def number_parameter(values, id, fallback)
   value.is_a?(Numeric) ? value : fallback
 end
 
+def require_hdl_identifier(value, description)
+  unless value.is_a?(String) && value.match?(HDL_IDENTIFIER)
+    raise "#{description} must be a Verilog identifier ([A-Za-z_][A-Za-z0-9_]*)"
+  end
+
+  value
+end
+
 def endpoint_slot_key(endpoint)
   slot = endpoint.dig('attachment', 'slot').to_s
   return [0, slot.to_i, endpoint.fetch('id')] if slot.match?(/\A\d+\z/)
@@ -58,10 +68,11 @@ def legacy_input(design)
   parameters = design.fetch('parameters', {})
   endpoints = design.fetch('endpoints', [])
   raise 'endpoints must be an array' unless endpoints.is_a?(Array)
+  design_id = require_hdl_identifier(design.fetch('id'), 'design id')
 
   endpoint_map = Hash.new { |map, key| map[key] = [] }
   endpoint_modules = endpoints.sort_by { |endpoint| endpoint.fetch('id') }.map do |endpoint|
-    id = endpoint.fetch('id')
+    id = require_hdl_identifier(endpoint.fetch('id'), 'endpoint id')
     type = endpoint.fetch('type')
     endpoint_parameters = endpoint.fetch('parameters', {})
     router = endpoint.dig('attachment', 'router')
@@ -95,7 +106,8 @@ def legacy_input(design)
 
   {
     'schema' => 'finepaper-ipcore-graph-v1',
-    'name' => design.fetch('name'),
+    # The display name is intentionally not used as a file or HDL token.
+    'name' => design_id,
     'ipcore' => 'finepaper.noc',
     'instance' => 'noc_0',
     'version' => design.dig('package', 'version') || '1.0.0',
@@ -177,7 +189,8 @@ begin
     raise(stderr.strip.empty? ? "legacy #{command} failed" : stderr.strip) unless status.success?
   end
 
-  artifacts = command == 'generate' ? artifact_list(File.expand_path(options[:output]), design.fetch('name')) : []
+  design_id = require_hdl_identifier(design.fetch('id'), 'design id')
+  artifacts = command == 'generate' ? artifact_list(File.expand_path(options[:output]), design_id) : []
   raise 'legacy generator did not produce any artifacts' if command == 'generate' && artifacts.empty?
 
   write_result(options[:result], success: true, artifacts: artifacts)

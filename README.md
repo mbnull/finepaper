@@ -25,12 +25,14 @@ The target architecture is described in
 xmake build finepaper
 xmake build finepaper-gui
 xmake build finepaper-tests
+xmake build finepaper-cli-tests
+xmake build finepaper-gui-smoke
 
 ./build/linux/x86_64/release/finepaper package list --package-root packages --json
 ./build/linux/x86_64/release/finepaper run examples/mesh-2x2.request.json \
   --package-root packages --output /tmp/finepaper-output --json
 ./build/linux/x86_64/release/finepaper-gui --package-root packages
-./build/linux/x86_64/release/finepaper-tests
+xmake test
 ```
 
 In the GUI, use **Package → Install Package Directory…** and select the

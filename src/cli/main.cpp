@@ -192,9 +192,11 @@ int designCreate(const QStringList& arguments, FinepaperApplication& application
         return kInputError;
     }
     DesignResult result = application.createDesign(request.object);
+    bool outputWriteFailed = false;
     if (result.success &&
         !application.saveDesignFile(outputPath, result.design, &result.diagnostics)) {
         result.success = false;
+        outputWriteFailed = true;
     }
     if (hasOption(arguments, QStringLiteral("--json"))) {
         printJson(designResultToJson(result));
@@ -207,7 +209,7 @@ int designCreate(const QStringList& arguments, FinepaperApplication& application
     if (result.success) {
         return kSuccess;
     }
-    return hasErrors(result.diagnostics) ? kDesignValidationError : kIoError;
+    return outputWriteFailed ? kIoError : kDesignValidationError;
 }
 
 int designValidate(const QStringList& arguments, FinepaperApplication& application) {
@@ -259,10 +261,12 @@ int designGenerate(const QStringList& arguments, FinepaperApplication& applicati
     } else {
         result = application.generate(loaded.design, GenerationOptions{outputRoot});
     }
-    const QJsonObject output = generationResultToJson(result);
     const QString resultPath = optionValue(arguments, QStringLiteral("--result"));
-    if (!resultPath.isEmpty()) {
-        saveJsonObject(resultPath, output, &result.diagnostics);
+    bool resultWriteFailed = false;
+    if (!resultPath.isEmpty() &&
+        !saveJsonObject(resultPath, generationResultToJson(result), &result.diagnostics)) {
+        result.success = false;
+        resultWriteFailed = true;
     }
     if (hasOption(arguments, QStringLiteral("--json"))) {
         printJson(generationResultToJson(result));
@@ -272,6 +276,9 @@ int designGenerate(const QStringList& arguments, FinepaperApplication& applicati
             QTextStream(stdout) << "Generated artifacts in " << result.outputDirectory
                                 << Qt::endl;
         }
+    }
+    if (resultWriteFailed) {
+        return kIoError;
     }
     return result.success ? kSuccess : kGenerationError;
 }
@@ -344,10 +351,12 @@ int runCommand(const QStringList& arguments) {
     }
 
     GenerationResult result = application.generate(design.design, GenerationOptions{outputRoot});
-    const QJsonObject output = generationResultToJson(result);
     const QString resultPath = optionValue(arguments, QStringLiteral("--result"));
-    if (!resultPath.isEmpty()) {
-        saveJsonObject(resultPath, output, &result.diagnostics);
+    bool resultWriteFailed = false;
+    if (!resultPath.isEmpty() &&
+        !saveJsonObject(resultPath, generationResultToJson(result), &result.diagnostics)) {
+        result.success = false;
+        resultWriteFailed = true;
     }
     if (hasOption(arguments, QStringLiteral("--json"))) {
         printJson(generationResultToJson(result));
@@ -357,6 +366,9 @@ int runCommand(const QStringList& arguments) {
             QTextStream(stdout) << "Generated artifacts in " << result.outputDirectory
                                 << Qt::endl;
         }
+    }
+    if (resultWriteFailed) {
+        return kIoError;
     }
     return result.success ? kSuccess : kGenerationError;
 }

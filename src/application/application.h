@@ -1,5 +1,6 @@
 #pragma once
 
+#include "execution/package_protocol.h"
 #include "noc/model.h"
 #include "package/package.h"
 
@@ -21,13 +22,6 @@ struct DesignResult {
 struct ValidationResult {
     bool success = false;
     QVector<Diagnostic> diagnostics;
-};
-
-struct Artifact {
-    QString id;
-    QString type;
-    QString path;
-    bool primary = false;
 };
 
 struct ExecutionTool {

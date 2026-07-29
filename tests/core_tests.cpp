@@ -6,6 +6,7 @@
 
 #include <QCoreApplication>
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QTemporaryDir>
@@ -31,6 +32,28 @@ bool hasDiagnosticCode(const QVector<Diagnostic>& diagnostics, const QString& co
     return std::any_of(diagnostics.cbegin(), diagnostics.cend(), [&](const Diagnostic& diagnostic) {
         return diagnostic.code == code;
     });
+}
+
+bool preparePackageFixture(const QString& packageRoot,
+                           const QString& generatorSource,
+                           const QJsonObject& manifest) {
+    const QString executable = QDir(packageRoot).filePath(QStringLiteral("runtime/bin/generate"));
+    if (!QDir().mkpath(QFileInfo(executable).absolutePath())) {
+        return false;
+    }
+    if (!QFileInfo::exists(executable)) {
+        if (!QFile::copy(generatorSource, executable)) {
+            return false;
+        }
+        if (!QFile::setPermissions(
+                executable,
+                QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner |
+                    QFileDevice::ReadGroup | QFileDevice::ExeGroup |
+                    QFileDevice::ReadOther | QFileDevice::ExeOther)) {
+            return false;
+        }
+    }
+    return saveJsonObject(QDir(packageRoot).filePath(QStringLiteral("package.json")), manifest);
 }
 
 QJsonObject request() {
@@ -122,6 +145,111 @@ int main(int argc, char** argv) {
     QCoreApplication application(argc, argv);
     const QString projectRoot = QString::fromUtf8(FINEPAPER_SOURCE_DIR);
 
+    const PackageOperationResult invalidOperationResult = parsePackageOperationResult(
+        QJsonObject{
+            {QStringLiteral("success"), QStringLiteral("yes")},
+            {QStringLiteral("diagnostics"), QJsonObject{}},
+            {QStringLiteral("artifacts"), QJsonArray{
+                QJsonObject{{QStringLiteral("id"), QStringLiteral("a")},
+                            {QStringLiteral("type"), QStringLiteral("rtl")},
+                            {QStringLiteral("path"), QStringLiteral("a.sv")},
+                            {QStringLiteral("primary"), QStringLiteral("true")}}
+            }}},
+        QStringLiteral("/tmp/result.json"),
+        QStringLiteral("test"),
+        ArtifactResultPolicy::Required);
+    check(!invalidOperationResult.protocolValid
+              && hasDiagnosticCode(invalidOperationResult.diagnostics,
+                                   QStringLiteral("operation.invalid_result")),
+          QStringLiteral("Package operation results are parsed with a strict typed contract"));
+
+    const JsonObjectLoadResult referenceManifest = loadJsonObject(
+        QDir(projectRoot).filePath(QStringLiteral("packages/finepaper-noc/package.json")));
+    check(referenceManifest.success, QStringLiteral("reference Package manifest is readable"));
+    QTemporaryDir manifestFixture(QStringLiteral("/tmp/finepaper-manifest-test-XXXXXX"));
+    check(manifestFixture.isValid(), QStringLiteral("temporary Package fixture is available"));
+    const QString generatorSource = QDir(projectRoot).filePath(
+        QStringLiteral("packages/finepaper-noc/runtime/bin/generate"));
+    if (referenceManifest.success && manifestFixture.isValid()) {
+        QJsonObject invalidManifest = referenceManifest.object;
+        invalidManifest.insert(QStringLiteral("endpointTypes"), QJsonObject{});
+        invalidManifest.insert(QStringLiteral("engine"), QStringLiteral("invalid"));
+        QJsonObject attachment = invalidManifest.value(QStringLiteral("attachment")).toObject();
+        attachment.insert(QStringLiteral("maxPerRouter"), 0);
+        attachment.insert(QStringLiteral("slotMode"), 7);
+        invalidManifest.insert(QStringLiteral("attachment"), attachment);
+        QJsonObject generator = invalidManifest.value(QStringLiteral("generator")).toObject();
+        generator.insert(QStringLiteral("supportsValidate"), QStringLiteral("true"));
+        generator.insert(QStringLiteral("timeoutSeconds"),
+                         kMaximumPackageTimeoutSeconds + 1);
+        invalidManifest.insert(QStringLiteral("generator"), generator);
+        QJsonObject mesh = invalidManifest.value(QStringLiteral("mesh")).toObject();
+        QJsonObject rows = mesh.value(QStringLiteral("rows")).toObject();
+        rows.insert(QStringLiteral("min"), 4);
+        rows.insert(QStringLiteral("default"), 2);
+        rows.insert(QStringLiteral("max"), kMaximumMeshDimension + 1);
+        mesh.insert(QStringLiteral("rows"), rows);
+        invalidManifest.insert(QStringLiteral("mesh"), mesh);
+        invalidManifest.insert(QStringLiteral("parameters"), QJsonArray{
+            QJsonObject{{QStringLiteral("id"), QStringLiteral("badInteger")},
+                        {QStringLiteral("type"), QStringLiteral("integer")},
+                        {QStringLiteral("default"), 1.5},
+                        {QStringLiteral("minimum"), 10},
+                        {QStringLiteral("maximum"), 1}},
+            QJsonObject{{QStringLiteral("id"), QStringLiteral("badEnum")},
+                        {QStringLiteral("type"), QStringLiteral("enum")},
+                        {QStringLiteral("default"), QStringLiteral("missing")},
+                        {QStringLiteral("values"), QJsonArray{QStringLiteral("a"),
+                                                              QStringLiteral("a"), 3}}},
+            QJsonObject{{QStringLiteral("id"), QStringLiteral("badType")},
+                        {QStringLiteral("type"), QStringLiteral("object")},
+                        {QStringLiteral("default"), QJsonObject{}}}
+        });
+        check(preparePackageFixture(manifestFixture.path(), generatorSource, invalidManifest),
+              QStringLiteral("strict Package fixture is prepared"));
+        const PackageLoadResult invalidPackage = loadPackage(manifestFixture.path());
+        check(!invalidPackage.success &&
+                  hasDiagnosticCode(invalidPackage.diagnostics,
+                                    QStringLiteral("package.invalid_endpoint_types")) &&
+                  hasDiagnosticCode(invalidPackage.diagnostics,
+                                    QStringLiteral("package.invalid_engine")) &&
+                  hasDiagnosticCode(invalidPackage.diagnostics,
+                                    QStringLiteral("package.invalid_attachment_capacity")) &&
+                  hasDiagnosticCode(invalidPackage.diagnostics,
+                                    QStringLiteral("package.invalid_timeout")) &&
+                  hasDiagnosticCode(invalidPackage.diagnostics,
+                                    QStringLiteral("package.invalid_mesh_rows")) &&
+                  hasDiagnosticCode(invalidPackage.diagnostics,
+                                    QStringLiteral("package.mesh_projection_too_large")) &&
+                  hasDiagnosticCode(invalidPackage.diagnostics,
+                                    QStringLiteral("package.invalid_parameter_type")) &&
+                  hasDiagnosticCode(invalidPackage.diagnostics,
+                                    QStringLiteral("package.invalid_parameter_default")) &&
+                  hasDiagnosticCode(invalidPackage.diagnostics,
+                                    QStringLiteral("package.duplicate_parameter_value")),
+              QStringLiteral("Package manifest validation fails closed across typed and semantic fields"));
+    }
+
+#ifdef Q_OS_UNIX
+    QTemporaryDir executableFixture(QStringLiteral("/tmp/finepaper-executable-test-XXXXXX"));
+    if (referenceManifest.success && executableFixture.isValid()) {
+        QJsonObject escapedManifest = referenceManifest.object;
+        const QString linkedExecutable = QDir(executableFixture.path()).filePath(
+            QStringLiteral("runtime/bin/generate"));
+        check(QDir().mkpath(QFileInfo(linkedExecutable).absolutePath()) &&
+                  QFile(QStringLiteral("/bin/true")).link(linkedExecutable) &&
+                  saveJsonObject(QDir(executableFixture.path()).filePath(
+                                     QStringLiteral("package.json")),
+                                 escapedManifest),
+              QStringLiteral("escaped executable fixture is prepared"));
+        const PackageLoadResult escapedPackage = loadPackage(executableFixture.path());
+        check(!escapedPackage.success &&
+                  hasDiagnosticCode(escapedPackage.diagnostics,
+                                    QStringLiteral("package.executable_escape")),
+              QStringLiteral("Package executable symlinks cannot escape the Package root"));
+    }
+#endif
+
     const RuntimeLocations locations = resolveRuntimeLocations(
         QStringList{QDir(projectRoot).filePath(QStringLiteral("packages"))}, projectRoot);
     check(locations.packageRoots == QStringList{QDir(projectRoot).filePath(QStringLiteral("packages"))},
@@ -140,6 +268,13 @@ int main(int argc, char** argv) {
         QStringList{QDir(projectRoot).filePath(QStringLiteral("packages"))});
     check(!hasErrors(packageDiagnostics), QStringLiteral("reference Package loads"));
     check(finepaper.packages().size() == 1, QStringLiteral("exactly one reference Package loads"));
+    if (manifestFixture.isValid()) {
+        const QVector<Diagnostic> failedReload = finepaper.reloadPackages(
+            QStringList{manifestFixture.path()});
+        check(hasErrors(failedReload) && finepaper.packages().size() == 1 &&
+                  finepaper.packages().at(0).id == QStringLiteral("finepaper.noc"),
+              QStringLiteral("failed Package reload preserves the previous catalog snapshot"));
+    }
 
     const DesignResult created = finepaper.createDesign(request());
     check(created.success, QStringLiteral("request creates a valid NocDesign"));
@@ -147,6 +282,81 @@ int main(int argc, char** argv) {
           QStringLiteral("Package defaults are materialized at creation"));
     check(created.design.endpoints.at(0).parameters.value(QStringLiteral("bufferDepth")).toInt() == 16,
           QStringLiteral("endpoint defaults are materialized at creation"));
+
+    QJsonObject numericNameRequest = request();
+    numericNameRequest.insert(QStringLiteral("name"), QStringLiteral("123 Demo-NoC"));
+    numericNameRequest.remove(QStringLiteral("id"));
+    const DesignResult numericNameDesign = finepaper.createDesign(numericNameRequest);
+    check(numericNameDesign.success &&
+              numericNameDesign.design.id == QStringLiteral("noc_123_demo_noc"),
+          QStringLiteral("generated design IDs are safe when display names start with digits"));
+
+    QJsonObject fractionalTopologyRequest = request();
+    QJsonObject fractionalTopology = fractionalTopologyRequest.value(
+        QStringLiteral("topology")).toObject();
+    fractionalTopology.insert(QStringLiteral("rows"), 1.5);
+    fractionalTopologyRequest.insert(QStringLiteral("topology"), fractionalTopology);
+    const DesignResult fractionalTopologyDesign = finepaper.createDesign(
+        fractionalTopologyRequest);
+    check(!fractionalTopologyDesign.success &&
+              hasDiagnosticCode(fractionalTopologyDesign.diagnostics,
+                                QStringLiteral("create.expected_integer")),
+          QStringLiteral("createDesign rejects fractional topology dimensions"));
+
+    QJsonObject invalidEndpointsRequest = request();
+    invalidEndpointsRequest.insert(QStringLiteral("endpoints"), QJsonObject{});
+    const DesignResult invalidEndpointsDesign = finepaper.createDesign(invalidEndpointsRequest);
+    check(!invalidEndpointsDesign.success &&
+              hasDiagnosticCode(invalidEndpointsDesign.diagnostics,
+                                QStringLiteral("create.expected_array")),
+          QStringLiteral("createDesign rejects a non-array endpoints field"));
+
+    QJsonObject automaticSlotRequest = request();
+    QJsonArray automaticSlotEndpoints = automaticSlotRequest.value(
+        QStringLiteral("endpoints")).toArray();
+    QJsonObject automaticSlotEndpoint = automaticSlotEndpoints.at(0).toObject();
+    automaticSlotEndpoint.insert(QStringLiteral("slot"), QStringLiteral("0"));
+    automaticSlotEndpoints[0] = automaticSlotEndpoint;
+    automaticSlotRequest.insert(QStringLiteral("endpoints"), automaticSlotEndpoints);
+    const DesignResult automaticSlotDesign = finepaper.createDesign(automaticSlotRequest);
+    check(!automaticSlotDesign.success &&
+              hasDiagnosticCode(automaticSlotDesign.diagnostics,
+                                QStringLiteral("endpoint.automatic_slot_persisted")),
+          QStringLiteral("automatic Package source designs cannot persist derived slots"));
+
+    NocDesign duplicateAutomaticSlots = created.design;
+    duplicateAutomaticSlots.endpoints[0].attachment.slot = QStringLiteral("same");
+    duplicateAutomaticSlots.endpoints[1].attachment.slot = QStringLiteral("same");
+    const ValidationResult duplicateAutomaticValidation = finepaper.validate(
+        duplicateAutomaticSlots, false);
+    check(!duplicateAutomaticValidation.success &&
+              hasDiagnosticCode(duplicateAutomaticValidation.diagnostics,
+                                QStringLiteral("endpoint.duplicate_slot")),
+          QStringLiteral("duplicate persisted slots are rejected in automatic mode"));
+
+    NocDesign staleSlotDesign = created.design;
+    staleSlotDesign.endpoints[2].attachment.slot = QStringLiteral("stale");
+    const DesignResult clearedSlotMove = finepaper.moveEndpoint(
+        staleSlotDesign, QStringLiteral("memory"), RouterPosition{0, 1}, std::nullopt);
+    check(clearedSlotMove.success &&
+              !clearedSlotMove.design.endpoints.at(2).attachment.slot,
+          QStringLiteral("moving with no slot clears stale automatic slot state"));
+
+    NocDesign oversizedDesign = created.design;
+    oversizedDesign.topology.rows = kMaximumMeshDimension;
+    oversizedDesign.topology.columns = kMaximumMeshDimension;
+    const QVector<Diagnostic> oversizedDiagnostics = validateDesignStructure(oversizedDesign);
+    check(hasDiagnosticCode(oversizedDiagnostics,
+                            QStringLiteral("topology.projection_too_large")) &&
+              projectTopology(oversizedDesign).routers.isEmpty(),
+          QStringLiteral("oversized topology is rejected and never projected"));
+
+    NocDesign unsafeIdentifierDesign = created.design;
+    unsafeIdentifierDesign.id = QStringLiteral("unsafe-id");
+    const ValidationResult unsafeIdentifierValidation = finepaper.validate(
+        unsafeIdentifierDesign, true);
+    check(!unsafeIdentifierValidation.success,
+          QStringLiteral("Package process validation rejects unsafe HDL design identifiers"));
 
     const NocDesign resolved = withResolvedAutomaticSlots(created.design);
     check(resolved.endpoints.at(0).attachment.slot == QStringLiteral("1"),
@@ -207,6 +417,14 @@ int main(int argc, char** argv) {
     check(complexValidation.success, QStringLiteral("complex Package validation succeeds through its Engine"));
     check(hasDiagnosticCode(complexValidation.diagnostics, QStringLiteral("mock.engine_used")),
           QStringLiteral("Engine, not the Generator, performs complex Package validation"));
+    NocDesign rejectedComplexDesign = complexDesign.design;
+    rejectedComplexDesign.packageData.insert(QStringLiteral("forceEngineError"), true);
+    const ValidationResult rejectedComplexValidation = complexApplication.validate(
+        rejectedComplexDesign, true);
+    check(!rejectedComplexValidation.success
+              && hasDiagnosticCode(rejectedComplexValidation.diagnostics,
+                                   QStringLiteral("mock.engine_rejected")),
+          QStringLiteral("structured Engine diagnostics survive a non-zero process exit"));
     QTemporaryDir complexOutput(QStringLiteral("/tmp/finepaper-engine-test-XXXXXX"));
     if (complexOutput.isValid()) {
         const GenerationResult complexGeneration = complexApplication.generate(
@@ -233,7 +451,7 @@ int main(int argc, char** argv) {
             return package.id == QStringLiteral("test.explicit-slots");
         });
     check(explicitPackage != multiPackageApplication.packages().cend()
-              && explicitPackage->attachment.slotMode == QStringLiteral("explicit")
+              && explicitPackage->attachment.slotMode == AttachmentSlotMode::Explicit
               && explicitPackage->attachment.positions.size() == 2
               && explicitPackage->attachment.positions.at(1).id == QStringLiteral("local1"),
           QStringLiteral("explicit Package exposes centrally declared attachment positions"));
@@ -243,6 +461,36 @@ int main(int argc, char** argv) {
               && explicitDesign.design.endpoints.at(0).attachment.slot
                      == QStringLiteral("local1"),
           QStringLiteral("explicit attachment position persists in NocDesign"));
+    QJsonObject nestedExplicitRequest = explicitSlotRequest();
+    QJsonArray nestedExplicitEndpoints = nestedExplicitRequest.value(
+        QStringLiteral("endpoints")).toArray();
+    QJsonObject nestedExplicitEndpoint = nestedExplicitEndpoints.at(0).toObject();
+    nestedExplicitEndpoint.remove(QStringLiteral("slot"));
+    nestedExplicitEndpoint.insert(
+        QStringLiteral("attachment"),
+        QJsonObject{{QStringLiteral("slot"), QStringLiteral("local1")}});
+    nestedExplicitEndpoints[0] = nestedExplicitEndpoint;
+    nestedExplicitRequest.insert(QStringLiteral("endpoints"), nestedExplicitEndpoints);
+    const DesignResult nestedExplicitDesign = multiPackageApplication.createDesign(
+        nestedExplicitRequest);
+    check(nestedExplicitDesign.success &&
+              nestedExplicitDesign.design.endpoints.at(0).attachment.router ==
+                  RouterPosition{0, 0},
+          QStringLiteral("a nested slot keeps the endpoint's top-level Router attachment"));
+
+    QJsonObject duplicateExplicitRequest = explicitSlotRequest();
+    QJsonArray duplicateExplicitEndpoints = duplicateExplicitRequest.value(
+        QStringLiteral("endpoints")).toArray();
+    QJsonObject duplicateExplicitEndpoint = duplicateExplicitEndpoints.at(0).toObject();
+    duplicateExplicitEndpoint.insert(QStringLiteral("id"), QStringLiteral("device_1"));
+    duplicateExplicitEndpoints.append(duplicateExplicitEndpoint);
+    duplicateExplicitRequest.insert(QStringLiteral("endpoints"), duplicateExplicitEndpoints);
+    const DesignResult duplicateExplicitDesign = multiPackageApplication.createDesign(
+        duplicateExplicitRequest);
+    check(!duplicateExplicitDesign.success &&
+              hasDiagnosticCode(duplicateExplicitDesign.diagnostics,
+                                QStringLiteral("endpoint.duplicate_slot")),
+          QStringLiteral("duplicate attachment slots are rejected in explicit mode"));
     QJsonObject invalidExplicitRequest = explicitSlotRequest();
     QJsonArray invalidEndpoints = invalidExplicitRequest.value(
         QStringLiteral("endpoints")).toArray();
@@ -271,6 +519,22 @@ int main(int argc, char** argv) {
         QThread::msleep(1200);
         check(!QFileInfo::exists(marker),
               QStringLiteral("timeout terminates Package child processes with their parent"));
+
+        const QString stubbornMarker = QDir(processOutput.path()).filePath(
+            QStringLiteral("stubborn-child-survived"));
+        const ProcessResult stubbornTimeout = runProcess(
+            QStringLiteral("/bin/sh"),
+            QStringList{
+                QStringLiteral("-c"),
+                QStringLiteral("(trap '' TERM; sleep 1; touch %1) & wait").arg(stubbornMarker)
+            },
+            processOutput.path(),
+            30);
+        check(stubbornTimeout.timedOut,
+              QStringLiteral("Process runner reports a timeout for a stubborn descendant"));
+        QThread::msleep(1200);
+        check(!QFileInfo::exists(stubbornMarker),
+              QStringLiteral("timeout force-kills descendants that ignore termination"));
     }
 #endif
 

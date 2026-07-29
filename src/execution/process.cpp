@@ -16,6 +16,10 @@ ProcessResult runProcess(const QString& executable,
                          int timeoutMilliseconds,
                          const QProcessEnvironment& environment) {
     ProcessResult result;
+    if (timeoutMilliseconds <= 0) {
+        result.error = QStringLiteral("process timeout must be a positive number of milliseconds");
+        return result;
+    }
     QProcess process;
     process.setProgram(executable);
     process.setArguments(arguments);
@@ -49,16 +53,22 @@ ProcessResult runProcess(const QString& executable,
 #else
         process.terminate();
 #endif
-        if (!process.waitForFinished(3000)) {
+        const bool parentFinished = process.waitForFinished(3000);
 #ifdef Q_OS_UNIX
-            if (processGroup > 0) {
-                ::kill(-processGroup, SIGKILL);
-            } else {
-                process.kill();
-            }
-#else
+        // The direct child may exit on SIGTERM while a descendant that ignored
+        // it is still alive. Always sweep the private process group after the
+        // grace period instead of using the parent's state as a proxy.
+        if (processGroup > 0) {
+            ::kill(-processGroup, SIGKILL);
+        } else if (!parentFinished) {
             process.kill();
+        }
+#else
+        if (!parentFinished) {
+            process.kill();
+        }
 #endif
+        if (!parentFinished) {
             process.waitForFinished(3000);
         }
     }

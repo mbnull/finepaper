@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace finepaper {
 namespace {
@@ -68,7 +69,11 @@ int requiredInteger(const QJsonObject& object,
                     const QString& path,
                     QVector<Diagnostic>& diagnostics) {
     const QJsonValue value = object.value(key);
-    if (!value.isDouble() || std::floor(value.toDouble()) != value.toDouble()) {
+    if (!value.isDouble() ||
+        !std::isfinite(value.toDouble()) ||
+        std::floor(value.toDouble()) != value.toDouble() ||
+        value.toDouble() < static_cast<double>(std::numeric_limits<int>::min()) ||
+        value.toDouble() > static_cast<double>(std::numeric_limits<int>::max())) {
         appendDiagnostic(diagnostics,
                          QStringLiteral("error"),
                          QStringLiteral("package.invalid_integer"),
@@ -79,27 +84,283 @@ int requiredInteger(const QJsonObject& object,
     return value.toInt();
 }
 
+QJsonObject requiredObject(const QJsonObject& object,
+                           const QString& key,
+                           const QString& path,
+                           QVector<Diagnostic>& diagnostics) {
+    const QJsonValue value = object.value(key);
+    if (!value.isObject()) {
+        appendDiagnostic(diagnostics,
+                         QStringLiteral("error"),
+                         QStringLiteral("package.invalid_object"),
+                         QStringLiteral("%1 must be an object").arg(key),
+                         path + QLatin1Char('/') + key);
+        return {};
+    }
+    return value.toObject();
+}
+
+QString optionalString(const QJsonObject& object,
+                       const QString& key,
+                       const QString& fallback,
+                       const QString& path,
+                       QVector<Diagnostic>& diagnostics) {
+    if (!object.contains(key)) {
+        return fallback;
+    }
+    const QJsonValue value = object.value(key);
+    if (!value.isString()) {
+        appendDiagnostic(diagnostics,
+                         QStringLiteral("error"),
+                         QStringLiteral("package.invalid_string"),
+                         QStringLiteral("%1 must be a string").arg(key),
+                         path + QLatin1Char('/') + key);
+        return fallback;
+    }
+    return value.toString();
+}
+
+bool optionalBoolean(const QJsonObject& object,
+                     const QString& key,
+                     bool fallback,
+                     const QString& path,
+                     QVector<Diagnostic>& diagnostics) {
+    if (!object.contains(key)) {
+        return fallback;
+    }
+    const QJsonValue value = object.value(key);
+    if (!value.isBool()) {
+        appendDiagnostic(diagnostics,
+                         QStringLiteral("error"),
+                         QStringLiteral("package.invalid_boolean"),
+                         QStringLiteral("%1 must be a boolean").arg(key),
+                         path + QLatin1Char('/') + key);
+        return fallback;
+    }
+    return value.toBool();
+}
+
+int optionalTimeoutSeconds(const QJsonObject& object,
+                           const QString& key,
+                           int fallback,
+                           const QString& path,
+                           QVector<Diagnostic>& diagnostics) {
+    if (!object.contains(key)) {
+        return fallback;
+    }
+    const int timeout = requiredInteger(object, key, fallback, path, diagnostics);
+    if (timeout <= 0 || timeout > kMaximumPackageTimeoutSeconds) {
+        appendDiagnostic(
+            diagnostics,
+            QStringLiteral("error"),
+            QStringLiteral("package.invalid_timeout"),
+            QStringLiteral("%1 must be between 1 and %2 seconds")
+                .arg(key)
+                .arg(kMaximumPackageTimeoutSeconds),
+            path + QLatin1Char('/') + key);
+    }
+    return timeout;
+}
+
+ParameterType parameterTypeFromId(const QString& type) {
+    if (type == QStringLiteral("integer")) return ParameterType::Integer;
+    if (type == QStringLiteral("number")) return ParameterType::Number;
+    if (type == QStringLiteral("boolean")) return ParameterType::Boolean;
+    if (type == QStringLiteral("string")) return ParameterType::String;
+    if (type == QStringLiteral("enum")) return ParameterType::Enumeration;
+    return ParameterType::Invalid;
+}
+
+bool valueMatchesParameterType(const QJsonValue& value, ParameterType type) {
+    if (type == ParameterType::Integer) {
+        return value.isDouble() &&
+               std::isfinite(value.toDouble()) &&
+               std::floor(value.toDouble()) == value.toDouble();
+    }
+    if (type == ParameterType::Number) {
+        return value.isDouble() && std::isfinite(value.toDouble());
+    }
+    if (type == ParameterType::Boolean) {
+        return value.isBool();
+    }
+    if (type == ParameterType::String || type == ParameterType::Enumeration) {
+        return value.isString();
+    }
+    return false;
+}
+
 ParameterDefinition parseParameter(const QJsonObject& object,
                                    const QString& path,
                                    QVector<Diagnostic>& diagnostics) {
     ParameterDefinition definition;
     definition.id = requiredString(object, QStringLiteral("id"), path, diagnostics);
-    definition.type = requiredString(object, QStringLiteral("type"), path, diagnostics);
-    definition.label = object.value(QStringLiteral("label")).toString(definition.id);
-    if (object.contains(QStringLiteral("default"))) {
+    const QString typeId = requiredString(
+        object, QStringLiteral("type"), path, diagnostics);
+    definition.type = parameterTypeFromId(typeId);
+    definition.label = optionalString(object,
+                                      QStringLiteral("label"),
+                                      definition.id,
+                                      path,
+                                      diagnostics);
+    if (definition.type == ParameterType::Invalid) {
+        appendDiagnostic(diagnostics,
+                         QStringLiteral("error"),
+                         QStringLiteral("package.invalid_parameter_type"),
+                         QStringLiteral("unsupported parameter type %1").arg(typeId),
+                         path + QStringLiteral("/type"));
+    }
+
+    if (!object.contains(QStringLiteral("default"))) {
+        appendDiagnostic(diagnostics,
+                         QStringLiteral("error"),
+                         QStringLiteral("package.missing_parameter_default"),
+                         QStringLiteral("parameter default is required"),
+                         path + QStringLiteral("/default"));
+    } else {
         definition.hasDefault = true;
         definition.defaultValue = object.value(QStringLiteral("default"));
+        if (!valueMatchesParameterType(definition.defaultValue, definition.type)) {
+            appendDiagnostic(diagnostics,
+                             QStringLiteral("error"),
+                             QStringLiteral("package.invalid_parameter_default"),
+                             QStringLiteral("parameter default does not match its type"),
+                             path + QStringLiteral("/default"));
+        }
     }
-    if (object.value(QStringLiteral("minimum")).isDouble()) {
-        definition.minimum = object.value(QStringLiteral("minimum")).toDouble();
+
+    if (object.contains(QStringLiteral("minimum"))) {
+        const QJsonValue minimum = object.value(QStringLiteral("minimum"));
+        if (!minimum.isDouble() || !std::isfinite(minimum.toDouble())) {
+            appendDiagnostic(diagnostics,
+                             QStringLiteral("error"),
+                             QStringLiteral("package.invalid_parameter_minimum"),
+                             QStringLiteral("minimum must be a finite number"),
+                             path + QStringLiteral("/minimum"));
+        } else {
+            definition.minimum = minimum.toDouble();
+        }
     }
-    if (object.value(QStringLiteral("maximum")).isDouble()) {
-        definition.maximum = object.value(QStringLiteral("maximum")).toDouble();
+    if (object.contains(QStringLiteral("maximum"))) {
+        const QJsonValue maximum = object.value(QStringLiteral("maximum"));
+        if (!maximum.isDouble() || !std::isfinite(maximum.toDouble())) {
+            appendDiagnostic(diagnostics,
+                             QStringLiteral("error"),
+                             QStringLiteral("package.invalid_parameter_maximum"),
+                             QStringLiteral("maximum must be a finite number"),
+                             path + QStringLiteral("/maximum"));
+        } else {
+            definition.maximum = maximum.toDouble();
+        }
     }
-    const QJsonArray values = object.value(QStringLiteral("values")).toArray();
-    for (const QJsonValue& value : values) {
-        if (value.isString()) {
-            definition.values.append(value.toString());
+
+    if ((definition.minimum || definition.maximum) &&
+        definition.type != ParameterType::Integer &&
+        definition.type != ParameterType::Number) {
+        appendDiagnostic(diagnostics,
+                         QStringLiteral("error"),
+                         QStringLiteral("package.invalid_parameter_range"),
+                         QStringLiteral("minimum and maximum require an integer or number parameter"),
+                         path);
+    }
+    if (definition.type == ParameterType::Integer) {
+        if (definition.minimum && std::floor(*definition.minimum) != *definition.minimum) {
+            appendDiagnostic(diagnostics,
+                             QStringLiteral("error"),
+                             QStringLiteral("package.invalid_parameter_minimum"),
+                             QStringLiteral("integer parameter minimum must be an integer"),
+                             path + QStringLiteral("/minimum"));
+        }
+        if (definition.maximum && std::floor(*definition.maximum) != *definition.maximum) {
+            appendDiagnostic(diagnostics,
+                             QStringLiteral("error"),
+                             QStringLiteral("package.invalid_parameter_maximum"),
+                             QStringLiteral("integer parameter maximum must be an integer"),
+                             path + QStringLiteral("/maximum"));
+        }
+    }
+    if (definition.minimum && definition.maximum &&
+        *definition.minimum > *definition.maximum) {
+        appendDiagnostic(diagnostics,
+                         QStringLiteral("error"),
+                         QStringLiteral("package.invalid_parameter_range"),
+                         QStringLiteral("minimum must not exceed maximum"),
+                         path);
+    }
+
+    if (object.contains(QStringLiteral("values"))) {
+        const QJsonValue valuesValue = object.value(QStringLiteral("values"));
+        if (!valuesValue.isArray()) {
+            appendDiagnostic(diagnostics,
+                             QStringLiteral("error"),
+                             QStringLiteral("package.invalid_parameter_values"),
+                             QStringLiteral("values must be an array"),
+                             path + QStringLiteral("/values"));
+        } else {
+            const QJsonArray values = valuesValue.toArray();
+            QSet<QString> seenValues;
+            for (qsizetype index = 0; index < values.size(); ++index) {
+                const QJsonValue value = values.at(index);
+                if (!value.isString() || value.toString().isEmpty()) {
+                    appendDiagnostic(diagnostics,
+                                     QStringLiteral("error"),
+                                     QStringLiteral("package.invalid_parameter_value"),
+                                     QStringLiteral("enum value must be a non-empty string"),
+                                     QStringLiteral("%1/values/%2").arg(path).arg(index));
+                    continue;
+                }
+                if (seenValues.contains(value.toString())) {
+                    appendDiagnostic(diagnostics,
+                                     QStringLiteral("error"),
+                                     QStringLiteral("package.duplicate_parameter_value"),
+                                     QStringLiteral("enum value is duplicated"),
+                                     QStringLiteral("%1/values/%2").arg(path).arg(index));
+                    continue;
+                }
+                seenValues.insert(value.toString());
+                definition.values.append(value.toString());
+            }
+        }
+    }
+
+    if (definition.type == ParameterType::Enumeration) {
+        if (definition.values.isEmpty()) {
+            appendDiagnostic(diagnostics,
+                             QStringLiteral("error"),
+                             QStringLiteral("package.missing_parameter_values"),
+                             QStringLiteral("enum parameter requires at least one value"),
+                             path + QStringLiteral("/values"));
+        }
+        if (definition.hasDefault && definition.defaultValue.isString() &&
+            !definition.values.contains(definition.defaultValue.toString())) {
+            appendDiagnostic(diagnostics,
+                             QStringLiteral("error"),
+                             QStringLiteral("package.invalid_parameter_default"),
+                             QStringLiteral("enum default is not one of its declared values"),
+                             path + QStringLiteral("/default"));
+        }
+    } else if (object.contains(QStringLiteral("values"))) {
+        appendDiagnostic(diagnostics,
+                         QStringLiteral("error"),
+                         QStringLiteral("package.invalid_parameter_values"),
+                         QStringLiteral("values are only supported for enum parameters"),
+                         path + QStringLiteral("/values"));
+    }
+
+    if (definition.hasDefault && definition.defaultValue.isDouble()) {
+        const double defaultNumber = definition.defaultValue.toDouble();
+        if (definition.minimum && defaultNumber < *definition.minimum) {
+            appendDiagnostic(diagnostics,
+                             QStringLiteral("error"),
+                             QStringLiteral("package.invalid_parameter_default"),
+                             QStringLiteral("parameter default is below minimum"),
+                             path + QStringLiteral("/default"));
+        }
+        if (definition.maximum && defaultNumber > *definition.maximum) {
+            appendDiagnostic(diagnostics,
+                             QStringLiteral("error"),
+                             QStringLiteral("package.invalid_parameter_default"),
+                             QStringLiteral("parameter default is above maximum"),
+                             path + QStringLiteral("/default"));
         }
     }
     return definition;
@@ -150,8 +411,11 @@ QVector<ParameterDefinition> parseParameters(const QJsonValue& value,
 }
 
 bool pathIsInside(const QString& rootPath, const QString& candidatePath) {
-    const QString root = QDir::cleanPath(QFileInfo(rootPath).absoluteFilePath());
-    const QString candidate = QDir::cleanPath(QFileInfo(candidatePath).absoluteFilePath());
+    const QString root = QFileInfo(rootPath).canonicalFilePath();
+    const QString candidate = QFileInfo(candidatePath).canonicalFilePath();
+    if (root.isEmpty() || candidate.isEmpty()) {
+        return false;
+    }
     return candidate == root || candidate.startsWith(root + QDir::separator());
 }
 
@@ -162,7 +426,24 @@ void validateExecutablePath(const QString& packageRoot,
     if (relativePath.isEmpty()) {
         return;
     }
+    if (QFileInfo(relativePath).isAbsolute()) {
+        appendDiagnostic(diagnostics,
+                         QStringLiteral("error"),
+                         QStringLiteral("package.executable_escape"),
+                         QStringLiteral("executable path must be relative to the package root"),
+                         jsonPath);
+        return;
+    }
     const QString absolutePath = QDir(packageRoot).filePath(relativePath);
+    const QFileInfo info(absolutePath);
+    if (!info.isFile() || !info.isExecutable()) {
+        appendDiagnostic(diagnostics,
+                         QStringLiteral("error"),
+                         QStringLiteral("package.executable_missing"),
+                         QStringLiteral("executable does not exist or is not executable"),
+                         jsonPath);
+        return;
+    }
     if (!pathIsInside(packageRoot, absolutePath)) {
         appendDiagnostic(diagnostics,
                          QStringLiteral("error"),
@@ -171,31 +452,10 @@ void validateExecutablePath(const QString& packageRoot,
                          jsonPath);
         return;
     }
-    const QFileInfo info(absolutePath);
-    if (!info.isFile() || !info.isExecutable()) {
-        appendDiagnostic(diagnostics,
-                         QStringLiteral("error"),
-                         QStringLiteral("package.executable_missing"),
-                         QStringLiteral("executable does not exist or is not executable"),
-                         jsonPath);
-    }
 }
 
 bool valueMatchesType(const QJsonValue& value, const ParameterDefinition& definition) {
-    if (definition.type == QStringLiteral("integer")) {
-        return value.isDouble() && std::floor(value.toDouble()) == value.toDouble();
-    }
-    if (definition.type == QStringLiteral("number")) {
-        return value.isDouble();
-    }
-    if (definition.type == QStringLiteral("boolean")) {
-        return value.isBool();
-    }
-    if (definition.type == QStringLiteral("string") ||
-        definition.type == QStringLiteral("enum")) {
-        return value.isString();
-    }
-    return false;
+    return valueMatchesParameterType(value, definition.type);
 }
 
 } // namespace
@@ -228,7 +488,10 @@ PackageLoadResult loadPackage(const QString& packageRoot) {
     }
 
     PackageDefinition package;
-    package.rootPath = absoluteRoot;
+    package.rootPath = QFileInfo(absoluteRoot).canonicalFilePath();
+    if (package.rootPath.isEmpty()) {
+        package.rootPath = absoluteRoot;
+    }
     package.format = requiredString(*rootObject,
                                     QStringLiteral("format"),
                                     QString(),
@@ -259,9 +522,18 @@ PackageLoadResult loadPackage(const QString& packageRoot) {
                          QStringLiteral("/formatVersion"));
     }
 
-    const QJsonObject mesh = rootObject->value(QStringLiteral("mesh")).toObject();
-    const QJsonObject rows = mesh.value(QStringLiteral("rows")).toObject();
-    const QJsonObject columns = mesh.value(QStringLiteral("columns")).toObject();
+    const QJsonObject mesh = requiredObject(*rootObject,
+                                            QStringLiteral("mesh"),
+                                            QString(),
+                                            result.diagnostics);
+    const QJsonObject rows = requiredObject(mesh,
+                                            QStringLiteral("rows"),
+                                            QStringLiteral("/mesh"),
+                                            result.diagnostics);
+    const QJsonObject columns = requiredObject(mesh,
+                                               QStringLiteral("columns"),
+                                               QStringLiteral("/mesh"),
+                                               result.diagnostics);
     package.mesh.minimumRows = requiredInteger(rows,
                                                QStringLiteral("min"),
                                                1,
@@ -292,12 +564,56 @@ PackageLoadResult loadPackage(const QString& packageRoot) {
                                                   1,
                                                   QStringLiteral("/mesh/columns"),
                                                   result.diagnostics);
+    const bool rowsValid = package.mesh.minimumRows > 0 &&
+        package.mesh.minimumRows <= package.mesh.defaultRows &&
+        package.mesh.defaultRows <= package.mesh.maximumRows;
+    if (!rowsValid) {
+        appendDiagnostic(result.diagnostics,
+                         QStringLiteral("error"),
+                         QStringLiteral("package.invalid_mesh_rows"),
+                         QStringLiteral("mesh rows must satisfy 0 < min <= default <= max"),
+                         QStringLiteral("/mesh/rows"));
+    }
+    const bool columnsValid = package.mesh.minimumColumns > 0 &&
+        package.mesh.minimumColumns <= package.mesh.defaultColumns &&
+        package.mesh.defaultColumns <= package.mesh.maximumColumns;
+    if (!columnsValid) {
+        appendDiagnostic(result.diagnostics,
+                         QStringLiteral("error"),
+                         QStringLiteral("package.invalid_mesh_columns"),
+                         QStringLiteral("mesh columns must satisfy 0 < min <= default <= max"),
+                         QStringLiteral("/mesh/columns"));
+    }
+    if (package.mesh.maximumRows > kMaximumMeshDimension ||
+        package.mesh.maximumColumns > kMaximumMeshDimension ||
+        (package.mesh.maximumRows > 0 && package.mesh.maximumColumns > 0 &&
+         static_cast<qint64>(package.mesh.maximumRows)
+                 * static_cast<qint64>(package.mesh.maximumColumns)
+             > kMaximumProjectedRouterCount)) {
+        appendDiagnostic(result.diagnostics,
+                         QStringLiteral("error"),
+                         QStringLiteral("package.mesh_projection_too_large"),
+                         QStringLiteral("Package mesh bounds exceed Finepaper's safe projection limit"),
+                         QStringLiteral("/mesh"));
+    }
 
     package.parameters = parseParameters(rootObject->value(QStringLiteral("parameters")),
                                          QStringLiteral("/parameters"),
                                          result.diagnostics);
 
-    const QJsonArray endpointTypes = rootObject->value(QStringLiteral("endpointTypes")).toArray();
+    QJsonArray endpointTypes;
+    const QJsonValue endpointTypesValue = rootObject->value(QStringLiteral("endpointTypes"));
+    if (!endpointTypesValue.isUndefined()) {
+        if (!endpointTypesValue.isArray()) {
+            appendDiagnostic(result.diagnostics,
+                             QStringLiteral("error"),
+                             QStringLiteral("package.invalid_endpoint_types"),
+                             QStringLiteral("endpointTypes must be an array"),
+                             QStringLiteral("/endpointTypes"));
+        } else {
+            endpointTypes = endpointTypesValue.toArray();
+        }
+    }
     QSet<QString> endpointIds;
     for (qsizetype index = 0; index < endpointTypes.size(); ++index) {
         const QString base = QStringLiteral("/endpointTypes/%1").arg(index);
@@ -312,8 +628,16 @@ PackageLoadResult loadPackage(const QString& packageRoot) {
         const QJsonObject object = endpointTypes.at(index).toObject();
         EndpointTypeDefinition definition;
         definition.id = requiredString(object, QStringLiteral("id"), base, result.diagnostics);
-        definition.label = object.value(QStringLiteral("label")).toString(definition.id);
-        definition.icon = object.value(QStringLiteral("icon")).toString();
+        definition.label = optionalString(object,
+                                          QStringLiteral("label"),
+                                          definition.id,
+                                          base,
+                                          result.diagnostics);
+        definition.icon = optionalString(object,
+                                         QStringLiteral("icon"),
+                                         QString(),
+                                         base,
+                                         result.diagnostics);
         definition.parameters = parseParameters(object.value(QStringLiteral("parameters")),
                                                 base + QStringLiteral("/parameters"),
                                                 result.diagnostics);
@@ -328,16 +652,33 @@ PackageLoadResult loadPackage(const QString& packageRoot) {
         package.endpointTypes.append(std::move(definition));
     }
 
-    const QJsonObject attachment = rootObject->value(QStringLiteral("attachment")).toObject();
+    const QJsonObject attachment = requiredObject(*rootObject,
+                                                  QStringLiteral("attachment"),
+                                                  QString(),
+                                                  result.diagnostics);
     package.attachment.maxPerRouter = requiredInteger(attachment,
                                                       QStringLiteral("maxPerRouter"),
                                                       1,
                                                       QStringLiteral("/attachment"),
                                                       result.diagnostics);
-    package.attachment.slotMode = attachment.value(QStringLiteral("slotMode"))
-                                      .toString(QStringLiteral("automatic"));
-    if (package.attachment.slotMode != QStringLiteral("automatic") &&
-        package.attachment.slotMode != QStringLiteral("explicit")) {
+    if (package.attachment.maxPerRouter <= 0) {
+        appendDiagnostic(result.diagnostics,
+                         QStringLiteral("error"),
+                         QStringLiteral("package.invalid_attachment_capacity"),
+                         QStringLiteral("maxPerRouter must be greater than zero"),
+                         QStringLiteral("/attachment/maxPerRouter"));
+    }
+    const QString slotModeId = optionalString(attachment,
+                                              QStringLiteral("slotMode"),
+                                              QStringLiteral("automatic"),
+                                              QStringLiteral("/attachment"),
+                                              result.diagnostics);
+    if (slotModeId == QStringLiteral("automatic")) {
+        package.attachment.slotMode = AttachmentSlotMode::Automatic;
+    } else if (slotModeId == QStringLiteral("explicit")) {
+        package.attachment.slotMode = AttachmentSlotMode::Explicit;
+    } else {
+        package.attachment.slotMode = AttachmentSlotMode::Invalid;
         appendDiagnostic(result.diagnostics,
                          QStringLiteral("error"),
                          QStringLiteral("package.invalid_slot_mode"),
@@ -368,8 +709,11 @@ PackageLoadResult loadPackage(const QString& packageRoot) {
             AttachmentSlotDefinition definition;
             definition.id = requiredString(
                 object, QStringLiteral("id"), base, result.diagnostics);
-            definition.label = object.value(QStringLiteral("label"))
-                                   .toString(definition.id);
+            definition.label = optionalString(object,
+                                              QStringLiteral("label"),
+                                              definition.id,
+                                              base,
+                                              result.diagnostics);
             if (!definition.id.isEmpty() && slotIds.contains(definition.id)) {
                 appendDiagnostic(result.diagnostics,
                                  QStringLiteral("error"),
@@ -382,7 +726,10 @@ PackageLoadResult loadPackage(const QString& packageRoot) {
         }
     }
 
-    const QJsonObject generator = rootObject->value(QStringLiteral("generator")).toObject();
+    const QJsonObject generator = requiredObject(*rootObject,
+                                                 QStringLiteral("generator"),
+                                                 QString(),
+                                                 result.diagnostics);
     package.generator.name = requiredString(generator,
                                             QStringLiteral("name"),
                                             QStringLiteral("/generator"),
@@ -395,30 +742,54 @@ PackageLoadResult loadPackage(const QString& packageRoot) {
                                                   QStringLiteral("executable"),
                                                   QStringLiteral("/generator"),
                                                   result.diagnostics);
-    package.generator.supportsValidate = generator.value(QStringLiteral("supportsValidate"))
-                                             .toBool(false);
-    package.generator.timeoutSeconds = generator.value(QStringLiteral("timeoutSeconds"))
-                                           .toInt(300);
-    validateExecutablePath(absoluteRoot,
+    package.generator.supportsValidate = optionalBoolean(generator,
+                                                         QStringLiteral("supportsValidate"),
+                                                         false,
+                                                         QStringLiteral("/generator"),
+                                                         result.diagnostics);
+    package.generator.timeoutSeconds = optionalTimeoutSeconds(
+        generator,
+        QStringLiteral("timeoutSeconds"),
+        GeneratorDefinition{}.timeoutSeconds,
+        QStringLiteral("/generator"),
+        result.diagnostics);
+    validateExecutablePath(package.rootPath,
                            package.generator.executable,
                            QStringLiteral("/generator/executable"),
                            result.diagnostics);
 
-    if (rootObject->value(QStringLiteral("engine")).isObject()) {
-        const QJsonObject engineObject = rootObject->value(QStringLiteral("engine")).toObject();
-        EngineDefinition engine;
-        engine.executable = requiredString(engineObject,
-                                           QStringLiteral("executable"),
-                                           QStringLiteral("/engine"),
-                                           result.diagnostics);
-        engine.providesValidation = engineObject.value(QStringLiteral("providesValidation"))
-                                        .toBool(false);
-        engine.timeoutSeconds = engineObject.value(QStringLiteral("timeoutSeconds")).toInt(1800);
-        validateExecutablePath(absoluteRoot,
-                               engine.executable,
-                               QStringLiteral("/engine/executable"),
-                               result.diagnostics);
-        package.engine = std::move(engine);
+    if (rootObject->contains(QStringLiteral("engine"))) {
+        const QJsonValue engineValue = rootObject->value(QStringLiteral("engine"));
+        if (!engineValue.isObject()) {
+            appendDiagnostic(result.diagnostics,
+                             QStringLiteral("error"),
+                             QStringLiteral("package.invalid_engine"),
+                             QStringLiteral("engine must be an object"),
+                             QStringLiteral("/engine"));
+        } else {
+            const QJsonObject engineObject = engineValue.toObject();
+            EngineDefinition engine;
+            engine.executable = requiredString(engineObject,
+                                               QStringLiteral("executable"),
+                                               QStringLiteral("/engine"),
+                                               result.diagnostics);
+            engine.providesValidation = optionalBoolean(engineObject,
+                                                        QStringLiteral("providesValidation"),
+                                                        false,
+                                                        QStringLiteral("/engine"),
+                                                        result.diagnostics);
+            engine.timeoutSeconds = optionalTimeoutSeconds(
+                engineObject,
+                QStringLiteral("timeoutSeconds"),
+                EngineDefinition{}.timeoutSeconds,
+                QStringLiteral("/engine"),
+                result.diagnostics);
+            validateExecutablePath(package.rootPath,
+                                   engine.executable,
+                                   QStringLiteral("/engine/executable"),
+                                   result.diagnostics);
+            package.engine = std::move(engine);
+        }
     }
 
     result.success = !hasErrors(result.diagnostics);
@@ -475,7 +846,7 @@ QVector<Diagnostic> validateParameterObject(
                                  source);
             }
         }
-        if (definition.type == QStringLiteral("enum") &&
+        if (definition.type == ParameterType::Enumeration &&
             !definition.values.contains(value.toString())) {
             appendDiagnostic(diagnostics,
                              QStringLiteral("error"),
@@ -553,7 +924,9 @@ QVector<Diagnostic> PackageCatalog::reload(const QStringList& roots) {
     std::sort(loaded.begin(), loaded.end(), [](const auto& lhs, const auto& rhs) {
         return lhs.key() < rhs.key();
     });
-    m_packages = std::move(loaded);
+    if (!hasErrors(diagnostics)) {
+        m_packages = std::move(loaded);
+    }
     return diagnostics;
 }
 
