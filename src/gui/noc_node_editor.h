@@ -46,9 +46,15 @@ struct NocEndpointTypeItem {
     QString label;
 };
 
+struct NocAttachmentTarget {
+    RouterPosition router;
+    std::optional<QString> exactSlot;
+};
+
 struct NocRouterAttachmentPortItem {
     QString id;
     QString label;
+    std::optional<QString> exactSlot;
 
     bool operator==(const NocRouterAttachmentPortItem&) const = default;
 };
@@ -61,6 +67,8 @@ public:
     void setDesign(const NocDesign* design);
     void setEndpointTypes(QVector<NocEndpointTypeItem> endpointTypes);
     void setRouterAttachmentPorts(QVector<NocRouterAttachmentPortItem> ports);
+    void setEditingEnabled(bool enabled);
+    bool editingEnabled() const;
     bool setRouterVisualPosition(const QString& routerId, QPointF position);
     std::optional<QPointF> routerVisualPosition(const QString& routerId) const;
     std::optional<QPointF> endpointVisualPosition(const QString& endpointId) const;
@@ -69,10 +77,10 @@ public:
     void regularizeLayout();
     void zoomToFit();
 
-    std::function<bool(const QString&, RouterPosition)> endpointTypeDropped;
-    std::function<bool(const QString&, RouterPosition)> endpointMoveRequested;
-    std::function<bool(const EndpointInstance&, RouterPosition)> detachedEndpointDropped;
-    std::function<void(const QString&)> endpointRemovalRequested;
+    std::function<bool(const QString&, NocAttachmentTarget)> endpointTypeDropped;
+    std::function<bool(const QString&, NocAttachmentTarget)> endpointMoveRequested;
+    std::function<bool(const EndpointInstance&, NocAttachmentTarget)> detachedEndpointDropped;
+    std::function<bool(const QString&)> endpointRemovalRequested;
     std::function<void(const NocEditorSelection&)> selectionChanged;
 
 protected:
@@ -126,7 +134,7 @@ private:
     void clearEndpointAttachmentDraft();
     bool handleEndpointDrop(const QString& endpointType, const QPoint& viewportPosition);
     void addPendingEndpoint(const QString& endpointType, QPointF scenePosition);
-    bool attachNodeToRouter(QtNodes::NodeId nodeId, RouterPosition router);
+    bool attachNodeToRouter(QtNodes::NodeId nodeId, NocAttachmentTarget target);
     void detachEndpoint(QtNodes::NodeId nodeId);
     void showContextMenu(const QPoint& viewportPosition, const QPoint& globalPosition);
     void showCanvasCreateMenu(QPointF scenePosition, const QPoint& globalPosition);
@@ -138,6 +146,7 @@ private:
         std::optional<QtNodes::NodeId> ignoredNode = std::nullopt) const;
     bool blockedPortAt(const QPoint& viewportPosition) const;
     bool isRouterAttachmentPort(unsigned int portIndex) const;
+    std::optional<QString> exactSlotForPort(unsigned int portIndex) const;
     bool attachmentPortAvailable(QtNodes::NodeId routerNode,
                                  unsigned int portIndex,
                                  std::optional<QtNodes::NodeId> ignoredEndpoint = std::nullopt) const;
@@ -161,7 +170,7 @@ private:
     QSet<QString> m_collapsedRouters;
     QVector<NocEndpointTypeItem> m_endpointTypes;
     QVector<NocRouterAttachmentPortItem> m_routerAttachmentPorts{{
-        QStringLiteral("0"), QStringLiteral("EP")}};
+        QStringLiteral("0"), QStringLiteral("EP"), std::nullopt}};
     QHash<QString, PendingEndpoint> m_pendingEndpoints;
     std::optional<RouterEndpointDraft> m_routerEndpointDraft;
     std::optional<EndpointAttachmentDraft> m_endpointAttachmentDraft;
@@ -169,6 +178,7 @@ private:
     NocEditorSelection::Kind m_selectedKind = NocEditorSelection::Kind::None;
     QString m_selectedId;
     bool m_hasStoredCollapsedLayout = false;
+    bool m_editingEnabled = true;
     QString m_layoutKey;
 };
 

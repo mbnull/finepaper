@@ -5,27 +5,39 @@
 #include "gui/workbench_config.h"
 
 #include <QAction>
+#include <QAbstractButton>
 #include <QApplication>
 #include <QComboBox>
 #include <QContextMenuEvent>
 #include <QDir>
 #include <QDockWidget>
+#include <QDoubleSpinBox>
 #include <QDragEnterEvent>
 #include <QDropEvent>
+#include <QElapsedTimer>
+#include <QEventLoop>
+#include <QFile>
 #include <QFileInfo>
 #include <QGraphicsView>
 #include <QGraphicsPathItem>
 #include <QGroupBox>
 #include <QInputDialog>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QKeyEvent>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QMenu>
+#include <QMessageBox>
 #include <QMimeData>
 #include <QPushButton>
+#include <QStatusBar>
 #include <QTabWidget>
 #include <QTableWidget>
 #include <QTemporaryDir>
 #include <QTextStream>
+#include <QThread>
 #include <QToolBar>
 #include <QTimer>
 
@@ -35,6 +47,7 @@
 #include <QtNodes/internal/NodeGraphicsObject.hpp>
 
 #include <optional>
+#include <functional>
 #include <memory>
 
 namespace {
@@ -46,6 +59,17 @@ void check(bool condition, const QString& message) {
         QTextStream(stderr) << "FAILED: " << message << Qt::endl;
         ++failures;
     }
+}
+
+bool waitUntil(const std::function<bool()>& predicate, int timeoutMilliseconds = 20000) {
+    QElapsedTimer timer;
+    timer.start();
+    while (!predicate() && timer.elapsed() < timeoutMilliseconds) {
+        QApplication::processEvents(QEventLoop::AllEvents, 50);
+        QThread::msleep(1);
+    }
+    QApplication::processEvents(QEventLoop::AllEvents, 50);
+    return predicate();
 }
 
 QAction* actionWithText(QWidget& widget, const QString& text) {
@@ -330,6 +354,120 @@ void chooseInputDialogItem(int index) {
     });
 }
 
+void chooseMessageBoxButton(QMessageBox::StandardButton button) {
+    QTimer::singleShot(0, [button] {
+        for (QWidget* widget : QApplication::topLevelWidgets()) {
+            auto* messageBox = qobject_cast<QMessageBox*>(widget);
+            if (!messageBox) {
+                continue;
+            }
+            if (QAbstractButton* target = messageBox->button(button)) {
+                target->click();
+            }
+            return;
+        }
+    });
+}
+
+void closeDiscarding(QWidget& window) {
+    if (window.isWindowModified()) {
+        chooseMessageBoxButton(QMessageBox::Discard);
+    }
+    window.close();
+    QApplication::processEvents();
+}
+
+bool createNumberParameterPackage(const QString& sourceRoot,
+                                  const QString& destinationRoot) {
+    QFile sourceManifest(QDir(sourceRoot).filePath(QStringLiteral("package.json")));
+    if (!sourceManifest.open(QIODevice::ReadOnly)) {
+        return false;
+    }
+    QJsonParseError error;
+    QJsonDocument document = QJsonDocument::fromJson(sourceManifest.readAll(), &error);
+    if (error.error != QJsonParseError::NoError || !document.isObject()) {
+        return false;
+    }
+
+    QJsonObject package = document.object();
+    package.insert(QStringLiteral("id"), QStringLiteral("test.number-parameter"));
+    package.insert(QStringLiteral("name"), QStringLiteral("Number Parameter Fixture"));
+    package.insert(QStringLiteral("parameters"), QJsonArray{
+        QJsonObject{
+            {QStringLiteral("id"), QStringLiteral("frequencyScale")},
+            {QStringLiteral("label"), QStringLiteral("Frequency scale")},
+            {QStringLiteral("type"), QStringLiteral("number")},
+            {QStringLiteral("default"), 1.25},
+            {QStringLiteral("minimum"), 0.1},
+            {QStringLiteral("maximum"), 10.0}
+        }
+    });
+
+    if (!QDir().mkpath(QDir(destinationRoot).filePath(QStringLiteral("runtime/bin")))) {
+        return false;
+    }
+    QFile destinationManifest(
+        QDir(destinationRoot).filePath(QStringLiteral("package.json")));
+    if (!destinationManifest.open(QIODevice::WriteOnly | QIODevice::Truncate)
+        || destinationManifest.write(QJsonDocument(package).toJson(QJsonDocument::Indented)) < 0) {
+        return false;
+    }
+    destinationManifest.close();
+
+    const QString sourceGenerator = QDir(sourceRoot).filePath(
+        QStringLiteral("runtime/bin/generate"));
+    const QString destinationGenerator = QDir(destinationRoot).filePath(
+        QStringLiteral("runtime/bin/generate"));
+    if (!QFile::copy(sourceGenerator, destinationGenerator)) {
+        return false;
+    }
+    return QFile::setPermissions(destinationGenerator, QFile::permissions(sourceGenerator));
+}
+
+bool writeMissingPackageDesign(const QString& path) {
+    const QJsonObject design{
+        {QStringLiteral("format"), QStringLiteral("finepaper.noc-design")},
+        {QStringLiteral("formatVersion"), 1},
+        {QStringLiteral("id"), QStringLiteral("missing_package_design")},
+        {QStringLiteral("name"), QStringLiteral("Missing Package Design")},
+        {QStringLiteral("package"), QJsonObject{
+            {QStringLiteral("id"), QStringLiteral("test.never-loaded")},
+            {QStringLiteral("version"), QStringLiteral("1.0.0")}
+        }},
+        {QStringLiteral("topology"), QJsonObject{
+            {QStringLiteral("type"), QStringLiteral("mesh")},
+            {QStringLiteral("rows"), 2},
+            {QStringLiteral("columns"), 2}
+        }},
+        {QStringLiteral("parameters"), QJsonObject{}},
+        {QStringLiteral("endpoints"), QJsonArray{
+            QJsonObject{
+                {QStringLiteral("id"), QStringLiteral("client_0")},
+                {QStringLiteral("type"), QStringLiteral("client")},
+                {QStringLiteral("parameters"), QJsonObject{}},
+                {QStringLiteral("attachment"), QJsonObject{
+                    {QStringLiteral("router"), QJsonObject{
+                        {QStringLiteral("x"), 0}, {QStringLiteral("y"), 0}}},
+                    {QStringLiteral("slot"), QStringLiteral("local0")}
+                }}
+            },
+            QJsonObject{
+                {QStringLiteral("id"), QStringLiteral("client_1")},
+                {QStringLiteral("type"), QStringLiteral("client")},
+                {QStringLiteral("parameters"), QJsonObject{}},
+                {QStringLiteral("attachment"), QJsonObject{
+                    {QStringLiteral("router"), QJsonObject{
+                        {QStringLiteral("x"), 0}, {QStringLiteral("y"), 0}}},
+                    {QStringLiteral("slot"), QStringLiteral("local1")}
+                }}
+            }
+        }}
+    };
+    QFile file(path);
+    return file.open(QIODevice::WriteOnly | QIODevice::Truncate)
+        && file.write(QJsonDocument(design).toJson(QJsonDocument::Indented)) >= 0;
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -339,6 +477,7 @@ int main(int argc, char** argv) {
     check(outputRoot.isValid(), QStringLiteral("temporary GUI output root is available"));
     qputenv("XDG_CONFIG_HOME", configRoot.path().toUtf8());
 
+    QCoreApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
     QApplication application(argc, argv);
     QCoreApplication::setOrganizationName(QStringLiteral("FinepaperTest"));
     QCoreApplication::setApplicationName(QStringLiteral("finepaper-gui-smoke"));
@@ -440,6 +579,23 @@ int main(int argc, char** argv) {
           QStringLiteral("runtime NoC Package is loaded into the workbench"));
     check(endpointPalette && endpointPalette->count() == 2,
           QStringLiteral("Package Endpoint types populate the drag palette"));
+    QAction* initialSaveAction = actionWithText(window, QStringLiteral("Save"));
+    QAction* saveAsAction = actionWithText(window, QStringLiteral("Save As…"));
+    QAction* initialValidateAction = actionWithText(
+        window, QStringLiteral("Validate / DRC"));
+    QAction* initialGenerateAction = actionWithText(window, QStringLiteral("Generate RTL"));
+    auto* applyParameters = window.findChild<QPushButton*>(
+        QStringLiteral("finepaper.applyParameters"));
+    check(endpointPalette && !endpointPalette->isEnabled(),
+          QStringLiteral("Endpoint Palette is disabled until a design exists"));
+    check(initialSaveAction && !initialSaveAction->isEnabled()
+              && saveAsAction && !saveAsAction->isEnabled(),
+          QStringLiteral("save actions are disabled without a design"));
+    check(initialValidateAction && !initialValidateAction->isEnabled()
+              && initialGenerateAction && !initialGenerateAction->isEnabled(),
+          QStringLiteral("validation and generation are disabled without a design"));
+    check(applyParameters && !applyParameters->isEnabled(),
+          QStringLiteral("parameter application is disabled without a design"));
 
     auto* createButton = window.findChild<QPushButton*>(QStringLiteral("finepaper.createDesign"));
     check(createButton != nullptr, QStringLiteral("Mesh create action is available in the Package dock"));
@@ -447,6 +603,16 @@ int main(int argc, char** argv) {
         createButton->click();
         application.processEvents();
     }
+    check(window.isWindowModified(),
+          QStringLiteral("creating a design marks the workbench dirty"));
+    check(endpointPalette && endpointPalette->isEnabled()
+              && initialSaveAction && initialSaveAction->isEnabled()
+              && saveAsAction && saveAsAction->isEnabled()
+              && initialValidateAction && initialValidateAction->isEnabled()
+              && initialGenerateAction && initialGenerateAction->isEnabled(),
+          QStringLiteral("design actions and Endpoint Palette enable for an editable design"));
+    check(applyParameters && applyParameters->isEnabled(),
+          QStringLiteral("Package parameters become editable with a design"));
 
     auto* editorWidget = window.findChild<QWidget*>(QStringLiteral("finepaper.nodeEditor"));
     auto* nodeEditor = dynamic_cast<finepaper::NocNodeEditor*>(editorWidget);
@@ -457,6 +623,15 @@ int main(int argc, char** argv) {
         : nullptr;
     check(graphicsView && graphicsView->scene() && !graphicsView->scene()->items().isEmpty(),
           QStringLiteral("created Mesh is projected into the QtNodes editor"));
+    QAction* newAction = actionWithText(window, QStringLiteral("New Mesh…"));
+    if (newAction) {
+        chooseMessageBoxButton(QMessageBox::Cancel);
+        newAction->trigger();
+        application.processEvents();
+    }
+    check(window.isWindowModified()
+              && graphicsScene && !graphicsScene->items().isEmpty(),
+          QStringLiteral("cancelling the unsaved-changes prompt preserves the current design"));
 
     const QPainterPath orthogonalPath = finepaper::orthogonalConnectionPath(
         QPointF(0.0, 0.0), QPointF(120.0, 80.0));
@@ -619,6 +794,23 @@ int main(int argc, char** argv) {
     check(draggedRouterPosition
               && QLineF(*draggedRouterPosition, movedRouterPosition).length() < 0.5,
           QStringLiteral("dragging a Router changes its user-arranged workspace position"));
+    auto* designNameInput = window.findChild<QLineEdit*>(
+        QStringLiteral("finepaper.designName"));
+    if (designNameInput) {
+        designNameInput->setFocus();
+        designNameInput->setCursorPosition(designNameInput->text().size());
+        QKeyEvent pressR(QEvent::KeyPress, Qt::Key_R, Qt::NoModifier, QStringLiteral("r"));
+        QKeyEvent releaseR(QEvent::KeyRelease, Qt::Key_R, Qt::NoModifier, QStringLiteral("r"));
+        QApplication::sendEvent(designNameInput, &pressR);
+        QApplication::sendEvent(designNameInput, &releaseR);
+        application.processEvents();
+    }
+    const std::optional<QPointF> routerAfterTextInput = nodeEditor
+        ? nodeEditor->routerVisualPosition(QStringLiteral("r-0-0")) : std::nullopt;
+    check(designNameInput && designNameInput->text().endsWith(QLatin1Char('r'))
+              && routerAfterTextInput
+              && QLineF(*routerAfterTextInput, movedRouterPosition).length() < 0.5,
+          QStringLiteral("single-key canvas shortcuts do not fire while editing text"));
     const auto selectedMovedRouter = nodeIdWithCaption(
         graphicsScene, QStringLiteral("r-0-0"));
     check(selectedMovedRouter
@@ -892,7 +1084,9 @@ int main(int argc, char** argv) {
           QStringLiteral("Router EP reassigns the Endpoint through the application layer"));
     if (nodeEditor && nodeEditor->endpointMoveRequested) {
         nodeEditor->endpointMoveRequested(
-            QStringLiteral("master_0"), finepaper::RouterPosition{1, 0});
+            QStringLiteral("master_0"),
+            finepaper::NocAttachmentTarget{
+                finepaper::RouterPosition{1, 0}, std::nullopt});
         application.processEvents();
     }
 
@@ -1134,7 +1328,8 @@ int main(int argc, char** argv) {
     check(validateAction != nullptr, QStringLiteral("shared validation action is available"));
     if (validateAction) {
         validateAction->trigger();
-        application.processEvents();
+        check(waitUntil([&window] { return !window.operationBusy(); }),
+              QStringLiteral("GUI validation finishes asynchronously without blocking the event loop"));
     }
 
     auto* outputPath = window.findChild<QLineEdit*>(QStringLiteral("finepaper.outputRoot"));
@@ -1145,7 +1340,8 @@ int main(int argc, char** argv) {
     check(generateAction != nullptr, QStringLiteral("shared RTL generation action is available"));
     if (generateAction) {
         generateAction->trigger();
-        application.processEvents();
+        check(waitUntil([&window] { return !window.operationBusy(); }),
+              QStringLiteral("GUI generation finishes asynchronously without blocking the event loop"));
     }
 
     auto* artifacts = window.findChild<QTableWidget*>(QStringLiteral("finepaper.artifactTable"));
@@ -1163,8 +1359,7 @@ int main(int argc, char** argv) {
     if (nodeEditor) {
         nodeEditor->setRouterCollapsed(QStringLiteral("r-0-0"), true);
     }
-    window.close();
-    application.processEvents();
+    closeDiscarding(window);
 
     finepaper::FinepaperMainWindow restoredWindow(locations);
     restoredWindow.show();
@@ -1189,7 +1384,7 @@ int main(int argc, char** argv) {
     check(restoredNodeEditor
               && restoredNodeEditor->routerCollapsed(QStringLiteral("r-0-0")),
           QStringLiteral("Router collapsed state is restored in the next session"));
-    restoredWindow.close();
+    closeDiscarding(restoredWindow);
 
     finepaper::RuntimeLocations explicitLocations{
         QStringList{QDir(projectRoot).filePath(
@@ -1243,7 +1438,9 @@ int main(int argc, char** argv) {
     chooseInputDialogItem(0);
     const bool explicitMove = explicitEditor && explicitEditor->endpointMoveRequested
         ? explicitEditor->endpointMoveRequested(
-              QStringLiteral("device_0"), finepaper::RouterPosition{1, 0})
+              QStringLiteral("device_0"),
+              finepaper::NocAttachmentTarget{
+                  finepaper::RouterPosition{1, 0}, std::nullopt})
         : false;
     application.processEvents();
     const auto movedExplicitEndpoint = nodeIdWithCaptionPrefix(
@@ -1260,7 +1457,281 @@ int main(int argc, char** argv) {
                    *explicitRouter10,
                    finepaper::portIndex(finepaper::RouterInputPort::Endpoint)}),
           QStringLiteral("moving an explicit Endpoint chooses a new free slot on its Router"));
-    explicitWindow.close();
+
+    std::unique_ptr<QMimeData> explicitMime;
+    if (explicitPalette && explicitPalette->count() > 0) {
+        explicitMime.reset(explicitPalette->model()->mimeData(
+            {explicitPalette->model()->index(0, 0)}));
+    }
+    const QPoint explicitBlankPosition = blankViewportPosition(explicitView);
+    if (explicitView && explicitMime) {
+        QDragEnterEvent dragEnter(explicitBlankPosition,
+                                  Qt::CopyAction,
+                                  explicitMime.get(),
+                                  Qt::LeftButton,
+                                  Qt::NoModifier);
+        QApplication::sendEvent(explicitView->viewport(), &dragEnter);
+        QDropEvent drop(QPointF(explicitBlankPosition),
+                        Qt::CopyAction,
+                        explicitMime.get(),
+                        Qt::LeftButton,
+                        Qt::NoModifier);
+        QApplication::sendEvent(explicitView->viewport(), &drop);
+        application.processEvents();
+    }
+    const auto explicitPending = nodeIdWithCaptionPrefix(
+        explicitScene, QStringLiteral("Unattached\nDevice endpoint"));
+    const auto exactSlotRouter = nodeIdWithCaption(
+        explicitScene, QStringLiteral("r-0-0"));
+    bool exactSlotDraftStarted = false;
+    if (explicitPending && exactSlotRouter) {
+        exactSlotDraftStarted = dragPortConnection(
+            explicitView,
+            explicitScene,
+            *explicitPending,
+            finepaper::portIndex(finepaper::EndpointOutputPort::Attachment),
+            *exactSlotRouter,
+            finepaper::portIndex(finepaper::RouterInputPort::Endpoint) + 1U);
+        application.processEvents();
+        application.processEvents();
+    }
+    const auto exactSlotEndpoint = nodeIdWithCaptionPrefix(
+        explicitScene, QStringLiteral("device_1"));
+    const auto exactSlotPort = exactSlotEndpoint
+        ? attachmentPortForEndpoint(explicitScene, *exactSlotEndpoint)
+        : std::nullopt;
+    check(exactSlotDraftStarted && exactSlotEndpoint && exactSlotPort
+              && *exactSlotPort
+                     == finepaper::portIndex(finepaper::RouterInputPort::Endpoint) + 1U
+              && explicitScene->graphModel().nodeData(
+                     *exactSlotEndpoint, QtNodes::NodeRole::Caption)
+                     .toString().contains(QStringLiteral("slot local1")),
+          QStringLiteral("dragging to an explicit Router port commits that exact slot without a second dialog"));
+
+    const auto endpointBeforeRejectedDetach = nodeIdWithCaptionPrefix(
+        explicitScene, QStringLiteral("device_0"));
+    const auto routerBeforeRejectedDetach = nodeIdWithCaption(
+        explicitScene, QStringLiteral("r-1-0"));
+    const auto originalRemovalCallback = explicitEditor
+        ? explicitEditor->endpointRemovalRequested
+        : std::function<bool(const QString&)>{};
+    if (explicitEditor) {
+        explicitEditor->endpointRemovalRequested = [](const QString&) { return false; };
+    }
+    if (explicitView && explicitScene && endpointBeforeRejectedDetach) {
+        const QPoint endpointPosition = explicitView->mapFromScene(
+            explicitScene->nodeGraphicsObject(*endpointBeforeRejectedDetach)
+                ->sceneBoundingRect().center());
+        sendContextMenu(explicitView, endpointPosition);
+        application.processEvents();
+    }
+    auto* rejectedDetachMenu = explicitEditor ? explicitEditor->findChild<QMenu*>(
+        finepaper::workbench::endpointContextMenuName) : nullptr;
+    QAction* rejectedDetach = rejectedDetachMenu ? rejectedDetachMenu->findChild<QAction*>(
+        finepaper::workbench::detachEndpointActionName) : nullptr;
+    if (rejectedDetach) {
+        rejectedDetach->trigger();
+        rejectedDetachMenu->close();
+        application.processEvents();
+    }
+    if (explicitEditor) {
+        explicitEditor->endpointRemovalRequested = originalRemovalCallback;
+    }
+    check(endpointBeforeRejectedDetach && routerBeforeRejectedDetach
+              && explicitScene->graphModel().connectionExists({
+                  *endpointBeforeRejectedDetach,
+                  finepaper::portIndex(finepaper::EndpointOutputPort::Attachment),
+                  *routerBeforeRejectedDetach,
+                  finepaper::portIndex(finepaper::RouterInputPort::Endpoint)})
+              && !nodeIdWithCaptionPrefix(
+                  explicitScene, QStringLiteral("Unattached\nDevice endpoint")),
+          QStringLiteral("a rejected disconnect keeps the durable attachment and creates no pending draft"));
+    closeDiscarding(explicitWindow);
+
+    QTemporaryDir numberPackageRoot(
+        QStringLiteral("/tmp/finepaper-number-package-XXXXXX"));
+    check(numberPackageRoot.isValid(),
+          QStringLiteral("temporary number-parameter Package root is available"));
+    const QString standardPackageRoot = QDir(projectRoot).filePath(
+        QStringLiteral("packages/finepaper-noc"));
+    check(numberPackageRoot.isValid()
+              && createNumberParameterPackage(
+                  standardPackageRoot, numberPackageRoot.path()),
+          QStringLiteral("number-parameter Package fixture is created at runtime"));
+
+    finepaper::RuntimeLocations numberLocations{
+        QStringList{numberPackageRoot.path()}, outputRoot.path()};
+    finepaper::FinepaperMainWindow numberWindow(numberLocations);
+    numberWindow.show();
+    application.processEvents();
+    auto* numberCreate = numberWindow.findChild<QPushButton*>(
+        QStringLiteral("finepaper.createDesign"));
+    if (numberCreate) {
+        numberCreate->click();
+        application.processEvents();
+    }
+    auto* numberEditor = numberWindow.findChild<QDoubleSpinBox*>(
+        QStringLiteral("finepaper.parameter.frequencyScale"));
+    check(numberEditor && qAbs(numberEditor->value() - 1.25) < 0.000001,
+          QStringLiteral("number Package parameters use QDoubleSpinBox"));
+    if (numberEditor) {
+        numberEditor->setValue(2.75);
+    }
+    auto* numberApply = numberWindow.findChild<QPushButton*>(
+        QStringLiteral("finepaper.applyParameters"));
+    if (numberApply) {
+        numberApply->click();
+        application.processEvents();
+    }
+    numberEditor = numberWindow.findChild<QDoubleSpinBox*>(
+        QStringLiteral("finepaper.parameter.frequencyScale"));
+    check(numberEditor && qAbs(numberEditor->value() - 2.75) < 0.000001,
+          QStringLiteral("number Package parameters round-trip as JSON numbers"));
+
+    auto* numberResultsDock = numberWindow.findChild<QDockWidget*>(
+        finepaper::workbench::resultsDockName);
+    if (numberResultsDock) {
+        numberResultsDock->hide();
+    }
+    const QString unavailablePackagePath = numberPackageRoot.path()
+        + QStringLiteral("-unavailable");
+    const bool packageMoved = QDir().rename(
+        numberPackageRoot.path(), unavailablePackagePath);
+    check(packageMoved,
+          QStringLiteral("runtime Package can be made unavailable for reload testing"));
+    QAction* reloadPackagesAction = actionWithText(
+        numberWindow, QStringLiteral("Reload Packages"));
+    if (reloadPackagesAction) {
+        reloadPackagesAction->trigger();
+        application.processEvents();
+        application.processEvents();
+    }
+
+    auto* retainedSelector = numberWindow.findChild<QComboBox*>(
+        QStringLiteral("finepaper.packageSelector"));
+    auto* retainedPalette = numberWindow.findChild<QListWidget*>(
+        QStringLiteral("finepaper.endpointPalette"));
+    auto* retainedApply = numberWindow.findChild<QPushButton*>(
+        QStringLiteral("finepaper.applyParameters"));
+    auto* reloadErrorDrc = numberWindow.findChild<QTableWidget*>(
+        QStringLiteral("finepaper.drcTable"));
+    QAction* retainedValidate = actionWithText(
+        numberWindow, QStringLiteral("Validate / DRC"));
+    QAction* retainedGenerate = actionWithText(
+        numberWindow, QStringLiteral("Generate RTL"));
+    check(retainedSelector && retainedSelector->count() == 1
+              && retainedSelector->currentIndex() == 0
+              && retainedPalette && retainedPalette->isEnabled()
+              && retainedApply && retainedApply->isEnabled()
+              && retainedValidate && retainedValidate->isEnabled()
+              && retainedGenerate && retainedGenerate->isEnabled(),
+          QStringLiteral("failed Package reload preserves the previous catalog snapshot"));
+    check(numberResultsDock && numberResultsDock->isVisible()
+              && reloadErrorDrc && reloadErrorDrc->rowCount() > 0,
+          QStringLiteral("Package reload errors automatically expose structured diagnostics"));
+    check(numberWindow.statusBar()->currentMessage().startsWith(
+              QStringLiteral("Package reload failed:")),
+          QStringLiteral("Package reload errors produce a clear status summary"));
+
+    if (packageMoved) {
+        check(QDir().rename(unavailablePackagePath, numberPackageRoot.path()),
+              QStringLiteral("runtime Package root is restored after reload testing"));
+    }
+    closeDiscarding(numberWindow);
+
+    QTemporaryDir missingPackageRoot(
+        QStringLiteral("/tmp/finepaper-missing-package-XXXXXX"));
+    check(missingPackageRoot.isValid(),
+          QStringLiteral("temporary missing-Package workspace is available"));
+    const QString missingDesignPath = QDir(missingPackageRoot.path()).filePath(
+        QStringLiteral("missing-package.fpnoc"));
+    check(writeMissingPackageDesign(missingDesignPath),
+          QStringLiteral("design referencing a never-loaded Package is created"));
+    finepaper::RuntimeLocations missingLocations{
+        QStringList{missingPackageRoot.path()}, outputRoot.path()};
+    finepaper::FinepaperMainWindow missingWindow(missingLocations);
+    missingWindow.show();
+    application.processEvents();
+    check(missingWindow.openDesignFile(missingDesignPath),
+          QStringLiteral("missing-Package design opens through the reusable file operation"));
+    application.processEvents();
+    application.processEvents();
+
+    auto* missingSelector = missingWindow.findChild<QComboBox*>(
+        QStringLiteral("finepaper.packageSelector"));
+    auto* missingPalette = missingWindow.findChild<QListWidget*>(
+        QStringLiteral("finepaper.endpointPalette"));
+    auto* missingApply = missingWindow.findChild<QPushButton*>(
+        QStringLiteral("finepaper.applyParameters"));
+    QAction* missingValidate = actionWithText(
+        missingWindow, QStringLiteral("Validate / DRC"));
+    QAction* missingGenerate = actionWithText(
+        missingWindow, QStringLiteral("Generate RTL"));
+    QAction* missingSaveAs = actionWithText(
+        missingWindow, QStringLiteral("Save As…"));
+    auto* missingEditor = dynamic_cast<finepaper::NocNodeEditor*>(
+        missingWindow.findChild<QWidget*>(QStringLiteral("finepaper.nodeEditor")));
+    auto* missingView = missingEditor
+        ? missingEditor->findChild<QGraphicsView*>() : nullptr;
+    auto* missingScene = missingView
+        ? dynamic_cast<QtNodes::BasicGraphicsScene*>(missingView->scene()) : nullptr;
+    check(missingSelector && missingSelector->currentIndex() == -1,
+          QStringLiteral("never-loaded design Package does not select an unrelated Package"));
+    check(missingPalette && missingPalette->count() == 0
+              && !missingPalette->isEnabled(),
+          QStringLiteral("never-loaded design Package clears and disables the Endpoint Palette"));
+    check(missingApply && !missingApply->isEnabled()
+              && missingValidate && !missingValidate->isEnabled()
+              && missingGenerate && !missingGenerate->isEnabled(),
+          QStringLiteral("never-loaded design Package disables persistent editing and run actions"));
+    check(missingSaveAs && missingSaveAs->isEnabled(),
+          QStringLiteral("missing-Package design can still be saved elsewhere"));
+    check(missingEditor && missingEditor->isEnabled()
+              && !missingEditor->editingEnabled(),
+          QStringLiteral("missing-Package design keeps the canvas browsable while disabling mutations"));
+    if (missingEditor) {
+        missingEditor->setRouterCollapsed(QStringLiteral("r-0-0"), false);
+    }
+    const auto readOnlyEndpoint0 = nodeIdWithCaptionPrefix(
+        missingScene, QStringLiteral("client_0"));
+    const auto readOnlyEndpoint1 = nodeIdWithCaptionPrefix(
+        missingScene, QStringLiteral("client_1"));
+    const auto readOnlyRouter = nodeIdWithCaption(
+        missingScene, QStringLiteral("r-0-0"));
+    const auto readOnlyPort0 = readOnlyEndpoint0
+        ? attachmentPortForEndpoint(missingScene, *readOnlyEndpoint0) : std::nullopt;
+    const auto readOnlyPort1 = readOnlyEndpoint1
+        ? attachmentPortForEndpoint(missingScene, *readOnlyEndpoint1) : std::nullopt;
+    check(readOnlyEndpoint0 && readOnlyEndpoint1 && readOnlyRouter
+              && readOnlyPort0 && readOnlyPort1 && *readOnlyPort0 != *readOnlyPort1,
+          QStringLiteral("read-only projection preserves all persisted Endpoint attachments without Package metadata"));
+    bool readOnlyDraftStarted = false;
+    if (readOnlyEndpoint0 && readOnlyRouter) {
+        readOnlyDraftStarted = dragPortConnection(
+            missingView,
+            missingScene,
+            *readOnlyEndpoint0,
+            finepaper::portIndex(finepaper::EndpointOutputPort::Attachment),
+            *readOnlyRouter,
+            finepaper::portIndex(finepaper::RouterInputPort::Endpoint));
+        application.processEvents();
+    }
+    check(!readOnlyDraftStarted && !hasDraftConnection(missingScene),
+          QStringLiteral("read-only canvas rejects connection drafts while remaining interactive"));
+    if (missingView && missingScene && readOnlyEndpoint0) {
+        const QPoint endpointPosition = missingView->mapFromScene(
+            missingScene->nodeGraphicsObject(*readOnlyEndpoint0)
+                ->sceneBoundingRect().center());
+        sendContextMenu(missingView, endpointPosition);
+        application.processEvents();
+    }
+    check(missingEditor && !missingEditor->findChild<QMenu*>(
+                               finepaper::workbench::endpointContextMenuName),
+          QStringLiteral("read-only Endpoint context menus expose no mutating actions"));
+    check(missingWindow.statusBar()->currentMessage().startsWith(
+              QStringLiteral("Read-only design:")),
+          QStringLiteral("missing-Package design reports a clear read-only status"));
+    closeDiscarding(missingWindow);
 
     QTextStream(stdout) << (failures == 0 ? "finepaper-gui-smoke passed"
                                           : "finepaper-gui-smoke failed")

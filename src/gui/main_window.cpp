@@ -12,12 +12,15 @@
 #include <QDateTime>
 #include <QDir>
 #include <QDockWidget>
+#include <QDoubleSpinBox>
 #include <QDrag>
 #include <QFileDialog>
 #include <QFormLayout>
+#include <QFutureWatcher>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QHeaderView>
+#include <QHash>
 #include <QInputDialog>
 #include <QJsonDocument>
 #include <QIcon>
@@ -30,6 +33,7 @@
 #include <QMimeData>
 #include <QPlainTextEdit>
 #include <QPushButton>
+#include <QProgressBar>
 #include <QRegularExpression>
 #include <QScrollArea>
 #include <QSet>
@@ -43,6 +47,10 @@
 #include <QTableWidget>
 #include <QToolBar>
 #include <QVBoxLayout>
+#include <QtConcurrentRun>
+
+#include <limits>
+#include <utility>
 
 namespace finepaper {
 namespace {
@@ -139,14 +147,20 @@ FinepaperMainWindow::FinepaperMainWindow(RuntimeLocations locations, QWidget* pa
       m_locations(std::move(locations)) {
     loadInstalledPackageRoots();
     createUi();
-    reloadPackages();
     restoreWorkbenchState();
-    statusBar()->showMessage(
-        QStringLiteral("Install or select a NoC Package, then create a Mesh NoC."));
+    reloadPackages();
+    if (statusBar()->currentMessage().isEmpty()) {
+        statusBar()->showMessage(
+            QStringLiteral("Install or select a NoC Package, then create a Mesh NoC."));
+    }
+}
+
+bool FinepaperMainWindow::operationBusy() const {
+    return m_operationBusy;
 }
 
 void FinepaperMainWindow::createUi() {
-    setWindowTitle(QStringLiteral("Finepaper — NoC Workbench"));
+    setWindowTitle(QStringLiteral("Finepaper — NoC Workbench[*]"));
     resize(1480, 920);
     setDockOptions(QMainWindow::AnimatedDocks
                    | QMainWindow::AllowNestedDocks
@@ -161,8 +175,17 @@ void FinepaperMainWindow::createUi() {
     createResultsDock();
     createActions();
 
+    m_operationProgress = new QProgressBar(this);
+    m_operationProgress->setObjectName(QStringLiteral("finepaper.operationProgress"));
+    m_operationProgress->setRange(0, 0);
+    m_operationProgress->setMaximumWidth(180);
+    m_operationProgress->setTextVisible(false);
+    m_operationProgress->hide();
+    statusBar()->addPermanentWidget(m_operationProgress);
+
     resizeDocks({m_packageDock, m_inspectorDock}, {285, 330}, Qt::Horizontal);
     resizeDocks({m_resultsDock}, {250}, Qt::Vertical);
+    updateUiState();
 }
 
 void FinepaperMainWindow::createCentralViews() {
@@ -205,24 +228,24 @@ void FinepaperMainWindow::createCentralViews() {
         {workbench::problemReportViewId, workbench::problemReportViewTitle}, problemPage);
 
     m_nodeEditor->endpointTypeDropped = [this](const QString& endpointType,
-                                                RouterPosition router) {
-        return addEndpoint(endpointType, router);
+                                                NocAttachmentTarget target) {
+        return addEndpoint(endpointType, std::move(target));
     };
     m_nodeEditor->endpointMoveRequested = [this](const QString& endpointId,
-                                                  RouterPosition router) {
-        return moveEndpoint(endpointId, router);
+                                                  NocAttachmentTarget target) {
+        return moveEndpoint(endpointId, std::move(target));
     };
     m_nodeEditor->detachedEndpointDropped = [this](const EndpointInstance& detached,
-                                                    RouterPosition router) {
-        if (!m_design) {
+                                                    NocAttachmentTarget target) {
+        if (!m_design || !packageForDesign()) {
             return false;
         }
-        const AttachmentSlotChoice slotChoice = chooseAttachmentSlot(router);
+        const AttachmentSlotChoice slotChoice = chooseAttachmentSlot(target);
         if (!slotChoice.accepted) {
             return false;
         }
         EndpointInstance endpoint = detached;
-        endpoint.attachment.router = router;
+        endpoint.attachment.router = target.router;
         endpoint.attachment.slot = slotChoice.slot;
         const DesignResult result = m_application.addEndpoint(*m_design, endpoint);
         adoptDesignResult(result,
@@ -230,7 +253,7 @@ void FinepaperMainWindow::createCentralViews() {
         return result.success;
     };
     m_nodeEditor->endpointRemovalRequested = [this](const QString& endpointId) {
-        removeEndpoint(endpointId);
+        return removeEndpoint(endpointId);
     };
     m_nodeEditor->selectionChanged = [this](const NocEditorSelection& selection) {
         updateInspector(selection);
@@ -253,10 +276,10 @@ void FinepaperMainWindow::createPackageDock() {
     m_packageSelector->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     packageLayout->addWidget(m_packageSelector);
     auto* packageButtons = new QHBoxLayout;
-    auto* installButton = new QPushButton(QStringLiteral("Install…"));
-    auto* reloadButton = new QPushButton(QStringLiteral("Reload"));
-    packageButtons->addWidget(installButton);
-    packageButtons->addWidget(reloadButton);
+    m_installPackageButton = new QPushButton(QStringLiteral("Install…"));
+    m_reloadPackagesButton = new QPushButton(QStringLiteral("Reload"));
+    packageButtons->addWidget(m_installPackageButton);
+    packageButtons->addWidget(m_reloadPackagesButton);
     packageLayout->addLayout(packageButtons);
     layout->addWidget(packageGroup);
 
@@ -275,9 +298,9 @@ void FinepaperMainWindow::createPackageDock() {
     createLayout->addRow(QStringLiteral("Name"), m_designName);
     createLayout->addRow(QStringLiteral("Rows"), m_rows);
     createLayout->addRow(QStringLiteral("Columns"), m_columns);
-    auto* createButton = new QPushButton(QStringLiteral("Create / Replace Design"));
-    createButton->setObjectName(QStringLiteral("finepaper.createDesign"));
-    createLayout->addRow(createButton);
+    m_createDesignButton = new QPushButton(QStringLiteral("Create / Replace Design"));
+    m_createDesignButton->setObjectName(QStringLiteral("finepaper.createDesign"));
+    createLayout->addRow(m_createDesignButton);
     layout->addWidget(createGroup);
 
     auto* paletteHeading = new QLabel(QStringLiteral("Endpoint Types"));
@@ -300,12 +323,16 @@ void FinepaperMainWindow::createPackageDock() {
     m_packageDock->setWidget(content);
     addDockWidget(Qt::LeftDockWidgetArea, m_packageDock);
 
-    connect(installButton, &QPushButton::clicked, this, &FinepaperMainWindow::installPackage);
-    connect(reloadButton, &QPushButton::clicked, this, &FinepaperMainWindow::reloadPackages);
-    connect(createButton, &QPushButton::clicked, this, &FinepaperMainWindow::createDesign);
+    connect(m_installPackageButton, &QPushButton::clicked,
+            this, &FinepaperMainWindow::installPackage);
+    connect(m_reloadPackagesButton, &QPushButton::clicked,
+            this, &FinepaperMainWindow::reloadPackages);
+    connect(m_createDesignButton, &QPushButton::clicked,
+            this, &FinepaperMainWindow::createDesign);
     connect(m_packageSelector, &QComboBox::currentIndexChanged, this, [this](int) {
         updateMeshBounds();
         updateEndpointPalette();
+        updateUiState();
     });
     connect(m_endpointPalette, &QListWidget::itemDoubleClicked,
             this, [this](QListWidgetItem* item) {
@@ -318,7 +345,9 @@ void FinepaperMainWindow::createPackageDock() {
                         5000);
                     return;
                 }
-                addEndpoint(item->data(Qt::UserRole).toString(), *m_selectedRouter);
+                addEndpoint(
+                    item->data(Qt::UserRole).toString(),
+                    NocAttachmentTarget{*m_selectedRouter, std::nullopt});
             });
 }
 
@@ -344,23 +373,25 @@ void FinepaperMainWindow::createInspectorDock() {
     selectionLayout->addWidget(m_selectionSummary);
     layout->addWidget(selectionGroup);
 
-    auto* parameterGroup = new QGroupBox(QStringLiteral("NoC Parameters"));
-    auto* parameterGroupLayout = new QVBoxLayout(parameterGroup);
+    m_parameterGroup = new QGroupBox(QStringLiteral("NoC Parameters"));
+    m_parameterGroup->setObjectName(QStringLiteral("finepaper.parameterGroup"));
+    auto* parameterGroupLayout = new QVBoxLayout(m_parameterGroup);
     auto* parameterContent = new QWidget;
     m_parameterForm = new QFormLayout(parameterContent);
     auto* parameterScroll = new QScrollArea;
     parameterScroll->setWidgetResizable(true);
     parameterScroll->setFrameShape(QFrame::NoFrame);
     parameterScroll->setWidget(parameterContent);
-    auto* applyButton = new QPushButton(QStringLiteral("Apply Parameters"));
+    m_applyParametersButton = new QPushButton(QStringLiteral("Apply Parameters"));
+    m_applyParametersButton->setObjectName(QStringLiteral("finepaper.applyParameters"));
     parameterGroupLayout->addWidget(parameterScroll, 1);
-    parameterGroupLayout->addWidget(applyButton);
-    layout->addWidget(parameterGroup, 1);
+    parameterGroupLayout->addWidget(m_applyParametersButton);
+    layout->addWidget(m_parameterGroup, 1);
 
     m_inspectorDock->setWidget(content);
     addDockWidget(Qt::RightDockWidgetArea, m_inspectorDock);
 
-    connect(applyButton, &QPushButton::clicked,
+    connect(m_applyParametersButton, &QPushButton::clicked,
             this, &FinepaperMainWindow::applyParameters);
 }
 
@@ -395,12 +426,13 @@ void FinepaperMainWindow::createResultsDock() {
     auto* outputControls = new QHBoxLayout;
     m_outputRoot = new QLineEdit(m_locations.defaultOutputRoot);
     m_outputRoot->setObjectName(QStringLiteral("finepaper.outputRoot"));
-    auto* browseOutput = new QPushButton(QStringLiteral("Browse…"));
-    auto* generateButton = new QPushButton(QStringLiteral("Generate RTL"));
+    m_browseOutputButton = new QPushButton(QStringLiteral("Browse…"));
+    m_generateButton = new QPushButton(QStringLiteral("Generate RTL"));
+    m_generateButton->setObjectName(QStringLiteral("finepaper.generateButton"));
     outputControls->addWidget(new QLabel(QStringLiteral("Output root")));
     outputControls->addWidget(m_outputRoot, 1);
-    outputControls->addWidget(browseOutput);
-    outputControls->addWidget(generateButton);
+    outputControls->addWidget(m_browseOutputButton);
+    outputControls->addWidget(m_generateButton);
     outputLayout->addLayout(outputControls);
 
     auto* outputSplitter = new QSplitter(Qt::Vertical);
@@ -425,53 +457,66 @@ void FinepaperMainWindow::createResultsDock() {
     m_resultsDock->setWidget(m_resultTabs);
     addDockWidget(Qt::BottomDockWidgetArea, m_resultsDock);
 
-    connect(browseOutput, &QPushButton::clicked, this, [this] {
+    connect(m_browseOutputButton, &QPushButton::clicked, this, [this] {
         const QString directory = QFileDialog::getExistingDirectory(
             this, QStringLiteral("Select output root"), m_outputRoot->text());
         if (!directory.isEmpty()) {
             m_outputRoot->setText(directory);
         }
     });
-    connect(generateButton, &QPushButton::clicked,
+    connect(m_generateButton, &QPushButton::clicked,
             this, &FinepaperMainWindow::generateDesign);
 }
 
 void FinepaperMainWindow::createActions() {
-    auto* newAction = new QAction(
+    m_newAction = new QAction(
         style()->standardIcon(QStyle::SP_FileIcon), QStringLiteral("New Mesh…"), this);
-    newAction->setShortcut(QKeySequence::New);
-    auto* openAction = new QAction(
+    m_newAction->setShortcut(QKeySequence::New);
+    m_openAction = new QAction(
         style()->standardIcon(QStyle::SP_DialogOpenButton), QStringLiteral("Open…"), this);
-    openAction->setShortcut(QKeySequence::Open);
-    auto* saveAction = new QAction(
+    m_openAction->setShortcut(QKeySequence::Open);
+    m_saveAction = new QAction(
         style()->standardIcon(QStyle::SP_DialogSaveButton), QStringLiteral("Save"), this);
-    saveAction->setShortcut(QKeySequence::Save);
-    auto* installAction = new QAction(QStringLiteral("Install Package Directory…"), this);
-    auto* reloadAction = new QAction(QStringLiteral("Reload Packages"), this);
-    auto* validateAction = new QAction(QStringLiteral("Validate / DRC"), this);
-    validateAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+V")));
-    auto* generateAction = new QAction(QStringLiteral("Generate RTL"), this);
-    generateAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+G")));
-    auto* regularizeAction = new QAction(
+    m_saveAction->setShortcut(QKeySequence::Save);
+    m_saveAsAction = new QAction(QStringLiteral("Save As…"), this);
+    m_saveAsAction->setShortcut(QKeySequence::SaveAs);
+    m_installAction = new QAction(QStringLiteral("Install Package Directory…"), this);
+    m_reloadAction = new QAction(QStringLiteral("Reload Packages"), this);
+    m_validateAction = new QAction(QStringLiteral("Validate / DRC"), this);
+    m_validateAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+V")));
+    m_generateAction = new QAction(QStringLiteral("Generate RTL"), this);
+    m_generateAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+G")));
+    m_regularizeAction = new QAction(
         style()->standardIcon(QStyle::SP_BrowserReload),
         QStringLiteral("Regularize Layout"), this);
-    regularizeAction->setObjectName(workbench::regularizeActionName);
-    regularizeAction->setShortcut(QKeySequence(QStringLiteral("R")));
-    regularizeAction->setStatusTip(
+    m_regularizeAction->setObjectName(workbench::regularizeActionName);
+    m_regularizeAction->setShortcut(QKeySequence(QStringLiteral("R")));
+    m_regularizeAction->setShortcutContext(Qt::WidgetWithChildrenShortcut);
+    m_regularizeAction->setStatusTip(
         QStringLiteral("Restore Router and Endpoint positions to the topology layout"));
-    auto* fitAction = new QAction(QStringLiteral("Fit NoC in View"), this);
-    fitAction->setShortcut(QKeySequence(QStringLiteral("F")));
+    m_fitAction = new QAction(QStringLiteral("Fit NoC in View"), this);
+    m_fitAction->setShortcut(QKeySequence(QStringLiteral("F")));
+    m_fitAction->setShortcutContext(Qt::WidgetWithChildrenShortcut);
+    m_nodeEditor->addAction(m_regularizeAction);
+    m_nodeEditor->addAction(m_fitAction);
 
-    connect(newAction, &QAction::triggered, this, &FinepaperMainWindow::createDesign);
-    connect(openAction, &QAction::triggered, this, &FinepaperMainWindow::openDesign);
-    connect(saveAction, &QAction::triggered, this, &FinepaperMainWindow::saveDesign);
-    connect(installAction, &QAction::triggered, this, &FinepaperMainWindow::installPackage);
-    connect(reloadAction, &QAction::triggered, this, &FinepaperMainWindow::reloadPackages);
-    connect(validateAction, &QAction::triggered, this, &FinepaperMainWindow::validateDesign);
-    connect(generateAction, &QAction::triggered, this, &FinepaperMainWindow::generateDesign);
-    connect(regularizeAction, &QAction::triggered,
+    connect(m_newAction, &QAction::triggered,
+            this, &FinepaperMainWindow::createDesign);
+    connect(m_openAction, &QAction::triggered,
+            this, &FinepaperMainWindow::openDesign);
+    connect(m_saveAction, &QAction::triggered, this, [this] { saveDesign(); });
+    connect(m_saveAsAction, &QAction::triggered, this, [this] { saveDesignAs(); });
+    connect(m_installAction, &QAction::triggered,
+            this, &FinepaperMainWindow::installPackage);
+    connect(m_reloadAction, &QAction::triggered,
+            this, &FinepaperMainWindow::reloadPackages);
+    connect(m_validateAction, &QAction::triggered,
+            this, &FinepaperMainWindow::validateDesign);
+    connect(m_generateAction, &QAction::triggered,
+            this, &FinepaperMainWindow::generateDesign);
+    connect(m_regularizeAction, &QAction::triggered,
             m_nodeEditor, &NocNodeEditor::regularizeLayout);
-    connect(fitAction, &QAction::triggered, m_nodeEditor, &NocNodeEditor::zoomToFit);
+    connect(m_fitAction, &QAction::triggered, m_nodeEditor, &NocNodeEditor::zoomToFit);
 
     QAction* packagePanelAction = m_packageDock->toggleViewAction();
     packagePanelAction->setObjectName(workbench::packageToggleActionName);
@@ -500,15 +545,16 @@ void FinepaperMainWindow::createActions() {
     resultsPanelAction->setStatusTip(QStringLiteral("Show or hide the bottom diagnostics panel"));
 
     QMenu* fileMenu = menuBar()->addMenu(QStringLiteral("&File"));
-    fileMenu->addAction(newAction);
-    fileMenu->addAction(openAction);
-    fileMenu->addAction(saveAction);
+    fileMenu->addAction(m_newAction);
+    fileMenu->addAction(m_openAction);
+    fileMenu->addAction(m_saveAction);
+    fileMenu->addAction(m_saveAsAction);
     QMenu* packageMenu = menuBar()->addMenu(QStringLiteral("&Package"));
-    packageMenu->addAction(installAction);
-    packageMenu->addAction(reloadAction);
+    packageMenu->addAction(m_installAction);
+    packageMenu->addAction(m_reloadAction);
     QMenu* runMenu = menuBar()->addMenu(QStringLiteral("&Run"));
-    runMenu->addAction(validateAction);
-    runMenu->addAction(generateAction);
+    runMenu->addAction(m_validateAction);
+    runMenu->addAction(m_generateAction);
 
     QMenu* viewMenu = menuBar()->addMenu(QStringLiteral("&View"));
     auto* centerViews = viewMenu->addMenu(QStringLiteral("Center View"));
@@ -530,8 +576,8 @@ void FinepaperMainWindow::createActions() {
     panelsMenu->addAction(inspectorPanelAction);
     panelsMenu->addAction(resultsPanelAction);
     viewMenu->addSeparator();
-    viewMenu->addAction(regularizeAction);
-    viewMenu->addAction(fitAction);
+    viewMenu->addAction(m_regularizeAction);
+    viewMenu->addAction(m_fitAction);
     connect(m_centerViews, &QTabWidget::currentChanged, this, [this, viewGroup](int index) {
         Q_UNUSED(index);
         const QString id = m_viewRegistry->currentViewId();
@@ -543,14 +589,14 @@ void FinepaperMainWindow::createActions() {
     QToolBar* toolbar = addToolBar(QStringLiteral("NoC Workbench"));
     toolbar->setObjectName(QStringLiteral("finepaper.mainToolbar"));
     toolbar->setMovable(true);
-    toolbar->addAction(newAction);
-    toolbar->addAction(openAction);
-    toolbar->addAction(saveAction);
+    toolbar->addAction(m_newAction);
+    toolbar->addAction(m_openAction);
+    toolbar->addAction(m_saveAction);
     toolbar->addSeparator();
-    toolbar->addAction(validateAction);
-    toolbar->addAction(generateAction);
+    toolbar->addAction(m_validateAction);
+    toolbar->addAction(m_generateAction);
     toolbar->addSeparator();
-    toolbar->addAction(regularizeAction);
+    toolbar->addAction(m_regularizeAction);
 
     QToolBar* activityBar = new QToolBar(QStringLiteral("Workbench Panels"), this);
     activityBar->setObjectName(workbench::activityBarName);
@@ -584,6 +630,18 @@ void FinepaperMainWindow::restoreWorkbenchState() {
 }
 
 void FinepaperMainWindow::closeEvent(QCloseEvent* event) {
+    if (m_operationBusy) {
+        QMessageBox::information(
+            this,
+            QStringLiteral("Operation in progress"),
+            QStringLiteral("Wait for the current validation or generation operation to finish."));
+        event->ignore();
+        return;
+    }
+    if (!maybeSave()) {
+        event->ignore();
+        return;
+    }
     QSettings settings;
     settings.setValue(workbench::geometrySetting, saveGeometry());
     settings.setValue(workbench::windowStateSetting, saveState());
@@ -601,20 +659,46 @@ void FinepaperMainWindow::loadInstalledPackageRoots() {
 }
 
 void FinepaperMainWindow::reloadPackages() {
+    if (m_operationBusy) {
+        return;
+    }
     const QVector<Diagnostic> diagnostics = m_application.reloadPackages(m_locations.packageRoots);
     updatePackageControls();
+    if (m_design) {
+        refreshDesignViews();
+    }
     showDiagnostics(diagnostics, QStringLiteral("Package discovery"), false);
     appendActivity(QStringLiteral("Loaded %1 runtime Package(s) from %2 configured root(s).")
                        .arg(m_application.packages().size())
                        .arg(m_locations.packageRoots.size()));
-    if (!hasErrors(diagnostics)) {
+    if (hasErrors(diagnostics)) {
+        m_resultTabs->setCurrentIndex(0);
+        m_resultsDock->show();
+        QString summary = QStringLiteral("Package reload failed.");
+        for (const Diagnostic& diagnostic : diagnostics) {
+            if (diagnostic.severity == QStringLiteral("error")) {
+                summary = QStringLiteral("Package reload failed: %1").arg(diagnostic.message);
+                break;
+            }
+        }
+        appendActivity(summary);
+        statusBar()->showMessage(summary);
+    } else if (m_design && !packageForDesign()) {
+        statusBar()->showMessage(
+            QStringLiteral("Read-only design: Package %1@%2 is not loaded.")
+                .arg(m_design->package.id, m_design->package.version));
+    } else {
         statusBar()->showMessage(
             QStringLiteral("Loaded %1 runtime Package(s).")
                 .arg(m_application.packages().size()));
     }
+    updateUiState();
 }
 
 void FinepaperMainWindow::installPackage() {
+    if (m_operationBusy) {
+        return;
+    }
     const QString directory = QFileDialog::getExistingDirectory(
         this,
         QStringLiteral("Select a NoC Package directory"),
@@ -664,9 +748,12 @@ void FinepaperMainWindow::updatePackageControls() {
     const int desiredIndex = m_packageSelector->findData(desired);
     if (desiredIndex >= 0) {
         m_packageSelector->setCurrentIndex(desiredIndex);
+    } else if (m_design) {
+        m_packageSelector->setCurrentIndex(-1);
     }
     updateMeshBounds();
     updateEndpointPalette();
+    updateUiState();
 }
 
 void FinepaperMainWindow::updateMeshBounds() {
@@ -691,23 +778,61 @@ void FinepaperMainWindow::updateMeshBounds() {
 
 void FinepaperMainWindow::updateEndpointPalette() {
     m_endpointPalette->clear();
-    const PackageDefinition* package = packageForDesign();
-    if (!package) {
-        package = selectedPackage();
-    }
+    const PackageDefinition* package = m_design ? packageForDesign() : selectedPackage();
     if (!package) {
         m_nodeEditor->setEndpointTypes({});
-        m_nodeEditor->setRouterAttachmentPorts({});
+        QVector<NocRouterAttachmentPortItem> readOnlyPorts;
+        if (m_design) {
+            QSet<QString> knownSlots;
+            QHash<QString, int> endpointsPerRouter;
+            int maximumAttachments = 0;
+            for (const EndpointInstance& endpoint : m_design->endpoints) {
+                const QString router = QStringLiteral("%1,%2")
+                                           .arg(endpoint.attachment.router.x)
+                                           .arg(endpoint.attachment.router.y);
+                maximumAttachments = std::max(
+                    maximumAttachments, ++endpointsPerRouter[router]);
+                if (endpoint.attachment.slot
+                    && !endpoint.attachment.slot->isEmpty()
+                    && !knownSlots.contains(*endpoint.attachment.slot)) {
+                    knownSlots.insert(*endpoint.attachment.slot);
+                    readOnlyPorts.append({*endpoint.attachment.slot,
+                                          *endpoint.attachment.slot,
+                                          std::nullopt});
+                }
+            }
+            int fallbackIndex = 0;
+            while (readOnlyPorts.size() < maximumAttachments) {
+                QString id;
+                do {
+                    id = QStringLiteral("__view_%1").arg(fallbackIndex++);
+                } while (knownSlots.contains(id));
+                knownSlots.insert(id);
+                readOnlyPorts.append({id,
+                                      QStringLiteral("EP%1").arg(readOnlyPorts.size()),
+                                      std::nullopt});
+            }
+        }
+        m_nodeEditor->setRouterAttachmentPorts(std::move(readOnlyPorts));
+        updateUiState();
         return;
     }
     QVector<NocEndpointTypeItem> editorTypes;
     QVector<NocRouterAttachmentPortItem> attachmentPorts;
-    if (package->attachment.slotMode == QStringLiteral("explicit")
-        && !package->attachment.positions.isEmpty()) {
-        attachmentPorts.reserve(package->attachment.positions.size());
-        for (const AttachmentSlotDefinition& slot : package->attachment.positions) {
+    if (package->attachment.slotMode == AttachmentSlotMode::Explicit) {
+        QVector<AttachmentSlotDefinition> declaredSlots = package->attachment.positions;
+        if (declaredSlots.isEmpty()) {
+            declaredSlots.reserve(package->attachment.maxPerRouter);
+            for (int index = 0; index < package->attachment.maxPerRouter; ++index) {
+                const QString id = QString::number(index);
+                declaredSlots.append({id, QStringLiteral("Local port %1").arg(index)});
+            }
+        }
+        attachmentPorts.reserve(declaredSlots.size());
+        for (const AttachmentSlotDefinition& slot : declaredSlots) {
             attachmentPorts.append({slot.id,
-                                    slot.label.trimmed().isEmpty() ? slot.id : slot.label});
+                                    slot.label.trimmed().isEmpty() ? slot.id : slot.label,
+                                    slot.id});
         }
     } else {
         attachmentPorts.reserve(package->attachment.maxPerRouter);
@@ -716,7 +841,8 @@ void FinepaperMainWindow::updateEndpointPalette() {
             attachmentPorts.append({id,
                                     package->attachment.maxPerRouter == 1
                                         ? QStringLiteral("EP")
-                                        : QStringLiteral("EP%1").arg(index)});
+                                        : QStringLiteral("EP%1").arg(index),
+                                    std::nullopt});
         }
     }
     editorTypes.reserve(package->endpointTypes.size());
@@ -731,6 +857,150 @@ void FinepaperMainWindow::updateEndpointPalette() {
     }
     m_nodeEditor->setEndpointTypes(std::move(editorTypes));
     m_nodeEditor->setRouterAttachmentPorts(std::move(attachmentPorts));
+    updateUiState();
+}
+
+void FinepaperMainWindow::updateUiState() {
+    const bool hasDesign = m_design.has_value();
+    const bool hasDesignPackage = hasDesign && packageForDesign();
+    const bool hasSelectedPackage = selectedPackage();
+
+    if (m_newAction) {
+        m_newAction->setEnabled(!m_operationBusy);
+    }
+    if (m_openAction) {
+        m_openAction->setEnabled(!m_operationBusy);
+    }
+    if (m_installAction) {
+        m_installAction->setEnabled(!m_operationBusy);
+    }
+    if (m_reloadAction) {
+        m_reloadAction->setEnabled(!m_operationBusy);
+    }
+
+    if (m_saveAction) {
+        m_saveAction->setEnabled(hasDesign && m_dirty);
+    }
+    if (m_saveAsAction) {
+        m_saveAsAction->setEnabled(hasDesign);
+    }
+    if (m_validateAction) {
+        m_validateAction->setEnabled(hasDesignPackage && !m_operationBusy);
+    }
+    if (m_generateAction) {
+        m_generateAction->setEnabled(hasDesignPackage && !m_operationBusy);
+    }
+    if (m_regularizeAction) {
+        m_regularizeAction->setEnabled(hasDesign);
+    }
+    if (m_fitAction) {
+        m_fitAction->setEnabled(hasDesign);
+    }
+    if (m_createDesignButton) {
+        m_createDesignButton->setEnabled(hasSelectedPackage && !m_operationBusy);
+    }
+    if (m_installPackageButton) {
+        m_installPackageButton->setEnabled(!m_operationBusy);
+    }
+    if (m_reloadPackagesButton) {
+        m_reloadPackagesButton->setEnabled(!m_operationBusy);
+    }
+    if (m_packageSelector) {
+        m_packageSelector->setEnabled(!m_operationBusy);
+    }
+    if (m_designName) {
+        m_designName->setEnabled(!m_operationBusy);
+    }
+    if (m_rows) {
+        m_rows->setEnabled(!m_operationBusy);
+    }
+    if (m_columns) {
+        m_columns->setEnabled(!m_operationBusy);
+    }
+    if (m_endpointPalette) {
+        m_endpointPalette->setEnabled(
+            hasDesignPackage && !m_operationBusy && m_endpointPalette->count() > 0);
+        if (!hasDesign) {
+            m_endpointPalette->setToolTip(
+                QStringLiteral("Create or open a design before adding Endpoints."));
+        } else if (!hasDesignPackage) {
+            m_endpointPalette->setToolTip(
+                QStringLiteral("The design Package is not loaded; Endpoint editing is disabled."));
+        } else {
+            m_endpointPalette->setToolTip({});
+        }
+    }
+    if (m_parameterGroup) {
+        m_parameterGroup->setEnabled(hasDesignPackage && !m_operationBusy);
+    }
+    if (m_applyParametersButton) {
+        m_applyParametersButton->setEnabled(
+            hasDesignPackage && !m_operationBusy && !m_parameterControls.isEmpty());
+    }
+    if (m_generateButton) {
+        m_generateButton->setEnabled(hasDesignPackage && !m_operationBusy);
+    }
+    if (m_outputRoot) {
+        m_outputRoot->setEnabled(!m_operationBusy);
+    }
+    if (m_browseOutputButton) {
+        m_browseOutputButton->setEnabled(!m_operationBusy);
+    }
+    if (m_nodeEditor) {
+        m_nodeEditor->setEnabled(true);
+        m_nodeEditor->setEditingEnabled(hasDesignPackage && !m_operationBusy);
+        if (m_operationBusy) {
+            m_nodeEditor->setToolTip(
+                QStringLiteral("Read-only while validation or generation is running."));
+        } else if (hasDesign && !hasDesignPackage) {
+            m_nodeEditor->setToolTip(
+                QStringLiteral("Read-only: the design Package is not loaded."));
+        } else {
+            m_nodeEditor->setToolTip({});
+        }
+    }
+}
+
+void FinepaperMainWindow::setOperationBusy(bool busy, const QString& message) {
+    m_operationBusy = busy;
+    if (m_operationProgress) {
+        m_operationProgress->setVisible(busy);
+    }
+    if (busy && !message.isEmpty()) {
+        statusBar()->showMessage(message);
+    }
+    updateUiState();
+}
+
+void FinepaperMainWindow::setDirty(bool dirty) {
+    if (m_dirty == dirty) {
+        updateUiState();
+        return;
+    }
+    m_dirty = dirty;
+    setWindowModified(m_dirty);
+    updateUiState();
+}
+
+bool FinepaperMainWindow::maybeSave() {
+    if (!m_dirty || !m_design) {
+        return true;
+    }
+    const QMessageBox::StandardButton choice = QMessageBox::warning(
+        this,
+        QStringLiteral("Unsaved changes"),
+        QStringLiteral("Save changes to %1 before continuing?")
+            .arg(m_design->name.isEmpty() ? QStringLiteral("the current design")
+                                          : m_design->name),
+        QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel,
+        QMessageBox::Save);
+    if (choice == QMessageBox::Cancel) {
+        return false;
+    }
+    if (choice == QMessageBox::Save) {
+        return saveDesign();
+    }
+    return true;
 }
 
 const PackageDefinition* FinepaperMainWindow::selectedPackage() const {
@@ -757,6 +1027,12 @@ const PackageDefinition* FinepaperMainWindow::packageForDesign() const {
 }
 
 void FinepaperMainWindow::createDesign() {
+    if (m_operationBusy) {
+        return;
+    }
+    if (!maybeSave()) {
+        return;
+    }
     const PackageDefinition* package = selectedPackage();
     if (!package) {
         QMessageBox::warning(this, QStringLiteral("No Package"),
@@ -773,8 +1049,11 @@ void FinepaperMainWindow::createDesign() {
             {QStringLiteral("rows"), m_rows->value()},
             {QStringLiteral("columns"), m_columns->value()}}}
     };
-    m_designPath.clear();
-    adoptDesignResult(m_application.createDesign(request), QStringLiteral("Create Mesh"));
+    const DesignResult result = m_application.createDesign(request);
+    if (result.success) {
+        m_designPath.clear();
+    }
+    adoptDesignResult(result, QStringLiteral("Create Mesh"));
     selectCenterView(workbench::editorViewId);
 }
 
@@ -785,50 +1064,112 @@ void FinepaperMainWindow::openDesign() {
     if (path.isEmpty()) {
         return;
     }
+    openDesignFile(path);
+}
+
+bool FinepaperMainWindow::openDesignFile(const QString& path) {
+    if (m_operationBusy || path.trimmed().isEmpty()) {
+        return false;
+    }
+    if (!maybeSave()) {
+        return false;
+    }
     const DesignResult loaded = m_application.loadDesignFile(path);
     if (!loaded.success) {
         showDiagnostics(loaded.diagnostics, QStringLiteral("Open design"));
-        return;
+        return false;
     }
     m_design = loaded.design;
     m_designPath = path;
     refreshDesignViews();
+    setDirty(false);
     selectCenterView(workbench::editorViewId);
     appendActivity(QStringLiteral("Opened design %1.").arg(path));
-    statusBar()->showMessage(QStringLiteral("Opened %1").arg(path));
+    if (packageForDesign()) {
+        statusBar()->showMessage(QStringLiteral("Opened %1").arg(path));
+    } else {
+        statusBar()->showMessage(
+            QStringLiteral("Read-only design: Package %1@%2 is not loaded.")
+                .arg(m_design->package.id, m_design->package.version));
+    }
+    return true;
 }
 
-void FinepaperMainWindow::saveDesign() {
+bool FinepaperMainWindow::saveDesign() {
     if (!m_design) {
         QMessageBox::information(this, QStringLiteral("Save design"),
                                  QStringLiteral("Create or open a NoC design first."));
-        return;
+        return false;
     }
     if (m_designPath.isEmpty()) {
-        m_designPath = QFileDialog::getSaveFileName(
-            this, QStringLiteral("Save NoC design"),
-            QDir::current().filePath(m_design->id + QStringLiteral(".fpnoc")),
-            QStringLiteral("Finepaper NoC (*.fpnoc)"));
+        return saveDesignAs();
     }
-    if (m_designPath.isEmpty()) {
-        return;
+    return saveDesignTo(m_designPath);
+}
+
+bool FinepaperMainWindow::saveDesignAs() {
+    if (!m_design) {
+        QMessageBox::information(this, QStringLiteral("Save design"),
+                                 QStringLiteral("Create or open a NoC design first."));
+        return false;
+    }
+    const QString suggestedPath = m_designPath.isEmpty()
+        ? QDir::current().filePath(m_design->id + QStringLiteral(".fpnoc"))
+        : m_designPath;
+    const QString path = QFileDialog::getSaveFileName(
+        this, QStringLiteral("Save NoC design as"), suggestedPath,
+        QStringLiteral("Finepaper NoC (*.fpnoc)"));
+    return !path.isEmpty() && saveDesignTo(path);
+}
+
+bool FinepaperMainWindow::saveDesignTo(const QString& path) {
+    if (!m_design || path.isEmpty()) {
+        return false;
     }
     QVector<Diagnostic> diagnostics;
-    if (!m_application.saveDesignFile(m_designPath, *m_design, &diagnostics)) {
+    if (!m_application.saveDesignFile(path, *m_design, &diagnostics)) {
         showDiagnostics(diagnostics, QStringLiteral("Save design"));
-        return;
+        return false;
     }
-    appendActivity(QStringLiteral("Saved design %1.").arg(m_designPath));
-    statusBar()->showMessage(QStringLiteral("Saved %1").arg(m_designPath));
+    m_designPath = path;
+    setDirty(false);
+    appendActivity(QStringLiteral("Saved design %1.").arg(path));
+    statusBar()->showMessage(QStringLiteral("Saved %1").arg(path));
+    return true;
 }
 
 void FinepaperMainWindow::validateDesign() {
-    if (!m_design) {
-        QMessageBox::information(this, QStringLiteral("Validate design"),
-                                 QStringLiteral("Create or open a NoC design first."));
+    if (m_operationBusy) {
         return;
     }
-    const ValidationResult result = m_application.validate(*m_design, true);
+    if (!m_design || !packageForDesign()) {
+        QMessageBox::information(this, QStringLiteral("Validate design"),
+                                 QStringLiteral("Create or open an editable NoC design first."));
+        return;
+    }
+    FinepaperApplication application = m_application;
+    NocDesign design = *m_design;
+    auto* watcher = new QFutureWatcher<ValidationResult>(this);
+    m_validationWatcher = watcher;
+    connect(watcher, &QFutureWatcher<ValidationResult>::finished,
+            this, [this, watcher] {
+                const ValidationResult result = watcher->result();
+                if (m_validationWatcher == watcher) {
+                    m_validationWatcher = nullptr;
+                }
+                watcher->deleteLater();
+                setOperationBusy(false);
+                presentValidationResult(result);
+            });
+    appendActivity(QStringLiteral("Starting validation and Package DRC."));
+    setOperationBusy(true, QStringLiteral("Validating design…"));
+    watcher->setFuture(QtConcurrent::run(
+        [application = std::move(application), design = std::move(design)]() mutable {
+            return application.validate(design, true);
+        }));
+}
+
+void FinepaperMainWindow::presentValidationResult(const ValidationResult& result) {
     populateDiagnostics(result.diagnostics);
     m_problemReport->setPlainText(diagnosticText(result.diagnostics));
     m_resultTabs->setCurrentIndex(0);
@@ -844,9 +1185,12 @@ void FinepaperMainWindow::validateDesign() {
 }
 
 void FinepaperMainWindow::generateDesign() {
-    if (!m_design) {
+    if (m_operationBusy) {
+        return;
+    }
+    if (!m_design || !packageForDesign()) {
         QMessageBox::information(this, QStringLiteral("Generate RTL"),
-                                 QStringLiteral("Create or open a NoC design first."));
+                                 QStringLiteral("Create or open an editable NoC design first."));
         return;
     }
     const QString root = m_outputRoot->text().trimmed();
@@ -856,7 +1200,30 @@ void FinepaperMainWindow::generateDesign() {
         return;
     }
     appendActivity(QStringLiteral("Starting RTL generation in %1.").arg(root));
-    const GenerationResult result = m_application.generate(*m_design, GenerationOptions{root});
+    FinepaperApplication application = m_application;
+    NocDesign design = *m_design;
+    auto* watcher = new QFutureWatcher<GenerationResult>(this);
+    m_generationWatcher = watcher;
+    connect(watcher, &QFutureWatcher<GenerationResult>::finished,
+            this, [this, watcher] {
+                const GenerationResult result = watcher->result();
+                if (m_generationWatcher == watcher) {
+                    m_generationWatcher = nullptr;
+                }
+                watcher->deleteLater();
+                setOperationBusy(false);
+                presentGenerationResult(result);
+            });
+    setOperationBusy(true, QStringLiteral("Generating RTL…"));
+    watcher->setFuture(QtConcurrent::run(
+        [application = std::move(application),
+         design = std::move(design),
+         root]() mutable {
+            return application.generate(design, GenerationOptions{root});
+        }));
+}
+
+void FinepaperMainWindow::presentGenerationResult(const GenerationResult& result) {
     populateGenerationOutputs(result);
     populateDiagnostics(result.diagnostics);
     m_resultTabs->setCurrentIndex(2);
@@ -873,20 +1240,21 @@ void FinepaperMainWindow::generateDesign() {
     }
 }
 
-bool FinepaperMainWindow::addEndpoint(const QString& endpointType, RouterPosition router) {
-    if (!m_design) {
+bool FinepaperMainWindow::addEndpoint(const QString& endpointType,
+                                      NocAttachmentTarget target) {
+    if (m_operationBusy || !m_design || !packageForDesign()) {
         QMessageBox::information(this, QStringLiteral("Add Endpoint"),
-                                 QStringLiteral("Create or open a NoC design first."));
+                                 QStringLiteral("Create or open an editable NoC design first."));
         return false;
     }
-    const AttachmentSlotChoice slotChoice = chooseAttachmentSlot(router);
+    const AttachmentSlotChoice slotChoice = chooseAttachmentSlot(target);
     if (!slotChoice.accepted) {
         return false;
     }
     EndpointInstance endpoint;
     endpoint.id = nextEndpointId(endpointType);
     endpoint.type = endpointType;
-    endpoint.attachment.router = router;
+    endpoint.attachment.router = target.router;
     endpoint.attachment.slot = slotChoice.slot;
     const DesignResult result = m_application.addEndpoint(*m_design, endpoint);
     adoptDesignResult(result,
@@ -894,32 +1262,34 @@ bool FinepaperMainWindow::addEndpoint(const QString& endpointType, RouterPositio
     return result.success;
 }
 
-bool FinepaperMainWindow::moveEndpoint(const QString& endpointId, RouterPosition router) {
-    if (!m_design) {
+bool FinepaperMainWindow::moveEndpoint(const QString& endpointId,
+                                       NocAttachmentTarget target) {
+    if (m_operationBusy || !m_design || !packageForDesign()) {
         return false;
     }
-    const AttachmentSlotChoice slotChoice = chooseAttachmentSlot(router, endpointId);
+    const AttachmentSlotChoice slotChoice = chooseAttachmentSlot(target, endpointId);
     if (!slotChoice.accepted) {
         m_nodeEditor->setDesign(&*m_design);
         return false;
     }
     const DesignResult result = m_application.moveEndpoint(
-        *m_design, endpointId, router, slotChoice.slot);
+        *m_design, endpointId, target.router, slotChoice.slot);
     adoptDesignResult(result,
                       QStringLiteral("Move Endpoint %1").arg(endpointId));
     return result.success;
 }
 
-void FinepaperMainWindow::removeEndpoint(const QString& endpointId) {
-    if (!m_design || endpointId.isEmpty()) {
-        return;
+bool FinepaperMainWindow::removeEndpoint(const QString& endpointId) {
+    if (m_operationBusy || !m_design || !packageForDesign() || endpointId.isEmpty()) {
+        return false;
     }
-    adoptDesignResult(m_application.removeEndpoint(*m_design, endpointId),
-                      QStringLiteral("Remove Endpoint %1").arg(endpointId));
+    const DesignResult result = m_application.removeEndpoint(*m_design, endpointId);
+    adoptDesignResult(result, QStringLiteral("Remove Endpoint %1").arg(endpointId));
+    return result.success;
 }
 
 FinepaperMainWindow::AttachmentSlotChoice FinepaperMainWindow::chooseAttachmentSlot(
-    RouterPosition router,
+    NocAttachmentTarget target,
     const QString& ignoredEndpointId) {
     const PackageDefinition* package = packageForDesign();
     if (!m_design || !package) {
@@ -930,7 +1300,7 @@ FinepaperMainWindow::AttachmentSlotChoice FinepaperMainWindow::chooseAttachmentS
     int attachedEndpointCount = 0;
     for (const EndpointInstance& endpoint : m_design->endpoints) {
         if (endpoint.id == ignoredEndpointId
-            || endpoint.attachment.router != router) {
+            || endpoint.attachment.router != target.router) {
             continue;
         }
         ++attachedEndpointCount;
@@ -943,11 +1313,11 @@ FinepaperMainWindow::AttachmentSlotChoice FinepaperMainWindow::chooseAttachmentS
             this,
             QStringLiteral("No available attachment position"),
             QStringLiteral("Router (%1, %2) has reached its Endpoint capacity.")
-                .arg(router.x)
-                .arg(router.y));
+                .arg(target.router.x)
+                .arg(target.router.y));
         return {};
     }
-    if (package->attachment.slotMode == QStringLiteral("automatic")) {
+    if (package->attachment.slotMode == AttachmentSlotMode::Automatic) {
         return {true, std::nullopt};
     }
 
@@ -976,16 +1346,26 @@ FinepaperMainWindow::AttachmentSlotChoice FinepaperMainWindow::chooseAttachmentS
             this,
             QStringLiteral("No available attachment position"),
             QStringLiteral("Router (%1, %2) has no free explicit Endpoint slot.")
-                .arg(router.x)
-                .arg(router.y));
+                .arg(target.router.x)
+                .arg(target.router.y));
         return {};
+    }
+
+    if (target.exactSlot) {
+        const int exactIndex = slotIds.indexOf(*target.exactSlot);
+        if (exactIndex < 0) {
+            return {};
+        }
+        return {true, slotIds.at(exactIndex)};
     }
 
     bool accepted = false;
     const QString selected = QInputDialog::getItem(
         this,
         QStringLiteral("Choose Endpoint attachment position"),
-        QStringLiteral("Router (%1, %2) slot").arg(router.x).arg(router.y),
+        QStringLiteral("Router (%1, %2) slot")
+            .arg(target.router.x)
+            .arg(target.router.y),
         labels,
         0,
         false,
@@ -1004,6 +1384,9 @@ QJsonValue FinepaperMainWindow::valueFromControl(const ParameterControl& control
     if (const auto* check = qobject_cast<QCheckBox*>(control.editor)) {
         return check->isChecked();
     }
+    if (const auto* spin = qobject_cast<QDoubleSpinBox*>(control.editor)) {
+        return spin->value();
+    }
     if (const auto* combo = qobject_cast<QComboBox*>(control.editor)) {
         return combo->currentData().isValid()
                    ? combo->currentData().toString()
@@ -1016,7 +1399,7 @@ QJsonValue FinepaperMainWindow::valueFromControl(const ParameterControl& control
 }
 
 void FinepaperMainWindow::applyParameters() {
-    if (!m_design) {
+    if (m_operationBusy || !m_design || !packageForDesign()) {
         return;
     }
     QJsonObject parameters;
@@ -1074,28 +1457,39 @@ void FinepaperMainWindow::adoptDesignResult(const DesignResult& result, const QS
     }
     m_design = result.design;
     refreshDesignViews();
+    setDirty(true);
     appendActivity(action + QStringLiteral(" completed."));
     statusBar()->showMessage(action + QStringLiteral(" completed."));
 }
 
 void FinepaperMainWindow::refreshDesignViews() {
     if (!m_design) {
+        setWindowTitle(QStringLiteral("Finepaper — NoC Workbench[*]"));
         m_nodeEditor->setDesign(nullptr);
         m_designOverview->setText(QStringLiteral("No design is open."));
+        rebuildParameterEditors();
+        updateInspector({});
+        updateUiState();
         return;
     }
 
-    setWindowTitle(QStringLiteral("Finepaper — %1").arg(m_design->name));
+    const bool packageAvailable = packageForDesign();
+    setWindowTitle(QStringLiteral("Finepaper — %1[*]").arg(m_design->name));
     m_designOverview->setText(
         QStringLiteral("<h3>%1</h3><p><b>Package</b><br>%2@%3</p>"
                        "<p><b>Topology</b><br>%4 × %5 Mesh</p>"
-                       "<p><b>Endpoints</b><br>%6</p>")
+                       "<p><b>Endpoints</b><br>%6</p>%7")
             .arg(m_design->name.toHtmlEscaped(),
                  m_design->package.id.toHtmlEscaped(),
                  m_design->package.version.toHtmlEscaped())
             .arg(m_design->topology.rows)
             .arg(m_design->topology.columns)
-            .arg(m_design->endpoints.size()));
+            .arg(m_design->endpoints.size())
+            .arg(packageAvailable
+                     ? QString()
+                     : QStringLiteral("<p><b>Read-only</b><br>The design Package is not "
+                                      "loaded. Endpoint and parameter editing, validation, "
+                                      "and generation are disabled.</p>")));
     m_performanceSummary->setText(
         QStringLiteral("NoC %1 currently contains a %2 × %3 Mesh and %4 Endpoint(s). "
                        "This view is reserved for Package or IP Engine performance results; "
@@ -1108,9 +1502,13 @@ void FinepaperMainWindow::refreshDesignViews() {
     const QString packageKey = QStringLiteral("%1@%2")
                                    .arg(m_design->package.id, m_design->package.version);
     const int packageIndex = m_packageSelector->findData(packageKey);
-    if (packageIndex >= 0) {
+    {
         const QSignalBlocker blocker(m_packageSelector);
-        m_packageSelector->setCurrentIndex(packageIndex);
+        if (packageIndex >= 0) {
+            m_packageSelector->setCurrentIndex(packageIndex);
+        } else {
+            m_packageSelector->setCurrentIndex(-1);
+        }
     }
     m_designName->setText(m_design->name);
     updateMeshBounds();
@@ -1118,6 +1516,12 @@ void FinepaperMainWindow::refreshDesignViews() {
     rebuildParameterEditors();
     updateInspector({});
     m_nodeEditor->setDesign(&*m_design);
+    updateUiState();
+    if (!packageAvailable) {
+        statusBar()->showMessage(
+            QStringLiteral("Read-only design: Package %1@%2 is not loaded.")
+                .arg(m_design->package.id, m_design->package.version));
+    }
 }
 
 void FinepaperMainWindow::rebuildParameterEditors() {
@@ -1128,22 +1532,32 @@ void FinepaperMainWindow::rebuildParameterEditors() {
     m_parameterControls.clear();
     const PackageDefinition* package = packageForDesign();
     if (!m_design || !package) {
+        updateUiState();
         return;
     }
     for (const ParameterDefinition& definition : package->parameters) {
         const QJsonValue value = m_design->parameters.value(definition.id);
         QWidget* editor = nullptr;
-        if (definition.type == QStringLiteral("integer")) {
+        if (definition.type == ParameterType::Integer) {
             auto* spin = new QSpinBox;
             spin->setRange(definition.minimum.value_or(-1000000000),
                            definition.maximum.value_or(1000000000));
             spin->setValue(value.toInt());
             editor = spin;
-        } else if (definition.type == QStringLiteral("boolean")) {
+        } else if (definition.type == ParameterType::Number) {
+            auto* spin = new QDoubleSpinBox;
+            spin->setDecimals(12);
+            spin->setRange(
+                definition.minimum.value_or(std::numeric_limits<double>::lowest()),
+                definition.maximum.value_or(std::numeric_limits<double>::max()));
+            spin->setSingleStep(0.1);
+            spin->setValue(value.toDouble());
+            editor = spin;
+        } else if (definition.type == ParameterType::Boolean) {
             auto* check = new QCheckBox;
             check->setChecked(value.toBool());
             editor = check;
-        } else if (definition.type == QStringLiteral("enum")) {
+        } else if (definition.type == ParameterType::Enumeration) {
             auto* combo = new QComboBox;
             for (const QString& entry : definition.values) {
                 combo->addItem(entry, entry);
@@ -1156,9 +1570,12 @@ void FinepaperMainWindow::rebuildParameterEditors() {
         } else {
             editor = new QLineEdit(value.toString());
         }
+        editor->setObjectName(
+            QStringLiteral("finepaper.parameter.%1").arg(definition.id));
         m_parameterForm->addRow(definition.label, editor);
         m_parameterControls.append(ParameterControl{definition, editor});
     }
+    updateUiState();
 }
 
 void FinepaperMainWindow::populateDiagnostics(const QVector<Diagnostic>& diagnostics) {
