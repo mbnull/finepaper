@@ -1,0 +1,7 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Keep the executable inside this Package root while sharing the maintained
+# generator implementation with the compatible V1 Package.
+runtime = File.expand_path('../../../finepaper-noc/runtime/bin/generate', __dir__)
+exec(runtime, *ARGV)

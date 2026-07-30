@@ -91,6 +91,17 @@ QJsonObject request() {
     };
 }
 
+QJsonObject configurableRequest() {
+    QJsonObject configurable = request();
+    configurable.insert(QStringLiteral("name"),
+                        QStringLiteral("configurable_mesh"));
+    QJsonObject package = configurable.value(
+        QStringLiteral("package")).toObject();
+    package.insert(QStringLiteral("version"), QStringLiteral("3.0.0"));
+    configurable.insert(QStringLiteral("package"), package);
+    return configurable;
+}
+
 QJsonObject complexRequest() {
     return QJsonObject{
         {QStringLiteral("name"), QStringLiteral("complex_demo")},
@@ -270,8 +281,13 @@ int main(int argc, char** argv) {
         QStringLiteral("packages/finepaper-noc"));
     const QVector<Diagnostic> packageDiagnostics = finepaper.reloadPackages(
         QStringList{bundledPackageRoot});
-    check(!hasErrors(packageDiagnostics), QStringLiteral("reference Package loads"));
-    check(finepaper.packages().size() == 1, QStringLiteral("exactly one reference Package loads"));
+    check(!hasErrors(packageDiagnostics), QStringLiteral("reference Packages load"));
+    check(finepaper.packages().size() == 2
+              && finepaper.packages().at(0).key()
+                  == QStringLiteral("finepaper.noc@1.0.0")
+              && finepaper.packages().at(1).key()
+                  == QStringLiteral("finepaper.noc@3.0.0"),
+          QStringLiteral("V1 compatibility and V3 configurable Packages load together"));
 
     QTemporaryDir duplicatePackageFixture(
         QStringLiteral("/tmp/finepaper-duplicate-package-XXXXXX"));
@@ -290,7 +306,7 @@ int main(int argc, char** argv) {
                         duplicatePackageFixture.path(),
                         missingPackageRoot});
         check(!hasErrors(discoveryDiagnostics)
-                  && resilientCatalog.packages().size() == 1
+                  && resilientCatalog.packages().size() == 2
                   && resilientCatalog.packages().at(0).id == QStringLiteral("finepaper.noc")
                   && hasDiagnosticCode(discoveryDiagnostics,
                                        QStringLiteral("package.duplicate_ignored"))
@@ -301,7 +317,7 @@ int main(int argc, char** argv) {
     if (manifestFixture.isValid()) {
         const QVector<Diagnostic> failedReload = finepaper.reloadPackages(
             QStringList{manifestFixture.path()});
-        check(hasErrors(failedReload) && finepaper.packages().size() == 1 &&
+        check(hasErrors(failedReload) && finepaper.packages().size() == 2 &&
                   finepaper.packages().at(0).id == QStringLiteral("finepaper.noc"),
               QStringLiteral("failed Package reload preserves the previous catalog snapshot"));
     }
@@ -451,6 +467,66 @@ int main(int argc, char** argv) {
         }
     }
 
+    const DesignResult configurableCreated = finepaper.createDesign(
+        configurableRequest());
+    check(configurableCreated.success
+              && configurableCreated.design.formatVersion == 3
+              && configurableCreated.design.domains.size() == 2
+              && configurableCreated.design.domainMemberships.size() == 7,
+          QStringLiteral(
+              "bundled V3 Package materializes Package-declared clock/power defaults and assignments"));
+    const DesignResult routerConfigured = configurableCreated.success
+        ? finepaper.setElementConfiguration(
+              configurableCreated.design,
+              ElementRef{ElementKind::Router, QStringLiteral("r-0-0")},
+              QStringLiteral("router.microarchitecture"),
+              QJsonObject{
+                  {QStringLiteral("routingAlgorithm"), QStringLiteral("yx")},
+                  {QStringLiteral("virtualChannels"), 4},
+                  {QStringLiteral("bufferDepth"), 16}})
+        : DesignResult{};
+    check(routerConfigured.success
+              && routerConfigured.design.elementConfigurations.size() == 1,
+          QStringLiteral(
+              "bundled V3 Package accepts sparse Router microarchitecture overrides"));
+    QTemporaryDir configurableOutput(
+        QStringLiteral("/tmp/finepaper-configurable-core-test-XXXXXX"));
+    if (routerConfigured.success && configurableOutput.isValid()) {
+        const GenerationResult generation = finepaper.generate(
+            routerConfigured.design,
+            GenerationOptions{configurableOutput.path()});
+        const auto primary = std::find_if(
+            generation.artifacts.cbegin(), generation.artifacts.cend(),
+            [](const Artifact& artifact) { return artifact.primary; });
+        const auto intent = std::find_if(
+            generation.artifacts.cbegin(), generation.artifacts.cend(),
+            [](const Artifact& artifact) {
+                return artifact.path.endsWith(
+                    QStringLiteral("_design_intent.json"));
+            });
+        QString primaryText;
+        if (primary != generation.artifacts.cend()) {
+            QFile primaryFile(QDir(generation.outputDirectory).filePath(
+                primary->path));
+            if (primaryFile.open(QIODevice::ReadOnly)) {
+                primaryText = QString::fromUtf8(primaryFile.readAll());
+            }
+        }
+        DesignLoadResult intentDesign;
+        if (intent != generation.artifacts.cend()) {
+            intentDesign = loadDesign(
+                QDir(generation.outputDirectory).filePath(intent->path));
+        }
+        check(generation.success
+                  && primaryText.contains(
+                      QStringLiteral("route=yx vc=4 depth=16"))
+                  && intentDesign.success
+                  && intentDesign.design.elementConfigurations
+                      == routerConfigured.design.elementConfigurations,
+              QStringLiteral(
+                  "bundled V3 Generator consumes Router overrides and emits the complete Design intent"));
+    }
+
     FinepaperApplication complexApplication;
     const QVector<Diagnostic> complexPackageDiagnostics = complexApplication.reloadPackages(
         QStringList{QDir(projectRoot).filePath(QStringLiteral("tests/fixtures"))});
@@ -486,8 +562,8 @@ int main(int argc, char** argv) {
         });
     check(!hasErrors(multiPackageDiagnostics),
           QStringLiteral("multiple Package roots load without a shared build step"));
-    check(multiPackageApplication.packages().size() == 3,
-          QStringLiteral("catalog exposes automatic, explicit-slot and Engine-backed Packages together"));
+    check(multiPackageApplication.packages().size() == 4,
+          QStringLiteral("catalog exposes V1/V3 automatic, explicit-slot and Engine-backed Packages together"));
     const auto explicitPackage = std::find_if(
         multiPackageApplication.packages().cbegin(),
         multiPackageApplication.packages().cend(),

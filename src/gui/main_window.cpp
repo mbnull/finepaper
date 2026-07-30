@@ -56,6 +56,7 @@
 #include <QToolBar>
 #include <QToolButton>
 #include <QVBoxLayout>
+#include <QVersionNumber>
 #include <QtConcurrentRun>
 
 #include <algorithm>
@@ -1883,6 +1884,26 @@ QVector<PackageDefinition> FinepaperMainWindow::runtimePackages() const {
             packages.append(package);
         }
     }
+    std::sort(
+        packages.begin(), packages.end(),
+        [](const PackageDefinition& lhs, const PackageDefinition& rhs) {
+            if (lhs.id != rhs.id) {
+                return lhs.id < rhs.id;
+            }
+            const QVersionNumber lhsVersion =
+                QVersionNumber::fromString(lhs.version);
+            const QVersionNumber rhsVersion =
+                QVersionNumber::fromString(rhs.version);
+            const int versionOrder = QVersionNumber::compare(
+                lhsVersion, rhsVersion);
+            if (versionOrder != 0) {
+                return versionOrder > 0;
+            }
+            if (lhs.version != rhs.version) {
+                return lhs.version > rhs.version;
+            }
+            return lhs.name < rhs.name;
+        });
     return packages;
 }
 

@@ -6,7 +6,14 @@ class TopologyExpander
     mesh = noc.parameters['mesh'] or raise "Topology not defined: add parameters.mesh or specify xps"
     w, h = mesh['width'], mesh['height']
     ep_map = mesh['endpoint_map'] || {}
-    xps = (0...h).flat_map { |y| (0...w).map { |x| Xp.new("xp_#{x}_#{y}", x, y, ep_map["xp_#{x}_#{y}"] || []) } }
+    router_configs = mesh['router_configs'] || {}
+    xps = (0...h).flat_map do |y|
+      (0...w).map do |x|
+        id = "xp_#{x}_#{y}"
+        config = (router_configs[id] || {}).transform_keys(&:to_sym)
+        Xp.new(id, x, y, ep_map[id] || [], config)
+      end
+    end
     conns = xps.flat_map do |xp|
       DIRS.filter_map do |(dx, dy), dir|
         nb = xps.find { |n| n.x == xp.x + dx && n.y == xp.y + dy }

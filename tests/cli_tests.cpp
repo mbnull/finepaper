@@ -133,7 +133,7 @@ int main(int argc, char** argv) {
               && packageListResult.exitStatus == QProcess::NormalExit
               && packageListResult.exitCode == 0
               && packageList.value(QStringLiteral("success")).toBool()
-              && packageList.value(QStringLiteral("packages")).toArray().size() == 1
+              && packageList.value(QStringLiteral("packages")).toArray().size() == 2
               && hasDiagnosticCode(packageList, QStringLiteral("package.root_missing")),
           QStringLiteral("CLI keeps valid Packages selectable when roots overlap or go missing"));
 

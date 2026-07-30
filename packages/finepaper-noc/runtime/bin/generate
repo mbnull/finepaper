@@ -55,6 +55,31 @@ def endpoint_slot_key(endpoint)
   [1, slot, endpoint.fetch('id')]
 end
 
+def router_configuration_map(design)
+  configurations = design.fetch('elementConfigurations', [])
+  raise 'elementConfigurations must be an array' unless configurations.is_a?(Array)
+
+  configurations.each_with_object({}) do |configuration, result|
+    next unless configuration.is_a?(Hash)
+    next unless configuration['propertySet'] == 'router.microarchitecture'
+
+    element = configuration['element']
+    next unless element.is_a?(Hash) && element['kind'] == 'router'
+
+    match = /\Ar-(\d+)-(\d+)\z/.match(element['id'].to_s)
+    raise "invalid Router id #{element['id']}" unless match
+
+    properties = configuration.fetch('properties', {})
+    raise 'Router element configuration properties must be an object' unless properties.is_a?(Hash)
+
+    mapped = {}
+    mapped['routing_algorithm'] = properties['routingAlgorithm'] if properties.key?('routingAlgorithm')
+    mapped['vc_count'] = properties['virtualChannels'] if properties.key?('virtualChannels')
+    mapped['buffer_depth'] = properties['bufferDepth'] if properties.key?('bufferDepth')
+    result["xp_#{match[1]}_#{match[2]}"] = mapped unless mapped.empty?
+  end
+end
+
 def legacy_input(design)
   raise 'design format must be finepaper.noc-design' unless design['format'] == 'finepaper.noc-design'
   raise 'only mesh topology is supported' unless design.dig('topology', 'type') == 'mesh'
@@ -103,6 +128,7 @@ def legacy_input(design)
   endpoint_map.transform_values! do |router_endpoints|
     router_endpoints.sort_by { |endpoint| endpoint_slot_key(endpoint) }.map { |endpoint| endpoint.fetch('id') }
   end
+  router_configs = router_configuration_map(design)
 
   {
     'schema' => 'finepaper-ipcore-graph-v1',
@@ -122,7 +148,8 @@ def legacy_input(design)
           'mesh' => {
             'width' => columns,
             'height' => rows,
-            'endpoint_map' => endpoint_map
+            'endpoint_map' => endpoint_map,
+            'router_configs' => router_configs
           }
         }
       }
@@ -190,6 +217,13 @@ begin
   end
 
   design_id = require_hdl_identifier(design.fetch('id'), 'design id')
+  if command == 'generate'
+    intent_path = File.join(
+      File.expand_path(options[:output]),
+      "#{design_id}_design_intent.json"
+    )
+    File.write(intent_path, JSON.pretty_generate(design) + "\n")
+  end
   artifacts = command == 'generate' ? artifact_list(File.expand_path(options[:output]), design_id) : []
   raise 'legacy generator did not produce any artifacts' if command == 'generate' && artifacts.empty?
 

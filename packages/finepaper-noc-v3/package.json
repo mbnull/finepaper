@@ -1,0 +1,112 @@
+{
+  "format": "finepaper.noc-package",
+  "formatVersion": 3,
+  "id": "finepaper.noc",
+  "name": "Finepaper Configurable Mesh NoC",
+  "version": "3.0.0",
+  "mesh": {
+    "rows": { "min": 1, "max": 16, "default": 2 },
+    "columns": { "min": 1, "max": 16, "default": 2 }
+  },
+  "parameters": [
+    { "id": "dataWidth", "label": "Data width", "type": "integer", "default": 64, "minimum": 8, "maximum": 512 },
+    { "id": "flitWidth", "label": "Flit width", "type": "integer", "default": 128, "minimum": 8, "maximum": 1024 },
+    { "id": "addrWidth", "label": "Address width", "type": "integer", "default": 32, "minimum": 8, "maximum": 64 }
+  ],
+  "endpointTypes": [
+    {
+      "id": "master",
+      "label": "Initiator endpoint",
+      "parameters": [
+        { "id": "protocol", "label": "Protocol", "type": "enum", "default": "axi4", "values": ["axi4"] },
+        { "id": "dataWidth", "label": "Data width", "type": "integer", "default": 64, "minimum": 8, "maximum": 512 },
+        { "id": "bufferDepth", "label": "Buffer depth", "type": "integer", "default": 16, "minimum": 1, "maximum": 1024 },
+        { "id": "qosEnabled", "label": "Enable QoS", "type": "boolean", "default": false }
+      ]
+    },
+    {
+      "id": "slave",
+      "label": "Target endpoint",
+      "parameters": [
+        { "id": "protocol", "label": "Protocol", "type": "enum", "default": "axi4", "values": ["axi4"] },
+        { "id": "dataWidth", "label": "Data width", "type": "integer", "default": 64, "minimum": 8, "maximum": 512 },
+        { "id": "bufferDepth", "label": "Buffer depth", "type": "integer", "default": 16, "minimum": 1, "maximum": 1024 },
+        { "id": "qosEnabled", "label": "Enable QoS", "type": "boolean", "default": false }
+      ]
+    }
+  ],
+  "domainTypes": [
+    {
+      "id": "clock",
+      "label": "Clock domain",
+      "appliesTo": ["router", "endpoint"],
+      "cardinality": "single",
+      "required": true,
+      "defaultInstance": {
+        "id": "clock-main",
+        "name": "Primary fabric clock",
+        "properties": {}
+      },
+      "properties": [
+        { "id": "frequencyMHz", "label": "Frequency (MHz)", "type": "number", "required": true, "default": 1000, "minimum": 1 }
+      ],
+      "relations": [
+        {
+          "id": "derived-from",
+          "label": "Derived from",
+          "targetTypes": ["clock"],
+          "cardinality": "single",
+          "required": false,
+          "properties": [
+            { "id": "divider", "label": "Divider", "type": "integer", "required": true, "default": 1, "minimum": 1 }
+          ]
+        }
+      ],
+      "crossingProperties": [
+        { "id": "implementation", "label": "CDC implementation", "type": "enum", "required": true, "default": "async-fifo", "values": ["synchronizer", "async-fifo"] },
+        { "id": "synchronizerStages", "label": "Synchronizer stages", "type": "integer", "required": true, "default": 2, "minimum": 2, "maximum": 8 }
+      ]
+    },
+    {
+      "id": "power",
+      "label": "Power domain",
+      "appliesTo": ["router", "endpoint"],
+      "cardinality": "single",
+      "required": true,
+      "defaultInstance": {
+        "id": "power-main",
+        "name": "Primary power domain",
+        "properties": {}
+      },
+      "properties": [
+        { "id": "voltageMv", "label": "Voltage (mV)", "type": "integer", "required": true, "default": 900, "minimum": 1 },
+        { "id": "retention", "label": "State retention", "type": "boolean", "required": true, "default": false }
+      ],
+      "relations": [],
+      "crossingProperties": [
+        { "id": "isolation", "label": "Isolation required", "type": "boolean", "required": true, "default": true },
+        { "id": "levelShift", "label": "Level shifting", "type": "enum", "required": true, "default": "auto", "values": ["none", "up", "down", "auto"] }
+      ]
+    }
+  ],
+  "elementPropertySets": [
+    {
+      "id": "router.microarchitecture",
+      "label": "Router microarchitecture",
+      "appliesTo": ["router"],
+      "properties": [
+        { "id": "routingAlgorithm", "label": "Routing algorithm", "type": "enum", "default": "xy", "values": ["xy", "yx"] },
+        { "id": "virtualChannels", "label": "Virtual channels", "type": "integer", "default": 2, "minimum": 1, "maximum": 8 },
+        { "id": "bufferDepth", "label": "Buffer depth", "type": "integer", "default": 8, "minimum": 1, "maximum": 64 }
+      ]
+    }
+  ],
+  "attachment": { "maxPerRouter": 4, "slotMode": "automatic" },
+  "generator": {
+    "name": "finepaper-noc-ruby",
+    "version": "3.0.0",
+    "executable": "runtime/bin/generate",
+    "supportsValidate": true,
+    "timeoutSeconds": 300
+  }
+}
