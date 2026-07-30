@@ -91,11 +91,11 @@ ParseResult parse(const QJsonObject& object,
                   const NocDesign& baseDesign,
                   const QString& basePath) {
     ParseResult result;
-    if (baseDesign.formatVersion != 2) {
+    if (!formatVersionSupportsDomains(baseDesign.formatVersion)) {
         result.diagnostics.append(Diagnostic{
             QStringLiteral("error"),
             QStringLiteral("create.domain_configuration_requires_v2"),
-            QStringLiteral("domainConfiguration requires Design formatVersion 2"),
+            QStringLiteral("domainConfiguration requires a Design format with Domain support"),
             basePath,
             QStringLiteral("finepaper")
         });

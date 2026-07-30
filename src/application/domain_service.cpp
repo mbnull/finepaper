@@ -360,7 +360,7 @@ MutationResult materializeRequiredDomains(
     const PackageDefinition& package) {
     MutationResult result;
     result.design = design;
-    if (package.formatVersion != 2) {
+    if (!formatVersionSupportsDomains(package.formatVersion)) {
         return result;
     }
 
@@ -998,7 +998,7 @@ QVector<Diagnostic> validateAgainstPackage(
     const NocDesign& design,
     const PackageDefinition& package) {
     QVector<Diagnostic> diagnostics;
-    const int requiredDesignVersion = package.formatVersion == 2 ? 2 : 1;
+    const int requiredDesignVersion = package.formatVersion;
     if (design.formatVersion != requiredDesignVersion) {
         appendDiagnostic(
             diagnostics,

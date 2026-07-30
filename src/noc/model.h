@@ -17,7 +17,16 @@ namespace finepaper {
 inline constexpr int kMaximumMeshDimension = 4096;
 inline constexpr qint64 kMaximumProjectedRouterCount = 1'000'000;
 inline constexpr int kMinimumDesignFormatVersion = 1;
-inline constexpr int kMaximumDesignFormatVersion = 2;
+inline constexpr int kMaximumDesignFormatVersion = 3;
+
+inline constexpr bool formatVersionSupportsDomains(int formatVersion) noexcept {
+    return formatVersion >= 2;
+}
+
+inline constexpr bool formatVersionSupportsElementConfigurations(
+    int formatVersion) noexcept {
+    return formatVersion >= 3;
+}
 
 struct Diagnostic {
     QString severity;
@@ -80,6 +89,7 @@ QString elementKindId(ElementKind kind);
 ElementKind elementKindFromId(const QString& id);
 bool isDomainMembershipElementKind(ElementKind kind);
 bool isDomainCrossingEdgeKind(ElementKind kind);
+bool isElementConfigurationTargetKind(ElementKind kind);
 
 struct ElementRef {
     ElementKind kind = ElementKind::Invalid;
@@ -125,6 +135,14 @@ struct DomainEdgeOverride {
     bool operator==(const DomainEdgeOverride&) const = default;
 };
 
+struct ElementConfiguration {
+    ElementRef element;
+    QString propertySet;
+    QJsonObject properties;
+
+    bool operator==(const ElementConfiguration&) const = default;
+};
+
 struct NocDesign {
     QString format = QStringLiteral("finepaper.noc-design");
     int formatVersion = 1;
@@ -139,6 +157,7 @@ struct NocDesign {
     QVector<DomainRelation> domainRelations;
     QVector<DomainCrossingPolicy> crossingPolicies;
     QVector<DomainEdgeOverride> edgeOverrides;
+    QVector<ElementConfiguration> elementConfigurations;
     QJsonObject packageData;
 };
 

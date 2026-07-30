@@ -190,6 +190,104 @@ QJsonArray completeDomainTypes() {
     };
 }
 
+QJsonArray completeEndpointTypes() {
+    return QJsonArray{
+        QJsonObject{
+            {QStringLiteral("id"), QStringLiteral("initiator")},
+            {QStringLiteral("label"), QStringLiteral("Initiator")},
+            {QStringLiteral("parameters"), QJsonArray{}}
+        },
+        QJsonObject{
+            {QStringLiteral("id"), QStringLiteral("target")},
+            {QStringLiteral("label"), QStringLiteral("Target")},
+            {QStringLiteral("parameters"), QJsonArray{}}
+        }
+    };
+}
+
+QJsonArray completeElementPropertySets() {
+    return QJsonArray{
+        QJsonObject{
+            {QStringLiteral("id"), QStringLiteral("fabric.microarchitecture")},
+            {QStringLiteral("label"), QStringLiteral("Fabric microarchitecture")},
+            {QStringLiteral("appliesTo"), QJsonArray{
+                QStringLiteral("router"), QStringLiteral("router-link")
+            }},
+            {QStringLiteral("properties"), QJsonArray{
+                QJsonObject{
+                    {QStringLiteral("id"), QStringLiteral("pipelineStages")},
+                    {QStringLiteral("type"), QStringLiteral("integer")},
+                    {QStringLiteral("default"), 2},
+                    {QStringLiteral("minimum"), 0},
+                    {QStringLiteral("maximum"), 8}
+                },
+                QJsonObject{
+                    {QStringLiteral("id"), QStringLiteral("routeBias")},
+                    {QStringLiteral("type"), QStringLiteral("number")},
+                    {QStringLiteral("default"), 0.5},
+                    {QStringLiteral("minimum"), 0.0},
+                    {QStringLiteral("maximum"), 1.0}
+                },
+                QJsonObject{
+                    {QStringLiteral("id"), QStringLiteral("cutThrough")},
+                    {QStringLiteral("type"), QStringLiteral("boolean")},
+                    {QStringLiteral("default"), true}
+                },
+                QJsonObject{
+                    {QStringLiteral("id"), QStringLiteral("implementation")},
+                    {QStringLiteral("type"), QStringLiteral("string")},
+                    {QStringLiteral("default"), QStringLiteral("balanced")}
+                },
+                QJsonObject{
+                    {QStringLiteral("id"), QStringLiteral("arbitration")},
+                    {QStringLiteral("type"), QStringLiteral("enum")},
+                    {QStringLiteral("default"), QStringLiteral("round-robin")},
+                    {QStringLiteral("values"), QJsonArray{
+                        QStringLiteral("round-robin"), QStringLiteral("fixed-priority")
+                    }}
+                },
+                QJsonObject{
+                    {QStringLiteral("id"), QStringLiteral("virtualNetworks")},
+                    {QStringLiteral("type"), QStringLiteral("enum")},
+                    {QStringLiteral("multiple"), true},
+                    {QStringLiteral("default"), QJsonArray{
+                        QStringLiteral("request"), QStringLiteral("response")
+                    }},
+                    {QStringLiteral("values"), QJsonArray{
+                        QStringLiteral("request"), QStringLiteral("response"),
+                        QStringLiteral("snoop")
+                    }}
+                }
+            }}
+        },
+        QJsonObject{
+            {QStringLiteral("id"), QStringLiteral("initiator.attachment")},
+            {QStringLiteral("appliesTo"), QJsonArray{
+                QStringLiteral("endpoint-attachment")
+            }},
+            {QStringLiteral("endpointTypes"), QJsonArray{
+                QStringLiteral("initiator")
+            }},
+            {QStringLiteral("properties"), QJsonArray{
+                QJsonObject{
+                    {QStringLiteral("id"), QStringLiteral("interfaceClass")},
+                    {QStringLiteral("type"), QStringLiteral("string")},
+                    {QStringLiteral("default"), QStringLiteral("coherent")}
+                }
+            }}
+        }
+    };
+}
+
+QJsonObject completeV3Manifest() {
+    QJsonObject manifest = baseManifest(3);
+    manifest.insert(QStringLiteral("endpointTypes"), completeEndpointTypes());
+    manifest.insert(QStringLiteral("domainTypes"), completeDomainTypes());
+    manifest.insert(
+        QStringLiteral("elementPropertySets"), completeElementPropertySets());
+    return manifest;
+}
+
 PackageLoadResult loadManifest(const QString& packageRoot, const QJsonObject& manifest) {
     const QString path = QDir(packageRoot).filePath(QStringLiteral("package.json"));
     QVector<Diagnostic> diagnostics;
@@ -222,10 +320,26 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    QJsonObject v4Manifest = baseManifest(4);
+    v4Manifest.insert(QStringLiteral("domainTypes"), QJsonArray{});
+    v4Manifest.insert(QStringLiteral("elementPropertySets"), QJsonArray{});
+    expectFailure(fixture.path(),
+                  v4Manifest,
+                  QStringLiteral("package.unsupported_version"),
+                  QStringLiteral("Package V4"));
+
     const QJsonObject v1Manifest = baseManifest(1);
     const PackageLoadResult v1Result = loadManifest(fixture.path(), v1Manifest);
     check(v1Result.success && v1Result.package && v1Result.package->domainTypes.isEmpty(),
           QStringLiteral("Package V1 succeeds without domainTypes"));
+
+    QJsonObject v1WithElementProperties = v1Manifest;
+    v1WithElementProperties.insert(
+        QStringLiteral("elementPropertySets"), QJsonArray{});
+    expectFailure(fixture.path(),
+                  v1WithElementProperties,
+                  QStringLiteral("package.element_property_sets_require_v3"),
+                  QStringLiteral("Package V1 with elementPropertySets"));
 
     QJsonObject v1WithDomains = v1Manifest;
     v1WithDomains.insert(QStringLiteral("domainTypes"), QJsonArray{});
@@ -246,6 +360,276 @@ int main(int argc, char** argv) {
     check(v2EmptyResult.success && v2EmptyResult.package
               && v2EmptyResult.package->domainTypes.isEmpty(),
           QStringLiteral("Package V2 accepts an explicit empty domainTypes array"));
+
+    QJsonObject v2WithElementProperties = v2EmptyDomains;
+    v2WithElementProperties.insert(
+        QStringLiteral("elementPropertySets"), QJsonArray{});
+    expectFailure(fixture.path(),
+                  v2WithElementProperties,
+                  QStringLiteral("package.element_property_sets_require_v3"),
+                  QStringLiteral("Package V2 with elementPropertySets"));
+
+    const QJsonObject v3MissingSchemas = baseManifest(3);
+    expectFailure(fixture.path(),
+                  v3MissingSchemas,
+                  QStringLiteral("package.invalid_domain_types"),
+                  QStringLiteral("Package V3 without domainTypes"));
+    expectFailure(fixture.path(),
+                  v3MissingSchemas,
+                  QStringLiteral("package.invalid_element_property_sets"),
+                  QStringLiteral("Package V3 without elementPropertySets"));
+
+    QJsonObject v3EmptySchemas = baseManifest(3);
+    v3EmptySchemas.insert(QStringLiteral("domainTypes"), QJsonArray{});
+    v3EmptySchemas.insert(QStringLiteral("elementPropertySets"), QJsonArray{});
+    const PackageLoadResult v3EmptyResult = loadManifest(
+        fixture.path(), v3EmptySchemas);
+    check(v3EmptyResult.success && v3EmptyResult.package
+              && v3EmptyResult.package->domainTypes.isEmpty()
+              && v3EmptyResult.package->elementPropertySets.isEmpty(),
+          QStringLiteral("Package V3 accepts explicit empty schema arrays"));
+
+    const QJsonObject completeV3 = completeV3Manifest();
+    const PackageLoadResult completeV3Result = loadManifest(
+        fixture.path(), completeV3);
+    check(completeV3Result.success && completeV3Result.package,
+          QStringLiteral("a complete Package V3 element property schema loads"));
+    if (completeV3Result.package) {
+        const ElementPropertySetDefinition* fabric =
+            completeV3Result.package->elementPropertySet(
+                QStringLiteral("fabric.microarchitecture"));
+        check(fabric
+                  && fabric->label == QStringLiteral("Fabric microarchitecture")
+                  && fabric->appliesTo
+                      == QVector<ElementKind>{ElementKind::Router,
+                                              ElementKind::RouterLink}
+                  && fabric->endpointTypes.isEmpty()
+                  && fabric->properties.size() == 6,
+              QStringLiteral("Package-defined set ids, labels, targets, and properties are parsed"));
+        if (fabric) {
+            const ElementPropertyDefinition* pipeline = fabric->property(
+                QStringLiteral("pipelineStages"));
+            const ElementPropertyDefinition* routeBias = fabric->property(
+                QStringLiteral("routeBias"));
+            const ElementPropertyDefinition* cutThrough = fabric->property(
+                QStringLiteral("cutThrough"));
+            const ElementPropertyDefinition* implementation = fabric->property(
+                QStringLiteral("implementation"));
+            const ElementPropertyDefinition* arbitration = fabric->property(
+                QStringLiteral("arbitration"));
+            const ElementPropertyDefinition* virtualNetworks = fabric->property(
+                QStringLiteral("virtualNetworks"));
+            check(pipeline && pipeline->type == ParameterType::Integer
+                      && pipeline->hasDefault && pipeline->defaultValue.toInt() == 2
+                      && pipeline->minimum == 0.0 && pipeline->maximum == 8.0,
+                  QStringLiteral("integer element properties retain defaults and ranges"));
+            check(routeBias && routeBias->type == ParameterType::Number
+                      && routeBias->defaultValue.toDouble() == 0.5,
+                  QStringLiteral("number element properties are supported"));
+            check(cutThrough && cutThrough->type == ParameterType::Boolean
+                      && cutThrough->defaultValue.toBool(),
+                  QStringLiteral("boolean element properties are supported"));
+            check(implementation && implementation->type == ParameterType::String
+                      && implementation->defaultValue.toString()
+                          == QStringLiteral("balanced"),
+                  QStringLiteral("string element properties are supported"));
+            check(arbitration
+                      && arbitration->type == ParameterType::Enumeration
+                      && arbitration->values
+                          == QStringList{QStringLiteral("round-robin"),
+                                         QStringLiteral("fixed-priority")},
+                  QStringLiteral("enum element properties retain their choices"));
+            check(virtualNetworks && virtualNetworks->multiple
+                      && virtualNetworks->defaultValue.toArray()
+                          == QJsonArray{QStringLiteral("request"),
+                                        QStringLiteral("response")},
+                  QStringLiteral("multiple element properties use array-shaped defaults"));
+        }
+
+        const ElementPropertySetDefinition* attachment =
+            completeV3Result.package->elementPropertySet(
+                QStringLiteral("initiator.attachment"));
+        check(attachment
+                  && attachment->appliesTo
+                      == QVector<ElementKind>{ElementKind::EndpointAttachment}
+                  && attachment->endpointTypes
+                      == QStringList{QStringLiteral("initiator")},
+              QStringLiteral("EndpointAttachment sets retain declared Endpoint type filters"));
+        check(completeV3Result.package->endpointType(QStringLiteral("initiator"))
+                  && completeV3Result.package->endpointType(
+                         QStringLiteral("initiator"))->parameters.isEmpty(),
+              QStringLiteral("Endpoint instance parameters remain on endpointTypes"));
+    }
+
+    QJsonObject malformedElementSets = completeV3;
+    malformedElementSets.insert(
+        QStringLiteral("elementPropertySets"), QJsonObject{});
+    expectFailure(fixture.path(),
+                  malformedElementSets,
+                  QStringLiteral("package.invalid_element_property_sets"),
+                  QStringLiteral("a non-array elementPropertySets field"));
+
+    QJsonObject endpointTargetManifest = completeV3;
+    QJsonArray endpointTargetSets = endpointTargetManifest.value(
+        QStringLiteral("elementPropertySets")).toArray();
+    QJsonObject endpointTargetSet = endpointTargetSets[0].toObject();
+    endpointTargetSet.insert(
+        QStringLiteral("appliesTo"), QJsonArray{QStringLiteral("endpoint")});
+    endpointTargetSets[0] = endpointTargetSet;
+    endpointTargetManifest.insert(
+        QStringLiteral("elementPropertySets"), endpointTargetSets);
+    expectFailure(
+        fixture.path(),
+        endpointTargetManifest,
+        QStringLiteral("package.unsupported_element_property_element_kind"),
+        QStringLiteral("Endpoint element properties that bypass endpoint parameters"));
+
+    QJsonObject duplicateTargetManifest = completeV3;
+    QJsonArray duplicateTargetSets = duplicateTargetManifest.value(
+        QStringLiteral("elementPropertySets")).toArray();
+    QJsonObject duplicateTargetSet = duplicateTargetSets[0].toObject();
+    duplicateTargetSet.insert(
+        QStringLiteral("appliesTo"),
+        QJsonArray{QStringLiteral("router"), QStringLiteral("router")});
+    duplicateTargetSets[0] = duplicateTargetSet;
+    duplicateTargetManifest.insert(
+        QStringLiteral("elementPropertySets"), duplicateTargetSets);
+    expectFailure(
+        fixture.path(),
+        duplicateTargetManifest,
+        QStringLiteral("package.duplicate_element_property_element_kind"),
+        QStringLiteral("duplicated element property targets"));
+
+    QJsonObject misplacedFilterManifest = completeV3;
+    QJsonArray misplacedFilterSets = misplacedFilterManifest.value(
+        QStringLiteral("elementPropertySets")).toArray();
+    QJsonObject misplacedFilterSet = misplacedFilterSets[0].toObject();
+    misplacedFilterSet.insert(
+        QStringLiteral("endpointTypes"),
+        QJsonArray{QStringLiteral("initiator")});
+    misplacedFilterSets[0] = misplacedFilterSet;
+    misplacedFilterManifest.insert(
+        QStringLiteral("elementPropertySets"), misplacedFilterSets);
+    expectFailure(
+        fixture.path(),
+        misplacedFilterManifest,
+        QStringLiteral("package.element_property_endpoint_types_require_attachment"),
+        QStringLiteral("an Endpoint type filter on a non-attachment set"));
+
+    QJsonObject unknownFilterManifest = completeV3;
+    QJsonArray unknownFilterSets = unknownFilterManifest.value(
+        QStringLiteral("elementPropertySets")).toArray();
+    QJsonObject unknownFilterSet = unknownFilterSets[1].toObject();
+    unknownFilterSet.insert(
+        QStringLiteral("endpointTypes"), QJsonArray{QStringLiteral("missing")});
+    unknownFilterSets[1] = unknownFilterSet;
+    unknownFilterManifest.insert(
+        QStringLiteral("elementPropertySets"), unknownFilterSets);
+    expectFailure(
+        fixture.path(),
+        unknownFilterManifest,
+        QStringLiteral("package.unknown_element_property_endpoint_type"),
+        QStringLiteral("an undeclared Endpoint type filter"));
+
+    QJsonObject duplicateFilterManifest = completeV3;
+    QJsonArray duplicateFilterSets = duplicateFilterManifest.value(
+        QStringLiteral("elementPropertySets")).toArray();
+    QJsonObject duplicateFilterSet = duplicateFilterSets[1].toObject();
+    duplicateFilterSet.insert(
+        QStringLiteral("endpointTypes"),
+        QJsonArray{QStringLiteral("initiator"), QStringLiteral("initiator")});
+    duplicateFilterSets[1] = duplicateFilterSet;
+    duplicateFilterManifest.insert(
+        QStringLiteral("elementPropertySets"), duplicateFilterSets);
+    expectFailure(
+        fixture.path(),
+        duplicateFilterManifest,
+        QStringLiteral("package.duplicate_element_property_endpoint_type"),
+        QStringLiteral("a duplicated Endpoint type filter"));
+
+    QJsonObject duplicateSetManifest = completeV3;
+    QJsonArray duplicateSets = duplicateSetManifest.value(
+        QStringLiteral("elementPropertySets")).toArray();
+    duplicateSets.append(duplicateSets[0]);
+    duplicateSetManifest.insert(
+        QStringLiteral("elementPropertySets"), duplicateSets);
+    expectFailure(fixture.path(),
+                  duplicateSetManifest,
+                  QStringLiteral("package.duplicate_element_property_set"),
+                  QStringLiteral("duplicated element property set ids"));
+
+    QJsonObject duplicateElementPropertyManifest = completeV3;
+    QJsonArray duplicateElementPropertySets = duplicateElementPropertyManifest.value(
+        QStringLiteral("elementPropertySets")).toArray();
+    QJsonObject duplicateElementPropertySet =
+        duplicateElementPropertySets[0].toObject();
+    QJsonArray duplicateElementProperties = duplicateElementPropertySet.value(
+        QStringLiteral("properties")).toArray();
+    duplicateElementProperties.append(duplicateElementProperties[0]);
+    duplicateElementPropertySet.insert(
+        QStringLiteral("properties"), duplicateElementProperties);
+    duplicateElementPropertySets[0] = duplicateElementPropertySet;
+    duplicateElementPropertyManifest.insert(
+        QStringLiteral("elementPropertySets"), duplicateElementPropertySets);
+    expectFailure(fixture.path(),
+                  duplicateElementPropertyManifest,
+                  QStringLiteral("package.duplicate_element_property"),
+                  QStringLiteral("duplicated element property ids"));
+
+    QJsonObject missingDefaultManifest = completeV3;
+    QJsonArray missingDefaultSets = missingDefaultManifest.value(
+        QStringLiteral("elementPropertySets")).toArray();
+    QJsonObject missingDefaultSet = missingDefaultSets[0].toObject();
+    QJsonArray missingDefaultProperties = missingDefaultSet.value(
+        QStringLiteral("properties")).toArray();
+    QJsonObject missingDefaultProperty = missingDefaultProperties[0].toObject();
+    missingDefaultProperty.remove(QStringLiteral("default"));
+    missingDefaultProperties[0] = missingDefaultProperty;
+    missingDefaultSet.insert(
+        QStringLiteral("properties"), missingDefaultProperties);
+    missingDefaultSets[0] = missingDefaultSet;
+    missingDefaultManifest.insert(
+        QStringLiteral("elementPropertySets"), missingDefaultSets);
+    expectFailure(fixture.path(),
+                  missingDefaultManifest,
+                  QStringLiteral("package.missing_parameter_default"),
+                  QStringLiteral("an element property without a default"));
+
+    QJsonObject invalidElementMultipleDefaultManifest = completeV3;
+    QJsonArray invalidMultipleDefaultSets = invalidElementMultipleDefaultManifest.value(
+        QStringLiteral("elementPropertySets")).toArray();
+    QJsonObject invalidMultipleDefaultSet =
+        invalidMultipleDefaultSets[0].toObject();
+    QJsonArray invalidElementMultipleDefaultProperties =
+        invalidMultipleDefaultSet.value(QStringLiteral("properties")).toArray();
+    QJsonObject invalidElementMultipleDefaultProperty =
+        invalidElementMultipleDefaultProperties[5].toObject();
+    invalidElementMultipleDefaultProperty.insert(
+        QStringLiteral("default"), QStringLiteral("request"));
+    invalidElementMultipleDefaultProperties[5] =
+        invalidElementMultipleDefaultProperty;
+    invalidMultipleDefaultSet.insert(
+        QStringLiteral("properties"), invalidElementMultipleDefaultProperties);
+    invalidMultipleDefaultSets[0] = invalidMultipleDefaultSet;
+    invalidElementMultipleDefaultManifest.insert(
+        QStringLiteral("elementPropertySets"), invalidMultipleDefaultSets);
+    expectFailure(fixture.path(),
+                  invalidElementMultipleDefaultManifest,
+                  QStringLiteral("package.invalid_parameter_default"),
+                  QStringLiteral("a multiple element property with a scalar default"));
+
+    QJsonObject emptyPropertiesManifest = completeV3;
+    QJsonArray emptyPropertiesSets = emptyPropertiesManifest.value(
+        QStringLiteral("elementPropertySets")).toArray();
+    QJsonObject emptyPropertiesSet = emptyPropertiesSets[0].toObject();
+    emptyPropertiesSet.insert(QStringLiteral("properties"), QJsonArray{});
+    emptyPropertiesSets[0] = emptyPropertiesSet;
+    emptyPropertiesManifest.insert(
+        QStringLiteral("elementPropertySets"), emptyPropertiesSets);
+    expectFailure(fixture.path(),
+                  emptyPropertiesManifest,
+                  QStringLiteral("package.invalid_element_properties"),
+                  QStringLiteral("an empty declared element property set"));
 
     QJsonObject completeManifest = baseManifest(2);
     completeManifest.insert(QStringLiteral("domainTypes"), completeDomainTypes());

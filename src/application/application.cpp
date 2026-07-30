@@ -285,7 +285,10 @@ DesignResult FinepaperApplication::createDesign(const QJsonObject& request) cons
     }
 
     NocDesign design;
-    design.formatVersion = package->formatVersion == 2 ? 2 : 1;
+    // Package and Design format versions evolve together. Copy the exact
+    // supported Package version so newer capabilities are not silently
+    // downgraded to a legacy Design shape.
+    design.formatVersion = package->formatVersion;
     design.package = reference;
     design.name = requestString(request,
                                 QStringLiteral("name"),
@@ -430,12 +433,12 @@ DesignResult FinepaperApplication::createDesign(const QJsonObject& request) cons
 
     const QString domainConfigurationKey = QStringLiteral("domainConfiguration");
     if (request.contains(domainConfigurationKey)) {
-        if (package->formatVersion != 2) {
+        if (!formatVersionSupportsDomains(package->formatVersion)) {
             appendDiagnostic(
                 result.diagnostics,
                 QStringLiteral("error"),
                 QStringLiteral("create.domain_configuration_requires_v2"),
-                QStringLiteral("domainConfiguration requires Package formatVersion 2"),
+                             QStringLiteral("domainConfiguration requires a Package format with Domain support"),
                 QStringLiteral("/domainConfiguration"));
             result.design = std::move(design);
             return result;
@@ -687,13 +690,13 @@ DesignResult FinepaperApplication::updateParameters(const NocDesign& design,
 DesignResult FinepaperApplication::replaceDomainConfiguration(
     const NocDesign& design,
     DomainConfiguration configuration) const {
-    if (design.formatVersion != 2) {
+    if (!formatVersionSupportsDomains(design.formatVersion)) {
         DesignResult result;
         result.design = design;
         appendDiagnostic(result.diagnostics,
                          QStringLiteral("error"),
                          QStringLiteral("domain_configuration.requires_v2"),
-                         QStringLiteral("DomainConfiguration requires Design formatVersion 2"),
+                         QStringLiteral("DomainConfiguration requires a Design format with Domain support"),
                          QStringLiteral("/formatVersion"));
         return result;
     }

@@ -49,6 +49,11 @@ QString edgeOverrideKey(const DomainEdgeOverride& edgeOverride) {
     return referenceKey(edgeOverride.edge) + QChar(0x1f) + edgeOverride.domainType;
 }
 
+QString elementConfigurationKey(const ElementConfiguration& configuration) {
+    return referenceKey(configuration.element) + QChar(0x1f)
+        + configuration.propertySet;
+}
+
 std::optional<RouterPosition> routerPositionFromStableId(const QString& id) {
     const QStringList parts = id.split(QLatin1Char('-'));
     if (parts.size() != 3 || parts.at(0) != QStringLiteral("r")) {
@@ -137,6 +142,10 @@ bool hasDomainData(const NocDesign& design) {
         || !design.edgeOverrides.isEmpty();
 }
 
+bool hasElementConfigurationData(const NocDesign& design) {
+    return !design.elementConfigurations.isEmpty();
+}
+
 QStringList normalizedDomainIds(QStringList ids) {
     std::sort(ids.begin(), ids.end());
     ids.erase(std::unique(ids.begin(), ids.end()), ids.end());
@@ -198,6 +207,12 @@ bool isDomainMembershipElementKind(ElementKind kind) {
 
 bool isDomainCrossingEdgeKind(ElementKind kind) {
     return kind == ElementKind::RouterLink
+        || kind == ElementKind::EndpointAttachment;
+}
+
+bool isElementConfigurationTargetKind(ElementKind kind) {
+    return kind == ElementKind::Router
+        || kind == ElementKind::RouterLink
         || kind == ElementKind::EndpointAttachment;
 }
 
@@ -473,13 +488,23 @@ QVector<Diagnostic> validateDesignStructure(const NocDesign& design) {
         || design.formatVersion > kMaximumDesignFormatVersion) {
         appendError(diagnostics,
                     QStringLiteral("design.unsupported_version"),
-                    QStringLiteral("formatVersion must be 1 or 2"),
+                    QStringLiteral("formatVersion must be between %1 and %2")
+                        .arg(kMinimumDesignFormatVersion)
+                        .arg(kMaximumDesignFormatVersion),
                     QStringLiteral("/formatVersion"));
     }
-    if (design.formatVersion == 1 && hasDomainData(design)) {
+    if (!formatVersionSupportsDomains(design.formatVersion)
+        && hasDomainData(design)) {
         appendError(diagnostics,
                     QStringLiteral("design.domains_require_v2"),
                     QStringLiteral("Domain data requires formatVersion 2"),
+                    QStringLiteral("/formatVersion"));
+    }
+    if (!formatVersionSupportsElementConfigurations(design.formatVersion)
+        && hasElementConfigurationData(design)) {
+        appendError(diagnostics,
+                    QStringLiteral("design.element_configurations_require_v3"),
+                    QStringLiteral("Element configuration data requires formatVersion 3"),
                     QStringLiteral("/formatVersion"));
     }
     if (design.id.trimmed().isEmpty()) {
@@ -854,6 +879,67 @@ QVector<Diagnostic> validateDesignStructure(const NocDesign& design) {
                             base);
             } else {
                 edgeOverrides.insert(key);
+            }
+        }
+    }
+
+    QSet<QString> elementConfigurations;
+    for (qsizetype index = 0; index < design.elementConfigurations.size(); ++index) {
+        const ElementConfiguration& configuration =
+            design.elementConfigurations.at(index);
+        const QString base = QStringLiteral("/elementConfigurations/%1").arg(index);
+        if (configuration.element.kind == ElementKind::Invalid) {
+            appendError(
+                diagnostics,
+                QStringLiteral("element_configuration.missing_element_kind"),
+                QStringLiteral(
+                    "Element configuration kind must be router, router-link, or endpoint-attachment"),
+                base + QStringLiteral("/element/kind"));
+        } else if (!isElementConfigurationTargetKind(configuration.element.kind)) {
+            appendError(
+                diagnostics,
+                QStringLiteral("element_configuration.unsupported_element_kind"),
+                QStringLiteral(
+                    "Element configuration kind must be router, router-link, or endpoint-attachment"),
+                base + QStringLiteral("/element/kind"));
+        }
+        if (configuration.element.id.trimmed().isEmpty()) {
+            appendError(diagnostics,
+                        QStringLiteral("element_configuration.missing_element_id"),
+                        QStringLiteral("Element configuration id is required"),
+                        base + QStringLiteral("/element/id"));
+        } else if (isElementConfigurationTargetKind(configuration.element.kind)
+                   && !designReferenceExists(design, configuration.element)) {
+            appendError(diagnostics,
+                        QStringLiteral("element_configuration.unknown_element"),
+                        QStringLiteral("Element configuration references an unknown element"),
+                        base + QStringLiteral("/element"));
+        }
+        if (configuration.propertySet.trimmed().isEmpty()) {
+            appendError(diagnostics,
+                        QStringLiteral("element_configuration.missing_property_set"),
+                        QStringLiteral("Element configuration propertySet is required"),
+                        base + QStringLiteral("/propertySet"));
+        }
+        if (configuration.properties.isEmpty()) {
+            appendError(diagnostics,
+                        QStringLiteral("element_configuration.empty_properties"),
+                        QStringLiteral("Element configuration properties must not be empty"),
+                        base + QStringLiteral("/properties"));
+        }
+
+        if (configuration.element.kind != ElementKind::Invalid
+            && !configuration.element.id.trimmed().isEmpty()
+            && !configuration.propertySet.trimmed().isEmpty()) {
+            const QString key = elementConfigurationKey(configuration);
+            if (elementConfigurations.contains(key)) {
+                appendError(diagnostics,
+                            QStringLiteral("element_configuration.duplicate"),
+                            QStringLiteral(
+                                "Element has more than one configuration for this propertySet"),
+                            base);
+            } else {
+                elementConfigurations.insert(key);
             }
         }
     }

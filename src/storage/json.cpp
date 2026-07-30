@@ -154,6 +154,10 @@ bool hasDomainData(const NocDesign& design) {
         || !design.edgeOverrides.isEmpty();
 }
 
+bool hasElementConfigurationData(const NocDesign& design) {
+    return !design.elementConfigurations.isEmpty();
+}
+
 } // namespace
 
 JsonObjectLoadResult loadJsonObject(const QString& path) {
@@ -254,7 +258,8 @@ QJsonObject designToJson(const NocDesign& design) {
         {QStringLiteral("parameters"), design.parameters},
         {QStringLiteral("endpoints"), endpoints}
     };
-    if (design.formatVersion >= 2 || hasDomainData(design)) {
+    if (formatVersionSupportsDomains(design.formatVersion)
+        || hasDomainData(design)) {
         QJsonArray domains;
         for (const DomainDefinition& domain : design.domains) {
             domains.append(QJsonObject{
@@ -321,6 +326,21 @@ QJsonObject designToJson(const NocDesign& design) {
         object.insert(QStringLiteral("crossingPolicies"), crossingPolicies);
         object.insert(QStringLiteral("edgeOverrides"), edgeOverrides);
     }
+    if (formatVersionSupportsElementConfigurations(design.formatVersion)
+        || hasElementConfigurationData(design)) {
+        QJsonArray elementConfigurations;
+        for (const ElementConfiguration& configuration
+             : design.elementConfigurations) {
+            elementConfigurations.append(QJsonObject{
+                {QStringLiteral("element"),
+                 elementRefToJson(configuration.element)},
+                {QStringLiteral("propertySet"), configuration.propertySet},
+                {QStringLiteral("properties"), configuration.properties}
+            });
+        }
+        object.insert(QStringLiteral("elementConfigurations"),
+                      elementConfigurations);
+    }
     if (!design.packageData.isEmpty()) {
         object.insert(QStringLiteral("packageData"), design.packageData);
     }
@@ -345,7 +365,13 @@ DesignLoadResult designFromJson(const QJsonObject& object) {
         QStringLiteral("crossingPolicies"),
         QStringLiteral("edgeOverrides")
     };
-    if (design.formatVersion == 1) {
+    const QString elementConfigurationsField =
+        QStringLiteral("elementConfigurations");
+    const bool supportedVersion =
+        design.formatVersion >= kMinimumDesignFormatVersion
+        && design.formatVersion <= kMaximumDesignFormatVersion;
+    if (supportedVersion
+        && !formatVersionSupportsDomains(design.formatVersion)) {
         for (const QString& field : v2Fields) {
             if (object.contains(field)) {
                 appendError(result.diagnostics,
@@ -354,16 +380,39 @@ DesignLoadResult designFromJson(const QJsonObject& object) {
                             QLatin1Char('/') + field);
             }
         }
-    } else if (design.formatVersion == 2) {
+    }
+    if (supportedVersion
+        && formatVersionSupportsDomains(design.formatVersion)) {
         for (const QString& field : v2Fields) {
             if (!object.contains(field)) {
                 appendError(result.diagnostics,
                             QStringLiteral("json.expected_array"),
-                            QStringLiteral("%1 must be present as an array in formatVersion 2")
-                                .arg(field),
+                            QStringLiteral(
+                                "%1 must be present as an array in formatVersion %2")
+                                .arg(field)
+                                .arg(design.formatVersion),
                             QLatin1Char('/') + field);
             }
         }
+    }
+    if (supportedVersion
+        && !formatVersionSupportsElementConfigurations(design.formatVersion)
+        && object.contains(elementConfigurationsField)) {
+        appendError(
+            result.diagnostics,
+            QStringLiteral("design.element_configurations_require_v3"),
+            QStringLiteral("elementConfigurations requires formatVersion 3"),
+            QStringLiteral("/elementConfigurations"));
+    } else if (supportedVersion
+               && formatVersionSupportsElementConfigurations(
+                   design.formatVersion)
+               && !object.contains(elementConfigurationsField)) {
+        appendError(
+            result.diagnostics,
+            QStringLiteral("json.expected_array"),
+            QStringLiteral(
+                "elementConfigurations must be present as an array in formatVersion 3"),
+            QStringLiteral("/elementConfigurations"));
     }
     design.id = stringValue(object, QStringLiteral("id"), QString(), result.diagnostics);
     design.name = stringValue(object, QStringLiteral("name"), QString(), result.diagnostics);
@@ -676,6 +725,43 @@ DesignLoadResult designFromJson(const QJsonObject& object) {
                 base,
                 result.diagnostics);
             design.edgeOverrides.append(std::move(edgeOverride));
+        }
+    }
+
+    if (const auto configurations = optionalArray(
+            object,
+            QStringLiteral("elementConfigurations"),
+            result.diagnostics)) {
+        for (qsizetype index = 0; index < configurations->size(); ++index) {
+            const QString base =
+                QStringLiteral("/elementConfigurations/%1").arg(index);
+            if (!configurations->at(index).isObject()) {
+                appendError(result.diagnostics,
+                            QStringLiteral("json.expected_object"),
+                            QStringLiteral("Element configuration must be an object"),
+                            base);
+                continue;
+            }
+            const QJsonObject configurationObject =
+                configurations->at(index).toObject();
+            ElementConfiguration configuration;
+            if (const auto element = elementRefFromJson(
+                    configurationObject.value(QStringLiteral("element")),
+                    base + QStringLiteral("/element"),
+                    result.diagnostics)) {
+                configuration.element = *element;
+            }
+            configuration.propertySet = stringValue(
+                configurationObject,
+                QStringLiteral("propertySet"),
+                base,
+                result.diagnostics);
+            configuration.properties = requiredObject(
+                configurationObject,
+                QStringLiteral("properties"),
+                base,
+                result.diagnostics);
+            design.elementConfigurations.append(std::move(configuration));
         }
     }
 

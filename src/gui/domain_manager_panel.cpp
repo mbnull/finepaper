@@ -263,8 +263,8 @@ void DomainManagerPanel::setContext(const NocDesign* design,
         m_status->setText(QStringLiteral(
             "The design Package metadata is unavailable. Domain data remains "
             "read-only until the exact Package is restored."));
-    } else if (m_design->formatVersion != 2
-               || m_package->formatVersion != 2) {
+    } else if (!formatVersionSupportsDomains(m_design->formatVersion)
+               || !formatVersionSupportsDomains(m_package->formatVersion)) {
         m_status->setText(QStringLiteral(
             "This Design/Package version does not expose Domain configuration."));
     } else if (m_package->domainTypes.isEmpty()) {
@@ -354,8 +354,9 @@ void DomainManagerPanel::rebuildTypeSelector(const QString& preferredType) {
     const QSignalBlocker blocker(m_typeSelector);
     m_updating = true;
     m_typeSelector->clear();
-    if (m_package && m_design && m_design->formatVersion == 2
-        && m_package->formatVersion == 2) {
+    if (m_package && m_design
+        && formatVersionSupportsDomains(m_design->formatVersion)
+        && formatVersionSupportsDomains(m_package->formatVersion)) {
         for (const DomainTypeDefinition& type : m_package->domainTypes) {
             m_typeSelector->addItem(
                 type.label.trimmed().isEmpty() ? type.id : type.label,
@@ -562,11 +563,13 @@ void DomainManagerPanel::refreshAssignment() {
 
 void DomainManagerPanel::updateActionState() {
     const bool editable = !m_busy && m_design && m_package
-        && m_design->formatVersion == 2 && m_package->formatVersion == 2
+        && formatVersionSupportsDomains(m_design->formatVersion)
+        && formatVersionSupportsDomains(m_package->formatVersion)
         && selectedType();
     const bool hasSelectedDomain = selectedDomain();
     const bool completeEditable = !m_busy && m_design && m_package
-        && m_design->formatVersion == 2 && m_package->formatVersion == 2
+        && formatVersionSupportsDomains(m_design->formatVersion)
+        && formatVersionSupportsDomains(m_package->formatVersion)
         && !m_assignmentEdited;
     m_completeConfiguration->setEnabled(completeEditable);
     m_completeConfiguration->setToolTip(

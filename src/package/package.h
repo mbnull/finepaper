@@ -12,6 +12,8 @@
 namespace finepaper {
 
 inline constexpr int kMaximumPackageTimeoutSeconds = 86'400;
+inline constexpr int kMinimumPackageFormatVersion = 1;
+inline constexpr int kMaximumPackageFormatVersion = 3;
 
 enum class ParameterType {
     Invalid,
@@ -50,6 +52,26 @@ struct EndpointTypeDefinition {
     QString label;
     QString icon;
     QVector<ParameterDefinition> parameters;
+};
+
+// Package V3 properties for sparse per-element overrides. A property always
+// declares a default; when multiple is true both defaults and overrides use an
+// array whose items have the declared scalar type.
+struct ElementPropertyDefinition : ParameterDefinition {
+    bool multiple = false;
+};
+
+struct ElementPropertySetDefinition {
+    QString id;
+    QString label;
+    QVector<ElementKind> appliesTo;
+    // Optional filter for EndpointAttachment targets. An empty list means all
+    // Endpoint types and is also the representation used when no filter was
+    // declared.
+    QStringList endpointTypes;
+    QVector<ElementPropertyDefinition> properties;
+
+    const ElementPropertyDefinition* property(const QString& id) const;
 };
 
 struct DomainPropertyDefinition : ParameterDefinition {
@@ -134,6 +156,7 @@ struct PackageDefinition {
     QVector<ParameterDefinition> parameters;
     QVector<EndpointTypeDefinition> endpointTypes;
     QVector<DomainTypeDefinition> domainTypes;
+    QVector<ElementPropertySetDefinition> elementPropertySets;
     AttachmentDefinition attachment;
     GeneratorDefinition generator;
     std::optional<EngineDefinition> engine;
@@ -142,6 +165,7 @@ struct PackageDefinition {
     const ParameterDefinition* parameter(const QString& id) const;
     const EndpointTypeDefinition* endpointType(const QString& id) const;
     const DomainTypeDefinition* domainType(const QString& id) const;
+    const ElementPropertySetDefinition* elementPropertySet(const QString& id) const;
 };
 
 struct PackageLoadResult {

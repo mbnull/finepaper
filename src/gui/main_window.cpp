@@ -762,8 +762,9 @@ void FinepaperMainWindow::createDomainDock() {
     };
     m_domainManager->completeConfigurationRequested = [this] {
         const PackageDefinition* package = packageForDesign();
-        if (!m_design || !package || m_design->formatVersion != 2
-            || package->formatVersion != 2) {
+        if (!m_design || !package
+            || !formatVersionSupportsDomains(m_design->formatVersion)
+            || !formatVersionSupportsDomains(package->formatVersion)) {
             return;
         }
         const NocDesign baseDesign = *m_design;
@@ -1861,12 +1862,12 @@ void FinepaperMainWindow::createDesign() {
 
     DesignResult result = m_application.createDesign(request);
     if (!result.success
-        && result.design.formatVersion == 2
+        && formatVersionSupportsDomains(result.design.formatVersion)
         && hasOnlyDomainConfigurationErrors(result.diagnostics)) {
         const PackageDefinition* package = packageByKey(
             QStringLiteral("%1@%2")
                 .arg(result.design.package.id, result.design.package.version));
-        if (package && package->formatVersion == 2) {
+        if (package && formatVersionSupportsDomains(package->formatVersion)) {
             DomainConfigurationDialog configurationDialog(
                 result.design,
                 *package,

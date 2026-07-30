@@ -112,6 +112,32 @@ NocDesign domainDesign() {
     return design;
 }
 
+NocDesign elementConfigurationDesign() {
+    NocDesign design = domainDesign();
+    design.formatVersion = 3;
+    design.elementConfigurations = {
+        ElementConfiguration{
+            ElementRef{ElementKind::Router, QStringLiteral("r-0-0")},
+            QStringLiteral("router.microarchitecture"),
+            QJsonObject{{QStringLiteral("inputBufferDepth"), 4}}
+        },
+        ElementConfiguration{
+            ElementRef{
+                ElementKind::RouterLink,
+                linkId(QStringLiteral("r-0-0"), QStringLiteral("r-1-0"))
+            },
+            QStringLiteral("link.pipeline"),
+            QJsonObject{{QStringLiteral("stages"), 2}}
+        },
+        ElementConfiguration{
+            ElementRef{ElementKind::EndpointAttachment, QStringLiteral("ep0")},
+            QStringLiteral("attachment.buffering"),
+            QJsonObject{{QStringLiteral("requestDepth"), 8}}
+        }
+    };
+    return design;
+}
+
 NocDesign projectionDesign() {
     NocDesign design;
     design.formatVersion = 2;
@@ -272,6 +298,25 @@ void expectDiagnostic(const QString& code,
     check(found, description + QStringLiteral(" reports ") + code);
 }
 
+void expectElementConfigurationDiagnostic(
+    const QString& code,
+    const QString& description,
+    const std::function<void(NocDesign&)>& mutate) {
+    NocDesign design = elementConfigurationDesign();
+    mutate(design);
+    const QVector<Diagnostic> diagnostics = validateDesignStructure(design);
+    const bool found = hasDiagnosticCode(diagnostics, code);
+    if (!found) {
+        QTextStream stream(stderr);
+        stream << "Diagnostics for " << description << ':';
+        for (const Diagnostic& diagnostic : diagnostics) {
+            stream << ' ' << diagnostic.code;
+        }
+        stream << Qt::endl;
+    }
+    check(found, description + QStringLiteral(" reports ") + code);
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -297,6 +342,67 @@ int main(int argc, char** argv) {
     const NocDesign valid = domainDesign();
     check(!hasErrors(validateDesignStructure(valid)),
           QStringLiteral("a complete clock/power Domain model is valid"));
+    check(formatVersionSupportsDomains(2)
+              && formatVersionSupportsDomains(3)
+              && !formatVersionSupportsDomains(1)
+              && formatVersionSupportsElementConfigurations(3)
+              && !formatVersionSupportsElementConfigurations(2),
+          QStringLiteral("Design format capability helpers expose the V2 and V3 boundaries"));
+
+    const NocDesign validElementConfigurations = elementConfigurationDesign();
+    check(!hasErrors(validateDesignStructure(validElementConfigurations)),
+          QStringLiteral("V3 accepts sparse Router, Router Link, and Endpoint Attachment configurations"));
+    check(isElementConfigurationTargetKind(ElementKind::Router)
+              && isElementConfigurationTargetKind(ElementKind::RouterLink)
+              && isElementConfigurationTargetKind(ElementKind::EndpointAttachment)
+              && !isElementConfigurationTargetKind(ElementKind::Endpoint)
+              && !isElementConfigurationTargetKind(ElementKind::Invalid),
+          QStringLiteral("element configuration target kinds are explicit and exclude Endpoints"));
+
+    expectElementConfigurationDiagnostic(
+        QStringLiteral("design.element_configurations_require_v3"),
+        QStringLiteral("V2 element configuration data"),
+        [](NocDesign& design) { design.formatVersion = 2; });
+    expectElementConfigurationDiagnostic(
+        QStringLiteral("element_configuration.unsupported_element_kind"),
+        QStringLiteral("an Endpoint element configuration"),
+        [](NocDesign& design) {
+            design.elementConfigurations[0].element =
+                ElementRef{ElementKind::Endpoint, QStringLiteral("ep0")};
+        });
+    expectElementConfigurationDiagnostic(
+        QStringLiteral("element_configuration.unknown_element"),
+        QStringLiteral("an element configuration referencing an unknown Router"),
+        [](NocDesign& design) {
+            design.elementConfigurations[0].element.id = QStringLiteral("r-9-9");
+        });
+    expectElementConfigurationDiagnostic(
+        QStringLiteral("element_configuration.duplicate"),
+        QStringLiteral("duplicate configurations for one element and propertySet"),
+        [](NocDesign& design) {
+            design.elementConfigurations.append(design.elementConfigurations[0]);
+        });
+    expectElementConfigurationDiagnostic(
+        QStringLiteral("element_configuration.missing_property_set"),
+        QStringLiteral("an element configuration without a propertySet"),
+        [](NocDesign& design) {
+            design.elementConfigurations[0].propertySet.clear();
+        });
+    expectElementConfigurationDiagnostic(
+        QStringLiteral("element_configuration.empty_properties"),
+        QStringLiteral("an element configuration without properties"),
+        [](NocDesign& design) {
+            design.elementConfigurations[0].properties = QJsonObject{};
+        });
+
+    NocDesign distinctPropertySets = elementConfigurationDesign();
+    ElementConfiguration additionalRouterConfiguration =
+        distinctPropertySets.elementConfigurations.front();
+    additionalRouterConfiguration.propertySet = QStringLiteral("router.qos");
+    distinctPropertySets.elementConfigurations.append(
+        std::move(additionalRouterConfiguration));
+    check(!hasErrors(validateDesignStructure(distinctPropertySets)),
+          QStringLiteral("one element may carry multiple distinct propertySets"));
 
     expectDiagnostic(
         QStringLiteral("design.domains_require_v2"),
