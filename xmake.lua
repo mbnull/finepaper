@@ -64,6 +64,42 @@ target("finepaper-cli-tests")
         trim_output = true
     })
 
+target("finepaper-domain-model-tests")
+    add_rules("qt.console")
+    set_kind("binary")
+    set_group("test")
+    set_default(false)
+    add_deps("finepaper-application")
+    add_files("tests/domain_model_tests.cpp")
+    add_includedirs("src")
+    add_tests("default", {
+        trim_output = true
+    })
+
+target("finepaper-json-version-tests")
+    add_rules("qt.console")
+    set_kind("binary")
+    set_group("test")
+    set_default(false)
+    add_deps("finepaper-application")
+    add_files("tests/json_version_tests.cpp")
+    add_includedirs("src")
+    add_tests("default", {
+        trim_output = true
+    })
+
+target("finepaper-package-domain-tests")
+    add_rules("qt.console")
+    set_kind("binary")
+    set_group("test")
+    set_default(false)
+    add_deps("finepaper-application")
+    add_files("tests/package_domain_tests.cpp")
+    add_includedirs("src")
+    add_tests("default", {
+        trim_output = true
+    })
+
 target("finepaper-gui-smoke")
     add_rules("qt.widgetapp")
     add_frameworks("QtConcurrent")

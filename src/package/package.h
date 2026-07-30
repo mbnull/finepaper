@@ -28,6 +28,12 @@ enum class AttachmentSlotMode {
     Explicit
 };
 
+enum class DomainCardinality {
+    Invalid,
+    Single,
+    Multiple
+};
+
 struct ParameterDefinition {
     QString id;
     ParameterType type = ParameterType::Invalid;
@@ -44,6 +50,32 @@ struct EndpointTypeDefinition {
     QString label;
     QString icon;
     QVector<ParameterDefinition> parameters;
+};
+
+struct DomainPropertyDefinition : ParameterDefinition {
+    bool required = false;
+    bool multiple = false;
+    std::optional<QString> referenceDomainType;
+};
+
+struct DomainRelationDefinition {
+    QString id;
+    QString label;
+    QStringList targetTypes;
+    DomainCardinality cardinality = DomainCardinality::Single;
+    bool required = false;
+    QVector<DomainPropertyDefinition> properties;
+};
+
+struct DomainTypeDefinition {
+    QString id;
+    QString label;
+    QVector<ElementKind> appliesTo;
+    DomainCardinality cardinality = DomainCardinality::Single;
+    bool required = false;
+    QVector<DomainPropertyDefinition> properties;
+    QVector<DomainRelationDefinition> relations;
+    QVector<DomainPropertyDefinition> crossingProperties;
 };
 
 struct AttachmentSlotDefinition {
@@ -90,6 +122,7 @@ struct PackageDefinition {
     MeshDefinition mesh;
     QVector<ParameterDefinition> parameters;
     QVector<EndpointTypeDefinition> endpointTypes;
+    QVector<DomainTypeDefinition> domainTypes;
     AttachmentDefinition attachment;
     GeneratorDefinition generator;
     std::optional<EngineDefinition> engine;
@@ -97,6 +130,7 @@ struct PackageDefinition {
     QString key() const;
     const ParameterDefinition* parameter(const QString& id) const;
     const EndpointTypeDefinition* endpointType(const QString& id) const;
+    const DomainTypeDefinition* domainType(const QString& id) const;
 };
 
 struct PackageLoadResult {

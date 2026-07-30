@@ -1,8 +1,10 @@
 #pragma once
 
+#include <QHash>
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QString>
+#include <QStringList>
 #include <QVector>
 
 #include <optional>
@@ -13,6 +15,8 @@ namespace finepaper {
 // design files. Runtime Packages may impose much smaller product limits.
 inline constexpr int kMaximumMeshDimension = 4096;
 inline constexpr qint64 kMaximumProjectedRouterCount = 1'000'000;
+inline constexpr int kMinimumDesignFormatVersion = 1;
+inline constexpr int kMaximumDesignFormatVersion = 2;
 
 struct Diagnostic {
     QString severity;
@@ -54,6 +58,68 @@ struct EndpointInstance {
     QJsonObject parameters;
 };
 
+struct DomainDefinition {
+    QString id;
+    QString type;
+    QString name;
+    QJsonObject properties;
+
+    bool operator==(const DomainDefinition&) const = default;
+};
+
+enum class ElementKind {
+    Invalid,
+    Router,
+    Endpoint,
+    RouterLink,
+    EndpointAttachment
+};
+
+QString elementKindId(ElementKind kind);
+ElementKind elementKindFromId(const QString& id);
+
+struct ElementRef {
+    ElementKind kind = ElementKind::Invalid;
+    QString id;
+
+    bool operator==(const ElementRef&) const = default;
+};
+
+struct DomainMembership {
+    ElementRef element;
+    QHash<QString, QStringList> assignments;
+
+    bool operator==(const DomainMembership&) const = default;
+};
+
+struct DomainRelation {
+    QString type;
+    QString from;
+    QString to;
+    QJsonObject properties;
+
+    bool operator==(const DomainRelation&) const = default;
+};
+
+struct DomainCrossingPolicy {
+    QString id;
+    QString domainType;
+    QString from;
+    QString to;
+    QJsonObject properties;
+
+    bool operator==(const DomainCrossingPolicy&) const = default;
+};
+
+struct DomainEdgeOverride {
+    ElementRef edge;
+    QString domainType;
+    QString policy;
+    QJsonObject properties;
+
+    bool operator==(const DomainEdgeOverride&) const = default;
+};
+
 struct NocDesign {
     QString format = QStringLiteral("finepaper.noc-design");
     int formatVersion = 1;
@@ -63,6 +129,11 @@ struct NocDesign {
     TopologySpec topology;
     QJsonObject parameters;
     QVector<EndpointInstance> endpoints;
+    QVector<DomainDefinition> domains;
+    QVector<DomainMembership> domainMemberships;
+    QVector<DomainRelation> domainRelations;
+    QVector<DomainCrossingPolicy> crossingPolicies;
+    QVector<DomainEdgeOverride> edgeOverrides;
     QJsonObject packageData;
 };
 

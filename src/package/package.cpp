@@ -190,9 +190,41 @@ bool valueMatchesParameterType(const QJsonValue& value, ParameterType type) {
     return false;
 }
 
+bool valueMatchesParameterShape(const QJsonValue& value,
+                                ParameterType type,
+                                bool multiple) {
+    if (!multiple) {
+        return valueMatchesParameterType(value, type);
+    }
+    if (!value.isArray()) {
+        return false;
+    }
+    const QJsonArray values = value.toArray();
+    return std::all_of(values.cbegin(), values.cend(), [type](const QJsonValue& item) {
+        return valueMatchesParameterType(item, type);
+    });
+}
+
+QJsonArray parameterDefaultItems(const ParameterDefinition& definition,
+                                 bool multiple) {
+    if (!definition.hasDefault) {
+        return {};
+    }
+    if (multiple) {
+        return definition.defaultValue.toArray();
+    }
+    return QJsonArray{definition.defaultValue};
+}
+
+struct ParameterParseOptions {
+    bool multiple = false;
+    bool defaultRequired = true;
+};
+
 ParameterDefinition parseParameter(const QJsonObject& object,
                                    const QString& path,
-                                   QVector<Diagnostic>& diagnostics) {
+                                   QVector<Diagnostic>& diagnostics,
+                                   const ParameterParseOptions& options = {}) {
     ParameterDefinition definition;
     definition.id = requiredString(object, QStringLiteral("id"), path, diagnostics);
     const QString typeId = requiredString(
@@ -211,20 +243,23 @@ ParameterDefinition parseParameter(const QJsonObject& object,
                          path + QStringLiteral("/type"));
     }
 
-    if (!object.contains(QStringLiteral("default"))) {
+    if (!object.contains(QStringLiteral("default")) && options.defaultRequired) {
         appendDiagnostic(diagnostics,
                          QStringLiteral("error"),
                          QStringLiteral("package.missing_parameter_default"),
                          QStringLiteral("parameter default is required"),
                          path + QStringLiteral("/default"));
-    } else {
+    } else if (object.contains(QStringLiteral("default"))) {
         definition.hasDefault = true;
         definition.defaultValue = object.value(QStringLiteral("default"));
-        if (!valueMatchesParameterType(definition.defaultValue, definition.type)) {
+        if (!valueMatchesParameterShape(
+                definition.defaultValue, definition.type, options.multiple)) {
             appendDiagnostic(diagnostics,
                              QStringLiteral("error"),
                              QStringLiteral("package.invalid_parameter_default"),
-                             QStringLiteral("parameter default does not match its type"),
+                             options.multiple
+                                 ? QStringLiteral("parameter default must be an array whose items match its type")
+                                 : QStringLiteral("parameter default does not match its type"),
                              path + QStringLiteral("/default"));
         }
     }
@@ -331,13 +366,20 @@ ParameterDefinition parseParameter(const QJsonObject& object,
                              QStringLiteral("enum parameter requires at least one value"),
                              path + QStringLiteral("/values"));
         }
-        if (definition.hasDefault && definition.defaultValue.isString() &&
-            !definition.values.contains(definition.defaultValue.toString())) {
-            appendDiagnostic(diagnostics,
-                             QStringLiteral("error"),
-                             QStringLiteral("package.invalid_parameter_default"),
-                             QStringLiteral("enum default is not one of its declared values"),
-                             path + QStringLiteral("/default"));
+        if (definition.hasDefault) {
+            const QJsonArray defaults = parameterDefaultItems(
+                definition, options.multiple);
+            for (const QJsonValue& defaultValue : defaults) {
+                if (defaultValue.isString()
+                    && !definition.values.contains(defaultValue.toString())) {
+                    appendDiagnostic(diagnostics,
+                                     QStringLiteral("error"),
+                                     QStringLiteral("package.invalid_parameter_default"),
+                                     QStringLiteral("enum default is not one of its declared values"),
+                                     path + QStringLiteral("/default"));
+                    break;
+                }
+            }
         }
     } else if (object.contains(QStringLiteral("values"))) {
         appendDiagnostic(diagnostics,
@@ -347,21 +389,30 @@ ParameterDefinition parseParameter(const QJsonObject& object,
                          path + QStringLiteral("/values"));
     }
 
-    if (definition.hasDefault && definition.defaultValue.isDouble()) {
-        const double defaultNumber = definition.defaultValue.toDouble();
-        if (definition.minimum && defaultNumber < *definition.minimum) {
-            appendDiagnostic(diagnostics,
-                             QStringLiteral("error"),
-                             QStringLiteral("package.invalid_parameter_default"),
-                             QStringLiteral("parameter default is below minimum"),
-                             path + QStringLiteral("/default"));
-        }
-        if (definition.maximum && defaultNumber > *definition.maximum) {
-            appendDiagnostic(diagnostics,
-                             QStringLiteral("error"),
-                             QStringLiteral("package.invalid_parameter_default"),
-                             QStringLiteral("parameter default is above maximum"),
-                             path + QStringLiteral("/default"));
+    if (definition.hasDefault) {
+        const QJsonArray defaults = parameterDefaultItems(
+            definition, options.multiple);
+        for (const QJsonValue& defaultValue : defaults) {
+            if (!defaultValue.isDouble()) {
+                continue;
+            }
+            const double defaultNumber = defaultValue.toDouble();
+            if (definition.minimum && defaultNumber < *definition.minimum) {
+                appendDiagnostic(diagnostics,
+                                 QStringLiteral("error"),
+                                 QStringLiteral("package.invalid_parameter_default"),
+                                 QStringLiteral("parameter default is below minimum"),
+                                 path + QStringLiteral("/default"));
+                break;
+            }
+            if (definition.maximum && defaultNumber > *definition.maximum) {
+                appendDiagnostic(diagnostics,
+                                 QStringLiteral("error"),
+                                 QStringLiteral("package.invalid_parameter_default"),
+                                 QStringLiteral("parameter default is above maximum"),
+                                 path + QStringLiteral("/default"));
+                break;
+            }
         }
     }
     return definition;
@@ -407,6 +458,432 @@ QVector<ParameterDefinition> parseParameters(const QJsonValue& value,
         }
         ids.insert(definition.id);
         definitions.append(std::move(definition));
+    }
+    return definitions;
+}
+
+DomainCardinality parseDomainCardinality(const QJsonObject& object,
+                                         const QString& path,
+                                         QVector<Diagnostic>& diagnostics) {
+    const QString id = optionalString(object,
+                                      QStringLiteral("cardinality"),
+                                      QStringLiteral("single"),
+                                      path,
+                                      diagnostics).trimmed();
+    if (id == QStringLiteral("single")) {
+        return DomainCardinality::Single;
+    }
+    if (id == QStringLiteral("multiple")) {
+        return DomainCardinality::Multiple;
+    }
+    appendDiagnostic(diagnostics,
+                     QStringLiteral("error"),
+                     QStringLiteral("package.invalid_domain_cardinality"),
+                     QStringLiteral("cardinality must be single or multiple"),
+                     path + QStringLiteral("/cardinality"));
+    return DomainCardinality::Invalid;
+}
+
+QVector<ElementKind> parseDomainAppliesTo(
+    const QJsonValue& value,
+    const QString& path,
+    QVector<Diagnostic>& diagnostics) {
+    QVector<ElementKind> kinds;
+    if (!value.isArray()) {
+        appendDiagnostic(diagnostics,
+                         QStringLiteral("error"),
+                         QStringLiteral("package.invalid_domain_applies_to"),
+                         QStringLiteral("appliesTo must be a non-empty array"),
+                         path);
+        return kinds;
+    }
+    const QJsonArray values = value.toArray();
+    QSet<QString> ids;
+    for (qsizetype index = 0; index < values.size(); ++index) {
+        const QString itemPath = QStringLiteral("%1/%2").arg(path).arg(index);
+        if (!values.at(index).isString()
+            || values.at(index).toString().trimmed().isEmpty()) {
+            appendDiagnostic(diagnostics,
+                             QStringLiteral("error"),
+                             QStringLiteral("package.invalid_domain_element_kind"),
+                             QStringLiteral("appliesTo entries must be non-empty strings"),
+                             itemPath);
+            continue;
+        }
+        const QString id = values.at(index).toString().trimmed();
+        if (ids.contains(id)) {
+            appendDiagnostic(diagnostics,
+                             QStringLiteral("error"),
+                             QStringLiteral("package.duplicate_domain_element_kind"),
+                             QStringLiteral("appliesTo element kind is duplicated"),
+                             itemPath);
+            continue;
+        }
+        ids.insert(id);
+        const ElementKind kind = elementKindFromId(id);
+        if (kind != ElementKind::Router && kind != ElementKind::Endpoint) {
+            appendDiagnostic(diagnostics,
+                             QStringLiteral("error"),
+                             QStringLiteral("package.unknown_domain_element_kind"),
+                             QStringLiteral("unsupported Domain element kind %1").arg(id),
+                             itemPath);
+            continue;
+        }
+        kinds.append(kind);
+    }
+    if (values.isEmpty()) {
+        appendDiagnostic(diagnostics,
+                         QStringLiteral("error"),
+                         QStringLiteral("package.invalid_domain_applies_to"),
+                         QStringLiteral("appliesTo must contain router or endpoint"),
+                         path);
+    }
+    return kinds;
+}
+
+QStringList parseDomainTypeReferences(const QJsonValue& value,
+                                      const QString& path,
+                                      QVector<Diagnostic>& diagnostics) {
+    QStringList references;
+    if (!value.isArray()) {
+        appendDiagnostic(diagnostics,
+                         QStringLiteral("error"),
+                         QStringLiteral("package.invalid_domain_type_references"),
+                         QStringLiteral("targetTypes must be a non-empty array"),
+                         path);
+        return references;
+    }
+    const QJsonArray values = value.toArray();
+    QSet<QString> seen;
+    for (qsizetype index = 0; index < values.size(); ++index) {
+        const QString itemPath = QStringLiteral("%1/%2").arg(path).arg(index);
+        if (!values.at(index).isString()
+            || values.at(index).toString().trimmed().isEmpty()) {
+            appendDiagnostic(diagnostics,
+                             QStringLiteral("error"),
+                             QStringLiteral("package.invalid_domain_type_reference"),
+                             QStringLiteral("targetTypes entries must be non-empty strings"),
+                             itemPath);
+            continue;
+        }
+        const QString id = values.at(index).toString().trimmed();
+        if (seen.contains(id)) {
+            appendDiagnostic(diagnostics,
+                             QStringLiteral("error"),
+                             QStringLiteral("package.duplicate_domain_type_reference"),
+                             QStringLiteral("target Domain type is duplicated"),
+                             itemPath);
+            continue;
+        }
+        seen.insert(id);
+        references.append(id);
+    }
+    if (values.isEmpty()) {
+        appendDiagnostic(diagnostics,
+                         QStringLiteral("error"),
+                         QStringLiteral("package.invalid_domain_type_references"),
+                         QStringLiteral("targetTypes must contain at least one Domain type"),
+                         path);
+    }
+    return references;
+}
+
+QVector<DomainPropertyDefinition> parseDomainProperties(
+    const QJsonValue& value,
+    const QString& path,
+    QVector<Diagnostic>& diagnostics) {
+    QVector<DomainPropertyDefinition> definitions;
+    if (value.isUndefined()) {
+        return definitions;
+    }
+    if (!value.isArray()) {
+        appendDiagnostic(diagnostics,
+                         QStringLiteral("error"),
+                         QStringLiteral("package.invalid_domain_properties"),
+                         QStringLiteral("Domain properties must be an array"),
+                         path);
+        return definitions;
+    }
+    const QJsonArray values = value.toArray();
+    QSet<QString> ids;
+    definitions.reserve(values.size());
+    for (qsizetype index = 0; index < values.size(); ++index) {
+        const QString itemPath = QStringLiteral("%1/%2").arg(path).arg(index);
+        if (!values.at(index).isObject()) {
+            appendDiagnostic(diagnostics,
+                             QStringLiteral("error"),
+                             QStringLiteral("package.invalid_domain_property"),
+                             QStringLiteral("Domain property must be an object"),
+                             itemPath);
+            definitions.append(DomainPropertyDefinition{});
+            continue;
+        }
+        const QJsonObject object = values.at(index).toObject();
+        DomainPropertyDefinition definition;
+        definition.required = optionalBoolean(object,
+                                              QStringLiteral("required"),
+                                              false,
+                                              itemPath,
+                                              diagnostics);
+        definition.multiple = optionalBoolean(object,
+                                              QStringLiteral("multiple"),
+                                              false,
+                                              itemPath,
+                                              diagnostics);
+        ParameterParseOptions parameterOptions;
+        parameterOptions.multiple = definition.multiple;
+        parameterOptions.defaultRequired = false;
+        static_cast<ParameterDefinition&>(definition) = parseParameter(
+            object, itemPath, diagnostics, parameterOptions);
+        if (object.contains(QStringLiteral("referenceDomainType"))) {
+            const QString reference = optionalString(
+                object,
+                QStringLiteral("referenceDomainType"),
+                QString(),
+                itemPath,
+                diagnostics).trimmed();
+            if (reference.isEmpty()) {
+                appendDiagnostic(diagnostics,
+                                 QStringLiteral("error"),
+                                 QStringLiteral("package.invalid_domain_property_reference"),
+                                 QStringLiteral("referenceDomainType must be a non-empty string"),
+                                 itemPath + QStringLiteral("/referenceDomainType"));
+            } else {
+                definition.referenceDomainType = reference;
+            }
+            if (definition.type != ParameterType::String) {
+                appendDiagnostic(diagnostics,
+                                 QStringLiteral("error"),
+                                 QStringLiteral("package.invalid_domain_property_reference_type"),
+                                 QStringLiteral("a Domain reference property must have type string"),
+                                 itemPath + QStringLiteral("/type"));
+            }
+        }
+        if (!definition.id.isEmpty() && ids.contains(definition.id)) {
+            appendDiagnostic(diagnostics,
+                             QStringLiteral("error"),
+                             QStringLiteral("package.duplicate_domain_property"),
+                             QStringLiteral("Domain property id is duplicated"),
+                             itemPath + QStringLiteral("/id"));
+        }
+        ids.insert(definition.id);
+        definitions.append(std::move(definition));
+    }
+    return definitions;
+}
+
+QVector<DomainRelationDefinition> parseDomainRelations(
+    const QJsonValue& value,
+    const QString& path,
+    QVector<Diagnostic>& diagnostics) {
+    QVector<DomainRelationDefinition> definitions;
+    if (value.isUndefined()) {
+        return definitions;
+    }
+    if (!value.isArray()) {
+        appendDiagnostic(diagnostics,
+                         QStringLiteral("error"),
+                         QStringLiteral("package.invalid_domain_relations"),
+                         QStringLiteral("relations must be an array"),
+                         path);
+        return definitions;
+    }
+    const QJsonArray values = value.toArray();
+    QSet<QString> ids;
+    definitions.reserve(values.size());
+    for (qsizetype index = 0; index < values.size(); ++index) {
+        const QString itemPath = QStringLiteral("%1/%2").arg(path).arg(index);
+        if (!values.at(index).isObject()) {
+            appendDiagnostic(diagnostics,
+                             QStringLiteral("error"),
+                             QStringLiteral("package.invalid_domain_relation"),
+                             QStringLiteral("Domain relation must be an object"),
+                             itemPath);
+            definitions.append(DomainRelationDefinition{});
+            continue;
+        }
+        const QJsonObject object = values.at(index).toObject();
+        DomainRelationDefinition definition;
+        definition.id = requiredString(
+            object, QStringLiteral("id"), itemPath, diagnostics);
+        definition.label = optionalString(object,
+                                          QStringLiteral("label"),
+                                          definition.id,
+                                          itemPath,
+                                          diagnostics);
+        definition.targetTypes = parseDomainTypeReferences(
+            object.value(QStringLiteral("targetTypes")),
+            itemPath + QStringLiteral("/targetTypes"),
+            diagnostics);
+        definition.cardinality = parseDomainCardinality(
+            object, itemPath, diagnostics);
+        definition.required = optionalBoolean(object,
+                                              QStringLiteral("required"),
+                                              false,
+                                              itemPath,
+                                              diagnostics);
+        definition.properties = parseDomainProperties(
+            object.value(QStringLiteral("properties")),
+            itemPath + QStringLiteral("/properties"),
+            diagnostics);
+        if (!definition.id.isEmpty() && ids.contains(definition.id)) {
+            appendDiagnostic(diagnostics,
+                             QStringLiteral("error"),
+                             QStringLiteral("package.duplicate_domain_relation"),
+                             QStringLiteral("Domain relation id is duplicated"),
+                             itemPath + QStringLiteral("/id"));
+        }
+        ids.insert(definition.id);
+        definitions.append(std::move(definition));
+    }
+    return definitions;
+}
+
+void validateDomainPropertyReferences(
+    const QVector<DomainPropertyDefinition>& properties,
+    const QSet<QString>& domainTypeIds,
+    const QString& path,
+    QVector<Diagnostic>& diagnostics) {
+    for (qsizetype index = 0; index < properties.size(); ++index) {
+        const auto& reference = properties.at(index).referenceDomainType;
+        if (reference && !domainTypeIds.contains(*reference)) {
+            appendDiagnostic(diagnostics,
+                             QStringLiteral("error"),
+                             QStringLiteral("package.unknown_domain_property_reference"),
+                             QStringLiteral("referenced Domain type %1 is not declared")
+                                 .arg(*reference),
+                             QStringLiteral("%1/%2/referenceDomainType")
+                                 .arg(path).arg(index));
+        }
+    }
+}
+
+QVector<DomainTypeDefinition> parseDomainTypes(
+    const QJsonValue& value,
+    int packageFormatVersion,
+    QVector<Diagnostic>& diagnostics) {
+    QVector<DomainTypeDefinition> definitions;
+    if (value.isUndefined()) {
+        if (packageFormatVersion == 2) {
+            appendDiagnostic(diagnostics,
+                             QStringLiteral("error"),
+                             QStringLiteral("package.invalid_domain_types"),
+                             QStringLiteral("formatVersion 2 requires domainTypes to be an array"),
+                             QStringLiteral("/domainTypes"));
+        }
+        return definitions;
+    }
+    if (packageFormatVersion != 2) {
+        appendDiagnostic(diagnostics,
+                         QStringLiteral("error"),
+                         QStringLiteral("package.domain_types_require_v2"),
+                         QStringLiteral("domainTypes requires Package formatVersion 2"),
+                         QStringLiteral("/domainTypes"));
+        return definitions;
+    }
+    if (!value.isArray()) {
+        appendDiagnostic(diagnostics,
+                         QStringLiteral("error"),
+                         QStringLiteral("package.invalid_domain_types"),
+                         QStringLiteral("domainTypes must be an array"),
+                         QStringLiteral("/domainTypes"));
+        return definitions;
+    }
+
+    const QJsonArray values = value.toArray();
+    QSet<QString> ids;
+    definitions.reserve(values.size());
+    for (qsizetype index = 0; index < values.size(); ++index) {
+        const QString path = QStringLiteral("/domainTypes/%1").arg(index);
+        if (!values.at(index).isObject()) {
+            appendDiagnostic(diagnostics,
+                             QStringLiteral("error"),
+                             QStringLiteral("package.invalid_domain_type"),
+                             QStringLiteral("Domain type must be an object"),
+                             path);
+            definitions.append(DomainTypeDefinition{});
+            continue;
+        }
+        const QJsonObject object = values.at(index).toObject();
+        DomainTypeDefinition definition;
+        definition.id = requiredString(
+            object, QStringLiteral("id"), path, diagnostics);
+        definition.label = optionalString(object,
+                                          QStringLiteral("label"),
+                                          definition.id,
+                                          path,
+                                          diagnostics);
+        definition.appliesTo = parseDomainAppliesTo(
+            object.value(QStringLiteral("appliesTo")),
+            path + QStringLiteral("/appliesTo"),
+            diagnostics);
+        definition.cardinality = parseDomainCardinality(
+            object, path, diagnostics);
+        definition.required = optionalBoolean(object,
+                                              QStringLiteral("required"),
+                                              false,
+                                              path,
+                                              diagnostics);
+        definition.properties = parseDomainProperties(
+            object.value(QStringLiteral("properties")),
+            path + QStringLiteral("/properties"),
+            diagnostics);
+        definition.relations = parseDomainRelations(
+            object.value(QStringLiteral("relations")),
+            path + QStringLiteral("/relations"),
+            diagnostics);
+        definition.crossingProperties = parseDomainProperties(
+            object.value(QStringLiteral("crossingProperties")),
+            path + QStringLiteral("/crossingProperties"),
+            diagnostics);
+        if (!definition.id.isEmpty() && ids.contains(definition.id)) {
+            appendDiagnostic(diagnostics,
+                             QStringLiteral("error"),
+                             QStringLiteral("package.duplicate_domain_type"),
+                             QStringLiteral("Domain type id is duplicated"),
+                             path + QStringLiteral("/id"));
+        }
+        ids.insert(definition.id);
+        definitions.append(std::move(definition));
+    }
+
+    for (qsizetype typeIndex = 0; typeIndex < definitions.size(); ++typeIndex) {
+        const DomainTypeDefinition& definition = definitions.at(typeIndex);
+        const QString typePath = QStringLiteral("/domainTypes/%1").arg(typeIndex);
+        validateDomainPropertyReferences(
+            definition.properties,
+            ids,
+            typePath + QStringLiteral("/properties"),
+            diagnostics);
+        validateDomainPropertyReferences(
+            definition.crossingProperties,
+            ids,
+            typePath + QStringLiteral("/crossingProperties"),
+            diagnostics);
+        for (qsizetype relationIndex = 0;
+             relationIndex < definition.relations.size(); ++relationIndex) {
+            const DomainRelationDefinition& relation =
+                definition.relations.at(relationIndex);
+            const QString relationPath = QStringLiteral("%1/relations/%2")
+                                             .arg(typePath).arg(relationIndex);
+            for (qsizetype targetIndex = 0;
+                 targetIndex < relation.targetTypes.size(); ++targetIndex) {
+                if (!ids.contains(relation.targetTypes.at(targetIndex))) {
+                    appendDiagnostic(diagnostics,
+                                     QStringLiteral("error"),
+                                     QStringLiteral("package.unknown_domain_relation_target"),
+                                     QStringLiteral("target Domain type %1 is not declared")
+                                         .arg(relation.targetTypes.at(targetIndex)),
+                                     QStringLiteral("%1/targetTypes/%2")
+                                         .arg(relationPath).arg(targetIndex));
+                }
+            }
+            validateDomainPropertyReferences(
+                relation.properties,
+                ids,
+                relationPath + QStringLiteral("/properties"),
+                diagnostics);
+        }
     }
     return definitions;
 }
@@ -479,6 +956,13 @@ const EndpointTypeDefinition* PackageDefinition::endpointType(const QString& id)
     return it == endpointTypes.cend() ? nullptr : &(*it);
 }
 
+const DomainTypeDefinition* PackageDefinition::domainType(const QString& id) const {
+    const auto it = std::find_if(domainTypes.cbegin(), domainTypes.cend(), [&](const auto& value) {
+        return value.id == id;
+    });
+    return it == domainTypes.cend() ? nullptr : &(*it);
+}
+
 PackageLoadResult loadPackage(const QString& packageRoot) {
     PackageLoadResult result;
     const QString absoluteRoot = QDir::cleanPath(QFileInfo(packageRoot).absoluteFilePath());
@@ -515,11 +999,11 @@ PackageLoadResult loadPackage(const QString& packageRoot) {
                          QStringLiteral("format must be finepaper.noc-package"),
                          QStringLiteral("/format"));
     }
-    if (package.formatVersion != 1) {
+    if (package.formatVersion != 1 && package.formatVersion != 2) {
         appendDiagnostic(result.diagnostics,
                          QStringLiteral("error"),
                          QStringLiteral("package.unsupported_version"),
-                         QStringLiteral("formatVersion must be 1"),
+                         QStringLiteral("formatVersion must be 1 or 2"),
                          QStringLiteral("/formatVersion"));
     }
 
@@ -652,6 +1136,11 @@ PackageLoadResult loadPackage(const QString& packageRoot) {
         endpointIds.insert(definition.id);
         package.endpointTypes.append(std::move(definition));
     }
+
+    package.domainTypes = parseDomainTypes(
+        rootObject->value(QStringLiteral("domainTypes")),
+        package.formatVersion,
+        result.diagnostics);
 
     const QJsonObject attachment = requiredObject(*rootObject,
                                                   QStringLiteral("attachment"),

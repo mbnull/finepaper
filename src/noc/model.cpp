@@ -2,6 +2,7 @@
 
 #include <QHash>
 #include <QSet>
+#include <QStringList>
 
 #include <algorithm>
 
@@ -25,6 +26,98 @@ void appendError(QVector<Diagnostic>& diagnostics,
     });
 }
 
+QString referenceKey(const ElementRef& reference) {
+    return elementKindId(reference.kind) + QChar(0x1f) + reference.id;
+}
+
+QString relationKey(const DomainRelation& relation) {
+    return relation.type + QChar(0x1f)
+        + relation.from + QChar(0x1f) + relation.to;
+}
+
+QString edgeOverrideKey(const DomainEdgeOverride& edgeOverride) {
+    return referenceKey(edgeOverride.edge) + QChar(0x1f) + edgeOverride.domainType;
+}
+
+std::optional<RouterPosition> routerPositionFromId(const QString& id) {
+    const QStringList parts = id.split(QLatin1Char('-'));
+    if (parts.size() != 3 || parts.at(0) != QStringLiteral("r")) {
+        return std::nullopt;
+    }
+    bool xValid = false;
+    bool yValid = false;
+    const int x = parts.at(1).toInt(&xValid);
+    const int y = parts.at(2).toInt(&yValid);
+    const RouterPosition position{x, y};
+    if (!xValid || !yValid || x < 0 || y < 0 || routerId(position) != id) {
+        return std::nullopt;
+    }
+    return position;
+}
+
+bool routerReferenceExists(const NocDesign& design, const QString& id) {
+    const std::optional<RouterPosition> position = routerPositionFromId(id);
+    return position
+        && position->x < design.topology.columns
+        && position->y < design.topology.rows;
+}
+
+bool linkReferenceExists(const NocDesign& design, const QString& id) {
+    constexpr qsizetype prefixLength = 5;
+    if (!id.startsWith(QStringLiteral("link-"))) {
+        return false;
+    }
+    const QString body = id.mid(prefixLength);
+    const qsizetype separator = body.indexOf(QStringLiteral("--"));
+    if (separator <= 0 || separator + 2 >= body.size()) {
+        return false;
+    }
+    const QString fromId = body.left(separator);
+    const QString toId = body.mid(separator + 2);
+    const std::optional<RouterPosition> from = routerPositionFromId(fromId);
+    const std::optional<RouterPosition> to = routerPositionFromId(toId);
+    if (!from || !to
+        || !routerReferenceExists(design, fromId)
+        || !routerReferenceExists(design, toId)
+        || linkId(fromId, toId) != id) {
+        return false;
+    }
+    return (to->x == from->x + 1 && to->y == from->y)
+        || (to->x == from->x && to->y == from->y + 1);
+}
+
+bool membershipElementReferenceExists(const NocDesign& design,
+                                      const ElementRef& reference,
+                                      const QSet<QString>& endpointIds) {
+    if (reference.kind == ElementKind::Router) {
+        return routerReferenceExists(design, reference.id);
+    }
+    if (reference.kind == ElementKind::Endpoint) {
+        return endpointIds.contains(reference.id);
+    }
+    return false;
+}
+
+bool edgeReferenceExists(const NocDesign& design,
+                         const ElementRef& reference,
+                         const QSet<QString>& endpointIds) {
+    if (reference.kind == ElementKind::RouterLink) {
+        return linkReferenceExists(design, reference.id);
+    }
+    if (reference.kind == ElementKind::EndpointAttachment) {
+        return endpointIds.contains(reference.id);
+    }
+    return false;
+}
+
+bool hasDomainData(const NocDesign& design) {
+    return !design.domains.isEmpty()
+        || !design.domainMemberships.isEmpty()
+        || !design.domainRelations.isEmpty()
+        || !design.crossingPolicies.isEmpty()
+        || !design.edgeOverrides.isEmpty();
+}
+
 } // namespace
 
 bool hasErrors(const QVector<Diagnostic>& diagnostics) {
@@ -39,6 +132,39 @@ QString routerId(RouterPosition position) {
 
 QString linkId(const QString& fromRouter, const QString& toRouter) {
     return QStringLiteral("link-%1--%2").arg(fromRouter, toRouter);
+}
+
+QString elementKindId(ElementKind kind) {
+    switch (kind) {
+    case ElementKind::Router:
+        return QStringLiteral("router");
+    case ElementKind::Endpoint:
+        return QStringLiteral("endpoint");
+    case ElementKind::RouterLink:
+        return QStringLiteral("router-link");
+    case ElementKind::EndpointAttachment:
+        return QStringLiteral("endpoint-attachment");
+    case ElementKind::Invalid:
+        break;
+    }
+    return {};
+}
+
+ElementKind elementKindFromId(const QString& id) {
+    if (id == QStringLiteral("router")) {
+        return ElementKind::Router;
+    }
+    if (id == QStringLiteral("endpoint")) {
+        return ElementKind::Endpoint;
+    }
+    if (id == QStringLiteral("router-link") || id == QStringLiteral("link")) {
+        return ElementKind::RouterLink;
+    }
+    if (id == QStringLiteral("endpoint-attachment")
+        || id == QStringLiteral("attachment")) {
+        return ElementKind::EndpointAttachment;
+    }
+    return ElementKind::Invalid;
 }
 
 NocDesign withResolvedAutomaticSlots(const NocDesign& design) {
@@ -143,10 +269,17 @@ QVector<Diagnostic> validateDesignStructure(const NocDesign& design) {
                     QStringLiteral("format must be finepaper.noc-design"),
                     QStringLiteral("/format"));
     }
-    if (design.formatVersion != 1) {
+    if (design.formatVersion < kMinimumDesignFormatVersion
+        || design.formatVersion > kMaximumDesignFormatVersion) {
         appendError(diagnostics,
                     QStringLiteral("design.unsupported_version"),
-                    QStringLiteral("formatVersion must be 1"),
+                    QStringLiteral("formatVersion must be 1 or 2"),
+                    QStringLiteral("/formatVersion"));
+    }
+    if (design.formatVersion == 1 && hasDomainData(design)) {
+        appendError(diagnostics,
+                    QStringLiteral("design.domains_require_v2"),
+                    QStringLiteral("Domain data requires formatVersion 2"),
                     QStringLiteral("/formatVersion"));
     }
     if (design.id.trimmed().isEmpty()) {
@@ -170,7 +303,7 @@ QVector<Diagnostic> validateDesignStructure(const NocDesign& design) {
     if (design.topology.type != QStringLiteral("mesh")) {
         appendError(diagnostics,
                     QStringLiteral("topology.unsupported_type"),
-                    QStringLiteral("Mesh V1 only supports topology.type=mesh"),
+                    QStringLiteral("Finepaper currently supports topology.type=mesh"),
                     QStringLiteral("/topology/type"));
     }
     if (design.topology.rows <= 0) {
@@ -227,6 +360,290 @@ QVector<Diagnostic> validateDesignStructure(const NocDesign& design) {
                         QStringLiteral("endpoint.router_out_of_range"),
                         QStringLiteral("endpoint router coordinate is outside the Mesh"),
                         base + QStringLiteral("/attachment/router"));
+        }
+    }
+
+    QHash<QString, QString> domainTypes;
+    for (qsizetype index = 0; index < design.domains.size(); ++index) {
+        const DomainDefinition& domain = design.domains.at(index);
+        const QString base = QStringLiteral("/domains/%1").arg(index);
+        if (domain.type.trimmed().isEmpty()) {
+            appendError(diagnostics,
+                        QStringLiteral("domain.missing_type"),
+                        QStringLiteral("Domain type is required"),
+                        base + QStringLiteral("/type"));
+        }
+        if (domain.id.trimmed().isEmpty()) {
+            appendError(diagnostics,
+                        QStringLiteral("domain.missing_id"),
+                        QStringLiteral("Domain id is required"),
+                        base + QStringLiteral("/id"));
+        } else if (domainTypes.contains(domain.id)) {
+            appendError(diagnostics,
+                        QStringLiteral("domain.duplicate_id"),
+                        QStringLiteral("Domain id is duplicated"),
+                        base + QStringLiteral("/id"));
+        } else {
+            domainTypes.insert(domain.id, domain.type);
+        }
+        if (domain.name.trimmed().isEmpty()) {
+            appendError(diagnostics,
+                        QStringLiteral("domain.missing_name"),
+                        QStringLiteral("Domain name is required"),
+                        base + QStringLiteral("/name"));
+        }
+    }
+
+    QSet<QString> membershipElements;
+    for (qsizetype index = 0; index < design.domainMemberships.size(); ++index) {
+        const DomainMembership& membership = design.domainMemberships.at(index);
+        const QString base = QStringLiteral("/domainMemberships/%1").arg(index);
+        const QString elementKey = referenceKey(membership.element);
+        if (membership.element.kind == ElementKind::Invalid) {
+            appendError(diagnostics,
+                        QStringLiteral("domain_membership.missing_element_kind"),
+                        QStringLiteral("Membership element kind must be router or endpoint"),
+                        base + QStringLiteral("/element/kind"));
+        } else if (membership.element.kind != ElementKind::Router
+                   && membership.element.kind != ElementKind::Endpoint) {
+            appendError(diagnostics,
+                        QStringLiteral("domain_membership.unsupported_element_kind"),
+                        QStringLiteral("Membership element kind must be router or endpoint"),
+                        base + QStringLiteral("/element/kind"));
+        }
+        if (membership.element.id.trimmed().isEmpty()) {
+            appendError(diagnostics,
+                        QStringLiteral("domain_membership.missing_element_id"),
+                        QStringLiteral("Membership element id is required"),
+                        base + QStringLiteral("/element/id"));
+        } else if ((membership.element.kind == ElementKind::Router
+                    || membership.element.kind == ElementKind::Endpoint)
+                   && !membershipElementReferenceExists(
+                       design, membership.element, endpointIds)) {
+            appendError(diagnostics,
+                        QStringLiteral("domain_membership.unknown_element"),
+                        QStringLiteral("Membership references an unknown element"),
+                        base + QStringLiteral("/element"));
+        }
+        if (membership.element.kind != ElementKind::Invalid
+            && !membership.element.id.trimmed().isEmpty()) {
+            if (membershipElements.contains(elementKey)) {
+                appendError(diagnostics,
+                            QStringLiteral("domain_membership.duplicate_element"),
+                            QStringLiteral("Element has more than one Domain membership record"),
+                            base + QStringLiteral("/element"));
+            } else {
+                membershipElements.insert(elementKey);
+            }
+        }
+
+        if (membership.assignments.isEmpty()) {
+            appendError(diagnostics,
+                        QStringLiteral("domain_membership.empty_membership"),
+                        QStringLiteral("Domain membership must contain at least one assignment"),
+                        base + QStringLiteral("/assignments"));
+        }
+
+        QStringList assignmentTypes = membership.assignments.keys();
+        std::sort(assignmentTypes.begin(), assignmentTypes.end());
+        for (const QString& assignmentType : std::as_const(assignmentTypes)) {
+            const QString assignmentPath = base + QStringLiteral("/assignments/")
+                + assignmentType;
+            if (assignmentType.trimmed().isEmpty()) {
+                appendError(diagnostics,
+                            QStringLiteral("domain_membership.missing_assignment_type"),
+                            QStringLiteral("Assignment type is required"),
+                            base + QStringLiteral("/assignments"));
+            }
+            QSet<QString> assignedDomains;
+            const QStringList domainIds = membership.assignments.value(assignmentType);
+            if (domainIds.isEmpty()) {
+                appendError(diagnostics,
+                            QStringLiteral("domain_membership.empty_assignment"),
+                            QStringLiteral("Domain assignment list must not be empty"),
+                            assignmentPath);
+            }
+            for (qsizetype assignmentIndex = 0;
+                 assignmentIndex < domainIds.size(); ++assignmentIndex) {
+                const QString& domainId = domainIds.at(assignmentIndex);
+                const QString path = assignmentPath
+                    + QStringLiteral("/%1").arg(assignmentIndex);
+                if (domainId.trimmed().isEmpty()) {
+                    appendError(diagnostics,
+                                QStringLiteral("domain_membership.missing_domain_id"),
+                                QStringLiteral("Assigned Domain id is required"),
+                                path);
+                    continue;
+                }
+                if (assignedDomains.contains(domainId)) {
+                    appendError(diagnostics,
+                                QStringLiteral("domain_membership.duplicate_assignment"),
+                                QStringLiteral("Domain is assigned more than once for this type"),
+                                path);
+                    continue;
+                }
+                assignedDomains.insert(domainId);
+                const auto domainType = domainTypes.constFind(domainId);
+                if (domainType == domainTypes.constEnd()) {
+                    appendError(diagnostics,
+                                QStringLiteral("domain_membership.unknown_domain"),
+                                QStringLiteral("Assignment references an unknown Domain"),
+                                path);
+                } else if (domainType.value() != assignmentType) {
+                    appendError(diagnostics,
+                                QStringLiteral("domain_membership.type_mismatch"),
+                                QStringLiteral("Assigned Domain type does not match the assignment key"),
+                                path);
+                }
+            }
+        }
+    }
+
+    QSet<QString> relations;
+    for (qsizetype index = 0; index < design.domainRelations.size(); ++index) {
+        const DomainRelation& relation = design.domainRelations.at(index);
+        const QString base = QStringLiteral("/domainRelations/%1").arg(index);
+        if (relation.type.trimmed().isEmpty()) {
+            appendError(diagnostics,
+                        QStringLiteral("domain_relation.missing_type"),
+                        QStringLiteral("Domain relation type is required"),
+                        base + QStringLiteral("/type"));
+        }
+        if (!domainTypes.contains(relation.from)) {
+            appendError(diagnostics,
+                        QStringLiteral("domain_relation.unknown_from"),
+                        QStringLiteral("Domain relation source is unknown"),
+                        base + QStringLiteral("/from"));
+        }
+        if (!domainTypes.contains(relation.to)) {
+            appendError(diagnostics,
+                        QStringLiteral("domain_relation.unknown_to"),
+                        QStringLiteral("Domain relation target is unknown"),
+                        base + QStringLiteral("/to"));
+        }
+        const QString key = relationKey(relation);
+        if (!relation.type.trimmed().isEmpty()
+            && !relation.from.trimmed().isEmpty()
+            && !relation.to.trimmed().isEmpty()) {
+            if (relations.contains(key)) {
+                appendError(diagnostics,
+                            QStringLiteral("domain_relation.duplicate"),
+                            QStringLiteral("Domain relation is duplicated"),
+                            base);
+            } else {
+                relations.insert(key);
+            }
+        }
+    }
+
+    QHash<QString, QString> policyTypes;
+    for (qsizetype index = 0; index < design.crossingPolicies.size(); ++index) {
+        const DomainCrossingPolicy& policy = design.crossingPolicies.at(index);
+        const QString base = QStringLiteral("/crossingPolicies/%1").arg(index);
+        if (policy.id.trimmed().isEmpty()) {
+            appendError(diagnostics,
+                        QStringLiteral("domain_policy.missing_id"),
+                        QStringLiteral("Crossing policy id is required"),
+                        base + QStringLiteral("/id"));
+        } else if (policyTypes.contains(policy.id)) {
+            appendError(diagnostics,
+                        QStringLiteral("domain_policy.duplicate_id"),
+                        QStringLiteral("Crossing policy id is duplicated"),
+                        base + QStringLiteral("/id"));
+        } else {
+            policyTypes.insert(policy.id, policy.domainType);
+        }
+        if (policy.domainType.trimmed().isEmpty()) {
+            appendError(diagnostics,
+                        QStringLiteral("domain_policy.missing_domain_type"),
+                        QStringLiteral("Crossing policy Domain type is required"),
+                        base + QStringLiteral("/domainType"));
+        }
+        const auto fromType = domainTypes.constFind(policy.from);
+        if (fromType == domainTypes.constEnd()) {
+            appendError(diagnostics,
+                        QStringLiteral("domain_policy.unknown_from"),
+                        QStringLiteral("Crossing policy source Domain is unknown"),
+                        base + QStringLiteral("/from"));
+        } else if (fromType.value() != policy.domainType) {
+            appendError(diagnostics,
+                        QStringLiteral("domain_policy.from_type_mismatch"),
+                        QStringLiteral("Crossing policy source has the wrong Domain type"),
+                        base + QStringLiteral("/from"));
+        }
+        const auto toType = domainTypes.constFind(policy.to);
+        if (toType == domainTypes.constEnd()) {
+            appendError(diagnostics,
+                        QStringLiteral("domain_policy.unknown_to"),
+                        QStringLiteral("Crossing policy target Domain is unknown"),
+                        base + QStringLiteral("/to"));
+        } else if (toType.value() != policy.domainType) {
+            appendError(diagnostics,
+                        QStringLiteral("domain_policy.to_type_mismatch"),
+                        QStringLiteral("Crossing policy target has the wrong Domain type"),
+                        base + QStringLiteral("/to"));
+        }
+    }
+
+    QSet<QString> edgeOverrides;
+    for (qsizetype index = 0; index < design.edgeOverrides.size(); ++index) {
+        const DomainEdgeOverride& edgeOverride = design.edgeOverrides.at(index);
+        const QString base = QStringLiteral("/edgeOverrides/%1").arg(index);
+        if (edgeOverride.edge.kind == ElementKind::Invalid) {
+            appendError(diagnostics,
+                        QStringLiteral("domain_edge_override.missing_edge_kind"),
+                        QStringLiteral("Edge kind must be router-link or endpoint-attachment"),
+                        base + QStringLiteral("/edge/kind"));
+        } else if (edgeOverride.edge.kind != ElementKind::RouterLink
+                   && edgeOverride.edge.kind != ElementKind::EndpointAttachment) {
+            appendError(diagnostics,
+                        QStringLiteral("domain_edge_override.unsupported_edge_kind"),
+                        QStringLiteral("Edge kind must be router-link or endpoint-attachment"),
+                        base + QStringLiteral("/edge/kind"));
+        }
+        if (edgeOverride.edge.id.trimmed().isEmpty()) {
+            appendError(diagnostics,
+                        QStringLiteral("domain_edge_override.missing_edge_id"),
+                        QStringLiteral("Edge id is required"),
+                        base + QStringLiteral("/edge/id"));
+        } else if ((edgeOverride.edge.kind == ElementKind::RouterLink
+                    || edgeOverride.edge.kind == ElementKind::EndpointAttachment)
+                   && !edgeReferenceExists(design, edgeOverride.edge, endpointIds)) {
+            appendError(diagnostics,
+                        QStringLiteral("domain_edge_override.unknown_edge"),
+                        QStringLiteral("Domain edge override references an unknown edge"),
+                        base + QStringLiteral("/edge"));
+        }
+        if (edgeOverride.domainType.trimmed().isEmpty()) {
+            appendError(diagnostics,
+                        QStringLiteral("domain_edge_override.missing_domain_type"),
+                        QStringLiteral("Domain edge override type is required"),
+                        base + QStringLiteral("/domainType"));
+        }
+        const auto policyType = policyTypes.constFind(edgeOverride.policy);
+        if (policyType == policyTypes.constEnd()) {
+            appendError(diagnostics,
+                        QStringLiteral("domain_edge_override.unknown_policy"),
+                        QStringLiteral("Domain edge override policy is unknown"),
+                        base + QStringLiteral("/policy"));
+        } else if (policyType.value() != edgeOverride.domainType) {
+            appendError(diagnostics,
+                        QStringLiteral("domain_edge_override.policy_type_mismatch"),
+                        QStringLiteral("Domain edge override policy has the wrong Domain type"),
+                        base + QStringLiteral("/policy"));
+        }
+        const QString key = edgeOverrideKey(edgeOverride);
+        if (edgeOverride.edge.kind != ElementKind::Invalid
+            && !edgeOverride.edge.id.trimmed().isEmpty()
+            && !edgeOverride.domainType.trimmed().isEmpty()) {
+            if (edgeOverrides.contains(key)) {
+                appendError(diagnostics,
+                            QStringLiteral("domain_edge_override.duplicate"),
+                            QStringLiteral("Edge has more than one override for this Domain type"),
+                            base);
+            } else {
+                edgeOverrides.insert(key);
+            }
         }
     }
     return diagnostics;

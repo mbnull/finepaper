@@ -7,6 +7,8 @@
 #include <QJsonDocument>
 #include <QSaveFile>
 
+#include <algorithm>
+
 namespace finepaper {
 namespace {
 
@@ -76,6 +78,80 @@ std::optional<RouterPosition> routerPositionFromJson(
         integerValue(object, QStringLiteral("x"), path, diagnostics),
         integerValue(object, QStringLiteral("y"), path, diagnostics)
     };
+}
+
+QJsonObject elementRefToJson(const ElementRef& reference) {
+    return QJsonObject{
+        {QStringLiteral("kind"), elementKindId(reference.kind)},
+        {QStringLiteral("id"), reference.id}
+    };
+}
+
+std::optional<ElementRef> elementRefFromJson(
+    const QJsonValue& value,
+    const QString& path,
+    QVector<Diagnostic>& diagnostics) {
+    if (!value.isObject()) {
+        appendError(diagnostics,
+                    QStringLiteral("json.expected_object"),
+                    QStringLiteral("element reference must be an object"),
+                    path);
+        return std::nullopt;
+    }
+    const QJsonObject object = value.toObject();
+    const QString kindId = stringValue(
+        object, QStringLiteral("kind"), path, diagnostics);
+    const ElementKind kind = elementKindFromId(kindId);
+    if (!kindId.isEmpty() && kind == ElementKind::Invalid) {
+        appendError(diagnostics,
+                    QStringLiteral("json.invalid_element_kind"),
+                    QStringLiteral("unsupported element kind %1").arg(kindId),
+                    path + QStringLiteral("/kind"));
+    }
+    return ElementRef{
+        kind,
+        stringValue(object, QStringLiteral("id"), path, diagnostics)
+    };
+}
+
+QJsonObject requiredObject(const QJsonObject& object,
+                           const QString& key,
+                           const QString& path,
+                           QVector<Diagnostic>& diagnostics) {
+    const QJsonValue value = object.value(key);
+    if (!value.isObject()) {
+        appendError(diagnostics,
+                    QStringLiteral("json.expected_object"),
+                    QStringLiteral("%1 must be an object").arg(key),
+                    path + QLatin1Char('/') + key);
+        return {};
+    }
+    return value.toObject();
+}
+
+std::optional<QJsonArray> optionalArray(const QJsonObject& object,
+                                        const QString& key,
+                                        QVector<Diagnostic>& diagnostics) {
+    if (!object.contains(key)) {
+        return std::nullopt;
+    }
+    const QJsonValue value = object.value(key);
+    if (!value.isArray()) {
+        appendError(diagnostics,
+                    QStringLiteral("json.expected_array"),
+                    QStringLiteral("%1 must be an array").arg(key),
+                    QLatin1Char('/') + key);
+        return std::nullopt;
+    }
+    return value.toArray();
+}
+
+bool hasDomainData(const NocDesign& design) {
+    return !design.domains.isEmpty()
+        || !design.domainMemberships.isEmpty()
+        || !design.domainRelations.isEmpty()
+        || !design.crossingPolicies.isEmpty()
+        || !design.edgeOverrides.isEmpty();
 }
 
 } // namespace
@@ -178,6 +254,73 @@ QJsonObject designToJson(const NocDesign& design) {
         {QStringLiteral("parameters"), design.parameters},
         {QStringLiteral("endpoints"), endpoints}
     };
+    if (design.formatVersion >= 2 || hasDomainData(design)) {
+        QJsonArray domains;
+        for (const DomainDefinition& domain : design.domains) {
+            domains.append(QJsonObject{
+                {QStringLiteral("id"), domain.id},
+                {QStringLiteral("type"), domain.type},
+                {QStringLiteral("name"), domain.name},
+                {QStringLiteral("properties"), domain.properties}
+            });
+        }
+
+        QJsonArray memberships;
+        for (const DomainMembership& membership : design.domainMemberships) {
+            QJsonObject assignments;
+            QStringList assignmentTypes = membership.assignments.keys();
+            std::sort(assignmentTypes.begin(), assignmentTypes.end());
+            for (const QString& assignmentType : std::as_const(assignmentTypes)) {
+                QJsonArray domainIds;
+                for (const QString& domainId
+                     : membership.assignments.value(assignmentType)) {
+                    domainIds.append(domainId);
+                }
+                assignments.insert(assignmentType, domainIds);
+            }
+            memberships.append(QJsonObject{
+                {QStringLiteral("element"), elementRefToJson(membership.element)},
+                {QStringLiteral("assignments"), assignments}
+            });
+        }
+
+        QJsonArray relations;
+        for (const DomainRelation& relation : design.domainRelations) {
+            relations.append(QJsonObject{
+                {QStringLiteral("type"), relation.type},
+                {QStringLiteral("from"), relation.from},
+                {QStringLiteral("to"), relation.to},
+                {QStringLiteral("properties"), relation.properties}
+            });
+        }
+
+        QJsonArray crossingPolicies;
+        for (const DomainCrossingPolicy& policy : design.crossingPolicies) {
+            crossingPolicies.append(QJsonObject{
+                {QStringLiteral("id"), policy.id},
+                {QStringLiteral("domainType"), policy.domainType},
+                {QStringLiteral("from"), policy.from},
+                {QStringLiteral("to"), policy.to},
+                {QStringLiteral("properties"), policy.properties}
+            });
+        }
+
+        QJsonArray edgeOverrides;
+        for (const DomainEdgeOverride& edgeOverride : design.edgeOverrides) {
+            edgeOverrides.append(QJsonObject{
+                {QStringLiteral("edge"), elementRefToJson(edgeOverride.edge)},
+                {QStringLiteral("domainType"), edgeOverride.domainType},
+                {QStringLiteral("policy"), edgeOverride.policy},
+                {QStringLiteral("properties"), edgeOverride.properties}
+            });
+        }
+
+        object.insert(QStringLiteral("domains"), domains);
+        object.insert(QStringLiteral("domainMemberships"), memberships);
+        object.insert(QStringLiteral("domainRelations"), relations);
+        object.insert(QStringLiteral("crossingPolicies"), crossingPolicies);
+        object.insert(QStringLiteral("edgeOverrides"), edgeOverrides);
+    }
     if (!design.packageData.isEmpty()) {
         object.insert(QStringLiteral("packageData"), design.packageData);
     }
@@ -195,6 +338,33 @@ DesignLoadResult designFromJson(const QJsonObject& object) {
                                         QStringLiteral("formatVersion"),
                                         QString(),
                                         result.diagnostics);
+    const QStringList v2Fields{
+        QStringLiteral("domains"),
+        QStringLiteral("domainMemberships"),
+        QStringLiteral("domainRelations"),
+        QStringLiteral("crossingPolicies"),
+        QStringLiteral("edgeOverrides")
+    };
+    if (design.formatVersion == 1) {
+        for (const QString& field : v2Fields) {
+            if (object.contains(field)) {
+                appendError(result.diagnostics,
+                            QStringLiteral("design.domains_require_v2"),
+                            QStringLiteral("%1 requires formatVersion 2").arg(field),
+                            QLatin1Char('/') + field);
+            }
+        }
+    } else if (design.formatVersion == 2) {
+        for (const QString& field : v2Fields) {
+            if (!object.contains(field)) {
+                appendError(result.diagnostics,
+                            QStringLiteral("json.expected_array"),
+                            QStringLiteral("%1 must be present as an array in formatVersion 2")
+                                .arg(field),
+                            QLatin1Char('/') + field);
+            }
+        }
+    }
     design.id = stringValue(object, QStringLiteral("id"), QString(), result.diagnostics);
     design.name = stringValue(object, QStringLiteral("name"), QString(), result.diagnostics);
 
@@ -309,6 +479,203 @@ DesignLoadResult designFromJson(const QJsonObject& object) {
                 endpoint.parameters = object.value(QStringLiteral("parameters")).toObject();
             }
             design.endpoints.append(std::move(endpoint));
+        }
+    }
+
+    if (const auto domains = optionalArray(
+            object, QStringLiteral("domains"), result.diagnostics)) {
+        for (qsizetype index = 0; index < domains->size(); ++index) {
+            const QString base = QStringLiteral("/domains/%1").arg(index);
+            if (!domains->at(index).isObject()) {
+                appendError(result.diagnostics,
+                            QStringLiteral("json.expected_object"),
+                            QStringLiteral("Domain definition must be an object"),
+                            base);
+                continue;
+            }
+            const QJsonObject domainObject = domains->at(index).toObject();
+            design.domains.append(DomainDefinition{
+                stringValue(domainObject,
+                            QStringLiteral("id"),
+                            base,
+                            result.diagnostics),
+                stringValue(domainObject,
+                            QStringLiteral("type"),
+                            base,
+                            result.diagnostics),
+                stringValue(domainObject,
+                            QStringLiteral("name"),
+                            base,
+                            result.diagnostics),
+                requiredObject(domainObject,
+                               QStringLiteral("properties"),
+                               base,
+                               result.diagnostics)
+            });
+        }
+    }
+
+    if (const auto memberships = optionalArray(
+            object, QStringLiteral("domainMemberships"), result.diagnostics)) {
+        for (qsizetype index = 0; index < memberships->size(); ++index) {
+            const QString base = QStringLiteral("/domainMemberships/%1").arg(index);
+            if (!memberships->at(index).isObject()) {
+                appendError(result.diagnostics,
+                            QStringLiteral("json.expected_object"),
+                            QStringLiteral("Domain membership must be an object"),
+                            base);
+                continue;
+            }
+            const QJsonObject membershipObject = memberships->at(index).toObject();
+            DomainMembership membership;
+            if (const auto element = elementRefFromJson(
+                    membershipObject.value(QStringLiteral("element")),
+                    base + QStringLiteral("/element"),
+                    result.diagnostics)) {
+                membership.element = *element;
+            }
+            const QJsonObject assignments = requiredObject(
+                membershipObject,
+                QStringLiteral("assignments"),
+                base,
+                result.diagnostics);
+            for (auto iterator = assignments.constBegin();
+                 iterator != assignments.constEnd(); ++iterator) {
+                const QString assignmentPath = base
+                    + QStringLiteral("/assignments/") + iterator.key();
+                if (!iterator.value().isArray()) {
+                    appendError(result.diagnostics,
+                                QStringLiteral("json.expected_array"),
+                                QStringLiteral("Domain assignments must be arrays"),
+                                assignmentPath);
+                    continue;
+                }
+                QStringList domainIds;
+                const QJsonArray values = iterator.value().toArray();
+                domainIds.reserve(values.size());
+                for (qsizetype assignmentIndex = 0;
+                     assignmentIndex < values.size(); ++assignmentIndex) {
+                    if (!values.at(assignmentIndex).isString()) {
+                        appendError(result.diagnostics,
+                                    QStringLiteral("json.expected_string"),
+                                    QStringLiteral("assigned Domain id must be a string"),
+                                    assignmentPath
+                                        + QStringLiteral("/%1").arg(assignmentIndex));
+                        continue;
+                    }
+                    domainIds.append(values.at(assignmentIndex).toString());
+                }
+                membership.assignments.insert(iterator.key(), std::move(domainIds));
+            }
+            design.domainMemberships.append(std::move(membership));
+        }
+    }
+
+    if (const auto relations = optionalArray(
+            object, QStringLiteral("domainRelations"), result.diagnostics)) {
+        for (qsizetype index = 0; index < relations->size(); ++index) {
+            const QString base = QStringLiteral("/domainRelations/%1").arg(index);
+            if (!relations->at(index).isObject()) {
+                appendError(result.diagnostics,
+                            QStringLiteral("json.expected_object"),
+                            QStringLiteral("Domain relation must be an object"),
+                            base);
+                continue;
+            }
+            const QJsonObject relationObject = relations->at(index).toObject();
+            design.domainRelations.append(DomainRelation{
+                stringValue(relationObject,
+                            QStringLiteral("type"),
+                            base,
+                            result.diagnostics),
+                stringValue(relationObject,
+                            QStringLiteral("from"),
+                            base,
+                            result.diagnostics),
+                stringValue(relationObject,
+                            QStringLiteral("to"),
+                            base,
+                            result.diagnostics),
+                requiredObject(relationObject,
+                               QStringLiteral("properties"),
+                               base,
+                               result.diagnostics)
+            });
+        }
+    }
+
+    if (const auto policies = optionalArray(
+            object, QStringLiteral("crossingPolicies"), result.diagnostics)) {
+        for (qsizetype index = 0; index < policies->size(); ++index) {
+            const QString base = QStringLiteral("/crossingPolicies/%1").arg(index);
+            if (!policies->at(index).isObject()) {
+                appendError(result.diagnostics,
+                            QStringLiteral("json.expected_object"),
+                            QStringLiteral("Domain crossing policy must be an object"),
+                            base);
+                continue;
+            }
+            const QJsonObject policyObject = policies->at(index).toObject();
+            design.crossingPolicies.append(DomainCrossingPolicy{
+                stringValue(policyObject,
+                            QStringLiteral("id"),
+                            base,
+                            result.diagnostics),
+                stringValue(policyObject,
+                            QStringLiteral("domainType"),
+                            base,
+                            result.diagnostics),
+                stringValue(policyObject,
+                            QStringLiteral("from"),
+                            base,
+                            result.diagnostics),
+                stringValue(policyObject,
+                            QStringLiteral("to"),
+                            base,
+                            result.diagnostics),
+                requiredObject(policyObject,
+                               QStringLiteral("properties"),
+                               base,
+                               result.diagnostics)
+            });
+        }
+    }
+
+    if (const auto edgeOverrides = optionalArray(
+            object, QStringLiteral("edgeOverrides"), result.diagnostics)) {
+        for (qsizetype index = 0; index < edgeOverrides->size(); ++index) {
+            const QString base = QStringLiteral("/edgeOverrides/%1").arg(index);
+            if (!edgeOverrides->at(index).isObject()) {
+                appendError(result.diagnostics,
+                            QStringLiteral("json.expected_object"),
+                            QStringLiteral("Domain edge override must be an object"),
+                            base);
+                continue;
+            }
+            const QJsonObject overrideObject = edgeOverrides->at(index).toObject();
+            DomainEdgeOverride edgeOverride;
+            if (const auto edge = elementRefFromJson(
+                    overrideObject.value(QStringLiteral("edge")),
+                    base + QStringLiteral("/edge"),
+                    result.diagnostics)) {
+                edgeOverride.edge = *edge;
+            }
+            edgeOverride.domainType = stringValue(
+                overrideObject,
+                QStringLiteral("domainType"),
+                base,
+                result.diagnostics);
+            edgeOverride.policy = stringValue(
+                overrideObject,
+                QStringLiteral("policy"),
+                base,
+                result.diagnostics);
+            edgeOverride.properties = requiredObject(
+                overrideObject,
+                QStringLiteral("properties"),
+                base,
+                result.diagnostics);
+            design.edgeOverrides.append(std::move(edgeOverride));
         }
     }
 
