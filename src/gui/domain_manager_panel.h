@@ -58,6 +58,7 @@ public:
         assignmentPatchRequested;
     std::function<void()> completeConfigurationRequested;
     std::function<void(QString)> showDomainLayerRequested;
+    std::function<void(QVector<ElementRef>)> selectElementsRequested;
 
 private:
     [[nodiscard]] const DomainTypeDefinition* selectedType() const;
@@ -70,6 +71,9 @@ private:
     void addDomain();
     void editDomain();
     void removeDomain();
+    void selectDomainMembers();
+    void selectAllEligible();
+    void selectUnassigned();
     void applyAssignment();
     void clearAssignment();
     void discardAssignment();
@@ -99,7 +103,10 @@ private:
     QPushButton* m_addDomain = nullptr;
     QPushButton* m_editDomain = nullptr;
     QPushButton* m_removeDomain = nullptr;
+    QPushButton* m_selectDomainMembers = nullptr;
     QLabel* m_assignmentState = nullptr;
+    QPushButton* m_selectAllEligible = nullptr;
+    QPushButton* m_selectUnassigned = nullptr;
     QComboBox* m_singleAssignment = nullptr;
     QListWidget* m_multipleAssignment = nullptr;
     QPushButton* m_applyAssignment = nullptr;

@@ -32,6 +32,11 @@ namespace finepaper {
 
 class AnimatedGraphicsView;
 
+enum class NocCanvasInteractionMode {
+    Select,
+    Pan
+};
+
 struct NocEditorSelection {
     enum class Kind {
         None,
@@ -116,6 +121,11 @@ public:
     void setRouterAttachmentPorts(QVector<NocRouterAttachmentPortItem> ports);
     void setEditingEnabled(bool enabled);
     bool editingEnabled() const;
+    void setCanvasInteractionMode(NocCanvasInteractionMode mode);
+    NocCanvasInteractionMode canvasInteractionMode() const {
+        return m_canvasInteractionMode;
+    }
+    void selectElements(const QVector<ElementRef>& elements);
     bool setRouterVisualPosition(const QString& routerId, QPointF position);
     std::optional<QPointF> routerVisualPosition(const QString& routerId) const;
     std::optional<QPointF> endpointVisualPosition(const QString& endpointId) const;
@@ -179,7 +189,6 @@ private:
     void loadWorkspaceLayout();
     void saveWorkspaceLayout() const;
     void handleSceneSelectionChanged();
-    void handleNodeSelection(QtNodes::NodeId nodeId);
     void handlePointerReleased(const QPoint& viewportPosition);
     void handleConnectionCreated(QtNodes::ConnectionId connectionId);
     void handleConnectionDeleted(QtNodes::ConnectionId connectionId);
@@ -258,6 +267,10 @@ private:
     DomainPresentationSnapshot m_domainPresentation;
     bool m_hasStoredCollapsedLayout = false;
     bool m_editingEnabled = true;
+    bool m_canvasSelectionGesture = false;
+    bool m_canvasItemGesture = false;
+    NocCanvasInteractionMode m_canvasInteractionMode =
+        NocCanvasInteractionMode::Select;
     QString m_layoutKey;
 };
 

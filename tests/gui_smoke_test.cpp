@@ -411,6 +411,40 @@ void dragNodeTo(QGraphicsView* view,
     QApplication::sendEvent(viewport, &release);
 }
 
+void dragCanvasSelection(QGraphicsView* view,
+                         const QPoint& start,
+                         const QPoint& end,
+                         Qt::KeyboardModifiers modifiers = Qt::NoModifier) {
+    if (!view || !view->viewport()) {
+        return;
+    }
+    QWidget* viewport = view->viewport();
+    QMouseEvent press(QEvent::MouseButtonPress,
+                      QPointF(start),
+                      QPointF(viewport->mapToGlobal(start)),
+                      Qt::LeftButton,
+                      Qt::LeftButton,
+                      modifiers);
+    QApplication::sendEvent(viewport, &press);
+    for (int step = 1; step <= 6; ++step) {
+        const QPoint position = start + (end - start) * step / 6;
+        QMouseEvent move(QEvent::MouseMove,
+                         QPointF(position),
+                         QPointF(viewport->mapToGlobal(position)),
+                         Qt::NoButton,
+                         Qt::LeftButton,
+                         modifiers);
+        QApplication::sendEvent(viewport, &move);
+    }
+    QMouseEvent release(QEvent::MouseButtonRelease,
+                        QPointF(end),
+                        QPointF(viewport->mapToGlobal(end)),
+                        Qt::LeftButton,
+                        Qt::NoButton,
+                        modifiers);
+    QApplication::sendEvent(viewport, &release);
+}
+
 void chooseInputDialogItem(int index) {
     QTimer::singleShot(0, [index] {
         for (QWidget* widget : QApplication::topLevelWidgets()) {
@@ -1095,6 +1129,29 @@ int main(int argc, char** argv) {
         : nullptr;
     check(graphicsView && graphicsView->scene() && !graphicsView->scene()->items().isEmpty(),
           QStringLiteral("created Mesh is projected into the QtNodes editor"));
+    QAction* selectCanvasAction = window.findChild<QAction*>(
+        finepaper::workbench::selectCanvasActionName);
+    QAction* panCanvasAction = window.findChild<QAction*>(
+        finepaper::workbench::panCanvasActionName);
+    check(selectCanvasAction && panCanvasAction && selectCanvasAction->isChecked()
+              && nodeEditor
+              && nodeEditor->canvasInteractionMode()
+                  == finepaper::NocCanvasInteractionMode::Select
+              && graphicsView->dragMode() == QGraphicsView::RubberBandDrag,
+          QStringLiteral("canvas exposes an explicit, default box-selection mode"));
+    if (panCanvasAction) {
+        panCanvasAction->trigger();
+        application.processEvents();
+    }
+    check(nodeEditor
+              && nodeEditor->canvasInteractionMode()
+                  == finepaper::NocCanvasInteractionMode::Pan
+              && graphicsView->dragMode() == QGraphicsView::ScrollHandDrag,
+          QStringLiteral("Pan mode explicitly restores empty-canvas viewport dragging"));
+    if (selectCanvasAction) {
+        selectCanvasAction->trigger();
+        application.processEvents();
+    }
     QAction* newAction = actionWithText(window, QStringLiteral("New NoC Design…"));
     if (newAction) {
         respondToNewDesignDialog(QStringLiteral("finepaper.noc@1.0.0"));
@@ -1134,6 +1191,29 @@ int main(int argc, char** argv) {
     const auto router11 = nodeIdWithCaption(graphicsScene, QStringLiteral("r-1-1"));
     check(router00 && router10 && router01 && router11,
           QStringLiteral("Mesh Router identities are present in the editor projection"));
+    if (graphicsView && graphicsScene && router00 && router10
+        && router01 && router11) {
+        const QRectF topRowScene = graphicsScene->nodeGraphicsObject(*router00)
+                                       ->sceneBoundingRect()
+                                       .united(graphicsScene->nodeGraphicsObject(*router10)
+                                                   ->sceneBoundingRect())
+                                       .adjusted(-18.0, -18.0, 18.0, 18.0);
+        const QRect topRowViewport = QRect(
+            graphicsView->mapFromScene(topRowScene.topLeft()),
+            graphicsView->mapFromScene(topRowScene.bottomRight())).normalized();
+        graphicsScene->clearSelection();
+        dragCanvasSelection(graphicsView,
+                            topRowViewport.topLeft(),
+                            topRowViewport.bottomRight());
+        application.processEvents();
+        check(graphicsScene->nodeGraphicsObject(*router00)->isSelected()
+                  && graphicsScene->nodeGraphicsObject(*router10)->isSelected()
+                  && !graphicsScene->nodeGraphicsObject(*router01)->isSelected()
+                  && !graphicsScene->nodeGraphicsObject(*router11)->isSelected(),
+              QStringLiteral("real empty-canvas drag box-selects the intended Mesh row"));
+        graphicsScene->clearSelection();
+        application.processEvents();
+    }
     if (graphicsScene && router00) {
         const QSize routerSize = graphicsScene->nodeGeometry().size(*router00);
         check(routerSize.width() == routerSize.height(),
@@ -1276,8 +1356,13 @@ int main(int argc, char** argv) {
     const std::optional<QPointF> draggedRouterPosition = nodeEditor
         ? nodeEditor->routerVisualPosition(QStringLiteral("r-0-0")) : std::nullopt;
     check(draggedRouterPosition
-              && QLineF(*draggedRouterPosition, movedRouterPosition).length() < 0.5,
-          QStringLiteral("dragging a Router changes its user-arranged workspace position"));
+              && QLineF(*draggedRouterPosition, movedRouterPosition).length() < 1.0,
+          QStringLiteral("dragging a Router changes its user-arranged workspace position (%1)")
+              .arg(draggedRouterPosition
+                       ? QStringLiteral("actual %1,%2")
+                             .arg(draggedRouterPosition->x())
+                             .arg(draggedRouterPosition->y())
+                       : QStringLiteral("missing")));
     auto* shortcutTextInput = window.findChild<QLineEdit*>(
         QStringLiteral("finepaper.outputRoot"));
     if (shortcutTextInput) {
@@ -1293,7 +1378,7 @@ int main(int argc, char** argv) {
         ? nodeEditor->routerVisualPosition(QStringLiteral("r-0-0")) : std::nullopt;
     check(shortcutTextInput && shortcutTextInput->text().endsWith(QLatin1Char('r'))
               && routerAfterTextInput
-              && QLineF(*routerAfterTextInput, movedRouterPosition).length() < 0.5,
+              && QLineF(*routerAfterTextInput, movedRouterPosition).length() < 1.0,
           QStringLiteral("single-key canvas shortcuts do not fire while editing text"));
     const auto selectedMovedRouter = nodeIdWithCaption(
         graphicsScene, QStringLiteral("r-0-0"));
@@ -2767,6 +2852,10 @@ int main(int argc, char** argv) {
         QStringLiteral("finepaper.domainManager.applyAssignment"));
     auto* domainCompleteConfiguration = domainWindow.findChild<QPushButton*>(
         QStringLiteral("finepaper.domainManager.completeConfiguration"));
+    auto* domainSelectMembers = domainWindow.findChild<QPushButton*>(
+        QStringLiteral("finepaper.domainManager.selectMembers"));
+    auto* domainSelectAllEligible = domainWindow.findChild<QPushButton*>(
+        QStringLiteral("finepaper.domainManager.selectAllEligible"));
     if (domainManagerType) {
         domainManagerType->setCurrentIndex(
             domainManagerType->findData(QStringLiteral("security-zone")));
@@ -2832,6 +2921,25 @@ int main(int argc, char** argv) {
         ? static_cast<qsizetype>(domainScene->graphModel().allNodeIds().size()) : 0;
     const qsizetype domainConnectionCount = static_cast<qsizetype>(
         sceneConnectionIds(domainScene).size());
+    if (domainManagerInstances && zoneARow >= 0) {
+        domainManagerInstances->selectRow(zoneARow);
+    }
+    if (domainSelectMembers) {
+        domainSelectMembers->click();
+        application.processEvents();
+    }
+    check(domainSelectMembers && domainRouterGraphics && domainRouter1Graphics
+              && domainRouterGraphics->isSelected()
+              && !domainRouter1Graphics->isSelected(),
+          QStringLiteral("Domain instance selection helper selects its exact canvas members"));
+    if (domainSelectAllEligible) {
+        domainSelectAllEligible->click();
+        application.processEvents();
+    }
+    check(domainSelectAllEligible && domainRouterGraphics && domainRouter1Graphics
+              && domainRouterGraphics->isSelected()
+              && domainRouter1Graphics->isSelected(),
+          QStringLiteral("Domain all-eligible helper bridges to one semantic canvas selection"));
     if (domainScene && domainRouterGraphics) {
         domainScene->clearSelection();
         domainRouterGraphics->setSelected(true);

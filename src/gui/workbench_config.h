@@ -41,6 +41,10 @@ inline const QString domainManagerToggleActionName =
     QStringLiteral("finepaper.toggleDomainManagerPanel");
 inline const QString resultsToggleActionName = QStringLiteral("finepaper.toggleResultsPanel");
 inline const QString regularizeActionName = QStringLiteral("finepaper.regularizeLayout");
+inline const QString selectCanvasActionName =
+    QStringLiteral("finepaper.selectCanvasMode");
+inline const QString panCanvasActionName =
+    QStringLiteral("finepaper.panCanvasMode");
 inline const QString domainLayerSelectorName =
     QStringLiteral("finepaper.domainLayerSelector");
 

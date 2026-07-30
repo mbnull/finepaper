@@ -149,6 +149,8 @@ private:
     QAction* m_resizeMeshAction = nullptr;
     QAction* m_regularizeAction = nullptr;
     QAction* m_fitAction = nullptr;
+    QAction* m_selectCanvasAction = nullptr;
+    QAction* m_panCanvasAction = nullptr;
     QAction* m_installAction = nullptr;
     QAction* m_reloadAction = nullptr;
     QComboBox* m_domainLayerSelector = nullptr;

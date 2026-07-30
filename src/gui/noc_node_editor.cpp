@@ -676,6 +676,7 @@ NocNodeEditor::NocNodeEditor(QWidget* parent)
     m_view->setAcceptDrops(true);
     m_view->viewport()->setAcceptDrops(true);
     m_view->viewport()->installEventFilter(this);
+    setCanvasInteractionMode(NocCanvasInteractionMode::Select);
 
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
@@ -723,8 +724,6 @@ NocNodeEditor::NocNodeEditor(QWidget* parent)
         return m_editingEnabled && isEndpointAttachmentConnection(connection);
     };
 
-    connect(m_scene, &QtNodes::BasicGraphicsScene::nodeSelected,
-            this, [this](QtNodes::NodeId nodeId) { handleNodeSelection(nodeId); });
     connect(m_scene, &QGraphicsScene::selectionChanged,
             this, [this] { handleSceneSelectionChanged(); });
     connect(m_graphModel.get(), &QtNodes::AbstractGraphModel::connectionCreated,
@@ -812,6 +811,48 @@ void NocNodeEditor::setEditingEnabled(bool enabled) {
 
 bool NocNodeEditor::editingEnabled() const {
     return m_editingEnabled;
+}
+
+void NocNodeEditor::setCanvasInteractionMode(NocCanvasInteractionMode mode) {
+    m_canvasInteractionMode = mode;
+    m_canvasSelectionGesture = false;
+    m_canvasItemGesture = false;
+    if (!m_view) {
+        return;
+    }
+    m_view->setPersistentDragMode(
+        mode == NocCanvasInteractionMode::Select
+            ? QGraphicsView::RubberBandDrag
+            : QGraphicsView::ScrollHandDrag);
+    m_view->setCursor(mode == NocCanvasInteractionMode::Select
+                          ? Qt::ArrowCursor
+                          : Qt::OpenHandCursor);
+}
+
+void NocNodeEditor::selectElements(const QVector<ElementRef>& elements) {
+    QVector<SelectionIdentity> requested;
+    requested.reserve(elements.size());
+    for (const ElementRef& element : elements) {
+        const NocEditorSelection::Kind kind = selectionKindForElement(element.kind);
+        const SelectionIdentity identity{kind, element.id};
+        if (kind != NocEditorSelection::Kind::None
+            && !element.id.trimmed().isEmpty()
+            && !requested.contains(identity)) {
+            requested.append(identity);
+        }
+    }
+    std::sort(requested.begin(), requested.end(), [](const auto& left,
+                                                      const auto& right) {
+        if (left.kind != right.kind) {
+            return static_cast<int>(left.kind) < static_cast<int>(right.kind);
+        }
+        return left.id < right.id;
+    });
+    m_selectedItems = std::move(requested);
+    restoreSelection();
+    if (m_view) {
+        m_view->setFocus(Qt::OtherFocusReason);
+    }
 }
 
 bool NocNodeEditor::setRouterVisualPosition(const QString& routerId, QPointF position) {
@@ -1202,6 +1243,8 @@ bool NocNodeEditor::eventFilter(QObject* watched, QEvent* event) {
     case QEvent::MouseButtonPress: {
         auto* mouse = static_cast<QMouseEvent*>(event);
         if (mouse->button() == Qt::LeftButton) {
+            m_canvasSelectionGesture = false;
+            m_canvasItemGesture = false;
             // QtNodes temporarily raises the last selected node. Restore the
             // semantic hit order immediately before QGraphicsView resolves
             // the press so an Endpoint remains draggable when it overlaps a
@@ -1215,6 +1258,15 @@ bool NocNodeEditor::eventFilter(QObject* watched, QEvent* event) {
                 || blockedPortAt(position)) {
                 mouse->accept();
                 return true;
+            }
+            if (m_canvasInteractionMode == NocCanvasInteractionMode::Select) {
+                const bool hitItem = nodeAt(position).has_value()
+                    || connectionAt(position);
+                m_canvasSelectionGesture = !hitItem;
+                m_canvasItemGesture = hitItem;
+                if (hitItem) {
+                    m_view->setDragMode(QGraphicsView::ScrollHandDrag);
+                }
             }
         }
         return false;
@@ -1250,6 +1302,16 @@ bool NocNodeEditor::eventFilter(QObject* watched, QEvent* event) {
             if (m_editingEnabled && tryCompleteDraftConnection(position)) {
                 mouse->accept();
                 return true;
+            }
+            if (m_canvasSelectionGesture) {
+                m_canvasSelectionGesture = false;
+                return false;
+            }
+            if (m_canvasItemGesture) {
+                m_canvasItemGesture = false;
+                QTimer::singleShot(0, m_view, [view = m_view] {
+                    view->setDragMode(view->persistentDragMode());
+                });
             }
             QTimer::singleShot(0, this, [this, position] {
                 handlePointerReleased(position);
@@ -1342,13 +1404,6 @@ void NocNodeEditor::handleSceneSelectionChanged() {
     }
     QTimer::singleShot(0, this, [this] { applyNodeStacking(); });
     emitSelectionChanged();
-}
-
-void NocNodeEditor::handleNodeSelection(QtNodes::NodeId nodeId) {
-    if (!m_scene || !m_graphModel->nodeExists(nodeId)) {
-        return;
-    }
-    handleSceneSelectionChanged();
 }
 
 void NocNodeEditor::handlePointerReleased(const QPoint& viewportPosition) {
@@ -1574,7 +1629,6 @@ bool NocNodeEditor::beginEndpointAttachmentDraft(const QPoint& viewportPosition)
     m_endpointAttachmentDraft = EndpointAttachmentDraft{
         *nodeId, startScenePosition, graphicsItem};
     node->setSelected(true);
-    handleNodeSelection(*nodeId);
     updateEndpointAttachmentDraft(viewportPosition);
     return true;
 }
@@ -1712,7 +1766,6 @@ bool NocNodeEditor::beginRouterEndpointDraft(const QPoint& viewportPosition) {
     m_routerEndpointDraft = RouterEndpointDraft{
         *nodeId, *metadata->router, hitPort, startScenePosition, graphicsItem};
     node->setSelected(true);
-    handleNodeSelection(*nodeId);
     updateRouterEndpointDraft(viewportPosition);
     return true;
 }
@@ -1980,7 +2033,6 @@ void NocNodeEditor::showContextMenu(const QPoint& viewportPosition,
                 if (!node->isSelected()) {
                     m_scene->clearSelection();
                     node->setSelected(true);
-                    handleNodeSelection(*nodeId);
                 }
             }
         }

@@ -1,6 +1,8 @@
 #include "gui/animated_graphics_view.h"
 
 #include <QFontMetrics>
+#include <QFocusEvent>
+#include <QKeyEvent>
 #include <QPainter>
 #include <QRadialGradient>
 
@@ -14,6 +16,7 @@ AnimatedGraphicsView::AnimatedGraphicsView(QtNodes::BasicGraphicsScene* scene,
       m_pulseAnimation(new QVariantAnimation(this)),
       m_fadeAnimation(new QVariantAnimation(this)) {
     setViewportUpdateMode(QGraphicsView::FullViewportUpdate);
+    setRubberBandSelectionMode(Qt::IntersectsItemShape);
 
     m_pulseAnimation->setStartValue(0.0);
     m_pulseAnimation->setEndValue(1.0);
@@ -38,6 +41,12 @@ AnimatedGraphicsView::AnimatedGraphicsView(QtNodes::BasicGraphicsScene* scene,
                 }
                 viewport()->update();
             });
+}
+
+void AnimatedGraphicsView::setPersistentDragMode(
+    QGraphicsView::DragMode mode) {
+    m_persistentDragMode = mode;
+    setDragMode(mode);
 }
 
 void AnimatedGraphicsView::beginEndpointDrag(const QPoint& viewportPosition,
@@ -166,6 +175,18 @@ void AnimatedGraphicsView::drawForeground(QPainter* painter,
                       Qt::AlignVCenter | Qt::AlignLeft,
                       chipText);
     painter->restore();
+}
+
+void AnimatedGraphicsView::keyReleaseEvent(QKeyEvent* event) {
+    QtNodes::GraphicsView::keyReleaseEvent(event);
+    if (event && event->key() == Qt::Key_Shift) {
+        setDragMode(m_persistentDragMode);
+    }
+}
+
+void AnimatedGraphicsView::focusOutEvent(QFocusEvent* event) {
+    QtNodes::GraphicsView::focusOutEvent(event);
+    setDragMode(m_persistentDragMode);
 }
 
 void AnimatedGraphicsView::animateOverlayTo(qreal targetOpacity) {

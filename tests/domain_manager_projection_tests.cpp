@@ -151,6 +151,36 @@ int main(int argc, char** argv) {
     const ElementRef endpoint{ElementKind::Endpoint, QStringLiteral("ep-a")};
     const ElementRef unassignedEndpoint{
         ElementKind::Endpoint, QStringLiteral("ep-unassigned")};
+    const ResolvedDesign resolved = resolveDesign(design);
+
+    const QVector<ElementRef> allSecurityElements =
+        buildDomainAssignmentSelection(
+            resolved,
+            *package.domainType(QStringLiteral("security-zone")),
+            DomainAssignmentSelectionScope::AllEligible);
+    check(allSecurityElements
+              == QVector<ElementRef>{router0, router1, endpoint,
+                                     unassignedEndpoint},
+          QStringLiteral("all-eligible selection follows stable Router then Endpoint order"));
+    check(buildDomainAssignmentSelection(
+              resolved,
+              *package.domainType(QStringLiteral("security-zone")),
+              DomainAssignmentSelectionScope::AssignedToDomain,
+              QStringLiteral("zone-a"))
+              == QVector<ElementRef>{router0, router1, endpoint},
+          QStringLiteral("Domain member selection returns every matching applicable element"));
+    check(buildDomainAssignmentSelection(
+              resolved,
+              *package.domainType(QStringLiteral("security-zone")),
+              DomainAssignmentSelectionScope::Unassigned)
+              == QVector<ElementRef>{unassignedEndpoint},
+          QStringLiteral("unassigned selection finds applicable elements without membership"));
+    check(buildDomainAssignmentSelection(
+              resolved,
+              *package.domainType(QStringLiteral("fabric-tier")),
+              DomainAssignmentSelectionScope::AllEligible)
+              == QVector<ElementRef>{router0, router1},
+          QStringLiteral("selection helpers honor Package appliesTo without fixed Domain names"));
 
     const DomainAssignmentAggregate commonMultiple =
         buildDomainAssignmentAggregate(

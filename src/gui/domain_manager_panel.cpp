@@ -118,16 +118,37 @@ DomainManagerPanel::DomainManagerPanel(QWidget* parent)
     m_removeDomain = new QPushButton(QStringLiteral("Delete…"));
     m_removeDomain->setObjectName(
         QStringLiteral("finepaper.domainManager.deleteDomain"));
+    m_selectDomainMembers = new QPushButton(QStringLiteral("Select members"));
+    m_selectDomainMembers->setObjectName(
+        QStringLiteral("finepaper.domainManager.selectMembers"));
+    m_selectDomainMembers->setToolTip(
+        QStringLiteral("Select every Router or Endpoint assigned to this Domain instance."));
     instanceButtons->addWidget(m_addDomain);
     instanceButtons->addWidget(m_editDomain);
     instanceButtons->addWidget(m_removeDomain);
     instanceButtons->addStretch();
+    instanceButtons->addWidget(m_selectDomainMembers);
     instancesLayout->addLayout(instanceButtons);
     m_tabs->addTab(instancesPage, QStringLiteral("Instances / Legend"));
 
     auto* assignmentPage = new QWidget;
     auto* assignmentLayout = new QVBoxLayout(assignmentPage);
     assignmentLayout->setContentsMargins(0, 6, 0, 0);
+    auto* selectionButtons = new QHBoxLayout;
+    m_selectAllEligible = new QPushButton(QStringLiteral("Select all eligible"));
+    m_selectAllEligible->setObjectName(
+        QStringLiteral("finepaper.domainManager.selectAllEligible"));
+    m_selectAllEligible->setToolTip(
+        QStringLiteral("Select every Mesh Router or Endpoint to which this Domain type applies."));
+    m_selectUnassigned = new QPushButton(QStringLiteral("Select unassigned"));
+    m_selectUnassigned->setObjectName(
+        QStringLiteral("finepaper.domainManager.selectUnassigned"));
+    m_selectUnassigned->setToolTip(
+        QStringLiteral("Select applicable Routers and Endpoints with no assignment for this Domain type."));
+    selectionButtons->addWidget(m_selectAllEligible);
+    selectionButtons->addWidget(m_selectUnassigned);
+    selectionButtons->addStretch();
+    assignmentLayout->addLayout(selectionButtons);
     m_assignmentState = new QLabel;
     m_assignmentState->setObjectName(
         QStringLiteral("finepaper.domainManager.assignmentState"));
@@ -192,6 +213,12 @@ DomainManagerPanel::DomainManagerPanel(QWidget* parent)
             this, [this] { editDomain(); });
     connect(m_removeDomain, &QPushButton::clicked,
             this, [this] { removeDomain(); });
+    connect(m_selectDomainMembers, &QPushButton::clicked,
+            this, [this] { selectDomainMembers(); });
+    connect(m_selectAllEligible, &QPushButton::clicked,
+            this, [this] { selectAllEligible(); });
+    connect(m_selectUnassigned, &QPushButton::clicked,
+            this, [this] { selectUnassigned(); });
     connect(m_singleAssignment, &QComboBox::currentIndexChanged,
             this, [this] {
                 if (!m_updating) {
@@ -247,8 +274,9 @@ void DomainManagerPanel::setContext(const NocDesign* design,
         m_status->setText(QStringLiteral(
             "Use the quick tabs for common instance/selection edits, or open "
             "the complete working copy for memberships, relations, default "
-            "crossing policies, and edge overrides. Routers and Router Links "
-            "remain fixed projections of the Mesh."));
+            "crossing policies, and edge overrides. Use the selection helpers "
+            "or the canvas Select mode for bulk assignment. Routers and Router "
+            "Links remain fixed projections of the Mesh."));
     }
     refreshCurrentType();
 }
@@ -561,6 +589,37 @@ void DomainManagerPanel::updateActionState() {
         editable && !m_assignmentEdited && hasSelectedDomain);
     m_removeDomain->setEnabled(
         editable && !m_assignmentEdited && hasSelectedDomain);
+    QVector<ElementRef> allEligible;
+    QVector<ElementRef> unassigned;
+    QVector<ElementRef> selectedMembers;
+    if (m_resolved && selectedType()) {
+        allEligible = buildDomainAssignmentSelection(
+            *m_resolved, *selectedType(),
+            DomainAssignmentSelectionScope::AllEligible);
+        unassigned = buildDomainAssignmentSelection(
+            *m_resolved, *selectedType(),
+            DomainAssignmentSelectionScope::Unassigned);
+        if (const DomainDefinition* domain = selectedDomain()) {
+            selectedMembers = buildDomainAssignmentSelection(
+                *m_resolved, *selectedType(),
+                DomainAssignmentSelectionScope::AssignedToDomain,
+                domain->id);
+        }
+    }
+    const bool selectionEnabled = !m_busy && m_resolved && selectedType()
+        && !m_assignmentEdited;
+    m_selectDomainMembers->setText(
+        QStringLiteral("Select members (%1)").arg(selectedMembers.size()));
+    m_selectDomainMembers->setEnabled(
+        selectionEnabled && hasSelectedDomain && !selectedMembers.isEmpty());
+    m_selectAllEligible->setText(
+        QStringLiteral("Select all eligible (%1)").arg(allEligible.size()));
+    m_selectAllEligible->setEnabled(
+        selectionEnabled && !allEligible.isEmpty());
+    m_selectUnassigned->setText(
+        QStringLiteral("Select unassigned (%1)").arg(unassigned.size()));
+    m_selectUnassigned->setEnabled(
+        selectionEnabled && !unassigned.isEmpty());
     const bool eligible = editable && m_assignment.eligibleElements > 0;
     m_singleAssignment->setEnabled(eligible && !m_clearAssignmentStaged);
     m_multipleAssignment->setEnabled(eligible && !m_clearAssignmentStaged);
@@ -632,6 +691,37 @@ void DomainManagerPanel::removeDomain() {
     if (confirmation.exec() == QMessageBox::Yes) {
         removeDomainRequested(domain->id);
     }
+}
+
+void DomainManagerPanel::selectDomainMembers() {
+    const DomainDefinition* domain = selectedDomain();
+    if (!selectElementsRequested || !m_resolved || !selectedType() || !domain
+        || m_assignmentEdited) {
+        return;
+    }
+    selectElementsRequested(buildDomainAssignmentSelection(
+        *m_resolved, *selectedType(),
+        DomainAssignmentSelectionScope::AssignedToDomain, domain->id));
+}
+
+void DomainManagerPanel::selectAllEligible() {
+    if (!selectElementsRequested || !m_resolved || !selectedType()
+        || m_assignmentEdited) {
+        return;
+    }
+    selectElementsRequested(buildDomainAssignmentSelection(
+        *m_resolved, *selectedType(),
+        DomainAssignmentSelectionScope::AllEligible));
+}
+
+void DomainManagerPanel::selectUnassigned() {
+    if (!selectElementsRequested || !m_resolved || !selectedType()
+        || m_assignmentEdited) {
+        return;
+    }
+    selectElementsRequested(buildDomainAssignmentSelection(
+        *m_resolved, *selectedType(),
+        DomainAssignmentSelectionScope::Unassigned));
 }
 
 void DomainManagerPanel::applyAssignment() {

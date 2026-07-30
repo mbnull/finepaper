@@ -53,6 +53,7 @@
 #include <QTabWidget>
 #include <QTableWidget>
 #include <QToolBar>
+#include <QToolButton>
 #include <QVBoxLayout>
 #include <QtConcurrentRun>
 
@@ -422,6 +423,7 @@ FinepaperMainWindow::~FinepaperMainWindow() {
         m_domainManager->assignmentPatchRequested = {};
         m_domainManager->completeConfigurationRequested = {};
         m_domainManager->showDomainLayerRequested = {};
+        m_domainManager->selectElementsRequested = {};
     }
 }
 
@@ -790,6 +792,13 @@ void FinepaperMainWindow::createDomainDock() {
             m_domainLayerSelector->setCurrentIndex(index);
         }
     };
+    m_domainManager->selectElementsRequested = [this](
+        QVector<ElementRef> elements) {
+        selectCenterView(workbench::editorViewId);
+        if (m_nodeEditor) {
+            m_nodeEditor->selectElements(elements);
+        }
+    };
 }
 
 void FinepaperMainWindow::createResultsDock() {
@@ -899,8 +908,29 @@ void FinepaperMainWindow::createActions() {
     m_fitAction = new QAction(QStringLiteral("Fit NoC in View"), this);
     m_fitAction->setShortcut(QKeySequence(QStringLiteral("F")));
     m_fitAction->setShortcutContext(Qt::WidgetWithChildrenShortcut);
+    m_selectCanvasAction = new QAction(QStringLiteral("Select"), this);
+    m_selectCanvasAction->setObjectName(workbench::selectCanvasActionName);
+    m_selectCanvasAction->setCheckable(true);
+    m_selectCanvasAction->setChecked(true);
+    m_selectCanvasAction->setShortcut(QKeySequence(QStringLiteral("V")));
+    m_selectCanvasAction->setShortcutContext(Qt::WidgetWithChildrenShortcut);
+    m_selectCanvasAction->setStatusTip(
+        QStringLiteral("Select nodes and connections; drag empty canvas to box-select"));
+    m_panCanvasAction = new QAction(QStringLiteral("Pan"), this);
+    m_panCanvasAction->setObjectName(workbench::panCanvasActionName);
+    m_panCanvasAction->setCheckable(true);
+    m_panCanvasAction->setShortcut(QKeySequence(QStringLiteral("H")));
+    m_panCanvasAction->setShortcutContext(Qt::WidgetWithChildrenShortcut);
+    m_panCanvasAction->setStatusTip(
+        QStringLiteral("Drag the empty canvas to pan without changing selection"));
+    auto* canvasModeGroup = new QActionGroup(this);
+    canvasModeGroup->setExclusive(true);
+    canvasModeGroup->addAction(m_selectCanvasAction);
+    canvasModeGroup->addAction(m_panCanvasAction);
     m_nodeEditor->addAction(m_regularizeAction);
     m_nodeEditor->addAction(m_fitAction);
+    m_nodeEditor->addAction(m_selectCanvasAction);
+    m_nodeEditor->addAction(m_panCanvasAction);
 
     connect(m_newAction, &QAction::triggered,
             this, &FinepaperMainWindow::createDesign);
@@ -921,6 +951,17 @@ void FinepaperMainWindow::createActions() {
     connect(m_regularizeAction, &QAction::triggered,
             m_nodeEditor, &NocNodeEditor::regularizeLayout);
     connect(m_fitAction, &QAction::triggered, m_nodeEditor, &NocNodeEditor::zoomToFit);
+    connect(m_selectCanvasAction, &QAction::triggered, this, [this] {
+        m_nodeEditor->setCanvasInteractionMode(NocCanvasInteractionMode::Select);
+        statusBar()->showMessage(
+            QStringLiteral("Select mode: drag empty canvas to box-select; Ctrl adds or toggles."),
+            5000);
+    });
+    connect(m_panCanvasAction, &QAction::triggered, this, [this] {
+        m_nodeEditor->setCanvasInteractionMode(NocCanvasInteractionMode::Pan);
+        statusBar()->showMessage(
+            QStringLiteral("Pan mode: drag empty canvas to move the view."), 5000);
+    });
 
     QAction* packagePanelAction = m_packageDock->toggleViewAction();
     packagePanelAction->setObjectName(workbench::packageToggleActionName);
@@ -995,6 +1036,9 @@ void FinepaperMainWindow::createActions() {
     panelsMenu->addAction(domainManagerPanelAction);
     panelsMenu->addAction(resultsPanelAction);
     viewMenu->addSeparator();
+    viewMenu->addAction(m_selectCanvasAction);
+    viewMenu->addAction(m_panCanvasAction);
+    viewMenu->addSeparator();
     viewMenu->addAction(m_regularizeAction);
     viewMenu->addAction(m_fitAction);
     connect(m_centerViews, &QTabWidget::currentChanged, this, [this, viewGroup](int index) {
@@ -1016,6 +1060,17 @@ void FinepaperMainWindow::createActions() {
     toolbar->addAction(m_generateAction);
     toolbar->addSeparator();
     toolbar->addAction(m_regularizeAction);
+    toolbar->addSeparator();
+    toolbar->addAction(m_selectCanvasAction);
+    toolbar->addAction(m_panCanvasAction);
+    if (auto* button = qobject_cast<QToolButton*>(
+            toolbar->widgetForAction(m_selectCanvasAction))) {
+        button->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    }
+    if (auto* button = qobject_cast<QToolButton*>(
+            toolbar->widgetForAction(m_panCanvasAction))) {
+        button->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    }
     toolbar->addSeparator();
     toolbar->addWidget(new QLabel(QStringLiteral("Color by"), toolbar));
     m_domainLayerSelector = new QComboBox(toolbar);
@@ -2307,7 +2362,9 @@ void FinepaperMainWindow::updateInspector(const NocEditorSelectionSet& selection
     m_selectedRouter.reset();
 
     if (selection.items.isEmpty()) {
-        m_selectionSummary->setText(QStringLiteral("Nothing selected."));
+        m_selectionSummary->setText(QStringLiteral(
+            "Nothing selected.<br>Use <b>Select</b> mode and drag empty canvas "
+            "to box-select. Use <b>Pan</b> mode to move the viewport."));
         return;
     }
 

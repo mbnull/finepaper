@@ -235,16 +235,24 @@ int main(int argc, char** argv) {
         QStringLiteral("finepaper.domainManager.editDomain"));
     auto* deleteDomain = panel.findChild<QPushButton*>(
         QStringLiteral("finepaper.domainManager.deleteDomain"));
+    auto* selectMembers = panel.findChild<QPushButton*>(
+        QStringLiteral("finepaper.domainManager.selectMembers"));
+    auto* selectAllEligible = panel.findChild<QPushButton*>(
+        QStringLiteral("finepaper.domainManager.selectAllEligible"));
+    auto* selectUnassigned = panel.findChild<QPushButton*>(
+        QStringLiteral("finepaper.domainManager.selectUnassigned"));
 
     check(typeSelector && instances && tabs && assignmentState && singleAssignment
               && multipleAssignment && applyAssignment && clearAssignment
               && discardAssignment
-              && completeConfiguration && addDomain && editDomain && deleteDomain,
+              && completeConfiguration && addDomain && editDomain && deleteDomain
+              && selectMembers && selectAllEligible && selectUnassigned,
           QStringLiteral("Domain Manager exposes its stable test controls"));
     if (!typeSelector || !instances || !tabs || !assignmentState || !singleAssignment
         || !multipleAssignment || !applyAssignment || !clearAssignment
         || !discardAssignment
-        || !completeConfiguration || !addDomain || !editDomain || !deleteDomain) {
+        || !completeConfiguration || !addDomain || !editDomain || !deleteDomain
+        || !selectMembers || !selectAllEligible || !selectUnassigned) {
         return 1;
     }
 
@@ -294,6 +302,50 @@ int main(int argc, char** argv) {
                          ->data(domainManagerCrossingCountRole).toLongLong() > 0,
               QStringLiteral("Legend rows expose deterministic colors and crossing counts"));
     }
+
+    QVector<QVector<ElementRef>> requestedSelections;
+    panel.selectElementsRequested = [&requestedSelections](
+        QVector<ElementRef> elements) {
+        requestedSelections.append(std::move(elements));
+    };
+    instances->selectRow(zoneARow);
+    selectMembers->click();
+    selectAllEligible->click();
+    QApplication::processEvents();
+    check(requestedSelections.size() == 2
+              && requestedSelections.at(0)
+                  == QVector<ElementRef>{router0, router1, endpoint}
+              && requestedSelections.at(1)
+                  == QVector<ElementRef>{router0, router1, endpoint},
+          QStringLiteral("Domain Manager selects a Domain's members or all applicable elements"));
+
+    NocDesign designWithUnassignedEndpoint = design;
+    designWithUnassignedEndpoint.endpoints.append(EndpointInstance{
+        QStringLiteral("ep-unassigned"),
+        QStringLiteral("client"),
+        EndpointAttachment{RouterPosition{1, 0}, std::nullopt},
+        {}});
+    const ResolvedDesign resolvedWithUnassignedEndpoint =
+        resolveDesign(designWithUnassignedEndpoint);
+    panel.setContext(&designWithUnassignedEndpoint,
+                     &resolvedWithUnassignedEndpoint,
+                     &package,
+                     QStringLiteral("security-zone"));
+    QApplication::processEvents();
+    check(selectUnassigned->isEnabled()
+              && selectUnassigned->text().contains(QStringLiteral("(1)")),
+          QStringLiteral("unassigned selection helper previews its exact target count"));
+    selectUnassigned->click();
+    QApplication::processEvents();
+    check(requestedSelections.size() == 3
+              && requestedSelections.constLast()
+                  == QVector<ElementRef>{ElementRef{
+                      ElementKind::Endpoint,
+                      QStringLiteral("ep-unassigned")}},
+          QStringLiteral("unassigned helper targets only applicable elements without an assignment"));
+    panel.setContext(&design, &resolved, &package,
+                     QStringLiteral("security-zone"));
+    QApplication::processEvents();
 
     std::optional<DomainDefinition> addedDomain;
     panel.addDomainRequested = [&addedDomain](DomainDefinition domain) {
@@ -465,8 +517,11 @@ int main(int argc, char** argv) {
         zoneC->setCheckState(Qt::Checked);
     }
     QApplication::processEvents();
-    check(!completeConfiguration->isEnabled() && !clearAssignment->isEnabled(),
-          QStringLiteral("pending assignment changes disable competing complete and Clear operations"));
+    check(!completeConfiguration->isEnabled() && !clearAssignment->isEnabled()
+              && !selectMembers->isEnabled()
+              && !selectAllEligible->isEnabled()
+              && !selectUnassigned->isEnabled(),
+          QStringLiteral("pending assignment changes freeze competing configuration and selection operations"));
     completeConfiguration->click();
     QApplication::processEvents();
     check(completeConfigurationRequests == 1,

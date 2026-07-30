@@ -24,6 +24,12 @@ enum class DomainAssignmentPresence {
     All
 };
 
+enum class DomainAssignmentSelectionScope {
+    AllEligible,
+    Unassigned,
+    AssignedToDomain
+};
+
 // A QWidget-independent projection of one Domain type over the current
 // semantic selection. It is suitable for a combo box, a tri-state list, or a
 // different presentation without changing the assignment semantics.
@@ -58,5 +64,11 @@ struct DomainAssignmentAggregate {
     const PackageDefinition& package,
     const QVector<ElementRef>& selectionRefs,
     const QString& domainType);
+
+[[nodiscard]] QVector<ElementRef> buildDomainAssignmentSelection(
+    const ResolvedDesign& resolved,
+    const DomainTypeDefinition& type,
+    DomainAssignmentSelectionScope scope,
+    const QString& domainId = {});
 
 } // namespace finepaper

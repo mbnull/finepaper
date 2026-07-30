@@ -157,4 +157,47 @@ DomainAssignmentAggregate buildDomainAssignmentAggregate(
     return aggregate;
 }
 
+QVector<ElementRef> buildDomainAssignmentSelection(
+    const ResolvedDesign& resolved,
+    const DomainTypeDefinition& type,
+    DomainAssignmentSelectionScope scope,
+    const QString& domainId) {
+    QVector<ElementRef> candidates;
+    if (appliesTo(type, ElementKind::Router)) {
+        candidates.reserve(resolved.topology.routers.size()
+                           + resolved.topology.endpoints.size());
+        for (const RouterView& router : resolved.topology.routers) {
+            candidates.append(ElementRef{ElementKind::Router, router.id});
+        }
+    }
+    if (appliesTo(type, ElementKind::Endpoint)) {
+        for (const EndpointView& endpoint : resolved.topology.endpoints) {
+            candidates.append(ElementRef{ElementKind::Endpoint, endpoint.id});
+        }
+    }
+    if (scope == DomainAssignmentSelectionScope::AllEligible) {
+        return candidates;
+    }
+
+    const QString requestedDomainId = domainId.trimmed();
+    if (scope == DomainAssignmentSelectionScope::AssignedToDomain
+        && requestedDomainId.isEmpty()) {
+        return {};
+    }
+    const QHash<ElementRef, QStringList> elementAssignments =
+        assignmentsByElement(resolved.design, type.id);
+    QVector<ElementRef> filtered;
+    filtered.reserve(candidates.size());
+    for (const ElementRef& reference : std::as_const(candidates)) {
+        const QStringList assignments = elementAssignments.value(reference);
+        if ((scope == DomainAssignmentSelectionScope::Unassigned
+             && assignments.isEmpty())
+            || (scope == DomainAssignmentSelectionScope::AssignedToDomain
+                && assignments.contains(requestedDomainId))) {
+            filtered.append(reference);
+        }
+    }
+    return filtered;
+}
+
 } // namespace finepaper
