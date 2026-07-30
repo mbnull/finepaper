@@ -765,6 +765,7 @@ int main(int argc, char** argv) {
     QJsonObject domainCapabilities = runtimeCapabilities.value(
         QStringLiteral("domainConfiguration")).toObject();
     domainCapabilities.insert(QStringLiteral("memberships"), false);
+    domainCapabilities.insert(QStringLiteral("edgeOverrides"), false);
     runtimeCapabilities.insert(
         QStringLiteral("domainConfiguration"), domainCapabilities);
     unsupportedRuntimeManifest.insert(
