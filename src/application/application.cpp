@@ -1,5 +1,7 @@
 #include "application/application.h"
 
+#include "application/domain_service.h"
+
 #include "execution/process.h"
 #include "storage/json.h"
 
@@ -135,9 +137,10 @@ std::optional<RouterPosition> requestRouter(const QJsonObject& endpoint,
     return std::nullopt;
 }
 
-QJsonObject defaultsFor(const QVector<ParameterDefinition>& definitions) {
+template <typename Definition>
+QJsonObject defaultsFor(const QVector<Definition>& definitions) {
     QJsonObject values;
-    for (const ParameterDefinition& definition : definitions) {
+    for (const Definition& definition : definitions) {
         if (definition.hasDefault) {
             values.insert(definition.id, definition.defaultValue);
         }
@@ -282,6 +285,7 @@ DesignResult FinepaperApplication::createDesign(const QJsonObject& request) cons
     }
 
     NocDesign design;
+    design.formatVersion = package->formatVersion == 2 ? 2 : 1;
     design.package = reference;
     design.name = requestString(request,
                                 QStringLiteral("name"),
@@ -424,6 +428,11 @@ DesignResult FinepaperApplication::createDesign(const QJsonObject& request) cons
         design.endpoints.append(std::move(endpoint));
     }
 
+    domain_service::MutationResult domainResult =
+        domain_service::materializeRequiredDomains(design, *package);
+    design = std::move(domainResult.design);
+    result.diagnostics += std::move(domainResult.diagnostics);
+
     if (request.contains(QStringLiteral("packageData"))) {
         if (!request.value(QStringLiteral("packageData")).isObject()) {
             appendDiagnostic(result.diagnostics,
@@ -455,6 +464,13 @@ DesignResult FinepaperApplication::loadDesignFile(const QString& path) const {
 bool FinepaperApplication::saveDesignFile(const QString& path,
                                           const NocDesign& design,
                                           QVector<Diagnostic>* diagnostics) const {
+    const DesignResult validation = validateEditedDesign(design);
+    if (!validation.success) {
+        if (diagnostics) {
+            *diagnostics += validation.diagnostics;
+        }
+        return false;
+    }
     return finepaper::saveDesign(path, design, diagnostics);
 }
 
@@ -476,9 +492,11 @@ DesignResult FinepaperApplication::validateEditedDesign(const NocDesign& design)
     return result;
 }
 
-DesignResult FinepaperApplication::resizeMesh(const NocDesign& design,
-                                               int rows,
-                                               int columns) const {
+DesignResult FinepaperApplication::resizeMesh(
+    const NocDesign& design,
+    int rows,
+    int columns,
+    const QVector<DomainMembership>& newRouterMemberships) const {
     DesignResult result;
     result.design = design;
     if (rows < 1 || columns < 1) {
@@ -486,6 +504,15 @@ DesignResult FinepaperApplication::resizeMesh(const NocDesign& design,
                          QStringLiteral("error"),
                          QStringLiteral("mesh.invalid_size"),
                          QStringLiteral("rows and columns must be positive"),
+                         QStringLiteral("/topology"));
+        return result;
+    }
+    const TopologySpec resizedTopology{design.topology.type, rows, columns};
+    if (!domain_service::canProjectTopology(resizedTopology)) {
+        appendDiagnostic(result.diagnostics,
+                         QStringLiteral("error"),
+                         QStringLiteral("topology.projection_too_large"),
+                         QStringLiteral("topology exceeds Finepaper's safe projection limit"),
                          QStringLiteral("/topology"));
         return result;
     }
@@ -502,20 +529,36 @@ DesignResult FinepaperApplication::resizeMesh(const NocDesign& design,
     if (hasErrors(result.diagnostics)) {
         return result;
     }
-    result.design.topology.rows = rows;
-    result.design.topology.columns = columns;
-    return validateEditedDesign(result.design);
+    const auto package = m_catalog.resolve(design.package);
+    if (!package) {
+        return validateEditedDesign(design);
+    }
+    domain_service::MutationResult domainResult = domain_service::resizeMesh(
+        design, *package, rows, columns, newRouterMemberships);
+    if (hasErrors(domainResult.diagnostics)) {
+        result.diagnostics = std::move(domainResult.diagnostics);
+        return result;
+    }
+    DesignResult validated = validateEditedDesign(domainResult.design);
+    if (!validated.success) {
+        validated.design = design;
+    }
+    return validated;
 }
 
-DesignResult FinepaperApplication::addEndpoint(const NocDesign& design,
-                                                EndpointInstance endpoint) const {
+DesignResult FinepaperApplication::addEndpoint(
+    const NocDesign& design,
+    EndpointInstance endpoint,
+    const QHash<QString, QStringList>& domainAssignments) const {
     endpoint.id = endpoint.id.trimmed();
     const auto package = m_catalog.resolve(design.package);
     if (!package) {
         return validateEditedDesign(design);
     }
     if (std::any_of(design.endpoints.cbegin(), design.endpoints.cend(),
-                    [&](const EndpointInstance& existing) { return existing.id == endpoint.id; })) {
+                    [&](const EndpointInstance& existing) {
+                        return existing.id == endpoint.id;
+                    })) {
         DesignResult result;
         result.design = design;
         appendDiagnostic(result.diagnostics,
@@ -530,9 +573,20 @@ DesignResult FinepaperApplication::addEndpoint(const NocDesign& design,
         endpoint.parameters = defaultsFor(type->parameters);
         mergeValues(endpoint.parameters, provided);
     }
-    NocDesign edited = design;
-    edited.endpoints.append(std::move(endpoint));
-    return validateEditedDesign(edited);
+    domain_service::MutationResult domainResult = domain_service::addEndpoint(
+        design, *package, std::move(endpoint), domainAssignments);
+    if (hasErrors(domainResult.diagnostics)) {
+        return DesignResult{
+            false,
+            design,
+            std::move(domainResult.diagnostics)
+        };
+    }
+    DesignResult validated = validateEditedDesign(domainResult.design);
+    if (!validated.success) {
+        validated.design = design;
+    }
+    return validated;
 }
 
 DesignResult FinepaperApplication::moveEndpoint(const NocDesign& design,
@@ -556,7 +610,11 @@ DesignResult FinepaperApplication::moveEndpoint(const NocDesign& design,
     }
     it->attachment.router = router;
     it->attachment.slot = std::move(slot);
-    return validateEditedDesign(edited);
+    DesignResult validated = validateEditedDesign(edited);
+    if (!validated.success) {
+        validated.design = design;
+    }
+    return validated;
 }
 
 DesignResult FinepaperApplication::removeEndpoint(const NocDesign& design,
@@ -577,14 +635,113 @@ DesignResult FinepaperApplication::removeEndpoint(const NocDesign& design,
         return result;
     }
     edited.endpoints.erase(it);
-    return validateEditedDesign(edited);
+    edited = domain_service::removeEndpointReferences(edited, endpointId);
+    DesignResult validated = validateEditedDesign(edited);
+    if (!validated.success) {
+        validated.design = design;
+    }
+    return validated;
 }
 
 DesignResult FinepaperApplication::updateParameters(const NocDesign& design,
                                                      const QJsonObject& parameters) const {
     NocDesign edited = design;
     edited.parameters = parameters;
-    return validateEditedDesign(edited);
+    DesignResult validated = validateEditedDesign(edited);
+    if (!validated.success) {
+        validated.design = design;
+    }
+    return validated;
+}
+
+DesignResult FinepaperApplication::addDomain(const NocDesign& design,
+                                              DomainDefinition domain) const {
+    const auto package = m_catalog.resolve(design.package);
+    if (!package) {
+        return validateEditedDesign(design);
+    }
+    domain_service::MutationResult domainResult = domain_service::addDomain(
+        design, *package, std::move(domain));
+    if (hasErrors(domainResult.diagnostics)) {
+        return DesignResult{false, design, std::move(domainResult.diagnostics)};
+    }
+    DesignResult validated = validateEditedDesign(domainResult.design);
+    if (!validated.success) {
+        validated.design = design;
+    }
+    return validated;
+}
+
+DesignResult FinepaperApplication::updateDomain(const NocDesign& design,
+                                                 const QString& domainId,
+                                                 DomainDefinition domain) const {
+    domain_service::MutationResult domainResult = domain_service::updateDomain(
+        design, domainId, std::move(domain));
+    if (hasErrors(domainResult.diagnostics)) {
+        return DesignResult{false, design, std::move(domainResult.diagnostics)};
+    }
+    DesignResult validated = validateEditedDesign(domainResult.design);
+    if (!validated.success) {
+        validated.design = design;
+    }
+    return validated;
+}
+
+DesignResult FinepaperApplication::removeDomain(const NocDesign& design,
+                                                 const QString& domainId) const {
+    const auto package = m_catalog.resolve(design.package);
+    if (!package) {
+        return validateEditedDesign(design);
+    }
+    domain_service::MutationResult domainResult = domain_service::removeDomain(
+        design, *package, domainId);
+    if (hasErrors(domainResult.diagnostics)) {
+        return DesignResult{false, design, std::move(domainResult.diagnostics)};
+    }
+    DesignResult validated = validateEditedDesign(domainResult.design);
+    if (!validated.success) {
+        validated.design = design;
+    }
+    return validated;
+}
+
+DesignResult FinepaperApplication::assignDomainsToElements(
+    const NocDesign& design,
+    const QVector<ElementRef>& elements,
+    const QString& domainType,
+    const QStringList& domainIds) const {
+    domain_service::MutationResult domainResult =
+        domain_service::assignDomainsToElements(
+            design, elements, domainType, domainIds);
+    if (hasErrors(domainResult.diagnostics)) {
+        return DesignResult{false, design, std::move(domainResult.diagnostics)};
+    }
+    DesignResult validated = validateEditedDesign(domainResult.design);
+    if (!validated.success) {
+        validated.design = design;
+    }
+    return validated;
+}
+
+DesignResult FinepaperApplication::clearDomainAssignment(
+    const NocDesign& design,
+    const QVector<ElementRef>& elements,
+    const QString& domainType) const {
+    const auto package = m_catalog.resolve(design.package);
+    if (!package) {
+        return validateEditedDesign(design);
+    }
+    domain_service::MutationResult domainResult =
+        domain_service::clearDomainAssignment(
+            design, *package, elements, domainType);
+    if (hasErrors(domainResult.diagnostics)) {
+        return DesignResult{false, design, std::move(domainResult.diagnostics)};
+    }
+    DesignResult validated = validateEditedDesign(domainResult.design);
+    if (!validated.success) {
+        validated.design = design;
+    }
+    return validated;
 }
 
 QVector<Diagnostic> FinepaperApplication::validateAgainstPackage(
@@ -692,6 +849,8 @@ QVector<Diagnostic> FinepaperApplication::validateAgainstPackage(
             }
         }
     }
+
+    diagnostics += domain_service::validateAgainstPackage(design, package);
 
     if (!package.engine && !design.packageData.isEmpty()) {
         appendDiagnostic(diagnostics,

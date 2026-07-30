@@ -416,6 +416,20 @@ int main(int argc, char** argv) {
     check(moved.success && moved.design.endpoints.at(2).attachment.router == RouterPosition{0, 1},
           QStringLiteral("Endpoint movement uses the shared application operation"));
 
+    const DesignResult rejectedMove = finepaper.moveEndpoint(
+        created.design, QStringLiteral("memory"), RouterPosition{99, 99});
+    check(!rejectedMove.success
+              && designToJson(rejectedMove.design) == designToJson(created.design),
+          QStringLiteral("failed Endpoint movement returns the unchanged Design"));
+
+    QJsonObject invalidParameters = created.design.parameters;
+    invalidParameters.insert(QStringLiteral("dataWidth"), QStringLiteral("wide"));
+    const DesignResult rejectedParameterUpdate = finepaper.updateParameters(
+        created.design, invalidParameters);
+    check(!rejectedParameterUpdate.success
+              && designToJson(rejectedParameterUpdate.design) == designToJson(created.design),
+          QStringLiteral("failed parameter updates return the unchanged Design"));
+
     const ValidationResult validation = finepaper.validate(created.design, true);
     check(validation.success, QStringLiteral("reference Package validates through its process boundary"));
 

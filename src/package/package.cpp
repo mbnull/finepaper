@@ -658,6 +658,14 @@ QVector<DomainPropertyDefinition> parseDomainProperties(
                                  QStringLiteral("a Domain reference property must have type string"),
                                  itemPath + QStringLiteral("/type"));
             }
+            if (definition.hasDefault) {
+                appendDiagnostic(
+                    diagnostics,
+                    QStringLiteral("error"),
+                    QStringLiteral("package.domain_reference_default_unsupported"),
+                    QStringLiteral("Domain reference properties cannot declare instance ids as defaults"),
+                    itemPath + QStringLiteral("/default"));
+            }
         }
         if (!definition.id.isEmpty() && ids.contains(definition.id)) {
             appendDiagnostic(diagnostics,

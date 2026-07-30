@@ -110,8 +110,7 @@ QJsonArray completeDomainTypes() {
                     {QStringLiteral("type"), QStringLiteral("string")},
                     {QStringLiteral("required"), true},
                     {QStringLiteral("multiple"), true},
-                    {QStringLiteral("referenceDomainType"), QStringLiteral("power")},
-                    {QStringLiteral("default"), QJsonArray{QStringLiteral("pd_main")}}
+                    {QStringLiteral("referenceDomainType"), QStringLiteral("power")}
                 }
             }},
             {QStringLiteral("relations"), QJsonArray{
@@ -257,9 +256,7 @@ int main(int argc, char** argv) {
                       && reference->required
                       && reference->multiple
                       && reference->referenceDomainType == QStringLiteral("power")
-                      && reference->hasDefault
-                      && reference->defaultValue.toArray()
-                          == QJsonArray{QStringLiteral("pd_main")},
+                      && !reference->hasDefault,
                   QStringLiteral("required, multiple Domain references are parsed"));
 
             check(clock->relations.size() == 1
@@ -353,7 +350,7 @@ int main(int argc, char** argv) {
         QStringLiteral("properties")).toArray();
     QJsonObject invalidDefaultProperty = invalidDefaultProperties[1].toObject();
     invalidDefaultProperty.insert(
-        QStringLiteral("default"), QStringLiteral("pd_main"));
+        QStringLiteral("default"), QJsonArray{QStringLiteral("pd_main")});
     invalidDefaultProperties[1] = invalidDefaultProperty;
     clockWithInvalidDefault.insert(
         QStringLiteral("properties"), invalidDefaultProperties);
@@ -361,6 +358,29 @@ int main(int argc, char** argv) {
     invalidDefaultManifest.insert(QStringLiteral("domainTypes"), invalidDefaultTypes);
     expectFailure(fixture.path(),
                   invalidDefaultManifest,
+                  QStringLiteral("package.domain_reference_default_unsupported"),
+                  QStringLiteral("a Domain reference property with an instance-id default"));
+
+    QJsonObject invalidMultipleDefaultManifest = completeManifest;
+    QJsonArray invalidMultipleDefaultTypes = invalidMultipleDefaultManifest.value(
+        QStringLiteral("domainTypes")).toArray();
+    QJsonObject clockWithInvalidMultipleDefault =
+        invalidMultipleDefaultTypes[0].toObject();
+    QJsonArray invalidMultipleDefaultProperties =
+        clockWithInvalidMultipleDefault.value(QStringLiteral("properties")).toArray();
+    QJsonObject invalidMultipleDefaultProperty =
+        invalidMultipleDefaultProperties[1].toObject();
+    invalidMultipleDefaultProperty.remove(QStringLiteral("referenceDomainType"));
+    invalidMultipleDefaultProperty.insert(
+        QStringLiteral("default"), QStringLiteral("not-an-array"));
+    invalidMultipleDefaultProperties[1] = invalidMultipleDefaultProperty;
+    clockWithInvalidMultipleDefault.insert(
+        QStringLiteral("properties"), invalidMultipleDefaultProperties);
+    invalidMultipleDefaultTypes[0] = clockWithInvalidMultipleDefault;
+    invalidMultipleDefaultManifest.insert(
+        QStringLiteral("domainTypes"), invalidMultipleDefaultTypes);
+    expectFailure(fixture.path(),
+                  invalidMultipleDefaultManifest,
                   QStringLiteral("package.invalid_parameter_default"),
                   QStringLiteral("a multiple Domain property with a scalar default"));
 

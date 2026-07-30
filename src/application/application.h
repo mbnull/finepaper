@@ -4,6 +4,7 @@
 #include "noc/model.h"
 #include "package/package.h"
 
+#include <QHash>
 #include <QJsonObject>
 #include <QString>
 #include <QStringList>
@@ -59,8 +60,15 @@ public:
                         const NocDesign& design,
                         QVector<Diagnostic>* diagnostics = nullptr) const;
 
-    DesignResult resizeMesh(const NocDesign& design, int rows, int columns) const;
-    DesignResult addEndpoint(const NocDesign& design, EndpointInstance endpoint) const;
+    DesignResult resizeMesh(
+        const NocDesign& design,
+        int rows,
+        int columns,
+        const QVector<DomainMembership>& newRouterMemberships = {}) const;
+    DesignResult addEndpoint(
+        const NocDesign& design,
+        EndpointInstance endpoint,
+        const QHash<QString, QStringList>& domainAssignments = {}) const;
     DesignResult moveEndpoint(const NocDesign& design,
                               const QString& endpointId,
                               RouterPosition router,
@@ -68,6 +76,20 @@ public:
     DesignResult removeEndpoint(const NocDesign& design, const QString& endpointId) const;
     DesignResult updateParameters(const NocDesign& design,
                                   const QJsonObject& parameters) const;
+    DesignResult addDomain(const NocDesign& design, DomainDefinition domain) const;
+    DesignResult updateDomain(const NocDesign& design,
+                              const QString& domainId,
+                              DomainDefinition domain) const;
+    DesignResult removeDomain(const NocDesign& design, const QString& domainId) const;
+    DesignResult assignDomainsToElements(
+        const NocDesign& design,
+        const QVector<ElementRef>& elements,
+        const QString& domainType,
+        const QStringList& domainIds) const;
+    DesignResult clearDomainAssignment(
+        const NocDesign& design,
+        const QVector<ElementRef>& elements,
+        const QString& domainType) const;
 
     ValidationResult validate(const NocDesign& design,
                               bool includePackageValidation = true) const;

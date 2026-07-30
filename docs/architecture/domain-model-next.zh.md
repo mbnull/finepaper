@@ -188,6 +188,7 @@ Domain property 沿用基础 scalar 类型、枚举和数值范围，同时增�
 - `default`：可选；存在时由创建操作物化。
 
 普通 Package 参数仍要求 default。Domain property 则允许没有 default，因为很多属性只能由用户或外部 Engine 决定。
+`referenceDomainType` 属性不能把设计内实例 ID 写成 Manifest default；Package 尚未声明实例，创建流程也不能用魔法字符串猜测引用目标。
 
 ## 4. Core 与 Package Validation 的职责
 
