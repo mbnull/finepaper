@@ -54,6 +54,7 @@
 #include <optional>
 #include <functional>
 #include <memory>
+#include <unordered_set>
 
 namespace {
 
@@ -114,6 +115,19 @@ std::optional<QtNodes::NodeId> nodeIdWithCaptionPrefix(
         }
     }
     return std::nullopt;
+}
+
+std::unordered_set<QtNodes::ConnectionId> sceneConnectionIds(
+    QtNodes::BasicGraphicsScene* scene) {
+    std::unordered_set<QtNodes::ConnectionId> connections;
+    if (!scene) {
+        return connections;
+    }
+    for (const QtNodes::NodeId nodeId : scene->graphModel().allNodeIds()) {
+        const auto nodeConnections = scene->graphModel().allConnectionIds(nodeId);
+        connections.insert(nodeConnections.cbegin(), nodeConnections.cend());
+    }
+    return connections;
 }
 
 std::optional<QtNodes::NodeId> endpointAttachedToRouter(
@@ -541,6 +555,144 @@ bool createNumberParameterPackage(const QString& sourceRoot,
     return QFile::setPermissions(destinationGenerator, QFile::permissions(sourceGenerator));
 }
 
+bool createDomainPresentationPackage(const QString& sourceRoot,
+                                     const QString& destinationRoot) {
+    QFile sourceManifest(QDir(sourceRoot).filePath(QStringLiteral("package.json")));
+    if (!sourceManifest.open(QIODevice::ReadOnly)) {
+        return false;
+    }
+    QJsonParseError error;
+    QJsonDocument document = QJsonDocument::fromJson(sourceManifest.readAll(), &error);
+    if (error.error != QJsonParseError::NoError || !document.isObject()) {
+        return false;
+    }
+
+    QJsonObject package = document.object();
+    package.insert(QStringLiteral("formatVersion"), 2);
+    package.insert(QStringLiteral("id"), QStringLiteral("test.domain-presentation"));
+    package.insert(QStringLiteral("name"), QStringLiteral("Domain Presentation Fixture"));
+    package.insert(QStringLiteral("domainTypes"), QJsonArray{
+        QJsonObject{
+            {QStringLiteral("id"), QStringLiteral("security-zone")},
+            {QStringLiteral("label"), QStringLiteral("Security zones")},
+            {QStringLiteral("appliesTo"), QJsonArray{
+                QStringLiteral("router"), QStringLiteral("endpoint")}},
+            {QStringLiteral("cardinality"), QStringLiteral("multiple")},
+            {QStringLiteral("required"), false},
+            {QStringLiteral("properties"), QJsonArray{}},
+            {QStringLiteral("relations"), QJsonArray{}},
+            {QStringLiteral("crossingProperties"), QJsonArray{}}
+        },
+        QJsonObject{
+            {QStringLiteral("id"), QStringLiteral("fabric-tier")},
+            {QStringLiteral("label"), QStringLiteral("Fabric tier")},
+            {QStringLiteral("appliesTo"), QJsonArray{QStringLiteral("router")}},
+            {QStringLiteral("cardinality"), QStringLiteral("single")},
+            {QStringLiteral("required"), false},
+            {QStringLiteral("properties"), QJsonArray{}},
+            {QStringLiteral("relations"), QJsonArray{}},
+            {QStringLiteral("crossingProperties"), QJsonArray{}}
+        }
+    });
+
+    if (!QDir().mkpath(QDir(destinationRoot).filePath(QStringLiteral("runtime/bin")))) {
+        return false;
+    }
+    QFile destinationManifest(
+        QDir(destinationRoot).filePath(QStringLiteral("package.json")));
+    if (!destinationManifest.open(QIODevice::WriteOnly | QIODevice::Truncate)
+        || destinationManifest.write(
+               QJsonDocument(package).toJson(QJsonDocument::Indented)) < 0) {
+        return false;
+    }
+    destinationManifest.close();
+
+    const QString sourceGenerator = QDir(sourceRoot).filePath(
+        QStringLiteral("runtime/bin/generate"));
+    const QString destinationGenerator = QDir(destinationRoot).filePath(
+        QStringLiteral("runtime/bin/generate"));
+    if (!QFile::copy(sourceGenerator, destinationGenerator)) {
+        return false;
+    }
+    return QFile::setPermissions(destinationGenerator, QFile::permissions(sourceGenerator));
+}
+
+bool writeDomainPresentationDesign(const QString& path) {
+    const QJsonObject design{
+        {QStringLiteral("format"), QStringLiteral("finepaper.noc-design")},
+        {QStringLiteral("formatVersion"), 2},
+        {QStringLiteral("id"), QStringLiteral("domain_presentation_design")},
+        {QStringLiteral("name"), QStringLiteral("Domain Presentation Design")},
+        {QStringLiteral("package"), QJsonObject{
+            {QStringLiteral("id"), QStringLiteral("test.domain-presentation")},
+            {QStringLiteral("version"), QStringLiteral("1.0.0")}
+        }},
+        {QStringLiteral("topology"), QJsonObject{
+            {QStringLiteral("type"), QStringLiteral("mesh")},
+            {QStringLiteral("rows"), 1},
+            {QStringLiteral("columns"), 2}
+        }},
+        {QStringLiteral("parameters"), QJsonObject{
+            {QStringLiteral("dataWidth"), 64},
+            {QStringLiteral("flitWidth"), 128},
+            {QStringLiteral("addrWidth"), 32}
+        }},
+        {QStringLiteral("endpoints"), QJsonArray{}},
+        {QStringLiteral("domains"), QJsonArray{
+            QJsonObject{
+                {QStringLiteral("id"), QStringLiteral("zone-a")},
+                {QStringLiteral("type"), QStringLiteral("security-zone")},
+                {QStringLiteral("name"), QStringLiteral("Trusted")},
+                {QStringLiteral("properties"), QJsonObject{}}
+            },
+            QJsonObject{
+                {QStringLiteral("id"), QStringLiteral("zone-b")},
+                {QStringLiteral("type"), QStringLiteral("security-zone")},
+                {QStringLiteral("name"), QStringLiteral("Restricted")},
+                {QStringLiteral("properties"), QJsonObject{}}
+            },
+            QJsonObject{
+                {QStringLiteral("id"), QStringLiteral("tier-core")},
+                {QStringLiteral("type"), QStringLiteral("fabric-tier")},
+                {QStringLiteral("name"), QStringLiteral("Core")},
+                {QStringLiteral("properties"), QJsonObject{}}
+            }
+        }},
+        {QStringLiteral("domainMemberships"), QJsonArray{
+            QJsonObject{
+                {QStringLiteral("element"), QJsonObject{
+                    {QStringLiteral("kind"), QStringLiteral("router")},
+                    {QStringLiteral("id"), QStringLiteral("r-0-0")}
+                }},
+                {QStringLiteral("assignments"), QJsonObject{
+                    {QStringLiteral("security-zone"), QJsonArray{
+                        QStringLiteral("zone-a")}},
+                    {QStringLiteral("fabric-tier"), QJsonArray{
+                        QStringLiteral("tier-core")}}
+                }}
+            },
+            QJsonObject{
+                {QStringLiteral("element"), QJsonObject{
+                    {QStringLiteral("kind"), QStringLiteral("router")},
+                    {QStringLiteral("id"), QStringLiteral("r-1-0")}
+                }},
+                {QStringLiteral("assignments"), QJsonObject{
+                    {QStringLiteral("security-zone"), QJsonArray{
+                        QStringLiteral("zone-b")}},
+                    {QStringLiteral("fabric-tier"), QJsonArray{
+                        QStringLiteral("tier-core")}}
+                }}
+            }
+        }},
+        {QStringLiteral("domainRelations"), QJsonArray{}},
+        {QStringLiteral("crossingPolicies"), QJsonArray{}},
+        {QStringLiteral("edgeOverrides"), QJsonArray{}}
+    };
+    QFile file(path);
+    return file.open(QIODevice::WriteOnly | QIODevice::Truncate)
+        && file.write(QJsonDocument(design).toJson(QJsonDocument::Indented)) >= 0;
+}
+
 bool writeMissingPackageDesign(const QString& path) {
     const QJsonObject design{
         {QStringLiteral("format"), QStringLiteral("finepaper.noc-design")},
@@ -598,6 +750,12 @@ int main(int argc, char** argv) {
     QApplication application(argc, argv);
     QCoreApplication::setOrganizationName(QStringLiteral("FinepaperTest"));
     QCoreApplication::setApplicationName(QStringLiteral("finepaper-gui-smoke"));
+
+    check(finepaper::workbench::designWorkspaceKey(
+              QStringLiteral("a"), QStringLiteral("b:c"), QStringLiteral("d"))
+              != finepaper::workbench::designWorkspaceKey(
+                  QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c:d")),
+          QStringLiteral("Workspace design keys remain unambiguous for arbitrary ids"));
 
     const QString projectRoot = QString::fromUtf8(FINEPAPER_SOURCE_DIR);
     finepaper::RuntimeLocations locations{
@@ -702,6 +860,8 @@ int main(int argc, char** argv) {
     auto* availablePackages = window.findChild<QLabel*>(
         QStringLiteral("finepaper.availablePackages"));
     auto* endpointPalette = window.findChild<QListWidget*>(QStringLiteral("finepaper.endpointPalette"));
+    auto* initialDomainSelector = window.findChild<QComboBox*>(
+        finepaper::workbench::domainLayerSelectorName);
     check(availablePackages
               && availablePackages->text().startsWith(QStringLiteral("1 NoC IP Package")),
           QStringLiteral("runtime NoC IP availability is summarized in the workbench"));
@@ -710,6 +870,10 @@ int main(int argc, char** argv) {
           QStringLiteral("the workbench does not imply an active IP before design creation"));
     check(endpointPalette && endpointPalette->count() == 0,
           QStringLiteral("Endpoint types are shown only for the active design Package"));
+    check(initialDomainSelector && initialDomainSelector->count() == 1
+              && initialDomainSelector->itemData(0).toString().isEmpty()
+              && !initialDomainSelector->isEnabled(),
+          QStringLiteral("a Package without Domain schema exposes only a disabled None layer"));
     QAction* initialSaveAction = actionWithText(window, QStringLiteral("Save"));
     QAction* saveAsAction = actionWithText(window, QStringLiteral("Save As…"));
     QAction* initialValidateAction = actionWithText(
@@ -1638,6 +1802,85 @@ int main(int argc, char** argv) {
         check(!artifactPath.isEmpty(), QStringLiteral("reported GUI artifact has a path"));
     }
 
+    finepaper::NocEditorSelectionSet observedSemanticSelection;
+    int semanticSelectionCallbacks = 0;
+    std::function<void(const finepaper::NocEditorSelectionSet&)>
+        mainWindowSelectionHandler;
+    if (nodeEditor) {
+        mainWindowSelectionHandler = nodeEditor->semanticSelectionChanged;
+        nodeEditor->semanticSelectionChanged =
+            [&, mainWindowSelectionHandler](
+                const finepaper::NocEditorSelectionSet& selection) {
+                observedSemanticSelection = selection;
+                ++semanticSelectionCallbacks;
+                if (mainWindowSelectionHandler) {
+                    mainWindowSelectionHandler(selection);
+                }
+            };
+    }
+    const auto semanticRouter = nodeIdWithCaption(
+        graphicsScene, QStringLiteral("r-0-0"));
+    const auto semanticEndpoint = nodeIdWithCaptionPrefix(
+        graphicsScene, QStringLiteral("master"));
+    if (graphicsScene && semanticRouter && semanticEndpoint) {
+        graphicsScene->clearSelection();
+        graphicsScene->nodeGraphicsObject(*semanticRouter)->setSelected(true);
+        graphicsScene->nodeGraphicsObject(*semanticEndpoint)->setSelected(true);
+        application.processEvents();
+    }
+    check(observedSemanticSelection.size() == 2
+              && observedSemanticSelection.elements().size() == 2,
+          QStringLiteral("Router and Endpoint multi-selection is reported as stable semantic references"));
+
+    std::optional<QtNodes::ConnectionId> semanticRouterLink;
+    std::optional<QtNodes::ConnectionId> semanticAttachment;
+    if (graphicsScene) {
+        for (const QtNodes::ConnectionId& connection
+             : sceneConnectionIds(graphicsScene)) {
+            const QString sourceCaption = graphicsScene->graphModel().nodeData(
+                connection.outNodeId, QtNodes::NodeRole::Caption).toString();
+            if (sourceCaption.startsWith(QStringLiteral("r-"))) {
+                if (!semanticRouterLink) {
+                    semanticRouterLink = connection;
+                }
+            } else if (!semanticAttachment) {
+                semanticAttachment = connection;
+            }
+        }
+    }
+    if (graphicsScene && semanticRouterLink) {
+        graphicsScene->clearSelection();
+        graphicsScene->connectionGraphicsObject(*semanticRouterLink)
+            ->setSelected(true);
+        application.processEvents();
+    }
+    auto* semanticInspectorGroup = window.findChild<QGroupBox*>(
+        finepaper::workbench::selectionInspectorName);
+    auto* semanticInspector = semanticInspectorGroup
+        ? semanticInspectorGroup->findChild<QLabel*>() : nullptr;
+    check(observedSemanticSelection.size() == 1
+              && observedSemanticSelection.items.front().kind
+                  == finepaper::NocEditorSelection::Kind::RouterLink
+              && semanticInspector
+              && semanticInspector->text().contains(QStringLiteral("fixed Mesh")),
+          QStringLiteral("a Router Link is selectable by semantic id while remaining fixed by the Mesh"));
+
+    if (graphicsScene && semanticAttachment) {
+        graphicsScene->clearSelection();
+        graphicsScene->connectionGraphicsObject(*semanticAttachment)
+            ->setSelected(true);
+        application.processEvents();
+    }
+    check(observedSemanticSelection.size() == 1
+              && observedSemanticSelection.items.front().kind
+                  == finepaper::NocEditorSelection::Kind::EndpointAttachment
+              && !observedSemanticSelection.items.front().id.isEmpty()
+              && semanticSelectionCallbacks > 0,
+          QStringLiteral("an Endpoint attachment line is exposed as a distinct semantic selection"));
+    if (nodeEditor) {
+        nodeEditor->semanticSelectionChanged = mainWindowSelectionHandler;
+    }
+
     if (packagePanelAction) {
         packagePanelAction->trigger();
         application.processEvents();
@@ -2053,6 +2296,142 @@ int main(int argc, char** argv) {
         check(QDir().rename(unavailablePackagePath, numberPackageRoot.path()),
               QStringLiteral("runtime Package fixture is restored after repair testing"));
     }
+
+    QTemporaryDir domainPackageRoot(
+        QStringLiteral("/tmp/finepaper-domain-package-XXXXXX"));
+    QTemporaryDir domainDesignRoot(
+        QStringLiteral("/tmp/finepaper-domain-design-XXXXXX"));
+    check(domainPackageRoot.isValid() && domainDesignRoot.isValid(),
+          QStringLiteral("temporary generic Domain GUI fixtures are available"));
+    check(createDomainPresentationPackage(
+              standardPackageRoot, domainPackageRoot.path()),
+          QStringLiteral("a Package V2 fixture declares arbitrary Domain types"));
+    const QString domainDesignPath = QDir(domainDesignRoot.path()).filePath(
+        QStringLiteral("domain-presentation.fpnoc"));
+    check(writeDomainPresentationDesign(domainDesignPath),
+          QStringLiteral("a Design V2 fixture carries generic Domain assignments"));
+
+    finepaper::RuntimeLocations domainLocations{
+        QStringList{domainPackageRoot.path()}, outputRoot.path()};
+    finepaper::FinepaperMainWindow domainWindow(domainLocations);
+    domainWindow.show();
+    application.processEvents();
+    check(domainWindow.openDesignFile(domainDesignPath),
+          QStringLiteral("the Package-driven Domain design opens in the workbench"));
+    application.processEvents();
+
+    auto* domainSelector = domainWindow.findChild<QComboBox*>(
+        finepaper::workbench::domainLayerSelectorName);
+    check(domainSelector && domainSelector->isEnabled()
+              && domainSelector->count() == 3
+              && domainSelector->itemText(0) == QStringLiteral("None")
+              && domainSelector->itemData(0).toString().isEmpty()
+              && domainSelector->findData(QStringLiteral("security-zone")) > 0
+              && domainSelector->findData(QStringLiteral("fabric-tier")) > 0,
+          QStringLiteral("Color by lists Package labels backed by arbitrary stable Domain type ids"));
+
+    auto* domainEditor = dynamic_cast<finepaper::NocNodeEditor*>(
+        domainWindow.findChild<QWidget*>(QStringLiteral("finepaper.nodeEditor")));
+    auto* domainView = domainEditor
+        ? domainEditor->findChild<QGraphicsView*>() : nullptr;
+    auto* domainScene = domainView
+        ? dynamic_cast<QtNodes::BasicGraphicsScene*>(domainView->scene()) : nullptr;
+    const auto domainRouter = nodeIdWithCaption(
+        domainScene, QStringLiteral("r-0-0"));
+    QtNodes::NodeGraphicsObject* domainRouterGraphics =
+        domainScene && domainRouter
+        ? domainScene->nodeGraphicsObject(*domainRouter) : nullptr;
+    const qsizetype domainNodeCount = domainScene
+        ? static_cast<qsizetype>(domainScene->graphModel().allNodeIds().size()) : 0;
+    const qsizetype domainConnectionCount = static_cast<qsizetype>(
+        sceneConnectionIds(domainScene).size());
+    if (domainScene && domainRouterGraphics) {
+        domainScene->clearSelection();
+        domainRouterGraphics->setSelected(true);
+        application.processEvents();
+    }
+    int domainLayerSelectionCallbacks = 0;
+    std::function<void(const finepaper::NocEditorSelectionSet&)>
+        domainMainWindowSelectionHandler;
+    if (domainEditor) {
+        domainMainWindowSelectionHandler = domainEditor->semanticSelectionChanged;
+        domainEditor->semanticSelectionChanged =
+            [&, domainMainWindowSelectionHandler](
+                const finepaper::NocEditorSelectionSet& selection) {
+                ++domainLayerSelectionCallbacks;
+                if (domainMainWindowSelectionHandler) {
+                    domainMainWindowSelectionHandler(selection);
+                }
+            };
+    }
+    if (domainSelector) {
+        domainSelector->setCurrentIndex(
+            domainSelector->findData(QStringLiteral("security-zone")));
+        application.processEvents();
+    }
+
+    QtNodes::ConnectionGraphicsObject* domainLinkGraphics = nullptr;
+    const auto domainConnections = sceneConnectionIds(domainScene);
+    if (domainScene && !domainConnections.empty()) {
+        domainLinkGraphics = domainScene->connectionGraphicsObject(
+            *domainConnections.begin());
+    }
+    check(domainEditor
+              && domainEditor->domainPresentation().activeDomainType
+                  == QStringLiteral("security-zone")
+              && domainEditor->domainPresentation().legend.size() == 2,
+          QStringLiteral("the selected generic Domain type produces a presentation snapshot"));
+    check(domainScene && domainRouter && domainRouterGraphics
+              && domainScene->nodeGraphicsObject(*domainRouter)
+                  == domainRouterGraphics
+              && domainScene->graphModel().allNodeIds().size()
+                  == static_cast<size_t>(domainNodeCount)
+              && sceneConnectionIds(domainScene).size()
+                  == static_cast<size_t>(domainConnectionCount)
+              && domainRouterGraphics->isSelected()
+              && domainLayerSelectionCallbacks == 0
+              && !domainWindow.isWindowModified(),
+          QStringLiteral("switching Domain layers repaints in place without rebuilding, changing selection, or dirtying the design"));
+    check(domainRouterGraphics
+              && static_cast<finepaper::DomainAssignmentDisplayState>(
+                     domainRouterGraphics->data(
+                         finepaper::domainAssignmentStateDataRole).toInt())
+                  == finepaper::DomainAssignmentDisplayState::Assigned
+              && domainRouterGraphics->data(
+                     finepaper::domainColorsDataRole).toList().size() == 1
+              && domainLinkGraphics
+              && domainLinkGraphics->data(
+                     finepaper::domainCrossingDataRole).toBool(),
+          QStringLiteral("nodes and derived Mesh crossings receive generic Domain presentation roles"));
+
+    const QString domainWorkspaceKey = finepaper::workbench::designWorkspaceKey(
+        QStringLiteral("test.domain-presentation"),
+        QStringLiteral("1.0.0"),
+        QStringLiteral("domain_presentation_design"));
+    check(QSettings().value(
+              finepaper::workbench::domainLayerSelectionsSetting).toMap()
+              .value(domainWorkspaceKey).toString()
+              == QStringLiteral("security-zone"),
+          QStringLiteral("the active Domain layer is saved as per-design Workspace state"));
+    if (domainEditor) {
+        domainEditor->semanticSelectionChanged = domainMainWindowSelectionHandler;
+    }
+    closeDiscarding(domainWindow);
+
+    finepaper::FinepaperMainWindow restoredDomainWindow(domainLocations);
+    restoredDomainWindow.show();
+    application.processEvents();
+    check(restoredDomainWindow.openDesignFile(domainDesignPath),
+          QStringLiteral("the Domain design reopens in a fresh workbench"));
+    application.processEvents();
+    auto* restoredDomainSelector = restoredDomainWindow.findChild<QComboBox*>(
+        finepaper::workbench::domainLayerSelectorName);
+    check(restoredDomainSelector
+              && restoredDomainSelector->currentData().toString()
+                  == QStringLiteral("security-zone")
+              && !restoredDomainWindow.isWindowModified(),
+          QStringLiteral("the per-design Domain layer restores without dirtying the design"));
+    closeDiscarding(restoredDomainWindow);
 
     QTemporaryDir missingPackageRoot(
         QStringLiteral("/tmp/finepaper-missing-package-XXXXXX"));

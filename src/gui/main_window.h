@@ -15,6 +15,7 @@
 
 class QAction;
 class QCloseEvent;
+class QComboBox;
 class QDockWidget;
 class QFormLayout;
 class QGroupBox;
@@ -64,6 +65,8 @@ private:
     void reloadPackages();
     void installPackage();
     void updatePackageControls();
+    void updateDomainLayerControls();
+    void applyDomainLayer(const QString& domainType);
     void updateEndpointPalette();
     void updateUiState();
     void setOperationBusy(bool busy, const QString& message = {});
@@ -82,7 +85,7 @@ private:
     bool moveEndpoint(const QString& endpointId, NocAttachmentTarget target);
     bool removeEndpoint(const QString& endpointId);
     void applyParameters();
-    void updateInspector(const NocEditorSelection& selection);
+    void updateInspector(const NocEditorSelectionSet& selection);
     void adoptDesignResult(const DesignResult& result, const QString& action);
     void refreshDesignViews();
     void rebuildParameterEditors();
@@ -108,6 +111,7 @@ private:
     FinepaperApplication m_application;
     RuntimeLocations m_locations;
     std::optional<NocDesign> m_design;
+    std::optional<ResolvedDesign> m_resolvedDesign;
     QString m_designPath;
     bool m_dirty = false;
     bool m_operationBusy = false;
@@ -125,6 +129,7 @@ private:
     QAction* m_fitAction = nullptr;
     QAction* m_installAction = nullptr;
     QAction* m_reloadAction = nullptr;
+    QComboBox* m_domainLayerSelector = nullptr;
 
     QFutureWatcher<ValidationResult>* m_validationWatcher = nullptr;
     QFutureWatcher<GenerationResult>* m_generationWatcher = nullptr;

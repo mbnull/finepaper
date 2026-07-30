@@ -14,6 +14,8 @@ inline const QString resultTabSetting = QStringLiteral("workbench/resultTab");
 inline const QString routerLayoutsSetting = QStringLiteral("workbench/routerLayouts");
 inline const QString endpointLayoutsSetting = QStringLiteral("workbench/endpointLayouts");
 inline const QString collapsedRoutersSetting = QStringLiteral("workbench/collapsedRouters");
+inline const QString domainLayerSelectionsSetting =
+    QStringLiteral("workbench/domainLayerSelections");
 
 inline const QString packageDockName = QStringLiteral("finepaper.packageDock");
 inline const QString inspectorDockName = QStringLiteral("finepaper.inspectorDock");
@@ -35,6 +37,8 @@ inline const QString packageToggleActionName = QStringLiteral("finepaper.toggleP
 inline const QString inspectorToggleActionName = QStringLiteral("finepaper.toggleInspectorPanel");
 inline const QString resultsToggleActionName = QStringLiteral("finepaper.toggleResultsPanel");
 inline const QString regularizeActionName = QStringLiteral("finepaper.regularizeLayout");
+inline const QString domainLayerSelectorName =
+    QStringLiteral("finepaper.domainLayerSelector");
 
 inline const QString editorViewId = QStringLiteral("noc-editor");
 inline const QString performanceViewId = QStringLiteral("performance-analysis");
@@ -47,5 +51,14 @@ inline const QString problemReportViewTitle = QStringLiteral("Problem Report");
 inline const QString drcTabTitle = QStringLiteral("DRC Problems");
 inline const QString activityTabTitle = QStringLiteral("Activity Log");
 inline const QString generationTabTitle = QStringLiteral("Generation Outputs");
+
+inline QString designWorkspaceKey(const QString& packageId,
+                                  const QString& packageVersion,
+                                  const QString& designId) {
+    const auto segment = [](const QString& value) {
+        return QString::number(value.size()) + QLatin1Char(':') + value;
+    };
+    return segment(packageId) + segment(packageVersion) + segment(designId);
+}
 
 } // namespace finepaper::workbench

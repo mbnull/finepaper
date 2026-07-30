@@ -182,6 +182,11 @@ ElementKind elementKindFromId(const QString& id) {
     return ElementKind::Invalid;
 }
 
+size_t qHash(const ElementRef& reference, size_t seed) noexcept {
+    const size_t kindHash = ::qHash(static_cast<int>(reference.kind), seed);
+    return ::qHash(reference.id, kindHash);
+}
+
 std::optional<RouterPosition> routerPositionFromId(const QString& id) {
     return routerPositionFromStableId(id);
 }

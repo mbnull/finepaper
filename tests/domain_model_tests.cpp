@@ -277,6 +277,23 @@ void expectDiagnostic(const QString& code,
 int main(int argc, char** argv) {
     QCoreApplication application(argc, argv);
 
+    QHash<ElementRef, QString> semanticReferences;
+    semanticReferences.insert(
+        ElementRef{ElementKind::Router, QStringLiteral("r-0-0")},
+        QStringLiteral("router"));
+    semanticReferences.insert(
+        ElementRef{ElementKind::RouterLink, QStringLiteral("link-r-0-0--r-1-0")},
+        QStringLiteral("link"));
+    check(semanticReferences.value(
+              ElementRef{ElementKind::Router, QStringLiteral("r-0-0")})
+              == QStringLiteral("router")
+              && semanticReferences.value(
+                  ElementRef{
+                      ElementKind::RouterLink,
+                      QStringLiteral("link-r-0-0--r-1-0")})
+                  == QStringLiteral("link"),
+          QStringLiteral("ElementRef is a strong QHash key for semantic GUI mappings"));
+
     const NocDesign valid = domainDesign();
     check(!hasErrors(validateDesignStructure(valid)),
           QStringLiteral("a complete clock/power Domain model is valid"));

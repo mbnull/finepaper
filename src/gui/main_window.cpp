@@ -41,6 +41,7 @@
 #include <QScrollArea>
 #include <QSet>
 #include <QSettings>
+#include <QSignalBlocker>
 #include <QSpinBox>
 #include <QSplitter>
 #include <QStatusBar>
@@ -404,7 +405,8 @@ void FinepaperMainWindow::createCentralViews() {
     m_nodeEditor->endpointRemovalRequested = [this](const QString& endpointId) {
         return removeEndpoint(endpointId);
     };
-    m_nodeEditor->selectionChanged = [this](const NocEditorSelection& selection) {
+    m_nodeEditor->semanticSelectionChanged = [this](
+                                                const NocEditorSelectionSet& selection) {
         updateInspector(selection);
     };
 }
@@ -735,6 +737,27 @@ void FinepaperMainWindow::createActions() {
     toolbar->addAction(m_generateAction);
     toolbar->addSeparator();
     toolbar->addAction(m_regularizeAction);
+    toolbar->addSeparator();
+    toolbar->addWidget(new QLabel(QStringLiteral("Color by"), toolbar));
+    m_domainLayerSelector = new QComboBox(toolbar);
+    m_domainLayerSelector->setObjectName(workbench::domainLayerSelectorName);
+    m_domainLayerSelector->setMinimumContentsLength(16);
+    m_domainLayerSelector->addItem(QStringLiteral("None"), QString());
+    m_domainLayerSelector->setEnabled(false);
+    toolbar->addWidget(m_domainLayerSelector);
+    connect(m_domainLayerSelector, &QComboBox::currentIndexChanged, this, [this] {
+        const QString domainType = m_domainLayerSelector->currentData().toString();
+        if (m_design) {
+            const QString workspaceKey = workbench::designWorkspaceKey(
+                m_design->package.id, m_design->package.version, m_design->id);
+            QSettings settings;
+            QVariantMap selections = settings.value(
+                workbench::domainLayerSelectionsSetting).toMap();
+            selections.insert(workspaceKey, domainType);
+            settings.setValue(workbench::domainLayerSelectionsSetting, selections);
+        }
+        applyDomainLayer(domainType);
+    });
 
     QToolBar* activityBar = new QToolBar(QStringLiteral("Workbench Panels"), this);
     activityBar->setObjectName(workbench::activityBarName);
@@ -1036,7 +1059,70 @@ void FinepaperMainWindow::updatePackageControls() {
             QStringLiteral("Install the exact Package id and version to restore editing."));
     }
     updateEndpointPalette();
+    updateDomainLayerControls();
     updateUiState();
+}
+
+void FinepaperMainWindow::updateDomainLayerControls() {
+    if (!m_domainLayerSelector) {
+        return;
+    }
+
+    const PackageDefinition* package = packageForDesign();
+    QString restoredDomainType;
+    if (m_design) {
+        const QString workspaceKey = workbench::designWorkspaceKey(
+            m_design->package.id, m_design->package.version, m_design->id);
+        const QVariantMap selections = QSettings().value(
+            workbench::domainLayerSelectionsSetting).toMap();
+        restoredDomainType = selections.value(workspaceKey).toString();
+    }
+
+    {
+        const QSignalBlocker blocker(m_domainLayerSelector);
+        m_domainLayerSelector->clear();
+        m_domainLayerSelector->addItem(QStringLiteral("None"), QString());
+        if (package) {
+            for (const DomainTypeDefinition& type : package->domainTypes) {
+                m_domainLayerSelector->addItem(
+                    type.label.trimmed().isEmpty() ? type.id : type.label,
+                    type.id);
+            }
+        }
+        const int restoredIndex = m_domainLayerSelector->findData(restoredDomainType);
+        m_domainLayerSelector->setCurrentIndex(restoredIndex >= 0 ? restoredIndex : 0);
+    }
+
+    const bool hasDomainLayers = m_design && package && !package->domainTypes.isEmpty();
+    m_domainLayerSelector->setEnabled(hasDomainLayers);
+    if (!m_design) {
+        m_domainLayerSelector->setToolTip(
+            QStringLiteral("Create or open a design before selecting a Domain layer."));
+    } else if (!package) {
+        m_domainLayerSelector->setToolTip(
+            QStringLiteral("The design Package is not loaded, so Domain layers are unavailable."));
+    } else if (package->domainTypes.isEmpty()) {
+        m_domainLayerSelector->setToolTip(
+            QStringLiteral("This Package does not declare any Domain types."));
+    } else {
+        m_domainLayerSelector->setToolTip(
+            QStringLiteral("Color the fixed Mesh projection by a Package-declared Domain type."));
+    }
+
+    applyDomainLayer(m_domainLayerSelector->currentData().toString());
+}
+
+void FinepaperMainWindow::applyDomainLayer(const QString& domainType) {
+    if (!m_nodeEditor) {
+        return;
+    }
+    const PackageDefinition* package = packageForDesign();
+    if (!m_design || !m_resolvedDesign || !package) {
+        m_nodeEditor->setDomainPresentation({});
+        return;
+    }
+    m_nodeEditor->setDomainPresentation(
+        buildDomainPresentationSnapshot(*m_resolvedDesign, *package, domainType));
 }
 
 void FinepaperMainWindow::updateEndpointPalette() {
@@ -1700,38 +1786,129 @@ void FinepaperMainWindow::applyParameters() {
                       QStringLiteral("Apply Parameters"));
 }
 
-void FinepaperMainWindow::updateInspector(const NocEditorSelection& selection) {
+void FinepaperMainWindow::updateInspector(const NocEditorSelectionSet& selection) {
     m_selectedRouter.reset();
-    if (selection.kind == NocEditorSelection::Kind::Router && selection.router) {
-        m_selectedRouter = selection.router;
-        m_selectionSummary->setText(
-            QStringLiteral("<b>Router %1</b><br>Column x: %2<br>Row y: %3<br>"
-                           "Drag to arrange this workspace. Router identity and links "
-                           "remain derived from the Mesh.")
-                .arg(selection.id)
-                .arg(selection.router->x)
-                .arg(selection.router->y));
+
+    if (selection.items.isEmpty()) {
+        m_selectionSummary->setText(QStringLiteral("Nothing selected."));
         return;
     }
-    if (selection.kind == NocEditorSelection::Kind::Endpoint && m_design) {
-        for (const EndpointInstance& endpoint : m_design->endpoints) {
-            if (endpoint.id == selection.id) {
-                m_selectionSummary->setText(
-                    QStringLiteral("<b>Endpoint %1</b><br>Type: %2<br>Router: (%3, %4)<br>"
-                                   "Slot: %5")
-                        .arg(endpoint.id, endpoint.type)
-                        .arg(endpoint.attachment.router.x)
-                        .arg(endpoint.attachment.router.y)
-                        .arg(endpoint.attachment.slot.value_or(QStringLiteral("automatic"))));
-                return;
+
+    if (selection.items.size() > 1) {
+        int routers = 0;
+        int endpoints = 0;
+        int routerLinks = 0;
+        int attachments = 0;
+        int pendingEndpoints = 0;
+        for (const NocEditorSelection& item : selection.items) {
+            switch (item.kind) {
+            case NocEditorSelection::Kind::Router: ++routers; break;
+            case NocEditorSelection::Kind::Endpoint: ++endpoints; break;
+            case NocEditorSelection::Kind::RouterLink: ++routerLinks; break;
+            case NocEditorSelection::Kind::EndpointAttachment: ++attachments; break;
+            case NocEditorSelection::Kind::PendingEndpoint: ++pendingEndpoints; break;
+            case NocEditorSelection::Kind::None: break;
             }
         }
+        QStringList counts;
+        if (routers > 0) counts.append(QStringLiteral("%1 Router(s)").arg(routers));
+        if (endpoints > 0) counts.append(QStringLiteral("%1 Endpoint(s)").arg(endpoints));
+        if (routerLinks > 0) counts.append(QStringLiteral("%1 Router Link(s)").arg(routerLinks));
+        if (attachments > 0) {
+            counts.append(QStringLiteral("%1 Endpoint Attachment(s)").arg(attachments));
+        }
+        if (pendingEndpoints > 0) {
+            counts.append(QStringLiteral("%1 unattached Endpoint draft(s)").arg(pendingEndpoints));
+        }
+        const QString meshNote = routers > 0 || routerLinks > 0
+            ? QStringLiteral("<br>Routers and Router Links remain fixed semantic projections "
+                             "of the Mesh; selection does not expose topology creation, deletion, "
+                             "or rewiring.")
+            : QString();
+        m_selectionSummary->setText(
+            QStringLiteral("<b>%1 items selected</b><br>%2%3")
+                .arg(selection.items.size())
+                .arg(counts.join(QStringLiteral(" · ")))
+                .arg(meshNote));
+        return;
     }
-    if (selection.kind == NocEditorSelection::Kind::PendingEndpoint) {
+
+    const NocEditorSelection& item = selection.items.front();
+    if (item.kind == NocEditorSelection::Kind::Router) {
+        std::optional<RouterPosition> position = item.router;
+        if (!position) {
+            position = routerPositionFromId(item.id);
+        }
+        if (position) {
+            m_selectedRouter = position;
+        }
+        m_selectionSummary->setText(
+            QStringLiteral("<b>Router %1</b><br>Column x: %2<br>Row y: %3<br>"
+                           "Router identity and every Router-to-Router Link are derived from "
+                           "the fixed Mesh. Dragging changes only this local Workspace layout; "
+                           "Router creation, deletion, and manual rewiring are not exposed.")
+                .arg(item.id.toHtmlEscaped())
+                .arg(position ? position->x : -1)
+                .arg(position ? position->y : -1));
+        return;
+    }
+    const auto endpoint = m_design
+        ? std::find_if(m_design->endpoints.cbegin(), m_design->endpoints.cend(),
+                       [&item](const EndpointInstance& candidate) {
+                           return candidate.id == item.id;
+                       })
+        : QVector<EndpointInstance>::const_iterator{};
+    const bool endpointFound = m_design && endpoint != m_design->endpoints.cend();
+    if (item.kind == NocEditorSelection::Kind::Endpoint && endpointFound) {
+        m_selectionSummary->setText(
+            QStringLiteral("<b>Endpoint %1</b><br>Type: %2<br>Router: (%3, %4)<br>"
+                           "Slot: %5<br>Moving the node changes only its Workspace position; "
+                           "the attachment changes only through an explicit connection action.")
+                .arg(endpoint->id.toHtmlEscaped(), endpoint->type.toHtmlEscaped())
+                .arg(endpoint->attachment.router.x)
+                .arg(endpoint->attachment.router.y)
+                .arg(endpoint->attachment.slot.value_or(QStringLiteral("automatic"))
+                         .toHtmlEscaped()));
+        return;
+    }
+    if (item.kind == NocEditorSelection::Kind::RouterLink && m_design) {
+        QString endpointsText;
+        if (const auto endpoints = edgeEndpoints(
+                *m_design, ElementRef{ElementKind::RouterLink, item.id})) {
+            endpointsText = QStringLiteral("<br>From: %1<br>To: %2")
+                                .arg(endpoints->first.id.toHtmlEscaped(),
+                                     endpoints->second.id.toHtmlEscaped());
+        }
+        m_selectionSummary->setText(
+            QStringLiteral("<b>Router Link %1</b>%2<br>This Link is derived from the fixed "
+                           "Mesh and cannot be created, deleted, or rewired manually.")
+                .arg(item.id.toHtmlEscaped(), endpointsText));
+        return;
+    }
+    if (item.kind == NocEditorSelection::Kind::EndpointAttachment) {
+        if (endpointFound) {
+            m_selectionSummary->setText(
+                QStringLiteral("<b>Endpoint Attachment %1</b><br>Router: (%2, %3)<br>"
+                               "Slot: %4<br>This semantic attachment may be disconnected or "
+                               "reassigned explicitly. Endpoint canvas placement remains "
+                               "independent Workspace state.")
+                    .arg(endpoint->id.toHtmlEscaped())
+                    .arg(endpoint->attachment.router.x)
+                    .arg(endpoint->attachment.router.y)
+                    .arg(endpoint->attachment.slot.value_or(QStringLiteral("automatic"))
+                             .toHtmlEscaped()));
+        } else {
+            m_selectionSummary->setText(
+                QStringLiteral("<b>Endpoint Attachment %1</b>")
+                    .arg(item.id.toHtmlEscaped()));
+        }
+        return;
+    }
+    if (item.kind == NocEditorSelection::Kind::PendingEndpoint) {
         m_selectionSummary->setText(
             QStringLiteral("<b>Unattached Endpoint</b><br>Type: %1<br>"
                            "Drag the node onto a Router to attach it.")
-                .arg(selection.id));
+                .arg(item.id.toHtmlEscaped()));
         return;
     }
     m_selectionSummary->setText(QStringLiteral("Nothing selected."));
@@ -1754,6 +1931,7 @@ void FinepaperMainWindow::adoptDesignResult(const DesignResult& result, const QS
 
 void FinepaperMainWindow::refreshDesignViews() {
     if (!m_design) {
+        m_resolvedDesign.reset();
         setWindowTitle(QStringLiteral("Finepaper — NoC Workbench[*]"));
         m_nodeEditor->setDesign(nullptr);
         m_designOverview->setText(QStringLiteral("No design is open."));
@@ -1763,6 +1941,7 @@ void FinepaperMainWindow::refreshDesignViews() {
         return;
     }
 
+    m_resolvedDesign = resolveDesign(*m_design);
     const bool packageMetadataAvailable = packageForDesign();
     setWindowTitle(QStringLiteral("Finepaper — %1[*]").arg(m_design->name));
     rebuildParameterEditors();

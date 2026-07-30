@@ -1,6 +1,9 @@
 #pragma once
 
+#include "gui/domain_presentation.h"
 #include "noc/model.h"
+
+#include <QtNodes/Definitions>
 
 #include <QHash>
 #include <QPointF>
@@ -33,12 +36,49 @@ struct NocEditorSelection {
         None,
         Router,
         Endpoint,
+        RouterLink,
+        EndpointAttachment,
         PendingEndpoint
     };
 
     Kind kind = Kind::None;
     QString id;
     std::optional<RouterPosition> router;
+
+    [[nodiscard]] std::optional<ElementRef> element() const {
+        switch (kind) {
+        case Kind::Router:
+            return ElementRef{ElementKind::Router, id};
+        case Kind::Endpoint:
+            return ElementRef{ElementKind::Endpoint, id};
+        case Kind::RouterLink:
+            return ElementRef{ElementKind::RouterLink, id};
+        case Kind::EndpointAttachment:
+            return ElementRef{ElementKind::EndpointAttachment, id};
+        case Kind::None:
+        case Kind::PendingEndpoint:
+            return std::nullopt;
+        }
+        return std::nullopt;
+    }
+};
+
+struct NocEditorSelectionSet {
+    QVector<NocEditorSelection> items;
+
+    bool empty() const { return items.isEmpty(); }
+    qsizetype size() const { return items.size(); }
+
+    [[nodiscard]] QVector<ElementRef> elements() const {
+        QVector<ElementRef> references;
+        references.reserve(items.size());
+        for (const NocEditorSelection& item : items) {
+            if (const std::optional<ElementRef> reference = item.element()) {
+                references.append(*reference);
+            }
+        }
+        return references;
+    }
 };
 
 struct NocEndpointTypeItem {
@@ -76,12 +116,15 @@ public:
     bool routerCollapsed(const QString& routerId) const;
     void regularizeLayout();
     void zoomToFit();
+    void setDomainPresentation(DomainPresentationSnapshot presentation);
+    [[nodiscard]] const DomainPresentationSnapshot& domainPresentation() const;
 
     std::function<bool(const QString&, NocAttachmentTarget)> endpointTypeDropped;
     std::function<bool(const QString&, NocAttachmentTarget)> endpointMoveRequested;
     std::function<bool(const EndpointInstance&, NocAttachmentTarget)> detachedEndpointDropped;
     std::function<bool(const QString&)> endpointRemovalRequested;
     std::function<void(const NocEditorSelection&)> selectionChanged;
+    std::function<void(const NocEditorSelectionSet&)> semanticSelectionChanged;
 
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
@@ -93,6 +136,13 @@ private:
         std::optional<RouterPosition> router;
         QPointF projectedPosition;
         QString endpointType;
+    };
+
+    struct SelectionIdentity {
+        NocEditorSelection::Kind kind = NocEditorSelection::Kind::None;
+        QString id;
+
+        bool operator==(const SelectionIdentity&) const = default;
     };
 
     struct PendingEndpoint {
@@ -119,6 +169,7 @@ private:
     void rebuildGraph(bool zoomToContents = true);
     void loadWorkspaceLayout();
     void saveWorkspaceLayout() const;
+    void handleSceneSelectionChanged();
     void handleNodeSelection(QtNodes::NodeId nodeId);
     void handlePointerReleased(const QPoint& viewportPosition);
     void handleConnectionCreated(QtNodes::ConnectionId connectionId);
@@ -163,6 +214,12 @@ private:
         QtNodes::NodeId routerNode,
         std::optional<QtNodes::NodeId> ignoredEndpoint = std::nullopt) const;
     QString endpointTypeLabel(const QString& endpointType) const;
+    std::optional<ElementRef> elementForConnection(
+        QtNodes::ConnectionId connectionId) const;
+    std::optional<NocEditorSelection> selectionForIdentity(
+        const SelectionIdentity& identity) const;
+    void emitSelectionChanged();
+    void applyDomainPresentation();
     void restoreSelection();
     void highlightNeighborhood(QtNodes::NodeId nodeId);
     void clearNeighborhoodHighlight();
@@ -174,6 +231,8 @@ private:
     AnimatedGraphicsView* m_view = nullptr;
     QHash<QtNodes::NodeId, NodeMetadata> m_metadata;
     QHash<QString, QtNodes::NodeId> m_routerNodes;
+    QHash<ElementRef, QtNodes::NodeId> m_elementNodes;
+    QHash<ElementRef, QtNodes::ConnectionId> m_elementConnections;
     QHash<QString, QPointF> m_routerLayout;
     QHash<QString, QPointF> m_endpointLayout;
     QSet<QString> m_collapsedRouters;
@@ -185,8 +244,8 @@ private:
     std::optional<EndpointAttachmentDraft> m_endpointAttachmentDraft;
     QSet<QString> m_pendingConnectionDetachments;
     int m_nextPendingEndpoint = 0;
-    NocEditorSelection::Kind m_selectedKind = NocEditorSelection::Kind::None;
-    QString m_selectedId;
+    QVector<SelectionIdentity> m_selectedItems;
+    DomainPresentationSnapshot m_domainPresentation;
     bool m_hasStoredCollapsedLayout = false;
     bool m_editingEnabled = true;
     QString m_layoutKey;

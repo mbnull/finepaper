@@ -7,6 +7,11 @@
 namespace finepaper {
 
 inline constexpr int relatedHighlightDataRole = 0x464e01;
+inline constexpr int domainColorsDataRole = 0x464e10;
+inline constexpr int domainAssignmentStateDataRole = 0x464e11;
+inline constexpr int domainCrossingDataRole = 0x464e12;
+inline constexpr int domainCrossingColorDataRole = 0x464e13;
+inline constexpr int domainOverrideDataRole = 0x464e14;
 
 enum class OrthogonalRouteAxis {
     Horizontal,

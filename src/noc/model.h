@@ -86,6 +86,8 @@ struct ElementRef {
     bool operator==(const ElementRef&) const = default;
 };
 
+size_t qHash(const ElementRef& reference, size_t seed = 0) noexcept;
+
 struct DomainMembership {
     ElementRef element;
     QHash<QString, QStringList> assignments;

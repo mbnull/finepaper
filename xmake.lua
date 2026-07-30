@@ -112,6 +112,20 @@ target("finepaper-application-domain-tests")
         trim_output = true
     })
 
+target("finepaper-domain-presentation-tests")
+    add_rules("qt.console")
+    add_frameworks("QtGui")
+    set_kind("binary")
+    set_group("test")
+    set_default(false)
+    add_deps("finepaper-application")
+    add_files("tests/domain_presentation_tests.cpp")
+    add_files("src/gui/domain_presentation.cpp")
+    add_includedirs("src")
+    add_tests("default", {
+        trim_output = true
+    })
+
 target("finepaper-gui-smoke")
     add_rules("qt.widgetapp")
     add_frameworks("QtConcurrent")
@@ -123,6 +137,7 @@ target("finepaper-gui-smoke")
     add_files("tests/gui_smoke_test.cpp")
     add_files("src/gui/main_window.cpp")
     add_files("src/gui/animated_graphics_view.cpp")
+    add_files("src/gui/domain_presentation.cpp")
     add_files("src/gui/noc_editor_style.cpp")
     add_files("src/gui/noc_node_editor.cpp")
     add_files("src/gui/workbench_view_registry.cpp")
