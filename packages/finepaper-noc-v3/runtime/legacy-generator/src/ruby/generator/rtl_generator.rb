@@ -3,6 +3,7 @@ require 'fileutils'
 require 'json'
 require_relative '../../../../lib/domain_rtl_context'
 require_relative '../../../../lib/domain_rtl_evidence'
+require_relative '../../../../lib/rtl_hierarchy_manifest'
 
 class RtlGenerator
   TIMING_ROLE = 'timing-domain'.freeze
@@ -61,11 +62,13 @@ class RtlGenerator
     FileUtils.mkdir_p(output_dir)
 
     lookup = xp_module_lookup
+    ni_lookup = ni_module_lookup
+    link_directions = xp_link_directions_by_id
     set_context(:@domain_rtl_context, domain_context)
     set_context(:@domain_rtl_rendering, domain_rendering)
     set_context(:@xp_module_lookup, lookup)
-    set_context(:@xp_link_directions_by_id, xp_link_directions_by_id)
-    set_context(:@ni_module_lookup, ni_module_lookup)
+    set_context(:@xp_link_directions_by_id, link_directions)
+    set_context(:@ni_module_lookup, ni_lookup)
     set_context(:@ni_features, ni_features)
 
     xp_paths = xp_variants.map do |variant|
@@ -100,6 +103,10 @@ class RtlGenerator
     top_path = File.join(output_dir, "#{@noc.name}_top.v")
     render('top.v.erb', top_path)
     write_filelist(output_dir, xp_paths + ni_paths + [top_path], library_dirs: library_dirs)
+    write_rtl_hierarchy(
+      output_dir, domain_context, domain_rendering, lookup, ni_lookup,
+      link_directions
+    )
     write_domain_evidence(output_dir, domain_context, domain_rendering)
   ensure
     clear_context(:@xp, :@xp_module_name, :@xp_variant_signature,
@@ -656,6 +663,230 @@ class RtlGenerator
       File.join(output_dir, evidence_name),
       JSON.pretty_generate(evidence) + "\n"
     )
+  end
+
+  def write_rtl_hierarchy(output_dir, context, rendering, router_modules,
+                          endpoint_modules, link_directions)
+    builder = FinepaperNoc::RtlHierarchyManifestBuilder.new(
+      context: context,
+      design: @noc.name,
+      top_module: "#{@noc.name}_top",
+      top_artifact: "#{@noc.name}_top.v"
+    )
+    @noc.xps.each do |xp|
+      builder.register_element(
+        element: {'kind' => 'router', 'id' => domain_router_id(xp)},
+        module_name: router_modules.fetch(xp.id),
+        instance: "u_#{xp.id}"
+      )
+    end
+    @noc.endpoints.each do |endpoint|
+      builder.register_element(
+        element: {'kind' => 'endpoint', 'id' => endpoint.id},
+        module_name: endpoint_modules.fetch(endpoint.id),
+        instance: "u_ni_#{endpoint.id}"
+      )
+    end
+    rendering.fetch('clockDomains').each do |domain|
+      builder.register_reset_synchronizer(
+        timing_domain: domain.fetch('domain'),
+        module_name: 'fp_reset_synchronizer',
+        instance: "u_reset_#{domain.fetch('token')}",
+        clock_signal: domain.fetch('clockSignal'),
+        async_reset_signal: 'rst_n',
+        local_reset_signal: domain.fetch('resetSignal')
+      )
+    end
+    rendered_bridges(rendering).each do |record|
+      producer_pins, consumer_pins = emitted_traffic_pins(
+        record, link_directions
+      )
+      bridge = if record.fetch('crossing')
+                 {
+                   'module' => 'fp_async_ready_valid_fifo',
+                   'instance' => record.fetch('instance'),
+                   'placement' => 'infrastructure',
+                   'sourcePins' => {
+                     'payload' => 'src_payload_i',
+                     'valid' => 'src_valid_i',
+                     'ready' => 'src_ready_o'
+                   },
+                   'destinationPins' => {
+                     'payload' => 'dst_payload_o',
+                     'valid' => 'dst_valid_o',
+                     'ready' => 'dst_ready_i'
+                   }
+                 }
+               end
+      builder.register_edge_direction(
+        edge: record.fetch('edge'),
+        orientation: record.fetch('orientation'),
+        producer: record.fetch('producer'),
+        consumer: record.fetch('consumer'),
+        producer_pins: producer_pins,
+        consumer_pins: consumer_pins,
+        source_bundle: ready_valid_bundle(record.fetch('sourceSignal')),
+        destination_bundle: ready_valid_bundle(
+          record.fetch('destinationSignal')
+        ),
+        bridge: bridge
+      )
+    end
+    manifest = builder.build
+    File.write(
+      File.join(output_dir, "#{@noc.name}_rtl_hierarchy.json"),
+      JSON.pretty_generate(manifest) + "\n"
+    )
+  end
+
+  def rendered_bridges(rendering)
+    values = rendering.fetch('routerTraffic').values
+    rendering.fetch('endpointAttachments').keys.sort.each do |endpoint_id|
+      attachment = rendering.fetch('endpointAttachments').fetch(endpoint_id)
+      values += %w[routerToEndpoint endpointToRouter].map do |direction|
+        attachment.fetch(direction)
+      end
+    end
+    values
+  end
+
+  def ready_valid_bundle(name)
+    {
+      'name' => name,
+      'payload' => "#{name}_flit",
+      'valid' => "#{name}_valid",
+      'ready' => "#{name}_ready"
+    }
+  end
+
+  def emitted_traffic_pins(record, link_directions)
+    edge = record.fetch('edge')
+    case edge.fetch('kind')
+    when 'router-link'
+      emitted_router_link_pins(record, link_directions)
+    when 'endpoint-attachment'
+      emitted_attachment_pins(record)
+    else
+      fail_hierarchy!(
+        'rtl_hierarchy.unknown_emitted_edge_kind', '/emitter/edges',
+        "cannot map emitted pins for edge kind #{edge.fetch('kind')}"
+      )
+    end
+  end
+
+  def emitted_router_link_pins(record, link_directions)
+    edge = record.fetch('edge')
+    producer = emitted_router_for!(record.fetch('producer'), edge)
+    consumer = emitted_router_for!(record.fetch('consumer'), edge)
+    producer_port = emitted_router_port!(
+      producer, consumer, edge.fetch('id'), link_directions
+    )
+    consumer_port = emitted_router_port!(
+      consumer, producer, edge.fetch('id'), link_directions
+    )
+    [
+      ready_valid_pins("flit_out_#{producer_port}"),
+      ready_valid_pins("flit_in_#{consumer_port}")
+    ]
+  end
+
+  def emitted_router_for!(reference, edge)
+    unless reference.fetch('kind') == 'router'
+      fail_hierarchy!(
+        'rtl_hierarchy.invalid_emitted_router_endpoint', '/emitter/edges',
+        "Router Link #{edge.fetch('id')} traffic endpoint is not a Router"
+      )
+    end
+    matches = @noc.xps.select do |xp|
+      domain_router_id(xp) == reference.fetch('id')
+    end
+    unless matches.one?
+      fail_hierarchy!(
+        'rtl_hierarchy.ambiguous_emitted_router', '/emitter/routers',
+        "Router element #{reference.fetch('id')} maps to #{matches.size} RTL instances"
+      )
+    end
+    matches.first
+  end
+
+  def emitted_router_port!(router, neighbor, edge_id, link_directions)
+    matches = link_directions.fetch(router.id).select do |link|
+      link.fetch(:neighbor).id == neighbor.id &&
+        domain_link_id(link.fetch(:connection)) == edge_id
+    end
+    unless matches.one?
+      fail_hierarchy!(
+        'rtl_hierarchy.ambiguous_emitted_router_port', '/emitter/routerPorts',
+        "edge #{edge_id} maps to #{matches.size} ports on Router #{router.id}"
+      )
+    end
+    matches.first[:port] || matches.first.fetch(:abbr)
+  end
+
+  def emitted_attachment_pins(record)
+    edge = record.fetch('edge')
+    endpoint_id = edge.fetch('id')
+    router = xp_for_endpoint(endpoint_id)
+    slots = router.endpoints.each_index.select do |index|
+      router.endpoints.fetch(index) == endpoint_id
+    end
+    unless slots.one?
+      fail_hierarchy!(
+        'rtl_hierarchy.ambiguous_emitted_endpoint_slot',
+        '/emitter/endpointSlots',
+        "Endpoint #{endpoint_id} maps to #{slots.size} local Router ports"
+      )
+    end
+    slot = slots.first
+    router_reference = {'kind' => 'router', 'id' => domain_router_id(router)}
+    endpoint_reference = {'kind' => 'endpoint', 'id' => endpoint_id}
+    case record.fetch('orientation')
+    when 'from-to'
+      validate_emitted_traffic_endpoints!(
+        record, router_reference, endpoint_reference
+      )
+      [
+        ready_valid_pins("local#{slot}_flit_out"),
+        ready_valid_pins('ep0_router_flit_out')
+      ]
+    when 'to-from'
+      validate_emitted_traffic_endpoints!(
+        record, endpoint_reference, router_reference
+      )
+      [
+        ready_valid_pins('ep0_router_flit_in'),
+        ready_valid_pins("local#{slot}_flit_in")
+      ]
+    else
+      fail_hierarchy!(
+        'rtl_hierarchy.invalid_emitted_orientation', '/emitter/edges',
+        "unknown attachment orientation #{record.fetch('orientation')}"
+      )
+    end
+  end
+
+  def validate_emitted_traffic_endpoints!(record, producer, consumer)
+    return if record.fetch('producer') == producer &&
+              record.fetch('consumer') == consumer
+
+    edge = record.fetch('edge')
+    fail_hierarchy!(
+      'rtl_hierarchy.emitted_traffic_endpoint_mismatch', '/emitter/edges',
+      "edge #{edge.fetch('id')} orientation #{record.fetch('orientation')} " \
+      'does not match its emitted product pins'
+    )
+  end
+
+  def ready_valid_pins(payload)
+    {
+      'payload' => payload,
+      'valid' => "#{payload}_valid",
+      'ready' => "#{payload}_ready"
+    }
+  end
+
+  def fail_hierarchy!(code, path, message)
+    raise FinepaperNoc::RtlHierarchyManifestError.new(code, path, message)
   end
 
   def set_context(name, value)

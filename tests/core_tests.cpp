@@ -9,11 +9,13 @@
 #include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
+#include <QHash>
 #include <QJsonArray>
 #include <QRegularExpression>
 #include <QTemporaryDir>
 #include <QTextStream>
 #include <QThread>
+#include <QVector>
 
 #include <algorithm>
 
@@ -101,6 +103,27 @@ QString readArtifact(const GenerationResult& result, const Artifact* artifact) {
     QFile file(QDir(result.outputDirectory).filePath(artifact->path));
     return file.open(QIODevice::ReadOnly) ? QString::fromUtf8(file.readAll())
                                           : QString{};
+}
+
+struct RtlInstanceRecord {
+    QString module;
+    QString block;
+};
+
+QHash<QString, QVector<RtlInstanceRecord>> indexRtlInstances(
+    const QString& rtl) {
+    static const QRegularExpression expression(
+        QStringLiteral(
+            R"((?<![A-Za-z0-9_$])([A-Za-z_][A-Za-z0-9_$]*)\s*(?:#\s*\([^;]*?\)\s*)?([A-Za-z_][A-Za-z0-9_$]*)\s*\([^;]*?\)\s*;)"),
+        QRegularExpression::DotMatchesEverythingOption);
+    QHash<QString, QVector<RtlInstanceRecord>> instances;
+    QRegularExpressionMatchIterator matches = expression.globalMatch(rtl);
+    while (matches.hasNext()) {
+        const QRegularExpressionMatch match = matches.next();
+        instances[match.captured(2)].append(
+            RtlInstanceRecord{match.captured(1), match.captured(0)});
+    }
+    return instances;
 }
 
 bool preparePackageFixture(const QString& packageRoot,
@@ -914,6 +937,7 @@ int main(int argc, char** argv) {
     QString crossingConstraintsText;
     QJsonObject crossingImplementation;
     QString crossingImplementationText;
+    QJsonObject crossingHierarchy;
     QString crossingTopText;
     QString crossingEvidenceText;
     if (crossingValidation.success && crossingOutput.isValid()) {
@@ -922,6 +946,8 @@ int main(int argc, char** argv) {
         const Artifact* topArtifact = primaryArtifact(generation);
         const Artifact* evidenceArtifact = artifactWithType(
             generation, QStringLiteral("implementation-evidence"));
+        const Artifact* hierarchyArtifact = artifactWithType(
+            generation, QStringLiteral("rtl-hierarchy"));
         crossingTopText = readArtifact(generation, topArtifact);
         crossingEvidenceText = readArtifact(generation, evidenceArtifact);
         QJsonObject crossingEvidence;
@@ -929,6 +955,11 @@ int main(int argc, char** argv) {
             crossingEvidence = loadJsonObject(
                 QDir(generation.outputDirectory).filePath(
                     evidenceArtifact->path)).object;
+        }
+        if (hierarchyArtifact) {
+            crossingHierarchy = loadJsonObject(
+                QDir(generation.outputDirectory).filePath(
+                    hierarchyArtifact->path)).object;
         }
         const auto constraints = std::find_if(
             generation.artifacts.cbegin(), generation.artifacts.cend(),
@@ -1105,6 +1136,128 @@ int main(int argc, char** argv) {
                          QStringLiteral("fp_reset_synchronizer #(")) == 2,
               QStringLiteral(
                   "Domain RTL evidence maps two active clock ports and reset synchronizers to the generated top"));
+
+        bool hierarchyMatchesTop = true;
+        int deferredCombinedBoundaries = 0;
+        const auto rtlInstances = indexRtlInstances(crossingTopText);
+        QHash<QString, QString> hierarchyInstanceBlocks;
+        const QJsonArray hierarchyElements = crossingHierarchy.value(
+            QStringLiteral("elements")).toArray();
+        for (const QJsonValue& value : hierarchyElements) {
+            const QJsonObject element = value.toObject();
+            const QString module = element.value(
+                QStringLiteral("module")).toString();
+            const QString instance = element.value(
+                QStringLiteral("instance")).toString();
+            const QVector<RtlInstanceRecord> matches = rtlInstances.value(
+                instance);
+            const QString block = matches.size() == 1
+                ? matches.first().block
+                : QString{};
+            hierarchyMatchesTop = hierarchyMatchesTop
+                && !module.isEmpty()
+                && !instance.isEmpty()
+                && matches.size() == 1
+                && matches.first().module == module
+                && !block.isEmpty()
+                && !hierarchyInstanceBlocks.contains(instance);
+            hierarchyInstanceBlocks.insert(instance, block);
+        }
+        const QJsonArray hierarchyDirections = crossingHierarchy.value(
+            QStringLiteral("edgeDirections")).toArray();
+        for (const QJsonValue& value : hierarchyDirections) {
+            const QJsonObject direction = value.toObject();
+            const QJsonObject bridge = direction.value(
+                QStringLiteral("bridge")).toObject();
+            const bool bridged = !bridge.isEmpty();
+            if (bridged) {
+                const QString module = bridge.value(
+                    QStringLiteral("module")).toString();
+                const QString instance = bridge.value(
+                    QStringLiteral("instance")).toString();
+                const QVector<RtlInstanceRecord> matches = rtlInstances.value(
+                    instance);
+                const QString block = matches.size() == 1
+                    ? matches.first().block
+                    : QString{};
+                hierarchyMatchesTop = hierarchyMatchesTop
+                    && matches.size() == 1
+                    && matches.first().module == module
+                    && !block.isEmpty()
+                    && !hierarchyInstanceBlocks.contains(instance);
+                hierarchyInstanceBlocks.insert(instance, block);
+            }
+            const QJsonArray flows = direction.value(
+                QStringLiteral("signalFlows")).toArray();
+            hierarchyMatchesTop = hierarchyMatchesTop
+                && flows.size() == (bridged ? 6 : 3);
+            for (const QJsonValue& flowValue : flows) {
+                const QJsonObject flow = flowValue.toObject();
+                const QString type = flow.value(
+                    QStringLiteral("type")).toString();
+                const QString signal = flow.value(
+                    QStringLiteral("signal")).toString();
+                if (type == QStringLiteral("ready")) {
+                    hierarchyMatchesTop = hierarchyMatchesTop
+                        && flow.value(QStringLiteral("direction")).toString()
+                            == QStringLiteral("consumer-to-producer");
+                }
+                for (const QString& terminalName : {
+                         QStringLiteral("driver"),
+                         QStringLiteral("receiver")}) {
+                    const QJsonObject terminal = flow.value(
+                        terminalName).toObject();
+                    const QString instance = terminal.value(
+                        QStringLiteral("instance")).toString();
+                    const QString pin = terminal.value(
+                        QStringLiteral("pin")).toString();
+                    const QString instanceBlock = hierarchyInstanceBlocks.value(
+                        instance);
+                    hierarchyMatchesTop = hierarchyMatchesTop
+                        && !signal.isEmpty()
+                        && !instance.isEmpty()
+                        && !pin.isEmpty()
+                        && !instanceBlock.isEmpty()
+                        && instanceBlock.contains(
+                            QStringLiteral(".%1(%2)").arg(pin, signal));
+                }
+            }
+            const QJsonObject powerBoundary = direction.value(
+                QStringLiteral("powerBoundary")).toObject();
+            if (powerBoundary.value(QStringLiteral("status")).toString()
+                == QStringLiteral("deferred")) {
+                ++deferredCombinedBoundaries;
+                hierarchyMatchesTop = hierarchyMatchesTop
+                    && bridged
+                    && direction.value(
+                           QStringLiteral("sourceSupplyDomain")).toString()
+                        != direction.value(
+                               QStringLiteral("destinationSupplyDomain"))
+                               .toString()
+                    && powerBoundary.value(
+                           QStringLiteral("reasonCode")).toString()
+                        == QStringLiteral(
+                            "rtl_hierarchy.infrastructure_bridge_supply_unowned");
+            }
+        }
+        check(hierarchyArtifact
+                  && crossingHierarchy.value(QStringLiteral("format")).toString()
+                      == QStringLiteral("finepaper.noc-rtl-hierarchy")
+                  && crossingHierarchy.value(
+                         QStringLiteral("formatVersion")).toInt() == 1
+                  && crossingHierarchy.value(QStringLiteral("topModule")).toString()
+                      == crossingEvidence.value(QStringLiteral("rtl")).toObject()
+                             .value(QStringLiteral("topModule")).toString()
+                  && hierarchyElements.size()
+                      == crossingImplementation.value(
+                             QStringLiteral("entityBindings")).toArray().size()
+                  && hierarchyDirections.size()
+                      == crossingImplementation.value(
+                             QStringLiteral("edgeBindings")).toArray().size() * 2
+                  && deferredCombinedBoundaries > 0
+                  && hierarchyMatchesTop,
+              QStringLiteral(
+                  "RTL hierarchy artifact binds every emitted element and ready/valid flow to concrete top-level instances and pins"));
 
         QStringList realizedDirections;
         QStringList realizedInstances;

@@ -1,0 +1,456 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://finepaper.dev/schema/noc-power-intent-v1.json",
+  "title": "Finepaper NoC power intent",
+  "description": "Package-owned logical power intent consumed by the Finepaper NoC runtime.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "formatVersion",
+    "supplies",
+    "controls",
+    "domains",
+    "defaultSystemState",
+    "systemStates"
+  ],
+  "properties": {
+    "format": {
+      "const": "finepaper.noc-power-intent"
+    },
+    "formatVersion": {
+      "const": 1
+    },
+    "supplies": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/supply"
+      }
+    },
+    "controls": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/control"
+      }
+    },
+    "domains": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/domain"
+      }
+    },
+    "defaultSystemState": {
+      "$ref": "#/$defs/nonEmptyString"
+    },
+    "systemStates": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/systemState"
+      }
+    },
+    "technology": {
+      "$ref": "#/$defs/technology"
+    }
+  },
+  "$defs": {
+    "nonEmptyString": {
+      "type": "string",
+      "pattern": "^(?=.*\\S)[^\\u0000-\\u001F\\u007F-\\u009F]*$"
+    },
+    "hdlIdentifier": {
+      "type": "string",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_$]*$"
+    },
+    "supply": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "port", "net", "states"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "kind": {
+          "enum": ["power", "ground"]
+        },
+        "port": {
+          "$ref": "#/$defs/hdlIdentifier"
+        },
+        "net": {
+          "$ref": "#/$defs/hdlIdentifier"
+        },
+        "states": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/supplyState"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "power"
+              }
+            },
+            "required": ["kind"]
+          },
+          "then": {
+            "properties": {
+              "states": {
+                "items": {
+                  "if": {
+                    "properties": {
+                      "condition": {
+                        "const": "full-on"
+                      }
+                    },
+                    "required": ["condition"]
+                  },
+                  "then": {
+                    "properties": {
+                      "voltageMv": {
+                        "exclusiveMinimum": 0
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "states": {
+                "items": {
+                  "if": {
+                    "properties": {
+                      "condition": {
+                        "const": "full-on"
+                      }
+                    },
+                    "required": ["condition"]
+                  },
+                  "then": {
+                    "properties": {
+                      "voltageMv": {
+                        "const": 0
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "supplyState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "condition"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "condition": {
+          "enum": ["full-on", "off"]
+        },
+        "voltageMv": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "condition": {
+                "const": "full-on"
+              }
+            },
+            "required": ["condition"]
+          },
+          "then": {
+            "required": ["voltageMv"]
+          },
+          "else": {
+            "not": {
+              "required": ["voltageMv"]
+            }
+          }
+        }
+      ]
+    },
+    "control": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "signal", "source", "activeSense"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "signal": {
+          "$ref": "#/$defs/hdlIdentifier"
+        },
+        "source": {
+          "enum": ["top-port", "upf-port"]
+        },
+        "activeSense": {
+          "enum": ["high", "low"]
+        },
+        "ownerDomain": {
+          "$ref": "#/$defs/nonEmptyString"
+        }
+      }
+    },
+    "domain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "domain",
+        "primaryPower",
+        "primaryGround",
+        "mode",
+        "defaultState",
+        "states"
+      ],
+      "properties": {
+        "domain": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "primaryPower": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "primaryGround": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "mode": {
+          "enum": ["always-on", "switchable"]
+        },
+        "defaultState": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "states": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/domainState"
+          }
+        },
+        "powerSwitch": {
+          "$ref": "#/$defs/powerSwitch"
+        },
+        "retention": {
+          "$ref": "#/$defs/retention"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "const": "switchable"
+              }
+            },
+            "required": ["mode"]
+          },
+          "then": {
+            "required": ["powerSwitch"]
+          },
+          "else": {
+            "not": {
+              "required": ["powerSwitch"]
+            },
+            "properties": {
+              "states": {
+                "items": {
+                  "properties": {
+                    "behavior": {
+                      "const": "operational"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "domainState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "powerState", "groundState", "behavior"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "powerState": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "groundState": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "behavior": {
+          "enum": ["operational", "retained", "corrupt"]
+        }
+      }
+    },
+    "powerSwitch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["inputSupply", "outputSupply", "control", "onSense"],
+      "properties": {
+        "inputSupply": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "outputSupply": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "control": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "onSense": {
+          "enum": ["high", "low"]
+        }
+      }
+    },
+    "retention": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "supply",
+        "saveControl",
+        "restoreControl",
+        "location"
+      ],
+      "properties": {
+        "supply": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "saveControl": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "restoreControl": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "location": {
+          "enum": ["self", "parent"]
+        }
+      }
+    },
+    "systemState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "domainStates"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "domainStates": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/systemDomainState"
+          }
+        }
+      }
+    },
+    "systemDomainState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["domain", "state"],
+      "properties": {
+        "domain": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "state": {
+          "$ref": "#/$defs/nonEmptyString"
+        }
+      }
+    },
+    "technology": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profile", "interfaceCells"],
+      "properties": {
+        "profile": {
+          "enum": ["abstract", "upf-interface-cells"]
+        },
+        "interfaceCells": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/interfaceCell"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "profile": {
+                "const": "abstract"
+              }
+            },
+            "required": ["profile"]
+          },
+          "then": {
+            "properties": {
+              "interfaceCells": {
+                "maxItems": 0
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "interfaceCells": {
+                "minItems": 1
+              }
+            }
+          }
+        }
+      ]
+    },
+    "interfaceCell": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "cells"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "kind": {
+          "enum": ["isolation", "level-shifter", "retention"]
+        },
+        "cells": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/nonEmptyString"
+          }
+        },
+        "direction": {
+          "enum": ["up", "down"]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "level-shifter"
+              }
+            },
+            "required": ["kind"]
+          },
+          "else": {
+            "not": {
+              "required": ["direction"]
+            }
+          }
+        }
+      ]
+    }
+  }
+}

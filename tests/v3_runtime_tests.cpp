@@ -62,6 +62,16 @@ int main(int argc, char** argv) {
         ruby,
         projectRoot,
         QStringLiteral(
+            "packages/finepaper-noc-v3/runtime/test/test_power_intent_compiler.rb"));
+    runRubyTest(
+        ruby,
+        projectRoot,
+        QStringLiteral(
+            "packages/finepaper-noc-v3/runtime/test/test_rtl_hierarchy_manifest.rb"));
+    runRubyTest(
+        ruby,
+        projectRoot,
+        QStringLiteral(
             "packages/finepaper-noc-v3/runtime/test/test_domain_rtl_materialization.rb"));
     runRubyTest(
         ruby,

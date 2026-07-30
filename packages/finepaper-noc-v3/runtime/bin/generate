@@ -630,6 +630,8 @@ def artifact_list(output_dir, design_name)
              'implementation-plan'
            elsif File.basename(path) == "#{design_name}_domain_implementation_evidence.json"
              'implementation-evidence'
+           elsif File.basename(path) == "#{design_name}_rtl_hierarchy.json"
+             'rtl-hierarchy'
            elsif %w[.v .sv].include?(File.extname(path).downcase)
              'rtl'
            else
