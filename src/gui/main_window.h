@@ -81,6 +81,7 @@ private:
     void setOperationBusy(bool busy, const QString& message = {});
     void setDirty(bool dirty);
     bool confirmDiscardPendingDomainAssignments(const QString& action);
+    bool canSaveDetachedEndpointDrafts();
     bool maybeSave();
     void createDesign();
     void openDesign();
@@ -89,11 +90,15 @@ private:
     bool saveDesignTo(const QString& path);
     void validateDesign();
     void generateDesign();
+    void resizeMesh();
     void presentValidationResult(const ValidationResult& result);
     void presentGenerationResult(const GenerationResult& result);
     bool addEndpoint(const QString& endpointType, NocAttachmentTarget target);
     bool moveEndpoint(const QString& endpointId, NocAttachmentTarget target);
     bool removeEndpoint(const QString& endpointId);
+    std::optional<QHash<QString, QStringList>> chooseEndpointDomainAssignments(
+        const QString& endpointId,
+        const QHash<QString, QStringList>& initialAssignments = {});
     void applyParameters();
     void updateInspector(const NocEditorSelectionSet& selection);
     void adoptDesignResult(
@@ -141,6 +146,7 @@ private:
     QAction* m_saveAsAction = nullptr;
     QAction* m_validateAction = nullptr;
     QAction* m_generateAction = nullptr;
+    QAction* m_resizeMeshAction = nullptr;
     QAction* m_regularizeAction = nullptr;
     QAction* m_fitAction = nullptr;
     QAction* m_installAction = nullptr;
@@ -166,6 +172,7 @@ private:
 
     QDockWidget* m_inspectorDock = nullptr;
     QLabel* m_designOverview = nullptr;
+    QPushButton* m_resizeMeshButton = nullptr;
     QLabel* m_selectionSummary = nullptr;
     QGroupBox* m_parameterGroup = nullptr;
     QFormLayout* m_parameterForm = nullptr;

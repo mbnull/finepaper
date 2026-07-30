@@ -195,14 +195,24 @@ std::optional<QPoint> viewportPointForConnection(
     for (int step = 1; step < 20; ++step) {
         const QPoint viewportPosition = view->mapFromScene(
             connection->mapToScene(path.pointAtPercent(step / 20.0)));
+        bool connectionHit = false;
+        bool nodeHit = false;
         for (QGraphicsItem* hitItem : view->items(viewportPosition)) {
             QGraphicsItem* item = hitItem;
             while (item) {
                 if (item == connection) {
-                    return viewportPosition;
+                    connectionHit = true;
+                    break;
+                }
+                if (qgraphicsitem_cast<QtNodes::NodeGraphicsObject*>(item)) {
+                    nodeHit = true;
+                    break;
                 }
                 item = item->parentItem();
             }
+        }
+        if (connectionHit && !nodeHit) {
+            return viewportPosition;
         }
     }
     return std::nullopt;
@@ -505,6 +515,42 @@ void respondToNewDesignDialog(
             if (auto* buttons = dialog->findChild<QDialogButtonBox*>()) {
                 if (QAbstractButton* button = buttons->button(
                         accept ? QDialogButtonBox::Ok : QDialogButtonBox::Cancel)) {
+                    button->click();
+                }
+            }
+            return;
+        }
+    });
+}
+
+void respondToMeshResizeDialog(bool accept = false) {
+    QTimer::singleShot(0, [accept] {
+        for (QWidget* widget : QApplication::topLevelWidgets()) {
+            auto* dialog = qobject_cast<QDialog*>(widget);
+            if (!dialog
+                || dialog->objectName()
+                    != QStringLiteral("finepaper.meshResizeDialog")) {
+                continue;
+            }
+            check(dialog->findChild<QSpinBox*>(
+                      QStringLiteral("finepaper.meshResize.rows"))
+                      && dialog->findChild<QSpinBox*>(
+                          QStringLiteral("finepaper.meshResize.columns"))
+                      && dialog->findChild<QListWidget*>(
+                          QStringLiteral("finepaper.meshResize.routerList"))
+                      && dialog->findChild<QListWidget*>(
+                          QStringLiteral(
+                              "finepaper.meshResize.removedMemberships"))
+                      && dialog->findChild<QListWidget*>(
+                          QStringLiteral(
+                              "finepaper.meshResize.removedEdgeOverrides")),
+                  QStringLiteral(
+                      "Mesh resize dialog exposes topology, assignment, and exact-impact controls"));
+            if (auto* buttons = dialog->findChild<QDialogButtonBox*>(
+                    QStringLiteral("finepaper.meshResize.buttons"))) {
+                if (QAbstractButton* button = buttons->button(
+                        accept ? QDialogButtonBox::Ok
+                               : QDialogButtonBox::Cancel)) {
                     button->click();
                 }
             }
@@ -987,6 +1033,10 @@ int main(int argc, char** argv) {
     QAction* initialGenerateAction = actionWithText(window, QStringLiteral("Generate RTL"));
     auto* applyParameters = window.findChild<QPushButton*>(
         QStringLiteral("finepaper.applyParameters"));
+    auto* resizeMeshButton = window.findChild<QPushButton*>(
+        QStringLiteral("finepaper.resizeMesh"));
+    QAction* resizeMeshAction = window.findChild<QAction*>(
+        QStringLiteral("finepaper.resizeMeshAction"));
     check(endpointPalette && !endpointPalette->isEnabled(),
           QStringLiteral("Endpoint Palette is disabled until a design exists"));
     check(initialSaveAction && !initialSaveAction->isEnabled()
@@ -997,6 +1047,9 @@ int main(int argc, char** argv) {
           QStringLiteral("validation and generation are disabled without a design"));
     check(applyParameters && !applyParameters->isEnabled(),
           QStringLiteral("parameter application is disabled without a design"));
+    check(resizeMeshButton && !resizeMeshButton->isEnabled()
+              && resizeMeshAction && !resizeMeshAction->isEnabled(),
+          QStringLiteral("Mesh resize entry points are disabled without a design"));
 
     auto* createButton = window.findChild<QPushButton*>(QStringLiteral("finepaper.createDesign"));
     check(createButton && createButton->isEnabled(),
@@ -1015,6 +1068,23 @@ int main(int argc, char** argv) {
           QStringLiteral("active NoC IP, design actions and Endpoint Palette stay aligned"));
     check(applyParameters && applyParameters->isEnabled(),
           QStringLiteral("Package parameters become editable with a design"));
+    check(resizeMeshButton && resizeMeshButton->isEnabled()
+              && resizeMeshAction && resizeMeshAction->isEnabled(),
+          QStringLiteral("Mesh resize entry points follow active Package metadata"));
+    auto* designOverview = window.findChild<QLabel*>(
+        QStringLiteral("finepaper.designOverview"));
+    const QString overviewBeforeCancelledResize = designOverview
+        ? designOverview->text() : QString();
+    const bool modifiedBeforeCancelledResize = window.isWindowModified();
+    if (resizeMeshButton) {
+        respondToMeshResizeDialog(false);
+        resizeMeshButton->click();
+        application.processEvents();
+    }
+    check(designOverview
+              && designOverview->text() == overviewBeforeCancelledResize
+              && window.isWindowModified() == modifiedBeforeCancelledResize,
+          QStringLiteral("cancelling Mesh resize leaves the current design unchanged"));
 
     auto* editorWidget = window.findChild<QWidget*>(QStringLiteral("finepaper.nodeEditor"));
     auto* nodeEditor = dynamic_cast<finepaper::NocNodeEditor*>(editorWidget);
@@ -1742,6 +1812,10 @@ int main(int argc, char** argv) {
           QStringLiteral("dragging the EP port creates the Router attachment without snapping the node"));
 
     const QPoint exposedAttachmentTarget = blankViewportPosition(graphicsView);
+    const std::optional<QPointF> routerPositionBeforeOverlappingEndpointDrag =
+        nodeEditor
+        ? nodeEditor->routerVisualPosition(QStringLiteral("r-0-1"))
+        : std::nullopt;
     if (bodyAttachedEndpoint) {
         dragNodeTo(graphicsView, graphicsScene,
                    *bodyAttachedEndpoint, exposedAttachmentTarget);
@@ -1749,9 +1823,33 @@ int main(int argc, char** argv) {
         application.processEvents();
     }
 
-    const auto bodyAttachmentConnection = bodyAttachedEndpoint
-        ? attachmentConnectionForEndpoint(graphicsScene, *bodyAttachedEndpoint)
+    // Projection rebuilds deliberately replace QtNodes' transient NodeIds.
+    // Resolve the Endpoint again through the design-facing Router identity
+    // before exercising direct line targeting.
+    const auto exposedBodyAttachedEndpoint = endpointAttachedToRouter(
+        graphicsScene, QStringLiteral("r-0-1"));
+    auto* exposedBodyAttachedGraphics = exposedBodyAttachedEndpoint
+        ? graphicsScene->nodeGraphicsObject(*exposedBodyAttachedEndpoint)
+        : nullptr;
+    check(exposedBodyAttachedGraphics
+              && graphicsView
+              && QLineF(
+                     exposedBodyAttachedGraphics->sceneBoundingRect().center(),
+                     graphicsView->mapToScene(exposedAttachmentTarget)).length() < 4.0
+              && nodeEditor
+              && nodeEditor->routerVisualPosition(QStringLiteral("r-0-1"))
+                     == routerPositionBeforeOverlappingEndpointDrag,
+          QStringLiteral("an Endpoint stacked over its Router remains the direct drag target without moving the Router"));
+    const auto bodyAttachmentConnection = exposedBodyAttachedEndpoint
+        ? attachmentConnectionForEndpoint(
+              graphicsScene, *exposedBodyAttachedEndpoint)
         : std::nullopt;
+    const QString exposedEndpointId = exposedBodyAttachedEndpoint
+        ? graphicsScene->graphModel().nodeData(
+              *exposedBodyAttachedEndpoint,
+              QtNodes::NodeRole::Caption).toString().section(
+                  QLatin1Char('\n'), 0, 0)
+        : QString();
     std::optional<QPoint> attachmentLinePoint;
     if (graphicsView && graphicsScene && bodyAttachmentConnection) {
         auto* connection = graphicsScene->connectionGraphicsObject(
@@ -1784,8 +1882,40 @@ int main(int argc, char** argv) {
     auto detachedBodyEndpoint = nodeIdWithCaptionPrefix(
         graphicsScene, QStringLiteral("Unattached\nMaster endpoint"));
     check(!endpointAttachedToRouter(graphicsScene, QStringLiteral("r-0-1"))
-              && detachedBodyEndpoint,
+              && detachedBodyEndpoint
+              && nodeEditor
+              && nodeEditor->detachedEndpointDraftIds()
+                     == QStringList{exposedEndpointId},
           QStringLiteral("line-menu Disconnect removes the attachment and keeps the Endpoint draft"));
+    bool sawDetachedEndpointSaveBlocker = false;
+    if (saveAsAction) {
+        QTimer::singleShot(0, [&] {
+            auto* dialog = qobject_cast<QDialog*>(
+                QApplication::activeModalWidget());
+            auto* messageBox = qobject_cast<QMessageBox*>(dialog);
+            sawDetachedEndpointSaveBlocker = messageBox
+                && messageBox->objectName()
+                    == QStringLiteral(
+                        "finepaper.detachedEndpointSaveBlocker");
+            if (messageBox) {
+                if (QAbstractButton* ok = messageBox->button(QMessageBox::Ok)) {
+                    ok->click();
+                } else {
+                    messageBox->reject();
+                }
+            } else if (dialog) {
+                dialog->reject();
+            }
+        });
+        saveAsAction->trigger();
+        application.processEvents();
+    }
+    check(sawDetachedEndpointSaveBlocker
+              && window.isWindowModified()
+              && nodeEditor
+              && nodeEditor->detachedEndpointDraftIds()
+                     == QStringList{exposedEndpointId},
+          QStringLiteral("saving is blocked while a durable Endpoint survives only as a detached draft"));
 
     const auto routerForDeleteKeyReconnect = nodeIdWithCaption(
         graphicsScene, QStringLiteral("r-0-1"));
@@ -1802,6 +1932,8 @@ int main(int argc, char** argv) {
     }
     const auto endpointForDeleteKey = endpointAttachedToRouter(
         graphicsScene, QStringLiteral("r-0-1"));
+    check(nodeEditor && nodeEditor->detachedEndpointDraftIds().isEmpty(),
+          QStringLiteral("reconnecting a detached Endpoint commits and clears its recoverable draft"));
     const auto connectionForDeleteKey = endpointForDeleteKey
         ? attachmentConnectionForEndpoint(graphicsScene, *endpointForDeleteKey)
         : std::nullopt;

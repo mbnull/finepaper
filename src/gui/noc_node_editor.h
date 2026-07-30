@@ -8,6 +8,7 @@
 #include <QHash>
 #include <QPointF>
 #include <QSet>
+#include <QStringList>
 #include <QVector>
 #include <QWidget>
 
@@ -91,6 +92,12 @@ struct NocAttachmentTarget {
     std::optional<QString> exactSlot;
 };
 
+struct NocDetachedEndpointSnapshot {
+    EndpointInstance endpoint;
+    QHash<QString, QStringList> domainAssignments;
+    QVector<DomainEdgeOverride> attachmentOverrides;
+};
+
 struct NocRouterAttachmentPortItem {
     QString id;
     QString label;
@@ -118,10 +125,12 @@ public:
     void zoomToFit();
     void setDomainPresentation(DomainPresentationSnapshot presentation);
     [[nodiscard]] const DomainPresentationSnapshot& domainPresentation() const;
+    [[nodiscard]] QStringList detachedEndpointDraftIds() const;
 
     std::function<bool(const QString&, NocAttachmentTarget)> endpointTypeDropped;
     std::function<bool(const QString&, NocAttachmentTarget)> endpointMoveRequested;
-    std::function<bool(const EndpointInstance&, NocAttachmentTarget)> detachedEndpointDropped;
+    std::function<bool(const NocDetachedEndpointSnapshot&, NocAttachmentTarget)>
+        detachedEndpointDropped;
     std::function<bool(const QString&)> endpointRemovalRequested;
     std::function<void(const NocEditorSelection&)> selectionChanged;
     std::function<void(const NocEditorSelectionSet&)> semanticSelectionChanged;
@@ -149,7 +158,7 @@ private:
         QString id;
         QString type;
         QPointF scenePosition;
-        std::optional<EndpointInstance> detachedEndpoint;
+        std::optional<NocDetachedEndpointSnapshot> detached;
     };
 
     struct RouterEndpointDraft {
@@ -219,6 +228,7 @@ private:
     std::optional<NocEditorSelection> selectionForIdentity(
         const SelectionIdentity& identity) const;
     void emitSelectionChanged();
+    void applyNodeStacking();
     void applyDomainPresentation();
     void restoreSelection();
     void highlightNeighborhood(QtNodes::NodeId nodeId);

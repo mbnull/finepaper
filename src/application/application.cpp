@@ -554,7 +554,8 @@ DesignResult FinepaperApplication::resizeMesh(
 DesignResult FinepaperApplication::addEndpoint(
     const NocDesign& design,
     EndpointInstance endpoint,
-    const QHash<QString, QStringList>& domainAssignments) const {
+    const QHash<QString, QStringList>& domainAssignments,
+    const QVector<DomainEdgeOverride>& attachmentOverrides) const {
     endpoint.id = endpoint.id.trimmed();
     const auto package = m_catalog.resolve(design.package);
     if (!package) {
@@ -573,6 +574,29 @@ DesignResult FinepaperApplication::addEndpoint(
                          QStringLiteral("/endpoints"));
         return result;
     }
+    QVector<Diagnostic> overrideDiagnostics;
+    const ElementRef expectedAttachment{
+        ElementKind::EndpointAttachment, endpoint.id};
+    for (qsizetype index = 0; index < attachmentOverrides.size(); ++index) {
+        if (attachmentOverrides.at(index).edge == expectedAttachment) {
+            continue;
+        }
+        appendDiagnostic(
+            overrideDiagnostics,
+            QStringLiteral("error"),
+            QStringLiteral("endpoint.attachment_override_mismatch"),
+            QStringLiteral(
+                "Endpoint attachment override must reference the Endpoint "
+                "being added"),
+            QStringLiteral("/edgeOverrides/new-endpoint/%1/edge").arg(index));
+    }
+    if (hasErrors(overrideDiagnostics)) {
+        return DesignResult{
+            false,
+            design,
+            std::move(overrideDiagnostics)
+        };
+    }
     if (const EndpointTypeDefinition* type = package->endpointType(endpoint.type)) {
         const QJsonObject provided = endpoint.parameters;
         endpoint.parameters = defaultsFor(type->parameters);
@@ -587,6 +611,7 @@ DesignResult FinepaperApplication::addEndpoint(
             std::move(domainResult.diagnostics)
         };
     }
+    domainResult.design.edgeOverrides += attachmentOverrides;
     DesignResult validated = validateEditedDesign(domainResult.design);
     if (!validated.success) {
         validated.design = design;

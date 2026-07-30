@@ -72,7 +72,8 @@ public:
     DesignResult addEndpoint(
         const NocDesign& design,
         EndpointInstance endpoint,
-        const QHash<QString, QStringList>& domainAssignments = {}) const;
+        const QHash<QString, QStringList>& domainAssignments = {},
+        const QVector<DomainEdgeOverride>& attachmentOverrides = {}) const;
     DesignResult moveEndpoint(const NocDesign& design,
                               const QString& endpointId,
                               RouterPosition router,

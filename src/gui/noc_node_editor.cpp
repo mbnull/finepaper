@@ -1,5 +1,6 @@
 #include "gui/noc_node_editor.h"
 
+#include "application/endpoint_domain_assignment.h"
 #include "gui/animated_graphics_view.h"
 #include "gui/noc_editor_style.h"
 #include "gui/workbench_config.h"
@@ -50,6 +51,8 @@ constexpr QtNodes::PortIndex kRouterEastOutPort = portIndex(RouterOutputPort::Ea
 constexpr QtNodes::PortIndex kRouterSouthOutPort = portIndex(RouterOutputPort::South);
 constexpr QtNodes::PortIndex kEndpointOutPort = portIndex(EndpointOutputPort::Attachment);
 constexpr qreal kInteractivePortHitRadius = 14.0;
+constexpr qreal kRouterNodeZValue = 10.0;
+constexpr qreal kEndpointNodeZValue = 20.0;
 constexpr int kSemanticElementKindDataRole = 0x464e02;
 constexpr int kSemanticElementIdDataRole = 0x464e03;
 
@@ -886,6 +889,18 @@ const DomainPresentationSnapshot& NocNodeEditor::domainPresentation() const {
     return m_domainPresentation;
 }
 
+QStringList NocNodeEditor::detachedEndpointDraftIds() const {
+    QStringList endpointIds;
+    for (const PendingEndpoint& pending : m_pendingEndpoints) {
+        if (pending.detached) {
+            endpointIds.append(pending.detached->endpoint.id);
+        }
+    }
+    std::sort(endpointIds.begin(), endpointIds.end());
+    endpointIds.removeDuplicates();
+    return endpointIds;
+}
+
 void NocNodeEditor::rebuildGraph(bool zoomToContents) {
     clearEndpointAttachmentDraft();
     clearRouterEndpointDraft();
@@ -1076,6 +1091,10 @@ void NocNodeEditor::rebuildGraph(bool zoomToContents) {
                 break;
             }
         }
+        if (pending.detached) {
+            label += QStringLiteral("\n%1")
+                         .arg(pending.detached->endpoint.id);
+        }
         const QtNodes::NodeId nodeId = graphModel.addProjectedNode(
             QStringLiteral("Unattached\n%1").arg(label),
             pending.scenePosition,
@@ -1183,6 +1202,11 @@ bool NocNodeEditor::eventFilter(QObject* watched, QEvent* event) {
     case QEvent::MouseButtonPress: {
         auto* mouse = static_cast<QMouseEvent*>(event);
         if (mouse->button() == Qt::LeftButton) {
+            // QtNodes temporarily raises the last selected node. Restore the
+            // semantic hit order immediately before QGraphicsView resolves
+            // the press so an Endpoint remains draggable when it overlaps a
+            // Router.
+            applyNodeStacking();
             const QPoint position = mouse->position().toPoint();
             if ((!m_editingEnabled && blockedPortAt(position))
                 || (m_editingEnabled
@@ -1235,6 +1259,7 @@ bool NocNodeEditor::eventFilter(QObject* watched, QEvent* event) {
     }
     case QEvent::ContextMenu: {
         auto* context = static_cast<QContextMenuEvent*>(event);
+        applyNodeStacking();
         showContextMenu(context->pos(), context->globalPos());
         context->accept();
         return true;
@@ -1315,6 +1340,7 @@ void NocNodeEditor::handleSceneSelectionChanged() {
             }
         }
     }
+    QTimer::singleShot(0, this, [this] { applyNodeStacking(); });
     emitSelectionChanged();
 }
 
@@ -1812,13 +1838,14 @@ bool NocNodeEditor::attachNodeToRouter(QtNodes::NodeId nodeId,
         }
         const PendingEndpoint pendingEndpoint = *pending;
         const QPointF visualPosition = pendingEndpoint.scenePosition;
-        if (pendingEndpoint.detachedEndpoint) {
+        if (pendingEndpoint.detached) {
             if (!detachedEndpointDropped
                 || !detachedEndpointDropped(
-                    *pendingEndpoint.detachedEndpoint, target)) {
+                    *pendingEndpoint.detached,
+                    target)) {
                 return false;
             }
-            const QString endpointId = pendingEndpoint.detachedEndpoint->id;
+            const QString endpointId = pendingEndpoint.detached->endpoint.id;
             m_endpointLayout.insert(endpointId, visualPosition);
             saveWorkspaceLayout();
             m_pendingEndpoints.remove(metadata.id);
@@ -1906,6 +1933,15 @@ bool NocNodeEditor::detachEndpoint(QtNodes::NodeId nodeId,
     }
     const QString endpointId = metadata->id;
     const EndpointInstance detached = *endpoint;
+    const EndpointDomainAssignments detachedAssignments =
+        endpointDomainAssignments(*m_design, endpointId);
+    QVector<DomainEdgeOverride> detachedOverrides;
+    for (const DomainEdgeOverride& edgeOverride : m_design->edgeOverrides) {
+        if (edgeOverride.edge
+            == ElementRef{ElementKind::EndpointAttachment, endpointId}) {
+            detachedOverrides.append(edgeOverride);
+        }
+    }
     if (!endpointRemovalRequested(endpointId)) {
         if (restoreProjectionOnFailure) {
             rebuildGraph(false);
@@ -1915,7 +1951,13 @@ bool NocNodeEditor::detachEndpoint(QtNodes::NodeId nodeId,
     const QString pendingId = QStringLiteral("pending-endpoint-%1")
                                   .arg(++m_nextPendingEndpoint);
     m_pendingEndpoints.insert(pendingId, PendingEndpoint{
-        pendingId, detached.type, scenePosition, detached});
+        pendingId,
+        detached.type,
+        scenePosition,
+        NocDetachedEndpointSnapshot{
+            detached,
+            detachedAssignments,
+            detachedOverrides}});
     m_selectedItems = {{NocEditorSelection::Kind::PendingEndpoint, pendingId}};
     rebuildGraph(false);
     return true;
@@ -2242,7 +2284,9 @@ void NocNodeEditor::addPendingEndpoint(const QString& endpointType,
     }
     const QString id = QStringLiteral("pending-endpoint-%1")
                            .arg(++m_nextPendingEndpoint);
-    m_pendingEndpoints.insert(id, PendingEndpoint{id, endpointType, scenePosition, std::nullopt});
+    m_pendingEndpoints.insert(
+        id,
+        PendingEndpoint{id, endpointType, scenePosition, std::nullopt});
     m_selectedItems = {{NocEditorSelection::Kind::PendingEndpoint, id}};
     rebuildGraph(false);
 }
@@ -2438,7 +2482,10 @@ std::optional<NocEditorSelection> NocNodeEditor::selectionForIdentity(
             return std::nullopt;
         }
         return NocEditorSelection{
-            identity.kind, pending->type, std::nullopt};
+            identity.kind,
+            pending->detached ? pending->detached->endpoint.id
+                              : pending->type,
+            std::nullopt};
     }
 
     const ElementKind elementKind = elementKindForSelection(identity.kind);
@@ -2491,6 +2538,20 @@ void NocNodeEditor::emitSelectionChanged() {
         selectionChanged(semanticSelection.items.size() == 1
                              ? semanticSelection.items.front()
                              : NocEditorSelection{});
+    }
+}
+
+void NocNodeEditor::applyNodeStacking() {
+    if (!m_scene) {
+        return;
+    }
+    for (auto iterator = m_metadata.constBegin();
+         iterator != m_metadata.constEnd(); ++iterator) {
+        if (auto* node = m_scene->nodeGraphicsObject(iterator.key())) {
+            node->setZValue(iterator->kind == NocEditorSelection::Kind::Router
+                                ? kRouterNodeZValue
+                                : kEndpointNodeZValue);
+        }
     }
 }
 

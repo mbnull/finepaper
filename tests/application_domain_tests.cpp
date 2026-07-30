@@ -11,6 +11,7 @@
 #include <QTextStream>
 
 #include <algorithm>
+#include <iterator>
 
 namespace {
 
@@ -1231,6 +1232,30 @@ int main(int argc, char** argv) {
         ElementRef{ElementKind::Endpoint, QStringLiteral("ep0")});
     check(application.validate(endpointCrossing, false).success,
           QStringLiteral("the Endpoint cleanup fixture is valid before removal"));
+    const auto detachedEndpoint = std::find_if(
+        endpointCrossing.endpoints.cbegin(),
+        endpointCrossing.endpoints.cend(),
+        [](const EndpointInstance& value) {
+            return value.id == QStringLiteral("ep0");
+        });
+    const DomainMembership* detachedMembership = findMembership(
+        endpointCrossing, ElementKind::Endpoint, QStringLiteral("ep0"));
+    QVector<DomainEdgeOverride> detachedOverrides;
+    std::copy_if(
+        endpointCrossing.edgeOverrides.cbegin(),
+        endpointCrossing.edgeOverrides.cend(),
+        std::back_inserter(detachedOverrides),
+        [](const DomainEdgeOverride& value) {
+            return value.edge
+                == ElementRef{
+                    ElementKind::EndpointAttachment,
+                    QStringLiteral("ep0")};
+        });
+    check(detachedEndpoint != endpointCrossing.endpoints.cend()
+              && detachedMembership
+              && detachedOverrides.size() == 1,
+          QStringLiteral(
+              "the Endpoint recovery fixture captures the instance, membership, and attachment override"));
     const DesignResult removedEndpoint = application.removeEndpoint(
         endpointCrossing, QStringLiteral("ep0"));
     check(removedEndpoint.success
@@ -1252,6 +1277,63 @@ int main(int argc, char** argv) {
                               QStringLiteral("ep0")};
                   }),
           QStringLiteral("removeEndpoint cleans up its membership and attachment override"));
+    if (removedEndpoint.success
+        && detachedEndpoint != endpointCrossing.endpoints.cend()
+        && detachedMembership
+        && detachedOverrides.size() == 1) {
+        const DesignResult restoredEndpoint = application.addEndpoint(
+            removedEndpoint.design,
+            *detachedEndpoint,
+            detachedMembership->assignments,
+            detachedOverrides);
+        check(restoredEndpoint.success
+                  && std::any_of(
+                      restoredEndpoint.design.endpoints.cbegin(),
+                      restoredEndpoint.design.endpoints.cend(),
+                      [](const EndpointInstance& value) {
+                          return value.id == QStringLiteral("ep0");
+                      })
+                  && hasAssignment(
+                      restoredEndpoint.design,
+                      ElementKind::Endpoint,
+                      QStringLiteral("ep0"),
+                      QStringLiteral("clock"),
+                      QStringList{QStringLiteral("clock-alt")})
+                  && std::count(
+                      restoredEndpoint.design.edgeOverrides.cbegin(),
+                      restoredEndpoint.design.edgeOverrides.cend(),
+                      detachedOverrides.constFirst()) == 1,
+              QStringLiteral(
+                  "addEndpoint atomically restores an Endpoint attachment override with its Domain membership"));
+
+        DomainEdgeOverride mismatchedOverride = detachedOverrides.constFirst();
+        mismatchedOverride.edge = ElementRef{
+            ElementKind::RouterLink, QStringLiteral("ep0")};
+        checkAtomicFailure(
+            application.addEndpoint(
+                removedEndpoint.design,
+                *detachedEndpoint,
+                detachedMembership->assignments,
+                QVector<DomainEdgeOverride>{mismatchedOverride}),
+            removedEndpoint.design,
+            QStringLiteral("endpoint.attachment_override_mismatch"),
+            QStringLiteral(
+                "addEndpoint rejects an attachment override for any edge other than the new Endpoint attachment"));
+
+        DomainEdgeOverride invalidOverride = detachedOverrides.constFirst();
+        invalidOverride.properties.insert(
+            QStringLiteral("stages"), QStringLiteral("three"));
+        checkAtomicFailure(
+            application.addEndpoint(
+                removedEndpoint.design,
+                *detachedEndpoint,
+                detachedMembership->assignments,
+                QVector<DomainEdgeOverride>{invalidOverride}),
+            removedEndpoint.design,
+            QStringLiteral("domain_property.invalid_type"),
+            QStringLiteral(
+                "addEndpoint validates restored attachment overrides and rejects invalid state atomically"));
+    }
 
     const DesignResult automaticGrow = application.resizeMesh(base, 2, 2);
     check(automaticGrow.success

@@ -112,6 +112,18 @@ target("finepaper-application-domain-tests")
         trim_output = true
     })
 
+target("finepaper-mesh-resize-plan-tests")
+    add_rules("qt.console")
+    set_kind("binary")
+    set_group("test")
+    set_default(false)
+    add_deps("finepaper-application")
+    add_files("tests/mesh_resize_plan_tests.cpp")
+    add_includedirs("src")
+    add_tests("default", {
+        trim_output = true
+    })
+
 target("finepaper-domain-presentation-tests")
     add_rules("qt.console")
     add_frameworks("QtGui")
@@ -189,6 +201,34 @@ target("finepaper-domain-configuration-dialog-tests")
         runenvs = {QT_QPA_PLATFORM = "offscreen"}
     })
 
+target("finepaper-endpoint-domain-assignment-dialog-tests")
+    add_rules("qt.widgetapp")
+    set_kind("binary")
+    set_group("test")
+    set_default(false)
+    add_deps("finepaper-application")
+    add_files("tests/endpoint_domain_assignment_dialog_tests.cpp")
+    add_files("src/gui/endpoint_domain_assignment_dialog.cpp")
+    add_includedirs("src")
+    add_tests("default", {
+        trim_output = true,
+        runenvs = {QT_QPA_PLATFORM = "offscreen"}
+    })
+
+target("finepaper-mesh-resize-dialog-tests")
+    add_rules("qt.widgetapp")
+    set_kind("binary")
+    set_group("test")
+    set_default(false)
+    add_deps("finepaper-application")
+    add_files("tests/mesh_resize_dialog_tests.cpp")
+    add_files("src/gui/mesh_resize_dialog.cpp")
+    add_includedirs("src")
+    add_tests("default", {
+        trim_output = true,
+        runenvs = {QT_QPA_PLATFORM = "offscreen"}
+    })
+
 target("finepaper-gui-smoke")
     add_rules("qt.widgetapp")
     add_frameworks("QtConcurrent")
@@ -206,6 +246,8 @@ target("finepaper-gui-smoke")
     add_files("src/gui/domain_manager_projection.cpp")
     add_files("src/gui/domain_presentation.cpp")
     add_files("src/gui/domain_property_form.cpp")
+    add_files("src/gui/endpoint_domain_assignment_dialog.cpp")
+    add_files("src/gui/mesh_resize_dialog.cpp")
     add_files("src/gui/noc_editor_style.cpp")
     add_files("src/gui/noc_node_editor.cpp")
     add_files("src/gui/schema_value_editor.cpp")
