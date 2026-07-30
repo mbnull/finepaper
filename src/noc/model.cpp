@@ -192,6 +192,15 @@ ElementKind elementKindFromId(const QString& id) {
     return ElementKind::Invalid;
 }
 
+bool isDomainMembershipElementKind(ElementKind kind) {
+    return kind == ElementKind::Router || kind == ElementKind::Endpoint;
+}
+
+bool isDomainCrossingEdgeKind(ElementKind kind) {
+    return kind == ElementKind::RouterLink
+        || kind == ElementKind::EndpointAttachment;
+}
+
 size_t qHash(const ElementRef& reference, size_t seed) noexcept {
     const size_t kindHash = ::qHash(static_cast<int>(reference.kind), seed);
     return ::qHash(reference.id, kindHash);
@@ -595,8 +604,7 @@ QVector<Diagnostic> validateDesignStructure(const NocDesign& design) {
                         QStringLiteral("domain_membership.missing_element_kind"),
                         QStringLiteral("Membership element kind must be router or endpoint"),
                         base + QStringLiteral("/element/kind"));
-        } else if (membership.element.kind != ElementKind::Router
-                   && membership.element.kind != ElementKind::Endpoint) {
+        } else if (!isDomainMembershipElementKind(membership.element.kind)) {
             appendError(diagnostics,
                         QStringLiteral("domain_membership.unsupported_element_kind"),
                         QStringLiteral("Membership element kind must be router or endpoint"),
@@ -607,8 +615,7 @@ QVector<Diagnostic> validateDesignStructure(const NocDesign& design) {
                         QStringLiteral("domain_membership.missing_element_id"),
                         QStringLiteral("Membership element id is required"),
                         base + QStringLiteral("/element/id"));
-        } else if ((membership.element.kind == ElementKind::Router
-                    || membership.element.kind == ElementKind::Endpoint)
+        } else if (isDomainMembershipElementKind(membership.element.kind)
                    && !membershipElementReferenceExists(
                        design, membership.element, endpointIds)) {
             appendError(diagnostics,
@@ -800,8 +807,7 @@ QVector<Diagnostic> validateDesignStructure(const NocDesign& design) {
                         QStringLiteral("domain_edge_override.missing_edge_kind"),
                         QStringLiteral("Edge kind must be router-link or endpoint-attachment"),
                         base + QStringLiteral("/edge/kind"));
-        } else if (edgeOverride.edge.kind != ElementKind::RouterLink
-                   && edgeOverride.edge.kind != ElementKind::EndpointAttachment) {
+        } else if (!isDomainCrossingEdgeKind(edgeOverride.edge.kind)) {
             appendError(diagnostics,
                         QStringLiteral("domain_edge_override.unsupported_edge_kind"),
                         QStringLiteral("Edge kind must be router-link or endpoint-attachment"),
@@ -812,8 +818,7 @@ QVector<Diagnostic> validateDesignStructure(const NocDesign& design) {
                         QStringLiteral("domain_edge_override.missing_edge_id"),
                         QStringLiteral("Edge id is required"),
                         base + QStringLiteral("/edge/id"));
-        } else if ((edgeOverride.edge.kind == ElementKind::RouterLink
-                    || edgeOverride.edge.kind == ElementKind::EndpointAttachment)
+        } else if (isDomainCrossingEdgeKind(edgeOverride.edge.kind)
                    && !edgeReferenceExists(design, edgeOverride.edge, endpointIds)) {
             appendError(diagnostics,
                         QStringLiteral("domain_edge_override.unknown_edge"),

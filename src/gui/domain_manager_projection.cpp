@@ -20,10 +20,6 @@ bool appliesTo(const DomainTypeDefinition& type, ElementKind kind) {
         != type.appliesTo.cend();
 }
 
-bool isAssignableElementKind(ElementKind kind) {
-    return kind == ElementKind::Router || kind == ElementKind::Endpoint;
-}
-
 QHash<ElementRef, QStringList> assignmentsByElement(
     const NocDesign& design,
     const QString& domainType) {
@@ -101,7 +97,7 @@ DomainAssignmentAggregate buildDomainAssignmentAggregate(
     }
 
     for (const ElementRef& reference : std::as_const(normalizedSelection)) {
-        if (!isAssignableElementKind(reference.kind)
+        if (!isDomainMembershipElementKind(reference.kind)
             || !appliesTo(*type, reference.kind)
             || !designReferenceExists(design, reference)) {
             continue;

@@ -521,7 +521,7 @@ QVector<ElementKind> parseDomainAppliesTo(
         }
         ids.insert(id);
         const ElementKind kind = elementKindFromId(id);
-        if (kind != ElementKind::Router && kind != ElementKind::Endpoint) {
+        if (!isDomainMembershipElementKind(kind)) {
             appendDiagnostic(diagnostics,
                              QStringLiteral("error"),
                              QStringLiteral("package.unknown_domain_element_kind"),

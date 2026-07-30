@@ -820,8 +820,7 @@ private:
     QStringList localErrors() const {
         QStringList errors;
         const ElementRef element = selectedElement();
-        if ((element.kind != ElementKind::Router
-             && element.kind != ElementKind::Endpoint)
+        if (!isDomainMembershipElementKind(element.kind)
             || !designReferenceExists(baseDesign_, element)) {
             errors.append(QStringLiteral("Choose an existing Mesh Router or Endpoint."));
         }

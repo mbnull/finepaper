@@ -418,6 +418,7 @@ void DomainManagerPanel::refreshInstances() {
 
 void DomainManagerPanel::refreshAssignment() {
     m_assignmentEdited = false;
+    m_clearAssignmentStaged = false;
     m_selectionChangedWhileEditing = false;
     m_touchedAssignmentDomains.clear();
     m_assignment = {};
@@ -561,12 +562,13 @@ void DomainManagerPanel::updateActionState() {
     m_removeDomain->setEnabled(
         editable && !m_assignmentEdited && hasSelectedDomain);
     const bool eligible = editable && m_assignment.eligibleElements > 0;
-    m_singleAssignment->setEnabled(eligible);
-    m_multipleAssignment->setEnabled(eligible);
+    m_singleAssignment->setEnabled(eligible && !m_clearAssignmentStaged);
+    m_multipleAssignment->setEnabled(eligible && !m_clearAssignmentStaged);
     m_applyAssignment->setEnabled(eligible && m_assignmentEdited);
     m_clearAssignment->setEnabled(
         eligible && !m_assignment.required
-        && m_assignment.state != DomainAssignmentAggregateState::Unassigned);
+        && m_assignment.state != DomainAssignmentAggregateState::Unassigned
+        && !m_assignmentEdited);
     m_discardAssignment->setEnabled(m_assignmentEdited);
     m_discardAssignment->setVisible(m_assignmentEdited);
 }
@@ -638,7 +640,9 @@ void DomainManagerPanel::applyAssignment() {
         return;
     }
     DomainAssignmentPatch patch;
-    if (selectedType()->cardinality == DomainCardinality::Single) {
+    if (m_clearAssignmentStaged) {
+        patch.replacement = QStringList{};
+    } else if (selectedType()->cardinality == DomainCardinality::Single) {
         if (!m_singleAssignment->currentData().isValid()) {
             return;
         }
@@ -664,14 +668,32 @@ void DomainManagerPanel::applyAssignment() {
 }
 
 void DomainManagerPanel::clearAssignment() {
-    if (!assignmentPatchRequested || m_assignment.eligibleElementRefs.isEmpty()
-        || m_assignment.required) {
+    if (m_assignment.eligibleElementRefs.isEmpty() || m_assignment.required
+        || m_assignmentEdited) {
         return;
     }
-    DomainAssignmentPatch patch;
-    patch.replacement = QStringList{};
-    assignmentPatchRequested(
-        m_assignment.eligibleElementRefs, currentDomainType(), std::move(patch));
+    m_clearAssignmentStaged = true;
+    m_assignmentEdited = true;
+    m_touchedAssignmentDomains.clear();
+    m_updating = true;
+    if (selectedType()
+        && selectedType()->cardinality == DomainCardinality::Single) {
+        const int unassigned = m_singleAssignment->findData(QString());
+        if (unassigned >= 0) {
+            m_singleAssignment->setCurrentIndex(unassigned);
+        }
+    } else {
+        for (int row = 0; row < m_multipleAssignment->count(); ++row) {
+            m_multipleAssignment->item(row)->setCheckState(Qt::Unchecked);
+        }
+    }
+    m_updating = false;
+    m_assignmentState->setText(
+        m_assignmentState->text()
+        + QStringLiteral(
+            "\nPending: clear this Domain assignment from the original %1 eligible item(s).")
+              .arg(m_assignment.eligibleElements));
+    updateActionState();
 }
 
 void DomainManagerPanel::discardAssignment() {

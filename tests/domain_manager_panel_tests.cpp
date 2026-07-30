@@ -223,6 +223,8 @@ int main(int argc, char** argv) {
         QStringLiteral("finepaper.domainManager.assignmentEditor.multiple"));
     auto* applyAssignment = panel.findChild<QPushButton*>(
         QStringLiteral("finepaper.domainManager.applyAssignment"));
+    auto* clearAssignment = panel.findChild<QPushButton*>(
+        QStringLiteral("finepaper.domainManager.clearAssignment"));
     auto* discardAssignment = panel.findChild<QPushButton*>(
         QStringLiteral("finepaper.domainManager.discardAssignment"));
     auto* completeConfiguration = panel.findChild<QPushButton*>(
@@ -235,11 +237,13 @@ int main(int argc, char** argv) {
         QStringLiteral("finepaper.domainManager.deleteDomain"));
 
     check(typeSelector && instances && tabs && assignmentState && singleAssignment
-              && multipleAssignment && applyAssignment && discardAssignment
+              && multipleAssignment && applyAssignment && clearAssignment
+              && discardAssignment
               && completeConfiguration && addDomain && editDomain && deleteDomain,
           QStringLiteral("Domain Manager exposes its stable test controls"));
     if (!typeSelector || !instances || !tabs || !assignmentState || !singleAssignment
-        || !multipleAssignment || !applyAssignment || !discardAssignment
+        || !multipleAssignment || !applyAssignment || !clearAssignment
+        || !discardAssignment
         || !completeConfiguration || !addDomain || !editDomain || !deleteDomain) {
         return 1;
     }
@@ -387,6 +391,30 @@ int main(int argc, char** argv) {
               && multipleAssignment->isVisible()
               && !singleAssignment->isVisible(),
           QStringLiteral("different multiple-cardinality sets appear as Mixed"));
+
+    const qsizetype callsBeforeClear = calls.size();
+    clearAssignment->click();
+    QApplication::processEvents();
+    check(calls.size() == callsBeforeClear
+              && applyAssignment->isEnabled()
+              && discardAssignment->isEnabled()
+              && !clearAssignment->isEnabled()
+              && !multipleAssignment->isEnabled()
+              && assignmentState->text().contains(QStringLiteral("Pending: clear")),
+          QStringLiteral("Clear stages one explicit draft instead of mutating immediately"));
+    applyAssignment->click();
+    QApplication::processEvents();
+    check(calls.size() == callsBeforeClear + 1
+              && calls.constLast().elements
+                  == QVector<ElementRef>{router0, router1}
+              && calls.constLast().domainType
+                  == QStringLiteral("security-zone")
+              && calls.constLast().patch.replacement
+                  == std::optional<QStringList>{QStringList{}},
+          QStringLiteral("applying a staged Clear emits one atomic empty replacement"));
+    discardAssignment->click();
+    QApplication::processEvents();
+
     QListWidgetItem* zoneA = assignmentItem(
         multipleAssignment, QStringLiteral("zone-a"));
     QListWidgetItem* zoneB = assignmentItem(
@@ -437,8 +465,8 @@ int main(int argc, char** argv) {
         zoneC->setCheckState(Qt::Checked);
     }
     QApplication::processEvents();
-    check(!completeConfiguration->isEnabled(),
-          QStringLiteral("pending assignment changes disable complete Domain configuration"));
+    check(!completeConfiguration->isEnabled() && !clearAssignment->isEnabled(),
+          QStringLiteral("pending assignment changes disable competing complete and Clear operations"));
     completeConfiguration->click();
     QApplication::processEvents();
     check(completeConfigurationRequests == 1,

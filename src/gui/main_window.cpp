@@ -1933,6 +1933,10 @@ bool FinepaperMainWindow::saveDesignAs() {
                                  QStringLiteral("Create or open a NoC design first."));
         return false;
     }
+    if (!confirmDiscardPendingDomainAssignments(
+            QStringLiteral("Saving the design"))) {
+        return false;
+    }
     if (!canSaveDetachedEndpointDrafts()) {
         return false;
     }
@@ -1947,6 +1951,10 @@ bool FinepaperMainWindow::saveDesignAs() {
 
 bool FinepaperMainWindow::saveDesignTo(const QString& path) {
     if (!m_design || path.isEmpty()) {
+        return false;
+    }
+    if (!confirmDiscardPendingDomainAssignments(
+            QStringLiteral("Saving the design"))) {
         return false;
     }
     if (!canSaveDetachedEndpointDrafts()) {
@@ -1973,6 +1981,10 @@ void FinepaperMainWindow::validateDesign() {
                                  QStringLiteral("The design's runtime NoC IP Package is not "
                                                 "available. Reload or reinstall the exact "
                                                 "Package before validation."));
+        return;
+    }
+    if (!confirmDiscardPendingDomainAssignments(
+            QStringLiteral("Validating the design"))) {
         return;
     }
     FinepaperApplication application = m_application;
@@ -2021,6 +2033,10 @@ void FinepaperMainWindow::generateDesign() {
                                  QStringLiteral("The design's runtime NoC IP Package is not "
                                                 "available. Reload or reinstall the exact "
                                                 "Package before generation."));
+        return;
+    }
+    if (!confirmDiscardPendingDomainAssignments(
+            QStringLiteral("Generating RTL"))) {
         return;
     }
     const QString root = m_outputRoot->text().trimmed();

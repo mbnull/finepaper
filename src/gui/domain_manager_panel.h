@@ -87,6 +87,7 @@ private:
     bool m_busy = false;
     bool m_updating = false;
     bool m_assignmentEdited = false;
+    bool m_clearAssignmentStaged = false;
     bool m_selectionChangedWhileEditing = false;
 
     QLabel* m_status = nullptr;

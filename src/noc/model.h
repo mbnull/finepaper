@@ -78,6 +78,8 @@ enum class ElementKind {
 
 QString elementKindId(ElementKind kind);
 ElementKind elementKindFromId(const QString& id);
+bool isDomainMembershipElementKind(ElementKind kind);
+bool isDomainCrossingEdgeKind(ElementKind kind);
 
 struct ElementRef {
     ElementKind kind = ElementKind::Invalid;

@@ -3185,6 +3185,28 @@ int main(int argc, char** argv) {
     check(domainApplyAssignment && domainApplyAssignment->isEnabled()
               && !domainWindow.isWindowModified(),
           QStringLiteral("editing Mixed choices stages an explicit atomic assignment without mutating the design"));
+
+    QAction* pendingDomainSave = actionWithText(
+        domainWindow, QStringLiteral("Save"));
+    QAction* pendingDomainValidate = actionWithText(
+        domainWindow, QStringLiteral("Validate / DRC"));
+    QAction* pendingDomainGenerate = actionWithText(
+        domainWindow, QStringLiteral("Generate RTL"));
+    for (QAction* action
+         : {pendingDomainSave, pendingDomainValidate, pendingDomainGenerate}) {
+        if (!action) {
+            continue;
+        }
+        chooseMessageBoxButton(QMessageBox::Cancel);
+        action->trigger();
+        application.processEvents();
+    }
+    check(pendingDomainSave && pendingDomainValidate && pendingDomainGenerate
+              && domainApplyAssignment->isEnabled()
+              && !domainWindow.operationBusy()
+              && !domainWindow.isWindowModified(),
+          QStringLiteral("Save, Validate and Generate cannot silently ignore a staged Domain assignment"));
+
     if (domainApplyAssignment) {
         domainApplyAssignment->click();
         application.processEvents();
