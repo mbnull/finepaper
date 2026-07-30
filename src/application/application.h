@@ -1,5 +1,6 @@
 #pragma once
 
+#include "application/domain_configuration.h"
 #include "execution/package_protocol.h"
 #include "noc/model.h"
 #include "package/package.h"
@@ -76,6 +77,9 @@ public:
     DesignResult removeEndpoint(const NocDesign& design, const QString& endpointId) const;
     DesignResult updateParameters(const NocDesign& design,
                                   const QJsonObject& parameters) const;
+    DesignResult replaceDomainConfiguration(
+        const NocDesign& design,
+        DomainConfiguration configuration) const;
     DesignResult addDomain(const NocDesign& design, DomainDefinition domain) const;
     DesignResult updateDomain(const NocDesign& design,
                               const QString& domainId,

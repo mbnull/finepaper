@@ -319,6 +319,153 @@ NocDesign crossingDesign(const FinepaperApplication& application,
     return design;
 }
 
+QJsonObject explicitConfigurationPackageManifest() {
+    QJsonObject manifest = packageManifest();
+    manifest.insert(
+        QStringLiteral("id"), QStringLiteral("test.explicit-domain-configuration"));
+    manifest.insert(
+        QStringLiteral("name"), QStringLiteral("Explicit Domain Configuration test"));
+
+    QJsonArray domainTypes = manifest.value(QStringLiteral("domainTypes")).toArray();
+    QJsonObject clockType = domainTypes[1].toObject();
+    QJsonArray properties = clockType.value(QStringLiteral("properties")).toArray();
+    QJsonObject powerReference = properties[1].toObject();
+    powerReference.insert(QStringLiteral("required"), true);
+    powerReference.remove(QStringLiteral("default"));
+    properties[1] = powerReference;
+    clockType.insert(QStringLiteral("properties"), properties);
+
+    QJsonArray relations = clockType.value(QStringLiteral("relations")).toArray();
+    QJsonObject poweredBy = relations[0].toObject();
+    poweredBy.insert(QStringLiteral("required"), true);
+    relations[0] = poweredBy;
+    clockType.insert(QStringLiteral("relations"), relations);
+    domainTypes[1] = clockType;
+    manifest.insert(QStringLiteral("domainTypes"), domainTypes);
+    return manifest;
+}
+
+QJsonObject versionOnePackageManifest() {
+    QJsonObject manifest = packageManifest();
+    manifest.insert(QStringLiteral("formatVersion"), 1);
+    manifest.insert(
+        QStringLiteral("id"), QStringLiteral("test.v1-domain-configuration"));
+    manifest.insert(
+        QStringLiteral("name"), QStringLiteral("V1 Domain Configuration test"));
+    manifest.remove(QStringLiteral("domainTypes"));
+    return manifest;
+}
+
+QJsonObject requestForPackage(const QString& packageId) {
+    QJsonObject request = createRequest();
+    QJsonObject package = request.value(QStringLiteral("package")).toObject();
+    package.insert(QStringLiteral("id"), packageId);
+    request.insert(QStringLiteral("package"), package);
+    return request;
+}
+
+DomainConfiguration singleDomainConfiguration() {
+    DomainConfiguration configuration;
+    configuration.domains = {
+        DomainDefinition{
+            QStringLiteral("power-explicit"),
+            QStringLiteral("power"),
+            QStringLiteral("Explicit power"),
+            QJsonObject{{QStringLiteral("voltageMv"), 900}}
+        },
+        DomainDefinition{
+            QStringLiteral("clock-left"),
+            QStringLiteral("clock"),
+            QStringLiteral("Left clock"),
+            QJsonObject{
+                {QStringLiteral("frequencyMHz"), 800},
+                {QStringLiteral("powerDomain"), QStringLiteral("power-explicit")}
+            }
+        }
+    };
+    configuration.domainMemberships = {
+        DomainMembership{
+            ElementRef{ElementKind::Router, QStringLiteral("r-0-0")},
+            QHash<QString, QStringList>{
+                {QStringLiteral("power"), QStringList{QStringLiteral("power-explicit")}},
+                {QStringLiteral("clock"), QStringList{QStringLiteral("clock-left")}}
+            }
+        },
+        DomainMembership{
+            ElementRef{ElementKind::Router, QStringLiteral("r-1-0")},
+            QHash<QString, QStringList>{
+                {QStringLiteral("power"), QStringList{QStringLiteral("power-explicit")}},
+                {QStringLiteral("clock"), QStringList{QStringLiteral("clock-left")}}
+            }
+        },
+        DomainMembership{
+            ElementRef{ElementKind::Endpoint, QStringLiteral("ep0")},
+            QHash<QString, QStringList>{
+                {QStringLiteral("power"), QStringList{QStringLiteral("power-explicit")}},
+                {QStringLiteral("clock"), QStringList{QStringLiteral("clock-left")}}
+            }
+        }
+    };
+    configuration.domainRelations.append(DomainRelation{
+        QStringLiteral("poweredBy"),
+        QStringLiteral("clock-left"),
+        QStringLiteral("power-explicit"),
+        QJsonObject{{QStringLiteral("latency"), 1}}
+    });
+    return configuration;
+}
+
+DomainConfiguration splitDomainConfiguration() {
+    DomainConfiguration configuration = singleDomainConfiguration();
+    configuration.domains.append(DomainDefinition{
+        QStringLiteral("clock-right"),
+        QStringLiteral("clock"),
+        QStringLiteral("Right clock"),
+        QJsonObject{
+            {QStringLiteral("frequencyMHz"), 600},
+            {QStringLiteral("powerDomain"), QStringLiteral("power-explicit")}
+        }
+    });
+    configuration.domainMemberships[1].assignments.insert(
+        QStringLiteral("clock"), QStringList{QStringLiteral("clock-right")});
+    configuration.domainRelations.append(DomainRelation{
+        QStringLiteral("poweredBy"),
+        QStringLiteral("clock-right"),
+        QStringLiteral("power-explicit"),
+        QJsonObject{{QStringLiteral("latency"), 2}}
+    });
+    configuration.crossingPolicies.append(DomainCrossingPolicy{
+        QStringLiteral("left_to_right"),
+        QStringLiteral("clock"),
+        QStringLiteral("clock-left"),
+        QStringLiteral("clock-right"),
+        QJsonObject{{QStringLiteral("stages"), 2}}
+    });
+    configuration.edgeOverrides.append(DomainEdgeOverride{
+        ElementRef{
+            ElementKind::RouterLink,
+            linkId(QStringLiteral("r-0-0"), QStringLiteral("r-1-0"))
+        },
+        QStringLiteral("clock"),
+        QStringLiteral("left_to_right"),
+        QJsonObject{{QStringLiteral("stages"), 3}}
+    });
+    return configuration;
+}
+
+QJsonObject domainConfigurationToJson(const DomainConfiguration& configuration) {
+    return domain_configuration::toJson(configuration);
+}
+
+bool hasDomainConfiguration(const NocDesign& design,
+                            const DomainConfiguration& configuration) {
+    return design.domains == configuration.domains
+        && design.domainMemberships == configuration.domainMemberships
+        && design.domainRelations == configuration.domainRelations
+        && design.crossingPolicies == configuration.crossingPolicies
+        && design.edgeOverrides == configuration.edgeOverrides;
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -698,6 +845,237 @@ int main(int argc, char** argv) {
                   QStringLiteral("mesh.resize_would_remove_edge_override"))
               && sameDesign(rejectedShrink.design, linkCrossing),
           QStringLiteral("resizeMesh rejects shrinking away Router memberships and Link overrides"));
+
+    QTemporaryDir configurationFixture(
+        QStringLiteral("/tmp/finepaper-domain-configuration-test-XXXXXX"));
+    const bool configurationFixtureReady = configurationFixture.isValid()
+        && prepareFixture(configurationFixture.path())
+        && saveJsonObject(
+            QDir(configurationFixture.path()).filePath(QStringLiteral("package.json")),
+            explicitConfigurationPackageManifest());
+    check(configurationFixtureReady,
+          QStringLiteral("the explicit Domain configuration Package fixture is prepared"));
+    if (configurationFixtureReady) {
+        FinepaperApplication configurationApplication;
+        const QVector<Diagnostic> configurationPackageDiagnostics =
+            configurationApplication.reloadPackages(
+                QStringList{configurationFixture.path()});
+        check(!hasErrors(configurationPackageDiagnostics),
+              QStringLiteral("the explicit Domain configuration Package loads"));
+
+        const DomainConfiguration singleConfiguration = singleDomainConfiguration();
+        const QJsonObject singleConfigurationJson = domainConfigurationToJson(
+            singleConfiguration);
+        const QStringList configurationFields{
+            QStringLiteral("domains"),
+            QStringLiteral("domainMemberships"),
+            QStringLiteral("domainRelations"),
+            QStringLiteral("crossingPolicies"),
+            QStringLiteral("edgeOverrides")
+        };
+        check(std::all_of(
+                  configurationFields.cbegin(),
+                  configurationFields.cend(),
+                  [&](const QString& field) {
+                      return singleConfigurationJson.value(field).isArray();
+                  }),
+              QStringLiteral("a Domain configuration serializes all five arrays explicitly"));
+
+        QJsonObject explicitRequest = requestForPackage(
+            QStringLiteral("test.explicit-domain-configuration"));
+        explicitRequest.insert(
+            QStringLiteral("domainConfiguration"), singleConfigurationJson);
+        const DesignResult explicitlyCreated = configurationApplication.createDesign(
+            explicitRequest);
+        check(explicitlyCreated.success
+                  && hasDomainConfiguration(
+                      explicitlyCreated.design, singleConfiguration)
+                  && !findDomain(
+                      explicitlyCreated.design, QStringLiteral("power-default"))
+                  && !findDomain(
+                      explicitlyCreated.design, QStringLiteral("clock-default")),
+              QStringLiteral("createDesign uses an explicit complete Domain configuration without materializing defaults"));
+
+        if (explicitlyCreated.success) {
+            const DomainConfiguration splitConfiguration = splitDomainConfiguration();
+            const DesignResult replaced =
+                configurationApplication.replaceDomainConfiguration(
+                    explicitlyCreated.design, splitConfiguration);
+            check(replaced.success
+                      && hasDomainConfiguration(replaced.design, splitConfiguration)
+                      && replaced.design.topology.rows
+                          == explicitlyCreated.design.topology.rows
+                      && replaced.design.topology.columns
+                          == explicitlyCreated.design.topology.columns
+                      && replaced.design.endpoints.size()
+                          == explicitlyCreated.design.endpoints.size(),
+                  QStringLiteral("replaceDomainConfiguration atomically installs a complete interdependent configuration"));
+
+            DomainConfiguration missingRelation = splitConfiguration;
+            missingRelation.domainRelations.removeLast();
+            checkAtomicFailure(
+                configurationApplication.replaceDomainConfiguration(
+                    explicitlyCreated.design, missingRelation),
+                explicitlyCreated.design,
+                QStringLiteral("domain_relation.required"),
+                QStringLiteral("replaceDomainConfiguration rejects a missing required relation atomically"));
+
+            DomainConfiguration unknownReference = splitConfiguration;
+            unknownReference.domains[2].properties.insert(
+                QStringLiteral("powerDomain"), QStringLiteral("missing-power"));
+            checkAtomicFailure(
+                configurationApplication.replaceDomainConfiguration(
+                    explicitlyCreated.design, unknownReference),
+                explicitlyCreated.design,
+                QStringLiteral("domain_property.unknown_reference"),
+                QStringLiteral("replaceDomainConfiguration validates required Domain references atomically"));
+
+            DomainConfiguration invalidPolicy = splitConfiguration;
+            invalidPolicy.crossingPolicies[0].properties.insert(
+                QStringLiteral("stages"), 9);
+            checkAtomicFailure(
+                configurationApplication.replaceDomainConfiguration(
+                    explicitlyCreated.design, invalidPolicy),
+                explicitlyCreated.design,
+                QStringLiteral("domain_property.above_maximum"),
+                QStringLiteral("replaceDomainConfiguration validates crossing policy schemas atomically"));
+
+            DomainConfiguration duplicateDomain = splitConfiguration;
+            duplicateDomain.domains.append(duplicateDomain.domains[0]);
+            checkAtomicFailure(
+                configurationApplication.replaceDomainConfiguration(
+                    explicitlyCreated.design, duplicateDomain),
+                explicitlyCreated.design,
+                QStringLiteral("domain.duplicate_id"),
+                QStringLiteral("replaceDomainConfiguration rejects structural errors atomically"));
+
+            DomainConfiguration unknownRouter = splitConfiguration;
+            unknownRouter.domainMemberships[1].element.id = QStringLiteral("r-9-9");
+            checkAtomicFailure(
+                configurationApplication.replaceDomainConfiguration(
+                    explicitlyCreated.design, unknownRouter),
+                explicitlyCreated.design,
+                QStringLiteral("domain_membership.unknown_element"),
+                QStringLiteral("Domain configuration cannot create Routers outside the Mesh"));
+        }
+
+        for (const QString& field : configurationFields) {
+            QJsonObject missingConfiguration = singleConfigurationJson;
+            missingConfiguration.remove(field);
+            QJsonObject missingFieldRequest = requestForPackage(
+                QStringLiteral("test.explicit-domain-configuration"));
+            missingFieldRequest.insert(
+                QStringLiteral("domainConfiguration"), missingConfiguration);
+            check(!configurationApplication.createDesign(missingFieldRequest).success,
+                  QStringLiteral("createDesign rejects domainConfiguration without %1")
+                      .arg(field));
+        }
+
+        QJsonObject nonObjectRequest = requestForPackage(
+            QStringLiteral("test.explicit-domain-configuration"));
+        nonObjectRequest.insert(
+            QStringLiteral("domainConfiguration"), QStringLiteral("invalid"));
+        check(!configurationApplication.createDesign(nonObjectRequest).success,
+              QStringLiteral("createDesign rejects a non-object domainConfiguration"));
+
+        QJsonObject unknownFieldConfiguration = singleConfigurationJson;
+        unknownFieldConfiguration.insert(QStringLiteral("domainPolices"), QJsonArray{});
+        QJsonObject unknownFieldRequest = requestForPackage(
+            QStringLiteral("test.explicit-domain-configuration"));
+        unknownFieldRequest.insert(
+            QStringLiteral("domainConfiguration"), unknownFieldConfiguration);
+        const DesignResult unknownFieldCreate =
+            configurationApplication.createDesign(unknownFieldRequest);
+        check(!unknownFieldCreate.success
+                  && hasDiagnosticCode(
+                      unknownFieldCreate.diagnostics,
+                      QStringLiteral("create.unknown_field")),
+              QStringLiteral("createDesign rejects unknown domainConfiguration fields"));
+
+        DomainConfiguration unknownRouterConfiguration = singleConfiguration;
+        unknownRouterConfiguration.domainMemberships[1].element.id =
+            QStringLiteral("r-9-9");
+        QJsonObject unknownRouterRequest = requestForPackage(
+            QStringLiteral("test.explicit-domain-configuration"));
+        unknownRouterRequest.insert(
+            QStringLiteral("domainConfiguration"),
+            domainConfigurationToJson(unknownRouterConfiguration));
+        const DesignResult unknownRouterCreate =
+            configurationApplication.createDesign(unknownRouterRequest);
+        check(!unknownRouterCreate.success
+                  && hasDiagnosticCode(
+                      unknownRouterCreate.diagnostics,
+                      QStringLiteral("domain_membership.unknown_element")),
+              QStringLiteral("createDesign rejects Domain memberships for non-Mesh Routers"));
+
+        DomainConfiguration missingRequiredRelation = singleConfiguration;
+        missingRequiredRelation.domainRelations.clear();
+        QJsonObject missingRelationRequest = requestForPackage(
+            QStringLiteral("test.explicit-domain-configuration"));
+        missingRelationRequest.insert(
+            QStringLiteral("domainConfiguration"),
+            domainConfigurationToJson(missingRequiredRelation));
+        const DesignResult missingRelationCreate =
+            configurationApplication.createDesign(missingRelationRequest);
+        check(!missingRelationCreate.success
+                  && hasDiagnosticCode(
+                      missingRelationCreate.diagnostics,
+                      QStringLiteral("domain_relation.required")),
+              QStringLiteral("createDesign validates required relation schemas in explicit configurations"));
+
+        DomainConfiguration invalidPropertyConfiguration = singleConfiguration;
+        invalidPropertyConfiguration.domains[1].properties.insert(
+            QStringLiteral("frequencyMHz"), 50);
+        QJsonObject invalidPropertyRequest = requestForPackage(
+            QStringLiteral("test.explicit-domain-configuration"));
+        invalidPropertyRequest.insert(
+            QStringLiteral("domainConfiguration"),
+            domainConfigurationToJson(invalidPropertyConfiguration));
+        const DesignResult invalidPropertyCreate =
+            configurationApplication.createDesign(invalidPropertyRequest);
+        check(!invalidPropertyCreate.success
+                  && hasDiagnosticCode(
+                      invalidPropertyCreate.diagnostics,
+                      QStringLiteral("domain_property.below_minimum")),
+              QStringLiteral("createDesign validates Package property schemas in explicit configurations"));
+
+        QTemporaryDir versionOneFixture(
+            QStringLiteral("/tmp/finepaper-v1-domain-configuration-test-XXXXXX"));
+        const bool versionOneFixtureReady = versionOneFixture.isValid()
+            && prepareFixture(versionOneFixture.path())
+            && saveJsonObject(
+                QDir(versionOneFixture.path()).filePath(QStringLiteral("package.json")),
+                versionOnePackageManifest());
+        check(versionOneFixtureReady,
+              QStringLiteral("the V1 Domain configuration Package fixture is prepared"));
+        if (versionOneFixtureReady) {
+            FinepaperApplication versionOneApplication;
+            const QVector<Diagnostic> versionOnePackageDiagnostics =
+                versionOneApplication.reloadPackages(
+                    QStringList{versionOneFixture.path()});
+            check(!hasErrors(versionOnePackageDiagnostics),
+                  QStringLiteral("the V1 Package fixture loads"));
+            QJsonObject versionOneRequest = requestForPackage(
+                QStringLiteral("test.v1-domain-configuration"));
+            versionOneRequest.insert(
+                QStringLiteral("domainConfiguration"), singleConfigurationJson);
+            check(!versionOneApplication.createDesign(versionOneRequest).success,
+                  QStringLiteral("a V1 Package rejects an explicit Domain configuration"));
+
+            const DesignResult versionOneDesign = versionOneApplication.createDesign(
+                requestForPackage(QStringLiteral("test.v1-domain-configuration")));
+            check(versionOneDesign.success,
+                  QStringLiteral("the V1 fixture creates a baseline Design"));
+            if (versionOneDesign.success) {
+                checkAtomicFailure(
+                    versionOneApplication.replaceDomainConfiguration(
+                        versionOneDesign.design, DomainConfiguration{}),
+                    versionOneDesign.design,
+                    QStringLiteral("domain_configuration.requires_v2"),
+                    QStringLiteral("replaceDomainConfiguration is explicitly V2-only"));
+            }
+        }
+    }
 
     if (failures == 0) {
         QTextStream(stdout) << "Application Domain tests passed" << Qt::endl;

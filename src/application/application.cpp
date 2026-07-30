@@ -428,10 +428,42 @@ DesignResult FinepaperApplication::createDesign(const QJsonObject& request) cons
         design.endpoints.append(std::move(endpoint));
     }
 
-    domain_service::MutationResult domainResult =
-        domain_service::materializeRequiredDomains(design, *package);
-    design = std::move(domainResult.design);
-    result.diagnostics += std::move(domainResult.diagnostics);
+    const QString domainConfigurationKey = QStringLiteral("domainConfiguration");
+    if (request.contains(domainConfigurationKey)) {
+        if (package->formatVersion != 2) {
+            appendDiagnostic(
+                result.diagnostics,
+                QStringLiteral("error"),
+                QStringLiteral("create.domain_configuration_requires_v2"),
+                QStringLiteral("domainConfiguration requires Package formatVersion 2"),
+                QStringLiteral("/domainConfiguration"));
+            result.design = std::move(design);
+            return result;
+        } else if (!request.value(domainConfigurationKey).isObject()) {
+            appendDiagnostic(result.diagnostics,
+                             QStringLiteral("error"),
+                             QStringLiteral("create.expected_object"),
+                             QStringLiteral("domainConfiguration must be an object"),
+                             QStringLiteral("/domainConfiguration"));
+            result.design = std::move(design);
+            return result;
+        } else {
+            domain_configuration::ParseResult parsed = domain_configuration::parse(
+                request.value(domainConfigurationKey).toObject(), design);
+            result.diagnostics += std::move(parsed.diagnostics);
+            if (!parsed.success) {
+                result.design = std::move(design);
+                return result;
+            }
+            design = domain_configuration::replace(
+                design, std::move(parsed.configuration));
+        }
+    } else {
+        domain_service::MutationResult domainResult =
+            domain_service::materializeRequiredDomains(design, *package);
+        design = std::move(domainResult.design);
+        result.diagnostics += std::move(domainResult.diagnostics);
+    }
 
     if (request.contains(QStringLiteral("packageData"))) {
         if (!request.value(QStringLiteral("packageData")).isObject()) {
@@ -647,6 +679,28 @@ DesignResult FinepaperApplication::updateParameters(const NocDesign& design,
                                                      const QJsonObject& parameters) const {
     NocDesign edited = design;
     edited.parameters = parameters;
+    DesignResult validated = validateEditedDesign(edited);
+    if (!validated.success) {
+        validated.design = design;
+    }
+    return validated;
+}
+
+DesignResult FinepaperApplication::replaceDomainConfiguration(
+    const NocDesign& design,
+    DomainConfiguration configuration) const {
+    if (design.formatVersion != 2) {
+        DesignResult result;
+        result.design = design;
+        appendDiagnostic(result.diagnostics,
+                         QStringLiteral("error"),
+                         QStringLiteral("domain_configuration.requires_v2"),
+                         QStringLiteral("DomainConfiguration requires Design formatVersion 2"),
+                         QStringLiteral("/formatVersion"));
+        return result;
+    }
+    const NocDesign edited = domain_configuration::replace(
+        design, std::move(configuration));
     DesignResult validated = validateEditedDesign(edited);
     if (!validated.success) {
         validated.design = design;

@@ -229,11 +229,46 @@ Generator/Engine 接收完整 Design V2。Core 不把 clock、power 或厂商 Ty
 
 GUI、CLI 和未来 API 都只能通过 `FinepaperApplication` 修改 Domain：
 
+- `replaceDomainConfiguration`；
 - `addDomain`；
 - `updateDomain`；
 - `removeDomain`；
 - `assignDomainsToElements`；
 - `clearDomainAssignment`。
+
+五组 Domain 数据可以通过公共 `DomainConfiguration` 一次性提交：
+
+~~~cpp
+struct DomainConfiguration {
+    QVector<DomainDefinition> domains;
+    QVector<DomainMembership> domainMemberships;
+    QVector<DomainRelation> domainRelations;
+    QVector<DomainCrossingPolicy> crossingPolicies;
+    QVector<DomainEdgeOverride> edgeOverrides;
+};
+~~~
+
+`DomainConfiguration` 只是五组既有数组的内存 aggregate，不是 Design V2 的第六个持久化字段；保存时仍展开为 `domains`、`domainMemberships`、`domainRelations`、`crossingPolicies` 和 `edgeOverrides`。
+
+`replaceDomainConfiguration` 是 aggregate transaction：先在候选 Design 上整体替换五组数据，再执行 Core 与 Package 全量校验；任何结构、引用、schema 或 required 约束失败时返回原 Design，不暴露半更新状态。Router 和 Router Link 仍由 Mesh 派生，配置只能通过稳定引用选择它们，不能携带或创建 Router/Link 实体。
+
+Package V2 的 `createDesign` 请求可以显式携带完整配置。`domainConfiguration` 必须是 object，并显式包含全部五个数组；解析复用 Design V2 的严格 JSON codec：
+
+~~~json
+{
+  "package": { "id": "vendor.noc", "version": "2.0.0" },
+  "name": "configured-noc",
+  "domainConfiguration": {
+    "domains": [],
+    "domainMemberships": [],
+    "domainRelations": [],
+    "crossingPolicies": [],
+    "edgeOverrides": []
+  }
+}
+~~~
+
+显式配置存在时，Application 不再补 required 默认实例，也不合并 Domain property default；该配置是权威的完整快照，必须自行满足 Package 约束。未提供时继续执行 Package-driven required 默认物化。Package V1 请求出现 `domainConfiguration` 时必须明确失败。
 
 批量 assignment 必须原子执行：任一元素或 Domain 不合法时，整次操作不修改设计。修改 Domain 的稳定 `id/type` 不应通过普通 update 偷偷重写引用；需要独立 rename/migrate 操作时再增加显式 API。
 
@@ -257,6 +292,7 @@ GUI、CLI 和未来 API 都只能通过 `FinepaperApplication` 修改 Domain：
 - Design V2 必须显式提供全部五组数组；
 - Package V1 不允许出现 `domainTypes`；
 - Package V2 必须显式提供 `domainTypes` 数组；
+- aggregate `replaceDomainConfiguration` API 与 create request 的 `domainConfiguration` 仅支持 Design V2；create request 同时要求 Package V2，且五个数组必须全部显式存在；
 - 未知更高版本必须失败关闭，不能读入后以旧版本覆盖保存。
 
 V1 -> V2 迁移是显式应用操作：根据 Package required Type 创建默认实例、为所有适用 Router/Endpoint 物化归属、运行 Core 与 Package validation，最后由用户确认保存。
