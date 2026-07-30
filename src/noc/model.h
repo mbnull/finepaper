@@ -8,6 +8,7 @@
 #include <QVector>
 
 #include <optional>
+#include <utility>
 
 namespace finepaper {
 
@@ -162,10 +163,36 @@ struct TopologyProjection {
     QVector<EndpointView> endpoints;
 };
 
+struct DomainCrossingView {
+    ElementRef edge;
+    ElementRef fromElement;
+    ElementRef toElement;
+    QString domainType;
+    QStringList fromDomains;
+    QStringList toDomains;
+    std::optional<QString> overridePolicy;
+    QJsonObject overrideProperties;
+
+    bool operator==(const DomainCrossingView&) const = default;
+};
+
+struct ResolvedDesign {
+    NocDesign design;
+    TopologyProjection topology;
+    QVector<DomainCrossingView> domainCrossings;
+};
+
 QString routerId(RouterPosition position);
 QString linkId(const QString& fromRouter, const QString& toRouter);
+std::optional<RouterPosition> routerPositionFromId(const QString& id);
+bool designReferenceExists(const NocDesign& design, const ElementRef& reference);
+std::optional<std::pair<ElementRef, ElementRef>> edgeEndpoints(
+    const NocDesign& design,
+    const ElementRef& edge);
 TopologyProjection projectTopology(const NocDesign& design);
+QVector<DomainCrossingView> projectDomainCrossings(const NocDesign& design);
 NocDesign withResolvedAutomaticSlots(const NocDesign& design);
+ResolvedDesign resolveDesign(const NocDesign& design);
 QVector<Diagnostic> validateDesignStructure(const NocDesign& design);
 
 } // namespace finepaper

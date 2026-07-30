@@ -112,6 +112,148 @@ NocDesign domainDesign() {
     return design;
 }
 
+NocDesign projectionDesign() {
+    NocDesign design;
+    design.formatVersion = 2;
+    design.id = QStringLiteral("domain_projection_test");
+    design.name = QStringLiteral("Domain projection test");
+    design.package = PackageReference{
+        QStringLiteral("test.domain-projection"),
+        QStringLiteral("1.0.0")
+    };
+    design.topology = TopologySpec{QStringLiteral("mesh"), 1, 2};
+    design.endpoints = {
+        EndpointInstance{
+            QStringLiteral("ep0"),
+            QStringLiteral("client"),
+            EndpointAttachment{RouterPosition{0, 0}, std::nullopt},
+            QJsonObject{}
+        },
+        EndpointInstance{
+            QStringLiteral("ep1"),
+            QStringLiteral("client"),
+            EndpointAttachment{RouterPosition{0, 0}, QStringLiteral("0")},
+            QJsonObject{}
+        }
+    };
+    design.domains = {
+        DomainDefinition{
+            QStringLiteral("clk_a"),
+            QStringLiteral("clock"),
+            QStringLiteral("Clock A"),
+            QJsonObject{}
+        },
+        DomainDefinition{
+            QStringLiteral("clk_b"),
+            QStringLiteral("clock"),
+            QStringLiteral("Clock B"),
+            QJsonObject{}
+        },
+        DomainDefinition{
+            QStringLiteral("clk_c"),
+            QStringLiteral("clock"),
+            QStringLiteral("Clock C"),
+            QJsonObject{}
+        },
+        DomainDefinition{
+            QStringLiteral("pd_main"),
+            QStringLiteral("power"),
+            QStringLiteral("Main power"),
+            QJsonObject{}
+        },
+        DomainDefinition{
+            QStringLiteral("pd_aux"),
+            QStringLiteral("power"),
+            QStringLiteral("Auxiliary power"),
+            QJsonObject{}
+        }
+    };
+    design.domainMemberships = {
+        DomainMembership{
+            ElementRef{ElementKind::Router, QStringLiteral("r-0-0")},
+            QHash<QString, QStringList>{
+                {QStringLiteral("clock"), QStringList{
+                    QStringLiteral("clk_b"), QStringLiteral("clk_a")
+                }},
+                {QStringLiteral("power"), QStringList{QStringLiteral("pd_main")}}
+            }
+        },
+        DomainMembership{
+            ElementRef{ElementKind::Router, QStringLiteral("r-1-0")},
+            QHash<QString, QStringList>{
+                {QStringLiteral("clock"), QStringList{
+                    QStringLiteral("clk_a"), QStringLiteral("clk_b")
+                }},
+                {QStringLiteral("power"), QStringList{QStringLiteral("pd_aux")}}
+            }
+        },
+        DomainMembership{
+            ElementRef{ElementKind::Endpoint, QStringLiteral("ep0")},
+            QHash<QString, QStringList>{
+                {QStringLiteral("clock"), QStringList{QStringLiteral("clk_c")}},
+                {QStringLiteral("power"), QStringList{QStringLiteral("pd_main")}}
+            }
+        },
+        DomainMembership{
+            ElementRef{ElementKind::Endpoint, QStringLiteral("ep1")},
+            QHash<QString, QStringList>{
+                {QStringLiteral("clock"), QStringList{
+                    QStringLiteral("clk_a"), QStringLiteral("clk_b")
+                }},
+                {QStringLiteral("power"), QStringList{QStringLiteral("pd_main")}}
+            }
+        }
+    };
+    design.crossingPolicies = {
+        DomainCrossingPolicy{
+            QStringLiteral("power_transition"),
+            QStringLiteral("power"),
+            QStringLiteral("pd_main"),
+            QStringLiteral("pd_aux"),
+            QJsonObject{}
+        },
+        DomainCrossingPolicy{
+            QStringLiteral("endpoint_clock"),
+            QStringLiteral("clock"),
+            QStringLiteral("clk_a"),
+            QStringLiteral("clk_c"),
+            QJsonObject{}
+        }
+    };
+    design.edgeOverrides = {
+        DomainEdgeOverride{
+            ElementRef{
+                ElementKind::RouterLink,
+                linkId(QStringLiteral("r-0-0"), QStringLiteral("r-1-0"))
+            },
+            QStringLiteral("power"),
+            QStringLiteral("power_transition"),
+            QJsonObject{{QStringLiteral("isolationCells"), 2}}
+        },
+        DomainEdgeOverride{
+            ElementRef{ElementKind::EndpointAttachment, QStringLiteral("ep0")},
+            QStringLiteral("clock"),
+            QStringLiteral("endpoint_clock"),
+            QJsonObject{{QStringLiteral("synchronizerStages"), 3}}
+        }
+    };
+    return design;
+}
+
+const DomainCrossingView* findCrossing(
+    const QVector<DomainCrossingView>& crossings,
+    ElementKind edgeKind,
+    const QString& edgeId,
+    const QString& domainType) {
+    const auto crossing = std::find_if(
+        crossings.cbegin(), crossings.cend(), [&](const DomainCrossingView& value) {
+            return value.edge.kind == edgeKind
+                && value.edge.id == edgeId
+                && value.domainType == domainType;
+        });
+    return crossing == crossings.cend() ? nullptr : &(*crossing);
+}
+
 void expectDiagnostic(const QString& code,
                       const QString& description,
                       const std::function<void(NocDesign&)>& mutate) {
@@ -288,6 +430,136 @@ int main(int argc, char** argv) {
     });
     check(!hasErrors(validateDesignStructure(validAttachmentOverride)),
           QStringLiteral("endpoint attachment edge references are accepted"));
+
+    const NocDesign projectedDesign = projectionDesign();
+    check(!hasErrors(validateDesignStructure(projectedDesign)),
+          QStringLiteral("the Domain projection fixture is structurally valid"));
+    const QVector<DomainCrossingView> crossings = projectDomainCrossings(projectedDesign);
+    check(crossings.size() == 2,
+          QStringLiteral("only edges whose Domain assignment sets differ become crossings"));
+
+    const QString projectedLinkId = linkId(
+        QStringLiteral("r-0-0"), QStringLiteral("r-1-0"));
+    const DomainCrossingView* linkCrossing = findCrossing(
+        crossings,
+        ElementKind::RouterLink,
+        projectedLinkId,
+        QStringLiteral("power"));
+    check(linkCrossing
+              && linkCrossing->fromElement
+                  == ElementRef{ElementKind::Router, QStringLiteral("r-0-0")}
+              && linkCrossing->toElement
+                  == ElementRef{ElementKind::Router, QStringLiteral("r-1-0")}
+              && linkCrossing->fromDomains
+                  == QStringList{QStringLiteral("pd_main")}
+              && linkCrossing->toDomains
+                  == QStringList{QStringLiteral("pd_aux")},
+          QStringLiteral("Router Link Domain crossings expose their endpoint assignments"));
+    check(linkCrossing
+              && linkCrossing->overridePolicy == QStringLiteral("power_transition")
+              && linkCrossing->overrideProperties
+                  == QJsonObject{{QStringLiteral("isolationCells"), 2}},
+          QStringLiteral("Router Link overrides map policy and properties onto crossings"));
+
+    const DomainCrossingView* attachmentCrossing = findCrossing(
+        crossings,
+        ElementKind::EndpointAttachment,
+        QStringLiteral("ep0"),
+        QStringLiteral("clock"));
+    check(attachmentCrossing
+              && attachmentCrossing->fromElement
+                  == ElementRef{ElementKind::Router, QStringLiteral("r-0-0")}
+              && attachmentCrossing->toElement
+                  == ElementRef{ElementKind::Endpoint, QStringLiteral("ep0")}
+              && attachmentCrossing->fromDomains
+                  == QStringList{QStringLiteral("clk_a"), QStringLiteral("clk_b")}
+              && attachmentCrossing->toDomains
+                  == QStringList{QStringLiteral("clk_c")},
+          QStringLiteral("Endpoint Attachment crossings are projected with normalized Domain sets"));
+    check(attachmentCrossing
+              && attachmentCrossing->overridePolicy == QStringLiteral("endpoint_clock")
+              && attachmentCrossing->overrideProperties
+                  == QJsonObject{{QStringLiteral("synchronizerStages"), 3}},
+          QStringLiteral("Endpoint Attachment overrides map onto crossings"));
+    check(findCrossing(crossings,
+                       ElementKind::RouterLink,
+                       projectedLinkId,
+                       QStringLiteral("clock")) == nullptr,
+          QStringLiteral("multiple Domain assignments compare as unordered sets"));
+    check(std::none_of(
+              crossings.cbegin(), crossings.cend(), [](const DomainCrossingView& crossing) {
+                  return crossing.edge.kind == ElementKind::EndpointAttachment
+                      && crossing.edge.id == QStringLiteral("ep1");
+              }),
+          QStringLiteral("equal Router and Endpoint Domain sets do not create a crossing"));
+
+    const std::optional<RouterPosition> routerPosition = routerPositionFromId(
+        QStringLiteral("r-1-0"));
+    check(routerPosition && *routerPosition == RouterPosition{1, 0}
+              && !routerPositionFromId(QStringLiteral("r-01-0"))
+              && !routerPositionFromId(QStringLiteral("router-1-0")),
+          QStringLiteral("Router ids are parsed only in canonical stable form"));
+
+    check(designReferenceExists(
+              projectedDesign,
+              ElementRef{ElementKind::Router, QStringLiteral("r-1-0")})
+              && designReferenceExists(
+                  projectedDesign,
+                  ElementRef{ElementKind::Endpoint, QStringLiteral("ep0")})
+              && designReferenceExists(
+                  projectedDesign,
+                  ElementRef{ElementKind::RouterLink, projectedLinkId})
+              && designReferenceExists(
+                  projectedDesign,
+                  ElementRef{ElementKind::EndpointAttachment, QStringLiteral("ep0")})
+              && !designReferenceExists(
+                  projectedDesign,
+                  ElementRef{ElementKind::Router, QStringLiteral("r-2-0")}),
+          QStringLiteral("design references resolve all supported element and edge kinds"));
+
+    const auto linkEndpoints = edgeEndpoints(
+        projectedDesign,
+        ElementRef{ElementKind::RouterLink, projectedLinkId});
+    check(linkEndpoints
+              && linkEndpoints->first
+                  == ElementRef{ElementKind::Router, QStringLiteral("r-0-0")}
+              && linkEndpoints->second
+                  == ElementRef{ElementKind::Router, QStringLiteral("r-1-0")},
+          QStringLiteral("Router Link endpoint references are resolved"));
+    const auto attachmentEndpoints = edgeEndpoints(
+        projectedDesign,
+        ElementRef{ElementKind::EndpointAttachment, QStringLiteral("ep0")});
+    check(attachmentEndpoints
+              && attachmentEndpoints->first
+                  == ElementRef{ElementKind::Router, QStringLiteral("r-0-0")}
+              && attachmentEndpoints->second
+                  == ElementRef{ElementKind::Endpoint, QStringLiteral("ep0")}
+              && !edgeEndpoints(
+                  projectedDesign,
+                  ElementRef{ElementKind::Router, QStringLiteral("r-0-0")}),
+          QStringLiteral("Endpoint Attachment endpoints resolve and non-edge references do not"));
+
+    const ResolvedDesign resolved = resolveDesign(projectedDesign);
+    const auto resolvedEndpoint = std::find_if(
+        resolved.design.endpoints.cbegin(),
+        resolved.design.endpoints.cend(),
+        [](const EndpointInstance& endpoint) {
+            return endpoint.id == QStringLiteral("ep0");
+        });
+    const auto projectedEndpoint = std::find_if(
+        resolved.topology.endpoints.cbegin(),
+        resolved.topology.endpoints.cend(),
+        [](const EndpointView& endpoint) {
+            return endpoint.id == QStringLiteral("ep0");
+        });
+    check(!projectedDesign.endpoints[0].attachment.slot
+              && resolvedEndpoint != resolved.design.endpoints.cend()
+              && resolvedEndpoint->attachment.slot == QStringLiteral("1")
+              && projectedEndpoint != resolved.topology.endpoints.cend()
+              && projectedEndpoint->slot == QStringLiteral("1"),
+          QStringLiteral("resolveDesign materializes automatic slots in both design and topology"));
+    check(resolved.domainCrossings == crossings,
+          QStringLiteral("resolveDesign includes the Domain crossing projection"));
 
     if (failures == 0) {
         QTextStream(stdout) << "Domain model tests passed" << Qt::endl;

@@ -39,7 +39,7 @@ QString edgeOverrideKey(const DomainEdgeOverride& edgeOverride) {
     return referenceKey(edgeOverride.edge) + QChar(0x1f) + edgeOverride.domainType;
 }
 
-std::optional<RouterPosition> routerPositionFromId(const QString& id) {
+std::optional<RouterPosition> routerPositionFromStableId(const QString& id) {
     const QStringList parts = id.split(QLatin1Char('-'));
     if (parts.size() != 3 || parts.at(0) != QStringLiteral("r")) {
         return std::nullopt;
@@ -56,34 +56,43 @@ std::optional<RouterPosition> routerPositionFromId(const QString& id) {
 }
 
 bool routerReferenceExists(const NocDesign& design, const QString& id) {
-    const std::optional<RouterPosition> position = routerPositionFromId(id);
+    const std::optional<RouterPosition> position = routerPositionFromStableId(id);
     return position
         && position->x < design.topology.columns
         && position->y < design.topology.rows;
 }
 
-bool linkReferenceExists(const NocDesign& design, const QString& id) {
+std::optional<std::pair<QString, QString>> linkRouterIds(
+    const NocDesign& design,
+    const QString& id) {
     constexpr qsizetype prefixLength = 5;
     if (!id.startsWith(QStringLiteral("link-"))) {
-        return false;
+        return std::nullopt;
     }
     const QString body = id.mid(prefixLength);
     const qsizetype separator = body.indexOf(QStringLiteral("--"));
     if (separator <= 0 || separator + 2 >= body.size()) {
-        return false;
+        return std::nullopt;
     }
     const QString fromId = body.left(separator);
     const QString toId = body.mid(separator + 2);
-    const std::optional<RouterPosition> from = routerPositionFromId(fromId);
-    const std::optional<RouterPosition> to = routerPositionFromId(toId);
+    const std::optional<RouterPosition> from = routerPositionFromStableId(fromId);
+    const std::optional<RouterPosition> to = routerPositionFromStableId(toId);
     if (!from || !to
         || !routerReferenceExists(design, fromId)
         || !routerReferenceExists(design, toId)
         || linkId(fromId, toId) != id) {
-        return false;
+        return std::nullopt;
     }
-    return (to->x == from->x + 1 && to->y == from->y)
-        || (to->x == from->x && to->y == from->y + 1);
+    if ((to->x == from->x + 1 && to->y == from->y)
+        || (to->x == from->x && to->y == from->y + 1)) {
+        return std::pair<QString, QString>{fromId, toId};
+    }
+    return std::nullopt;
+}
+
+bool linkReferenceExists(const NocDesign& design, const QString& id) {
+    return linkRouterIds(design, id).has_value();
 }
 
 bool membershipElementReferenceExists(const NocDesign& design,
@@ -116,6 +125,12 @@ bool hasDomainData(const NocDesign& design) {
         || !design.domainRelations.isEmpty()
         || !design.crossingPolicies.isEmpty()
         || !design.edgeOverrides.isEmpty();
+}
+
+QStringList normalizedDomainIds(QStringList ids) {
+    std::sort(ids.begin(), ids.end());
+    ids.erase(std::unique(ids.begin(), ids.end()), ids.end());
+    return ids;
 }
 
 } // namespace
@@ -165,6 +180,55 @@ ElementKind elementKindFromId(const QString& id) {
         return ElementKind::EndpointAttachment;
     }
     return ElementKind::Invalid;
+}
+
+std::optional<RouterPosition> routerPositionFromId(const QString& id) {
+    return routerPositionFromStableId(id);
+}
+
+bool designReferenceExists(const NocDesign& design, const ElementRef& reference) {
+    switch (reference.kind) {
+    case ElementKind::Router:
+        return routerReferenceExists(design, reference.id);
+    case ElementKind::Endpoint:
+    case ElementKind::EndpointAttachment:
+        return std::any_of(
+            design.endpoints.cbegin(), design.endpoints.cend(),
+            [&](const EndpointInstance& endpoint) { return endpoint.id == reference.id; });
+    case ElementKind::RouterLink:
+        return linkReferenceExists(design, reference.id);
+    case ElementKind::Invalid:
+        return false;
+    }
+    return false;
+}
+
+std::optional<std::pair<ElementRef, ElementRef>> edgeEndpoints(
+    const NocDesign& design,
+    const ElementRef& edge) {
+    if (edge.kind == ElementKind::RouterLink) {
+        const auto routers = linkRouterIds(design, edge.id);
+        if (!routers) {
+            return std::nullopt;
+        }
+        return std::pair<ElementRef, ElementRef>{
+            ElementRef{ElementKind::Router, routers->first},
+            ElementRef{ElementKind::Router, routers->second}
+        };
+    }
+    if (edge.kind == ElementKind::EndpointAttachment) {
+        const auto endpoint = std::find_if(
+            design.endpoints.cbegin(), design.endpoints.cend(),
+            [&](const EndpointInstance& value) { return value.id == edge.id; });
+        if (endpoint == design.endpoints.cend()) {
+            return std::nullopt;
+        }
+        return std::pair<ElementRef, ElementRef>{
+            ElementRef{ElementKind::Router, routerId(endpoint->attachment.router)},
+            ElementRef{ElementKind::Endpoint, endpoint->id}
+        };
+    }
+    return std::nullopt;
 }
 
 NocDesign withResolvedAutomaticSlots(const NocDesign& design) {
@@ -259,6 +323,100 @@ TopologyProjection projectTopology(const NocDesign& design) {
         });
     }
     return projection;
+}
+
+QVector<DomainCrossingView> projectDomainCrossings(const NocDesign& design) {
+    QHash<QString, QHash<QString, QStringList>> assignmentsByElement;
+    for (const DomainMembership& membership : design.domainMemberships) {
+        QHash<QString, QStringList> normalizedAssignments;
+        for (auto iterator = membership.assignments.constBegin();
+             iterator != membership.assignments.constEnd(); ++iterator) {
+            normalizedAssignments.insert(
+                iterator.key(), normalizedDomainIds(iterator.value()));
+        }
+        assignmentsByElement.insert(referenceKey(membership.element),
+                                    std::move(normalizedAssignments));
+    }
+
+    QHash<QString, const DomainEdgeOverride*> overrides;
+    for (const DomainEdgeOverride& edgeOverride : design.edgeOverrides) {
+        overrides.insert(edgeOverrideKey(edgeOverride), &edgeOverride);
+    }
+
+    QVector<DomainCrossingView> crossings;
+    const auto appendCrossingsForEdge = [&](const ElementRef& edge,
+                                            const ElementRef& from,
+                                            const ElementRef& to) {
+        static const QHash<QString, QStringList> emptyAssignments;
+        const auto fromIterator = assignmentsByElement.constFind(referenceKey(from));
+        const auto toIterator = assignmentsByElement.constFind(referenceKey(to));
+        const QHash<QString, QStringList>& fromAssignments =
+            fromIterator == assignmentsByElement.constEnd()
+                ? emptyAssignments : fromIterator.value();
+        const QHash<QString, QStringList>& toAssignments =
+            toIterator == assignmentsByElement.constEnd()
+                ? emptyAssignments : toIterator.value();
+        QSet<QString> types;
+        for (auto iterator = fromAssignments.constBegin();
+             iterator != fromAssignments.constEnd(); ++iterator) {
+            types.insert(iterator.key());
+        }
+        for (auto iterator = toAssignments.constBegin();
+             iterator != toAssignments.constEnd(); ++iterator) {
+            types.insert(iterator.key());
+        }
+        QStringList sortedTypes = types.values();
+        std::sort(sortedTypes.begin(), sortedTypes.end());
+        for (const QString& type : std::as_const(sortedTypes)) {
+            const QStringList fromDomains = normalizedDomainIds(
+                fromAssignments.value(type));
+            const QStringList toDomains = normalizedDomainIds(
+                toAssignments.value(type));
+            if (fromDomains == toDomains) {
+                continue;
+            }
+            DomainCrossingView crossing{
+                edge,
+                from,
+                to,
+                type,
+                fromDomains,
+                toDomains,
+                std::nullopt,
+                {}
+            };
+            const DomainEdgeOverride lookup{edge, type, {}, {}};
+            const auto override = overrides.constFind(edgeOverrideKey(lookup));
+            if (override != overrides.constEnd()) {
+                crossing.overridePolicy = (*override)->policy;
+                crossing.overrideProperties = (*override)->properties;
+            }
+            crossings.append(std::move(crossing));
+        }
+    };
+
+    const TopologyProjection topology = projectTopology(design);
+    for (const LinkView& link : topology.links) {
+        appendCrossingsForEdge(
+            ElementRef{ElementKind::RouterLink, link.id},
+            ElementRef{ElementKind::Router, link.fromRouter},
+            ElementRef{ElementKind::Router, link.toRouter});
+    }
+    for (const EndpointView& endpoint : topology.endpoints) {
+        appendCrossingsForEdge(
+            ElementRef{ElementKind::EndpointAttachment, endpoint.id},
+            ElementRef{ElementKind::Router, endpoint.routerId},
+            ElementRef{ElementKind::Endpoint, endpoint.id});
+    }
+    return crossings;
+}
+
+ResolvedDesign resolveDesign(const NocDesign& design) {
+    ResolvedDesign resolved;
+    resolved.design = withResolvedAutomaticSlots(design);
+    resolved.topology = projectTopology(resolved.design);
+    resolved.domainCrossings = projectDomainCrossings(resolved.design);
+    return resolved;
 }
 
 QVector<Diagnostic> validateDesignStructure(const NocDesign& design) {
