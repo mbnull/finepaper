@@ -1,5 +1,6 @@
 #pragma once
 
+#include "features/attachment/endpoint_attachment_rules.h"
 #include "features/domain/domain_presentation.h"
 #include "features/topology/topology_workspace_store.h"
 #include "noc/model.h"
@@ -32,6 +33,7 @@ class QGraphicsPathItem;
 namespace finepaper {
 
 class AnimatedGraphicsView;
+enum class EndpointDragTarget;
 
 enum class NocCanvasInteractionMode {
     Select,
@@ -108,25 +110,8 @@ struct NocEndpointTypeItem {
     QString label;
 };
 
-struct NocAttachmentTarget {
-    RouterPosition router;
-    std::optional<QString> exactSlot;
-};
-
-struct NocDetachedEndpointSnapshot {
-    EndpointInstance endpoint;
-    QHash<QString, QStringList> domainAssignments;
-    QVector<DomainEdgeOverride> attachmentOverrides;
-    QVector<ElementConfiguration> attachmentConfigurations;
-};
-
-struct NocRouterAttachmentPortItem {
-    QString id;
-    QString label;
-    std::optional<QString> exactSlot;
-
-    bool operator==(const NocRouterAttachmentPortItem&) const = default;
-};
+using NocAttachmentTarget = attachment::AttachmentTarget;
+using NocDetachedEndpointSnapshot = attachment::DetachedEndpointSnapshot;
 
 class NocNodeEditor final : public QWidget {
 public:
@@ -134,6 +119,7 @@ public:
     ~NocNodeEditor() override;
 
     void setDesign(const NocDesign* design);
+    void setDesign(const NocDesign* design, attachment::Policy policy);
     // Separates transient canvas state from persistent workspace identity.
     // MainWindow calls this once for each newly created or opened document.
     void beginDocumentSession(QString sessionToken);
@@ -142,7 +128,7 @@ public:
     // the current selection and Workspace layout.
     void syncDesignState(const NocDesign& design);
     void setEndpointTypes(QVector<NocEndpointTypeItem> endpointTypes);
-    void setRouterAttachmentPorts(QVector<NocRouterAttachmentPortItem> ports);
+    void setAttachmentPolicy(attachment::Policy policy);
     void setEditingEnabled(bool enabled);
     bool editingEnabled() const;
     void setCanvasInteractionMode(NocCanvasInteractionMode mode);
@@ -161,7 +147,12 @@ public:
     [[nodiscard]] const DomainPresentationSnapshot& domainPresentation() const;
     [[nodiscard]] QStringList detachedEndpointDraftIds() const;
 
-    std::function<bool(const QString&, NocAttachmentTarget)> endpointTypeDropped;
+    // Mutation callbacks are synchronous and run on this widget's GUI thread.
+    // They may synchronously replace the design and rebuild the graph; callers
+    // therefore copy semantic values before invocation and never retain a
+    // NodeId, iterator, or graphics pointer across the callback boundary.
+    std::function<attachment::CreateEndpointResult(
+        const QString&, NocAttachmentTarget)> endpointTypeDropped;
     std::function<bool(const QString&, NocAttachmentTarget)> endpointMoveRequested;
     std::function<bool(const NocDetachedEndpointSnapshot&, NocAttachmentTarget)>
         detachedEndpointDropped;
@@ -175,6 +166,8 @@ public:
     std::function<void(const NocEditorSelectionSet&)> semanticSelectionChanged;
     std::function<void(const TopologyWorkspaceDiagnostic&)>
         workspaceDiagnosticRaised;
+    std::function<void(attachment::Rejection, std::optional<RouterPosition>)>
+        attachmentRejected;
 
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
@@ -217,6 +210,9 @@ private:
     };
 
     void rebuildGraph(bool zoomToContents = true);
+    void applyDesign(const NocDesign* design, attachment::Policy policy);
+    void beginSemanticMutation();
+    void endSemanticMutation(bool refreshProjection);
     void loadWorkspaceState();
     bool saveWorkspaceState();
     void deferForCurrentGraph(std::function<void()> operation);
@@ -248,7 +244,6 @@ private:
                                    const QPoint& globalPosition);
     void showCanvasCreateMenu(QPointF scenePosition, const QPoint& globalPosition);
     void showNodeContextMenu(QtNodes::NodeId nodeId, const QPoint& globalPosition);
-    std::optional<RouterPosition> routerAt(const QPointF& scenePosition) const;
     std::optional<QtNodes::NodeId> routerNodeAt(
         const QPointF& scenePosition) const;
     std::optional<QtNodes::NodeId> nodeAt(const QPoint& viewportPosition) const;
@@ -259,13 +254,29 @@ private:
         const QPoint& viewportPosition) const;
     bool blockedPortAt(const QPoint& viewportPosition) const;
     bool isRouterAttachmentPort(unsigned int portIndex) const;
-    std::optional<QString> exactSlotForPort(unsigned int portIndex) const;
+    attachment::ConnectionHandleKind outputConnectionHandle(
+        QtNodes::NodeId nodeId,
+        unsigned int portIndex) const;
+    attachment::ConnectionHandleKind inputConnectionHandle(
+        QtNodes::NodeId nodeId,
+        unsigned int portIndex) const;
+    attachment::TargetResolution resolveAttachmentTarget(
+        QtNodes::NodeId routerNode,
+        attachment::RouterHitKind hitKind,
+        std::optional<unsigned int> portIndex = std::nullopt,
+        std::optional<QtNodes::NodeId> ignoredEndpoint = std::nullopt) const;
+    attachment::TargetResolution resolveAttachmentTargetAt(
+        QtNodes::NodeId routerNode,
+        const QPointF& scenePosition,
+        std::optional<QtNodes::NodeId> ignoredEndpoint = std::nullopt) const;
+    EndpointDragTarget endpointDragTargetAt(
+        const QPoint& viewportPosition) const;
+    void reportAttachmentRejection(
+        attachment::Rejection rejection,
+        std::optional<RouterPosition> router = std::nullopt) const;
     bool attachmentPortAvailable(QtNodes::NodeId routerNode,
                                  unsigned int portIndex,
                                  std::optional<QtNodes::NodeId> ignoredEndpoint = std::nullopt) const;
-    std::optional<unsigned int> firstAvailableAttachmentPort(
-        QtNodes::NodeId routerNode,
-        std::optional<QtNodes::NodeId> ignoredEndpoint = std::nullopt) const;
     QString endpointTypeLabel(const QString& endpointType) const;
     std::optional<ElementRef> elementForConnection(
         QtNodes::ConnectionId connectionId) const;
@@ -290,8 +301,9 @@ private:
     TopologyWorkspaceState m_workspaceState;
     TopologyWorkspaceStore m_workspaceStore;
     QVector<NocEndpointTypeItem> m_endpointTypes;
-    QVector<NocRouterAttachmentPortItem> m_routerAttachmentPorts{{
-        QStringLiteral("0"), QStringLiteral("EP"), std::nullopt}};
+    attachment::Policy m_attachmentPolicy =
+        attachment::policyFromPackage(AttachmentDefinition{});
+    attachment::DesignIndex m_attachmentIndex;
     QHash<QString, PendingEndpoint> m_pendingEndpoints;
     std::optional<RouterEndpointDraft> m_routerEndpointDraft;
     std::optional<EndpointAttachmentDraft> m_endpointAttachmentDraft;
@@ -304,6 +316,9 @@ private:
     bool m_workspaceReloadPending = false;
     bool m_canvasSelectionGesture = false;
     bool m_canvasItemGesture = false;
+    int m_semanticMutationDepth = 0;
+    bool m_projectionRefreshDeferred = false;
+    bool m_projectionZoomDeferred = false;
     NocCanvasInteractionMode m_canvasInteractionMode =
         NocCanvasInteractionMode::Select;
     std::optional<TopologyWorkspaceIdentity> m_workspaceIdentity = std::nullopt;

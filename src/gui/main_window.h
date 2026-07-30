@@ -97,7 +97,9 @@ private:
     void resizeMesh();
     void presentValidationResult(const ValidationResult& result);
     void presentGenerationResult(const GenerationResult& result);
-    bool addEndpoint(const QString& endpointType, NocAttachmentTarget target);
+    attachment::CreateEndpointResult addEndpoint(
+        const QString& endpointType,
+        NocAttachmentTarget target);
     bool moveEndpoint(const QString& endpointId, NocAttachmentTarget target);
     bool removeEndpoint(const QString& endpointId,
                         bool discardConfigurationDraft = true);

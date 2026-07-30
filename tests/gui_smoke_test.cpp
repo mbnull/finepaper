@@ -26,7 +26,6 @@
 #include <QGraphicsView>
 #include <QGraphicsPathItem>
 #include <QGroupBox>
-#include <QInputDialog>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -309,7 +308,9 @@ bool dragPortConnection(QGraphicsView* view,
                         QtNodes::NodeId sourceNode,
                         QtNodes::PortIndex sourcePort,
                         QtNodes::NodeId targetNode,
-                        QtNodes::PortIndex targetPort) {
+                        QtNodes::PortIndex targetPort,
+                        QtNodes::PortType targetPortType =
+                            QtNodes::PortType::In) {
     if (!view || !scene || !view->viewport()) {
         return false;
     }
@@ -323,7 +324,7 @@ bool dragPortConnection(QGraphicsView* view,
             sourceNode, QtNodes::PortType::Out, sourcePort));
     const QPointF targetScene = targetGraphics->mapToScene(
         scene->nodeGeometry().portPosition(
-            targetNode, QtNodes::PortType::In, targetPort));
+            targetNode, targetPortType, targetPort));
     const QPoint source = view->mapFromScene(sourceScene);
     const QPoint target = view->mapFromScene(targetScene);
     QWidget* viewport = view->viewport();
@@ -479,16 +480,19 @@ void dragCanvasSelection(QGraphicsView* view,
     QApplication::sendEvent(viewport, &release);
 }
 
-void chooseInputDialogItem(int index) {
+void chooseAttachmentSlot(int index) {
     QTimer::singleShot(0, [index] {
         for (QWidget* widget : QApplication::topLevelWidgets()) {
-            auto* dialog = qobject_cast<QInputDialog*>(widget);
+            auto* dialog = qobject_cast<QDialog*>(widget);
             if (!dialog) {
                 continue;
             }
-            if (auto* combo = dialog->findChild<QComboBox*>()) {
-                combo->setCurrentIndex(index);
+            auto* combo = dialog->findChild<QComboBox*>(
+                QStringLiteral("finepaper.attachmentSlotSelector"));
+            if (!combo) {
+                continue;
             }
+            combo->setCurrentIndex(index);
             dialog->accept();
             return;
         }
@@ -1767,6 +1771,71 @@ int main(int argc, char** argv) {
     }
     check(!routerPortStartedDraft,
           QStringLiteral("Router direction ports do not start user wiring"));
+
+    bool endpointToTopologyDraftStarted = false;
+    std::optional<QPoint> eastOutputPosition = std::nullopt;
+    if (pendingEndpoint && routerForConnectionRule && graphicsView
+        && graphicsScene) {
+        auto* routerGraphics = graphicsScene->nodeGraphicsObject(
+            *routerForConnectionRule);
+        if (routerGraphics) {
+            eastOutputPosition = graphicsView->mapFromScene(
+                routerGraphics->mapToScene(
+                    graphicsScene->nodeGeometry().portPosition(
+                        *routerForConnectionRule,
+                        QtNodes::PortType::Out,
+                        finepaper::portIndex(
+                            finepaper::RouterOutputPort::East))));
+        }
+        endpointToTopologyDraftStarted = dragPortConnection(
+            graphicsView,
+            graphicsScene,
+            *pendingEndpoint,
+            finepaper::portIndex(
+                finepaper::EndpointOutputPort::Attachment),
+            *routerForConnectionRule,
+            finepaper::portIndex(finepaper::RouterOutputPort::East),
+            QtNodes::PortType::Out);
+        application.processEvents();
+    }
+    check(endpointToTopologyDraftStarted
+              && nodeIdWithCaptionPrefix(
+                  graphicsScene,
+                  QStringLiteral("Unattached\nMaster endpoint")),
+          QStringLiteral(
+              "Endpoint EP release on Router East stays unattached"));
+
+    const std::size_t nodesBeforeTopologyDrop = graphicsScene
+        ? graphicsScene->graphModel().allNodeIds().size() : 0;
+    bool topologyDropBlockedPreview = false;
+    bool topologyDropRejected = false;
+    if (eastOutputPosition && graphicsView && endpointMime) {
+        QDragEnterEvent dragEnter(
+            *eastOutputPosition,
+            Qt::CopyAction,
+            endpointMime.get(),
+            Qt::LeftButton,
+            Qt::NoModifier);
+        QApplication::sendEvent(graphicsView->viewport(), &dragEnter);
+        topologyDropBlockedPreview = animatedView
+            && animatedView->endpointDragBlocked();
+        QDropEvent drop(
+            QPointF(*eastOutputPosition),
+            Qt::CopyAction,
+            endpointMime.get(),
+            Qt::LeftButton,
+            Qt::NoModifier);
+        QApplication::sendEvent(graphicsView->viewport(), &drop);
+        topologyDropRejected = !drop.isAccepted();
+        application.processEvents();
+    }
+    check(topologyDropBlockedPreview && topologyDropRejected
+              && graphicsScene
+              && graphicsScene->graphModel().allNodeIds().size()
+                  == nodesBeforeTopologyDrop,
+          QStringLiteral(
+              "Palette preview and drop both reject Router topology outputs"));
+
     bool staleConnectionWasQueued = false;
     if (pendingEndpoint && connectionRouter && nodeEditor && graphicsScene) {
         graphicsScene->graphModel().addConnection(pendingAttachment);
@@ -2790,7 +2859,180 @@ int main(int argc, char** argv) {
           QStringLiteral("a new document session clears transient state despite the same storage identity"));
     sessionEditor.close();
 
-    finepaper::RuntimeLocations explicitLocations{
+    finepaper::NocDesign collapsedOccupancyDesign;
+    collapsedOccupancyDesign.id = QStringLiteral("collapsed-occupancy");
+    collapsedOccupancyDesign.topology = {QStringLiteral("mesh"), 1, 1};
+    collapsedOccupancyDesign.endpoints = {
+        finepaper::EndpointInstance{
+            QStringLiteral("hidden_endpoint"),
+            QStringLiteral("master"),
+            finepaper::EndpointAttachment{
+                finepaper::RouterPosition{0, 0}, std::nullopt},
+            {},
+        },
+    };
+    finepaper::AttachmentDefinition singleAttachment;
+    singleAttachment.maxPerRouter = 1;
+    singleAttachment.slotMode = finepaper::AttachmentSlotMode::Automatic;
+    finepaper::NocNodeEditor collapsedOccupancyEditor;
+    collapsedOccupancyEditor.setAttachmentPolicy(
+        finepaper::attachment::policyFromPackage(singleAttachment));
+    collapsedOccupancyEditor.beginDocumentSession(
+        QStringLiteral("collapsed-occupancy-session"));
+    collapsedOccupancyEditor.setDesign(&collapsedOccupancyDesign);
+    collapsedOccupancyEditor.show();
+    collapsedOccupancyEditor.setRouterCollapsed(
+        QStringLiteral("r-0-0"), true);
+    application.processEvents();
+    auto* collapsedOccupancyView =
+        collapsedOccupancyEditor.findChild<QGraphicsView*>();
+    auto* collapsedOccupancyScene = collapsedOccupancyView
+        ? dynamic_cast<QtNodes::BasicGraphicsScene*>(
+              collapsedOccupancyView->scene())
+        : nullptr;
+    const auto fullCollapsedRouter = nodeIdWithCaption(
+        collapsedOccupancyScene, QStringLiteral("r-0-0"));
+    const bool collapsedPortAcceptsDraft = fullCollapsedRouter
+        && collapsedOccupancyScene
+        && collapsedOccupancyScene->graphModel().connectionPossible({
+            QtNodes::InvalidNodeId,
+            finepaper::portIndex(
+                finepaper::EndpointOutputPort::Attachment),
+            *fullCollapsedRouter,
+            finepaper::portIndex(finepaper::RouterInputPort::Endpoint),
+        });
+    check(fullCollapsedRouter
+              && !nodeIdWithCaptionPrefix(
+                  collapsedOccupancyScene,
+                  QStringLiteral("hidden_endpoint"))
+              && !collapsedPortAcceptsDraft,
+          QStringLiteral(
+              "a collapsed full Router keeps its hidden Endpoint port occupied"));
+    collapsedOccupancyEditor.close();
+
+    finepaper::NocDesign capacityProjectionDesign;
+    capacityProjectionDesign.id = QStringLiteral("capacity-projection");
+    capacityProjectionDesign.topology = {QStringLiteral("mesh"), 1, 1};
+    capacityProjectionDesign.endpoints = {
+        finepaper::EndpointInstance{
+            QStringLiteral("capacity_endpoint"),
+            QStringLiteral("master"),
+            finepaper::EndpointAttachment{
+                finepaper::RouterPosition{0, 0}, QStringLiteral("local0")},
+            {},
+        },
+    };
+    finepaper::AttachmentDefinition capacityAttachment;
+    capacityAttachment.maxPerRouter = 1;
+    capacityAttachment.slotMode = finepaper::AttachmentSlotMode::Explicit;
+    capacityAttachment.positions = {
+        {QStringLiteral("local0"), QStringLiteral("Local 0")},
+        {QStringLiteral("local1"), QStringLiteral("Local 1")},
+    };
+    finepaper::NocNodeEditor capacityProjectionEditor;
+    capacityProjectionEditor.setAttachmentPolicy(
+        finepaper::attachment::policyFromPackage(capacityAttachment));
+    capacityProjectionEditor.beginDocumentSession(
+        QStringLiteral("capacity-projection-session"));
+    capacityProjectionEditor.setDesign(&capacityProjectionDesign);
+    capacityProjectionEditor.show();
+    capacityProjectionEditor.setRouterCollapsed(
+        QStringLiteral("r-0-0"), false);
+    application.processEvents();
+    auto* capacityProjectionView =
+        capacityProjectionEditor.findChild<QGraphicsView*>();
+    auto* capacityProjectionScene = capacityProjectionView
+        ? dynamic_cast<QtNodes::BasicGraphicsScene*>(
+              capacityProjectionView->scene())
+        : nullptr;
+    const auto capacityRouter = nodeIdWithCaption(
+        capacityProjectionScene, QStringLiteral("r-0-0"));
+    const bool sparePortAccepted = capacityRouter && capacityProjectionScene
+        && capacityProjectionScene->graphModel().connectionPossible({
+            QtNodes::InvalidNodeId,
+            finepaper::portIndex(
+                finepaper::EndpointOutputPort::Attachment),
+            *capacityRouter,
+            finepaper::portIndex(finepaper::RouterInputPort::Endpoint) + 1U,
+        });
+    finepaper::attachment::Policy invalidProjectionPolicy =
+        finepaper::attachment::policyFromPackage(singleAttachment);
+    invalidProjectionPolicy.maxPerRouter = 2;
+    capacityProjectionEditor.setAttachmentPolicy(invalidProjectionPolicy);
+    application.processEvents();
+    const auto invalidPolicyRouter = nodeIdWithCaption(
+        capacityProjectionScene, QStringLiteral("r-0-0"));
+    const bool invalidPolicyAccepted = invalidPolicyRouter
+        && capacityProjectionScene
+        && capacityProjectionScene->graphModel().connectionPossible({
+            QtNodes::InvalidNodeId,
+            finepaper::portIndex(
+                finepaper::EndpointOutputPort::Attachment),
+            *invalidPolicyRouter,
+            finepaper::portIndex(finepaper::RouterInputPort::Endpoint),
+        });
+    check(!sparePortAccepted && !invalidPolicyAccepted,
+          QStringLiteral(
+              "QtNodes preflight enforces Package capacity and policy invariants"));
+    capacityProjectionEditor.close();
+
+    finepaper::NocDesign readOnlyRaceDesign;
+    readOnlyRaceDesign.id = QStringLiteral("disconnect-read-only-race");
+    readOnlyRaceDesign.topology = {QStringLiteral("mesh"), 1, 1};
+    readOnlyRaceDesign.endpoints = {
+        finepaper::EndpointInstance{
+            QStringLiteral("race_endpoint"),
+            QStringLiteral("master"),
+            finepaper::EndpointAttachment{
+                finepaper::RouterPosition{0, 0}, std::nullopt},
+            {},
+        },
+    };
+    finepaper::NocNodeEditor readOnlyRaceEditor;
+    readOnlyRaceEditor.setAttachmentPolicy(
+        finepaper::attachment::policyFromPackage(singleAttachment));
+    readOnlyRaceEditor.beginDocumentSession(
+        QStringLiteral("disconnect-read-only-race-session"));
+    readOnlyRaceEditor.setDesign(&readOnlyRaceDesign);
+    readOnlyRaceEditor.show();
+    readOnlyRaceEditor.setRouterCollapsed(QStringLiteral("r-0-0"), false);
+    application.processEvents();
+    auto* readOnlyRaceView = readOnlyRaceEditor.findChild<QGraphicsView*>();
+    auto* readOnlyRaceScene = readOnlyRaceView
+        ? dynamic_cast<QtNodes::BasicGraphicsScene*>(
+              readOnlyRaceView->scene())
+        : nullptr;
+    const auto readOnlyRaceEndpoint = nodeIdWithCaptionPrefix(
+        readOnlyRaceScene, QStringLiteral("race_endpoint"));
+    const auto readOnlyRaceAttachment = readOnlyRaceEndpoint
+        ? attachmentConnectionForEndpoint(
+              readOnlyRaceScene, *readOnlyRaceEndpoint)
+        : std::nullopt;
+    bool readOnlyRaceRemovalCalled = false;
+    readOnlyRaceEditor.endpointRemovalRequested = [&](const QString&) {
+        readOnlyRaceRemovalCalled = true;
+        return true;
+    };
+    const bool readOnlyRaceDeletionQueued = readOnlyRaceScene
+        && readOnlyRaceAttachment
+        && readOnlyRaceScene->graphModel().deleteConnection(
+            *readOnlyRaceAttachment);
+    readOnlyRaceEditor.setEditingEnabled(false);
+    application.processEvents();
+    application.processEvents();
+    const auto restoredRaceEndpoint = nodeIdWithCaptionPrefix(
+        readOnlyRaceScene, QStringLiteral("race_endpoint"));
+    const auto restoredRaceAttachment = restoredRaceEndpoint
+        ? attachmentConnectionForEndpoint(
+              readOnlyRaceScene, *restoredRaceEndpoint)
+        : std::nullopt;
+    check(readOnlyRaceDeletionQueued && !readOnlyRaceRemovalCalled
+              && restoredRaceAttachment,
+          QStringLiteral(
+              "switching to read-only during deferred disconnect restores the projection"));
+    readOnlyRaceEditor.close();
+
+    finepaper::RuntimeLocations explicitLocations = {
         QStringList{QDir(projectRoot).filePath(
             QStringLiteral("tests/fixtures/explicit-package"))},
         outputRoot.path()};
@@ -2828,7 +3070,7 @@ int main(int argc, char** argv) {
         explicitScene->nodeSelected(*explicitRouter00);
         application.processEvents();
     }
-    chooseInputDialogItem(1);
+    chooseAttachmentSlot(1);
     if (explicitPalette && explicitPalette->count() > 0) {
         explicitPalette->itemDoubleClicked(explicitPalette->item(0));
         application.processEvents();
@@ -2841,7 +3083,7 @@ int main(int argc, char** argv) {
                      .toString().contains(QStringLiteral("slot local1")),
           QStringLiteral("explicit Package lets the user choose the Endpoint attachment slot"));
 
-    chooseInputDialogItem(0);
+    chooseAttachmentSlot(0);
     const bool explicitMove = explicitEditor && explicitEditor->endpointMoveRequested
         ? explicitEditor->endpointMoveRequested(
               QStringLiteral("device_0"),
@@ -2863,6 +3105,36 @@ int main(int argc, char** argv) {
                    *explicitRouter10,
                    finepaper::portIndex(finepaper::RouterInputPort::Endpoint)}),
           QStringLiteral("moving an explicit Endpoint chooses a new free slot on its Router"));
+
+    chooseAttachmentSlot(1);
+    bool explicitSameRouterBodyDraftStarted = false;
+    if (movedExplicitEndpoint && explicitRouter10) {
+        explicitSameRouterBodyDraftStarted = dragPortToNodeBody(
+            explicitView,
+            explicitScene,
+            *movedExplicitEndpoint,
+            QtNodes::PortType::Out,
+            finepaper::portIndex(
+                finepaper::EndpointOutputPort::Attachment),
+            *explicitRouter10);
+        application.processEvents();
+        application.processEvents();
+    }
+    const auto sameRouterMovedEndpoint = nodeIdWithCaptionPrefix(
+        explicitScene, QStringLiteral("device_0"));
+    const auto sameRouterMovedPort = sameRouterMovedEndpoint
+        ? attachmentPortForEndpoint(explicitScene, *sameRouterMovedEndpoint)
+        : std::nullopt;
+    check(explicitSameRouterBodyDraftStarted && sameRouterMovedEndpoint
+              && sameRouterMovedPort
+              && *sameRouterMovedPort
+                  == finepaper::portIndex(
+                         finepaper::RouterInputPort::Endpoint) + 1U
+              && explicitScene->graphModel().nodeData(
+                     *sameRouterMovedEndpoint, QtNodes::NodeRole::Caption)
+                     .toString().contains(QStringLiteral("slot local1")),
+          QStringLiteral(
+              "explicit same-Router body reconnect still asks for and applies a slot"));
 
     std::unique_ptr<QMimeData> explicitMime;
     if (explicitPalette && explicitPalette->count() > 0) {
@@ -2943,12 +3215,14 @@ int main(int argc, char** argv) {
     if (explicitEditor) {
         explicitEditor->endpointRemovalRequested = originalRemovalCallback;
     }
+    const auto endpointAfterRejectedDetach = nodeIdWithCaptionPrefix(
+        explicitScene, QStringLiteral("device_0"));
+    const auto attachmentAfterRejectedDetach = endpointAfterRejectedDetach
+        ? attachmentConnectionForEndpoint(
+              explicitScene, *endpointAfterRejectedDetach)
+        : std::nullopt;
     check(endpointBeforeRejectedDetach && routerBeforeRejectedDetach
-              && explicitScene->graphModel().connectionExists({
-                  *endpointBeforeRejectedDetach,
-                  finepaper::portIndex(finepaper::EndpointOutputPort::Attachment),
-                  *routerBeforeRejectedDetach,
-                  finepaper::portIndex(finepaper::RouterInputPort::Endpoint)})
+              && attachmentAfterRejectedDetach
               && !nodeIdWithCaptionPrefix(
                   explicitScene, QStringLiteral("Unattached\nDevice endpoint")),
           QStringLiteral("a rejected disconnect keeps the durable attachment and creates no pending draft"));

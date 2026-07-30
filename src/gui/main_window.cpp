@@ -30,7 +30,6 @@
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QHash>
-#include <QInputDialog>
 #include <QJsonDocument>
 #include <QIcon>
 #include <QLabel>
@@ -418,6 +417,7 @@ FinepaperMainWindow::~FinepaperMainWindow() {
         m_nodeEditor->selectionChanged = {};
         m_nodeEditor->semanticSelectionChanged = {};
         m_nodeEditor->workspaceDiagnosticRaised = {};
+        m_nodeEditor->attachmentRejected = {};
     }
     if (m_domainManager) {
         m_domainManager->validateAddDomain = {};
@@ -610,6 +610,17 @@ void FinepaperMainWindow::createCentralViews() {
             m_endpointConfigurationPanel->discardDraft(
                 m_designSessionIdentity, endpointId);
         }
+    };
+    m_nodeEditor->attachmentRejected = [this](
+        attachment::Rejection rejection,
+        std::optional<RouterPosition> router) {
+        const QString message = attachment::rejectionMessage(rejection, router);
+        if (message.isEmpty()) {
+            return;
+        }
+        statusBar()->showMessage(message, 6000);
+        appendActivity(QStringLiteral("Endpoint attachment unchanged: %1")
+                           .arg(message));
     };
     m_nodeEditor->semanticSelectionChanged = [this](
         const NocEditorSelectionSet& selection) {
@@ -1800,70 +1811,14 @@ void FinepaperMainWindow::updateEndpointPalette() {
     const PackageDefinition* package = packageForDesign();
     if (!package) {
         m_nodeEditor->setEndpointTypes({});
-        QVector<NocRouterAttachmentPortItem> readOnlyPorts;
-        if (m_design) {
-            QSet<QString> knownSlots;
-            QHash<QString, int> endpointsPerRouter;
-            int maximumAttachments = 0;
-            for (const EndpointInstance& endpoint : m_design->endpoints) {
-                const QString router = QStringLiteral("%1,%2")
-                                           .arg(endpoint.attachment.router.x)
-                                           .arg(endpoint.attachment.router.y);
-                maximumAttachments = std::max(
-                    maximumAttachments, ++endpointsPerRouter[router]);
-                if (endpoint.attachment.slot
-                    && !endpoint.attachment.slot->isEmpty()
-                    && !knownSlots.contains(*endpoint.attachment.slot)) {
-                    knownSlots.insert(*endpoint.attachment.slot);
-                    readOnlyPorts.append({*endpoint.attachment.slot,
-                                          *endpoint.attachment.slot,
-                                          std::nullopt});
-                }
-            }
-            int fallbackIndex = 0;
-            while (readOnlyPorts.size() < maximumAttachments) {
-                QString id;
-                do {
-                    id = QStringLiteral("__view_%1").arg(fallbackIndex++);
-                } while (knownSlots.contains(id));
-                knownSlots.insert(id);
-                readOnlyPorts.append({id,
-                                      QStringLiteral("EP%1").arg(readOnlyPorts.size()),
-                                      std::nullopt});
-            }
-        }
-        m_nodeEditor->setRouterAttachmentPorts(std::move(readOnlyPorts));
+        const attachment::Policy inferredPolicy = m_design
+            ? attachment::inferReadOnlyPolicy(*m_design)
+            : attachment::inferReadOnlyPolicy(NocDesign{});
+        m_nodeEditor->setAttachmentPolicy(inferredPolicy);
         updateUiState();
         return;
     }
     QVector<NocEndpointTypeItem> editorTypes;
-    QVector<NocRouterAttachmentPortItem> attachmentPorts;
-    if (package->attachment.slotMode == AttachmentSlotMode::Explicit) {
-        QVector<AttachmentSlotDefinition> declaredSlots = package->attachment.positions;
-        if (declaredSlots.isEmpty()) {
-            declaredSlots.reserve(package->attachment.maxPerRouter);
-            for (int index = 0; index < package->attachment.maxPerRouter; ++index) {
-                const QString id = QString::number(index);
-                declaredSlots.append({id, QStringLiteral("Local port %1").arg(index)});
-            }
-        }
-        attachmentPorts.reserve(declaredSlots.size());
-        for (const AttachmentSlotDefinition& slot : declaredSlots) {
-            attachmentPorts.append({slot.id,
-                                    slot.label.trimmed().isEmpty() ? slot.id : slot.label,
-                                    slot.id});
-        }
-    } else {
-        attachmentPorts.reserve(package->attachment.maxPerRouter);
-        for (int index = 0; index < package->attachment.maxPerRouter; ++index) {
-            const QString id = QString::number(index);
-            attachmentPorts.append({id,
-                                    package->attachment.maxPerRouter == 1
-                                        ? QStringLiteral("EP")
-                                        : QStringLiteral("EP%1").arg(index),
-                                    std::nullopt});
-        }
-    }
     editorTypes.reserve(package->endpointTypes.size());
     for (const EndpointTypeDefinition& type : package->endpointTypes) {
         auto* item = new QListWidgetItem(type.label, m_endpointPalette);
@@ -1875,7 +1830,8 @@ void FinepaperMainWindow::updateEndpointPalette() {
         editorTypes.append({type.id, type.label});
     }
     m_nodeEditor->setEndpointTypes(std::move(editorTypes));
-    m_nodeEditor->setRouterAttachmentPorts(std::move(attachmentPorts));
+    m_nodeEditor->setAttachmentPolicy(
+        attachment::policyFromPackage(package->attachment));
     updateUiState();
 }
 
@@ -2600,20 +2556,21 @@ void FinepaperMainWindow::presentGenerationResult(const GenerationResult& result
     }
 }
 
-bool FinepaperMainWindow::addEndpoint(const QString& endpointType,
-                                      NocAttachmentTarget target) {
+attachment::CreateEndpointResult FinepaperMainWindow::addEndpoint(
+    const QString& endpointType,
+    NocAttachmentTarget target) {
     if (m_operationBusy || !m_design || !packageForDesign()) {
         QMessageBox::information(this, QStringLiteral("Add Endpoint"),
                                  QStringLiteral("Create or open an editable NoC design first."));
-        return false;
+        return {};
     }
     if (!confirmDiscardPendingDomainChanges(
             QStringLiteral("Adding an Endpoint"))) {
-        return false;
+        return {};
     }
     const AttachmentSlotChoice slotChoice = chooseAttachmentSlot(target);
     if (!slotChoice.accepted) {
-        return false;
+        return {};
     }
     EndpointCreationDialog configuration(
         *m_design,
@@ -2622,7 +2579,7 @@ bool FinepaperMainWindow::addEndpoint(const QString& endpointType,
         nextEndpointId(endpointType),
         this);
     if (configuration.exec() != QDialog::Accepted) {
-        return false;
+        return {};
     }
     const EndpointCreationDraft draft = configuration.draft();
     EndpointInstance endpoint;
@@ -2638,7 +2595,7 @@ bool FinepaperMainWindow::addEndpoint(const QString& endpointType,
     }
     adoptDesignResult(result,
                       QStringLiteral("Add Endpoint %1").arg(endpoint.id));
-    return result.success;
+    return {result.success, result.success ? endpoint.id : QString()};
 }
 
 std::optional<QHash<QString, QStringList>>
@@ -2725,86 +2682,56 @@ FinepaperMainWindow::AttachmentSlotChoice FinepaperMainWindow::chooseAttachmentS
     if (!m_design || !package) {
         return {};
     }
-
-    QSet<QString> occupiedSlots;
-    int attachedEndpointCount = 0;
-    for (const EndpointInstance& endpoint : m_design->endpoints) {
-        if (endpoint.id == ignoredEndpointId
-            || endpoint.attachment.router != target.router) {
-            continue;
-        }
-        ++attachedEndpointCount;
-        if (endpoint.attachment.slot) {
-            occupiedSlots.insert(*endpoint.attachment.slot);
-        }
-    }
-    if (attachedEndpointCount >= package->attachment.maxPerRouter) {
+    const attachment::SlotResolution resolution = attachment::resolveSlot(
+        *m_design,
+        attachment::policyFromPackage(package->attachment),
+        target,
+        ignoredEndpointId);
+    if (resolution.kind == attachment::SlotResolutionKind::Rejected) {
         QMessageBox::information(
             this,
             QStringLiteral("No available attachment position"),
-            QStringLiteral("Router (%1, %2) has reached its Endpoint capacity.")
-                .arg(target.router.x)
-                .arg(target.router.y));
+            attachment::rejectionMessage(resolution.rejection, target.router));
         return {};
     }
-    if (package->attachment.slotMode == AttachmentSlotMode::Automatic) {
+    if (resolution.kind == attachment::SlotResolutionKind::Automatic) {
         return {true, std::nullopt};
     }
-
-    QVector<AttachmentSlotDefinition> declaredSlots = package->attachment.positions;
-    if (declaredSlots.isEmpty()) {
-        declaredSlots.reserve(package->attachment.maxPerRouter);
-        for (int index = 0; index < package->attachment.maxPerRouter; ++index) {
-            const QString slot = QString::number(index);
-            declaredSlots.append({slot, QStringLiteral("Local port %1").arg(index)});
-        }
+    if (resolution.kind == attachment::SlotResolutionKind::Exact) {
+        return {true, resolution.resolvedSlot};
     }
 
-    QStringList labels;
-    QVector<QString> slotIds;
-    for (const AttachmentSlotDefinition& slot : declaredSlots) {
-        if (occupiedSlots.contains(slot.id)) {
-            continue;
-        }
-        labels.append(slot.label == slot.id
-                          ? slot.id
-                          : QStringLiteral("%1 — %2").arg(slot.label, slot.id));
-        slotIds.append(slot.id);
-    }
-    if (slotIds.isEmpty()) {
-        QMessageBox::information(
-            this,
-            QStringLiteral("No available attachment position"),
-            QStringLiteral("Router (%1, %2) has no free explicit Endpoint slot.")
-                .arg(target.router.x)
-                .arg(target.router.y));
-        return {};
-    }
-
-    if (target.exactSlot) {
-        const int exactIndex = slotIds.indexOf(*target.exactSlot);
-        if (exactIndex < 0) {
-            return {};
-        }
-        return {true, slotIds.at(exactIndex)};
-    }
-
-    bool accepted = false;
-    const QString selected = QInputDialog::getItem(
-        this,
-        QStringLiteral("Choose Endpoint attachment position"),
+    QDialog dialog(this);
+    dialog.setWindowTitle(QStringLiteral("Choose Endpoint attachment position"));
+    auto* layout = new QVBoxLayout(&dialog);
+    auto* prompt = new QLabel(
         QStringLiteral("Router (%1, %2) slot")
             .arg(target.router.x)
             .arg(target.router.y),
-        labels,
-        0,
-        false,
-        &accepted);
-    const int selectedIndex = labels.indexOf(selected);
-    if (!accepted || selectedIndex < 0) {
+        &dialog);
+    auto* selector = new QComboBox(&dialog);
+    selector->setObjectName(QStringLiteral("finepaper.attachmentSlotSelector"));
+    prompt->setBuddy(selector);
+    layout->addWidget(prompt);
+    layout->addWidget(selector);
+    for (const attachment::SlotChoice& choice : resolution.choices) {
+        const QString label = choice.label == choice.id
+            ? choice.id
+            : QStringLiteral("%1 — %2")
+                  .arg(choice.label)
+                  .arg(choice.id);
+        selector->addItem(label, choice.id);
+    }
+    auto* buttons = new QDialogButtonBox(
+        QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    layout->addWidget(buttons);
+    selector->setFocus();
+    if (dialog.exec() != QDialog::Accepted) {
         return {};
     }
-    return {true, slotIds.at(selectedIndex)};
+    return {true, selector->currentData().toString()};
 }
 
 void FinepaperMainWindow::applyParameters() {
@@ -2987,7 +2914,8 @@ void FinepaperMainWindow::updateInspector(const NocEditorSelectionSet& selection
     if (item.kind == NocEditorSelection::Kind::PendingEndpoint) {
         m_selectionSummary->setText(
             QStringLiteral("<b>Unattached Endpoint</b><br>Type: %1<br>"
-                           "Drag the node onto a Router to attach it.")
+                           "Drag its EP port to a Router EP port or Router body to attach it. "
+                           "Moving the node only changes its canvas position.")
                 .arg(item.id.toHtmlEscaped()));
         return;
     }
@@ -3066,11 +2994,15 @@ void FinepaperMainWindow::refreshDesignViews() {
     }
 
     m_resolvedDesign = resolveDesign(*m_design);
-    const bool packageMetadataAvailable = packageForDesign();
+    const PackageDefinition* package = packageForDesign();
+    const bool packageMetadataAvailable = package;
     setWindowTitle(QStringLiteral("Finepaper — %1[*]").arg(m_design->name));
     rebuildParameterEditors();
     updateInspector({});
-    m_nodeEditor->setDesign(&*m_design);
+    const attachment::Policy attachmentPolicy = package
+        ? attachment::policyFromPackage(package->attachment)
+        : attachment::inferReadOnlyPolicy(*m_design);
+    m_nodeEditor->setDesign(&*m_design, attachmentPolicy);
     updatePackageControls();
 
     const bool packageRuntimeAvailable = runtimePackageForDesign();

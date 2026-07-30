@@ -1,8 +1,9 @@
 # Topology feature
 
 This directory owns the desktop interaction and presentation of the NoC
-topology: the canvas, Router/Endpoint attachment gestures, layout state, and
-Mesh resize UI.
+topology: the canvas, attachment hit-testing/gestures, layout state, and Mesh
+resize UI. Package-driven Endpoint attachment policy and lifecycle decisions
+live in the sibling `features/attachment` boundary.
 
 `TopologyWorkspaceStore` is the persistence boundary for visual Router and
 Endpoint position overrides plus Router collapse state. It writes one
@@ -27,5 +28,5 @@ headers from `gui/`; shared widgets and workbench contracts belong under
 `ui/`.
 
 Large classes in this directory are migration points, not a permanent
-architecture. Subsequent behavior changes should extract scene projection,
-attachment gestures, and hit-testing behind focused interfaces.
+architecture. Subsequent behavior changes should continue extracting scene
+projection and hit-testing behind focused interfaces.

@@ -684,41 +684,30 @@ NocNodeEditor::NocNodeEditor(QWidget* parent)
 
     auto& graphModel = static_cast<NocGraphModel&>(*m_graphModel);
     graphModel.userConnectionPossible = [this](const QtNodes::ConnectionId& connection) {
-        if (!m_editingEnabled) {
-            return false;
-        }
         const bool hasSource = connection.outNodeId != QtNodes::InvalidNodeId;
         const bool hasTarget = connection.inNodeId != QtNodes::InvalidNodeId;
-        const auto source = m_metadata.constFind(connection.outNodeId);
-        const auto target = m_metadata.constFind(connection.inNodeId);
-        if (hasSource && source == m_metadata.constEnd()) {
+        const attachment::RuleDecision decision = attachment::connectionPossible(
+            m_editingEnabled
+                && m_attachmentPolicy.source
+                    == attachment::PolicySource::Package,
+            {hasSource
+                 ? outputConnectionHandle(
+                       connection.outNodeId, connection.outPortIndex)
+                 : attachment::ConnectionHandleKind::Missing,
+             hasTarget
+                 ? inputConnectionHandle(
+                       connection.inNodeId, connection.inPortIndex)
+                 : attachment::ConnectionHandleKind::Missing});
+        if (!decision.allowed) {
             return false;
         }
-        if (hasTarget && target == m_metadata.constEnd()) {
-            return false;
-        }
-
-        // QtNodes asks whether an incomplete draft is permitted before the
-        // opposite port exists.  Accept only the two valid starting handles;
-        // the full Endpoint -> Router EP rule is checked once both ends exist.
-        if (!hasSource) {
-            return hasTarget
-                && target->kind == NocEditorSelection::Kind::Router
-                && isRouterAttachmentPort(connection.inPortIndex);
-        }
-        if (!hasTarget) {
-            const bool sourceIsEndpoint =
-                source->kind == NocEditorSelection::Kind::Endpoint
-                || source->kind == NocEditorSelection::Kind::PendingEndpoint;
-            return sourceIsEndpoint && connection.outPortIndex == kEndpointOutPort;
-        }
-        const bool sourceIsEndpoint =
-            source->kind == NocEditorSelection::Kind::Endpoint
-            || source->kind == NocEditorSelection::Kind::PendingEndpoint;
-        return sourceIsEndpoint
-            && connection.outPortIndex == kEndpointOutPort
-            && target->kind == NocEditorSelection::Kind::Router
-            && isRouterAttachmentPort(connection.inPortIndex);
+        return !hasTarget
+            || attachmentPortAvailable(
+                connection.inNodeId,
+                connection.inPortIndex,
+                hasSource
+                    ? std::optional<QtNodes::NodeId>(connection.outNodeId)
+                    : std::nullopt);
     };
     graphModel.userConnectionDeletable = [this](const QtNodes::ConnectionId& connection) {
         return m_editingEnabled && isEndpointAttachmentConnection(connection);
@@ -750,21 +739,45 @@ NocNodeEditor::~NocNodeEditor() {
 }
 
 void NocNodeEditor::setDesign(const NocDesign* design) {
+    applyDesign(design, m_attachmentPolicy);
+}
+
+void NocNodeEditor::setDesign(
+    const NocDesign* design,
+    attachment::Policy policy) {
+    applyDesign(design, std::move(policy));
+}
+
+void NocNodeEditor::applyDesign(
+    const NocDesign* design,
+    attachment::Policy policy) {
     ++m_graphRevision;
     m_pendingConnectionDetachments.clear();
     const std::optional<TopologyWorkspaceIdentity> workspaceIdentity = design
         ? std::optional<TopologyWorkspaceIdentity>{TopologyWorkspaceIdentity{
               design->package.id, design->package.version, design->id}}
         : std::nullopt;
-    if (workspaceIdentity != m_workspaceIdentity || m_workspaceReloadPending) {
+    const bool newDocumentProjection =
+        workspaceIdentity != m_workspaceIdentity || m_workspaceReloadPending;
+    if (newDocumentProjection) {
         m_workspaceIdentity = workspaceIdentity;
         m_workspaceReloadPending = false;
         loadWorkspaceState();
         m_pendingEndpoints.clear();
         m_selectedItems.clear();
     }
+    m_attachmentPolicy = std::move(policy);
     m_design = design ? std::optional<NocDesign>(*design) : std::nullopt;
-    rebuildGraph();
+    m_attachmentIndex = m_design
+        ? attachment::buildDesignIndex(*m_design, m_attachmentPolicy)
+        : attachment::DesignIndex{};
+    if (m_semanticMutationDepth > 0) {
+        m_projectionRefreshDeferred = true;
+        m_projectionZoomDeferred =
+            m_projectionZoomDeferred || newDocumentProjection;
+        return;
+    }
+    rebuildGraph(newDocumentProjection);
 }
 
 void NocNodeEditor::beginDocumentSession(QString sessionToken) {
@@ -791,26 +804,52 @@ void NocNodeEditor::beginDocumentSession(QString sessionToken) {
 
 void NocNodeEditor::syncDesignState(const NocDesign& design) {
     m_design = design;
+    m_attachmentIndex = attachment::buildDesignIndex(
+        *m_design, m_attachmentPolicy);
 }
 
 void NocNodeEditor::setEndpointTypes(QVector<NocEndpointTypeItem> endpointTypes) {
     m_endpointTypes = std::move(endpointTypes);
 }
 
-void NocNodeEditor::setRouterAttachmentPorts(
-    QVector<NocRouterAttachmentPortItem> ports) {
-    ports.erase(std::remove_if(ports.begin(), ports.end(), [](const auto& port) {
-        return port.id.trimmed().isEmpty();
-    }), ports.end());
-    if (ports.isEmpty()) {
-        ports.append({QStringLiteral("0"), QStringLiteral("EP"), std::nullopt});
-    }
-    if (m_routerAttachmentPorts == ports) {
+void NocNodeEditor::setAttachmentPolicy(attachment::Policy policy) {
+    if (m_attachmentPolicy == policy) {
         return;
     }
-    m_routerAttachmentPorts = std::move(ports);
+    m_attachmentPolicy = std::move(policy);
+    m_attachmentIndex = m_design
+        ? attachment::buildDesignIndex(*m_design, m_attachmentPolicy)
+        : attachment::DesignIndex{};
     if (m_design) {
-        rebuildGraph(false);
+        if (m_semanticMutationDepth > 0) {
+            m_projectionRefreshDeferred = true;
+        } else {
+            rebuildGraph(false);
+        }
+    }
+}
+
+void NocNodeEditor::beginSemanticMutation() {
+    ++m_semanticMutationDepth;
+}
+
+void NocNodeEditor::endSemanticMutation(bool refreshProjection) {
+    if (m_semanticMutationDepth <= 0) {
+        return;
+    }
+    --m_semanticMutationDepth;
+    if (m_semanticMutationDepth > 0) {
+        m_projectionRefreshDeferred =
+            m_projectionRefreshDeferred || refreshProjection;
+        return;
+    }
+    const bool shouldRefresh =
+        refreshProjection || m_projectionRefreshDeferred;
+    const bool zoomToContents = m_projectionZoomDeferred;
+    m_projectionRefreshDeferred = false;
+    m_projectionZoomDeferred = false;
+    if (shouldRefresh) {
+        rebuildGraph(zoomToContents);
     }
 }
 
@@ -1025,8 +1064,8 @@ void NocNodeEditor::rebuildGraph(bool zoomToContents) {
         saveWorkspaceState();
     }
     QStringList attachmentPortLabels;
-    attachmentPortLabels.reserve(m_routerAttachmentPorts.size());
-    for (const NocRouterAttachmentPortItem& port : m_routerAttachmentPorts) {
+    attachmentPortLabels.reserve(m_attachmentPolicy.ports.size());
+    for (const attachment::PortDefinition& port : m_attachmentPolicy.ports) {
         attachmentPortLabels.append(port.label.trimmed().isEmpty()
                                         ? QStringLiteral("EP")
                                         : port.label);
@@ -1083,7 +1122,6 @@ void NocNodeEditor::rebuildGraph(bool zoomToContents) {
     }
 
     QHash<QString, int> endpointOffsets;
-    QHash<QString, QSet<int>> usedAttachmentPortOffsets;
     for (const EndpointView& endpoint : projection.endpoints) {
         if (m_workspaceState.collapsedRouterIds->contains(endpoint.routerId)) {
             continue;
@@ -1116,30 +1154,21 @@ void NocNodeEditor::rebuildGraph(bool zoomToContents) {
                           static_cast<int>(endpointElement.kind));
             node->setData(kSemanticElementIdDataRole, endpointElement.id);
         }
-        int attachmentOffset = -1;
-        for (qsizetype index = 0; index < m_routerAttachmentPorts.size(); ++index) {
-            if (m_routerAttachmentPorts.at(index).id == endpoint.slot) {
-                attachmentOffset = static_cast<int>(index);
-                break;
-            }
-        }
-        QSet<int>& usedOffsets = usedAttachmentPortOffsets[endpoint.routerId];
-        if (attachmentOffset < 0 || usedOffsets.contains(attachmentOffset)) {
-            for (int index = 0; index < m_routerAttachmentPorts.size(); ++index) {
-                if (!usedOffsets.contains(index)) {
-                    attachmentOffset = index;
-                    break;
-                }
-            }
-        }
-        if (attachmentOffset < 0 || attachmentOffset >= m_routerAttachmentPorts.size()) {
+        const auto occupancy = m_attachmentIndex.routers.constFind(
+            endpoint.routerId);
+        if (occupancy == m_attachmentIndex.routers.constEnd()) {
             continue;
         }
-        usedOffsets.insert(attachmentOffset);
+        const std::optional<attachment::PortOffset> attachmentOffset =
+            occupancy->layout.portForEndpoint(endpoint.id);
+        if (!attachmentOffset) {
+            continue;
+        }
         const QtNodes::ConnectionId connection{
             endpointNode, kEndpointOutPort,
             routerNode,
-            kRouterEndpointInPort + static_cast<QtNodes::PortIndex>(attachmentOffset)};
+            kRouterEndpointInPort
+                + static_cast<QtNodes::PortIndex>(*attachmentOffset)};
         graphModel.addProjectedConnection(connection);
         const ElementRef attachmentElement{
             ElementKind::EndpointAttachment, endpoint.id};
@@ -1216,7 +1245,7 @@ bool NocNodeEditor::eventFilter(QObject* watched, QEvent* event) {
         m_view->beginEndpointDrag(
             position,
             endpointTypeLabel(endpointType),
-            routerAt(m_view->mapToScene(position)).has_value());
+            endpointDragTargetAt(position));
         drag->acceptProposedAction();
         return true;
     }
@@ -1235,7 +1264,7 @@ bool NocNodeEditor::eventFilter(QObject* watched, QEvent* event) {
         m_view->updateEndpointDrag(
             position,
             endpointTypeLabel(endpointType),
-            routerAt(m_view->mapToScene(position)).has_value());
+            endpointDragTargetAt(position));
         drag->acceptProposedAction();
         return true;
     }
@@ -1258,7 +1287,7 @@ bool NocNodeEditor::eventFilter(QObject* watched, QEvent* event) {
         m_view->updateEndpointDrag(
             position,
             endpointTypeLabel(endpointType),
-            routerAt(m_view->mapToScene(position)).has_value());
+            endpointDragTargetAt(position));
         if (handleEndpointDrop(endpointType, drop->position().toPoint())) {
             drop->acceptProposedAction();
         } else {
@@ -1551,11 +1580,22 @@ void NocNodeEditor::handleConnectionCreated(QtNodes::ConnectionId connectionId) 
         return;
     }
     const QtNodes::NodeId sourceNode = connectionId.outNodeId;
-    const RouterPosition router = *target->router;
-    const std::optional<QString> exactSlot = exactSlotForPort(connectionId.inPortIndex);
-    deferForCurrentGraph([this, sourceNode, router, exactSlot] {
-        attachNodeToRouter(sourceNode, NocAttachmentTarget{router, exactSlot});
-        rebuildGraph(false);
+    const attachment::TargetResolution resolution = resolveAttachmentTarget(
+        connectionId.inNodeId,
+        attachment::RouterHitKind::AttachmentPort,
+        connectionId.inPortIndex,
+        sourceNode);
+    if (!resolution.decision.allowed || !resolution.target) {
+        reportAttachmentRejection(
+            resolution.decision.rejection, target->router);
+        deferForCurrentGraph([this] { rebuildGraph(false); });
+        return;
+    }
+    const NocAttachmentTarget attachmentTarget = *resolution.target;
+    deferForCurrentGraph([this, sourceNode, attachmentTarget] {
+        if (!attachNodeToRouter(sourceNode, attachmentTarget)) {
+            rebuildGraph(false);
+        }
     });
 }
 
@@ -1609,28 +1649,7 @@ bool NocNodeEditor::beginEndpointAttachmentDraft(const QPoint& viewportPosition)
     if (!m_editingEnabled || !m_scene || !m_view || m_endpointAttachmentDraft) {
         return false;
     }
-    std::optional<QtNodes::NodeId> nodeId;
-    qreal closestDistance = kInteractivePortHitRadius;
-    for (auto iterator = m_metadata.constBegin();
-         iterator != m_metadata.constEnd(); ++iterator) {
-        if (iterator->kind != NocEditorSelection::Kind::Endpoint
-            && iterator->kind != NocEditorSelection::Kind::PendingEndpoint) {
-            continue;
-        }
-        auto* candidate = m_scene->nodeGraphicsObject(iterator.key());
-        if (!candidate) {
-            continue;
-        }
-        const QPoint portPosition = m_view->mapFromScene(candidate->mapToScene(
-            m_scene->nodeGeometry().portPosition(
-                iterator.key(), QtNodes::PortType::Out, kEndpointOutPort)));
-        const qreal distance = QLineF(
-            QPointF(viewportPosition), QPointF(portPosition)).length();
-        if (distance <= closestDistance) {
-            closestDistance = distance;
-            nodeId = iterator.key();
-        }
-    }
+    const std::optional<QtNodes::NodeId> nodeId = nodeAt(viewportPosition);
     if (!nodeId) {
         return false;
     }
@@ -1640,6 +1659,13 @@ bool NocNodeEditor::beginEndpointAttachmentDraft(const QPoint& viewportPosition)
         || (metadata->kind != NocEditorSelection::Kind::Endpoint
             && metadata->kind != NocEditorSelection::Kind::PendingEndpoint)
         || !node) {
+        return false;
+    }
+    const QPoint portPosition = m_view->mapFromScene(node->mapToScene(
+        m_scene->nodeGeometry().portPosition(
+            *nodeId, QtNodes::PortType::Out, kEndpointOutPort)));
+    if (QLineF(QPointF(viewportPosition), QPointF(portPosition)).length()
+        > kInteractivePortHitRadius) {
         return false;
     }
 
@@ -1695,29 +1721,20 @@ bool NocNodeEditor::completeEndpointAttachmentDraft(const QPoint& viewportPositi
         return false;
     }
 
-    const QPointF localPosition = routerGraphics->mapFromScene(
-        m_view->mapToScene(viewportPosition));
-    const QtNodes::PortIndex hitPort = m_scene->nodeGeometry().checkPortHit(
-        *targetNode, QtNodes::PortType::In, localPosition);
-    std::optional<unsigned int> attachmentPort;
-    std::optional<QString> exactSlot;
-    if (isRouterAttachmentPort(hitPort)
-        && attachmentPortAvailable(*targetNode, hitPort, draft.endpointNode)) {
-        attachmentPort = hitPort;
-        exactSlot = exactSlotForPort(hitPort);
-    } else if (hitPort == QtNodes::InvalidPortIndex) {
-        attachmentPort = firstAvailableAttachmentPort(*targetNode, draft.endpointNode);
-    }
-    if (!attachmentPort) {
+    const attachment::TargetResolution resolution = resolveAttachmentTargetAt(
+        *targetNode,
+        m_view->mapToScene(viewportPosition),
+        draft.endpointNode);
+    if (!resolution.decision.allowed || !resolution.target) {
+        reportAttachmentRejection(
+            resolution.decision.rejection, target->router);
         restoreSelection();
         return false;
     }
-    if (!attachNodeToRouter(
-            draft.endpointNode, NocAttachmentTarget{*target->router, exactSlot})) {
+    if (!attachNodeToRouter(draft.endpointNode, *resolution.target)) {
         restoreSelection();
         return false;
     }
-    rebuildGraph(false);
     return true;
 }
 
@@ -1739,44 +1756,36 @@ bool NocNodeEditor::beginRouterEndpointDraft(const QPoint& viewportPosition) {
     if (!m_editingEnabled || !m_scene || !m_view || m_routerEndpointDraft) {
         return false;
     }
-    std::optional<QtNodes::NodeId> nodeId;
-    QtNodes::PortIndex hitPort = QtNodes::InvalidPortIndex;
-    qreal closestDistance = kInteractivePortHitRadius;
-    for (auto iterator = m_metadata.constBegin();
-         iterator != m_metadata.constEnd(); ++iterator) {
-        if (iterator->kind != NocEditorSelection::Kind::Router
-            || !iterator->router) {
-            continue;
-        }
-        auto* candidate = m_scene->nodeGraphicsObject(iterator.key());
-        if (!candidate) {
-            continue;
-        }
-        for (QtNodes::PortIndex portIndex = kRouterEndpointInPort;
-             portIndex < kRouterEndpointInPort
-                 + static_cast<QtNodes::PortIndex>(m_routerAttachmentPorts.size());
-             ++portIndex) {
-            if (!attachmentPortAvailable(iterator.key(), portIndex)) {
-                continue;
-            }
-            const QPoint portPosition = m_view->mapFromScene(candidate->mapToScene(
-                m_scene->nodeGeometry().portPosition(
-                    iterator.key(), QtNodes::PortType::In, portIndex)));
-            const qreal distance = QLineF(
-                QPointF(viewportPosition), QPointF(portPosition)).length();
-            if (distance <= closestDistance) {
-                closestDistance = distance;
-                nodeId = iterator.key();
-                hitPort = portIndex;
-            }
-        }
-    }
-    if (!nodeId || hitPort == QtNodes::InvalidPortIndex) {
+    const std::optional<QtNodes::NodeId> nodeId = nodeAt(viewportPosition);
+    if (!nodeId) {
         return false;
     }
     const auto metadata = m_metadata.constFind(*nodeId);
     auto* node = m_scene->nodeGraphicsObject(*nodeId);
-    if (metadata == m_metadata.constEnd() || !metadata->router || !node) {
+    if (metadata == m_metadata.constEnd()
+        || metadata->kind != NocEditorSelection::Kind::Router
+        || !metadata->router || !node) {
+        return false;
+    }
+
+    QtNodes::PortIndex hitPort = QtNodes::InvalidPortIndex;
+    qreal closestDistance = kInteractivePortHitRadius;
+    for (QtNodes::PortIndex portIndex = kRouterEndpointInPort;
+         portIndex < kRouterEndpointInPort
+             + static_cast<QtNodes::PortIndex>(m_attachmentPolicy.ports.size());
+         ++portIndex) {
+        const QPoint portPosition = m_view->mapFromScene(node->mapToScene(
+            m_scene->nodeGeometry().portPosition(
+                *nodeId, QtNodes::PortType::In, portIndex)));
+        const qreal distance = QLineF(
+            QPointF(viewportPosition), QPointF(portPosition)).length();
+        if (distance <= closestDistance) {
+            closestDistance = distance;
+            hitPort = portIndex;
+        }
+    }
+    if (hitPort == QtNodes::InvalidPortIndex
+        || !attachmentPortAvailable(*nodeId, hitPort)) {
         return false;
     }
 
@@ -1828,13 +1837,21 @@ bool NocNodeEditor::completeRouterEndpointDraft(const QPoint& viewportPosition) 
         restoreSelection();
         return false;
     }
-    if (!attachNodeToRouter(
-            *targetNode,
-            NocAttachmentTarget{draft.router, exactSlotForPort(draft.portIndex)})) {
+    const attachment::TargetResolution resolution = resolveAttachmentTarget(
+        draft.routerNode,
+        attachment::RouterHitKind::AttachmentPort,
+        draft.portIndex,
+        *targetNode);
+    if (!resolution.decision.allowed || !resolution.target) {
+        reportAttachmentRejection(
+            resolution.decision.rejection, draft.router);
         restoreSelection();
         return false;
     }
-    rebuildGraph(false);
+    if (!attachNodeToRouter(*targetNode, *resolution.target)) {
+        restoreSelection();
+        return false;
+    }
     return true;
 }
 
@@ -1865,16 +1882,19 @@ bool NocNodeEditor::tryCompleteDraftConnection(const QPoint& viewportPosition) {
     }
 
     const QPointF scenePosition = m_view->mapToScene(viewportPosition);
-    std::optional<QtNodes::NodeId> endpointNode;
-    std::optional<RouterPosition> router;
-    std::optional<QString> exactSlot;
+    std::optional<QtNodes::NodeId> endpointNode = std::nullopt;
+    std::optional<QtNodes::NodeId> routerNode = std::nullopt;
+    attachment::RouterHitKind hitKind = attachment::RouterHitKind::Body;
+    std::optional<unsigned int> hitPort = std::nullopt;
+    bool hitRouterAtPointer = false;
     const NodeMetadata startMetadata = m_metadata.value(start->nodeId);
     if (start->startFromOutput
         && start->portIndex == kEndpointOutPort
         && (startMetadata.kind == NocEditorSelection::Kind::Endpoint
             || startMetadata.kind == NocEditorSelection::Kind::PendingEndpoint)) {
         endpointNode = start->nodeId;
-        router = routerAt(scenePosition);
+        routerNode = routerNodeAt(scenePosition);
+        hitRouterAtPointer = true;
     } else if (!start->startFromOutput
                && isRouterAttachmentPort(start->portIndex)
                && startMetadata.kind == NocEditorSelection::Kind::Router
@@ -1886,24 +1906,40 @@ bool NocNodeEditor::tryCompleteDraftConnection(const QPoint& viewportPosition) {
             if (targetMetadata.kind == NocEditorSelection::Kind::Endpoint
                 || targetMetadata.kind == NocEditorSelection::Kind::PendingEndpoint) {
                 endpointNode = *target;
-                router = startMetadata.router;
-                exactSlot = exactSlotForPort(start->portIndex);
+                routerNode = start->nodeId;
+                hitKind = attachment::RouterHitKind::AttachmentPort;
+                hitPort = start->portIndex;
             }
         }
     }
 
-    if (!endpointNode || !router) {
+    if (!endpointNode || !routerNode) {
+        return false;
+    }
+    const attachment::TargetResolution resolution = hitRouterAtPointer
+        ? resolveAttachmentTargetAt(
+              *routerNode, scenePosition, *endpointNode)
+        : resolveAttachmentTarget(
+              *routerNode, hitKind, hitPort, *endpointNode);
+    if (!resolution.decision.allowed || !resolution.target) {
+        const auto router = m_metadata.constFind(*routerNode);
+        reportAttachmentRejection(
+            resolution.decision.rejection,
+            router == m_metadata.constEnd() ? std::nullopt : router->router);
         return false;
     }
     m_scene->resetDraftConnection();
-    attachNodeToRouter(*endpointNode, NocAttachmentTarget{*router, exactSlot});
-    rebuildGraph(false);
+    if (!attachNodeToRouter(*endpointNode, *resolution.target)) {
+        rebuildGraph(false);
+        return false;
+    }
     return true;
 }
 
 bool NocNodeEditor::attachNodeToRouter(QtNodes::NodeId nodeId,
                                        NocAttachmentTarget target) {
-    if (!m_editingEnabled) {
+    if (!m_editingEnabled
+        || m_attachmentPolicy.source != attachment::PolicySource::Package) {
         return false;
     }
     const auto iterator = m_metadata.constFind(nodeId);
@@ -1918,11 +1954,33 @@ bool NocNodeEditor::attachNodeToRouter(QtNodes::NodeId nodeId,
         }
         const PendingEndpoint pendingEndpoint = *pending;
         const QPointF visualPosition = pendingEndpoint.scenePosition;
+        attachment::EndpointSubject subject;
+        subject.lifecycle = pendingEndpoint.detached
+            ? attachment::EndpointLifecycle::Detached
+            : attachment::EndpointLifecycle::PendingNew;
         if (pendingEndpoint.detached) {
-            if (!detachedEndpointDropped
-                || !detachedEndpointDropped(
-                    *pendingEndpoint.detached,
-                    target)) {
+            subject.endpointId = pendingEndpoint.detached->endpoint.id;
+            subject.durableAttachment =
+                pendingEndpoint.detached->endpoint.attachment;
+        }
+        const attachment::TransitionPlan plan = attachment::decideTransition(
+            m_editingEnabled,
+            m_attachmentPolicy,
+            {subject, attachment::TransitionIntent::Attach, target});
+        if (!plan.decision.allowed) {
+            reportAttachmentRejection(plan.decision.rejection, target.router);
+            return false;
+        }
+        if (plan.command
+            == attachment::AttachmentCommandKind::RestoreDetachedEndpoint) {
+            if (!detachedEndpointDropped) {
+                return false;
+            }
+            beginSemanticMutation();
+            const bool restored = detachedEndpointDropped(
+                *pendingEndpoint.detached, target);
+            if (!restored) {
+                endSemanticMutation(true);
                 return false;
             }
             const QString endpointId = pendingEndpoint.detached->endpoint.id;
@@ -1931,63 +1989,86 @@ bool NocNodeEditor::attachNodeToRouter(QtNodes::NodeId nodeId,
             saveWorkspaceState();
             m_pendingEndpoints.remove(metadata.id);
             m_selectedItems = {{NocEditorSelection::Kind::Endpoint, endpointId}};
+            endSemanticMutation(true);
             return true;
         }
-        QSet<QString> endpointIdsBefore;
-        if (m_design) {
-            for (const EndpointInstance& endpoint : m_design->endpoints) {
-                endpointIdsBefore.insert(endpoint.id);
-            }
+        if (plan.command
+            != attachment::AttachmentCommandKind::CreateEndpoint
+            || !endpointTypeDropped) {
+            return false;
         }
-        if (!endpointTypeDropped
-            || !endpointTypeDropped(metadata.endpointType, target)) {
+        beginSemanticMutation();
+        const attachment::CreateEndpointResult created = endpointTypeDropped(
+            metadata.endpointType, target);
+        if (!created.success || created.endpointId.trimmed().isEmpty()) {
+            endSemanticMutation(true);
             return false;
         }
         m_pendingEndpoints.remove(metadata.id);
-        QString createdEndpointId;
-        if (m_design) {
-            for (const EndpointInstance& endpoint : m_design->endpoints) {
-                if (!endpointIdsBefore.contains(endpoint.id)
-                    && endpoint.type == metadata.endpointType
-                    && endpoint.attachment.router == target.router) {
-                    createdEndpointId = endpoint.id;
-                    break;
-                }
+        m_workspaceState.endpointPositionOverrides.insert(
+            created.endpointId, visualPosition);
+        saveWorkspaceState();
+        for (SelectionIdentity& selected : m_selectedItems) {
+            if (selected.kind == NocEditorSelection::Kind::PendingEndpoint
+                && selected.id == metadata.id) {
+                selected = {NocEditorSelection::Kind::Endpoint,
+                            created.endpointId};
             }
         }
-        if (!createdEndpointId.isEmpty()) {
-            m_workspaceState.endpointPositionOverrides.insert(
-                createdEndpointId, visualPosition);
-            saveWorkspaceState();
-            for (SelectionIdentity& selected : m_selectedItems) {
-                if (selected.kind == NocEditorSelection::Kind::PendingEndpoint
-                    && selected.id == metadata.id) {
-                    selected = {NocEditorSelection::Kind::Endpoint,
-                                createdEndpointId};
-                }
-            }
-        }
+        endSemanticMutation(true);
         return true;
     }
     if (metadata.kind == NocEditorSelection::Kind::Endpoint) {
+        if (!m_design) {
+            return false;
+        }
+        const auto endpoint = std::find_if(
+            m_design->endpoints.cbegin(),
+            m_design->endpoints.cend(),
+            [&](const EndpointInstance& candidate) {
+                return candidate.id == metadata.id;
+            });
+        if (endpoint == m_design->endpoints.cend()) {
+            return false;
+        }
+        const attachment::TransitionPlan plan = attachment::decideTransition(
+            m_editingEnabled,
+            m_attachmentPolicy,
+            {{attachment::EndpointLifecycle::Attached,
+              endpoint->id,
+              endpoint->attachment},
+             attachment::TransitionIntent::Attach,
+             target});
+        if (!plan.decision.allowed) {
+            reportAttachmentRejection(plan.decision.rejection, target.router);
+            return false;
+        }
         QPointF visualPosition = metadata.projectedPosition;
         if (m_graphModel->nodeExists(nodeId)) {
             visualPosition = m_graphModel->nodeData(
                 nodeId, QtNodes::NodeRole::Position).toPointF();
         }
-        if (metadata.router && *metadata.router == target.router
-            && !target.exactSlot) {
+        if (plan.command
+            == attachment::AttachmentCommandKind::PreserveAttachedEndpoint) {
             m_workspaceState.endpointPositionOverrides.insert(
                 metadata.id, visualPosition);
             saveWorkspaceState();
             return true;
         }
-        if (!endpointMoveRequested || !endpointMoveRequested(metadata.id, target)) {
+        if (plan.command != attachment::AttachmentCommandKind::MoveEndpoint
+            || !endpointMoveRequested) {
+            return false;
+        }
+        beginSemanticMutation();
+        const bool moved = endpointMoveRequested(metadata.id, target);
+        if (!moved) {
+            endSemanticMutation(true);
             return false;
         }
         m_workspaceState.endpointPositionOverrides.insert(
             metadata.id, visualPosition);
         saveWorkspaceState();
+        endSemanticMutation(true);
         return true;
     }
     return false;
@@ -1995,20 +2076,41 @@ bool NocNodeEditor::attachNodeToRouter(QtNodes::NodeId nodeId,
 
 bool NocNodeEditor::detachEndpoint(QtNodes::NodeId nodeId,
                                    bool restoreProjectionOnFailure) {
+    const auto fail = [this, restoreProjectionOnFailure] {
+        if (restoreProjectionOnFailure) {
+            rebuildGraph(false);
+        }
+        return false;
+    };
     const auto metadata = m_metadata.constFind(nodeId);
     if (metadata == m_metadata.constEnd()
         || metadata->kind != NocEditorSelection::Kind::Endpoint
         || !m_design
         || !endpointRemovalRequested
-        || !m_editingEnabled) {
-        return false;
+        || !m_editingEnabled
+        || m_attachmentPolicy.source != attachment::PolicySource::Package) {
+        return fail();
     }
     const auto endpoint = std::find_if(m_design->endpoints.cbegin(), m_design->endpoints.cend(),
                                        [&](const EndpointInstance& candidate) {
                                            return candidate.id == metadata->id;
                                        });
     if (endpoint == m_design->endpoints.cend()) {
-        return false;
+        return fail();
+    }
+    const attachment::TransitionPlan plan = attachment::decideTransition(
+        m_editingEnabled,
+        m_attachmentPolicy,
+        {{attachment::EndpointLifecycle::Attached,
+          endpoint->id,
+          endpoint->attachment},
+         attachment::TransitionIntent::Detach,
+         std::nullopt});
+    if (!plan.decision.allowed
+        || plan.command
+            != attachment::AttachmentCommandKind::DetachToRecoverableDraft) {
+        reportAttachmentRejection(plan.decision.rejection, endpoint->attachment.router);
+        return fail();
     }
     QPointF scenePosition = metadata->projectedPosition;
     if (m_graphModel->nodeExists(nodeId)) {
@@ -2034,10 +2136,9 @@ bool NocNodeEditor::detachEndpoint(QtNodes::NodeId nodeId,
             detachedConfigurations.append(configuration);
         }
     }
+    beginSemanticMutation();
     if (!endpointRemovalRequested(endpointId)) {
-        if (restoreProjectionOnFailure) {
-            rebuildGraph(false);
-        }
+        endSemanticMutation(true);
         return false;
     }
     const QString pendingId = QStringLiteral("pending-endpoint-%1")
@@ -2052,7 +2153,7 @@ bool NocNodeEditor::detachEndpoint(QtNodes::NodeId nodeId,
             detachedOverrides,
             detachedConfigurations}});
     m_selectedItems = {{NocEditorSelection::Kind::PendingEndpoint, pendingId}};
-    rebuildGraph(false);
+    endSemanticMutation(true);
     return true;
 }
 
@@ -2147,8 +2248,10 @@ void NocNodeEditor::showNodeContextMenu(QtNodes::NodeId nodeId,
                 const RouterPosition router = *metadata->router;
                 connect(action, &QAction::triggered, this, [this, type, router] {
                     if (endpointTypeDropped) {
+                        beginSemanticMutation();
                         endpointTypeDropped(
                             type.id, NocAttachmentTarget{router, std::nullopt});
+                        endSemanticMutation(true);
                     }
                 });
             }
@@ -2197,7 +2300,6 @@ void NocNodeEditor::showNodeContextMenu(QtNodes::NodeId nodeId,
         connect(action, &QAction::triggered, this, [this, nodeId, position = router.first] {
             attachNodeToRouter(
                 nodeId, NocAttachmentTarget{position, std::nullopt});
-            rebuildGraph(false);
         });
     }
     menu->addSeparator();
@@ -2216,17 +2318,66 @@ void NocNodeEditor::showNodeContextMenu(QtNodes::NodeId nodeId,
     connect(remove, &QAction::triggered, this, [this, pending, endpointId] {
         if (pending) {
             const auto iterator = m_pendingEndpoints.constFind(endpointId);
-            const QString durableEndpointId =
-                iterator != m_pendingEndpoints.cend() && iterator->detached
-                ? iterator->detached->endpoint.id : QString();
+            if (iterator == m_pendingEndpoints.cend()) {
+                return;
+            }
+            attachment::EndpointSubject subject;
+            subject.lifecycle = iterator->detached
+                ? attachment::EndpointLifecycle::Detached
+                : attachment::EndpointLifecycle::PendingNew;
+            if (iterator->detached) {
+                subject.endpointId = iterator->detached->endpoint.id;
+                subject.durableAttachment =
+                    iterator->detached->endpoint.attachment;
+            }
+            const attachment::TransitionPlan plan = attachment::decideTransition(
+                m_editingEnabled,
+                m_attachmentPolicy,
+                {subject, attachment::TransitionIntent::Delete, std::nullopt});
+            if (!plan.decision.allowed) {
+                reportAttachmentRejection(plan.decision.rejection);
+                return;
+            }
+            const QString durableEndpointId = subject.endpointId;
             m_pendingEndpoints.remove(endpointId);
-            if (!durableEndpointId.isEmpty()
+            if (plan.command
+                    == attachment::AttachmentCommandKind::DiscardDetachedDraft
+                && !durableEndpointId.isEmpty()
                 && detachedEndpointDeletionRequested) {
                 detachedEndpointDeletionRequested(durableEndpointId);
             }
             rebuildGraph(false);
-        } else if (endpointDeletionRequested) {
+            return;
+        }
+        if (!m_design || !endpointDeletionRequested) {
+            return;
+        }
+        const auto endpoint = std::find_if(
+            m_design->endpoints.cbegin(),
+            m_design->endpoints.cend(),
+            [&](const EndpointInstance& candidate) {
+                return candidate.id == endpointId;
+            });
+        if (endpoint == m_design->endpoints.cend()) {
+            return;
+        }
+        const attachment::TransitionPlan plan = attachment::decideTransition(
+            m_editingEnabled,
+            m_attachmentPolicy,
+            {{attachment::EndpointLifecycle::Attached,
+              endpoint->id,
+              endpoint->attachment},
+             attachment::TransitionIntent::Delete,
+             std::nullopt});
+        if (plan.decision.allowed
+            && plan.command
+                == attachment::AttachmentCommandKind::DeleteAttachedEndpoint) {
+            beginSemanticMutation();
             endpointDeletionRequested(endpointId);
+            endSemanticMutation(true);
+        } else {
+            reportAttachmentRejection(
+                plan.decision.rejection, endpoint->attachment.router);
         }
     });
     menu->popup(globalPosition);
@@ -2359,34 +2510,33 @@ bool NocNodeEditor::handleEndpointDrop(const QString& endpointType,
     if (!knownType) {
         return false;
     }
-    const std::optional<QtNodes::NodeId> target = nodeAt(viewportPosition);
+    const QPointF scenePosition = m_view->mapToScene(viewportPosition);
+    const std::optional<QtNodes::NodeId> target = routerNodeAt(scenePosition);
     if (!target) {
-        addPendingEndpoint(endpointType, m_view->mapToScene(viewportPosition));
+        addPendingEndpoint(endpointType, scenePosition);
         return true;
     }
     const auto metadata = m_metadata.constFind(*target);
     if (metadata == m_metadata.constEnd()
         || metadata->kind != NocEditorSelection::Kind::Router
         || !metadata->router) {
-        addPendingEndpoint(endpointType, m_view->mapToScene(viewportPosition));
-        return true;
+        return false;
     }
-    std::optional<QString> exactSlot;
-    if (auto* routerGraphics = m_scene->nodeGraphicsObject(*target)) {
-        const QPointF localPosition = routerGraphics->mapFromScene(
-            m_view->mapToScene(viewportPosition));
-        const QtNodes::PortIndex hitPort = m_scene->nodeGeometry().checkPortHit(
-            *target, QtNodes::PortType::In, localPosition);
-        if (isRouterAttachmentPort(hitPort)) {
-            if (!attachmentPortAvailable(*target, hitPort)) {
-                return false;
-            }
-            exactSlot = exactSlotForPort(hitPort);
-        }
+    const attachment::TargetResolution resolution = resolveAttachmentTargetAt(
+        *target, scenePosition);
+    if (!resolution.decision.allowed || !resolution.target) {
+        reportAttachmentRejection(
+            resolution.decision.rejection, metadata->router);
+        return false;
     }
-    return endpointTypeDropped
-        && endpointTypeDropped(
-            endpointType, NocAttachmentTarget{*metadata->router, exactSlot});
+    if (!endpointTypeDropped) {
+        return false;
+    }
+    beginSemanticMutation();
+    const attachment::CreateEndpointResult created = endpointTypeDropped(
+        endpointType, *resolution.target);
+    endSemanticMutation(true);
+    return created.success;
 }
 
 void NocNodeEditor::addPendingEndpoint(const QString& endpointType,
@@ -2403,21 +2553,32 @@ void NocNodeEditor::addPendingEndpoint(const QString& endpointType,
     rebuildGraph(false);
 }
 
-std::optional<RouterPosition> NocNodeEditor::routerAt(
-    const QPointF& scenePosition) const {
-    const std::optional<QtNodes::NodeId> routerNode = routerNodeAt(scenePosition);
-    return routerNode ? m_metadata.value(*routerNode).router : std::nullopt;
-}
-
 std::optional<QtNodes::NodeId> NocNodeEditor::routerNodeAt(
     const QPointF& scenePosition) const {
-    for (auto iterator = m_routerNodes.constBegin(); iterator != m_routerNodes.constEnd(); ++iterator) {
-        auto* routerGraphics = m_scene
-            ? m_scene->nodeGraphicsObject(iterator.value())
-            : nullptr;
-        if (routerGraphics
-            && routerGraphics->sceneBoundingRect().contains(scenePosition)) {
-            return iterator.value();
+    if (!m_scene) {
+        return std::nullopt;
+    }
+    QSet<QtNodes::NodeId> visited;
+    for (QGraphicsItem* hitItem : m_scene->items(
+             scenePosition,
+             Qt::IntersectsItemShape,
+             Qt::DescendingOrder)) {
+        QGraphicsItem* item = hitItem;
+        while (item) {
+            if (auto* node =
+                    qgraphicsitem_cast<QtNodes::NodeGraphicsObject*>(item)) {
+                if (visited.contains(node->nodeId())) {
+                    break;
+                }
+                visited.insert(node->nodeId());
+                const auto metadata = m_metadata.constFind(node->nodeId());
+                if (metadata != m_metadata.constEnd()
+                    && metadata->kind == NocEditorSelection::Kind::Router) {
+                    return node->nodeId();
+                }
+                break;
+            }
+            item = item->parentItem();
         }
     }
     return std::nullopt;
@@ -2471,13 +2632,25 @@ std::optional<QtNodes::NodeId> NocNodeEditor::nodeAtScene(
     if (!m_scene) {
         return std::nullopt;
     }
-    for (auto iterator = m_metadata.constBegin(); iterator != m_metadata.constEnd(); ++iterator) {
-        if (ignoredNode && iterator.key() == *ignoredNode) {
-            continue;
-        }
-        auto* node = m_scene->nodeGraphicsObject(iterator.key());
-        if (node && node->sceneBoundingRect().contains(scenePosition)) {
-            return iterator.key();
+    QSet<QtNodes::NodeId> visited;
+    for (QGraphicsItem* hitItem : m_scene->items(
+             scenePosition,
+             Qt::IntersectsItemShape,
+             Qt::DescendingOrder)) {
+        QGraphicsItem* item = hitItem;
+        while (item) {
+            if (auto* node =
+                    qgraphicsitem_cast<QtNodes::NodeGraphicsObject*>(item)) {
+                if (visited.contains(node->nodeId())) {
+                    break;
+                }
+                visited.insert(node->nodeId());
+                if (!ignoredNode || node->nodeId() != *ignoredNode) {
+                    return node->nodeId();
+                }
+                break;
+            }
+            item = item->parentItem();
         }
     }
     return std::nullopt;
@@ -2509,47 +2682,169 @@ bool NocNodeEditor::blockedPortAt(const QPoint& viewportPosition) const {
 bool NocNodeEditor::isRouterAttachmentPort(unsigned int portIndex) const {
     return portIndex >= kRouterEndpointInPort
         && portIndex < kRouterEndpointInPort
-            + static_cast<unsigned int>(m_routerAttachmentPorts.size());
+            + static_cast<unsigned int>(m_attachmentPolicy.ports.size());
 }
 
-std::optional<QString> NocNodeEditor::exactSlotForPort(unsigned int portIndex) const {
-    if (!isRouterAttachmentPort(portIndex)) {
-        return std::nullopt;
+attachment::ConnectionHandleKind NocNodeEditor::outputConnectionHandle(
+    QtNodes::NodeId nodeId,
+    unsigned int portIndex) const {
+    const auto node = m_metadata.constFind(nodeId);
+    if (node == m_metadata.constEnd()) {
+        return attachment::ConnectionHandleKind::Other;
     }
-    const qsizetype offset = static_cast<qsizetype>(portIndex - kRouterEndpointInPort);
-    return m_routerAttachmentPorts.value(offset).exactSlot;
+    if ((node->kind == NocEditorSelection::Kind::Endpoint
+         || node->kind == NocEditorSelection::Kind::PendingEndpoint)
+        && portIndex == kEndpointOutPort) {
+        return attachment::ConnectionHandleKind::EndpointAttachmentOutput;
+    }
+    if (node->kind == NocEditorSelection::Kind::Router) {
+        return attachment::ConnectionHandleKind::RouterTopologyPort;
+    }
+    return attachment::ConnectionHandleKind::Other;
+}
+
+attachment::ConnectionHandleKind NocNodeEditor::inputConnectionHandle(
+    QtNodes::NodeId nodeId,
+    unsigned int portIndex) const {
+    const auto node = m_metadata.constFind(nodeId);
+    if (node == m_metadata.constEnd()) {
+        return attachment::ConnectionHandleKind::Other;
+    }
+    if (node->kind == NocEditorSelection::Kind::Router) {
+        return isRouterAttachmentPort(portIndex)
+            ? attachment::ConnectionHandleKind::RouterAttachmentInput
+            : attachment::ConnectionHandleKind::RouterTopologyPort;
+    }
+    return attachment::ConnectionHandleKind::Other;
+}
+
+attachment::TargetResolution NocNodeEditor::resolveAttachmentTarget(
+    QtNodes::NodeId routerNode,
+    attachment::RouterHitKind hitKind,
+    std::optional<unsigned int> portIndex,
+    std::optional<QtNodes::NodeId> ignoredEndpoint) const {
+    attachment::TargetResolution rejected;
+    rejected.decision = attachment::RuleDecision::reject(
+        attachment::Rejection::UnknownRouter);
+    if (!m_design) {
+        return rejected;
+    }
+    const auto router = m_metadata.constFind(routerNode);
+    if (router == m_metadata.constEnd()
+        || router->kind != NocEditorSelection::Kind::Router
+        || !router->router) {
+        return rejected;
+    }
+
+    QString ignoredEndpointId;
+    if (ignoredEndpoint) {
+        const auto endpoint = m_metadata.constFind(*ignoredEndpoint);
+        if (endpoint != m_metadata.constEnd()
+            && endpoint->kind == NocEditorSelection::Kind::Endpoint) {
+            ignoredEndpointId = endpoint->id;
+        }
+    }
+    std::optional<attachment::PortOffset> offset = std::nullopt;
+    if (portIndex) {
+        if (!isRouterAttachmentPort(*portIndex)) {
+            rejected.decision = attachment::RuleDecision::reject(
+                attachment::Rejection::InvalidPort);
+            return rejected;
+        }
+        offset = static_cast<attachment::PortOffset>(
+            *portIndex - kRouterEndpointInPort);
+    }
+    return attachment::resolveTarget(
+        *m_design,
+        m_attachmentIndex,
+        m_editingEnabled,
+        attachment::RouterHit{*router->router, hitKind, offset},
+        ignoredEndpointId);
+}
+
+attachment::TargetResolution NocNodeEditor::resolveAttachmentTargetAt(
+    QtNodes::NodeId routerNode,
+    const QPointF& scenePosition,
+    std::optional<QtNodes::NodeId> ignoredEndpoint) const {
+    if (!m_scene) {
+        attachment::TargetResolution rejected;
+        rejected.decision = attachment::RuleDecision::reject(
+            attachment::Rejection::UnknownRouter);
+        return rejected;
+    }
+    auto* routerGraphics = m_scene->nodeGraphicsObject(routerNode);
+    if (!routerGraphics) {
+        attachment::TargetResolution rejected;
+        rejected.decision = attachment::RuleDecision::reject(
+            attachment::Rejection::UnknownRouter);
+        return rejected;
+    }
+
+    const QPointF localPosition = routerGraphics->mapFromScene(scenePosition);
+    const auto& geometry = m_scene->nodeGeometry();
+    const QtNodes::PortIndex inputPort = geometry.checkPortHit(
+        routerNode, QtNodes::PortType::In, localPosition);
+    if (inputPort != QtNodes::InvalidPortIndex) {
+        const bool attachmentPort = isRouterAttachmentPort(inputPort);
+        return resolveAttachmentTarget(
+            routerNode,
+            attachmentPort
+                ? attachment::RouterHitKind::AttachmentPort
+                : attachment::RouterHitKind::TopologyPort,
+            attachmentPort
+                ? std::optional<unsigned int>(inputPort) : std::nullopt,
+            ignoredEndpoint);
+    }
+
+    const QtNodes::PortIndex outputPort = geometry.checkPortHit(
+        routerNode, QtNodes::PortType::Out, localPosition);
+    return resolveAttachmentTarget(
+        routerNode,
+        outputPort == QtNodes::InvalidPortIndex
+            ? attachment::RouterHitKind::Body
+            : attachment::RouterHitKind::TopologyPort,
+        std::nullopt,
+        ignoredEndpoint);
+}
+
+EndpointDragTarget NocNodeEditor::endpointDragTargetAt(
+    const QPoint& viewportPosition) const {
+    if (!m_view) {
+        return EndpointDragTarget::Canvas;
+    }
+    const QPointF scenePosition = m_view->mapToScene(viewportPosition);
+    const std::optional<QtNodes::NodeId> routerNode = routerNodeAt(
+        scenePosition);
+    if (!routerNode) {
+        return EndpointDragTarget::Canvas;
+    }
+    return resolveAttachmentTargetAt(*routerNode, scenePosition)
+            .decision.allowed
+        ? EndpointDragTarget::AttachToRouter
+        : EndpointDragTarget::Blocked;
+}
+
+void NocNodeEditor::reportAttachmentRejection(
+    attachment::Rejection rejection,
+    std::optional<RouterPosition> router) const {
+    if (attachmentRejected && rejection != attachment::Rejection::None) {
+        attachmentRejected(rejection, router);
+    }
 }
 
 bool NocNodeEditor::attachmentPortAvailable(
     QtNodes::NodeId routerNode,
     unsigned int portIndex,
     std::optional<QtNodes::NodeId> ignoredEndpoint) const {
-    if (!isRouterAttachmentPort(portIndex) || !m_graphModel->nodeExists(routerNode)) {
+    if (!m_graphModel->nodeExists(routerNode)) {
         return false;
     }
-    for (const QtNodes::ConnectionId& connection : m_graphModel->allConnectionIds(routerNode)) {
-        if (connection.inNodeId != routerNode || connection.inPortIndex != portIndex) {
-            continue;
-        }
-        if (!ignoredEndpoint || connection.outNodeId != *ignoredEndpoint) {
-            return false;
-        }
-    }
-    return true;
-}
-
-std::optional<unsigned int> NocNodeEditor::firstAvailableAttachmentPort(
-    QtNodes::NodeId routerNode,
-    std::optional<QtNodes::NodeId> ignoredEndpoint) const {
-    for (unsigned int portIndex = kRouterEndpointInPort;
-         portIndex < kRouterEndpointInPort
-             + static_cast<unsigned int>(m_routerAttachmentPorts.size());
-         ++portIndex) {
-        if (attachmentPortAvailable(routerNode, portIndex, ignoredEndpoint)) {
-            return portIndex;
-        }
-    }
-    return std::nullopt;
+    return resolveAttachmentTarget(
+               routerNode,
+               attachment::RouterHitKind::AttachmentPort,
+               portIndex,
+               ignoredEndpoint)
+        .decision.allowed;
 }
 
 QString NocNodeEditor::endpointTypeLabel(const QString& endpointType) const {

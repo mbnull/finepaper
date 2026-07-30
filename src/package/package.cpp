@@ -1716,6 +1716,31 @@ bool valueMatchesType(const QJsonValue& value, const ParameterDefinition& defini
 
 } // namespace
 
+QVector<AttachmentSlotDefinition> effectiveExplicitAttachmentSlots(
+    const AttachmentDefinition& definition) {
+    if (definition.slotMode != AttachmentSlotMode::Explicit) {
+        return {};
+    }
+    if (definition.maxPerRouter <= 0
+        || definition.maxPerRouter > kMaximumEndpointAttachmentsPerRouter
+        || definition.positions.size()
+            > kMaximumEndpointAttachmentsPerRouter) {
+        return {};
+    }
+    if (!definition.positions.isEmpty()) {
+        return definition.positions;
+    }
+
+    QVector<AttachmentSlotDefinition> effectiveSlots;
+    effectiveSlots.reserve(definition.maxPerRouter);
+    for (int index = 0; index < definition.maxPerRouter; ++index) {
+        const QString id = QString::number(index);
+        effectiveSlots.append({
+            id, QStringLiteral("Local port %1").arg(index)});
+    }
+    return effectiveSlots;
+}
+
 QString PackageDefinition::key() const {
     return id + QLatin1Char('@') + version;
 }
@@ -1959,11 +1984,14 @@ PackageLoadResult loadPackage(const QString& packageRoot) {
                                                       1,
                                                       QStringLiteral("/attachment"),
                                                       result.diagnostics);
-    if (package.attachment.maxPerRouter <= 0) {
+    if (package.attachment.maxPerRouter <= 0
+        || package.attachment.maxPerRouter
+            > kMaximumEndpointAttachmentsPerRouter) {
         appendDiagnostic(result.diagnostics,
                          QStringLiteral("error"),
                          QStringLiteral("package.invalid_attachment_capacity"),
-                         QStringLiteral("maxPerRouter must be greater than zero"),
+                         QStringLiteral("maxPerRouter must be between 1 and %1")
+                             .arg(kMaximumEndpointAttachmentsPerRouter),
                          QStringLiteral("/attachment/maxPerRouter"));
     }
     const QString slotModeId = optionalString(attachment,
@@ -1992,8 +2020,21 @@ PackageLoadResult loadPackage(const QString& packageRoot) {
                          QStringLiteral("/attachment/slots"));
     } else {
         const QJsonArray slotArray = attachmentSlots.toArray();
+        if (slotArray.size() > kMaximumEndpointAttachmentsPerRouter) {
+            appendDiagnostic(
+                result.diagnostics,
+                QStringLiteral("error"),
+                QStringLiteral("package.too_many_attachment_slots"),
+                QStringLiteral("attachment slots cannot exceed %1")
+                    .arg(kMaximumEndpointAttachmentsPerRouter),
+                QStringLiteral("/attachment/slots"));
+        }
+        const qsizetype slotCount = (std::min)(
+            slotArray.size(),
+            static_cast<qsizetype>(
+                kMaximumEndpointAttachmentsPerRouter));
         QSet<QString> slotIds;
-        for (qsizetype index = 0; index < slotArray.size(); ++index) {
+        for (qsizetype index = 0; index < slotCount; ++index) {
             const QString base = QStringLiteral("/attachment/slots/%1").arg(index);
             if (!slotArray.at(index).isObject()) {
                 appendDiagnostic(result.diagnostics,

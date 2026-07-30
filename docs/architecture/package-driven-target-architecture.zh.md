@@ -703,7 +703,7 @@ package.json 的职责是告诉 Finepaper：
 
 第一阶段不应继续向 package.json 加入条件表达式、工作流 DAG、任意 action、UI 布局语言或跨字段规则 DSL。一个字段如果没有当前 GUI、CLI、验证或生成流程的实际消费者，就不进入 Package 格式。
 
-当 `attachment.slotMode` 为 `explicit` 时，Package 可以在 `attachment.slots` 中集中声明可选挂载位，例如 `[{"id":"local0","label":"Local port 0"}]`。GUI 在新增或移动 Endpoint 时只显示目标 Router 上尚未占用的位置，并把选择的 `id` 保存到 `EndpointAttachment.slot`。未声明 `slots` 的旧 Package 按 `0..maxPerRouter-1` 提供兼容位置，不把位置规则硬编码到各个入口。
+当 `attachment.slotMode` 为 `explicit` 时，Package 可以在 `attachment.slots` 中集中声明可选挂载位，例如 `[{"id":"local0","label":"Local port 0"}]`。GUI 在新增或移动 Endpoint 时只显示目标 Router 上尚未占用的位置，并把选择的 `id` 保存到 `EndpointAttachment.slot`。未声明 `slots` 的旧 Package 按 `0..maxPerRouter-1` 提供兼容位置，不把位置规则硬编码到各个入口。`maxPerRouter` 与显式 slot 数量在解析 Package 时受公开的 `kMaximumEndpointAttachmentsPerRouter` 资源上限约束，避免损坏或不可信 manifest 在 GUI 中展开无界端口；该上限是输入安全边界，不承载具体 NoC 的语义默认值。
 
 ### 12.1 不提供 connectionRules
 
@@ -1112,9 +1112,9 @@ NodeEditor 负责直接操作 NoC，而不是承载通用 IP 图编辑器：
 - Router 使用可展开/收起的方形设备外观，并明确显示 North、East、South、West 四个拓扑方向端口；新设计默认以收起状态打开，Mesh 链路分别从 East→West、South→North 连接，不使用无方向含义的通用连线；
 - Router 的 Mesh 身份与连接关系固定，但其画布位置允许用户自由拖动调整；位置与收起状态只保存到本机 Workspace 布局，不写入 `NocDesign`；工具栏提供“规整化布局”，按 N×M 派生位置重排 Router 与 Endpoint，而不是只缩放视图；
 - Router 与 Router Link 不可任意创建、删除或连接；
-- Endpoint Palette 中的类型既可直接拖到 Router 完成立即创建和挂载，也可拖到画布空白处形成“未挂载 Endpoint”工作区草稿；草稿不是 `NocDesign` 的第二事实源，只有把节点拖到 Router 主体或从菜单选择 Router 后才调用 `FinepaperApplication::addEndpoint` 并成为持久设计事实；
+- Endpoint Palette 中的类型既可直接拖到 Router 完成立即创建和挂载，也可拖到画布空白处形成“未挂载 Endpoint”工作区草稿；草稿不是 `NocDesign` 的第二事实源，只有把草稿的 EP 端口连到 Router EP 端口/主体或从菜单选择 Router 后才调用 `FinepaperApplication::addEndpoint` 并成为持久设计事实；
 - Endpoint 使用独立 EP 挂载端口，不占用 North/East/South/West 拓扑端口。Package 的 `attachment.maxPerRouter` 与显式 slot 集中决定 Router 上显示的 EP 端口；每个 EP 端口最多一条 Endpoint 挂载线，不能把多个 Endpoint 视觉上或语义上接到同一端口。只有 Endpoint EP 与空闲 Router EP 可以作为人工拖线起点；释放到对应 EP 或目标节点主体都会映射为 Endpoint→Router 挂载。North/East/South/West 始终只是派生 Mesh 链路的显示方向，不能手工拖线、创建或删除。Router-to-Router 和 Endpoint-to-Endpoint 的任意人工连线均被拒绝；
-- 已有 Endpoint 的画布位置可以自由调整且不改变挂载关系；只有将 Endpoint 节点主体拖到另一个 Router 主体，或从右键菜单选择目标 Router，才映射为 `moveEndpoint`；Endpoint 画布位置与 Router 画布位置一样属于本机 Workspace 布局，不写入 `NocDesign`；
+- 已有 Endpoint 的画布位置可以自由调整且不改变挂载关系；只有把 Endpoint 的 EP 端口重新连到另一个 Router EP 端口/主体，或从右键菜单选择目标 Router，才映射为 `moveEndpoint`；Endpoint 节点主体拖动永远只改变本机 Workspace 布局，不写入 `NocDesign`；
 - `explicit` slot Package 在新增或移动 Endpoint 时要求用户选择目标 Router 上的空闲挂载位；`automatic` 模式不弹出该选择；
 - 选择 Endpoint 或 Router 会驱动右侧 Inspector，并高亮与该节点直接相连的线和一跳邻接节点；节点拖动、自由摆放、重建投影和规整化不会取消该选择，只有选择另一节点或点击画布空白处才会改变选择；
 - 画布空白处右键可创建未挂载 Endpoint；Router 右键菜单可按 Package 类型添加 Endpoint；Endpoint 右键菜单可连接/移动到指定 Router、断开为未挂载草稿或删除。断开通过共享应用层移除持久挂载，再在 Workspace 保留携带原 Endpoint 配置的草稿，重新挂载时恢复该配置。右侧 Inspector 只展示选择对象的属性与参数，不放置挂载、连线或删除工具；

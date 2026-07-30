@@ -51,10 +51,10 @@ void AnimatedGraphicsView::setPersistentDragMode(
 
 void AnimatedGraphicsView::beginEndpointDrag(const QPoint& viewportPosition,
                                               const QString& endpointLabel,
-                                              bool overRouter) {
+                                              EndpointDragTarget target) {
     m_dragPosition = viewportPosition;
     m_endpointLabel = endpointLabel;
-    m_overRouter = overRouter;
+    m_dragTarget = target;
     const bool fadeIn = !m_dragActive && m_overlayOpacity < 0.99;
     m_dragActive = true;
     if (m_pulseAnimation->state() != QAbstractAnimation::Running) {
@@ -69,16 +69,16 @@ void AnimatedGraphicsView::beginEndpointDrag(const QPoint& viewportPosition,
 
 void AnimatedGraphicsView::updateEndpointDrag(const QPoint& viewportPosition,
                                                const QString& endpointLabel,
-                                               bool overRouter) {
+                                               EndpointDragTarget target) {
     if (!m_dragActive) {
-        beginEndpointDrag(viewportPosition, endpointLabel, overRouter);
+        beginEndpointDrag(viewportPosition, endpointLabel, target);
         return;
     }
     m_dragPosition = viewportPosition;
     if (!endpointLabel.isEmpty()) {
         m_endpointLabel = endpointLabel;
     }
-    m_overRouter = overRouter;
+    m_dragTarget = target;
     viewport()->update();
 }
 
@@ -87,7 +87,7 @@ void AnimatedGraphicsView::endEndpointDrag() {
         return;
     }
     m_dragActive = false;
-    m_overRouter = false;
+    m_dragTarget = EndpointDragTarget::Canvas;
     animateOverlayTo(0.0);
 }
 
@@ -105,9 +105,12 @@ void AnimatedGraphicsView::drawForeground(QPainter* painter,
 
     const QRectF viewportRectangle = viewport()->rect();
     const QRectF frame = viewportRectangle.adjusted(16.0, 16.0, -16.0, -16.0);
-    const QColor accent = m_overRouter
-        ? QColor(QStringLiteral("#16a34a"))
-        : palette().highlight().color();
+    QColor accent = palette().highlight().color();
+    if (m_dragTarget == EndpointDragTarget::AttachToRouter) {
+        accent = QColor(QStringLiteral("#16a34a"));
+    } else if (m_dragTarget == EndpointDragTarget::Blocked) {
+        accent = palette().color(QPalette::Disabled, QPalette::Text);
+    }
 
     QColor frameFill = accent;
     frameFill.setAlpha(18);
@@ -148,9 +151,12 @@ void AnimatedGraphicsView::drawForeground(QPainter* painter,
                          26.0 + m_pulsePhase * 16.0,
                          26.0 + m_pulsePhase * 16.0);
 
-    const QString instruction = m_overRouter
-        ? QStringLiteral("Attach to Router")
-        : QStringLiteral("Place on canvas");
+    QString instruction = QStringLiteral("Place on canvas");
+    if (m_dragTarget == EndpointDragTarget::AttachToRouter) {
+        instruction = QStringLiteral("Attach to Router");
+    } else if (m_dragTarget == EndpointDragTarget::Blocked) {
+        instruction = QStringLiteral("Not an attachment target");
+    }
     const QString chipText = QStringLiteral("%1  ·  %2")
                                  .arg(m_endpointLabel, instruction);
     QFont chipFont = font();

@@ -249,7 +249,9 @@ QJsonObject packageManifest() {
     };
 }
 
-bool prepareFixture(const QString& packageRoot) {
+bool prepareFixture(
+    const QString& packageRoot,
+    const QJsonObject& manifest = packageManifest()) {
     const QString executable = QDir(packageRoot).filePath(
         QStringLiteral("runtime/bin/generate"));
     if (!QDir().mkpath(QFileInfo(executable).absolutePath())) {
@@ -271,7 +273,7 @@ bool prepareFixture(const QString& packageRoot) {
     }
     return saveJsonObject(
         QDir(packageRoot).filePath(QStringLiteral("package.json")),
-        packageManifest());
+        manifest);
 }
 
 QJsonObject createRequest() {
@@ -318,6 +320,78 @@ int main(int argc, char** argv) {
         application.reloadPackages(QStringList{fixture.path()});
     check(!hasErrors(packageDiagnostics),
           QStringLiteral("Endpoint lifecycle Package loads"));
+
+    QTemporaryDir legacyFixture(QStringLiteral(
+        "/tmp/finepaper-legacy-attachment-test-XXXXXX"));
+    QJsonObject legacyManifest = packageManifest();
+    legacyManifest.insert(
+        QStringLiteral("id"), QStringLiteral("test.legacy-explicit"));
+    legacyManifest.insert(
+        QStringLiteral("attachment"),
+        QJsonObject{
+            {QStringLiteral("maxPerRouter"), 2},
+            {QStringLiteral("slotMode"), QStringLiteral("explicit")},
+        });
+    check(legacyFixture.isValid()
+              && prepareFixture(legacyFixture.path(), legacyManifest),
+          QStringLiteral("legacy explicit-slot Package fixture is available"));
+    FinepaperApplication legacyApplication;
+    const QVector<Diagnostic> legacyPackageDiagnostics =
+        legacyApplication.reloadPackages(QStringList{legacyFixture.path()});
+    QJsonObject legacyRequest = createRequest();
+    QJsonObject legacyPackage =
+        legacyRequest.value(QStringLiteral("package")).toObject();
+    legacyPackage.insert(
+        QStringLiteral("id"), QStringLiteral("test.legacy-explicit"));
+    legacyRequest.insert(QStringLiteral("package"), legacyPackage);
+    QJsonArray legacyEndpoints =
+        legacyRequest.value(QStringLiteral("endpoints")).toArray();
+    QJsonObject legacyEndpoint = legacyEndpoints.at(0).toObject();
+    legacyEndpoint.insert(QStringLiteral("slot"), QStringLiteral("0"));
+    legacyEndpoints[0] = legacyEndpoint;
+    legacyRequest.insert(QStringLiteral("endpoints"), legacyEndpoints);
+    const DesignResult validLegacyDesign =
+        legacyApplication.createDesign(legacyRequest);
+    legacyEndpoint.insert(
+        QStringLiteral("slot"), QStringLiteral("hardcodedTrick"));
+    legacyEndpoints[0] = legacyEndpoint;
+    legacyRequest.insert(QStringLiteral("endpoints"), legacyEndpoints);
+    const DesignResult invalidLegacyDesign =
+        legacyApplication.createDesign(legacyRequest);
+    check(!hasErrors(legacyPackageDiagnostics)
+              && validLegacyDesign.success
+              && !invalidLegacyDesign.success
+              && hasDiagnosticCode(
+                  invalidLegacyDesign.diagnostics,
+                  QStringLiteral("endpoint.unknown_slot")),
+          QStringLiteral(
+              "Application and GUI share numeric legacy explicit slots"));
+
+    QTemporaryDir oversizedFixture(QStringLiteral(
+        "/tmp/finepaper-oversized-attachment-test-XXXXXX"));
+    QJsonObject oversizedManifest = packageManifest();
+    oversizedManifest.insert(
+        QStringLiteral("id"), QStringLiteral("test.oversized-attachment"));
+    oversizedManifest.insert(
+        QStringLiteral("attachment"),
+        QJsonObject{
+            {QStringLiteral("maxPerRouter"),
+             kMaximumEndpointAttachmentsPerRouter + 1},
+            {QStringLiteral("slotMode"), QStringLiteral("automatic")},
+        });
+    check(oversizedFixture.isValid()
+              && prepareFixture(oversizedFixture.path(), oversizedManifest),
+          QStringLiteral("oversized attachment Package fixture is available"));
+    FinepaperApplication oversizedApplication;
+    const QVector<Diagnostic> oversizedDiagnostics =
+        oversizedApplication.reloadPackages(
+            QStringList{oversizedFixture.path()});
+    check(hasErrors(oversizedDiagnostics)
+              && hasDiagnosticCode(
+                  oversizedDiagnostics,
+                  QStringLiteral("package.invalid_attachment_capacity")),
+          QStringLiteral(
+              "Package loading rejects attachment capacities that could exhaust the GUI"));
 
     const DesignResult created = application.createDesign(createRequest());
     const EndpointInstance* createdEndpoint = findEndpoint(created.design, QStringLiteral("ep0"));
@@ -410,7 +484,7 @@ int main(int argc, char** argv) {
                   QStringLiteral("endpoint.invalid_parameter_migration")),
           QStringLiteral("unknown migration enum values fail closed"));
 
-    EndpointInstance addedEndpoint{
+    EndpointInstance addedEndpoint = {
         QStringLiteral("memory1"),
         QStringLiteral("memory"),
         EndpointAttachment{RouterPosition{1, 0}, std::nullopt},
@@ -436,6 +510,61 @@ int main(int argc, char** argv) {
         created.design,
         QStringLiteral("parameter.unknown"),
         QStringLiteral("addEndpoint rejects undeclared Endpoint parameters atomically"));
+
+    const DesignResult sameAttachment = application.moveEndpoint(
+        created.design,
+        QStringLiteral("ep0"),
+        RouterPosition{0, 0},
+        std::nullopt);
+    check(sameAttachment.success
+              && sameDesign(sameAttachment.design, created.design),
+          QStringLiteral("moving to the unchanged automatic attachment is a stable no-op"));
+    checkAtomicFailure(
+        application.moveEndpoint(
+            created.design,
+            QStringLiteral("missing"),
+            RouterPosition{1, 0},
+            std::nullopt),
+        created.design,
+        QStringLiteral("endpoint.not_found"),
+        QStringLiteral("moveEndpoint rejects an unknown Endpoint atomically"));
+    checkAtomicFailure(
+        application.moveEndpoint(
+            created.design,
+            QStringLiteral("ep0"),
+            RouterPosition{9, 9},
+            std::nullopt),
+        created.design,
+        QStringLiteral("endpoint.router_out_of_range"),
+        QStringLiteral("moveEndpoint cannot target a Router outside the derived Mesh"));
+
+    DesignResult filledRouter = created;
+    for (int index = 1; index < 8 && filledRouter.success; ++index) {
+        filledRouter = application.addEndpoint(
+            filledRouter.design,
+            EndpointInstance{
+                QStringLiteral("capacity_%1").arg(index),
+                QStringLiteral("client"),
+                EndpointAttachment{RouterPosition{0, 0}, std::nullopt},
+                {},
+            });
+    }
+    check(filledRouter.success && filledRouter.design.endpoints.size() == 8,
+          QStringLiteral("Application accepts exactly the Package attachment capacity"));
+    if (filledRouter.success) {
+        checkAtomicFailure(
+            application.addEndpoint(
+                filledRouter.design,
+                EndpointInstance{
+                    QStringLiteral("capacity_overflow"),
+                    QStringLiteral("client"),
+                    EndpointAttachment{RouterPosition{0, 0}, std::nullopt},
+                    {},
+                }),
+            filledRouter.design,
+            QStringLiteral("endpoint.router_capacity"),
+            QStringLiteral("Application rejects over-capacity attachment atomically"));
+    }
 
     const DesignResult genericConfigured = application.setElementConfiguration(
         created.design,

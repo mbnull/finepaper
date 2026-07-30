@@ -1047,6 +1047,8 @@ QVector<Diagnostic> FinepaperApplication::validateAgainstPackage(
                                            QStringLiteral("/parameters"),
                                            QStringLiteral("package"));
 
+    const QVector<AttachmentSlotDefinition> explicitAttachmentSlots =
+        effectiveExplicitAttachmentSlots(package.attachment);
     QHash<QString, int> endpointCounts;
     QHash<QString, QSet<QString>> slotsByRouter;
     for (qsizetype index = 0; index < design.endpoints.size(); ++index) {
@@ -1110,10 +1112,9 @@ QVector<Diagnostic> FinepaperApplication::validateAgainstPackage(
                                  QStringLiteral("this Package requires an explicit slot"),
                                  base + QStringLiteral("/attachment/slot"),
                                  QStringLiteral("package"));
-            } else if (!package.attachment.positions.isEmpty()
-                       && std::none_of(
-                           package.attachment.positions.cbegin(),
-                           package.attachment.positions.cend(),
+            } else if (std::none_of(
+                           explicitAttachmentSlots.cbegin(),
+                           explicitAttachmentSlots.cend(),
                            [&](const AttachmentSlotDefinition& position) {
                                return position.id == *endpoint.attachment.slot;
                            })) {

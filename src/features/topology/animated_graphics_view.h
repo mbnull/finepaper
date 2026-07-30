@@ -9,6 +9,12 @@ class QKeyEvent;
 
 namespace finepaper {
 
+enum class EndpointDragTarget {
+    Canvas,
+    AttachToRouter,
+    Blocked,
+};
+
 // Reused from the original NodeEditor canvas: renders a pulsing drag overlay
 // while an Endpoint type is being dragged from the runtime Package library.
 class AnimatedGraphicsView final : public QtNodes::GraphicsView {
@@ -18,10 +24,10 @@ public:
 
     void beginEndpointDrag(const QPoint& viewportPosition,
                            const QString& endpointLabel,
-                           bool overRouter);
+                           EndpointDragTarget target);
     void updateEndpointDrag(const QPoint& viewportPosition,
                             const QString& endpointLabel,
-                            bool overRouter);
+                            EndpointDragTarget target);
     void endEndpointDrag();
     void setPersistentDragMode(QGraphicsView::DragMode mode);
     QGraphicsView::DragMode persistentDragMode() const {
@@ -29,7 +35,12 @@ public:
     }
 
     bool endpointDragActive() const { return m_dragActive; }
-    bool endpointDragOverRouter() const { return m_overRouter; }
+    bool endpointDragOverRouter() const {
+        return m_dragTarget == EndpointDragTarget::AttachToRouter;
+    }
+    bool endpointDragBlocked() const {
+        return m_dragTarget == EndpointDragTarget::Blocked;
+    }
 
 protected:
     void drawForeground(QPainter* painter, const QRectF& rectangle) override;
@@ -46,7 +57,7 @@ private:
     qreal m_pulsePhase = 0.0;
     qreal m_overlayOpacity = 0.0;
     bool m_dragActive = false;
-    bool m_overRouter = false;
+    EndpointDragTarget m_dragTarget = EndpointDragTarget::Canvas;
     QGraphicsView::DragMode m_persistentDragMode =
         QGraphicsView::ScrollHandDrag;
 };

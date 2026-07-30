@@ -12,6 +12,7 @@
 namespace finepaper {
 
 inline constexpr int kMaximumPackageTimeoutSeconds = 86'400;
+inline constexpr int kMaximumEndpointAttachmentsPerRouter = 4'096;
 inline constexpr int kMinimumPackageFormatVersion = 1;
 inline constexpr int kMaximumPackageFormatVersion = 3;
 
@@ -137,6 +138,12 @@ struct AttachmentDefinition {
     AttachmentSlotMode slotMode = AttachmentSlotMode::Automatic;
     QVector<AttachmentSlotDefinition> positions;
 };
+
+// Older explicit-slot Packages omitted `slots` and used the numeric range
+// 0..maxPerRouter-1. Keep that compatibility rule at the Package boundary so
+// validation, GUI projection, and runtime consumers share one catalog.
+[[nodiscard]] QVector<AttachmentSlotDefinition>
+effectiveExplicitAttachmentSlots(const AttachmentDefinition& definition);
 
 struct GeneratorDefinition {
     QString name;
