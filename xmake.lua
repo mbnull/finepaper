@@ -302,6 +302,18 @@ target("finepaper-mesh-resize-dialog-tests")
         runenvs = {QT_QPA_PLATFORM = "offscreen"}
     })
 
+target("finepaper-topology-workspace-store-tests")
+    add_rules("qt.console")
+    set_kind("binary")
+    set_group("test")
+    set_default(false)
+    add_files("tests/topology_workspace_store_tests.cpp")
+    add_files("src/features/topology/topology_workspace_store.cpp")
+    add_includedirs("src")
+    add_tests("default", {
+        trim_output = true
+    })
+
 target("finepaper-gui-smoke")
     add_rules("qt.widgetapp")
     add_frameworks("QtConcurrent")
@@ -326,6 +338,7 @@ target("finepaper-gui-smoke")
     add_files("src/features/topology/mesh_resize_dialog.cpp")
     add_files("src/features/topology/noc_editor_style.cpp")
     add_files("src/features/topology/noc_node_editor.cpp")
+    add_files("src/features/topology/topology_workspace_store.cpp")
     add_files("src/gui/package_parameter_form.cpp")
     add_files("src/ui/common/schema_value_editor.cpp")
     add_files("src/gui/workbench_view_registry.cpp")

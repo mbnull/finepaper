@@ -4,6 +4,7 @@
 #include "gui/endpoint_configuration_panel.h"
 #include "features/topology/noc_editor_style.h"
 #include "features/topology/noc_node_editor.h"
+#include "features/topology/topology_workspace_store.h"
 #include "ui/common/schema_value_editor.h"
 #include "ui/workbench/workbench_config.h"
 
@@ -32,12 +33,15 @@
 #include <QKeyEvent>
 #include <QLabel>
 #include <QLineEdit>
+#include <QLineF>
 #include <QListWidget>
 #include <QMenu>
 #include <QMessageBox>
 #include <QMimeData>
+#include <QPlainTextEdit>
 #include <QPushButton>
 #include <QSettings>
+#include <QSet>
 #include <QSpinBox>
 #include <QStatusBar>
 #include <QTabWidget>
@@ -55,6 +59,7 @@
 
 #include <optional>
 #include <functional>
+#include <limits>
 #include <memory>
 #include <unordered_set>
 
@@ -959,6 +964,55 @@ bool writeDomainPresentationDesign(const QString& path) {
         && file.write(QJsonDocument(design).toJson(QJsonDocument::Indented)) >= 0;
 }
 
+bool writeTopologyWorkspaceDesign(const QString& path) {
+    const QJsonObject design{
+        {QStringLiteral("format"), QStringLiteral("finepaper.noc-design")},
+        {QStringLiteral("formatVersion"), 1},
+        {QStringLiteral("id"), QStringLiteral("topology_workspace_persistence")},
+        {QStringLiteral("name"), QStringLiteral("Topology Workspace Persistence")},
+        {QStringLiteral("package"), QJsonObject{
+            {QStringLiteral("id"), QStringLiteral("finepaper.noc")},
+            {QStringLiteral("version"), QStringLiteral("1.0.0")}
+        }},
+        {QStringLiteral("topology"), QJsonObject{
+            {QStringLiteral("type"), QStringLiteral("mesh")},
+            {QStringLiteral("rows"), 2},
+            {QStringLiteral("columns"), 2}
+        }},
+        {QStringLiteral("parameters"), QJsonObject{}},
+        {QStringLiteral("endpoints"), QJsonArray{
+            QJsonObject{
+                {QStringLiteral("id"), QStringLiteral("persisted_master")},
+                {QStringLiteral("type"), QStringLiteral("master")},
+                {QStringLiteral("parameters"), QJsonObject{}},
+                {QStringLiteral("attachment"), QJsonObject{
+                    {QStringLiteral("router"), QJsonObject{
+                        {QStringLiteral("x"), 0},
+                        {QStringLiteral("y"), 0}
+                    }}
+                }}
+            }
+        }}
+    };
+    const QByteArray payload = QJsonDocument(design).toJson(
+        QJsonDocument::Indented);
+    QFile file(path);
+    return file.open(QIODevice::WriteOnly | QIODevice::Truncate)
+        && file.write(payload) == payload.size();
+}
+
+QSet<QString> currentTopologyWorkspaceKeys() {
+    QSettings settings;
+    QSet<QString> keys;
+    for (const QString& key : settings.allKeys()) {
+        if (key.startsWith(QStringLiteral("workbench/workspaces/v1/"))
+            && key.endsWith(QStringLiteral("/topology"))) {
+            keys.insert(key);
+        }
+    }
+    return keys;
+}
+
 bool writeMissingPackageDesign(const QString& path) {
     const QJsonObject design{
         {QStringLiteral("format"), QStringLiteral("finepaper.noc-design")},
@@ -1713,15 +1767,34 @@ int main(int argc, char** argv) {
     }
     check(!routerPortStartedDraft,
           QStringLiteral("Router direction ports do not start user wiring"));
+    bool staleConnectionWasQueued = false;
+    if (pendingEndpoint && connectionRouter && nodeEditor && graphicsScene) {
+        graphicsScene->graphModel().addConnection(pendingAttachment);
+        staleConnectionWasQueued = graphicsScene->graphModel().connectionExists(
+            pendingAttachment);
+        nodeEditor->regularizeLayout();
+        application.processEvents();
+        application.processEvents();
+    }
+    const auto pendingAfterProjectionRebuild = nodeIdWithCaptionPrefix(
+        graphicsScene, QStringLiteral("Unattached\nMaster endpoint"));
+    check(staleConnectionWasQueued && pendingAfterProjectionRebuild
+              && !nodeIdWithCaptionPrefix(
+                  graphicsScene, QStringLiteral("master_")),
+          QStringLiteral(
+              "a projection rebuild discards a queued connection from its old graph"));
+    const auto connectionRouterAfterProjectionRebuild = nodeIdWithCaption(
+        graphicsScene, QStringLiteral("r-1-0"));
     bool endpointPortStartedDraft = false;
-    if (pendingEndpoint && connectionRouter) {
+    if (pendingAfterProjectionRebuild
+        && connectionRouterAfterProjectionRebuild) {
         endpointPortStartedDraft = dragPortToNodeBody(
             graphicsView,
             graphicsScene,
-            *pendingEndpoint,
+            *pendingAfterProjectionRebuild,
             QtNodes::PortType::Out,
             finepaper::portIndex(finepaper::EndpointOutputPort::Attachment),
-            *connectionRouter);
+            *connectionRouterAfterProjectionRebuild);
         application.processEvents();
         application.processEvents();
     }
@@ -2415,6 +2488,307 @@ int main(int argc, char** argv) {
               && restoredNodeEditor->routerCollapsed(QStringLiteral("r-0-0")),
           QStringLiteral("Router collapsed state is restored in the next session"));
     closeDiscarding(restoredWindow);
+
+    const QString topologyWorkspaceDesignPath = outputRoot.filePath(
+        QStringLiteral("topology-workspace-persistence.fpnoc"));
+    check(writeTopologyWorkspaceDesign(topologyWorkspaceDesignPath),
+          QStringLiteral("topology workspace persistence design is writable"));
+    const finepaper::TopologyWorkspaceIdentity topologyWorkspaceIdentity{
+        QStringLiteral("finepaper.noc"),
+        QStringLiteral("1.0.0"),
+        QStringLiteral("topology_workspace_persistence"),
+    };
+    finepaper::TopologyWorkspaceState damagedWorkspaceFixture;
+    damagedWorkspaceFixture.collapsedRouterIds.emplace();
+    const QSet<QString> workspaceKeysBeforeDamage =
+        currentTopologyWorkspaceKeys();
+    finepaper::TopologyWorkspaceStore topologyWorkspaceWriter;
+    check(topologyWorkspaceWriter.save(
+              topologyWorkspaceIdentity, damagedWorkspaceFixture).success,
+          QStringLiteral("topology workspace damage fixture is writable"));
+    const QSet<QString> newWorkspaceKeys = currentTopologyWorkspaceKeys()
+        - workspaceKeysBeforeDamage;
+    check(newWorkspaceKeys.size() == 1,
+          QStringLiteral("topology workspace damage fixture has one isolated record"));
+    if (newWorkspaceKeys.size() == 1) {
+        QSettings rawWorkspaceSettings;
+        rawWorkspaceSettings.setValue(
+            *newWorkspaceKeys.cbegin(), QStringLiteral("damaged-record"));
+        rawWorkspaceSettings.sync();
+    }
+    finepaper::FinepaperMainWindow positionWindow(locations);
+    positionWindow.show();
+    application.processEvents();
+    check(positionWindow.openDesignFile(topologyWorkspaceDesignPath),
+          QStringLiteral("topology workspace persistence design opens"));
+    check(positionWindow.statusBar()->currentMessage().contains(
+              QStringLiteral("is damaged"), Qt::CaseInsensitive),
+          QStringLiteral("a damaged canvas layout is reported non-modally"));
+    QAction* repairWorkspaceAction = positionWindow.findChild<QAction*>(
+        finepaper::workbench::regularizeActionName);
+    if (repairWorkspaceAction) {
+        repairWorkspaceAction->trigger();
+        application.processEvents();
+    }
+    const finepaper::TopologyWorkspaceLoadResult repairedWorkspace =
+        topologyWorkspaceWriter.load(topologyWorkspaceIdentity);
+    check(repairWorkspaceAction && repairedWorkspace.ok()
+              && repairedWorkspace.state
+              && positionWindow.statusBar()->currentMessage().contains(
+                  QStringLiteral("repaired"), Qt::CaseInsensitive),
+          QStringLiteral(
+              "Regularize Layout explicitly repairs damaged workspace storage"));
+    auto* positionEditor = dynamic_cast<finepaper::NocNodeEditor*>(
+        positionWindow.findChild<QWidget*>(
+            QStringLiteral("finepaper.nodeEditor")));
+    if (positionEditor) {
+        positionEditor->setRouterCollapsed(QStringLiteral("r-0-0"), false);
+    }
+    auto* positionView = positionEditor
+        ? positionEditor->findChild<QGraphicsView*>() : nullptr;
+    auto* positionScene = positionView
+        ? dynamic_cast<QtNodes::BasicGraphicsScene*>(positionView->scene())
+        : nullptr;
+    const auto positionEndpoint = nodeIdWithCaptionPrefix(
+        positionScene, QStringLiteral("persisted_master"));
+    const std::optional<QPointF> initialEndpointPosition = positionEditor
+        ? positionEditor->endpointVisualPosition(
+              QStringLiteral("persisted_master"))
+        : std::nullopt;
+    if (positionView && positionScene && positionEndpoint) {
+        dragNodeTo(positionView, positionScene, *positionEndpoint,
+                   blankViewportPosition(positionView));
+        application.processEvents();
+        application.processEvents();
+    }
+    const std::optional<QPointF> persistedEndpointPosition = positionEditor
+        ? positionEditor->endpointVisualPosition(
+              QStringLiteral("persisted_master"))
+        : std::nullopt;
+    check(persistedEndpointPosition.has_value(),
+          QStringLiteral("free Endpoint position is captured before restart"));
+    check(initialEndpointPosition && persistedEndpointPosition
+              && QLineF(*initialEndpointPosition, *persistedEndpointPosition)
+                     .length() >= 4.0,
+          QStringLiteral("the Endpoint actually moves before persistence is tested"));
+    check(positionEditor
+              && !positionEditor->setRouterVisualPosition(
+                  QStringLiteral("r-0-0"),
+                  QPointF(std::numeric_limits<qreal>::infinity(), 0.0)),
+          QStringLiteral("the canvas rejects non-finite Router positions"));
+    QString settingsFile;
+    {
+        QSettings settings;
+        settings.sync();
+        settingsFile = settings.fileName();
+    }
+    const QString settingsBackup = outputRoot.filePath(
+        QStringLiteral("workspace-save-recovery-settings.backup"));
+    const bool settingsCopied = QFile::copy(settingsFile, settingsBackup);
+    const bool settingsRemoved = settingsCopied && QFile::remove(settingsFile);
+    const bool settingsBlocked = settingsRemoved
+        && QDir().mkdir(settingsFile);
+    check(settingsBlocked,
+          QStringLiteral("workspace save failure fixture replaces the settings file"));
+    auto* positionActivityLog = positionWindow.findChild<QPlainTextEdit*>(
+        QStringLiteral("finepaper.activityLog"));
+    const int activityBlocksBeforeFailure = positionActivityLog
+        ? positionActivityLog->document()->blockCount() : 0;
+    if (settingsBlocked && positionEditor) {
+        positionEditor->setRouterVisualPosition(
+            QStringLiteral("r-0-0"), QPointF(440.0, 210.0));
+        positionEditor->setRouterVisualPosition(
+            QStringLiteral("r-0-0"), QPointF(460.0, 230.0));
+    }
+    const int activityBlocksAfterFailure = positionActivityLog
+        ? positionActivityLog->document()->blockCount() : 0;
+    check(settingsBlocked && positionActivityLog
+              && activityBlocksAfterFailure
+                  == activityBlocksBeforeFailure + 1
+              && positionWindow.statusBar()->currentMessage().contains(
+                  QStringLiteral("could not be saved"), Qt::CaseInsensitive),
+          QStringLiteral(
+              "repeated Workspace save failures produce one persistent UI diagnostic"));
+    const bool settingsBlockRemoved = settingsBlocked
+        && QDir().rmdir(settingsFile);
+    const bool settingsRestored = settingsBlockRemoved
+        && QFile::copy(settingsBackup, settingsFile);
+    check(settingsRestored,
+          QStringLiteral("workspace save failure fixture restores settings storage"));
+    if (settingsRestored && positionEditor) {
+        positionEditor->setRouterVisualPosition(
+            QStringLiteral("r-0-0"), QPointF(480.0, 250.0));
+    }
+    const int activityBlocksAfterRecovery = positionActivityLog
+        ? positionActivityLog->document()->blockCount() : 0;
+    check(settingsRestored && positionActivityLog
+              && activityBlocksAfterRecovery
+                  == activityBlocksAfterFailure + 1
+              && positionWindow.statusBar()->currentMessage().contains(
+                  QStringLiteral("available again"), Qt::CaseInsensitive),
+          QStringLiteral(
+              "a successful retry clears the persistent save failure state"));
+    closeDiscarding(positionWindow);
+
+    finepaper::FinepaperMainWindow positionRestoredWindow(locations);
+    positionRestoredWindow.show();
+    application.processEvents();
+    check(positionRestoredWindow.openDesignFile(topologyWorkspaceDesignPath),
+          QStringLiteral("the same topology design reopens in a new session"));
+    auto* positionRestoredEditor = dynamic_cast<finepaper::NocNodeEditor*>(
+        positionRestoredWindow.findChild<QWidget*>(
+            QStringLiteral("finepaper.nodeEditor")));
+    if (positionRestoredEditor) {
+        positionRestoredEditor->setRouterCollapsed(
+            QStringLiteral("r-0-0"), false);
+    }
+    check(positionRestoredEditor && persistedEndpointPosition
+              && positionRestoredEditor->endpointVisualPosition(
+                     QStringLiteral("persisted_master"))
+                     == persistedEndpointPosition,
+          QStringLiteral("free Endpoint placement is restored for the reopened design"));
+    closeDiscarding(positionRestoredWindow);
+
+    finepaper::NocDesign reloadDesign = {};
+    reloadDesign.formatVersion = 1;
+    reloadDesign.id = QStringLiteral("same-editor-workspace-reload");
+    reloadDesign.name = QStringLiteral("Same Editor Workspace Reload");
+    reloadDesign.package = {
+        QStringLiteral("finepaper.noc"), QStringLiteral("1.0.0")};
+    reloadDesign.topology = {QStringLiteral("mesh"), 1, 1};
+    reloadDesign.endpoints = {
+        finepaper::EndpointInstance{
+            QStringLiteral("reload_endpoint"),
+            QStringLiteral("master"),
+            finepaper::EndpointAttachment{
+                finepaper::RouterPosition{0, 0}, std::nullopt},
+            {},
+        },
+    };
+    const finepaper::TopologyWorkspaceIdentity reloadWorkspaceIdentity = {
+        reloadDesign.package.id,
+        reloadDesign.package.version,
+        reloadDesign.id,
+    };
+    finepaper::TopologyWorkspaceState firstReloadState;
+    firstReloadState.endpointPositionOverrides.insert(
+        QStringLiteral("reload_endpoint"), QPointF(121.5, -87.25));
+    firstReloadState.collapsedRouterIds.emplace();
+    finepaper::TopologyWorkspaceStore firstReloadWriter;
+    check(firstReloadWriter.save(
+              reloadWorkspaceIdentity, firstReloadState).success,
+          QStringLiteral("same-editor reload fixture saves its first state"));
+
+    finepaper::NocNodeEditor reloadEditor;
+    reloadEditor.beginDocumentSession(QStringLiteral("reload-session-a"));
+    reloadEditor.setDesign(&reloadDesign);
+    check(reloadEditor.endpointVisualPosition(
+              QStringLiteral("reload_endpoint"))
+              == firstReloadState.endpointPositionOverrides.value(
+                  QStringLiteral("reload_endpoint")),
+          QStringLiteral("same-editor reload fixture loads its first state"));
+
+    finepaper::TopologyWorkspaceState secondReloadState = firstReloadState;
+    secondReloadState.endpointPositionOverrides.insert(
+        QStringLiteral("reload_endpoint"), QPointF(-302.75, 411.125));
+    finepaper::TopologyWorkspaceStore secondReloadWriter;
+    check(secondReloadWriter.save(
+              reloadWorkspaceIdentity, secondReloadState).success,
+          QStringLiteral("an independent writer updates the same Workspace"));
+    reloadEditor.beginDocumentSession(QStringLiteral("reload-session-b"));
+    reloadEditor.setDesign(&reloadDesign);
+    check(reloadEditor.endpointVisualPosition(
+              QStringLiteral("reload_endpoint"))
+              == secondReloadState.endpointPositionOverrides.value(
+                  QStringLiteral("reload_endpoint")),
+          QStringLiteral(
+              "a new document session reloads an externally updated Workspace "
+              "even when its identity is unchanged"));
+    reloadEditor.close();
+
+    finepaper::NocDesign sessionDesign = {};
+    sessionDesign.formatVersion = 1;
+    sessionDesign.id = QStringLiteral("same-storage-identity");
+    sessionDesign.name = QStringLiteral("Document Session Separation");
+    sessionDesign.package = {
+        QStringLiteral("finepaper.noc"), QStringLiteral("1.0.0")};
+    sessionDesign.topology = {QStringLiteral("mesh"), 1, 1};
+    sessionDesign.endpoints = {
+        finepaper::EndpointInstance{
+            QStringLiteral("session_endpoint"),
+            QStringLiteral("master"),
+            finepaper::EndpointAttachment{
+                finepaper::RouterPosition{0, 0}, std::nullopt},
+            {},
+        },
+    };
+    finepaper::NocNodeEditor sessionEditor;
+    sessionEditor.setObjectName(QStringLiteral("finepaper.sessionEditor"));
+    sessionEditor.setEndpointTypes({{
+        QStringLiteral("master"), QStringLiteral("Master endpoint")}});
+    sessionEditor.beginDocumentSession(QStringLiteral("document-session-a"));
+    sessionEditor.setDesign(&sessionDesign);
+    sessionEditor.show();
+    sessionEditor.setRouterCollapsed(QStringLiteral("r-0-0"), false);
+    application.processEvents();
+    auto* sessionView = sessionEditor.findChild<QGraphicsView*>();
+    auto* sessionAnimatedView = dynamic_cast<finepaper::AnimatedGraphicsView*>(
+        sessionView);
+    auto* sessionScene = sessionView
+        ? dynamic_cast<QtNodes::BasicGraphicsScene*>(sessionView->scene())
+        : nullptr;
+    const auto sessionEndpoint = nodeIdWithCaptionPrefix(
+        sessionScene, QStringLiteral("session_endpoint"));
+    const auto sessionAttachment = sessionEndpoint
+        ? attachmentConnectionForEndpoint(sessionScene, *sessionEndpoint)
+        : std::nullopt;
+    sessionEditor.endpointRemovalRequested = [&](const QString& endpointId) {
+        if (endpointId != QStringLiteral("session_endpoint")) {
+            return false;
+        }
+        sessionDesign.endpoints.clear();
+        sessionEditor.syncDesignState(sessionDesign);
+        return true;
+    };
+    const bool staleDeletionWasQueued = sessionScene && sessionAttachment
+        && sessionScene->graphModel().deleteConnection(*sessionAttachment);
+    sessionEditor.regularizeLayout();
+    const auto sessionEndpointAfterProjectionRebuild = nodeIdWithCaptionPrefix(
+        sessionScene, QStringLiteral("session_endpoint"));
+    const auto sessionAttachmentAfterProjectionRebuild =
+        sessionEndpointAfterProjectionRebuild
+        ? attachmentConnectionForEndpoint(
+              sessionScene, *sessionEndpointAfterProjectionRebuild)
+        : std::nullopt;
+    if (sessionScene && sessionAttachmentAfterProjectionRebuild
+        && sessionAnimatedView) {
+        sessionScene->clearSelection();
+        auto* sessionConnection = sessionScene->connectionGraphicsObject(
+            *sessionAttachmentAfterProjectionRebuild);
+        if (sessionConnection) {
+            sessionConnection->setSelected(true);
+        }
+        sessionAnimatedView->deleteSelectionAction()->trigger();
+        application.processEvents();
+        application.processEvents();
+    }
+    check(staleDeletionWasQueued
+              && sessionEditor.detachedEndpointDraftIds()
+              == QStringList{QStringLiteral("session_endpoint")},
+          QStringLiteral(
+              "a canceled old deletion does not block a new disconnect, which "
+              "creates a transient Endpoint draft"));
+    sessionEditor.setDesign(&sessionDesign);
+    check(sessionEditor.detachedEndpointDraftIds()
+              == QStringList{QStringLiteral("session_endpoint")},
+          QStringLiteral("same-session projection refresh retains the detached Endpoint draft"));
+    sessionEditor.beginDocumentSession(QStringLiteral("document-session-b"));
+    sessionEditor.setDesign(&sessionDesign);
+    check(sessionEditor.detachedEndpointDraftIds().isEmpty()
+              && !nodeIdWithCaptionPrefix(
+                  sessionScene, QStringLiteral("Unattached\nMaster endpoint")),
+          QStringLiteral("a new document session clears transient state despite the same storage identity"));
+    sessionEditor.close();
 
     finepaper::RuntimeLocations explicitLocations{
         QStringList{QDir(projectRoot).filePath(

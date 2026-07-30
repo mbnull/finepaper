@@ -417,6 +417,7 @@ FinepaperMainWindow::~FinepaperMainWindow() {
         m_nodeEditor->detachedEndpointDeletionRequested = {};
         m_nodeEditor->selectionChanged = {};
         m_nodeEditor->semanticSelectionChanged = {};
+        m_nodeEditor->workspaceDiagnosticRaised = {};
     }
     if (m_domainManager) {
         m_domainManager->validateAddDomain = {};
@@ -611,8 +612,57 @@ void FinepaperMainWindow::createCentralViews() {
         }
     };
     m_nodeEditor->semanticSelectionChanged = [this](
-                                                const NocEditorSelectionSet& selection) {
+        const NocEditorSelectionSet& selection) {
         updateInspector(selection);
+    };
+    m_nodeEditor->workspaceDiagnosticRaised = [this](
+        const TopologyWorkspaceDiagnostic& diagnostic) {
+        QString message;
+        switch (diagnostic.kind) {
+        case TopologyWorkspaceDiagnosticKind::LoadFailed:
+            message = QStringLiteral(
+                "Canvas layout is damaged; the design is still usable. Choose "
+                "Regularize Layout to repair it.");
+            break;
+        case TopologyWorkspaceDiagnosticKind::SaveFailed:
+            message = QStringLiteral(
+                "Canvas layout could not be saved. Node positions may not be "
+                "restored next time.");
+            break;
+        case TopologyWorkspaceDiagnosticKind::SaveRecovered:
+            message = QStringLiteral(
+                "Canvas layout storage is available again.");
+            break;
+        case TopologyWorkspaceDiagnosticKind::LegacyImportSkipped:
+            message = QStringLiteral(
+                "An old canvas layout could not be imported. A new layout will "
+                "be used without changing the old data.");
+            break;
+        case TopologyWorkspaceDiagnosticKind::RepairSucceeded:
+            message = QStringLiteral(
+                "Canvas layout was regularized and its workspace storage was "
+                "repaired.");
+            break;
+        }
+        const bool workspaceRecovered =
+            diagnostic.kind == TopologyWorkspaceDiagnosticKind::SaveRecovered
+            || diagnostic.kind
+                   == TopologyWorkspaceDiagnosticKind::RepairSucceeded;
+        if (workspaceRecovered) {
+            m_workspaceStatusMessage.clear();
+        } else {
+            m_workspaceStatusMessage = message;
+        }
+        QString activity = message;
+        if (!diagnostic.details.isEmpty()) {
+            activity += QStringLiteral(" Details: %1").arg(diagnostic.details);
+        }
+        appendActivity(activity);
+        if (workspaceRecovered) {
+            statusBar()->showMessage(message, 5000);
+        } else {
+            showWorkspaceStatusMessage();
+        }
     };
 }
 
@@ -2361,6 +2411,7 @@ bool FinepaperMainWindow::openDesignFile(const QString& path) {
             QStringLiteral("Read-only design: Package %1@%2 is not loaded.")
                 .arg(m_design->package.id, m_design->package.version));
     }
+    showWorkspaceStatusMessage();
     return true;
 }
 
@@ -2969,6 +3020,7 @@ void FinepaperMainWindow::adoptDesignResult(
     setDirty(true);
     appendActivity(action + QStringLiteral(" completed."));
     statusBar()->showMessage(action + QStringLiteral(" completed."));
+    showWorkspaceStatusMessage();
 }
 
 void FinepaperMainWindow::adoptDomainResult(
@@ -3127,6 +3179,12 @@ void FinepaperMainWindow::appendActivity(const QString& message) {
                  message));
 }
 
+void FinepaperMainWindow::showWorkspaceStatusMessage() {
+    if (!m_workspaceStatusMessage.isEmpty()) {
+        statusBar()->showMessage(m_workspaceStatusMessage);
+    }
+}
+
 void FinepaperMainWindow::selectCenterView(const QString& id) {
     if (!m_viewRegistry->select(id)) {
         m_viewRegistry->select(workbench::editorViewId);
@@ -3137,6 +3195,10 @@ void FinepaperMainWindow::beginDesignSession() {
     ++m_designSessionSerial;
     m_designSessionIdentity = QStringLiteral("design-session-%1")
         .arg(m_designSessionSerial);
+    m_workspaceStatusMessage.clear();
+    if (m_nodeEditor) {
+        m_nodeEditor->beginDocumentSession(m_designSessionIdentity);
+    }
     if (m_endpointConfigurationPanel) {
         m_endpointConfigurationPanel->clearDrafts();
     }

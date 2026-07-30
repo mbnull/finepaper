@@ -120,6 +120,7 @@ private:
                          const QString& title,
                          bool modalOnError = true);
     void appendActivity(const QString& message);
+    void showWorkspaceStatusMessage();
     void selectCenterView(const QString& id);
     void beginDesignSession();
 
@@ -138,6 +139,7 @@ private:
     std::optional<NocDesign> m_design;
     std::optional<ResolvedDesign> m_resolvedDesign;
     QString m_designPath;
+    QString m_workspaceStatusMessage;
     bool m_dirty = false;
     bool m_operationBusy = false;
     quint64 m_designSessionSerial = 0;

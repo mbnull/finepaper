@@ -20,6 +20,7 @@
 
 #include <QDragEnterEvent>
 #include <QContextMenuEvent>
+#include <QDebug>
 #include <QDropEvent>
 #include <QEvent>
 #include <QGraphicsItem>
@@ -28,16 +29,15 @@
 #include <QMimeData>
 #include <QMouseEvent>
 #include <QSet>
-#include <QSettings>
 #include <QSignalBlocker>
 #include <QTimer>
-#include <QVariantMap>
 #include <QVBoxLayout>
 #include <QLineF>
 #include <QPainter>
 #include <QPainterPathStroker>
 
 #include <algorithm>
+#include <cmath>
 #include <unordered_set>
 #include <utility>
 
@@ -750,18 +750,43 @@ NocNodeEditor::~NocNodeEditor() {
 }
 
 void NocNodeEditor::setDesign(const NocDesign* design) {
-    const QString layoutKey = design
-        ? workbench::designWorkspaceKey(
-              design->package.id, design->package.version, design->id)
-        : QString();
-    if (layoutKey != m_layoutKey) {
-        m_layoutKey = layoutKey;
-        loadWorkspaceLayout();
+    ++m_graphRevision;
+    m_pendingConnectionDetachments.clear();
+    const std::optional<TopologyWorkspaceIdentity> workspaceIdentity = design
+        ? std::optional<TopologyWorkspaceIdentity>{TopologyWorkspaceIdentity{
+              design->package.id, design->package.version, design->id}}
+        : std::nullopt;
+    if (workspaceIdentity != m_workspaceIdentity || m_workspaceReloadPending) {
+        m_workspaceIdentity = workspaceIdentity;
+        m_workspaceReloadPending = false;
+        loadWorkspaceState();
         m_pendingEndpoints.clear();
         m_selectedItems.clear();
     }
     m_design = design ? std::optional<NocDesign>(*design) : std::nullopt;
     rebuildGraph();
+}
+
+void NocNodeEditor::beginDocumentSession(QString sessionToken) {
+    if (sessionToken == m_documentSessionToken) {
+        return;
+    }
+    m_documentSessionToken = std::move(sessionToken);
+    ++m_graphRevision;
+    m_workspaceReloadPending = true;
+    m_lastWorkspaceDiagnostic.clear();
+    m_lastWorkspaceDiagnosticKind = std::nullopt;
+    clearEndpointAttachmentDraft();
+    clearRouterEndpointDraft();
+    if (m_view) {
+        m_view->endEndpointDrag();
+    }
+    m_pendingEndpoints.clear();
+    m_pendingConnectionDetachments.clear();
+    m_selectedItems.clear();
+    m_nextPendingEndpoint = 0;
+    m_canvasSelectionGesture = false;
+    m_canvasItemGesture = false;
 }
 
 void NocNodeEditor::syncDesignState(const NocDesign& design) {
@@ -860,11 +885,13 @@ void NocNodeEditor::selectElements(const QVector<ElementRef>& elements) {
 }
 
 bool NocNodeEditor::setRouterVisualPosition(const QString& routerId, QPointF position) {
-    if (!m_routerNodes.contains(routerId)) {
+    if (!m_routerNodes.contains(routerId)
+        || !std::isfinite(position.x())
+        || !std::isfinite(position.y())) {
         return false;
     }
-    m_routerLayout.insert(routerId, position);
-    saveWorkspaceLayout();
+    m_workspaceState.routerPositionOverrides.insert(routerId, position);
+    saveWorkspaceState();
     rebuildGraph(false);
     return true;
 }
@@ -894,24 +921,37 @@ bool NocNodeEditor::setRouterCollapsed(const QString& routerId, bool collapsed) 
     if (!m_routerNodes.contains(routerId)) {
         return false;
     }
-    if (collapsed) {
-        m_collapsedRouters.insert(routerId);
-    } else {
-        m_collapsedRouters.remove(routerId);
+    if (!m_workspaceState.collapsedRouterIds) {
+        m_workspaceState.collapsedRouterIds.emplace();
     }
-    saveWorkspaceLayout();
+    if (collapsed) {
+        m_workspaceState.collapsedRouterIds->insert(routerId);
+    } else {
+        m_workspaceState.collapsedRouterIds->remove(routerId);
+    }
+    saveWorkspaceState();
     rebuildGraph(false);
     return true;
 }
 
 bool NocNodeEditor::routerCollapsed(const QString& routerId) const {
-    return m_collapsedRouters.contains(routerId);
+    return m_workspaceState.collapsedRouterIds
+        && m_workspaceState.collapsedRouterIds->contains(routerId);
 }
 
 void NocNodeEditor::regularizeLayout() {
-    m_routerLayout.clear();
-    m_endpointLayout.clear();
-    saveWorkspaceLayout();
+    const bool repairingWorkspace = m_workspacePersistenceBlocked;
+    m_workspacePersistenceBlocked = false;
+    m_workspaceState.routerPositionOverrides.clear();
+    m_workspaceState.endpointPositionOverrides.clear();
+    const bool saved = saveWorkspaceState();
+    if (repairingWorkspace) {
+        m_workspacePersistenceBlocked = !saved;
+        if (saved) {
+            reportWorkspaceDiagnostic(
+                TopologyWorkspaceDiagnosticKind::RepairSucceeded);
+        }
+    }
     rebuildGraph(false);
 }
 
@@ -947,6 +987,8 @@ QStringList NocNodeEditor::detachedEndpointDraftIds() const {
 }
 
 void NocNodeEditor::rebuildGraph(bool zoomToContents) {
+    ++m_graphRevision;
+    m_pendingConnectionDetachments.clear();
     clearEndpointAttachmentDraft();
     clearRouterEndpointDraft();
     auto& graphModel = static_cast<NocGraphModel&>(*m_graphModel);
@@ -962,12 +1004,25 @@ void NocNodeEditor::rebuildGraph(bool zoomToContents) {
     graphModel.beginProjectionMutation();
 
     const TopologyProjection projection = projectTopology(*m_design);
-    if (!m_hasStoredCollapsedLayout) {
+    QSet<QString> projectedRouterIds;
+    for (const RouterView& router : projection.routers) {
+        projectedRouterIds.insert(router.id);
+    }
+    QSet<QString> designEndpointIds;
+    for (const EndpointInstance& endpoint : m_design->endpoints) {
+        designEndpointIds.insert(endpoint.id);
+    }
+    bool workspaceChanged = m_workspaceState.retainKnownElements(
+        projectedRouterIds, designEndpointIds);
+    if (!m_workspaceState.collapsedRouterIds) {
+        m_workspaceState.collapsedRouterIds.emplace();
         for (const RouterView& router : projection.routers) {
-            m_collapsedRouters.insert(router.id);
+            m_workspaceState.collapsedRouterIds->insert(router.id);
         }
-        m_hasStoredCollapsedLayout = true;
-        saveWorkspaceLayout();
+        workspaceChanged = true;
+    }
+    if (workspaceChanged) {
+        saveWorkspaceState();
     }
     QStringList attachmentPortLabels;
     attachmentPortLabels.reserve(m_routerAttachmentPorts.size());
@@ -976,18 +1031,17 @@ void NocNodeEditor::rebuildGraph(bool zoomToContents) {
                                         ? QStringLiteral("EP")
                                         : port.label);
     }
-    QSet<QString> projectedRouterIds;
     QHash<QString, RouterPosition> routerPositions;
     for (const RouterView& router : projection.routers) {
-        projectedRouterIds.insert(router.id);
         routerPositions.insert(router.id, router.position);
-        const QPointF visualPosition = m_routerLayout.value(
-            router.id, routerScenePosition(router.position));
+        const QPointF visualPosition =
+            m_workspaceState.routerPositionOverrides.value(
+                router.id, routerScenePosition(router.position));
         const QtNodes::NodeId nodeId = graphModel.addProjectedNode(
             router.id,
             visualPosition,
             true,
-            m_collapsedRouters.contains(router.id),
+            m_workspaceState.collapsedRouterIds->contains(router.id),
             false,
             attachmentPortLabels);
         m_routerNodes.insert(router.id, nodeId);
@@ -1005,21 +1059,6 @@ void NocNodeEditor::rebuildGraph(bool zoomToContents) {
             node->setData(kSemanticElementIdDataRole, element.id);
         }
     }
-    for (auto iterator = m_routerLayout.begin(); iterator != m_routerLayout.end();) {
-        if (!projectedRouterIds.contains(iterator.key())) {
-            iterator = m_routerLayout.erase(iterator);
-        } else {
-            ++iterator;
-        }
-    }
-    for (auto iterator = m_collapsedRouters.begin(); iterator != m_collapsedRouters.end();) {
-        if (!projectedRouterIds.contains(*iterator)) {
-            iterator = m_collapsedRouters.erase(iterator);
-        } else {
-            ++iterator;
-        }
-    }
-
     for (const LinkView& link : projection.links) {
         const RouterPosition from = routerPositions.value(link.fromRouter);
         const RouterPosition to = routerPositions.value(link.toRouter);
@@ -1043,27 +1082,10 @@ void NocNodeEditor::rebuildGraph(bool zoomToContents) {
         }
     }
 
-    QSet<QString> designEndpointIds;
-    for (const EndpointInstance& endpoint : m_design->endpoints) {
-        designEndpointIds.insert(endpoint.id);
-    }
-    bool endpointLayoutPruned = false;
-    for (auto iterator = m_endpointLayout.begin(); iterator != m_endpointLayout.end();) {
-        if (!designEndpointIds.contains(iterator.key())) {
-            iterator = m_endpointLayout.erase(iterator);
-            endpointLayoutPruned = true;
-        } else {
-            ++iterator;
-        }
-    }
-    if (endpointLayoutPruned) {
-        saveWorkspaceLayout();
-    }
-
     QHash<QString, int> endpointOffsets;
     QHash<QString, QSet<int>> usedAttachmentPortOffsets;
     for (const EndpointView& endpoint : projection.endpoints) {
-        if (m_collapsedRouters.contains(endpoint.routerId)) {
+        if (m_workspaceState.collapsedRouterIds->contains(endpoint.routerId)) {
             continue;
         }
         const int offset = endpointOffsets[endpoint.routerId]++;
@@ -1074,8 +1096,9 @@ void NocNodeEditor::rebuildGraph(bool zoomToContents) {
             routerPosition.x() - nocEditorMetrics().endpointHorizontalOffset,
             routerPosition.y() + nocEditorMetrics().endpointTopOffset
                 + offset * nocEditorMetrics().endpointVerticalSpacing);
-        const QPointF endpointPosition = m_endpointLayout.value(
-            endpoint.id, defaultEndpointPosition);
+        const QPointF endpointPosition =
+            m_workspaceState.endpointPositionOverrides.value(
+                endpoint.id, defaultEndpointPosition);
         const QString caption = QStringLiteral("%1\n%2 · slot %3")
                                     .arg(endpoint.id, endpoint.type, endpoint.slot);
         const QtNodes::NodeId endpointNode = graphModel.addProjectedNode(
@@ -1168,7 +1191,7 @@ void NocNodeEditor::rebuildGraph(bool zoomToContents) {
     restoreSelection();
 
     if (zoomToContents) {
-        QTimer::singleShot(0, this, [this] { zoomToFit(); });
+        deferForCurrentGraph([this] { zoomToFit(); });
     }
 }
 
@@ -1313,11 +1336,13 @@ bool NocNodeEditor::eventFilter(QObject* watched, QEvent* event) {
             }
             if (m_canvasItemGesture) {
                 m_canvasItemGesture = false;
-                QTimer::singleShot(0, m_view, [view = m_view] {
-                    view->setDragMode(view->persistentDragMode());
+                deferForCurrentGraph([this] {
+                    if (m_view) {
+                        m_view->setDragMode(m_view->persistentDragMode());
+                    }
                 });
             }
-            QTimer::singleShot(0, this, [this, position] {
+            deferForCurrentGraph([this, position] {
                 handlePointerReleased(position);
             });
         }
@@ -1406,7 +1431,7 @@ void NocNodeEditor::handleSceneSelectionChanged() {
             }
         }
     }
-    QTimer::singleShot(0, this, [this] { applyNodeStacking(); });
+    deferForCurrentGraph([this] { applyNodeStacking(); });
     emitSelectionChanged();
 }
 
@@ -1469,7 +1494,8 @@ void NocNodeEditor::handlePointerReleased(const QPoint& viewportPosition) {
         }
 
         if (metadata.kind == NocEditorSelection::Kind::Router) {
-            m_routerLayout.insert(metadata.id, position);
+            m_workspaceState.routerPositionOverrides.insert(
+                metadata.id, position);
             routerMoved = true;
             workspaceChanged = true;
         } else if (metadata.kind == NocEditorSelection::Kind::PendingEndpoint) {
@@ -1480,7 +1506,8 @@ void NocNodeEditor::handlePointerReleased(const QPoint& viewportPosition) {
         } else {
             // Endpoint placement is Workspace state only. Logical attachment
             // changes only through an explicit connection operation.
-            m_endpointLayout.insert(metadata.id, position);
+            m_workspaceState.endpointPositionOverrides.insert(
+                metadata.id, position);
             workspaceChanged = true;
         }
 
@@ -1495,7 +1522,7 @@ void NocNodeEditor::handlePointerReleased(const QPoint& viewportPosition) {
         return;
     }
     if (workspaceChanged) {
-        saveWorkspaceLayout();
+        saveWorkspaceState();
     }
     if (routerMoved) {
         rebuildGraph(false);
@@ -1510,7 +1537,7 @@ void NocNodeEditor::handleConnectionCreated(QtNodes::ConnectionId connectionId) 
         return;
     }
     if (!m_editingEnabled) {
-        QTimer::singleShot(0, this, [this] { rebuildGraph(false); });
+        deferForCurrentGraph([this] { rebuildGraph(false); });
         return;
     }
     const auto source = m_metadata.constFind(connectionId.outNodeId);
@@ -1520,13 +1547,13 @@ void NocNodeEditor::handleConnectionCreated(QtNodes::ConnectionId connectionId) 
         || target->kind != NocEditorSelection::Kind::Router
         || !isRouterAttachmentPort(connectionId.inPortIndex)
         || !target->router) {
-        QTimer::singleShot(0, this, [this] { rebuildGraph(false); });
+        deferForCurrentGraph([this] { rebuildGraph(false); });
         return;
     }
     const QtNodes::NodeId sourceNode = connectionId.outNodeId;
     const RouterPosition router = *target->router;
     const std::optional<QString> exactSlot = exactSlotForPort(connectionId.inPortIndex);
-    QTimer::singleShot(0, this, [this, sourceNode, router, exactSlot] {
+    deferForCurrentGraph([this, sourceNode, router, exactSlot] {
         attachNodeToRouter(sourceNode, NocAttachmentTarget{router, exactSlot});
         rebuildGraph(false);
     });
@@ -1551,12 +1578,8 @@ void NocNodeEditor::handleConnectionDeleted(QtNodes::ConnectionId connectionId) 
         return;
     }
     m_pendingConnectionDetachments.insert(endpointId);
-    const QString layoutKey = m_layoutKey;
-    QTimer::singleShot(0, this, [this, endpointId, layoutKey] {
+    deferForCurrentGraph([this, endpointId] {
         m_pendingConnectionDetachments.remove(endpointId);
-        if (layoutKey != m_layoutKey) {
-            return;
-        }
         for (auto iterator = m_metadata.constBegin();
              iterator != m_metadata.constEnd(); ++iterator) {
             if (iterator->kind == NocEditorSelection::Kind::Endpoint
@@ -1903,8 +1926,9 @@ bool NocNodeEditor::attachNodeToRouter(QtNodes::NodeId nodeId,
                 return false;
             }
             const QString endpointId = pendingEndpoint.detached->endpoint.id;
-            m_endpointLayout.insert(endpointId, visualPosition);
-            saveWorkspaceLayout();
+            m_workspaceState.endpointPositionOverrides.insert(
+                endpointId, visualPosition);
+            saveWorkspaceState();
             m_pendingEndpoints.remove(metadata.id);
             m_selectedItems = {{NocEditorSelection::Kind::Endpoint, endpointId}};
             return true;
@@ -1932,8 +1956,9 @@ bool NocNodeEditor::attachNodeToRouter(QtNodes::NodeId nodeId,
             }
         }
         if (!createdEndpointId.isEmpty()) {
-            m_endpointLayout.insert(createdEndpointId, visualPosition);
-            saveWorkspaceLayout();
+            m_workspaceState.endpointPositionOverrides.insert(
+                createdEndpointId, visualPosition);
+            saveWorkspaceState();
             for (SelectionIdentity& selected : m_selectedItems) {
                 if (selected.kind == NocEditorSelection::Kind::PendingEndpoint
                     && selected.id == metadata.id) {
@@ -1952,15 +1977,17 @@ bool NocNodeEditor::attachNodeToRouter(QtNodes::NodeId nodeId,
         }
         if (metadata.router && *metadata.router == target.router
             && !target.exactSlot) {
-            m_endpointLayout.insert(metadata.id, visualPosition);
-            saveWorkspaceLayout();
+            m_workspaceState.endpointPositionOverrides.insert(
+                metadata.id, visualPosition);
+            saveWorkspaceState();
             return true;
         }
         if (!endpointMoveRequested || !endpointMoveRequested(metadata.id, target)) {
             return false;
         }
-        m_endpointLayout.insert(metadata.id, visualPosition);
-        saveWorkspaceLayout();
+        m_workspaceState.endpointPositionOverrides.insert(
+            metadata.id, visualPosition);
+        saveWorkspaceState();
         return true;
     }
     return false;
@@ -2238,73 +2265,85 @@ void NocNodeEditor::clearNeighborhoodHighlight() {
     }
 }
 
-void NocNodeEditor::loadWorkspaceLayout() {
-    m_routerLayout.clear();
-    m_endpointLayout.clear();
-    m_collapsedRouters.clear();
-    m_hasStoredCollapsedLayout = false;
-    if (m_layoutKey.isEmpty()) {
+void NocNodeEditor::loadWorkspaceState() {
+    m_workspacePersistenceBlocked = false;
+    if (!m_workspaceIdentity) {
+        m_workspaceState = {};
         return;
     }
-    QSettings settings;
-    const QVariantMap layouts = settings.value(workbench::routerLayoutsSetting).toMap();
-    const QVariantMap layout = layouts.value(m_layoutKey).toMap();
-    for (auto iterator = layout.constBegin(); iterator != layout.constEnd(); ++iterator) {
-        if (iterator.value().canConvert<QPointF>()) {
-            m_routerLayout.insert(iterator.key(), iterator.value().toPointF());
-        }
+    const TopologyWorkspaceLoadResult loaded =
+        m_workspaceStore.load(*m_workspaceIdentity);
+    if (!loaded.ok()) {
+        m_workspaceState = {};
+        m_workspacePersistenceBlocked = true;
+        qWarning() << "Could not load the topology workspace state for"
+                   << m_workspaceIdentity->designId << ':' << loaded.error;
+        reportWorkspaceDiagnostic(
+            TopologyWorkspaceDiagnosticKind::LoadFailed, loaded.error);
+        return;
     }
-    const QVariantMap endpointLayouts = settings.value(
-        workbench::endpointLayoutsSetting).toMap();
-    const QVariantMap endpointLayout = endpointLayouts.value(m_layoutKey).toMap();
-    for (auto iterator = endpointLayout.constBegin();
-         iterator != endpointLayout.constEnd(); ++iterator) {
-        if (iterator.value().canConvert<QPointF>()) {
-            m_endpointLayout.insert(iterator.key(), iterator.value().toPointF());
-        }
-    }
-    const QVariantMap collapsedLayouts = settings.value(
-        workbench::collapsedRoutersSetting).toMap();
-    m_hasStoredCollapsedLayout = collapsedLayouts.contains(m_layoutKey);
-    const QStringList collapsed = collapsedLayouts.value(m_layoutKey).toStringList();
-    for (const QString& routerId : collapsed) {
-        m_collapsedRouters.insert(routerId);
+    m_workspaceState = loaded.state.value_or(TopologyWorkspaceState{});
+    if (!loaded.warning.isEmpty()) {
+        qWarning() << "Could not import legacy topology workspace state for"
+                   << m_workspaceIdentity->designId << ':' << loaded.warning;
+        reportWorkspaceDiagnostic(
+            TopologyWorkspaceDiagnosticKind::LegacyImportSkipped,
+            loaded.warning);
     }
 }
 
-void NocNodeEditor::saveWorkspaceLayout() const {
-    if (m_layoutKey.isEmpty()) {
+bool NocNodeEditor::saveWorkspaceState() {
+    if (!m_workspaceIdentity || m_workspacePersistenceBlocked) {
+        return false;
+    }
+    const TopologyWorkspaceSaveResult saved = m_workspaceStore.save(
+        *m_workspaceIdentity, m_workspaceState);
+    if (!saved.success) {
+        qWarning() << "Could not persist the topology workspace state for"
+                   << m_workspaceIdentity->designId << ':' << saved.error;
+        reportWorkspaceDiagnostic(
+            TopologyWorkspaceDiagnosticKind::SaveFailed, saved.error);
+        return false;
+    }
+    if (m_lastWorkspaceDiagnosticKind
+        == TopologyWorkspaceDiagnosticKind::SaveFailed) {
+        m_lastWorkspaceDiagnostic.clear();
+        m_lastWorkspaceDiagnosticKind = std::nullopt;
+        reportWorkspaceDiagnostic(
+            TopologyWorkspaceDiagnosticKind::SaveRecovered);
+    }
+    return true;
+}
+
+void NocNodeEditor::deferForCurrentGraph(std::function<void()> operation) {
+    const quint64 graphRevision = m_graphRevision;
+    QTimer::singleShot(
+        0,
+        this,
+        [this, graphRevision, operation = std::move(operation)] {
+            if (graphRevision == m_graphRevision) {
+                operation();
+            }
+        });
+}
+
+void NocNodeEditor::reportWorkspaceDiagnostic(
+    TopologyWorkspaceDiagnosticKind kind,
+    const QString& details) {
+    if (!workspaceDiagnosticRaised) {
         return;
     }
-    QVariantMap layout;
-    for (auto iterator = m_routerLayout.constBegin(); iterator != m_routerLayout.constEnd(); ++iterator) {
-        layout.insert(iterator.key(), iterator.value());
+    const QString designId = m_workspaceIdentity
+        ? m_workspaceIdentity->designId : QString();
+    const QString diagnosticKey = QStringLiteral("%1\n%2\n%3")
+        .arg(static_cast<int>(kind))
+        .arg(designId, details);
+    if (diagnosticKey == m_lastWorkspaceDiagnostic) {
+        return;
     }
-    QSettings settings;
-    QVariantMap layouts = settings.value(workbench::routerLayoutsSetting).toMap();
-    layouts.insert(m_layoutKey, layout);
-    settings.setValue(workbench::routerLayoutsSetting, layouts);
-
-    QVariantMap endpointLayout;
-    for (auto iterator = m_endpointLayout.constBegin();
-         iterator != m_endpointLayout.constEnd(); ++iterator) {
-        endpointLayout.insert(iterator.key(), iterator.value());
-    }
-    QVariantMap endpointLayouts = settings.value(
-        workbench::endpointLayoutsSetting).toMap();
-    endpointLayouts.insert(m_layoutKey, endpointLayout);
-    settings.setValue(workbench::endpointLayoutsSetting, endpointLayouts);
-
-    QVariantMap collapsedLayouts = settings.value(
-        workbench::collapsedRoutersSetting).toMap();
-    QStringList collapsed;
-    collapsed.reserve(m_collapsedRouters.size());
-    for (const QString& routerId : m_collapsedRouters) {
-        collapsed.append(routerId);
-    }
-    collapsed.sort();
-    collapsedLayouts.insert(m_layoutKey, collapsed);
-    settings.setValue(workbench::collapsedRoutersSetting, collapsedLayouts);
+    m_lastWorkspaceDiagnostic = diagnosticKey;
+    m_lastWorkspaceDiagnosticKind = kind;
+    workspaceDiagnosticRaised({kind, designId, details});
 }
 
 bool NocNodeEditor::handleEndpointDrop(const QString& endpointType,

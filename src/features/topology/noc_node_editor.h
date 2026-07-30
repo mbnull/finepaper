@@ -1,6 +1,7 @@
 #pragma once
 
 #include "features/domain/domain_presentation.h"
+#include "features/topology/topology_workspace_store.h"
 #include "noc/model.h"
 
 #include <QtNodes/Definitions>
@@ -35,6 +36,21 @@ class AnimatedGraphicsView;
 enum class NocCanvasInteractionMode {
     Select,
     Pan
+};
+
+enum class TopologyWorkspaceDiagnosticKind : quint8 {
+    LoadFailed,
+    SaveFailed,
+    SaveRecovered,
+    LegacyImportSkipped,
+    RepairSucceeded,
+};
+
+struct TopologyWorkspaceDiagnostic {
+    TopologyWorkspaceDiagnosticKind kind =
+        TopologyWorkspaceDiagnosticKind::LoadFailed;
+    QString designId;
+    QString details;
 };
 
 struct NocEditorSelection {
@@ -118,6 +134,9 @@ public:
     ~NocNodeEditor() override;
 
     void setDesign(const NocDesign* design);
+    // Separates transient canvas state from persistent workspace identity.
+    // MainWindow calls this once for each newly created or opened document.
+    void beginDocumentSession(QString sessionToken);
     // Updates non-projected semantic state (for example Domain assignments or
     // sparse element configurations) without rebuilding the graph or losing
     // the current selection and Workspace layout.
@@ -154,6 +173,8 @@ public:
     std::function<void(const QString&)> detachedEndpointDeletionRequested;
     std::function<void(const NocEditorSelection&)> selectionChanged;
     std::function<void(const NocEditorSelectionSet&)> semanticSelectionChanged;
+    std::function<void(const TopologyWorkspaceDiagnostic&)>
+        workspaceDiagnosticRaised;
 
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
@@ -196,8 +217,12 @@ private:
     };
 
     void rebuildGraph(bool zoomToContents = true);
-    void loadWorkspaceLayout();
-    void saveWorkspaceLayout() const;
+    void loadWorkspaceState();
+    bool saveWorkspaceState();
+    void deferForCurrentGraph(std::function<void()> operation);
+    void reportWorkspaceDiagnostic(
+        TopologyWorkspaceDiagnosticKind kind,
+        const QString& details = {});
     void handleSceneSelectionChanged();
     void handlePointerReleased(const QPoint& viewportPosition);
     void handleConnectionCreated(QtNodes::ConnectionId connectionId);
@@ -262,9 +287,8 @@ private:
     QHash<QString, QtNodes::NodeId> m_routerNodes;
     QHash<ElementRef, QtNodes::NodeId> m_elementNodes;
     QHash<ElementRef, QtNodes::ConnectionId> m_elementConnections;
-    QHash<QString, QPointF> m_routerLayout;
-    QHash<QString, QPointF> m_endpointLayout;
-    QSet<QString> m_collapsedRouters;
+    TopologyWorkspaceState m_workspaceState;
+    TopologyWorkspaceStore m_workspaceStore;
     QVector<NocEndpointTypeItem> m_endpointTypes;
     QVector<NocRouterAttachmentPortItem> m_routerAttachmentPorts{{
         QStringLiteral("0"), QStringLiteral("EP"), std::nullopt}};
@@ -275,13 +299,19 @@ private:
     int m_nextPendingEndpoint = 0;
     QVector<SelectionIdentity> m_selectedItems;
     DomainPresentationSnapshot m_domainPresentation;
-    bool m_hasStoredCollapsedLayout = false;
     bool m_editingEnabled = true;
+    bool m_workspacePersistenceBlocked = false;
+    bool m_workspaceReloadPending = false;
     bool m_canvasSelectionGesture = false;
     bool m_canvasItemGesture = false;
     NocCanvasInteractionMode m_canvasInteractionMode =
         NocCanvasInteractionMode::Select;
-    QString m_layoutKey;
+    std::optional<TopologyWorkspaceIdentity> m_workspaceIdentity = std::nullopt;
+    QString m_documentSessionToken;
+    QString m_lastWorkspaceDiagnostic;
+    std::optional<TopologyWorkspaceDiagnosticKind>
+        m_lastWorkspaceDiagnosticKind = std::nullopt;
+    quint64 m_graphRevision = 0;
 };
 
 } // namespace finepaper
