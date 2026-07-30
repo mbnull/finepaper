@@ -1,11 +1,11 @@
 #include "gui/main_window.h"
-#include "gui/animated_graphics_view.h"
+#include "features/topology/animated_graphics_view.h"
 #include "features/domain/domain_manager_panel.h"
 #include "gui/endpoint_configuration_panel.h"
-#include "gui/noc_editor_style.h"
-#include "gui/noc_node_editor.h"
+#include "features/topology/noc_editor_style.h"
+#include "features/topology/noc_node_editor.h"
 #include "ui/common/schema_value_editor.h"
-#include "gui/workbench_config.h"
+#include "ui/workbench/workbench_config.h"
 
 #include <QAction>
 #include <QAbstractButton>

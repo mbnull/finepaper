@@ -2,7 +2,7 @@
 
 #include "application/application.h"
 #include "application/runtime_settings.h"
-#include "gui/noc_node_editor.h"
+#include "features/topology/noc_node_editor.h"
 #include "gui/workbench_view_registry.h"
 
 #include <QJsonValue>

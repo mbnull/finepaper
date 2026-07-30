@@ -1,4 +1,4 @@
-#include "gui/animated_graphics_view.h"
+#include "features/topology/animated_graphics_view.h"
 
 #include <QFontMetrics>
 #include <QFocusEvent>

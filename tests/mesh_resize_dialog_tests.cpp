@@ -1,4 +1,4 @@
-#include "gui/mesh_resize_dialog.h"
+#include "features/topology/mesh_resize_dialog.h"
 
 #include <QApplication>
 #include <QComboBox>

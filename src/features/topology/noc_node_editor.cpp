@@ -1,9 +1,9 @@
-#include "gui/noc_node_editor.h"
+#include "features/topology/noc_node_editor.h"
 
 #include "application/endpoint_domain_assignment.h"
-#include "gui/animated_graphics_view.h"
-#include "gui/noc_editor_style.h"
-#include "gui/workbench_config.h"
+#include "features/topology/animated_graphics_view.h"
+#include "features/topology/noc_editor_style.h"
+#include "ui/workbench/workbench_config.h"
 
 #include <QtNodes/AbstractConnectionPainter>
 #include <QtNodes/AbstractNodePainter>

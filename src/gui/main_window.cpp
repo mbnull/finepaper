@@ -6,9 +6,9 @@
 #include "gui/element_configuration_panel.h"
 #include "gui/endpoint_configuration_panel.h"
 #include "features/domain/endpoint_domain_assignment_dialog.h"
-#include "gui/mesh_resize_dialog.h"
+#include "features/topology/mesh_resize_dialog.h"
 #include "gui/package_parameter_form.h"
-#include "gui/workbench_config.h"
+#include "ui/workbench/workbench_config.h"
 #include "storage/json.h"
 
 #include <QAbstractItemView>

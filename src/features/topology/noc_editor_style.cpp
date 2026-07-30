@@ -1,4 +1,4 @@
-#include "gui/noc_editor_style.h"
+#include "features/topology/noc_editor_style.h"
 
 #include <cmath>
 
