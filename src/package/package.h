@@ -13,6 +13,9 @@ namespace finepaper {
 
 inline constexpr int kMaximumPackageTimeoutSeconds = 86'400;
 inline constexpr int kMaximumEndpointAttachmentsPerRouter = 4'096;
+inline constexpr int kMaximumDesignExtensionsPerPackage = 64;
+inline constexpr int kMaximumDesignExtensionSchemaBytes = 1 * 1024 * 1024;
+inline constexpr int kMaximumDesignExtensionSchemaTotalBytes = 8 * 1024 * 1024;
 inline constexpr int kMinimumPackageFormatVersion = 1;
 inline constexpr int kMaximumPackageFormatVersion = 3;
 
@@ -179,13 +182,23 @@ struct RuntimeCapabilitiesDefinition {
     std::optional<DomainConfigurationRuntimeCapabilities> domainConfiguration;
 };
 
-// A Package-owned namespace in NocDesign::packageData. Finepaper validates the
-// namespace declaration and preserves its JSON value, but never interprets the
-// schema itself.
+// A Package-owned editor capability. Core preserves future capability ids so a
+// client that does not implement them can fail closed instead of guessing an
+// editor from the extension namespace.
+struct DesignExtensionEditorDefinition {
+    QString kind;
+};
+
+// A Package-owned namespace in NocDesign::packageData. The schema document is
+// loaded at the Package boundary after path containment, size, JSON-root, and
+// local-reference checks. Generic consumers may validate the namespace against
+// it without recognizing Package-specific ids or fields.
 struct DesignExtensionDefinition {
     QString id;
     QString schema;
+    QJsonObject schemaDocument;
     int version = 0;
+    std::optional<DesignExtensionEditorDefinition> editor = std::nullopt;
 };
 
 struct PackageDefinition {

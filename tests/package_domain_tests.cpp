@@ -1,6 +1,7 @@
 #include "package/package.h"
 #include "storage/json.h"
 
+#include <QByteArray>
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
@@ -17,6 +18,15 @@ using namespace finepaper;
 
 int failures = 0;
 
+QByteArray testExtensionSchema() {
+    return QByteArrayLiteral(R"json({
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Test extension",
+  "type": "object"
+}
+)json");
+}
+
 void check(bool condition, const QString& message) {
     if (!condition) {
         QTextStream(stderr) << "FAILED: " << message << Qt::endl;
@@ -28,6 +38,29 @@ bool hasDiagnosticCode(const QVector<Diagnostic>& diagnostics, const QString& co
     return std::any_of(diagnostics.cbegin(), diagnostics.cend(), [&](const Diagnostic& diagnostic) {
         return diagnostic.code == code;
     });
+}
+
+qsizetype diagnosticCount(const QVector<Diagnostic>& diagnostics,
+                          const QString& code) {
+    return std::count_if(
+        diagnostics.cbegin(),
+        diagnostics.cend(),
+        [&](const Diagnostic& diagnostic) { return diagnostic.code == code; });
+}
+
+bool writeFixtureSchema(
+    const QString& packageRoot,
+    const QByteArray& contents,
+    const QString& relativePath = QStringLiteral(
+        "schemas/test-extension.schema.json")) {
+    const QString schemaPath = QDir(packageRoot).filePath(
+        relativePath);
+    if (!QDir().mkpath(QFileInfo(schemaPath).absolutePath())) {
+        return false;
+    }
+    QFile schemaFile(schemaPath);
+    return schemaFile.open(QIODevice::WriteOnly | QIODevice::Truncate)
+        && schemaFile.write(contents) == contents.size();
 }
 
 bool prepareFixture(const QString& packageRoot) {
@@ -52,14 +85,7 @@ bool prepareFixture(const QString& packageRoot) {
         return false;
     }
 
-    const QString schemaPath = QDir(packageRoot).filePath(
-        QStringLiteral("schemas/test-extension.schema.json"));
-    if (!QDir().mkpath(QFileInfo(schemaPath).absolutePath())) {
-        return false;
-    }
-    QFile schemaFile(schemaPath);
-    return schemaFile.open(QIODevice::WriteOnly | QIODevice::Truncate)
-        && schemaFile.write("{}\n") >= 0;
+    return writeFixtureSchema(packageRoot, testExtensionSchema());
 }
 
 QJsonObject designExtension(const QString& id,
@@ -71,6 +97,16 @@ QJsonObject designExtension(const QString& id,
         {QStringLiteral("schema"), schema},
         {QStringLiteral("version"), version}
     };
+}
+
+QJsonObject designExtensionWithEditor(
+    const QString& id,
+    const QString& editorKind = QStringLiteral("json-schema")) {
+    QJsonObject extension = designExtension(id);
+    extension.insert(
+        QStringLiteral("editor"),
+        QJsonObject{{QStringLiteral("kind"), editorKind}});
+    return extension;
 }
 
 QJsonObject completeRuntimeCapabilities() {
@@ -392,7 +428,8 @@ int main(int argc, char** argv) {
     QJsonObject v1WithDesignExtension = v1Manifest;
     v1WithDesignExtension.insert(
         QStringLiteral("designExtensions"),
-        QJsonArray{designExtension(QStringLiteral("test.package.settings"))});
+        QJsonArray{designExtensionWithEditor(
+            QStringLiteral("test.package.settings"))});
     const PackageLoadResult designExtensionResult = loadManifest(
         fixture.path(), v1WithDesignExtension);
     const DesignExtensionDefinition* loadedExtension =
@@ -405,9 +442,114 @@ int main(int argc, char** argv) {
               && loadedExtension
               && loadedExtension->schema
                   == QStringLiteral("schemas/test-extension.schema.json")
-              && loadedExtension->version == 1,
+              && loadedExtension->schemaDocument.value(QStringLiteral("title"))
+                  == QStringLiteral("Test extension")
+              && loadedExtension->version == 1
+              && loadedExtension->editor
+              && loadedExtension->editor->kind == QStringLiteral("json-schema"),
           QStringLiteral(
-              "Package design extension namespaces retain their contained schema and version"));
+              "Package design extensions retain their loaded schema and editor capability"));
+
+    QJsonObject v1WithoutExtensionEditor = v1Manifest;
+    v1WithoutExtensionEditor.insert(
+        QStringLiteral("designExtensions"),
+        QJsonArray{designExtension(QStringLiteral("test.package.settings"))});
+    const PackageLoadResult noExtensionEditorResult = loadManifest(
+        fixture.path(), v1WithoutExtensionEditor);
+    const DesignExtensionDefinition* extensionWithoutEditor =
+        noExtensionEditorResult.package
+        ? noExtensionEditorResult.package->designExtension(
+              QStringLiteral("test.package.settings"))
+        : nullptr;
+    check(noExtensionEditorResult.success && extensionWithoutEditor
+              && !extensionWithoutEditor->editor,
+          QStringLiteral(
+              "an omitted editor capability remains absent instead of being inferred"));
+
+    QJsonObject futureEditorExtension = designExtensionWithEditor(
+        QStringLiteral("test.package.settings"),
+        QStringLiteral("vendor.power-form-v2"));
+    QJsonObject v1WithFutureEditor = v1Manifest;
+    v1WithFutureEditor.insert(
+        QStringLiteral("designExtensions"), QJsonArray{futureEditorExtension});
+    const PackageLoadResult futureEditorResult = loadManifest(
+        fixture.path(), v1WithFutureEditor);
+    const DesignExtensionDefinition* futureEditor = futureEditorResult.package
+        ? futureEditorResult.package->designExtension(
+              QStringLiteral("test.package.settings"))
+        : nullptr;
+    check(futureEditorResult.success && futureEditor && futureEditor->editor
+              && futureEditor->editor->kind
+                  == QStringLiteral("vendor.power-form-v2"),
+          QStringLiteral(
+              "unknown editor capability ids are preserved for fail-closed clients"));
+
+    QJsonObject nonObjectEditorExtension = designExtension(
+        QStringLiteral("test.package.settings"));
+    nonObjectEditorExtension.insert(QStringLiteral("editor"), true);
+    QJsonObject v1WithNonObjectEditor = v1Manifest;
+    v1WithNonObjectEditor.insert(
+        QStringLiteral("designExtensions"), QJsonArray{nonObjectEditorExtension});
+    expectFailure(
+        fixture.path(),
+        v1WithNonObjectEditor,
+        QStringLiteral("package.invalid_design_extension_editor"),
+        QStringLiteral("a non-object design extension editor"));
+
+    QJsonObject missingEditorKindExtension = designExtension(
+        QStringLiteral("test.package.settings"));
+    missingEditorKindExtension.insert(QStringLiteral("editor"), QJsonObject{});
+    QJsonObject v1WithMissingEditorKind = v1Manifest;
+    v1WithMissingEditorKind.insert(
+        QStringLiteral("designExtensions"), QJsonArray{missingEditorKindExtension});
+    expectFailure(
+        fixture.path(),
+        v1WithMissingEditorKind,
+        QStringLiteral("package.missing_field"),
+        QStringLiteral("a design extension editor without a kind"));
+
+    QJsonObject invalidEditorKindExtension = designExtension(
+        QStringLiteral("test.package.settings"));
+    invalidEditorKindExtension.insert(
+        QStringLiteral("editor"),
+        QJsonObject{{QStringLiteral("kind"), 7}});
+    QJsonObject v1WithInvalidEditorKind = v1Manifest;
+    v1WithInvalidEditorKind.insert(
+        QStringLiteral("designExtensions"), QJsonArray{invalidEditorKindExtension});
+    expectFailure(
+        fixture.path(),
+        v1WithInvalidEditorKind,
+        QStringLiteral("package.missing_field"),
+        QStringLiteral("a design extension editor with a non-string kind"));
+
+    QJsonObject unknownEditorFieldExtension = designExtensionWithEditor(
+        QStringLiteral("test.package.settings"));
+    QJsonObject editorWithUnknownField = unknownEditorFieldExtension.value(
+        QStringLiteral("editor")).toObject();
+    editorWithUnknownField.insert(QStringLiteral("bad/~field"), true);
+    unknownEditorFieldExtension.insert(
+        QStringLiteral("editor"), editorWithUnknownField);
+    QJsonObject v1WithUnknownEditorField = v1Manifest;
+    v1WithUnknownEditorField.insert(
+        QStringLiteral("designExtensions"), QJsonArray{unknownEditorFieldExtension});
+    const PackageLoadResult unknownEditorFieldResult = loadManifest(
+        fixture.path(), v1WithUnknownEditorField);
+    const auto unknownEditorFieldDiagnostic = std::find_if(
+        unknownEditorFieldResult.diagnostics.cbegin(),
+        unknownEditorFieldResult.diagnostics.cend(),
+        [](const Diagnostic& diagnostic) {
+            return diagnostic.code
+                == QStringLiteral(
+                    "package.unknown_design_extension_editor_field");
+        });
+    check(!unknownEditorFieldResult.success
+              && unknownEditorFieldDiagnostic
+                  != unknownEditorFieldResult.diagnostics.cend()
+              && unknownEditorFieldDiagnostic->path
+                  == QStringLiteral(
+                      "/designExtensions/0/editor/bad~1~0field"),
+          QStringLiteral(
+              "unknown editor field diagnostics escape JSON Pointer tokens"));
 
     QJsonObject invalidDesignExtensions = v1Manifest;
     invalidDesignExtensions.insert(
@@ -531,6 +673,281 @@ int main(int argc, char** argv) {
         missingDesignExtensionSchema,
         QStringLiteral("package.design_extension_schema_missing"),
         QStringLiteral("a missing design extension schema file"));
+
+    check(writeFixtureSchema(
+              fixture.path(),
+              QByteArrayLiteral(R"json({
+  "$defs": {
+    "payload": {
+      "type": "object",
+      "properties": {
+        "name": {"type": "string"}
+      }
+    }
+  },
+  "$ref": "#/$defs/payload"
+}
+)json")),
+          QStringLiteral("a schema with a local reference can be written"));
+    const PackageLoadResult localReferenceSchemaResult = loadManifest(
+        fixture.path(), v1WithDesignExtension);
+    const DesignExtensionDefinition* localReferenceExtension =
+        localReferenceSchemaResult.package
+        ? localReferenceSchemaResult.package->designExtension(
+              QStringLiteral("test.package.settings"))
+        : nullptr;
+    check(localReferenceSchemaResult.success && localReferenceExtension
+              && localReferenceExtension->schemaDocument.value(
+                     QStringLiteral("$ref"))
+                  == QStringLiteral("#/$defs/payload"),
+          QStringLiteral(
+              "local schema references are retained without external resolution"));
+
+    check(writeFixtureSchema(
+              fixture.path(),
+              QByteArrayLiteral(
+                  R"json({"$dynamicAnchor":"node","$dynamicRef":"#node"})json")),
+          QStringLiteral("a local dynamic-reference schema can be written"));
+    const PackageLoadResult localDynamicReferenceResult = loadManifest(
+        fixture.path(), v1WithDesignExtension);
+    check(localDynamicReferenceResult.success,
+          QStringLiteral("a same-document dynamic reference is accepted"));
+
+    check(writeFixtureSchema(
+              fixture.path(),
+              QByteArrayLiteral(
+                  R"json({"default":{"$ref":"literal user data"},"type":"object"})json")),
+          QStringLiteral("a schema with literal $ref-shaped default data can be written"));
+    const PackageLoadResult literalReferenceDataResult = loadManifest(
+        fixture.path(), v1WithDesignExtension);
+    check(literalReferenceDataResult.success,
+          QStringLiteral(
+              "$ref-shaped properties inside schema annotations remain ordinary data"));
+
+    check(writeFixtureSchema(
+              fixture.path(),
+              QByteArrayLiteral(
+                  R"json({"properties":{"nested":{"$ref":"https://example.invalid/external.json"}}})json")),
+          QStringLiteral("an external-reference schema can be written"));
+    const PackageLoadResult externalReferenceSchemaResult = loadManifest(
+        fixture.path(), v1WithDesignExtension);
+    const auto externalReferenceDiagnostic = std::find_if(
+        externalReferenceSchemaResult.diagnostics.cbegin(),
+        externalReferenceSchemaResult.diagnostics.cend(),
+        [](const Diagnostic& diagnostic) {
+            return diagnostic.code
+                == QStringLiteral(
+                    "package.design_extension_schema_external_ref");
+        });
+    check(!externalReferenceSchemaResult.success
+              && externalReferenceDiagnostic
+                  != externalReferenceSchemaResult.diagnostics.cend()
+              && externalReferenceDiagnostic->path
+                  == QStringLiteral(
+                      "/designExtensions/0/schema#/properties/nested/$ref"),
+          QStringLiteral(
+              "external schema references fail at an unambiguous document path"));
+
+    check(writeFixtureSchema(
+              fixture.path(),
+              QByteArrayLiteral(
+                  R"json({"$dynamicRef":"https://example.invalid/dynamic.json#node"})json")),
+          QStringLiteral("an external dynamic-reference schema can be written"));
+    const PackageLoadResult externalDynamicReferenceResult = loadManifest(
+        fixture.path(), v1WithDesignExtension);
+    const auto externalDynamicReferenceDiagnostic = std::find_if(
+        externalDynamicReferenceResult.diagnostics.cbegin(),
+        externalDynamicReferenceResult.diagnostics.cend(),
+        [](const Diagnostic& diagnostic) {
+            return diagnostic.code
+                == QStringLiteral(
+                    "package.design_extension_schema_external_ref");
+        });
+    check(!externalDynamicReferenceResult.success
+              && externalDynamicReferenceDiagnostic
+                  != externalDynamicReferenceResult.diagnostics.cend()
+              && externalDynamicReferenceDiagnostic->path
+                  == QStringLiteral(
+                      "/designExtensions/0/schema#/$dynamicRef"),
+          QStringLiteral(
+              "external dynamic references use the same local-only boundary"));
+
+    check(writeFixtureSchema(
+              fixture.path(),
+              QByteArrayLiteral(
+                  R"json({"allOf":[{"$recursiveRef":"legacy.schema.json#"}]})json")),
+          QStringLiteral("an external recursive-reference schema can be written"));
+    expectFailure(
+        fixture.path(),
+        v1WithDesignExtension,
+        QStringLiteral("package.design_extension_schema_external_ref"),
+        QStringLiteral("an external legacy recursive schema reference"));
+
+    check(writeFixtureSchema(
+              fixture.path(), QByteArrayLiteral(R"json({"$ref":7})json")),
+          QStringLiteral("a non-string-reference schema can be written"));
+    expectFailure(
+        fixture.path(),
+        v1WithDesignExtension,
+        QStringLiteral("package.design_extension_schema_invalid_ref"),
+        QStringLiteral("a non-string design extension schema reference"));
+
+    check(writeFixtureSchema(
+              fixture.path(), QByteArrayLiteral(R"json({"$ref":""})json")),
+          QStringLiteral("an empty-reference schema can be written"));
+    expectFailure(
+        fixture.path(),
+        v1WithDesignExtension,
+        QStringLiteral("package.design_extension_schema_invalid_ref"),
+        QStringLiteral("an empty design extension schema reference"));
+
+    check(writeFixtureSchema(
+              fixture.path(), QByteArrayLiteral("{\"type\":")),
+          QStringLiteral("a malformed schema can be written"));
+    expectFailure(
+        fixture.path(),
+        v1WithDesignExtension,
+        QStringLiteral("package.design_extension_schema_invalid_json"),
+        QStringLiteral("malformed design extension schema JSON"));
+
+    check(writeFixtureSchema(
+              fixture.path(), QByteArrayLiteral("[]\n")),
+          QStringLiteral("a non-object schema can be written"));
+    expectFailure(
+        fixture.path(),
+        v1WithDesignExtension,
+        QStringLiteral("package.design_extension_schema_invalid_root"),
+        QStringLiteral("a non-object design extension schema root"));
+
+    QByteArray maximumSchema(kMaximumDesignExtensionSchemaBytes, ' ');
+    maximumSchema.front() = '{';
+    maximumSchema.back() = '}';
+    check(writeFixtureSchema(fixture.path(), maximumSchema),
+          QStringLiteral("a schema at the byte limit can be written"));
+    const PackageLoadResult maximumSchemaResult = loadManifest(
+        fixture.path(), v1WithDesignExtension);
+    check(maximumSchemaResult.success,
+          QStringLiteral("a valid schema at the byte limit is accepted"));
+
+    maximumSchema.append(' ');
+    check(writeFixtureSchema(fixture.path(), maximumSchema),
+          QStringLiteral("an oversized schema can be written"));
+    expectFailure(
+        fixture.path(),
+        v1WithDesignExtension,
+        QStringLiteral("package.design_extension_schema_too_large"),
+        QStringLiteral("a design extension schema above the byte limit"));
+
+    check(writeFixtureSchema(fixture.path(), testExtensionSchema()),
+          QStringLiteral("the shared design extension schema is restored"));
+
+    QJsonArray excessiveDesignExtensions;
+    for (int index = 0; index <= kMaximumDesignExtensionsPerPackage; ++index) {
+        excessiveDesignExtensions.append(designExtension(
+            QStringLiteral("test.package.settings.%1").arg(index)));
+    }
+    QJsonObject excessiveDesignExtensionManifest = v1Manifest;
+    excessiveDesignExtensionManifest.insert(
+        QStringLiteral("designExtensions"), excessiveDesignExtensions);
+    expectFailure(
+        fixture.path(),
+        excessiveDesignExtensionManifest,
+        QStringLiteral("package.too_many_design_extensions"),
+        QStringLiteral("a Package with too many design extensions"));
+
+    maximumSchema.chop(1);
+    const QString sharedBudgetSchemaPath = QStringLiteral(
+        "schemas/shared-budget.schema.json");
+    check(writeFixtureSchema(
+              fixture.path(), maximumSchema, sharedBudgetSchemaPath),
+          QStringLiteral("a shared budget schema can be written"));
+    constexpr int schemaReferencesBeyondBudget =
+        kMaximumDesignExtensionSchemaTotalBytes
+            / kMaximumDesignExtensionSchemaBytes
+        + 1;
+    QJsonArray sharedSchemaExtensions;
+    for (int index = 0; index < schemaReferencesBeyondBudget; ++index) {
+        sharedSchemaExtensions.append(designExtension(
+            QStringLiteral("test.package.shared.%1").arg(index),
+            sharedBudgetSchemaPath));
+    }
+    QJsonObject sharedSchemaManifest = v1Manifest;
+    sharedSchemaManifest.insert(
+        QStringLiteral("designExtensions"), sharedSchemaExtensions);
+    const PackageLoadResult sharedSchemaResult = loadManifest(
+        fixture.path(), sharedSchemaManifest);
+    check(sharedSchemaResult.success,
+          QStringLiteral(
+              "extensions sharing one canonical schema consume the byte budget once"));
+
+    QJsonArray aggregateSchemaExtensions;
+    for (int index = 0; index < schemaReferencesBeyondBudget; ++index) {
+        const QString schemaPath = QStringLiteral(
+            "schemas/budget-%1.schema.json").arg(index);
+        check(writeFixtureSchema(fixture.path(), maximumSchema, schemaPath),
+              QStringLiteral("aggregate budget schema %1 can be written")
+                  .arg(index));
+        aggregateSchemaExtensions.append(designExtension(
+            QStringLiteral("test.package.budget.%1").arg(index), schemaPath));
+    }
+    QJsonObject aggregateSchemaManifest = v1Manifest;
+    aggregateSchemaManifest.insert(
+        QStringLiteral("designExtensions"), aggregateSchemaExtensions);
+    expectFailure(
+        fixture.path(),
+        aggregateSchemaManifest,
+        QStringLiteral("package.design_extension_schema_budget_exceeded"),
+        QStringLiteral("unique design extension schemas above the Package budget"));
+
+    QByteArray invalidMaximumSchema(
+        kMaximumDesignExtensionSchemaBytes, ' ');
+    invalidMaximumSchema.front() = '{';
+    const QString sharedInvalidSchemaPath = QStringLiteral(
+        "schemas/shared-invalid.schema.json");
+    check(writeFixtureSchema(
+              fixture.path(), invalidMaximumSchema, sharedInvalidSchemaPath),
+          QStringLiteral("a shared invalid schema can be written"));
+    QJsonArray sharedInvalidExtensions;
+    for (int index = 0; index < schemaReferencesBeyondBudget; ++index) {
+        sharedInvalidExtensions.append(designExtension(
+            QStringLiteral("test.package.shared-invalid.%1").arg(index),
+            sharedInvalidSchemaPath));
+    }
+    QJsonObject sharedInvalidManifest = v1Manifest;
+    sharedInvalidManifest.insert(
+        QStringLiteral("designExtensions"), sharedInvalidExtensions);
+    const PackageLoadResult sharedInvalidResult = loadManifest(
+        fixture.path(), sharedInvalidManifest);
+    check(!sharedInvalidResult.success
+              && diagnosticCount(
+                     sharedInvalidResult.diagnostics,
+                     QStringLiteral(
+                         "package.design_extension_schema_invalid_json"))
+                  == 1,
+          QStringLiteral(
+              "a shared invalid schema is parsed and diagnosed only once"));
+
+    QJsonArray aggregateInvalidExtensions;
+    for (int index = 0; index < schemaReferencesBeyondBudget; ++index) {
+        const QString schemaPath = QStringLiteral(
+            "schemas/invalid-budget-%1.schema.json").arg(index);
+        check(writeFixtureSchema(
+                  fixture.path(), invalidMaximumSchema, schemaPath),
+              QStringLiteral("invalid aggregate budget schema %1 can be written")
+                  .arg(index));
+        aggregateInvalidExtensions.append(designExtension(
+            QStringLiteral("test.package.invalid-budget.%1").arg(index),
+            schemaPath));
+    }
+    QJsonObject aggregateInvalidManifest = v1Manifest;
+    aggregateInvalidManifest.insert(
+        QStringLiteral("designExtensions"), aggregateInvalidExtensions);
+    expectFailure(
+        fixture.path(),
+        aggregateInvalidManifest,
+        QStringLiteral("package.design_extension_schema_budget_exceeded"),
+        QStringLiteral(
+            "invalid unique schemas still consume the Package byte budget"));
 
     QTemporaryDir externalSchemaFixture(QStringLiteral(
         "/tmp/finepaper-external-schema-test-XXXXXX"));

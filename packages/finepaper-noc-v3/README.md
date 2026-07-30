@@ -26,7 +26,11 @@ topology fixed to a rectangular Mesh.
   switches, retention, isolation, level-shifter placement, and optional
   technology-cell mappings. Its JSON Schema and compiler live inside this
   Package; Application transports the extension without recognizing those
-  fields.
+  fields. The Package explicitly declares `editor.kind`; Finepaper never
+  infers editability from the extension id. Schema loading is bounded to 1 MiB,
+  contained within the Package root, and restricts standard reference keywords
+  to same-document targets so generic tooling never performs hidden file or
+  network resolution.
 - `router.microarchitecture` provides sparse per-Router overrides for routing
   algorithm, virtual-channel count, and buffer depth.
 - Endpoint parameters remain owned by each Endpoint instance. Their labels,

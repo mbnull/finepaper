@@ -104,7 +104,10 @@
     {
       "id": "finepaper.noc.powerIntent",
       "schema": "runtime/power-intent.schema.json",
-      "version": 1
+      "version": 1,
+      "editor": {
+        "kind": "json-schema"
+      }
     }
   ],
   "elementPropertySets": [

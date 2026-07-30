@@ -1,5 +1,7 @@
 #include "package/package.h"
 
+#include "package/design_extension_schema.h"
+
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -10,6 +12,7 @@
 #include <QSet>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <iterator>
 #include <limits>
@@ -1736,7 +1739,21 @@ QVector<DesignExtensionDefinition> parseDesignExtensions(
     }
 
     const QJsonArray values = value.toArray();
+    if (values.size() > kMaximumDesignExtensionsPerPackage) {
+        appendDiagnostic(
+            diagnostics,
+            QStringLiteral("error"),
+            QStringLiteral("package.too_many_design_extensions"),
+            QStringLiteral("designExtensions cannot contain more than %1 entries")
+                .arg(kMaximumDesignExtensionsPerPackage),
+            path);
+        return definitions;
+    }
+
     QSet<QString> ids;
+    QHash<QString, QJsonObject> schemasByCanonicalPath;
+    QSet<QString> attemptedSchemaPaths;
+    qint64 accountedSchemaBytes = 0;
     definitions.reserve(values.size());
     for (qsizetype index = 0; index < values.size(); ++index) {
         const QString itemPath = QStringLiteral("%1/%2").arg(path).arg(index);
@@ -1749,14 +1766,17 @@ QVector<DesignExtensionDefinition> parseDesignExtensions(
             continue;
         }
 
+        const qsizetype itemDiagnosticStart = diagnostics.size();
         const QJsonObject object = values.at(index).toObject();
-        const QSet<QString> allowed{
+        static const std::array<QString, 4> allowed = {
             QStringLiteral("id"),
             QStringLiteral("schema"),
-            QStringLiteral("version")
+            QStringLiteral("version"),
+            QStringLiteral("editor")
         };
         for (auto it = object.constBegin(); it != object.constEnd(); ++it) {
-            if (!allowed.contains(it.key())) {
+            if (std::find(allowed.cbegin(), allowed.cend(), it.key())
+                == allowed.cend()) {
                 appendDiagnostic(
                     diagnostics,
                     QStringLiteral("error"),
@@ -1774,6 +1794,41 @@ QVector<DesignExtensionDefinition> parseDesignExtensions(
             object, QStringLiteral("schema"), itemPath, diagnostics);
         definition.version = requiredInteger(
             object, QStringLiteral("version"), 0, itemPath, diagnostics);
+        if (object.contains(QStringLiteral("editor"))) {
+            const QJsonValue editorValue = object.value(QStringLiteral("editor"));
+            const QString editorPath = itemPath + QStringLiteral("/editor");
+            if (!editorValue.isObject()) {
+                appendDiagnostic(
+                    diagnostics,
+                    QStringLiteral("error"),
+                    QStringLiteral("package.invalid_design_extension_editor"),
+                    QStringLiteral("design extension editor must be an object"),
+                    editorPath);
+            } else {
+                const QJsonObject editorObject = editorValue.toObject();
+                for (auto it = editorObject.constBegin();
+                     it != editorObject.constEnd(); ++it) {
+                    if (it.key() != QStringLiteral("kind")) {
+                        appendDiagnostic(
+                            diagnostics,
+                            QStringLiteral("error"),
+                            QStringLiteral(
+                                "package.unknown_design_extension_editor_field"),
+                            QStringLiteral("design extension editor field %1 is not supported")
+                                .arg(it.key()),
+                            editorPath + QLatin1Char('/')
+                                + jsonPointerToken(it.key()));
+                    }
+                }
+                definition.editor = DesignExtensionEditorDefinition{
+                    requiredString(
+                        editorObject,
+                        QStringLiteral("kind"),
+                        editorPath,
+                        diagnostics)
+                };
+            }
+        }
 
         const auto isAsciiLetterOrDigit = [](const auto character) {
             const ushort value = character.unicode();
@@ -1853,6 +1908,65 @@ QVector<DesignExtensionDefinition> parseDesignExtensions(
                     QStringLiteral("package.design_extension_schema_escape"),
                     QStringLiteral("design extension schema escapes the Package root"),
                     itemPath + QStringLiteral("/schema"));
+            } else if (diagnostics.size() == itemDiagnosticStart) {
+                const QString canonicalSchemaPath = schemaInfo.canonicalFilePath();
+                const auto cachedSchema = schemasByCanonicalPath.constFind(
+                    canonicalSchemaPath);
+                if (cachedSchema != schemasByCanonicalPath.constEnd()) {
+                    definition.schemaDocument = cachedSchema.value();
+                } else if (attemptedSchemaPaths.contains(canonicalSchemaPath)) {
+                    // The first attempt already produced the authoritative
+                    // diagnostic. Do not re-read an invalid shared schema.
+                } else {
+                    attemptedSchemaPaths.insert(canonicalSchemaPath);
+                    const qint64 schemaBytes = schemaInfo.size();
+                    if (schemaBytes < 0) {
+                        appendDiagnostic(
+                            diagnostics,
+                            QStringLiteral("error"),
+                            QStringLiteral(
+                                "package.design_extension_schema_read_failed"),
+                            QStringLiteral(
+                                "could not determine design extension schema size"),
+                            itemPath + QStringLiteral("/schema"));
+                    } else if (schemaBytes
+                               > kMaximumDesignExtensionSchemaBytes) {
+                        appendDiagnostic(
+                            diagnostics,
+                            QStringLiteral("error"),
+                            QStringLiteral(
+                                "package.design_extension_schema_too_large"),
+                            QStringLiteral(
+                                "design extension schema exceeds the %1 byte limit")
+                                .arg(kMaximumDesignExtensionSchemaBytes),
+                            itemPath + QStringLiteral("/schema"));
+                    } else if (schemaBytes
+                               > kMaximumDesignExtensionSchemaTotalBytes
+                                   - accountedSchemaBytes) {
+                        appendDiagnostic(
+                            diagnostics,
+                            QStringLiteral("error"),
+                            QStringLiteral(
+                                "package.design_extension_schema_budget_exceeded"),
+                            QStringLiteral(
+                                "unique design extension schemas exceed the %1 byte Package budget")
+                                .arg(kMaximumDesignExtensionSchemaTotalBytes),
+                            itemPath + QStringLiteral("/schema"));
+                    } else {
+                        accountedSchemaBytes += schemaBytes;
+                        std::optional<QJsonObject> schema =
+                            package_detail::loadDesignExtensionSchema(
+                                schemaPath,
+                                itemPath + QStringLiteral("/schema"),
+                                diagnostics);
+                        if (schema) {
+                            definition.schemaDocument = std::move(*schema);
+                            schemasByCanonicalPath.insert(
+                                canonicalSchemaPath,
+                                definition.schemaDocument);
+                        }
+                    }
+                }
             }
         }
 
